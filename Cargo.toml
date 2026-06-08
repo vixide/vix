@@ -1,0 +1,35 @@
+[package]
+name = "stride"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.86"
+description = "STRIDE: Simple Terminal Rust IDE — a keyboard-friendly TUI text editor"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sixarm/stride"
+readme = "README.md"
+keywords = ["tui", "editor", "ide", "terminal", "ratatui"]
+categories = ["text-editors", "command-line-utilities"]
+
+[dependencies]
+# Terminal UI core. The whole widget ecosystem must agree on this version.
+ratatui = { version = "0.30", features = ["crossterm"] }
+# Center editing widget: a Tree-sitter-powered code editor (syntax highlighting,
+# history, selection, system clipboard, built-in mouse handling). Tracks ratatui 0.30.
+ratatui-code-editor = "0.0.4"
+# Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
+crossterm = "0.29"
+# Regular expressions for find/replace.
+regex = "1"
+# Date/time: local + UTC, ISO 8601, and ISO week date for the calendar box.
+# Packaged in Debian as librust-jiff-dev.
+jiff = "0.2"
+# Settings serialization.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ratatui-image = "11.0.4"
+image = "0.25"
+
+[profile.release]
+lto = true
+strip = true
+opt-level = "z"
