@@ -10,12 +10,28 @@ readme = "README.md"
 keywords = ["tui", "editor", "ide", "terminal", "ratatui"]
 categories = ["text-editors", "command-line-utilities"]
 
+[features]
+# Which Tree-sitter grammars to compile in. Each grammar is a sizeable C parser,
+# so the default is a lean set; opt into more (or all) at build time:
+#   cargo build --release                                  # common grammars
+#   cargo build --release --no-default-features            # no highlighting (smallest)
+#   cargo build --release --no-default-features --features syntax-all
+default = ["syntax-common"]
+syntax-common = [
+    "ratatui-code-editor/lang-rust",
+    "ratatui-code-editor/lang-markdown",
+    "ratatui-code-editor/lang-json",
+    "ratatui-code-editor/lang-toml",
+]
+syntax-all = ["ratatui-code-editor/langs-all"]
+
 [dependencies]
 # Terminal UI core. The whole widget ecosystem must agree on this version.
 ratatui = { version = "0.30", features = ["crossterm"] }
 # Center editing widget: a Tree-sitter-powered code editor (syntax highlighting,
-# history, selection, system clipboard, built-in mouse handling). Tracks ratatui 0.30.
-ratatui-code-editor = "0.0.4"
+# history, selection, system clipboard, built-in mouse handling). Vendored under
+# vendor/ so the Tree-sitter grammars can be gated behind features (see [features]).
+ratatui-code-editor = { path = "vendor/ratatui-code-editor", default-features = false, features = ["crossterm"] }
 # Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
 crossterm = "0.29"
 # Regular expressions for find/replace.

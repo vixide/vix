@@ -37,8 +37,15 @@ cargo run                 # open in the current directory
 cargo run -- src/main.rs  # open one or more files
 cargo run -- file.rs:42:7 # open and jump to line 42, column 7
 cargo test                # run the logic + doc tests
-cargo build --release     # optimized binary at target/release/stride
+cargo build --release     # optimized binary (~4.9M, common grammars)
+cargo build --release --no-default-features                  # ~3.0M, no syntax grammars
+cargo build --release --no-default-features --features syntax-all  # ~18M, all grammars
 ```
+
+Tree-sitter grammars are gated behind Cargo features (see the `[features]` table
+in `Cargo.toml` and the vendored `vendor/ratatui-code-editor`), so the binary
+only links the parsers selected at build time. The default set is Rust, Markdown,
+JSON, and TOML.
 
 The application root is the current working directory; the explorer and the
 command-palette file finder operate within it.

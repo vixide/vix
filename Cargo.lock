@@ -1903,8 +1903,6 @@ dependencies = [
 [[package]]
 name = "ratatui-code-editor"
 version = "0.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b21a0bcd9cdca9aba7cbd8a4167858f9b34fef142164f2f83757f6a65bf9d1e7"
 dependencies = [
  "anyhow",
  "arboard",

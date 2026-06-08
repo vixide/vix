@@ -24,8 +24,14 @@ fn main() -> io::Result<()> {
 
     let mut terminal = ratatui::init();
     let _ = execute!(io::stdout(), EnableMouseCapture);
-    // Query the terminal for graphics support so images can be displayed.
-    app.picker = ratatui_image::picker::Picker::from_query_stdio().ok();
+    // Query the terminal for graphics support so images can be displayed. Use a
+    // short timeout (the default is 2s) so startup never stalls on terminals
+    // that don't answer the capability query.
+    let query = ratatui_image::picker::cap_parser::QueryStdioOptions {
+        timeout: Duration::from_millis(250),
+        ..Default::default()
+    };
+    app.picker = ratatui_image::picker::Picker::from_query_stdio_with_options(query).ok();
     let result = run(&mut terminal, &mut app);
     let _ = execute!(io::stdout(), DisableMouseCapture);
     let _ = io::stdout().flush();

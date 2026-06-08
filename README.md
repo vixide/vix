@@ -59,6 +59,21 @@ cargo build --release     # optimized binary at target/release/stride
 
 For best results use a [Nerd Font] so the file/folder/clock glyphs render.
 
+### Syntax highlighting grammars (binary size)
+
+Each Tree-sitter grammar is a sizeable compiled C parser, so they are gated
+behind Cargo features. The default compiles a lean set (Rust, Markdown, JSON,
+TOML); choose more or fewer at build time:
+
+```sh
+cargo build --release                                          # ~4.9M, common grammars (default)
+cargo build --release --no-default-features                    # ~3.0M, no highlighting
+cargo build --release --no-default-features --features syntax-all   # ~18M, all 16 grammars
+```
+
+Files whose grammar isn't compiled in still open — just as plain (unhighlighted)
+text. The grammar set lives in the vendored `vendor/ratatui-code-editor` crate.
+
 ## Keyboard shortcuts
 
 A few of the most common; see [`docs/keybindings.md`](docs/keybindings.md) for

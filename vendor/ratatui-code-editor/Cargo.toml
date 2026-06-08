@@ -1,0 +1,83 @@
+# Vendored copy of ratatui-code-editor 0.0.4 (MIT, by vipmax) with the
+# Tree-sitter grammars made optional behind per-language Cargo features so the
+# binary only links the parsers it needs. Upstream:
+# https://github.com/vipmax/ratatui-code-editor
+
+[package]
+edition = "2024"
+name = "ratatui-code-editor"
+version = "0.0.4"
+authors = ["vipmax"]
+description = "A code editor widget for ratatui with Tree-sitter syntax highlighting (vendored, grammars gated)."
+license = "MIT"
+repository = "https://github.com/vipmax/ratatui-code-editor.git"
+build = false
+autolib = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+
+[lib]
+name = "ratatui_code_editor"
+path = "src/lib.rs"
+
+[features]
+default = ["crossterm"]
+crossterm = ["dep:crossterm"]
+
+# One feature per grammar — each pulls in only that Tree-sitter parser.
+lang-bash = ["dep:tree-sitter-bash"]
+lang-c = ["dep:tree-sitter-c"]
+lang-c-sharp = ["dep:tree-sitter-c-sharp"]
+lang-cpp = ["dep:tree-sitter-cpp"]
+lang-css = ["dep:tree-sitter-css"]
+lang-go = ["dep:tree-sitter-go"]
+lang-html = ["dep:tree-sitter-html"]
+lang-java = ["dep:tree-sitter-java"]
+lang-javascript = ["dep:tree-sitter-javascript"]
+lang-json = ["dep:tree-sitter-json"]
+lang-markdown = ["dep:tree-sitter-md"]
+lang-python = ["dep:tree-sitter-python"]
+lang-rust = ["dep:tree-sitter-rust"]
+lang-toml = ["dep:tree-sitter-toml-ng"]
+lang-typescript = ["dep:tree-sitter-typescript"]
+lang-yaml = ["dep:tree-sitter-yaml"]
+
+# Convenience groups.
+langs-common = ["lang-rust", "lang-markdown", "lang-json", "lang-toml"]
+langs-all = [
+    "lang-bash", "lang-c", "lang-c-sharp", "lang-cpp", "lang-css", "lang-go",
+    "lang-html", "lang-java", "lang-javascript", "lang-json", "lang-markdown",
+    "lang-python", "lang-rust", "lang-toml", "lang-typescript", "lang-yaml",
+]
+
+[dependencies]
+anyhow = "1.0"
+arboard = { version = "3.5", default-features = false }
+crossterm = { version = "0.29", optional = true }
+ratatui-core = "0.1"
+ropey = "1.6"
+rust-embed = { version = "8.7", features = ["include-exclude"] }
+streaming-iterator = "0.1"
+tree-sitter = "0.26"
+unicode-segmentation = "1.12"
+unicode-width = "0.2"
+
+# Optional grammars, selected by the features above.
+tree-sitter-bash = { version = "0.25.0", optional = true }
+tree-sitter-c = { version = "0.24.1", optional = true }
+tree-sitter-c-sharp = { version = "0.23.1", optional = true }
+tree-sitter-cpp = { version = "0.23.4", optional = true }
+tree-sitter-css = { version = "0.25", optional = true }
+tree-sitter-go = { version = "0.25", optional = true }
+tree-sitter-html = { version = "0.23.2", optional = true }
+tree-sitter-java = { version = "0.23.5", optional = true }
+tree-sitter-javascript = { version = "0.25", optional = true }
+tree-sitter-json = { version = "0.24.8", optional = true }
+tree-sitter-md = { version = "0.5.1", optional = true }
+tree-sitter-python = { version = "0.25", optional = true }
+tree-sitter-rust = { version = "0.24", optional = true }
+tree-sitter-toml-ng = { version = "0.7.0", optional = true }
+tree-sitter-typescript = { version = "0.23", optional = true }
+tree-sitter-yaml = { version = "0.7", optional = true }
