@@ -370,6 +370,42 @@ fn explorer_multiselect_collects_paths() {
 }
 
 #[test]
+fn position_history_back_and_forward() {
+    let dir = unique_dir("nav");
+    fs::write(dir.join("a.txt"), "1\n2\n3\n4\n5\n").unwrap();
+    fs::write(dir.join("b.txt"), "a\nb\nc\nd\ne\n").unwrap();
+    let mut app = app_at(&dir);
+
+    let open_at = |app: &mut App, spec: &str| {
+        app.run_action("file.open");
+        for c in spec.chars() {
+            app.on_key(key(c));
+        }
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    };
+    let here = |app: &App| -> (String, usize) {
+        let t = app.editor.active_tab().unwrap();
+        let name = t.path.as_ref().unwrap().file_name().unwrap().to_string_lossy().into_owned();
+        (name, app.editor.cursor_1based().0)
+    };
+
+    open_at(&mut app, "a.txt:3");
+    assert_eq!(here(&app), ("a.txt".into(), 3));
+    open_at(&mut app, "b.txt:2");
+    assert_eq!(here(&app), ("b.txt".into(), 2));
+
+    // Alt+Left goes back to the previous location.
+    app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::ALT));
+    assert_eq!(here(&app), ("a.txt".into(), 3), "Alt+Left → previous position");
+
+    // Alt+Right returns forward.
+    app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::ALT));
+    assert_eq!(here(&app), ("b.txt".into(), 2), "Alt+Right → next position");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn project_search_finds_matches_across_files() {
     let dir = unique_dir("psearch");
     fs::write(dir.join("a.txt"), "alpha beta\nbeta gamma\n").unwrap();

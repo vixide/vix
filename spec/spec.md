@@ -152,8 +152,8 @@ Also shipped: explorer file clipboard (copy/cut/paste with conflict prompt),
 multi-selection, delete-with-confirm, and buffers that follow file moves.
 
 Also shipped: project-wide search & replace (`Ctrl+Shift+F`, searches open
-buffers in their unsaved state).
+buffers in their unsaved state) and position history (`Alt+Left`/`Alt+Right`).
 
 Roadmap (designed in the sibling spec files, not yet built): LSP "go to
-definition", position history, and the live go-to-line preview. Each sibling
-spec marks its own status.
+definition" and the live go-to-line preview. Each sibling spec marks its own
+status.

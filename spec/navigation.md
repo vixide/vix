@@ -1,8 +1,9 @@
 # Navigation
 
 **Status:** Partly shipped. The `path:line[:col]` jump works from both the Open
-prompt and the command palette. "Go to Definition" (needs LSP) and Position
-History (Alt+Left/Right) are roadmap.
+prompt and the command palette, and Position History (`Alt+Left`/`Alt+Right`)
+navigates back/forward through jump locations. "Go to Definition" (needs LSP) is
+roadmap.
 
 
 Go to Definition: Use the command palette (Ctrl+P >) and search for "Go to Definition" to jump to the definition of a symbol under the cursor (requires LSP).

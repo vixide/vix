@@ -21,6 +21,7 @@ macOS/Windows conventions; STRIDE is **not** modal.
 | `F3` / `Shift+F3`| Find next / previous                                 |
 | `Ctrl+B`         | Toggle the file explorer (reveals the active file)   |
 | `Ctrl+E`         | Toggle focus between explorer and editor             |
+| `Alt+Left` / `Alt+Right` | Position history: jump back / forward        |
 | `F10`            | Open / close the menu bar                            |
 | `Alt+F/E/T/H`    | Open the File / Edit / Tools / Help menu             |
 | `F1`             | Show the keyboard-shortcut help overlay              |

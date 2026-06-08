@@ -753,6 +753,8 @@ const HELP_ROWS: &[(&str, &str)] = &[
     ("Ctrl+F / Ctrl+R", "Find / Find & Replace"),
     ("F3 / Shift+F3", "Find next / previous"),
     ("Ctrl+B / Ctrl+E", "Toggle / focus explorer"),
+    ("Ctrl+Shift+F", "Search across the project"),
+    ("Alt+Left / Alt+Right", "Position history back / forward"),
     ("F10 / Alt+F,E,T,H", "Menu bar"),
     ("F1", "This help"),
     ("Mouse", "Click to place cursor, drag to select, wheel to scroll"),

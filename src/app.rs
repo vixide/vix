@@ -61,6 +61,14 @@ pub struct Confirm {
     pub paths: Vec<PathBuf>,
 }
 
+/// A point in the position-history jump list: a file and a 1-based line/column.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Location {
+    pub path: PathBuf,
+    pub line: usize,
+    pub col: usize,
+}
+
 /// Rectangles recorded during rendering, used for mouse hit-testing and for
 /// telling the code editor which viewport to scroll within.
 #[derive(Default)]
@@ -88,6 +96,9 @@ pub struct App {
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
     pub clip: Vec<PathBuf>,
     pub clip_cut: bool,
+    /// Position-history jump list (Alt+Left / Alt+Right) and the current index.
+    pub nav_history: Vec<Location>,
+    pub nav_idx: usize,
     /// Terminal image picker; `None` until set from a real terminal (so tests
     /// and headless use construct fine), and on terminals without graphics.
     pub picker: Option<Picker>,
@@ -127,6 +138,8 @@ impl App {
             confirm: None,
             clip: Vec::new(),
             clip_cut: false,
+            nav_history: Vec::new(),
+            nav_idx: 0,
             picker: None,
             show_explorer: settings.show_explorer,
             show_messages: settings.show_messages,
@@ -254,6 +267,14 @@ impl App {
             }
         }
         match key.code {
+            KeyCode::Left if Self::alt(&key) => {
+                self.nav_back();
+                true
+            }
+            KeyCode::Right if Self::alt(&key) => {
+                self.nav_forward();
+                true
+            }
             KeyCode::F(1) => {
                 self.show_help = true;
                 true
@@ -765,8 +786,10 @@ impl App {
                 self.explorer.toggle_selected();
             } else {
                 let path = node.path.clone();
-                self.open_path(&path, false);
-                self.focus = Focus::Editor;
+                self.with_jump(|s| {
+                    s.open_path(&path, false);
+                    s.focus = Focus::Editor;
+                });
             }
         }
     }
@@ -810,6 +833,64 @@ impl App {
             }
             Err(e) => self.messages.error(format!("Open failed: {e}")),
         }
+    }
+
+    // ----- position history (Alt+Left / Alt+Right) -----------------------
+
+    fn current_location(&self) -> Option<Location> {
+        let tab = self.editor.active_tab()?;
+        let path = tab.path.clone()?;
+        let (line, col) = tab.cursor_1based();
+        Some(Location { path, line, col })
+    }
+
+    /// Run a cursor-moving jump `f`, recording the origin and destination in the
+    /// position history so Alt+Left/Right can revisit them.
+    fn with_jump<F: FnOnce(&mut Self)>(&mut self, f: F) {
+        let origin = self.current_location();
+        f(self);
+        let dest = self.current_location();
+        // Drop any forward history, then append origin then destination.
+        if !self.nav_history.is_empty() {
+            self.nav_history.truncate(self.nav_idx + 1);
+        }
+        if let Some(o) = origin {
+            if self.nav_history.last() != Some(&o) {
+                self.nav_history.push(o);
+            }
+        }
+        if let Some(d) = dest {
+            if self.nav_history.last() != Some(&d) {
+                self.nav_history.push(d);
+            }
+        }
+        self.nav_idx = self.nav_history.len().saturating_sub(1);
+    }
+
+    fn nav_back(&mut self) {
+        if self.nav_history.is_empty() || self.nav_idx == 0 {
+            self.status = "No earlier position".into();
+            return;
+        }
+        self.nav_idx -= 1;
+        self.navigate_to(self.nav_history[self.nav_idx].clone());
+    }
+
+    fn nav_forward(&mut self) {
+        if self.nav_idx + 1 >= self.nav_history.len() {
+            self.status = "No later position".into();
+            return;
+        }
+        self.nav_idx += 1;
+        self.navigate_to(self.nav_history[self.nav_idx].clone());
+    }
+
+    /// Go to a recorded location without itself recording a new jump.
+    fn navigate_to(&mut self, loc: Location) {
+        self.open_path(&loc.path, false);
+        self.editor.goto(loc.line, Some(loc.col), self.editor_view());
+        self.focus = Focus::Editor;
+        self.status = format!("{}:{}", loc.path.display(), loc.line);
     }
 
     fn open_image(&mut self, path: &Path) {
@@ -1123,22 +1204,30 @@ impl App {
         self.palette = None;
         match entry.action {
             PAction::OpenFile(path, target) => {
-                self.open_path(&path, false);
-                if let Some((line, col)) = target {
-                    self.editor.goto(line, Some(col), self.editor_view());
-                }
-                self.focus = Focus::Editor;
+                self.with_jump(|s| {
+                    s.open_path(&path, false);
+                    if let Some((line, col)) = target {
+                        let area = s.editor_view();
+                        s.editor.goto(line, Some(col), area);
+                    }
+                    s.focus = Focus::Editor;
+                });
             }
             PAction::RunCommand(action) => self.run_action(&action),
             PAction::SwitchBuffer(i) => {
-                if i < self.editor.tabs.len() {
-                    self.editor.active = i;
-                }
-                self.focus = Focus::Editor;
+                self.with_jump(|s| {
+                    if i < s.editor.tabs.len() {
+                        s.editor.active = i;
+                    }
+                    s.focus = Focus::Editor;
+                });
             }
             PAction::GotoLine(n) => {
-                self.editor.goto(n, None, self.editor_view());
-                self.focus = Focus::Editor;
+                self.with_jump(|s| {
+                    let area = s.editor_view();
+                    s.editor.goto(n, None, area);
+                    s.focus = Focus::Editor;
+                });
             }
         }
     }
@@ -1553,9 +1642,12 @@ impl App {
             .map(|h| (h.path.clone(), h.line, h.col));
         if let Some((path, line, col)) = target {
             self.project_search = None;
-            self.open_path(&path, false);
-            self.editor.goto(line, Some(col), self.editor_view());
-            self.focus = Focus::Editor;
+            self.with_jump(|s| {
+                s.open_path(&path, false);
+                let area = s.editor_view();
+                s.editor.goto(line, Some(col), area);
+                s.focus = Focus::Editor;
+            });
         }
     }
 
@@ -1738,11 +1830,14 @@ impl App {
                     return;
                 }
                 let path = self.resolve(&path);
-                self.open_path(&path, false);
-                if let Some((line, col)) = target {
-                    self.editor.goto(line, Some(col), self.editor_view());
-                }
-                self.focus = Focus::Editor;
+                self.with_jump(|s| {
+                    s.open_path(&path, false);
+                    if let Some((line, col)) = target {
+                        let area = s.editor_view();
+                        s.editor.goto(line, Some(col), area);
+                    }
+                    s.focus = Focus::Editor;
+                });
             }
             PromptKind::SaveAs => {
                 let raw = prompt.input.trim();
