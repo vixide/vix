@@ -2,7 +2,7 @@
 
 **Status:** Roadmap. This describes a dedicated keybindings *browser* (searchable
 list of bindings with key-recording lookup) that is not yet built. For the
-shortcuts STRIDE supports today, see `docs/keybindings.md`.
+shortcuts Vix supports today, see `docs/keybindings.md`.
 
 
 | Shortcut | Action                |

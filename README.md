@@ -1,6 +1,6 @@
-# STRIDE — Simple Terminal Rust IDE
+# Vix — Simple Terminal Rust IDE
 
-STRIDE is a keyboard-friendly terminal text editor written in Rust. It opens
+Vix is a keyboard-friendly terminal text editor written in Rust. It opens
 text files, edits them, and saves them — with a menu bar, a file-explorer drawer,
 tabbed buffers, a message drawer, a command palette, find & replace, and a
 calendar box. It is built on [`ratatui`] and [`ratatui-code-editor`], and uses
@@ -8,10 +8,10 @@ familiar macOS/Windows shortcuts (Ctrl+C / Ctrl+V, not modal editing). Mouse and
 keyboard both work.
 
 ```
- File  Edit  Tools  Help                                       STRIDE
+ File  Edit  Tools  Help                                       Vix
 ╭─ Explorer ─────────╮╭ main.rs │ spec.md ────────────────────╮╭─ Messages ─────╮
 │  src               ││╭──────────────────────────────────────╮││ Welcome to     │
-│   app.rs           │││ 1  fn main() {                       △│││ STRIDE…      x │
+│   app.rs           │││ 1  fn main() {                       △│││ Vix…      x │
 │   editor.rs        │││ 2      println!("hi");               ┃│││ Ctrl+B toggles │
 │   main.rs          │││ 3  }                                 ┃│││ the explorer x │
 │  spec              │││ 4                                    ▽││╰────────────────╯
@@ -44,7 +44,7 @@ keyboard both work.
 - **Message drawer** — advice and notifications, each individually dismissable.
 - **Calendar box** — local clock, UTC ISO-8601 instant, ISO-8601 week date, and a
   month grid with today highlighted (all computed with [`jiff`]).
-- **Settings** — persisted as JSON under `~/.config/stride/`.
+- **Settings** — persisted as JSON under `~/.config/vix/`.
 
 ## Install & run
 
@@ -54,7 +54,7 @@ Requires a Rust toolchain (1.74+).
 cargo run                 # open the editor rooted at the current directory
 cargo run -- src/main.rs  # open one or more files on launch
 cargo run -- file.rs:42:7 # open and jump straight to line 42, column 7
-cargo build --release     # optimized binary at target/release/stride
+cargo build --release     # optimized binary at target/release/vix
 ```
 
 For best results use a [Nerd Font] so the file/folder/clock glyphs render.

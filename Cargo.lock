@@ -2437,21 +2437,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b2231b7c3057d5e4ad0156fb3dc807d900806020c5ffa3ee6ff2c8c76fb8520"
 
 [[package]]
-name = "stride"
-version = "0.1.0"
-dependencies = [
- "crossterm",
- "image",
- "jiff",
- "ratatui",
- "ratatui-code-editor",
- "ratatui-image",
- "regex",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2905,6 +2890,21 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "vix"
+version = "0.1.0"
+dependencies = [
+ "crossterm",
+ "image",
+ "jiff",
+ "ratatui",
+ "ratatui-code-editor",
+ "ratatui-image",
+ "regex",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "vsimd"

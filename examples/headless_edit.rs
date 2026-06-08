@@ -1,4 +1,4 @@
-//! Drive STRIDE's editing logic without a terminal.
+//! Drive Vix's editing logic without a terminal.
 //!
 //! This opens a temp file, types into it, runs a regex find-and-replace via the
 //! same key events the TUI would receive, saves, and prints the result — showing
@@ -10,14 +10,14 @@ use std::fs;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
-use stride::app::App;
+use vix::app::App;
 
 fn key(c: char) -> KeyEvent {
     KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
 }
 
 fn main() -> std::io::Result<()> {
-    let dir = std::env::temp_dir().join("stride-example");
+    let dir = std::env::temp_dir().join("vix-example");
     fs::create_dir_all(&dir)?;
     let file = dir.join("greeting.txt");
     fs::write(&file, "hello world\n")?;

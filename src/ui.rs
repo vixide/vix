@@ -237,7 +237,7 @@ fn draw_menu_bar(app: &App, frame: &mut Frame, area: Rect) {
         spans.push(Span::styled(format!(" {} ", m.name), style));
     }
     spans.push(Span::raw("   "));
-    spans.push(Span::styled(format!("{} STRIDE", icon::PALETTE), theme::dim()));
+    spans.push(Span::styled(format!("{} Vix", icon::PALETTE), theme::dim()));
     let bar = Paragraph::new(Line::from(spans)).style(Style::default().bg(Color::Indexed(236)));
     frame.render_widget(bar, area);
 }

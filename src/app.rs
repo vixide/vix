@@ -120,7 +120,7 @@ impl App {
         let settings = Settings::load();
         let editor = Editor::new(settings.line_numbers);
         let mut messages = Messages::default();
-        messages.advice("Welcome to STRIDE. Press Ctrl+P for the command palette, F1 for help.");
+        messages.advice("Welcome to Vix. Press Ctrl+P for the command palette, F1 for help.");
         messages.info("Ctrl+B toggles the file explorer, Ctrl+E switches focus.");
 
         App {
@@ -415,11 +415,11 @@ impl App {
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
             "help.shortcuts" => self.show_help = true,
-            "help.website" => self.messages.info("Website: https://github.com/sixarm/stride"),
+            "help.website" => self.messages.info("Website: https://github.com/sixarm/vix"),
             "help.email" => self.messages.info("Email: hello@sixarm.com"),
             "help.about" => self
                 .messages
-                .advice("STRIDE — Simple Terminal Rust IDE. Open, edit, and save text files."),
+                .advice("Vix — Simple Terminal Rust IDE. Open, edit, and save text files."),
             other => self.messages.warn(format!("Unknown action: {other}")),
         }
     }
@@ -2103,7 +2103,7 @@ mod tests {
 
     #[test]
     fn renders_project_search_panel_with_hits() {
-        let dir = std::env::temp_dir().join(format!("stride-ps-unit-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("vix-ps-unit-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("note.txt"), "the needle is here\n").unwrap();
 
@@ -2130,7 +2130,7 @@ mod tests {
         let picker = Picker::halfblocks();
         let img = image::DynamicImage::new_rgb8(8, 8);
         let proto = picker.new_resize_protocol(img);
-        app.editor.open_image(Path::new("/tmp/stride-test.png"), proto);
+        app.editor.open_image(Path::new("/tmp/vix-test.png"), proto);
         assert!(app.editor.active_tab().unwrap().is_image());
 
         // A full draw of the image tab must not panic.

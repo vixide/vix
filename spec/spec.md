@@ -1,4 +1,4 @@
-# STRIDE: Simple Terminal Rust IDE
+# Vix: Simple Terminal Rust IDE
 
 Goal: Create a Simple Terminal Rust Integrated Development Environment. It opens
 text files, edits them, saves them.
@@ -7,7 +7,7 @@ Nerd Font icons, monospace.
 
 ## Crates
 
-STRIDE is built on a deliberately small, version-compatible crate set. The whole
+Vix is built on a deliberately small, version-compatible crate set. The whole
 `ratatui` widget ecosystem must agree on one `ratatui` version (0.30); the editor
 widget pins that.
 
@@ -79,7 +79,7 @@ command-palette file finder operate within it.
     - Keyboard Shortcuts (also `F1`)
     - Website
     - Email Us
-    - About STRIDE
+    - About Vix
 - Left drawer file browser (in-house tree; `Ctrl+B` toggle, `Ctrl+E` focus)
 - Center editing area using `ratatui-code-editor` (Tree-sitter syntax
   highlighting, undo/redo, selection, system clipboard)
@@ -127,7 +127,7 @@ testable.
 | `search`   | Find / find-and-replace toolbar state                     |
 | `messages` | Right-drawer notifications                                |
 | `datetime` | Local/UTC/ISO formatting and the month grid (via `jiff`)  |
-| `settings` | serde-backed settings at `~/.config/stride/settings.json` |
+| `settings` | serde-backed settings at `~/.config/vix/settings.json` |
 | `theme`    | Colors and Nerd Font icons                                |
 | `ui`       | All rendering; lays out the frame and draws each pane     |
 

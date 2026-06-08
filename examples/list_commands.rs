@@ -3,11 +3,11 @@
 //!
 //! Run with: `cargo run --example list_commands`
 
-use stride::palette::COMMANDS;
+use vix::palette::COMMANDS;
 
 fn main() {
     let width = COMMANDS.iter().map(|(label, _)| label.len()).max().unwrap_or(0);
-    println!("STRIDE command palette — `>` commands\n");
+    println!("Vix command palette — `>` commands\n");
     for (label, action) in COMMANDS {
         println!("  {label:<width$}  {action}");
     }

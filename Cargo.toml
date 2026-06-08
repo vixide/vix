@@ -1,11 +1,11 @@
 [package]
-name = "stride"
+name = "vix"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.86"
-description = "STRIDE: Simple Terminal Rust IDE — a keyboard-friendly TUI text editor"
+description = "Vix: Simple Terminal Rust IDE — a keyboard-friendly TUI text editor"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/sixarm/stride"
+repository = "https://github.com/sixarm/vix"
 readme = "README.md"
 keywords = ["tui", "editor", "ide", "terminal", "ratatui"]
 categories = ["text-editors", "command-line-utilities"]

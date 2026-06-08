@@ -44,7 +44,7 @@ const TOOLS: &[Item] = &[
 const HELP: &[Item] = &[
     Item { label: "Website", action: "help.website", shortcut: "" },
     Item { label: "Email Us", action: "help.email", shortcut: "" },
-    Item { label: "About STRIDE", action: "help.about", shortcut: "" },
+    Item { label: "About Vix", action: "help.about", shortcut: "" },
 ];
 
 pub const MENUS: &[MenuDef] = &[

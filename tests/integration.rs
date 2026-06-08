@@ -1,4 +1,4 @@
-//! Integration tests for STRIDE's terminal-independent logic.
+//! Integration tests for Vix's terminal-independent logic.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 
-use stride::app::{App, Focus};
-use stride::datetime;
-use stride::fileops;
-use stride::palette::{fuzzy_match, parse_path_target};
-use stride::search::SearchBar;
+use vix::app::{App, Focus};
+use vix::datetime;
+use vix::fileops;
+use vix::palette::{fuzzy_match, parse_path_target};
+use vix::search::SearchBar;
 
 fn key(c: char) -> KeyEvent {
     KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
@@ -29,7 +29,7 @@ fn app_at(root: &Path) -> App {
 }
 
 fn unique_dir(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("stride-{tag}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("vix-{tag}-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
     dir
 }
@@ -491,7 +491,7 @@ fn project_replace_rewrites_files() {
 
 #[test]
 fn detects_image_extensions() {
-    use stride::editor::is_image_path;
+    use vix::editor::is_image_path;
     assert!(is_image_path(Path::new("photos/a.PNG")));
     assert!(is_image_path(Path::new("x.jpeg")));
     assert!(is_image_path(Path::new("y.webp")));

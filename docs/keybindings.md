@@ -1,7 +1,7 @@
-# STRIDE Keybindings
+# Vix Keybindings
 
-Every shortcut STRIDE currently implements. Shortcuts use familiar
-macOS/Windows conventions; STRIDE is **not** modal.
+Every shortcut Vix currently implements. Shortcuts use familiar
+macOS/Windows conventions; Vix is **not** modal.
 
 ## Global
 

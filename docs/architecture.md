@@ -1,8 +1,8 @@
-# STRIDE Architecture
+# Vix Architecture
 
 ## Crate shape: library + binary
 
-STRIDE is a library crate (`src/lib.rs`) with a thin binary (`src/main.rs`) on
+Vix is a library crate (`src/lib.rs`) with a thin binary (`src/main.rs`) on
 top. The binary owns only the terminal lifecycle and the event loop; everything
 else is a public module in the library. This keeps the editing logic
 terminal-independent, so it can be unit-tested and driven from examples without
@@ -20,7 +20,7 @@ spinning up a real TTY (see `tests/integration.rs` and `examples/`).
 | `search`   | `SearchBar`: query/replace/toggles; builds the regex pattern    |
 | `messages` | `Messages`: the notifications drawer model                      |
 | `datetime` | `jiff`-based clock/ISO/week formatting and the month grid       |
-| `settings` | serde-backed `Settings` persisted to `~/.config/stride`         |
+| `settings` | serde-backed `Settings` persisted to `~/.config/vix`         |
 | `theme`    | Colors and Nerd Font icon constants                            |
 | `ui`       | Pure rendering: lays out the frame and draws each pane/overlay  |
 
@@ -85,7 +85,7 @@ pins the stack:
 - The file explorer, scrollbar, popups, menu, and command palette are
   implemented directly on `ratatui` primitives (`List`, `Scrollbar`, `Clear`,
   `Tabs`) rather than pulling additional widget crates.
-- Date/time uses `jiff` and the month grid is rendered in-house, so STRIDE
+- Date/time uses `jiff` and the month grid is rendered in-house, so Vix
   depends on exactly one date library.
 
 Historical note: the first cut used `tui-textarea` (which targets `ratatui`

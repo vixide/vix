@@ -1,7 +1,7 @@
-//! STRIDE: Simple Terminal Rust IDE — binary entry point.
+//! Vix: Simple Terminal Rust IDE — binary entry point.
 //!
 //! Sets up the terminal (with mouse capture), runs the event loop, and restores
-//! on exit. All of the application logic lives in the `stride` library crate.
+//! on exit. All of the application logic lives in the `vix` library crate.
 
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -10,8 +10,8 @@ use std::time::Duration;
 use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event};
 use crossterm::execute;
 
-use stride::app::App;
-use stride::ui;
+use vix::app::App;
+use vix::ui;
 
 fn main() -> io::Result<()> {
     let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));

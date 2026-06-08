@@ -1,4 +1,4 @@
-//! STRIDE: Simple Terminal Rust IDE.
+//! Vix: Simple Terminal Rust IDE.
 //!
 //! A keyboard-friendly TUI text editor built on [`ratatui`] and
 //! [`ratatui-code-editor`]. The crate is split into focused modules so the
@@ -6,7 +6,7 @@
 //!
 //! ```
 //! use std::path::PathBuf;
-//! use stride::app::App;
+//! use vix::app::App;
 //!
 //! // Build an app rooted at a directory. No terminal is required for this.
 //! let app = App::new(PathBuf::from("."));

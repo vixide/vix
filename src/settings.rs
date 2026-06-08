@@ -1,4 +1,4 @@
-//! User settings, serialized with serde to `~/.config/stride/settings.json`.
+//! User settings, serialized with serde to `~/.config/vix/settings.json`.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -32,7 +32,7 @@ impl Settings {
         let base = std::env::var_os("XDG_CONFIG_HOME")
             .map(PathBuf::from)
             .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-        Some(base.join("stride").join("settings.json"))
+        Some(base.join("vix").join("settings.json"))
     }
 
     /// Load settings, falling back to defaults on any error.
