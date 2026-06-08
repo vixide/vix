@@ -24,6 +24,7 @@ pub mod fileops;
 pub mod menu;
 pub mod messages;
 pub mod palette;
+pub mod project_search;
 pub mod query;
 pub mod search;
 pub mod settings;

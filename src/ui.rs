@@ -112,6 +112,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.palette.is_some() {
         draw_palette(app, frame, area);
     }
+    if app.project_search.is_some() {
+        draw_project_search(app, frame, area);
+    }
     if app.prompt.is_some() {
         draw_prompt(app, frame, area);
     }
@@ -587,6 +590,67 @@ fn draw_palette(app: &App, frame: &mut Frame, area: Rect) {
         theme::dim(),
     ));
     frame.render_widget(Paragraph::new(hint), rows[2]);
+}
+
+fn draw_project_search(app: &App, frame: &mut Frame, area: Rect) {
+    let Some(ps) = app.project_search.as_ref() else { return };
+    let rect = centered(area, 80, 80);
+    frame.render_widget(Clear, rect);
+    let title = if ps.replacing {
+        format!(" {} Search & Replace in Project ", icon::SEARCH)
+    } else {
+        format!(" {} Search in Project ", icon::SEARCH)
+    };
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(title);
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let head = if ps.replacing { 4 } else { 3 };
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(head), Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let mut header = Vec::new();
+    let q_focus = !ps.replacing || ps.field == Field::Query;
+    header.push(field_line("Find   ", &ps.query, q_focus));
+    if ps.replacing {
+        header.push(field_line("Replace", &ps.replace, ps.field == Field::Replace));
+    }
+    let toggle = |on: bool, label: &str| {
+        let style = if on { theme::selected() } else { theme::dim() };
+        Span::styled(format!(" {label} "), style)
+    };
+    header.push(Line::from(vec![
+        toggle(ps.case_sensitive, "Case (Alt+C)"),
+        Span::raw(" "),
+        toggle(ps.regex, "Regex (Alt+R)"),
+    ]));
+    header.push(Line::from(Span::styled(ps.status.clone(), theme::dim())));
+    frame.render_widget(Paragraph::new(header), rows[0]);
+
+    let items: Vec<ListItem> = ps
+        .hits
+        .iter()
+        .map(|h| ListItem::new(Line::from(h.display.clone())))
+        .collect();
+    let list = List::new(items).highlight_style(theme::selected());
+    let mut state = ListState::default();
+    if !ps.hits.is_empty() {
+        state.select(Some(ps.selected));
+    }
+    frame.render_stateful_widget(list, rows[1], &mut state);
+
+    let hint = if ps.replacing {
+        "Enter: open match   Alt+Enter / Replace-field Enter: replace all   Tab: switch field   Esc: close"
+    } else {
+        "Enter: open match   \u{2191}\u{2193}: navigate   Esc: close"
+    };
+    frame.render_widget(Paragraph::new(Line::from(Span::styled(hint, theme::dim()))), rows[2]);
 }
 
 fn draw_search(app: &App, frame: &mut Frame, area: Rect) {

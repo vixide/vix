@@ -19,6 +19,7 @@ use crate::explorer::Explorer;
 use crate::menu::{Menu, MENUS};
 use crate::messages::{Level, Messages};
 use crate::palette::{self, Action as PAction, Entry, Mode as PMode, Palette};
+use crate::project_search::{Hit, ProjectSearch};
 use crate::query::{Decision, QueryReplace};
 use crate::search::{Field, SearchBar};
 use crate::settings::Settings;
@@ -80,6 +81,7 @@ pub struct App {
     pub palette: Option<Palette>,
     pub search: Option<SearchBar>,
     pub query_replace: Option<QueryReplace>,
+    pub project_search: Option<ProjectSearch>,
     pub prompt: Option<Prompt>,
     pub paste: Option<PasteOp>,
     pub confirm: Option<Confirm>,
@@ -119,6 +121,7 @@ impl App {
             palette: None,
             search: None,
             query_replace: None,
+            project_search: None,
             prompt: None,
             paste: None,
             confirm: None,
@@ -159,6 +162,10 @@ impl App {
         }
         if self.query_replace.is_some() {
             self.qr_key(key);
+            return;
+        }
+        if self.project_search.is_some() {
+            self.ps_key(key);
             return;
         }
         if self.confirm.is_some() {
@@ -222,6 +229,7 @@ impl App {
                     'p' => self.run_action("tools.palette"),
                     'b' => self.run_action("view.explorer"),
                     'e' => self.toggle_focus_explorer_editor(),
+                    'f' if Self::shift(&key) => self.run_action("search.project"),
                     'f' => self.run_action("edit.find"),
                     'r' if Self::alt(&key) => self.run_action("edit.query_replace"),
                     'r' => self.run_action("edit.replace"),
@@ -352,6 +360,8 @@ impl App {
                     s.interactive = true;
                 }
             }
+            "search.project" => self.open_project_search(false),
+            "search.project_replace" => self.open_project_search(true),
             "tools.calendar" => self.show_calendar = !self.show_calendar,
             "tools.palette" => self.open_palette(),
             "tools.line_numbers" => {
@@ -1314,6 +1324,241 @@ impl App {
         }
     }
 
+    // ----- project-wide search / replace ---------------------------------
+
+    fn open_project_search(&mut self, replacing: bool) {
+        self.build_file_index();
+        self.project_search = Some(ProjectSearch::new(replacing));
+        self.run_project_search();
+    }
+
+    /// The current text for a path: the open buffer if one points at it (so
+    /// unsaved edits are searched), otherwise the file on disk.
+    fn current_text(&self, path: &Path) -> Option<String> {
+        let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        if let Some(tab) = self
+            .editor
+            .tabs
+            .iter()
+            .find(|t| t.path.as_deref() == Some(canon.as_path()))
+        {
+            return Some(tab.text());
+        }
+        let meta = std::fs::metadata(path).ok()?;
+        if meta.len() > 2_000_000 {
+            return None; // skip very large files
+        }
+        std::fs::read_to_string(path).ok()
+    }
+
+    fn run_project_search(&mut self) {
+        let Some(ps) = self.project_search.as_ref() else {
+            return;
+        };
+        let Some(pat) = ps.pattern() else {
+            if let Some(p) = self.project_search.as_mut() {
+                p.hits.clear();
+                p.selected = 0;
+                p.status = "Type to search the project (2+ characters).".into();
+            }
+            return;
+        };
+        let re = match Regex::new(&pat) {
+            Ok(r) => r,
+            Err(e) => {
+                if let Some(p) = self.project_search.as_mut() {
+                    p.status = format!("bad regex: {e}");
+                }
+                return;
+            }
+        };
+
+        let mut hits: Vec<Hit> = Vec::new();
+        let mut files = 0usize;
+        'outer: for path in &self.file_index {
+            let Some(content) = self.current_text(path) else {
+                continue;
+            };
+            let rel = path
+                .strip_prefix(&self.root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .into_owned();
+            let mut file_had_hit = false;
+            for (i, line) in content.lines().enumerate() {
+                if let Some(m) = re.find(line) {
+                    file_had_hit = true;
+                    let clipped: String = line.trim_start().chars().take(120).collect();
+                    hits.push(Hit {
+                        path: path.clone(),
+                        line: i + 1,
+                        col: m.start() + 1,
+                        display: format!("{rel}:{}: {clipped}", i + 1),
+                    });
+                    if hits.len() >= 5000 {
+                        break 'outer;
+                    }
+                }
+            }
+            if file_had_hit {
+                files += 1;
+            }
+        }
+
+        if let Some(p) = self.project_search.as_mut() {
+            p.status = if hits.is_empty() {
+                "No matches".into()
+            } else {
+                format!("{} matches in {} files", hits.len(), files)
+            };
+            if p.selected >= hits.len() {
+                p.selected = hits.len().saturating_sub(1);
+            }
+            p.hits = hits;
+        }
+    }
+
+    fn project_replace_all(&mut self) {
+        let Some(ps) = self.project_search.as_ref() else {
+            return;
+        };
+        if !ps.replacing {
+            return;
+        }
+        let Some(pat) = ps.pattern() else {
+            return;
+        };
+        let re = match Regex::new(&pat) {
+            Ok(r) => r,
+            Err(e) => {
+                if let Some(p) = self.project_search.as_mut() {
+                    p.status = format!("bad regex: {e}");
+                }
+                return;
+            }
+        };
+        let use_regex = ps.regex;
+        let replacement = ps.replace.clone();
+
+        // Unique set of files that currently have hits.
+        let mut paths: Vec<PathBuf> = ps.hits.iter().map(|h| h.path.clone()).collect();
+        paths.sort();
+        paths.dedup();
+
+        let mut replaced = 0usize;
+        let mut files = 0usize;
+        for path in &paths {
+            let Some(content) = self.current_text(path) else {
+                continue;
+            };
+            let count = re.find_iter(&content).count();
+            if count == 0 {
+                continue;
+            }
+            let new = if use_regex {
+                let rep = unescape(&replacement);
+                re.replace_all(&content, rep.as_str()).into_owned()
+            } else {
+                re.replace_all(&content, regex::NoExpand(&replacement)).into_owned()
+            };
+            if new == content {
+                continue;
+            }
+            if let Err(e) = std::fs::write(path, &new) {
+                self.messages.error(format!("Write failed for {}: {e}", path.display()));
+                continue;
+            }
+            // Keep any open buffer in sync (and clean, since we just saved).
+            let canon = path.canonicalize().unwrap_or_else(|_| path.clone());
+            for tab in &mut self.editor.tabs {
+                if tab.path.as_deref() == Some(canon.as_path()) {
+                    tab.editor.set_content(&new);
+                    tab.dirty = false;
+                }
+            }
+            replaced += count;
+            files += 1;
+        }
+
+        self.run_project_search();
+        if let Some(p) = self.project_search.as_mut() {
+            p.status = format!("Replaced {replaced} in {files} files");
+        }
+    }
+
+    fn ps_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => self.project_search = None,
+            KeyCode::Up => {
+                if let Some(p) = self.project_search.as_mut() {
+                    p.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.project_search.as_mut() {
+                    p.down();
+                }
+            }
+            KeyCode::Tab => {
+                if let Some(p) = self.project_search.as_mut() {
+                    p.toggle_field();
+                }
+            }
+            KeyCode::Enter => {
+                let replacing = self.project_search.as_ref().map(|p| p.replacing).unwrap_or(false);
+                let on_replace = self.project_search.as_ref().map(|p| p.field) == Some(Field::Replace);
+                if replacing && (Self::alt(&key) || on_replace) {
+                    self.project_replace_all();
+                } else {
+                    self.open_selected_hit();
+                }
+            }
+            KeyCode::Char(c) if Self::alt(&key) => {
+                if let Some(p) = self.project_search.as_mut() {
+                    match c.to_ascii_lowercase() {
+                        'c' => p.case_sensitive = !p.case_sensitive,
+                        'r' => p.regex = !p.regex,
+                        _ => {}
+                    }
+                }
+                self.run_project_search();
+            }
+            KeyCode::Backspace => {
+                let in_query = self.project_search.as_ref().map(|p| p.field) == Some(Field::Query);
+                if let Some(p) = self.project_search.as_mut() {
+                    p.active_field_mut().pop();
+                }
+                if in_query {
+                    self.run_project_search();
+                }
+            }
+            KeyCode::Char(c) => {
+                let in_query = self.project_search.as_ref().map(|p| p.field) == Some(Field::Query);
+                if let Some(p) = self.project_search.as_mut() {
+                    p.active_field_mut().push(c);
+                }
+                if in_query {
+                    self.run_project_search();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn open_selected_hit(&mut self) {
+        let target = self
+            .project_search
+            .as_ref()
+            .and_then(|p| p.selected_hit())
+            .map(|h| (h.path.clone(), h.line, h.col));
+        if let Some((path, line, col)) = target {
+            self.project_search = None;
+            self.open_path(&path, false);
+            self.editor.goto(line, Some(col), self.editor_view());
+            self.focus = Focus::Editor;
+        }
+    }
+
     // ----- interactive query-replace -------------------------------------
 
     fn begin_query_replace(&mut self) {
@@ -1641,6 +1886,38 @@ mod tests {
     use super::*;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+
+    fn buffer_text(terminal: &Terminal<TestBackend>) -> String {
+        terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|c| c.symbol())
+            .collect()
+    }
+
+    #[test]
+    fn renders_project_search_panel_with_hits() {
+        let dir = std::env::temp_dir().join(format!("stride-ps-unit-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("note.txt"), "the needle is here\n").unwrap();
+
+        let mut app = App::new(dir.clone());
+        app.run_action("search.project");
+        for c in "needle".chars() {
+            app.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        assert_eq!(app.project_search.as_ref().unwrap().hits.len(), 1);
+
+        let mut terminal = Terminal::new(TestBackend::new(100, 40)).unwrap();
+        terminal.draw(|f| crate::ui::draw(&mut app, f)).unwrap();
+        let text = buffer_text(&terminal);
+        assert!(text.contains("Search in Project"), "panel title rendered");
+        assert!(text.contains("needle"), "the matching line is shown");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn renders_image_tab_without_panic() {

@@ -370,6 +370,58 @@ fn explorer_multiselect_collects_paths() {
 }
 
 #[test]
+fn project_search_finds_matches_across_files() {
+    let dir = unique_dir("psearch");
+    fs::write(dir.join("a.txt"), "alpha beta\nbeta gamma\n").unwrap();
+    fs::write(dir.join("b.txt"), "delta beta\n").unwrap();
+    let mut app = app_at(&dir);
+
+    app.run_action("search.project");
+    for c in "beta".chars() {
+        app.on_key(key(c));
+    }
+    let ps = app.project_search.as_ref().unwrap();
+    assert_eq!(ps.hits.len(), 3, "two in a.txt, one in b.txt");
+    let expected = ps.selected_hit().unwrap();
+    let expected_name = expected.path.file_name().unwrap().to_owned();
+    let expected_line = expected.line;
+
+    // Enter opens the selected match and jumps to it.
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(app.project_search.is_none());
+    let tab = app.editor.active_tab().unwrap();
+    assert!(tab.path.as_ref().unwrap().ends_with(&expected_name));
+    assert_eq!(app.editor.cursor_1based().0, expected_line);
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn project_replace_rewrites_files() {
+    let dir = unique_dir("preplace");
+    fs::write(dir.join("a.txt"), "beta and beta\n").unwrap();
+    fs::write(dir.join("b.txt"), "gamma beta\n").unwrap();
+    let mut app = app_at(&dir);
+
+    app.run_action("search.project_replace");
+    for c in "beta".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)); // to replace field
+    for c in "ZZ".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // replace all in project
+
+    let a = fs::read_to_string(dir.join("a.txt")).unwrap();
+    let b = fs::read_to_string(dir.join("b.txt")).unwrap();
+    assert_eq!(a, "ZZ and ZZ\n");
+    assert_eq!(b, "gamma ZZ\n");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn detects_image_extensions() {
     use stride::editor::is_image_path;
     assert!(is_image_path(Path::new("photos/a.PNG")));

@@ -127,6 +127,8 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("Find", "edit.find"),
     ("Find & Replace", "edit.replace"),
     ("Query Replace", "edit.query_replace"),
+    ("Search in Project", "search.project"),
+    ("Search and Replace in Project", "search.project_replace"),
     ("Toggle Line Numbers", "tools.line_numbers"),
     ("Toggle Explorer", "view.explorer"),
     ("Toggle Messages", "view.messages"),

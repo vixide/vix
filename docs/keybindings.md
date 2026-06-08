@@ -16,6 +16,8 @@ macOS/Windows conventions; STRIDE is **not** modal.
 | `Ctrl+P`         | Open the command palette                             |
 | `Ctrl+F`         | Find                                                 |
 | `Ctrl+R`         | Find & Replace                                       |
+| `Ctrl+Alt+R`     | Interactive query-replace (y/n/!/q)                  |
+| `Ctrl+Shift+F`   | Search across the whole project                      |
 | `F3` / `Shift+F3`| Find next / previous                                 |
 | `Ctrl+B`         | Toggle the file explorer (reveals the active file)   |
 | `Ctrl+E`         | Toggle focus between explorer and editor             |

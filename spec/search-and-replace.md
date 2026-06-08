@@ -2,10 +2,11 @@
 
 **Status:** Shipped — `Ctrl+F` find, `Ctrl+R` replace, `F3`/`Shift+F3` next/prev,
 the Case/Word/Regex toggles (`Alt+C`/`Alt+W`/`Alt+R`), capture groups, the
-`\n`/`\t`/`\r`/`\\` escapes, Replace All, and **interactive query-replace**
-(`Ctrl+Alt+R` or palette "Query Replace" → step through with `y`/`n`/`!`/`q`).
-Roadmap: find-occurrence-of-selection (`Alt+N`/`Alt+P`) and project-wide search
-& replace.
+`\n`/`\t`/`\r`/`\\` escapes, Replace All, **interactive query-replace**
+(`Ctrl+Alt+R` or palette "Query Replace" → step through with `y`/`n`/`!`/`q`), and
+**project-wide search & replace** (`Ctrl+Shift+F` or palette "Search in Project" /
+"Search and Replace in Project"; searches open buffers in their unsaved state).
+Roadmap: find-occurrence-of-selection (`Alt+N`/`Alt+P`).
 
 
 | Shortcut              | Action                                            |
@@ -38,4 +39,11 @@ The replacement also interprets the standard escape sequences \n (newline), \t (
 
 ## Project-Wide Search and Replace
 
-Use "Search and Replace in Project" from the command palette to search across all git-tracked files in the project. Press Alt+Enter to replace all matches across the project. Works with unsaved buffers and large files, up to 10,000 results.
+Open with `Ctrl+Shift+F`, or "Search in Project" / "Search and Replace in Project"
+from the command palette. Type to search incrementally across every file under
+the project root; results list as `path:line: text`. Use ↑/↓ to navigate and
+Enter to open a match. In the replace variant, `Tab` switches to the replacement
+field and `Alt+Enter` (or Enter from the replace field) rewrites every match
+across the project. Open buffers are searched and replaced in their current
+(possibly unsaved) state; files larger than 2 MB and binary files are skipped,
+and results are capped at 5,000.
