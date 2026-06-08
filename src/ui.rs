@@ -596,7 +596,9 @@ fn draw_project_search(app: &App, frame: &mut Frame, area: Rect) {
     let Some(ps) = app.project_search.as_ref() else { return };
     let rect = centered(area, 80, 80);
     frame.render_widget(Clear, rect);
-    let title = if ps.replacing {
+    let title = if ps.static_results {
+        format!(" {} Go to Definition ", icon::SEARCH)
+    } else if ps.replacing {
         format!(" {} Search & Replace in Project ", icon::SEARCH)
     } else {
         format!(" {} Search in Project ", icon::SEARCH)
@@ -754,6 +756,7 @@ const HELP_ROWS: &[(&str, &str)] = &[
     ("F3 / Shift+F3", "Find next / previous"),
     ("Ctrl+B / Ctrl+E", "Toggle / focus explorer"),
     ("Ctrl+Shift+F", "Search across the project"),
+    ("F12", "Go to definition of symbol under cursor"),
     ("Alt+Left / Alt+Right", "Position history back / forward"),
     ("F10 / Alt+F,E,T,H", "Menu bar"),
     ("F1", "This help"),

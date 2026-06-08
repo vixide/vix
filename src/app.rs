@@ -279,6 +279,10 @@ impl App {
                 self.show_help = true;
                 true
             }
+            KeyCode::F(12) => {
+                self.run_action("nav.goto_definition");
+                true
+            }
             KeyCode::F(10) => {
                 self.menu.toggle();
                 true
@@ -383,6 +387,7 @@ impl App {
             }
             "search.project" => self.open_project_search(false),
             "search.project_replace" => self.open_project_search(true),
+            "nav.goto_definition" => self.goto_definition(),
             "tools.calendar" => self.show_calendar = !self.show_calendar,
             "tools.palette" => self.open_palette(),
             "tools.line_numbers" => {
@@ -1415,6 +1420,106 @@ impl App {
 
     // ----- project-wide search / replace ---------------------------------
 
+    /// Heuristic "go to definition": find likely definitions of the identifier
+    /// under the cursor across the project (keyword-prefixed declarations). Not
+    /// a semantic LSP — fast, offline, and language-agnostic.
+    fn goto_definition(&mut self) {
+        let Some(symbol) = self.symbol_under_cursor() else {
+            self.messages.warn("No symbol under the cursor");
+            return;
+        };
+        self.build_file_index();
+        let hits = self.find_definitions(&symbol);
+        match hits.len() {
+            0 => self
+                .messages
+                .warn(format!("No definition found for `{symbol}`")),
+            1 => {
+                let (path, line, col) = (hits[0].path.clone(), hits[0].line, hits[0].col);
+                self.with_jump(|s| {
+                    s.open_path(&path, false);
+                    let area = s.editor_view();
+                    s.editor.goto(line, Some(col), area);
+                    s.focus = Focus::Editor;
+                });
+                self.status = format!("Definition of `{symbol}`");
+            }
+            n => {
+                let mut ps = ProjectSearch::new(false);
+                ps.query = symbol.clone();
+                ps.static_results = true;
+                ps.hits = hits;
+                ps.status = format!("{n} definitions of `{symbol}` — Enter to jump");
+                self.project_search = Some(ps);
+            }
+        }
+    }
+
+    /// The identifier (alphanumeric/underscore word) under the cursor.
+    fn symbol_under_cursor(&self) -> Option<String> {
+        let tab = self.editor.active_tab()?;
+        if tab.is_image() {
+            return None;
+        }
+        let text = tab.text();
+        let cursor = tab.editor.get_cursor();
+        let chars: Vec<char> = text.chars().collect();
+        let is_word = |c: char| c.is_alphanumeric() || c == '_';
+        let mut start = cursor.min(chars.len());
+        while start > 0 && is_word(chars[start - 1]) {
+            start -= 1;
+        }
+        let mut end = cursor.min(chars.len());
+        while end < chars.len() && is_word(chars[end]) {
+            end += 1;
+        }
+        if start == end {
+            return None;
+        }
+        let sym: String = chars[start..end].iter().collect();
+        let ok = sym.chars().next().map(|c| c.is_alphabetic() || c == '_').unwrap_or(false);
+        ok.then_some(sym)
+    }
+
+    fn find_definitions(&self, symbol: &str) -> Vec<Hit> {
+        let esc = regex::escape(symbol);
+        // Definition-introducing keywords across common languages.
+        let kw = "fn|func|function|def|class|struct|enum|trait|interface|type|\
+                  const|let|var|val|static|mod|namespace|package|macro_rules!";
+        let pat = format!(r"(?:\b(?:{kw})\s+{esc}\b|#define\s+{esc}\b)");
+        let Ok(re) = Regex::new(&pat) else {
+            return Vec::new();
+        };
+        let mut hits = Vec::new();
+        for path in &self.file_index {
+            let Some(content) = self.current_text(path) else {
+                continue;
+            };
+            let rel = path
+                .strip_prefix(&self.root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .into_owned();
+            for (i, line) in content.lines().enumerate() {
+                if re.is_match(line) {
+                    let byte = line.find(symbol).unwrap_or(0);
+                    let col = line[..byte].chars().count() + 1;
+                    let clipped: String = line.trim_start().chars().take(120).collect();
+                    hits.push(Hit {
+                        path: path.clone(),
+                        line: i + 1,
+                        col,
+                        display: format!("{rel}:{}: {clipped}", i + 1),
+                    });
+                    if hits.len() >= 200 {
+                        return hits;
+                    }
+                }
+            }
+        }
+        hits
+    }
+
     fn open_project_search(&mut self, replacing: bool) {
         self.build_file_index();
         self.project_search = Some(ProjectSearch::new(replacing));
@@ -1441,6 +1546,10 @@ impl App {
     }
 
     fn run_project_search(&mut self) {
+        // Static result lists (e.g. go-to-definition) are not re-searched.
+        if self.project_search.as_ref().map(|p| p.static_results).unwrap_or(false) {
+            return;
+        }
         let Some(ps) = self.project_search.as_ref() else {
             return;
         };

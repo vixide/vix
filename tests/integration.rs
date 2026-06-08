@@ -370,6 +370,38 @@ fn explorer_multiselect_collects_paths() {
 }
 
 #[test]
+fn goto_definition_single_jumps() {
+    let dir = unique_dir("gotodef");
+    fs::write(dir.join("lib.rs"), "fn target() {}\n").unwrap();
+    fs::write(dir.join("main.rs"), "target()\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(dir.join("main.rs")); // cursor at offset 0 → on "target"
+
+    app.on_key(KeyEvent::new(KeyCode::F(12), KeyModifiers::NONE));
+    let tab = app.editor.active_tab().unwrap();
+    assert!(tab.path.as_ref().unwrap().ends_with("lib.rs"), "jumped to the definition file");
+    assert_eq!(app.editor.cursor_1based().0, 1);
+    assert!(app.project_search.is_none(), "single match jumps directly");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn goto_definition_multiple_opens_panel() {
+    let dir = unique_dir("gotodef2");
+    fs::write(dir.join("a.rs"), "fn dup() {}\n").unwrap();
+    fs::write(dir.join("b.rs"), "fn dup() {}\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(dir.join("a.rs"));
+    app.editor.goto(1, Some(4), Rect::new(0, 0, 80, 24)); // cursor on "dup"
+
+    app.on_key(KeyEvent::new(KeyCode::F(12), KeyModifiers::NONE));
+    let ps = app.project_search.as_ref().expect("panel of candidates");
+    assert!(ps.static_results);
+    assert_eq!(ps.hits.len(), 2, "two definitions of dup");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn position_history_back_and_forward() {
     let dir = unique_dir("nav");
     fs::write(dir.join("a.txt"), "1\n2\n3\n4\n5\n").unwrap();

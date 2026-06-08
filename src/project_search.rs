@@ -30,6 +30,9 @@ pub struct ProjectSearch {
     pub hits: Vec<Hit>,
     pub selected: usize,
     pub status: String,
+    /// When set, the hit list is fixed (e.g. go-to-definition candidates) and
+    /// typing does not re-run the search.
+    pub static_results: bool,
 }
 
 impl ProjectSearch {
@@ -44,6 +47,7 @@ impl ProjectSearch {
             hits: Vec::new(),
             selected: 0,
             status: "Type to search the project (2+ characters).".to_string(),
+            static_results: false,
         }
     }
 
