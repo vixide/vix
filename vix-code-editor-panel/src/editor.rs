@@ -11,7 +11,7 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use anyhow::{Result, anyhow};
 use ratatui_core::layout::Rect;
-use ratatui_core::style::{Color, Style};
+use ratatui_core::style::{Color, Modifier, Style};
 
 // keyword and ratatui style
 type Theme = HashMap<String, Style>;
@@ -60,6 +60,22 @@ pub struct Editor {
 
     /// Controls the left padding before writing the code
     pub(crate) left_code_padding: usize,
+
+    /// Style for ordinary (untokenized) text. Configurable so the host can
+    /// match its own theme (e.g. white-on-dark vs. black-on-light).
+    pub(crate) text_style: Style,
+
+    /// Style for the line-number gutter.
+    pub(crate) line_number_style: Style,
+
+    /// Style applied to the active selection. Defaults to reversed video, which
+    /// reads correctly on any background.
+    pub(crate) selection_style: Style,
+
+    /// Style for the one-cell block cursor at the caret. `None` draws no cursor
+    /// (the original behavior); `Some` draws a visible block cursor so the host
+    /// can theme it (e.g. a custom cursor color).
+    pub(crate) cursor_style: Option<Style>,
 }
 
 impl Editor {
@@ -93,7 +109,45 @@ impl Editor {
             highlights_cache,
             show_line_numbers: true,
             left_code_padding: 2,
+            text_style: Style::default().fg(Color::White),
+            line_number_style: Style::default().fg(Color::DarkGray),
+            selection_style: Style::default().add_modifier(Modifier::REVERSED),
+            cursor_style: None,
         })
+    }
+
+    /// Set the style for ordinary text (the foreground of unhighlighted code).
+    pub fn set_text_style(&mut self, style: Style) {
+        self.text_style = style;
+    }
+
+    /// Set the style for the line-number gutter.
+    pub fn set_line_number_style(&mut self, style: Style) {
+        self.line_number_style = style;
+    }
+
+    /// Set the block-cursor style. Pass `Some(style)` to draw a visible cursor
+    /// cell (its `bg` is the cursor color), or `None` to draw no cursor.
+    pub fn set_cursor_style(&mut self, style: Option<Style>) {
+        self.cursor_style = style;
+    }
+
+    /// Replace the syntax-highlight theme (token name -> `#rrggbb`) and drop the
+    /// cached highlights so the new colors take effect on the next render.
+    pub fn set_syntax_theme(&mut self, theme: &[(&str, &str)]) {
+        self.theme = theme
+            .iter()
+            .map(|(name, hex)| {
+                let (r, g, b) = utils::rgb(hex);
+                ((*name).to_string(), Style::default().fg(Color::Rgb(r, g, b)))
+            })
+            .collect();
+        self.highlights_cache.borrow_mut().clear();
+    }
+
+    /// Set the style applied to the active selection.
+    pub fn set_selection_style(&mut self, style: Style) {
+        self.selection_style = style;
     }
 
     pub(crate) fn get_line_number_width(&self) -> usize {
@@ -496,6 +550,12 @@ impl Editor {
 
     pub fn show_line_numbers(&mut self, show: bool) {
         self.show_line_numbers = show
+    }
+
+    /// Toggle the line-number gutter; returns the new visibility.
+    pub fn toggle_line_numbers(&mut self) -> bool {
+        self.show_line_numbers = !self.show_line_numbers;
+        self.show_line_numbers
     }
 
     pub fn set_left_code_padding(&mut self, char_count: usize) {

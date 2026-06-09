@@ -1,0 +1,39 @@
+{
+  "name": "Gruvbox Dark",
+  "menu-bar": {
+    "foreground": [235, 219, 178],
+    "background": [40, 40, 40],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "status-bar": {
+    "foreground": [235, 219, 178],
+    "background": [40, 40, 40],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "left-dock": {
+    "foreground": [235, 219, 178],
+    "background": [40, 40, 40],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "right-dock": {
+    "foreground": [235, 219, 178],
+    "background": [40, 40, 40],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "editor": {
+    "foreground": [235, 219, 178],
+    "background": [40, 40, 40],
+    "font-style": "normal",
+    "font-weight": "normal",
+    "cursor": [254, 128, 25]
+  },
+  "syntax": {
+    "keyword": [251, 73, 52],
+    "string": [184, 187, 38],
+    "comment": [146, 131, 116]
+  }
+}

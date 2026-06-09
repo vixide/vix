@@ -1,0 +1,39 @@
+{
+  "name": "Solarized Dark",
+  "menu-bar": {
+    "foreground": [131, 148, 150],
+    "background": [0, 43, 54],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "status-bar": {
+    "foreground": [131, 148, 150],
+    "background": [0, 43, 54],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "left-dock": {
+    "foreground": [131, 148, 150],
+    "background": [0, 43, 54],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "right-dock": {
+    "foreground": [131, 148, 150],
+    "background": [0, 43, 54],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "editor": {
+    "foreground": [131, 148, 150],
+    "background": [0, 43, 54],
+    "font-style": "normal",
+    "font-weight": "normal",
+    "cursor": [38, 139, 210]
+  },
+  "syntax": {
+    "keyword": [133, 153, 0],
+    "string": [42, 161, 152],
+    "comment": [88, 110, 117]
+  }
+}

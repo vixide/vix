@@ -1,0 +1,15 @@
+# vix-keyboard-shortcut-panel: the data for the keyboard-shortcut help overlay —
+# each row pairs a key combo (never translated) with an i18n key for its
+# description. Pure data (no dependencies); the host translates and renders.
+
+[package]
+name = "vix-keyboard-shortcut-panel"
+version = "0.1.0"
+edition = "2021"
+description = "Keyboard-shortcut help rows for Vix."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_keyboard_shortcut_panel"
+path = "src/lib.rs"

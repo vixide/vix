@@ -29,7 +29,7 @@ Single-click opens a file in an ephemeral preview tab — the next single-click 
 
 Double-click opens the file in a permanent tab and focuses the editor.
 
-Preview tabs are enabled by default. Turn them off in the Settings UI if you prefer every click to open a permanent tab.
+Preview tabs are enabled by default. Turn them off via the `preview_tabs` setting (see `docs/configuration.md`) if you prefer every click to open a permanent tab.
 
 ## Cut / Copy / Paste and Multi-Selection
 

@@ -1,0 +1,39 @@
+{
+  "name": "Monokai",
+  "menu-bar": {
+    "foreground": [248, 248, 242],
+    "background": [39, 40, 34],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "status-bar": {
+    "foreground": [248, 248, 242],
+    "background": [39, 40, 34],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "left-dock": {
+    "foreground": [248, 248, 242],
+    "background": [39, 40, 34],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "right-dock": {
+    "foreground": [248, 248, 242],
+    "background": [39, 40, 34],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "editor": {
+    "foreground": [248, 248, 242],
+    "background": [39, 40, 34],
+    "font-style": "normal",
+    "font-weight": "normal",
+    "cursor": [248, 248, 240]
+  },
+  "syntax": {
+    "keyword": [249, 38, 114],
+    "string": [230, 219, 116],
+    "comment": [117, 113, 94]
+  }
+}

@@ -1,0 +1,184 @@
+//! Vix Calendar: the date/time strings and the navigable month grid shown in
+//! Vix's calendar box. See `spec/vix-calendar.md`.
+//!
+//! This crate is pure logic over [`jiff`] — it computes strings and a day grid
+//! but does no rendering, so the host draws it in whatever style it likes and
+//! the logic stays unit-testable without a terminal.
+
+use jiff::civil::Date;
+use jiff::{ToSpan, Zoned};
+
+/// Current time in the system's local time zone.
+pub fn now_local() -> Zoned {
+    Zoned::now()
+}
+
+/// `HH:MM:SS` in the local zone.
+pub fn local_clock(now: &Zoned) -> String {
+    now.strftime("%H:%M:%S").to_string()
+}
+
+/// Localized local date and time with seconds precision: `YYYY-MM-DD HH:MM:SS`
+/// in the system zone (as opposed to the UTC instant).
+pub fn local_datetime(now: &Zoned) -> String {
+    now.strftime("%Y-%m-%d %H:%M:%S").to_string()
+}
+
+/// ISO 8601 instant in UTC: `YYYY-MM-DDTHH:MM:SSZ`.
+pub fn utc_iso(now: &Zoned) -> String {
+    now.timestamp()
+        .strftime("%Y-%m-%dT%H:%M:%SZ")
+        .to_string()
+}
+
+/// ISO 8601 commercial date: `YYYY-Www-D` (week-numbering year, week 01..53,
+/// day 1=Monday..7=Sunday).
+pub fn iso_week_date(now: &Zoned) -> String {
+    let iso = now.date().iso_week_date();
+    format!(
+        "{:04}-W{:02}-{}",
+        iso.year(),
+        iso.week(),
+        iso.weekday().to_monday_one_offset()
+    )
+}
+
+/// The first day of the month containing `date`.
+fn first_of_month(date: Date) -> Date {
+    Date::new(date.year(), date.month(), 1).expect("first of month is always valid")
+}
+
+/// A month laid out as weeks of seven optional day numbers, Monday first.
+/// `None` marks padding cells before the 1st and after the last day.
+pub struct MonthGrid {
+    pub weeks: Vec<[Option<u8>; 7]>,
+    /// Day-of-month of "today", set only when this grid's month is the actual
+    /// current local month; otherwise `None` (so a navigated-to month has no
+    /// highlight).
+    pub today: Option<u8>,
+}
+
+/// Build the day grid for the month containing `month` (any day within it).
+/// Highlights today only when that month is the current local month.
+pub fn month_grid(month: Date) -> MonthGrid {
+    let first = first_of_month(month);
+    // 0 = Monday .. 6 = Sunday — the column the 1st lands in.
+    let lead = first.weekday().to_monday_zero_offset() as usize;
+    let days = first.days_in_month() as u8;
+
+    let now = now_local().date();
+    let today = (now.year() == first.year() && now.month() == first.month())
+        .then_some(now.day() as u8);
+
+    let mut weeks: Vec<[Option<u8>; 7]> = Vec::new();
+    let mut week = [None; 7];
+    let mut col = lead;
+    for day in 1..=days {
+        week[col] = Some(day);
+        col += 1;
+        if col == 7 {
+            weeks.push(week);
+            week = [None; 7];
+            col = 0;
+        }
+    }
+    if col != 0 {
+        weeks.push(week);
+    }
+    MonthGrid { weeks, today }
+}
+
+/// The calendar box's month view and its navigation state. The displayed month
+/// is independent of the live clock, so the user can page back and forth with
+/// [`Calendar::prev_month`] / [`Calendar::next_month`] while the date/time area
+/// keeps showing the present.
+pub struct Calendar {
+    /// First day of the month currently displayed.
+    shown: Date,
+}
+
+impl Default for Calendar {
+    fn default() -> Self {
+        Calendar::new()
+    }
+}
+
+impl Calendar {
+    /// A calendar showing the current local month.
+    pub fn new() -> Self {
+        Calendar {
+            shown: first_of_month(now_local().date()),
+        }
+    }
+
+    /// Move the view to the next month.
+    pub fn next_month(&mut self) {
+        self.shown = self.shown.saturating_add(1.month());
+    }
+
+    /// Move the view to the previous month.
+    pub fn prev_month(&mut self) {
+        self.shown = self.shown.saturating_sub(1.month());
+    }
+
+    /// Snap the view back to the current local month.
+    pub fn reset(&mut self) {
+        self.shown = first_of_month(now_local().date());
+    }
+
+    /// First day of the displayed month.
+    pub fn shown_month(&self) -> Date {
+        self.shown
+    }
+
+    /// Month-and-year heading for the displayed month, e.g. `June 2026`.
+    pub fn title(&self) -> String {
+        self.shown.strftime("%B %Y").to_string()
+    }
+
+    /// Day grid for the displayed month (today highlighted only if it is the
+    /// current local month).
+    pub fn grid(&self) -> MonthGrid {
+        month_grid(self.shown)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn grid_has_valid_day_count() {
+        let count = month_grid(now_local().date())
+            .weeks
+            .iter()
+            .flatten()
+            .filter(|c| c.is_some())
+            .count();
+        assert!((28..=31).contains(&count), "days in month: {count}");
+    }
+
+    #[test]
+    fn current_month_highlights_today_others_do_not() {
+        let mut cal = Calendar::new();
+        assert!(cal.grid().today.is_some(), "current month highlights today");
+        cal.next_month();
+        assert!(cal.grid().today.is_none(), "a future month has no today");
+        cal.prev_month();
+        assert!(cal.grid().today.is_some(), "back to the current month");
+    }
+
+    #[test]
+    fn navigation_wraps_year_boundaries() {
+        let mut cal = Calendar::new();
+        let start = cal.shown_month();
+        for _ in 0..12 {
+            cal.next_month();
+        }
+        let after = cal.shown_month();
+        assert_eq!(after.year(), start.year() + 1);
+        assert_eq!(after.month(), start.month());
+        cal.reset();
+        assert_eq!(cal.shown_month(), start);
+    }
+}

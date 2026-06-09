@@ -1,3 +1,7 @@
-/target
+# Build artifacts (root and every workspace member)
+target/
 **/*.rs.bk
 *.pdb
+
+# Workspace members share the root Cargo.lock; ignore stale per-member lockfiles.
+vix-*/Cargo.lock

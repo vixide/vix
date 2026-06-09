@@ -1,0 +1,39 @@
+{
+  "name": "Nord",
+  "menu-bar": {
+    "foreground": [216, 222, 233],
+    "background": [46, 52, 64],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "status-bar": {
+    "foreground": [216, 222, 233],
+    "background": [46, 52, 64],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "left-dock": {
+    "foreground": [216, 222, 233],
+    "background": [46, 52, 64],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "right-dock": {
+    "foreground": [216, 222, 233],
+    "background": [46, 52, 64],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "editor": {
+    "foreground": [216, 222, 233],
+    "background": [46, 52, 64],
+    "font-style": "normal",
+    "font-weight": "normal",
+    "cursor": [136, 192, 208]
+  },
+  "syntax": {
+    "keyword": [129, 161, 193],
+    "string": [163, 190, 140],
+    "comment": [76, 86, 106]
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "name": "Dracula",
+  "menu-bar": {
+    "foreground": [248, 248, 242],
+    "background": [40, 42, 54],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "status-bar": {
+    "foreground": [248, 248, 242],
+    "background": [40, 42, 54],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "left-dock": {
+    "foreground": [248, 248, 242],
+    "background": [40, 42, 54],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "right-dock": {
+    "foreground": [248, 248, 242],
+    "background": [40, 42, 54],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "editor": {
+    "foreground": [248, 248, 242],
+    "background": [40, 42, 54],
+    "font-style": "normal",
+    "font-weight": "normal",
+    "cursor": [255, 121, 198]
+  },
+  "syntax": {
+    "keyword": [255, 121, 198],
+    "string": [241, 250, 140],
+    "comment": [98, 114, 164]
+  }
+}

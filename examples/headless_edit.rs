@@ -11,6 +11,7 @@ use std::fs;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 use vix::app::App;
+use vix::settings::Settings;
 
 fn key(c: char) -> KeyEvent {
     KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
@@ -24,7 +25,7 @@ fn main() -> std::io::Result<()> {
 
     // Root the app at the temp dir and open the file. A non-zero editor area
     // gives the code editor a viewport to scroll the cursor within.
-    let mut app = App::new(dir.clone());
+    let mut app = App::new(dir.clone(), Settings::default());
     app.layout.editor = Rect::new(0, 0, 80, 24);
     app.open_initial(file.clone());
     println!("opened : {:?}", app.editor.active_tab().unwrap().lines());

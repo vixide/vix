@@ -1,3 +1,15 @@
+# `vix` is both the application package and the workspace root, so
+# `cargo build`/`cargo test --workspace` cover the internal crates too, and the
+# whole tree shares one lockfile and target directory.
+[workspace]
+members = [
+    "vix-code-editor-panel",
+    "vix-date-time-calendar-panel",
+    "vix-theme-chooser",
+    "vix-locale-chooser",
+    "vix-keyboard-shortcut-panel",
+]
+
 [package]
 name = "vix"
 version = "0.1.0"
@@ -18,34 +30,47 @@ categories = ["text-editors", "command-line-utilities"]
 #   cargo build --release --no-default-features --features syntax-all
 default = ["syntax-common"]
 syntax-common = [
-    "ratatui-code-editor/lang-rust",
-    "ratatui-code-editor/lang-markdown",
-    "ratatui-code-editor/lang-json",
-    "ratatui-code-editor/lang-toml",
+    "vix-code-editor-panel/lang-rust",
+    "vix-code-editor-panel/lang-markdown",
+    "vix-code-editor-panel/lang-json",
+    "vix-code-editor-panel/lang-toml",
 ]
-syntax-all = ["ratatui-code-editor/langs-all"]
+syntax-all = ["vix-code-editor-panel/langs-all"]
 
 [dependencies]
 # Terminal UI core. The whole widget ecosystem must agree on this version.
 ratatui = { version = "0.30", features = ["crossterm"] }
 # Center editing widget: a Tree-sitter-powered code editor (syntax highlighting,
-# history, selection, system clipboard, built-in mouse handling). Vendored under
-# vendor/ so the Tree-sitter grammars can be gated behind features (see [features]).
-ratatui-code-editor = { path = "vendor/ratatui-code-editor", default-features = false, features = ["crossterm"] }
+# history, selection, system clipboard, built-in mouse handling). An internal
+# fork lives under vix-code-editor-panel/ so the Tree-sitter grammars can be gated
+# behind features (see [features]) and rendering is theme-aware.
+vix-code-editor-panel = { path = "vix-code-editor-panel", default-features = false, features = ["crossterm"] }
+# Calendar box: date/time strings and the navigable month grid. Internal crate so
+# the calendar logic stays unit-testable on its own (it owns the jiff dependency).
+vix-date-time-calendar-panel = { path = "vix-date-time-calendar-panel" }
+# Theme: the monochrome Dark/Light model, ratatui styles, and chooser state.
+vix-theme-chooser = { path = "vix-theme-chooser" }
+# Locale chooser: available UI languages + selection state.
+vix-locale-chooser = { path = "vix-locale-chooser" }
+# Keyboard-shortcut help rows (key combo + i18n description key).
+vix-keyboard-shortcut-panel = { path = "vix-keyboard-shortcut-panel" }
 # Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
 crossterm = "0.29"
 # Regular expressions for find/replace.
 regex = "1"
-# Date/time: local + UTC, ISO 8601, and ISO week date for the calendar box.
-# Packaged in Debian as librust-jiff-dev.
-jiff = "0.2"
-# Settings serialization.
+# Settings serialization (confy handles the TOML; serde derives the schema).
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
 ratatui-image = "11.0.4"
 image = "0.25"
+confy = "2.0.0"
+clap = { version = "4.6.1", features = ["derive"] }
+rust-i18n = "4.1.0"
+include_dir = "0.7.4"
 
 [profile.release]
 lto = true
 strip = true
 opt-level = "z"
+
+[target.x86_64-unknown-linux-musl]
+linker = "musl-gcc"

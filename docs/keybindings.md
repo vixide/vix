@@ -24,7 +24,7 @@ macOS/Windows conventions; Vix is **not** modal.
 | `Alt+Left` / `Alt+Right` | Position history: jump back / forward        |
 | `F12`            | Go to definition of the symbol under the cursor      |
 | `F10`            | Open / close the menu bar                            |
-| `Alt+F/E/T/H`    | Open the File / Edit / Tools / Help menu             |
+| `Alt+F/E/V/T/H`  | Open the File / Edit / View / Tools / Help menu      |
 | `F1`             | Show the keyboard-shortcut help overlay              |
 
 ## Editor (when the editor is focused)
@@ -40,8 +40,9 @@ macOS/Windows conventions; Vix is **not** modal.
 | Arrows / `Home` / `End` / `PgUp` / `PgDn` | Move the cursor       |
 | Typing / `Enter` / `Backspace` / `Delete` / `Tab` | Edit text     |
 
-The editor wraps [`ratatui-code-editor`], which adds Tree-sitter syntax
-highlighting, `Ctrl+K` delete-line, and `Ctrl+D` duplicate-line.
+The editor wraps the internal `vix-code-editor-panel` widget, which adds
+Tree-sitter syntax highlighting, `Ctrl+K` delete-line, and `Ctrl+D`
+duplicate-line.
 
 ## Mouse
 
@@ -56,6 +57,7 @@ highlighting, `Ctrl+K` delete-line, and `Ctrl+D` duplicate-line.
 | Wheel over explorer      | Move the selection                              |
 | Click a message's `x`    | Dismiss that message                            |
 | Click a menu name        | Open that menu                                  |
+| Click a dock toggle icon | Toggle the explorer / messages drawer (top-right of the menu bar) |
 
 ## File explorer (when focused — `Ctrl+E`)
 
@@ -127,4 +129,22 @@ replacement, then press `Enter` to step through each match:
 | `!`            | Replace this match and all remaining  |
 | `q` / `Esc`    | Stop                                  |
 
-[`ratatui-code-editor`]: https://crates.io/crates/ratatui-code-editor
+## View menu overlays
+
+The **View** menu opens small chooser overlays:
+
+| Overlay                | Keys                                                   |
+| ---------------------- | ------------------------------------------------------ |
+| **Themes…**            | `↑`/`↓` preview live, `Enter` apply & save, `Esc` cancel |
+| **Locale…** (language) | `↑`/`↓` preview live, `Enter` apply & save, `Esc` cancel |
+
+View also has the line-numbers / explorer / messages toggles.
+
+## Calendar box (Tools → Calendar)
+
+| Key             | Action                          |
+| --------------- | ------------------------------- |
+| `Left` / `Right`| Previous / next month           |
+| `Esc` / `q`     | Close the calendar              |
+
+The date/time area always shows the present; only the month grid navigates.

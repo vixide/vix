@@ -3,23 +3,55 @@
 //! Sets up the terminal (with mouse capture), runs the event loop, and restores
 //! on exit. All of the application logic lives in the `vix` library crate.
 
+// Always start with high quality coding conventions.
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
+#![warn(clippy::clippy::pedantic)]
+
+// When we build for MUSL static, use faster memory allocator.
+#[cfg(target_env = "musl")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::time::Duration;
 
+use clap::Parser;
 use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event};
 use crossterm::execute;
 
 use vix::app::App;
+use vix::settings::Settings;
 use vix::ui;
 
+/// Command-line interface for Vix.
+#[derive(Parser, Debug)]
+#[command(name = "vix", version, about = "Vix: Simple Terminal Rust IDE")]
+struct Cli {
+    /// File(s) to open on startup; the last one is focused.
+    files: Vec<PathBuf>,
+
+    /// UI language as a locale code (e.g. en, es, fr, de, cy). Overrides the
+    /// saved `locale` setting for this run only.
+    #[arg(short, long)]
+    locale: Option<String>,
+}
+
 fn main() -> io::Result<()> {
+    let cli = Cli::parse();
+    let settings = Settings::load();
+
+    // A `--locale` flag wins over the persisted setting, but is not saved back.
+    let locale = cli.locale.clone().unwrap_or_else(|| settings.locale.clone());
+    rust_i18n::set_locale(&locale);
+
     let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let mut app = App::new(root);
+    let mut app = App::new(root, settings);
 
     // Optional file argument(s): open each, focusing the last.
-    for arg in std::env::args().skip(1) {
-        app.open_initial(PathBuf::from(arg));
+    for path in cli.files {
+        app.open_initial(path);
     }
 
     let mut terminal = ratatui::init();

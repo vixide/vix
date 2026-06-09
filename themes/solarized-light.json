@@ -1,0 +1,39 @@
+{
+  "name": "Solarized Light",
+  "menu-bar": {
+    "foreground": [101, 123, 131],
+    "background": [253, 246, 227],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "status-bar": {
+    "foreground": [101, 123, 131],
+    "background": [253, 246, 227],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "left-dock": {
+    "foreground": [101, 123, 131],
+    "background": [253, 246, 227],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "right-dock": {
+    "foreground": [101, 123, 131],
+    "background": [253, 246, 227],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "editor": {
+    "foreground": [101, 123, 131],
+    "background": [253, 246, 227],
+    "font-style": "normal",
+    "font-weight": "normal",
+    "cursor": [38, 139, 210]
+  },
+  "syntax": {
+    "keyword": [133, 153, 0],
+    "string": [42, 161, 152],
+    "comment": [147, 161, 161]
+  }
+}

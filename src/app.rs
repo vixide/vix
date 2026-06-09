@@ -6,11 +6,12 @@ use std::path::{Path, PathBuf};
 use crossterm::event::{
     KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
+use include_dir::{include_dir, Dir};
 use ratatui::layout::Rect;
-use ratatui_code_editor::actions::{
+use vix_code_editor_panel::actions::{
     Copy as CopyAction, Cut as CutAction, Paste as PasteAction, Redo as RedoAction, Undo as UndoAction,
 };
-use ratatui_code_editor::selection::Selection;
+use vix_code_editor_panel::selection::Selection;
 use ratatui_image::picker::Picker;
 use regex::Regex;
 
@@ -24,32 +25,70 @@ use crate::query::{Decision, QueryReplace};
 use crate::search::{Field, SearchBar};
 use crate::settings::Settings;
 
+/// The repo's `themes/` directory, embedded into the binary so its themes are
+/// available in the chooser without the user installing anything.
+static BUNDLED_THEMES: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/themes");
+
+/// Parse every bundled `*.json` theme. Malformed files are skipped.
+fn bundled_themes() -> Vec<crate::theme::CustomTheme> {
+    BUNDLED_THEMES
+        .files()
+        .filter(|f| f.path().extension().and_then(|e| e.to_str()) == Some("json"))
+        .filter_map(|f| f.contents_utf8().and_then(vix_theme_chooser::parse_theme))
+        .collect()
+}
+
+/// Which dock is being resized by an in-progress edge drag.
 #[derive(Clone, Copy, PartialEq, Eq)]
+enum DockResize {
+    /// The left dock (explorer); drag its right edge.
+    Left,
+    /// The right dock (messages); drag its left edge.
+    Right,
+}
+
+/// Which pane currently has keyboard focus.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Focus {
+    /// The center editor.
     Editor,
+    /// The left file explorer.
     Explorer,
+    /// The right message drawer.
     Messages,
 }
 
+/// Which kind of single-line prompt is open.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PromptKind {
+    /// Open-file prompt.
     Open,
+    /// Save-as prompt.
     SaveAs,
 }
 
+/// A single-line input prompt (open / save-as).
 pub struct Prompt {
+    /// Which prompt this is.
     pub kind: PromptKind,
+    /// Title shown in the prompt border.
     pub title: String,
+    /// Current input text.
     pub input: String,
 }
 
 /// An in-progress paste, processed one source at a time so a name conflict can
 /// pause for an (o)verwrite / (s)kip / (c)ancel decision.
 pub struct PasteOp {
+    /// Destination directory.
     pub target: PathBuf,
+    /// Whether this is a cut (move) rather than a copy.
     pub cut: bool,
+    /// Remaining sources to process.
     pub queue: VecDeque<PathBuf>,
+    /// Overwrite every conflict without asking.
     pub overwrite_all: bool,
+    /// Skip every conflict without asking.
     pub skip_all: bool,
     /// The source currently awaiting a conflict decision, if any.
     pub conflict: Option<PathBuf>,
@@ -57,15 +96,46 @@ pub struct PasteOp {
 
 /// A yes/no confirmation (currently only used for delete).
 pub struct Confirm {
+    /// Prompt text.
     pub message: String,
+    /// Paths the confirmed action will act on.
     pub paths: Vec<PathBuf>,
 }
+
+/// A modal info dialog: a title, a body, and a single **Ok** button. Used by the
+/// Vix menu's About / Website / Email items.
+///
+/// When `editor` is `Some`, the body is shown in a selectable/copyable text field
+/// (Website/Email — select with the mouse or keyboard, `Ctrl+C` to copy) and only
+/// Esc / clicking Ok closes it. When `None` it is a plain text dialog (About),
+/// dismissed with Enter, Esc, or a click.
+pub struct Dialog {
+    /// Title shown in the dialog border.
+    pub title: String,
+    /// Body text (version string, URL, or email address).
+    pub body: String,
+    /// Selectable/copyable text field for the body, when applicable.
+    pub editor: Option<crate::editor::CodeEditor>,
+}
+
+/// Theme chooser overlay state (View -> Themes), re-exported from
+/// [`vix_theme_chooser`]. Moving the selection previews the theme live; Enter
+/// commits and persists it, Esc reverts.
+pub use vix_theme_chooser::Chooser as ThemeChooser;
+
+/// Locale chooser overlay state (View -> Locale), re-exported from
+/// [`vix_locale_chooser`]. Moving the selection previews the language live;
+/// Enter commits and persists it, Esc reverts.
+pub use vix_locale_chooser::Chooser as LocaleChooser;
 
 /// A point in the position-history jump list: a file and a 1-based line/column.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Location {
+    /// File the position is in.
     pub path: PathBuf,
+    /// 1-based line.
     pub line: usize,
+    /// 1-based column.
     pub col: usize,
 }
 
@@ -73,55 +143,112 @@ pub struct Location {
 /// telling the code editor which viewport to scroll within.
 #[derive(Default)]
 pub struct Layout {
+    /// Menu-bar rectangle.
     pub menu: Rect,
+    /// Open menu dropdown rectangle (valid while a menu is open).
+    pub menu_dropdown: Rect,
+    /// Info-dialog text-field rectangle (valid while a text dialog is open).
+    pub dialog_body: Rect,
+    /// Tab-strip rectangle.
     pub tabs: Rect,
+    /// Editor viewport rectangle.
     pub editor: Rect,
+    /// Editor vertical-scrollbar rectangle (the column right of the editor text).
+    pub scrollbar: Rect,
+    /// Explorer pane rectangle.
     pub explorer: Rect,
+    /// Message-drawer rectangle.
     pub messages: Rect,
 }
 
+/// The whole application state.
 pub struct App {
+    /// Project root directory.
     pub root: PathBuf,
+    /// Tabbed text editor.
     pub editor: Editor,
+    /// File explorer pane.
     pub explorer: Explorer,
+    /// Message drawer.
     pub messages: Messages,
+    /// Menu-bar state.
     pub menu: Menu,
+    /// Command palette, when open.
     pub palette: Option<Palette>,
+    /// Find / replace toolbar, when open.
     pub search: Option<SearchBar>,
+    /// Interactive query-replace session, when active.
     pub query_replace: Option<QueryReplace>,
+    /// Project-wide search panel, when open.
     pub project_search: Option<ProjectSearch>,
+    /// Single-line prompt, when open.
     pub prompt: Option<Prompt>,
+    /// In-progress paste operation, when active.
     pub paste: Option<PasteOp>,
+    /// Pending confirmation, when active.
     pub confirm: Option<Confirm>,
+    /// Theme chooser overlay, when open.
+    pub theme_chooser: Option<ThemeChooser>,
+    /// Locale chooser overlay, when open.
+    pub locale_chooser: Option<LocaleChooser>,
+    /// Modal info dialog (Vix menu About / Website / Email), when open.
+    pub dialog: Option<Dialog>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
     pub clip: Vec<PathBuf>,
+    /// Whether [`App::clip`] holds a cut (move) rather than a copy.
     pub clip_cut: bool,
-    /// Position-history jump list (Alt+Left / Alt+Right) and the current index.
+    /// Position-history jump list (Alt+Left / Alt+Right).
     pub nav_history: Vec<Location>,
+    /// Current index into [`App::nav_history`].
     pub nav_idx: usize,
     /// Terminal image picker; `None` until set from a real terminal (so tests
     /// and headless use construct fine), and on terminals without graphics.
     pub picker: Option<Picker>,
+    /// Persisted user settings.
     pub settings: Settings,
+    /// Which pane has focus.
     pub focus: Focus,
+    /// Whether the explorer pane is shown.
     pub show_explorer: bool,
+    /// Whether the message drawer is shown.
     pub show_messages: bool,
+    /// Whether the calendar box is shown.
     pub show_calendar: bool,
+    /// Month navigation state for the calendar box.
+    pub calendar: crate::calendar::Calendar,
+    /// Whether the keyboard-help overlay is shown.
     pub show_help: bool,
+    /// Status-bar text.
     pub status: String,
+    /// Set to request application exit.
     pub should_quit: bool,
+    /// Pane rectangles recorded during the last render.
     pub layout: Layout,
     /// File paths under the project root, for the palette file finder.
     file_index: Vec<PathBuf>,
+    /// True while the editor scrollbar thumb is being dragged, so the drag keeps
+    /// scrolling even if the pointer drifts off the one-column track.
+    scrollbar_active: bool,
+    /// Which dock (if any) is being resized by an in-progress edge drag.
+    dock_resize: Option<DockResize>,
 }
 
 impl App {
-    pub fn new(root: PathBuf) -> Self {
-        let settings = Settings::load();
+    /// Build an app rooted at `root` using the given `settings`.
+    ///
+    /// The active locale and theme should already be applied by the caller
+    /// (see `main`); the theme is (re)applied here so the first buffer is styled
+    /// correctly, and the welcome messages are produced in the current locale.
+    #[must_use]
+    pub fn new(root: PathBuf, settings: Settings) -> Self {
+        // Apply the saved theme before building any editor so the first buffer is
+        // styled correctly. A theme value that is not a built-in mode is treated
+        // as the name of a custom JSON theme.
+        Self::apply_saved_theme(&settings.theme);
         let editor = Editor::new(settings.line_numbers);
         let mut messages = Messages::default();
-        messages.advice("Welcome to Vix. Press Ctrl+P for the command palette, F1 for help.");
-        messages.info("Ctrl+B toggles the file explorer, Ctrl+E switches focus.");
+        messages.advice(t!("msg.welcome").to_string());
+        messages.info(t!("msg.welcome_hint").to_string());
 
         App {
             explorer: Explorer::new(root.clone()),
@@ -136,6 +263,9 @@ impl App {
             prompt: None,
             paste: None,
             confirm: None,
+            theme_chooser: None,
+            locale_chooser: None,
+            dialog: None,
             clip: Vec::new(),
             clip_cut: false,
             nav_history: Vec::new(),
@@ -144,13 +274,16 @@ impl App {
             show_explorer: settings.show_explorer,
             show_messages: settings.show_messages,
             show_calendar: false,
+            calendar: crate::calendar::Calendar::new(),
             show_help: false,
             focus: Focus::Editor,
-            status: "Ready".to_string(),
+            status: t!("status.ready").to_string(),
             should_quit: false,
             layout: Layout::default(),
             settings,
             file_index: Vec::new(),
+            scrollbar_active: false,
+            dock_resize: None,
         }
     }
 
@@ -161,6 +294,7 @@ impl App {
 
     // ----- top-level event entry -----------------------------------------
 
+    /// Handle a key event, routing it to the active modal layer or focused pane.
     pub fn on_key(&mut self, key: KeyEvent) {
         if key.kind == KeyEventKind::Release {
             return;
@@ -171,6 +305,52 @@ impl App {
                 KeyCode::Esc | KeyCode::F(1) | KeyCode::Char('q') => self.show_help = false,
                 _ => {}
             }
+            return;
+        }
+        // The info dialog. A plain dialog (About) closes on Enter/Esc/Space/O. A
+        // text-field dialog (Website/Email) closes on Esc; Ctrl+C copies the
+        // selection, and other keys drive selection/navigation in the field.
+        if self.dialog.is_some() {
+            let has_field = self.dialog.as_ref().is_some_and(|d| d.editor.is_some());
+            if !has_field {
+                if matches!(
+                    key.code,
+                    KeyCode::Enter | KeyCode::Esc | KeyCode::Char(' ' | 'o' | 'O')
+                ) {
+                    self.dialog = None;
+                }
+                return;
+            }
+            if key.code == KeyCode::Esc {
+                self.dialog = None;
+                return;
+            }
+            let area = self.dialog_field_area();
+            if let Some(ed) = self.dialog.as_mut().and_then(|d| d.editor.as_mut()) {
+                if Self::ctrl(&key) && matches!(key.code, KeyCode::Char('c')) {
+                    ed.apply(CopyAction {});
+                } else {
+                    let _ = ed.input(key, &area);
+                }
+            }
+            return;
+        }
+        // While the calendar box is open it captures left/right to page months.
+        if self.show_calendar {
+            match key.code {
+                KeyCode::Left => self.calendar.prev_month(),
+                KeyCode::Right => self.calendar.next_month(),
+                KeyCode::Esc | KeyCode::Char('q') => self.show_calendar = false,
+                _ => {}
+            }
+            return;
+        }
+        if self.theme_chooser.is_some() {
+            self.theme_key(key);
+            return;
+        }
+        if self.locale_chooser.is_some() {
+            self.locale_key(key);
             return;
         }
         if self.query_replace.is_some() {
@@ -253,11 +433,13 @@ impl App {
         }
         if Self::alt(&key) {
             if let KeyCode::Char(c) = key.code {
+                // The Vix menu is index 0; the rest follow (File=1, …, Help=5).
                 let idx = match c.to_ascii_lowercase() {
-                    'f' => Some(0),
-                    'e' => Some(1),
-                    't' => Some(2),
-                    'h' => Some(3),
+                    'f' => Some(1),
+                    'e' => Some(2),
+                    'v' => Some(3),
+                    't' => Some(4),
+                    'h' => Some(5),
                     _ => None,
                 };
                 if let Some(i) = idx {
@@ -313,17 +495,19 @@ impl App {
 
     // ----- action dispatch (menu + palette + shortcuts) ------------------
 
+    /// Dispatch a named action (shared by the menu bar, command palette, and
+    /// keyboard shortcuts).
     pub fn run_action(&mut self, action: &str) {
         match action {
             "file.new" => {
                 self.editor.new_tab();
                 self.focus = Focus::Editor;
-                self.status = "New buffer".into();
+                self.status = t!("status.new_buffer").into();
             }
             "file.open" => {
                 self.prompt = Some(Prompt {
                     kind: PromptKind::Open,
-                    title: "Open file (path[:line[:col]])".into(),
+                    title: t!("prompt.open").to_string(),
                     input: String::new(),
                 });
             }
@@ -337,13 +521,13 @@ impl App {
                     .unwrap_or_default();
                 self.prompt = Some(Prompt {
                     kind: PromptKind::SaveAs,
-                    title: "Save as (path)".into(),
+                    title: t!("prompt.save_as").to_string(),
                     input: cur,
                 });
             }
             "file.close" => {
                 self.editor.close_active();
-                self.status = "Closed buffer".into();
+                self.status = t!("status.closed_buffer").into();
             }
             "file.quit" => self.should_quit = true,
             "edit.undo" => {
@@ -388,45 +572,46 @@ impl App {
             "search.project" => self.open_project_search(false),
             "search.project_replace" => self.open_project_search(true),
             "nav.goto_definition" => self.goto_definition(),
-            "tools.calendar" => self.show_calendar = !self.show_calendar,
-            "tools.palette" => self.open_palette(),
-            "tools.line_numbers" => {
-                self.editor.line_numbers = !self.editor.line_numbers;
-                self.editor.refresh_line_numbers();
-                self.settings.line_numbers = self.editor.line_numbers;
-                self.status = format!(
-                    "Line numbers {}",
-                    if self.editor.line_numbers { "on" } else { "off" }
-                );
-            }
-            "view.explorer" => {
-                self.show_explorer = !self.show_explorer;
-                self.settings.show_explorer = self.show_explorer;
-                if self.show_explorer {
-                    if let Some(p) = self.editor.active_tab().and_then(|t| t.path.clone()) {
-                        self.explorer.reveal(&p);
-                    }
+            "view.themes" => self.open_theme_chooser(),
+            "view.locale" => self.open_locale_chooser(),
+            "tools.calendar" => {
+                self.show_calendar = !self.show_calendar;
+                // Always open on the present month; navigation is per-session.
+                if self.show_calendar {
+                    self.calendar.reset();
                 }
             }
-            "view.messages" => {
-                self.show_messages = !self.show_messages;
-                self.settings.show_messages = self.show_messages;
-            }
+            "tools.palette" => self.open_palette(),
+            // The left/right docks are the explorer and message drawers. Both the
+            // old action ids and the new dock-named ones route to one method.
+            "view.line_numbers" | "tools.line_numbers" => self.toggle_editor_line_numbers(),
+            "view.left_dock" | "view.explorer" => self.toggle_left_dock(),
+            "view.right_dock" | "view.messages" => self.toggle_right_dock(),
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
             "help.shortcuts" => self.show_help = true,
-            "help.website" => self.messages.info("Website: https://github.com/sixarm/vix"),
-            "help.email" => self.messages.info("Email: hello@sixarm.com"),
-            "help.about" => self
-                .messages
-                .advice("Vix — Simple Terminal Rust IDE. Open, edit, and save text files."),
-            other => self.messages.warn(format!("Unknown action: {other}")),
+            "vix.about" => {
+                self.dialog = Some(Dialog {
+                    title: t!("menu.item.vix.about").to_string(),
+                    body: format!("Vix {}", env!("CARGO_PKG_VERSION")),
+                    editor: None,
+                });
+            }
+            "vix.website" => self.open_text_dialog(
+                t!("menu.item.vix.website").to_string(),
+                "https://github.com/joelparkerhenderson/vix",
+            ),
+            "vix.email" => self.open_text_dialog(
+                t!("menu.item.vix.email").to_string(),
+                "joel@joelparkerhenderson.com",
+            ),
+            other => self.messages.warn(t!("msg.unknown_action", action = other).to_string()),
         }
     }
 
     fn save(&mut self) {
         if self.editor.active_tab().map(Tab::is_image).unwrap_or(false) {
-            self.status = "Image tabs are read-only".into();
+            self.status = t!("status.image_readonly").into();
             return;
         }
         if self.editor.active_tab().and_then(|t| t.path.as_ref()).is_none() {
@@ -434,9 +619,48 @@ impl App {
             return;
         }
         match self.editor.save_active() {
-            Ok(p) => self.status = format!("Saved {}", p.display()),
-            Err(e) => self.messages.error(format!("Save failed: {e}")),
+            Ok(p) => self.status = t!("status.saved", path = p.display()).to_string(),
+            Err(e) => self.messages.error(t!("msg.save_failed", error = e).to_string()),
         }
+    }
+
+    // ----- view toggles ---------------------------------------------------
+
+    /// Toggle the left dock (the file explorer). Revealing it also reveals the
+    /// active file in the tree.
+    fn toggle_left_dock(&mut self) {
+        self.show_explorer = !self.show_explorer;
+        self.settings.show_explorer = self.show_explorer;
+        if self.show_explorer {
+            if let Some(p) = self.editor.active_tab().and_then(|t| t.path.clone()) {
+                self.explorer.reveal(&p);
+            }
+        }
+    }
+
+    /// Toggle the right dock (the message drawer).
+    fn toggle_right_dock(&mut self) {
+        self.show_messages = !self.show_messages;
+        self.settings.show_messages = self.show_messages;
+    }
+
+    /// Toggle the editor's line-number gutter, driven by the editor panel's own
+    /// `toggle_line_numbers`, then mirrored across every tab and persisted.
+    fn toggle_editor_line_numbers(&mut self) {
+        let fallback = !self.editor.line_numbers;
+        let on = self
+            .editor
+            .active_tab_mut()
+            .map_or(fallback, |t| t.editor.toggle_line_numbers());
+        self.editor.line_numbers = on;
+        self.editor.refresh_line_numbers();
+        self.settings.line_numbers = on;
+        self.status = if on {
+            t!("status.line_numbers_on")
+        } else {
+            t!("status.line_numbers_off")
+        }
+        .to_string();
     }
 
     // ----- focus handlers -------------------------------------------------
@@ -550,7 +774,7 @@ impl App {
                 if !self.clip.is_empty() && self.clip_cut {
                     self.clip.clear();
                     self.clip_cut = false;
-                    self.status = "Cut cancelled".into();
+                    self.status = t!("status.cut_cancelled").into();
                 } else if !self.explorer.marked.is_empty() {
                     self.explorer.clear_marks();
                 } else {
@@ -571,7 +795,7 @@ impl App {
         let n = paths.len();
         self.clip = paths;
         self.clip_cut = cut;
-        self.status = format!("{} {n} item(s)", if cut { "Cut" } else { "Copied" });
+        self.status = (if cut { t!("status.cut_n", n = n) } else { t!("status.copied_n", n = n) }).to_string();
     }
 
     fn explorer_paste(&mut self) {
@@ -612,7 +836,7 @@ impl App {
                 }
                 self.explorer.clear_marks();
                 self.explorer.rebuild();
-                self.status = "Paste complete".into();
+                self.status = t!("status.paste_complete").into();
                 return;
             };
             let (target, cut, overwrite_all, skip_all) = {
@@ -620,11 +844,15 @@ impl App {
                 (op.target.clone(), op.cut, op.overwrite_all, op.skip_all)
             };
             let same_dir = src.parent() == Some(target.as_path());
+            // Cutting a file into its own directory would move it onto itself: a
+            // no-op, so just drop it from the queue.
             if cut && same_dir {
                 self.paste.as_mut().unwrap().queue.pop_front();
                 continue;
             }
             let mut dest = target.join(src.file_name().unwrap_or_default());
+            // Copying into the same directory can't overwrite the source, so it
+            // gets an auto-incremented "name copy" instead of a conflict prompt.
             if !cut && same_dir {
                 dest = crate::fileops::unique_copy_name(&target, &src);
             } else if dest.exists() {
@@ -703,7 +931,7 @@ impl App {
             }
             KeyCode::Char('c') | KeyCode::Esc => {
                 self.paste = None;
-                self.status = "Paste cancelled".into();
+                self.status = t!("status.paste_cancelled").into();
             }
             _ => {}
         }
@@ -717,7 +945,7 @@ impl App {
             return;
         }
         self.confirm = Some(Confirm {
-            message: format!("Delete {} item(s)? (y/n)", paths.len()),
+            message: t!("confirm.delete", n = paths.len()).to_string(),
             paths,
         });
     }
@@ -735,17 +963,17 @@ impl App {
                                 self.close_buffers_under(&canon);
                                 removed += 1;
                             }
-                            Err(e) => self.messages.error(format!("Delete failed: {e}")),
+                            Err(e) => self.messages.error(t!("msg.delete_failed", error = e).to_string()),
                         }
                     }
                     self.explorer.clear_marks();
                     self.explorer.rebuild();
-                    self.status = format!("Deleted {removed} item(s)");
+                    self.status = t!("status.deleted_n", n = removed).to_string();
                 }
             }
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
                 self.confirm = None;
-                self.status = "Delete cancelled".into();
+                self.status = t!("status.delete_cancelled").into();
             }
             _ => {}
         }
@@ -834,9 +1062,9 @@ impl App {
                 if !preview {
                     self.editor.promote_active();
                 }
-                self.status = format!("Opened {}", path.display());
+                self.status = t!("status.opened", path = path.display()).to_string();
             }
-            Err(e) => self.messages.error(format!("Open failed: {e}")),
+            Err(e) => self.messages.error(t!("msg.open_failed", error = e).to_string()),
         }
     }
 
@@ -874,7 +1102,7 @@ impl App {
 
     fn nav_back(&mut self) {
         if self.nav_history.is_empty() || self.nav_idx == 0 {
-            self.status = "No earlier position".into();
+            self.status = t!("status.no_earlier").into();
             return;
         }
         self.nav_idx -= 1;
@@ -883,7 +1111,7 @@ impl App {
 
     fn nav_forward(&mut self) {
         if self.nav_idx + 1 >= self.nav_history.len() {
-            self.status = "No later position".into();
+            self.status = t!("status.no_later").into();
             return;
         }
         self.nav_idx += 1;
@@ -901,7 +1129,7 @@ impl App {
     fn open_image(&mut self, path: &Path) {
         let Some(picker) = self.picker.as_ref() else {
             self.messages
-                .warn("Image preview needs a graphics-capable terminal");
+                .warn(t!("msg.image_needs_terminal"));
             return;
         };
         match decode_image(path) {
@@ -909,20 +1137,96 @@ impl App {
                 let proto = picker.new_resize_protocol(img);
                 self.editor.open_image(path, proto);
                 self.focus = Focus::Editor;
-                self.status = format!("Opened image {}", path.display());
+                self.status = t!("status.opened_image", path = path.display()).to_string();
             }
-            Err(e) => self.messages.error(format!("Image open failed: {e}")),
+            Err(e) => self.messages.error(t!("msg.image_open_failed", error = e).to_string()),
         }
     }
 
     // ----- mouse ----------------------------------------------------------
 
+    /// Handle a mouse event, dispatching to whichever pane it lands in.
     pub fn on_mouse(&mut self, mouse: MouseEvent) {
         // Overlays swallow mouse input rather than acting on panes underneath.
-        if self.show_help || self.palette.is_some() || self.prompt.is_some() {
+        // The info dialog is modal. Within a text-field dialog, clicks/drags in
+        // the field select text (for copying); a left click anywhere else acts as
+        // the Ok button and closes.
+        if self.dialog.is_some() {
+            let (col, row) = (mouse.column, mouse.row);
+            let in_field = self.dialog.as_ref().is_some_and(|d| d.editor.is_some())
+                && rect_contains(self.layout.dialog_body, col, row);
+            if in_field {
+                let area = self.dialog_field_area();
+                if let Some(ed) = self.dialog.as_mut().and_then(|d| d.editor.as_mut()) {
+                    let _ = ed.mouse(mouse, &area);
+                }
+            } else if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+                self.dialog = None;
+            }
+            return;
+        }
+        if self.show_help
+            || self.palette.is_some()
+            || self.prompt.is_some()
+            || self.theme_chooser.is_some()
+            || self.locale_chooser.is_some()
+        {
             return;
         }
         let (col, row) = (mouse.column, mouse.row);
+
+        // Editor scrollbar: press the thumb/track to jump there, then drag to
+        // scroll. The drag continues even if the pointer leaves the 1-column
+        // track (tracked by `scrollbar_active`), and ends on button release.
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left)
+                if rect_contains(self.layout.scrollbar, col, row) =>
+            {
+                self.scrollbar_active = true;
+                self.scrollbar_drag(row);
+                return;
+            }
+            MouseEventKind::Drag(MouseButton::Left) if self.scrollbar_active => {
+                self.scrollbar_drag(row);
+                return;
+            }
+            MouseEventKind::Up(MouseButton::Left) => self.scrollbar_active = false,
+            _ => {}
+        }
+
+        // Dock resizing: press a dock's inner edge (the explorer's right border
+        // or the messages drawer's left border) and drag to resize it. The drag
+        // continues even if the pointer drifts off that column.
+        let left_edge = self
+            .show_explorer
+            .then(|| self.layout.explorer.right().saturating_sub(1));
+        let right_edge = self.show_messages.then_some(self.layout.messages.x);
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) if Some(col) == left_edge => {
+                self.dock_resize = Some(DockResize::Left);
+                return;
+            }
+            MouseEventKind::Down(MouseButton::Left) if Some(col) == right_edge => {
+                self.dock_resize = Some(DockResize::Right);
+                return;
+            }
+            MouseEventKind::Drag(MouseButton::Left) if self.dock_resize.is_some() => {
+                self.resize_dock(col);
+                return;
+            }
+            MouseEventKind::Up(MouseButton::Left) => self.dock_resize = None,
+            _ => {}
+        }
+
+        // While a menu is open, a left click runs the dropdown item under the
+        // pointer, switches menus when on the bar, or closes the menu when
+        // clicked away.
+        if self.menu.is_open() {
+            if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+                self.menu_mouse(col, row);
+            }
+            return;
+        }
 
         if rect_contains(self.layout.menu, col, row) {
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
@@ -946,6 +1250,49 @@ impl App {
         }
         if self.show_messages && rect_contains(self.layout.messages, col, row) {
             self.messages_mouse(mouse);
+        }
+    }
+
+    /// Scroll the editor to the line corresponding to a scrollbar row `row`.
+    ///
+    /// The scrollbar thumb tracks the cursor line, so dragging maps the pointer's
+    /// position along the track to a target line and moves the cursor there,
+    /// which scrolls the view (and the thumb) to match.
+    fn scrollbar_drag(&mut self, row: u16) {
+        let sb = self.layout.scrollbar;
+        if sb.height == 0 {
+            return;
+        }
+        let total = self.editor.active_line_count().max(1);
+        // Fraction of the track the pointer is at, mapped to a 1-based line.
+        let rel = row.saturating_sub(sb.y).min(sb.height.saturating_sub(1)) as usize;
+        let denom = (sb.height.saturating_sub(1)).max(1) as usize;
+        let line = 1 + rel * (total - 1) / denom;
+        let area = self.editor_view();
+        self.editor.goto(line, None, area);
+        self.focus = Focus::Editor;
+    }
+
+    /// Resize the dock currently being dragged so its edge follows column `col`,
+    /// keeping at least a minimum dock width and leaving room for the editor.
+    fn resize_dock(&mut self, col: u16) {
+        const MIN_DOCK: u16 = 12;
+        const MIN_EDITOR: u16 = 20;
+        let full = self.layout.menu.width; // the menu bar spans the full width
+        match self.dock_resize {
+            Some(DockResize::Left) => {
+                let other = if self.show_messages { self.settings.messages_width } else { 0 };
+                let max = full.saturating_sub(MIN_EDITOR + other).max(MIN_DOCK);
+                let w = (col.saturating_sub(self.layout.explorer.x) + 1).clamp(MIN_DOCK, max);
+                self.settings.explorer_width = w;
+            }
+            Some(DockResize::Right) => {
+                let other = if self.show_explorer { self.settings.explorer_width } else { 0 };
+                let max = full.saturating_sub(MIN_EDITOR + other).max(MIN_DOCK);
+                let w = self.layout.messages.right().saturating_sub(col).clamp(MIN_DOCK, max);
+                self.settings.messages_width = w;
+            }
+            None => {}
         }
     }
 
@@ -1032,10 +1379,46 @@ impl App {
         }
     }
 
+    /// Handle a left click while a menu dropdown is open: run the item under the
+    /// pointer, switch menus when the bar is clicked, or close on a click away.
+    fn menu_mouse(&mut self, col: u16, row: u16) {
+        if rect_contains(self.layout.menu, col, row) {
+            self.menu_click(col);
+            return;
+        }
+        let dd = self.layout.menu_dropdown;
+        if rect_contains(dd, col, row) {
+            // Items start one row below the dropdown's top border.
+            let top = dd.y + 1;
+            if let Some(mi) = self.menu.open {
+                let items = MENUS[mi].items;
+                let idx = row.saturating_sub(top) as usize;
+                if row >= top && idx < items.len() {
+                    let action = items[idx].action;
+                    self.menu.close();
+                    self.run_action(action);
+                }
+            }
+            return;
+        }
+        // Clicked outside both the bar and the dropdown: dismiss the menu.
+        self.menu.close();
+    }
+
     fn menu_click(&mut self, col: u16) {
+        // Right-aligned dock toggles take priority over menu hit-testing.
+        let (left_dock, right_dock) = crate::ui::dock_toggle_cols(self.layout.menu);
+        if col == left_dock {
+            self.run_action("view.explorer");
+            return;
+        }
+        if col == right_dock {
+            self.run_action("view.messages");
+            return;
+        }
         let mut x = self.layout.menu.x + 1;
         for (i, m) in MENUS.iter().enumerate() {
-            let w = m.name.chars().count() as u16 + 2;
+            let w = m.title().chars().count() as u16 + 2;
             if col >= x && col < x + w {
                 self.menu.open_index(i);
                 return;
@@ -1059,6 +1442,143 @@ impl App {
                 }
             }
             KeyCode::Esc | KeyCode::F(10) => self.menu.close(),
+            _ => {}
+        }
+    }
+
+    // ----- theme chooser --------------------------------------------------
+
+    /// Custom themes available to choose from: those installed in the user's
+    /// themes directory first (so they win on a name clash), then the themes
+    /// bundled into the binary.
+    fn available_custom_themes() -> Vec<crate::theme::CustomTheme> {
+        let mut themes = Settings::themes_dir()
+            .map(|d| vix_theme_chooser::load_custom_themes(&d))
+            .unwrap_or_default();
+        themes.extend(bundled_themes());
+        themes
+    }
+
+    /// Apply a persisted theme value: a built-in mode (`"dark"`/`"light"`) or a
+    /// custom theme by name (user-installed or bundled).
+    fn apply_saved_theme(value: &str) {
+        if value == "dark" || value == "light" {
+            crate::theme::set_mode(crate::theme::Mode::from_name(value));
+            crate::theme::set_custom(None);
+            return;
+        }
+        match Self::available_custom_themes()
+            .into_iter()
+            .find(|t| t.name == value)
+        {
+            Some(theme) => crate::theme::set_custom(Some(theme)),
+            // Unknown name: fall back to the default built-in.
+            None => crate::theme::set_mode(crate::theme::Mode::Dark),
+        }
+    }
+
+    fn open_theme_chooser(&mut self) {
+        self.theme_chooser = Some(ThemeChooser::open(Self::available_custom_themes()));
+    }
+
+    /// Display name for a theme choice (built-in names are translated).
+    fn choice_label(choice: &vix_theme_chooser::Choice) -> String {
+        match choice.builtin() {
+            Some(mode) => t!(mode.label()).to_string(),
+            None => choice.custom_name().unwrap_or_default().to_string(),
+        }
+    }
+
+    fn theme_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up | KeyCode::Down => {
+                if let Some(tc) = self.theme_chooser.as_mut() {
+                    if key.code == KeyCode::Up {
+                        tc.up();
+                    } else {
+                        tc.down();
+                    }
+                    // Preview the highlighted theme live.
+                    vix_theme_chooser::apply(tc.selected_choice());
+                }
+                self.editor.refresh_theme();
+            }
+            KeyCode::Enter => {
+                if let Some(tc) = self.theme_chooser.take() {
+                    let choice = tc.selected_choice().clone();
+                    vix_theme_chooser::apply(&choice);
+                    self.editor.refresh_theme();
+                    self.settings.theme = choice.id();
+                    self.status =
+                        t!("status.theme", theme = Self::choice_label(&choice)).to_string();
+                }
+            }
+            KeyCode::Esc => {
+                if let Some(tc) = self.theme_chooser.take() {
+                    vix_theme_chooser::apply(tc.original_choice());
+                    self.editor.refresh_theme();
+                    self.status = t!("status.theme_unchanged").into();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // ----- info dialog ----------------------------------------------------
+
+    /// Open a dialog whose body is a selectable/copyable text field.
+    fn open_text_dialog(&mut self, title: String, text: &str) {
+        self.dialog = Some(Dialog {
+            title,
+            body: text.to_string(),
+            editor: Some(crate::editor::text_field(text)),
+        });
+    }
+
+    /// The dialog's text-field rectangle, clamped to a width the editor can
+    /// safely scroll within (mirrors [`App::editor_view`]).
+    fn dialog_field_area(&self) -> Rect {
+        let r = self.layout.dialog_body;
+        Rect {
+            width: r.width.max(MIN_EDITOR_WIDTH),
+            height: r.height.max(1),
+            ..r
+        }
+    }
+
+    // ----- locale chooser -------------------------------------------------
+
+    fn open_locale_chooser(&mut self) {
+        self.locale_chooser = Some(LocaleChooser::open(&rust_i18n::locale()));
+    }
+
+    fn locale_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up | KeyCode::Down => {
+                if let Some(lc) = self.locale_chooser.as_mut() {
+                    if key.code == KeyCode::Up {
+                        lc.up();
+                    } else {
+                        lc.down();
+                    }
+                    // Preview the highlighted language live.
+                    rust_i18n::set_locale(lc.selected_code());
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(lc) = self.locale_chooser.take() {
+                    let code = lc.selected_code();
+                    rust_i18n::set_locale(code);
+                    self.settings.locale = code.to_string();
+                    self.status = t!("status.locale", locale = code).to_string();
+                }
+            }
+            KeyCode::Esc => {
+                if let Some(lc) = self.locale_chooser.take() {
+                    rust_i18n::set_locale(lc.original_code());
+                    self.status = t!("status.locale_unchanged").to_string();
+                }
+            }
             _ => {}
         }
     }
@@ -1126,8 +1646,9 @@ impl App {
                 }
             }
             PMode::Commands => {
-                for (label, action) in palette::COMMANDS {
-                    if query.is_empty() || palette::fuzzy_match(label, &query) {
+                for (label_key, action) in palette::COMMANDS {
+                    let label = t!(*label_key).to_string();
+                    if query.is_empty() || palette::fuzzy_match(&label, &query) {
                         entries.push(Entry {
                             label: format!("> {label}"),
                             action: PAction::RunCommand((*action).to_string()),
@@ -1263,7 +1784,7 @@ impl App {
             Ok(r) => r,
             Err(e) => {
                 if let Some(s) = self.search.as_mut() {
-                    s.status = format!("bad regex: {e}");
+                    s.status = t!("msg.bad_regex", error = e).to_string();
                 }
                 return;
             }
@@ -1281,7 +1802,7 @@ impl App {
         if matches.is_empty() {
             t.editor.remove_marks();
             if let Some(s) = self.search.as_mut() {
-                s.status = "no matches".into();
+                s.status = t!("status.no_matches").into();
             }
             return;
         }
@@ -1289,26 +1810,28 @@ impl App {
             matches.iter().map(|(s, e)| (*s, *e, SEARCH_MARK)).collect();
         t.editor.set_marks(marks);
 
+        // Pick the next/previous match relative to the cursor, wrapping around
+        // the ends (first match after the last, last match before the first).
         let cur = t.editor.get_cursor();
         let target = if forward {
             matches
                 .iter()
                 .find(|(s, _)| *s > cur)
                 .copied()
-                .unwrap_or(matches[0])
+                .unwrap_or(matches[0]) // past the last match: wrap to the first
         } else {
             matches
                 .iter()
                 .rev()
                 .find(|(s, _)| *s < cur)
                 .copied()
-                .unwrap_or(*matches.last().unwrap())
+                .unwrap_or(*matches.last().unwrap()) // before the first: wrap to the last
         };
         t.editor.set_cursor(target.0);
         t.editor.set_selection(Some(Selection::new(target.0, target.1)));
         t.editor.focus(&area);
         if let Some(s) = self.search.as_mut() {
-            s.status = format!("{} matches", matches.len());
+            s.status = t!("status.matches", count = matches.len()).to_string();
         }
     }
 
@@ -1391,7 +1914,7 @@ impl App {
             Ok(r) => r,
             Err(e) => {
                 if let Some(s) = self.search.as_mut() {
-                    s.status = format!("bad regex: {e}");
+                    s.status = t!("msg.bad_regex", error = e).to_string();
                 }
                 return;
             }
@@ -1414,7 +1937,7 @@ impl App {
         tab.dirty = true;
         tab.preview = false;
         if let Some(s) = self.search.as_mut() {
-            s.status = format!("replaced {count}");
+            s.status = t!("status.replaced", count = count).to_string();
         }
     }
 
@@ -1425,7 +1948,7 @@ impl App {
     /// a semantic LSP — fast, offline, and language-agnostic.
     fn goto_definition(&mut self) {
         let Some(symbol) = self.symbol_under_cursor() else {
-            self.messages.warn("No symbol under the cursor");
+            self.messages.warn(t!("msg.no_symbol"));
             return;
         };
         self.build_file_index();
@@ -1433,7 +1956,7 @@ impl App {
         match hits.len() {
             0 => self
                 .messages
-                .warn(format!("No definition found for `{symbol}`")),
+                .warn(t!("msg.no_definition", symbol = symbol).to_string()),
             1 => {
                 let (path, line, col) = (hits[0].path.clone(), hits[0].line, hits[0].col);
                 self.with_jump(|s| {
@@ -1442,14 +1965,14 @@ impl App {
                     s.editor.goto(line, Some(col), area);
                     s.focus = Focus::Editor;
                 });
-                self.status = format!("Definition of `{symbol}`");
+                self.status = t!("status.definition_of", symbol = symbol).to_string();
             }
             n => {
                 let mut ps = ProjectSearch::new(false);
                 ps.query = symbol.clone();
                 ps.static_results = true;
                 ps.hits = hits;
-                ps.status = format!("{n} definitions of `{symbol}` — Enter to jump");
+                ps.status = t!("status.definitions_n", n = n, symbol = symbol).to_string();
                 self.project_search = Some(ps);
             }
         }
@@ -1557,7 +2080,7 @@ impl App {
             if let Some(p) = self.project_search.as_mut() {
                 p.hits.clear();
                 p.selected = 0;
-                p.status = "Type to search the project (2+ characters).".into();
+                p.status = t!("status.project_search_prompt").into();
             }
             return;
         };
@@ -1565,7 +2088,7 @@ impl App {
             Ok(r) => r,
             Err(e) => {
                 if let Some(p) = self.project_search.as_mut() {
-                    p.status = format!("bad regex: {e}");
+                    p.status = t!("msg.bad_regex", error = e).to_string();
                 }
                 return;
             }
@@ -1605,9 +2128,9 @@ impl App {
 
         if let Some(p) = self.project_search.as_mut() {
             p.status = if hits.is_empty() {
-                "No matches".into()
+                t!("status.no_matches_cap").into()
             } else {
-                format!("{} matches in {} files", hits.len(), files)
+                t!("status.matches_in_files", count = hits.len(), files = files).to_string()
             };
             if p.selected >= hits.len() {
                 p.selected = hits.len().saturating_sub(1);
@@ -1630,7 +2153,7 @@ impl App {
             Ok(r) => r,
             Err(e) => {
                 if let Some(p) = self.project_search.as_mut() {
-                    p.status = format!("bad regex: {e}");
+                    p.status = t!("msg.bad_regex", error = e).to_string();
                 }
                 return;
             }
@@ -1663,7 +2186,7 @@ impl App {
                 continue;
             }
             if let Err(e) = std::fs::write(path, &new) {
-                self.messages.error(format!("Write failed for {}: {e}", path.display()));
+                self.messages.error(t!("msg.write_failed", path = path.display(), error = e).to_string());
                 continue;
             }
             // Keep any open buffer in sync (and clean, since we just saved).
@@ -1680,7 +2203,7 @@ impl App {
 
         self.run_project_search();
         if let Some(p) = self.project_search.as_mut() {
-            p.status = format!("Replaced {replaced} in {files} files");
+            p.status = t!("status.replaced_in_files", replaced = replaced, files = files).to_string();
         }
     }
 
@@ -1768,7 +2291,7 @@ impl App {
         };
         let Some(pat) = sb.pattern() else {
             if let Some(s) = self.search.as_mut() {
-                s.status = "type something to find".into();
+                s.status = t!("status.type_to_find").into();
             }
             return;
         };
@@ -1776,7 +2299,7 @@ impl App {
             Ok(r) => r,
             Err(e) => {
                 if let Some(s) = self.search.as_mut() {
-                    s.status = format!("bad regex: {e}");
+                    s.status = t!("msg.bad_regex", error = e).to_string();
                 }
                 return;
             }
@@ -1814,9 +2337,9 @@ impl App {
                     replaced: 0,
                     label,
                 });
-                self.status = "Query replace — y replace  n skip  ! rest  q quit".into();
+                self.status = t!("status.qr_keys").into();
             }
-            None => self.status = "Query replace: no matches".into(),
+            None => self.status = t!("status.qr_no_matches").into(),
         }
     }
 
@@ -1903,7 +2426,7 @@ impl App {
             }
             None => {
                 self.query_replace = None;
-                self.status = format!("Query replace: replaced {replaced}");
+                self.status = t!("status.qr_replaced", count = replaced).to_string();
             }
         }
     }
@@ -1956,10 +2479,10 @@ impl App {
                 let path = self.resolve(raw);
                 match self.editor.save_active_as(path) {
                     Ok(p) => {
-                        self.status = format!("Saved {}", p.display());
+                        self.status = t!("status.saved", path = p.display()).to_string();
                         self.explorer.rebuild();
                     }
-                    Err(e) => self.messages.error(format!("Save failed: {e}")),
+                    Err(e) => self.messages.error(t!("msg.save_failed", error = e).to_string()),
                 }
             }
         }
@@ -1978,7 +2501,7 @@ impl App {
     pub fn on_exit(&mut self) {
         if let Err(e) = self.settings.save() {
             self.messages
-                .push(Level::Warn, format!("Could not save settings: {e}"));
+                .push(Level::Warn, t!("msg.settings_save_failed", error = e).to_string());
         }
     }
 }
@@ -2107,7 +2630,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("note.txt"), "the needle is here\n").unwrap();
 
-        let mut app = App::new(dir.clone());
+        let mut app = App::new(dir.clone(), Settings::default());
         app.run_action("search.project");
         for c in "needle".chars() {
             app.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
@@ -2125,7 +2648,7 @@ mod tests {
 
     #[test]
     fn renders_image_tab_without_panic() {
-        let mut app = App::new(std::env::temp_dir());
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
         // Halfblocks renders into a plain cell buffer — no real terminal needed.
         let picker = Picker::halfblocks();
         let img = image::DynamicImage::new_rgb8(8, 8);

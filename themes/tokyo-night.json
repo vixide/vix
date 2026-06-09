@@ -1,0 +1,39 @@
+{
+  "name": "Tokyo Night",
+  "menu-bar": {
+    "foreground": [192, 202, 245],
+    "background": [26, 27, 38],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "status-bar": {
+    "foreground": [192, 202, 245],
+    "background": [26, 27, 38],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "left-dock": {
+    "foreground": [192, 202, 245],
+    "background": [26, 27, 38],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "right-dock": {
+    "foreground": [192, 202, 245],
+    "background": [26, 27, 38],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "editor": {
+    "foreground": [192, 202, 245],
+    "background": [26, 27, 38],
+    "font-style": "normal",
+    "font-weight": "normal",
+    "cursor": [122, 162, 247]
+  },
+  "syntax": {
+    "keyword": [187, 154, 247],
+    "string": [158, 206, 106],
+    "comment": [86, 95, 137]
+  }
+}

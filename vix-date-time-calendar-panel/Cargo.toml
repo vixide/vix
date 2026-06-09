@@ -1,0 +1,20 @@
+# vix-date-time-calendar-panel: the calendar box's date/time logic and a
+# navigable month grid. Pure logic over `jiff` (no UI framework) so it can be
+# unit-tested on its own; the host renders it. See spec/vix-calendar.md.
+
+[package]
+name = "vix-date-time-calendar-panel"
+version = "0.1.0"
+edition = "2021"
+description = "Date/time helpers and a navigable Monday-first month grid for Vix."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_date_time_calendar_panel"
+path = "src/lib.rs"
+
+[dependencies]
+# Date/time: local + UTC, ISO 8601, and ISO week date for the calendar box.
+# Packaged in Debian as librust-jiff-dev.
+jiff = "0.2"

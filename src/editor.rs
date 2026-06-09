@@ -1,4 +1,4 @@
-//! Tabbed editor: a stack of buffers, each backed by a `ratatui-code-editor`
+//! Tabbed editor: a stack of buffers, each backed by a `vix-code-editor-panel`
 //! widget (Tree-sitter syntax highlighting, history, selection, clipboard).
 //!
 //! The code editor addresses the cursor as a flat character offset; this module
@@ -9,10 +9,10 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use ratatui::layout::Rect;
-use ratatui_code_editor::actions::{Delete, MoveDown, MoveRight, MoveUp};
-use ratatui_code_editor::editor::Editor as CodeEditor;
-use ratatui_code_editor::theme::vesper;
-use ratatui_code_editor::utils::get_lang;
+use ratatui::style::Style;
+use vix_code_editor_panel::actions::{Delete, MoveDown, MoveRight, MoveUp};
+pub use vix_code_editor_panel::editor::Editor as CodeEditor;
+use vix_code_editor_panel::utils::get_lang;
 use ratatui_image::protocol::StatefulProtocol;
 
 use crate::theme;
@@ -28,8 +28,37 @@ pub fn is_image_path(path: &Path) -> bool {
     )
 }
 
-/// Highlight color used to mark search hits.
-pub const SEARCH_MARK: &str = "#ffd866";
+/// Marker passed to the code editor for search hits. The monochrome theme
+/// renders marks as underlines, so the specific value is not shown as a color.
+pub const SEARCH_MARK: &str = "search";
+
+/// Apply the current theme's styles to a code editor.
+///
+/// With a custom JSON theme active, the editor uses its per-region foreground,
+/// its syntax colors, and its cursor color; otherwise everything is monochrome
+/// (foreground only, no token colors) and the cursor is a reversed block.
+fn apply_theme(ed: &mut CodeEditor) {
+    ed.set_text_style(
+        Style::default()
+            .fg(theme::region_fg(theme::Region::Editor))
+            .add_modifier(theme::region_modifiers(theme::Region::Editor)),
+    );
+    ed.set_line_number_style(theme::dim());
+    ed.set_selection_style(theme::selected());
+
+    // Syntax token colors from the active custom theme (empty == monochrome).
+    let syntax = theme::syntax_theme();
+    let pairs: Vec<(&str, &str)> = syntax.iter().map(|(t, hex)| (*t, hex.as_str())).collect();
+    ed.set_syntax_theme(&pairs);
+
+    // Block cursor: the custom theme's cursor color (drawn as the cell bg, with
+    // the editor background as fg so the glyph stays legible), else reversed.
+    let cursor = match theme::editor_cursor() {
+        Some(color) => Style::default().bg(color).fg(theme::region_bg(theme::Region::Editor)),
+        None => theme::selected(),
+    };
+    ed.set_cursor_style(Some(cursor));
+}
 
 fn make_editor(path: Option<&Path>, text: &str, line_numbers: bool) -> CodeEditor {
     let name = path
@@ -41,17 +70,34 @@ fn make_editor(path: Option<&Path>, text: &str, line_numbers: bool) -> CodeEdito
     } else {
         get_lang(&name)
     };
-    // `CodeEditor::new` already falls back to plain "text" on an unknown grammar.
-    let mut ed = CodeEditor::new(&lang, text, vesper())
-        .or_else(|_| CodeEditor::new("text", text, vesper()))
+    // An empty syntax theme keeps the editor monochrome (no token colors), as the
+    // theme spec requires. `CodeEditor::new` falls back to plain "text" on an
+    // unknown grammar.
+    let mut ed = CodeEditor::new(&lang, text, Vec::new())
+        .or_else(|_| CodeEditor::new("text", text, Vec::new()))
         .expect("code editor init for plain text never fails");
     ed.show_line_numbers(line_numbers);
+    apply_theme(&mut ed);
+    ed
+}
+
+/// Build a small, theme-styled, single-line text field holding `content`. Used by
+/// the Vix menu's Website/Email dialogs so the text is selectable and copyable
+/// from inside the TUI (select with the mouse or keyboard, then `Ctrl+C`).
+#[must_use]
+pub fn text_field(content: &str) -> CodeEditor {
+    let mut ed = CodeEditor::new("text", content, Vec::new())
+        .expect("text field init for plain text never fails");
+    ed.show_line_numbers(false);
+    apply_theme(&mut ed);
     ed
 }
 
 /// One open buffer shown as one tab.
 pub struct Tab {
+    /// The underlying code-editor widget/state.
     pub editor: CodeEditor,
+    /// File path backing this buffer, or `None` for an untitled buffer.
     pub path: Option<PathBuf>,
     /// Set when the buffer has unsaved edits.
     pub dirty: bool,
@@ -94,6 +140,7 @@ impl Tab {
         format!("{icon} {name}{flag}")
     }
 
+    /// Full path for display (status bar / buffer switcher), or `"untitled"`.
     pub fn display_path(&self) -> String {
         self.path
             .as_ref()
@@ -111,8 +158,11 @@ impl Tab {
     }
 }
 
+/// The tab strip: a stack of open buffers and the active index.
 pub struct Editor {
+    /// Open buffers, left to right.
     pub tabs: Vec<Tab>,
+    /// Index of the active tab.
     pub active: usize,
     /// Whether the line-number gutter is shown.
     pub line_numbers: bool,
@@ -136,10 +186,13 @@ impl Editor {
         e
     }
 
+    /// The active tab, if any.
+    #[must_use]
     pub fn active_tab(&self) -> Option<&Tab> {
         self.tabs.get(self.active)
     }
 
+    /// Mutable access to the active tab, if any.
     pub fn active_tab_mut(&mut self) -> Option<&mut Tab> {
         self.tabs.get_mut(self.active)
     }
@@ -184,6 +237,13 @@ impl Editor {
     pub fn refresh_line_numbers(&mut self) {
         for tab in &mut self.tabs {
             tab.editor.show_line_numbers(self.line_numbers);
+        }
+    }
+
+    /// Re-apply the current theme's styles to every buffer (after a theme switch).
+    pub fn refresh_theme(&mut self) {
+        for tab in &mut self.tabs {
+            apply_theme(&mut tab.editor);
         }
     }
 
@@ -232,6 +292,11 @@ impl Editor {
         }
     }
 
+    /// Save the active buffer to its existing path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer has no path, or the write fails.
     pub fn save_active(&mut self) -> io::Result<PathBuf> {
         let idx = self.active;
         let path = self.tabs[idx]
@@ -242,6 +307,11 @@ impl Editor {
         Ok(path)
     }
 
+    /// Save the active buffer to `path` and adopt it as the buffer's path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the write fails.
     pub fn save_active_as(&mut self, path: PathBuf) -> io::Result<PathBuf> {
         let idx = self.active;
         self.write_to(idx, &path)?;
@@ -273,12 +343,14 @@ impl Editor {
         }
     }
 
+    /// Activate the next tab, wrapping around.
     pub fn next_tab(&mut self) {
         if !self.tabs.is_empty() {
             self.active = (self.active + 1) % self.tabs.len();
         }
     }
 
+    /// Activate the previous tab, wrapping around.
     pub fn prev_tab(&mut self) {
         if !self.tabs.is_empty() {
             self.active = (self.active + self.tabs.len() - 1) % self.tabs.len();

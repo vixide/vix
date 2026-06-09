@@ -1,0 +1,39 @@
+{
+  "name": "Light",
+  "menu-bar": {
+    "foreground": [40, 40, 40],
+    "background": [215, 215, 215],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "status-bar": {
+    "foreground": [40, 40, 40],
+    "background": [215, 215, 215],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "left-dock": {
+    "foreground": [40, 40, 40],
+    "background": [215, 215, 215],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "right-dock": {
+    "foreground": [40, 40, 40],
+    "background": [215, 215, 215],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "editor": {
+    "foreground": [40, 40, 40],
+    "background": [215, 215, 215],
+    "font-style": "normal",
+    "font-weight": "normal",
+    "cursor": [82, 139, 255]
+  },
+  "syntax": {
+    "keyword": [86, 156, 214],
+    "string": [206, 145, 120],
+    "comment": [106, 153, 85]
+  }
+}

@@ -1,16 +1,18 @@
-# Vendored copy of ratatui-code-editor 0.0.4 (MIT, by vipmax) with the
-# Tree-sitter grammars made optional behind per-language Cargo features so the
-# binary only links the parsers it needs. Upstream:
+# vix-code-editor-panel: an internal fork of ratatui-code-editor 0.0.4 (MIT, by vipmax).
+# The Tree-sitter grammars are optional behind per-language Cargo features so the
+# binary only links the parsers it needs, and rendering is theme-aware (the
+# default text/line-number/selection styles are configurable) so Vix can present
+# the editor in either its dark or light theme. Upstream:
 # https://github.com/vipmax/ratatui-code-editor
 
 [package]
 edition = "2024"
-name = "ratatui-code-editor"
-version = "0.0.4"
-authors = ["vipmax"]
-description = "A code editor widget for ratatui with Tree-sitter syntax highlighting (vendored, grammars gated)."
+name = "vix-code-editor-panel"
+version = "0.1.0"
+authors = ["vipmax", "Vix contributors"]
+description = "A theme-aware code editor widget for ratatui with optional Tree-sitter syntax highlighting (internal fork for Vix)."
 license = "MIT"
-repository = "https://github.com/vipmax/ratatui-code-editor.git"
+repository = "https://github.com/sixarm/vix"
 build = false
 autolib = false
 autobins = false
@@ -19,7 +21,7 @@ autotests = false
 autobenches = false
 
 [lib]
-name = "ratatui_code_editor"
+name = "vix_code_editor_panel"
 path = "src/lib.rs"
 
 [features]

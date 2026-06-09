@@ -1,7 +1,7 @@
 use ratatui_core::{widgets::Widget};
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
-use ratatui_core::style::{Color, Style};
+use ratatui_core::style::{Modifier, Style};
 use crate::editor::Editor;
 use crate::code::{
     RopeGraphemes, grapheme_width_and_chars_len, grapheme_width_and_bytes_len
@@ -33,8 +33,8 @@ impl Widget for &Editor {
 
         let mut draw_y = area.top();
         
-        let line_number_style = Style::default().fg(Color::DarkGray);
-        let default_text_style = Style::default().fg(Color::White);
+        let line_number_style = self.line_number_style;
+        let default_text_style = self.text_style;
 
         // draw line numbers and text
         for line_idx in self.offset_y..total_lines {
@@ -171,7 +171,7 @@ impl Widget for &Editor {
                         for dx in 0..g_width as u16 {
                             let draw_x = start_x + dx;
                             if draw_x < area.right() && draw_y < area.bottom() {
-                                buf[(draw_x, draw_y)].set_style(Style::default().bg(Color::DarkGray));
+                                buf[(draw_x, draw_y)].set_style(self.selection_style);
                             }
                         }
                     }
@@ -184,7 +184,7 @@ impl Widget for &Editor {
 
         // draw marks
         if let Some(ref marks) = self.marks {
-            for &(start, end, color) in marks {
+            for &(start, end, _color) in marks {
                 if start >= end || end > total_chars { continue }
 
                 let start_line = code.char_to_line(start);
@@ -226,13 +226,49 @@ impl Widget for &Editor {
                             for dx in 0..g_width as u16 {
                                 let draw_x = start_x + dx;
                                 if draw_x < area.right() && draw_y < area.bottom() {
-                                    buf[(draw_x, draw_y)].set_bg(color);
+                                    buf[(draw_x, draw_y)].set_style(
+                                        Style::default().add_modifier(Modifier::UNDERLINED),
+                                    );
                                 }
                             }
                         }
                     
                         visual_x = visual_x.saturating_add(g_width as u16);
                         char_col += g_chars;
+                    }
+                }
+            }
+        }
+
+        // draw cursor (topmost): a one-cell block at the caret, themed by the host
+        if let Some(cursor_style) = self.cursor_style {
+            let cur = self.cursor.min(total_chars);
+            let line_idx = code.char_to_line(cur);
+            if line_idx >= self.offset_y && line_idx < self.offset_y + area.height as usize {
+                let line_start_char = code.line_to_char(line_idx);
+                let line_len = code.line_len(line_idx);
+                let rel = cur - line_start_char; // cursor's character column
+                let start_col = self.offset_x.min(line_len);
+                let max_text_width = (area.width as usize).saturating_sub(line_number_width);
+                let end_col = (start_col + max_text_width).min(line_len);
+
+                // Only draw when the caret column is within the horizontal viewport.
+                if rel >= start_col && rel <= end_col {
+                    // Walk graphemes from the first visible column to accumulate the
+                    // visual x of the caret (so wide glyphs are accounted for).
+                    let visible = code.char_slice(line_start_char + start_col, line_start_char + end_col);
+                    let mut visual_x: u16 = 0;
+                    let mut char_col = start_col;
+                    for g in RopeGraphemes::new(&visible) {
+                        if char_col >= rel { break; }
+                        let (g_width, g_chars) = grapheme_width_and_chars_len(g);
+                        visual_x = visual_x.saturating_add(g_width as u16);
+                        char_col += g_chars;
+                    }
+                    let draw_x = area.left() + line_number_width as u16 + visual_x;
+                    let draw_y = area.top() + (line_idx - self.offset_y) as u16;
+                    if draw_x < area.right() && draw_y < area.bottom() {
+                        buf[(draw_x, draw_y)].set_style(cursor_style);
                     }
                 }
             }

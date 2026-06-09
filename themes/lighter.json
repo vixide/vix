@@ -1,0 +1,39 @@
+{
+  "name": "Lighter",
+  "menu-bar": {
+    "foreground": [20, 20, 20],
+    "background": [235, 235, 235],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "status-bar": {
+    "foreground": [20, 20, 20],
+    "background": [235, 235, 235],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "left-dock": {
+    "foreground": [20, 20, 20],
+    "background": [235, 235, 235],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "right-dock": {
+    "foreground": [20, 20, 20],
+    "background": [235, 235, 235],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "editor": {
+    "foreground": [20, 20, 20],
+    "background": [235, 235, 235],
+    "font-style": "normal",
+    "font-weight": "normal",
+    "cursor": [82, 139, 255]
+  },
+  "syntax": {
+    "keyword": [86, 156, 214],
+    "string": [206, 145, 120],
+    "comment": [106, 153, 85]
+  }
+}

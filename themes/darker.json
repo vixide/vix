@@ -1,0 +1,39 @@
+{
+  "name": "Darker",
+  "menu-bar": {
+    "foreground": [235, 235, 235],
+    "background": [20, 20, 20],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "status-bar": {
+    "foreground": [235, 235, 235],
+    "background": [20, 20, 20],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "left-dock": {
+    "foreground": [235, 235, 235],
+    "background": [20, 20, 20],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "right-dock": {
+    "foreground": [235, 235, 235],
+    "background": [20, 20, 20],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "editor": {
+    "foreground": [235, 235, 235],
+    "background": [20, 20, 20],
+    "font-style": "normal",
+    "font-weight": "normal",
+    "cursor": [82, 139, 255]
+  },
+  "syntax": {
+    "keyword": [86, 156, 214],
+    "string": [206, 145, 120],
+    "comment": [106, 153, 85]
+  }
+}

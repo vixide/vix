@@ -4,16 +4,25 @@ use std::path::{Path, PathBuf};
 
 /// A visible row in the flattened tree.
 pub struct Node {
+    /// Absolute path of this entry.
     pub path: PathBuf,
+    /// File or directory name (no parent path).
     pub name: String,
+    /// Indentation depth from the root.
     pub depth: usize,
+    /// Whether this entry is a directory.
     pub is_dir: bool,
+    /// Whether this directory is currently expanded.
     pub expanded: bool,
 }
 
+/// The file-explorer tree and its selection/scroll state.
 pub struct Explorer {
+    /// Project root the tree is rooted at.
     pub root: PathBuf,
+    /// Flattened list of currently visible rows.
     pub nodes: Vec<Node>,
+    /// Index of the highlighted row.
     pub selected: usize,
     /// First visible row, kept in sync with the rendered viewport so mouse
     /// clicks map to the correct node.
@@ -28,6 +37,8 @@ pub struct Explorer {
 }
 
 impl Explorer {
+    /// Build an explorer rooted at `root`, with the root expanded.
+    #[must_use]
     pub fn new(root: PathBuf) -> Self {
         let mut e = Explorer {
             root: root.clone(),
@@ -57,6 +68,7 @@ impl Explorer {
         }
     }
 
+    /// Clear the multi-selection.
     pub fn clear_marks(&mut self) {
         self.marked.clear();
     }
@@ -138,32 +150,40 @@ impl Explorer {
         }
     }
 
+    /// The highlighted node, if any.
+    #[must_use]
     pub fn selected_node(&self) -> Option<&Node> {
         self.nodes.get(self.selected)
     }
 
+    /// Move the selection up one row.
     pub fn up(&mut self) {
         self.selected = self.selected.saturating_sub(1);
     }
 
+    /// Move the selection down one row.
     pub fn down(&mut self) {
         if self.selected + 1 < self.nodes.len() {
             self.selected += 1;
         }
     }
 
+    /// Move the selection up by `n` rows.
     pub fn page_up(&mut self, n: usize) {
         self.selected = self.selected.saturating_sub(n);
     }
 
+    /// Move the selection down by `n` rows.
     pub fn page_down(&mut self, n: usize) {
         self.selected = (self.selected + n).min(self.nodes.len().saturating_sub(1));
     }
 
+    /// Select the first row.
     pub fn first(&mut self) {
         self.selected = 0;
     }
 
+    /// Select the last row.
     pub fn last(&mut self) {
         self.selected = self.nodes.len().saturating_sub(1);
     }

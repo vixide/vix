@@ -1,0 +1,39 @@
+{
+  "name": "One Dark",
+  "menu-bar": {
+    "foreground": [171, 178, 191],
+    "background": [40, 44, 52],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "status-bar": {
+    "foreground": [171, 178, 191],
+    "background": [40, 44, 52],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "left-dock": {
+    "foreground": [171, 178, 191],
+    "background": [40, 44, 52],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "right-dock": {
+    "foreground": [171, 178, 191],
+    "background": [40, 44, 52],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "editor": {
+    "foreground": [171, 178, 191],
+    "background": [40, 44, 52],
+    "font-style": "normal",
+    "font-weight": "normal",
+    "cursor": [97, 175, 239]
+  },
+  "syntax": {
+    "keyword": [198, 120, 221],
+    "string": [152, 195, 121],
+    "comment": [92, 99, 112]
+  }
+}

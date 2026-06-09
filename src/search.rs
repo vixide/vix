@@ -3,14 +3,20 @@
 //! The actual searching uses `tui-textarea`'s regex search; replacement is
 //! applied by `App` against the active buffer.
 
+/// Which input field of the search bar has focus.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Field {
+    /// The search-pattern field.
     Query,
+    /// The replacement field.
     Replace,
 }
 
+/// State of the find / find-and-replace toolbar.
 pub struct SearchBar {
+    /// Search-pattern text.
     pub query: String,
+    /// Replacement text.
     pub replace: String,
     /// Replace mode shows and uses the replacement field.
     pub replacing: bool,
@@ -18,14 +24,19 @@ pub struct SearchBar {
     pub interactive: bool,
     /// Which input field has focus (only meaningful while replacing).
     pub field: Field,
+    /// Match case exactly.
     pub case_sensitive: bool,
+    /// Match whole words only.
     pub whole_word: bool,
+    /// Treat the query as a regular expression.
     pub regex: bool,
     /// Last status, e.g. match count or "no matches".
     pub status: String,
 }
 
 impl SearchBar {
+    /// A fresh search bar; `replacing` selects find-and-replace mode.
+    #[must_use]
     pub fn new(replacing: bool) -> Self {
         SearchBar {
             query: String::new(),
@@ -40,6 +51,7 @@ impl SearchBar {
         }
     }
 
+    /// Mutable access to the currently focused field's text.
     pub fn active_field_mut(&mut self) -> &mut String {
         match self.field {
             Field::Query => &mut self.query,
@@ -47,6 +59,7 @@ impl SearchBar {
         }
     }
 
+    /// Switch focus between the query and replace fields (replace mode only).
     pub fn toggle_field(&mut self) {
         if self.replacing {
             self.field = match self.field {
