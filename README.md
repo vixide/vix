@@ -3,9 +3,10 @@
 Vix is a keyboard-friendly terminal text editor written in Rust. It opens
 text files, edits them, and saves them — with a menu bar, a file-explorer drawer,
 tabbed buffers, a message drawer, a command palette, find & replace, a calendar
-box, switchable themes, and a switchable UI language. It is built on
-[`ratatui`] and an in-house code-editor widget, and uses familiar
-macOS/Windows shortcuts (Ctrl+C / Ctrl+V, not modal editing). Mouse and keyboard
+box, switchable themes, a switchable UI language, and switchable keyboard
+navigation styles. It is built on [`ratatui`] and an in-house code-editor widget.
+By default it uses familiar macOS/Windows shortcuts (Ctrl+C / Ctrl+V, not modal),
+and you can switch to Emacs or Vim "keyways" if you prefer. Mouse and keyboard
 both work.
 
 ```
@@ -50,7 +51,7 @@ both work.
 - **Calendar box** — local date/time, UTC ISO-8601 instant, ISO-8601 week date,
   and a navigable month grid with today highlighted (all computed with [`jiff`]).
 - **Themes** — two built-in monochrome themes (Dark and Light) plus custom
-  themes loaded from JSON, chosen live in **View → Themes…**. See
+  themes loaded from JSON, chosen live in **View → Theme…**. See
   [`docs/themes.md`](docs/themes.md).
 - **Internationalization** — the whole UI is translatable; 15 languages are
   selectable (English, Spanish, French, German, Welsh fully; Irish, Scottish
@@ -58,6 +59,10 @@ both work.
   Japanese with core coverage + English fallback). Choose one in
   **View → Locale…**, via the `locale` setting, or with `--locale`. See
   [`docs/i18n.md`](docs/i18n.md).
+- **Keyways** — switch the keyboard navigation style in **View → Keyway…**:
+  **Apple** (default; modifier shortcuts), **Emacs** (`Ctrl` chords with a
+  `Ctrl+X` prefix), or **Vim** (modal Normal/Insert + `:` command line). See
+  [`docs/keybindings.md`](docs/keybindings.md).
 - **Keyboard help** — press `F1` for an overlay of every shortcut.
 
 ## Install & run
@@ -142,6 +147,7 @@ vix-code-editor-panel/          the center editor widget (Tree-sitter, themeable
 vix-date-time-calendar-panel/   calendar date/time logic + navigable month grid
 vix-theme-chooser/              theme model, styles, custom JSON themes, chooser
 vix-locale-chooser/             available UI languages + chooser
+vix-keyway-chooser/             keyboard navigation styles (Apple/Emacs/Vim) + chooser
 vix-keyboard-shortcut-panel/    keyboard-help rows
 
 spec/            design specification (the source of truth)
@@ -172,8 +178,9 @@ cargo clippy --workspace   # lints (the tree is warning-clean)
 The editing logic lives in the library crate and is exercised by
 `tests/integration.rs` without needing a live terminal — typing, open/save round
 trips, go-to-line, fuzzy matching, the search-pattern builder, regex replace with
-capture groups, theme/locale switching, and the ISO/date formatting are all
-covered. Each internal crate carries its own focused unit tests.
+capture groups, theme/locale/keyway switching, the Emacs and Vim keyways, and the
+ISO/date formatting are all covered. Each internal crate carries its own focused
+unit tests.
 
 ## License
 

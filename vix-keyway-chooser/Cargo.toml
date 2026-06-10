@@ -1,0 +1,15 @@
+# vix-keyway-chooser: the list of available keyboard navigation styles ("keyways")
+# and the chooser's selection state, parallel to vix-locale-chooser. Pure data
+# (no dependencies); the host persists the chosen keyway and applies its bindings.
+
+[package]
+name = "vix-keyway-chooser"
+version = "0.1.0"
+edition = "2021"
+description = "Available keyboard navigation styles (keyways) and chooser state for Vix."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_keyway_chooser"
+path = "src/lib.rs"

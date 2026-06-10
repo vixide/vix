@@ -41,8 +41,9 @@ Fix drift by aligning all three (code, spec, docs).
 | `spec/file-explorer.md`                | Explorer tree and file ops              |
 | `spec/search-and-replace.md`           | Find/replace, project search, query-replace |
 | `spec/code-editor.md`                  | The editor widget behavior              |
-| `spec/themes.md`                       | Theme model + custom JSON format        |
-| `spec/locales.md`                      | Internationalization                    |
+| `spec/theme-chooser.md`                | Theme model + custom JSON format        |
+| `spec/locale-chooser.md`               | Internationalization / languages        |
+| `spec/keyway-chooser.md`               | Keyboard navigation styles (Apple/Emacs/Vim) |
 | `spec/vix-calendar.md`                 | Calendar box                            |
 | `spec/main-rs-and-lib-rs-boilerplate.md` | Entry-point conventions               |
 | `spec/comparisons.md`                  | Comparisons to other editors            |

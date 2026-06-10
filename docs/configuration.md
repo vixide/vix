@@ -18,26 +18,36 @@ their defaults, so it is safe to delete or hand-edit.
 | Key             | Type   | Default  | Meaning                                                              |
 | --------------- | ------ | -------- | -------------------------------------------------------------------- |
 | `line_numbers`  | bool   | `true`   | Show the line-number gutter.                                         |
+| `show_whitespace`| bool  | `false`  | Show visible glyphs for space (`·`), tab (`→`), and line ending (`¶`). |
 | `show_explorer` | bool   | `true`   | Show the file-explorer drawer on startup.                            |
 | `show_messages` | bool   | `true`   | Show the message drawer on startup.                                  |
 | `preview_tabs`  | bool   | `true`   | Open single-clicked / arrow-scanned files in an ephemeral preview tab. |
 | `theme`         | string | `"dark"` | `"dark"`, `"light"`, or the `name` of a custom theme.                |
-| `locale`        | string | `"en"`   | UI language code (`en`, `es`, `fr`, `de`, `cy`).                     |
+| `locale`        | string | `"en"`   | UI language code (`en`, `es`, `fr`, `de`, `cy`, …).                  |
+| `keyway`        | string | `"apple"`| Keyboard navigation style: `"apple"`, `"emacs"`, or `"vim"`.         |
+| `explorer_width`| int    | `30`     | Width (columns) of the left dock; drag its right edge to resize.    |
+| `messages_width`| int    | `32`     | Width (columns) of the right dock; drag its left edge to resize.    |
 
 Example `config.toml`:
 
 ```toml
 line_numbers = true
+show_whitespace = false
 show_explorer = true
 show_messages = true
 preview_tabs = true
 theme = "dark"
 locale = "en"
+keyway = "apple"
+explorer_width = 30
+messages_width = 32
 ```
 
 Most settings are also changed from inside the app and saved on quit: toggling
-line numbers / explorer / messages, and choosing a theme (**View → Themes…**) or
-language (**View → Locale…**).
+line numbers / visible whitespace / explorer / messages, resizing a dock (drag
+its inner edge), and
+choosing a theme (**View → Theme…**), language (**View → Locale…**), or keyway
+(**View → Keyway…**).
 
 ## Custom themes directory
 

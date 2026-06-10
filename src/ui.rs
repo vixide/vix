@@ -142,6 +142,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.locale_chooser.is_some() {
         draw_locale_chooser(app, frame, area);
     }
+    if app.keyway_chooser.is_some() {
+        draw_keyway_chooser(app, frame, area);
+    }
     if app.paste.as_ref().map(|p| p.conflict.is_some()).unwrap_or(false) {
         draw_paste_conflict(app, frame, area);
     }
@@ -222,10 +225,19 @@ fn draw_confirm(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(Line::from(c.message.clone())), inner);
 }
 
-fn draw_theme_chooser(app: &App, frame: &mut Frame, area: Rect) {
-    let Some(tc) = app.theme_chooser.as_ref() else { return };
+/// Render a centered list-chooser overlay (theme/locale/keyway): a titled box
+/// with one row per `labels` entry, the `selected` row highlighted, and a hint
+/// line. Returns the list's rectangle so the caller can record it for mouse
+/// hit-testing.
+fn draw_list_chooser(
+    frame: &mut Frame,
+    area: Rect,
+    title: &str,
+    labels: &[String],
+    selected: usize,
+) -> Rect {
     let width = 34u16.min(area.width);
-    let height = (tc.choices.len() as u16 + 4).min(area.height);
+    let height = (labels.len() as u16 + 4).min(area.height);
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
         y: area.y + area.height / 3,
@@ -238,7 +250,7 @@ fn draw_theme_chooser(app: &App, frame: &mut Frame, area: Rect) {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(theme::title(true))
-        .title(format!(" {} {} ", icon::PALETTE, t!("ui.themes")));
+        .title(format!(" {} {} ", icon::PALETTE, title));
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
 
@@ -247,65 +259,52 @@ fn draw_theme_chooser(app: &App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let items: Vec<ListItem> = tc
-        .choices
+    let items: Vec<ListItem> = labels
         .iter()
-        .map(|c| {
-            let label = match c.builtin() {
-                Some(m) => t!(m.label()).to_string(),
-                None => c.custom_name().unwrap_or_default().to_string(),
-            };
-            ListItem::new(Line::from(format!("  {label}")))
-        })
+        .map(|label| ListItem::new(Line::from(format!("  {label}"))))
         .collect();
     let list = List::new(items).highlight_style(theme::selected());
     let mut state = ListState::default();
-    state.select(Some(tc.selected));
-    frame.render_stateful_widget(list, rows[0], &mut state);
-
-    let hint = Line::from(Span::styled(
-        t!("ui.theme_hint"),
-        theme::dim(),
-    ));
-    frame.render_widget(Paragraph::new(hint), rows[1]);
-}
-
-fn draw_locale_chooser(app: &App, frame: &mut Frame, area: Rect) {
-    let Some(lc) = app.locale_chooser.as_ref() else { return };
-    let width = 34u16.min(area.width);
-    let height = (vix_locale_chooser::LOCALES.len() as u16 + 4).min(area.height);
-    let rect = Rect {
-        x: area.x + (area.width.saturating_sub(width)) / 2,
-        y: area.y + area.height / 3,
-        width,
-        height,
-    };
-    frame.render_widget(Clear, rect);
-    let block = Block::default()
-        .style(theme::base())
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(theme::title(true))
-        .title(format!(" {} {} ", icon::PALETTE, t!("ui.locale")));
-    let inner = block.inner(rect);
-    frame.render_widget(block, rect);
-
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
-        .split(inner);
-
-    let items: Vec<ListItem> = vix_locale_chooser::LOCALES
-        .iter()
-        .map(|l| ListItem::new(Line::from(format!("  {}", l.name))))
-        .collect();
-    let list = List::new(items).highlight_style(theme::selected());
-    let mut state = ListState::default();
-    state.select(Some(lc.selected));
+    state.select(Some(selected));
     frame.render_stateful_widget(list, rows[0], &mut state);
 
     let hint = Line::from(Span::styled(t!("ui.theme_hint"), theme::dim()));
     frame.render_widget(Paragraph::new(hint), rows[1]);
+    rows[0]
+}
+
+fn draw_theme_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(tc) = app.theme_chooser.as_ref() else { return };
+    let selected = tc.selected;
+    let labels: Vec<String> = tc
+        .choices
+        .iter()
+        .map(|c| match c.builtin() {
+            Some(m) => t!(m.label()).to_string(),
+            None => c.custom_name().unwrap_or_default().to_string(),
+        })
+        .collect();
+    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.theme"), &labels, selected);
+}
+
+fn draw_locale_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(lc) = app.locale_chooser.as_ref() else { return };
+    let selected = lc.selected;
+    let labels: Vec<String> = vix_locale_chooser::LOCALES
+        .iter()
+        .map(|l| l.name.to_string())
+        .collect();
+    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.locale"), &labels, selected);
+}
+
+fn draw_keyway_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(kc) = app.keyway_chooser.as_ref() else { return };
+    let selected = kc.selected;
+    let labels: Vec<String> = vix_keyway_chooser::KEYWAYS
+        .iter()
+        .map(|k| format!("{}  —  {}", k.name, k.tooltip))
+        .collect();
+    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.keyway"), &labels, selected);
 }
 
 fn draw_paste_conflict(app: &App, frame: &mut Frame, area: Rect) {
@@ -559,7 +558,12 @@ fn draw_tabs(app: &App, frame: &mut Frame, area: Rect) {
         // the wrong color (e.g. white) when the theme background differs.
         .style(theme::region_base(theme::Region::Editor))
         .select(app.editor.active)
-        .highlight_style(theme::selected())
+        // Mark the active tab with an underline rather than reversed video, so it
+        // keeps the editor's (e.g. dark) background instead of flipping to a light
+        // one.
+        .highlight_style(
+            theme::region_base(theme::Region::Editor).add_modifier(Modifier::UNDERLINED),
+        )
         .divider(Span::styled("│", theme::dim()));
     frame.render_widget(tabs, area);
 }
@@ -646,7 +650,11 @@ fn draw_status_bar(app: &App, frame: &mut Frame, area: Rect) {
         String::new()
     };
 
-    let left = format!(" {}{}  \u{2014}  {}", path, dirty_flag, app.status);
+    let mode = app
+        .mode_indicator()
+        .map(|m| format!("{m}   "))
+        .unwrap_or_default();
+    let left = format!(" {}{}{}  \u{2014}  {}", mode, path, dirty_flag, app.status);
     let right = format!("Ln {line}:Col {col}   {} ", icon::CALENDAR);
 
     let cols = Layout::default()

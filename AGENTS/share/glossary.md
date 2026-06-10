@@ -2,7 +2,7 @@
 
 Shared terms used across the code, specs, and docs.
 
-- **Action id** — a stable string (e.g. `file.save`, `view.themes`) that names a
+- **Action id** — a stable string (e.g. `file.save`, `view.theme`) that names a
   command. Menus, the palette, and shortcuts all dispatch one through
   `App::run_action`.
 - **Buffer / Tab** — one open file (or untitled document) shown as one editor tab.
@@ -28,4 +28,10 @@ Shared terms used across the code, specs, and docs.
 - **Mark** — a non-selection highlight in the editor (e.g. other search hits),
   rendered as an underline in monochrome.
 - **Monochrome** — the built-in theme style: one foreground, one background, no
-  hue; emphasis via bold/dim; reversed only for selections/cursor.
+  hue; emphasis via dim and full intensity (no bold/italic); reversed only for
+  selections/cursor.
+- **Keyway** — the keyboard navigation style: **Apple** (modifier shortcuts, the
+  default), **Emacs** (`Ctrl` chords), or **Vim** (modal). Exactly one is active;
+  chosen in **View → Keyway…** and persisted in the `keyway` setting.
+- **Mode (Vim)** — within the Vim keyway, **Normal** (motions/commands) vs
+  **Insert** (typing); the `:` command line is a third input state.

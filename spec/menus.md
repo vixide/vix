@@ -1,60 +1,87 @@
 # Menus
 
-Top menu bar
+Top menu bar.
 
-- Open with `F10` or `Alt+F/E/T/H`
-- Arrows navigate
-- `Enter` runs
-- `Esc` closes
+- Open with `F10`, or `Alt+F/E/V/T/H` for File/Edit/View/Tools/Help.
+- Arrows navigate, `Enter` runs, `Esc` closes.
+- A mouse click on a menu name opens it; a click on a dropdown item runs it.
+- While a menu is open, moving the pointer follows the selection: hovering a
+  dropdown row highlights it, and hovering another top-level name switches menus.
 
-- Vix menu
-  - About Vix -> show modal dialog with text "Vix " + version number, for example "Vix 1.0.0" and close button "Ok".
-  - Website -> show modal dialog ratatui-textarea with text "https://github.com/joelparkerhenderson/vix" and close button "Ok".
-  - Email -> show modal dialog ratatui-textarea with text "joel@joelparkerhenderson.com" and close button "Ok".
-- File menu
-  - New | ^N | Create new file in editor
-  - Open... | ^O | Open existing file in editor
-  - Open Recent... | ⇧ ^O | Open recent file in editor
-  ***
-  - Save | ^S | Save file
-  - Save As... | ⇧ ^S | Save file as a different name
-  ***
-  - Close || Close the editor file
-  ***
-  - Quit || Quit Vix
-- Edit menu
-  - Undo | ^Z | Undo action
-  - Redo | ⇧ ^Z | Redo action
-  ***
-  - Cut | ^X | Cut to clipboard
-  - Copy | ^C | Copy to clipboard
-  - Paste | ^P | Paste from clipboard
-  ***
-  - Find In File | ^F | Find in the current file
-  - Find In Project | ⇧ ^F | Find in all project files
-  - Replace | ^R | Find-And-Replace in the current file
-  - Replace | ⇧^R | Find-And-Replace in all project files
-- Select menu
-  - Select All | ^A
-- View menu
-  - Theme... | | Theme chooser
-  - Locale... | | Locale chooser
-- ***
-  - Zoom In | ^=
-  - Zoom Out | ^-
-  - Zoom Zero | ^0
-  ***
-  - Toggle Left Dock -> toggle_left_dock(…)
-  - Toggle Right Dock -> toggle_right_dock(…)
-  - Toggle Editor Line Numbers -> vix code editor panel toggle_line_numbers(…)
-- Tools menu
-  - Calendar -> show vix-calendar
-  - Command Palette
-- Help menu
-  - Keyboard Shortcuts (also `F1`)
+The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
+
+## Vix menu
+
+- About Vix — modal dialog showing `Vix <version>` and an **Ok** button.
+- Website — modal dialog with a selectable/copyable text field
+  `https://github.com/joelparkerhenderson/vix` and an **Ok** button.
+- Email — modal dialog with a selectable/copyable text field
+  `joel@joelparkerhenderson.com` and an **Ok** button.
+
+## File menu
+
+| Item     | Shortcut       | Action                      |
+| -------- | -------------- | --------------------------- |
+| New      | `Ctrl+N`       | Create a new buffer         |
+| Open…    | `Ctrl+O`       | Open an existing file       |
+| Save     | `Ctrl+S`       | Save the file               |
+| Save As… | `Ctrl+Shift+S` | Save under a different name |
+| Close    | `Ctrl+W`       | Close the active buffer     |
+| Quit     | `Ctrl+Q`       | Quit Vix                    |
+
+## Edit menu
+
+| Item    | Shortcut | Action                       |
+| ------- | -------- | ---------------------------- |
+| Undo    | `Ctrl+Z` | Undo                         |
+| Redo    | `Ctrl+Y` | Redo                         |
+| Cut     | `Ctrl+X` | Cut to clipboard             |
+| Copy    | `Ctrl+C` | Copy to clipboard            |
+| Paste   | `Ctrl+V` | Paste from clipboard         |
+| Find    | `Ctrl+F` | Find in the current file     |
+| Replace | `Ctrl+R` | Find-and-replace in the file |
+
+(Project-wide search/replace is `Ctrl+Shift+F`; interactive query-replace is
+`Ctrl+Alt+R`. Both are reachable from the command palette — see
+`search-and-replace.md`.)
+
+## View menu
+
+| Item                             | Action                                        |
+| -------------------------------- | --------------------------------------------- |
+| Theme…                           | Open the theme chooser (`theme-chooser.md`)   |
+| Locale…                          | Open the locale chooser (`locale-chooser.md`) |
+| Keyway…                          | Open the keyway chooser (`keyway-chooser.md`) |
+| Toggle Left Dock                 | Show/hide the file explorer (`Ctrl+B`)        |
+| Toggle Right Dock                | Show/hide the message drawer                  |
+| Toggle Editor Line Numbers       | Show/hide the line-number gutter              |
+| Toggle Editor Visible Whitespace | Show/hide visible space, tab, newline, return |
+
+## Tools menu
+
+| Item            | Action                      |
+| --------------- | --------------------------- |
+| Calendar        | Toggle the calendar box     |
+| Command Palette | Open the palette (`Ctrl+P`) |
+
+## Help menu
+
+| Item               | Action                            |
+| ------------------ | --------------------------------- |
+| Keyboard Shortcuts | Open the help overlay (also `F1`) |
 
 ## For all menu items
 
-- Left-align menu item title. Example "Open...".
-- Right-align menu item shortcut. Example: "^O".
-- Ensure there is at least 1 character of spacing between left title and right shortcut.
+- Left-align the menu item title (e.g. "Open…").
+- Right-align the shortcut (e.g. "Ctrl+O").
+- Keep at least one space between the title and the shortcut.
+
+## Planned (not yet built)
+
+These appear in the design but are not implemented yet:
+
+- File ▸ **Open Recent…** (recent-files history).
+- **Select** menu with **Select All** (`Ctrl+A`).
+- View ▸ **Zoom In / Out / Zero** (terminal font zoom).
+- Separate Edit menu entries for project-wide find/replace (today these live on
+  shortcuts and the palette, not the menu).

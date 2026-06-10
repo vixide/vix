@@ -1,4 +1,4 @@
-# Themes
+# Theme chooser
 
 Vix has two layers of theming:
 
@@ -8,7 +8,7 @@ Vix has two layers of theming:
 
 The **default** theme is Dark.
 
-Pick a theme live in **View → Themes…**: arrow keys preview it, Enter applies and
+Pick a theme live in **View → Theme…**: arrow keys preview it, Enter applies and
 persists it (to the `theme` setting), Esc cancels. The chooser lists the built-in
 modes and every JSON theme together, sorted alphabetically (see Theme chooser).
 

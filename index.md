@@ -27,8 +27,11 @@ A map of all documentation in this repository. Start with the
 - [command-palette.md](spec/command-palette.md) ·
   [file-explorer.md](spec/file-explorer.md) ·
   [search-and-replace.md](spec/search-and-replace.md)
-- [code-editor.md](spec/code-editor.md) · [themes.md](spec/themes.md) ·
-  [locales.md](spec/locales.md) · [vix-calendar.md](spec/vix-calendar.md)
+- [code-editor.md](spec/code-editor.md) ·
+  [theme-chooser.md](spec/theme-chooser.md) ·
+  [locale-chooser.md](spec/locale-chooser.md) ·
+  [keyway-chooser.md](spec/keyway-chooser.md) ·
+  [vix-calendar.md](spec/vix-calendar.md)
 - [main-rs-and-lib-rs-boilerplate.md](spec/main-rs-and-lib-rs-boilerplate.md) ·
   [comparisons.md](spec/comparisons.md) · [test.md](spec/test.md)
 

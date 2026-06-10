@@ -3278,6 +3278,7 @@ dependencies = [
  "vix-code-editor-panel",
  "vix-date-time-calendar-panel",
  "vix-keyboard-shortcut-panel",
+ "vix-keyway-chooser",
  "vix-locale-chooser",
  "vix-theme-chooser",
 ]
@@ -3323,6 +3324,10 @@ dependencies = [
 
 [[package]]
 name = "vix-keyboard-shortcut-panel"
+version = "0.1.0"
+
+[[package]]
+name = "vix-keyway-chooser"
 version = "0.1.0"
 
 [[package]]

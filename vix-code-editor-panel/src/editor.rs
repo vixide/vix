@@ -58,6 +58,12 @@ pub struct Editor {
     /// Controls when to show the line numbers
     pub(crate) show_line_numbers: bool,
 
+    /// When true, render visible glyphs for whitespace (space, tab, line ending).
+    pub(crate) show_whitespace: bool,
+
+    /// Style for the visible-whitespace glyphs (typically dimmed).
+    pub(crate) whitespace_style: Style,
+
     /// Controls the left padding before writing the code
     pub(crate) left_code_padding: usize,
 
@@ -108,6 +114,8 @@ impl Editor {
             marks: None,
             highlights_cache,
             show_line_numbers: true,
+            show_whitespace: false,
+            whitespace_style: Style::default().fg(Color::DarkGray),
             left_code_padding: 2,
             text_style: Style::default().fg(Color::White),
             line_number_style: Style::default().fg(Color::DarkGray),
@@ -556,6 +564,22 @@ impl Editor {
     pub fn toggle_line_numbers(&mut self) -> bool {
         self.show_line_numbers = !self.show_line_numbers;
         self.show_line_numbers
+    }
+
+    /// Show or hide visible-whitespace glyphs (space, tab, line ending).
+    pub fn show_whitespace(&mut self, show: bool) {
+        self.show_whitespace = show
+    }
+
+    /// Toggle visible-whitespace glyphs; returns the new visibility.
+    pub fn toggle_whitespace(&mut self) -> bool {
+        self.show_whitespace = !self.show_whitespace;
+        self.show_whitespace
+    }
+
+    /// Set the style used for visible-whitespace glyphs (typically dimmed).
+    pub fn set_whitespace_style(&mut self, style: Style) {
+        self.whitespace_style = style;
     }
 
     pub fn set_left_code_padding(&mut self, char_count: usize) {

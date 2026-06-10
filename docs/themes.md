@@ -1,12 +1,12 @@
 # Themes
 
 Vix ships two built-in themes and supports user-defined custom themes loaded from
-JSON. Pick a theme live in **View → Themes…** (↑↓ to preview, Enter to apply, Esc
+JSON. Pick a theme live in **View → Theme…** (↑↓ to preview, Enter to apply, Esc
 to cancel). The choice is saved to the `theme` setting.
 
 ## Built-in themes
 
-The built-ins are intentionally **monochrome** (see `spec/themes.md`):
+The built-ins are intentionally **monochrome** (see `spec/theme-chooser.md`):
 
 - **Dark** (default) — white foreground on a black background.
 - **Light** — black foreground on a white background.
@@ -31,7 +31,7 @@ Custom themes are JSON files in the themes directory:
 ### Ready-made themes
 
 A set of themes is **bundled into the binary** (from the repo's `themes/`
-directory) and appears in **View → Themes…** automatically — no installation
+directory) and appears in **View → Theme…** automatically — no installation
 needed: `Darker`, `Darkest`, `Lighter`, `Lightest`, `Matrix`, `Turbo`,
 `Solarized Dark`, `Solarized Light`, `Dracula`, `Nord`, `Gruvbox Dark`,
 `Monokai`, `One Dark`, and `Tokyo Night`. (The bundled `Dark`/`Light` files are
@@ -96,12 +96,12 @@ those effects appear only under a custom theme that opts in.
 
 ### Selecting a custom theme
 
-Drop a file in the themes directory and reopen **View → Themes…**: it appears in
+Drop a file in the themes directory and reopen **View → Theme…**: it appears in
 the list after Dark and Light. Selecting it saves its `name` to the `theme`
 setting, so it is restored on the next launch. If a saved custom theme name can
 no longer be found, Vix falls back to Dark.
 
 ## See also
 
-- `spec/themes.md` — the theme specification (source of truth).
+- `spec/theme-chooser.md` — the theme specification (source of truth).
 - [configuration.md](configuration.md) — the `theme` setting and file locations.

@@ -1,4 +1,4 @@
-# Locales
+# Locale chooser
 
 For locales, localization, l10n, internationalization, i18n.
 

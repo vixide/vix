@@ -11,6 +11,7 @@ Vix is a Cargo workspace. Shared reference for where everything lives.
 | `vix-date-time-calendar-panel` | `vix-date-time-calendar-panel/` | Calendar date/time + navigable month grid (owns `jiff`).            |
 | `vix-theme-chooser`            | `vix-theme-chooser/`            | Theme model, ratatui styles, custom JSON themes, chooser state.     |
 | `vix-locale-chooser`           | `vix-locale-chooser/`           | Available UI languages + chooser state.                             |
+| `vix-keyway-chooser`           | `vix-keyway-chooser/`           | Keyboard navigation styles (Apple/Emacs/Vim) + chooser state.       |
 | `vix-keyboard-shortcut-panel`  | `vix-keyboard-shortcut-panel/`  | Keyboard-help rows (key combo + i18n description key).              |
 
 ## `vix` application modules (`src/`)

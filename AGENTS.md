@@ -47,12 +47,17 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
   *keys*; the host translates. See [`docs/i18n.md`](docs/i18n.md).
 - **One action, one implementation.** Menu items, palette commands, and
   shortcuts all dispatch through `App::run_action` using string action ids
-  (`file.save`, `view.themes`, …). Add the behavior there once.
-- **Built-in themes are monochrome.** One fg, one bg; emphasis via bold/dim;
-  reversed video only for selections and the cursor. Color belongs only to custom
-  JSON themes. See [`docs/themes.md`](docs/themes.md).
+  (`file.save`, `view.theme`, …). Add the behavior there once.
+- **Built-in themes are monochrome.** One fg, one bg; emphasis via dim and full
+  intensity (no bold or italic); reversed video only for selections and the
+  cursor. Color belongs only to custom JSON themes. See
+  [`docs/themes.md`](docs/themes.md).
 - **Keep the logic terminal-independent.** Editing/state logic lives in the
   library and is tested without a TTY. Rendering lives only in `src/ui.rs`.
+- **Input dispatch is keyway-aware.** Raw keys route through the active *keyway*
+  (Apple / Emacs / Vim) in `App::on_key`; keyways translate keys into the same
+  `run_action` calls and editor motions rather than duplicating behavior. See
+  `spec/keyway-chooser.md`.
 - **One `ratatui` version.** The whole widget stack must agree on `ratatui` 0.30
   / `crossterm` 0.29. Don't add a widget crate on a different version.
 
@@ -66,6 +71,8 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 | Add a setting                        | `src/settings.rs`                                  |
 | Change the editor widget             | `vix-code-editor-panel/`                           |
 | Change theme colors/model            | `vix-theme-chooser/`                               |
+| Change available UI languages        | `vix-locale-chooser/`                              |
+| Change keyboard navigation styles    | `vix-keyway-chooser/` + keyway dispatch in `src/app.rs` |
 | Change the calendar                  | `vix-date-time-calendar-panel/`                    |
 
 See [`AGENTS/share/crate-map.md`](AGENTS/share/crate-map.md) for the full map.

@@ -1,7 +1,9 @@
 # Vix Keybindings
 
-Every shortcut Vix currently implements. Shortcuts use familiar
-macOS/Windows conventions; Vix is **not** modal.
+Every shortcut Vix currently implements. The bindings below are the **Apple**
+keyway (the default): familiar macOS/Windows modifier shortcuts. Two other
+keyways change this dispatch — **Emacs** (`Ctrl` chords) and **Vim** (modal).
+Switch via **View → Keyway…**; the choice persists. See [Keyways](#keyways).
 
 ## Global
 
@@ -57,6 +59,7 @@ duplicate-line.
 | Wheel over explorer      | Move the selection                              |
 | Click a message's `x`    | Dismiss that message                            |
 | Click a menu name        | Open that menu                                  |
+| Hover over an open menu  | Move the highlight (rows) / switch menus (names) |
 | Click a dock toggle icon | Toggle the explorer / messages drawer (top-right of the menu bar) |
 
 ## File explorer (when focused — `Ctrl+E`)
@@ -135,10 +138,15 @@ The **View** menu opens small chooser overlays:
 
 | Overlay                | Keys                                                   |
 | ---------------------- | ------------------------------------------------------ |
-| **Themes…**            | `↑`/`↓` preview live, `Enter` apply & save, `Esc` cancel |
+| **Theme…**            | `↑`/`↓` preview live, `Enter` apply & save, `Esc` cancel |
 | **Locale…** (language) | `↑`/`↓` preview live, `Enter` apply & save, `Esc` cancel |
+| **Keyway…**            | `↑`/`↓` highlight, `Enter` apply & save, `Esc` cancel    |
 
-View also has the line-numbers / explorer / messages toggles.
+In every chooser a left **click** on a row highlights it (Themes/Locale also
+preview live).
+
+View also has toggles for the line-number gutter, visible whitespace (glyphs
+for space `·`, tab `→`, and line ending `¶`), and the explorer / messages docks.
 
 ## Calendar box (Tools → Calendar)
 
@@ -148,3 +156,49 @@ View also has the line-numbers / explorer / messages toggles.
 | `Esc` / `q`     | Close the calendar              |
 
 The date/time area always shows the present; only the month grid navigates.
+
+## Keyways
+
+A *keyway* is the keyboard navigation style. Exactly one is active at a time;
+choose it in **View → Keyway…**. Menu mnemonics (`Alt+F/E/V/T/H`) and function
+keys (`F1`, `F3`, `F10`, `F12`) work in every keyway.
+
+### Apple (default)
+
+Modifier shortcuts — the tables above.
+
+### Emacs
+
+`Ctrl` chords, with a `Ctrl+X` prefix for file commands:
+
+| Keys                | Action                          |
+| ------------------- | ------------------------------- |
+| `Ctrl+X` `Ctrl+F`   | Open file…                      |
+| `Ctrl+X` `Ctrl+S`   | Save                            |
+| `Ctrl+X` `Ctrl+C`   | Quit                            |
+| `Ctrl+X` `k`        | Close the active tab            |
+| `Ctrl+F` / `Ctrl+B` | Forward / back one character    |
+| `Ctrl+N` / `Ctrl+P` | Next / previous line            |
+| `Ctrl+A` / `Ctrl+E` | Start / end of line             |
+| `Ctrl+V`            | Page down                       |
+| `Ctrl+D`            | Delete the character ahead      |
+| `Ctrl+S`            | Find                            |
+| `Ctrl+G`            | Cancel                          |
+
+### Vim
+
+Modal. The status bar shows `-- NORMAL --`, `-- INSERT --`, or the `:` command
+line. Press `Esc` to return to Normal mode.
+
+| Mode    | Keys                | Action                              |
+| ------- | ------------------- | ----------------------------------- |
+| Normal  | `h` `j` `k` `l`     | Left / down / up / right            |
+| Normal  | `0` / `$`           | Start / end of line                 |
+| Normal  | `x`                 | Delete the character ahead          |
+| Normal  | `i` / `a`           | Insert before / after the cursor    |
+| Normal  | `o` / `O`           | Open a line below / above           |
+| Insert  | `Esc`               | Return to Normal mode               |
+| Command | `:w`                | Save                                |
+| Command | `:q` / `:q!`        | Close tab / quit                    |
+| Command | `:wq` / `:x`        | Save and close                      |
+| Command | `:Ex`               | Focus the file explorer             |

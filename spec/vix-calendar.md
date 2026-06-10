@@ -1,6 +1,6 @@
 # Vix Calendar
 
-vix-calendar crate
+The `vix-date-time-calendar-panel` crate (originally drafted as `vix-calendar`).
 
 Calendar box:
 

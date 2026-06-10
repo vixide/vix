@@ -24,7 +24,8 @@ widget pins that.
 | rust-i18n     | Internationalization YAML files                       | https://crates.io/crates/rust-i18n     | librust-regex-dev                                                                              |
 | confy         | Configuration                                         | https://crates.io/crates/confy         | librust-confy-dev                                                                              |
 | clap          | Command Line Argument Parsing                         | https://crates.io/crates/clap          | librust-clap-dev, librust-clap-complete-dev, librust-clap-derive-dev, librust-clap-builder-dev | 4.6.1                   |
-| mimalloc      | MiMalloc custom memory allocator for MUSL             | https://crates.io/crates/mimalloc      |                                                                                                |                         |
+| mimalloc      | MiMalloc custom memory allocator for MUSL             | https://crates.io/crates/mimalloc      |                                                                                                |
+| include_dir   | Embed bundled theme JSON files into the binary        | https://crates.io/crates/include_dir   |                                                                                                |                         |
 
 The center editing area uses **`vix-code-editor-panel`** — an internal fork of
 `ratatui-code-editor` (Tree-sitter syntax highlighting, undo/redo history,
@@ -82,30 +83,37 @@ The crate exposes a library (`src/lib.rs`) plus a thin binary (`src/main.rs`).
 Splitting it this way keeps all editing logic terminal-independent and unit
 testable.
 
-| Module     | Responsibility                                              |
-| ---------- | ----------------------------------------------------------- |
-| `app`      | Central state, event routing, action dispatch               |
-| `editor`   | Tabs/buffers wrapping `vix-code-editor-panel`; open/save/goto |
-| `explorer` | Left-drawer directory tree                                  |
-| `menu`     | Menu-bar definitions (i18n-keyed) and dropdown state         |
-| `palette`  | Command palette (file/`>`/`#`/`:` modes) + fuzzy matching   |
-| `search`   | Find / find-and-replace toolbar state                       |
-| `messages` | Right-drawer notifications                                  |
-| `settings` | confy-backed settings (TOML) at `~/.config/vix/config.toml` |
-| `theme`    | Nerd Font icons + re-export of `vix-theme-chooser`          |
-| `ui`       | All rendering; lays out the frame and draws each pane       |
+| Module           | Responsibility                                              |
+| ---------------- | ----------------------------------------------------------- |
+| `app`            | Central state, event routing, action dispatch, keyway dispatch |
+| `editor`         | Tabs/buffers wrapping `vix-code-editor-panel`; open/save/goto |
+| `explorer`       | Left-drawer directory tree                                  |
+| `menu`           | Menu-bar definitions (i18n-keyed) and dropdown state         |
+| `palette`        | Command palette (file/`>`/`#`/`:` modes) + fuzzy matching   |
+| `search`         | Find / find-and-replace toolbar state                       |
+| `project_search` | Project-wide search/replace panel state                     |
+| `query`          | Interactive query-replace session                           |
+| `messages`       | Right-drawer notifications                                  |
+| `fileops`        | Explorer copy/cut/paste/delete filesystem helpers           |
+| `settings`       | confy-backed settings (TOML) at `~/.config/vix/config.toml` |
+| `theme`          | Nerd Font icons + re-export of `vix-theme-chooser`          |
+| `ui`             | All rendering; lays out the frame and draws each pane       |
 
-The calendar date/time logic, theme model, locale list, and keyboard-help rows
-live in the internal crates `vix-date-time-calendar-panel`, `vix-theme-chooser`,
-`vix-locale-chooser`, and `vix-keyboard-shortcut-panel`. See
-`docs/architecture.md`.
+The calendar date/time logic, theme model, locale list, keyway (keyboard
+navigation style) list, and keyboard-help rows live in the internal crates
+`vix-date-time-calendar-panel`, `vix-theme-chooser`, `vix-locale-chooser`,
+`vix-keyway-chooser`, and `vix-keyboard-shortcut-panel`. Bundled themes are
+embedded in the binary with `include_dir`. See `docs/architecture.md`.
 
 Event flow: `main` runs the loop, calling `ui::draw(&mut app)` (which records
 each pane's rectangle for mouse hit-testing) then feeding each `crossterm` event
 to `App::on_key` or `App::on_mouse`. `on_key` resolves modal layers in priority
-order — help, prompt, palette, search, menu — before global shortcuts and,
-finally, the focused pane (editor / explorer / messages). Menu items and palette
-commands share one set of action identifiers dispatched by `App::run_action`.
+order — help, dialog, calendar, theme/locale/keyway choosers, query-replace,
+project search, confirm, paste-conflict, prompt, palette, search, menu — before
+the active **keyway** dispatch (Apple shortcuts / Emacs chords / Vim modal; see
+`keyway-chooser.md`) and, finally, the focused pane (editor / explorer /
+messages). Menu items and palette commands share one set of action identifiers
+dispatched by `App::run_action`.
 
 ## Implementation status
 
@@ -125,6 +133,16 @@ buffers in their unsaved state), position history (`Alt+Left`/`Alt+Right`), and
 "go to definition" (`F12`) — a fast offline heuristic over declaration-style
 lines rather than a semantic LSP.
 
+Also shipped: **internationalization** (`rust-i18n`; 15 selectable languages,
+English fallback, `--locale` flag + `locale` setting + live **View → Locale…**),
+**themes** (monochrome Dark/Light modes plus bundled and user-installed custom
+JSON themes, live **View → Theme…**), **keyways** (Apple / Emacs / Vim keyboard
+navigation styles, live **View → Keyway…**; see `keyway-chooser.md`),
+**configuration** (`confy` TOML), a **CLI** (`clap`), the **Vix menu**
+(About / Website / Email modal dialogs), **resizable docks** (drag a dock's inner
+edge), and **dock toggle icons** in the menu bar.
+
 Roadmap (designed in the sibling spec files, not yet built): a real LSP client
-(semantic go-to-definition, completions, diagnostics) and the live go-to-line
-preview. Each sibling spec marks its own status.
+(semantic go-to-definition, completions, diagnostics), the live go-to-line
+preview, and the unbuilt menu items (Open Recent, Select All, Zoom, the keyboard
+*browser* in `keyboard.md`). Each sibling spec marks its own status.

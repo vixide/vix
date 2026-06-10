@@ -59,11 +59,13 @@ const EDIT: &[Item] = &[
 ];
 
 const VIEW: &[Item] = &[
-    Item { label: "menu.item.view.themes", action: "view.themes", shortcut: "" },
+    Item { label: "menu.item.view.theme", action: "view.theme", shortcut: "" },
     Item { label: "menu.item.view.locale", action: "view.locale", shortcut: "" },
+    Item { label: "menu.item.view.keyway", action: "view.keyway", shortcut: "" },
     Item { label: "menu.item.view.left_dock", action: "view.left_dock", shortcut: "Ctrl+B" },
     Item { label: "menu.item.view.right_dock", action: "view.right_dock", shortcut: "" },
     Item { label: "menu.item.view.line_numbers", action: "view.line_numbers", shortcut: "" },
+    Item { label: "menu.item.view.whitespace", action: "view.whitespace", shortcut: "" },
 ];
 
 const VIX: &[Item] = &[

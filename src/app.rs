@@ -128,6 +128,35 @@ pub use vix_theme_chooser::Chooser as ThemeChooser;
 /// Enter commits and persists it, Esc reverts.
 pub use vix_locale_chooser::Chooser as LocaleChooser;
 
+/// Keyway chooser overlay state (View -> Keyway), re-exported from
+/// [`vix_keyway_chooser`]. Moving the selection highlights a keyboard navigation
+/// style; Enter commits and persists it, Esc reverts.
+pub use vix_keyway_chooser::Chooser as KeywayChooser;
+
+/// The active keyboard navigation style, derived from `settings.keyway`. It
+/// decides how raw key events are dispatched (see [`App::on_key`]): `Apple` uses
+/// modifier shortcuts, `Emacs` uses `Ctrl` chords, `Vim` is modal.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Keyway {
+    /// Modifier-key shortcuts (the default), e.g. `Ctrl+O` to open.
+    Apple,
+    /// `Ctrl` chords and the `Ctrl+X` prefix, e.g. `Ctrl+X Ctrl+F` to open.
+    Emacs,
+    /// Modal editing: a Normal mode for motions/commands and an Insert mode.
+    Vim,
+}
+
+impl Keyway {
+    /// Parse a persisted keyway id; anything unrecognized is [`Keyway::Apple`].
+    fn from_id(id: &str) -> Self {
+        match id {
+            "emacs" => Keyway::Emacs,
+            "vim" => Keyway::Vim,
+            _ => Keyway::Apple,
+        }
+    }
+}
+
 /// A point in the position-history jump list: a file and a 1-based line/column.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Location {
@@ -159,6 +188,9 @@ pub struct Layout {
     pub explorer: Rect,
     /// Message-drawer rectangle.
     pub messages: Rect,
+    /// Row list rectangle of the open chooser overlay (theme/locale/keyway), so a
+    /// click can hit-test which row was picked.
+    pub chooser: Rect,
 }
 
 /// The whole application state.
@@ -191,6 +223,8 @@ pub struct App {
     pub theme_chooser: Option<ThemeChooser>,
     /// Locale chooser overlay, when open.
     pub locale_chooser: Option<LocaleChooser>,
+    /// Keyway chooser overlay, when open.
+    pub keyway_chooser: Option<KeywayChooser>,
     /// Modal info dialog (Vix menu About / Website / Email), when open.
     pub dialog: Option<Dialog>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
@@ -231,6 +265,15 @@ pub struct App {
     scrollbar_active: bool,
     /// Which dock (if any) is being resized by an in-progress edge drag.
     dock_resize: Option<DockResize>,
+    /// Emacs keyway: a `Ctrl+X` prefix has been pressed and the next key
+    /// completes the chord. Always false in other keyways.
+    emacs_prefix: bool,
+    /// Vim keyway: true in Insert mode, false in Normal mode. Meaningless in
+    /// other keyways.
+    vim_insert: bool,
+    /// Vim keyway: the in-progress `:` command-line text, when the command line
+    /// is open.
+    vim_cmd: Option<String>,
 }
 
 impl App {
@@ -245,7 +288,7 @@ impl App {
         // styled correctly. A theme value that is not a built-in mode is treated
         // as the name of a custom JSON theme.
         Self::apply_saved_theme(&settings.theme);
-        let editor = Editor::new(settings.line_numbers);
+        let editor = Editor::new(settings.line_numbers, settings.show_whitespace);
         let mut messages = Messages::default();
         messages.advice(t!("msg.welcome").to_string());
         messages.info(t!("msg.welcome_hint").to_string());
@@ -265,6 +308,7 @@ impl App {
             confirm: None,
             theme_chooser: None,
             locale_chooser: None,
+            keyway_chooser: None,
             dialog: None,
             clip: Vec::new(),
             clip_cut: false,
@@ -284,6 +328,9 @@ impl App {
             file_index: Vec::new(),
             scrollbar_active: false,
             dock_resize: None,
+            emacs_prefix: false,
+            vim_insert: false,
+            vim_cmd: None,
         }
     }
 
@@ -353,6 +400,10 @@ impl App {
             self.locale_key(key);
             return;
         }
+        if self.keyway_chooser.is_some() {
+            self.keyway_key(key);
+            return;
+        }
         if self.query_replace.is_some() {
             self.qr_key(key);
             return;
@@ -385,13 +436,53 @@ impl App {
             self.menu_key(key);
             return;
         }
-        if self.global_key(key) {
-            return;
+        // Keyway-specific dispatch. Each keyway first gets a chance to consume the
+        // key; `Emacs`/`Vim` then fall back to the shared keys (menu mnemonics and
+        // function keys) before the focused pane handles it.
+        match self.active_keyway() {
+            Keyway::Apple => {
+                if self.global_key(key) {
+                    return;
+                }
+            }
+            Keyway::Emacs => {
+                if self.emacs_key(key) || self.global_shared_key(key) {
+                    return;
+                }
+            }
+            Keyway::Vim => {
+                if self.vim_key(key) || self.global_shared_key(key) {
+                    return;
+                }
+            }
         }
         match self.focus {
             Focus::Editor => self.editor_key(key),
             Focus::Explorer => self.explorer_key(key),
             Focus::Messages => self.messages_key(key),
+        }
+    }
+
+    /// The keyboard navigation style currently in effect.
+    fn active_keyway(&self) -> Keyway {
+        Keyway::from_id(&self.settings.keyway)
+    }
+
+    /// A short keyway-mode indicator for the status bar (Vim's mode / command
+    /// line, or Emacs's pending chord prefix), or `None` when there is nothing to
+    /// show (e.g. the Apple keyway).
+    #[must_use]
+    pub fn mode_indicator(&self) -> Option<String> {
+        match self.active_keyway() {
+            Keyway::Vim => Some(if let Some(cmd) = &self.vim_cmd {
+                format!(":{cmd}")
+            } else if self.vim_insert {
+                t!("status.vim_insert").to_string()
+            } else {
+                t!("status.vim_normal").to_string()
+            }),
+            Keyway::Emacs if self.emacs_prefix => Some("C-x-".to_string()),
+            _ => None,
         }
     }
 
@@ -407,9 +498,14 @@ impl App {
         key.modifiers.contains(KeyModifiers::SHIFT)
     }
 
-    /// Global shortcuts available when no modal is active. Returns true if the
-    /// key was consumed.
+    /// Global shortcuts available when no modal is active (Apple keyway). Returns
+    /// true if the key was consumed.
     fn global_key(&mut self, key: KeyEvent) -> bool {
+        self.apple_ctrl_key(key) || self.global_shared_key(key)
+    }
+
+    /// The Apple keyway's `Ctrl`-letter shortcuts. Returns true if consumed.
+    fn apple_ctrl_key(&mut self, key: KeyEvent) -> bool {
         if Self::ctrl(&key) {
             if let KeyCode::Char(c) = key.code {
                 match c.to_ascii_lowercase() {
@@ -431,6 +527,12 @@ impl App {
                 return true;
             }
         }
+        false
+    }
+
+    /// Keys shared by every keyway: menu-bar mnemonics and function keys. Returns
+    /// true if consumed.
+    fn global_shared_key(&mut self, key: KeyEvent) -> bool {
         if Self::alt(&key) {
             if let KeyCode::Char(c) = key.code {
                 // The Vix menu is index 0; the rest follow (File=1, …, Help=5).
@@ -491,6 +593,174 @@ impl App {
                 Focus::Explorer
             }
         };
+    }
+
+    // ----- keyway: Emacs --------------------------------------------------
+
+    /// Feed a key to the editor as if it were typed with no modifiers, but only
+    /// when the editor pane is focused. Used to translate keyway motions
+    /// (`Ctrl+F`, `l`, …) into the editor's existing handling.
+    fn editor_motion(&mut self, code: KeyCode) {
+        if self.focus == Focus::Editor {
+            self.editor_key(KeyEvent::new(code, KeyModifiers::NONE));
+        }
+    }
+
+    /// Emacs keyway dispatch: the `Ctrl+X` prefix and `Ctrl`-key chords. Returns
+    /// true if the key was consumed (so it should not fall through).
+    fn emacs_key(&mut self, key: KeyEvent) -> bool {
+        // Second key of a `Ctrl+X …` chord.
+        if self.emacs_prefix {
+            self.emacs_prefix = false;
+            if Self::ctrl(&key) {
+                if let KeyCode::Char(c) = key.code {
+                    match c.to_ascii_lowercase() {
+                        'f' => self.run_action("file.open"),
+                        's' => self.run_action("file.save"),
+                        'c' => self.run_action("file.quit"),
+                        _ => self.status = t!("status.emacs_no_chord").to_string(),
+                    }
+                    return true;
+                }
+            }
+            if let KeyCode::Char('k') = key.code {
+                self.run_action("file.close");
+                return true;
+            }
+            self.status = t!("status.emacs_no_chord").to_string();
+            return true;
+        }
+        if Self::ctrl(&key) {
+            if let KeyCode::Char(c) = key.code {
+                match c.to_ascii_lowercase() {
+                    'x' => self.emacs_prefix = true,
+                    'g' => self.status = t!("status.emacs_quit").to_string(),
+                    's' => self.run_action("edit.find"),
+                    'f' => self.editor_motion(KeyCode::Right),
+                    'b' => self.editor_motion(KeyCode::Left),
+                    'n' => self.editor_motion(KeyCode::Down),
+                    'p' => self.editor_motion(KeyCode::Up),
+                    'a' => self.editor_motion(KeyCode::Home),
+                    'e' => self.editor_motion(KeyCode::End),
+                    'v' => self.editor_motion(KeyCode::PageDown),
+                    'd' => self.editor_motion(KeyCode::Delete),
+                    _ => return false,
+                }
+                return true;
+            }
+        }
+        false
+    }
+
+    // ----- keyway: Vim ----------------------------------------------------
+
+    /// Vim keyway dispatch: Normal-mode motions/commands, Insert mode, and the
+    /// `:` command line. Returns true if the key was consumed.
+    fn vim_key(&mut self, key: KeyEvent) -> bool {
+        if self.vim_cmd.is_some() {
+            self.vim_cmd_key(key);
+            return true;
+        }
+        if self.vim_insert {
+            if key.code == KeyCode::Esc {
+                self.vim_insert = false;
+                return true;
+            }
+            // Let typing and shared keys flow through to the editor.
+            return false;
+        }
+        // Normal mode. Defer modifier combos and function keys to the shared
+        // handler (menu mnemonics, F10, …).
+        if Self::ctrl(&key) || Self::alt(&key) || matches!(key.code, KeyCode::F(_)) {
+            return false;
+        }
+        // `:` opens the command line from any pane (shown in the mode indicator).
+        if key.code == KeyCode::Char(':') {
+            self.vim_cmd = Some(String::new());
+            return true;
+        }
+        // Other Normal-mode keys only make sense over the editor; elsewhere let the
+        // focused pane keep its own navigation.
+        if self.focus != Focus::Editor {
+            return false;
+        }
+        match key.code {
+            KeyCode::Char('h') | KeyCode::Left => self.editor_motion(KeyCode::Left),
+            KeyCode::Char('j') | KeyCode::Down => self.editor_motion(KeyCode::Down),
+            KeyCode::Char('k') | KeyCode::Up => self.editor_motion(KeyCode::Up),
+            KeyCode::Char('l') | KeyCode::Right => self.editor_motion(KeyCode::Right),
+            KeyCode::Char('0') => self.editor_motion(KeyCode::Home),
+            KeyCode::Char('$') => self.editor_motion(KeyCode::End),
+            KeyCode::Char('x') => self.editor_motion(KeyCode::Delete),
+            KeyCode::Char('i') => self.vim_enter_insert(),
+            KeyCode::Char('a') => {
+                self.editor_motion(KeyCode::Right);
+                self.vim_enter_insert();
+            }
+            KeyCode::Char('o') => {
+                self.editor_motion(KeyCode::End);
+                self.editor_motion(KeyCode::Enter);
+                self.vim_enter_insert();
+            }
+            KeyCode::Char('O') => {
+                self.editor_motion(KeyCode::Home);
+                self.editor_motion(KeyCode::Enter);
+                self.editor_motion(KeyCode::Up);
+                self.vim_enter_insert();
+            }
+            _ => {}
+        }
+        // Swallow every other Normal-mode key so it never types into the buffer.
+        true
+    }
+
+    fn vim_enter_insert(&mut self) {
+        self.vim_insert = true;
+    }
+
+    /// Handle a key while the Vim `:` command line is open. The in-progress text
+    /// is reflected live by the mode indicator, so this only mutates state.
+    fn vim_cmd_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => self.vim_cmd = None,
+            KeyCode::Enter => {
+                let cmd = self.vim_cmd.take().unwrap_or_default();
+                self.run_vim_command(cmd.trim());
+            }
+            KeyCode::Backspace => {
+                // Backspacing past the empty `:` closes the command line.
+                if let Some(s) = self.vim_cmd.as_mut() {
+                    if s.pop().is_none() {
+                        self.vim_cmd = None;
+                    }
+                }
+            }
+            KeyCode::Char(c) => {
+                if let Some(s) = self.vim_cmd.as_mut() {
+                    s.push(c);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Run a Vim ex command (the text after `:`).
+    fn run_vim_command(&mut self, cmd: &str) {
+        match cmd {
+            "w" => self.run_action("file.save"),
+            "q" => self.run_action("file.close"),
+            "q!" => self.run_action("file.quit"),
+            "wq" | "x" => {
+                self.run_action("file.save");
+                self.run_action("file.close");
+            }
+            "Ex" => {
+                self.show_explorer = true;
+                self.focus = Focus::Explorer;
+            }
+            "" => {}
+            other => self.status = t!("status.vim_no_command", cmd = other).to_string(),
+        }
     }
 
     // ----- action dispatch (menu + palette + shortcuts) ------------------
@@ -572,8 +842,9 @@ impl App {
             "search.project" => self.open_project_search(false),
             "search.project_replace" => self.open_project_search(true),
             "nav.goto_definition" => self.goto_definition(),
-            "view.themes" => self.open_theme_chooser(),
+            "view.theme" => self.open_theme_chooser(),
             "view.locale" => self.open_locale_chooser(),
+            "view.keyway" => self.open_keyway_chooser(),
             "tools.calendar" => {
                 self.show_calendar = !self.show_calendar;
                 // Always open on the present month; navigation is per-session.
@@ -585,6 +856,7 @@ impl App {
             // The left/right docks are the explorer and message drawers. Both the
             // old action ids and the new dock-named ones route to one method.
             "view.line_numbers" | "tools.line_numbers" => self.toggle_editor_line_numbers(),
+            "view.whitespace" => self.toggle_editor_whitespace(),
             "view.left_dock" | "view.explorer" => self.toggle_left_dock(),
             "view.right_dock" | "view.messages" => self.toggle_right_dock(),
             "tab.next" => self.editor.next_tab(),
@@ -659,6 +931,25 @@ impl App {
             t!("status.line_numbers_on")
         } else {
             t!("status.line_numbers_off")
+        }
+        .to_string();
+    }
+
+    /// Toggle the editor's visible-whitespace glyphs, mirrored across every tab
+    /// and persisted.
+    fn toggle_editor_whitespace(&mut self) {
+        let fallback = !self.editor.show_whitespace;
+        let on = self
+            .editor
+            .active_tab_mut()
+            .map_or(fallback, |t| t.editor.toggle_whitespace());
+        self.editor.show_whitespace = on;
+        self.editor.refresh_whitespace();
+        self.settings.show_whitespace = on;
+        self.status = if on {
+            t!("status.whitespace_on")
+        } else {
+            t!("status.whitespace_off")
         }
         .to_string();
     }
@@ -1165,12 +1456,21 @@ impl App {
             }
             return;
         }
-        if self.show_help
-            || self.palette.is_some()
-            || self.prompt.is_some()
-            || self.theme_chooser.is_some()
-            || self.locale_chooser.is_some()
-        {
+        // Choosers are list overlays: a left click on a row highlights it (and,
+        // for the theme chooser, previews live), mirroring keyboard Up/Down.
+        if self.theme_chooser.is_some() {
+            self.theme_mouse(mouse);
+            return;
+        }
+        if self.locale_chooser.is_some() {
+            self.locale_mouse(mouse);
+            return;
+        }
+        if self.keyway_chooser.is_some() {
+            self.keyway_mouse(mouse);
+            return;
+        }
+        if self.show_help || self.palette.is_some() || self.prompt.is_some() {
             return;
         }
         let (col, row) = (mouse.column, mouse.row);
@@ -1220,11 +1520,22 @@ impl App {
 
         // While a menu is open, a left click runs the dropdown item under the
         // pointer, switches menus when on the bar, or closes the menu when
-        // clicked away.
+        // clicked away. Moving the pointer (hover, or drag from the bar) follows
+        // the selection without committing.
         if self.menu.is_open() {
-            if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
-                self.menu_mouse(col, row);
+            match mouse.kind {
+                MouseEventKind::Down(MouseButton::Left) => self.menu_mouse(col, row),
+                MouseEventKind::Moved | MouseEventKind::Drag(MouseButton::Left) => {
+                    self.menu_hover(col, row);
+                }
+                _ => {}
             }
+            return;
+        }
+
+        // Plain pointer motion only drives the open menu above. Ignore it
+        // elsewhere so hovering a pane never steals focus or moves the cursor.
+        if matches!(mouse.kind, MouseEventKind::Moved) {
             return;
         }
 
@@ -1416,14 +1727,46 @@ impl App {
             self.run_action("view.messages");
             return;
         }
+        if let Some(i) = self.top_menu_index_at(col) {
+            self.menu.open_index(i);
+        }
+    }
+
+    /// Index of the top-level menu whose title spans column `col`, if any.
+    fn top_menu_index_at(&self, col: u16) -> Option<usize> {
         let mut x = self.layout.menu.x + 1;
         for (i, m) in MENUS.iter().enumerate() {
             let w = m.title().chars().count() as u16 + 2;
             if col >= x && col < x + w {
-                self.menu.open_index(i);
-                return;
+                return Some(i);
             }
             x += w;
+        }
+        None
+    }
+
+    /// Move the open-menu highlight to follow the pointer: hovering a different
+    /// top-level name switches to that menu; hovering a dropdown row highlights
+    /// that item. Never commits an action or closes the menu.
+    fn menu_hover(&mut self, col: u16, row: u16) {
+        if rect_contains(self.layout.menu, col, row) {
+            if let Some(i) = self.top_menu_index_at(col) {
+                if self.menu.open != Some(i) {
+                    self.menu.open_index(i);
+                }
+            }
+            return;
+        }
+        let dd = self.layout.menu_dropdown;
+        if rect_contains(dd, col, row) {
+            // Items start one row below the dropdown's top border.
+            let top = dd.y + 1;
+            if let Some(mi) = self.menu.open {
+                let idx = row.saturating_sub(top) as usize;
+                if row >= top && idx < MENUS[mi].items.len() {
+                    self.menu.item = idx;
+                }
+            }
         }
     }
 
@@ -1580,6 +1923,93 @@ impl App {
                 }
             }
             _ => {}
+        }
+    }
+
+    // ----- keyway chooser -------------------------------------------------
+
+    fn open_keyway_chooser(&mut self) {
+        self.keyway_chooser = Some(KeywayChooser::open(&self.settings.keyway));
+    }
+
+    fn keyway_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up | KeyCode::Down => {
+                if let Some(kc) = self.keyway_chooser.as_mut() {
+                    if key.code == KeyCode::Up {
+                        kc.up();
+                    } else {
+                        kc.down();
+                    }
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(kc) = self.keyway_chooser.take() {
+                    let id = kc.selected_id();
+                    self.settings.keyway = id.to_string();
+                    self.reset_keyway_modes();
+                    self.status = t!("status.keyway", keyway = id).to_string();
+                }
+            }
+            KeyCode::Esc => {
+                // Only reachable while the chooser is open, so just discard it.
+                self.keyway_chooser = None;
+                self.status = t!("status.keyway_unchanged").to_string();
+            }
+            _ => {}
+        }
+    }
+
+    /// Reset per-keyway session state (Emacs chord prefix, Vim mode/command line)
+    /// so a freshly chosen keyway starts clean — Vim begins in Normal mode.
+    fn reset_keyway_modes(&mut self) {
+        self.emacs_prefix = false;
+        self.vim_insert = false;
+        self.vim_cmd = None;
+    }
+
+    // ----- chooser mouse --------------------------------------------------
+
+    /// The row index a mouse event lands on within the open chooser's list
+    /// rectangle, or `None` if it is outside the list.
+    fn chooser_row(&self, mouse: MouseEvent) -> Option<usize> {
+        let r = self.layout.chooser;
+        (matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
+            && rect_contains(r, mouse.column, mouse.row))
+        .then(|| (mouse.row - r.y) as usize)
+    }
+
+    fn theme_mouse(&mut self, mouse: MouseEvent) {
+        if let Some(idx) = self.chooser_row(mouse) {
+            if let Some(tc) = self.theme_chooser.as_mut() {
+                if idx < tc.choices.len() {
+                    tc.selected = idx;
+                    // Preview the highlighted theme live, as Up/Down does.
+                    vix_theme_chooser::apply(tc.selected_choice());
+                    self.editor.refresh_theme();
+                }
+            }
+        }
+    }
+
+    fn locale_mouse(&mut self, mouse: MouseEvent) {
+        if let Some(idx) = self.chooser_row(mouse) {
+            if let Some(lc) = self.locale_chooser.as_mut() {
+                if idx < vix_locale_chooser::LOCALES.len() {
+                    lc.selected = idx;
+                    rust_i18n::set_locale(lc.selected_code());
+                }
+            }
+        }
+    }
+
+    fn keyway_mouse(&mut self, mouse: MouseEvent) {
+        if let Some(idx) = self.chooser_row(mouse) {
+            if let Some(kc) = self.keyway_chooser.as_mut() {
+                if idx < vix_keyway_chooser::KEYWAYS.len() {
+                    kc.selected = idx;
+                }
+            }
         }
     }
 

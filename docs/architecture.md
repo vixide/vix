@@ -19,6 +19,7 @@ genuinely needs it:
 | `vix-date-time-calendar-panel`   | Calendar date/time strings and the navigable Monday-first month grid (owns the `jiff` dependency). |
 | `vix-theme-chooser`              | The theme model: monochrome Dark/Light modes, the ratatui styles derived from them, **custom JSON themes** (per-region RGB), and chooser state. |
 | `vix-locale-chooser`             | The list of available UI languages and chooser state.                 |
+| `vix-keyway-chooser`             | The keyboard navigation styles (Apple / Emacs / Vim) and chooser state. |
 | `vix-keyboard-shortcut-panel`    | The keyboard-help rows (key combo + i18n description key).            |
 
 The pattern for the panel/chooser crates is **data and logic in the crate, host
@@ -66,15 +67,18 @@ main()                         ui::draw(&app, frame)         App::on_key(event)
                                                            │ palette         │
                                                            │ search          │
                                                            │ menu            │
-                                                           ├─ global shortcuts
+                                                           ├─ keyway dispatch
                                                            └─ focused pane:
                                                               editor/explorer/
                                                               messages
 ```
 
 `App::on_key` resolves input in strict priority order: each modal overlay
-consumes input while open; with no modal active, global shortcuts run first, then
-the event routes to the focused pane.
+consumes input while open (the theme, locale, and keyway choosers are overlays in
+this chain). With no modal active, the active **keyway** dispatches the key —
+Apple modifier shortcuts, Emacs `Ctrl` chords, or Vim modal motions, all routing
+through `run_action` and the editor's own handling — and anything it does not
+consume routes to the focused pane.
 
 Mouse events arrive as `Event::Mouse` and go to `App::on_mouse`, which hit-tests
 against the pane rectangles `ui::draw` records each frame (`app.layout`). Editor
@@ -83,7 +87,7 @@ explorer/messages/tab/menu clicks map to the corresponding row or item, and the
 menu bar's right-edge dock-toggle icons toggle the drawers.
 
 Menu items and palette `>`-commands share one set of **action identifiers**
-(strings like `file.save`, `view.themes`, `view.locale`). Both funnel through
+(strings like `file.save`, `view.theme`, `view.locale`, `view.keyway`). Both funnel through
 `App::run_action`, so a command has exactly one implementation regardless of how
 it is invoked.
 
@@ -96,17 +100,20 @@ clock keeps ticking while the editor is idle.
 three vertical bands — menu bar, body, status bar — and splits the body
 horizontally into explorer / editor / messages according to which drawers are
 visible. The editor band is itself split into a tab bar and the text area plus a
-`Scrollbar`. Overlays (calendar, menu dropdown, search, palette, prompt, theme
-and locale choosers, …) are drawn last, each clearing its rectangle with `Clear`
-and painting a bordered box in the theme background so it reads correctly in
-either light or dark mode.
+`Scrollbar`. The status bar also shows the keyway mode indicator (Vim's
+`-- NORMAL --` / `-- INSERT --` / `:` line, or Emacs's pending `Ctrl+X-` prefix).
+Overlays (calendar, menu dropdown, search, palette, prompt, dialogs, and the
+theme / locale / keyway choosers, …) are drawn last, each clearing its rectangle
+with `Clear` and painting a bordered box in the theme background so it reads
+correctly in either light or dark mode.
 
 ## Theming
 
 The theme model lives in `vix-theme-chooser`. Two built-in modes are strictly
-monochrome (one foreground, one background; emphasis via bold/dim; reversed video
-only for selections). A process-global holds the active mode so the static style
-helpers (`fg`, `bg`, `base`, `title`, `selected`, `dim`) need no threading.
+monochrome (one foreground, one background; emphasis via dim and full intensity,
+no bold or italic; reversed video only for selections and the cursor). A
+process-global holds the active mode so the static style helpers (`fg`, `bg`,
+`base`, `title`, `selected`, `dim`) need no threading.
 
 Custom themes are JSON files providing **per-region** RGB colors (menu bar,
 status bar, left/right dock, editor) plus optional editor cursor and syntax

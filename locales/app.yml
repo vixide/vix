@@ -191,18 +191,24 @@ menu.item.edit.replace:
   fr: "Rechercher et remplacer"
   de: "Suchen und Ersetzen"
   cy: "Chwilio ac Amnewid"
-menu.item.view.themes:
-  en: "Themes…"
-  es: "Temas…"
-  fr: "Thèmes…"
-  de: "Designs…"
-  cy: "Themâu…"
+menu.item.view.theme:
+  en: "Theme…"
+  es: "Tema…"
+  fr: "Thème…"
+  de: "Design…"
+  cy: "Thema…"
 menu.item.view.locale:
   en: "Locale…"
   es: "Idioma…"
   fr: "Langue…"
   de: "Sprache…"
   cy: "Iaith…"
+menu.item.view.keyway:
+  en: "Keyway…"
+  es: "Estilo de teclado…"
+  fr: "Style clavier…"
+  de: "Tastenstil…"
+  cy: "Dull Bysell…"
 menu.item.view.left_dock:
   en: "Toggle Left Dock"
   es: "Alternar panel izquierdo"
@@ -221,6 +227,12 @@ menu.item.view.line_numbers:
   fr: "Basculer les numéros de ligne de l'éditeur"
   de: "Editor-Zeilennummern umschalten"
   cy: "Toglo Rhifau Llinell y Golygydd"
+menu.item.view.whitespace:
+  en: "Toggle Editor Visible Whitespace"
+  es: "Alternar espacios en blanco visibles del editor"
+  fr: "Basculer les espaces visibles de l'éditeur"
+  de: "Sichtbare Leerzeichen im Editor umschalten"
+  cy: "Toglo Bylchau Gweladwy'r Golygydd"
 menu.item.tools.line_numbers:
   en: "Toggle Line Numbers"
   es: "Alternar números de línea"
@@ -382,12 +394,24 @@ cmd.goto_definition:
   fr: "Aller à la définition"
   de: "Zur Definition springen"
   cy: "Mynd i'r Diffiniad"
-cmd.themes:
-  en: "Themes…"
-  es: "Temas…"
-  fr: "Thèmes…"
-  de: "Designs…"
-  cy: "Themâu…"
+cmd.theme:
+  en: "Theme…"
+  es: "Tema…"
+  fr: "Thème…"
+  de: "Design…"
+  cy: "Thema…"
+cmd.locale:
+  en: "Locale…"
+  es: "Idioma…"
+  fr: "Langue…"
+  de: "Sprache…"
+  cy: "Iaith…"
+cmd.keyway:
+  en: "Keyway…"
+  es: "Estilo de teclado…"
+  fr: "Style clavier…"
+  de: "Tastenstil…"
+  cy: "Dull Bysell…"
 cmd.toggle_left_dock:
   en: "Toggle Left Dock"
   es: "Alternar panel izquierdo"
@@ -406,6 +430,12 @@ cmd.toggle_line_numbers:
   fr: "Basculer les numéros de ligne de l'éditeur"
   de: "Editor-Zeilennummern umschalten"
   cy: "Toglo Rhifau Llinell y Golygydd"
+cmd.toggle_whitespace:
+  en: "Toggle Editor Visible Whitespace"
+  es: "Alternar espacios en blanco visibles del editor"
+  fr: "Basculer les espaces visibles de l'éditeur"
+  de: "Sichtbare Leerzeichen im Editor umschalten"
+  cy: "Toglo Bylchau Gweladwy'r Golygydd"
 cmd.toggle_calendar:
   en: "Toggle Calendar"
   es: "Alternar calendario"
@@ -476,7 +506,7 @@ ui.ok:
   fr: "OK"
   de: "OK"
   cy: "Iawn"
-ui.themes:
+ui.theme:
   en: "Themes"
   es: "Temas"
   fr: "Thèmes"
@@ -488,6 +518,12 @@ ui.locale:
   fr: "Langue"
   de: "Sprache"
   cy: "Iaith"
+ui.keyway:
+  en: "Keyway"
+  es: "Estilo de teclado"
+  fr: "Style clavier"
+  de: "Tastenstil"
+  cy: "Dull Bysell"
 ui.paste_conflict:
   en: "Paste conflict"
   es: "Conflicto al pegar"
@@ -880,6 +916,18 @@ status.line_numbers_off:
   fr: "Numéros de ligne désactivés"
   de: "Zeilennummern aus"
   cy: "Rhifau llinell i ffwrdd"
+status.whitespace_on:
+  en: "Visible whitespace on"
+  es: "Espacios en blanco visibles activados"
+  fr: "Espaces visibles activés"
+  de: "Sichtbare Leerzeichen an"
+  cy: "Bylchau gweladwy ymlaen"
+status.whitespace_off:
+  en: "Visible whitespace off"
+  es: "Espacios en blanco visibles desactivados"
+  fr: "Espaces visibles désactivés"
+  de: "Sichtbare Leerzeichen aus"
+  cy: "Bylchau gweladwy i ffwrdd"
 status.image_readonly:
   en: "Image tabs are read-only"
   es: "Las pestañas de imagen son de solo lectura"
@@ -982,6 +1030,48 @@ status.locale_unchanged:
   fr: "Langue inchangée"
   de: "Sprache unverändert"
   cy: "Iaith heb ei newid"
+status.keyway:
+  en: "Keyway: %{keyway}"
+  es: "Estilo de teclado: %{keyway}"
+  fr: "Style clavier : %{keyway}"
+  de: "Tastenstil: %{keyway}"
+  cy: "Dull Bysell: %{keyway}"
+status.keyway_unchanged:
+  en: "Keyway unchanged"
+  es: "Estilo de teclado sin cambios"
+  fr: "Style clavier inchangé"
+  de: "Tastenstil unverändert"
+  cy: "Dull Bysell heb ei newid"
+status.vim_normal:
+  en: "-- NORMAL --"
+  es: "-- NORMAL --"
+  fr: "-- NORMAL --"
+  de: "-- NORMAL --"
+  cy: "-- NORMAL --"
+status.vim_insert:
+  en: "-- INSERT --"
+  es: "-- INSERTAR --"
+  fr: "-- INSERTION --"
+  de: "-- EINFÜGEN --"
+  cy: "-- MEWNOSOD --"
+status.vim_no_command:
+  en: "Not a command: %{cmd}"
+  es: "No es un comando: %{cmd}"
+  fr: "Commande inconnue : %{cmd}"
+  de: "Kein Befehl: %{cmd}"
+  cy: "Nid gorchymyn: %{cmd}"
+status.emacs_no_chord:
+  en: "Unknown chord"
+  es: "Combinación desconocida"
+  fr: "Accord inconnu"
+  de: "Unbekannter Akkord"
+  cy: "Cord anhysbys"
+status.emacs_quit:
+  en: "Quit"
+  es: "Cancelado"
+  fr: "Annulé"
+  de: "Abgebrochen"
+  cy: "Gadael"
 status.no_matches:
   en: "no matches"
   es: "sin coincidencias"

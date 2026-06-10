@@ -11,6 +11,9 @@ The fork:
   cursor styles, and may set a syntax color palette. The built-in themes are
   monochrome (no token colors); colors appear only under a custom theme.
 - Renders a visible block cursor at the caret.
+- Can render **visible whitespace** glyphs (space `·`, tab `→`, carriage return
+  `␍`, line ending `¶`) in a configurable dim style; toggled by the host via
+  **View → Toggle Editor Visible Whitespace**.
 
 Capabilities: Tree-sitter syntax highlighting, undo/redo history, text selection,
 system clipboard, and built-in mouse handling (click, drag-select, wheel-scroll).

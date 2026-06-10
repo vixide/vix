@@ -175,7 +175,7 @@ fn view_themes_menu_switches_theme() {
     assert_eq!(app.settings.theme, "light");
 
     // Reopen via the command action and switch back to Dark.
-    app.run_action("view.themes");
+    app.run_action("view.theme");
     app.theme_chooser.as_mut().unwrap().selected = builtin_choice_index(&app, vix::theme::Mode::Dark);
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(app.settings.theme, "dark");
@@ -239,7 +239,7 @@ fn view_locale_chooser_opens_and_cancels() {
 #[test]
 fn theme_chooser_lists_bundled_themes() {
     let mut app = app_at(Path::new("."));
-    app.run_action("view.themes");
+    app.run_action("view.theme");
     let tc = app.theme_chooser.as_ref().expect("theme chooser open");
     let names: Vec<&str> = tc.choices.iter().filter_map(|c| c.custom_name()).collect();
     for expected in ["Dracula", "Nord", "Tokyo Night", "Gruvbox Dark", "Solarized Dark"] {
@@ -273,14 +273,14 @@ fn theme_chooser_lists_bundled_themes() {
 fn theme_chooser_esc_reverts() {
     let mut app = app_at(Path::new("."));
     // Apply Light first so we have a known baseline.
-    app.run_action("view.themes");
+    app.run_action("view.theme");
     app.theme_chooser.as_mut().unwrap().selected = builtin_choice_index(&app, vix::theme::Mode::Light);
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(app.settings.theme, "light");
 
     // Open again, move the highlight to Dark, then cancel with Esc: the
     // persisted theme must stay Light.
-    app.run_action("view.themes");
+    app.run_action("view.theme");
     app.theme_chooser.as_mut().unwrap().selected = builtin_choice_index(&app, vix::theme::Mode::Dark);
     app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     assert!(app.theme_chooser.is_none());
@@ -293,6 +293,19 @@ fn line_number_toggle() {
     let before = app.editor.line_numbers;
     app.run_action("tools.line_numbers");
     assert_ne!(before, app.editor.line_numbers);
+}
+
+#[test]
+fn visible_whitespace_toggle() {
+    let mut app = app_at(Path::new("."));
+    // Off by default; the action toggles it and persists the setting.
+    assert!(!app.editor.show_whitespace);
+    assert!(!app.settings.show_whitespace);
+    app.run_action("view.whitespace");
+    assert!(app.editor.show_whitespace, "toggles visible whitespace on");
+    assert!(app.settings.show_whitespace, "persists the new setting");
+    app.run_action("view.whitespace");
+    assert!(!app.editor.show_whitespace, "toggles back off");
 }
 
 #[test]
@@ -969,6 +982,57 @@ fn click_dropdown_item_runs_its_action() {
     assert!(app.dialog.is_some(), "clicking About opens its dialog");
 }
 
+/// Column inside the `idx`-th top-level menu's title (mirrors the bar layout),
+/// computed from the actual titles so it is locale-independent.
+fn top_menu_col(app: &App, idx: usize) -> u16 {
+    let mut x = app.layout.menu.x + 1;
+    for m in &vix::menu::MENUS[..idx] {
+        x += m.title().chars().count() as u16 + 2;
+    }
+    x + 1
+}
+
+#[test]
+fn hover_moves_menu_dropdown_selection() {
+    let mut app = app_at(Path::new("."));
+    app.layout.menu = Rect::new(0, 0, 100, 1);
+    app.on_mouse(click(2, 0)); // open the Vix menu (index 0)
+    assert_eq!(app.menu.open, Some(0));
+    let dd = vix::ui::menu_dropdown_rect(Rect::new(0, 0, 100, 40), app.layout.menu, 0);
+    app.layout.menu_dropdown = dd;
+
+    // Hover (no button) over the third item; the highlight follows the pointer
+    // without committing or closing.
+    app.on_mouse(mouse(MouseEventKind::Moved, dd.x + 2, dd.y + 1 + 2));
+    assert_eq!(app.menu.item, 2, "hover highlights the item under the pointer");
+    assert!(app.menu.is_open(), "hover must not commit or close");
+    // Move back up to the first item.
+    app.on_mouse(mouse(MouseEventKind::Moved, dd.x + 2, dd.y + 1));
+    assert_eq!(app.menu.item, 0);
+}
+
+#[test]
+fn hover_switches_open_top_menu() {
+    let mut app = app_at(Path::new("."));
+    app.layout.menu = Rect::new(0, 0, 100, 1);
+    app.on_mouse(click(2, 0)); // open Vix (index 0)
+    assert_eq!(app.menu.open, Some(0));
+    // Hover the File menu name (index 1); the open menu follows the pointer.
+    let file_col = top_menu_col(&app, 1);
+    app.on_mouse(mouse(MouseEventKind::Moved, file_col, 0));
+    assert_eq!(app.menu.open, Some(1), "hovering another name switches menus");
+}
+
+#[test]
+fn hover_over_pane_does_not_steal_focus() {
+    let mut app = app_at(Path::new("."));
+    app.layout.editor = Rect::new(0, 0, 80, 24);
+    app.focus = Focus::Explorer;
+    // With no menu open, plain motion must be ignored everywhere.
+    app.on_mouse(mouse(MouseEventKind::Moved, 10, 5));
+    assert_eq!(app.focus, Focus::Explorer, "plain hover must not change focus");
+}
+
 #[test]
 fn click_away_closes_open_menu() {
     let mut app = app_at(Path::new("."));
@@ -1056,4 +1120,164 @@ fn click_dock_toggle_icons() {
     let messages_before = app.show_messages;
     app.on_mouse(click(right, 0));
     assert_ne!(app.show_messages, messages_before, "right dock icon toggles the messages");
+}
+
+#[test]
+fn click_theme_chooser_row_highlights_it() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.theme");
+    let count = app.theme_chooser.as_ref().unwrap().choices.len();
+    assert!(count >= 3, "need a few themes to click");
+    // The list rect is normally recorded during render; set it directly.
+    app.layout.chooser = Rect::new(10, 5, 34, count as u16);
+    // Click the third row (index 2).
+    app.on_mouse(click(12, 7));
+    assert!(app.theme_chooser.is_some(), "a click highlights, it does not close");
+    assert_eq!(
+        app.theme_chooser.as_ref().unwrap().selected,
+        2,
+        "clicking a row highlights that theme"
+    );
+    // A click below the list (out of bounds) is ignored.
+    app.on_mouse(click(12, 5 + count as u16 + 3));
+    assert_eq!(app.theme_chooser.as_ref().unwrap().selected, 2, "out-of-list click ignored");
+}
+
+#[test]
+fn view_keyway_chooser_opens_navigates_and_selects() {
+    let mut app = app_at(Path::new("."));
+    assert!(app.keyway_chooser.is_none());
+    assert_eq!(app.settings.keyway, "apple", "default keyway");
+
+    app.run_action("view.keyway");
+    assert!(app.keyway_chooser.is_some(), "View -> Keyway opens the chooser");
+
+    // Down moves Apple → Emacs; Enter commits and persists it.
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.keyway_chooser.is_none(), "Enter closes the chooser");
+    assert_eq!(app.settings.keyway, "emacs");
+
+    // Reopen, move, then Esc reverts (the committed keyway is unchanged).
+    app.run_action("view.keyway");
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(esc());
+    assert!(app.keyway_chooser.is_none(), "Esc closes the chooser");
+    assert_eq!(app.settings.keyway, "emacs", "Esc does not change the keyway");
+}
+
+#[test]
+fn click_keyway_chooser_row_highlights_it() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.keyway");
+    assert!(app.keyway_chooser.is_some());
+    app.layout.chooser = Rect::new(10, 5, 34, 3);
+    // Click the second row (index 1 → Emacs).
+    app.on_mouse(click(12, 6));
+    assert_eq!(app.keyway_chooser.as_ref().unwrap().selected, 1, "click highlights the row");
+    // Committing with Enter persists the clicked keyway.
+    app.on_key(keycode(KeyCode::Enter));
+    assert_eq!(app.settings.keyway, "emacs");
+}
+
+#[test]
+fn emacs_keyway_ctrl_movement() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keyway = "emacs".to_string();
+    // Plain letters still type (no modifier).
+    for c in "abc".chars() {
+        app.on_key(key(c));
+    }
+    assert_eq!(app.editor.cursor_1based().1, 4, "cursor after typing abc");
+    // Ctrl chords move the cursor: C-b back, C-f forward, C-a home, C-e end.
+    app.on_key(ctrl('b'));
+    assert_eq!(app.editor.cursor_1based().1, 3, "C-b moves back a char");
+    app.on_key(ctrl('f'));
+    assert_eq!(app.editor.cursor_1based().1, 4, "C-f moves forward a char");
+    app.on_key(ctrl('a'));
+    assert_eq!(app.editor.cursor_1based().1, 1, "C-a moves to line start");
+    app.on_key(ctrl('e'));
+    assert_eq!(app.editor.cursor_1based().1, 4, "C-e moves to line end");
+    // Typing was not corrupted by the motions.
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "abc");
+}
+
+#[test]
+fn emacs_keyway_chords_open_find_and_quit() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keyway = "emacs".to_string();
+    // C-x C-f opens the file prompt.
+    app.on_key(ctrl('x'));
+    app.on_key(ctrl('f'));
+    assert!(app.prompt.is_some(), "C-x C-f opens the open-file prompt");
+    app.on_key(esc());
+    assert!(app.prompt.is_none());
+    // Standalone C-s opens find.
+    app.on_key(ctrl('s'));
+    assert!(app.search.is_some(), "C-s opens find");
+    app.on_key(esc());
+    // C-x C-c quits.
+    app.on_key(ctrl('x'));
+    app.on_key(ctrl('c'));
+    assert!(app.should_quit, "C-x C-c quits");
+}
+
+#[test]
+fn vim_keyway_normal_mode_is_modal() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keyway = "vim".to_string();
+    assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"));
+
+    // Normal-mode letters are commands, not text.
+    for c in "hjkl".chars() {
+        app.on_key(key(c));
+    }
+    assert!(
+        app.editor.active_tab().unwrap().text().is_empty(),
+        "Normal mode must not type into the buffer"
+    );
+
+    // `i` enters Insert mode; now letters type.
+    app.on_key(key('i'));
+    assert_eq!(app.mode_indicator().as_deref(), Some("-- INSERT --"));
+    for c in "hello".chars() {
+        app.on_key(key(c));
+    }
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "hello");
+
+    // Esc returns to Normal; `0` then `x` deletes the first char.
+    app.on_key(esc());
+    assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"));
+    app.on_key(key('0'));
+    app.on_key(key('x'));
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "ello", "x deletes a char");
+}
+
+#[test]
+fn vim_keyway_command_line_quits() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keyway = "vim".to_string();
+    // `:` opens the command line (shown in the mode indicator).
+    app.on_key(key(':'));
+    assert_eq!(app.mode_indicator().as_deref(), Some(":"));
+    app.on_key(key('q'));
+    app.on_key(key('!'));
+    assert_eq!(app.mode_indicator().as_deref(), Some(":q!"));
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.should_quit, ":q! quits");
+}
+
+#[test]
+fn switching_keyway_resets_vim_to_normal() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keyway = "vim".to_string();
+    app.on_key(key('i')); // enter Insert
+    assert_eq!(app.mode_indicator().as_deref(), Some("-- INSERT --"));
+    // Choose the Vim keyway again via the chooser; modes reset to Normal.
+    app.run_action("view.keyway");
+    // Move selection to Vim and commit.
+    app.keyway_chooser.as_mut().unwrap().selected = 2;
+    app.on_key(keycode(KeyCode::Enter));
+    assert_eq!(app.settings.keyway, "vim");
+    assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"), "reset to Normal");
 }

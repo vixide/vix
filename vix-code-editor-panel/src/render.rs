@@ -55,13 +55,53 @@ impl Widget for &Editor {
         
             let visible_chars = code.char_slice(char_start, char_end);
 
-            let displayed_line = visible_chars.to_string().replace("\t", &" ");
-        
             let text_x = area.left() + line_number_width as u16;
-            if text_x < area.left() + area.width && draw_y < area.top() + area.height {
-                buf.set_string(text_x, draw_y, &displayed_line, default_text_style);
+            let right_edge = area.left() + area.width;
+
+            if self.show_whitespace {
+                // Substitute a visible glyph for each space / tab / carriage
+                // return. The syntax layer below only restyles cells (it never
+                // rewrites them), so these glyphs survive.
+                let displayed_line: String = visible_chars
+                    .chars()
+                    .map(|c| match c {
+                        '\t' => '\u{2192}', // → tab
+                        ' ' => '\u{00B7}',  // · space
+                        '\r' => '\u{240D}', // ␍ carriage return
+                        other => other,
+                    })
+                    .collect();
+                if text_x < right_edge && draw_y < area.top() + area.height {
+                    buf.set_string(text_x, draw_y, &displayed_line, default_text_style);
+                    // Dim the glyph cells, tracking display columns so wide
+                    // characters elsewhere on the line don't shift the marks.
+                    let mut x = 0usize;
+                    for g in RopeGraphemes::new(&visible_chars) {
+                        let (g_width, _g_chars) = grapheme_width_and_chars_len(g);
+                        if matches!(g.chars().next(), Some('\t' | ' ' | '\r')) {
+                            let gx = text_x + x as u16;
+                            if gx < right_edge {
+                                buf[(gx, draw_y)].set_style(self.whitespace_style);
+                            }
+                        }
+                        x = x.saturating_add(g_width);
+                    }
+                    // A line-ending glyph after the content, when the line's end
+                    // is in view and it is not the final (newline-less) line.
+                    if end_col == line_len && line_idx + 1 < total_lines {
+                        let nl_x = text_x + x as u16;
+                        if nl_x < right_edge {
+                            buf.set_string(nl_x, draw_y, "\u{00B6}", self.whitespace_style); // ¶
+                        }
+                    }
+                }
+            } else {
+                let displayed_line = visible_chars.to_string().replace("\t", " ");
+                if text_x < right_edge && draw_y < area.top() + area.height {
+                    buf.set_string(text_x, draw_y, &displayed_line, default_text_style);
+                }
             }
-        
+
             draw_y += 1;
         }
 
@@ -273,5 +313,45 @@ impl Widget for &Editor {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod whitespace_tests {
+    use crate::editor::Editor;
+    use ratatui_core::buffer::Buffer;
+    use ratatui_core::layout::Rect;
+    use ratatui_core::widgets::Widget;
+
+    /// Collect the glyphs of one rendered row into a String.
+    fn row(buf: &Buffer, y: u16, x0: u16, x1: u16) -> String {
+        (x0..x1).map(|x| buf[(x, y)].symbol().chars().next().unwrap_or(' ')).collect()
+    }
+
+    #[test]
+    fn shows_glyphs_for_space_tab_and_newline() {
+        // Two lines so the first line has a trailing newline glyph.
+        let mut ed = Editor::new("text", "a b\tc\nx", Vec::new()).unwrap();
+        ed.show_line_numbers(false);
+        ed.show_whitespace(true);
+        let area = Rect::new(0, 0, 12, 3);
+        let mut buf = Buffer::empty(area);
+        (&ed).render(area, &mut buf);
+        let line0 = row(&buf, 0, 0, 12);
+        assert!(line0.contains('\u{00B7}'), "space → middot: {line0:?}");
+        assert!(line0.contains('\u{2192}'), "tab → arrow: {line0:?}");
+        assert!(line0.contains('\u{00B6}'), "line end → pilcrow: {line0:?}");
+    }
+
+    #[test]
+    fn hidden_by_default() {
+        let mut ed = Editor::new("text", "a b\tc", Vec::new()).unwrap();
+        ed.show_line_numbers(false);
+        let area = Rect::new(0, 0, 12, 2);
+        let mut buf = Buffer::empty(area);
+        (&ed).render(area, &mut buf);
+        let line0 = row(&buf, 0, 0, 12);
+        assert!(!line0.contains('\u{00B7}'), "no glyphs when off: {line0:?}");
+        assert!(!line0.contains('\u{2192}'));
     }
 }

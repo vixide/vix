@@ -45,6 +45,7 @@ fn apply_theme(ed: &mut CodeEditor) {
     );
     ed.set_line_number_style(theme::dim());
     ed.set_selection_style(theme::selected());
+    ed.set_whitespace_style(theme::dim());
 
     // Syntax token colors from the active custom theme (empty == monochrome).
     let syntax = theme::syntax_theme();
@@ -60,7 +61,12 @@ fn apply_theme(ed: &mut CodeEditor) {
     ed.set_cursor_style(Some(cursor));
 }
 
-fn make_editor(path: Option<&Path>, text: &str, line_numbers: bool) -> CodeEditor {
+fn make_editor(
+    path: Option<&Path>,
+    text: &str,
+    line_numbers: bool,
+    show_whitespace: bool,
+) -> CodeEditor {
     let name = path
         .and_then(|p| p.file_name())
         .map(|s| s.to_string_lossy().into_owned())
@@ -77,6 +83,7 @@ fn make_editor(path: Option<&Path>, text: &str, line_numbers: bool) -> CodeEdito
         .or_else(|_| CodeEditor::new("text", text, Vec::new()))
         .expect("code editor init for plain text never fails");
     ed.show_line_numbers(line_numbers);
+    ed.show_whitespace(show_whitespace);
     apply_theme(&mut ed);
     ed
 }
@@ -166,21 +173,25 @@ pub struct Editor {
     pub active: usize,
     /// Whether the line-number gutter is shown.
     pub line_numbers: bool,
+    /// Whether visible-whitespace glyphs are shown.
+    pub show_whitespace: bool,
 }
 
 impl Default for Editor {
     fn default() -> Self {
-        Editor::new(true)
+        Editor::new(true, false)
     }
 }
 
 impl Editor {
-    /// Create an editor with one empty buffer and the given gutter setting.
-    pub fn new(line_numbers: bool) -> Self {
+    /// Create an editor with one empty buffer and the given gutter / whitespace
+    /// settings.
+    pub fn new(line_numbers: bool, show_whitespace: bool) -> Self {
         let mut e = Editor {
             tabs: Vec::new(),
             active: 0,
             line_numbers,
+            show_whitespace,
         };
         e.new_tab();
         e
@@ -199,7 +210,7 @@ impl Editor {
 
     /// Create an empty untitled buffer and focus it.
     pub fn new_tab(&mut self) {
-        let editor = make_editor(None, "", self.line_numbers);
+        let editor = make_editor(None, "", self.line_numbers, self.show_whitespace);
         self.tabs.push(Tab {
             editor,
             path: None,
@@ -222,7 +233,7 @@ impl Editor {
             self.active = i;
             return;
         }
-        let editor = make_editor(Some(&canon), "", self.line_numbers);
+        let editor = make_editor(Some(&canon), "", self.line_numbers, self.show_whitespace);
         self.tabs.push(Tab {
             editor,
             path: Some(canon),
@@ -237,6 +248,13 @@ impl Editor {
     pub fn refresh_line_numbers(&mut self) {
         for tab in &mut self.tabs {
             tab.editor.show_line_numbers(self.line_numbers);
+        }
+    }
+
+    /// Apply the current visible-whitespace setting to every buffer.
+    pub fn refresh_whitespace(&mut self) {
+        for tab in &mut self.tabs {
+            tab.editor.show_whitespace(self.show_whitespace);
         }
     }
 
@@ -264,7 +282,7 @@ impl Editor {
         }
 
         let content = fs::read_to_string(&canon)?;
-        let editor = make_editor(Some(&canon), &content, self.line_numbers);
+        let editor = make_editor(Some(&canon), &content, self.line_numbers, self.show_whitespace);
         let tab = Tab {
             editor,
             path: Some(canon),

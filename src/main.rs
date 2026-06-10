@@ -56,6 +56,12 @@ fn main() -> io::Result<()> {
 
     let mut terminal = ratatui::init();
     let _ = execute!(io::stdout(), EnableMouseCapture);
+    // Also request any-motion mouse tracking (xterm mode 1003) so plain hover is
+    // reported, not just clicks and drags. This drives the menu mouseover; every
+    // other pane ignores button-less motion. Best-effort — terminals without
+    // support simply won't send motion events.
+    let _ = write!(io::stdout(), "\x1b[?1003h");
+    let _ = io::stdout().flush();
     // Query the terminal for graphics support so images can be displayed. Use a
     // short timeout (the default is 2s) so startup never stalls on terminals
     // that don't answer the capability query.
@@ -65,6 +71,7 @@ fn main() -> io::Result<()> {
     };
     app.picker = ratatui_image::picker::Picker::from_query_stdio_with_options(query).ok();
     let result = run(&mut terminal, &mut app);
+    let _ = write!(io::stdout(), "\x1b[?1003l");
     let _ = execute!(io::stdout(), DisableMouseCapture);
     let _ = io::stdout().flush();
     ratatui::restore();

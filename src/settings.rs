@@ -31,6 +31,8 @@ const CONFIG_NAME: &str = "config";
 pub struct Settings {
     /// Show the line-number gutter.
     pub line_numbers: bool,
+    /// Render visible glyphs for whitespace (space, tab, line ending).
+    pub show_whitespace: bool,
     /// Show the file explorer on startup.
     pub show_explorer: bool,
     /// Show the message drawer on startup.
@@ -42,6 +44,8 @@ pub struct Settings {
     /// UI language as a locale code (e.g. `"en"`, `"es"`, `"fr"`, `"de"`, `"cy"`).
     /// Used as the default; a `--locale` CLI flag overrides it for one run.
     pub locale: String,
+    /// Keyboard navigation style id: `"apple"` (default), `"emacs"`, or `"vim"`.
+    pub keyway: String,
     /// Width (columns) of the left dock (file explorer); drag its right edge to
     /// resize.
     pub explorer_width: u16,
@@ -54,11 +58,13 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             line_numbers: true,
+            show_whitespace: false,
             show_explorer: true,
             show_messages: true,
             preview_tabs: true,
             theme: "dark".to_string(),
             locale: "en".to_string(),
+            keyway: "apple".to_string(),
             explorer_width: 30,
             messages_width: 32,
         }
