@@ -33,12 +33,22 @@ pub struct Settings {
     pub line_numbers: bool,
     /// Render visible glyphs for whitespace (space, tab, line ending).
     pub show_whitespace: bool,
+    /// Wrap long lines across screen rows instead of scrolling horizontally.
+    pub soft_wrap: bool,
     /// Show the file explorer on startup.
     pub show_explorer: bool,
     /// Show the message drawer on startup.
     pub show_messages: bool,
     /// Open single-clicked / arrow-scanned files in an ephemeral preview tab.
     pub preview_tabs: bool,
+    /// On save, strip trailing spaces/tabs from every line.
+    pub trim_trailing_whitespace: bool,
+    /// On save, append a final newline if the file does not end with one.
+    pub ensure_final_newline: bool,
+    /// Indentation inserted by Tab: `"spaces"` (default) or `"tabs"`.
+    pub indent_style: String,
+    /// Number of spaces per indent when `indent_style` is `"spaces"`.
+    pub tab_width: usize,
     /// Color theme: `"dark"` (default) or `"light"`.
     pub theme: String,
     /// UI language as a locale code (e.g. `"en"`, `"es"`, `"fr"`, `"de"`, `"cy"`).
@@ -52,21 +62,33 @@ pub struct Settings {
     /// Width (columns) of the right dock (message drawer); drag its left edge to
     /// resize.
     pub messages_width: u16,
+    /// Recently opened files, most-recent first (absolute paths). Capped to a
+    /// small number; surfaced by **File → Open Recent…**.
+    pub recent_files: Vec<String>,
 }
+
+/// Maximum number of entries kept in [`Settings::recent_files`].
+pub const MAX_RECENT_FILES: usize = 15;
 
 impl Default for Settings {
     fn default() -> Self {
         Settings {
             line_numbers: true,
             show_whitespace: false,
+            soft_wrap: false,
             show_explorer: true,
             show_messages: true,
             preview_tabs: true,
+            trim_trailing_whitespace: true,
+            ensure_final_newline: true,
+            indent_style: "spaces".to_string(),
+            tab_width: 4,
             theme: "dark".to_string(),
             locale: "en".to_string(),
             keyway: "apple".to_string(),
             explorer_width: 30,
             messages_width: 32,
+            recent_files: Vec::new(),
         }
     }
 }
@@ -77,6 +99,17 @@ impl Settings {
     #[must_use]
     pub fn load() -> Settings {
         confy::load(APP_NAME, Some(CONFIG_NAME)).unwrap_or_default()
+    }
+
+    /// The string Tab inserts: a tab character for `indent_style = "tabs"`, else
+    /// [`Settings::tab_width`] spaces. An empty width falls back to one space.
+    #[must_use]
+    pub fn indent_string(&self) -> String {
+        if self.indent_style == "tabs" {
+            "\t".to_string()
+        } else {
+            " ".repeat(self.tab_width.max(1))
+        }
     }
 
     /// Persist settings to the user's config directory.

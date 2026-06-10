@@ -145,7 +145,10 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.keyway_chooser.is_some() {
         draw_keyway_chooser(app, frame, area);
     }
-    if app.paste.as_ref().map(|p| p.conflict.is_some()).unwrap_or(false) {
+    if app.recent_chooser.is_some() {
+        draw_recent_chooser(app, frame, area);
+    }
+    if app.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
         draw_paste_conflict(app, frame, area);
     }
     if app.show_help {
@@ -233,6 +236,7 @@ fn draw_list_chooser(
     frame: &mut Frame,
     area: Rect,
     title: &str,
+    hint: &str,
     labels: &[String],
     selected: usize,
 ) -> Rect {
@@ -268,7 +272,7 @@ fn draw_list_chooser(
     state.select(Some(selected));
     frame.render_stateful_widget(list, rows[0], &mut state);
 
-    let hint = Line::from(Span::styled(t!("ui.theme_hint"), theme::dim()));
+    let hint = Line::from(Span::styled(hint.to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), rows[1]);
     rows[0]
 }
@@ -284,7 +288,8 @@ fn draw_theme_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
             None => c.custom_name().unwrap_or_default().to_string(),
         })
         .collect();
-    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.theme"), &labels, selected);
+    let hint = t!("ui.theme_hint");
+    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.theme"), &hint, &labels, selected);
 }
 
 fn draw_locale_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -294,7 +299,8 @@ fn draw_locale_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
         .iter()
         .map(|l| l.name.to_string())
         .collect();
-    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.locale"), &labels, selected);
+    let hint = t!("ui.theme_hint");
+    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.locale"), &hint, &labels, selected);
 }
 
 fn draw_keyway_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -304,7 +310,32 @@ fn draw_keyway_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
         .iter()
         .map(|k| format!("{}  —  {}", k.name, k.tooltip))
         .collect();
-    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.keyway"), &labels, selected);
+    let hint = t!("ui.theme_hint");
+    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.keyway"), &hint, &labels, selected);
+}
+
+fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(rc) = app.recent_chooser.as_ref() else { return };
+    let selected = rc.selected;
+    // Show the file name first (survives truncation), then its directory.
+    let labels: Vec<String> = rc
+        .entries
+        .iter()
+        .map(|p| {
+            let name = p
+                .file_name()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            match p.parent() {
+                Some(dir) if !dir.as_os_str().is_empty() => {
+                    format!("{name}  —  {}", dir.display())
+                }
+                _ => name,
+            }
+        })
+        .collect();
+    let hint = t!("ui.recent_hint");
+    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.recent"), &hint, &labels, selected);
 }
 
 fn draw_paste_conflict(app: &App, frame: &mut Frame, area: Rect) {
@@ -420,6 +451,7 @@ fn draw_menu_bar(app: &App, frame: &mut Frame, area: Rect) {
 
 /// Columns (within the menu-bar rect) of the left- and right-dock toggle icons,
 /// matching the right-aligned layout drawn by `draw_menu_bar`.
+#[must_use] 
 pub fn dock_toggle_cols(menu: Rect) -> (u16, u16) {
     let right = menu.x + menu.width;
     // Layout from the right edge: FOLDER, space, BELL, space.
@@ -428,6 +460,7 @@ pub fn dock_toggle_cols(menu: Rect) -> (u16, u16) {
 
 /// Geometry of the dropdown for the menu at `index`. Shared by the renderer and
 /// by mouse hit-testing (`App::on_mouse`) so clicks land on the right item.
+#[must_use] 
 pub fn menu_dropdown_rect(frame_area: Rect, bar: Rect, index: usize) -> Rect {
     let def = &MENUS[index];
     let x = bar.x + menu_offsets()[index];
@@ -569,7 +602,7 @@ fn draw_tabs(app: &App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
-    let is_image = app.editor.active_tab().map(|t| t.is_image()).unwrap_or(false);
+    let is_image = app.editor.active_tab().is_some_and(super::editor::Tab::is_image);
     if is_image {
         if let Some(tab) = app.editor.active_tab_mut() {
             if let Some(proto) = tab.image.as_mut() {
@@ -617,8 +650,7 @@ fn draw_messages(app: &App, frame: &mut Frame, area: Rect) {
         .iter()
         .map(|m| {
             let (sym, sym_style) = match m.level {
-                Level::Info => (icon::INFO, Style::default()),
-                Level::Advice => (icon::INFO, Style::default()),
+                Level::Info | Level::Advice => (icon::INFO, Style::default()),
                 Level::Warn => (icon::BELL, Style::default()),
                 Level::Error => (icon::CLOSE, Style::default()),
             };
@@ -641,9 +673,9 @@ fn draw_status_bar(app: &App, frame: &mut Frame, area: Rect) {
     let path = app
         .editor
         .active_tab()
-        .map(|t| t.display_path())
+        .map(super::editor::Tab::display_path)
         .unwrap_or_default();
-    let dirty = app.editor.active_tab().map(|t| t.dirty).unwrap_or(false);
+    let dirty = app.editor.active_tab().is_some_and(|t| t.dirty);
     let dirty_flag = if dirty {
         format!(" {}", icon::FILE_DIRTY)
     } else {
@@ -654,8 +686,28 @@ fn draw_status_bar(app: &App, frame: &mut Frame, area: Rect) {
         .mode_indicator()
         .map(|m| format!("{m}   "))
         .unwrap_or_default();
+    // Editor info (language · line ending · encoding · selection) for text tabs.
+    let info = app
+        .editor
+        .active_tab()
+        .filter(|t| !t.is_image())
+        .map(|t| {
+            let lang = match t.editor.language() {
+                "unknown" | "" => "text",
+                other => other,
+            };
+            let eol = t.editor.line_ending();
+            let sel = t.editor.selection_span().map_or(String::new(), |(s, e)| {
+                let code = t.editor.code_ref();
+                let lines = code.char_to_line(e) - code.char_to_line(s) + 1;
+                format!("Sel {} ({lines}L)   ", e - s)
+            });
+            format!("{lang}  {eol}  UTF-8   {sel}")
+        })
+        .unwrap_or_default();
+
     let left = format!(" {}{}{}  \u{2014}  {}", mode, path, dirty_flag, app.status);
-    let right = format!("Ln {line}:Col {col}   {} ", icon::CALENDAR);
+    let right = format!("{info}Ln {line}:Col {col}   {} ", icon::CALENDAR);
 
     let cols = Layout::default()
         .direction(Direction::Horizontal)
@@ -867,7 +919,7 @@ fn draw_project_search(app: &App, frame: &mut Frame, area: Rect) {
 fn draw_search(app: &App, frame: &mut Frame, area: Rect) {
     let Some(s) = app.search.as_ref() else { return };
     let height = if s.replacing { 5 } else { 4 };
-    let width = (area.width as f32 * 0.7) as u16;
+    let width = (f32::from(area.width) * 0.7) as u16;
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
         y: area.y + 1,
@@ -930,7 +982,7 @@ fn field_line(label: &str, value: &str, focused: bool) -> Line<'static> {
 
 fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
     let Some(p) = app.prompt.as_ref() else { return };
-    let width = (area.width as f32 * 0.6) as u16;
+    let width = (f32::from(area.width) * 0.6) as u16;
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
         y: area.y + area.height / 3,

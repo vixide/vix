@@ -61,8 +61,15 @@ pub struct Editor {
     /// When true, render visible glyphs for whitespace (space, tab, line ending).
     pub(crate) show_whitespace: bool,
 
+    /// When true, long logical lines wrap across several screen rows instead of
+    /// scrolling horizontally.
+    pub(crate) soft_wrap: bool,
+
     /// Style for the visible-whitespace glyphs (typically dimmed).
     pub(crate) whitespace_style: Style,
+
+    /// Style for the bracket matching the one at the cursor.
+    pub(crate) bracket_style: Style,
 
     /// Controls the left padding before writing the code
     pub(crate) left_code_padding: usize,
@@ -115,7 +122,9 @@ impl Editor {
             highlights_cache,
             show_line_numbers: true,
             show_whitespace: false,
+            soft_wrap: false,
             whitespace_style: Style::default().fg(Color::DarkGray),
+            bracket_style: Style::default().add_modifier(Modifier::REVERSED),
             left_code_padding: 2,
             text_style: Style::default().fg(Color::White),
             line_number_style: Style::default().fg(Color::DarkGray),
@@ -176,10 +185,31 @@ impl Editor {
 
         let line = self.code.char_to_line(self.cursor);
         let col = self.cursor - self.code.line_to_char(line);
-    
+
+        if self.soft_wrap {
+            // No horizontal scroll; scroll vertically by logical line until the
+            // cursor's visual row is within the viewport.
+            self.offset_x = 0;
+            if line < self.offset_y {
+                self.offset_y = line;
+            }
+            let text_width = width.saturating_sub(line_number_width);
+            while self.offset_y < line {
+                let rows = self.visual_rows(text_width, height.max(1));
+                let visible = rows
+                    .iter()
+                    .any(|r| self.cursor >= r.start && self.cursor <= r.end);
+                if visible {
+                    break;
+                }
+                self.offset_y += 1;
+            }
+            return;
+        }
+
         let visible_width = width.saturating_sub(line_number_width);
         let visible_height = height;
-    
+
         let step_size = 10;
         if col < self.offset_x {
             self.offset_x = col.saturating_sub(step_size);
@@ -263,7 +293,26 @@ impl Editor {
         {
             return None;
         }
-    
+
+        if self.soft_wrap {
+            let screen_row = (mouse_y - area.top()) as usize;
+            let text_width = (area.width as usize).saturating_sub(line_number_width as usize);
+            let rows = self.visual_rows(text_width, screen_row + 1);
+            let vr = rows.get(screen_row)?;
+            let clicked_col = (mouse_x - area.left() - line_number_width) as usize;
+            let slice = self.code.char_slice(vr.start, vr.end);
+            let mut cur_col = 0usize;
+            let mut ch = vr.start;
+            for g in RopeGraphemes::new(&slice) {
+                let (gw0, gc) = grapheme_width_and_chars_len(g);
+                let gw = if g.chars().next() == Some('\t') { 1 } else { gw0 };
+                if cur_col + gw > clicked_col { break; }
+                cur_col += gw;
+                ch += gc;
+            }
+            return Some(ch);
+        }
+
         let clicked_row = (mouse_y - area.top()) as usize + self.offset_y;
         if clicked_row >= self.code.len_lines() {
             return None;
@@ -492,6 +541,25 @@ impl Editor {
         &self.code
     }
 
+    /// The buffer's language identifier (e.g. `"rust"`, `"text"`).
+    pub fn language(&self) -> &str {
+        self.code.lang()
+    }
+
+    /// The buffer's line ending: `"LF"` or `"CRLF"`.
+    pub fn line_ending(&self) -> &'static str {
+        self.code.first_line_ending()
+    }
+
+    /// The current selection as a sorted `(start, end)` char range, or `None`
+    /// when there is no (non-empty) selection.
+    pub fn selection_span(&self) -> Option<(usize, usize)> {
+        self.selection
+            .as_ref()
+            .filter(|s| !s.is_empty())
+            .map(|s| (s.start.min(s.end), s.start.max(s.end)))
+    }
+
     /// Set the change callback function for handling document changes
     pub fn set_change_callback(
         &mut self, callback: Box<dyn Fn(Vec<(usize, usize, usize, usize, String)>)>
@@ -571,6 +639,26 @@ impl Editor {
         self.show_whitespace = show
     }
 
+    /// Enable or disable soft wrap (long lines wrap instead of scrolling).
+    pub fn set_soft_wrap(&mut self, on: bool) {
+        self.soft_wrap = on;
+        if on {
+            self.offset_x = 0;
+        }
+    }
+
+    /// Toggle soft wrap; returns the new state.
+    pub fn toggle_soft_wrap(&mut self) -> bool {
+        self.set_soft_wrap(!self.soft_wrap);
+        self.soft_wrap
+    }
+
+    /// Set the indent string inserted by Tab / the `Indent` action (spaces or a
+    /// tab). `None` restores the per-language default.
+    pub fn set_indent(&mut self, indent: Option<String>) {
+        self.code.set_indent(indent);
+    }
+
     /// Toggle visible-whitespace glyphs; returns the new visibility.
     pub fn toggle_whitespace(&mut self) -> bool {
         self.show_whitespace = !self.show_whitespace;
@@ -580,6 +668,11 @@ impl Editor {
     /// Set the style used for visible-whitespace glyphs (typically dimmed).
     pub fn set_whitespace_style(&mut self, style: Style) {
         self.whitespace_style = style;
+    }
+
+    /// Set the style used to highlight the bracket matching the one at the cursor.
+    pub fn set_bracket_style(&mut self, style: Style) {
+        self.bracket_style = style;
     }
 
     pub fn set_left_code_padding(&mut self, char_count: usize) {

@@ -6,6 +6,8 @@
 //!
 //! Run with: `cargo run --example headless_edit`
 
+#![warn(clippy::pedantic)]
+
 use std::fs;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};

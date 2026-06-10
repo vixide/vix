@@ -27,6 +27,13 @@ Shared terms used across the code, specs, and docs.
   prompt, palette, search, choosers, …), handled in priority order in `on_key`.
 - **Mark** — a non-selection highlight in the editor (e.g. other search hits),
   rendered as an underline in monochrome.
+- **Soft wrap** — a long logical line drawn across several screen rows instead of
+  scrolling horizontally (**View → Toggle Soft Wrap**, the `soft_wrap` setting).
+- **Visual row** — in soft-wrap mode, one screen row: a `[start, end)` char slice
+  of a logical line. The shared layout (`Editor::visual_rows`) drives the wrapped
+  renderer, cursor scroll, and mouse hit-testing.
+- **Bracket match** — the partner of the bracket at (or just before) the cursor,
+  highlighted by the editor (no pair auto-insertion).
 - **Monochrome** — the built-in theme style: one foreground, one background, no
   hue; emphasis via dim and full intensity (no bold/italic); reversed only for
   selections/cursor.

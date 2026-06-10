@@ -1,5 +1,10 @@
 //! Integration tests for Vix's terminal-independent logic.
 
+#![warn(clippy::pedantic)]
+// Test setup casts small counts to `u16` cell coordinates and builds fixture
+// strings by collecting `format!`; both are fine in tests.
+#![allow(clippy::cast_possible_truncation, clippy::format_collect)]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -55,6 +60,40 @@ fn unique_dir(tag: &str) -> PathBuf {
     dir
 }
 
+/// Build an app with custom settings and a realistic editor viewport.
+fn app_with(settings: Settings) -> App {
+    let mut app = App::new(Path::new(".").to_path_buf(), settings);
+    app.layout.editor = Rect::new(0, 0, 80, 24);
+    app
+}
+
+#[test]
+fn tab_inserts_spaces_by_default() {
+    let mut app = app_at(Path::new(".")); // default: spaces, width 4
+    app.on_key(keycode(KeyCode::Tab));
+    app.on_key(key('x'));
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "    x", "Tab inserts 4 spaces");
+}
+
+#[test]
+fn tab_width_setting_controls_space_count() {
+    let mut app = app_with(Settings { tab_width: 2, ..Settings::default() });
+    app.on_key(keycode(KeyCode::Tab));
+    app.on_key(key('y'));
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "  y", "tab_width=2 inserts 2 spaces");
+}
+
+#[test]
+fn indent_style_tabs_inserts_a_tab() {
+    let mut app = app_with(Settings {
+        indent_style: "tabs".to_string(),
+        ..Settings::default()
+    });
+    app.on_key(keycode(KeyCode::Tab));
+    app.on_key(key('z'));
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "\tz", "tabs style inserts a tab");
+}
+
 #[test]
 fn types_into_buffer_and_marks_dirty() {
     let mut app = app_at(Path::new("."));
@@ -86,6 +125,140 @@ fn open_edit_save_round_trip() {
     let saved = fs::read_to_string(&file).unwrap();
     assert!(saved.starts_with("first line!!!"), "got: {saved:?}");
 
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn smart_home_toggles_first_nonblank_and_column0() {
+    let dir = unique_dir("smarthome");
+    let file = dir.join("h.txt");
+    fs::write(&file, "    hello\n").unwrap(); // four-space indent
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+
+    app.on_key(keycode(KeyCode::End));
+    assert_eq!(app.editor.cursor_1based().1, 10, "end of '    hello'");
+    // First Home -> first non-blank (column index 4 -> 1-based 5).
+    app.on_key(keycode(KeyCode::Home));
+    assert_eq!(app.editor.cursor_1based().1, 5, "Home jumps to first non-blank");
+    // Second Home -> column 0.
+    app.on_key(keycode(KeyCode::Home));
+    assert_eq!(app.editor.cursor_1based().1, 1, "Home again jumps to column 0");
+    // Third Home -> back to first non-blank.
+    app.on_key(keycode(KeyCode::Home));
+    assert_eq!(app.editor.cursor_1based().1, 5, "toggles back to first non-blank");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn palette_goto_line_previews_and_reverts_on_esc() {
+    let dir = unique_dir("gotorevert");
+    let file = dir.join("g.txt");
+    let body: String = (1..=20).map(|i| format!("L{i}\n")).collect();
+    fs::write(&file, body).unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+    assert_eq!(app.editor.cursor_1based().0, 1);
+
+    app.run_action("tools.palette");
+    app.on_key(key(':'));
+    app.on_key(key('7'));
+    assert_eq!(app.editor.cursor_1based().0, 7, "live preview moves to line 7 while typing");
+    app.on_key(esc());
+    assert!(app.palette.is_none());
+    assert_eq!(app.editor.cursor_1based().0, 1, "Esc reverts to the original line");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn palette_goto_line_commit_records_origin_in_history() {
+    let dir = unique_dir("gotocommit");
+    let file = dir.join("g.txt");
+    let body: String = (1..=20).map(|i| format!("L{i}\n")).collect();
+    fs::write(&file, body).unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+
+    app.run_action("tools.palette");
+    for c in ":12".chars() {
+        app.on_key(key(c));
+    }
+    assert_eq!(app.editor.cursor_1based().0, 12, "preview reached line 12");
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.palette.is_none());
+    assert_eq!(app.editor.cursor_1based().0, 12, "commit stays at line 12");
+    // Position-history back goes to the pre-jump origin (line 1), not the preview.
+    app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::ALT));
+    assert_eq!(app.editor.cursor_1based().0, 1, "Alt+Left returns to origin line 1");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn find_selection_jumps_between_occurrences() {
+    let dir = unique_dir("findsel");
+    let file = dir.join("f.txt");
+    fs::write(&file, "foo bar foo baz foo\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+    // No selection: the word under the cursor ("foo") is used. Occurrences start
+    // at chars 0, 8, 16.
+    app.run_action("search.next_selection");
+    assert_eq!(app.editor.cursor_1based(), (1, 9), "next -> second foo");
+    app.run_action("search.next_selection");
+    assert_eq!(app.editor.cursor_1based(), (1, 17), "next -> third foo");
+    app.run_action("search.prev_selection");
+    assert_eq!(app.editor.cursor_1based(), (1, 9), "prev -> second foo");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn save_trims_trailing_whitespace_by_default() {
+    let dir = unique_dir("trim");
+    let file = dir.join("t.txt");
+    fs::write(&file, "abc\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file.clone());
+    app.on_key(keycode(KeyCode::End));
+    for _ in 0..3 {
+        app.on_key(key(' '));
+    }
+    app.run_action("file.save");
+    assert_eq!(fs::read_to_string(&file).unwrap(), "abc\n", "trailing spaces trimmed");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn save_ensures_final_newline_by_default() {
+    let dir = unique_dir("newline");
+    let file = dir.join("n.txt");
+    fs::write(&file, "abc").unwrap(); // no trailing newline
+    let mut app = app_at(&dir);
+    app.open_initial(file.clone());
+    app.run_action("file.save");
+    assert_eq!(fs::read_to_string(&file).unwrap(), "abc\n", "final newline added");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn save_respects_disabled_normalization() {
+    let dir = unique_dir("rawsave");
+    let file = dir.join("r.txt");
+    fs::write(&file, "abc").unwrap(); // no trailing newline
+    let mut app = app_at(&dir);
+    app.settings.trim_trailing_whitespace = false;
+    app.settings.ensure_final_newline = false;
+    app.open_initial(file.clone());
+    app.on_key(keycode(KeyCode::End));
+    for _ in 0..2 {
+        app.on_key(key(' '));
+    }
+    app.run_action("file.save");
+    assert_eq!(
+        fs::read_to_string(&file).unwrap(),
+        "abc  ",
+        "no trim and no final newline when both disabled"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -306,6 +479,175 @@ fn visible_whitespace_toggle() {
     assert!(app.settings.show_whitespace, "persists the new setting");
     app.run_action("view.whitespace");
     assert!(!app.editor.show_whitespace, "toggles back off");
+}
+
+#[test]
+fn status_bar_info_accessors() {
+    let dir = unique_dir("statusinfo");
+    let file = dir.join("s.rs");
+    fs::write(&file, "fn main() {}\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+    let tab = app.editor.active_tab().unwrap();
+    assert_eq!(tab.editor.language(), "rust", "language from extension");
+    assert_eq!(tab.editor.line_ending(), "LF");
+    assert!(tab.editor.selection_span().is_none(), "no selection initially");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn line_ending_detects_crlf() {
+    let dir = unique_dir("crlf");
+    let file = dir.join("c.txt");
+    fs::write(&file, "a\r\nb\r\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+    assert_eq!(app.editor.active_tab().unwrap().editor.line_ending(), "CRLF");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn soft_wrap_toggle() {
+    let mut app = app_at(Path::new("."));
+    assert!(!app.editor.soft_wrap, "off by default");
+    assert!(!app.settings.soft_wrap);
+    app.run_action("view.soft_wrap");
+    assert!(app.editor.soft_wrap, "toggles soft wrap on");
+    assert!(app.settings.soft_wrap, "persists the setting");
+    app.run_action("view.soft_wrap");
+    assert!(!app.editor.soft_wrap, "toggles back off");
+}
+
+#[test]
+fn toggle_comment_round_trips_and_is_undoable() {
+    let mut app = app_at(Path::new("."));
+    for c in "hello".chars() {
+        app.on_key(key(c));
+    }
+    // A new (untitled) buffer uses the default `//` token.
+    app.run_action("edit.toggle_comment");
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "//hello");
+    assert!(app.editor.active_tab().unwrap().dirty);
+    // Toggling again removes it.
+    app.run_action("edit.toggle_comment");
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "hello", "second toggle uncomments");
+    // And the whole thing is a single undoable edit.
+    app.run_action("edit.toggle_comment");
+    app.run_action("edit.undo");
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "hello", "undo reverts the comment");
+}
+
+#[test]
+fn ctrl_slash_toggles_comment() {
+    let mut app = app_at(Path::new("."));
+    app.on_key(key('x'));
+    app.on_key(ctrl('/'));
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "//x");
+}
+
+#[test]
+fn toggle_comment_uses_language_token() {
+    let dir = unique_dir("comment");
+    let file = dir.join("c.toml");
+    fs::write(&file, "key = 1\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+    app.run_action("edit.toggle_comment");
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "#key = 1", "TOML uses #");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn open_recent_records_dedups_and_reopens() {
+    let dir = unique_dir("recent");
+    fs::write(dir.join("a.txt"), "aaa").unwrap();
+    fs::write(dir.join("b.txt"), "bbb").unwrap();
+    let mut app = app_at(&dir);
+    assert!(app.settings.recent_files.is_empty());
+
+    app.open_initial(dir.join("a.txt"));
+    app.open_initial(dir.join("b.txt"));
+    assert_eq!(app.settings.recent_files.len(), 2);
+    assert!(app.settings.recent_files[0].ends_with("b.txt"), "most-recent first");
+    assert!(app.settings.recent_files[1].ends_with("a.txt"));
+
+    // Reopening a recorded file moves it to the front without duplicating.
+    app.open_initial(dir.join("a.txt"));
+    assert_eq!(app.settings.recent_files.len(), 2, "deduped");
+    assert!(app.settings.recent_files[0].ends_with("a.txt"));
+
+    // The chooser lists the entries; Down + Enter opens the second.
+    app.run_action("file.open_recent");
+    assert_eq!(app.recent_chooser.as_ref().unwrap().entries.len(), 2);
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.recent_chooser.is_none(), "Enter opens and closes the chooser");
+    let open = app.editor.active_tab().unwrap().path.clone().unwrap();
+    assert!(open.ends_with("b.txt"), "opened the highlighted recent file");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn palette_symbols_finds_declarations_not_locals() {
+    let text = "fn alpha() {}\nlet skip = 1;\nstruct Beta;\nclass Gamma:\n  pass\n#define MAX 10\n";
+    let syms = vix::palette::symbols(text);
+    let names: Vec<&str> = syms.iter().map(|s| s.name.as_str()).collect();
+    assert!(names.contains(&"alpha"), "fn: {names:?}");
+    assert!(names.contains(&"Beta"), "struct: {names:?}");
+    assert!(names.contains(&"Gamma"), "class: {names:?}");
+    assert!(names.contains(&"MAX"), "#define: {names:?}");
+    assert!(!names.contains(&"skip"), "local `let` is excluded: {names:?}");
+    assert_eq!(syms[0].line, 1, "lines are 1-based");
+}
+
+#[test]
+fn goto_symbol_mode_lists_and_jumps() {
+    let dir = unique_dir("symbols");
+    let file = dir.join("s.rs");
+    fs::write(&file, "fn alpha() {}\nlet x = 1;\nstruct Beta {}\nfn gamma() {}\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+
+    app.run_action("nav.goto_symbol");
+    let p = app.palette.as_ref().expect("palette open");
+    assert!(matches!(p.mode(), vix::palette::Mode::Symbols), "@ enters symbols mode");
+    assert_eq!(p.entries.len(), 3, "three declarations (the `let` is excluded)");
+
+    // Filter to a single symbol, then jump to it.
+    for c in "gamma".chars() {
+        app.on_key(key(c));
+    }
+    assert_eq!(app.palette.as_ref().unwrap().entries.len(), 1);
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.palette.is_none(), "Enter accepts and closes the palette");
+    assert_eq!(app.editor.cursor_1based().0, 4, "jumped to gamma's line");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn open_recent_empty_shows_status_only() {
+    let mut app = app_at(Path::new("."));
+    assert!(app.settings.recent_files.is_empty());
+    app.run_action("file.open_recent");
+    assert!(app.recent_chooser.is_none(), "no chooser when there are no recent files");
+}
+
+#[test]
+fn click_recent_row_opens_file() {
+    let dir = unique_dir("recentclick");
+    fs::write(dir.join("c.txt"), "ccc").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(dir.join("c.txt"));
+    app.run_action("file.open_recent");
+    // The list rect is normally recorded during render; set it directly.
+    app.layout.chooser = Rect::new(10, 5, 34, 1);
+    app.on_mouse(click(12, 5));
+    assert!(app.recent_chooser.is_none(), "a click opens and closes the chooser");
+    let open = app.editor.active_tab().unwrap().path.clone().unwrap();
+    assert!(open.ends_with("c.txt"));
+    fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -731,7 +1073,7 @@ fn image_open_without_picker_warns_and_does_not_crash() {
     let before = app.messages.items.len();
     app.open_initial(dir.join("pic.png"));
     // No image tab opened, but the user is told why, and nothing panicked.
-    assert!(app.editor.active_tab().map(|t| !t.is_image()).unwrap_or(true));
+    assert!(app.editor.active_tab().is_none_or(|t| !t.is_image()));
     assert!(app.messages.items.len() > before, "a warning was added");
     fs::remove_dir_all(&dir).ok();
 }

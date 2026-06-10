@@ -23,6 +23,17 @@ use crate::code::{
 /// 
 impl Widget for &Editor {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        if self.soft_wrap {
+            self.render_wrapped(area, buf);
+        } else {
+            self.render_nowrap(area, buf);
+        }
+    }
+}
+
+impl Editor {
+    /// Classic render: one logical line per screen row, horizontal scrolling.
+    fn render_nowrap(&self, area: Rect, buf: &mut Buffer) {
         let code = self.code_ref();
         let total_chars = code.len_chars();
 
@@ -313,7 +324,37 @@ impl Widget for &Editor {
                 }
             }
         }
+
+        // highlight the bracket matching the one at the cursor
+        if let Some(bpos) = self.matching_bracket() {
+            let line_idx = code.char_to_line(bpos);
+            if line_idx >= self.offset_y && line_idx < self.offset_y + area.height as usize {
+                let line_start_char = code.line_to_char(line_idx);
+                let line_len = code.line_len(line_idx);
+                let rel = bpos - line_start_char;
+                let start_col = self.offset_x.min(line_len);
+                let max_text_width = (area.width as usize).saturating_sub(line_number_width);
+                let end_col = (start_col + max_text_width).min(line_len);
+                if rel >= start_col && rel < end_col {
+                    let visible = code.char_slice(line_start_char + start_col, line_start_char + end_col);
+                    let mut visual_x: u16 = 0;
+                    let mut char_col = start_col;
+                    for g in RopeGraphemes::new(&visible) {
+                        if char_col >= rel { break; }
+                        let (g_width, g_chars) = grapheme_width_and_chars_len(g);
+                        visual_x = visual_x.saturating_add(g_width as u16);
+                        char_col += g_chars;
+                    }
+                    let draw_x = area.left() + line_number_width as u16 + visual_x;
+                    let draw_y = area.top() + (line_idx - self.offset_y) as u16;
+                    if draw_x < area.right() && draw_y < area.bottom() {
+                        buf[(draw_x, draw_y)].set_style(self.bracket_style);
+                    }
+                }
+            }
+        }
     }
+
 }
 
 #[cfg(test)]
@@ -326,6 +367,32 @@ mod whitespace_tests {
     /// Collect the glyphs of one rendered row into a String.
     fn row(buf: &Buffer, y: u16, x0: u16, x1: u16) -> String {
         (x0..x1).map(|x| buf[(x, y)].symbol().chars().next().unwrap_or(' ')).collect()
+    }
+
+    #[test]
+    fn soft_wrap_splits_long_line_across_rows() {
+        let mut ed = Editor::new("text", "abcdefghij", Vec::new()).unwrap();
+        ed.show_line_numbers(false);
+        ed.set_soft_wrap(true);
+        // The editor keeps a 2-cell left padding, so a width-6 area has a width-4
+        // text column starting at x=2. "abcdefghij" wraps into abcd / efgh / ij.
+        let area = Rect::new(0, 0, 6, 5);
+        let mut buf = Buffer::empty(area);
+        (&ed).render(area, &mut buf);
+        assert_eq!(row(&buf, 0, 2, 6), "abcd");
+        assert_eq!(row(&buf, 1, 2, 6), "efgh");
+        assert_eq!(row(&buf, 2, 2, 6), "ij  ");
+    }
+
+    #[test]
+    fn soft_wrap_mouse_maps_to_wrapped_row() {
+        let mut ed = Editor::new("text", "abcdefghij", Vec::new()).unwrap();
+        ed.show_line_numbers(false);
+        ed.set_soft_wrap(true);
+        let area = Rect::new(0, 0, 6, 5);
+        // Click the 2nd visual row ("efgh") at text column 2 (x = 2 padding + 2).
+        let off = ed.cursor_from_mouse(4, 1, &area).unwrap();
+        assert_eq!(off, 6, "click on wrapped row 1 col 2 maps to char index 6 ('g')");
     }
 
     #[test]

@@ -125,6 +125,12 @@ menu.item.file.open:
   fr: "Ouvrir…"
   de: "Öffnen…"
   cy: "Agor…"
+menu.item.file.open_recent:
+  en: "Open Recent…"
+  es: "Abrir reciente…"
+  fr: "Ouvrir récent…"
+  de: "Zuletzt geöffnet…"
+  cy: "Agor Diweddar…"
 menu.item.file.save:
   en: "Save"
   es: "Guardar"
@@ -179,6 +185,12 @@ menu.item.edit.paste:
   fr: "Coller"
   de: "Einfügen"
   cy: "Gludo"
+menu.item.edit.toggle_comment:
+  en: "Toggle Comment"
+  es: "Alternar comentario"
+  fr: "Basculer le commentaire"
+  de: "Kommentar umschalten"
+  cy: "Toglo Sylw"
 menu.item.edit.find:
   en: "Find"
   es: "Buscar"
@@ -233,6 +245,12 @@ menu.item.view.whitespace:
   fr: "Basculer les espaces visibles de l'éditeur"
   de: "Sichtbare Leerzeichen im Editor umschalten"
   cy: "Toglo Bylchau Gweladwy'r Golygydd"
+menu.item.view.soft_wrap:
+  en: "Toggle Soft Wrap"
+  es: "Alternar ajuste de línea"
+  fr: "Basculer le retour à la ligne"
+  de: "Zeilenumbruch umschalten"
+  cy: "Toglo Lapio Meddal"
 menu.item.tools.line_numbers:
   en: "Toggle Line Numbers"
   es: "Alternar números de línea"
@@ -309,6 +327,12 @@ palette.mode.goto_line:
   fr: "Aller à la ligne"
   de: "Gehe zu Zeile"
   cy: "Mynd i'r llinell"
+palette.mode.symbols:
+  en: "Go to symbol"
+  es: "Ir al símbolo"
+  fr: "Aller au symbole"
+  de: "Gehe zu Symbol"
+  cy: "Mynd i'r symbol"
 
 cmd.new_file:
   en: "New File"
@@ -322,6 +346,12 @@ cmd.open_file:
   fr: "Ouvrir un fichier…"
   de: "Datei öffnen…"
   cy: "Agor Ffeil…"
+cmd.open_recent:
+  en: "Open Recent File…"
+  es: "Abrir archivo reciente…"
+  fr: "Ouvrir un fichier récent…"
+  de: "Zuletzt geöffnete Datei…"
+  cy: "Agor Ffeil Ddiweddar…"
 cmd.save:
   en: "Save"
   es: "Guardar"
@@ -358,6 +388,12 @@ cmd.redo:
   fr: "Rétablir"
   de: "Wiederholen"
   cy: "Ailwneud"
+cmd.toggle_comment:
+  en: "Toggle Comment"
+  es: "Alternar comentario"
+  fr: "Basculer le commentaire"
+  de: "Kommentar umschalten"
+  cy: "Toglo Sylw"
 cmd.find:
   en: "Find"
   es: "Buscar"
@@ -376,6 +412,18 @@ cmd.query_replace:
   fr: "Remplacement interactif"
   de: "Interaktives Ersetzen"
   cy: "Amnewid Holiadol"
+cmd.find_next_selection:
+  en: "Find Next Occurrence of Selection"
+  es: "Buscar siguiente aparición de la selección"
+  fr: "Occurrence suivante de la sélection"
+  de: "Nächstes Vorkommen der Auswahl"
+  cy: "Canfod Achos Nesaf y Dewis"
+cmd.find_prev_selection:
+  en: "Find Previous Occurrence of Selection"
+  es: "Buscar aparición anterior de la selección"
+  fr: "Occurrence précédente de la sélection"
+  de: "Vorheriges Vorkommen der Auswahl"
+  cy: "Canfod Achos Blaenorol y Dewis"
 cmd.search_project:
   en: "Search in Project"
   es: "Buscar en el proyecto"
@@ -394,6 +442,12 @@ cmd.goto_definition:
   fr: "Aller à la définition"
   de: "Zur Definition springen"
   cy: "Mynd i'r Diffiniad"
+cmd.goto_symbol:
+  en: "Go to Symbol in File"
+  es: "Ir al símbolo en el archivo"
+  fr: "Aller au symbole dans le fichier"
+  de: "Zu Symbol in Datei springen"
+  cy: "Mynd i'r Symbol yn y Ffeil"
 cmd.theme:
   en: "Theme…"
   es: "Tema…"
@@ -436,6 +490,12 @@ cmd.toggle_whitespace:
   fr: "Basculer les espaces visibles de l'éditeur"
   de: "Sichtbare Leerzeichen im Editor umschalten"
   cy: "Toglo Bylchau Gweladwy'r Golygydd"
+cmd.toggle_soft_wrap:
+  en: "Toggle Soft Wrap"
+  es: "Alternar ajuste de línea"
+  fr: "Basculer le retour à la ligne"
+  de: "Zeilenumbruch umschalten"
+  cy: "Toglo Lapio Meddal"
 cmd.toggle_calendar:
   en: "Toggle Calendar"
   es: "Alternar calendario"
@@ -524,6 +584,18 @@ ui.keyway:
   fr: "Style clavier"
   de: "Tastenstil"
   cy: "Dull Bysell"
+ui.recent:
+  en: "Recent Files"
+  es: "Archivos recientes"
+  fr: "Fichiers récents"
+  de: "Zuletzt geöffnet"
+  cy: "Ffeiliau Diweddar"
+ui.recent_hint:
+  en: "↑↓ select   Enter open   Esc cancel"
+  es: "↑↓ seleccionar   Enter abrir   Esc cancelar"
+  fr: "↑↓ sélectionner   Entrée ouvrir   Échap annuler"
+  de: "↑↓ auswählen   Enter öffnen   Esc abbrechen"
+  cy: "↑↓ dewis   Enter agor   Esc canslo"
 ui.paste_conflict:
   en: "Paste conflict"
   es: "Conflicto al pegar"
@@ -667,11 +739,11 @@ ui.weekdays:
   de: "Mo Di Mi Do Fr Sa So"
   cy: "Ll Ma Me Ia Gw Sa Su"
 ui.palette_prefixes:
-  en: "prefixes:  (none) files   > commands   # buffers   : line     Tab accept   Esc close"
-  es: "prefijos:  (ninguno) archivos   > comandos   # búferes   : línea     Tab aceptar   Esc cerrar"
-  fr: "préfixes :  (aucun) fichiers   > commandes   # tampons   : ligne     Tab accepter   Échap fermer"
-  de: "Präfixe:  (kein) Dateien   > Befehle   # Puffer   : Zeile     Tab übernehmen   Esc schließen"
-  cy: "rhagddodiaid:  (dim) ffeiliau   > gorchmynion   # byfferi   : llinell     Tab derbyn   Esc cau"
+  en: "prefixes:  (none) files   > commands   # buffers   : line   @ symbols     Tab accept   Esc close"
+  es: "prefijos:  (ninguno) archivos   > comandos   # búferes   : línea   @ símbolos     Tab aceptar   Esc cerrar"
+  fr: "préfixes :  (aucun) fichiers   > commandes   # tampons   : ligne   @ symboles     Tab accepter   Échap fermer"
+  de: "Präfixe:  (kein) Dateien   > Befehle   # Puffer   : Zeile   @ Symbole     Tab übernehmen   Esc schließen"
+  cy: "rhagddodiaid:  (dim) ffeiliau   > gorchmynion   # byfferi   : llinell   @ symbolau     Tab derbyn   Esc cau"
 ui.field_find:
   en: "Find"
   es: "Buscar"
@@ -928,6 +1000,18 @@ status.whitespace_off:
   fr: "Espaces visibles désactivés"
   de: "Sichtbare Leerzeichen aus"
   cy: "Bylchau gweladwy i ffwrdd"
+status.soft_wrap_on:
+  en: "Soft wrap on"
+  es: "Ajuste de línea activado"
+  fr: "Retour à la ligne activé"
+  de: "Zeilenumbruch an"
+  cy: "Lapio meddal ymlaen"
+status.soft_wrap_off:
+  en: "Soft wrap off"
+  es: "Ajuste de línea desactivado"
+  fr: "Retour à la ligne désactivé"
+  de: "Zeilenumbruch aus"
+  cy: "Lapio meddal i ffwrdd"
 status.image_readonly:
   en: "Image tabs are read-only"
   es: "Las pestañas de imagen son de solo lectura"
@@ -988,6 +1072,12 @@ status.opened:
   fr: "Ouvert %{path}"
   de: "Geöffnet %{path}"
   cy: "Agorwyd %{path}"
+status.no_recent:
+  en: "No recent files"
+  es: "No hay archivos recientes"
+  fr: "Aucun fichier récent"
+  de: "Keine zuletzt geöffneten Dateien"
+  cy: "Dim ffeiliau diweddar"
 status.opened_image:
   en: "Opened image %{path}"
   es: "Imagen abierta %{path}"
@@ -1078,6 +1168,12 @@ status.no_matches:
   fr: "aucune correspondance"
   de: "keine Treffer"
   cy: "dim cyfatebiaethau"
+status.no_selection:
+  en: "No selection or word under cursor"
+  es: "Sin selección ni palabra bajo el cursor"
+  fr: "Aucune sélection ni mot sous le curseur"
+  de: "Keine Auswahl oder Wort unter dem Cursor"
+  cy: "Dim dewis na gair o dan y cyrchwr"
 status.no_matches_cap:
   en: "No matches"
   es: "Sin coincidencias"

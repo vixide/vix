@@ -1,4 +1,4 @@
-//! Tabbed editor: a stack of buffers, each backed by a `vix-code-editor-panel`
+//! Tabbed editor: a stack of buffers, each backed by a `vix-editor`
 //! widget (Tree-sitter syntax highlighting, history, selection, clipboard).
 //!
 //! The code editor addresses the cursor as a flat character offset; this module
@@ -10,19 +10,44 @@ use std::path::{Path, PathBuf};
 
 use ratatui::layout::Rect;
 use ratatui::style::Style;
-use vix_code_editor_panel::actions::{Delete, MoveDown, MoveRight, MoveUp};
-pub use vix_code_editor_panel::editor::Editor as CodeEditor;
-use vix_code_editor_panel::utils::get_lang;
+use vix_editor::actions::{Delete, MoveDown, MoveRight, MoveUp};
+pub use vix_editor::editor::Editor as CodeEditor;
+use vix_editor::utils::get_lang;
 use ratatui_image::protocol::StatefulProtocol;
 
 use crate::theme;
 
+/// On-save text-normalization options (from [`crate::settings::Settings`]).
+#[derive(Clone, Copy)]
+pub struct SaveOptions {
+    /// Strip trailing spaces/tabs from every line.
+    pub trim_trailing_whitespace: bool,
+    /// Append a final newline if the (non-empty) file lacks one.
+    pub ensure_final_newline: bool,
+}
+
+/// Strip trailing spaces and tabs from each line, preserving the line structure
+/// (including any final newline and any `\r` before a `\n`).
+fn trim_trailing_whitespace(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut lines = text.split('\n');
+    if let Some(first) = lines.next() {
+        out.push_str(first.trim_end_matches([' ', '\t']));
+    }
+    for line in lines {
+        out.push('\n');
+        out.push_str(line.trim_end_matches([' ', '\t']));
+    }
+    out
+}
+
 /// File extensions opened as images rather than text.
+#[must_use] 
 pub fn is_image_path(path: &Path) -> bool {
     matches!(
         path.extension()
             .and_then(|e| e.to_str())
-            .map(|e| e.to_ascii_lowercase())
+            .map(str::to_ascii_lowercase)
             .as_deref(),
         Some("png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "ico" | "tiff" | "tif")
     )
@@ -46,6 +71,7 @@ fn apply_theme(ed: &mut CodeEditor) {
     ed.set_line_number_style(theme::dim());
     ed.set_selection_style(theme::selected());
     ed.set_whitespace_style(theme::dim());
+    ed.set_bracket_style(theme::selected());
 
     // Syntax token colors from the active custom theme (empty == monochrome).
     let syntax = theme::syntax_theme();
@@ -66,6 +92,8 @@ fn make_editor(
     text: &str,
     line_numbers: bool,
     show_whitespace: bool,
+    soft_wrap: bool,
+    indent: &str,
 ) -> CodeEditor {
     let name = path
         .and_then(|p| p.file_name())
@@ -84,6 +112,8 @@ fn make_editor(
         .expect("code editor init for plain text never fails");
     ed.show_line_numbers(line_numbers);
     ed.show_whitespace(show_whitespace);
+    ed.set_soft_wrap(soft_wrap);
+    ed.set_indent(Some(indent.to_string()));
     apply_theme(&mut ed);
     ed
 }
@@ -91,6 +121,10 @@ fn make_editor(
 /// Build a small, theme-styled, single-line text field holding `content`. Used by
 /// the Vix menu's Website/Email dialogs so the text is selectable and copyable
 /// from inside the TUI (select with the mouse or keyboard, then `Ctrl+C`).
+///
+/// # Panics
+///
+/// Never in practice: the underlying `"text"` grammar always initializes.
 #[must_use]
 pub fn text_field(content: &str) -> CodeEditor {
     let mut ed = CodeEditor::new("text", content, Vec::new())
@@ -127,7 +161,7 @@ impl Tab {
 
     /// Buffer split into lines (no trailing empty element).
     pub fn lines(&self) -> Vec<String> {
-        self.text().lines().map(|s| s.to_string()).collect()
+        self.text().lines().map(std::string::ToString::to_string).collect()
     }
 
     /// Title shown on the tab and in the buffer switcher.
@@ -135,9 +169,7 @@ impl Tab {
         let name = self
             .path
             .as_ref()
-            .and_then(|p| p.file_name())
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "untitled".to_string());
+            .and_then(|p| p.file_name()).map_or_else(|| "untitled".to_string(), |s| s.to_string_lossy().into_owned());
         let icon = theme::file_icon(&name);
         let flag = if self.dirty {
             format!(" {}", theme::icon::FILE_DIRTY)
@@ -150,9 +182,7 @@ impl Tab {
     /// Full path for display (status bar / buffer switcher), or `"untitled"`.
     pub fn display_path(&self) -> String {
         self.path
-            .as_ref()
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|| "untitled".to_string())
+            .as_ref().map_or_else(|| "untitled".to_string(), |p| p.display().to_string())
     }
 
     /// 1-based (line, column) of the cursor.
@@ -175,23 +205,30 @@ pub struct Editor {
     pub line_numbers: bool,
     /// Whether visible-whitespace glyphs are shown.
     pub show_whitespace: bool,
+    /// Whether long lines soft-wrap.
+    pub soft_wrap: bool,
+    /// String Tab inserts in every buffer (spaces or a tab).
+    pub indent: String,
 }
 
 impl Default for Editor {
     fn default() -> Self {
-        Editor::new(true, false)
+        Editor::new(true, false, false, "    ".to_string())
     }
 }
 
 impl Editor {
-    /// Create an editor with one empty buffer and the given gutter / whitespace
-    /// settings.
-    pub fn new(line_numbers: bool, show_whitespace: bool) -> Self {
+    /// Create an editor with one empty buffer and the given gutter / whitespace /
+    /// soft-wrap / indentation settings.
+    #[must_use]
+    pub fn new(line_numbers: bool, show_whitespace: bool, soft_wrap: bool, indent: String) -> Self {
         let mut e = Editor {
             tabs: Vec::new(),
             active: 0,
             line_numbers,
             show_whitespace,
+            soft_wrap,
+            indent,
         };
         e.new_tab();
         e
@@ -210,7 +247,7 @@ impl Editor {
 
     /// Create an empty untitled buffer and focus it.
     pub fn new_tab(&mut self) {
-        let editor = make_editor(None, "", self.line_numbers, self.show_whitespace);
+        let editor = make_editor(None, "", self.line_numbers, self.show_whitespace, self.soft_wrap, &self.indent);
         self.tabs.push(Tab {
             editor,
             path: None,
@@ -233,7 +270,7 @@ impl Editor {
             self.active = i;
             return;
         }
-        let editor = make_editor(Some(&canon), "", self.line_numbers, self.show_whitespace);
+        let editor = make_editor(Some(&canon), "", self.line_numbers, self.show_whitespace, self.soft_wrap, &self.indent);
         self.tabs.push(Tab {
             editor,
             path: Some(canon),
@@ -258,6 +295,13 @@ impl Editor {
         }
     }
 
+    /// Apply the current soft-wrap setting to every buffer.
+    pub fn refresh_soft_wrap(&mut self) {
+        for tab in &mut self.tabs {
+            tab.editor.set_soft_wrap(self.soft_wrap);
+        }
+    }
+
     /// Re-apply the current theme's styles to every buffer (after a theme switch).
     pub fn refresh_theme(&mut self) {
         for tab in &mut self.tabs {
@@ -267,6 +311,10 @@ impl Editor {
 
     /// Open a file: focus it if already open, otherwise load it. `preview`
     /// requests an ephemeral tab that the next preview reuses.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read.
     pub fn open(&mut self, path: &Path, preview: bool) -> io::Result<()> {
         let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         if let Some(i) = self
@@ -282,7 +330,7 @@ impl Editor {
         }
 
         let content = fs::read_to_string(&canon)?;
-        let editor = make_editor(Some(&canon), &content, self.line_numbers, self.show_whitespace);
+        let editor = make_editor(Some(&canon), &content, self.line_numbers, self.show_whitespace, self.soft_wrap, &self.indent);
         let tab = Tab {
             editor,
             path: Some(canon),
@@ -315,13 +363,13 @@ impl Editor {
     /// # Errors
     ///
     /// Returns an error if the buffer has no path, or the write fails.
-    pub fn save_active(&mut self) -> io::Result<PathBuf> {
+    pub fn save_active(&mut self, opts: SaveOptions) -> io::Result<PathBuf> {
         let idx = self.active;
         let path = self.tabs[idx]
             .path
             .clone()
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "buffer has no path"))?;
-        self.write_to(idx, &path)?;
+        self.write_to(idx, &path, opts)?;
         Ok(path)
     }
 
@@ -330,16 +378,19 @@ impl Editor {
     /// # Errors
     ///
     /// Returns an error if the write fails.
-    pub fn save_active_as(&mut self, path: PathBuf) -> io::Result<PathBuf> {
+    pub fn save_active_as(&mut self, path: PathBuf, opts: SaveOptions) -> io::Result<PathBuf> {
         let idx = self.active;
-        self.write_to(idx, &path)?;
+        self.write_to(idx, &path, opts)?;
         self.tabs[idx].path = Some(path.clone());
         Ok(path)
     }
 
-    fn write_to(&mut self, idx: usize, path: &Path) -> io::Result<()> {
+    fn write_to(&mut self, idx: usize, path: &Path, opts: SaveOptions) -> io::Result<()> {
         let mut data = self.tabs[idx].text();
-        if !data.ends_with('\n') {
+        if opts.trim_trailing_whitespace {
+            data = trim_trailing_whitespace(&data);
+        }
+        if opts.ensure_final_newline && !data.is_empty() && !data.ends_with('\n') {
             data.push('\n');
         }
         fs::write(path, data)?;
@@ -376,37 +427,55 @@ impl Editor {
     }
 
     /// 1-based (line, column) of the active cursor, for the status bar.
+    #[must_use] 
     pub fn cursor_1based(&self) -> (usize, usize) {
-        self.active_tab().map(|t| t.cursor_1based()).unwrap_or((1, 1))
+        self.active_tab().map_or((1, 1), Tab::cursor_1based)
     }
 
     /// Total line count of the active buffer (for the scrollbar).
+    #[must_use] 
     pub fn active_line_count(&self) -> usize {
         self.active_tab()
-            .map(|t| t.editor.code_ref().len_lines())
-            .unwrap_or(1)
+            .map_or(1, |t| t.editor.code_ref().len_lines())
     }
 
     /// Jump the active buffer to a 1-based line and optional 1-based column,
-    /// keeping the target visible within `area`.
+    /// keeping the target visible within `area`. The line is clamped to the
+    /// buffer's range (an out-of-range line would otherwise panic).
     pub fn goto(&mut self, line: usize, col: Option<usize>, area: Rect) {
         if let Some(t) = self.active_tab_mut() {
+            let last = t.editor.code_ref().len_lines().max(1);
+            let line = line.clamp(1, last);
             let off = t
                 .editor
                 .code_ref()
-                .offset(line.saturating_sub(1), col.unwrap_or(1).saturating_sub(1));
+                .offset(line - 1, col.unwrap_or(1).saturating_sub(1));
             t.editor.set_cursor(off);
             t.editor.focus(&area);
         }
     }
 
     /// Move the active cursor to the start of its current line.
+    /// Smart Home: jump to the first non-blank character of the line; if already
+    /// there (or the line is blank), jump to column 0. Pressing Home repeatedly
+    /// toggles between the two.
     pub fn cursor_line_home(&mut self) {
         if let Some(t) = self.active_tab_mut() {
             let cur = t.editor.get_cursor();
-            let row = t.editor.code_ref().char_to_line(cur);
-            let off = t.editor.code_ref().line_to_char(row);
-            t.editor.set_cursor(off);
+            let code = t.editor.code_ref();
+            let row = code.char_to_line(cur);
+            let line_start = code.line_to_char(row);
+            let line_len = code.line_len(row);
+            let cur_col = cur - line_start;
+            let indent = code
+                .char_slice(line_start, line_start + line_len)
+                .chars()
+                .take_while(|c| *c == ' ' || *c == '\t')
+                .count();
+            // A blank/all-whitespace line has no first non-blank: treat it as 0.
+            let indent = if indent >= line_len { 0 } else { indent };
+            let target = if cur_col == indent { 0 } else { indent };
+            t.editor.set_cursor(line_start + target);
         }
     }
 
@@ -429,7 +498,7 @@ impl Editor {
         }
     }
 
-    /// Move the cursor up by `lines` (PageUp).
+    /// Move the cursor up by `lines` (`PageUp`).
     pub fn page_up(&mut self, lines: usize) {
         if let Some(t) = self.active_tab_mut() {
             for _ in 0..lines.max(1) {
@@ -438,7 +507,7 @@ impl Editor {
         }
     }
 
-    /// Move the cursor down by `lines` (PageDown).
+    /// Move the cursor down by `lines` (`PageDown`).
     pub fn page_down(&mut self, lines: usize) {
         if let Some(t) = self.active_tab_mut() {
             for _ in 0..lines.max(1) {

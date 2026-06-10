@@ -15,7 +15,7 @@ genuinely needs it:
 
 | Crate                            | Responsibility                                                        |
 | -------------------------------- | --------------------------------------------------------------------- |
-| `vix-code-editor-panel`          | The center editor widget: Tree-sitter highlighting, history, selection, clipboard, mouse, and **themeable** text/line-number/selection/cursor styles. A fork of `ratatui-code-editor`, with the grammars gated behind features. |
+| `vix-editor`          | Vix's fully-custom center editor widget: Tree-sitter highlighting, history, selection, clipboard, mouse, **soft wrap**, and **themeable** text/line-number/selection/cursor styles. The highlighting engine was adapted from `ratatui-code-editor`; grammars are gated behind features. |
 | `vix-date-time-calendar-panel`   | Calendar date/time strings and the navigable Monday-first month grid (owns the `jiff` dependency). |
 | `vix-theme-chooser`              | The theme model: monochrome Dark/Light modes, the ratatui styles derived from them, **custom JSON themes** (per-region RGB), and chooser state. |
 | `vix-locale-chooser`             | The list of available UI languages and chooser state.                 |
@@ -100,12 +100,17 @@ clock keeps ticking while the editor is idle.
 three vertical bands — menu bar, body, status bar — and splits the body
 horizontally into explorer / editor / messages according to which drawers are
 visible. The editor band is itself split into a tab bar and the text area plus a
-`Scrollbar`. The status bar also shows the keyway mode indicator (Vim's
-`-- NORMAL --` / `-- INSERT --` / `:` line, or Emacs's pending `Ctrl+X-` prefix).
+`Scrollbar`. The text area is handed to the **`vix-editor`** widget, which renders
+itself — including syntax highlighting, the block cursor, visible-whitespace
+glyphs, **bracket matching**, and **soft wrap** (a shared visual-row layout drives
+its renderer, cursor scroll, and mouse hit-testing). The status bar shows the
+keyway mode indicator (Vim's `-- NORMAL --` / `-- INSERT --` / `:` line, or
+Emacs's pending `Ctrl+X-` prefix) plus the buffer's language, line ending
+(LF/CRLF), encoding, selection char/line count, and line:column.
 Overlays (calendar, menu dropdown, search, palette, prompt, dialogs, and the
-theme / locale / keyway choosers, …) are drawn last, each clearing its rectangle
-with `Clear` and painting a bordered box in the theme background so it reads
-correctly in either light or dark mode.
+theme / locale / keyway / recent choosers, …) are drawn last, each clearing its
+rectangle with `Clear` and painting a bordered box in the theme background so it
+reads correctly in either light or dark mode.
 
 ## Theming
 

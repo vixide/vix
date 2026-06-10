@@ -7,12 +7,30 @@ Vix is a Cargo workspace. Shared reference for where everything lives.
 | Crate                          | Path                            | Owns                                                                |
 | ------------------------------ | ------------------------------- | ------------------------------------------------------------------- |
 | `vix`                          | `./` (`src/`)                   | The application: state, routing, rendering, i18n, settings.         |
-| `vix-code-editor-panel`        | `vix-code-editor-panel/`        | The center editor widget (Tree-sitter, history, themeable styles).  |
+| `vix-editor`                   | `vix-editor/`                   | Fully-custom center editor widget (Tree-sitter, history, soft wrap, themeable styles). |
 | `vix-date-time-calendar-panel` | `vix-date-time-calendar-panel/` | Calendar date/time + navigable month grid (owns `jiff`).            |
 | `vix-theme-chooser`            | `vix-theme-chooser/`            | Theme model, ratatui styles, custom JSON themes, chooser state.     |
 | `vix-locale-chooser`           | `vix-locale-chooser/`           | Available UI languages + chooser state.                             |
 | `vix-keyway-chooser`           | `vix-keyway-chooser/`           | Keyboard navigation styles (Apple/Emacs/Vim) + chooser state.       |
 | `vix-keyboard-shortcut-panel`  | `vix-keyboard-shortcut-panel/`  | Keyboard-help rows (key combo + i18n description key).              |
+
+## `vix-editor` modules (`vix-editor/src/`)
+
+The crate keeps a reused **engine** (allowed `clippy::all`, upstream style) and
+**Vix-owned** modules (held to `clippy::pedantic` via their own inner attributes).
+
+| Module                 | Kind        | Owns                                                       |
+| ---------------------- | ----------- | ---------------------------------------------------------- |
+| `code`                 | engine      | Rope buffer + Tree-sitter parse/highlight + edit batches.  |
+| `history`              | engine      | Undo/redo stacks.                                          |
+| `selection`, `utils`   | engine      | Selection type; grapheme/width/indent/comment helpers.     |
+| `actions`              | engine      | Editing operations (insert/delete/move/indent/comment/…).  |
+| `editor`               | engine+Vix  | `Editor` state, public API, input, mouse (`cursor_from_mouse`). |
+| `render`               | engine      | Non-wrap renderer + the render dispatch.                   |
+| `wrap`                 | **Vix**     | Soft-wrap visual-row layout + wrapped renderer (pedantic). |
+| `brackets`             | **Vix**     | Bracket matching (`matching_bracket`) (pedantic).          |
+| `editor_crossterm`     | engine      | `KeyEvent` → actions mapping (behind the `crossterm` feature). |
+| `theme`                | engine      | Token-name → style helpers.                                |
 
 ## `vix` application modules (`src/`)
 

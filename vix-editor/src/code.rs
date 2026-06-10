@@ -68,6 +68,8 @@ pub struct Code {
     injection_queries: Option<HashMap<String, Query>>,
     change_callback: Option<Box<dyn Fn(Vec<(usize, usize, usize, usize, String)>)>>,
     custom_highlights: Option<HashMap<String, String>>,
+    /// Overrides the per-language indent string when set (host configuration).
+    indent_override: Option<String>,
 }
 
 impl Code {
@@ -90,6 +92,7 @@ impl Code {
             injection_queries: None,
             change_callback: None,
             custom_highlights,
+            indent_override: None,
         };
 
         if let Some(language) = Self::get_language(lang) {
@@ -556,7 +559,32 @@ impl Code {
     }
     
     pub fn indent(&self) -> String {
-        indent(&self.lang)
+        self.indent_override
+            .clone()
+            .unwrap_or_else(|| indent(&self.lang))
+    }
+
+    /// The language identifier (e.g. `"rust"`, `"text"`).
+    pub fn lang(&self) -> &str {
+        &self.lang
+    }
+
+    /// `"CRLF"` if the first line ends with `\r\n`, else `"LF"`.
+    pub fn first_line_ending(&self) -> &'static str {
+        if self.content.len_lines() > 1 {
+            let line = self.content.line(0);
+            let n = line.len_chars();
+            if n >= 2 && line.char(n - 2) == '\r' && line.char(n - 1) == '\n' {
+                return "CRLF";
+            }
+        }
+        "LF"
+    }
+
+    /// Override the indent string inserted by Tab / the `Indent` action (e.g. a
+    /// run of spaces, or a tab). `None` restores the per-language default.
+    pub fn set_indent(&mut self, indent: Option<String>) {
+        self.indent_override = indent;
     }
 
     pub fn comment(&self) -> String {

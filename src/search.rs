@@ -71,6 +71,7 @@ impl SearchBar {
 
     /// Build the effective regex pattern from the query and the toggles.
     /// Returns `None` for an empty query.
+    #[must_use] 
     pub fn pattern(&self) -> Option<String> {
         if self.query.is_empty() {
             return None;

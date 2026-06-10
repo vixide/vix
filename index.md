@@ -21,7 +21,7 @@ A map of all documentation in this repository. Start with the
 
 ## Specification (`spec/`) — source of truth
 
-- [spec.md](spec/spec.md) — overview, crate set, build/run.
+- [index.md](spec/index.md) — overview, crate set, build/run, implementation status.
 - [menus.md](spec/menus.md) · [keyboard.md](spec/keyboard.md) ·
   [navigation.md](spec/navigation.md)
 - [command-palette.md](spec/command-palette.md) ·
@@ -31,9 +31,11 @@ A map of all documentation in this repository. Start with the
   [theme-chooser.md](spec/theme-chooser.md) ·
   [locale-chooser.md](spec/locale-chooser.md) ·
   [keyway-chooser.md](spec/keyway-chooser.md) ·
-  [vix-calendar.md](spec/vix-calendar.md)
+  [vix-calendar.md](spec/vix-calendar.md) · [hover.md](spec/hover.md)
 - [main-rs-and-lib-rs-boilerplate.md](spec/main-rs-and-lib-rs-boilerplate.md) ·
-  [comparisons.md](spec/comparisons.md) · [test.md](spec/test.md)
+  [rust-clippy-pedantic.md](spec/rust-clippy-pedantic.md) ·
+  [rust-cargo-config-toml-musl.md](spec/rust-cargo-config-toml-musl.md)
+- [comparisons.md](spec/comparisons.md) · [test.md](spec/test.md)
 
 ## Contributor & agent guidance (`AGENTS/`)
 

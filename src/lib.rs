@@ -1,8 +1,8 @@
 //! Vix: Simple Terminal Rust IDE.
 //!
-//! A keyboard-friendly TUI text editor built on [`ratatui`] and `vix-code-editor-panel`
-//! (an internal fork of [`ratatui-code-editor`]). The crate is split into focused
-//! modules so the editing logic can be unit-tested and reused without a live terminal.
+//! A keyboard-friendly TUI text editor built on [`ratatui`] and `vix-editor`,
+//! Vix's fully-custom code-editor widget. The crate is split into focused modules
+//! so the editing logic can be unit-tested and reused without a live terminal.
 //!
 //! ```
 //! use std::path::PathBuf;
@@ -23,12 +23,23 @@
 //! the `--locale` flag).
 //!
 //! [`ratatui`]: https://crates.io/crates/ratatui
-//! [`ratatui-code-editor`]: https://crates.io/crates/ratatui-code-editor
 
 // Always start with high quality coding conventions.
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
-#![warn(clippy::clippy::pedantic)]
+#![warn(clippy::pedantic)]
+// Intentional exceptions to pedantic: TUI layout/color math casts small `usize`
+// counts and `f32` ratios to `u16` cell coordinates (always in range), a few
+// dispatch/render functions are necessarily long, and several state structs hold
+// many independent boolean flags by design.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::struct_excessive_bools,
+    clippy::needless_pass_by_value
+)]
 
 #[macro_use]
 extern crate rust_i18n;

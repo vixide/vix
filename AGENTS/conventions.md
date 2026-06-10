@@ -10,6 +10,17 @@ on top.
 - Doc comments say *what and why*, briefly. Implementation details that would
   surprise a reader get an inline `//` comment explaining the *why*.
 
+## Lints
+
+- `#![forbid(unsafe_code)]` and `#![warn(clippy::pedantic)]` on every `vix` target
+  (each `tests/`/`examples/` file repeats the inner attribute — lints are
+  per-crate-root). Keep `cargo clippy --workspace` clean.
+- New code in `vix-editor` goes in a **Vix-owned** module held to
+  `clippy::pedantic` (e.g. `wrap`, `brackets`) — not in the reused engine modules,
+  which carry `#![allow(clippy::all)]` to track upstream style.
+- A small, *documented* `allow` list for genuinely-noisy pedantic lints (casts to
+  `u16` cell coords, `too_many_lines`, …) is fine; prefer fixing the rest.
+
 ## Internationalization
 
 - User-facing strings are i18n keys looked up with `t!`, never literals.
@@ -28,7 +39,8 @@ on top.
 
 ## Rendering
 
-- All drawing is in `src/ui.rs`; no editing/state logic there.
+- All of the *app's* drawing is in `src/ui.rs`; no editing/state logic there. The
+  editor widget renders itself (in `vix-editor`); the app just hands it a `Rect`.
 - Paint the whole frame in the theme background first, then panes, then overlays.
 - Overlays `Clear` their rect and set the block `.style(theme::base())` so they
   read correctly in light mode.

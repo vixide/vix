@@ -1,27 +1,21 @@
-# vix-code-editor-panel: an internal fork of ratatui-code-editor 0.0.4 (MIT, by vipmax).
-# The Tree-sitter grammars are optional behind per-language Cargo features so the
-# binary only links the parsers it needs, and rendering is theme-aware (the
-# default text/line-number/selection styles are configurable) so Vix can present
-# the editor in either its dark or light theme. Upstream:
-# https://github.com/vipmax/ratatui-code-editor
+# vix-editor: Vix's fully-custom terminal code-editor widget.
+#
+# The buffer + Tree-sitter highlighting + undo/redo "engine" (code/history/
+# selection/utils/theme) is reused; the widget itself (editor state, editing API,
+# input, mouse, and the soft-wrap-capable renderer) is written in-house for Vix.
+# Tree-sitter grammars are optional behind per-language Cargo features so the
+# binary only links the parsers it needs.
 
 [package]
-edition = "2024"
-name = "vix-code-editor-panel"
+name = "vix-editor"
 version = "0.1.0"
-authors = ["vipmax", "Vix contributors"]
-description = "A theme-aware code editor widget for ratatui with optional Tree-sitter syntax highlighting (internal fork for Vix)."
-license = "MIT"
+edition = "2024"
+description = "Vix's fully-custom terminal code-editor widget with Tree-sitter highlighting and soft wrap."
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/sixarm/vix"
-build = false
-autolib = false
-autobins = false
-autoexamples = false
-autotests = false
-autobenches = false
 
 [lib]
-name = "vix_code_editor_panel"
+name = "vix_editor"
 path = "src/lib.rs"
 
 [features]

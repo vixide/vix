@@ -8,10 +8,11 @@ use crossterm::event::{
 };
 use include_dir::{include_dir, Dir};
 use ratatui::layout::Rect;
-use vix_code_editor_panel::actions::{
-    Copy as CopyAction, Cut as CutAction, Paste as PasteAction, Redo as RedoAction, Undo as UndoAction,
+use vix_editor::actions::{
+    Copy as CopyAction, Cut as CutAction, Paste as PasteAction, Redo as RedoAction,
+    ToggleComment, Undo as UndoAction,
 };
-use vix_code_editor_panel::selection::Selection;
+use vix_editor::selection::Selection;
 use ratatui_image::picker::Picker;
 use regex::Regex;
 
@@ -168,6 +169,15 @@ pub struct Location {
     pub col: usize,
 }
 
+/// Recent-files chooser overlay state (File -> Open Recent). Lists previously
+/// opened files; Enter (or a click) reopens the highlighted one.
+pub struct RecentChooser {
+    /// Recent file paths, most-recent first.
+    pub entries: Vec<PathBuf>,
+    /// Index of the highlighted entry.
+    pub selected: usize,
+}
+
 /// Rectangles recorded during rendering, used for mouse hit-testing and for
 /// telling the code editor which viewport to scroll within.
 #[derive(Default)]
@@ -225,6 +235,8 @@ pub struct App {
     pub locale_chooser: Option<LocaleChooser>,
     /// Keyway chooser overlay, when open.
     pub keyway_chooser: Option<KeywayChooser>,
+    /// Recent-files chooser overlay, when open.
+    pub recent_chooser: Option<RecentChooser>,
     /// Modal info dialog (Vix menu About / Website / Email), when open.
     pub dialog: Option<Dialog>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
@@ -260,6 +272,9 @@ pub struct App {
     pub layout: Layout,
     /// File paths under the project root, for the palette file finder.
     file_index: Vec<PathBuf>,
+    /// Cursor offset captured when the palette opened, so the `:` go-to-line
+    /// preview can revert on cancel and the jump records the true origin.
+    palette_origin: Option<usize>,
     /// True while the editor scrollbar thumb is being dragged, so the drag keeps
     /// scrolling even if the pointer drifts off the one-column track.
     scrollbar_active: bool,
@@ -288,7 +303,12 @@ impl App {
         // styled correctly. A theme value that is not a built-in mode is treated
         // as the name of a custom JSON theme.
         Self::apply_saved_theme(&settings.theme);
-        let editor = Editor::new(settings.line_numbers, settings.show_whitespace);
+        let editor = Editor::new(
+            settings.line_numbers,
+            settings.show_whitespace,
+            settings.soft_wrap,
+            settings.indent_string(),
+        );
         let mut messages = Messages::default();
         messages.advice(t!("msg.welcome").to_string());
         messages.info(t!("msg.welcome_hint").to_string());
@@ -309,6 +329,7 @@ impl App {
             theme_chooser: None,
             locale_chooser: None,
             keyway_chooser: None,
+            recent_chooser: None,
             dialog: None,
             clip: Vec::new(),
             clip_cut: false,
@@ -326,6 +347,7 @@ impl App {
             layout: Layout::default(),
             settings,
             file_index: Vec::new(),
+            palette_origin: None,
             scrollbar_active: false,
             dock_resize: None,
             emacs_prefix: false,
@@ -404,6 +426,10 @@ impl App {
             self.keyway_key(key);
             return;
         }
+        if self.recent_chooser.is_some() {
+            self.recent_key(key);
+            return;
+        }
         if self.query_replace.is_some() {
             self.qr_key(key);
             return;
@@ -416,7 +442,7 @@ impl App {
             self.confirm_key(key);
             return;
         }
-        if self.paste.as_ref().map(|p| p.conflict.is_some()).unwrap_or(false) {
+        if self.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
             self.paste_key(key);
             return;
         }
@@ -511,6 +537,7 @@ impl App {
                 match c.to_ascii_lowercase() {
                     'q' => self.run_action("file.quit"),
                     'n' => self.run_action("file.new"),
+                    'o' if Self::shift(&key) => self.run_action("file.open_recent"),
                     'o' => self.run_action("file.open"),
                     's' if Self::shift(&key) => self.run_action("file.save_as"),
                     's' => self.run_action("file.save"),
@@ -522,6 +549,7 @@ impl App {
                     'f' => self.run_action("edit.find"),
                     'r' if Self::alt(&key) => self.run_action("edit.query_replace"),
                     'r' => self.run_action("edit.replace"),
+                    '/' => self.run_action("edit.toggle_comment"),
                     _ => return false,
                 }
                 return true;
@@ -579,19 +607,24 @@ impl App {
                 self.find_step(true);
                 true
             }
+            KeyCode::Char('n' | 'N') if Self::alt(&key) && self.focus == Focus::Editor => {
+                self.run_action("search.next_selection");
+                true
+            }
+            KeyCode::Char('p' | 'P') if Self::alt(&key) && self.focus == Focus::Editor => {
+                self.run_action("search.prev_selection");
+                true
+            }
             _ => false,
         }
     }
 
     fn toggle_focus_explorer_editor(&mut self) {
-        self.focus = match self.focus {
-            Focus::Explorer => Focus::Editor,
-            _ => {
-                if !self.show_explorer {
-                    self.show_explorer = true;
-                }
-                Focus::Explorer
+        self.focus = if self.focus == Focus::Explorer { Focus::Editor } else {
+            if !self.show_explorer {
+                self.show_explorer = true;
             }
+            Focus::Explorer
         };
     }
 
@@ -781,6 +814,7 @@ impl App {
                     input: String::new(),
                 });
             }
+            "file.open_recent" => self.open_recent_chooser(),
             "file.save" => self.save(),
             "file.save_as" => {
                 let cur = self
@@ -831,6 +865,17 @@ impl App {
                     t.preview = false;
                 }
             }
+            "edit.toggle_comment" => {
+                if let Some(t) = self.editor.active_tab_mut() {
+                    if !t.is_image() {
+                        // Comments the cursor line, or every line touched by the
+                        // selection; the editor picks the language's token.
+                        t.editor.apply(ToggleComment {});
+                        t.dirty = true;
+                        t.preview = false;
+                    }
+                }
+            }
             "edit.find" => self.start_search(false),
             "edit.replace" => self.start_search(true),
             "edit.query_replace" => {
@@ -841,7 +886,10 @@ impl App {
             }
             "search.project" => self.open_project_search(false),
             "search.project_replace" => self.open_project_search(true),
+            "search.next_selection" => self.find_selection(true),
+            "search.prev_selection" => self.find_selection(false),
             "nav.goto_definition" => self.goto_definition(),
+            "nav.goto_symbol" => self.open_palette_seeded("@"),
             "view.theme" => self.open_theme_chooser(),
             "view.locale" => self.open_locale_chooser(),
             "view.keyway" => self.open_keyway_chooser(),
@@ -857,6 +905,7 @@ impl App {
             // old action ids and the new dock-named ones route to one method.
             "view.line_numbers" | "tools.line_numbers" => self.toggle_editor_line_numbers(),
             "view.whitespace" => self.toggle_editor_whitespace(),
+            "view.soft_wrap" => self.toggle_editor_soft_wrap(),
             "view.left_dock" | "view.explorer" => self.toggle_left_dock(),
             "view.right_dock" | "view.messages" => self.toggle_right_dock(),
             "tab.next" => self.editor.next_tab(),
@@ -882,7 +931,7 @@ impl App {
     }
 
     fn save(&mut self) {
-        if self.editor.active_tab().map(Tab::is_image).unwrap_or(false) {
+        if self.editor.active_tab().is_some_and(Tab::is_image) {
             self.status = t!("status.image_readonly").into();
             return;
         }
@@ -890,9 +939,18 @@ impl App {
             self.run_action("file.save_as");
             return;
         }
-        match self.editor.save_active() {
+        let opts = self.save_options();
+        match self.editor.save_active(opts) {
             Ok(p) => self.status = t!("status.saved", path = p.display()).to_string(),
             Err(e) => self.messages.error(t!("msg.save_failed", error = e).to_string()),
+        }
+    }
+
+    /// On-save normalization options derived from the current settings.
+    fn save_options(&self) -> crate::editor::SaveOptions {
+        crate::editor::SaveOptions {
+            trim_trailing_whitespace: self.settings.trim_trailing_whitespace,
+            ensure_final_newline: self.settings.ensure_final_newline,
         }
     }
 
@@ -954,6 +1012,25 @@ impl App {
         .to_string();
     }
 
+    /// Toggle soft wrap (long lines wrap vs. scroll), mirrored across every tab
+    /// and persisted.
+    fn toggle_editor_soft_wrap(&mut self) {
+        let fallback = !self.editor.soft_wrap;
+        let on = self
+            .editor
+            .active_tab_mut()
+            .map_or(fallback, |t| t.editor.toggle_soft_wrap());
+        self.editor.soft_wrap = on;
+        self.editor.refresh_soft_wrap();
+        self.settings.soft_wrap = on;
+        self.status = if on {
+            t!("status.soft_wrap_on")
+        } else {
+            t!("status.soft_wrap_off")
+        }
+        .to_string();
+    }
+
     // ----- focus handlers -------------------------------------------------
 
     /// The editor rectangle, clamped to a width the code editor can safely
@@ -969,7 +1046,7 @@ impl App {
 
     fn editor_key(&mut self, key: KeyEvent) {
         // Image tabs are view-only.
-        if self.editor.active_tab().map(Tab::is_image).unwrap_or(false) {
+        if self.editor.active_tab().is_some_and(Tab::is_image) {
             return;
         }
         let area = self.editor_view();
@@ -1009,12 +1086,7 @@ impl App {
         if Self::ctrl(key) {
             return matches!(
                 key.code,
-                KeyCode::Char('v')
-                    | KeyCode::Char('x')
-                    | KeyCode::Char('z')
-                    | KeyCode::Char('y')
-                    | KeyCode::Char('k')
-                    | KeyCode::Char('d')
+                KeyCode::Char('v' | 'x' | 'z' | 'y' | 'k' | 'd')
             );
         }
         matches!(
@@ -1097,9 +1169,7 @@ impl App {
             Some(n) if n.is_dir => n.path.clone(),
             Some(n) => n
                 .path
-                .parent()
-                .map(Path::to_path_buf)
-                .unwrap_or_else(|| self.root.clone()),
+                .parent().map_or_else(|| self.root.clone(), Path::to_path_buf),
             None => self.root.clone(),
         };
         self.paste = Some(PasteOp {
@@ -1243,7 +1313,7 @@ impl App {
 
     fn confirm_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('y') | KeyCode::Char('Y') => {
+            KeyCode::Char('y' | 'Y') => {
                 if let Some(c) = self.confirm.take() {
                     let mut removed = 0;
                     for path in &c.paths {
@@ -1262,7 +1332,7 @@ impl App {
                     self.status = t!("status.deleted_n", n = removed).to_string();
                 }
             }
-            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            KeyCode::Char('n' | 'N') | KeyCode::Esc => {
                 self.confirm = None;
                 self.status = t!("status.delete_cancelled").into();
             }
@@ -1289,8 +1359,7 @@ impl App {
             let under = self.editor.tabs[i]
                 .path
                 .as_ref()
-                .map(|p| p == path || p.starts_with(path))
-                .unwrap_or(false);
+                .is_some_and(|p| p == path || p.starts_with(path));
             if under {
                 self.editor.tabs.remove(i);
             } else {
@@ -1345,6 +1414,7 @@ impl App {
         if is_image_path(path) {
             if !preview {
                 self.open_image(path);
+                self.record_recent(path);
             }
             return;
         }
@@ -1352,11 +1422,23 @@ impl App {
             Ok(()) => {
                 if !preview {
                     self.editor.promote_active();
+                    self.record_recent(path);
                 }
                 self.status = t!("status.opened", path = path.display()).to_string();
             }
             Err(e) => self.messages.error(t!("msg.open_failed", error = e).to_string()),
         }
+    }
+
+    /// Record a real (non-preview) file open at the front of the recent list,
+    /// de-duplicated and capped. Stored canonicalized so reopening is reliable.
+    fn record_recent(&mut self, path: &Path) {
+        let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let entry = canon.to_string_lossy().into_owned();
+        let recent = &mut self.settings.recent_files;
+        recent.retain(|p| p != &entry);
+        recent.insert(0, entry);
+        recent.truncate(crate::settings::MAX_RECENT_FILES);
     }
 
     // ----- position history (Alt+Left / Alt+Right) -----------------------
@@ -1468,6 +1550,10 @@ impl App {
         }
         if self.keyway_chooser.is_some() {
             self.keyway_mouse(mouse);
+            return;
+        }
+        if self.recent_chooser.is_some() {
+            self.recent_mouse(mouse);
             return;
         }
         if self.show_help || self.palette.is_some() || self.prompt.is_some() {
@@ -1968,6 +2054,71 @@ impl App {
         self.vim_cmd = None;
     }
 
+    // ----- recent-files chooser -------------------------------------------
+
+    /// Open the recent-files chooser, listing the saved recent paths that still
+    /// exist. Does nothing (just a status note) when there are none.
+    fn open_recent_chooser(&mut self) {
+        let entries: Vec<PathBuf> = self
+            .settings
+            .recent_files
+            .iter()
+            .map(PathBuf::from)
+            .filter(|p| p.is_file())
+            .collect();
+        if entries.is_empty() {
+            self.status = t!("status.no_recent").to_string();
+            return;
+        }
+        self.recent_chooser = Some(RecentChooser { entries, selected: 0 });
+    }
+
+    fn recent_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => {
+                if let Some(rc) = self.recent_chooser.as_mut() {
+                    let n = rc.entries.len();
+                    rc.selected = (rc.selected + n - 1) % n;
+                }
+            }
+            KeyCode::Down => {
+                if let Some(rc) = self.recent_chooser.as_mut() {
+                    rc.selected = (rc.selected + 1) % rc.entries.len();
+                }
+            }
+            KeyCode::Enter => self.open_selected_recent(),
+            KeyCode::Esc => {
+                self.recent_chooser = None;
+            }
+            _ => {}
+        }
+    }
+
+    /// Open the highlighted recent file and close the chooser.
+    fn open_selected_recent(&mut self) {
+        if let Some(rc) = self.recent_chooser.take() {
+            if let Some(path) = rc.entries.get(rc.selected).cloned() {
+                self.with_jump(|s| {
+                    s.open_path(&path, false);
+                    s.focus = Focus::Editor;
+                });
+            }
+        }
+    }
+
+    fn recent_mouse(&mut self, mouse: MouseEvent) {
+        if let Some(idx) = self.chooser_row(mouse) {
+            if let Some(rc) = self.recent_chooser.as_mut() {
+                if idx < rc.entries.len() {
+                    // A click selects the row and opens it (no live preview to
+                    // justify a two-step interaction).
+                    rc.selected = idx;
+                    self.open_selected_recent();
+                }
+            }
+        }
+    }
+
     // ----- chooser mouse --------------------------------------------------
 
     /// The row index a mouse event lands on within the open chooser's list
@@ -2016,9 +2167,51 @@ impl App {
     // ----- command palette ------------------------------------------------
 
     fn open_palette(&mut self) {
+        self.open_palette_seeded("");
+    }
+
+    /// Open the palette with `seed` already typed (e.g. `"@"` to land in
+    /// go-to-symbol mode).
+    fn open_palette_seeded(&mut self, seed: &str) {
         self.build_file_index();
-        self.palette = Some(Palette::new());
+        self.palette_origin = self.editor.active_tab().map(|t| t.editor.get_cursor());
+        let mut p = Palette::new();
+        p.input = seed.to_string();
+        self.palette = Some(p);
         self.recompute_palette();
+    }
+
+    /// Live `:` go-to-line preview: move the cursor to the number being typed.
+    /// Always reverts to the captured origin first, so editing the number (or
+    /// leaving go-to-line mode) tracks the latest input.
+    fn preview_goto_line(&mut self) {
+        self.restore_palette_origin();
+        let Some(p) = self.palette.as_ref() else {
+            return;
+        };
+        if p.mode() != PMode::GotoLine {
+            return;
+        }
+        let Ok(n) = p.query().trim().parse::<usize>() else {
+            return;
+        };
+        if n >= 1 {
+            let area = self.editor_view();
+            self.editor.goto(n, None, area);
+        }
+    }
+
+    /// Return the cursor to where it was when the palette opened (used to revert a
+    /// go-to-line preview).
+    fn restore_palette_origin(&mut self) {
+        let Some(off) = self.palette_origin else {
+            return;
+        };
+        let area = self.editor_view();
+        if let Some(t) = self.editor.active_tab_mut() {
+            t.editor.set_cursor(off);
+            t.editor.focus(&area);
+        }
     }
 
     fn build_file_index(&mut self) {
@@ -2105,6 +2298,21 @@ impl App {
                     });
                 }
             }
+            PMode::Symbols => {
+                if let Some(tab) = self.editor.active_tab() {
+                    if !tab.is_image() {
+                        let text = tab.text();
+                        for sym in palette::symbols(&text) {
+                            if query.is_empty() || palette::fuzzy_match(&sym.name, &query) {
+                                entries.push(Entry {
+                                    label: format!("@ {}", sym.text),
+                                    action: PAction::GotoLine(sym.line),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
         }
         if let Some(p) = self.palette.as_mut() {
             if p.selected >= entries.len() {
@@ -2116,7 +2324,12 @@ impl App {
 
     fn palette_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Esc => self.palette = None,
+            KeyCode::Esc => {
+                // Cancel: revert any go-to-line preview to where the cursor was.
+                self.restore_palette_origin();
+                self.palette = None;
+                self.palette_origin = None;
+            }
             KeyCode::Up => {
                 if let Some(p) = self.palette.as_mut() {
                     p.up();
@@ -2139,12 +2352,14 @@ impl App {
                     p.backspace();
                 }
                 self.recompute_palette();
+                self.preview_goto_line();
             }
             KeyCode::Char(c) => {
                 if let Some(p) = self.palette.as_mut() {
                     p.insert(c);
                 }
                 self.recompute_palette();
+                self.preview_goto_line();
             }
             _ => {}
         }
@@ -2158,6 +2373,10 @@ impl App {
             return;
         };
         self.palette = None;
+        // Undo any live go-to-line preview so the action below jumps from (and
+        // records in the history) the cursor's real pre-palette position.
+        self.restore_palette_origin();
+        self.palette_origin = None;
         match entry.action {
             PAction::OpenFile(path, target) => {
                 self.with_jump(|s| {
@@ -2199,14 +2418,13 @@ impl App {
     fn search_should_preview(&self) -> bool {
         self.search
             .as_ref()
-            .map(|s| !s.interactive && s.field == Field::Query)
-            .unwrap_or(false)
+            .is_some_and(|s| !s.interactive && s.field == Field::Query)
     }
 
     /// Recompute and apply search-highlight marks for the active buffer, then
     /// move the cursor to the next/previous match.
     fn find_step(&mut self, forward: bool) {
-        let Some(pat) = self.search.as_ref().and_then(|s| s.pattern()) else {
+        let Some(pat) = self.search.as_ref().and_then(super::search::SearchBar::pattern) else {
             self.clear_marks();
             return;
         };
@@ -2219,9 +2437,48 @@ impl App {
                 return;
             }
         };
+        let count = self.find_with(&re, forward);
+        if let Some(s) = self.search.as_mut() {
+            s.status = if count == 0 {
+                t!("status.no_matches").into()
+            } else {
+                t!("status.matches", count = count).to_string()
+            };
+        }
+    }
+
+    /// Find next/previous occurrence of the current selection (or, with no
+    /// selection, the word under the cursor) — independent of the search bar.
+    fn find_selection(&mut self, forward: bool) {
+        let selected = self
+            .editor
+            .active_tab_mut()
+            .and_then(|t| t.editor.get_selection_text());
+        let query = selected
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| self.symbol_under_cursor());
+        let Some(query) = query else {
+            self.status = t!("status.no_selection").to_string();
+            return;
+        };
+        let Ok(re) = Regex::new(&regex::escape(&query)) else {
+            return;
+        };
+        let count = self.find_with(&re, forward);
+        self.status = if count == 0 {
+            t!("status.no_matches").into()
+        } else {
+            t!("status.matches", count = count).to_string()
+        };
+    }
+
+    /// Mark every match of `re` in the active buffer and move the cursor to the
+    /// next/previous one (wrapping at the ends). Returns the match count; zero
+    /// matches clears the marks.
+    fn find_with(&mut self, re: &Regex, forward: bool) -> usize {
         let area = self.editor_view();
         let Some(t) = self.editor.active_tab_mut() else {
-            return;
+            return 0;
         };
         let content = t.text();
         let mut matches: Vec<(usize, usize)> = Vec::new();
@@ -2231,10 +2488,7 @@ impl App {
         }
         if matches.is_empty() {
             t.editor.remove_marks();
-            if let Some(s) = self.search.as_mut() {
-                s.status = t!("status.no_matches").into();
-            }
-            return;
+            return 0;
         }
         let marks: Vec<(usize, usize, &str)> =
             matches.iter().map(|(s, e)| (*s, *e, SEARCH_MARK)).collect();
@@ -2260,9 +2514,7 @@ impl App {
         t.editor.set_cursor(target.0);
         t.editor.set_selection(Some(Selection::new(target.0, target.1)));
         t.editor.focus(&area);
-        if let Some(s) = self.search.as_mut() {
-            s.status = t!("status.matches", count = matches.len()).to_string();
-        }
+        matches.len()
     }
 
     fn clear_marks(&mut self) {
@@ -2287,8 +2539,8 @@ impl App {
                 }
             }
             KeyCode::Enter => {
-                let interactive = self.search.as_ref().map(|s| s.interactive).unwrap_or(false);
-                let replacing = self.search.as_ref().map(|s| s.replacing).unwrap_or(false);
+                let interactive = self.search.as_ref().is_some_and(|s| s.interactive);
+                let replacing = self.search.as_ref().is_some_and(|s| s.replacing);
                 let on_replace_field =
                     self.search.as_ref().map(|s| s.field) == Some(Field::Replace);
                 if interactive {
@@ -2317,7 +2569,7 @@ impl App {
                     }
                 }
                 // Toggles never move the cursor while in interactive mode.
-                if self.search.as_ref().map(|s| !s.interactive).unwrap_or(false) {
+                if self.search.as_ref().is_some_and(|s| !s.interactive) {
                     self.find_step(true);
                 }
             }
@@ -2399,7 +2651,7 @@ impl App {
             }
             n => {
                 let mut ps = ProjectSearch::new(false);
-                ps.query = symbol.clone();
+                ps.query.clone_from(&symbol);
                 ps.static_results = true;
                 ps.hits = hits;
                 ps.status = t!("status.definitions_n", n = n, symbol = symbol).to_string();
@@ -2430,7 +2682,7 @@ impl App {
             return None;
         }
         let sym: String = chars[start..end].iter().collect();
-        let ok = sym.chars().next().map(|c| c.is_alphabetic() || c == '_').unwrap_or(false);
+        let ok = sym.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_');
         ok.then_some(sym)
     }
 
@@ -2500,7 +2752,7 @@ impl App {
 
     fn run_project_search(&mut self) {
         // Static result lists (e.g. go-to-definition) are not re-searched.
-        if self.project_search.as_ref().map(|p| p.static_results).unwrap_or(false) {
+        if self.project_search.as_ref().is_some_and(|p| p.static_results) {
             return;
         }
         let Some(ps) = self.project_search.as_ref() else {
@@ -2656,7 +2908,7 @@ impl App {
                 }
             }
             KeyCode::Enter => {
-                let replacing = self.project_search.as_ref().map(|p| p.replacing).unwrap_or(false);
+                let replacing = self.project_search.as_ref().is_some_and(|p| p.replacing);
                 let on_replace = self.project_search.as_ref().map(|p| p.field) == Some(Field::Replace);
                 if replacing && (Self::alt(&key) || on_replace) {
                     self.project_replace_all();
@@ -2775,10 +3027,10 @@ impl App {
 
     fn qr_key(&mut self, key: KeyEvent) {
         let decision = match key.code {
-            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Char(' ') => Decision::Replace,
-            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Delete => Decision::Skip,
+            KeyCode::Char('y' | 'Y' | ' ') => Decision::Replace,
+            KeyCode::Char('n' | 'N') | KeyCode::Delete => Decision::Skip,
             KeyCode::Char('!') => Decision::ReplaceRest,
-            KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc | KeyCode::Enter => {
+            KeyCode::Char('q' | 'Q') | KeyCode::Esc | KeyCode::Enter => {
                 Decision::Quit
             }
             _ => return,
@@ -2847,17 +3099,14 @@ impl App {
             result
         };
 
-        match next {
-            Some(current) => {
-                if let Some(q) = self.query_replace.as_mut() {
-                    q.current = current;
-                    q.replaced = replaced;
-                }
+        if let Some(current) = next {
+            if let Some(q) = self.query_replace.as_mut() {
+                q.current = current;
+                q.replaced = replaced;
             }
-            None => {
-                self.query_replace = None;
-                self.status = t!("status.qr_replaced", count = replaced).to_string();
-            }
+        } else {
+            self.query_replace = None;
+            self.status = t!("status.qr_replaced", count = replaced).to_string();
         }
     }
 
@@ -2907,7 +3156,8 @@ impl App {
                     return;
                 }
                 let path = self.resolve(raw);
-                match self.editor.save_active_as(path) {
+                let opts = self.save_options();
+                match self.editor.save_active_as(path, opts) {
                     Ok(p) => {
                         self.status = t!("status.saved", path = p.display()).to_string();
                         self.explorer.rebuild();
@@ -3024,12 +3274,11 @@ fn unescape(s: &str) -> String {
                 Some('n') => out.push('\n'),
                 Some('t') => out.push('\t'),
                 Some('r') => out.push('\r'),
-                Some('\\') => out.push('\\'),
+                Some('\\') | None => out.push('\\'),
                 Some(other) => {
                     out.push('\\');
                     out.push(other);
                 }
-                None => out.push('\\'),
             }
         } else {
             out.push(c);
@@ -3050,7 +3299,7 @@ mod tests {
             .buffer()
             .content
             .iter()
-            .map(|c| c.symbol())
+            .map(ratatui::buffer::Cell::symbol)
             .collect()
     }
 

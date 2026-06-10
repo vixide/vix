@@ -14,6 +14,13 @@ A single match jumps directly; multiple matches open a chooser. The lookup scans
 the project for declaration-style lines, so it works for any language without a
 language server (but is heuristic, not semantically precise).
 
+Go to Symbol in File: Open the command palette and type `@` (or run the
+"Go to Symbol in File" command) to list the current file's declarations —
+functions, types, classes, traits, modules, `#define`s, and the like. Type to
+fuzzy-filter, then Enter to jump. Like go-to-definition, it is a fast, offline,
+language-agnostic heuristic over declaration-style lines (local `let`/`var`
+bindings are excluded to keep the outline structural), not a semantic LSP.
+
 Position History: Navigate back and forward through your edit locations using Alt+Left and Alt+Right.
 
 Open File Jump: The Open File prompt and Quick Open (Ctrl+O) support path:line[:col] syntax to jump directly to a location after opening (e.g. src/main.rs:42:10).

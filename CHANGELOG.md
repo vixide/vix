@@ -8,6 +8,20 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Bracket matching.** When the cursor is on (or just after) a bracket
+  `()[]{}`, its matching partner is highlighted. No auto-insertion of pairs.
+- **Richer status bar.** The status bar now shows the language, line ending
+  (LF/CRLF), encoding (UTF-8), and — when text is selected — the selected
+  character and line count, alongside the existing line:column.
+- **Fully-custom editor widget (`vix-editor`) with soft wrap.** The editor was
+  migrated from the vendored `vix-code-editor-panel` fork to an in-house widget:
+  the Tree-sitter highlighting + buffer + undo/redo engine is reused, while the
+  editor state, input, mouse, and renderer are owned by Vix. The renderer now
+  supports **soft wrap** — toggle with **View → Toggle Soft Wrap** (or the
+  palette); the `soft_wrap` setting persists. Long lines wrap across screen rows
+  with cursor, scroll, and mouse all wrap-aware. (Also fixed a latent panic when
+  jumping to a line past the end of the buffer.)
+
 - **Internationalization** via `rust-i18n`. The entire UI is translatable; 15
   languages are selectable (English, Spanish, French, German, Welsh fully
   translated; Irish, Scottish Gaelic, Polish, Portuguese, Russian, Arabic, Hindi,
@@ -38,6 +52,33 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `:wq`/`:x`, `:Ex`). The status bar shows the current mode.
 - **View menu** with theme, locale, and keyway choosers and the drawer/line-number
   toggles.
+- **Indentation settings** — `indent_style` (`"spaces"` / `"tabs"`) and
+  `tab_width` control what the Tab key inserts (default: 4 spaces), overriding the
+  editor widget's per-language default.
+- **Live go-to-line preview** — in the palette's `:` mode the cursor now follows
+  the line number as you type (scrolling it into view); `Enter` commits (recording
+  the original position in the jump history) and `Esc` reverts. (Also fixes a
+  latent panic when jumping to a line past the end of the buffer.)
+- **Find occurrence of selection** (`Alt+N` / `Alt+P`, or the palette): jump to
+  the next/previous occurrence of the current selection — or the word under the
+  cursor when there is no selection — without opening the search bar.
+- **Smart Home** — `Home` jumps to the first non-blank character of the line;
+  pressing it again jumps to column 0 (toggling between the two).
+- **On-save normalization** — two settings (`trim_trailing_whitespace`,
+  `ensure_final_newline`, both default on) strip trailing spaces/tabs from each
+  line and append a final newline when saving. (Making the previously
+  always-on final-newline behavior configurable.)
+- **Toggle Comment** (`Ctrl+/`, the Edit menu, or the palette): comment or
+  uncomment the cursor line or every line in the selection, using the language's
+  comment token (`//`, `#`, `--`), as a single undoable edit. The editor widget's
+  comment-token map gained TOML/YAML (`#`) and SQL (`--`).
+- **Go to Symbol in File** — a new command-palette mode (`@` prefix, or the
+  "Go to Symbol in File" command) listing the current file's declarations
+  (functions, types, classes, traits, modules, `#define`s, …) to fuzzy-filter
+  and jump to. A fast, offline, language-agnostic heuristic — no language server.
+- **Open Recent** (`File → Open Recent…`, `Ctrl+Shift+O`, or the palette): a
+  chooser of recently opened files. The list (most-recent first, de-duplicated,
+  capped at 15) persists in the `recent_files` setting.
 - **Toggle Editor Visible Whitespace** (View menu / palette / `view.whitespace`):
   render dim glyphs for space (`·`), tab (`→`), carriage return (`␍`), and line
   ending (`¶`). Off by default; persists in the `show_whitespace` setting.
@@ -65,7 +106,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - The editor widget crate was renamed `ratatui-code-editor` →
-  `vix-code-editor-panel` and made **theme-aware** (configurable text,
+  `vix-editor` and made **theme-aware** (configurable text,
   line-number, selection, and cursor styles, and a settable syntax palette).
 - The calendar logic moved into `vix-date-time-calendar-panel` and gained
   month navigation (Left/Right while the calendar is open).

@@ -22,9 +22,10 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 
 | Item     | Shortcut       | Action                      |
 | -------- | -------------- | --------------------------- |
-| New      | `Ctrl+N`       | Create a new buffer         |
-| Open…    | `Ctrl+O`       | Open an existing file       |
-| Save     | `Ctrl+S`       | Save the file               |
+| New          | `Ctrl+N`       | Create a new buffer         |
+| Open…        | `Ctrl+O`       | Open an existing file       |
+| Open Recent… | `Ctrl+Shift+O` | Reopen a recently opened file (chooser) |
+| Save         | `Ctrl+S`       | Save the file               |
 | Save As… | `Ctrl+Shift+S` | Save under a different name |
 | Close    | `Ctrl+W`       | Close the active buffer     |
 | Quit     | `Ctrl+Q`       | Quit Vix                    |
@@ -38,6 +39,7 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 | Cut     | `Ctrl+X` | Cut to clipboard             |
 | Copy    | `Ctrl+C` | Copy to clipboard            |
 | Paste   | `Ctrl+V` | Paste from clipboard         |
+| Toggle Comment | `Ctrl+/` | Comment/uncomment the line or selection |
 | Find    | `Ctrl+F` | Find in the current file     |
 | Replace | `Ctrl+R` | Find-and-replace in the file |
 
@@ -56,6 +58,7 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 | Toggle Right Dock                | Show/hide the message drawer                  |
 | Toggle Editor Line Numbers       | Show/hide the line-number gutter              |
 | Toggle Editor Visible Whitespace | Show/hide visible space, tab, newline, return |
+| Toggle Soft Wrap                 | Wrap long lines vs. scroll horizontally       |
 
 ## Tools menu
 
@@ -80,7 +83,6 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 
 These appear in the design but are not implemented yet:
 
-- File ▸ **Open Recent…** (recent-files history).
 - **Select** menu with **Select All** (`Ctrl+A`).
 - View ▸ **Zoom In / Out / Zero** (terminal font zoom).
 - Separate Edit menu entries for project-wide find/replace (today these live on

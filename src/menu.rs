@@ -42,6 +42,7 @@ impl MenuDef {
 const FILE: &[Item] = &[
     Item { label: "menu.item.file.new", action: "file.new", shortcut: "Ctrl+N" },
     Item { label: "menu.item.file.open", action: "file.open", shortcut: "Ctrl+O" },
+    Item { label: "menu.item.file.open_recent", action: "file.open_recent", shortcut: "Ctrl+Shift+O" },
     Item { label: "menu.item.file.save", action: "file.save", shortcut: "Ctrl+S" },
     Item { label: "menu.item.file.save_as", action: "file.save_as", shortcut: "Ctrl+Shift+S" },
     Item { label: "menu.item.file.close", action: "file.close", shortcut: "Ctrl+W" },
@@ -54,6 +55,7 @@ const EDIT: &[Item] = &[
     Item { label: "menu.item.edit.cut", action: "edit.cut", shortcut: "Ctrl+X" },
     Item { label: "menu.item.edit.copy", action: "edit.copy", shortcut: "Ctrl+C" },
     Item { label: "menu.item.edit.paste", action: "edit.paste", shortcut: "Ctrl+V" },
+    Item { label: "menu.item.edit.toggle_comment", action: "edit.toggle_comment", shortcut: "Ctrl+/" },
     Item { label: "menu.item.edit.find", action: "edit.find", shortcut: "Ctrl+F" },
     Item { label: "menu.item.edit.replace", action: "edit.replace", shortcut: "Ctrl+R" },
 ];
@@ -66,6 +68,7 @@ const VIEW: &[Item] = &[
     Item { label: "menu.item.view.right_dock", action: "view.right_dock", shortcut: "" },
     Item { label: "menu.item.view.line_numbers", action: "view.line_numbers", shortcut: "" },
     Item { label: "menu.item.view.whitespace", action: "view.whitespace", shortcut: "" },
+    Item { label: "menu.item.view.soft_wrap", action: "view.soft_wrap", shortcut: "" },
 ];
 
 const VIX: &[Item] = &[

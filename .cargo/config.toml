@@ -1,0 +1,6 @@
+# The MUSL static target links with `musl-gcc`. This linker setting must live in
+# cargo's config (here), not in `Cargo.toml`: a `[target.<triple>].linker` key in
+# the manifest is ignored with an "unused manifest key" warning, because the
+# manifest's `[target.*]` tables are only for platform-specific dependencies.
+[target.x86_64-unknown-linux-musl]
+linker = "musl-gcc"

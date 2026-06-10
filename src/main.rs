@@ -6,7 +6,7 @@
 // Always start with high quality coding conventions.
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
-#![warn(clippy::clippy::pedantic)]
+#![warn(clippy::pedantic)]
 
 // When we build for MUSL static, use faster memory allocator.
 #[cfg(target_env = "musl")]
@@ -90,7 +90,6 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
             match event::read()? {
                 Event::Key(key) => app.on_key(key),
                 Event::Mouse(mouse) => app.on_mouse(mouse),
-                Event::Resize(_, _) => {}
                 _ => {}
             }
         }

@@ -5,8 +5,10 @@ the Case/Word/Regex toggles (`Alt+C`/`Alt+W`/`Alt+R`), capture groups, the
 `\n`/`\t`/`\r`/`\\` escapes, Replace All, **interactive query-replace**
 (`Ctrl+Alt+R` or palette "Query Replace" → step through with `y`/`n`/`!`/`q`), and
 **project-wide search & replace** (`Ctrl+Shift+F` or palette "Search in Project" /
-"Search and Replace in Project"; searches open buffers in their unsaved state).
-Roadmap: find-occurrence-of-selection (`Alt+N`/`Alt+P`).
+"Search and Replace in Project"; searches open buffers in their unsaved state), and
+**find-occurrence-of-selection** (`Alt+N`/`Alt+P`, or the palette, jumping to the
+next/previous occurrence of the selection — or the word under the cursor — without
+opening the search bar).
 
 
 | Shortcut              | Action                                            |
@@ -16,8 +18,8 @@ Roadmap: find-occurrence-of-selection (`Alt+N`/`Alt+P`).
 | Ctrl+Alt+R            | Interactive replace (y/n/!/q for each match)      |
 | F3                    | Find next match                                   |
 | Shift+F3              | Find previous match                               |
-| Alt+N / Ctrl+F3       | Find next occurrence of selection                 |
-| Alt+P / Ctrl+Shift+F3 | Find previous occurrence of selection             |
+| Alt+N                 | Find next occurrence of selection                 |
+| Alt+P                 | Find previous occurrence of selection             |
 
 Query Replace: Use "Query Replace" from the command palette for interactive replacement (y/n/!/q prompts for each match).
 

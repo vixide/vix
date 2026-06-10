@@ -19,14 +19,20 @@ their defaults, so it is safe to delete or hand-edit.
 | --------------- | ------ | -------- | -------------------------------------------------------------------- |
 | `line_numbers`  | bool   | `true`   | Show the line-number gutter.                                         |
 | `show_whitespace`| bool  | `false`  | Show visible glyphs for space (`·`), tab (`→`), and line ending (`¶`). |
+| `soft_wrap`     | bool   | `false`  | Wrap long lines across screen rows instead of scrolling horizontally. |
 | `show_explorer` | bool   | `true`   | Show the file-explorer drawer on startup.                            |
 | `show_messages` | bool   | `true`   | Show the message drawer on startup.                                  |
 | `preview_tabs`  | bool   | `true`   | Open single-clicked / arrow-scanned files in an ephemeral preview tab. |
+| `indent_style`  | string | `"spaces"`| What Tab inserts: `"spaces"` or `"tabs"`.                           |
+| `tab_width`     | int    | `4`      | Number of spaces per indent when `indent_style = "spaces"`.          |
+| `trim_trailing_whitespace` | bool | `true` | On save, strip trailing spaces/tabs from every line. |
+| `ensure_final_newline`     | bool | `true` | On save, append a final newline if the file lacks one. |
 | `theme`         | string | `"dark"` | `"dark"`, `"light"`, or the `name` of a custom theme.                |
 | `locale`        | string | `"en"`   | UI language code (`en`, `es`, `fr`, `de`, `cy`, …).                  |
 | `keyway`        | string | `"apple"`| Keyboard navigation style: `"apple"`, `"emacs"`, or `"vim"`.         |
 | `explorer_width`| int    | `30`     | Width (columns) of the left dock; drag its right edge to resize.    |
 | `messages_width`| int    | `32`     | Width (columns) of the right dock; drag its left edge to resize.    |
+| `recent_files`  | list   | `[]`     | Recently opened files (absolute paths), most-recent first, capped at 15. Updated automatically; surfaced by **File → Open Recent…**. |
 
 Example `config.toml`:
 
@@ -36,12 +42,21 @@ show_whitespace = false
 show_explorer = true
 show_messages = true
 preview_tabs = true
+indent_style = "spaces"
+tab_width = 4
+trim_trailing_whitespace = true
+ensure_final_newline = true
 theme = "dark"
 locale = "en"
 keyway = "apple"
 explorer_width = 30
 messages_width = 32
 ```
+
+`trim_trailing_whitespace` and `ensure_final_newline` normalize each file when it
+is saved (both default on). Note that trimming removes Markdown's trailing
+two-space hard line breaks — set `trim_trailing_whitespace = false` if you rely on
+them.
 
 Most settings are also changed from inside the app and saved on quit: toggling
 line numbers / visible whitespace / explorer / messages, resizing a dock (drag

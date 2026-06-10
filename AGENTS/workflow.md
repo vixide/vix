@@ -31,20 +31,23 @@ Fix drift by aligning all three (code, spec, docs).
 
 ## Spec map
 
-| Spec file                              | Covers                                  |
-| -------------------------------------- | --------------------------------------- |
-| `spec/spec.md`                         | Overview, crate set, build/run          |
-| `spec/menus.md`                        | Menu bar structure and items            |
-| `spec/keyboard.md`                     | Keyboard shortcuts                      |
-| `spec/navigation.md`                   | Position history, go-to-definition      |
-| `spec/command-palette.md`              | Palette modes and behavior              |
-| `spec/file-explorer.md`                | Explorer tree and file ops              |
-| `spec/search-and-replace.md`           | Find/replace, project search, query-replace |
-| `spec/code-editor.md`                  | The editor widget behavior              |
-| `spec/theme-chooser.md`                | Theme model + custom JSON format        |
-| `spec/locale-chooser.md`               | Internationalization / languages        |
-| `spec/keyway-chooser.md`               | Keyboard navigation styles (Apple/Emacs/Vim) |
-| `spec/vix-calendar.md`                 | Calendar box                            |
-| `spec/main-rs-and-lib-rs-boilerplate.md` | Entry-point conventions               |
-| `spec/comparisons.md`                  | Comparisons to other editors            |
-| `spec/test.md`                         | Manual test scenarios                   |
+| Spec file                                | Covers                                       |
+| ---------------------------------------- | -------------------------------------------- |
+| `spec/index.md`                          | Overview, crate set, build/run, status       |
+| `spec/menus.md`                          | Menu bar structure and items                 |
+| `spec/keyboard.md`                       | Keyboard shortcuts (roadmap: bindings browser) |
+| `spec/navigation.md`                     | Position history, go-to-definition/symbol    |
+| `spec/command-palette.md`                | Palette modes and behavior                   |
+| `spec/file-explorer.md`                  | Explorer tree and file ops                   |
+| `spec/search-and-replace.md`             | Find/replace, project search, query-replace  |
+| `spec/code-editor.md`                    | The `vix-editor` widget (soft wrap, brackets, …) |
+| `spec/theme-chooser.md`                  | Theme model + custom JSON format             |
+| `spec/locale-chooser.md`                 | Internationalization / languages             |
+| `spec/keyway-chooser.md`                 | Keyboard navigation styles (Apple/Emacs/Vim) |
+| `spec/vix-calendar.md`                   | Calendar box                                 |
+| `spec/hover.md`                          | Mouse any-motion (menu hover) tracking       |
+| `spec/main-rs-and-lib-rs-boilerplate.md` | Entry-point conventions                      |
+| `spec/rust-clippy-pedantic.md`           | `clippy::pedantic` on all targets            |
+| `spec/rust-cargo-config-toml-musl.md`    | MUSL linker config (`.cargo/config.toml`)    |
+| `spec/comparisons.md`                    | Comparisons to other editors                 |
+| `spec/test.md`                           | Manual test scenarios                        |

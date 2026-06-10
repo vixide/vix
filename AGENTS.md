@@ -38,7 +38,11 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 - **Every public item needs a doc comment.** A new `pub fn`/`struct`/`field`
   without `///` fails the build.
 - **No `unsafe`.**
-- Keep the tree warning-clean.
+- **`#![warn(clippy::pedantic)]`** is on for every `vix` target (`lib.rs`,
+  `main.rs`, `tests/`, `examples/`) and for the Vix-owned `vix-editor` modules
+  (`wrap`, `brackets`), each with a small curated `allow` list for the noisy
+  casts/etc. The reused `vix-editor` engine keeps `#![allow(clippy::all)]`.
+- Keep the tree warning-clean: `cargo clippy --workspace` must be clean.
 
 ## Non-negotiable conventions
 
@@ -69,7 +73,8 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 | Change rendering                     | `src/ui.rs`                                        |
 | Add/translate UI text                | `locales/app.yml` (+ `t!` at the call site)       |
 | Add a setting                        | `src/settings.rs`                                  |
-| Change the editor widget             | `vix-code-editor-panel/`                           |
+| Change the editor widget             | `vix-editor/` (engine reused; widget is Vix's)    |
+| Change soft-wrap / bracket rendering | `vix-editor/src/wrap.rs`, `vix-editor/src/brackets.rs` |
 | Change theme colors/model            | `vix-theme-chooser/`                               |
 | Change available UI languages        | `vix-locale-chooser/`                              |
 | Change keyboard navigation styles    | `vix-keyway-chooser/` + keyway dispatch in `src/app.rs` |

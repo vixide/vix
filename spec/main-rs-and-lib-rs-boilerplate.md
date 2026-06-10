@@ -1,12 +1,15 @@
 # main.rs and lib.rs boilerplate
 
-The files `src/main.rs` and `src/lib.rs` must start with comprehensive rustdoc comments then this section:
+Every compilation root of the `vix` package — `src/main.rs`, `src/lib.rs`, each
+file under `tests/` and `examples/` (and `benches/`, if any) — must begin with
+comprehensive rustdoc comments then this section. (Lint attributes are per–crate
+root, so each target needs its own copy.)
 
 ```rust
 // Always start with high quality coding conventions.
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
-#![warn(clippy::clippy::pedantic)]
+#![warn(clippy::pedantic)]
 
 // When we build for MUSL static, use faster memory allocator.
 #[cfg(target_env = "musl")]

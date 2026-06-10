@@ -6,6 +6,7 @@
 //! | `>`    | Commands    |
 //! | `#`    | Buffers     |
 //! | `:`    | Go to line  |
+//! | `@`    | Symbols     |
 
 use std::path::PathBuf;
 
@@ -20,6 +21,8 @@ pub enum Mode {
     Buffers,
     /// Jump to a line number (`:` prefix).
     GotoLine,
+    /// Jump to a declaration in the current file (`@` prefix).
+    Symbols,
 }
 
 impl Mode {
@@ -30,6 +33,7 @@ impl Mode {
             Some('>') => Mode::Commands,
             Some('#') => Mode::Buffers,
             Some(':') => Mode::GotoLine,
+            Some('@') => Mode::Symbols,
             _ => Mode::Files,
         }
     }
@@ -42,6 +46,7 @@ impl Mode {
             Mode::Commands => t!("palette.mode.commands"),
             Mode::Buffers => t!("palette.mode.buffers"),
             Mode::GotoLine => t!("palette.mode.goto_line"),
+            Mode::Symbols => t!("palette.mode.symbols"),
         }
         .to_string()
     }
@@ -151,18 +156,23 @@ impl Palette {
 pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.new_file", "file.new"),
     ("cmd.open_file", "file.open"),
+    ("cmd.open_recent", "file.open_recent"),
     ("cmd.save", "file.save"),
     ("cmd.save_as", "file.save_as"),
     ("cmd.close_tab", "file.close"),
     ("cmd.quit", "file.quit"),
     ("cmd.undo", "edit.undo"),
     ("cmd.redo", "edit.redo"),
+    ("cmd.toggle_comment", "edit.toggle_comment"),
     ("cmd.find", "edit.find"),
     ("cmd.replace", "edit.replace"),
     ("cmd.query_replace", "edit.query_replace"),
+    ("cmd.find_next_selection", "search.next_selection"),
+    ("cmd.find_prev_selection", "search.prev_selection"),
     ("cmd.search_project", "search.project"),
     ("cmd.search_replace_project", "search.project_replace"),
     ("cmd.goto_definition", "nav.goto_definition"),
+    ("cmd.goto_symbol", "nav.goto_symbol"),
     ("cmd.theme", "view.theme"),
     ("cmd.locale", "view.locale"),
     ("cmd.keyway", "view.keyway"),
@@ -170,13 +180,56 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.toggle_right_dock", "view.right_dock"),
     ("cmd.toggle_line_numbers", "view.line_numbers"),
     ("cmd.toggle_whitespace", "view.whitespace"),
+    ("cmd.toggle_soft_wrap", "view.soft_wrap"),
     ("cmd.toggle_calendar", "tools.calendar"),
     ("cmd.next_tab", "tab.next"),
     ("cmd.prev_tab", "tab.prev"),
 ];
 
+/// One declaration found in a buffer, for the `@` go-to-symbol mode.
+pub struct Symbol {
+    /// The declared identifier (used for fuzzy matching).
+    pub name: String,
+    /// 1-based line of the declaration.
+    pub line: usize,
+    /// The trimmed source line, for display.
+    pub text: String,
+}
+
+/// Scan `text` for declaration-style lines and return their symbols, in order.
+///
+/// A fast, offline, language-agnostic heuristic (the same family as
+/// go-to-definition): a structural keyword followed by an identifier. Local
+/// bindings (`let`/`var`/`const`) are intentionally excluded to keep the outline
+/// to top-level structure.
+#[must_use]
+pub fn symbols(text: &str) -> Vec<Symbol> {
+    let kw = "fn|func|function|def|class|struct|enum|trait|interface|type|mod|\
+              namespace|package|macro_rules!";
+    let pat = format!(
+        r"(?:\b(?:{kw})\s+([A-Za-z_][A-Za-z0-9_]*)|#define\s+([A-Za-z_][A-Za-z0-9_]*))"
+    );
+    let Ok(re) = regex::Regex::new(&pat) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        if let Some(caps) = re.captures(line) {
+            if let Some(name) = caps.get(1).or_else(|| caps.get(2)) {
+                out.push(Symbol {
+                    name: name.as_str().to_string(),
+                    line: i + 1,
+                    text: line.trim_start().chars().take(120).collect(),
+                });
+            }
+        }
+    }
+    out
+}
+
 /// Case-insensitive, space-separated subsequence match. Every whitespace term
 /// must appear (in order, as a subsequence) in `haystack`.
+#[must_use] 
 pub fn fuzzy_match(haystack: &str, query: &str) -> bool {
     let hay = haystack.to_lowercase();
     query
@@ -193,7 +246,7 @@ fn subsequence(hay: &str, needle: &str) -> bool {
         loop {
             match chars.next() {
                 Some(hc) if hc == nc => break,
-                Some(_) => continue,
+                Some(_) => {}
                 None => return false,
             }
         }
@@ -203,6 +256,7 @@ fn subsequence(hay: &str, needle: &str) -> bool {
 
 /// Parse a `path:line[:col]` suffix. Returns the path part and an optional
 /// (line, col) target.
+#[must_use] 
 pub fn parse_path_target(input: &str) -> (String, Option<(usize, usize)>) {
     let mut parts = input.splitn(3, ':');
     let path = parts.next().unwrap_or("").to_string();

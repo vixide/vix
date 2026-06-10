@@ -11,6 +11,7 @@ Switch via **View → Keyway…**; the choice persists. See [Keyways](#keyways).
 | ---------------- | --------------------------------------------------- |
 | `Ctrl+N`         | New buffer                                           |
 | `Ctrl+O`         | Open file… (prompt; accepts `path:line[:col]`)       |
+| `Ctrl+Shift+O`   | Open Recent… (chooser of recently opened files)      |
 | `Ctrl+S`         | Save (prompts for a path if the buffer is untitled)  |
 | `Ctrl+Shift+S`   | Save As…                                             |
 | `Ctrl+W`         | Close the active tab                                 |
@@ -21,6 +22,7 @@ Switch via **View → Keyway…**; the choice persists. See [Keyways](#keyways).
 | `Ctrl+Alt+R`     | Interactive query-replace (y/n/!/q)                  |
 | `Ctrl+Shift+F`   | Search across the whole project                      |
 | `F3` / `Shift+F3`| Find next / previous                                 |
+| `Alt+N` / `Alt+P`| Find next / previous occurrence of the selection     |
 | `Ctrl+B`         | Toggle the file explorer (reveals the active file)   |
 | `Ctrl+E`         | Toggle focus between explorer and editor             |
 | `Alt+Left` / `Alt+Right` | Position history: jump back / forward        |
@@ -39,10 +41,12 @@ Switch via **View → Keyway…**; the choice persists. See [Keyways](#keyways).
 | `Ctrl+C`          | Copy selection                        |
 | `Ctrl+V`          | Paste                                 |
 | `Ctrl+A`          | Select all                            |
-| Arrows / `Home` / `End` / `PgUp` / `PgDn` | Move the cursor       |
+| `Ctrl+/`          | Toggle line comment (line or selection) |
+| Arrows / `End` / `PgUp` / `PgDn` | Move the cursor                |
+| `Home`            | Smart Home: first non-blank, then column 0 |
 | Typing / `Enter` / `Backspace` / `Delete` / `Tab` | Edit text     |
 
-The editor wraps the internal `vix-code-editor-panel` widget, which adds
+The editor wraps the internal `vix-editor` widget, which adds
 Tree-sitter syntax highlighting, `Ctrl+K` delete-line, and `Ctrl+D`
 duplicate-line.
 
@@ -101,7 +105,9 @@ Open buffers follow their files when moved and close when deleted.
 | `Esc`          | Close the palette                            |
 
 Prefixes switch modes: *(none)* file finder, `>` commands, `#` buffers,
-`:` go-to-line. In file-finder mode, append `:line[:col]` to jump on open.
+`:` go-to-line (the cursor previews the line live as you type; `Esc` reverts),
+`@` go-to-symbol (declarations in the current file). In file-finder mode, append
+`:line[:col]` to jump on open.
 
 ## Find & Replace
 
@@ -146,7 +152,8 @@ In every chooser a left **click** on a row highlights it (Themes/Locale also
 preview live).
 
 View also has toggles for the line-number gutter, visible whitespace (glyphs
-for space `·`, tab `→`, and line ending `¶`), and the explorer / messages docks.
+for space `·`, tab `→`, and line ending `¶`), soft wrap (long lines wrap instead
+of scrolling), and the explorer / messages docks.
 
 ## Calendar box (Tools → Calendar)
 

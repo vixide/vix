@@ -26,9 +26,17 @@ both work.
 
 - **Menu bar** — File / Edit / View / Tools / Help, navigable entirely by
   keyboard (`F10` or `Alt+F/E/V/T/H`), and by mouse.
-- **Tabbed editor** — each file is a tab; a full multiline editor with optional
-  Tree-sitter syntax highlighting, undo/redo, selection, system clipboard, line
-  numbers (toggleable), a block cursor, and a right-side scrollbar.
+- **Tabbed editor** (`vix-editor`, Vix's fully-custom widget) — each file is a
+  tab; a full multiline editor with optional Tree-sitter syntax highlighting,
+  undo/redo, selection, system clipboard, a block cursor, a right-side scrollbar,
+  **soft wrap**, **bracket matching**, toggleable line numbers and visible
+  whitespace, and configurable indentation (`indent_style` / `tab_width`).
+- **Editing comforts** — Smart Home (`Home` → first non-blank, then col 0),
+  comment toggle (`Ctrl+/`), find next/previous occurrence of the selection
+  (`Alt+N`/`Alt+P`), live go-to-line preview (palette `:`), and on-save
+  trim-trailing-whitespace / ensure-final-newline.
+- **Rich status bar** — language, line ending (LF/CRLF), encoding, the selected
+  character/line count, and line:column.
 - **Mouse support** — click to place the cursor, drag to select, wheel to scroll;
   click tabs, files, messages, and menus; click the dock toggle icons.
 - **Image viewing** — open a PNG/JPG/GIF/… and it renders in a read-only image
@@ -38,8 +46,9 @@ both work.
 - **File explorer ops** — copy/cut/paste (`Ctrl+C`/`X`/`V`) with conflict
   prompts, `Shift+Up/Down` multi-select, and `Delete`; open buffers follow file
   moves and close on delete.
-- **Command palette** (`Ctrl+P`) — four modes via prefix: file finder, `>`
-  commands, `#` buffers, `:` go-to-line. Space-separated fuzzy matching.
+- **Command palette** (`Ctrl+P`) — five modes via prefix: file finder, `>`
+  commands, `#` buffers, `:` go-to-line, `@` go-to-symbol. Space-separated fuzzy
+  matching.
 - **Find & Replace** — incremental search, `F3`/`Shift+F3` navigation, Case /
   Whole-Word / Regex toggles, capture groups (`$1`, `${name}`) and escapes;
   project-wide search/replace and interactive query-replace.
@@ -93,7 +102,7 @@ cargo build --release --no-default-features --features syntax-all  # all grammar
 ```
 
 Files whose grammar isn't compiled in still open — just as plain (unhighlighted)
-text. The grammar set lives in the internal `vix-code-editor-panel` crate. Note
+text. The grammar set lives in the internal `vix-editor` crate. Note
 that the built-in themes are monochrome by design; token colors appear only when
 a custom theme defines a `syntax` block (see [`docs/themes.md`](docs/themes.md)).
 
@@ -143,7 +152,7 @@ src/                            the vix application crate
   ui.rs          all rendering
 locales/         rust-i18n translation files (en/es/fr/de/cy)
 
-vix-code-editor-panel/          the center editor widget (Tree-sitter, themeable)
+vix-editor/                     Vix's fully-custom editor widget (Tree-sitter, soft wrap, themeable)
 vix-date-time-calendar-panel/   calendar date/time logic + navigable month grid
 vix-theme-chooser/              theme model, styles, custom JSON themes, chooser
 vix-locale-chooser/             available UI languages + chooser

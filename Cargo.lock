@@ -3275,8 +3275,8 @@ dependencies = [
  "regex",
  "rust-i18n",
  "serde",
- "vix-code-editor-panel",
  "vix-date-time-calendar-panel",
+ "vix-editor",
  "vix-keyboard-shortcut-panel",
  "vix-keyway-chooser",
  "vix-locale-chooser",
@@ -3284,7 +3284,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "vix-code-editor-panel"
+name = "vix-date-time-calendar-panel"
+version = "0.1.0"
+dependencies = [
+ "jiff",
+]
+
+[[package]]
+name = "vix-editor"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -3313,13 +3320,6 @@ dependencies = [
  "tree-sitter-yaml",
  "unicode-segmentation",
  "unicode-width",
-]
-
-[[package]]
-name = "vix-date-time-calendar-panel"
-version = "0.1.0"
-dependencies = [
- "jiff",
 ]
 
 [[package]]
