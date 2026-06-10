@@ -121,6 +121,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Menu dropdown items keep at least one space between the label and the
+  right-aligned keyboard shortcut (the widest item used to let them touch).
+- Keyboard-only modal overlays (the calendar box, find, query-replace, project
+  search, confirm, paste-conflict) now swallow mouse clicks instead of letting
+  them fall through to the editor underneath.
 - Menu mouseover now moves the selection: with a dropdown open, hovering a row
   highlights it and hovering another top-level name switches menus (any-motion
   mouse tracking is enabled for this; other panes ignore button-less motion).

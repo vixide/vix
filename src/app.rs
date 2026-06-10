@@ -1556,7 +1556,18 @@ impl App {
             self.recent_mouse(mouse);
             return;
         }
-        if self.show_help || self.palette.is_some() || self.prompt.is_some() {
+        // Keyboard-only modal overlays swallow all mouse input rather than
+        // letting a click fall through to the editor/explorer underneath.
+        if self.show_help
+            || self.show_calendar
+            || self.palette.is_some()
+            || self.prompt.is_some()
+            || self.search.is_some()
+            || self.query_replace.is_some()
+            || self.project_search.is_some()
+            || self.confirm.is_some()
+            || self.paste.as_ref().is_some_and(|p| p.conflict.is_some())
+        {
             return;
         }
         let (col, row) = (mouse.column, mouse.row);

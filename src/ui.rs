@@ -467,7 +467,12 @@ pub fn menu_dropdown_rect(frame_area: Rect, bar: Rect, index: usize) -> Rect {
     let width = def
         .items
         .iter()
-        .map(|it| it.label().chars().count() + it.shortcut.chars().count() + 4)
+        // Budget: 2 borders + leading + trailing space (= 4), plus a 1-column gap
+        // between the label and the shortcut so they never touch.
+        .map(|it| {
+            let gap = usize::from(!it.shortcut.is_empty());
+            it.label().chars().count() + it.shortcut.chars().count() + 4 + gap
+        })
         .max()
         .unwrap_or(12)
         .max(14) as u16;

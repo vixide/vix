@@ -1301,6 +1301,26 @@ fn delete_key_forward_deletes() {
 // ===========================================================================
 
 #[test]
+fn menu_dropdown_keeps_a_gap_before_shortcuts() {
+    // The dropdown rect must be wide enough that every item with a shortcut keeps
+    // at least one space between its label and the right-aligned shortcut.
+    let bar = Rect::new(0, 0, 200, 1);
+    let frame = Rect::new(0, 0, 200, 40);
+    for (i, m) in vix::menu::MENUS.iter().enumerate() {
+        let rect = vix::ui::menu_dropdown_rect(frame, bar, i);
+        for it in m.items {
+            if it.shortcut.is_empty() {
+                continue;
+            }
+            // Row = " label" + pad + "shortcut " inside borders; pad must be >= 1.
+            let content = it.label().chars().count() + it.shortcut.chars().count();
+            let pad = (rect.width as usize).saturating_sub(content + 4);
+            assert!(pad >= 1, "{}/{} label and shortcut touch", m.name, it.action);
+        }
+    }
+}
+
+#[test]
 fn click_menu_bar_opens_menu() {
     let mut app = app_at(Path::new("."));
     app.layout.menu = Rect::new(0, 0, 100, 1);
@@ -1394,6 +1414,18 @@ fn click_editor_focuses_it() {
     app.focus = Focus::Explorer;
     app.on_mouse(click(5, 3));
     assert_eq!(app.focus, Focus::Editor, "clicking the editor focuses it");
+}
+
+#[test]
+fn open_calendar_swallows_editor_clicks() {
+    let mut app = app_at(Path::new("."));
+    app.layout.editor = Rect::new(0, 0, 80, 24);
+    app.focus = Focus::Explorer;
+    app.run_action("tools.calendar"); // open the calendar overlay
+    assert!(app.show_calendar);
+    // A click over the editor must not reach it while the calendar is open.
+    app.on_mouse(click(5, 3));
+    assert_eq!(app.focus, Focus::Explorer, "calendar open swallows the editor click");
 }
 
 #[test]
