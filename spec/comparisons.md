@@ -10,7 +10,8 @@ Simpler than Fresh Editor (~/github/sinelaw/fresh) because:
 More advanced than Micro Editor (~/github/micro-editor-micro) because:
 - Left-side drawer is a file explorer
 - Right-side drawer is a message explorer
-- Switchable themes (monochrome Dark/Light plus custom JSON themes)
+- Bottom dock for logs/output/data (Run Command, project search)
+- Switchable themes (Dark, Light, and more — all JSON themes)
 - Switchable UI language (internationalization)
 
 Easier for novices than vim because:

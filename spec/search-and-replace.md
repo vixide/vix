@@ -67,3 +67,11 @@ field and `Alt+Enter` (or Enter from the replace field) rewrites every match
 across the project. Open buffers are searched and replaced in their current
 (possibly unsaved) state; files larger than 2 MB and binary files are skipped,
 and results are capped at 5,000.
+
+## Search in Project → Dock
+
+A variant that lists results in the **bottom dock** instead of a panel: **Edit →
+Find → Search in Project → Dock** (or the palette). It prompts for a term —
+`Alt+C` toggles case-sensitivity, `Alt+R` toggles regex (default: case-insensitive
+literal) — then pushes `relpath:line:col: text` lines into the dock, each
+**click-to-jump** to the match. See `vix-bottom-dock.md`.

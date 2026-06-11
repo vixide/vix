@@ -1,5 +1,9 @@
 # File Explorer
 
+The file explorer is the **left dock**; its tree state lives in the internal
+`vix-left-dock` crate (see `vix-left-dock.md`), and the host renders it and runs
+the file operations.
+
 **Status:** Shipped — keyboard navigation (`→`/`Enter` opens a file or expands a
 directory; `←` collapses an expanded directory or jumps to its parent, and never
 expands), arrow-scan preview tabs, `Ctrl+B` toggle (revealing the active file),

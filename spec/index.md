@@ -61,7 +61,7 @@ command-palette file finder operate within it.
 - Center editing area using `vix-editor` (Tree-sitter syntax
   highlighting, undo/redo, selection, system clipboard, block cursor)
   - Top tab bar: each tab is one text file; preview tabs render dimmed
-  - Show/hide line numbers (`View ▸ Toggle Line Numbers`)
+  - Show/hide line numbers, whitespace, scroll bar, soft wrap (`View ▸ Editor`)
   - Editing comforts: select all (`Ctrl+A`), duplicate line (`Ctrl+D`), delete
     line (`Ctrl+K`), move line up/down (`Alt+↑`/`Alt+↓`), jump to the matching
     bracket (`Ctrl+]`), and auto-indent on Enter (see `code-editor.md`)
@@ -71,7 +71,15 @@ command-palette file finder operate within it.
 - Right drawer message browser
   - List of advice and notifications; each item shows a close `x`
     (dismiss with `x`, `Delete`, or `Enter` while the drawer is focused)
-- Bottom status bar (toggle with `View ▸ Toggle Bottom Status`)
+- Bottom dock (toggle with `View ▸ Show/Hide Bottom Dock`; see
+  `vix-bottom-dock.md`) — a full-width, resizable, scrollable line panel pinned
+  above the status bar for logs/output/data
+  - **Run Command** (`Tools ▸ Run Command…`) streams a shell command's output
+    here; **Cancel Command** kills it
+  - **Search in Project → Dock** (`Edit ▸ Find`) lists `path:line:col` hits here
+  - Lines that name a `path:line[:col]` location are **click-to-jump**; the dock
+    can be focused (click) and scrolled, and follows new output only at the bottom
+- Bottom status bar (toggle with `View ▸ Show/Hide Bottom Status`)
   - File path and dirty indicator, plus the latest status message
   - Language, line ending (LF/CRLF), encoding (UTF-8), and the selected
     character/line count when text is selected
@@ -122,8 +130,9 @@ palette, query-replace, project search, confirm, paste-conflict, prompt, palette
 search, menu — before
 the active **keyway** dispatch (Apple shortcuts / Emacs chords / Vim modal; see
 `keyway-chooser.md`) and, finally, the focused pane (editor / explorer /
-messages). Menu items and palette commands share one set of action identifiers
-dispatched by `App::run_action`.
+messages / bottom dock). Each loop iteration also drains any streamed
+command output into the bottom dock. Menu items and palette commands share one
+set of action identifiers dispatched by `App::run_action`.
 
 ## Implementation status
 
@@ -143,10 +152,11 @@ buffers in their unsaved state), position history (`Alt+Left`/`Alt+Right`), and
 "go to definition" (`F12`) — a fast offline heuristic over declaration-style
 lines rather than a semantic LSP.
 
-Also shipped: **internationalization** (`rust-i18n`; 27 selectable languages,
-English fallback, `--locale` flag + `locale` setting + live **View → Locale…**),
-**themes** (monochrome Dark/Light modes plus bundled and user-installed custom
-JSON themes, live **View → Theme…**), **keyways** (Apple / Emacs / Vim keyboard
+Also shipped: **internationalization** (`rust-i18n`; 27 selectable languages
+including Klingon and Sindarin, English fallback, `--locale` flag + `locale`
+setting + live **View → Locale…**), **themes** (every theme is a JSON theme;
+Dark, Light, and more ship bundled, plus user-installed; live **View → Theme…**;
+see `theme-chooser.md`), **keyways** (Apple / Emacs / Vim keyboard
 navigation styles, live **View → Keyway…**; see `keyway-chooser.md`),
 **configuration** (`confy` TOML), a **CLI** (`clap`), the **Vix menu**
 (About / Website / Email modal dialogs), **resizable docks** (drag a dock's inner
@@ -156,24 +166,36 @@ edge), **dock toggle icons** in the menu bar, **Open Recent**, **go-to-symbol**
 
 Also shipped (editor widget): the center editor is now **`vix-editor`**, Vix's
 fully-custom widget (replacing the vendored fork; see `code-editor.md`), with
-**soft wrap** (**View → Toggle Soft Wrap**, the `soft_wrap` setting),
+**soft wrap** (**View → Editor → Show/Hide Soft Wrap**, the `soft_wrap` setting),
 **bracket matching** (highlight the partner of the bracket at the cursor; no
 auto-insert), **indentation settings** (`indent_style` / `tab_width` drive what
 Tab inserts), **Smart Home** (`Home` → first non-blank, then column 0),
 **find occurrence of selection** (`Alt+N` / `Alt+P`), **live go-to-line preview**
 (the cursor follows the number typed in palette `:` mode), **visible whitespace**
-(**View → Toggle Editor Visible Whitespace**), and a **richer status bar**
+(**View → Editor → Show/Hide Whitespace**), and a **richer status bar**
 (language, line ending, encoding, selection char/line count).
 
 Also shipped: **menu separators** grouping dropdown items (File/Edit/View);
 **Nerd Font Palette** (Tools → a glyph picker, `vix-nerd-font-palette`);
-**Toggle Bottom Status** (`View → Toggle Bottom Status`, `show_status_bar`
+**Show/Hide Bottom Status** (`View → Show/Hide Bottom Status`, `show_status_bar`
 setting); more **editing comforts** — Select All (`Ctrl+A`), Duplicate Line
 (`Ctrl+D`), Move Line Up/Down (`Alt+↑`/`Alt+↓`), Jump to Matching Bracket
 (`Ctrl+]`), and auto-indent on Enter; the find / replace box state extracted to
 `vix-find-panel` with **click-to-focus** fields; and **borderless screen edges**
 (the left/right docks drop their outer border and the editor its left/right
 borders).
+
+Also shipped: the left/right docks and the status bar were extracted to internal
+crates (`vix-left-dock`, `vix-right-dock`, `vix-status-bar-panel`); a new
+**bottom dock** (`vix-bottom-dock`, `View → Show/Hide Bottom Dock`) — resizable
+(drag its top edge), scrollable (sticky-bottom), with **click-to-jump** on
+`path:line` lines — fed by **Run Command** / **Cancel Command** (Tools) and
+**Search in Project → Dock** (Edit → Find; `Alt+C` case / `Alt+R` regex). Also:
+nested **submenus** (View → Editor, Edit → Find), **menu type-ahead** (type a
+letter to jump to the next matching item), **Close All Tabs**, **Reopen Closed
+Tab** (`Ctrl+Shift+T`), **Find Next/Previous** (`Ctrl+G`/`Ctrl+Shift+G`, remember
+the last search), and the **calendar** gained click-to-insert and clickable
+month-nav arrows.
 
 Roadmap (designed in the sibling spec files, not yet built): a real LSP client
 (semantic go-to-definition, completions, diagnostics), display tab width
