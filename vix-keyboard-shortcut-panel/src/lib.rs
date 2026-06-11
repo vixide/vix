@@ -23,7 +23,7 @@ pub const ROWS: &[Row] = &[
     Row { keys: "Ctrl+S / Ctrl+Shift+S", desc: "help.save" },
     Row { keys: "Ctrl+N / Ctrl+W", desc: "help.new_close" },
     Row { keys: "Ctrl+Q", desc: "help.quit" },
-    Row { keys: "Ctrl+Z / Ctrl+Y", desc: "help.undo_redo" },
+    Row { keys: "Ctrl+Z / Ctrl+Shift+Z", desc: "help.undo_redo" },
     Row { keys: "Ctrl+X / Ctrl+C / Ctrl+V", desc: "help.cut_copy_paste" },
     Row { keys: "Ctrl+A", desc: "help.select_all" },
     Row { keys: "Ctrl+F / Ctrl+R", desc: "help.find_replace" },

@@ -38,7 +38,7 @@ Switch via **View → Keyway…**; the choice persists. See [Keyways](#keyways).
 | Shortcut          | Action                                |
 | ----------------- | ------------------------------------- |
 | `Ctrl+Z`          | Undo                                  |
-| `Ctrl+Y`          | Redo                                  |
+| `Ctrl+Shift+Z`    | Redo                                  |
 | `Ctrl+X`          | Cut selection                         |
 | `Ctrl+C`          | Copy selection                        |
 | `Ctrl+V`          | Paste                                 |

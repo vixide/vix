@@ -49,7 +49,7 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 | Item    | Shortcut | Action                       |
 | ------- | -------- | ---------------------------- |
 | Undo    | `Ctrl+Z` | Undo                         |
-| Redo    | `Ctrl+Y` | Redo                         |
+| Redo    | `Ctrl+Shift+Z` | Redo                   |
 | *— separator —* | | |
 | Cut     | `Ctrl+X` | Cut to clipboard             |
 | Copy    | `Ctrl+C` | Copy to clipboard            |

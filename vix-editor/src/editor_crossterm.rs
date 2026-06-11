@@ -20,8 +20,8 @@ impl Editor {
 
         match key.code {
             KeyCode::Char('÷') => self.apply(ToggleComment { }),
+            KeyCode::Char('z' | 'Z') if ctrl && shift => self.apply(Redo { }),
             KeyCode::Char('z') if ctrl => self.apply(Undo { }),
-            KeyCode::Char('y') if ctrl => self.apply(Redo { }),
             KeyCode::Char('c') if ctrl => self.apply(Copy { }),
             KeyCode::Char('v') if ctrl => self.apply(Paste { }),
             KeyCode::Char('x') if ctrl => self.apply(Cut { }),

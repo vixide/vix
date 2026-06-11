@@ -1248,7 +1248,7 @@ impl App {
         if Self::ctrl(key) {
             return matches!(
                 key.code,
-                KeyCode::Char('v' | 'x' | 'z' | 'y' | 'k' | 'd')
+                KeyCode::Char('v' | 'x' | 'z' | 'Z' | 'k' | 'd')
             );
         }
         matches!(

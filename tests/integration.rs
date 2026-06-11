@@ -1764,7 +1764,7 @@ fn alt_letters_open_specific_menus() {
 }
 
 #[test]
-fn ctrl_z_undoes_and_ctrl_y_redoes() {
+fn ctrl_z_undoes_and_ctrl_shift_z_redoes() {
     let mut app = app_at(Path::new("."));
     for c in "abc".chars() {
         app.on_key(key(c));
@@ -1773,9 +1773,9 @@ fn ctrl_z_undoes_and_ctrl_y_redoes() {
     app.on_key(ctrl('z'));
     let undone = app.editor.active_tab().unwrap().lines()[0].len();
     assert!(undone < full, "Ctrl+Z undoes typing ({undone} < {full})");
-    app.on_key(ctrl('y'));
+    app.on_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
     let redone = app.editor.active_tab().unwrap().lines()[0].len();
-    assert!(redone > undone, "Ctrl+Y redoes ({redone} > {undone})");
+    assert!(redone > undone, "Ctrl+Shift+Z redoes ({redone} > {undone})");
 }
 
 #[test]

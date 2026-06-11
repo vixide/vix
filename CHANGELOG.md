@@ -6,6 +6,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Redo shortcut is now `Ctrl+Shift+Z`** (was `Ctrl+Y`), matching the common
+  undo/redo pairing.
+
 ### Added
 
 - **View → Layout submenu.** The dock and status-bar toggles (Show/Hide Left
