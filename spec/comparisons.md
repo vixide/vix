@@ -5,7 +5,6 @@ Simpler than Fresh Editor (~/github/sinelaw/fresh) because:
 - No JavaScript
 - No TypeScript
 - No remote editing
-- No git integration
 
 More advanced than Micro Editor (~/github/micro-editor-micro) because:
 - Left-side drawer is a file explorer
