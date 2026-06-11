@@ -21,6 +21,8 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
   `https://github.com/joelparkerhenderson/vix` and an **Ok** button.
 - Email — modal dialog with a selectable/copyable text field
   `joel@joelparkerhenderson.com` and an **Ok** button.
+- *separator*
+- Quit (`Ctrl+Q`) — quit Vix.
 
 ## File menu
 
@@ -36,8 +38,8 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 | Close    | `Ctrl+W`       | Close the active buffer     |
 | Close All Tabs | | Close every buffer (leaves one empty) |
 | Reopen Closed Tab | `Ctrl+Shift+T` | Reopen the most recently closed file |
-| *— separator —* | | |
-| Quit     | `Ctrl+Q`       | Quit Vix                    |
+
+(Quit moved to the **Vix** menu.)
 
 ## Edit menu
 
@@ -82,15 +84,15 @@ The **Find…** submenu:
 | Show/Hide Bottom Status          | Show/hide the bottom status bar               |
 | *— separator —*                  |                                               |
 | Editor ▸                         | Submenu of editor display toggles (below)     |
-| Show/Hide Soft Wrap              | Wrap long lines vs. scroll horizontally       |
 
 The **Editor** submenu:
 
 | Item                             | Action                                        |
 | -------------------------------- | --------------------------------------------- |
-| Show/Hide Editor Line Numbers    | Show/hide the line-number gutter              |
-| Show/Hide Editor Visible Whitespace | Show/hide visible space, tab, newline, return |
-| Show/Hide Editor Scroll Bar      | Show/hide the editor's right-side scroll bar  |
+| Show/Hide Line Numbers           | Show/hide the line-number gutter              |
+| Show/Hide Whitespace             | Show/hide visible space, tab, newline, return |
+| Show/Hide Scroll Bar             | Show/hide the editor's right-side scroll bar  |
+| Show/Hide Soft Wrap              | Wrap long lines vs. scroll horizontally       |
 
 ## Tools menu
 

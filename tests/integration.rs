@@ -367,22 +367,22 @@ fn quit_action_sets_flag() {
 }
 
 #[test]
-fn file_menu_quit_quits_program() {
+fn vix_menu_quit_quits_program() {
     let mut app = app_at(Path::new("."));
     assert!(!app.should_quit);
 
-    // Open the menu bar, move right to the File menu, then walk down to "Quit".
+    // Open the menu bar (the Vix menu is first), then walk down to "Quit".
     app.on_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
-    let file_idx = vix::menu::MENUS
+    let vix_idx = vix::menu::MENUS
         .iter()
-        .position(|m| m.name == "menu.file")
-        .expect("a File menu exists");
-    for _ in 0..file_idx {
+        .position(|m| m.name == "menu.vix")
+        .expect("a Vix menu exists");
+    for _ in 0..vix_idx {
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     }
     // Walk down until "Quit" is highlighted (Down skips separators, so we cannot
     // assume the number of presses equals the item's array index).
-    let item_count = vix::menu::MENUS[file_idx].items.len();
+    let item_count = vix::menu::MENUS[vix_idx].items.len();
     for _ in 0..=item_count {
         if app.menu.selected_action() == Some("file.quit") {
             break;
@@ -397,8 +397,8 @@ fn file_menu_quit_quits_program() {
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     // The main loop (main.rs) breaks out as soon as this flag is set, so
-    // choosing File -> Quit really does end the program.
-    assert!(app.should_quit, "File -> Quit must request exit");
+    // choosing Vix -> Quit really does end the program.
+    assert!(app.should_quit, "Vix -> Quit must request exit");
 }
 
 #[test]
@@ -1630,7 +1630,8 @@ fn menus_have_separators_in_the_specified_places() {
         // (find-related items now live in the Edit → Find submenu; the editor
         // display toggles now live in the View → Editor submenu — so the
         // top-level separators precede the groups/submenus that remain.)
-        ("menu.file", &["file.open", "file.close", "file.quit"]),
+        ("menu.file", &["file.open", "file.close"]),
+        ("menu.vix", &["file.quit"]),
         ("menu.edit", &["edit.cut", "edit.toggle_comment"]),
         ("menu.view", &["view.left_dock"]),
     ];
@@ -1691,7 +1692,10 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
         .and_then(|it| it.submenu)
         .expect("View has an Editor submenu");
     let actions: Vec<&str> = editor.iter().map(|it| it.action).collect();
-    assert_eq!(actions, vec!["view.line_numbers", "view.whitespace", "view.scrollbar"]);
+    assert_eq!(
+        actions,
+        vec!["view.line_numbers", "view.whitespace", "view.scrollbar", "view.soft_wrap"]
+    );
 }
 
 #[test]
