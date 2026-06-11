@@ -187,6 +187,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.keyway", "view.keyway"),
     ("cmd.toggle_left_dock", "view.left_dock"),
     ("cmd.toggle_right_dock", "view.right_dock"),
+    ("cmd.toggle_bottom_dock", "view.bottom_dock"),
     ("cmd.toggle_status_bar", "view.status_bar"),
     ("cmd.toggle_line_numbers", "view.line_numbers"),
     ("cmd.toggle_whitespace", "view.whitespace"),

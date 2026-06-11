@@ -109,9 +109,10 @@ The calendar date/time logic, theme model, locale list, keyway (keyboard
 navigation style) list, keyboard-help rows, Nerd Font glyph set, and find /
 replace box state live in the internal crates `vix-date-time-calendar-panel`,
 `vix-theme-chooser`, `vix-locale-chooser`, `vix-keyway-chooser`,
-`vix-keyboard-shortcut-panel`, `vix-nerd-font-palette`, and `vix-find-panel`.
-Bundled themes are embedded in the binary with `include_dir`. See
-`docs/architecture.md`.
+`vix-keyboard-shortcut-panel`, `vix-nerd-font-palette`, `vix-find-panel`,
+`vix-left-dock` (explorer), `vix-right-dock` (messages), `vix-bottom-dock`, and
+`vix-status-bar-panel`. Bundled themes are embedded in the binary with
+`include_dir`. See `docs/architecture.md`.
 
 Event flow: `main` runs the loop, calling `ui::draw(&mut app)` (which records
 each pane's rectangle for mouse hit-testing) then feeding each `crossterm` event

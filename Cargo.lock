@@ -3275,15 +3275,23 @@ dependencies = [
  "regex",
  "rust-i18n",
  "serde",
+ "vix-bottom-dock",
  "vix-date-time-calendar-panel",
  "vix-editor",
  "vix-find-panel",
  "vix-keyboard-shortcut-panel",
  "vix-keyway-chooser",
+ "vix-left-dock",
  "vix-locale-chooser",
  "vix-nerd-font-palette",
+ "vix-right-dock",
+ "vix-status-bar-panel",
  "vix-theme-chooser",
 ]
+
+[[package]]
+name = "vix-bottom-dock"
+version = "0.1.0"
 
 [[package]]
 name = "vix-date-time-calendar-panel"
@@ -3340,11 +3348,23 @@ name = "vix-keyway-chooser"
 version = "0.1.0"
 
 [[package]]
+name = "vix-left-dock"
+version = "0.1.0"
+
+[[package]]
 name = "vix-locale-chooser"
 version = "0.1.0"
 
 [[package]]
 name = "vix-nerd-font-palette"
+version = "0.1.0"
+
+[[package]]
+name = "vix-right-dock"
+version = "0.1.0"
+
+[[package]]
+name = "vix-status-bar-panel"
 version = "0.1.0"
 
 [[package]]

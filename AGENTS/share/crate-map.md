@@ -15,6 +15,10 @@ Vix is a Cargo workspace. Shared reference for where everything lives.
 | `vix-keyboard-shortcut-panel`  | `vix-keyboard-shortcut-panel/`  | Keyboard-help rows (key combo + i18n description key).              |
 | `vix-nerd-font-palette`        | `vix-nerd-font-palette/`        | Curated Nerd Font glyph set + character-picker grid state.          |
 | `vix-find-panel`               | `vix-find-panel/`               | Find / find-and-replace box state + effective-pattern builder.      |
+| `vix-left-dock`                | `vix-left-dock/`                | Left-dock file-explorer tree state (lazy expand, selection).        |
+| `vix-right-dock`               | `vix-right-dock/`               | Right-dock message-drawer state (advice/notifications + selection). |
+| `vix-bottom-dock`              | `vix-bottom-dock/`              | Bottom-dock scrollable line buffer (logs/output/data).              |
+| `vix-status-bar-panel`         | `vix-status-bar-panel/`         | Status-bar left/right segment formatting.                           |
 
 ## `vix-editor` modules (`vix-editor/src/`)
 

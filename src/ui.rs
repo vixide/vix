@@ -36,8 +36,20 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         .constraints(vconstraints)
         .split(area);
     app.layout.menu = rows[0];
-    let body = rows[1];
     let status_row = rows.get(2).copied();
+
+    // The bottom dock (when shown) takes a fixed-height strip at the bottom of the
+    // body; the rest is the main body (explorer | center | messages).
+    let (body, bottom_dock_rect) = if app.show_bottom_dock {
+        let h = 9u16.min(rows[1].height.saturating_sub(3));
+        let v = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(3), Constraint::Length(h)])
+            .split(rows[1]);
+        (v[0], Some(v[1]))
+    } else {
+        (rows[1], None)
+    };
 
     // Body columns: explorer | center | messages. The dock widths are
     // user-adjustable (drag the inner edges); clamp them so the editor keeps room.
@@ -119,6 +131,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     draw_center(app, frame, editor_area, scrollbar_area);
     if let Some(r) = messages_rect {
         draw_messages(app, frame, r);
+    }
+    if let Some(r) = bottom_dock_rect {
+        draw_bottom_dock(app, frame, r);
     }
     if let Some(r) = status_row {
         draw_status_bar(app, frame, r);
@@ -732,6 +747,30 @@ fn draw_messages(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_stateful_widget(list, inner, &mut state);
 }
 
+fn draw_bottom_dock(app: &App, frame: &mut Frame, area: Rect) {
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::TOP)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(false))
+        .title(format!(" {} {} ", icon::INFO, t!("ui.bottom_dock")));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let lines: Vec<Line> = if app.bottom_dock.is_empty() {
+        vec![Line::from(Span::styled(
+            t!("ui.bottom_dock_empty").to_string(),
+            theme::dim(),
+        ))]
+    } else {
+        app.bottom_dock
+            .visible(inner.height as usize)
+            .iter()
+            .map(|l| Line::from(l.clone()))
+            .collect()
+    };
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
 fn draw_status_bar(app: &App, frame: &mut Frame, area: Rect) {
     let (line, col) = app.editor.cursor_1based();
     let path = app
@@ -760,18 +799,16 @@ fn draw_status_bar(app: &App, frame: &mut Frame, area: Rect) {
                 "unknown" | "" => "text",
                 other => other,
             };
-            let eol = t.editor.line_ending();
-            let sel = t.editor.selection_span().map_or(String::new(), |(s, e)| {
+            let sel = t.editor.selection_span().map(|(s, e)| {
                 let code = t.editor.code_ref();
-                let lines = code.char_to_line(e) - code.char_to_line(s) + 1;
-                format!("Sel {} ({lines}L)   ", e - s)
+                (e - s, code.char_to_line(e) - code.char_to_line(s) + 1)
             });
-            format!("{lang}  {eol}  UTF-8   {sel}")
+            vix_status_bar_panel::info_segment(Some(lang), t.editor.line_ending(), sel)
         })
         .unwrap_or_default();
 
-    let left = format!(" {}{}{}  \u{2014}  {}", mode, path, dirty_flag, app.status);
-    let right = format!("{info}Ln {line}:Col {col}   {} ", icon::CALENDAR);
+    let left = vix_status_bar_panel::left_segment(&mode, &path, &dirty_flag, &app.status);
+    let right = vix_status_bar_panel::right_segment(&info, line, col, icon::CALENDAR);
 
     let bg = theme::region_base(theme::Region::StatusBar);
     // A top border separates the status bar from the body above it.

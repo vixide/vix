@@ -8,6 +8,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Bottom dock** (View → Show/Hide Bottom Dock, or the palette;
+  `show_bottom_dock` setting, default off): a full-width scrollable line buffer at
+  the bottom of the body for log messages, command/terminal output, data views,
+  etc. State lives in the new `vix-bottom-dock` crate (line buffer + scroll).
 - **Calendar month-nav arrows.** The calendar box's month header shows
   `◀ Month Year ▶`; the arrows are clickable (and mirror the `←`/`→` keys), and a
   bottom help line shows `◀ ▶ month   Esc close`.
@@ -153,6 +157,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Docks and status bar extracted to internal crates.** The left dock (file
+  explorer) moved to `vix-left-dock`, the right dock (message drawer) to
+  `vix-right-dock`, and the status-bar segment formatting to
+  `vix-status-bar-panel`. The app re-exports them; behavior is unchanged.
 - The main panes use a lighter border frame: the left and right docks keep only
   their inner (top + side-facing-the-editor) borders, the center editor keeps
   only its top border, and the bottom status bar gains a full-width top border

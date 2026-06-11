@@ -1,0 +1,15 @@
+# vix-left-dock: state for the left dock — the file explorer's lazily-expanded
+# directory tree, selection, multi-selection, and scroll. Depends only on `std`
+# (it reads directories); the host renders it.
+
+[package]
+name = "vix-left-dock"
+version = "0.1.0"
+edition = "2021"
+description = "Left-dock file-explorer tree state for Vix."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_left_dock"
+path = "src/lib.rs"

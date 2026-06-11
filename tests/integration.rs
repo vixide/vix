@@ -1122,6 +1122,26 @@ fn calendar_click_inserts_into_editor() {
 }
 
 #[test]
+fn toggle_bottom_dock_flips_persists_and_renders() {
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+    let mut app = app_at(Path::new("."));
+    assert!(!app.show_bottom_dock, "hidden by default");
+
+    app.run_action("view.bottom_dock");
+    assert!(app.show_bottom_dock, "the action shows the bottom dock");
+    assert!(app.settings.show_bottom_dock, "the choice persists");
+
+    // The dock buffers lines and renders without panicking.
+    app.bottom_dock.push("hello from the bottom dock");
+    let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+
+    app.run_action("view.bottom_dock");
+    assert!(!app.show_bottom_dock, "toggling again hides it");
+}
+
+#[test]
 fn draw_handles_a_hidden_status_bar() {
     // A full render with the status bar hidden must lay out and paint without
     // panicking (the body row now consumes the freed line).
@@ -2094,6 +2114,7 @@ fn switching_keyway_resets_vim_to_normal() {
     assert_eq!(app.settings.keyway, "vim");
     assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"), "reset to Normal");
 }
+
 
 
 

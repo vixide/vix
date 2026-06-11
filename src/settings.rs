@@ -43,6 +43,8 @@ pub struct Settings {
     pub show_status_bar: bool,
     /// Show the editor's right-side scroll bar.
     pub show_scrollbar: bool,
+    /// Show the bottom dock (log/output/data panel).
+    pub show_bottom_dock: bool,
     /// Open single-clicked / arrow-scanned files in an ephemeral preview tab.
     pub preview_tabs: bool,
     /// On save, strip trailing spaces/tabs from every line.
@@ -84,6 +86,7 @@ impl Default for Settings {
             show_messages: true,
             show_status_bar: true,
             show_scrollbar: true,
+            show_bottom_dock: false,
             preview_tabs: true,
             trim_trailing_whitespace: true,
             ensure_final_newline: true,

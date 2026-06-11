@@ -33,6 +33,10 @@ A map of all documentation in this repository. Start with the
   [keyway-chooser.md](spec/keyway-chooser.md) ·
   [nerd-font-palette.md](spec/nerd-font-palette.md) ·
   [vix-calendar.md](spec/vix-calendar.md) · [hover.md](spec/hover.md)
+- [vix-left-dock.md](spec/vix-left-dock.md) ·
+  [vix-right-dock.md](spec/vix-right-dock.md) ·
+  [vix-bottom-dock.md](spec/vix-bottom-dock.md) ·
+  [vix-status-bar-panel.md](spec/vix-status-bar-panel.md)
 - [main-rs-and-lib-rs-boilerplate.md](spec/main-rs-and-lib-rs-boilerplate.md) ·
   [rust-clippy-pedantic.md](spec/rust-clippy-pedantic.md) ·
   [rust-cargo-config-toml-musl.md](spec/rust-cargo-config-toml-musl.md)

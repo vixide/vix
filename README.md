@@ -141,13 +141,13 @@ src/                            the vix application crate
   lib.rs         library crate root; loads i18n translations (rust-i18n)
   app.rs         central state, event routing, action dispatch
   editor.rs      tabs/buffers over the code-editor widget
-  explorer.rs    file-tree drawer
+  explorer.rs    re-export of the file-tree state (vix-left-dock)
   menu.rs        menu-bar definitions + dropdown state
   palette.rs     command palette + fuzzy matching
   search.rs      re-export of the find/replace box state (vix-find-panel)
   project_search.rs  project-wide search/replace panel
   query.rs       interactive query-replace session
-  messages.rs    notifications drawer
+  messages.rs    re-export of the message-drawer state (vix-right-dock)
   fileops.rs     explorer copy/cut/paste/delete helpers
   settings.rs    confy-backed settings + themes directory
   theme.rs       Nerd Font icons + re-export of the theme model
@@ -162,6 +162,10 @@ vix-keyway-chooser/             keyboard navigation styles (Apple/Emacs/Vim) + c
 vix-keyboard-shortcut-panel/    keyboard-help rows
 vix-nerd-font-palette/          curated Nerd Font glyph set + character-picker grid state
 vix-find-panel/                 find / find-and-replace box state + pattern builder
+vix-left-dock/                  left-dock file-explorer tree state
+vix-right-dock/                 right-dock message-drawer state
+vix-bottom-dock/                bottom-dock scrollable line buffer (logs/output/data)
+vix-status-bar-panel/           status-bar left/right segment formatting
 
 spec/            design specification (the source of truth)
 docs/            architecture, keybindings, themes, i18n, configuration

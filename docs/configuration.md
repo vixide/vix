@@ -24,6 +24,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `show_messages` | bool   | `true`   | Show the message drawer on startup.                                  |
 | `show_status_bar` | bool | `true`   | Show the bottom status bar.                                          |
 | `show_scrollbar` | bool  | `true`   | Show the editor's right-side scroll bar.                             |
+| `show_bottom_dock` | bool | `false` | Show the bottom dock (log/output/data panel).                        |
 | `preview_tabs`  | bool   | `true`   | Open single-clicked / arrow-scanned files in an ephemeral preview tab. |
 | `indent_style`  | string | `"spaces"`| What Tab inserts: `"spaces"` or `"tabs"`.                           |
 | `tab_width`     | int    | `4`      | Number of spaces per indent when `indent_style = "spaces"`.          |
@@ -45,6 +46,7 @@ show_explorer = true
 show_messages = true
 show_status_bar = true
 show_scrollbar = true
+show_bottom_dock = false
 preview_tabs = true
 indent_style = "spaces"
 tab_width = 4

@@ -123,6 +123,7 @@ const VIEW: &[Item] = &[
     SEP,
     Item::leaf("menu.item.view.left_dock", "view.left_dock", "Ctrl+B"),
     Item::leaf("menu.item.view.right_dock", "view.right_dock", ""),
+    Item::leaf("menu.item.view.bottom_dock", "view.bottom_dock", ""),
     Item::leaf("menu.item.view.status_bar", "view.status_bar", ""),
     SEP,
     Item::sub("menu.item.view.editor", VIEW_EDITOR),

@@ -1,0 +1,15 @@
+# vix-right-dock: state for the right dock — the message drawer (advice and
+# notifications, each dismissable) plus its selection. Pure data (no
+# dependencies); the host renders it.
+
+[package]
+name = "vix-right-dock"
+version = "0.1.0"
+edition = "2021"
+description = "Right-dock message-drawer state for Vix."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_right_dock"
+path = "src/lib.rs"

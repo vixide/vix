@@ -81,6 +81,7 @@ The **Find…** submenu:
 | *— separator —*                  |                                               |
 | Show/Hide Left Dock              | Show/hide the file explorer (`Ctrl+B`)        |
 | Show/Hide Right Dock             | Show/hide the message drawer                  |
+| Show/Hide Bottom Dock            | Show/hide the bottom dock (logs/output/data)  |
 | Show/Hide Bottom Status          | Show/hide the bottom status bar               |
 | *— separator —*                  |                                               |
 | Editor ▸                         | Submenu of editor display toggles (below)     |

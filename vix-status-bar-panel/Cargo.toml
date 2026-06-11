@@ -1,0 +1,16 @@
+# vix-status-bar-panel: formatting for the bottom status bar's left and right
+# segments (path/dirty/mode/status, and language/line-ending/encoding/selection/
+# line:col). Pure string logic (no dependencies); the host gathers the data,
+# supplies the glyphs, and renders the result.
+
+[package]
+name = "vix-status-bar-panel"
+version = "0.1.0"
+edition = "2021"
+description = "Status-bar segment formatting for Vix."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_status_bar_panel"
+path = "src/lib.rs"

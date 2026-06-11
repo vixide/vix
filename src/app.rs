@@ -280,6 +280,10 @@ pub struct App {
     pub show_status_bar: bool,
     /// Whether the editor's right-side scroll bar is shown.
     pub show_scrollbar: bool,
+    /// Whether the bottom dock (log/output/data panel) is shown.
+    pub show_bottom_dock: bool,
+    /// Bottom-dock line buffer.
+    pub bottom_dock: vix_bottom_dock::BottomDock,
     /// Whether the calendar box is shown.
     pub show_calendar: bool,
     /// Month navigation state for the calendar box.
@@ -369,6 +373,8 @@ impl App {
             show_messages: settings.show_messages,
             show_status_bar: settings.show_status_bar,
             show_scrollbar: settings.show_scrollbar,
+            show_bottom_dock: settings.show_bottom_dock,
+            bottom_dock: vix_bottom_dock::BottomDock::new(),
             show_calendar: false,
             calendar: crate::calendar::Calendar::new(),
             show_help: false,
@@ -986,6 +992,7 @@ impl App {
             "view.right_dock" | "view.messages" => self.toggle_right_dock(),
             "view.status_bar" => self.toggle_status_bar(),
             "view.scrollbar" => self.toggle_scrollbar(),
+            "view.bottom_dock" => self.toggle_bottom_dock(),
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
             "help.shortcuts" => self.show_help = true,
@@ -1056,6 +1063,12 @@ impl App {
     fn toggle_status_bar(&mut self) {
         self.show_status_bar = !self.show_status_bar;
         self.settings.show_status_bar = self.show_status_bar;
+    }
+
+    /// Toggle the bottom dock (log/output/data panel), persisting the choice.
+    fn toggle_bottom_dock(&mut self) {
+        self.show_bottom_dock = !self.show_bottom_dock;
+        self.settings.show_bottom_dock = self.show_bottom_dock;
     }
 
     /// Toggle the editor's right-side scroll bar, persisting the choice.
