@@ -1,17 +1,8 @@
 //! Soft-wrap layout and rendering for the editor widget (Vix's own code, held to
-//! `clippy::pedantic`). Long logical lines wrap across several screen rows; a
-//! shared [`Editor::visual_rows`] layout drives the renderer here as well as the
-//! cursor scroll (`Editor::focus`) and mouse hit-testing (`cursor_from_mouse`).
-
-#![warn(clippy::pedantic)]
-// TUI layout math casts small `usize` counts to `u16` cell coordinates (always in
-// range), matching the rest of Vix.
-#![allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::too_many_lines
-)]
+//! the crate's `clippy::pedantic`). Long logical lines wrap across several screen
+//! rows; a shared [`Editor::visual_rows`] layout drives the renderer here as well
+//! as the cursor scroll (`Editor::focus`) and mouse hit-testing
+//! (`cursor_from_mouse`).
 
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;

@@ -1,7 +1,5 @@
 //! Bracket matching: find the partner of the bracket at (or just before) the
-//! cursor. Vix-owned code, held to `clippy::pedantic`.
-
-#![warn(clippy::pedantic)]
+//! cursor. Vix-owned code, held to the crate's `clippy::pedantic`.
 
 use crate::editor::Editor;
 

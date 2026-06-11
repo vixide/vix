@@ -39,16 +39,15 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
   without `///` fails the build.
 - **No `unsafe`.**
 - **`#![warn(clippy::pedantic)]`** is on for every `vix` target (`lib.rs`,
-  `main.rs`, `tests/`, `examples/`) and for the Vix-owned `vix-editor` modules
-  (`wrap`, `brackets`), each with a small curated `allow` list for the noisy
-  casts/etc. The reused `vix-editor` engine keeps `#![allow(clippy::all)]`.
+  `main.rs`, `tests/`, `examples/`) and for the Vix-owned crates and modules,
+  each with a small curated `allow` list for the noisy casts/etc.
 - Keep the tree warning-clean: `cargo clippy --workspace` must be clean.
 
 ## Non-negotiable conventions
 
 - **Internationalize all user-facing text.** Never hard-code a display string;
   add a key to `locales/app.yml` and render it with `t!`. Data crates store i18n
-  *keys*; the host translates. See [`docs/i18n.md`](docs/i18n.md).
+  _keys_; the host translates. See [`docs/i18n.md`](docs/i18n.md).
 - **One action, one implementation.** Menu items, palette commands, and
   shortcuts all dispatch through `App::run_action` using string action ids
   (`file.save`, `view.theme`, …). Add the behavior there once.
@@ -58,7 +57,7 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
   [`docs/themes.md`](docs/themes.md).
 - **Keep the logic terminal-independent.** Editing/state logic lives in the
   library and is tested without a TTY. Rendering lives only in `src/ui.rs`.
-- **Input dispatch is keyway-aware.** Raw keys route through the active *keyway*
+- **Input dispatch is keyway-aware.** Raw keys route through the active _keyway_
   (Apple / Emacs / Vim) in `App::on_key`; keyways translate keys into the same
   `run_action` calls and editor motions rather than duplicating behavior. See
   `spec/keyway-chooser.md`.
@@ -67,18 +66,18 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 
 ## Where things live
 
-| You want to…                         | Go to…                                            |
-| ------------------------------------ | ------------------------------------------------- |
+| You want to…                         | Go to…                                                       |
+| ------------------------------------ | ------------------------------------------------------------ |
 | Add/route a command                  | `src/app.rs` (`run_action`), `src/menu.rs`, `src/palette.rs` |
-| Change rendering                     | `src/ui.rs`                                        |
-| Add/translate UI text                | `locales/app.yml` (+ `t!` at the call site)       |
-| Add a setting                        | `src/settings.rs`                                  |
-| Change the editor widget             | `vix-editor/` (engine reused; widget is Vix's)    |
-| Change soft-wrap / bracket rendering | `vix-editor/src/wrap.rs`, `vix-editor/src/brackets.rs` |
-| Change theme colors/model            | `vix-theme-chooser/`                               |
-| Change available UI languages        | `vix-locale-chooser/`                              |
-| Change keyboard navigation styles    | `vix-keyway-chooser/` + keyway dispatch in `src/app.rs` |
-| Change the calendar                  | `vix-date-time-calendar-panel/`                    |
+| Change rendering                     | `src/ui.rs`                                                  |
+| Add/translate UI text                | `locales/app.yml` (+ `t!` at the call site)                  |
+| Add a setting                        | `src/settings.rs`                                            |
+| Change the editor widget             | `vix-editor/` (engine reused; widget is Vix's)               |
+| Change soft-wrap / bracket rendering | `vix-editor/src/wrap.rs`, `vix-editor/src/brackets.rs`       |
+| Change theme colors/model            | `vix-theme-chooser/`                                         |
+| Change available UI languages        | `vix-locale-chooser/`                                        |
+| Change keyboard navigation styles    | `vix-keyway-chooser/` + keyway dispatch in `src/app.rs`      |
+| Change the calendar                  | `vix-date-time-calendar-panel/`                              |
 
 See [`AGENTS/share/crate-map.md`](AGENTS/share/crate-map.md) for the full map.
 

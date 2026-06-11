@@ -18,8 +18,10 @@ Vix is a Cargo workspace. Shared reference for where everything lives.
 
 ## `vix-editor` modules (`vix-editor/src/`)
 
-The crate keeps a reused **engine** (allowed `clippy::all`, upstream style) and
-**Vix-owned** modules (held to `clippy::pedantic` via their own inner attributes).
+The crate root carries `#![warn(clippy::pedantic)]`, so **Vix-owned** modules are
+held to pedantic by default. The reused **engine** modules keep their upstream
+style and carry `#[allow(clippy::all, clippy::pedantic)]` (both are listed because
+`clippy::all` does not include `pedantic`).
 
 | Module                 | Kind        | Owns                                                       |
 | ---------------------- | ----------- | ---------------------------------------------------------- |

@@ -15,9 +15,10 @@ on top.
 - `#![forbid(unsafe_code)]` and `#![warn(clippy::pedantic)]` on every `vix` target
   (each `tests/`/`examples/` file repeats the inner attribute — lints are
   per-crate-root). Keep `cargo clippy --workspace` clean.
-- New code in `vix-editor` goes in a **Vix-owned** module held to
-  `clippy::pedantic` (e.g. `wrap`, `brackets`) — not in the reused engine modules,
-  which carry `#![allow(clippy::all)]` to track upstream style.
+- `vix-editor` also has crate-root `#![warn(clippy::pedantic)]`. New code goes in
+  a **Vix-owned** module (e.g. `wrap`, `brackets`, `lines`), held to pedantic by
+  default — not in the reused engine modules, which carry
+  `#[allow(clippy::all, clippy::pedantic)]` to track upstream style.
 - A small, *documented* `allow` list for genuinely-noisy pedantic lints (casts to
   `u16` cell coords, `too_many_lines`, …) is fine; prefer fixing the rest.
 
