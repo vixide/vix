@@ -103,17 +103,18 @@ testable.
 | `ui`             | All rendering; lays out the frame and draws each pane          |
 
 The calendar date/time logic, theme model, locale list, keyway (keyboard
-navigation style) list, and keyboard-help rows live in the internal crates
-`vix-date-time-calendar-panel`, `vix-theme-chooser`, `vix-locale-chooser`,
-`vix-keyway-chooser`, and `vix-keyboard-shortcut-panel`. Bundled themes are
-embedded in the binary with `include_dir`. See `docs/architecture.md`.
+navigation style) list, keyboard-help rows, and Nerd Font glyph set live in the
+internal crates `vix-date-time-calendar-panel`, `vix-theme-chooser`,
+`vix-locale-chooser`, `vix-keyway-chooser`, `vix-keyboard-shortcut-panel`, and
+`vix-nerd-font-palette`. Bundled themes are embedded in the binary with
+`include_dir`. See `docs/architecture.md`.
 
 Event flow: `main` runs the loop, calling `ui::draw(&mut app)` (which records
 each pane's rectangle for mouse hit-testing) then feeding each `crossterm` event
 to `App::on_key` or `App::on_mouse`. `on_key` resolves modal layers in priority
-order — help, dialog, calendar, theme/locale/keyway/recent choosers,
-query-replace, project search, confirm, paste-conflict, prompt, palette, search,
-menu — before
+order — help, dialog, calendar, theme/locale/keyway/recent choosers, Nerd Font
+palette, query-replace, project search, confirm, paste-conflict, prompt, palette,
+search, menu — before
 the active **keyway** dispatch (Apple shortcuts / Emacs chords / Vim modal; see
 `keyway-chooser.md`) and, finally, the focused pane (editor / explorer /
 messages). Menu items and palette commands share one set of action identifiers

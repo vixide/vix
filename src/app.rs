@@ -134,6 +134,11 @@ pub use vix_locale_chooser::Chooser as LocaleChooser;
 /// style; Enter commits and persists it, Esc reverts.
 pub use vix_keyway_chooser::Chooser as KeywayChooser;
 
+/// Nerd Font palette overlay state (Tools -> Nerd Font Palette), re-exported from
+/// [`vix_nerd_font_palette`]. Arrow keys move within the glyph grid; Enter (or a
+/// click) inserts the highlighted glyph into the active editor, Esc closes.
+pub use vix_nerd_font_palette::Palette as NerdPalette;
+
 /// The active keyboard navigation style, derived from `settings.keyway`. It
 /// decides how raw key events are dispatched (see [`App::on_key`]): `Apple` uses
 /// modifier shortcuts, `Emacs` uses `Ctrl` chords, `Vim` is modal.
@@ -201,6 +206,9 @@ pub struct Layout {
     /// Row list rectangle of the open chooser overlay (theme/locale/keyway), so a
     /// click can hit-test which row was picked.
     pub chooser: Rect,
+    /// Glyph-grid rectangle of the open Nerd Font palette, so a click can
+    /// hit-test which cell was picked.
+    pub nerd_palette: Rect,
 }
 
 /// The whole application state.
@@ -237,6 +245,8 @@ pub struct App {
     pub keyway_chooser: Option<KeywayChooser>,
     /// Recent-files chooser overlay, when open.
     pub recent_chooser: Option<RecentChooser>,
+    /// Nerd Font palette (character picker) overlay, when open.
+    pub nerd_palette: Option<NerdPalette>,
     /// Modal info dialog (Vix menu About / Website / Email), when open.
     pub dialog: Option<Dialog>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
@@ -330,6 +340,7 @@ impl App {
             locale_chooser: None,
             keyway_chooser: None,
             recent_chooser: None,
+            nerd_palette: None,
             dialog: None,
             clip: Vec::new(),
             clip_cut: false,
@@ -428,6 +439,10 @@ impl App {
         }
         if self.recent_chooser.is_some() {
             self.recent_key(key);
+            return;
+        }
+        if self.nerd_palette.is_some() {
+            self.nerd_key(key);
             return;
         }
         if self.query_replace.is_some() {
@@ -900,6 +915,7 @@ impl App {
                     self.calendar.reset();
                 }
             }
+            "tools.nerd_palette" => self.open_nerd_palette(),
             "tools.palette" => self.open_palette(),
             // The left/right docks are the explorer and message drawers. Both the
             // old action ids and the new dock-named ones route to one method.
@@ -1556,6 +1572,10 @@ impl App {
             self.recent_mouse(mouse);
             return;
         }
+        if self.nerd_palette.is_some() {
+            self.nerd_mouse(mouse);
+            return;
+        }
         // Keyboard-only modal overlays swallow all mouse input rather than
         // letting a click fall through to the editor/explorer underneath.
         if self.show_help
@@ -1801,7 +1821,7 @@ impl App {
             if let Some(mi) = self.menu.open {
                 let items = MENUS[mi].items;
                 let idx = row.saturating_sub(top) as usize;
-                if row >= top && idx < items.len() {
+                if row >= top && idx < items.len() && !items[idx].is_separator() {
                     let action = items[idx].action;
                     self.menu.close();
                     self.run_action(action);
@@ -1859,8 +1879,9 @@ impl App {
             // Items start one row below the dropdown's top border.
             let top = dd.y + 1;
             if let Some(mi) = self.menu.open {
+                let items = MENUS[mi].items;
                 let idx = row.saturating_sub(top) as usize;
-                if row >= top && idx < MENUS[mi].items.len() {
+                if row >= top && idx < items.len() && !items[idx].is_separator() {
                     self.menu.item = idx;
                 }
             }
@@ -2172,6 +2193,73 @@ impl App {
                     kc.selected = idx;
                 }
             }
+        }
+    }
+
+    // ----- Nerd Font palette ----------------------------------------------
+
+    fn open_nerd_palette(&mut self) {
+        self.nerd_palette = Some(NerdPalette::open());
+    }
+
+    fn nerd_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.nerd_palette.as_mut() {
+                    p.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.nerd_palette.as_mut() {
+                    p.down();
+                }
+            }
+            KeyCode::Left => {
+                if let Some(p) = self.nerd_palette.as_mut() {
+                    p.left();
+                }
+            }
+            KeyCode::Right => {
+                if let Some(p) = self.nerd_palette.as_mut() {
+                    p.right();
+                }
+            }
+            // Enter inserts and keeps the palette open so several glyphs can be
+            // picked in a row; Esc closes it.
+            KeyCode::Enter => self.insert_selected_glyph(),
+            KeyCode::Esc => self.nerd_palette = None,
+            _ => {}
+        }
+    }
+
+    fn nerd_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.nerd_palette;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let col = ((mouse.column - r.x) / crate::ui::NERD_CELL_W) as usize;
+        let row = (mouse.row - r.y) as usize;
+        if let Some(p) = self.nerd_palette.as_mut() {
+            if p.select_at(row, col) {
+                self.insert_selected_glyph();
+            }
+        }
+    }
+
+    /// Insert the highlighted glyph into the active editor (leaving the palette
+    /// open). No-op when there is no editable buffer (e.g. an image tab).
+    fn insert_selected_glyph(&mut self) {
+        let Some(p) = self.nerd_palette.as_ref() else {
+            return;
+        };
+        let glyph = p.selected_glyph();
+        let name = p.selected_name();
+        let area = self.layout.editor;
+        if self.editor.insert_str(&glyph.to_string(), area) {
+            self.status = t!("status.glyph_inserted", name = name).to_string();
         }
     }
 

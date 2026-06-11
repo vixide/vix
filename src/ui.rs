@@ -148,6 +148,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.recent_chooser.is_some() {
         draw_recent_chooser(app, frame, area);
     }
+    if app.nerd_palette.is_some() {
+        draw_nerd_palette(app, frame, area);
+    }
     if app.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
         draw_paste_conflict(app, frame, area);
     }
@@ -470,6 +473,9 @@ pub fn menu_dropdown_rect(frame_area: Rect, bar: Rect, index: usize) -> Rect {
         // Budget: 2 borders + leading + trailing space (= 4), plus a 1-column gap
         // between the label and the shortcut so they never touch.
         .map(|it| {
+            if it.is_separator() {
+                return 0;
+            }
             let gap = usize::from(!it.shortcut.is_empty());
             it.label().chars().count() + it.shortcut.chars().count() + 4 + gap
         })
@@ -495,6 +501,10 @@ fn draw_menu_dropdown(app: &App, frame: &mut Frame, bar: Rect) {
         .items
         .iter()
         .map(|it| {
+            if it.is_separator() {
+                let w = (area.width as usize).saturating_sub(2);
+                return ListItem::new(Line::from(Span::styled("─".repeat(w), theme::dim())));
+            }
             let label = it.label();
             let pad = (area.width as usize)
                 .saturating_sub(label.chars().count() + it.shortcut.chars().count() + 4);
@@ -770,6 +780,80 @@ fn draw_calendar(app: &App, frame: &mut Frame, area: Rect) {
     ));
     frame.render_widget(Paragraph::new(header), rows[1]);
     frame.render_widget(Paragraph::new(month_lines(&app.calendar)), rows[2]);
+}
+
+/// Columns each glyph cell occupies in the Nerd Font palette grid. The mouse
+/// hit-test in [`crate::app::App::nerd_mouse`] divides by this, so the renderer
+/// and the hit-test must agree on it.
+pub const NERD_CELL_W: u16 = 4;
+
+fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
+    use vix_nerd_font_palette::{COLS, GLYPHS};
+    let Some(p) = app.nerd_palette.as_ref() else {
+        return;
+    };
+    let grid_w = COLS as u16 * NERD_CELL_W;
+    let width = (grid_w + 2).min(area.width);
+    let grid_rows = p.rows() as u16;
+    // Borders (2) + glyph rows + the selected-name row (1) + the hint row (1).
+    let height = (grid_rows + 4).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::PALETTE, t!("ui.nerd_palette")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1), Constraint::Length(1)])
+        .split(inner);
+
+    // The glyph grid: COLS cells per row, each NERD_CELL_W wide so the column a
+    // click lands in is `(x - grid_x) / NERD_CELL_W`. The highlighted cell is
+    // drawn reversed (theme::selected), mirroring the other choosers.
+    let mut lines: Vec<Line> = Vec::with_capacity(p.rows());
+    for row in 0..p.rows() {
+        let mut spans = Vec::with_capacity(COLS);
+        for col in 0..COLS {
+            let idx = row * COLS + col;
+            if idx >= GLYPHS.len() {
+                spans.push(Span::raw(" ".repeat(NERD_CELL_W as usize)));
+                continue;
+            }
+            let cell = format!(" {}  ", GLYPHS[idx].ch);
+            if idx == p.selected {
+                spans.push(Span::styled(cell, theme::selected()));
+            } else {
+                spans.push(Span::raw(cell));
+            }
+        }
+        lines.push(Line::from(spans));
+    }
+    frame.render_widget(Paragraph::new(lines), chunks[0]);
+
+    let name = Line::from(Span::raw(format!("  {}", p.selected_name())));
+    frame.render_widget(Paragraph::new(name), chunks[1]);
+
+    let hint = Line::from(Span::styled(t!("ui.nerd_palette_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[2]);
+
+    // Record just the glyph rows for mouse hit-testing.
+    app.layout.nerd_palette = Rect {
+        x: chunks[0].x,
+        y: chunks[0].y,
+        width: grid_w.min(chunks[0].width),
+        height: grid_rows.min(chunks[0].height),
+    };
 }
 
 fn month_lines(cal: &calendar::Calendar) -> Vec<Line<'static>> {

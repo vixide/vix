@@ -3280,6 +3280,7 @@ dependencies = [
  "vix-keyboard-shortcut-panel",
  "vix-keyway-chooser",
  "vix-locale-chooser",
+ "vix-nerd-font-palette",
  "vix-theme-chooser",
 ]
 
@@ -3332,6 +3333,10 @@ version = "0.1.0"
 
 [[package]]
 name = "vix-locale-chooser"
+version = "0.1.0"
+
+[[package]]
+name = "vix-nerd-font-palette"
 version = "0.1.0"
 
 [[package]]

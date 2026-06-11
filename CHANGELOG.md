@@ -8,6 +8,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Nerd Font Palette** (Tools → Nerd Font Palette…, crate
+  `vix-nerd-font-palette`): a character picker showing a grid of curated Nerd
+  Font glyphs. Browse with the arrow keys or the mouse; Enter or a click inserts
+  the highlighted glyph into the active editor and leaves the palette open so
+  several can be picked in a row; Esc closes it.
+- **Menu separators.** Dropdowns group related items with non-selectable
+  divider lines: in File (before Open, Close, Quit), Edit (before Cut, Toggle
+  Comment, Find), and View (before Toggle Left Dock, Toggle Editor Line Numbers).
+  Keyboard navigation, hover, and clicks skip separators.
 - **Bracket matching.** When the cursor is on (or just after) a bracket
   `()[]{}`, its matching partner is highlighted. No auto-insertion of pairs.
 - **Richer status bar.** The status bar now shows the language, line ending

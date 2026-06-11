@@ -307,14 +307,20 @@ fn file_menu_quit_quits_program() {
     for _ in 0..file_idx {
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     }
-    let quit_idx = vix::menu::MENUS[file_idx]
-        .items
-        .iter()
-        .position(|i| i.action == "file.quit")
-        .expect("File menu has a Quit item");
-    for _ in 0..quit_idx {
+    // Walk down until "Quit" is highlighted (Down skips separators, so we cannot
+    // assume the number of presses equals the item's array index).
+    let item_count = vix::menu::MENUS[file_idx].items.len();
+    for _ in 0..=item_count {
+        if app.menu.selected_action() == Some("file.quit") {
+            break;
+        }
         app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
     }
+    assert_eq!(
+        app.menu.selected_action(),
+        Some("file.quit"),
+        "Down navigation must reach Quit"
+    );
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     // The main loop (main.rs) breaks out as soon as this flag is set, so
@@ -1318,6 +1324,85 @@ fn menu_dropdown_keeps_a_gap_before_shortcuts() {
             assert!(pad >= 1, "{}/{} label and shortcut touch", m.name, it.action);
         }
     }
+}
+
+#[test]
+fn menus_have_separators_in_the_specified_places() {
+    // A separator sits immediately before each named item.
+    let cases: &[(&str, &[&str])] = &[
+        ("menu.file", &["file.open", "file.close", "file.quit"]),
+        ("menu.edit", &["edit.cut", "edit.toggle_comment", "edit.find"]),
+        ("menu.view", &["view.left_dock", "view.line_numbers"]),
+    ];
+    for (menu, befores) in cases {
+        let items = vix::menu::MENUS
+            .iter()
+            .find(|m| m.name == *menu)
+            .unwrap_or_else(|| panic!("{menu} exists"))
+            .items;
+        for action in *befores {
+            let at = items
+                .iter()
+                .position(|it| it.action == *action)
+                .unwrap_or_else(|| panic!("{menu} has {action}"));
+            assert!(at > 0 && items[at - 1].is_separator(), "{menu}: separator before {action}");
+        }
+    }
+}
+
+#[test]
+fn menu_navigation_skips_separators() {
+    let mut app = app_at(Path::new("."));
+    app.on_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
+    let file_idx = vix::menu::MENUS.iter().position(|m| m.name == "menu.file").unwrap();
+    for _ in 0..file_idx {
+        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    }
+    // Walking the whole menu with Down must never land on (or commit) a separator.
+    let len = vix::menu::MENUS[file_idx].items.len();
+    for _ in 0..=len {
+        let action = app.menu.selected_action().expect("never a separator");
+        assert_ne!(action, vix::menu::SEPARATOR);
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    }
+}
+
+#[test]
+fn nerd_palette_inserts_glyph_with_keyboard() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.nerd_palette");
+    assert!(app.nerd_palette.is_some(), "the action opens the palette");
+
+    // Move one cell right, capture the highlighted glyph, then insert it.
+    app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    let expected = app.nerd_palette.as_ref().unwrap().selected_glyph();
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    // Enter inserts but keeps the palette open for picking more glyphs.
+    assert!(app.nerd_palette.is_some(), "Enter keeps the palette open");
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains(expected), "the editor holds the inserted glyph");
+
+    app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert!(app.nerd_palette.is_none(), "Esc closes the palette");
+}
+
+#[test]
+fn nerd_palette_click_inserts_glyph() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.nerd_palette");
+    // The grid rect is normally recorded during render; set it directly. Each
+    // cell is `NERD_CELL_W` wide, so column 1 starts at x = NERD_CELL_W.
+    let cw = vix::ui::NERD_CELL_W;
+    app.layout.nerd_palette = Rect::new(0, 2, cw * 8, 7);
+    app.on_mouse(click(cw, 2)); // row 0, column 1 → glyph index 1
+
+    // The click both highlights that cell and inserts it; the palette stays open,
+    // so its current glyph is the one just inserted.
+    assert!(app.nerd_palette.is_some(), "a click keeps the palette open");
+    let expected = app.nerd_palette.as_ref().unwrap().selected_glyph();
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains(expected), "clicking a cell inserts that glyph");
 }
 
 #[test]

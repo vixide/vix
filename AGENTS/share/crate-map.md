@@ -13,6 +13,7 @@ Vix is a Cargo workspace. Shared reference for where everything lives.
 | `vix-locale-chooser`           | `vix-locale-chooser/`           | Available UI languages + chooser state.                             |
 | `vix-keyway-chooser`           | `vix-keyway-chooser/`           | Keyboard navigation styles (Apple/Emacs/Vim) + chooser state.       |
 | `vix-keyboard-shortcut-panel`  | `vix-keyboard-shortcut-panel/`  | Keyboard-help rows (key combo + i18n description key).              |
+| `vix-nerd-font-palette`        | `vix-nerd-font-palette/`        | Curated Nerd Font glyph set + character-picker grid state.          |
 
 ## `vix-editor` modules (`vix-editor/src/`)
 

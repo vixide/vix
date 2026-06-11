@@ -275,6 +275,12 @@ menu.item.tools.calendar:
   fr: "Calendrier"
   de: "Kalender"
   cy: "Calendr"
+menu.item.tools.nerd_palette:
+  en: "Nerd Font Palette…"
+  es: "Paleta de Nerd Font…"
+  fr: "Palette Nerd Font…"
+  de: "Nerd-Font-Palette…"
+  cy: "Palet Nerd Font…"
 menu.item.tools.palette:
   en: "Command Palette"
   es: "Paleta de comandos"
@@ -620,6 +626,12 @@ ui.calendar:
   fr: "Calendrier"
   de: "Kalender"
   cy: "Calendr"
+ui.nerd_palette:
+  en: "Nerd Font Palette"
+  es: "Paleta de Nerd Font"
+  fr: "Palette Nerd Font"
+  de: "Nerd-Font-Palette"
+  cy: "Palet Nerd Font"
 ui.command_palette:
   en: "Command Palette"
   es: "Paleta de comandos"
@@ -678,6 +690,12 @@ ui.theme_hint:
   fr: "↑↓ aperçu   Entrée appliquer   Échap annuler"
   de: "↑↓ Vorschau   Enter anwenden   Esc abbrechen"
   cy: "↑↓ rhagolwg   Enter cymhwyso   Esc canslo"
+ui.nerd_palette_hint:
+  en: "←↑↓→ move   Enter insert   Esc close"
+  es: "←↑↓→ mover   Enter insertar   Esc cerrar"
+  fr: "←↑↓→ déplacer   Entrée insérer   Échap fermer"
+  de: "←↑↓→ bewegen   Enter einfügen   Esc schließen"
+  cy: "←↑↓→ symud   Enter mewnosod   Esc cau"
 ui.paste_exists:
   en: "\"%{name}\" already exists in the destination."
   es: "\"%{name}\" ya existe en el destino."
@@ -1072,6 +1090,12 @@ status.opened:
   fr: "Ouvert %{path}"
   de: "Geöffnet %{path}"
   cy: "Agorwyd %{path}"
+status.glyph_inserted:
+  en: "Inserted %{name}"
+  es: "Insertado %{name}"
+  fr: "Inséré %{name}"
+  de: "%{name} eingefügt"
+  cy: "Mewnosodwyd %{name}"
 status.no_recent:
   en: "No recent files"
   es: "No hay archivos recientes"

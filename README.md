@@ -59,6 +59,8 @@ both work.
 - **Message drawer** — advice and notifications, each individually dismissable.
 - **Calendar box** — local date/time, UTC ISO-8601 instant, ISO-8601 week date,
   and a navigable month grid with today highlighted (all computed with [`jiff`]).
+- **Nerd Font palette** (Tools menu) — a character picker: browse a grid of Nerd
+  Font glyphs and click (or arrow + Enter) to insert one into the editor.
 - **Themes** — two built-in monochrome themes (Dark and Light) plus custom
   themes loaded from JSON, chosen live in **View → Theme…**. See
   [`docs/themes.md`](docs/themes.md).
@@ -158,6 +160,7 @@ vix-theme-chooser/              theme model, styles, custom JSON themes, chooser
 vix-locale-chooser/             available UI languages + chooser
 vix-keyway-chooser/             keyboard navigation styles (Apple/Emacs/Vim) + chooser
 vix-keyboard-shortcut-panel/    keyboard-help rows
+vix-nerd-font-palette/          curated Nerd Font glyph set + character-picker grid state
 
 spec/            design specification (the source of truth)
 docs/            architecture, keybindings, themes, i18n, configuration

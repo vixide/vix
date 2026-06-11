@@ -31,6 +31,7 @@ A map of all documentation in this repository. Start with the
   [theme-chooser.md](spec/theme-chooser.md) ·
   [locale-chooser.md](spec/locale-chooser.md) ·
   [keyway-chooser.md](spec/keyway-chooser.md) ·
+  [nerd-font-palette.md](spec/nerd-font-palette.md) ·
   [vix-calendar.md](spec/vix-calendar.md) · [hover.md](spec/hover.md)
 - [main-rs-and-lib-rs-boilerplate.md](spec/main-rs-and-lib-rs-boilerplate.md) ·
   [rust-clippy-pedantic.md](spec/rust-clippy-pedantic.md) ·

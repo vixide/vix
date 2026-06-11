@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use ratatui::layout::Rect;
 use ratatui::style::Style;
-use vix_editor::actions::{Delete, MoveDown, MoveRight, MoveUp};
+use vix_editor::actions::{Delete, InsertText, MoveDown, MoveRight, MoveUp};
 pub use vix_editor::editor::Editor as CodeEditor;
 use vix_editor::utils::get_lang;
 use ratatui_image::protocol::StatefulProtocol;
@@ -488,6 +488,23 @@ impl Editor {
             let off = code.line_to_char(row) + code.line_len(row);
             t.editor.set_cursor(off);
         }
+    }
+
+    /// Insert `text` at the active buffer's cursor and scroll it into `area`.
+    /// Returns whether the text was inserted (false when there is no editable
+    /// buffer, e.g. an image tab). Marks the buffer dirty and promotes a preview.
+    pub fn insert_str(&mut self, text: &str, area: Rect) -> bool {
+        if let Some(t) = self.active_tab_mut() {
+            if t.is_image() {
+                return false;
+            }
+            t.editor.apply(InsertText { text: text.to_string() });
+            t.editor.focus(&area);
+            t.dirty = true;
+            t.preview = false;
+            return true;
+        }
+        false
     }
 
     /// Forward-delete (the `Delete` key): step right, then delete back.

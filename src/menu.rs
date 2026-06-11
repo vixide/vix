@@ -15,13 +15,25 @@ pub struct Item {
     pub shortcut: &'static str,
 }
 
+/// Sentinel `action` marking a non-selectable separator row in a dropdown.
+pub const SEPARATOR: &str = "menu.separator";
+
 impl Item {
     /// The label translated into the active locale.
     #[must_use]
     pub fn label(&self) -> String {
         t!(self.label).to_string()
     }
+
+    /// Whether this entry is a separator (a non-selectable divider line).
+    #[must_use]
+    pub fn is_separator(&self) -> bool {
+        self.action == SEPARATOR
+    }
 }
+
+/// A dropdown separator (divider line).
+const SEP: Item = Item { label: "", action: SEPARATOR, shortcut: "" };
 
 /// A top-level menu and its items.
 pub struct MenuDef {
@@ -41,21 +53,27 @@ impl MenuDef {
 
 const FILE: &[Item] = &[
     Item { label: "menu.item.file.new", action: "file.new", shortcut: "Ctrl+N" },
+    SEP,
     Item { label: "menu.item.file.open", action: "file.open", shortcut: "Ctrl+O" },
     Item { label: "menu.item.file.open_recent", action: "file.open_recent", shortcut: "Ctrl+Shift+O" },
     Item { label: "menu.item.file.save", action: "file.save", shortcut: "Ctrl+S" },
     Item { label: "menu.item.file.save_as", action: "file.save_as", shortcut: "Ctrl+Shift+S" },
+    SEP,
     Item { label: "menu.item.file.close", action: "file.close", shortcut: "Ctrl+W" },
+    SEP,
     Item { label: "menu.item.file.quit", action: "file.quit", shortcut: "Ctrl+Q" },
 ];
 
 const EDIT: &[Item] = &[
     Item { label: "menu.item.edit.undo", action: "edit.undo", shortcut: "Ctrl+Z" },
     Item { label: "menu.item.edit.redo", action: "edit.redo", shortcut: "Ctrl+Y" },
+    SEP,
     Item { label: "menu.item.edit.cut", action: "edit.cut", shortcut: "Ctrl+X" },
     Item { label: "menu.item.edit.copy", action: "edit.copy", shortcut: "Ctrl+C" },
     Item { label: "menu.item.edit.paste", action: "edit.paste", shortcut: "Ctrl+V" },
+    SEP,
     Item { label: "menu.item.edit.toggle_comment", action: "edit.toggle_comment", shortcut: "Ctrl+/" },
+    SEP,
     Item { label: "menu.item.edit.find", action: "edit.find", shortcut: "Ctrl+F" },
     Item { label: "menu.item.edit.replace", action: "edit.replace", shortcut: "Ctrl+R" },
 ];
@@ -64,8 +82,10 @@ const VIEW: &[Item] = &[
     Item { label: "menu.item.view.theme", action: "view.theme", shortcut: "" },
     Item { label: "menu.item.view.locale", action: "view.locale", shortcut: "" },
     Item { label: "menu.item.view.keyway", action: "view.keyway", shortcut: "" },
+    SEP,
     Item { label: "menu.item.view.left_dock", action: "view.left_dock", shortcut: "Ctrl+B" },
     Item { label: "menu.item.view.right_dock", action: "view.right_dock", shortcut: "" },
+    SEP,
     Item { label: "menu.item.view.line_numbers", action: "view.line_numbers", shortcut: "" },
     Item { label: "menu.item.view.whitespace", action: "view.whitespace", shortcut: "" },
     Item { label: "menu.item.view.soft_wrap", action: "view.soft_wrap", shortcut: "" },
@@ -79,6 +99,8 @@ const VIX: &[Item] = &[
 
 const TOOLS: &[Item] = &[
     Item { label: "menu.item.tools.calendar", action: "tools.calendar", shortcut: "" },
+    Item { label: "menu.item.tools.nerd_palette", action: "tools.nerd_palette", shortcut: "" },
+    SEP,
     Item { label: "menu.item.tools.palette", action: "tools.palette", shortcut: "Ctrl+P" },
 ];
 
@@ -152,25 +174,44 @@ impl Menu {
         }
     }
 
-    /// Highlight the previous item, wrapping around.
+    /// Highlight the previous selectable item, skipping separators and wrapping.
     pub fn up(&mut self) {
         if let Some(i) = self.open {
-            let len = MENUS[i].items.len();
-            self.item = (self.item + len - 1) % len;
+            let items = MENUS[i].items;
+            let len = items.len();
+            let mut j = self.item;
+            for _ in 0..len {
+                j = (j + len - 1) % len;
+                if !items[j].is_separator() {
+                    break;
+                }
+            }
+            self.item = j;
         }
     }
 
-    /// Highlight the next item, wrapping around.
+    /// Highlight the next selectable item, skipping separators and wrapping.
     pub fn down(&mut self) {
         if let Some(i) = self.open {
-            let len = MENUS[i].items.len();
-            self.item = (self.item + 1) % len;
+            let items = MENUS[i].items;
+            let len = items.len();
+            let mut j = self.item;
+            for _ in 0..len {
+                j = (j + 1) % len;
+                if !items[j].is_separator() {
+                    break;
+                }
+            }
+            self.item = j;
         }
     }
 
-    /// The action of the highlighted item, if a menu is open.
+    /// The action of the highlighted item, unless it is a separator.
     #[must_use]
     pub fn selected_action(&self) -> Option<&'static str> {
-        self.open.map(|i| MENUS[i].items[self.item].action)
+        self.open.and_then(|i| {
+            let it = &MENUS[i].items[self.item];
+            (!it.is_separator()).then_some(it.action)
+        })
     }
 }

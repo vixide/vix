@@ -7,6 +7,8 @@ Top menu bar.
 - A mouse click on a menu name opens it; a click on a dropdown item runs it.
 - While a menu is open, moving the pointer follows the selection: hovering a
   dropdown row highlights it, and hovering another top-level name switches menus.
+- Dropdowns may contain **separators** — non-selectable divider lines that group
+  related items. Arrow navigation, hover, and clicks all skip them.
 
 The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 
@@ -23,11 +25,14 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 | Item     | Shortcut       | Action                      |
 | -------- | -------------- | --------------------------- |
 | New          | `Ctrl+N`       | Create a new buffer         |
+| *— separator —* | | |
 | Open…        | `Ctrl+O`       | Open an existing file       |
 | Open Recent… | `Ctrl+Shift+O` | Reopen a recently opened file (chooser) |
 | Save         | `Ctrl+S`       | Save the file               |
 | Save As… | `Ctrl+Shift+S` | Save under a different name |
+| *— separator —* | | |
 | Close    | `Ctrl+W`       | Close the active buffer     |
+| *— separator —* | | |
 | Quit     | `Ctrl+Q`       | Quit Vix                    |
 
 ## Edit menu
@@ -36,10 +41,13 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 | ------- | -------- | ---------------------------- |
 | Undo    | `Ctrl+Z` | Undo                         |
 | Redo    | `Ctrl+Y` | Redo                         |
+| *— separator —* | | |
 | Cut     | `Ctrl+X` | Cut to clipboard             |
 | Copy    | `Ctrl+C` | Copy to clipboard            |
 | Paste   | `Ctrl+V` | Paste from clipboard         |
+| *— separator —* | | |
 | Toggle Comment | `Ctrl+/` | Comment/uncomment the line or selection |
+| *— separator —* | | |
 | Find    | `Ctrl+F` | Find in the current file     |
 | Replace | `Ctrl+R` | Find-and-replace in the file |
 
@@ -54,18 +62,22 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 | Theme…                           | Open the theme chooser (`theme-chooser.md`)   |
 | Locale…                          | Open the locale chooser (`locale-chooser.md`) |
 | Keyway…                          | Open the keyway chooser (`keyway-chooser.md`) |
+| *— separator —*                  |                                               |
 | Toggle Left Dock                 | Show/hide the file explorer (`Ctrl+B`)        |
 | Toggle Right Dock                | Show/hide the message drawer                  |
+| *— separator —*                  |                                               |
 | Toggle Editor Line Numbers       | Show/hide the line-number gutter              |
 | Toggle Editor Visible Whitespace | Show/hide visible space, tab, newline, return |
 | Toggle Soft Wrap                 | Wrap long lines vs. scroll horizontally       |
 
 ## Tools menu
 
-| Item            | Action                      |
-| --------------- | --------------------------- |
-| Calendar        | Toggle the calendar box     |
-| Command Palette | Open the palette (`Ctrl+P`) |
+| Item               | Action                                            |
+| ------------------ | ------------------------------------------------- |
+| Calendar           | Toggle the calendar box                           |
+| Nerd Font Palette… | Open the glyph picker (`nerd-font-palette.md`)    |
+| *— separator —*    |                                                   |
+| Command Palette    | Open the palette (`Ctrl+P`)                       |
 
 ## Help menu
 
