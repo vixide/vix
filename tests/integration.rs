@@ -1957,6 +1957,67 @@ fn ascii_panel_opens_inserts_and_closes() {
 }
 
 #[test]
+fn closing_a_dirty_tab_prompts_then_discards() {
+    let mut app = app_at(Path::new("."));
+    app.on_key(key('x')); // dirties the untitled buffer
+    assert!(app.editor.active_tab().unwrap().dirty);
+    app.run_action("file.close");
+    assert!(app.unsaved.is_some(), "a dirty close prompts to save");
+    app.on_key(key('d')); // don't save -> close anyway
+    assert!(app.unsaved.is_none(), "the prompt is dismissed");
+    assert!(
+        !app.editor.active_tab().unwrap().dirty,
+        "the buffer was closed (a fresh empty tab remains)"
+    );
+}
+
+#[test]
+fn closing_a_dirty_tab_can_be_cancelled() {
+    let mut app = app_at(Path::new("."));
+    app.on_key(key('x'));
+    app.run_action("file.close");
+    assert!(app.unsaved.is_some());
+    app.on_key(key('c')); // cancel
+    assert!(app.unsaved.is_none());
+    assert!(
+        app.editor.active_tab().unwrap().dirty,
+        "cancelling keeps the unsaved buffer open"
+    );
+}
+
+#[test]
+fn quitting_with_a_dirty_tab_prompts_then_quits_on_discard() {
+    let mut app = app_at(Path::new("."));
+    app.on_key(key('x'));
+    app.run_action("file.quit");
+    assert!(app.unsaved.is_some(), "a dirty quit prompts first");
+    assert!(!app.should_quit, "quit is deferred until the tab is resolved");
+    app.on_key(key('d')); // discard -> no more dirty tabs -> quit
+    assert!(app.should_quit, "discarding the last dirty tab quits");
+}
+
+#[test]
+fn unsaved_prompt_save_writes_and_closes() {
+    let dir = unique_dir("unsaved_save");
+    let file = dir.join("note.txt");
+    fs::write(&file, "hello\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file.clone());
+    app.on_key(keycode(KeyCode::End));
+    for c in "!!!".chars() {
+        app.on_key(key(c));
+    }
+    assert!(app.editor.active_tab().unwrap().dirty);
+    app.run_action("file.close");
+    assert!(app.unsaved.is_some());
+    app.on_key(key('s')); // save -> writes -> closes
+    assert!(app.unsaved.is_none());
+    let saved = fs::read_to_string(&file).unwrap();
+    assert!(saved.starts_with("hello!!!"), "got: {saved:?}");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn menu_type_ahead_selects_by_first_letter() {
     let mut app = app_at(Path::new("."));
     app.on_key(keycode(KeyCode::F(10)));

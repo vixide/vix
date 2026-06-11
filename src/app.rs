@@ -145,6 +145,25 @@ pub struct Confirm {
     pub paths: Vec<PathBuf>,
 }
 
+/// What an [`UnsavedPrompt`] is guarding: closing the active tab, or quitting the
+/// whole program (which walks every dirty tab in turn).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum UnsavedMode {
+    /// Closing the active tab.
+    CloseTab,
+    /// Quitting; each dirty tab is resolved before the program exits.
+    Quit,
+}
+
+/// A modal "you have unsaved changes" prompt offering **Save**, **Don't Save**,
+/// and **Cancel**. Raised when closing a tab or quitting with a dirty buffer.
+pub struct UnsavedPrompt {
+    /// Whether this prompt guards a tab close or a quit.
+    pub mode: UnsavedMode,
+    /// Display name of the buffer being asked about.
+    pub name: String,
+}
+
 /// A modal info dialog: a title, a body, and a single **Ok** button. Used by the
 /// Vix menu's About / Website / Email items.
 ///
@@ -297,6 +316,8 @@ pub struct App {
     pub paste: Option<PasteOp>,
     /// Pending confirmation, when active.
     pub confirm: Option<Confirm>,
+    /// Pending unsaved-changes prompt (close tab / quit), when active.
+    pub unsaved: Option<UnsavedPrompt>,
     /// Theme chooser overlay, when open.
     pub theme_chooser: Option<ThemeChooser>,
     /// Locale chooser overlay, when open.
@@ -414,6 +435,7 @@ impl App {
             prompt: None,
             paste: None,
             confirm: None,
+            unsaved: None,
             theme_chooser: None,
             locale_chooser: None,
             keyway_chooser: None,
@@ -545,6 +567,10 @@ impl App {
         }
         if self.confirm.is_some() {
             self.confirm_key(key);
+            return;
+        }
+        if self.unsaved.is_some() {
+            self.unsaved_key(key);
             return;
         }
         if self.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
@@ -900,7 +926,8 @@ impl App {
         match cmd {
             "w" => self.run_action("file.save"),
             "q" => self.run_action("file.close"),
-            "q!" => self.run_action("file.quit"),
+            // Vim force-quit discards unsaved changes without prompting.
+            "q!" => self.should_quit = true,
             "wq" | "x" => {
                 self.run_action("file.save");
                 self.run_action("file.close");
@@ -940,12 +967,7 @@ impl App {
                 self.prompt =
                     Some(Prompt::new(PromptKind::SaveAs, t!("prompt.save_as").to_string()).with_input(cur));
             }
-            "file.close" => {
-                if let Some(p) = self.editor.close_active() {
-                    self.push_closed_tab(p);
-                }
-                self.status = t!("status.closed_buffer").into();
-            }
+            "file.close" => self.request_close_active(),
             "file.close_all" => {
                 for p in self.editor.close_all() {
                     self.push_closed_tab(p);
@@ -954,7 +976,7 @@ impl App {
                 self.status = t!("status.closed_all").into();
             }
             "file.reopen_closed" => self.reopen_closed_tab(),
-            "file.quit" => self.should_quit = true,
+            "file.quit" => self.request_quit(),
             "edit.undo" => {
                 if let Some(t) = self.editor.active_tab_mut() {
                     t.editor.apply(UndoAction {});
@@ -1476,6 +1498,118 @@ impl App {
         }
     }
 
+    // ----- unsaved-changes prompt (close tab / quit) ---------------------
+
+    /// Display name of the active buffer, for the unsaved-changes prompt.
+    fn active_tab_name(&self) -> String {
+        self.editor
+            .active_tab()
+            .and_then(|t| t.path.as_ref())
+            .and_then(|p| p.file_name().map(|s| s.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| t!("ui.untitled").to_string())
+    }
+
+    /// Index of the first tab with unsaved changes (skipping read-only images).
+    fn first_dirty_tab(&self) -> Option<usize> {
+        self.editor.tabs.iter().position(|t| t.dirty && !t.is_image())
+    }
+
+    /// Close the active tab, prompting first if it has unsaved changes.
+    fn request_close_active(&mut self) {
+        if self.editor.active_tab().is_some_and(|t| t.dirty && !t.is_image()) {
+            self.unsaved = Some(UnsavedPrompt {
+                mode: UnsavedMode::CloseTab,
+                name: self.active_tab_name(),
+            });
+        } else {
+            self.do_close_active();
+        }
+    }
+
+    /// Close the active tab unconditionally.
+    fn do_close_active(&mut self) {
+        if let Some(p) = self.editor.close_active() {
+            self.push_closed_tab(p);
+        }
+        self.status = t!("status.closed_buffer").into();
+    }
+
+    /// Quit, prompting for each tab that has unsaved changes first.
+    fn request_quit(&mut self) {
+        if let Some(idx) = self.first_dirty_tab() {
+            self.editor.active = idx;
+            self.unsaved = Some(UnsavedPrompt {
+                mode: UnsavedMode::Quit,
+                name: self.active_tab_name(),
+            });
+        } else {
+            self.should_quit = true;
+        }
+    }
+
+    /// After a dirty tab is resolved during quit, move on to the next one (or
+    /// actually quit when none remain).
+    fn advance_quit(&mut self) {
+        if let Some(idx) = self.first_dirty_tab() {
+            self.editor.active = idx;
+            let name = self.active_tab_name();
+            if let Some(u) = self.unsaved.as_mut() {
+                u.name = name;
+            }
+        } else {
+            self.unsaved = None;
+            self.should_quit = true;
+        }
+    }
+
+    fn unsaved_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('s' | 'S') => self.unsaved_save(),
+            KeyCode::Char('d' | 'D') => self.unsaved_discard(),
+            KeyCode::Char('c' | 'C') | KeyCode::Esc => self.unsaved = None,
+            _ => {}
+        }
+    }
+
+    /// Save the active buffer, then continue the close/quit it was guarding. If
+    /// the buffer is untitled, [`save`](Self::save) opens a Save As prompt and the
+    /// chain stops there (the user can re-trigger close/quit afterward).
+    fn unsaved_save(&mut self) {
+        let mode = self.unsaved.as_ref().map(|u| u.mode);
+        self.save();
+        // Untitled buffers route to Save As (still dirty here) or a save failed;
+        // either way, drop the prompt and let that flow take over.
+        if self.editor.active_tab().is_some_and(|t| t.dirty) {
+            self.unsaved = None;
+            return;
+        }
+        match mode {
+            Some(UnsavedMode::CloseTab) => {
+                self.unsaved = None;
+                self.do_close_active();
+            }
+            Some(UnsavedMode::Quit) => self.advance_quit(),
+            None => self.unsaved = None,
+        }
+    }
+
+    /// Discard unsaved changes and continue the close/quit being guarded.
+    fn unsaved_discard(&mut self) {
+        match self.unsaved.as_ref().map(|u| u.mode) {
+            Some(UnsavedMode::CloseTab) => {
+                self.unsaved = None;
+                self.do_close_active();
+            }
+            Some(UnsavedMode::Quit) => {
+                if let Some(t) = self.editor.active_tab_mut() {
+                    t.dirty = false;
+                }
+                self.advance_quit();
+            }
+            None => self.unsaved = None,
+        }
+    }
+
     // ----- explorer delete (with confirm) --------------------------------
 
     fn explorer_delete_request(&mut self) {
@@ -1801,6 +1935,7 @@ impl App {
             || self.query_replace.is_some()
             || self.project_search.is_some()
             || self.confirm.is_some()
+            || self.unsaved.is_some()
             || self.paste.as_ref().is_some_and(|p| p.conflict.is_some())
         {
             return;

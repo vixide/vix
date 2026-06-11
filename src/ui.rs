@@ -171,6 +171,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.confirm.is_some() {
         draw_confirm(app, frame, area);
     }
+    if app.unsaved.is_some() {
+        draw_unsaved(app, frame, area);
+    }
     if app.theme_chooser.is_some() {
         draw_theme_chooser(app, frame, area);
     }
@@ -267,6 +270,33 @@ fn draw_confirm(app: &App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
     frame.render_widget(Paragraph::new(Line::from(c.message.clone())), inner);
+}
+
+fn draw_unsaved(app: &App, frame: &mut Frame, area: Rect) {
+    let Some(u) = app.unsaved.as_ref() else { return };
+    let message = t!("ui.unsaved_prompt", name = u.name).to_string();
+    let choices = t!("ui.unsaved_choices");
+    let width = (message.chars().count().max(choices.chars().count()) as u16 + 6).min(area.width);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height / 3,
+        width,
+        height: 4,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} ", t!("ui.unsaved_title")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+    let lines = vec![
+        Line::from(message),
+        Line::from(Span::styled(choices.to_string(), theme::dim())),
+    ];
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 /// Render a centered list-chooser overlay (theme/locale/keyway): a titled box

@@ -13,6 +13,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Unsaved-changes prompt.** Closing a tab or quitting with unsaved changes now
+  raises a modal asking to **(s)ave**, **(d)on't save**, or **(c)ancel**. Quit
+  walks every dirty tab in turn before exiting. Vim `:q!` still force-quits
+  without prompting.
 - **ASCII panel** (Tools → ASCII): a scrolling overlay of the 128 ASCII codes
   showing each code's decimal, hexadecimal, and character representation. Arrow
   keys / PageUp / PageDown / Home / End move the highlight; Enter or a click
