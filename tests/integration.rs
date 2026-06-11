@@ -1172,6 +1172,39 @@ fn cancel_command_kills_a_running_command() {
 }
 
 #[test]
+fn project_dock_search_regex_and_case_toggles() {
+    let dir = unique_dir("dockre");
+    fs::write(dir.join("a.txt"), "foo123\nFOObar\nbaz\n").unwrap();
+    let mut app = app_at(&dir);
+
+    // Regex search `fo+\d` (Alt+R) → matches foo123 on line 1 only.
+    app.run_action("search.project_dock");
+    app.on_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::ALT));
+    assert!(app.prompt.as_ref().unwrap().regex, "Alt+R turned regex on");
+    for c in r"fo+\d".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+    let out = app.bottom_dock.lines.join("\n");
+    assert!(out.contains("a.txt:1:1:"), "regex matched foo123: {out:?}");
+    assert!(out.contains("[1 matches in 1 files]"), "one hit: {out:?}");
+
+    // Case-sensitive literal `FOO` (Alt+C) → matches line 2 (FOObar) only.
+    app.bottom_dock.clear();
+    app.run_action("search.project_dock");
+    app.on_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::ALT));
+    for c in "FOO".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+    let out2 = app.bottom_dock.lines.join("\n");
+    assert!(out2.contains("a.txt:2:1:"), "case-sensitive FOO matched line 2: {out2:?}");
+    assert!(out2.contains("[1 matches in 1 files]"), "only the uppercase hit: {out2:?}");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn search_in_project_to_dock_lists_and_jumps() {
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;

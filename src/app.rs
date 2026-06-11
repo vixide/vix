@@ -84,6 +84,23 @@ pub struct Prompt {
     pub title: String,
     /// Current input text.
     pub input: String,
+    /// Case-sensitive matching (`Alt+C`); only used by `SearchToDock`.
+    pub case_sensitive: bool,
+    /// Regex matching (`Alt+R`); only used by `SearchToDock`.
+    pub regex: bool,
+}
+
+impl Prompt {
+    /// A prompt of `kind` with the given border `title` and empty input.
+    fn new(kind: PromptKind, title: String) -> Self {
+        Prompt { kind, title, input: String::new(), case_sensitive: false, regex: false }
+    }
+
+    /// Set the initial input text.
+    fn with_input(mut self, input: String) -> Self {
+        self.input = input;
+        self
+    }
 }
 
 /// Output from a running command, streamed from its reader thread.
@@ -894,11 +911,7 @@ impl App {
                 self.status = t!("status.new_buffer").into();
             }
             "file.open" => {
-                self.prompt = Some(Prompt {
-                    kind: PromptKind::Open,
-                    title: t!("prompt.open").to_string(),
-                    input: String::new(),
-                });
+                self.prompt = Some(Prompt::new(PromptKind::Open, t!("prompt.open").to_string()));
             }
             "file.open_recent" => self.open_recent_chooser(),
             "file.save" => self.save(),
@@ -909,11 +922,8 @@ impl App {
                     .and_then(|t| t.path.clone())
                     .map(|p| p.display().to_string())
                     .unwrap_or_default();
-                self.prompt = Some(Prompt {
-                    kind: PromptKind::SaveAs,
-                    title: t!("prompt.save_as").to_string(),
-                    input: cur,
-                });
+                self.prompt =
+                    Some(Prompt::new(PromptKind::SaveAs, t!("prompt.save_as").to_string()).with_input(cur));
             }
             "file.close" => {
                 if let Some(p) = self.editor.close_active() {
@@ -999,11 +1009,8 @@ impl App {
             "search.project" => self.open_project_search(false),
             "search.project_replace" => self.open_project_search(true),
             "search.project_dock" => {
-                self.prompt = Some(Prompt {
-                    kind: PromptKind::SearchToDock,
-                    title: t!("prompt.search_dock").to_string(),
-                    input: String::new(),
-                });
+                self.prompt =
+                    Some(Prompt::new(PromptKind::SearchToDock, t!("prompt.search_dock").to_string()));
             }
             "search.next_selection" => self.find_selection(true),
             "search.prev_selection" => self.find_selection(false),
@@ -1021,11 +1028,8 @@ impl App {
             }
             "tools.nerd_palette" => self.open_nerd_palette(),
             "tools.run_command" => {
-                self.prompt = Some(Prompt {
-                    kind: PromptKind::RunCommand,
-                    title: t!("prompt.run_command").to_string(),
-                    input: String::new(),
-                });
+                self.prompt =
+                    Some(Prompt::new(PromptKind::RunCommand, t!("prompt.run_command").to_string()));
             }
             "tools.cancel_command" => self.cancel_command(),
             "tools.palette" => self.open_palette(),
@@ -3622,6 +3626,18 @@ impl App {
                     p.input.pop();
                 }
             }
+            // Alt+C / Alt+R toggle case / regex for the project→dock search.
+            KeyCode::Char(c) if Self::alt(&key) => {
+                if let Some(p) = self.prompt.as_mut() {
+                    if matches!(p.kind, PromptKind::SearchToDock) {
+                        match c.to_ascii_lowercase() {
+                            'c' => p.case_sensitive = !p.case_sensitive,
+                            'r' => p.regex = !p.regex,
+                            _ => {}
+                        }
+                    }
+                }
+            }
             KeyCode::Char(c) => {
                 if let Some(p) = self.prompt.as_mut() {
                     p.input.push(c);
@@ -3667,21 +3683,37 @@ impl App {
                 }
             }
             PromptKind::RunCommand => self.run_command(&prompt.input),
-            PromptKind::SearchToDock => self.search_project_to_dock(&prompt.input),
+            PromptKind::SearchToDock => {
+                self.search_project_to_dock(&prompt.input, prompt.case_sensitive, prompt.regex);
+            }
         }
     }
 
-    /// Search every project file for `query` (case-insensitive, literal) and list
-    /// the hits in the bottom dock as `relpath:line:col: text` lines, which are
-    /// click-to-jump. Shows the dock.
-    fn search_project_to_dock(&mut self, query: &str) {
+    /// Search every project file for `query` and list the hits in the bottom dock
+    /// as `relpath:line:col: text` lines, which are click-to-jump. `regex` treats
+    /// the query as a regular expression (else literal); `case_sensitive` matches
+    /// case exactly. Shows the dock.
+    fn search_project_to_dock(&mut self, query: &str, case_sensitive: bool, regex: bool) {
         let query = query.trim();
         if query.is_empty() {
             return;
         }
         self.build_file_index();
-        let Ok(re) = Regex::new(&format!("(?i){}", regex::escape(query))) else {
-            return;
+        let core = if regex {
+            query.to_string()
+        } else {
+            regex::escape(query)
+        };
+        let pat = if case_sensitive { core } else { format!("(?i){core}") };
+        let re = match Regex::new(&pat) {
+            Ok(r) => r,
+            Err(e) => {
+                self.show_bottom_dock = true;
+                self.settings.show_bottom_dock = true;
+                self.bottom_dock.push(format!("[bad regex: {e}]"));
+                self.status = t!("msg.bad_regex", error = e).to_string();
+                return;
+            }
         };
         self.show_bottom_dock = true;
         self.settings.show_bottom_dock = true;

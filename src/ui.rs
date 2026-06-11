@@ -1189,12 +1189,14 @@ fn field_line(label: &str, value: &str, focused: bool) -> Line<'static> {
 
 fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
     let Some(p) = app.prompt.as_ref() else { return };
+    // The project→dock search prompt shows case/regex toggles on a second line.
+    let toggles = matches!(p.kind, crate::app::PromptKind::SearchToDock);
     let width = (f32::from(area.width) * 0.6) as u16;
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
         y: area.y + area.height / 3,
         width,
-        height: 3,
+        height: if toggles { 4 } else { 3 },
     };
     frame.render_widget(Clear, rect);
     let block = Block::default()
@@ -1205,12 +1207,27 @@ fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
         .title(format!(" {} ", p.title));
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
-    let line = Line::from(vec![
+
+    let input = Line::from(vec![
         Span::styled("\u{276f} ", theme::title(true)),
         Span::raw(p.input.clone()),
         Span::styled("\u{2588}", theme::dim()),
     ]);
-    frame.render_widget(Paragraph::new(line), inner);
+    if toggles {
+        let rows = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Length(1)])
+            .split(inner);
+        frame.render_widget(Paragraph::new(input), rows[0]);
+        let on = |b: bool| if b { "on" } else { "off" };
+        let hint = format!("Alt+C case: {}   Alt+R regex: {}", on(p.case_sensitive), on(p.regex));
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(hint, theme::dim()))),
+            rows[1],
+        );
+    } else {
+        frame.render_widget(Paragraph::new(input), inner);
+    }
 }
 
 fn draw_help(frame: &mut Frame, area: Rect) {

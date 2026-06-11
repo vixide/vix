@@ -10,7 +10,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Search in Project → Dock** (Edit → Find submenu, or the palette): search
   every project file for a term and list the hits in the bottom dock as
-  `path:line:col` lines — each one click-to-jumps to the match.
+  `path:line:col` lines — each one click-to-jumps to the match. In the prompt,
+  `Alt+C` toggles case-sensitivity and `Alt+R` toggles regex.
 - **Run Command** (Tools → Run Command…, or the palette): prompt for a shell
   command, run it in the project root in a **background thread**, and **stream**
   its merged stdout/stderr into the bottom dock (shown automatically) line by
