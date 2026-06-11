@@ -144,7 +144,7 @@ src/                            the vix application crate
   explorer.rs    file-tree drawer
   menu.rs        menu-bar definitions + dropdown state
   palette.rs     command palette + fuzzy matching
-  search.rs      find/replace toolbar state
+  search.rs      re-export of the find/replace box state (vix-find-panel)
   project_search.rs  project-wide search/replace panel
   query.rs       interactive query-replace session
   messages.rs    notifications drawer
@@ -161,6 +161,7 @@ vix-locale-chooser/             available UI languages + chooser
 vix-keyway-chooser/             keyboard navigation styles (Apple/Emacs/Vim) + chooser
 vix-keyboard-shortcut-panel/    keyboard-help rows
 vix-nerd-font-palette/          curated Nerd Font glyph set + character-picker grid state
+vix-find-panel/                 find / find-and-replace box state + pattern builder
 
 spec/            design specification (the source of truth)
 docs/            architecture, keybindings, themes, i18n, configuration

@@ -62,13 +62,16 @@ command-palette file finder operate within it.
   highlighting, undo/redo, selection, system clipboard, block cursor)
   - Top tab bar: each tab is one text file; preview tabs render dimmed
   - Show/hide line numbers (`View ▸ Toggle Line Numbers`)
+  - Editing comforts: select all (`Ctrl+A`), duplicate line (`Ctrl+D`), delete
+    line (`Ctrl+K`), move line up/down (`Alt+↑`/`Alt+↓`), jump to the matching
+    bracket (`Ctrl+]`), and auto-indent on Enter (see `code-editor.md`)
   - Right-side scroll bar (`ratatui::widgets::Scrollbar`)
   - Opening an image file (png/jpg/gif/bmp/webp/…) shows it in a read-only
     image tab via `ratatui-image` (needs a graphics-capable terminal)
 - Right drawer message browser
   - List of advice and notifications; each item shows a close `x`
     (dismiss with `x`, `Delete`, or `Enter` while the drawer is focused)
-- Bottom status bar
+- Bottom status bar (toggle with `View ▸ Toggle Bottom Status`)
   - File path and dirty indicator, plus the latest status message
   - Language, line ending (LF/CRLF), encoding (UTF-8), and the selected
     character/line count when text is selected
@@ -103,11 +106,12 @@ testable.
 | `ui`             | All rendering; lays out the frame and draws each pane          |
 
 The calendar date/time logic, theme model, locale list, keyway (keyboard
-navigation style) list, keyboard-help rows, and Nerd Font glyph set live in the
-internal crates `vix-date-time-calendar-panel`, `vix-theme-chooser`,
-`vix-locale-chooser`, `vix-keyway-chooser`, `vix-keyboard-shortcut-panel`, and
-`vix-nerd-font-palette`. Bundled themes are embedded in the binary with
-`include_dir`. See `docs/architecture.md`.
+navigation style) list, keyboard-help rows, Nerd Font glyph set, and find /
+replace box state live in the internal crates `vix-date-time-calendar-panel`,
+`vix-theme-chooser`, `vix-locale-chooser`, `vix-keyway-chooser`,
+`vix-keyboard-shortcut-panel`, `vix-nerd-font-palette`, and `vix-find-panel`.
+Bundled themes are embedded in the binary with `include_dir`. See
+`docs/architecture.md`.
 
 Event flow: `main` runs the loop, calling `ui::draw(&mut app)` (which records
 each pane's rectangle for mouse hit-testing) then feeding each `crossterm` event
@@ -160,8 +164,17 @@ Tab inserts), **Smart Home** (`Home` → first non-blank, then column 0),
 (**View → Toggle Editor Visible Whitespace**), and a **richer status bar**
 (language, line ending, encoding, selection char/line count).
 
+Also shipped: **menu separators** grouping dropdown items (File/Edit/View);
+**Nerd Font Palette** (Tools → a glyph picker, `vix-nerd-font-palette`);
+**Toggle Bottom Status** (`View → Toggle Bottom Status`, `show_status_bar`
+setting); more **editing comforts** — Select All (`Ctrl+A`), Duplicate Line
+(`Ctrl+D`), Move Line Up/Down (`Alt+↑`/`Alt+↓`), Jump to Matching Bracket
+(`Ctrl+]`), and auto-indent on Enter; the find / replace box state extracted to
+`vix-find-panel` with **click-to-focus** fields; and **borderless screen edges**
+(the left/right docks drop their outer border and the editor its left/right
+borders).
+
 Roadmap (designed in the sibling spec files, not yet built): a real LSP client
 (semantic go-to-definition, completions, diagnostics), display tab width
-(literal tabs as `tab_width` columns), and the unbuilt menu items (Select All,
-Zoom, the keyboard _browser_ in `keyboard.md`). Each sibling spec marks its own
-status.
+(literal tabs as `tab_width` columns), and the unbuilt menu items (Zoom, the
+keyboard _browser_ in `keyboard.md`). Each sibling spec marks its own status.

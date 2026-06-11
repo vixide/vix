@@ -22,6 +22,8 @@ their defaults, so it is safe to delete or hand-edit.
 | `soft_wrap`     | bool   | `false`  | Wrap long lines across screen rows instead of scrolling horizontally. |
 | `show_explorer` | bool   | `true`   | Show the file-explorer drawer on startup.                            |
 | `show_messages` | bool   | `true`   | Show the message drawer on startup.                                  |
+| `show_status_bar` | bool | `true`   | Show the bottom status bar.                                          |
+| `show_scrollbar` | bool  | `true`   | Show the editor's right-side scroll bar.                             |
 | `preview_tabs`  | bool   | `true`   | Open single-clicked / arrow-scanned files in an ephemeral preview tab. |
 | `indent_style`  | string | `"spaces"`| What Tab inserts: `"spaces"` or `"tabs"`.                           |
 | `tab_width`     | int    | `4`      | Number of spaces per indent when `indent_style = "spaces"`.          |
@@ -41,6 +43,8 @@ line_numbers = true
 show_whitespace = false
 show_explorer = true
 show_messages = true
+show_status_bar = true
+show_scrollbar = true
 preview_tabs = true
 indent_style = "spaces"
 tab_width = 4

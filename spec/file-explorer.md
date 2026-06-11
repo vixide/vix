@@ -1,7 +1,9 @@
 # File Explorer
 
-**Status:** Shipped — keyboard navigation, expand/collapse, Enter-to-open,
-arrow-scan preview tabs, `Ctrl+B` toggle (revealing the active file), `Ctrl+E`
+**Status:** Shipped — keyboard navigation (`→`/`Enter` opens a file or expands a
+directory; `←` collapses an expanded directory or jumps to its parent, and never
+expands), arrow-scan preview tabs, `Ctrl+B` toggle (revealing the active file),
+`Ctrl+E`
 focus switching, mouse support (wheel to move the selection; click a file to
 preview it and click again to open it permanently; click a directory to
 expand/collapse), the file clipboard (`Ctrl+C`/`Ctrl+X`/`Ctrl+V` with same-dir

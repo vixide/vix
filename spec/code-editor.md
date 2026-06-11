@@ -29,6 +29,11 @@ the language's comment token — `//`, `#`, `--` — as one undoable edit), and
 highlighted; no pair auto-insertion). It also exposes its language, line ending
 (LF/CRLF), and selection span for the host's status bar.
 
+Editing comforts (each a single undoable edit): **select all** (`Ctrl+A`),
+**duplicate line** (`Ctrl+D`), **delete line** (`Ctrl+K`), **move line up/down**
+(`Alt+↑`/`Alt+↓`), **jump to the matching bracket** (`Ctrl+]`), and **auto-indent
+on Enter** (the new line carries the previous line's leading whitespace).
+
 ## Soft wrap
 
 **View → Toggle Soft Wrap** (the `soft_wrap` setting) wraps long logical lines

@@ -8,6 +8,36 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Calendar click-to-insert.** In the calendar box, clicking one of the
+  date-time lines (local date-time, UTC ISO instant, ISO week date) inserts that
+  string into the editor; clicking a day in the month grid inserts that date
+  formatted per the active locale. The box stays open for repeated inserts; a
+  click outside closes it.
+- **Nested submenus** in the menu bar. **View → Editor** groups the editor
+  display toggles (line numbers, visible whitespace, scroll bar); **Edit → Find**
+  groups the find-related items (Find, Find Next, Find Previous, Find Selection,
+  Find & Replace). Arrow keys / clicks open and navigate submenus (Right or a
+  click opens, Left or Esc backs out).
+- **Show/Hide Editor Scroll Bar** (View → Editor, or the palette): toggle the
+  editor's right-side scroll bar; the text reclaims the column when hidden.
+  Persists in the `show_scrollbar` setting (default on).
+- **Reopen Closed Tab** (`Ctrl+Shift+T`, File menu, or the palette): reopen the
+  most recently closed file (remembers a stack of recently closed paths).
+- **Close All Tabs** (File menu, after Close, or the palette): close every open
+  buffer, leaving a single empty untitled buffer.
+- **Find Next / Find Previous / Find Selection** in the Edit menu (after Find).
+  Find Next (`Ctrl+G`) and Find Previous (`Ctrl+Shift+G`) repeat the last search
+  — and now keep working **after the find box is closed** (the last pattern is
+  remembered; `F3` / `Shift+F3` repeat it too). Find Selection jumps to the next
+  occurrence of the selection (`Alt+N`).
+- **Toggle Bottom Status** (View menu / palette / `view.status_bar`): show or
+  hide the bottom status bar; the editor body reclaims the row when it is hidden.
+  Persists in the `show_status_bar` setting (default on).
+- **Editing comforts.** **Select All** (`Ctrl+A`, Edit menu, or the palette),
+  **Duplicate Line** (`Ctrl+D` or the palette), **Move Line Up/Down**
+  (`Alt+↑`/`Alt+↓` or the palette), and **Jump to Matching Bracket** (`Ctrl+]` or
+  the palette). Auto-indent on Enter (carry the previous line's leading
+  whitespace) was already present and is now covered by tests.
 - **Nerd Font Palette** (Tools → Nerd Font Palette…, crate
   `vix-nerd-font-palette`): a character picker showing a grid of curated Nerd
   Font glyphs. Browse with the arrow keys or the mouse; Enter or a click inserts
@@ -107,13 +137,18 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   installation. A same-named theme in `~/.config/vix/themes/` overrides a
   bundled one.
 - New internal crates: `vix-theme-chooser`, `vix-locale-chooser`,
-  `vix-keyway-chooser`, `vix-keyboard-shortcut-panel`, and
-  `vix-date-time-calendar-panel`.
+  `vix-keyway-chooser`, `vix-keyboard-shortcut-panel`,
+  `vix-date-time-calendar-panel`, `vix-nerd-font-palette`, and `vix-find-panel`
+  (the find / find-and-replace box state).
 - New docs: `docs/themes.md`, `docs/i18n.md`, `docs/configuration.md`,
   `index.md`, `AGENTS.md` (+ `AGENTS/`), and this changelog.
 
 ### Changed
 
+- The main panes use a lighter border frame: the left and right docks keep only
+  their inner (top + side-facing-the-editor) borders, the center editor keeps
+  only its top border, and the bottom status bar gains a full-width top border
+  that separates it from the body.
 - The editor widget crate was renamed `ratatui-code-editor` →
   `vix-editor` and made **theme-aware** (configurable text,
   line-number, selection, and cursor styles, and a settable syntax palette).
@@ -130,6 +165,18 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- In the find / replace box, clicking the Find or Replace field now focuses it
+  (previously the box swallowed all mouse input, so the Replace field was only
+  reachable with `Tab`, which the hint never mentioned). The hint now states
+  `Tab / click: switch field` in replace mode.
+- In the file explorer, `←` (Left) no longer expands a collapsed folder. It now
+  collapses an expanded folder, or jumps to the parent folder when the selection
+  is already collapsed — it never opens a folder.
+- Duplicating the last line of a buffer with no trailing newline (`Ctrl+D`) now
+  produces a real second line instead of concatenating the copy onto the
+  original. Line-boundary detection at end-of-buffer was off by one, which also
+  affected `Ctrl+K` (delete line) and triple-click line selection on the last
+  line.
 - Menu dropdown items keep at least one space between the label and the
   right-aligned keyboard shortcut (the widest item used to let them touch).
 - Keyboard-only modal overlays (the calendar box, find, query-replace, project

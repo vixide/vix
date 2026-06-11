@@ -14,6 +14,7 @@ Vix is a Cargo workspace. Shared reference for where everything lives.
 | `vix-keyway-chooser`           | `vix-keyway-chooser/`           | Keyboard navigation styles (Apple/Emacs/Vim) + chooser state.       |
 | `vix-keyboard-shortcut-panel`  | `vix-keyboard-shortcut-panel/`  | Keyboard-help rows (key combo + i18n description key).              |
 | `vix-nerd-font-palette`        | `vix-nerd-font-palette/`        | Curated Nerd Font glyph set + character-picker grid state.          |
+| `vix-find-panel`               | `vix-find-panel/`               | Find / find-and-replace box state + effective-pattern builder.      |
 
 ## `vix-editor` modules (`vix-editor/src/`)
 
@@ -30,6 +31,7 @@ The crate keeps a reused **engine** (allowed `clippy::all`, upstream style) and
 | `render`               | engine      | Non-wrap renderer + the render dispatch.                   |
 | `wrap`                 | **Vix**     | Soft-wrap visual-row layout + wrapped renderer (pedantic). |
 | `brackets`             | **Vix**     | Bracket matching (`matching_bracket`) (pedantic).          |
+| `lines`                | **Vix**     | Move-line up/down (`move_line_up`/`down`) (pedantic).      |
 | `editor_crossterm`     | engine      | `KeyEvent` → actions mapping (behind the `crossterm` feature). |
 | `theme`                | engine      | Token-name → style helpers.                                |
 

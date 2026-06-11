@@ -191,6 +191,8 @@ pub struct Layout {
     pub menu: Rect,
     /// Open menu dropdown rectangle (valid while a menu is open).
     pub menu_dropdown: Rect,
+    /// Open submenu dropdown rectangle (valid while a submenu is open).
+    pub submenu_dropdown: Rect,
     /// Info-dialog text-field rectangle (valid while a text dialog is open).
     pub dialog_body: Rect,
     /// Tab-strip rectangle.
@@ -209,6 +211,12 @@ pub struct Layout {
     /// Glyph-grid rectangle of the open Nerd Font palette, so a click can
     /// hit-test which cell was picked.
     pub nerd_palette: Rect,
+    /// Inner content rectangle of the open find / replace box, so a click can
+    /// focus the Find or Replace field.
+    pub search: Rect,
+    /// Inner content rectangle of the open calendar box, so a click can insert a
+    /// date-time line or a calendar day.
+    pub calendar: Rect,
 }
 
 /// The whole application state.
@@ -268,6 +276,10 @@ pub struct App {
     pub show_explorer: bool,
     /// Whether the message drawer is shown.
     pub show_messages: bool,
+    /// Whether the bottom status bar is shown.
+    pub show_status_bar: bool,
+    /// Whether the editor's right-side scroll bar is shown.
+    pub show_scrollbar: bool,
     /// Whether the calendar box is shown.
     pub show_calendar: bool,
     /// Month navigation state for the calendar box.
@@ -285,6 +297,12 @@ pub struct App {
     /// Cursor offset captured when the palette opened, so the `:` go-to-line
     /// preview can revert on cancel and the jump records the true origin.
     palette_origin: Option<usize>,
+    /// The most recent search pattern (regex), so Find Next / Find Previous can
+    /// repeat it after the find box has closed.
+    last_search: Option<String>,
+    /// Stack of recently closed file paths, most-recent last, for Reopen Closed
+    /// Tab (`Ctrl+Shift+T`). Capped to a small number.
+    closed_tabs: Vec<PathBuf>,
     /// True while the editor scrollbar thumb is being dragged, so the drag keeps
     /// scrolling even if the pointer drifts off the one-column track.
     scrollbar_active: bool,
@@ -349,6 +367,8 @@ impl App {
             picker: None,
             show_explorer: settings.show_explorer,
             show_messages: settings.show_messages,
+            show_status_bar: settings.show_status_bar,
+            show_scrollbar: settings.show_scrollbar,
             show_calendar: false,
             calendar: crate::calendar::Calendar::new(),
             show_help: false,
@@ -359,6 +379,8 @@ impl App {
             settings,
             file_index: Vec::new(),
             palette_origin: None,
+            last_search: None,
+            closed_tabs: Vec::new(),
             scrollbar_active: false,
             dock_resize: None,
             emacs_prefix: false,
@@ -557,14 +579,18 @@ impl App {
                     's' if Self::shift(&key) => self.run_action("file.save_as"),
                     's' => self.run_action("file.save"),
                     'w' => self.run_action("file.close"),
+                    't' if Self::shift(&key) => self.run_action("file.reopen_closed"),
                     'p' => self.run_action("tools.palette"),
                     'b' => self.run_action("view.explorer"),
                     'e' => self.toggle_focus_explorer_editor(),
                     'f' if Self::shift(&key) => self.run_action("search.project"),
                     'f' => self.run_action("edit.find"),
+                    'g' if Self::shift(&key) => self.run_action("edit.find_prev"),
+                    'g' => self.run_action("edit.find_next"),
                     'r' if Self::alt(&key) => self.run_action("edit.query_replace"),
                     'r' => self.run_action("edit.replace"),
                     '/' => self.run_action("edit.toggle_comment"),
+                    ']' => self.run_action("edit.match_bracket"),
                     _ => return false,
                 }
                 return true;
@@ -600,6 +626,14 @@ impl App {
             }
             KeyCode::Right if Self::alt(&key) => {
                 self.nav_forward();
+                true
+            }
+            KeyCode::Up if Self::alt(&key) && self.focus == Focus::Editor => {
+                self.run_action("edit.move_line_up");
+                true
+            }
+            KeyCode::Down if Self::alt(&key) && self.focus == Focus::Editor => {
+                self.run_action("edit.move_line_down");
                 true
             }
             KeyCode::F(1) => {
@@ -845,9 +879,19 @@ impl App {
                 });
             }
             "file.close" => {
-                self.editor.close_active();
+                if let Some(p) = self.editor.close_active() {
+                    self.push_closed_tab(p);
+                }
                 self.status = t!("status.closed_buffer").into();
             }
+            "file.close_all" => {
+                for p in self.editor.close_all() {
+                    self.push_closed_tab(p);
+                }
+                self.focus = Focus::Editor;
+                self.status = t!("status.closed_all").into();
+            }
+            "file.reopen_closed" => self.reopen_closed_tab(),
             "file.quit" => self.should_quit = true,
             "edit.undo" => {
                 if let Some(t) = self.editor.active_tab_mut() {
@@ -891,7 +935,23 @@ impl App {
                     }
                 }
             }
+            "edit.select_all" => self.editor.select_all(),
+            "edit.duplicate_line" => self.editor.duplicate_line(),
+            "edit.move_line_up" => {
+                let area = self.editor_view();
+                self.editor.move_line(false, area);
+            }
+            "edit.move_line_down" => {
+                let area = self.editor_view();
+                self.editor.move_line(true, area);
+            }
+            "edit.match_bracket" => {
+                let area = self.editor_view();
+                self.editor.jump_matching_bracket(area);
+            }
             "edit.find" => self.start_search(false),
+            "edit.find_next" => self.find_step(true),
+            "edit.find_prev" => self.find_step(false),
             "edit.replace" => self.start_search(true),
             "edit.query_replace" => {
                 self.start_search(true);
@@ -924,6 +984,8 @@ impl App {
             "view.soft_wrap" => self.toggle_editor_soft_wrap(),
             "view.left_dock" | "view.explorer" => self.toggle_left_dock(),
             "view.right_dock" | "view.messages" => self.toggle_right_dock(),
+            "view.status_bar" => self.toggle_status_bar(),
+            "view.scrollbar" => self.toggle_scrollbar(),
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
             "help.shortcuts" => self.show_help = true,
@@ -988,6 +1050,24 @@ impl App {
     fn toggle_right_dock(&mut self) {
         self.show_messages = !self.show_messages;
         self.settings.show_messages = self.show_messages;
+    }
+
+    /// Toggle the bottom status bar, persisting the choice.
+    fn toggle_status_bar(&mut self) {
+        self.show_status_bar = !self.show_status_bar;
+        self.settings.show_status_bar = self.show_status_bar;
+    }
+
+    /// Toggle the editor's right-side scroll bar, persisting the choice.
+    fn toggle_scrollbar(&mut self) {
+        self.show_scrollbar = !self.show_scrollbar;
+        self.settings.show_scrollbar = self.show_scrollbar;
+        self.status = if self.show_scrollbar {
+            t!("status.scrollbar_on")
+        } else {
+            t!("status.scrollbar_off")
+        }
+        .to_string();
     }
 
     /// Toggle the editor's line-number gutter, driven by the editor panel's own
@@ -1146,7 +1226,7 @@ impl App {
             KeyCode::End => self.explorer.last(),
             KeyCode::Enter | KeyCode::Right => self.open_or_expand_selected(),
             KeyCode::Left => {
-                self.explorer.toggle_selected();
+                self.explorer.collapse_or_parent();
             }
             KeyCode::Delete => self.explorer_delete_request(),
             KeyCode::Esc => {
@@ -1446,6 +1526,32 @@ impl App {
         }
     }
 
+    /// Push a just-closed file path onto the reopen stack (most-recent last),
+    /// de-duplicated and capped.
+    fn push_closed_tab(&mut self, path: PathBuf) {
+        self.closed_tabs.retain(|p| p != &path);
+        self.closed_tabs.push(path);
+        let cap = 20;
+        if self.closed_tabs.len() > cap {
+            let drop = self.closed_tabs.len() - cap;
+            self.closed_tabs.drain(0..drop);
+        }
+    }
+
+    /// Reopen the most recently closed tab whose file still exists.
+    fn reopen_closed_tab(&mut self) {
+        while let Some(path) = self.closed_tabs.pop() {
+            if path.is_file() {
+                self.with_jump(|s| {
+                    s.open_path(&path, false);
+                    s.focus = Focus::Editor;
+                });
+                return;
+            }
+        }
+        self.status = t!("status.no_closed_tab").to_string();
+    }
+
     /// Record a real (non-preview) file open at the front of the recent list,
     /// de-duplicated and capped. Stored canonicalized so reopening is reliable.
     fn record_recent(&mut self, path: &Path) {
@@ -1576,13 +1682,21 @@ impl App {
             self.nerd_mouse(mouse);
             return;
         }
+        // The find / replace box: a left click focuses the Find or Replace field.
+        if self.search.is_some() {
+            self.search_mouse(mouse);
+            return;
+        }
+        // The calendar box: a left click inserts a date-time line or a day.
+        if self.show_calendar {
+            self.calendar_mouse(mouse);
+            return;
+        }
         // Keyboard-only modal overlays swallow all mouse input rather than
         // letting a click fall through to the editor/explorer underneath.
         if self.show_help
-            || self.show_calendar
             || self.palette.is_some()
             || self.prompt.is_some()
-            || self.search.is_some()
             || self.query_replace.is_some()
             || self.project_search.is_some()
             || self.confirm.is_some()
@@ -1814,6 +1928,22 @@ impl App {
             self.menu_click(col);
             return;
         }
+        // The open submenu (drawn to the right of its parent) takes priority.
+        if self.menu.sub.is_some() {
+            let sd = self.layout.submenu_dropdown;
+            if rect_contains(sd, col, row) {
+                let top = sd.y + 1;
+                if let Some(items) = self.menu.submenu_items() {
+                    let idx = row.saturating_sub(top) as usize;
+                    if row >= top && idx < items.len() && !items[idx].is_separator() {
+                        let action = items[idx].action;
+                        self.menu.close();
+                        self.run_action(action);
+                    }
+                }
+                return;
+            }
+        }
         let dd = self.layout.menu_dropdown;
         if rect_contains(dd, col, row) {
             // Items start one row below the dropdown's top border.
@@ -1822,14 +1952,20 @@ impl App {
                 let items = MENUS[mi].items;
                 let idx = row.saturating_sub(top) as usize;
                 if row >= top && idx < items.len() && !items[idx].is_separator() {
-                    let action = items[idx].action;
-                    self.menu.close();
-                    self.run_action(action);
+                    if items[idx].has_submenu() {
+                        self.menu.item = idx;
+                        self.menu.sub = None;
+                        self.menu.right(); // opens the submenu
+                    } else {
+                        let action = items[idx].action;
+                        self.menu.close();
+                        self.run_action(action);
+                    }
                 }
             }
             return;
         }
-        // Clicked outside both the bar and the dropdown: dismiss the menu.
+        // Clicked outside the bar and every dropdown: dismiss the menu.
         self.menu.close();
     }
 
@@ -1874,6 +2010,19 @@ impl App {
             }
             return;
         }
+        if self.menu.sub.is_some() {
+            let sd = self.layout.submenu_dropdown;
+            if rect_contains(sd, col, row) {
+                let top = sd.y + 1;
+                if let Some(items) = self.menu.submenu_items() {
+                    let idx = row.saturating_sub(top) as usize;
+                    if row >= top && idx < items.len() && !items[idx].is_separator() {
+                        self.menu.sub = Some(idx);
+                    }
+                }
+                return;
+            }
+        }
         let dd = self.layout.menu_dropdown;
         if rect_contains(dd, col, row) {
             // Items start one row below the dropdown's top border.
@@ -1883,6 +2032,10 @@ impl App {
                 let idx = row.saturating_sub(top) as usize;
                 if row >= top && idx < items.len() && !items[idx].is_separator() {
                     self.menu.item = idx;
+                    self.menu.sub = None;
+                    if items[idx].has_submenu() {
+                        self.menu.right(); // reveal the submenu on hover
+                    }
                 }
             }
         }
@@ -1897,12 +2050,19 @@ impl App {
             KeyCode::Up => self.menu.up(),
             KeyCode::Down => self.menu.down(),
             KeyCode::Enter => {
-                if let Some(action) = self.menu.selected_action() {
+                if let Some(action) = self.menu.enter() {
                     self.menu.close();
                     self.run_action(action);
                 }
             }
-            KeyCode::Esc | KeyCode::F(10) => self.menu.close(),
+            KeyCode::Esc => {
+                if self.menu.sub.is_some() {
+                    self.menu.sub = None;
+                } else {
+                    self.menu.close();
+                }
+            }
+            KeyCode::F(10) => self.menu.close(),
             _ => {}
         }
     }
@@ -2523,8 +2683,20 @@ impl App {
     /// Recompute and apply search-highlight marks for the active buffer, then
     /// move the cursor to the next/previous match.
     fn find_step(&mut self, forward: bool) {
-        let Some(pat) = self.search.as_ref().and_then(super::search::SearchBar::pattern) else {
-            self.clear_marks();
+        // While the find box is open, use its (possibly empty) query; once closed,
+        // repeat the last completed search so Find Next / Previous keep working.
+        let pat = if self.search.is_some() {
+            self.search.as_ref().and_then(super::search::SearchBar::pattern)
+        } else {
+            self.last_search.clone()
+        };
+        let Some(pat) = pat else {
+            if self.search.is_some() {
+                self.clear_marks();
+            } else {
+                // Nothing remembered yet: fall back to the selection / word.
+                self.find_selection(forward);
+            }
             return;
         };
         let re = match Regex::new(&pat) {
@@ -2536,13 +2708,17 @@ impl App {
                 return;
             }
         };
+        self.last_search = Some(pat);
         let count = self.find_with(&re, forward);
+        let msg = if count == 0 {
+            t!("status.no_matches").to_string()
+        } else {
+            t!("status.matches", count = count).to_string()
+        };
         if let Some(s) = self.search.as_mut() {
-            s.status = if count == 0 {
-                t!("status.no_matches").into()
-            } else {
-                t!("status.matches", count = count).to_string()
-            };
+            s.status = msg;
+        } else {
+            self.status = msg;
         }
     }
 
@@ -2560,9 +2736,11 @@ impl App {
             self.status = t!("status.no_selection").to_string();
             return;
         };
-        let Ok(re) = Regex::new(&regex::escape(&query)) else {
+        let pat = regex::escape(&query);
+        let Ok(re) = Regex::new(&pat) else {
             return;
         };
+        self.last_search = Some(pat);
         let count = self.find_with(&re, forward);
         self.status = if count == 0 {
             t!("status.no_matches").into()
@@ -2681,6 +2859,81 @@ impl App {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// A left click inside the find / replace box focuses the field whose row was
+    /// clicked (the second row is the Replace field in replace mode). Clicks
+    /// elsewhere are ignored so the box stays open.
+    fn search_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.search;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let rel = mouse.row - r.y;
+        if let Some(s) = self.search.as_mut() {
+            if rel == 0 {
+                s.field = Field::Query;
+            } else if s.replacing && rel == 1 {
+                s.field = Field::Replace;
+            }
+        }
+    }
+
+    /// `strftime` pattern for inserting a clicked calendar day, by active locale.
+    fn locale_date_pattern() -> &'static str {
+        match &*rust_i18n::locale() {
+            "en" => "%m/%d/%Y",
+            "de" => "%d.%m.%Y",
+            "fr" | "es" | "cy" => "%d/%m/%Y",
+            _ => "%Y-%m-%d",
+        }
+    }
+
+    /// A left click in the calendar box inserts text into the active editor: one
+    /// of the three date-time info lines, or a clicked day formatted per locale.
+    /// A click outside the box closes it. The box stays open after an insert so
+    /// several values can be picked.
+    fn calendar_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.calendar;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            self.show_calendar = false;
+            return;
+        }
+        let rel_y = mouse.row - r.y;
+        let rel_x = mouse.column - r.x;
+        // Rows 0..=2 are the local / UTC-ISO / ISO-week lines; the month grid
+        // starts at row 6 (after the blank line, title, and weekday header), each
+        // day cell being three columns wide.
+        let text = if rel_y <= 2 {
+            let now = crate::calendar::now_local();
+            Some(match rel_y {
+                0 => crate::calendar::local_datetime(&now),
+                1 => crate::calendar::utc_iso(&now),
+                _ => crate::calendar::iso_week_date(&now),
+            })
+        } else if rel_y >= 6 {
+            let week = (rel_y - 6) as usize;
+            let col = (rel_x / 3) as usize;
+            self.calendar
+                .grid()
+                .weeks
+                .get(week)
+                .and_then(|w| w.get(col).copied())
+                .flatten()
+                .and_then(|d| self.calendar.format_day(d, Self::locale_date_pattern()))
+        } else {
+            None
+        };
+        if let Some(text) = text {
+            let area = self.editor_view();
+            self.editor.insert_str(&text, area);
         }
     }
 

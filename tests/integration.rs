@@ -67,6 +67,79 @@ fn app_with(settings: Settings) -> App {
     app
 }
 
+fn alt(code: KeyCode) -> KeyEvent {
+    KeyEvent::new(code, KeyModifiers::ALT)
+}
+
+fn type_str(app: &mut App, s: &str) {
+    for c in s.chars() {
+        if c == '\n' {
+            app.on_key(keycode(KeyCode::Enter));
+        } else {
+            app.on_key(key(c));
+        }
+    }
+}
+
+#[test]
+fn select_all_then_typing_replaces_buffer() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "hello");
+    app.on_key(ctrl('a')); // Ctrl+A selects the whole buffer
+    app.on_key(key('x'));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "x");
+}
+
+#[test]
+fn select_all_action_selects_whole_buffer() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "hello");
+    app.run_action("edit.select_all"); // the menu / palette path
+    app.on_key(key('z'));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "z");
+}
+
+#[test]
+fn duplicate_line_copies_the_current_line() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "abc");
+    app.on_key(ctrl('d')); // Ctrl+D duplicates the cursor line
+    assert_eq!(app.editor.active_tab().unwrap().lines(), vec!["abc", "abc"]);
+}
+
+#[test]
+fn enter_carries_indentation() {
+    let mut app = app_at(Path::new("."));
+    app.on_key(keycode(KeyCode::Tab));
+    type_str(&mut app, "x\ny"); // Tab, 'x', Enter (auto-indent), 'y'
+    assert_eq!(app.editor.active_tab().unwrap().lines(), vec!["    x", "    y"]);
+}
+
+#[test]
+fn alt_down_moves_the_line_down() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "aaa\nbbb");
+    app.on_key(keycode(KeyCode::Up)); // cursor onto line 0
+    app.on_key(alt(KeyCode::Down));
+    assert_eq!(app.editor.active_tab().unwrap().lines(), vec!["bbb", "aaa"]);
+}
+
+#[test]
+fn alt_up_moves_the_line_up() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "aaa\nbbb"); // cursor on line 1
+    app.on_key(alt(KeyCode::Up));
+    assert_eq!(app.editor.active_tab().unwrap().lines(), vec!["bbb", "aaa"]);
+}
+
+#[test]
+fn ctrl_bracket_jumps_to_matching_bracket() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "(x)"); // cursor just after ')'
+    app.on_key(KeyEvent::new(KeyCode::Char(']'), KeyModifiers::CONTROL));
+    assert_eq!(app.editor.active_tab().unwrap().editor.get_cursor(), 0, "jumps to '('");
+}
+
 #[test]
 fn tab_inserts_spaces_by_default() {
     let mut app = app_at(Path::new(".")); // default: spaces, width 4
@@ -735,6 +808,126 @@ fn replace_all_with_capture_groups() {
 }
 
 #[test]
+fn reopen_closed_tab_restores_the_last_closed_file() {
+    let dir = unique_dir("reopen");
+    fs::write(dir.join("a.txt"), "aaa").unwrap();
+    fs::write(dir.join("b.txt"), "bbb").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(dir.join("a.txt"));
+    app.open_initial(dir.join("b.txt")); // active: b.txt
+
+    // Close b.txt, then reopen it.
+    app.run_action("file.close");
+    assert!(
+        !app.editor.tabs.iter().any(|t| t.path.as_deref() == Some(dir.join("b.txt").as_path())),
+        "b.txt is closed"
+    );
+    app.run_action("file.reopen_closed");
+    assert!(
+        app.editor.tabs.iter().any(|t| t.path.as_deref()
+            == Some(dir.join("b.txt").canonicalize().unwrap().as_path())),
+        "b.txt is reopened"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn close_all_tabs_leaves_one_empty_buffer() {
+    let dir = unique_dir("closeall");
+    fs::write(dir.join("a.txt"), "aaa").unwrap();
+    fs::write(dir.join("b.txt"), "bbb").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(dir.join("a.txt"));
+    app.open_initial(dir.join("b.txt"));
+    assert!(app.editor.tabs.len() >= 2, "two files are open");
+
+    app.run_action("file.close_all");
+
+    assert_eq!(app.editor.tabs.len(), 1, "exactly one buffer remains");
+    let t = app.editor.active_tab().unwrap();
+    assert!(t.path.is_none(), "the remaining buffer is untitled");
+    assert!(t.text().is_empty(), "the remaining buffer is empty");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn find_next_repeats_after_the_box_closes() {
+    let dir = unique_dir("findnext");
+    let file = dir.join("f.txt");
+    fs::write(&file, "ab xx ab xx ab\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+
+    // Find "xx", then close the box.
+    app.run_action("edit.find");
+    for c in "xx".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(esc()); // box closed; cursor sits on a match
+    assert!(app.search.is_none());
+    let first = app.editor.active_tab().unwrap().editor.get_cursor();
+
+    // Ctrl+G repeats the last search even with the box closed, moving to the
+    // other "xx" (there are exactly two, so it cycles).
+    app.on_key(ctrl('g'));
+    let second = app.editor.active_tab().unwrap().editor.get_cursor();
+    assert_ne!(second, first, "Find Next moved to the other match");
+
+    // Ctrl+Shift+G goes back to where we started.
+    app.on_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
+    let back = app.editor.active_tab().unwrap().editor.get_cursor();
+    assert_eq!(back, first, "Find Previous returned to the earlier match");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn literal_replace_all_after_preview() {
+    let dir = unique_dir("litrep");
+    let file = dir.join("l.txt");
+    fs::write(&file, "foo foo\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+
+    app.run_action("edit.replace");
+    for c in "foo".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter)); // find next (preview) -> moves cursor + selects
+    app.on_key(keycode(KeyCode::Tab)); // to replace field
+    for c in "bar".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter)); // replace all
+    let line = app.editor.active_tab().unwrap().lines()[0].clone();
+    assert_eq!(line, "bar bar");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn click_focuses_the_replace_field() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("edit.replace");
+    // The box's inner rect is recorded during render; set it directly. Row 0 is
+    // the Find field, row 1 the Replace field.
+    app.layout.search = Rect::new(0, 5, 40, 4);
+    app.on_mouse(click(2, 6)); // click the Replace row
+
+    // Typing now lands in the Replace field, not the Find field.
+    for c in "xyz".chars() {
+        app.on_key(key(c));
+    }
+    let s = app.search.as_ref().unwrap();
+    assert_eq!(s.field, vix::search::Field::Replace, "click focused the Replace field");
+    assert_eq!(s.replace, "xyz");
+    assert!(s.query.is_empty(), "the Find field stayed empty");
+
+    // Clicking the first row focuses the Find field again.
+    app.on_mouse(click(2, 5));
+    assert_eq!(app.search.as_ref().unwrap().field, vix::search::Field::Query);
+}
+
+#[test]
 fn interactive_query_replace_y_n_y() {
     let dir = unique_dir("qr");
     let file = dir.join("q.txt");
@@ -853,6 +1046,110 @@ fn node_index(app: &App, name: &str) -> usize {
         .iter()
         .position(|n| n.name == name)
         .unwrap_or_else(|| panic!("no explorer node named {name}"))
+}
+
+#[test]
+fn toggle_status_bar_action_flips_and_persists() {
+    let mut app = app_at(Path::new("."));
+    assert!(app.show_status_bar, "the status bar is shown by default");
+    app.run_action("view.status_bar");
+    assert!(!app.show_status_bar, "the action hides the status bar");
+    assert!(!app.settings.show_status_bar, "the choice persists in settings");
+    app.run_action("view.status_bar");
+    assert!(app.show_status_bar, "toggling again shows it");
+}
+
+#[test]
+fn toggle_scrollbar_flips_persists_and_reclaims_the_column() {
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+    let mut app = app_at(Path::new("."));
+    let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
+
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    assert!(app.show_scrollbar, "shown by default");
+    let with = app.layout.editor.width;
+    assert!(app.layout.scrollbar.width > 0, "scrollbar has a column");
+
+    app.run_action("view.scrollbar"); // hide it
+    assert!(!app.show_scrollbar);
+    assert!(!app.settings.show_scrollbar, "choice persists");
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    assert_eq!(app.layout.scrollbar.width, 0, "scrollbar column collapses");
+    assert_eq!(app.layout.editor.width, with + 1, "the text reclaims the column");
+}
+
+#[test]
+fn calendar_click_inserts_into_editor() {
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.calendar");
+    let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let cal = app.layout.calendar;
+    assert!(cal.width > 0, "the calendar rect was recorded");
+
+    // Click the first info line (local date-time) → inserts a date-time string.
+    app.on_mouse(click(cal.x + 1, cal.y));
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains(':') && text.contains('-'), "inserted a date-time: {text:?}");
+    assert!(app.show_calendar, "an in-box click keeps the calendar open");
+
+    // Click a populated day cell (cells are 3 columns wide; the grid starts at
+    // row 6 of the box).
+    let grid = app.calendar.grid();
+    let (wk, col) = grid
+        .weeks
+        .iter()
+        .enumerate()
+        .find_map(|(w, week)| week.iter().position(Option::is_some).map(|c| (w, c)))
+        .unwrap();
+    let before = app.editor.active_tab().unwrap().text().len();
+    app.on_mouse(click(cal.x + col as u16 * 3 + 1, cal.y + 6 + wk as u16));
+    let after = app.editor.active_tab().unwrap().text();
+    assert!(after.len() > before, "clicking a day inserted a date");
+
+    // A click outside the box closes it.
+    app.on_mouse(click(0, 23));
+    assert!(!app.show_calendar, "an outside click closes the calendar");
+}
+
+#[test]
+fn draw_handles_a_hidden_status_bar() {
+    // A full render with the status bar hidden must lay out and paint without
+    // panicking (the body row now consumes the freed line).
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.status_bar"); // hide it
+    let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+}
+
+#[test]
+fn explorer_left_arrow_collapses_never_opens() {
+    let dir = unique_dir("explorerleft");
+    fs::create_dir(dir.join("sub")).unwrap();
+    fs::write(dir.join("sub/inner.txt"), "x").unwrap();
+
+    let mut app = app_at(&dir);
+    app.focus = Focus::Explorer;
+    let has_inner = |app: &App| app.explorer.nodes.iter().any(|n| n.name == "inner.txt");
+
+    // Left on a collapsed folder must NOT open it.
+    app.explorer.selected = node_index(&app, "sub");
+    app.on_key(keycode(KeyCode::Left));
+    assert!(!has_inner(&app), "Left must not expand a collapsed folder");
+
+    // Right opens it; Left then closes it again.
+    app.on_key(keycode(KeyCode::Right));
+    assert!(has_inner(&app), "Right expands the folder");
+    app.explorer.selected = node_index(&app, "sub");
+    app.on_key(keycode(KeyCode::Left));
+    assert!(!has_inner(&app), "Left collapses the expanded folder");
+
+    fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -1330,9 +1627,12 @@ fn menu_dropdown_keeps_a_gap_before_shortcuts() {
 fn menus_have_separators_in_the_specified_places() {
     // A separator sits immediately before each named item.
     let cases: &[(&str, &[&str])] = &[
+        // (find-related items now live in the Edit → Find submenu; the editor
+        // display toggles now live in the View → Editor submenu — so the
+        // top-level separators precede the groups/submenus that remain.)
         ("menu.file", &["file.open", "file.close", "file.quit"]),
-        ("menu.edit", &["edit.cut", "edit.toggle_comment", "edit.find"]),
-        ("menu.view", &["view.left_dock", "view.line_numbers"]),
+        ("menu.edit", &["edit.cut", "edit.toggle_comment"]),
+        ("menu.view", &["view.left_dock"]),
     ];
     for (menu, befores) in cases {
         let items = vix::menu::MENUS
@@ -1348,6 +1648,50 @@ fn menus_have_separators_in_the_specified_places() {
             assert!(at > 0 && items[at - 1].is_separator(), "{menu}: separator before {action}");
         }
     }
+}
+
+#[test]
+fn submenu_opens_and_runs_a_nested_action() {
+    let mut app = app_at(Path::new("."));
+    app.on_key(keycode(KeyCode::F(10)));
+    let edit_idx = vix::menu::MENUS.iter().position(|m| m.name == "menu.edit").unwrap();
+    for _ in 0..edit_idx {
+        app.on_key(keycode(KeyCode::Right));
+    }
+    // Walk down to the Find submenu parent.
+    let edit_items = vix::menu::MENUS[edit_idx].items;
+    let find_parent = edit_items.iter().position(vix::menu::Item::has_submenu).unwrap();
+    for _ in 0..=edit_items.len() {
+        if app.menu.item == find_parent {
+            break;
+        }
+        app.on_key(keycode(KeyCode::Down));
+    }
+    assert_eq!(app.menu.item, find_parent);
+    assert!(app.menu.sub.is_none(), "submenu starts closed");
+
+    // Right opens the submenu; its first item is a find action.
+    app.on_key(keycode(KeyCode::Right));
+    assert!(app.menu.sub.is_some(), "Right opens the submenu");
+    assert_eq!(app.menu.selected_action(), Some("edit.find"));
+
+    // Enter runs the nested action (opens the find box) and closes the menu.
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.menu.open.is_none(), "the menu closed");
+    assert!(app.search.is_some(), "Find opened the search box");
+}
+
+#[test]
+fn view_editor_submenu_rolls_up_the_editor_toggles() {
+    let view = vix::menu::MENUS.iter().find(|m| m.name == "menu.view").unwrap();
+    let editor = view
+        .items
+        .iter()
+        .find(|it| it.has_submenu())
+        .and_then(|it| it.submenu)
+        .expect("View has an Editor submenu");
+    let actions: Vec<&str> = editor.iter().map(|it| it.action).collect();
+    assert_eq!(actions, vec!["view.line_numbers", "view.whitespace", "view.scrollbar"]);
 }
 
 #[test]
@@ -1740,3 +2084,6 @@ fn switching_keyway_resets_vim_to_normal() {
     assert_eq!(app.settings.keyway, "vim");
     assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"), "reset to Normal");
 }
+
+
+

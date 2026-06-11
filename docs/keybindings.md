@@ -15,6 +15,7 @@ Switch via **View → Keyway…**; the choice persists. See [Keyways](#keyways).
 | `Ctrl+S`         | Save (prompts for a path if the buffer is untitled)  |
 | `Ctrl+Shift+S`   | Save As…                                             |
 | `Ctrl+W`         | Close the active tab                                 |
+| `Ctrl+Shift+T`   | Reopen the most recently closed tab                  |
 | `Ctrl+Q`         | Quit                                                 |
 | `Ctrl+P`         | Open the command palette                             |
 | `Ctrl+F`         | Find                                                 |
@@ -22,6 +23,7 @@ Switch via **View → Keyway…**; the choice persists. See [Keyways](#keyways).
 | `Ctrl+Alt+R`     | Interactive query-replace (y/n/!/q)                  |
 | `Ctrl+Shift+F`   | Search across the whole project                      |
 | `F3` / `Shift+F3`| Find next / previous                                 |
+| `Ctrl+G` / `Ctrl+Shift+G` | Find next / previous (repeats the last search, even after the box closes) |
 | `Alt+N` / `Alt+P`| Find next / previous occurrence of the selection     |
 | `Ctrl+B`         | Toggle the file explorer (reveals the active file)   |
 | `Ctrl+E`         | Toggle focus between explorer and editor             |
@@ -41,14 +43,18 @@ Switch via **View → Keyway…**; the choice persists. See [Keyways](#keyways).
 | `Ctrl+C`          | Copy selection                        |
 | `Ctrl+V`          | Paste                                 |
 | `Ctrl+A`          | Select all                            |
+| `Ctrl+D`          | Duplicate the current line (or selection) |
+| `Ctrl+K`          | Delete the current line               |
+| `Alt+↑` / `Alt+↓` | Move the current line up / down       |
+| `Ctrl+]`          | Jump to the matching bracket          |
 | `Ctrl+/`          | Toggle line comment (line or selection) |
 | Arrows / `End` / `PgUp` / `PgDn` | Move the cursor                |
 | `Home`            | Smart Home: first non-blank, then column 0 |
-| Typing / `Enter` / `Backspace` / `Delete` / `Tab` | Edit text     |
+| `Enter`           | New line, carrying the previous line's indentation |
+| Typing / `Backspace` / `Delete` / `Tab` | Edit text               |
 
-The editor wraps the internal `vix-editor` widget, which adds
-Tree-sitter syntax highlighting, `Ctrl+K` delete-line, and `Ctrl+D`
-duplicate-line.
+The editor wraps the internal `vix-editor` widget, which adds Tree-sitter
+syntax highlighting and the line operations above.
 
 ## Mouse
 
@@ -73,8 +79,8 @@ duplicate-line.
 | `Up` / `Down`     | Move selection (scans a preview tab on the way) |
 | `PgUp` / `PgDn`   | Move by a page                                  |
 | `Home` / `End`    | Jump to first / last entry                      |
-| `Enter` / `Right` | Open file, or expand/collapse a directory       |
-| `Left`            | Collapse / expand the selected directory        |
+| `Enter` / `Right` | Open the file, or expand a directory            |
+| `Left`            | Collapse the directory, or jump to its parent   |
 | `Shift+Up`/`Down` | Extend the multi-selection                      |
 | `Ctrl+C`/`Ctrl+X` | Copy / cut the selection                        |
 | `Ctrl+V`          | Paste into the selected directory               |

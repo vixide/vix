@@ -547,7 +547,10 @@ impl Code {
 
     pub fn line_boundaries(&self, pos: usize) -> (usize, usize) {
         let total_chars = self.content.len_chars();
-        if pos >= total_chars {
+        // `pos == total_chars` is the cursor sitting at end-of-buffer; it still
+        // belongs to the last line (which has no trailing newline), so let it fall
+        // through. Only a `pos` past the end has no line.
+        if pos > total_chars {
             return (pos, pos);
         }
 

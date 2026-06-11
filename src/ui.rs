@@ -24,19 +24,24 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     // Paint the whole frame in the theme's background so every pane (and the gaps
     // between them) shares one background — important for the light theme.
     frame.render_widget(Block::default().style(theme::base()), area);
+    let mut vconstraints = vec![
+        Constraint::Length(1), // menu bar
+        Constraint::Min(1),    // body
+    ];
+    if app.show_status_bar {
+        vconstraints.push(Constraint::Length(2)); // status bar (top border + content)
+    }
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(1), // menu bar
-            Constraint::Min(1),    // body
-            Constraint::Length(1), // status bar
-        ])
+        .constraints(vconstraints)
         .split(area);
     app.layout.menu = rows[0];
+    let body = rows[1];
+    let status_row = rows.get(2).copied();
 
     // Body columns: explorer | center | messages. The dock widths are
     // user-adjustable (drag the inner edges); clamp them so the editor keeps room.
-    let dock_max = rows[1].width.saturating_sub(20).max(12);
+    let dock_max = body.width.saturating_sub(20).max(12);
     let mut constraints = Vec::new();
     if app.show_explorer {
         constraints.push(Constraint::Length(app.settings.explorer_width.clamp(12, dock_max)));
@@ -48,7 +53,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints(constraints)
-        .split(rows[1]);
+        .split(body);
 
     let mut ci = 0;
     let explorer_rect = if app.show_explorer {
@@ -71,16 +76,25 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
 
     let editor_block = Block::default()
         .style(theme::region_base(theme::Region::Editor))
-        .borders(Borders::ALL)
+        // The center editor keeps only its top border (no left/right/bottom).
+        .borders(Borders::TOP)
         .border_type(BorderType::Rounded)
         .border_style(theme::title(app.focus == Focus::Editor));
     let editor_inner = editor_block.inner(center[1]);
-    let editor_split = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
-        .split(editor_inner);
-    app.layout.editor = editor_split[0];
-    app.layout.scrollbar = editor_split[1];
+    // The right-side scroll bar is optional; when hidden, the text reclaims its
+    // column and the scrollbar rect collapses to zero (so hit-testing/drawing skip
+    // it).
+    let (editor_area, scrollbar_area) = if app.show_scrollbar {
+        let s = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(1), Constraint::Length(1)])
+            .split(editor_inner);
+        (s[0], s[1])
+    } else {
+        (editor_inner, Rect { width: 0, height: 0, ..editor_inner })
+    };
+    app.layout.editor = editor_area;
+    app.layout.scrollbar = scrollbar_area;
 
     if let Some(r) = explorer_rect {
         app.layout.explorer = r;
@@ -102,11 +116,13 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     }
     draw_tabs(app, frame, center[0]);
     frame.render_widget(editor_block, center[1]);
-    draw_center(app, frame, editor_split[0], editor_split[1]);
+    draw_center(app, frame, editor_area, scrollbar_area);
     if let Some(r) = messages_rect {
         draw_messages(app, frame, r);
     }
-    draw_status_bar(app, frame, rows[2]);
+    if let Some(r) = status_row {
+        draw_status_bar(app, frame, r);
+    }
 
     // Overlays.
     if app.show_calendar {
@@ -116,7 +132,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         if let Some(i) = app.menu.open {
             app.layout.menu_dropdown = menu_dropdown_rect(area, rows[0], i);
         }
-        draw_menu_dropdown(app, frame, rows[0]);
+        draw_menu_dropdown(app, frame);
     }
     if app.search.is_some() {
         draw_search(app, frame, area);
@@ -461,27 +477,42 @@ pub fn dock_toggle_cols(menu: Rect) -> (u16, u16) {
     (right.saturating_sub(4), right.saturating_sub(2))
 }
 
-/// Geometry of the dropdown for the menu at `index`. Shared by the renderer and
-/// by mouse hit-testing (`App::on_mouse`) so clicks land on the right item.
-#[must_use] 
-pub fn menu_dropdown_rect(frame_area: Rect, bar: Rect, index: usize) -> Rect {
-    let def = &MENUS[index];
-    let x = bar.x + menu_offsets()[index];
-    let width = def
-        .items
+/// Right-aligned indicator for a dropdown item: a `▸` arrow for a submenu parent,
+/// otherwise its keyboard shortcut.
+fn item_right(it: &crate::menu::Item) -> String {
+    if it.has_submenu() {
+        "\u{25b8}".to_string()
+    } else {
+        it.shortcut.to_string()
+    }
+}
+
+/// Width budget for a dropdown holding `items`: 2 borders + leading + trailing
+/// space (= 4), plus a 1-column gap so the label and the right indicator never
+/// touch. Minimum 14.
+fn dropdown_width(items: &[crate::menu::Item]) -> u16 {
+    items
         .iter()
-        // Budget: 2 borders + leading + trailing space (= 4), plus a 1-column gap
-        // between the label and the shortcut so they never touch.
         .map(|it| {
             if it.is_separator() {
                 return 0;
             }
-            let gap = usize::from(!it.shortcut.is_empty());
-            it.label().chars().count() + it.shortcut.chars().count() + 4 + gap
+            let right = item_right(it).chars().count();
+            let gap = usize::from(it.has_submenu() || !it.shortcut.is_empty());
+            it.label().chars().count() + right + 4 + gap
         })
         .max()
         .unwrap_or(12)
-        .max(14) as u16;
+        .max(14) as u16
+}
+
+/// Geometry of the dropdown for the menu at `index`. Shared by the renderer and
+/// by mouse hit-testing (`App::on_mouse`) so clicks land on the right item.
+#[must_use]
+pub fn menu_dropdown_rect(frame_area: Rect, bar: Rect, index: usize) -> Rect {
+    let def = &MENUS[index];
+    let x = bar.x + menu_offsets()[index];
+    let width = dropdown_width(def.items);
     let height = def.items.len() as u16 + 2;
     let y = bar.y + 1;
     Rect {
@@ -492,13 +523,10 @@ pub fn menu_dropdown_rect(frame_area: Rect, bar: Rect, index: usize) -> Rect {
     }
 }
 
-fn draw_menu_dropdown(app: &App, frame: &mut Frame, bar: Rect) {
-    let Some(i) = app.menu.open else { return };
-    let def = &MENUS[i];
-    let area = menu_dropdown_rect(frame.area(), bar, i);
+/// Render one dropdown (Clear + bordered list) at `area`, highlighting `selected`.
+fn render_dropdown(frame: &mut Frame, area: Rect, items: &[crate::menu::Item], selected: usize) {
     frame.render_widget(Clear, area);
-    let items: Vec<ListItem> = def
-        .items
+    let rows: Vec<ListItem> = items
         .iter()
         .map(|it| {
             if it.is_separator() {
@@ -506,19 +534,20 @@ fn draw_menu_dropdown(app: &App, frame: &mut Frame, bar: Rect) {
                 return ListItem::new(Line::from(Span::styled("─".repeat(w), theme::dim())));
             }
             let label = it.label();
+            let right = item_right(it);
             let pad = (area.width as usize)
-                .saturating_sub(label.chars().count() + it.shortcut.chars().count() + 4);
+                .saturating_sub(label.chars().count() + right.chars().count() + 4);
             let line = Line::from(vec![
                 Span::raw(format!(" {label}")),
                 Span::raw(" ".repeat(pad)),
-                Span::styled(format!("{} ", it.shortcut), theme::dim()),
+                Span::styled(format!("{right} "), theme::dim()),
             ]);
             ListItem::new(line)
         })
         .collect();
-    // The dropdown shows no title — the open menu is already indicated in the
-    // menu bar, and a title here would otherwise display the raw i18n key.
-    let list = List::new(items)
+    // No title — the open menu is already indicated in the bar, and a title would
+    // otherwise display the raw i18n key.
+    let list = List::new(rows)
         .block(
             Block::default()
                 .style(theme::base())
@@ -528,15 +557,39 @@ fn draw_menu_dropdown(app: &App, frame: &mut Frame, bar: Rect) {
         )
         .highlight_style(theme::selected());
     let mut state = ListState::default();
-    state.select(Some(app.menu.item));
+    state.select(Some(selected));
     frame.render_stateful_widget(list, area, &mut state);
+}
+
+fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
+    let Some(i) = app.menu.open else { return };
+    let area = app.layout.menu_dropdown;
+    render_dropdown(frame, area, MENUS[i].items, app.menu.item);
+
+    // An open submenu is drawn to the right of its parent item.
+    if let (Some(sidx), Some(subitems)) = (app.menu.sub, app.menu.submenu_items()) {
+        let fa = frame.area();
+        let sub_w = dropdown_width(subitems);
+        let sub_h = subitems.len() as u16 + 2;
+        let sub_x = (area.x + area.width).min(fa.width.saturating_sub(sub_w));
+        let sub_y = (area.y + app.menu.item as u16).min(fa.height.saturating_sub(sub_h));
+        let sub_area = Rect {
+            x: sub_x,
+            y: sub_y,
+            width: sub_w.min(fa.width),
+            height: sub_h.min(fa.height.saturating_sub(sub_y)),
+        };
+        app.layout.submenu_dropdown = sub_area;
+        render_dropdown(frame, sub_area, subitems, sidx);
+    }
 }
 
 fn draw_explorer(app: &App, frame: &mut Frame, area: Rect) {
     let focused = app.focus == Focus::Explorer;
     let block = Block::default()
         .style(theme::region_base(theme::Region::LeftDock))
-        .borders(Borders::ALL)
+        // The left dock keeps only its top and right borders.
+        .borders(Borders::TOP | Borders::RIGHT)
         .border_type(BorderType::Rounded)
         .border_style(theme::title(focused))
         .title(format!(" {} {} ", icon::FOLDER, t!("ui.explorer")));
@@ -629,14 +682,16 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
     if let Some(tab) = app.editor.active_tab() {
         frame.render_widget(&tab.editor, text);
 
-        let total = app.editor.active_line_count().max(1);
-        let pos = app.editor.cursor_1based().0.saturating_sub(1);
-        let mut sb_state = ScrollbarState::new(total).position(pos);
-        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some("\u{2191}"))
-            .end_symbol(Some("\u{2193}"))
-            .style(theme::dim());
-        frame.render_stateful_widget(bar, scrollbar, &mut sb_state);
+        if scrollbar.width > 0 {
+            let total = app.editor.active_line_count().max(1);
+            let pos = app.editor.cursor_1based().0.saturating_sub(1);
+            let mut sb_state = ScrollbarState::new(total).position(pos);
+            let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("\u{2191}"))
+                .end_symbol(Some("\u{2193}"))
+                .style(theme::dim());
+            frame.render_stateful_widget(bar, scrollbar, &mut sb_state);
+        }
     }
 }
 
@@ -644,7 +699,8 @@ fn draw_messages(app: &App, frame: &mut Frame, area: Rect) {
     let focused = app.focus == Focus::Messages;
     let block = Block::default()
         .style(theme::region_base(theme::Region::RightDock))
-        .borders(Borders::ALL)
+        // The right dock keeps only its top and left borders.
+        .borders(Borders::TOP | Borders::LEFT)
         .border_type(BorderType::Rounded)
         .border_style(theme::title(focused))
         .title(format!(" {} {} ", icon::BELL, t!("ui.messages")));
@@ -724,20 +780,28 @@ fn draw_status_bar(app: &App, frame: &mut Frame, area: Rect) {
     let left = format!(" {}{}{}  \u{2014}  {}", mode, path, dirty_flag, app.status);
     let right = format!("{info}Ln {line}:Col {col}   {} ", icon::CALENDAR);
 
+    let bg = theme::region_base(theme::Region::StatusBar);
+    // A top border separates the status bar from the body above it.
+    let block = Block::default()
+        .style(bg)
+        .borders(Borders::TOP)
+        .border_style(theme::title(false));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Min(1),
             Constraint::Length(right.chars().count() as u16 + 1),
         ])
-        .split(area);
+        .split(inner);
 
-    let bg = theme::region_base(theme::Region::StatusBar);
     frame.render_widget(Paragraph::new(left).style(bg).alignment(Alignment::Left), cols[0]);
     frame.render_widget(Paragraph::new(right).style(bg).alignment(Alignment::Right), cols[1]);
 }
 
-fn draw_calendar(app: &App, frame: &mut Frame, area: Rect) {
+fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
     // The date/time area always reflects the present; the month area follows the
     // user's navigation (see `App::calendar`).
     let now = calendar::now_local();
@@ -757,6 +821,8 @@ fn draw_calendar(app: &App, frame: &mut Frame, area: Rect) {
         .border_style(theme::title(true))
         .title(format!(" {} {} ", icon::CLOCK, t!("ui.calendar")));
     let inner = block.inner(rect);
+    // Record the inner rect so a click can hit-test info lines and day cells.
+    app.layout.calendar = inner;
     frame.render_widget(block, rect);
 
     let rows = Layout::default()
@@ -1005,7 +1071,7 @@ fn draw_project_search(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(Line::from(Span::styled(hint, theme::dim()))), rows[2]);
 }
 
-fn draw_search(app: &App, frame: &mut Frame, area: Rect) {
+fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(s) = app.search.as_ref() else { return };
     let height = if s.replacing { 5 } else { 4 };
     let width = (f32::from(area.width) * 0.7) as u16;
@@ -1031,6 +1097,7 @@ fn draw_search(app: &App, frame: &mut Frame, area: Rect) {
         .title(title);
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
+    app.layout.search = inner;
 
     let mut lines = Vec::new();
     let q_focus = !s.replacing || s.field == Field::Query;
@@ -1053,6 +1120,8 @@ fn draw_search(app: &App, frame: &mut Frame, area: Rect) {
         s.status.clone()
     } else if s.interactive {
         t!("ui.search_hint_interactive").to_string()
+    } else if s.replacing {
+        t!("ui.search_hint_replace").to_string()
     } else {
         t!("ui.search_hint").to_string()
     };

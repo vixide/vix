@@ -16,6 +16,16 @@ Calendar box:
   - right arrow -> next month
   - left arrow -> previous month
 
+Mouse:
+
+- Clicking a date-time line inserts that exact string into the active editor.
+- Clicking a day in the month grid inserts that date into the editor, formatted
+  per the active locale (`%m/%d/%Y` for English, `%d.%m.%Y` for German,
+  `%d/%m/%Y` for French/Spanish/Welsh, ISO `%Y-%m-%d` otherwise). The crate
+  exposes `Calendar::format_day(day, pattern)`; the host picks the pattern.
+- The box stays open after an insert (so several values can be picked); a click
+  outside the box closes it.
+
 Constraints:
 
 - No icon before date/time rows — the first line is just 2026-06-08 14:23:01 (the 🕐 stays only in the panel title). All datetime rows are left-aligned.

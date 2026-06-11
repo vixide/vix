@@ -208,6 +208,28 @@ impl Explorer {
         true
     }
 
+    /// Left-arrow behavior: collapse the selected directory if it is expanded;
+    /// otherwise move the selection to its parent directory. Never expands a
+    /// directory. Returns true if it changed anything.
+    pub fn collapse_or_parent(&mut self) -> bool {
+        let Some(node) = self.nodes.get(self.selected) else {
+            return false;
+        };
+        let path = node.path.clone();
+        if node.is_dir && self.expanded.contains(&path) {
+            self.expanded.remove(&path);
+            self.rebuild();
+            return true;
+        }
+        if let Some(parent) = path.parent() {
+            if let Some(i) = self.nodes.iter().position(|n| n.path == parent) {
+                self.selected = i;
+                return true;
+            }
+        }
+        false
+    }
+
     /// Expand every ancestor directory of `path` and select that row, so a file
     /// opened elsewhere is revealed in the tree.
     pub fn reveal(&mut self, path: &Path) {

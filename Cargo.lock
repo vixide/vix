@@ -3277,6 +3277,7 @@ dependencies = [
  "serde",
  "vix-date-time-calendar-panel",
  "vix-editor",
+ "vix-find-panel",
  "vix-keyboard-shortcut-panel",
  "vix-keyway-chooser",
  "vix-locale-chooser",
@@ -3321,6 +3322,13 @@ dependencies = [
  "tree-sitter-yaml",
  "unicode-segmentation",
  "unicode-width",
+]
+
+[[package]]
+name = "vix-find-panel"
+version = "0.1.0"
+dependencies = [
+ "regex",
 ]
 
 [[package]]

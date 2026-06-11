@@ -1,0 +1,20 @@
+# vix-find-panel: state for the find / find-and-replace box — the query and
+# replacement text, the focused field, the case/word/regex toggles, and the
+# effective-pattern builder. The host renders the box and runs the search /
+# replacement against the buffer.
+
+[package]
+name = "vix-find-panel"
+version = "0.1.0"
+edition = "2021"
+description = "Find / find-and-replace box state and pattern builder for Vix."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_find_panel"
+path = "src/lib.rs"
+
+[dependencies]
+# Only for `regex::escape`, which turns a literal query into a safe pattern.
+regex = "1"

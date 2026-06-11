@@ -13,6 +13,13 @@ const PAIRS: [(char, char); 3] = [('(', ')'), ('[', ']'), ('{', '}')];
 const SCAN_LIMIT: usize = 50_000;
 
 impl Editor {
+    /// Public accessor for the matching bracket offset, used by the host to jump
+    /// the cursor to a bracket's partner (`Ctrl+]` / the palette).
+    #[must_use]
+    pub fn matching_bracket_offset(&self) -> Option<usize> {
+        self.matching_bracket()
+    }
+
     /// Character offset of the bracket matching the one at (or immediately
     /// before) the cursor, or `None` when the cursor is not adjacent to a bracket
     /// or no partner is found within [`SCAN_LIMIT`].

@@ -10,6 +10,7 @@ members = [
     "vix-keyway-chooser",
     "vix-keyboard-shortcut-panel",
     "vix-nerd-font-palette",
+    "vix-find-panel",
 ]
 
 [package]
@@ -60,6 +61,8 @@ vix-keyway-chooser = { path = "vix-keyway-chooser" }
 vix-keyboard-shortcut-panel = { path = "vix-keyboard-shortcut-panel" }
 # Nerd Font palette (Tools menu): curated glyph set + character-picker grid state.
 vix-nerd-font-palette = { path = "vix-nerd-font-palette" }
+# Find / find-and-replace box state (query, replacement, toggles, pattern builder).
+vix-find-panel = { path = "vix-find-panel" }
 # Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
 crossterm = "0.29"
 # Regular expressions for find/replace.

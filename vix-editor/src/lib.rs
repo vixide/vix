@@ -31,6 +31,7 @@ pub mod theme;
 pub mod utils;
 
 // Vix-owned modules, held to clippy::pedantic (see each module's inner
-// attributes): the soft-wrap layout + renderer, and bracket matching.
+// attributes): the soft-wrap layout + renderer, bracket matching, and line ops.
 mod brackets;
+mod lines;
 mod wrap;

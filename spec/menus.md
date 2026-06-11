@@ -9,6 +9,8 @@ Top menu bar.
   dropdown row highlights it, and hovering another top-level name switches menus.
 - Dropdowns may contain **separators** — non-selectable divider lines that group
   related items. Arrow navigation, hover, and clicks all skip them.
+- An item marked `▸` opens a **submenu** (one level deep). `Right` or a click
+  opens it; `Left` or `Esc` backs out to the parent.
 
 The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 
@@ -32,6 +34,8 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 | Save As… | `Ctrl+Shift+S` | Save under a different name |
 | *— separator —* | | |
 | Close    | `Ctrl+W`       | Close the active buffer     |
+| Close All Tabs | | Close every buffer (leaves one empty) |
+| Reopen Closed Tab | `Ctrl+Shift+T` | Reopen the most recently closed file |
 | *— separator —* | | |
 | Quit     | `Ctrl+Q`       | Quit Vix                    |
 
@@ -45,10 +49,20 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 | Cut     | `Ctrl+X` | Cut to clipboard             |
 | Copy    | `Ctrl+C` | Copy to clipboard            |
 | Paste   | `Ctrl+V` | Paste from clipboard         |
+| Select All | `Ctrl+A` | Select the whole buffer    |
 | *— separator —* | | |
 | Toggle Comment | `Ctrl+/` | Comment/uncomment the line or selection |
 | *— separator —* | | |
+| Find… ▸  | | Submenu of find-related items (below) |
+
+The **Find…** submenu:
+
+| Item    | Shortcut | Action                       |
+| ------- | -------- | ---------------------------- |
 | Find    | `Ctrl+F` | Find in the current file     |
+| Find Next | `Ctrl+G` | Repeat the last search forward (works after the box closes) |
+| Find Previous | `Ctrl+Shift+G` | Repeat the last search backward |
+| Find Selection | `Alt+N` | Jump to the next occurrence of the selection |
 | Replace | `Ctrl+R` | Find-and-replace in the file |
 
 (Project-wide search/replace is `Ctrl+Shift+F`; interactive query-replace is
@@ -63,12 +77,20 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 | Locale…                          | Open the locale chooser (`locale-chooser.md`) |
 | Keyway…                          | Open the keyway chooser (`keyway-chooser.md`) |
 | *— separator —*                  |                                               |
-| Toggle Left Dock                 | Show/hide the file explorer (`Ctrl+B`)        |
-| Toggle Right Dock                | Show/hide the message drawer                  |
+| Show/Hide Left Dock              | Show/hide the file explorer (`Ctrl+B`)        |
+| Show/Hide Right Dock             | Show/hide the message drawer                  |
+| Show/Hide Bottom Status          | Show/hide the bottom status bar               |
 | *— separator —*                  |                                               |
-| Toggle Editor Line Numbers       | Show/hide the line-number gutter              |
-| Toggle Editor Visible Whitespace | Show/hide visible space, tab, newline, return |
-| Toggle Soft Wrap                 | Wrap long lines vs. scroll horizontally       |
+| Editor ▸                         | Submenu of editor display toggles (below)     |
+| Show/Hide Soft Wrap              | Wrap long lines vs. scroll horizontally       |
+
+The **Editor** submenu:
+
+| Item                             | Action                                        |
+| -------------------------------- | --------------------------------------------- |
+| Show/Hide Editor Line Numbers    | Show/hide the line-number gutter              |
+| Show/Hide Editor Visible Whitespace | Show/hide visible space, tab, newline, return |
+| Show/Hide Editor Scroll Bar      | Show/hide the editor's right-side scroll bar  |
 
 ## Tools menu
 
@@ -95,7 +117,6 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 
 These appear in the design but are not implemented yet:
 
-- **Select** menu with **Select All** (`Ctrl+A`).
 - View ▸ **Zoom In / Out / Zero** (terminal font zoom).
 - Separate Edit menu entries for project-wide find/replace (today these live on
   shortcuts and the palette, not the menu).

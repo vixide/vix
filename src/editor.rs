@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use ratatui::layout::Rect;
 use ratatui::style::Style;
-use vix_editor::actions::{Delete, InsertText, MoveDown, MoveRight, MoveUp};
+use vix_editor::actions::{Delete, Duplicate, InsertText, MoveDown, MoveRight, MoveUp, SelectAll};
 pub use vix_editor::editor::Editor as CodeEditor;
 use vix_editor::utils::get_lang;
 use ratatui_image::protocol::StatefulProtocol;
@@ -399,17 +399,28 @@ impl Editor {
         Ok(())
     }
 
-    /// Close the active tab; keeps at least one empty buffer open.
-    pub fn close_active(&mut self) {
+    /// Close the active tab; keeps at least one empty buffer open. Returns the
+    /// closed tab's file path, if it had one (for "reopen closed tab").
+    pub fn close_active(&mut self) -> Option<PathBuf> {
         if self.tabs.is_empty() {
-            return;
+            return None;
         }
-        self.tabs.remove(self.active);
+        let closed = self.tabs.remove(self.active).path;
         if self.tabs.is_empty() {
             self.new_tab();
         } else if self.active >= self.tabs.len() {
             self.active = self.tabs.len() - 1;
         }
+        closed
+    }
+
+    /// Close every tab, leaving a single empty untitled buffer. Returns the file
+    /// paths of the closed tabs, oldest first (for "reopen closed tab").
+    pub fn close_all(&mut self) -> Vec<PathBuf> {
+        let closed: Vec<PathBuf> = self.tabs.drain(..).filter_map(|t| t.path).collect();
+        self.active = 0;
+        self.new_tab();
+        closed
     }
 
     /// Activate the next tab, wrapping around.
@@ -505,6 +516,54 @@ impl Editor {
             return true;
         }
         false
+    }
+
+    /// Select the entire active buffer.
+    pub fn select_all(&mut self) {
+        if let Some(t) = self.active_tab_mut() {
+            t.editor.apply(SelectAll {});
+        }
+    }
+
+    /// Duplicate the cursor line (or the selection) in the active buffer.
+    pub fn duplicate_line(&mut self) {
+        if let Some(t) = self.active_tab_mut() {
+            if t.is_image() {
+                return;
+            }
+            t.editor.apply(Duplicate {});
+            t.dirty = true;
+            t.preview = false;
+        }
+    }
+
+    /// Move the active buffer's cursor line up or down by one row, scrolling it
+    /// into `area`.
+    pub fn move_line(&mut self, down: bool, area: Rect) {
+        if let Some(t) = self.active_tab_mut() {
+            if t.is_image() {
+                return;
+            }
+            if down {
+                t.editor.move_line_down();
+            } else {
+                t.editor.move_line_up();
+            }
+            t.editor.focus(&area);
+            t.dirty = true;
+            t.preview = false;
+        }
+    }
+
+    /// Jump the cursor to the partner of the bracket at (or just before) it,
+    /// scrolling it into `area`. No-op when the cursor is not on a bracket.
+    pub fn jump_matching_bracket(&mut self, area: Rect) {
+        if let Some(t) = self.active_tab_mut() {
+            if let Some(off) = t.editor.matching_bracket_offset() {
+                t.editor.set_cursor(off);
+                t.editor.focus(&area);
+            }
+        }
     }
 
     /// Forward-delete (the `Delete` key): step right, then delete back.

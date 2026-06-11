@@ -561,17 +561,20 @@ impl Action for Duplicate {
             let column = cursor - line_start;
 
             let insert_pos = line_end;
-            let to_insert = if line_text.ends_with('\n') {
-                line_text.clone()
+            // When the line ends in a newline, the duplicate goes at the start of
+            // the next line. The last line has no trailing newline, so insert a
+            // leading newline instead — otherwise the copy joins onto the original.
+            let (to_insert, line_base) = if line_text.ends_with('\n') {
+                (line_text.clone(), insert_pos)
             } else {
-                format!("{}\n", line_text)
+                (format!("\n{}", line_text), insert_pos + 1)
             };
             code.insert(insert_pos, &to_insert);
 
             // Keep cursor on the same relative column in the new line
-            let new_line_len = to_insert.trim_end_matches('\n').chars().count();
+            let new_line_len = to_insert.trim_matches('\n').chars().count();
             let new_column = column.min(new_line_len);
-            cursor = insert_pos + new_column;
+            cursor = line_base + new_column;
         }
 
         code.set_state_after(cursor, selection);

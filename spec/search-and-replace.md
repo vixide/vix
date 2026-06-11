@@ -16,12 +16,30 @@ opening the search bar).
 | Ctrl+F                | Search in buffer; open search prompt              |
 | Ctrl+R                | Replace in buffer; open search-and-replace prompt |
 | Ctrl+Alt+R            | Interactive replace (y/n/!/q for each match)      |
-| F3                    | Find next match                                   |
-| Shift+F3              | Find previous match                               |
+| F3 / Ctrl+G           | Find next match (repeats the last search)         |
+| Shift+F3 / Ctrl+Shift+G | Find previous match                             |
 | Alt+N                 | Find next occurrence of selection                 |
 | Alt+P                 | Find previous occurrence of selection             |
 
+**Find Next** (`Ctrl+G` / `F3`) and **Find Previous** (`Ctrl+Shift+G` /
+`Shift+F3`) repeat the last completed search, and keep working after the find box
+has closed — the last pattern is remembered. With nothing searched yet, they fall
+back to the selection (or word under the cursor), like **Find Selection**
+(`Alt+N`). All three are also on the Edit menu.
+
 Query Replace: Use "Query Replace" from the command palette for interactive replacement (y/n/!/q prompts for each match).
+
+## Find / replace box
+
+The in-buffer find / replace box has a Find field and (in replace mode) a Replace
+field below it. Switch the focused field with **`Tab`** or by **clicking** the
+field's row; the hint line reads `Tab / click: switch field` in replace mode.
+With the cursor in the Replace field, **`Enter`** (or **`Alt+Enter`** from either
+field) replaces all matches; `Enter` from the Find field finds the next match.
+
+The box's state — the query and replacement text, the focused field, the toggles,
+and the effective-pattern builder — lives in the internal `vix-find-panel` crate;
+the app renders the box and runs the search / replacement against the buffer.
 
 ## Search toolbar
 

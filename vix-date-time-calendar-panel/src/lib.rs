@@ -141,6 +141,14 @@ impl Calendar {
     pub fn grid(&self) -> MonthGrid {
         month_grid(self.shown)
     }
+
+    /// Format day-of-month `day` in the displayed month with a `strftime`
+    /// `pattern` (e.g. `"%Y-%m-%d"`). Returns `None` if `day` is not a valid day
+    /// of the displayed month. The host chooses the pattern (e.g. per locale).
+    pub fn format_day(&self, day: u8, pattern: &str) -> Option<String> {
+        let date = Date::new(self.shown.year(), self.shown.month(), day as i8).ok()?;
+        Some(date.strftime(pattern).to_string())
+    }
 }
 
 #[cfg(test)]
@@ -166,6 +174,16 @@ mod tests {
         assert!(cal.grid().today.is_none(), "a future month has no today");
         cal.prev_month();
         assert!(cal.grid().today.is_some(), "back to the current month");
+    }
+
+    #[test]
+    fn format_day_uses_the_displayed_month() {
+        let cal = Calendar::new();
+        let first = cal.shown_month();
+        let got = cal.format_day(15, "%Y-%m-%d").unwrap();
+        assert_eq!(got, format!("{:04}-{:02}-15", first.year(), first.month()));
+        // Day 0 is never valid.
+        assert!(cal.format_day(0, "%Y-%m-%d").is_none());
     }
 
     #[test]

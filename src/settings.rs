@@ -39,6 +39,10 @@ pub struct Settings {
     pub show_explorer: bool,
     /// Show the message drawer on startup.
     pub show_messages: bool,
+    /// Show the bottom status bar.
+    pub show_status_bar: bool,
+    /// Show the editor's right-side scroll bar.
+    pub show_scrollbar: bool,
     /// Open single-clicked / arrow-scanned files in an ephemeral preview tab.
     pub preview_tabs: bool,
     /// On save, strip trailing spaces/tabs from every line.
@@ -78,6 +82,8 @@ impl Default for Settings {
             soft_wrap: false,
             show_explorer: true,
             show_messages: true,
+            show_status_bar: true,
+            show_scrollbar: true,
             preview_tabs: true,
             trim_trailing_whitespace: true,
             ensure_final_newline: true,
