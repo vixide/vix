@@ -10,6 +10,7 @@ members = [
     "vix-keyway-chooser",
     "vix-keyboard-shortcut-panel",
     "vix-nerd-font-palette",
+    "vix-ascii-panel",
     "vix-find-panel",
     "vix-right-dock",
     "vix-left-dock",
@@ -65,6 +66,8 @@ vix-keyway-chooser = { path = "vix-keyway-chooser" }
 vix-keyboard-shortcut-panel = { path = "vix-keyboard-shortcut-panel" }
 # Nerd Font palette (Tools menu): curated glyph set + character-picker grid state.
 vix-nerd-font-palette = { path = "vix-nerd-font-palette" }
+# ASCII panel (Tools menu): the ASCII reference table + row-selection state.
+vix-ascii-panel = { path = "vix-ascii-panel" }
 # Find / find-and-replace box state (query, replacement, toggles, pattern builder).
 vix-find-panel = { path = "vix-find-panel" }
 # Right dock: message-drawer state (advice/notifications + selection).

@@ -1,0 +1,15 @@
+# vix-ascii-panel: the ASCII reference table (decimal, hex, character) and the
+# panel's row-selection + scroll state. Pure data (no dependencies); the host
+# renders the table and inserts the chosen character into the active editor.
+
+[package]
+name = "vix-ascii-panel"
+version = "0.1.0"
+edition = "2021"
+description = "ASCII reference table and row-selection state for Vix."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_ascii_panel"
+path = "src/lib.rs"

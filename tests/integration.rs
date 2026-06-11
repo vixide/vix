@@ -1937,6 +1937,26 @@ fn view_layout_submenu_rolls_up_the_dock_toggles() {
 }
 
 #[test]
+fn ascii_panel_opens_inserts_and_closes() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.ascii");
+    assert!(app.ascii_panel.is_some(), "Tools → ASCII opens the panel");
+
+    // Highlight code 65 ('A') and insert it; the panel stays open.
+    app.ascii_panel.as_mut().unwrap().selected = 65;
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.ascii_panel.is_some(), "Enter keeps the panel open");
+    assert!(
+        app.editor.active_tab().unwrap().lines()[0].contains('A'),
+        "the highlighted character is inserted into the editor"
+    );
+
+    // Esc closes the panel.
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(app.ascii_panel.is_none(), "Esc closes the panel");
+}
+
+#[test]
 fn menu_type_ahead_selects_by_first_letter() {
     let mut app = app_at(Path::new("."));
     app.on_key(keycode(KeyCode::F(10)));

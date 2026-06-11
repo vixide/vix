@@ -13,6 +13,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **ASCII panel** (Tools → ASCII): a scrolling overlay of the 128 ASCII codes
+  showing each code's decimal, hexadecimal, and character representation. Arrow
+  keys / PageUp / PageDown / Home / End move the highlight; Enter or a click
+  inserts the highlighted character into the active editor; Esc closes. Lives in
+  the new internal `vix-ascii-panel` crate.
 - **View → Layout submenu.** The dock and status-bar toggles (Show/Hide Left
   Dock, Right Dock, Bottom Dock, Bottom Status) now live under a **Layout**
   submenu, alongside the existing **Editor** submenu.

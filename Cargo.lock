@@ -3275,6 +3275,7 @@ dependencies = [
  "regex",
  "rust-i18n",
  "serde",
+ "vix-ascii-panel",
  "vix-bottom-dock",
  "vix-date-time-calendar-panel",
  "vix-editor",
@@ -3288,6 +3289,10 @@ dependencies = [
  "vix-status-bar-panel",
  "vix-theme-chooser",
 ]
+
+[[package]]
+name = "vix-ascii-panel"
+version = "0.1.0"
 
 [[package]]
 name = "vix-bottom-dock"

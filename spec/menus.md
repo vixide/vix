@@ -108,8 +108,9 @@ The **Editor** submenu:
 
 | Item               | Action                                            |
 | ------------------ | ------------------------------------------------- |
-| Calendar           | Toggle the calendar box                           |
+| Calendar…          | Toggle the calendar box                           |
 | Nerd Font Palette… | Open the glyph picker (`nerd-font-palette.md`)    |
+| ASCII…             | Open the ASCII reference table (`vix-ascii-panel.md`) |
 | Run Command…       | Run a shell command into the bottom dock          |
 | Cancel Command     | Kill the running command                          |
 | *— separator —*    |                                                   |

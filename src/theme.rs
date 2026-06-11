@@ -39,6 +39,8 @@ pub mod icon {
     pub const INFO: &str = "\u{f05a}";
     /// Palette / app logo glyph.
     pub const PALETTE: &str = "\u{f120}";
+    /// Table grid (ASCII panel).
+    pub const TABLE: &str = "\u{f0ce}";
 }
 
 /// Pick a file icon from a path's extension.

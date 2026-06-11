@@ -181,6 +181,11 @@ pub use vix_keyway_chooser::Chooser as KeywayChooser;
 /// click) inserts the highlighted glyph into the active editor, Esc closes.
 pub use vix_nerd_font_palette::Palette as NerdPalette;
 
+/// ASCII panel overlay state (Tools -> ASCII), re-exported from
+/// [`vix_ascii_panel`]. Arrow keys move within the table; Enter (or a click)
+/// inserts the highlighted character into the active editor, Esc closes.
+pub use vix_ascii_panel::Panel as AsciiPanel;
+
 /// The active keyboard navigation style, derived from `settings.keyway`. It
 /// decides how raw key events are dispatched (see [`App::on_key`]): `Apple` uses
 /// modifier shortcuts, `Emacs` uses `Ctrl` chords, `Vim` is modal.
@@ -255,6 +260,9 @@ pub struct Layout {
     /// Glyph-grid rectangle of the open Nerd Font palette, so a click can
     /// hit-test which cell was picked.
     pub nerd_palette: Rect,
+    /// Row-list rectangle of the open ASCII panel, so a click can hit-test which
+    /// row was picked.
+    pub ascii_panel: Rect,
     /// Inner content rectangle of the open find / replace box, so a click can
     /// focus the Find or Replace field.
     pub search: Rect,
@@ -299,6 +307,8 @@ pub struct App {
     pub recent_chooser: Option<RecentChooser>,
     /// Nerd Font palette (character picker) overlay, when open.
     pub nerd_palette: Option<NerdPalette>,
+    /// ASCII panel (reference table) overlay, when open.
+    pub ascii_panel: Option<AsciiPanel>,
     /// Modal info dialog (Vix menu About / Website / Email), when open.
     pub dialog: Option<Dialog>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
@@ -409,6 +419,7 @@ impl App {
             keyway_chooser: None,
             recent_chooser: None,
             nerd_palette: None,
+            ascii_panel: None,
             dialog: None,
             clip: Vec::new(),
             clip_cut: false,
@@ -518,6 +529,10 @@ impl App {
         }
         if self.nerd_palette.is_some() {
             self.nerd_key(key);
+            return;
+        }
+        if self.ascii_panel.is_some() {
+            self.ascii_key(key);
             return;
         }
         if self.query_replace.is_some() {
@@ -1027,6 +1042,7 @@ impl App {
                 }
             }
             "tools.nerd_palette" => self.open_nerd_palette(),
+            "tools.ascii" => self.open_ascii_panel(),
             "tools.run_command" => {
                 self.prompt =
                     Some(Prompt::new(PromptKind::RunCommand, t!("prompt.run_command").to_string()));
@@ -1761,6 +1777,10 @@ impl App {
         }
         if self.nerd_palette.is_some() {
             self.nerd_mouse(mouse);
+            return;
+        }
+        if self.ascii_panel.is_some() {
+            self.ascii_mouse(mouse);
             return;
         }
         // The find / replace box: a left click focuses the Find or Replace field.
@@ -2567,6 +2587,84 @@ impl App {
         let area = self.layout.editor;
         if self.editor.insert_str(&glyph.to_string(), area) {
             self.status = t!("status.glyph_inserted", name = name).to_string();
+        }
+    }
+
+    // ----- ASCII panel ----------------------------------------------------
+
+    fn open_ascii_panel(&mut self) {
+        self.ascii_panel = Some(AsciiPanel::open());
+    }
+
+    fn ascii_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.ascii_panel.height as usize).max(1);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.ascii_panel.as_mut() {
+                    p.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.ascii_panel.as_mut() {
+                    p.down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(p) = self.ascii_panel.as_mut() {
+                    p.page_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(p) = self.ascii_panel.as_mut() {
+                    p.page_down(page);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(p) = self.ascii_panel.as_mut() {
+                    p.page_up(p.len());
+                }
+            }
+            KeyCode::End => {
+                if let Some(p) = self.ascii_panel.as_mut() {
+                    p.page_down(p.len());
+                }
+            }
+            // Enter inserts and keeps the panel open so several characters can be
+            // picked in a row; Esc closes it.
+            KeyCode::Enter => self.insert_selected_ascii(),
+            KeyCode::Esc => self.ascii_panel = None,
+            _ => {}
+        }
+    }
+
+    fn ascii_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.ascii_panel;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row_in_view = (mouse.row - r.y) as usize;
+        if let Some(p) = self.ascii_panel.as_mut() {
+            let idx = p.scroll + row_in_view;
+            if p.select_index(idx) {
+                self.insert_selected_ascii();
+            }
+        }
+    }
+
+    /// Insert the highlighted character into the active editor (leaving the panel
+    /// open). No-op when there is no editable buffer (e.g. an image tab).
+    fn insert_selected_ascii(&mut self) {
+        let Some(p) = self.ascii_panel.as_ref() else {
+            return;
+        };
+        let ch = p.selected_char();
+        let name = p.selected_label();
+        let area = self.layout.editor;
+        if self.editor.insert_str(&ch.to_string(), area) {
+            self.status = t!("status.ascii_inserted", name = name).to_string();
         }
     }
 

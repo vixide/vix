@@ -186,6 +186,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.nerd_palette.is_some() {
         draw_nerd_palette(app, frame, area);
     }
+    if app.ascii_panel.is_some() {
+        draw_ascii_panel(app, frame, area);
+    }
     if app.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
         draw_paste_conflict(app, frame, area);
     }
@@ -968,6 +971,70 @@ fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
         y: chunks[0].y,
         width: grid_w.min(chunks[0].width),
         height: grid_rows.min(chunks[0].height),
+    };
+}
+
+fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
+    use vix_ascii_panel::{self as ascii, LEN};
+    if app.ascii_panel.is_none() {
+        return;
+    }
+    let width = 26u16.min(area.width);
+    // Borders (2) + header (1) + rows + hint (1); cap rows so the box fits.
+    let max_rows = area.height.saturating_sub(4).max(1);
+    let rows = (LEN as u16).min(max_rows);
+    let height = (rows + 4).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::TABLE, t!("ui.ascii")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let header = Line::from(Span::styled(t!("ui.ascii_header").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(header), chunks[0]);
+
+    // Sync the scroll window to the highlighted row, then render that window.
+    let view_h = chunks[1].height as usize;
+    if let Some(p) = app.ascii_panel.as_mut() {
+        p.ensure_visible(view_h);
+    }
+    let p = app.ascii_panel.as_ref().unwrap();
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for idx in p.scroll..(p.scroll + view_h).min(LEN) {
+        let code = idx as u8;
+        let text = format!("  {:>3}  {:>2}   {}", ascii::dec(code), ascii::hex(code), ascii::label(code));
+        if idx == p.selected {
+            lines.push(Line::from(Span::styled(text, theme::selected())));
+        } else {
+            lines.push(Line::from(Span::raw(text)));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines), chunks[1]);
+
+    let hint = Line::from(Span::styled(t!("ui.ascii_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[2]);
+
+    // Record just the row window for mouse hit-testing.
+    app.layout.ascii_panel = Rect {
+        x: chunks[1].x,
+        y: chunks[1].y,
+        width: chunks[1].width,
+        height: (view_h as u16).min(chunks[1].height),
     };
 }
 

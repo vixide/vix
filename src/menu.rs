@@ -145,6 +145,7 @@ const VIX: &[Item] = &[
 const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.calendar", "tools.calendar", ""),
     Item::leaf("menu.item.tools.nerd_palette", "tools.nerd_palette", ""),
+    Item::leaf("menu.item.tools.ascii", "tools.ascii", ""),
     Item::leaf("menu.item.tools.run_command", "tools.run_command", ""),
     Item::leaf("menu.item.tools.cancel_command", "tools.cancel_command", ""),
     SEP,
