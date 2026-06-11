@@ -2895,6 +2895,16 @@ impl App {
         }
         let rel_y = mouse.row - r.y;
         let rel_x = mouse.column - r.x;
+        // The month-header row (row 4) carries the `◀`/`▶` nav arrows: `◀` at
+        // column 0, `▶` at column 20.
+        if rel_y == 4 {
+            if rel_x == 0 {
+                self.calendar.prev_month();
+            } else if rel_x == 20 {
+                self.calendar.next_month();
+            }
+            return;
+        }
         // Rows 0..=2 are the local / UTC-ISO / ISO-week lines; the month grid
         // starts at row 6 (after the blank line, title, and weekday header), each
         // day cell being three columns wide.

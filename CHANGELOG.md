@@ -8,6 +8,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Calendar month-nav arrows.** The calendar box's month header shows
+  `◀ Month Year ▶`; the arrows are clickable (and mirror the `←`/`→` keys), and a
+  bottom help line shows `◀ ▶ month   Esc close`.
+- **Many more UI languages.** Added Italian, Korean, Turkish, Dutch, Vietnamese,
+  Indonesian, Thai, Persian, Ukrainian, and Greek — plus **Klingon** (`tlh`) and
+  **Sindarin** (`sjn`) — for 27 selectable languages. The full menu bar is
+  translated into the 15 primary locales; other keys fall back to English.
 - **Calendar click-to-insert.** In the calendar box, clicking one of the
   date-time lines (local date-time, UTC ISO instant, ISO week date) inserts that
   string into the editor; clicking a day in the month grid inserts that date

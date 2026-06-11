@@ -12,12 +12,16 @@ Calendar box:
     number `01..53`, and `D` the day of week `1` (Monday) .. `7` (Sunday)
   - Blank spacer line
 - Calendar month area
+  - a month header showing `◀  Month Year  ▶` — the `◀`/`▶` glyphs are clickable
+    month-nav arrows (the panel crate is render-free, so the host draws them)
   - an in-house Monday-first day grid computed with `jiff`, highlighting today
-  - right arrow -> next month
-  - left arrow -> previous month
+  - `→` / next-arrow click -> next month
+  - `←` / previous-arrow click -> previous month
+  - a bottom help line: `◀ ▶ month   Esc close`
 
 Mouse:
 
+- Clicking the `◀` / `▶` arrow on the month-header row pages the month.
 - Clicking a date-time line inserts that exact string into the active editor.
 - Clicking a day in the month grid inserts that date into the editor, formatted
   per the active locale (`%m/%d/%Y` for English, `%d.%m.%Y` for German,

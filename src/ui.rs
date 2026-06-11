@@ -799,7 +799,7 @@ fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
     // user's navigation (see `App::calendar`).
     let now = calendar::now_local();
     let width = 28u16.min(area.width);
-    let height = 14u16.min(area.height);
+    let height = 16u16.min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width + 1),
         y: area.y + 2,
@@ -814,13 +814,19 @@ fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
         .border_style(theme::title(true))
         .title(format!(" {} {} ", icon::CLOCK, t!("ui.calendar")));
     let inner = block.inner(rect);
-    // Record the inner rect so a click can hit-test info lines and day cells.
+    // Record the inner rect so a click can hit-test info lines, the month-nav
+    // arrows, and day cells.
     app.layout.calendar = inner;
     frame.render_widget(block, rect);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(4), Constraint::Length(1), Constraint::Min(6)])
+        .constraints([
+            Constraint::Length(4), // info
+            Constraint::Length(1), // month header + nav arrows
+            Constraint::Min(6),    // weekday header + weeks
+            Constraint::Length(1), // help
+        ])
         .split(inner);
 
     let info = vec![
@@ -833,13 +839,21 @@ fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
     ];
     frame.render_widget(Paragraph::new(info), rows[0]);
 
-    let header = Line::from(Span::styled(
-        format!("{:^21}", app.calendar.title()),
-        Style::default(),
-    ));
+    // Month header: a left arrow, the centered month title, and a right arrow
+    // (`◀`/`▶`). The arrows are clickable (see `App::calendar_mouse`) and mirror
+    // the Left/Right keys.
+    let header = Line::from(format!("{CAL_PREV}{:^19}{CAL_NEXT}", app.calendar.title()));
     frame.render_widget(Paragraph::new(header), rows[1]);
     frame.render_widget(Paragraph::new(month_lines(&app.calendar)), rows[2]);
+
+    let help = Line::from(Span::styled(t!("ui.calendar_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(help), rows[3]);
 }
+
+/// Previous-month arrow glyph, at column 0 of the calendar's month-header row.
+pub const CAL_PREV: char = '\u{25c0}';
+/// Next-month arrow glyph, at column 20 of the calendar's month-header row.
+pub const CAL_NEXT: char = '\u{25b6}';
 
 /// Columns each glyph cell occupies in the Nerd Font palette grid. The mouse
 /// hit-test in [`crate::app::App::nerd_mouse`] divides by this, so the renderer

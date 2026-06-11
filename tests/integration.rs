@@ -1067,6 +1067,25 @@ fn toggle_scrollbar_flips_persists_and_reclaims_the_column() {
 }
 
 #[test]
+fn calendar_nav_arrows_change_the_month() {
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.calendar");
+    let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let cal = app.layout.calendar;
+    let title = app.calendar.title();
+
+    // The nav arrows sit on the month-header row (row 4): ◀ at col 0, ▶ at col 20.
+    app.on_mouse(click(cal.x + 20, cal.y + 4)); // ▶ next month
+    assert_ne!(app.calendar.title(), title, "▶ advanced to the next month");
+    app.on_mouse(click(cal.x, cal.y + 4)); // ◀ previous month
+    assert_eq!(app.calendar.title(), title, "◀ returned to the original month");
+    assert!(app.show_calendar, "an arrow click keeps the calendar open");
+}
+
+#[test]
 fn calendar_click_inserts_into_editor() {
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
@@ -2075,6 +2094,7 @@ fn switching_keyway_resets_vim_to_normal() {
     assert_eq!(app.settings.keyway, "vim");
     assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"), "reset to Normal");
 }
+
 
 
 
