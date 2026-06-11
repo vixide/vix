@@ -13,6 +13,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **System Information panel** (Tools → System Information): a scrolling,
+  read-only snapshot of the host — OS, CPU, memory, swap, disks, uptime, and
+  environment (via the `sysinfo` crate). Enter or a click inserts the highlighted
+  value into the editor; Esc closes. Lives in the new internal
+  `vix-system-information-panel` crate.
 - **Unsaved-changes prompt.** Closing a tab or quitting with unsaved changes now
   raises a modal asking to **(s)ave**, **(d)on't save**, or **(c)ancel**. Quit
   walks every dirty tab in turn before exiting. Vim `:q!` still force-quits

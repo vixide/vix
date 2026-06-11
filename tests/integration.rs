@@ -2018,6 +2018,34 @@ fn unsaved_prompt_save_writes_and_closes() {
 }
 
 #[test]
+fn system_info_panel_opens_inserts_and_closes() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.system_info");
+    assert!(app.system_info.is_some(), "Tools → System Information opens the panel");
+
+    // Highlight the first row that has an insertable value, then insert it.
+    let idx = app
+        .system_info
+        .as_ref()
+        .unwrap()
+        .rows
+        .iter()
+        .position(|r| !r.value.is_empty())
+        .expect("the snapshot has at least one value row");
+    let value = app.system_info.as_ref().unwrap().rows[idx].value.clone();
+    app.system_info.as_mut().unwrap().select_index(idx);
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.system_info.is_some(), "Enter keeps the panel open");
+    assert!(
+        app.editor.active_tab().unwrap().lines()[0].contains(&value),
+        "the highlighted value is inserted into the editor"
+    );
+
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(app.system_info.is_none(), "Esc closes the panel");
+}
+
+#[test]
 fn menu_type_ahead_selects_by_first_letter() {
     let mut app = app_at(Path::new("."));
     app.on_key(keycode(KeyCode::F(10)));

@@ -205,6 +205,12 @@ pub use vix_nerd_font_palette::Palette as NerdPalette;
 /// inserts the highlighted character into the active editor, Esc closes.
 pub use vix_ascii_panel::Panel as AsciiPanel;
 
+/// System Information panel overlay state (Tools -> System Information),
+/// re-exported from [`vix_system_information_panel`]. Arrow keys move within the
+/// table; Enter (or a click) inserts the highlighted value into the active
+/// editor, Esc closes.
+pub use vix_system_information_panel::Panel as SystemInfoPanel;
+
 /// The active keyboard navigation style, derived from `settings.keyway`. It
 /// decides how raw key events are dispatched (see [`App::on_key`]): `Apple` uses
 /// modifier shortcuts, `Emacs` uses `Ctrl` chords, `Vim` is modal.
@@ -282,6 +288,9 @@ pub struct Layout {
     /// Row-list rectangle of the open ASCII panel, so a click can hit-test which
     /// row was picked.
     pub ascii_panel: Rect,
+    /// Row-list rectangle of the open System Information panel, so a click can
+    /// hit-test which row was picked.
+    pub system_info: Rect,
     /// Inner content rectangle of the open find / replace box, so a click can
     /// focus the Find or Replace field.
     pub search: Rect,
@@ -330,6 +339,8 @@ pub struct App {
     pub nerd_palette: Option<NerdPalette>,
     /// ASCII panel (reference table) overlay, when open.
     pub ascii_panel: Option<AsciiPanel>,
+    /// System Information panel overlay, when open.
+    pub system_info: Option<SystemInfoPanel>,
     /// Modal info dialog (Vix menu About / Website / Email), when open.
     pub dialog: Option<Dialog>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
@@ -442,6 +453,7 @@ impl App {
             recent_chooser: None,
             nerd_palette: None,
             ascii_panel: None,
+            system_info: None,
             dialog: None,
             clip: Vec::new(),
             clip_cut: false,
@@ -555,6 +567,10 @@ impl App {
         }
         if self.ascii_panel.is_some() {
             self.ascii_key(key);
+            return;
+        }
+        if self.system_info.is_some() {
+            self.system_info_key(key);
             return;
         }
         if self.query_replace.is_some() {
@@ -1065,6 +1081,7 @@ impl App {
             }
             "tools.nerd_palette" => self.open_nerd_palette(),
             "tools.ascii" => self.open_ascii_panel(),
+            "tools.system_info" => self.open_system_info(),
             "tools.run_command" => {
                 self.prompt =
                     Some(Prompt::new(PromptKind::RunCommand, t!("prompt.run_command").to_string()));
@@ -1915,6 +1932,10 @@ impl App {
         }
         if self.ascii_panel.is_some() {
             self.ascii_mouse(mouse);
+            return;
+        }
+        if self.system_info.is_some() {
+            self.system_info_mouse(mouse);
             return;
         }
         // The find / replace box: a left click focuses the Find or Replace field.
@@ -2800,6 +2821,85 @@ impl App {
         let area = self.layout.editor;
         if self.editor.insert_str(&ch.to_string(), area) {
             self.status = t!("status.ascii_inserted", name = name).to_string();
+        }
+    }
+
+    // ----- System Information panel ---------------------------------------
+
+    fn open_system_info(&mut self) {
+        self.system_info = Some(SystemInfoPanel::open());
+    }
+
+    fn system_info_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.system_info.height as usize).max(1);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.system_info.as_mut() {
+                    p.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.system_info.as_mut() {
+                    p.down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(p) = self.system_info.as_mut() {
+                    p.page_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(p) = self.system_info.as_mut() {
+                    p.page_down(page);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(p) = self.system_info.as_mut() {
+                    p.page_up(p.len());
+                }
+            }
+            KeyCode::End => {
+                if let Some(p) = self.system_info.as_mut() {
+                    p.page_down(p.len());
+                }
+            }
+            // Enter inserts the highlighted value and keeps the panel open; Esc closes.
+            KeyCode::Enter => self.insert_selected_system_info(),
+            KeyCode::Esc => self.system_info = None,
+            _ => {}
+        }
+    }
+
+    fn system_info_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.system_info;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row_in_view = (mouse.row - r.y) as usize;
+        if let Some(p) = self.system_info.as_mut() {
+            let idx = p.scroll + row_in_view;
+            if p.select_index(idx) {
+                self.insert_selected_system_info();
+            }
+        }
+    }
+
+    /// Insert the highlighted value into the active editor (leaving the panel
+    /// open). Section-heading rows have no value, so they insert nothing.
+    fn insert_selected_system_info(&mut self) {
+        let Some(p) = self.system_info.as_ref() else {
+            return;
+        };
+        let value = p.selected_value();
+        if value.is_empty() {
+            return;
+        }
+        let area = self.layout.editor;
+        if self.editor.insert_str(&value, area) {
+            self.status = t!("status.ascii_inserted", name = value).to_string();
         }
     }
 

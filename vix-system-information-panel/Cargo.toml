@@ -1,0 +1,20 @@
+# vix-system-information-panel: a read-only snapshot of host system information
+# (OS, CPU, memory, swap, disks, uptime, environment) plus the panel's
+# row-selection + scroll state. Uses the `sysinfo` crate to gather hardware and
+# OS facts; the host renders the table and inserts a chosen value into the editor.
+
+[package]
+name = "vix-system-information-panel"
+version = "0.1.0"
+edition = "2021"
+description = "Host system-information snapshot and row-selection state for Vix."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_system_information_panel"
+path = "src/lib.rs"
+
+[dependencies]
+# Cross-platform system facts: OS/kernel, CPU, memory, swap, disks, uptime.
+sysinfo = "0.33"

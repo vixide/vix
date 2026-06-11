@@ -111,6 +111,7 @@ The **Editor** submenu:
 | Calendar…          | Toggle the calendar box                           |
 | Nerd Font Palette… | Open the glyph picker (`nerd-font-palette.md`)    |
 | ASCII…             | Open the ASCII reference table (`vix-ascii-panel.md`) |
+| System Information… | Host OS/CPU/memory/disk snapshot (`vix-system-information-panel.md`) |
 | Run Command…       | Run a shell command into the bottom dock          |
 | Cancel Command     | Kill the running command                          |
 | *— separator —*    |                                                   |
