@@ -56,19 +56,19 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 | Paste   | `Ctrl+V` | Paste from clipboard         |
 | Select All | `Ctrl+A` | Select the whole buffer    |
 | *— separator —* | | |
-| Find… ▸  | | Submenu of find-related items (below) |
+| Find ▸  | | Submenu of find-related items (below) |
 | *— separator —* | | |
 | Toggle Comment | `Ctrl+/` | Comment/uncomment the line or selection |
 
-The **Find…** submenu:
+The **Find** submenu:
 
 | Item    | Shortcut | Action                       |
 | ------- | -------- | ---------------------------- |
-| Find    | `Ctrl+F` | Find in the current file     |
+| Find…   | `Ctrl+F` | Find in the current file     |
 | Find Next | `Ctrl+G` | Repeat the last search forward (works after the box closes) |
 | Find Previous | `Ctrl+Shift+G` | Repeat the last search backward |
 | Find Selection | `Alt+N` | Jump to the next occurrence of the selection |
-| Search in Project → Dock | | List project-wide hits in the bottom dock (click-to-jump) |
+| Search in Project… | | List project-wide hits in the bottom dock (click-to-jump) |
 | Replace | `Ctrl+R` | Find-and-replace in the file |
 
 (Project-wide search/replace is `Ctrl+Shift+F`; interactive query-replace is
