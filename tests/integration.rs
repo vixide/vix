@@ -1227,6 +1227,32 @@ fn clicking_a_dock_location_jumps_to_it() {
 }
 
 #[test]
+fn bottom_dock_top_edge_drag_resizes() {
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.bottom_dock");
+    let mut term = Terminal::new(TestBackend::new(80, 40)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+
+    let r = app.layout.bottom_dock;
+    let before = app.settings.bottom_dock_height;
+    // Press the top edge and drag up four rows → taller.
+    app.on_mouse(mouse(MouseEventKind::Down(MouseButton::Left), r.x + 1, r.y));
+    app.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), r.x + 1, r.y - 4));
+    assert!(app.settings.bottom_dock_height > before, "dragging the top edge up grows the dock");
+    app.on_mouse(mouse(MouseEventKind::Up(MouseButton::Left), r.x + 1, r.y - 4));
+
+    // Re-render so the dock rect reflects the new height, then drag down → shorter.
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let grown = app.settings.bottom_dock_height;
+    let r2 = app.layout.bottom_dock;
+    app.on_mouse(mouse(MouseEventKind::Down(MouseButton::Left), r2.x + 1, r2.y));
+    app.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), r2.x + 1, r2.y + 3));
+    assert!(app.settings.bottom_dock_height < grown, "dragging the top edge down shrinks it");
+}
+
+#[test]
 fn bottom_dock_focus_and_scroll() {
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;

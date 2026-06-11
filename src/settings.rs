@@ -45,6 +45,8 @@ pub struct Settings {
     pub show_scrollbar: bool,
     /// Show the bottom dock (log/output/data panel).
     pub show_bottom_dock: bool,
+    /// Height (rows) of the bottom dock; drag its top edge to resize.
+    pub bottom_dock_height: u16,
     /// Open single-clicked / arrow-scanned files in an ephemeral preview tab.
     pub preview_tabs: bool,
     /// On save, strip trailing spaces/tabs from every line.
@@ -87,6 +89,7 @@ impl Default for Settings {
             show_status_bar: true,
             show_scrollbar: true,
             show_bottom_dock: false,
+            bottom_dock_height: 9,
             preview_tabs: true,
             trim_trailing_whitespace: true,
             ensure_final_newline: true,

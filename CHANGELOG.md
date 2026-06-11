@@ -16,6 +16,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   its merged stdout/stderr into the bottom dock (shown automatically) line by
   line, with a `$ command` header and an `[exit N]` footer. The UI stays
   responsive; **Cancel Command** (Tools menu / palette) kills a running command.
+- **Resizable bottom dock.** The bottom dock is pinned directly above the status
+  bar, and its top edge is draggable to grow or shrink it (persisted in the
+  `bottom_dock_height` setting), matching the draggable left/right docks.
 - **Bottom-dock scrolling, focus & click-to-jump.** Click the bottom dock to
   focus it (its border brightens); then `↑`/`↓`, `PgUp`/`PgDn`, and `Home`/`End`
   scroll its buffer. The mouse wheel scrolls it any time; `Esc` returns focus to

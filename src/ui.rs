@@ -41,7 +41,10 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     // The bottom dock (when shown) takes a fixed-height strip at the bottom of the
     // body; the rest is the main body (explorer | center | messages).
     let (body, bottom_dock_rect) = if app.show_bottom_dock {
-        let h = 9u16.min(rows[1].height.saturating_sub(3));
+        // Height is user-adjustable (drag the dock's top edge); keep at least 3
+        // rows for the main body above it.
+        let max_h = rows[1].height.saturating_sub(3).max(3);
+        let h = app.settings.bottom_dock_height.clamp(3, max_h);
         let v = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(3), Constraint::Length(h)])

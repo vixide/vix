@@ -12,8 +12,11 @@ routes the toggle (`src/app.rs`). Pure data, no dependencies.
 
 - Toggle with **View → Show/Hide Bottom Dock** (`view.bottom_dock`), the command
   palette, or the `show_bottom_dock` setting (default off). The choice persists.
-- When shown, it takes a fixed-height strip at the bottom of the body; the
-  explorer / editor / messages share the remaining space above it.
+- When shown, it takes a strip at the bottom of the body, **pinned directly above
+  the status bar**; the explorer / editor / messages share the space above it.
+- Its height is **draggable**: press the dock's top edge and drag up/down to grow
+  or shrink it (kept between a 3-row minimum and leaving 3 rows for the body). The
+  height persists in the `bottom_dock_height` setting.
 - Shows the newest lines (pinned to the bottom) or a `(no output yet)` hint when
   empty.
 

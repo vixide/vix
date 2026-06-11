@@ -46,6 +46,8 @@ enum DockResize {
     Left,
     /// The right dock (messages); drag its left edge.
     Right,
+    /// The bottom dock; drag its top edge.
+    Bottom,
 }
 
 /// Which pane currently has keyboard focus.
@@ -1807,7 +1809,15 @@ impl App {
             .show_explorer
             .then(|| self.layout.explorer.right().saturating_sub(1));
         let right_edge = self.show_messages.then_some(self.layout.messages.x);
+        // The bottom dock's top edge (its top border row), draggable to resize.
+        let bottom_edge = self.show_bottom_dock.then_some(self.layout.bottom_dock.y);
         match mouse.kind {
+            // The bottom edge is a row, so check it first (a column edge could
+            // otherwise win on that row).
+            MouseEventKind::Down(MouseButton::Left) if Some(row) == bottom_edge => {
+                self.dock_resize = Some(DockResize::Bottom);
+                return;
+            }
             MouseEventKind::Down(MouseButton::Left) if Some(col) == left_edge => {
                 self.dock_resize = Some(DockResize::Left);
                 return;
@@ -1817,7 +1827,11 @@ impl App {
                 return;
             }
             MouseEventKind::Drag(MouseButton::Left) if self.dock_resize.is_some() => {
-                self.resize_dock(col);
+                if matches!(self.dock_resize, Some(DockResize::Bottom)) {
+                    self.resize_bottom_dock(row);
+                } else {
+                    self.resize_dock(col);
+                }
                 return;
             }
             MouseEventKind::Up(MouseButton::Left) => self.dock_resize = None,
@@ -1954,8 +1968,23 @@ impl App {
                 let w = self.layout.messages.right().saturating_sub(col).clamp(MIN_DOCK, max);
                 self.settings.messages_width = w;
             }
-            None => {}
+            Some(DockResize::Bottom) | None => {}
         }
+    }
+
+    /// Resize the bottom dock so its top edge follows `row`, keeping at least a
+    /// minimum dock height and a minimum body above it.
+    fn resize_bottom_dock(&mut self, row: u16) {
+        const MIN_DOCK: u16 = 3;
+        const MIN_BODY: u16 = 3;
+        let bottom = self.layout.bottom_dock.bottom(); // boundary above the status bar
+        let body_top = self.layout.menu.bottom(); // first body row (below the menu)
+        let max = bottom
+            .saturating_sub(body_top)
+            .saturating_sub(MIN_BODY)
+            .max(MIN_DOCK);
+        let h = bottom.saturating_sub(row).clamp(MIN_DOCK, max);
+        self.settings.bottom_dock_height = h;
     }
 
     fn editor_mouse(&mut self, mouse: MouseEvent) {
