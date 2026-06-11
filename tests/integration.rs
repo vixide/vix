@@ -1133,10 +1133,42 @@ fn run_command_streams_output_to_bottom_dock() {
 
     assert!(app.prompt.is_none(), "Enter runs and closes the prompt");
     assert!(app.show_bottom_dock, "running shows the bottom dock");
+
+    // The command runs in a background thread; drain it like the event loop does.
+    let mut waited = 0;
+    while app.command_running() && waited < 300 {
+        app.poll_command();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        waited += 1;
+    }
+    app.poll_command();
+
     let out = app.bottom_dock.lines.join("\n");
     assert!(out.contains("$ echo hello-vix"), "echoes the command: {out:?}");
     assert!(out.contains("hello-vix"), "shows the output: {out:?}");
     assert!(out.contains("[exit 0]"), "shows the exit code: {out:?}");
+}
+
+#[test]
+fn cancel_command_kills_a_running_command() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.run_command");
+    for c in "sleep 5".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.command_running(), "the command is running");
+
+    app.run_action("tools.cancel_command");
+    let mut waited = 0;
+    while app.command_running() && waited < 300 {
+        app.poll_command();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        waited += 1;
+    }
+    assert!(!app.command_running(), "cancel ended the command");
+    let out = app.bottom_dock.lines.join("\n");
+    assert!(out.contains("[cancelled]"), "shows it was cancelled: {out:?}");
 }
 
 #[test]

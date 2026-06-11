@@ -102,6 +102,7 @@ The **Editor** submenu:
 | Calendar           | Toggle the calendar box                           |
 | Nerd Font Palette… | Open the glyph picker (`nerd-font-palette.md`)    |
 | Run Command…       | Run a shell command into the bottom dock          |
+| Cancel Command     | Kill the running command                          |
 | *— separator —*    |                                                   |
 | Command Palette    | Open the palette (`Ctrl+P`)                       |
 

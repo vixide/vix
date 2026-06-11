@@ -81,12 +81,20 @@ fn main() -> io::Result<()> {
 
 fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()> {
     loop {
+        // Drain any streamed output from a running command into the bottom dock.
+        app.poll_command();
         terminal.draw(|frame| ui::draw(app, frame))?;
         if app.should_quit {
             return Ok(());
         }
-        // Poll with a timeout so the calendar clock refreshes while idle.
-        if event::poll(Duration::from_millis(500))? {
+        // Poll with a timeout so the calendar clock refreshes while idle; poll
+        // faster while a command is streaming so its output appears promptly.
+        let timeout = if app.command_running() {
+            Duration::from_millis(50)
+        } else {
+            Duration::from_millis(500)
+        };
+        if event::poll(timeout)? {
             match event::read()? {
                 Event::Key(key) => app.on_key(key),
                 Event::Mouse(mouse) => app.on_mouse(mouse),

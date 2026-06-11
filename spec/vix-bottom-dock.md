@@ -29,12 +29,13 @@ routes the toggle (`src/app.rs`). Pure data, no dependencies.
 ## Producers
 
 - **Run Command** (Tools → Run Command…) runs a shell command in the project root
-  and pushes a `$ command` header, the command's stdout/stderr lines, and an
-  `[exit N]` footer into the dock (showing it). Synchronous for now.
+  in a background thread, **streaming** a `$ command` header, the merged
+  stdout/stderr lines, and an `[exit N]` footer into the dock (showing it). The
+  event loop drains the output each frame (polling faster while a command runs),
+  so the UI stays responsive. **Cancel Command** kills it (and adds
+  `[cancelled]`). Only one command runs at a time.
 
 ## Roadmap
 
-- Asynchronous/streaming command output (a long command currently blocks the UI
-  until it finishes); cancel a running command.
 - Route diagnostics or a data view into the dock.
 - Keyboard/mouse scrolling and focus.

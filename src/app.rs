@@ -80,6 +80,23 @@ pub struct Prompt {
     pub input: String,
 }
 
+/// Output from a running command, streamed from its reader thread.
+enum CmdMsg {
+    /// One line of merged stdout/stderr.
+    Line(String),
+    /// The command finished with this exit code (`None` if killed/unknown).
+    Done(Option<i32>),
+}
+
+/// A command running in a background thread, streaming into the bottom dock.
+struct RunningCommand {
+    /// Receiver for the reader thread's output.
+    rx: std::sync::mpsc::Receiver<CmdMsg>,
+    /// The child process, shared so it can be reaped by the reader and killed by
+    /// the app.
+    child: std::sync::Arc<std::sync::Mutex<std::process::Child>>,
+}
+
 /// An in-progress paste, processed one source at a time so a name conflict can
 /// pause for an (o)verwrite / (s)kip / (c)ancel decision.
 pub struct PasteOp {
@@ -309,6 +326,8 @@ pub struct App {
     /// Stack of recently closed file paths, most-recent last, for Reopen Closed
     /// Tab (`Ctrl+Shift+T`). Capped to a small number.
     closed_tabs: Vec<PathBuf>,
+    /// The command currently streaming into the bottom dock, if any.
+    running_command: Option<RunningCommand>,
     /// True while the editor scrollbar thumb is being dragged, so the drag keeps
     /// scrolling even if the pointer drifts off the one-column track.
     scrollbar_active: bool,
@@ -389,6 +408,7 @@ impl App {
             palette_origin: None,
             last_search: None,
             closed_tabs: Vec::new(),
+            running_command: None,
             scrollbar_active: false,
             dock_resize: None,
             emacs_prefix: false,
@@ -991,6 +1011,7 @@ impl App {
                     input: String::new(),
                 });
             }
+            "tools.cancel_command" => self.cancel_command(),
             "tools.palette" => self.open_palette(),
             // The left/right docks are the explorer and message drawers. Both the
             // old action ids and the new dock-named ones route to one method.
@@ -3540,39 +3561,105 @@ impl App {
         }
     }
 
-    /// Run a shell command in the project root and stream its output to the
-    /// bottom dock (which is shown). Runs synchronously: a long command blocks
-    /// the UI until it finishes (streaming is future work — see
-    /// `spec/vix-bottom-dock.md`).
+    /// Run a shell command in the project root, streaming its output (stdout and
+    /// stderr merged) into the bottom dock, which is shown. The command runs in a
+    /// background thread; [`App::poll_command`] drains its output each frame and
+    /// [`App::cancel_command`] kills it.
     fn run_command(&mut self, cmd: &str) {
         let cmd = cmd.trim();
         if cmd.is_empty() {
             return;
         }
+        if self.running_command.is_some() {
+            self.status = t!("status.command_busy").to_string();
+            return;
+        }
         self.show_bottom_dock = true;
         self.settings.show_bottom_dock = true;
         self.bottom_dock.push(format!("$ {cmd}"));
-        match std::process::Command::new("sh")
+
+        // Merge the whole command's stderr into stdout so one pipe carries both.
+        let mut child = match std::process::Command::new("sh")
             .arg("-c")
-            .arg(cmd)
+            .arg(format!("{{ {cmd} ; }} 2>&1"))
             .current_dir(&self.root)
-            .output()
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
         {
-            Ok(out) => {
-                for line in String::from_utf8_lossy(&out.stdout).lines() {
-                    self.bottom_dock.push(line.to_string());
-                }
-                for line in String::from_utf8_lossy(&out.stderr).lines() {
-                    self.bottom_dock.push(line.to_string());
-                }
-                let code = out.status.code().unwrap_or(-1);
-                self.bottom_dock.push(format!("[exit {code}]"));
-                self.status = t!("status.command_done", code = code).to_string();
-            }
+            Ok(c) => c,
             Err(e) => {
                 self.bottom_dock.push(format!("[error: {e}]"));
                 self.messages.error(t!("msg.command_failed", error = e).to_string());
+                return;
             }
+        };
+        let stdout = child.stdout.take().expect("piped stdout");
+        let child = std::sync::Arc::new(std::sync::Mutex::new(child));
+        let (tx, rx) = std::sync::mpsc::channel();
+        let reader_child = child.clone();
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            let reader = std::io::BufReader::new(stdout);
+            for line in reader.lines().map_while(Result::ok) {
+                if tx.send(CmdMsg::Line(line)).is_err() {
+                    return; // the app dropped the receiver
+                }
+            }
+            // Pipe closed: the process is finishing. Reap it for the exit code.
+            let code = reader_child
+                .lock()
+                .expect("command lock")
+                .wait()
+                .ok()
+                .and_then(|s| s.code());
+            let _ = tx.send(CmdMsg::Done(code));
+        });
+        self.running_command = Some(RunningCommand { rx, child });
+    }
+
+    /// Drain any streamed command output into the bottom dock. Called once per
+    /// event-loop iteration; cheap when no command is running.
+    pub fn poll_command(&mut self) {
+        let msgs: Vec<CmdMsg> = {
+            let Some(rc) = self.running_command.as_ref() else {
+                return;
+            };
+            let mut v = Vec::new();
+            while let Ok(m) = rc.rx.try_recv() {
+                v.push(m);
+            }
+            v
+        };
+        let mut done = false;
+        for msg in msgs {
+            match msg {
+                CmdMsg::Line(l) => self.bottom_dock.push(l),
+                CmdMsg::Done(code) => {
+                    let code = code.unwrap_or(-1);
+                    self.bottom_dock.push(format!("[exit {code}]"));
+                    self.status = t!("status.command_done", code = code).to_string();
+                    done = true;
+                }
+            }
+        }
+        if done {
+            self.running_command = None;
+        }
+    }
+
+    /// Whether a command is currently running (the loop polls faster then).
+    #[must_use]
+    pub fn command_running(&self) -> bool {
+        self.running_command.is_some()
+    }
+
+    /// Kill the running command, if any. Its `[exit N]` line still follows once
+    /// the reader thread reaps it.
+    fn cancel_command(&mut self) {
+        if let Some(rc) = self.running_command.as_ref() {
+            let _ = rc.child.lock().expect("command lock").kill();
+            self.bottom_dock.push("[cancelled]".to_string());
         }
     }
 
