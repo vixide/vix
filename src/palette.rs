@@ -179,6 +179,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.find_next_selection", "search.next_selection"),
     ("cmd.find_prev_selection", "search.prev_selection"),
     ("cmd.search_project", "search.project"),
+    ("cmd.search_project_dock", "search.project_dock"),
     ("cmd.search_replace_project", "search.project_replace"),
     ("cmd.goto_definition", "nav.goto_definition"),
     ("cmd.goto_symbol", "nav.goto_symbol"),

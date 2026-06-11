@@ -70,6 +70,8 @@ pub enum PromptKind {
     SaveAs,
     /// Run a shell command, streaming its output to the bottom dock.
     RunCommand,
+    /// Search the project, listing hits in the bottom dock (click-to-jump).
+    SearchToDock,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -994,6 +996,13 @@ impl App {
             }
             "search.project" => self.open_project_search(false),
             "search.project_replace" => self.open_project_search(true),
+            "search.project_dock" => {
+                self.prompt = Some(Prompt {
+                    kind: PromptKind::SearchToDock,
+                    title: t!("prompt.search_dock").to_string(),
+                    input: String::new(),
+                });
+            }
             "search.next_selection" => self.find_selection(true),
             "search.prev_selection" => self.find_selection(false),
             "nav.goto_definition" => self.goto_definition(),
@@ -3626,7 +3635,59 @@ impl App {
                 }
             }
             PromptKind::RunCommand => self.run_command(&prompt.input),
+            PromptKind::SearchToDock => self.search_project_to_dock(&prompt.input),
         }
+    }
+
+    /// Search every project file for `query` (case-insensitive, literal) and list
+    /// the hits in the bottom dock as `relpath:line:col: text` lines, which are
+    /// click-to-jump. Shows the dock.
+    fn search_project_to_dock(&mut self, query: &str) {
+        let query = query.trim();
+        if query.is_empty() {
+            return;
+        }
+        self.build_file_index();
+        let Ok(re) = Regex::new(&format!("(?i){}", regex::escape(query))) else {
+            return;
+        };
+        self.show_bottom_dock = true;
+        self.settings.show_bottom_dock = true;
+        self.bottom_dock.push(format!("$ search \"{query}\""));
+        let mut count = 0usize;
+        let mut files = 0usize;
+        for path in self.file_index.clone() {
+            let Some(content) = self.current_text(&path) else {
+                continue;
+            };
+            let rel = path
+                .strip_prefix(&self.root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .into_owned();
+            let mut had_hit = false;
+            for (i, line) in content.lines().enumerate() {
+                if let Some(m) = re.find(line) {
+                    had_hit = true;
+                    count += 1;
+                    let clipped: String = line.trim_start().chars().take(120).collect();
+                    self.bottom_dock
+                        .push(format!("{rel}:{}:{}: {clipped}", i + 1, m.start() + 1));
+                    if count >= 5000 {
+                        break;
+                    }
+                }
+            }
+            if had_hit {
+                files += 1;
+            }
+            if count >= 5000 {
+                break;
+            }
+        }
+        self.bottom_dock
+            .push(format!("[{count} matches in {files} files]"));
+        self.status = t!("status.matches_in_files", count = count, files = files).to_string();
     }
 
     /// Run a shell command in the project root, streaming its output (stdout and

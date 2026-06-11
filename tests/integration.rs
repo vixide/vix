@@ -1172,6 +1172,38 @@ fn cancel_command_kills_a_running_command() {
 }
 
 #[test]
+fn search_in_project_to_dock_lists_and_jumps() {
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+    let dir = unique_dir("searchdock");
+    fs::write(dir.join("a.txt"), "one\nNEEDLE here\nthree\n").unwrap();
+    fs::write(dir.join("b.txt"), "nothing\n").unwrap();
+    let mut app = app_at(&dir);
+
+    app.run_action("search.project_dock");
+    assert!(app.prompt.is_some(), "opens a search prompt");
+    for c in "NEEDLE".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+
+    assert!(app.show_bottom_dock, "shows the dock");
+    let out = app.bottom_dock.lines.join("\n");
+    assert!(out.contains("a.txt:2:1:"), "lists the hit as path:line:col: {out:?}");
+    assert!(out.contains("NEEDLE here"), "includes the matched text: {out:?}");
+    assert!(out.contains("[1 matches in 1 files]"), "summary line: {out:?}");
+
+    // Render to record the dock rect, then click the hit (2nd content row).
+    let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let r = app.layout.bottom_dock;
+    app.on_mouse(click(r.x + 1, r.y + 2));
+    assert_eq!(app.editor.active_tab().unwrap().cursor_1based().0, 2, "jumps to line 2");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn clicking_a_dock_location_jumps_to_it() {
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;

@@ -28,6 +28,9 @@ routes the toggle (`src/app.rs`). Pure data, no dependencies.
 
 ## Producers
 
+- **Search in Project → Dock** (Edit → Find submenu) prompts for a term, scans
+  every project file (case-insensitive), and lists hits as `relpath:line:col:
+  text` — each click-to-jumps to the match.
 - **Run Command** (Tools → Run Command…) runs a shell command in the project root
   in a background thread, **streaming** a `$ command` header, the merged
   stdout/stderr lines, and an `[exit N]` footer into the dock (showing it). The
