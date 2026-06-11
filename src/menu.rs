@@ -164,6 +164,21 @@ fn first_selectable(items: &[Item]) -> usize {
     items.iter().position(|it| !it.is_separator()).unwrap_or(0)
 }
 
+/// The next item after `from` (cycling) whose translated label starts with `c`
+/// (ASCII case-insensitive), skipping separators. `None` if none match.
+fn label_starting(items: &[Item], from: usize, c: char) -> Option<usize> {
+    let target = c.to_ascii_lowercase();
+    let len = items.len();
+    (1..=len).map(|step| (from + step) % len).find(|&j| {
+        !items[j].is_separator()
+            && items[j]
+                .label()
+                .chars()
+                .next()
+                .is_some_and(|fc| fc.to_ascii_lowercase() == target)
+    })
+}
+
 /// The next non-separator index after `from`, wrapping around.
 fn next_selectable(items: &[Item], from: usize) -> usize {
     let len = items.len();
@@ -304,6 +319,20 @@ impl Menu {
             return None;
         }
         (!it.is_separator()).then_some(it.action)
+    }
+
+    /// Type-ahead: highlight the next item whose label starts with `c` (cycling
+    /// from the current selection), within the open submenu if one is open, else
+    /// the top dropdown. Lets the user press e.g. `S`, `S` to step Save → Save As.
+    pub fn type_ahead(&mut self, c: char) {
+        let Some(i) = self.open else { return };
+        if let (Some(sidx), Some(items)) = (self.sub, MENUS[i].items[self.item].submenu) {
+            if let Some(j) = label_starting(items, sidx, c) {
+                self.sub = Some(j);
+            }
+        } else if let Some(j) = label_starting(MENUS[i].items, self.item, c) {
+            self.item = j;
+        }
     }
 
     /// The action of the highlighted leaf item, or `None` for a separator or a

@@ -8,6 +8,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Menu type-ahead.** With a menu open, typing a letter jumps to the next item
+  whose label starts with it, cycling — e.g. in File, `S` → Save, `S` → Save As.
+  Works inside an open submenu too.
 - **Search in Project → Dock** (Edit → Find submenu, or the palette): search
   every project file for a term and list the hits in the bottom dock as
   `path:line:col` lines — each one click-to-jumps to the match. In the prompt,

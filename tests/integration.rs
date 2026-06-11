@@ -1922,6 +1922,27 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
 }
 
 #[test]
+fn menu_type_ahead_selects_by_first_letter() {
+    let mut app = app_at(Path::new("."));
+    app.on_key(keycode(KeyCode::F(10)));
+    let file_idx = vix::menu::MENUS.iter().position(|m| m.name == "menu.file").unwrap();
+    for _ in 0..file_idx {
+        app.on_key(keycode(KeyCode::Right));
+    }
+    // Open File, type S → Save, S → Save As, S again wraps back to Save.
+    app.on_key(key('s'));
+    assert_eq!(app.menu.selected_action(), Some("file.save"));
+    app.on_key(key('s'));
+    assert_eq!(app.menu.selected_action(), Some("file.save_as"));
+    app.on_key(key('s'));
+    assert_eq!(app.menu.selected_action(), Some("file.save"), "wraps around");
+
+    // A different letter jumps elsewhere (C → Close).
+    app.on_key(key('c'));
+    assert_eq!(app.menu.selected_action(), Some("file.close"));
+}
+
+#[test]
 fn menu_navigation_skips_separators() {
     let mut app = app_at(Path::new("."));
     app.on_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));

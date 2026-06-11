@@ -2219,6 +2219,10 @@ impl App {
                 }
             }
             KeyCode::F(10) => self.menu.close(),
+            // Type-ahead: a plain letter jumps to the next matching item.
+            KeyCode::Char(c) if !Self::ctrl(&key) && !Self::alt(&key) => {
+                self.menu.type_ahead(c);
+            }
             _ => {}
         }
     }

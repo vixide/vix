@@ -11,6 +11,9 @@ Top menu bar.
   related items. Arrow navigation, hover, and clicks all skip them.
 - An item marked `▸` opens a **submenu** (one level deep). `Right` or a click
   opens it; `Left` or `Esc` backs out to the parent.
+- **Type-ahead:** with a menu open, typing a letter jumps to the next item whose
+  label starts with it, cycling. E.g. in File, `S` selects Save, `S` again selects
+  Save As. Works inside an open submenu too.
 
 The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 
