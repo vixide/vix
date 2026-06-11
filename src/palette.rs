@@ -194,6 +194,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.toggle_soft_wrap", "view.soft_wrap"),
     ("cmd.toggle_scrollbar", "view.scrollbar"),
     ("cmd.toggle_calendar", "tools.calendar"),
+    ("cmd.run_command", "tools.run_command"),
     ("cmd.next_tab", "tab.next"),
     ("cmd.prev_tab", "tab.prev"),
 ];

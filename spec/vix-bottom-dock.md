@@ -26,8 +26,15 @@ routes the toggle (`src/app.rs`). Pure data, no dependencies.
   - `scroll_up`/`scroll_down` move the viewport.
   - `visible(height)` returns the lines for a `height`-row viewport.
 
+## Producers
+
+- **Run Command** (Tools → Run Command…) runs a shell command in the project root
+  and pushes a `$ command` header, the command's stdout/stderr lines, and an
+  `[exit N]` footer into the dock (showing it). Synchronous for now.
+
 ## Roadmap
 
-- Producers (run a command and stream stdout/stderr here; route diagnostics or a
-  data view into it) — the buffer API is ready; wiring is future work.
+- Asynchronous/streaming command output (a long command currently blocks the UI
+  until it finishes); cancel a running command.
+- Route diagnostics or a data view into the dock.
 - Keyboard/mouse scrolling and focus.

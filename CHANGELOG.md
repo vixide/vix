@@ -8,6 +8,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Run Command** (Tools → Run Command…, or the palette): prompt for a shell
+  command, run it in the project root, and stream its stdout/stderr into the
+  bottom dock (shown automatically), with a `$ command` header and an `[exit N]`
+  footer. Runs synchronously for now (a long command blocks until it finishes).
 - **Bottom dock** (View → Show/Hide Bottom Dock, or the palette;
   `show_bottom_dock` setting, default off): a full-width scrollable line buffer at
   the bottom of the body for log messages, command/terminal output, data views,

@@ -1122,6 +1122,24 @@ fn calendar_click_inserts_into_editor() {
 }
 
 #[test]
+fn run_command_streams_output_to_bottom_dock() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.run_command");
+    assert!(app.prompt.is_some(), "the action opens a command prompt");
+    for c in "echo hello-vix".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+
+    assert!(app.prompt.is_none(), "Enter runs and closes the prompt");
+    assert!(app.show_bottom_dock, "running shows the bottom dock");
+    let out = app.bottom_dock.lines.join("\n");
+    assert!(out.contains("$ echo hello-vix"), "echoes the command: {out:?}");
+    assert!(out.contains("hello-vix"), "shows the output: {out:?}");
+    assert!(out.contains("[exit 0]"), "shows the exit code: {out:?}");
+}
+
+#[test]
 fn toggle_bottom_dock_flips_persists_and_renders() {
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;

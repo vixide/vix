@@ -66,6 +66,8 @@ pub enum PromptKind {
     Open,
     /// Save-as prompt.
     SaveAs,
+    /// Run a shell command, streaming its output to the bottom dock.
+    RunCommand,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -982,6 +984,13 @@ impl App {
                 }
             }
             "tools.nerd_palette" => self.open_nerd_palette(),
+            "tools.run_command" => {
+                self.prompt = Some(Prompt {
+                    kind: PromptKind::RunCommand,
+                    title: t!("prompt.run_command").to_string(),
+                    input: String::new(),
+                });
+            }
             "tools.palette" => self.open_palette(),
             // The left/right docks are the explorer and message drawers. Both the
             // old action ids and the new dock-named ones route to one method.
@@ -3526,6 +3535,43 @@ impl App {
                     }
                     Err(e) => self.messages.error(t!("msg.save_failed", error = e).to_string()),
                 }
+            }
+            PromptKind::RunCommand => self.run_command(&prompt.input),
+        }
+    }
+
+    /// Run a shell command in the project root and stream its output to the
+    /// bottom dock (which is shown). Runs synchronously: a long command blocks
+    /// the UI until it finishes (streaming is future work — see
+    /// `spec/vix-bottom-dock.md`).
+    fn run_command(&mut self, cmd: &str) {
+        let cmd = cmd.trim();
+        if cmd.is_empty() {
+            return;
+        }
+        self.show_bottom_dock = true;
+        self.settings.show_bottom_dock = true;
+        self.bottom_dock.push(format!("$ {cmd}"));
+        match std::process::Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .current_dir(&self.root)
+            .output()
+        {
+            Ok(out) => {
+                for line in String::from_utf8_lossy(&out.stdout).lines() {
+                    self.bottom_dock.push(line.to_string());
+                }
+                for line in String::from_utf8_lossy(&out.stderr).lines() {
+                    self.bottom_dock.push(line.to_string());
+                }
+                let code = out.status.code().unwrap_or(-1);
+                self.bottom_dock.push(format!("[exit {code}]"));
+                self.status = t!("status.command_done", code = code).to_string();
+            }
+            Err(e) => {
+                self.bottom_dock.push(format!("[error: {e}]"));
+                self.messages.error(t!("msg.command_failed", error = e).to_string());
             }
         }
     }
