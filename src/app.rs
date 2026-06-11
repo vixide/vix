@@ -1573,11 +1573,11 @@ impl App {
         let page = (self.layout.bottom_dock.height.saturating_sub(1) as usize).max(1);
         match key.code {
             KeyCode::Up => self.bottom_dock.scroll_up(1),
-            KeyCode::Down => self.bottom_dock.scroll_down(1),
+            KeyCode::Down => self.bottom_dock.scroll_down(1, page),
             KeyCode::PageUp => self.bottom_dock.scroll_up(page),
-            KeyCode::PageDown => self.bottom_dock.scroll_down(page),
-            KeyCode::Home => self.bottom_dock.scroll_up(usize::MAX),
-            KeyCode::End => self.bottom_dock.scroll_down(usize::MAX),
+            KeyCode::PageDown => self.bottom_dock.scroll_down(page, page),
+            KeyCode::Home => self.bottom_dock.scroll_to_top(),
+            KeyCode::End => self.bottom_dock.scroll_to_bottom(),
             KeyCode::Esc => self.focus = Focus::Editor,
             _ => {}
         }
@@ -1897,7 +1897,10 @@ impl App {
                 self.bottomdock_open_at(mouse.row);
             }
             MouseEventKind::ScrollUp => self.bottom_dock.scroll_up(3),
-            MouseEventKind::ScrollDown => self.bottom_dock.scroll_down(3),
+            MouseEventKind::ScrollDown => {
+                let page = (self.layout.bottom_dock.height.saturating_sub(1) as usize).max(1);
+                self.bottom_dock.scroll_down(3, page);
+            }
             _ => {}
         }
     }
