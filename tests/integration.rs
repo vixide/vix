@@ -1850,13 +1850,12 @@ fn menu_dropdown_keeps_a_gap_before_shortcuts() {
 fn menus_have_separators_in_the_specified_places() {
     // A separator sits immediately before each named item.
     let cases: &[(&str, &[&str])] = &[
-        // (find-related items now live in the Edit → Find submenu; the editor
-        // display toggles now live in the View → Editor submenu — so the
+        // (find-related items live in the Edit → Find submenu; the View dock and
+        // editor toggles live in the View → Layout / Editor submenus — so the
         // top-level separators precede the groups/submenus that remain.)
         ("menu.file", &["file.open", "file.close"]),
         ("menu.vix", &["file.quit"]),
         ("menu.edit", &["edit.cut", "edit.toggle_comment"]),
-        ("menu.view", &["view.left_dock"]),
     ];
     for (menu, befores) in cases {
         let items = vix::menu::MENUS
@@ -1911,13 +1910,29 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
     let editor = view
         .items
         .iter()
-        .find(|it| it.has_submenu())
+        .find(|it| it.label == "menu.item.view.editor")
         .and_then(|it| it.submenu)
         .expect("View has an Editor submenu");
     let actions: Vec<&str> = editor.iter().map(|it| it.action).collect();
     assert_eq!(
         actions,
         vec!["view.line_numbers", "view.whitespace", "view.scrollbar", "view.soft_wrap"]
+    );
+}
+
+#[test]
+fn view_layout_submenu_rolls_up_the_dock_toggles() {
+    let view = vix::menu::MENUS.iter().find(|m| m.name == "menu.view").unwrap();
+    let layout = view
+        .items
+        .iter()
+        .find(|it| it.label == "menu.item.view.layout")
+        .and_then(|it| it.submenu)
+        .expect("View has a Layout submenu");
+    let actions: Vec<&str> = layout.iter().map(|it| it.action).collect();
+    assert_eq!(
+        actions,
+        vec!["view.left_dock", "view.right_dock", "view.bottom_dock", "view.status_bar"]
     );
 }
 

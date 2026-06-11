@@ -109,6 +109,14 @@ const EDIT: &[Item] = &[
     Item::leaf("menu.item.edit.toggle_comment", "edit.toggle_comment", "Ctrl+/"),
 ];
 
+/// Dock/status-bar visibility toggles, grouped under View → Layout.
+const VIEW_LAYOUT: &[Item] = &[
+    Item::leaf("menu.item.view.left_dock", "view.left_dock", "Ctrl+B"),
+    Item::leaf("menu.item.view.right_dock", "view.right_dock", ""),
+    Item::leaf("menu.item.view.bottom_dock", "view.bottom_dock", ""),
+    Item::leaf("menu.item.view.status_bar", "view.status_bar", ""),
+];
+
 /// Editor display toggles, grouped under View → Editor.
 const VIEW_EDITOR: &[Item] = &[
     Item::leaf("menu.item.view.line_numbers", "view.line_numbers", ""),
@@ -122,11 +130,7 @@ const VIEW: &[Item] = &[
     Item::leaf("menu.item.view.locale", "view.locale", ""),
     Item::leaf("menu.item.view.keyway", "view.keyway", ""),
     SEP,
-    Item::leaf("menu.item.view.left_dock", "view.left_dock", "Ctrl+B"),
-    Item::leaf("menu.item.view.right_dock", "view.right_dock", ""),
-    Item::leaf("menu.item.view.bottom_dock", "view.bottom_dock", ""),
-    Item::leaf("menu.item.view.status_bar", "view.status_bar", ""),
-    SEP,
+    Item::sub("menu.item.view.layout", VIEW_LAYOUT),
     Item::sub("menu.item.view.editor", VIEW_EDITOR),
 ];
 

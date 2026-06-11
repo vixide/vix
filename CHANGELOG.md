@@ -8,6 +8,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **View → Layout submenu.** The dock and status-bar toggles (Show/Hide Left
+  Dock, Right Dock, Bottom Dock, Bottom Status) now live under a **Layout**
+  submenu, alongside the existing **Editor** submenu.
 - **Menu type-ahead.** With a menu open, typing a letter jumps to the next item
   whose label starts with it, cycling — e.g. in File, `S` → Save, `S` → Save As.
   Works inside an open submenu too.

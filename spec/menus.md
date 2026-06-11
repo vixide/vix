@@ -83,12 +83,17 @@ The **Find…** submenu:
 | Locale…                          | Open the locale chooser (`locale-chooser.md`) |
 | Keyway…                          | Open the keyway chooser (`keyway-chooser.md`) |
 | *— separator —*                  |                                               |
+| Layout ▸                         | Submenu of dock/status toggles (below)        |
+| Editor ▸                         | Submenu of editor display toggles (below)     |
+
+The **Layout** submenu:
+
+| Item                             | Action                                        |
+| -------------------------------- | --------------------------------------------- |
 | Show/Hide Left Dock              | Show/hide the file explorer (`Ctrl+B`)        |
 | Show/Hide Right Dock             | Show/hide the message drawer                  |
 | Show/Hide Bottom Dock            | Show/hide the bottom dock (logs/output/data)  |
 | Show/Hide Bottom Status          | Show/hide the bottom status bar               |
-| *— separator —*                  |                                               |
-| Editor ▸                         | Submenu of editor display toggles (below)     |
 
 The **Editor** submenu:
 
