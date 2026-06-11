@@ -79,7 +79,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         // The center editor keeps only its top border (no left/right/bottom).
         .borders(Borders::TOP)
         .border_type(BorderType::Rounded)
-        .border_style(theme::title(app.focus == Focus::Editor));
+        .border_style(theme::region_title(theme::Region::Editor, app.focus == Focus::Editor));
     let editor_inner = editor_block.inner(center[1]);
     // The right-side scroll bar is optional; when hidden, the text reclaims its
     // column and the scrollbar rect collapses to zero (so hit-testing/drawing skip
@@ -299,14 +299,7 @@ fn draw_list_chooser(
 fn draw_theme_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(tc) = app.theme_chooser.as_ref() else { return };
     let selected = tc.selected;
-    let labels: Vec<String> = tc
-        .choices
-        .iter()
-        .map(|c| match c.builtin() {
-            Some(m) => t!(m.label()).to_string(),
-            None => c.custom_name().unwrap_or_default().to_string(),
-        })
-        .collect();
+    let labels: Vec<String> = tc.choices.iter().map(|c| c.name.clone()).collect();
     let hint = t!("ui.theme_hint");
     app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.theme"), &hint, &labels, selected);
 }
@@ -591,7 +584,7 @@ fn draw_explorer(app: &App, frame: &mut Frame, area: Rect) {
         // The left dock keeps only its top and right borders.
         .borders(Borders::TOP | Borders::RIGHT)
         .border_type(BorderType::Rounded)
-        .border_style(theme::title(focused))
+        .border_style(theme::region_title(theme::Region::LeftDock, focused))
         .title(format!(" {} {} ", icon::FOLDER, t!("ui.explorer")));
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -702,7 +695,7 @@ fn draw_messages(app: &App, frame: &mut Frame, area: Rect) {
         // The right dock keeps only its top and left borders.
         .borders(Borders::TOP | Borders::LEFT)
         .border_type(BorderType::Rounded)
-        .border_style(theme::title(focused))
+        .border_style(theme::region_title(theme::Region::RightDock, focused))
         .title(format!(" {} {} ", icon::BELL, t!("ui.messages")));
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -785,7 +778,7 @@ fn draw_status_bar(app: &App, frame: &mut Frame, area: Rect) {
     let block = Block::default()
         .style(bg)
         .borders(Borders::TOP)
-        .border_style(theme::title(false));
+        .border_style(theme::region_title(theme::Region::StatusBar, false));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 

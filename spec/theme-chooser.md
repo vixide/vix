@@ -1,35 +1,27 @@
 # Theme chooser
 
-Vix has two layers of theming:
-
-1. **Built-in modes** — two monochrome themes baked into the binary.
-2. **JSON themes** — colorful, per-region themes loaded from JSON files (a bundled
-   collection plus any the user installs).
+Every theme is a **JSON theme** with per-region colors and font attributes
+(a bundled collection plus any the user installs). There are no hardcoded
+"modes" — **Dark** and **Light** are ordinary bundled themes
+(`themes/dark.json` / `themes/light.json`).
 
 The **default** theme is Dark.
 
 Pick a theme live in **View → Theme…**: arrow keys preview it, Enter applies and
-persists it (to the `theme` setting), Esc cancels. The chooser lists the built-in
-modes and every JSON theme together, sorted alphabetically (see Theme chooser).
-
-## Built-in modes
-
-Emphasis comes from **dim** (secondary/hint text) and full intensity (titles),
-never from hue or weight.
+persists it (the theme's name is written to the `theme` setting), Esc cancels.
+The chooser lists every theme, sorted alphabetically.
 
 ## Theme chooser
 
-All themes — the built-in modes **and** the JSON themes — are sorted together
-alphabetically by their canonical (English) name. For example:
+All themes are sorted alphabetically (case-insensitively) by name. For example:
 
 Dark, Darker, Darkest, Dracula, Gruvbox Dark, Light, Lighter, Lightest, Matrix,
 Monokai, Nord, One Dark, Solarized Dark, Solarized Light, Tokyo Night, Turbo.
 
 ## JSON themes
 
-JSON themes provide per-region colors and font attributes, layered over the
-built-in defaults. Anything a JSON theme leaves unset falls back to the active
-built-in mode, so a partial theme is valid.
+JSON themes provide per-region colors and font attributes. Anything a theme leaves
+unset falls back to the primary editor color, so a partial theme is valid.
 
 Colors are `[R, G, B]` arrays, each channel `0–255`.
 
@@ -37,14 +29,13 @@ Colors are `[R, G, B]` arrays, each channel `0–255`.
 
 - **Bundled:** the themes in `../themes/*.json` are embedded in the binary and
   appear in the chooser automatically (no installation). The bundled set is:
-  `Darker`, `Darkest`, `Lighter`, `Lightest`, `Matrix`, `Turbo`,
+  `Dark`, `Light`, `Darker`, `Darkest`, `Lighter`, `Lightest`, `Matrix`, `Turbo`,
   `Solarized Dark`, `Solarized Light`, `Dracula`, `Nord`, `Gruvbox Dark`,
   `Monokai`, `One Dark`, and `Tokyo Night`.
 - **User-installed:** JSON files in `~/.config/vix/themes/` (platform config
   directory). Edit or add files here directly.
-- A user-installed theme **overrides** a bundled one of the same name. A JSON
-  theme named `Dark` or `Light` is ignored in favor of the built-in mode (so the
-  chooser shows no duplicates).
+- A user-installed theme **overrides** a bundled one of the same name
+  (case-insensitively), so you can replace `Dark`/`Light` with your own.
 
 ### File format
 
@@ -77,9 +68,9 @@ Colors are `[R, G, B]` arrays, each channel `0–255`.
   - `font-style` — `"normal"` (default) or `"italic"`.
   - `font-weight` — `"normal"` (default) or `"bold"`.
 - `editor` additionally takes `cursor` — the block-cursor color.
-- `syntax` — optional token colors: `keyword`, `string`, `comment`. The built-in
-  monochrome modes leave this empty (no token colors); colors appear only under a
-  JSON theme that sets them.
+- `syntax` — optional token colors: `keyword`, `string`, `comment`. A theme that
+  omits this block gets no token colors (plain text); colors appear only when a
+  theme sets them.
 
-Unlike the built-in modes, JSON themes may use arbitrary colors, italic, and
-bold (via the per-region `font-style` / `font-weight`).
+Themes may use arbitrary colors, italic, and bold (via the per-region
+`font-style` / `font-weight`).

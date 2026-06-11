@@ -1,99 +1,48 @@
 //! The Vix theme model and chooser state.
 //!
-//! The theme is strictly monochrome (see `spec/themes.md`): one foreground and
-//! one background, with two modes that swap them — Dark (white on black, the
-//! default) and Light (black on white). Emphasis comes from bold/dim intensity,
-//! never from hue. The sole use of reversed video is selections ([`selected`]).
+//! Every theme is a JSON [`CustomTheme`] with per-region colors and font
+//! attributes (see `spec/themes.md`). There is always exactly one active theme;
+//! the bundled `Dark` and `Light` themes (from `themes/dark.json` /
+//! `themes/light.json`) are just ordinary themes the host ships. The style
+//! helpers ([`fg`], [`bg`], [`region_base`], …) read the active theme.
 //!
-//! Color names ([`Mode::label`]) are returned as i18n keys for the host to
-//! translate, so this crate stays free of any localization dependency.
+//! Theme names are plain strings (also the value persisted in settings), so this
+//! crate stays free of any localization dependency.
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::RwLock;
 
 use ratatui_core::style::{Color, Modifier, Style};
 use serde::Deserialize;
 
-/// The two themes. Dark is the default.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Mode {
-    /// White foreground on black background.
-    Dark,
-    /// Black foreground on white background.
-    Light,
-}
+// Ultimate fallbacks used only before a theme is loaded, or for a theme that
+// leaves the editor foreground/background unset. They match the bundled `Dark`.
+const FALLBACK_FG: Color = Color::Rgb(215, 215, 215);
+const FALLBACK_BG: Color = Color::Rgb(40, 40, 40);
 
-/// All themes, in the order the chooser presents them.
-pub const MODES: [Mode; 2] = [Mode::Dark, Mode::Light];
-
-impl Mode {
-    /// i18n key for this theme's display name (translated by the host).
-    #[must_use]
-    pub fn label(self) -> &'static str {
-        match self {
-            Mode::Dark => "theme.dark",
-            Mode::Light => "theme.light",
-        }
-    }
-
-    /// Stable identifier persisted in settings.
-    #[must_use]
-    pub fn name(self) -> &'static str {
-        match self {
-            Mode::Dark => "dark",
-            Mode::Light => "light",
-        }
-    }
-
-    /// Parse a persisted name, defaulting to Dark for anything unrecognized.
-    #[must_use]
-    pub fn from_name(s: &str) -> Mode {
-        match s {
-            "light" => Mode::Light,
-            _ => Mode::Dark,
-        }
-    }
-}
-
-// Current mode as a process-global so the static style helpers can read it
-// without threading a theme through every render function. false = Dark.
-static LIGHT: AtomicBool = AtomicBool::new(false);
-
-/// The currently active theme mode.
-#[must_use]
-pub fn mode() -> Mode {
-    if LIGHT.load(Ordering::Relaxed) {
-        Mode::Light
-    } else {
-        Mode::Dark
-    }
-}
-
-/// Switch the active theme mode.
-pub fn set_mode(m: Mode) {
-    LIGHT.store(m == Mode::Light, Ordering::Relaxed);
-}
-
-/// Foreground color for the current mode.
+/// Primary foreground: the active theme's editor foreground (or the dark default).
 #[must_use]
 pub fn fg() -> Color {
-    match mode() {
-        Mode::Dark => Color::White,
-        Mode::Light => Color::Black,
-    }
+    CUSTOM
+        .read()
+        .expect("theme lock")
+        .as_ref()
+        .and_then(|c| c.editor.foreground)
+        .map_or(FALLBACK_FG, rgb)
 }
 
-/// Background color for the current mode.
+/// Primary background: the active theme's editor background (or the dark default).
 #[must_use]
 pub fn bg() -> Color {
-    match mode() {
-        Mode::Dark => Color::Black,
-        Mode::Light => Color::White,
-    }
+    CUSTOM
+        .read()
+        .expect("theme lock")
+        .as_ref()
+        .and_then(|c| c.editor.background)
+        .map_or(FALLBACK_BG, rgb)
 }
 
 /// The base style: theme foreground on theme background. Used to paint the whole
@@ -103,11 +52,24 @@ pub fn base() -> Style {
     Style::default().fg(fg()).bg(bg())
 }
 
-/// Style for panel titles/borders. The built-in themes use no bold, so a focused
-/// title is plain (full intensity) and an unfocused one is dimmed.
+/// Style for panel titles/borders. A focused title is plain (full intensity) and
+/// an unfocused one is dimmed.
 #[must_use]
 pub fn title(focused: bool) -> Style {
     let base = Style::default().fg(fg());
+    if focused {
+        base
+    } else {
+        base.add_modifier(Modifier::DIM)
+    }
+}
+
+/// Style for a `region`'s panel title/border: the region's foreground, dimmed
+/// when unfocused. Keeps borders matching panes whose colors differ from the
+/// editor's.
+#[must_use]
+pub fn region_title(region: Region, focused: bool) -> Style {
+    let base = Style::default().fg(region_fg(region));
     if focused {
         base
     } else {
@@ -129,7 +91,7 @@ pub fn dim() -> Style {
 }
 
 // ===========================================================================
-// Custom themes (per-region RGB), loaded from JSON. See spec/themes.md.
+// Theme model (per-region RGB), loaded from JSON. See spec/themes.md.
 // ===========================================================================
 
 /// An `[R, G, B]` color, 0-255 per channel.
@@ -151,7 +113,7 @@ pub enum Region {
 }
 
 /// Foreground/background colors and font attributes for a region (each optional;
-/// missing values fall back to the active built-in monochrome theme).
+/// a missing value falls back to the primary editor color).
 #[derive(Deserialize, Clone, Default)]
 pub struct RegionColors {
     /// Foreground color.
@@ -194,7 +156,8 @@ pub struct SyntaxColors {
     pub comment: Option<Rgb>,
 }
 
-/// A custom theme loaded from a JSON file in `~/.config/vix/themes/`.
+/// A theme loaded from a JSON file (bundled in the binary or installed in
+/// `~/.config/vix/themes/`).
 #[derive(Deserialize, Clone)]
 pub struct CustomTheme {
     /// Display name (also the value persisted in settings).
@@ -251,16 +214,16 @@ impl RegionColors {
     }
 }
 
-// The active custom theme, if any. When set, its per-region colors override the
-// monochrome defaults; unset regions/channels still fall back to monochrome.
+// The active theme. Always `Some` after the host applies one at startup; the
+// fallbacks above cover the brief window before that.
 static CUSTOM: RwLock<Option<CustomTheme>> = RwLock::new(None);
 
-/// Set (or clear) the active custom theme.
+/// Set (or clear) the active theme.
 pub fn set_custom(theme: Option<CustomTheme>) {
     *CUSTOM.write().expect("theme lock") = theme;
 }
 
-/// Name of the active custom theme, if one is active.
+/// Name of the active theme, if one is active.
 #[must_use]
 pub fn custom_name() -> Option<String> {
     CUSTOM.read().expect("theme lock").as_ref().map(|c| c.name.clone())
@@ -270,7 +233,7 @@ fn rgb(c: Rgb) -> Color {
     Color::Rgb(c[0], c[1], c[2])
 }
 
-/// Foreground color for `region`: the custom theme's, or the monochrome default.
+/// Foreground color for `region`: the theme's, or the primary editor foreground.
 #[must_use]
 pub fn region_fg(region: Region) -> Color {
     if let Some(ct) = CUSTOM.read().expect("theme lock").as_ref() {
@@ -281,7 +244,7 @@ pub fn region_fg(region: Region) -> Color {
     fg()
 }
 
-/// Background color for `region`: the custom theme's, or the monochrome default.
+/// Background color for `region`: the theme's, or the primary editor background.
 #[must_use]
 pub fn region_bg(region: Region) -> Color {
     if let Some(ct) = CUSTOM.read().expect("theme lock").as_ref() {
@@ -292,8 +255,7 @@ pub fn region_bg(region: Region) -> Color {
     bg()
 }
 
-/// Font attributes (`ITALIC` / `BOLD`) the active custom theme requests for
-/// `region`. Empty for the built-in themes (which use no italic or bold).
+/// Font attributes (`ITALIC` / `BOLD`) the active theme requests for `region`.
 #[must_use]
 pub fn region_modifiers(region: Region) -> Modifier {
     CUSTOM
@@ -313,7 +275,7 @@ pub fn region_base(region: Region) -> Style {
         .add_modifier(region_modifiers(region))
 }
 
-/// Cursor color from the active custom theme, if one specifies it.
+/// Cursor color from the active theme, if one specifies it.
 #[must_use]
 pub fn editor_cursor() -> Option<Color> {
     CUSTOM
@@ -324,8 +286,8 @@ pub fn editor_cursor() -> Option<Color> {
         .map(rgb)
 }
 
-/// Syntax-highlight colors as `(token, "#rrggbb")` pairs from the active custom
-/// theme. Empty when no custom theme is active (so the editor stays monochrome).
+/// Syntax-highlight colors as `(token, "#rrggbb")` pairs from the active theme.
+/// Empty when the theme specifies no token colors (so the editor stays plain).
 #[must_use]
 pub fn syntax_theme() -> Vec<(&'static str, String)> {
     let guard = CUSTOM.read().expect("theme lock");
@@ -345,14 +307,14 @@ pub fn syntax_theme() -> Vec<(&'static str, String)> {
     out
 }
 
-/// Parse a single custom theme from JSON, returning `None` if it doesn't parse.
+/// Parse a single theme from JSON, returning `None` if it doesn't parse.
 #[must_use]
 pub fn parse_theme(json: &str) -> Option<CustomTheme> {
     serde_json::from_str(json).ok()
 }
 
-/// Load all custom themes (`*.json`) from `dir`, sorted by name. Unreadable or
-/// malformed files are skipped.
+/// Load all themes (`*.json`) from `dir`, sorted by name. Unreadable or malformed
+/// files are skipped.
 #[must_use]
 pub fn load_custom_themes(dir: &Path) -> Vec<CustomTheme> {
     let mut out = Vec::new();
@@ -373,143 +335,76 @@ pub fn load_custom_themes(dir: &Path) -> Vec<CustomTheme> {
     out
 }
 
-/// One entry in the theme chooser: a built-in mode or a loaded custom theme.
-/// The custom theme is boxed because it is much larger than a [`Mode`].
-#[derive(Clone)]
-pub enum Choice {
-    /// A built-in monochrome theme.
-    Builtin(Mode),
-    /// A custom JSON theme.
-    Custom(Box<CustomTheme>),
+/// Apply `theme` as the active theme.
+pub fn apply(theme: &CustomTheme) {
+    set_custom(Some(theme.clone()));
 }
 
-impl Choice {
-    /// The value persisted in settings (`"dark"`, `"light"`, or a custom name).
-    #[must_use]
-    pub fn id(&self) -> String {
-        match self {
-            Choice::Builtin(m) => m.name().to_string(),
-            Choice::Custom(c) => c.name.clone(),
-        }
-    }
-
-    /// The built-in mode, if this is a built-in choice.
-    #[must_use]
-    pub fn builtin(&self) -> Option<Mode> {
-        match self {
-            Choice::Builtin(m) => Some(*m),
-            Choice::Custom(_) => None,
-        }
-    }
-
-    /// The custom-theme name, if this is a custom choice.
-    #[must_use]
-    pub fn custom_name(&self) -> Option<&str> {
-        match self {
-            Choice::Custom(c) => Some(&c.name),
-            Choice::Builtin(_) => None,
-        }
-    }
-
-    /// Lower-cased canonical (English) name used to order the chooser. Built-ins
-    /// use their stable id (`"dark"`/`"light"`) so the order is locale-stable.
-    fn sort_key(&self) -> String {
-        match self {
-            Choice::Builtin(m) => m.name().to_string(),
-            Choice::Custom(c) => c.name.to_lowercase(),
-        }
-    }
-}
-
-/// Apply a choice to the global theme state: built-ins set the mode and clear
-/// any custom theme; custom themes are installed (keeping the current mode as a
-/// fallback for unspecified regions).
-pub fn apply(choice: &Choice) {
-    match choice {
-        Choice::Builtin(m) => {
-            set_mode(*m);
-            set_custom(None);
-        }
-        Choice::Custom(c) => set_custom(Some((**c).clone())),
-    }
-}
-
-/// Selection state for the theme chooser overlay. Lists the two built-in themes
-/// followed by any custom themes. Moving the selection previews the theme live;
-/// the host commits or reverts.
+/// Selection state for the theme chooser overlay. Lists every available theme,
+/// sorted by name. Moving the selection previews the theme live; the host commits
+/// or reverts.
 pub struct Chooser {
-    /// All choices, in display order.
-    pub choices: Vec<Choice>,
-    /// Index of the highlighted choice.
+    /// All themes, in display order.
+    pub choices: Vec<CustomTheme>,
+    /// Index of the highlighted theme.
     pub selected: usize,
-    /// Index of the choice active when the chooser opened, restored on cancel.
+    /// Index of the theme active when the chooser opened, restored on cancel.
     pub original: usize,
 }
 
 impl Chooser {
-    /// Open the chooser listing the built-in modes and `customs`, highlighting
-    /// the currently active theme.
+    /// Open the chooser listing `themes`, highlighting the active one.
     ///
-    /// Every choice — built-in modes included — is sorted alphabetically by its
-    /// canonical (English, case-insensitive) name, e.g. Dark, Darker, Darkest,
-    /// Dracula, …, Light, Lighter, …
-    ///
-    /// Custom themes are de-duplicated by name (case-insensitively): the first of
-    /// any repeated name wins (so user-installed themes shadow bundled ones), and
-    /// a custom theme that shadows a built-in mode name (`Dark`/`Light`) is
-    /// dropped in favor of the built-in.
+    /// Themes are de-duplicated by name (case-insensitively): the first of any
+    /// repeated name wins (so user-installed themes shadow bundled ones). The
+    /// result is sorted alphabetically by name.
     #[must_use]
-    pub fn open(customs: Vec<CustomTheme>) -> Self {
-        // De-duplicate, preserving the caller's order so precedence (user over
-        // bundled) is honored.
-        let mut seen: Vec<String> = MODES.iter().map(|m| m.name().to_lowercase()).collect();
-        let mut deduped: Vec<CustomTheme> = Vec::new();
-        for theme in customs {
+    pub fn open(themes: Vec<CustomTheme>) -> Self {
+        let mut seen: Vec<String> = Vec::new();
+        let mut choices: Vec<CustomTheme> = Vec::new();
+        for theme in themes {
             let key = theme.name.to_lowercase();
             if seen.contains(&key) {
                 continue;
             }
             seen.push(key);
-            deduped.push(theme);
+            choices.push(theme);
         }
-
-        // Built-ins + customs, all sorted alphabetically by canonical name.
-        let mut choices: Vec<Choice> = MODES.iter().map(|m| Choice::Builtin(*m)).collect();
-        choices.extend(deduped.into_iter().map(|t| Choice::Custom(Box::new(t))));
-        choices.sort_by_key(Choice::sort_key);
+        choices.sort_by_key(|c| c.name.to_lowercase());
 
         let active = custom_name();
-        let selected = choices
-            .iter()
-            .position(|c| match (&active, c) {
-                (Some(name), Choice::Custom(ct)) => &ct.name == name,
-                (None, Choice::Builtin(m)) => *m == mode(),
-                _ => false,
-            })
+        let selected = active
+            .and_then(|name| choices.iter().position(|c| c.name == name))
             .unwrap_or(0);
         Chooser { choices, selected, original: selected }
     }
 
-    /// Highlight the previous choice, wrapping around.
+    /// Highlight the previous theme, wrapping around.
     pub fn up(&mut self) {
+        if self.choices.is_empty() {
+            return;
+        }
         let n = self.choices.len();
         self.selected = (self.selected + n - 1) % n;
     }
 
-    /// Highlight the next choice, wrapping around.
+    /// Highlight the next theme, wrapping around.
     pub fn down(&mut self) {
+        if self.choices.is_empty() {
+            return;
+        }
         self.selected = (self.selected + 1) % self.choices.len();
     }
 
-    /// The highlighted choice.
+    /// The highlighted theme.
     #[must_use]
-    pub fn selected_choice(&self) -> &Choice {
+    pub fn selected_theme(&self) -> &CustomTheme {
         &self.choices[self.selected]
     }
 
-    /// The choice active when the chooser opened.
+    /// The theme active when the chooser opened.
     #[must_use]
-    pub fn original_choice(&self) -> &Choice {
+    pub fn original_theme(&self) -> &CustomTheme {
         &self.choices[self.original]
     }
 }
@@ -518,38 +413,43 @@ impl Chooser {
 mod tests {
     use super::*;
 
+    fn theme(json: &str) -> CustomTheme {
+        serde_json::from_str(json).unwrap()
+    }
+
     // One test to keep the process-global theme state sequential.
     #[test]
-    fn custom_theme_parsing_regions_and_chooser() {
-        let json = r#"{
-            "name": "test",
-            "menu-bar": { "foreground": [1, 2, 3], "background": [4, 5, 6] },
-            "editor": { "foreground": [7, 8, 9] }
-        }"#;
-        let theme: CustomTheme = serde_json::from_str(json).unwrap();
-        assert_eq!(theme.name, "test");
+    fn parsing_regions_and_chooser() {
+        let t = theme(
+            r#"{
+                "name": "test",
+                "menu-bar": { "foreground": [1, 2, 3], "background": [4, 5, 6] },
+                "editor": { "foreground": [7, 8, 9], "background": [10, 11, 12] }
+            }"#,
+        );
+        assert_eq!(t.name, "test");
 
-        set_mode(Mode::Dark);
-        set_custom(Some(theme));
+        set_custom(Some(t));
         assert_eq!(region_fg(Region::MenuBar), Color::Rgb(1, 2, 3));
         assert_eq!(region_bg(Region::MenuBar), Color::Rgb(4, 5, 6));
         assert_eq!(region_fg(Region::Editor), Color::Rgb(7, 8, 9));
-        // An unspecified channel falls back to the monochrome theme.
-        assert_eq!(region_bg(Region::Editor), Color::Black);
+        // An unspecified region channel falls back to the primary editor color.
+        assert_eq!(region_bg(Region::LeftDock), Color::Rgb(10, 11, 12));
         assert_eq!(custom_name().as_deref(), Some("test"));
 
-        // The chooser lists the built-ins first, then customs.
-        let custom: CustomTheme = serde_json::from_str(r#"{ "name": "solar" }"#).unwrap();
-        let ch = Chooser::open(vec![custom]);
-        assert_eq!(ch.choices.len(), 3);
-        assert!(matches!(ch.choices[0], Choice::Builtin(Mode::Dark)));
-        assert!(matches!(ch.choices[1], Choice::Builtin(Mode::Light)));
-        assert_eq!(ch.choices[2].custom_name(), Some("solar"));
+        // The chooser lists, de-dups (case-insensitively), and sorts by name.
+        let ch = Chooser::open(vec![
+            theme(r#"{ "name": "Nord" }"#),
+            theme(r#"{ "name": "Dark" }"#),
+            theme(r#"{ "name": "dark" }"#), // duplicate of "Dark"
+        ]);
+        assert_eq!(ch.choices.len(), 2);
+        assert_eq!(ch.choices[0].name, "Dark");
+        assert_eq!(ch.choices[1].name, "Nord");
 
-        // Applying a built-in clears the custom theme.
-        apply(&Choice::Builtin(Mode::Light));
-        assert_eq!(custom_name(), None);
-        assert_eq!(region_fg(Region::MenuBar), Color::Black); // light fg
-        set_mode(Mode::Dark);
+        // Applying a theme makes it active.
+        apply(&theme(r#"{ "name": "Light", "editor": { "foreground": [40, 40, 40] } }"#));
+        assert_eq!(custom_name().as_deref(), Some("Light"));
+        assert_eq!(fg(), Color::Rgb(40, 40, 40));
     }
 }

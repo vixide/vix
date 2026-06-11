@@ -61,8 +61,8 @@ both work.
   and a navigable month grid with today highlighted (all computed with [`jiff`]).
 - **Nerd Font palette** (Tools menu) — a character picker: browse a grid of Nerd
   Font glyphs and click (or arrow + Enter) to insert one into the editor.
-- **Themes** — two built-in monochrome themes (Dark and Light) plus custom
-  themes loaded from JSON, chosen live in **View → Theme…**. See
+- **Themes** — JSON themes with per-region colors; Dark, Light, and more ship
+  bundled, plus your own loaded from JSON, chosen live in **View → Theme…**. See
   [`docs/themes.md`](docs/themes.md).
 - **Internationalization** — the whole UI is translatable; 15 languages are
   selectable (English, Spanish, French, German, Welsh fully; Irish, Scottish
@@ -104,9 +104,9 @@ cargo build --release --no-default-features --features syntax-all  # all grammar
 ```
 
 Files whose grammar isn't compiled in still open — just as plain (unhighlighted)
-text. The grammar set lives in the internal `vix-editor` crate. Note
-that the built-in themes are monochrome by design; token colors appear only when
-a custom theme defines a `syntax` block (see [`docs/themes.md`](docs/themes.md)).
+text. The grammar set lives in the internal `vix-editor` crate. Token colors
+appear only when the active theme defines a `syntax` block (see
+[`docs/themes.md`](docs/themes.md)).
 
 ## Configuration
 

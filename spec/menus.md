@@ -53,9 +53,9 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 | Paste   | `Ctrl+V` | Paste from clipboard         |
 | Select All | `Ctrl+A` | Select the whole buffer    |
 | *— separator —* | | |
-| Toggle Comment | `Ctrl+/` | Comment/uncomment the line or selection |
-| *— separator —* | | |
 | Find… ▸  | | Submenu of find-related items (below) |
+| *— separator —* | | |
+| Toggle Comment | `Ctrl+/` | Comment/uncomment the line or selection |
 
 The **Find…** submenu:
 

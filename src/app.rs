@@ -2080,34 +2080,22 @@ impl App {
         themes
     }
 
-    /// Apply a persisted theme value: a built-in mode (`"dark"`/`"light"`) or a
-    /// custom theme by name (user-installed or bundled).
+    /// Apply a persisted theme value by name (case-insensitive, so the default
+    /// `"dark"` matches the bundled `Dark`). Falls back to `Dark`, then to the
+    /// first available theme.
     fn apply_saved_theme(value: &str) {
-        if value == "dark" || value == "light" {
-            crate::theme::set_mode(crate::theme::Mode::from_name(value));
-            crate::theme::set_custom(None);
-            return;
-        }
-        match Self::available_custom_themes()
-            .into_iter()
-            .find(|t| t.name == value)
-        {
-            Some(theme) => crate::theme::set_custom(Some(theme)),
-            // Unknown name: fall back to the default built-in.
-            None => crate::theme::set_mode(crate::theme::Mode::Dark),
-        }
+        let themes = Self::available_custom_themes();
+        let chosen = themes
+            .iter()
+            .find(|t| t.name.eq_ignore_ascii_case(value))
+            .or_else(|| themes.iter().find(|t| t.name.eq_ignore_ascii_case("dark")))
+            .or_else(|| themes.first())
+            .cloned();
+        crate::theme::set_custom(chosen);
     }
 
     fn open_theme_chooser(&mut self) {
         self.theme_chooser = Some(ThemeChooser::open(Self::available_custom_themes()));
-    }
-
-    /// Display name for a theme choice (built-in names are translated).
-    fn choice_label(choice: &vix_theme_chooser::Choice) -> String {
-        match choice.builtin() {
-            Some(mode) => t!(mode.label()).to_string(),
-            None => choice.custom_name().unwrap_or_default().to_string(),
-        }
     }
 
     fn theme_key(&mut self, key: KeyEvent) {
@@ -2120,23 +2108,22 @@ impl App {
                         tc.down();
                     }
                     // Preview the highlighted theme live.
-                    vix_theme_chooser::apply(tc.selected_choice());
+                    vix_theme_chooser::apply(tc.selected_theme());
                 }
                 self.editor.refresh_theme();
             }
             KeyCode::Enter => {
                 if let Some(tc) = self.theme_chooser.take() {
-                    let choice = tc.selected_choice().clone();
-                    vix_theme_chooser::apply(&choice);
+                    let theme = tc.selected_theme().clone();
+                    vix_theme_chooser::apply(&theme);
                     self.editor.refresh_theme();
-                    self.settings.theme = choice.id();
-                    self.status =
-                        t!("status.theme", theme = Self::choice_label(&choice)).to_string();
+                    self.settings.theme.clone_from(&theme.name);
+                    self.status = t!("status.theme", theme = theme.name).to_string();
                 }
             }
             KeyCode::Esc => {
                 if let Some(tc) = self.theme_chooser.take() {
-                    vix_theme_chooser::apply(tc.original_choice());
+                    vix_theme_chooser::apply(tc.original_theme());
                     self.editor.refresh_theme();
                     self.status = t!("status.theme_unchanged").into();
                 }
@@ -2328,7 +2315,7 @@ impl App {
                 if idx < tc.choices.len() {
                     tc.selected = idx;
                     // Preview the highlighted theme live, as Up/Down does.
-                    vix_theme_chooser::apply(tc.selected_choice());
+                    vix_theme_chooser::apply(tc.selected_theme());
                     self.editor.refresh_theme();
                 }
             }

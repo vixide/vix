@@ -67,10 +67,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Bengali, Chinese, Japanese with menu/theme coverage and English fallback).
   Language is chosen with `--locale`, the `locale` setting, or **View → Locale…**
   (a live chooser). English is the fallback. See `docs/i18n.md`.
-- **Themes.** Two built-in monochrome themes (Dark, Light) plus **custom JSON
-  themes** loaded from `~/.config/vix/themes/*.json`, with per-region RGB colors
-  (menu bar, status bar, left/right dock, editor) and optional editor cursor and
-  syntax colors. Chosen live in **View → Theme…**. See `docs/themes.md`.
+- **Themes.** All themes are **JSON themes** with per-region RGB colors (menu
+  bar, status bar, left/right dock, editor) and optional editor cursor and syntax
+  colors. Dark and Light ship bundled; more are bundled too, and users can add
+  their own in `~/.config/vix/themes/*.json`. Chosen live in **View → Theme…**.
+  See `docs/themes.md`.
 - **Configuration** via `confy`, stored as TOML in the platform config directory.
   New `theme` and `locale` settings. See `docs/configuration.md`.
 - **Command-line interface** via `clap`: positional files (with optional
@@ -154,17 +155,21 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   line-number, selection, and cursor styles, and a settable syntax palette).
 - The calendar logic moved into `vix-date-time-calendar-panel` and gained
   month navigation (Left/Right while the calendar is open).
-- The theme chooser lists all themes (built-in modes and JSON themes together)
-  sorted alphabetically by canonical name.
-- The theme system is monochrome by default (one foreground, one background;
-  emphasis via dim and full intensity; **no bold or italic** in the built-in
-  themes; reversed video only for selections and the cursor).
+- **Every theme is now a JSON theme.** The hardcoded monochrome Dark/Light
+  *modes* were removed; **Dark** and **Light** are now ordinary bundled themes
+  (`themes/dark.json` / `themes/light.json`, soft `[215,215,215]` on `[40,40,40]`
+  and its inverse) loaded like any other. The chooser lists every theme
+  (including Dark and Light) sorted by name, and the persisted `theme` setting is
+  the theme's name.
 - Settings moved from hand-rolled JSON to `confy` TOML.
 - All public items are documented (`#![deny(missing_docs)]`); the crate forbids
   `unsafe`.
 
 ### Fixed
 
+- Panel border lines now use each pane's own foreground color (via
+  `region_title`) instead of the global editor foreground, so borders match the
+  pane under themes whose regions use different colors.
 - In the find / replace box, clicking the Find or Replace field now focuses it
   (previously the box swallowed all mouse input, so the Replace field was only
   reachable with `Tab`, which the hint never mentioned). The hint now states

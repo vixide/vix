@@ -1,13 +1,13 @@
 //! Nerd Font icons, plus a re-export of the [`vix_theme_chooser`] theme model.
 //!
-//! The monochrome Dark/Light theme model and its ratatui styles live in the
-//! `vix-theme-chooser` crate; this module re-exports them as `crate::theme::*`
-//! and keeps the icon set (which is not part of the theme model).
+//! The JSON theme model and its ratatui styles live in the `vix-theme-chooser`
+//! crate; this module re-exports them as `crate::theme::*` and keeps the icon set
+//! (which is not part of the theme model).
 
 pub use vix_theme_chooser::{
-    base, bg, custom_name, dim, editor_cursor, fg, mode, region_base, region_bg, region_fg,
-    region_modifiers, selected, set_custom, set_mode, syntax_theme, title, Choice, Chooser,
-    CustomTheme, Mode, Region, MODES,
+    base, bg, custom_name, dim, editor_cursor, fg, region_base, region_bg, region_fg,
+    region_modifiers, region_title, selected, set_custom, syntax_theme, title, Chooser,
+    CustomTheme, Region,
 };
 
 /// Nerd Font glyphs (monospace). They render best with a patched "Nerd Font"

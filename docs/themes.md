@@ -1,28 +1,20 @@
 # Themes
 
-Vix ships two built-in themes and supports user-defined custom themes loaded from
-JSON. Pick a theme live in **View → Theme…** (↑↓ to preview, Enter to apply, Esc
-to cancel). The choice is saved to the `theme` setting.
+Every theme in Vix is a **JSON theme** (see `spec/theme-chooser.md`). A set ships
+bundled in the binary — including **Dark** (the default) and **Light** — and you
+can add your own. Pick a theme live in **View → Theme…** (↑↓ to preview, Enter to
+apply, Esc to cancel). The chosen theme's name is saved to the `theme` setting.
 
 ## Built-in themes
 
-The built-ins are intentionally **monochrome** (see `spec/theme-chooser.md`):
-
-- **Dark** (default) — white foreground on a black background.
-- **Light** — black foreground on a white background.
-
-Rules that keep them clean and legible on any terminal:
-
-- No colors other than the one foreground and one background.
-- No italics.
-- No reversed video, except for the selection (and the editor's block cursor).
-
-Emphasis comes from **bold** (focused titles) and **dim** (hints, secondary
-text) intensity, never from hue.
+**Dark** (default, a soft `[215,215,215]` on `[40,40,40]`) and **Light** (its
+inverse) are ordinary bundled themes — `themes/dark.json` and
+`themes/light.json` — with no special treatment. Edit those files, or install a
+same-named theme of your own, to change them.
 
 ## Custom themes
 
-Custom themes are JSON files in the themes directory:
+Themes are JSON files in the themes directory:
 
 ```
 ~/.config/vix/themes/<name>.json     # Linux (and platform equivalents)
@@ -32,10 +24,9 @@ Custom themes are JSON files in the themes directory:
 
 A set of themes is **bundled into the binary** (from the repo's `themes/`
 directory) and appears in **View → Theme…** automatically — no installation
-needed: `Darker`, `Darkest`, `Lighter`, `Lightest`, `Matrix`, `Turbo`,
-`Solarized Dark`, `Solarized Light`, `Dracula`, `Nord`, `Gruvbox Dark`,
-`Monokai`, `One Dark`, and `Tokyo Night`. (The bundled `Dark`/`Light` files are
-hidden because the built-in monochrome Dark/Light modes already cover them.)
+needed: `Dark`, `Light`, `Darker`, `Darkest`, `Lighter`, `Lightest`, `Matrix`,
+`Turbo`, `Solarized Dark`, `Solarized Light`, `Dracula`, `Nord`, `Gruvbox Dark`,
+`Monokai`, `One Dark`, and `Tokyo Night`.
 
 A theme you install in your own themes directory **overrides** a bundled one of
 the same name, so you can customize any of them by dropping an edited copy there.
@@ -43,7 +34,7 @@ the same name, so you can customize any of them by dropping an edited copy there
 ### Writing your own
 
 Each file defines per-region colors. Any region, channel, or section you omit
-falls back to the active built-in monochrome theme, so a partial theme is valid.
+falls back to the primary editor color, so a partial theme is valid.
 Colors are `[R, G, B]` arrays, each channel `0–255`.
 
 ```json
@@ -91,8 +82,8 @@ Each region takes `foreground` and `background`, and optional font attributes:
 The optional `syntax` block colors Tree-sitter tokens — `keyword`, `string`, and
 `comment` are recognized.
 
-The built-in monochrome themes use no italic, no bold, and no token colors, so
-those effects appear only under a custom theme that opts in.
+The bundled Dark/Light themes use no italic or bold; those effects appear only
+under a theme that opts in.
 
 ### Selecting a custom theme
 

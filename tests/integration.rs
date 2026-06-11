@@ -419,29 +419,28 @@ fn view_themes_menu_switches_theme() {
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert!(app.theme_chooser.is_some(), "Themes… opens the chooser");
 
-    // Pick Light deterministically and apply; the choice is persisted. The list
-    // is sorted (and includes bundled themes), so find Light's index.
-    app.theme_chooser.as_mut().unwrap().selected = builtin_choice_index(&app, vix::theme::Mode::Light);
+    // Pick Light deterministically and apply; the choice is persisted by name.
+    app.theme_chooser.as_mut().unwrap().selected = theme_choice_index(&app, "Light");
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert!(app.theme_chooser.is_none(), "Enter closes the chooser");
-    assert_eq!(app.settings.theme, "light");
+    assert_eq!(app.settings.theme, "Light");
 
     // Reopen via the command action and switch back to Dark.
     app.run_action("view.theme");
-    app.theme_chooser.as_mut().unwrap().selected = builtin_choice_index(&app, vix::theme::Mode::Dark);
+    app.theme_chooser.as_mut().unwrap().selected = theme_choice_index(&app, "Dark");
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert_eq!(app.settings.theme, "dark");
+    assert_eq!(app.settings.theme, "Dark");
 }
 
-/// Index of the built-in `mode` within the open theme chooser's sorted choices.
-fn builtin_choice_index(app: &App, mode: vix::theme::Mode) -> usize {
+/// Index of the theme named `name` within the open theme chooser's sorted list.
+fn theme_choice_index(app: &App, name: &str) -> usize {
     app.theme_chooser
         .as_ref()
         .unwrap()
         .choices
         .iter()
-        .position(|c| c.builtin() == Some(mode))
-        .expect("built-in mode is in the chooser")
+        .position(|c| c.name == name)
+        .unwrap_or_else(|| panic!("theme {name} is in the chooser"))
 }
 
 #[test]
@@ -493,29 +492,17 @@ fn theme_chooser_lists_bundled_themes() {
     let mut app = app_at(Path::new("."));
     app.run_action("view.theme");
     let tc = app.theme_chooser.as_ref().expect("theme chooser open");
-    let names: Vec<&str> = tc.choices.iter().filter_map(|c| c.custom_name()).collect();
-    for expected in ["Dracula", "Nord", "Tokyo Night", "Gruvbox Dark", "Solarized Dark"] {
+    let names: Vec<&str> = tc.choices.iter().map(|c| c.name.as_str()).collect();
+    // Dark/Light are now ordinary bundled themes, listed alongside the rest.
+    for expected in ["Dark", "Light", "Dracula", "Nord", "Tokyo Night", "Gruvbox Dark"] {
         assert!(
             names.contains(&expected),
             "chooser should list bundled theme {expected}; got {names:?}"
         );
     }
-    // The bundled "Dark"/"Light" themes are dropped in favor of the built-in modes.
-    assert!(
-        !names.iter().any(|n| n.eq_ignore_ascii_case("dark") || n.eq_ignore_ascii_case("light")),
-        "built-in modes shadow same-named custom themes; got {names:?}"
-    );
 
-    // Every choice — built-ins included — is sorted alphabetically by canonical
-    // name (built-ins use their id "dark"/"light").
-    let keys: Vec<String> = tc
-        .choices
-        .iter()
-        .map(|c| match c.builtin() {
-            Some(m) => m.name().to_string(),
-            None => c.custom_name().unwrap().to_lowercase(),
-        })
-        .collect();
+    // The list is sorted alphabetically (case-insensitively) by name.
+    let keys: Vec<String> = names.iter().map(|n| n.to_lowercase()).collect();
     let mut sorted = keys.clone();
     sorted.sort();
     assert_eq!(keys, sorted, "theme chooser is sorted alphabetically");
@@ -526,17 +513,17 @@ fn theme_chooser_esc_reverts() {
     let mut app = app_at(Path::new("."));
     // Apply Light first so we have a known baseline.
     app.run_action("view.theme");
-    app.theme_chooser.as_mut().unwrap().selected = builtin_choice_index(&app, vix::theme::Mode::Light);
+    app.theme_chooser.as_mut().unwrap().selected = theme_choice_index(&app, "Light");
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert_eq!(app.settings.theme, "light");
+    assert_eq!(app.settings.theme, "Light");
 
     // Open again, move the highlight to Dark, then cancel with Esc: the
     // persisted theme must stay Light.
     app.run_action("view.theme");
-    app.theme_chooser.as_mut().unwrap().selected = builtin_choice_index(&app, vix::theme::Mode::Dark);
+    app.theme_chooser.as_mut().unwrap().selected = theme_choice_index(&app, "Dark");
     app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     assert!(app.theme_chooser.is_none());
-    assert_eq!(app.settings.theme, "light", "Esc must not persist a change");
+    assert_eq!(app.settings.theme, "Light", "Esc must not persist a change");
 }
 
 #[test]

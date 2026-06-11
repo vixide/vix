@@ -103,9 +103,9 @@ const EDIT: &[Item] = &[
     Item::leaf("menu.item.edit.paste", "edit.paste", "Ctrl+V"),
     Item::leaf("menu.item.edit.select_all", "edit.select_all", "Ctrl+A"),
     SEP,
-    Item::leaf("menu.item.edit.toggle_comment", "edit.toggle_comment", "Ctrl+/"),
-    SEP,
     Item::sub("menu.item.edit.find_menu", EDIT_FIND),
+    SEP,
+    Item::leaf("menu.item.edit.toggle_comment", "edit.toggle_comment", "Ctrl+/"),
 ];
 
 /// Editor display toggles, grouped under View → Editor.
