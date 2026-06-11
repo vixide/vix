@@ -142,7 +142,7 @@ buffers in their unsaved state), position history (`Alt+Left`/`Alt+Right`), and
 "go to definition" (`F12`) — a fast offline heuristic over declaration-style
 lines rather than a semantic LSP.
 
-Also shipped: **internationalization** (`rust-i18n`; 15 selectable languages,
+Also shipped: **internationalization** (`rust-i18n`; 27 selectable languages,
 English fallback, `--locale` flag + `locale` setting + live **View → Locale…**),
 **themes** (monochrome Dark/Light modes plus bundled and user-installed custom
 JSON themes, live **View → Theme…**), **keyways** (Apple / Emacs / Vim keyboard

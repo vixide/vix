@@ -36,6 +36,19 @@ pub const LOCALES: &[Locale] = &[
     Locale { code: "bn", name: "বাংলা" },
     Locale { code: "zh", name: "中文" },
     Locale { code: "ja", name: "日本語" },
+    Locale { code: "it", name: "Italiano" },
+    Locale { code: "ko", name: "한국어" },
+    Locale { code: "tr", name: "Türkçe" },
+    Locale { code: "nl", name: "Nederlands" },
+    Locale { code: "vi", name: "Tiếng Việt" },
+    Locale { code: "id", name: "Bahasa Indonesia" },
+    Locale { code: "th", name: "ไทย" },
+    Locale { code: "fa", name: "فارسی" },
+    Locale { code: "uk", name: "Українська" },
+    Locale { code: "el", name: "Ελληνικά" },
+    // Constructed languages, last.
+    Locale { code: "tlh", name: "tlhIngan Hol" },
+    Locale { code: "sjn", name: "Edhellen" },
 ];
 
 /// Selection state for the locale chooser overlay. Moving the selection previews

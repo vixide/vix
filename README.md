@@ -64,10 +64,10 @@ both work.
 - **Themes** — JSON themes with per-region colors; Dark, Light, and more ship
   bundled, plus your own loaded from JSON, chosen live in **View → Theme…**. See
   [`docs/themes.md`](docs/themes.md).
-- **Internationalization** — the whole UI is translatable; 15 languages are
-  selectable (English, Spanish, French, German, Welsh fully; Irish, Scottish
-  Gaelic, Polish, Portuguese, Russian, Arabic, Hindi, Bengali, Chinese, and
-  Japanese with core coverage + English fallback). Choose one in
+- **Internationalization** — the whole UI is translatable; 27 languages are
+  selectable, from English/Spanish/French/German/Welsh (fullest coverage)
+  through Italian, Korean, Turkish, Dutch, Vietnamese, Greek, and more — even
+  Klingon and Sindarin. Any untranslated key falls back to English. Choose one in
   **View → Locale…**, via the `locale` setting, or with `--locale`. See
   [`docs/i18n.md`](docs/i18n.md).
 - **Keyways** — switch the keyboard navigation style in **View → Keyway…**:

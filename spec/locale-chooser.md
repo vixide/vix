@@ -2,14 +2,15 @@
 
 For locales, localization, l10n, internationalization, i18n.
 
-**Status:** 15 languages are selectable today (English, Spanish, French, German,
+**Status:** 27 languages are selectable today: English, Spanish, French, German,
 Welsh, Irish, Scottish Gaelic, Polish, Portuguese, Russian, Arabic, Hindi,
-Bengali, Chinese, Japanese). English, Spanish, French, German, and Welsh are
-fully translated; the rest cover the menu bar and theme names and fall back to
-English elsewhere. English is the fallback for any untranslated key. See
-`locales/app.yml`, `vix-locale-chooser`, and `docs/i18n.md`. The table below is
-the broader target set — adding a language is a matter of filling in its column
-in `locales/app.yml` and listing it in `vix-locale-chooser`.
+Bengali, Chinese, Japanese, Italian, Korean, Turkish, Dutch, Vietnamese,
+Indonesian, Thai, Persian, Ukrainian, Greek — and the constructed languages
+Klingon (`tlh`) and Sindarin (`sjn`). Coverage varies (English, Spanish, French,
+German, and Welsh are the fullest); any untranslated key falls back to English.
+See `locales/app.yml`, `vix-locale-chooser`, and `docs/i18n.md`. Adding a language
+is a matter of filling in its column in `locales/app.yml` and listing it in
+`vix-locale-chooser`.
 
 | ISO 639-1 code | Endodymn         | English equivalent |
 | -------------- | ---------------- | ------------------ |
