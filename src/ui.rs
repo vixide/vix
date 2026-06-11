@@ -133,6 +133,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         draw_messages(app, frame, r);
     }
     if let Some(r) = bottom_dock_rect {
+        app.layout.bottom_dock = r;
         draw_bottom_dock(app, frame, r);
     }
     if let Some(r) = status_row {
@@ -748,11 +749,12 @@ fn draw_messages(app: &App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_bottom_dock(app: &App, frame: &mut Frame, area: Rect) {
+    let focused = app.focus == Focus::BottomDock;
     let block = Block::default()
         .style(theme::base())
         .borders(Borders::TOP)
         .border_type(BorderType::Rounded)
-        .border_style(theme::title(false))
+        .border_style(theme::title(focused))
         .title(format!(" {} {} ", icon::INFO, t!("ui.bottom_dock")));
     let inner = block.inner(area);
     frame.render_widget(block, area);

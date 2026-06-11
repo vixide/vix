@@ -1172,6 +1172,39 @@ fn cancel_command_kills_a_running_command() {
 }
 
 #[test]
+fn bottom_dock_focus_and_scroll() {
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.bottom_dock");
+    for i in 0..50 {
+        app.bottom_dock.push(format!("line {i}"));
+    }
+    let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let r = app.layout.bottom_dock;
+    assert!(r.height > 0, "the dock rect was recorded");
+
+    // A click focuses the dock; it starts pinned to the bottom.
+    app.on_mouse(click(r.x + 1, r.y + 1));
+    assert_eq!(app.focus, vix::app::Focus::BottomDock);
+    let pinned = app.bottom_dock.scroll;
+
+    // Up / wheel scroll back through the buffer.
+    app.on_key(keycode(KeyCode::Up));
+    assert!(app.bottom_dock.scroll < pinned, "Up scrolls back");
+    app.on_mouse(mouse(MouseEventKind::ScrollUp, r.x + 1, r.y + 1));
+    let after_wheel = app.bottom_dock.scroll;
+    app.on_key(keycode(KeyCode::Home));
+    assert_eq!(app.bottom_dock.scroll, 0, "Home jumps to the top");
+    assert!(after_wheel < pinned);
+
+    // Esc returns focus to the editor.
+    app.on_key(esc());
+    assert_eq!(app.focus, vix::app::Focus::Editor);
+}
+
+#[test]
 fn toggle_bottom_dock_flips_persists_and_renders() {
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;

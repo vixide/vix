@@ -35,7 +35,13 @@ routes the toggle (`src/app.rs`). Pure data, no dependencies.
   so the UI stays responsive. **Cancel Command** kills it (and adds
   `[cancelled]`). Only one command runs at a time.
 
+## Focus and scrolling
+
+- Click the dock to focus it (its border brightens); `Esc` returns focus to the
+  editor.
+- While focused: `↑`/`↓` scroll a line, `PgUp`/`PgDn` a page, `Home`/`End` to the
+  top/bottom. The mouse wheel scrolls it whether or not it is focused.
+
 ## Roadmap
 
 - Route diagnostics or a data view into the dock.
-- Keyboard/mouse scrolling and focus.

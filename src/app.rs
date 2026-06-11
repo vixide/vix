@@ -57,6 +57,8 @@ pub enum Focus {
     Explorer,
     /// The right message drawer.
     Messages,
+    /// The bottom dock (log/output/data panel).
+    BottomDock,
 }
 
 /// Which kind of single-line prompt is open.
@@ -224,6 +226,8 @@ pub struct Layout {
     pub explorer: Rect,
     /// Message-drawer rectangle.
     pub messages: Rect,
+    /// Bottom-dock rectangle (valid while the bottom dock is shown).
+    pub bottom_dock: Rect,
     /// Row list rectangle of the open chooser overlay (theme/locale/keyway), so a
     /// click can hit-test which row was picked.
     pub chooser: Rect,
@@ -551,6 +555,7 @@ impl App {
             Focus::Editor => self.editor_key(key),
             Focus::Explorer => self.explorer_key(key),
             Focus::Messages => self.messages_key(key),
+            Focus::BottomDock => self.bottomdock_key(key),
         }
     }
 
@@ -1099,6 +1104,9 @@ impl App {
     fn toggle_bottom_dock(&mut self) {
         self.show_bottom_dock = !self.show_bottom_dock;
         self.settings.show_bottom_dock = self.show_bottom_dock;
+        if !self.show_bottom_dock && self.focus == Focus::BottomDock {
+            self.focus = Focus::Editor;
+        }
     }
 
     /// Toggle the editor's right-side scroll bar, persisting the choice.
@@ -1549,6 +1557,21 @@ impl App {
         }
     }
 
+    fn bottomdock_key(&mut self, key: KeyEvent) {
+        // A page is the dock's visible height (minus its top border).
+        let page = (self.layout.bottom_dock.height.saturating_sub(1) as usize).max(1);
+        match key.code {
+            KeyCode::Up => self.bottom_dock.scroll_up(1),
+            KeyCode::Down => self.bottom_dock.scroll_down(1),
+            KeyCode::PageUp => self.bottom_dock.scroll_up(page),
+            KeyCode::PageDown => self.bottom_dock.scroll_down(page),
+            KeyCode::Home => self.bottom_dock.scroll_up(usize::MAX),
+            KeyCode::End => self.bottom_dock.scroll_down(usize::MAX),
+            KeyCode::Esc => self.focus = Focus::Editor,
+            _ => {}
+        }
+    }
+
     fn open_path(&mut self, path: &Path, preview: bool) {
         if is_image_path(path) {
             if !preview {
@@ -1835,6 +1858,20 @@ impl App {
         }
         if self.show_messages && rect_contains(self.layout.messages, col, row) {
             self.messages_mouse(mouse);
+            return;
+        }
+        if self.show_bottom_dock && rect_contains(self.layout.bottom_dock, col, row) {
+            self.bottomdock_mouse(mouse);
+        }
+    }
+
+    /// A left click focuses the bottom dock; the wheel scrolls it.
+    fn bottomdock_mouse(&mut self, mouse: MouseEvent) {
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => self.focus = Focus::BottomDock,
+            MouseEventKind::ScrollUp => self.bottom_dock.scroll_up(3),
+            MouseEventKind::ScrollDown => self.bottom_dock.scroll_down(3),
+            _ => {}
         }
     }
 
