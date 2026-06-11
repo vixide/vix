@@ -1865,13 +1865,44 @@ impl App {
         }
     }
 
-    /// A left click focuses the bottom dock; the wheel scrolls it.
+    /// A left click focuses the bottom dock (and jumps to a `path:line` location
+    /// on the clicked line, if any); the wheel scrolls it.
     fn bottomdock_mouse(&mut self, mouse: MouseEvent) {
         match mouse.kind {
-            MouseEventKind::Down(MouseButton::Left) => self.focus = Focus::BottomDock,
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.focus = Focus::BottomDock;
+                self.bottomdock_open_at(mouse.row);
+            }
             MouseEventKind::ScrollUp => self.bottom_dock.scroll_up(3),
             MouseEventKind::ScrollDown => self.bottom_dock.scroll_down(3),
             _ => {}
+        }
+    }
+
+    /// If the clicked dock line names a `path:line[:col]` location (e.g. a build
+    /// error or grep hit), open that file there.
+    fn bottomdock_open_at(&mut self, row: u16) {
+        let area = self.layout.bottom_dock;
+        if row <= area.y {
+            return; // the top border row
+        }
+        let inner_h = area.height.saturating_sub(1) as usize;
+        let idx = (row - area.y - 1) as usize;
+        let Some(line) = self.bottom_dock.visible(inner_h).get(idx).cloned() else {
+            return;
+        };
+        let (path, target) = palette::parse_path_target(line.trim());
+        let (Some((line_no, col)), false) = (target, path.is_empty()) else {
+            return;
+        };
+        let path = self.resolve(&path);
+        if path.is_file() {
+            self.with_jump(|s| {
+                s.open_path(&path, false);
+                let area = s.editor_view();
+                s.editor.goto(line_no, Some(col), area);
+                s.focus = Focus::Editor;
+            });
         }
     }
 

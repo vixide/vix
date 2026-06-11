@@ -1172,6 +1172,29 @@ fn cancel_command_kills_a_running_command() {
 }
 
 #[test]
+fn clicking_a_dock_location_jumps_to_it() {
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+    let dir = unique_dir("dockjump");
+    let file = dir.join("hit.txt");
+    fs::write(&file, "a\nb\nTARGET\nd\n").unwrap();
+    let mut app = app_at(&dir);
+    app.run_action("view.bottom_dock");
+    // A grep-style line: path:line:col:text (pointing at line 3).
+    app.bottom_dock.push(format!("{}:3:1: TARGET", file.display()));
+    let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+
+    let r = app.layout.bottom_dock;
+    app.on_mouse(click(r.x + 1, r.y + 1)); // first content row = the line
+
+    let tab = app.editor.active_tab().unwrap();
+    assert_eq!(tab.path.as_deref(), Some(file.canonicalize().unwrap().as_path()), "opened the file");
+    assert_eq!(tab.cursor_1based().0, 3, "jumped to line 3");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn bottom_dock_focus_and_scroll() {
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;

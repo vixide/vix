@@ -41,6 +41,9 @@ routes the toggle (`src/app.rs`). Pure data, no dependencies.
   editor.
 - While focused: `↑`/`↓` scroll a line, `PgUp`/`PgDn` a page, `Home`/`End` to the
   top/bottom. The mouse wheel scrolls it whether or not it is focused.
+- **Click-to-jump:** clicking a line that names a `path:line[:col]` location (a
+  build error, grep hit, etc.) opens that file there — so Run Command output is
+  actionable.
 
 ## Roadmap
 

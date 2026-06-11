@@ -13,9 +13,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   its merged stdout/stderr into the bottom dock (shown automatically) line by
   line, with a `$ command` header and an `[exit N]` footer. The UI stays
   responsive; **Cancel Command** (Tools menu / palette) kills a running command.
-- **Bottom-dock scrolling & focus.** Click the bottom dock to focus it (its
-  border brightens); then `↑`/`↓`, `PgUp`/`PgDn`, and `Home`/`End` scroll its
-  buffer. The mouse wheel scrolls it any time; `Esc` returns focus to the editor.
+- **Bottom-dock scrolling, focus & click-to-jump.** Click the bottom dock to
+  focus it (its border brightens); then `↑`/`↓`, `PgUp`/`PgDn`, and `Home`/`End`
+  scroll its buffer. The mouse wheel scrolls it any time; `Esc` returns focus to
+  the editor. Clicking a line that names a `path:line[:col]` location (a build
+  error, grep hit, …) opens that file there, making Run Command output
+  actionable.
 - **Bottom dock** (View → Show/Hide Bottom Dock, or the palette;
   `show_bottom_dock` setting, default off): a full-width scrollable line buffer at
   the bottom of the body for log messages, command/terminal output, data views,
