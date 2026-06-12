@@ -48,6 +48,7 @@ fn main() -> io::Result<()> {
 
     let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let mut app = App::new(root, settings);
+    app.refresh_git();
 
     // Optional file argument(s): open each, focusing the last.
     for path in cli.files {

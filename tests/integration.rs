@@ -2035,6 +2035,17 @@ fn spellcheck_toggle_persists_and_clears_when_off() {
 }
 
 #[test]
+fn refresh_git_populates_branch_when_in_a_repo() {
+    let mut app = app_at(Path::new("."));
+    app.refresh_git();
+    if app.git_repo {
+        assert!(app.git_branch.is_some(), "a repo reports a branch");
+    }
+    // The dirty flag is always consistent with the cached status list.
+    assert_eq!(app.git_dirty(), !app.git_status.is_empty());
+}
+
+#[test]
 fn spell_suggest_is_a_noop_without_a_dictionary() {
     // With spellcheck off (and no dictionary loaded), Ctrl+; just sets a status
     // and does not open the popup.

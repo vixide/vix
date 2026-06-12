@@ -703,6 +703,18 @@ fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
     }
 }
 
+/// The badge color for a git change in the file explorer.
+fn git_change_color(change: vix_git::Change) -> Color {
+    use vix_git::Change;
+    match change {
+        Change::Added | Change::Untracked => Color::Green,
+        Change::Modified => Color::Yellow,
+        Change::Deleted => Color::Red,
+        Change::Renamed => Color::Cyan,
+        Change::Conflicted => Color::Magenta,
+    }
+}
+
 fn draw_explorer(app: &App, frame: &mut Frame, area: Rect) {
     let focused = app.focus == Focus::Explorer;
     let block = Block::default()
@@ -740,10 +752,20 @@ fn draw_explorer(app: &App, frame: &mut Frame, area: Rect) {
                 style = style.add_modifier(Modifier::DIM);
             }
             let mark = if marked { "● " } else { "" };
-            let mut item = ListItem::new(Line::from(vec![
+            let mut spans = vec![
                 Span::raw(indent),
                 Span::styled(format!("{mark}{glyph} {}", n.name), style),
-            ]));
+            ];
+            // Git status badge (a colored letter) for changed, tracked files.
+            if !n.is_dir {
+                if let Some(change) = app.git_change_for(&n.path) {
+                    spans.push(Span::styled(
+                        format!("  {}", change.letter()),
+                        Style::default().fg(git_change_color(change)),
+                    ));
+                }
+            }
+            let mut item = ListItem::new(Line::from(spans));
             if marked {
                 item = item.style(Style::default());
             }
@@ -919,8 +941,9 @@ fn draw_status_bar(app: &App, frame: &mut Frame, area: Rect) {
         })
         .unwrap_or_default();
 
+    let git = vix_status_bar_panel::git_segment(app.git_branch.as_deref(), icon::BRANCH, app.git_dirty());
     let left = vix_status_bar_panel::left_segment(&mode, &path, &dirty_flag, &app.status);
-    let right = vix_status_bar_panel::right_segment(&info, line, col, icon::CALENDAR);
+    let right = vix_status_bar_panel::right_segment(&format!("{git}{info}"), line, col, icon::CALENDAR);
 
     let bg = theme::region_base(theme::Region::StatusBar);
     // A top border separates the status bar from the body above it.

@@ -75,6 +75,8 @@ vix-ascii-panel = { path = "vix-ascii-panel" }
 vix-system-information-panel = { path = "vix-system-information-panel" }
 # Spell checking: Hunspell-backed checker over comment/string ranges.
 vix-spellcheck = { path = "vix-spellcheck" }
+# Git integration: status/diff/staging via the git CLI.
+vix-git = { path = "vix-git" }
 # Find / find-and-replace box state (query, replacement, toggles, pattern builder).
 vix-find-panel = { path = "vix-find-panel" }
 # Right dock: message-drawer state (advice/notifications + selection).

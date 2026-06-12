@@ -384,6 +384,12 @@ pub struct App {
     pub show_status_bar: bool,
     /// Whether the editor's right-side scroll bar is shown.
     pub show_scrollbar: bool,
+    /// Whether the project root is a git work tree (checked once at startup).
+    pub git_repo: bool,
+    /// Cached current git branch (or short hash when detached), when in a repo.
+    pub git_branch: Option<String>,
+    /// Cached `git status` rows (changed files), refreshed on save / git actions.
+    pub git_status: Vec<vix_git::FileStatus>,
     /// Whether spell-checking (red underline in comments/strings) is enabled.
     pub spellcheck: bool,
     /// Loaded spell checker for the active locale, when spell-checking is on and
@@ -491,6 +497,9 @@ impl App {
             show_messages: settings.show_messages,
             show_status_bar: settings.show_status_bar,
             show_scrollbar: settings.show_scrollbar,
+            git_repo: false,
+            git_branch: None,
+            git_status: Vec::new(),
             spellcheck: settings.spellcheck,
             speller: None,
             speller_locale: None,
@@ -1168,7 +1177,10 @@ impl App {
         }
         let opts = self.save_options();
         match self.editor.save_active(opts) {
-            Ok(p) => self.status = t!("status.saved", path = p.display()).to_string(),
+            Ok(p) => {
+                self.status = t!("status.saved", path = p.display()).to_string();
+                self.refresh_git();
+            }
             Err(e) => self.messages.error(t!("msg.save_failed", error = e).to_string()),
         }
     }
@@ -1226,6 +1238,37 @@ impl App {
             t!("status.scrollbar_off")
         }
         .to_string();
+    }
+
+    /// Refresh the cached git state (repo?, branch, changed files) for the project
+    /// root. Cheap enough to call after saves and git actions; not per-frame.
+    pub fn refresh_git(&mut self) {
+        self.git_repo = vix_git::is_repo(&self.root);
+        if self.git_repo {
+            self.git_branch = vix_git::branch(&self.root);
+            self.git_status = vix_git::status(&self.root);
+        } else {
+            self.git_branch = None;
+            self.git_status.clear();
+        }
+    }
+
+    /// Whether the working tree has uncommitted changes (derived from the cached
+    /// `git status`).
+    #[must_use]
+    pub fn git_dirty(&self) -> bool {
+        !self.git_status.is_empty()
+    }
+
+    /// The git change for a file `path` (absolute, under the project root), from
+    /// the cached status — `None` when not in a repo or the file is unchanged.
+    #[must_use]
+    pub fn git_change_for(&self, path: &Path) -> Option<vix_git::Change> {
+        if !self.git_repo {
+            return None;
+        }
+        let rel = path.strip_prefix(&self.root).ok()?.to_string_lossy().replace('\\', "/");
+        self.git_status.iter().find(|s| s.path == rel).and_then(vix_git::FileStatus::primary)
     }
 
     /// Toggle spell-checking (red underline in comments/strings), persisting the

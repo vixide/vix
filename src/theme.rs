@@ -41,6 +41,8 @@ pub mod icon {
     pub const PALETTE: &str = "\u{f120}";
     /// Table grid (ASCII panel).
     pub const TABLE: &str = "\u{f0ce}";
+    /// Git branch (Powerline).
+    pub const BRANCH: &str = "\u{e0a0}";
 }
 
 /// Pick a file icon from a path's extension.

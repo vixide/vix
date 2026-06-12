@@ -45,9 +45,31 @@ pub fn right_segment(info: &str, line: usize, col: usize, calendar: &str) -> Str
     format!("{info}Ln {line}:Col {col}   {calendar} ")
 }
 
+/// The git indicator for the right segment: `"{glyph} {branch}{dirty}   "`, where
+/// `glyph` is the branch icon and `dirty` is a bullet (`•`) when the working tree
+/// has changes. Empty when `branch` is `None` (not a repo / detached with no
+/// name), so it cleanly disappears.
+#[must_use]
+pub fn git_segment(branch: Option<&str>, glyph: &str, dirty: bool) -> String {
+    match branch {
+        Some(b) => {
+            let dot = if dirty { " \u{2022}" } else { "" };
+            format!("{glyph} {b}{dot}   ")
+        }
+        None => String::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn git_segment_shows_branch_and_dirty_dot() {
+        assert_eq!(git_segment(Some("main"), "\u{e0a0}", false), "\u{e0a0} main   ");
+        assert_eq!(git_segment(Some("main"), "\u{e0a0}", true), "\u{e0a0} main \u{2022}   ");
+        assert_eq!(git_segment(None, "\u{e0a0}", true), "");
+    }
 
     #[test]
     fn left_joins_pieces_with_an_em_dash() {
