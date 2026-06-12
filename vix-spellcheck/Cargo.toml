@@ -1,0 +1,20 @@
+# vix-spellcheck: spell-checking for the Vix editor. Loads Hunspell dictionaries
+# (index.aff + index.dic, e.g. from the repo's `dictionaries/<locale>/` set) via
+# the pure-Rust `spellbook` checker, and finds misspelled words in text. The host
+# runs it over comment/string ranges and renders underlines.
+
+[package]
+name = "vix-spellcheck"
+version = "0.1.0"
+edition = "2021"
+description = "Hunspell-backed spell checking for the Vix editor."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_spellcheck"
+path = "src/lib.rs"
+
+[dependencies]
+# Pure-Rust Hunspell-compatible spell checker (check + suggest).
+spellbook = "0.4"
