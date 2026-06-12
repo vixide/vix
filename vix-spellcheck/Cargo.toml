@@ -8,7 +8,7 @@ name = "vix-spellcheck"
 version = "0.1.0"
 edition = "2021"
 description = "Hunspell-backed spell checking for the Vix editor."
-license = "MIT OR Apache-2.0"
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
 repository = "https://github.com/sixarm/vix"
 
 [lib]
