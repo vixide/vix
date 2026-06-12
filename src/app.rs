@@ -857,6 +857,14 @@ impl App {
             }
         }
         match key.code {
+            KeyCode::Right if Self::ctrl(&key) && Self::shift(&key) && self.focus == Focus::Editor => {
+                self.run_action("edit.select_more");
+                true
+            }
+            KeyCode::Left if Self::ctrl(&key) && Self::shift(&key) && self.focus == Focus::Editor => {
+                self.run_action("edit.select_less");
+                true
+            }
             KeyCode::Left if Self::alt(&key) => {
                 self.nav_back();
                 true
@@ -1181,6 +1189,14 @@ impl App {
             "edit.match_bracket" => {
                 let area = self.editor_view();
                 self.editor.jump_matching_bracket(area);
+            }
+            "edit.select_more" => {
+                let area = self.editor_view();
+                self.editor.select_word(true, area);
+            }
+            "edit.select_less" => {
+                let area = self.editor_view();
+                self.editor.select_word(false, area);
             }
             "edit.find" => self.start_search(false),
             "edit.find_next" => self.find_step(true),

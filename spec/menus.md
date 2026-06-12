@@ -55,6 +55,11 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 | Copy    | `Ctrl+C` | Copy to clipboard            |
 | Paste   | `Ctrl+V` | Paste from clipboard         |
 | Select All | `Ctrl+A` | Select the whole buffer    |
+| Select More | `Ctrl+Shift+→` | Extend the selection right by a word |
+| Select Less | `Ctrl+Shift+←` | Retract the selection left by a word |
+| *— separator —* | | |
+| Move Up | `Alt+↑` | Move the current line up    |
+| Move Down | `Alt+↓` | Move the current line down  |
 | *— separator —* | | |
 | Find ▸  | | Submenu of find-related items (below) |
 | Case ▸  | | Submenu of case transforms for the selection (below) |

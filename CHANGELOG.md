@@ -30,6 +30,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   project folder name, disk usage (`du`), file count, and git commit count, each
   computed asynchronously and filled in as it completes. New internal
   `vix-project-dashboard-panel` crate.
+- **Select More / Select Less** (Edit menu; `Ctrl+Shift+→` / `Ctrl+Shift+←`):
+  grow or shrink the selection by a word. **Move Up / Move Down** (Edit menu;
+  `Alt+↑` / `Alt+↓`) are now also surfaced in the menu.
 - **Case transforms** (Edit → Case): convert the selection to Upper, Lower,
   Title, Kebab (`foo-bar`), Snake (`foo_bar`), Camel (`fooBar`), or Pascal
   (`FooBar`).

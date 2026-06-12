@@ -555,6 +555,25 @@ impl Editor {
         }
     }
 
+    /// Extend the selection by one word: `forward` grows the active end to the
+    /// next word boundary on the right ("Select More"), otherwise to the previous
+    /// word boundary on the left ("Select Less").
+    pub fn select_word(&mut self, forward: bool, area: Rect) {
+        if let Some(t) = self.active_tab_mut() {
+            if t.is_image() {
+                return;
+            }
+            let text: Vec<char> = t.text().chars().collect();
+            let cur = t.editor.get_cursor();
+            let target = if forward { next_word(&text, cur) } else { prev_word(&text, cur) };
+            if target != cur {
+                t.editor.extend_selection(target);
+                t.editor.set_cursor(target);
+                t.editor.focus(&area);
+            }
+        }
+    }
+
     /// Jump the cursor to the partner of the bracket at (or just before) it,
     /// scrolling it into `area`. No-op when the cursor is not on a bracket.
     pub fn jump_matching_bracket(&mut self, area: Rect) {
@@ -591,4 +610,36 @@ impl Editor {
             }
         }
     }
+}
+
+/// Whether `c` is part of a word (alphanumeric or underscore).
+fn is_word_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// The next word-boundary char index at or after `pos`: skip any non-word
+/// characters, then the following word run.
+fn next_word(text: &[char], pos: usize) -> usize {
+    let n = text.len();
+    let mut i = pos.min(n);
+    while i < n && !is_word_char(text[i]) {
+        i += 1;
+    }
+    while i < n && is_word_char(text[i]) {
+        i += 1;
+    }
+    i
+}
+
+/// The previous word-boundary char index at or before `pos`: skip any non-word
+/// characters to the left, then the preceding word run.
+fn prev_word(text: &[char], pos: usize) -> usize {
+    let mut i = pos.min(text.len());
+    while i > 0 && !is_word_char(text[i - 1]) {
+        i -= 1;
+    }
+    while i > 0 && is_word_char(text[i - 1]) {
+        i -= 1;
+    }
+    i
 }

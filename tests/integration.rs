@@ -2091,6 +2091,32 @@ fn spellcheck_toggle_persists_and_clears_when_off() {
 }
 
 #[test]
+fn select_more_and_less_extend_selection_by_word() {
+    let mut app = app_at(Path::new("."));
+    for c in "alpha beta gamma".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Home)); // cursor to column 0
+
+    app.run_action("edit.select_more");
+    assert_eq!(
+        app.editor.active_tab_mut().unwrap().editor.get_selection_text().as_deref(),
+        Some("alpha"),
+    );
+    app.run_action("edit.select_more");
+    assert_eq!(
+        app.editor.active_tab_mut().unwrap().editor.get_selection_text().as_deref(),
+        Some("alpha beta"),
+    );
+    // Select Less retracts the active end leftward by a word.
+    app.run_action("edit.select_less");
+    assert_eq!(
+        app.editor.active_tab_mut().unwrap().editor.get_selection_text().as_deref(),
+        Some("alpha "),
+    );
+}
+
+#[test]
 fn change_case_transforms_the_selection() {
     let mut app = app_at(Path::new("."));
     for c in "foo bar".chars() {
