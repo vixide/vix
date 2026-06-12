@@ -817,7 +817,11 @@ fn draw_explorer(app: &App, frame: &mut Frame, area: Rect) {
         .borders(Borders::TOP | Borders::RIGHT)
         .border_type(BorderType::Rounded)
         .border_style(theme::region_title(theme::Region::LeftDock, focused))
-        .title(format!(" {} {} ", icon::FOLDER, t!("ui.explorer")));
+        .title(if app.explorer.has_filter() {
+            format!(" {} {}  {} ", icon::FOLDER, t!("ui.explorer"), t!("ui.explorer_filtered"))
+        } else {
+            format!(" {} {} ", icon::FOLDER, t!("ui.explorer"))
+        });
     let inner = block.inner(area);
     frame.render_widget(block, area);
 

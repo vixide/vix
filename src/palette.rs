@@ -184,6 +184,8 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.goto_definition", "nav.goto_definition"),
     ("cmd.goto_symbol", "nav.goto_symbol"),
     ("cmd.outline", "nav.outline"),
+    ("cmd.explorer_filter_include", "explorer.filter_include"),
+    ("cmd.explorer_filter_exclude", "explorer.filter_exclude"),
     ("cmd.theme", "view.theme"),
     ("cmd.locale", "view.locale"),
     ("cmd.keyway", "view.keyway"),

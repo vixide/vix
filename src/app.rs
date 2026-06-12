@@ -76,6 +76,10 @@ pub enum PromptKind {
     SearchToDock,
     /// Enter a git commit message for the staged changes.
     GitCommit,
+    /// Enter the file-explorer "include" path regex filter.
+    ExplorerInclude,
+    /// Enter the file-explorer "exclude" path regex filter.
+    ExplorerExclude,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -1227,6 +1231,20 @@ impl App {
             "nav.goto_definition" => self.goto_definition(),
             "nav.goto_symbol" => self.open_palette_seeded("@"),
             "nav.outline" => self.open_outline(),
+            "explorer.filter_include" => {
+                let cur = self.explorer.include_filter.clone();
+                self.prompt = Some(
+                    Prompt::new(PromptKind::ExplorerInclude, t!("prompt.explorer_include").to_string())
+                        .with_input(cur),
+                );
+            }
+            "explorer.filter_exclude" => {
+                let cur = self.explorer.exclude_filter.clone();
+                self.prompt = Some(
+                    Prompt::new(PromptKind::ExplorerExclude, t!("prompt.explorer_exclude").to_string())
+                        .with_input(cur),
+                );
+            }
             "view.theme" => self.open_theme_chooser(),
             "view.locale" => self.open_locale_chooser(),
             "view.keyway" => self.open_keyway_chooser(),
@@ -4872,6 +4890,14 @@ impl App {
                 self.search_project_to_dock(&prompt.input, prompt.case_sensitive, prompt.regex);
             }
             PromptKind::GitCommit => self.git_commit(&prompt.input),
+            PromptKind::ExplorerInclude => {
+                let exclude = self.explorer.exclude_filter.clone();
+                self.explorer.set_filter(prompt.input.trim(), &exclude);
+            }
+            PromptKind::ExplorerExclude => {
+                let include = self.explorer.include_filter.clone();
+                self.explorer.set_filter(&include, prompt.input.trim());
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 # vix-left-dock: state for the left dock — the file explorer's lazily-expanded
-# directory tree, selection, multi-selection, and scroll. Depends only on `std`
-# (it reads directories); the host renders it.
+# directory tree, selection, multi-selection, scroll, and include/exclude regex
+# filters. Reads directories (`std`) and compiles the filters (`regex`); the host
+# renders it.
 
 [package]
 name = "vix-left-dock"
@@ -13,3 +14,7 @@ repository = "https://github.com/sixarm/vix"
 [lib]
 name = "vix_left_dock"
 path = "src/lib.rs"
+
+[dependencies]
+# Compile the explorer's include/exclude path filters.
+regex = "1"

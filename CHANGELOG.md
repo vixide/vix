@@ -24,6 +24,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **File-explorer path filters**: filter the tree by **Include regex** and
+  **Exclude regex** (command palette "Explorer: Include/Exclude Regex Filter").
+  Files whose project-relative path fails the filter are hidden; directories
+  stay visible. The explorer title shows `(filtered)` when active.
 - **Outline panel** (`Ctrl+Shift+B`, or the palette "Outline"): a list of the
   active buffer's symbols (kind prefix + name); Enter or a click jumps to the
   symbol, and the cursor's enclosing symbol is selected on open. New internal
