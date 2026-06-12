@@ -77,9 +77,10 @@ pub struct Settings {
     pub recent_files: Vec<String>,
     /// Underline misspelled words in comments and strings.
     pub spellcheck: bool,
-    /// Directory holding Hunspell dictionaries (`<dir>/<locale>/index.{aff,dic}`),
-    /// used by the spell checker. Resolved relative to the working directory.
-    pub dictionaries_dir: String,
+    /// Extra directory to search for Hunspell dictionaries, on top of the
+    /// autodetected standard locations. Empty = autodetect only. Both the
+    /// `<dir>/<name>.{aff,dic}` and `<dir>/<name>/index.{aff,dic}` layouts work.
+    pub dictionary_path: String,
 }
 
 /// Maximum number of entries kept in [`Settings::recent_files`].
@@ -110,7 +111,7 @@ impl Default for Settings {
             messages_width: 32,
             recent_files: Vec::new(),
             spellcheck: false,
-            dictionaries_dir: "./dictionaries".to_string(),
+            dictionary_path: String::new(),
         }
     }
 }

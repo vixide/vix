@@ -20,7 +20,8 @@
 #![deny(missing_docs)]
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use spellbook::Dictionary;
 
@@ -225,6 +226,144 @@ fn should_check(word: &str) -> bool {
     true
 }
 
+/// Dictionary-name candidates for a locale, most specific first. Covers both the
+/// `en-GB` and Hunspell `en_GB` spellings plus the base language `en`.
+fn dict_name_candidates(locale: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut push = |s: String| {
+        if !s.is_empty() && !out.contains(&s) {
+            out.push(s);
+        }
+    };
+    push(locale.to_string());
+    push(locale.replace('-', "_"));
+    push(locale.replace('_', "-"));
+    if let Some(base) = locale.split(['-', '_']).next() {
+        push(base.to_string());
+    }
+    out
+}
+
+/// Parse the search paths reported by `hunspell -D` (printed to stderr under a
+/// `SEARCH PATH:` header as a colon-separated list).
+fn hunspell_search_dirs() -> Vec<PathBuf> {
+    let Ok(out) = Command::new("hunspell").arg("-D").output() else {
+        return Vec::new();
+    };
+    let text = String::from_utf8_lossy(&out.stderr);
+    let mut lines = text.lines();
+    while let Some(line) = lines.next() {
+        if line.trim_start().starts_with("SEARCH PATH:") {
+            if let Some(paths) = lines.next() {
+                return paths.split(':').filter(|p| !p.is_empty()).map(PathBuf::from).collect();
+            }
+        }
+    }
+    Vec::new()
+}
+
+/// The platform's standard Hunspell dictionary directories that currently exist,
+/// augmented with whatever `hunspell -D` reports. Order is best-first.
+#[must_use]
+pub fn system_dictionary_dirs() -> Vec<PathBuf> {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let xdg = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .or_else(|| home.as_ref().map(|h| h.join(".local/share")));
+
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    if cfg!(target_os = "macos") {
+        dirs.push(PathBuf::from("/Library/Spelling"));
+        if let Some(h) = &home {
+            dirs.push(h.join("Library/Spelling"));
+        }
+        dirs.push(PathBuf::from("/opt/homebrew/share/hunspell"));
+        dirs.push(PathBuf::from("/usr/local/share/hunspell"));
+        if let Some(h) = &home {
+            dirs.push(h.join("Library/Dictionaries"));
+        }
+    } else {
+        dirs.push(PathBuf::from("/usr/share/hunspell"));
+        dirs.push(PathBuf::from("/usr/local/share/hunspell"));
+    }
+    if let Some(x) = &xdg {
+        dirs.push(x.join("hunspell"));
+    }
+    dirs.extend(hunspell_search_dirs());
+
+    // Keep existing directories, de-duplicated, order preserved.
+    let mut seen = HashSet::new();
+    dirs.into_iter().filter(|d| d.is_dir() && seen.insert(d.clone())).collect()
+}
+
+/// Locate an `.aff` + `.dic` pair for `locale` within `dirs`. Tries both the
+/// wooorm layout (`<dir>/<name>/index.{aff,dic}`) and the standard Hunspell
+/// layout (`<dir>/<name>.{aff,dic}`), then falls back to any `<base>*.dic` (e.g.
+/// `en_US`) with a matching `.aff`. Returns `(aff_path, dic_path)`.
+#[must_use]
+pub fn find_dictionary(dirs: &[PathBuf], locale: &str) -> Option<(PathBuf, PathBuf)> {
+    for name in dict_name_candidates(locale) {
+        for dir in dirs {
+            let aff = dir.join(&name).join("index.aff");
+            let dic = dir.join(&name).join("index.dic");
+            if aff.is_file() && dic.is_file() {
+                return Some((aff, dic));
+            }
+            let aff = dir.join(format!("{name}.aff"));
+            let dic = dir.join(format!("{name}.dic"));
+            if aff.is_file() && dic.is_file() {
+                return Some((aff, dic));
+            }
+        }
+    }
+    // Prefix fallback: e.g. locale "en" matches a file named "en_US.dic".
+    let base = locale.split(['-', '_']).next().unwrap_or(locale);
+    for dir in dirs {
+        let Ok(read) = std::fs::read_dir(dir) else { continue };
+        let mut dics: Vec<PathBuf> = read
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("dic"))
+            .collect();
+        dics.sort();
+        for dic in dics {
+            let stem = dic.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+            let matches = stem == base
+                || stem.starts_with(&format!("{base}_"))
+                || stem.starts_with(&format!("{base}-"));
+            if matches {
+                let aff = dic.with_extension("aff");
+                if aff.is_file() {
+                    return Some((aff, dic));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Discover and load the dictionary for `locale`. Searches `dictionary_path`
+/// (when non-empty) first, then `./dictionaries` (the repo's bundled set), then
+/// the platform's [`system_dictionary_dirs`].
+///
+/// # Errors
+/// Returns [`Error::NotFound`] when no dictionary matches, [`Error::Io`] on a
+/// read failure, or [`Error::Parse`] when the dictionary cannot be parsed.
+pub fn load_for(dictionary_path: &str, locale: &str) -> Result<SpellChecker, Error> {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    if !dictionary_path.is_empty() {
+        dirs.push(PathBuf::from(dictionary_path));
+    }
+    dirs.push(PathBuf::from("./dictionaries"));
+    dirs.extend(system_dictionary_dirs());
+
+    let (aff, dic) =
+        find_dictionary(&dirs, locale).ok_or_else(|| Error::NotFound(locale.to_string()))?;
+    let aff_s = std::fs::read_to_string(&aff).map_err(Error::Io)?;
+    let dic_s = std::fs::read_to_string(&dic).map_err(Error::Io)?;
+    SpellChecker::from_strings(&aff_s, &dic_s)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -308,5 +447,44 @@ mod tests {
         assert_eq!(locale_candidates("fr"), vec!["fr", "en"]);
         assert_eq!(locale_candidates("en"), vec!["en"]);
         assert_eq!(locale_candidates("pt-BR"), vec!["pt-BR", "pt", "en"]);
+    }
+
+    #[test]
+    fn dict_name_candidates_covers_both_spellings() {
+        assert_eq!(dict_name_candidates("en-GB"), vec!["en-GB", "en_GB", "en"]);
+        assert_eq!(dict_name_candidates("de_DE"), vec!["de_DE", "de-DE", "de"]);
+        assert_eq!(dict_name_candidates("fr"), vec!["fr"]);
+    }
+
+    fn temp_dir(tag: &str) -> PathBuf {
+        // A unique-ish dir without needing the rand/tempfile crates.
+        let base = std::env::temp_dir().join(format!("vix-spell-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        base
+    }
+
+    #[test]
+    fn find_dictionary_standard_hunspell_layout() {
+        let dir = temp_dir("std");
+        std::fs::write(dir.join("en_US.aff"), "SET UTF-8\n").unwrap();
+        std::fs::write(dir.join("en_US.dic"), "1\nhello\n").unwrap();
+        // Locale "en" finds "en_US" via the prefix fallback.
+        let found = find_dictionary(std::slice::from_ref(&dir), "en");
+        assert_eq!(found, Some((dir.join("en_US.aff"), dir.join("en_US.dic"))));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn find_dictionary_wooorm_layout_and_exact_name() {
+        let dir = temp_dir("woo");
+        let sub = dir.join("fr");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(sub.join("index.aff"), "SET UTF-8\n").unwrap();
+        std::fs::write(sub.join("index.dic"), "1\nbonjour\n").unwrap();
+        let found = find_dictionary(std::slice::from_ref(&dir), "fr");
+        assert_eq!(found, Some((sub.join("index.aff"), sub.join("index.dic"))));
+        // A missing locale yields None.
+        assert_eq!(find_dictionary(std::slice::from_ref(&dir), "zz"), None);
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

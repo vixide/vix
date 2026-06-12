@@ -12,10 +12,15 @@ dictionaries/
   fr/   …
 ```
 
-The directory location is the `dictionaries_dir` setting (default
-`./dictionaries`, resolved relative to the working directory — see
-`docs/configuration.md`). The spell-check language follows the UI locale, falling
-back to the base language and then `en`.
+Dictionaries are **autodetected** from the platform's standard Hunspell
+directories (`/usr/share/hunspell`, `/Library/Spelling`,
+`/opt/homebrew/share/hunspell`, `$XDG_DATA_HOME/hunspell`, … plus whatever
+`hunspell -D` reports), where they use the standard `<name>.{aff,dic}` naming
+(e.g. `en_US.dic`). The `dictionary_path` setting (default empty — see
+`docs/configuration.md`) adds one more directory to search first, and the repo's
+own `./dictionaries` is searched too; both the standard `<name>.{aff,dic}` and
+the wooorm `<name>/index.{aff,dic}` layouts are accepted. The spell-check
+language follows the UI locale, falling back to the base language and then `en`.
 
 ## Obtaining the dictionaries
 

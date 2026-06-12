@@ -12,12 +12,17 @@ session dictionary, `i` ignores it for the session, `Esc` closes.
 ## How it works
 
 - The crate wraps the pure-Rust [`spellbook`] Hunspell checker. A `SpellChecker`
-  loads an `index.aff` + `index.dic` pair from a `dictionaries/<locale>/`
-  directory — the [wooorm/dictionaries] layout — resolving the active UI locale
-  against a fallback chain (e.g. `en-GB` → `en`, then `en`).
-- The dictionaries directory is the `dictionaries_dir` setting (default
-  `./dictionaries`, resolved relative to the working directory). See
-  `docs/configuration.md`.
+  loads an `.aff` + `.dic` pair, supporting both the standard Hunspell layout
+  (`<dir>/en_US.{aff,dic}`) and the [wooorm/dictionaries] layout
+  (`<dir>/<locale>/index.{aff,dic}`).
+- Dictionaries are **autodetected** from the platform's standard Hunspell
+  directories (`/usr/share/hunspell`, `/Library/Spelling`,
+  `/opt/homebrew/share/hunspell`, `$XDG_DATA_HOME/hunspell`, …) plus whatever
+  `hunspell -D` reports. The `dictionary_path` setting adds one more directory to
+  search first; `./dictionaries` (the repo's bundled set) is also searched. See
+  `docs/configuration.md` and `dictionaries.md`.
+- The dictionary name is resolved from the UI locale, trying `en-GB`, `en_GB`,
+  then the base `en`, and finally any `en_*` file (e.g. `en_US`).
 - The language follows the **UI locale** (View → Locale); changing locale reloads
   the dictionary. A missing dictionary leaves spell-checking silently inert.
 - The host asks the editor for its **comment and string** character ranges (from

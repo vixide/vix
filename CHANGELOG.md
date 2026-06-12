@@ -8,6 +8,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Spellcheck autodetects Hunspell dictionaries** from the platform's standard
+  locations (`/usr/share/hunspell`, `/Library/Spelling`,
+  `/opt/homebrew/share/hunspell`, `$XDG_DATA_HOME/hunspell`, and `hunspell -D`).
+  The `dictionaries_dir` setting is replaced by `dictionary_path` (an extra
+  directory to search; empty = autodetect only); both the standard
+  `<name>.{aff,dic}` and wooorm `<name>/index.{aff,dic}` layouts are accepted.
 - **Bottom-dock scrollback is configurable** via the `scrollback` setting
   (default 1000 lines, down from a hard-coded 5000); the oldest lines are dropped
   past the limit.

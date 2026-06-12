@@ -1387,8 +1387,7 @@ impl App {
         if self.speller_locale.as_deref() == Some(locale.as_str()) {
             return;
         }
-        let dir = std::path::PathBuf::from(&self.settings.dictionaries_dir);
-        self.speller = vix_spellcheck::SpellChecker::load(&dir, &locale).ok();
+        self.speller = vix_spellcheck::load_for(&self.settings.dictionary_path, &locale).ok();
         self.speller_locale = Some(locale);
     }
 
