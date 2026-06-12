@@ -12,7 +12,7 @@ future phase.
 ## Awareness (read-only)
 
 - **Status bar** shows the current branch (with a `\u{2022}` dirty dot when the
-  working tree has changes).
+  working tree has changes). **Clicking it opens the Git Changes panel.**
 - **File explorer** shows a colored one-letter badge on changed tracked files:
   `M` (modified, yellow), `A` (added, green), `?` (untracked, green), `D`
   (deleted, red), `R` (renamed, cyan), `U` (conflicted, magenta).

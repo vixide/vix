@@ -341,6 +341,8 @@ pub struct Layout {
     /// File-list rectangle of the open git changes panel, so a click can hit-test
     /// which row was picked.
     pub git_panel: Rect,
+    /// Status-bar git/branch segment rectangle, so a click opens the Git panel.
+    pub git_status_bar: Rect,
     /// Inner content rectangle of the open find / replace box, so a click can
     /// focus the Find or Replace field.
     pub search: Rect,
@@ -2590,6 +2592,14 @@ impl App {
             return;
         }
         let (col, row) = (mouse.column, mouse.row);
+
+        // Clicking the status-bar git/branch indicator opens the Git panel.
+        if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
+            && rect_contains(self.layout.git_status_bar, col, row)
+        {
+            self.run_action("git.changes");
+            return;
+        }
 
         // Editor scrollbar: press the thumb/track to jump there, then drag to
         // scroll. The drag continues even if the pointer leaves the 1-column

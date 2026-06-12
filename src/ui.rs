@@ -996,7 +996,7 @@ fn draw_bottom_dock(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), inner);
 }
 
-fn draw_status_bar(app: &App, frame: &mut Frame, area: Rect) {
+fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
     let (line, col) = app.editor.cursor_1based();
     let path = app
         .editor
@@ -1055,6 +1055,16 @@ fn draw_status_bar(app: &App, frame: &mut Frame, area: Rect) {
 
     frame.render_widget(Paragraph::new(left).style(bg).alignment(Alignment::Left), cols[0]);
     frame.render_widget(Paragraph::new(right).style(bg).alignment(Alignment::Right), cols[1]);
+
+    // Record the git/branch segment's rectangle (the leftmost part of the
+    // right-aligned right segment, after its 1-cell padding) so a click on the
+    // branch indicator opens the Git panel.
+    let git_w = git.chars().count() as u16;
+    app.layout.git_status_bar = if git_w > 0 {
+        Rect { x: cols[1].x + 1, y: cols[1].y, width: git_w.min(cols[1].width), height: 1 }
+    } else {
+        Rect::default()
+    };
 }
 
 fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
