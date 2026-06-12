@@ -27,6 +27,9 @@ widget pins that.
 | mimalloc      | MiMalloc custom memory allocator for MUSL             | https://crates.io/crates/mimalloc      |                                                                                                |
 | include_dir   | Embed bundled theme JSON files into the binary        | https://crates.io/crates/include_dir   |                                                                                                |                         |
 | tree-sitter   | Rust bindings to the Tree-sitter parsing library      | https://crates.io/crates/tree-sitter   | librust-tree-sitter-dev                                                                        |
+| sysinfo       | Host system snapshot (System Information panel)       | https://crates.io/crates/sysinfo       | librust-sysinfo-dev                                                                            |
+| spellbook     | Pure-Rust Hunspell spell checker                      | https://crates.io/crates/spellbook     |                                                                                                |
+| similar       | Text diffing for the git diff gutter                  | https://crates.io/crates/similar       | librust-similar-dev                                                                            |
 
 The center editing area uses **`vix-editor`** — Vix's fully-custom code-editor
 widget (Tree-sitter syntax highlighting, undo/redo history, selection, system
@@ -197,7 +200,27 @@ Tab** (`Ctrl+Shift+T`), **Find Next/Previous** (`Ctrl+G`/`Ctrl+Shift+G`, remembe
 the last search), and the **calendar** gained click-to-insert and clickable
 month-nav arrows.
 
+Also shipped: an **unsaved-changes prompt** on tab close / quit (Save / Don't
+Save / Cancel); the **ASCII panel** (Tools → ASCII; `vix-ascii-panel`); the
+**System Information panel** (Tools → System Information; `vix-system-information-panel`,
+via `sysinfo`); **case transforms** (Edit → Case: upper/lower/title/kebab/snake/
+camel/pascal; `src/case.rs`); a configurable bottom-dock **scrollback** setting;
+and **project-search path filters** (Include/Exclude path regex).
+
+Also shipped: **spell checking** (`vix-spellcheck`, via `spellbook`) — red
+underline of misspellings in comments/strings (View → Editor → Toggle
+Spellcheck), `Ctrl+;` suggestions popup (replace / add to dictionary / ignore),
+Hunspell dictionaries autodetected from standard locations (`dictionary_path`
+setting); see `vix-spellcheck.md` and `dictionaries.md`.
+
+Also shipped: **git integration** (`vix-git`, shelling out to the `git` CLI) —
+branch + dirty indicator in the status bar, M/A/?/D/R/U badges in the explorer, a
+colored diff gutter against HEAD, and a **Git** menu with a Changes panel
+(stage/unstage/commit), Switch Branch, and Pull/Push/Fetch; see
+`git-integration.md`.
+
 Roadmap (designed in the sibling spec files, not yet built): a real LSP client
 (semantic go-to-definition, completions, diagnostics), display tab width
-(literal tabs as `tab_width` columns), and the unbuilt menu items (Zoom, the
-keyboard _browser_ in `keyboard.md`). Each sibling spec marks its own status.
+(literal tabs as `tab_width` columns), git conflict resolution, and the unbuilt
+menu items (Zoom, the keyboard _browser_ in `keyboard.md`). Each sibling spec
+marks its own status.

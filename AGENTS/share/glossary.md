@@ -25,8 +25,11 @@ Shared terms used across the code, specs, and docs.
 - **Fallback locale** — English (`en`); used for any key a language lacks.
 - **Modal / overlay** — a UI layer that consumes all input while open (help,
   prompt, palette, search, choosers, …), handled in priority order in `on_key`.
-- **Mark** — a non-selection highlight in the editor (e.g. other search hits),
-  rendered as an underline in monochrome.
+- **Mark** — a non-selection highlight in the editor, on three separate channels:
+  **search marks** (other search hits, underline), **spell marks** (misspelled
+  words in comments/strings, red underline; from `vix-spellcheck`), and **gutter
+  marks** (git diff bars in the line-number gutter; from `vix_git::diff_marks`
+  against the cached HEAD blob).
 - **Soft wrap** — a long logical line drawn across several screen rows instead of
   scrolling horizontally (**View → Toggle Soft Wrap**, the `soft_wrap` setting).
 - **Visual row** — in soft-wrap mode, one screen row: a `[start, end)` char slice

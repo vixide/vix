@@ -26,13 +26,21 @@ A map of all documentation in this repository. Start with the
   [navigation.md](spec/navigation.md)
 - [command-palette.md](spec/command-palette.md) ·
   [file-explorer.md](spec/file-explorer.md) ·
-  [search-and-replace.md](spec/search-and-replace.md)
+  [vix-find-panel.md](spec/vix-find-panel.md)
 - [code-editor.md](spec/code-editor.md) ·
   [theme-chooser.md](spec/theme-chooser.md) ·
   [locale-chooser.md](spec/locale-chooser.md) ·
   [keyway-chooser.md](spec/keyway-chooser.md) ·
   [nerd-font-palette.md](spec/nerd-font-palette.md) ·
-  [vix-calendar.md](spec/vix-calendar.md) · [hover.md](spec/hover.md)
+  [vix-date-time-calendar-panel.md](spec/vix-date-time-calendar-panel.md) ·
+  [hover.md](spec/hover.md)
+- [vix-ascii-panel.md](spec/vix-ascii-panel.md) ·
+  [vix-system-information-panel.md](spec/vix-system-information-panel.md) ·
+  [case-change.md](spec/case-change.md)
+- [vix-spellcheck.md](spec/vix-spellcheck.md) ·
+  [dictionaries.md](spec/dictionaries.md) ·
+  [hunspell-dictionary-path.md](spec/hunspell-dictionary-path.md)
+- [git-integration.md](spec/git-integration.md)
 - [vix-left-dock.md](spec/vix-left-dock.md) ·
   [vix-right-dock.md](spec/vix-right-dock.md) ·
   [vix-bottom-dock.md](spec/vix-bottom-dock.md) ·

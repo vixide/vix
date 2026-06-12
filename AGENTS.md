@@ -78,6 +78,9 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 | Change available UI languages        | `vix-locale-chooser/`                                        |
 | Change keyboard navigation styles    | `vix-keyway-chooser/` + keyway dispatch in `src/app.rs`      |
 | Change the calendar                  | `vix-date-time-calendar-panel/`                              |
+| Change spell checking                | `vix-spellcheck/` + wiring in `src/app.rs` / `src/ui.rs`     |
+| Change git status/diff/staging       | `vix-git/` + wiring in `src/app.rs` / `src/ui.rs`           |
+| Change the find/replace engine       | `vix-find-panel/` (matches/replace_all/unescape/PathFilter) |
 
 See [`AGENTS/share/crate-map.md`](AGENTS/share/crate-map.md) for the full map.
 

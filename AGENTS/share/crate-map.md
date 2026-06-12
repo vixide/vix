@@ -14,11 +14,15 @@ Vix is a Cargo workspace. Shared reference for where everything lives.
 | `vix-keyway-chooser`           | `vix-keyway-chooser/`           | Keyboard navigation styles (Apple/Emacs/Vim) + chooser state.       |
 | `vix-keyboard-shortcut-panel`  | `vix-keyboard-shortcut-panel/`  | Keyboard-help rows (key combo + i18n description key).              |
 | `vix-nerd-font-palette`        | `vix-nerd-font-palette/`        | Curated Nerd Font glyph set + character-picker grid state.          |
-| `vix-find-panel`               | `vix-find-panel/`               | Find / find-and-replace box state + effective-pattern builder.      |
+| `vix-ascii-panel`              | `vix-ascii-panel/`              | ASCII reference table (dec/hex/char) + row-selection state.         |
+| `vix-system-information-panel` | `vix-system-information-panel/` | Host OS/CPU/memory/disk snapshot (via `sysinfo`) + row state.       |
+| `vix-find-panel`               | `vix-find-panel/`               | Find/replace box state + the search/replace engine (matches, replace_all, unescape) + path filters. |
+| `vix-spellcheck`               | `vix-spellcheck/`               | Hunspell spell checking (via `spellbook`): dictionary discovery, check/suggest, misspelling tokenizer. |
+| `vix-git`                      | `vix-git/`                      | Git status/diff/staging via the `git` CLI; diff marks via `similar`. |
 | `vix-left-dock`                | `vix-left-dock/`                | Left-dock file-explorer tree state (lazy expand, selection).        |
 | `vix-right-dock`               | `vix-right-dock/`               | Right-dock message-drawer state (advice/notifications + selection). |
-| `vix-bottom-dock`              | `vix-bottom-dock/`              | Bottom-dock scrollable line buffer (logs/output/data).              |
-| `vix-status-bar-panel`         | `vix-status-bar-panel/`         | Status-bar left/right segment formatting.                           |
+| `vix-bottom-dock`              | `vix-bottom-dock/`              | Bottom-dock scrollable line buffer with configurable scrollback.    |
+| `vix-status-bar-panel`         | `vix-status-bar-panel/`         | Status-bar left/right/git segment formatting.                       |
 
 ## `vix-editor` modules (`vix-editor/src/`)
 
@@ -47,7 +51,8 @@ style and carry `#[allow(clippy::all, clippy::pedantic)]` (both are listed becau
 | ------------------- | -------------------------------------------------------------------- |
 | `main.rs`           | clap CLI, locale resolution, terminal setup, event loop.            |
 | `lib.rs`            | Crate root; `i18n!` catalog init; module declarations; re-exports.  |
-| `app.rs`            | `App` state, `on_key`/`on_mouse`, `run_action`, all behavior.       |
+| `app.rs`            | `App` state, `on_key`/`on_mouse`, `run_action`, all behavior (incl. spellcheck, git, overlays). |
+| `case.rs`           | Selection case transforms (upper/lower/title/kebab/snake/camel/pascal). |
 | `editor.rs`         | `Editor`/`Tab`: buffers over the editor widget; open/save/goto.     |
 | `explorer.rs`       | `Explorer`: directory tree flattened to rows.                       |
 | `menu.rs`           | Menu definitions (i18n-keyed) + `Menu` dropdown state.              |
@@ -65,7 +70,8 @@ style and carry `#[allow(clippy::all, clippy::pedantic)]` (both are listed becau
 
 | Path          | Contents                                                  |
 | ------------- | -------------------------------------------------------- |
-| `locales/`    | `app.yml` — rust-i18n translations (en/es/fr/de/cy).     |
+| `locales/`    | `app.yml` — rust-i18n translations (27 languages, English fallback). |
+| `dictionaries/` | Hunspell spell-check dictionaries — gitignored; see `spec/dictionaries.md`. |
 | `spec/`       | Specification (source of truth).                         |
 | `docs/`       | Architecture, keybindings, themes, i18n, configuration.  |
 | `examples/`   | `headless_edit.rs`, `list_commands.rs`.                  |

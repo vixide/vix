@@ -59,7 +59,7 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 | Find ▸  | | Submenu of find-related items (below) |
 | Case ▸  | | Submenu of case transforms for the selection (below) |
 | *— separator —* | | |
-| Toggle Comment | `Ctrl+/` | Comment/uncomment the line or selection |
+| Comment | `Ctrl+/` | Comment/uncomment the line or selection |
 
 The **Find** submenu:
 
