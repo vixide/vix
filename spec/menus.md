@@ -122,6 +122,9 @@ The **Editor** submenu:
 | Show/Hide Scroll Bar             | Show/hide the editor's right-side scroll bar  |
 | Show/Hide Soft Wrap              | Wrap long lines vs. scroll horizontally       |
 | Toggle Spellcheck                | Underline misspellings in comments/strings (`vix-spellcheck.md`) |
+| *— separator —*                  |                                               |
+| Next Tab                         | Switch to the next tab (`Ctrl+Tab`)           |
+| Previous Tab                     | Switch to the previous tab (`Ctrl+Shift+Tab`) |
 
 ## Tools menu
 

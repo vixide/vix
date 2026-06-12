@@ -1961,6 +1961,15 @@ fn submenu_opens_and_runs_a_nested_action() {
 }
 
 #[test]
+fn ctrl_tab_switches_tabs() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("file.new"); // open a second tab
+    let before = app.editor.active;
+    app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::CONTROL));
+    assert_ne!(app.editor.active, before, "Ctrl+Tab moves to another tab");
+}
+
+#[test]
 fn view_editor_submenu_rolls_up_the_editor_toggles() {
     let view = vix::menu::MENUS.iter().find(|m| m.name == "menu.view").unwrap();
     let editor = view
@@ -1969,7 +1978,8 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
         .find(|it| it.label == "menu.item.view.editor")
         .and_then(|it| it.submenu)
         .expect("View has an Editor submenu");
-    let actions: Vec<&str> = editor.iter().map(|it| it.action).collect();
+    let actions: Vec<&str> =
+        editor.iter().map(|it| it.action).filter(|a| a.starts_with("view.")).collect();
     assert_eq!(
         actions,
         vec!["view.line_numbers", "view.whitespace", "view.scrollbar", "view.soft_wrap", "view.spellcheck"]

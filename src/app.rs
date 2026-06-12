@@ -857,6 +857,14 @@ impl App {
             }
         }
         match key.code {
+            KeyCode::Tab if Self::ctrl(&key) => {
+                self.run_action("tab.next");
+                true
+            }
+            KeyCode::BackTab if Self::ctrl(&key) => {
+                self.run_action("tab.prev");
+                true
+            }
             KeyCode::Right if Self::ctrl(&key) && Self::shift(&key) && self.focus == Focus::Editor => {
                 self.run_action("edit.select_more");
                 true

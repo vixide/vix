@@ -141,6 +141,9 @@ const VIEW_EDITOR: &[Item] = &[
     Item::leaf("menu.item.view.scrollbar", "view.scrollbar", ""),
     Item::leaf("menu.item.view.soft_wrap", "view.soft_wrap", ""),
     Item::leaf("menu.item.view.spellcheck", "view.spellcheck", ""),
+    SEP,
+    Item::leaf("menu.item.view.next_tab", "tab.next", "Ctrl+Tab"),
+    Item::leaf("menu.item.view.prev_tab", "tab.prev", "Ctrl+Shift+Tab"),
 ];
 
 const VIEW: &[Item] = &[
