@@ -160,6 +160,7 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.nerd_palette", "tools.nerd_palette", ""),
     Item::leaf("menu.item.tools.ascii", "tools.ascii", ""),
     Item::leaf("menu.item.tools.system_info", "tools.system_info", ""),
+    Item::leaf("menu.item.tools.dashboard", "tools.dashboard", ""),
     Item::leaf("menu.item.tools.run_command", "tools.run_command", ""),
     Item::leaf("menu.item.tools.cancel_command", "tools.cancel_command", ""),
     SEP,

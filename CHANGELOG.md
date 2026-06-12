@@ -22,6 +22,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Project Dashboard** (Tools → Project Dashboard): a live overlay showing the
+  project folder name, disk usage (`du`), file count, and git commit count, each
+  computed asynchronously and filled in as it completes. New internal
+  `vix-project-dashboard-panel` crate.
 - **Case transforms** (Edit → Case): convert the selection to Upper, Lower,
   Title, Kebab (`foo-bar`), Snake (`foo_bar`), Camel (`fooBar`), or Pascal
   (`FooBar`).

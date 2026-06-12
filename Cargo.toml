@@ -12,6 +12,7 @@ members = [
     "vix-nerd-font-palette",
     "vix-ascii-panel",
     "vix-system-information-panel",
+    "vix-project-dashboard-panel",
     "vix-spellcheck",
     "vix-git",
     "vix-find-panel",
@@ -73,6 +74,8 @@ vix-nerd-font-palette = { path = "vix-nerd-font-palette" }
 vix-ascii-panel = { path = "vix-ascii-panel" }
 # System Information panel (Tools menu): host OS/CPU/memory/disk snapshot.
 vix-system-information-panel = { path = "vix-system-information-panel" }
+# Project Dashboard panel (Tools menu): live folder/disk/file/commit metrics.
+vix-project-dashboard-panel = { path = "vix-project-dashboard-panel" }
 # Spell checking: Hunspell-backed checker over comment/string ranges.
 vix-spellcheck = { path = "vix-spellcheck" }
 # Git integration: status/diff/staging via the git CLI.

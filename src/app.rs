@@ -113,6 +113,16 @@ enum CmdMsg {
     Done(Option<i32>),
 }
 
+/// A computed project-dashboard metric, sent from a background thread.
+enum DashMsg {
+    /// Human-readable disk usage from `du`.
+    Disk(String),
+    /// Recursive file count under the project root.
+    Files(u64),
+    /// Commit count reachable from HEAD.
+    Commits(u64),
+}
+
 /// A command running in a background thread, streaming into the bottom dock.
 struct RunningCommand {
     /// Receiver for the reader thread's output.
@@ -240,6 +250,10 @@ pub use vix_ascii_panel::Panel as AsciiPanel;
 /// table; Enter (or a click) inserts the highlighted value into the active
 /// editor, Esc closes.
 pub use vix_system_information_panel::Panel as SystemInfoPanel;
+
+/// Project dashboard overlay state (Tools -> Project Dashboard), re-exported from
+/// [`vix_project_dashboard_panel`]. Its metrics fill in asynchronously; Esc closes.
+pub use vix_project_dashboard_panel::Dashboard;
 
 /// The active keyboard navigation style, derived from `settings.keyway`. It
 /// decides how raw key events are dispatched (see [`App::on_key`]): `Apple` uses
@@ -383,6 +397,10 @@ pub struct App {
     pub ascii_panel: Option<AsciiPanel>,
     /// System Information panel overlay, when open.
     pub system_info: Option<SystemInfoPanel>,
+    /// Project Dashboard overlay, when open.
+    pub dashboard: Option<Dashboard>,
+    /// Receiver for the dashboard's background metric computations.
+    dashboard_rx: Option<std::sync::mpsc::Receiver<DashMsg>>,
     /// Modal info dialog (Vix menu About / Website / Email), when open.
     pub dialog: Option<Dialog>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
@@ -516,6 +534,8 @@ impl App {
             nerd_palette: None,
             ascii_panel: None,
             system_info: None,
+            dashboard: None,
+            dashboard_rx: None,
             dialog: None,
             clip: Vec::new(),
             clip_cut: false,
@@ -640,6 +660,12 @@ impl App {
         }
         if self.system_info.is_some() {
             self.system_info_key(key);
+            return;
+        }
+        if self.dashboard.is_some() {
+            if matches!(key.code, KeyCode::Esc | KeyCode::Enter) {
+                self.close_dashboard();
+            }
             return;
         }
         if self.query_replace.is_some() {
@@ -1172,6 +1198,7 @@ impl App {
             "tools.nerd_palette" => self.open_nerd_palette(),
             "tools.ascii" => self.open_ascii_panel(),
             "tools.system_info" => self.open_system_info(),
+            "tools.dashboard" => self.open_dashboard(),
             "tools.run_command" => {
                 self.prompt =
                     Some(Prompt::new(PromptKind::RunCommand, t!("prompt.run_command").to_string()));
@@ -2557,6 +2584,7 @@ impl App {
             || self.spell_suggest.is_some()
             || self.git_panel.is_some()
             || self.branch_chooser.is_some()
+            || self.dashboard.is_some()
             || self.paste.as_ref().is_some_and(|p| p.conflict.is_some())
         {
             return;
@@ -3500,6 +3528,84 @@ impl App {
         let area = self.layout.editor;
         if self.editor.insert_str(&value, area) {
             self.status = t!("status.ascii_inserted", name = value).to_string();
+        }
+    }
+
+    // ----- project dashboard ----------------------------------------------
+
+    /// Open the Project Dashboard and kick off the background metric computations
+    /// (disk usage via `du`, a recursive file count, and the git commit count).
+    fn open_dashboard(&mut self) {
+        let folder = self
+            .root
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| self.root.display().to_string());
+        self.dashboard = Some(Dashboard::new(folder));
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let root = self.root.clone();
+
+        let dtx = tx.clone();
+        let droot = root.clone();
+        std::thread::spawn(move || {
+            if let Ok(out) = std::process::Command::new("du").arg("-sh").arg(&droot).output() {
+                if out.status.success() {
+                    let text = String::from_utf8_lossy(&out.stdout);
+                    if let Some(size) = text.split_whitespace().next() {
+                        let _ = dtx.send(DashMsg::Disk(size.to_string()));
+                    }
+                }
+            }
+        });
+
+        let ftx = tx.clone();
+        let froot = root.clone();
+        std::thread::spawn(move || {
+            let _ = ftx.send(DashMsg::Files(count_files(&froot)));
+        });
+
+        std::thread::spawn(move || {
+            let _ = tx.send(DashMsg::Commits(vix_git::commit_count(&root).unwrap_or(0)));
+        });
+
+        self.dashboard_rx = Some(rx);
+    }
+
+    fn close_dashboard(&mut self) {
+        self.dashboard = None;
+        self.dashboard_rx = None;
+    }
+
+    /// Whether the dashboard is open with metrics still computing (the run loop
+    /// ticks faster then, so values appear promptly).
+    #[must_use]
+    pub fn dashboard_loading(&self) -> bool {
+        self.dashboard.as_ref().is_some_and(|d| !d.is_complete())
+    }
+
+    /// Drain any finished dashboard metrics into the open panel.
+    pub fn poll_dashboard(&mut self) {
+        if self.dashboard.is_none() {
+            self.dashboard_rx = None;
+            return;
+        }
+        let Some(rx) = self.dashboard_rx.as_ref() else {
+            return;
+        };
+        let mut msgs = Vec::new();
+        while let Ok(m) = rx.try_recv() {
+            msgs.push(m);
+        }
+        if let Some(d) = self.dashboard.as_mut() {
+            for m in msgs {
+                match m {
+                    DashMsg::Disk(s) => d.disk_usage = Some(s),
+                    DashMsg::Files(n) => d.file_count = Some(n),
+                    DashMsg::Commits(n) => d.commit_count = Some(n),
+                }
+            }
         }
     }
 
@@ -4838,6 +4944,27 @@ fn do_replace(t: &mut Tab, re: &Regex, regex: bool, template: &str, current: (us
         }
         None => current.1,
     }
+}
+
+/// Recursively count regular files under `dir`, skipping `.git` and `target`
+/// (the large generated trees). Best-effort: unreadable entries are skipped.
+fn count_files(dir: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    let mut count = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        if name == ".git" || name == "target" {
+            continue;
+        }
+        match entry.file_type() {
+            Ok(ft) if ft.is_dir() => count += count_files(&entry.path()),
+            Ok(ft) if ft.is_file() => count += 1,
+            _ => {}
+        }
+    }
+    count
 }
 
 /// Hex color for a diff-gutter line mark (green add, yellow modify, red delete).

@@ -212,6 +212,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.system_info.is_some() {
         draw_system_info(app, frame, area);
     }
+    if app.dashboard.is_some() {
+        draw_dashboard(app, frame, area);
+    }
     if app.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
         draw_paste_conflict(app, frame, area);
     }
@@ -1251,6 +1254,54 @@ fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         width: chunks[1].width,
         height: (view_h as u16).min(chunks[1].height),
     };
+}
+
+fn draw_dashboard(app: &App, frame: &mut Frame, area: Rect) {
+    let Some(d) = app.dashboard.as_ref() else { return };
+    let pending = t!("ui.dashboard_computing");
+    let num = |n: Option<u64>| n.map_or_else(|| pending.to_string(), |v| v.to_string());
+    let rows = [
+        (t!("ui.dashboard_folder"), d.folder.clone()),
+        (t!("ui.dashboard_disk"), d.disk_usage.clone().unwrap_or_else(|| pending.to_string())),
+        (t!("ui.dashboard_files"), num(d.file_count)),
+        (t!("ui.dashboard_commits"), num(d.commit_count)),
+    ];
+    let width = 52u16.min(area.width);
+    let height = (rows.len() as u16 + 4).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::INFO, t!("ui.dashboard")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let lines: Vec<Line> = rows
+        .iter()
+        .map(|(label, value)| {
+            Line::from(vec![
+                Span::styled(format!("  {label:<14} "), theme::dim()),
+                Span::raw(value.clone()),
+            ])
+        })
+        .collect();
+    frame.render_widget(Paragraph::new(lines), chunks[0]);
+
+    let hint = Line::from(Span::styled(t!("ui.dashboard_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
 }
 
 fn draw_system_info(app: &mut App, frame: &mut Frame, area: Rect) {

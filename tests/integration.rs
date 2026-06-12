@@ -2276,6 +2276,32 @@ fn spellcheck_underlines_a_misspelling_in_a_comment() {
 }
 
 #[test]
+fn project_dashboard_opens_counts_files_and_closes() {
+    let dir = unique_dir("dashboard");
+    fs::write(dir.join("a.txt"), "x\n").unwrap();
+    fs::write(dir.join("b.txt"), "y\n").unwrap();
+    let mut app = app_at(&dir);
+
+    app.run_action("tools.dashboard");
+    assert!(app.dashboard.is_some(), "Tools → Project Dashboard opens");
+    assert!(!app.dashboard.as_ref().unwrap().folder.is_empty(), "folder is shown immediately");
+
+    // Wait (bounded) for the async file-count metric to arrive.
+    for _ in 0..200 {
+        app.poll_dashboard();
+        if app.dashboard.as_ref().unwrap().file_count.is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert_eq!(app.dashboard.as_ref().unwrap().file_count, Some(2), "counted the two files");
+
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(app.dashboard.is_none(), "Esc closes the dashboard");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn system_info_panel_opens_inserts_and_closes() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.system_info");

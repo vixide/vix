@@ -3331,6 +3331,7 @@ dependencies = [
  "vix-left-dock",
  "vix-locale-chooser",
  "vix-nerd-font-palette",
+ "vix-project-dashboard-panel",
  "vix-right-dock",
  "vix-spellcheck",
  "vix-status-bar-panel",
@@ -3417,6 +3418,10 @@ version = "0.1.0"
 
 [[package]]
 name = "vix-nerd-font-palette"
+version = "0.1.0"
+
+[[package]]
+name = "vix-project-dashboard-panel"
 version = "0.1.0"
 
 [[package]]

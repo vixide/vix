@@ -236,6 +236,13 @@ pub fn unstage(dir: &Path, rel_path: &str) -> bool {
     git(dir, &["restore", "--staged", "--", rel_path]).is_ok_and(|o| o.status.success())
 }
 
+/// The number of commits reachable from HEAD (`git rev-list --count HEAD`), or
+/// `None` when not a repo or there are no commits yet.
+#[must_use]
+pub fn commit_count(dir: &Path) -> Option<u64> {
+    git_stdout(dir, &["rev-list", "--count", "HEAD"])?.trim().parse().ok()
+}
+
 /// The local branch names, current branch first when it can be determined.
 #[must_use]
 pub fn local_branches(dir: &Path) -> Vec<String> {

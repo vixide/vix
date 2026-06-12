@@ -126,6 +126,7 @@ The **Editor** submenu:
 | Nerd Font…         | Open the glyph picker (`nerd-font-palette.md`)    |
 | ASCII Characters…  | Open the ASCII reference table (`vix-ascii-panel.md`) |
 | System Information… | Host OS/CPU/memory/disk snapshot (`vix-system-information-panel.md`) |
+| Project Dashboard… | Live folder/disk/file/commit metrics (`vix-project-dashboard-panel.md`) |
 | Run Command…       | Run a shell command into the bottom dock          |
 | Cancel Command     | Kill the running command                          |
 | *— separator —*    |                                                   |

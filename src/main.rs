@@ -82,15 +82,18 @@ fn main() -> io::Result<()> {
 
 fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()> {
     loop {
-        // Drain any streamed output from a running command into the bottom dock.
+        // Drain any streamed output from a running command into the bottom dock,
+        // and any finished dashboard metrics into the dashboard panel.
         app.poll_command();
+        app.poll_dashboard();
         terminal.draw(|frame| ui::draw(app, frame))?;
         if app.should_quit {
             return Ok(());
         }
         // Poll with a timeout so the calendar clock refreshes while idle; poll
-        // faster while a command is streaming so its output appears promptly.
-        let timeout = if app.command_running() {
+        // faster while a command is streaming or dashboard metrics are computing
+        // so their output appears promptly.
+        let timeout = if app.command_running() || app.dashboard_loading() {
             Duration::from_millis(50)
         } else {
             Duration::from_millis(500)
