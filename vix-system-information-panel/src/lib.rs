@@ -226,6 +226,11 @@ pub fn gather() -> Vec<Row> {
 
     rows.push(Row::heading("Uptime"));
     rows.push(Row::pair("System uptime", human_uptime(System::uptime())));
+    let load = System::load_average();
+    rows.push(Row::pair(
+        "Load average",
+        format!("{:.2} / {:.2} / {:.2} (1/5/15 min)", load.one, load.five, load.fifteen),
+    ));
 
     rows.push(Row::heading("Environment"));
     rows.push(Row::pair("User", env_or(&["USER", "USERNAME"], unknown)));
