@@ -1,13 +1,126 @@
-//! State for the find / find-and-replace box.
+//! Find / find-and-replace for the editor.
 //!
-//! This crate owns the box's *state* — the query and replacement text, which
-//! field has focus, the case / whole-word / regex toggles, and the builder that
-//! turns the query plus toggles into an effective regex pattern. The host (the
-//! `vix` app) renders the box and runs the search and replacement against the
-//! active buffer; only `regex::escape` (for literal queries) is needed here.
+//! This crate owns both the box's *state* — the query and replacement text,
+//! which field has focus, the case / whole-word / regex toggles, and the
+//! [`SearchBar::pattern`] builder — and the *search/replace logic* over buffer
+//! text: [`matches`], [`next_match`], [`replace_all`], [`replace_one`], and the
+//! replacement-template [`unescape`]. All operate on `&str` with **character**
+//! offsets; the host owns the buffer and applies the returned text.
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+
+use regex::Regex;
+
+/// Byte offset of character index `ch` in `text` (or `text.len()` if past the end).
+fn char_to_byte(text: &str, ch: usize) -> usize {
+    text.char_indices().nth(ch).map_or(text.len(), |(b, _)| b)
+}
+
+/// All matches of `re` in `text`, as `(char_start, char_end)` ranges in
+/// ascending order. Byte→char conversion is done with one pass over the text.
+#[must_use]
+pub fn matches(text: &str, re: &Regex) -> Vec<(usize, usize)> {
+    // Byte offset where each character starts; `partition_point` maps byte→char.
+    let starts: Vec<usize> = text.char_indices().map(|(b, _)| b).collect();
+    let to_char = |byte: usize| starts.partition_point(|&b| b < byte);
+    re.find_iter(text).map(|m| (to_char(m.start()), to_char(m.end()))).collect()
+}
+
+/// The first match of `re` at or after character offset `from_char`, as a
+/// `(char_start, char_end)` range, or `None` if there is none.
+#[must_use]
+pub fn next_match(text: &str, re: &Regex, from_char: usize) -> Option<(usize, usize)> {
+    let from_byte = char_to_byte(text, from_char);
+    let m = re.find_iter(text).find(|m| m.start() >= from_byte)?;
+    Some((text[..m.start()].chars().count(), text[..m.end()].chars().count()))
+}
+
+/// Replace every match of `re` in `text`. In `regex_mode` the `replacement` is
+/// [`unescape`]d and `$group` references expand; otherwise it is inserted
+/// literally. Returns the new text and the number of replacements.
+#[must_use]
+pub fn replace_all(text: &str, re: &Regex, regex_mode: bool, replacement: &str) -> (String, usize) {
+    let count = re.find_iter(text).count();
+    let new = if regex_mode {
+        let rep = unescape(replacement);
+        re.replace_all(text, rep.as_str()).into_owned()
+    } else {
+        re.replace_all(text, regex::NoExpand(replacement)).into_owned()
+    };
+    (new, count)
+}
+
+/// Replace the single match of `re` whose start is exactly character offset
+/// `at_char`. `template` is assumed already [`unescape`]d; in `regex_mode`
+/// `$group` references expand, otherwise it is inserted literally. Returns the
+/// new text and the char offset just past the inserted text (where searching
+/// should resume), or `None` if no match starts at `at_char`.
+#[must_use]
+pub fn replace_one(
+    text: &str,
+    re: &Regex,
+    regex_mode: bool,
+    template: &str,
+    at_char: usize,
+) -> Option<(String, usize)> {
+    let at_byte = char_to_byte(text, at_char);
+    for caps in re.captures_iter(text) {
+        let m = caps.get(0)?;
+        if m.start() == at_byte {
+            let mut exp = String::new();
+            if regex_mode {
+                caps.expand(template, &mut exp);
+            } else {
+                exp.push_str(template);
+            }
+            let mut new = String::with_capacity(text.len() + exp.len());
+            new.push_str(&text[..m.start()]);
+            new.push_str(&exp);
+            new.push_str(&text[m.end()..]);
+            let resume = at_char + exp.chars().count();
+            return Some((new, resume));
+        }
+        if m.start() > at_byte {
+            break;
+        }
+    }
+    None
+}
+
+/// Interpret `\n`, `\t`, `\r`, `\\` escapes in a regex replacement template,
+/// leaving `$group` references intact for the regex engine to expand.
+#[must_use]
+pub fn unescape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.peek() {
+                Some('n') => {
+                    out.push('\n');
+                    chars.next();
+                }
+                Some('t') => {
+                    out.push('\t');
+                    chars.next();
+                }
+                Some('r') => {
+                    out.push('\r');
+                    chars.next();
+                }
+                Some('\\') => {
+                    out.push('\\');
+                    chars.next();
+                }
+                _ => out.push('\\'),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
 
 /// Which input field of the box has focus.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -152,5 +265,53 @@ mod tests {
     fn empty_query_has_no_pattern() {
         let s = SearchBar::new(false);
         assert_eq!(s.pattern(), None);
+    }
+
+    fn re(p: &str) -> Regex {
+        Regex::new(p).unwrap()
+    }
+
+    #[test]
+    fn matches_returns_char_ranges_including_multibyte() {
+        // "é" is two bytes; char offsets must not be byte offsets.
+        let text = "é foo foo";
+        let m = matches(text, &re("foo"));
+        assert_eq!(m, vec![(2, 5), (6, 9)]);
+    }
+
+    #[test]
+    fn next_match_finds_at_or_after_a_char_offset() {
+        let text = "foo foo foo";
+        assert_eq!(next_match(text, &re("foo"), 0), Some((0, 3)));
+        assert_eq!(next_match(text, &re("foo"), 1), Some((4, 7)));
+        assert_eq!(next_match(text, &re("foo"), 8), Some((8, 11)));
+        assert_eq!(next_match(text, &re("foo"), 9), None);
+    }
+
+    #[test]
+    fn replace_all_literal_and_regex() {
+        let (out, n) = replace_all("a.b a.b", &re(r"a\.b"), false, "X");
+        assert_eq!((out.as_str(), n), ("X X", 2));
+        // Regex mode expands $groups and unescapes \n in the template.
+        let (out, n) = replace_all("ab", &re("(a)(b)"), true, "$2$1\\n");
+        assert_eq!((out.as_str(), n), ("ba\n", 1));
+    }
+
+    #[test]
+    fn replace_one_replaces_only_the_match_at_offset() {
+        let text = "foo foo";
+        // Match at char 4 → resume after the inserted text.
+        let (out, resume) = replace_one(text, &re("foo"), false, "BAR", 4).unwrap();
+        assert_eq!(out, "foo BAR");
+        assert_eq!(resume, 7);
+        // No match starts at char 1.
+        assert_eq!(replace_one(text, &re("foo"), false, "BAR", 1), None);
+    }
+
+    #[test]
+    fn unescape_handles_known_escapes_and_leaves_groups() {
+        assert_eq!(unescape(r"a\nb\tc"), "a\nb\tc");
+        assert_eq!(unescape(r"\\"), "\\");
+        assert_eq!(unescape(r"$1\x"), r"$1\x"); // unknown escape kept verbatim
     }
 }

@@ -3808,11 +3808,7 @@ impl App {
             return 0;
         };
         let content = t.text();
-        let mut matches: Vec<(usize, usize)> = Vec::new();
-        for m in re.find_iter(&content) {
-            let code = t.editor.code_ref();
-            matches.push((code.byte_to_char(m.start()), code.byte_to_char(m.end())));
-        }
+        let matches = vix_find_panel::matches(&content, re);
         if matches.is_empty() {
             t.editor.remove_marks();
             return 0;
@@ -4019,13 +4015,7 @@ impl App {
             return;
         };
         let text = tab.text();
-        let count = re.find_iter(&text).count();
-        let new_text = if use_regex {
-            let rep = unescape(&replacement);
-            re.replace_all(&text, rep.as_str()).into_owned()
-        } else {
-            re.replace_all(&text, regex::NoExpand(&replacement)).into_owned()
-        };
+        let (new_text, count) = vix_find_panel::replace_all(&text, &re, use_regex, &replacement);
         tab.editor.set_content(&new_text);
         tab.editor.remove_marks();
         tab.dirty = true;
@@ -4266,16 +4256,10 @@ impl App {
             let Some(content) = self.current_text(path) else {
                 continue;
             };
-            let count = re.find_iter(&content).count();
+            let (new, count) = vix_find_panel::replace_all(&content, &re, use_regex, &replacement);
             if count == 0 {
                 continue;
             }
-            let new = if use_regex {
-                let rep = unescape(&replacement);
-                re.replace_all(&content, rep.as_str()).into_owned()
-            } else {
-                re.replace_all(&content, regex::NoExpand(&replacement)).into_owned()
-            };
             if new == content {
                 continue;
             }
@@ -4399,7 +4383,7 @@ impl App {
             }
         };
         let template = if sb.regex {
-            unescape(&sb.replace)
+            vix_find_panel::unescape(&sb.replace)
         } else {
             sb.replace.clone()
         };
@@ -4801,47 +4785,18 @@ fn decode_image(path: &Path) -> Result<image::DynamicImage, String> {
 }
 
 /// First match whose (char) start is at or after `from_char`, as char offsets.
+/// Editor adapter: the first match of `re` at/after char offset `from_char` in
+/// `t`'s buffer. Pure matching lives in [`vix_find_panel::next_match`].
 fn next_match_from(t: &Tab, re: &Regex, from_char: usize) -> Option<(usize, usize)> {
-    let content = t.text();
-    let code = t.editor.code_ref();
-    let bfrom = code.char_to_byte(from_char);
-    for m in re.find_iter(&content) {
-        if m.start() >= bfrom {
-            return Some((code.byte_to_char(m.start()), code.byte_to_char(m.end())));
-        }
-    }
-    None
+    vix_find_panel::next_match(&t.text(), re, from_char)
 }
 
-/// Replace the single match at char offset `current.0` in `t`, returning the
-/// char offset just past the inserted text (where searching should resume).
+/// Editor adapter: replace the single match at char offset `current.0` in `t`,
+/// returning the char offset just past the inserted text (where searching should
+/// resume). Pure replacement lives in [`vix_find_panel::replace_one`].
 fn do_replace(t: &mut Tab, re: &Regex, regex: bool, template: &str, current: (usize, usize)) -> usize {
-    let content = t.text();
-    let bstart = t.editor.code_ref().char_to_byte(current.0);
-    let mut expansion: Option<(usize, usize, String)> = None;
-    for caps in re.captures_iter(&content) {
-        let m = caps.get(0).unwrap();
-        if m.start() == bstart {
-            let mut out = String::new();
-            if regex {
-                caps.expand(template, &mut out);
-            } else {
-                out.push_str(template);
-            }
-            expansion = Some((m.start(), m.end(), out));
-            break;
-        }
-        if m.start() > bstart {
-            break;
-        }
-    }
-    match expansion {
-        Some((bs, be, exp)) => {
-            let mut new = String::with_capacity(content.len() + exp.len());
-            new.push_str(&content[..bs]);
-            new.push_str(&exp);
-            new.push_str(&content[be..]);
-            let resume = current.0 + exp.chars().count();
+    match vix_find_panel::replace_one(&t.text(), re, regex, template, current.0) {
+        Some((new, resume)) => {
             t.editor.set_content(&new);
             resume
         }
@@ -4884,30 +4839,6 @@ fn highlight_match(t: &mut Tab, cs: usize, ce: usize, area: Rect) {
 /// `visible_width - 10` and underflows (panics) when the area is narrower than
 /// the line-number gutter plus that step, so we never pass it a smaller width.
 const MIN_EDITOR_WIDTH: u16 = 20;
-
-/// Interpret `\n`, `\t`, `\r`, `\\` escapes in a regex replacement template,
-/// leaving `$group` references intact for the regex engine to expand.
-fn unescape(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut chars = s.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '\\' {
-            match chars.next() {
-                Some('n') => out.push('\n'),
-                Some('t') => out.push('\t'),
-                Some('r') => out.push('\r'),
-                Some('\\') | None => out.push('\\'),
-                Some(other) => {
-                    out.push('\\');
-                    out.push(other);
-                }
-            }
-        } else {
-            out.push(c);
-        }
-    }
-    out
-}
 
 #[cfg(test)]
 mod tests {
