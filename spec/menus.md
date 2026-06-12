@@ -130,15 +130,15 @@ The **Editor** submenu:
 
 | Item               | Action                                            |
 | ------------------ | ------------------------------------------------- |
+| Command Palette    | Open the palette (`Ctrl+P`)                       |
+| *— separator —*    |                                                   |
 | Calendar…          | Toggle the calendar box                           |
-| Nerd Font…         | Open the glyph picker (`nerd-font-palette.md`)    |
+| Nerd Font Characters… | Open the glyph picker (`nerd-font-palette.md`) |
 | ASCII Characters…  | Open the ASCII reference table (`vix-ascii-panel.md`) |
 | System Information… | Host OS/CPU/memory/disk snapshot (`vix-system-information-panel.md`) |
 | Project Dashboard… | Live folder/disk/file/commit metrics (`vix-project-dashboard-panel.md`) |
 | Run Command…       | Run a shell command into the bottom dock          |
 | Cancel Command     | Kill the running command                          |
-| *— separator —*    |                                                   |
-| Command Palette    | Open the palette (`Ctrl+P`)                       |
 
 ## Git menu
 
