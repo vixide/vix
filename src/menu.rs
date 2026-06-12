@@ -154,6 +154,8 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.palette", "tools.palette", "Ctrl+P"),
 ];
 
+const GIT: &[Item] = &[Item::leaf("menu.item.git.changes", "git.changes", "")];
+
 const HELP: &[Item] = &[Item::leaf("menu.item.help.shortcuts", "help.shortcuts", "F1")];
 
 /// The full menu bar, left to right.
@@ -163,6 +165,7 @@ pub const MENUS: &[MenuDef] = &[
     MenuDef { name: "menu.edit", items: EDIT },
     MenuDef { name: "menu.view", items: VIEW },
     MenuDef { name: "menu.tools", items: TOOLS },
+    MenuDef { name: "menu.git", items: GIT },
     MenuDef { name: "menu.help", items: HELP },
 ];
 

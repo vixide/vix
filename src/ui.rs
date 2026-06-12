@@ -185,6 +185,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.spell_suggest.is_some() {
         draw_spell_suggest(app, frame, area);
     }
+    if app.git_panel.is_some() {
+        draw_git_panel(app, frame, area);
+    }
     if app.theme_chooser.is_some() {
         draw_theme_chooser(app, frame, area);
     }
@@ -311,6 +314,78 @@ fn draw_unsaved(app: &App, frame: &mut Frame, area: Rect) {
         Line::from(Span::styled(choices.to_string(), theme::dim())),
     ];
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.git_panel.is_none() {
+        return;
+    }
+    let selected = app.git_panel.as_ref().unwrap().selected;
+    let rows = app.git_status.len().max(1);
+    let width = 64u16.min(area.width);
+    let max_rows = area.height.saturating_sub(4).max(1);
+    let visible = (rows as u16).min(max_rows);
+    let height = (visible + 4).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let title = match app.git_branch.as_deref() {
+        Some(b) => format!(" {} {} — {} ", icon::BRANCH, t!("ui.git_changes"), b),
+        None => format!(" {} {} ", icon::BRANCH, t!("ui.git_changes")),
+    };
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(title);
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    if app.git_status.is_empty() {
+        let clean = Line::from(Span::styled(t!("ui.git_clean").to_string(), theme::dim()));
+        frame.render_widget(Paragraph::new(clean), chunks[0]);
+    } else {
+        let items: Vec<ListItem> = app
+            .git_status
+            .iter()
+            .map(|s| {
+                // "[x] M  path" — [x] when staged; the letter is colored by change.
+                let staged = if s.is_staged() { "[\u{2713}]" } else { "[ ]" };
+                let change = s.primary();
+                let letter = change.map_or(' ', vix_git::Change::letter);
+                let color = change.map_or(Color::Gray, git_change_color);
+                ListItem::new(Line::from(vec![
+                    Span::raw(format!("  {staged} ")),
+                    Span::styled(format!("{letter} "), Style::default().fg(color)),
+                    Span::raw(s.path.clone()),
+                ]))
+            })
+            .collect();
+        let list = List::new(items).highlight_style(theme::selected());
+        let mut state = ListState::default();
+        state.select(Some(selected.min(app.git_status.len() - 1)));
+        frame.render_stateful_widget(list, chunks[0], &mut state);
+    }
+
+    let hint = Line::from(Span::styled(t!("ui.git_changes_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
+
+    app.layout.git_panel = Rect {
+        x: chunks[0].x,
+        y: chunks[0].y,
+        width: chunks[0].width,
+        height: (app.git_status.len() as u16).min(chunks[0].height),
+    };
 }
 
 fn draw_spell_suggest(app: &mut App, frame: &mut Frame, area: Rect) {

@@ -195,6 +195,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.toggle_soft_wrap", "view.soft_wrap"),
     ("cmd.toggle_scrollbar", "view.scrollbar"),
     ("cmd.toggle_spellcheck", "view.spellcheck"),
+    ("cmd.git_changes", "git.changes"),
     ("cmd.toggle_calendar", "tools.calendar"),
     ("cmd.run_command", "tools.run_command"),
     ("cmd.cancel_command", "tools.cancel_command"),

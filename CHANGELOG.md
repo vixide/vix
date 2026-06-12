@@ -16,6 +16,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Git integration (phase 1)** via the new `vix-git` crate, shelling out to the
+  `git` CLI. The status bar shows the current branch and a dirty dot; the file
+  explorer shows colored M/A/?/D/R/U badges on changed files; the editor draws a
+  colored diff gutter (added/modified/deleted) against HEAD. A new **Git →
+  Changes…** panel stages/unstages files (`Space`/`s`/`u`) and commits (`c`).
 - **Spell checking** (View → Editor → Toggle Spellcheck): underlines misspelled
   words in comments and string literals in red, using Hunspell dictionaries from
   the `dictionaries/<locale>/` directory (`dictionaries_dir` setting) via the new

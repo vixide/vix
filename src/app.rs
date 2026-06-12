@@ -74,6 +74,8 @@ pub enum PromptKind {
     RunCommand,
     /// Search the project, listing hits in the bottom dock (click-to-jump).
     SearchToDock,
+    /// Enter a git commit message for the staged changes.
+    GitCommit,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -153,6 +155,13 @@ pub enum UnsavedMode {
     CloseTab,
     /// Quitting; each dirty tab is resolved before the program exits.
     Quit,
+}
+
+/// The git changes panel: a list of changed files with stage/unstage/commit
+/// actions. The file list is read live from the cached `git status`.
+pub struct GitPanel {
+    /// Index of the highlighted row in the changed-files list.
+    pub selected: usize,
 }
 
 /// The spell-suggestion popup (Ctrl+;): corrections for the misspelled word at
@@ -307,6 +316,9 @@ pub struct Layout {
     /// Suggestion-list rectangle of the open spell-suggestion popup, so a click
     /// can hit-test which suggestion was picked.
     pub spell_suggest: Rect,
+    /// File-list rectangle of the open git changes panel, so a click can hit-test
+    /// which row was picked.
+    pub git_panel: Rect,
     /// Inner content rectangle of the open find / replace box, so a click can
     /// focus the Find or Replace field.
     pub search: Rect,
@@ -345,6 +357,8 @@ pub struct App {
     pub unsaved: Option<UnsavedPrompt>,
     /// Spell-suggestion popup (Ctrl+;), when open.
     pub spell_suggest: Option<SpellSuggest>,
+    /// Git changes panel (stage/unstage/commit), when open.
+    pub git_panel: Option<GitPanel>,
     /// Theme chooser overlay, when open.
     pub theme_chooser: Option<ThemeChooser>,
     /// Locale chooser overlay, when open.
@@ -483,6 +497,7 @@ impl App {
             confirm: None,
             unsaved: None,
             spell_suggest: None,
+            git_panel: None,
             theme_chooser: None,
             locale_chooser: None,
             keyway_chooser: None,
@@ -636,6 +651,10 @@ impl App {
             self.spell_suggest_key(key);
             return;
         }
+        if self.git_panel.is_some() {
+            self.git_panel_key(key);
+            return;
+        }
         if self.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
             self.paste_key(key);
             return;
@@ -763,13 +782,14 @@ impl App {
     fn global_shared_key(&mut self, key: KeyEvent) -> bool {
         if Self::alt(&key) {
             if let KeyCode::Char(c) = key.code {
-                // The Vix menu is index 0; the rest follow (File=1, …, Help=5).
+                // The Vix menu is index 0; the rest follow (File=1, …, Help=6).
                 let idx = match c.to_ascii_lowercase() {
                     'f' => Some(1),
                     'e' => Some(2),
                     'v' => Some(3),
                     't' => Some(4),
-                    'h' => Some(5),
+                    'g' => Some(5),
+                    'h' => Some(6),
                     _ => None,
                 };
                 if let Some(i) = idx {
@@ -1147,6 +1167,7 @@ impl App {
             "view.scrollbar" => self.toggle_scrollbar(),
             "view.spellcheck" => self.toggle_spellcheck(),
             "spell.suggest" => self.open_spell_suggest(),
+            "git.changes" => self.open_git_panel(),
             "view.bottom_dock" => self.toggle_bottom_dock(),
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
@@ -1506,6 +1527,129 @@ impl App {
         }
         self.status = t!("status.spell_ignored", word = p.word).to_string();
         self.refresh_spellcheck();
+    }
+
+    // ----- git changes panel ----------------------------------------------
+
+    /// Open the git changes panel (refreshing status first). Reports a status when
+    /// the project root is not a git repository.
+    fn open_git_panel(&mut self) {
+        self.refresh_git();
+        if !self.git_repo {
+            self.status = t!("status.git_not_repo").into();
+            return;
+        }
+        self.git_panel = Some(GitPanel { selected: 0 });
+    }
+
+    fn git_panel_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.git_panel.as_mut() {
+                    p.selected = p.selected.saturating_sub(1);
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.git_panel.as_mut() {
+                    if p.selected + 1 < self.git_status.len() {
+                        p.selected += 1;
+                    }
+                }
+            }
+            // Space / s / u toggle or set the staged state of the selected file.
+            KeyCode::Char(' ') => self.git_toggle_stage(),
+            KeyCode::Char('s' | 'S') => self.git_stage_selected(true),
+            KeyCode::Char('u' | 'U') => self.git_stage_selected(false),
+            KeyCode::Char('c' | 'C') => self.git_begin_commit(),
+            KeyCode::Char('r' | 'R') => {
+                self.refresh_git();
+                self.clamp_git_selection();
+            }
+            KeyCode::Esc => self.git_panel = None,
+            _ => {}
+        }
+    }
+
+    fn git_panel_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.git_panel;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row = (mouse.row - r.y) as usize;
+        if row < self.git_status.len() {
+            if let Some(p) = self.git_panel.as_mut() {
+                p.selected = row;
+            }
+            self.git_toggle_stage();
+        }
+    }
+
+    /// The repo-relative path of the selected changed file.
+    fn git_selected_path(&self) -> Option<String> {
+        let idx = self.git_panel.as_ref()?.selected;
+        self.git_status.get(idx).map(|s| s.path.clone())
+    }
+
+    fn clamp_git_selection(&mut self) {
+        if let Some(p) = self.git_panel.as_mut() {
+            p.selected = p.selected.min(self.git_status.len().saturating_sub(1));
+        }
+    }
+
+    /// Stage (or unstage) the selected file, then refresh.
+    fn git_stage_selected(&mut self, stage: bool) {
+        let Some(path) = self.git_selected_path() else {
+            return;
+        };
+        let ok = if stage {
+            vix_git::stage(&self.root, &path)
+        } else {
+            vix_git::unstage(&self.root, &path)
+        };
+        if !ok {
+            self.messages.error(t!("msg.git_failed").to_string());
+        }
+        self.refresh_git();
+        self.clamp_git_selection();
+    }
+
+    /// Toggle the selected file between staged and unstaged based on its current
+    /// state (staged → unstage; otherwise stage).
+    fn git_toggle_stage(&mut self) {
+        let staged = self
+            .git_panel
+            .as_ref()
+            .and_then(|p| self.git_status.get(p.selected))
+            .is_some_and(vix_git::FileStatus::is_staged);
+        self.git_stage_selected(!staged);
+    }
+
+    /// Begin a commit: prompt for a message (only when something is staged).
+    fn git_begin_commit(&mut self) {
+        let any_staged = self.git_status.iter().any(vix_git::FileStatus::is_staged);
+        if !any_staged {
+            self.status = t!("status.git_nothing_staged").into();
+            return;
+        }
+        self.git_panel = None;
+        self.prompt = Some(Prompt::new(PromptKind::GitCommit, t!("prompt.git_commit").to_string()));
+    }
+
+    /// Run `git commit -m <message>` and report the outcome.
+    fn git_commit(&mut self, message: &str) {
+        let message = message.trim();
+        if message.is_empty() {
+            self.status = t!("status.git_empty_message").into();
+            return;
+        }
+        match vix_git::commit(&self.root, message) {
+            Ok(()) => self.status = t!("status.git_committed").into(),
+            Err(e) => self.messages.error(t!("msg.git_commit_failed", error = e).to_string()),
+        }
+        self.refresh_git();
     }
 
     /// Toggle the editor's line-number gutter, driven by the editor panel's own
@@ -2259,6 +2403,10 @@ impl App {
             self.spell_suggest_mouse(mouse);
             return;
         }
+        if self.git_panel.is_some() {
+            self.git_panel_mouse(mouse);
+            return;
+        }
         // The find / replace box: a left click focuses the Find or Replace field.
         if self.search.is_some() {
             self.search_mouse(mouse);
@@ -2279,6 +2427,7 @@ impl App {
             || self.confirm.is_some()
             || self.unsaved.is_some()
             || self.spell_suggest.is_some()
+            || self.git_panel.is_some()
             || self.paste.as_ref().is_some_and(|p| p.conflict.is_some())
         {
             return;
@@ -4345,6 +4494,7 @@ impl App {
             PromptKind::SearchToDock => {
                 self.search_project_to_dock(&prompt.input, prompt.case_sensitive, prompt.regex);
             }
+            PromptKind::GitCommit => self.git_commit(&prompt.input),
         }
     }
 

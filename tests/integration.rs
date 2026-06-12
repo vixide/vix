@@ -1756,7 +1756,13 @@ fn alt_letters_open_specific_menus() {
     let menu_index = |name: &str| {
         vix::menu::MENUS.iter().position(|m| m.name == name).unwrap()
     };
-    for (letter, name) in [('f', "menu.file"), ('e', "menu.edit"), ('v', "menu.view"), ('h', "menu.help")] {
+    for (letter, name) in [
+        ('f', "menu.file"),
+        ('e', "menu.edit"),
+        ('v', "menu.view"),
+        ('g', "menu.git"),
+        ('h', "menu.help"),
+    ] {
         let mut app = app_at(Path::new("."));
         app.on_key(alt(letter));
         assert_eq!(app.menu.open, Some(menu_index(name)), "Alt+{letter} opens {name}");
@@ -2061,6 +2067,41 @@ fn git_gutter_marks_a_modified_line() {
         .cloned()
         .unwrap_or_default();
     assert!(!marks.is_empty(), "a modified line is marked in the gutter");
+}
+
+#[test]
+#[ignore = "needs git; creates a throwaway repo and commits in it"]
+fn git_panel_stages_and_commits() {
+    let dir = unique_dir("gitpanel");
+    fs::create_dir_all(&dir).unwrap();
+    let run = |args: &[&str]| {
+        std::process::Command::new("git").current_dir(&dir).args(args).output().unwrap();
+    };
+    run(&["init", "-q"]);
+    run(&["config", "user.email", "t@example.com"]);
+    run(&["config", "user.name", "Test"]);
+    fs::write(dir.join("a.txt"), "hello\n").unwrap();
+
+    let mut app = app_at(&dir);
+    app.run_action("git.changes");
+    assert!(app.git_panel.is_some(), "panel opens in a repo");
+    assert_eq!(app.git_status.len(), 1, "one changed (untracked) file");
+
+    // Space stages the selected file.
+    app.on_key(keycode(KeyCode::Char(' ')));
+    assert!(app.git_status[0].is_staged(), "file is staged");
+
+    // 'c' begins the commit message prompt.
+    app.on_key(keycode(KeyCode::Char('c')));
+    assert!(app.prompt.is_some(), "commit message prompt opens");
+    for ch in "initial".chars() {
+        app.on_key(key(ch));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+
+    app.refresh_git();
+    assert!(app.git_status.is_empty(), "after commit the tree is clean");
+    fs::remove_dir_all(&dir).ok();
 }
 
 #[test]

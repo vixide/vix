@@ -118,6 +118,12 @@ The **Editor** submenu:
 | *— separator —*    |                                                   |
 | Command Palette    | Open the palette (`Ctrl+P`)                       |
 
+## Git menu
+
+| Item      | Action                                                        |
+| --------- | ------------------------------------------------------------- |
+| Changes…  | Open the git changes panel: stage/unstage files and commit (`git-integration.md`) |
+
 ## Help menu
 
 | Item               | Action                            |
