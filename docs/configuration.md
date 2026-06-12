@@ -37,6 +37,8 @@ their defaults, so it is safe to delete or hand-edit.
 | `explorer_width`| int    | `30`     | Width (columns) of the left dock; drag its right edge to resize.    |
 | `messages_width`| int    | `32`     | Width (columns) of the right dock; drag its left edge to resize.    |
 | `recent_files`  | list   | `[]`     | Recently opened files (absolute paths), most-recent first, capped at 15. Updated automatically; surfaced by **File → Open Recent…**. |
+| `spellcheck`    | bool   | `false`  | Underline misspelled words in comments/strings (**View → Editor → Toggle Spellcheck**). |
+| `dictionaries_dir` | string | `"./dictionaries"` | Directory of Hunspell dictionaries (`<dir>/<locale>/index.{aff,dic}`), resolved relative to the working directory. The spellcheck language follows the UI `locale`. |
 
 Example `config.toml`:
 

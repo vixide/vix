@@ -415,6 +415,38 @@ impl Code {
             .collect()
     }
 
+    /// Char ranges of `comment` and `string` tokens across the whole buffer,
+    /// for spell-checking. Returns an empty list when the language has no
+    /// Tree-sitter query or no parse tree.
+    pub fn comment_string_ranges(&self) -> Vec<(usize, usize)> {
+        let Some(query) = &self.query else { return vec![] };
+        let Some(tree) = &self.tree else { return vec![] };
+        let text = self.content.slice(..);
+        let root_node = tree.root_node();
+        let names = query.capture_names();
+
+        let mut cursor = QueryCursor::new();
+        let mut matches = cursor.matches(query, root_node, RopeProvider(text));
+        let mut out = Vec::new();
+        while let Some(m) = matches.next() {
+            for capture in m.captures {
+                let name = names[capture.index as usize];
+                let is_prose = name == "comment"
+                    || name.starts_with("comment.")
+                    || name == "string"
+                    || name.starts_with("string.");
+                if is_prose {
+                    let sc = self.byte_to_char(capture.node.start_byte());
+                    let ec = self.byte_to_char(capture.node.end_byte());
+                    if sc < ec {
+                        out.push((sc, ec));
+                    }
+                }
+            }
+        }
+        out
+    }
+
     fn highlight<T: Copy>(
         text: RopeSlice<'_>,
         start_byte: usize,

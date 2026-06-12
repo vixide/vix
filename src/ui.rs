@@ -20,6 +20,11 @@ use crate::theme::{self, icon};
 /// Render the whole frame: lay out panes, record their rectangles for mouse
 /// hit-testing, draw each pane, then draw any active overlay on top.
 pub fn draw(app: &mut App, frame: &mut Frame) {
+    // Refresh misspelled-word underlines before painting (event-driven redraw, so
+    // this recomputes once per input rather than continuously).
+    if app.spellcheck {
+        app.refresh_spellcheck();
+    }
     let area = frame.area();
     // Paint the whole frame in the theme's background so every pane (and the gaps
     // between them) shares one background — important for the light theme.

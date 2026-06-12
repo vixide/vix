@@ -3325,6 +3325,7 @@ dependencies = [
  "vix-locale-chooser",
  "vix-nerd-font-palette",
  "vix-right-dock",
+ "vix-spellcheck",
  "vix-status-bar-panel",
  "vix-system-information-panel",
  "vix-theme-chooser",

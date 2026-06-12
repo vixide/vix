@@ -103,6 +103,7 @@ The **Editor** submenu:
 | Show/Hide Whitespace             | Show/hide visible space, tab, newline, return |
 | Show/Hide Scroll Bar             | Show/hide the editor's right-side scroll bar  |
 | Show/Hide Soft Wrap              | Wrap long lines vs. scroll horizontally       |
+| Toggle Spellcheck                | Underline misspellings in comments/strings (`vix-spellcheck.md`) |
 
 ## Tools menu
 

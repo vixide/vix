@@ -73,6 +73,11 @@ pub struct Settings {
     /// Recently opened files, most-recent first (absolute paths). Capped to a
     /// small number; surfaced by **File → Open Recent…**.
     pub recent_files: Vec<String>,
+    /// Underline misspelled words in comments and strings.
+    pub spellcheck: bool,
+    /// Directory holding Hunspell dictionaries (`<dir>/<locale>/index.{aff,dic}`),
+    /// used by the spell checker. Resolved relative to the working directory.
+    pub dictionaries_dir: String,
 }
 
 /// Maximum number of entries kept in [`Settings::recent_files`].
@@ -101,6 +106,8 @@ impl Default for Settings {
             explorer_width: 30,
             messages_width: 32,
             recent_files: Vec::new(),
+            spellcheck: false,
+            dictionaries_dir: "./dictionaries".to_string(),
         }
     }
 }

@@ -1916,7 +1916,7 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
     let actions: Vec<&str> = editor.iter().map(|it| it.action).collect();
     assert_eq!(
         actions,
-        vec!["view.line_numbers", "view.whitespace", "view.scrollbar", "view.soft_wrap"]
+        vec!["view.line_numbers", "view.whitespace", "view.scrollbar", "view.soft_wrap", "view.spellcheck"]
     );
 }
 
@@ -2014,6 +2014,47 @@ fn unsaved_prompt_save_writes_and_closes() {
     assert!(app.unsaved.is_none());
     let saved = fs::read_to_string(&file).unwrap();
     assert!(saved.starts_with("hello!!!"), "got: {saved:?}");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn spellcheck_toggle_persists_and_clears_when_off() {
+    // Toggling the setting works without a dictionary present (graceful no-op):
+    // enabling sets the flag; disabling clears marks and the flag.
+    let mut app = app_at(Path::new("."));
+    assert!(!app.spellcheck);
+    app.run_action("view.spellcheck");
+    assert!(app.spellcheck, "toggle enables spellcheck");
+    assert!(app.settings.spellcheck, "the setting is updated for persistence");
+    app.run_action("view.spellcheck");
+    assert!(!app.spellcheck, "toggle disables spellcheck");
+    assert!(
+        app.editor.active_tab().unwrap().editor.spell_marks().is_none(),
+        "disabling clears the underline marks"
+    );
+}
+
+// End-to-end spellcheck needs the untracked ./dictionaries set and the Rust
+// grammar; run with `cargo test -p vix --test integration -- --ignored`.
+#[test]
+#[ignore = "needs the untracked ./dictionaries set and the Rust grammar"]
+fn spellcheck_underlines_a_misspelling_in_a_comment() {
+    let dir = unique_dir("spell");
+    let file = dir.join("a.rs");
+    fs::write(&file, "// helllo wrld\nfn main() {}\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+    app.run_action("view.spellcheck");
+    app.refresh_spellcheck();
+    let marks = app
+        .editor
+        .active_tab()
+        .unwrap()
+        .editor
+        .spell_marks()
+        .cloned()
+        .unwrap_or_default();
+    assert!(!marks.is_empty(), "misspelled words in the comment are underlined");
     fs::remove_dir_all(&dir).ok();
 }
 

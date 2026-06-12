@@ -287,7 +287,7 @@ mod tests {
     // Ignored by default because that directory is large and not always present;
     // run with `cargo test -p vix-spellcheck -- --ignored --nocapture`.
     #[test]
-    #[ignore]
+    #[ignore = "needs the repo's large, sometimes-absent ./dictionaries/en set"]
     fn real_en_dictionary_loads_and_suggests() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../dictionaries");
         let sc = SpellChecker::load(&dir, "en").expect("load en dictionary");

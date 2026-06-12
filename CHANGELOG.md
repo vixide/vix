@@ -13,6 +13,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Spell checking** (View → Editor → Toggle Spellcheck): underlines misspelled
+  words in comments and string literals in red, using Hunspell dictionaries from
+  the `dictionaries/<locale>/` directory (`dictionaries_dir` setting) via the new
+  pure-Rust `vix-spellcheck` crate. The language follows the UI locale; code-like
+  tokens (acronyms, camelCase identifiers) are skipped. Off by default.
 - **System Information panel** (Tools → System Information): a scrolling,
   read-only snapshot of the host — OS, CPU, memory, swap, disks, uptime, and
   environment (via the `sysinfo` crate). Enter or a click inserts the highlighted

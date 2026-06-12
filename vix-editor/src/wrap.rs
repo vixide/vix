@@ -6,7 +6,7 @@
 
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
-use ratatui_core::style::{Modifier, Style};
+use ratatui_core::style::{Color, Modifier, Style};
 use ropey::RopeSlice;
 
 use crate::code::{grapheme_width_and_bytes_len, grapheme_width_and_chars_len, RopeGraphemes};
@@ -138,6 +138,21 @@ impl Editor {
                         right,
                         draw_y,
                         Style::default().add_modifier(Modifier::UNDERLINED),
+                    );
+                }
+                if let Some(spell) = self.spell_marks.as_ref()
+                    && spell.iter().any(|&(s, e)| s <= ch && ch < e)
+                {
+                    paint(
+                        buf,
+                        cell_x,
+                        gw,
+                        right,
+                        draw_y,
+                        Style {
+                            fg: Some(Color::Red),
+                            ..Style::default().add_modifier(Modifier::UNDERLINED)
+                        },
                     );
                 }
                 if bracket == Some(ch) {

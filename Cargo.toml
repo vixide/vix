@@ -72,6 +72,8 @@ vix-nerd-font-palette = { path = "vix-nerd-font-palette" }
 vix-ascii-panel = { path = "vix-ascii-panel" }
 # System Information panel (Tools menu): host OS/CPU/memory/disk snapshot.
 vix-system-information-panel = { path = "vix-system-information-panel" }
+# Spell checking: Hunspell-backed checker over comment/string ranges.
+vix-spellcheck = { path = "vix-spellcheck" }
 # Find / find-and-replace box state (query, replacement, toggles, pattern builder).
 vix-find-panel = { path = "vix-find-panel" }
 # Right dock: message-drawer state (advice/notifications + selection).

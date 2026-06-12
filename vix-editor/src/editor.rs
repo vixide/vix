@@ -52,6 +52,11 @@ pub struct Editor {
     /// User marks for intervals: (start, end, color)
     pub(crate) marks: Option<Vec<(usize, usize, Color)>>,
 
+    /// Spell-check marks: char ranges of misspelled words, drawn as a red
+    /// underline on a separate channel from `marks` (which the host uses for
+    /// search hits).
+    pub(crate) spell_marks: Option<Vec<(usize, usize)>>,
+
     /// Syntax highlight cache by intervals to speed up rendering
     pub(crate) highlights_cache: RefCell<HightlightCache>,
 
@@ -119,6 +124,7 @@ impl Editor {
             selection_snap: SelectionSnap::None,
             clipboard: None,
             marks: None,
+            spell_marks: None,
             highlights_cache,
             show_line_numbers: true,
             show_whitespace: false,
@@ -491,6 +497,46 @@ impl Editor {
 
     pub fn remove_marks(&mut self) {
         self.marks = None;
+    }
+
+    /// Set the spell-check underline marks (char ranges of misspelled words).
+    pub fn set_spell_marks(&mut self, marks: Vec<(usize, usize)>) {
+        self.spell_marks = if marks.is_empty() { None } else { Some(marks) };
+    }
+
+    /// Clear all spell-check underline marks.
+    pub fn clear_spell_marks(&mut self) {
+        self.spell_marks = None;
+    }
+
+    /// The current spell-check underline marks (char ranges), if any.
+    #[must_use]
+    pub fn spell_marks(&self) -> Option<&Vec<(usize, usize)>> {
+        self.spell_marks.as_ref()
+    }
+
+    /// Char ranges of comment and string tokens in the buffer, for the host's
+    /// spell checker to scan. Empty when the language has no Tree-sitter query.
+    #[must_use]
+    pub fn comment_string_ranges(&self) -> Vec<(usize, usize)> {
+        self.code.comment_string_ranges()
+    }
+
+    /// The text of the char range `[start, end)` as an owned string.
+    #[must_use]
+    pub fn char_text(&self, start: usize, end: usize) -> String {
+        self.code.slice(start, end)
+    }
+
+    /// The word (and its char range) at `pos`, using the buffer's word
+    /// boundaries; `None` when `pos` is not inside a word.
+    #[must_use]
+    pub fn word_at(&self, pos: usize) -> Option<(usize, usize, String)> {
+        let (start, end) = self.code.word_boundaries(pos);
+        if start >= end {
+            return None;
+        }
+        Some((start, end, self.code.slice(start, end)))
     }
 
     pub fn has_marks(&self) -> bool {

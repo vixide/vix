@@ -366,6 +366,14 @@ pub struct App {
     pub show_status_bar: bool,
     /// Whether the editor's right-side scroll bar is shown.
     pub show_scrollbar: bool,
+    /// Whether spell-checking (red underline in comments/strings) is enabled.
+    pub spellcheck: bool,
+    /// Loaded spell checker for the active locale, when spell-checking is on and
+    /// a dictionary was found.
+    pub speller: Option<vix_spellcheck::SpellChecker>,
+    /// Locale the loaded (or last-attempted) [`speller`](Self::speller) is for, so
+    /// it is reloaded only on a locale change.
+    speller_locale: Option<String>,
     /// Whether the bottom dock (log/output/data panel) is shown.
     pub show_bottom_dock: bool,
     /// Bottom-dock line buffer.
@@ -464,6 +472,9 @@ impl App {
             show_messages: settings.show_messages,
             show_status_bar: settings.show_status_bar,
             show_scrollbar: settings.show_scrollbar,
+            spellcheck: settings.spellcheck,
+            speller: None,
+            speller_locale: None,
             show_bottom_dock: settings.show_bottom_dock,
             bottom_dock: vix_bottom_dock::BottomDock::new(),
             show_calendar: false,
@@ -1097,6 +1108,7 @@ impl App {
             "view.right_dock" | "view.messages" => self.toggle_right_dock(),
             "view.status_bar" => self.toggle_status_bar(),
             "view.scrollbar" => self.toggle_scrollbar(),
+            "view.spellcheck" => self.toggle_spellcheck(),
             "view.bottom_dock" => self.toggle_bottom_dock(),
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
@@ -1189,6 +1201,90 @@ impl App {
             t!("status.scrollbar_off")
         }
         .to_string();
+    }
+
+    /// Toggle spell-checking (red underline in comments/strings), persisting the
+    /// choice and refreshing the marks on the active buffer.
+    fn toggle_spellcheck(&mut self) {
+        self.spellcheck = !self.spellcheck;
+        self.settings.spellcheck = self.spellcheck;
+        if !self.spellcheck {
+            self.speller = None;
+            self.speller_locale = None;
+            if let Some(t) = self.editor.active_tab_mut() {
+                t.editor.clear_spell_marks();
+            }
+        }
+        self.refresh_spellcheck();
+        self.status = if self.spellcheck {
+            t!("status.spellcheck_on")
+        } else {
+            t!("status.spellcheck_off")
+        }
+        .to_string();
+    }
+
+    /// Load the spell checker for the active UI locale if needed (enabled, and not
+    /// already loaded for that locale). A missing dictionary leaves the checker
+    /// unset, so spell-checking is silently inert until the locale changes.
+    fn ensure_speller(&mut self) {
+        if !self.spellcheck {
+            return;
+        }
+        let locale = rust_i18n::locale().to_string();
+        if self.speller_locale.as_deref() == Some(locale.as_str()) {
+            return;
+        }
+        let dir = std::path::PathBuf::from(&self.settings.dictionaries_dir);
+        self.speller = vix_spellcheck::SpellChecker::load(&dir, &locale).ok();
+        self.speller_locale = Some(locale);
+    }
+
+    /// Recompute the misspelled-word underlines on the active buffer. Scans only
+    /// comment and string ranges; clears the marks when spell-checking is off, no
+    /// dictionary loaded, or the tab is not editable text.
+    pub fn refresh_spellcheck(&mut self) {
+        self.ensure_speller();
+        if self.speller.is_none() {
+            if let Some(t) = self.editor.active_tab_mut() {
+                t.editor.clear_spell_marks();
+            }
+            return;
+        }
+        // 1. Gather (base char offset, text) for each comment/string range.
+        let chunks: Option<Vec<(usize, String)>> = self.editor.active_tab().and_then(|t| {
+            if t.is_image() {
+                return None;
+            }
+            Some(
+                t.editor
+                    .comment_string_ranges()
+                    .into_iter()
+                    .map(|(s, e)| (s, t.editor.char_text(s, e)))
+                    .collect(),
+            )
+        });
+        let Some(chunks) = chunks else {
+            if let Some(t) = self.editor.active_tab_mut() {
+                t.editor.clear_spell_marks();
+            }
+            return;
+        };
+        // 2. Compute misspelled spans with the checker (borrow scoped, then dropped).
+        let spans = match self.speller.as_ref() {
+            Some(sc) => {
+                let mut spans = Vec::new();
+                for (base, text) in &chunks {
+                    spans.extend(sc.misspellings_in(text, *base));
+                }
+                spans
+            }
+            None => Vec::new(),
+        };
+        // 3. Apply the underline marks.
+        if let Some(t) = self.editor.active_tab_mut() {
+            t.editor.set_spell_marks(spans);
+        }
     }
 
     /// Toggle the editor's line-number gutter, driven by the editor panel's own
