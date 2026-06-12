@@ -1118,6 +1118,13 @@ impl App {
                     }
                 }
             }
+            "edit.case_upper" => self.change_case(crate::case::upper),
+            "edit.case_lower" => self.change_case(crate::case::lower),
+            "edit.case_title" => self.change_case(crate::case::title),
+            "edit.case_kebab" => self.change_case(crate::case::kebab),
+            "edit.case_snake" => self.change_case(crate::case::snake),
+            "edit.case_camel" => self.change_case(crate::case::camel),
+            "edit.case_pascal" => self.change_case(crate::case::pascal),
             "edit.select_all" => self.editor.select_all(),
             "edit.duplicate_line" => self.editor.duplicate_line(),
             "edit.move_line_up" => {
@@ -1282,6 +1289,30 @@ impl App {
             t!("status.scrollbar_off")
         }
         .to_string();
+    }
+
+    /// Apply a case transform to the current selection, re-selecting the result.
+    /// No-op (with a status) when there is no selection or the tab is an image.
+    fn change_case(&mut self, f: fn(&str) -> String) {
+        let found = self.editor.active_tab().and_then(|t| {
+            if t.is_image() {
+                return None;
+            }
+            let (s, e) = t.editor.selection_span()?;
+            (s != e).then(|| (s, e, t.editor.char_text(s, e)))
+        });
+        let Some((s, e, text)) = found else {
+            self.status = t!("status.no_selection").into();
+            return;
+        };
+        let new = f(&text);
+        let new_len = new.chars().count();
+        if let Some(t) = self.editor.active_tab_mut() {
+            replace_char_span(t, (s, e), &new);
+            t.editor.set_selection(Some(Selection::new(s, s + new_len)));
+            t.dirty = true;
+            t.preview = false;
+        }
     }
 
     /// Refresh the cached git state (repo?, branch, changed files) for the project

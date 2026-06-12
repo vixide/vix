@@ -54,6 +54,7 @@ i18n!("locales", fallback = "en");
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 pub mod app;
+pub mod case;
 pub mod editor;
 pub mod explorer;
 pub mod fileops;

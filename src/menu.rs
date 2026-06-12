@@ -105,8 +105,20 @@ const EDIT: &[Item] = &[
     Item::leaf("menu.item.edit.select_all", "edit.select_all", "Ctrl+A"),
     SEP,
     Item::sub("menu.item.edit.find_menu", EDIT_FIND),
+    Item::sub("menu.item.edit.case", EDIT_CASE),
     SEP,
     Item::leaf("menu.item.edit.toggle_comment", "edit.toggle_comment", "Ctrl+/"),
+];
+
+/// Case transforms applied to the selection, grouped under Edit → Case.
+const EDIT_CASE: &[Item] = &[
+    Item::leaf("menu.item.edit.case_upper", "edit.case_upper", ""),
+    Item::leaf("menu.item.edit.case_lower", "edit.case_lower", ""),
+    Item::leaf("menu.item.edit.case_title", "edit.case_title", ""),
+    Item::leaf("menu.item.edit.case_kebab", "edit.case_kebab", ""),
+    Item::leaf("menu.item.edit.case_snake", "edit.case_snake", ""),
+    Item::leaf("menu.item.edit.case_camel", "edit.case_camel", ""),
+    Item::leaf("menu.item.edit.case_pascal", "edit.case_pascal", ""),
 ];
 
 /// Dock/status-bar visibility toggles, grouped under View → Layout.

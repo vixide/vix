@@ -57,6 +57,7 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 | Select All | `Ctrl+A` | Select the whole buffer    |
 | *— separator —* | | |
 | Find ▸  | | Submenu of find-related items (below) |
+| Case ▸  | | Submenu of case transforms for the selection (below) |
 | *— separator —* | | |
 | Toggle Comment | `Ctrl+/` | Comment/uncomment the line or selection |
 
@@ -70,6 +71,18 @@ The **Find** submenu:
 | Find Selection | `Alt+N` | Jump to the next occurrence of the selection |
 | Search in Project… | | List project-wide hits in the bottom dock (click-to-jump) |
 | Replace | `Ctrl+R` | Find-and-replace in the file |
+
+The **Case** submenu (applies to the current selection):
+
+| Item               | Result    |
+| ------------------ | --------- |
+| Upper (FOO BAR)    | `FOO BAR` |
+| Lower (foo bar)    | `foo bar` |
+| Title (Foo Bar)    | `Foo Bar` |
+| Kebab (foo-bar)    | `foo-bar` |
+| Snake (foo_bar)    | `foo_bar` |
+| Camel (fooBar)     | `fooBar`  |
+| Pascal (FooBar)    | `FooBar`  |
 
 (Project-wide search/replace is `Ctrl+Shift+F`; interactive query-replace is
 `Ctrl+Alt+R`. Both are reachable from the command palette — see

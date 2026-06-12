@@ -22,6 +22,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Case transforms** (Edit → Case): convert the selection to Upper, Lower,
+  Title, Kebab (`foo-bar`), Snake (`foo_bar`), Camel (`fooBar`), or Pascal
+  (`FooBar`).
 - **Project search path filters**: the project-wide search/replace panel gains
   **Include path** and **Exclude path** regex fields that narrow the searched
   files by their project-relative path (`Tab` cycles to them).

@@ -2091,6 +2091,32 @@ fn spellcheck_toggle_persists_and_clears_when_off() {
 }
 
 #[test]
+fn change_case_transforms_the_selection() {
+    let mut app = app_at(Path::new("."));
+    for c in "foo bar".chars() {
+        app.on_key(key(c));
+    }
+    app.run_action("edit.select_all");
+    app.run_action("edit.case_upper");
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "FOO BAR");
+    // The result stays selected, so the next transform applies to it.
+    app.run_action("edit.case_snake");
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "foo_bar");
+    app.run_action("edit.case_pascal");
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "FooBar");
+}
+
+#[test]
+fn change_case_without_selection_is_a_noop() {
+    let mut app = app_at(Path::new("."));
+    for c in "hello".chars() {
+        app.on_key(key(c));
+    }
+    app.run_action("edit.case_upper"); // no selection
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "hello");
+}
+
+#[test]
 fn editor_gutter_marks_round_trip() {
     let mut app = app_at(Path::new("."));
     let t = app.editor.active_tab_mut().unwrap();
