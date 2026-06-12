@@ -8,6 +8,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Shortcut labels use spaces** instead of `+` (e.g. `Ctrl Shift Z` rather than
+  `Ctrl+Shift+Z`) in menus and the keyboard-help overlay.
 - **Recent-files count is configurable** via the `recent_files_max` setting
   (default 15), controlling how many entries **File → Open Recent…** keeps.
 - **Spellcheck autodetects Hunspell dictionaries** from the platform's standard
@@ -24,6 +26,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Right-click context menu** in the editor: Cut / Copy / Paste, Select All /
+  Select More / Select Less, and Find / Find Next / Find Previous.
 - **File-explorer path filters**: filter the tree by **Include regex** and
   **Exclude regex** (command palette "Explorer: Include/Exclude Regex Filter").
   Files whose project-relative path fails the filter are hidden; directories

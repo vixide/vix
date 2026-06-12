@@ -73,46 +73,46 @@ impl MenuDef {
 }
 
 const FILE: &[Item] = &[
-    Item::leaf("menu.item.file.new", "file.new", "Ctrl+N"),
+    Item::leaf("menu.item.file.new", "file.new", "Ctrl N"),
     SEP,
-    Item::leaf("menu.item.file.open", "file.open", "Ctrl+O"),
-    Item::leaf("menu.item.file.open_recent", "file.open_recent", "Ctrl+Shift+O"),
-    Item::leaf("menu.item.file.save", "file.save", "Ctrl+S"),
-    Item::leaf("menu.item.file.save_as", "file.save_as", "Ctrl+Shift+S"),
+    Item::leaf("menu.item.file.open", "file.open", "Ctrl O"),
+    Item::leaf("menu.item.file.open_recent", "file.open_recent", "Ctrl Shift O"),
+    Item::leaf("menu.item.file.save", "file.save", "Ctrl S"),
+    Item::leaf("menu.item.file.save_as", "file.save_as", "Ctrl Shift S"),
     SEP,
-    Item::leaf("menu.item.file.close", "file.close", "Ctrl+W"),
+    Item::leaf("menu.item.file.close", "file.close", "Ctrl W"),
     Item::leaf("menu.item.file.close_all", "file.close_all", ""),
-    Item::leaf("menu.item.file.reopen_closed", "file.reopen_closed", "Ctrl+Shift+T"),
+    Item::leaf("menu.item.file.reopen_closed", "file.reopen_closed", "Ctrl Shift T"),
 ];
 
 /// Find-related items, grouped under Edit → Find.
 const EDIT_FIND: &[Item] = &[
-    Item::leaf("menu.item.edit.find", "edit.find", "Ctrl+F"),
-    Item::leaf("menu.item.edit.find_next", "edit.find_next", "Ctrl+G"),
-    Item::leaf("menu.item.edit.find_prev", "edit.find_prev", "Ctrl+Shift+G"),
-    Item::leaf("menu.item.edit.find_selection", "search.next_selection", "Alt+N"),
+    Item::leaf("menu.item.edit.find", "edit.find", "Ctrl F"),
+    Item::leaf("menu.item.edit.find_next", "edit.find_next", "Ctrl G"),
+    Item::leaf("menu.item.edit.find_prev", "edit.find_prev", "Ctrl Shift G"),
+    Item::leaf("menu.item.edit.find_selection", "search.next_selection", "Alt N"),
     Item::leaf("menu.item.edit.search_project_dock", "search.project_dock", ""),
-    Item::leaf("menu.item.edit.replace", "edit.replace", "Ctrl+R"),
+    Item::leaf("menu.item.edit.replace", "edit.replace", "Ctrl R"),
 ];
 
 const EDIT: &[Item] = &[
-    Item::leaf("menu.item.edit.undo", "edit.undo", "Ctrl+Z"),
-    Item::leaf("menu.item.edit.redo", "edit.redo", "Ctrl+Shift+Z"),
+    Item::leaf("menu.item.edit.undo", "edit.undo", "Ctrl Z"),
+    Item::leaf("menu.item.edit.redo", "edit.redo", "Ctrl Shift Z"),
     SEP,
-    Item::leaf("menu.item.edit.cut", "edit.cut", "Ctrl+X"),
-    Item::leaf("menu.item.edit.copy", "edit.copy", "Ctrl+C"),
-    Item::leaf("menu.item.edit.paste", "edit.paste", "Ctrl+V"),
-    Item::leaf("menu.item.edit.select_all", "edit.select_all", "Ctrl+A"),
-    Item::leaf("menu.item.edit.select_more", "edit.select_more", "Ctrl+Shift+→"),
-    Item::leaf("menu.item.edit.select_less", "edit.select_less", "Ctrl+Shift+←"),
+    Item::leaf("menu.item.edit.cut", "edit.cut", "Ctrl X"),
+    Item::leaf("menu.item.edit.copy", "edit.copy", "Ctrl C"),
+    Item::leaf("menu.item.edit.paste", "edit.paste", "Ctrl V"),
+    Item::leaf("menu.item.edit.select_all", "edit.select_all", "Ctrl A"),
+    Item::leaf("menu.item.edit.select_more", "edit.select_more", "Ctrl Shift →"),
+    Item::leaf("menu.item.edit.select_less", "edit.select_less", "Ctrl Shift ←"),
     SEP,
-    Item::leaf("menu.item.edit.move_up", "edit.move_line_up", "Alt+↑"),
-    Item::leaf("menu.item.edit.move_down", "edit.move_line_down", "Alt+↓"),
+    Item::leaf("menu.item.edit.move_up", "edit.move_line_up", "Alt ↑"),
+    Item::leaf("menu.item.edit.move_down", "edit.move_line_down", "Alt ↓"),
     SEP,
     Item::sub("menu.item.edit.find_menu", EDIT_FIND),
     Item::sub("menu.item.edit.case", EDIT_CASE),
     SEP,
-    Item::leaf("menu.item.edit.toggle_comment", "edit.toggle_comment", "Ctrl+/"),
+    Item::leaf("menu.item.edit.toggle_comment", "edit.toggle_comment", "Ctrl /"),
 ];
 
 /// Case transforms applied to the selection, grouped under Edit → Case.
@@ -128,7 +128,7 @@ const EDIT_CASE: &[Item] = &[
 
 /// Dock/status-bar visibility toggles, grouped under View → Layout.
 const VIEW_LAYOUT: &[Item] = &[
-    Item::leaf("menu.item.view.left_dock", "view.left_dock", "Ctrl+B"),
+    Item::leaf("menu.item.view.left_dock", "view.left_dock", "Ctrl B"),
     Item::leaf("menu.item.view.right_dock", "view.right_dock", ""),
     Item::leaf("menu.item.view.bottom_dock", "view.bottom_dock", ""),
     Item::leaf("menu.item.view.status_bar", "view.status_bar", ""),
@@ -142,8 +142,8 @@ const VIEW_EDITOR: &[Item] = &[
     Item::leaf("menu.item.view.soft_wrap", "view.soft_wrap", ""),
     Item::leaf("menu.item.view.spellcheck", "view.spellcheck", ""),
     SEP,
-    Item::leaf("menu.item.view.next_tab", "tab.next", "Ctrl+Tab"),
-    Item::leaf("menu.item.view.prev_tab", "tab.prev", "Ctrl+Shift+Tab"),
+    Item::leaf("menu.item.view.next_tab", "tab.next", "Ctrl Tab"),
+    Item::leaf("menu.item.view.prev_tab", "tab.prev", "Ctrl Shift Tab"),
 ];
 
 const VIEW: &[Item] = &[
@@ -160,19 +160,19 @@ const VIX: &[Item] = &[
     Item::leaf("menu.item.vix.website", "vix.website", ""),
     Item::leaf("menu.item.vix.email", "vix.email", ""),
     SEP,
-    Item::leaf("menu.item.file.quit", "file.quit", "Ctrl+Q"),
+    Item::leaf("menu.item.file.quit", "file.quit", "Ctrl Q"),
 ];
 
 const TOOLS: &[Item] = &[
-    Item::leaf("menu.item.tools.palette", "tools.palette", "Ctrl+P"),
+    Item::leaf("menu.item.tools.palette", "tools.palette", "Ctrl P"),
     SEP,
+    Item::leaf("menu.item.tools.run_command", "tools.run_command", ""),
+    Item::leaf("menu.item.tools.cancel_command", "tools.cancel_command", ""),
     Item::leaf("menu.item.tools.calendar", "tools.calendar", ""),
     Item::leaf("menu.item.tools.nerd_palette", "tools.nerd_palette", ""),
     Item::leaf("menu.item.tools.ascii", "tools.ascii", ""),
     Item::leaf("menu.item.tools.system_info", "tools.system_info", ""),
     Item::leaf("menu.item.tools.dashboard", "tools.dashboard", ""),
-    Item::leaf("menu.item.tools.run_command", "tools.run_command", ""),
-    Item::leaf("menu.item.tools.cancel_command", "tools.cancel_command", ""),
 ];
 
 const GIT: &[Item] = &[

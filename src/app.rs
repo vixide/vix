@@ -178,6 +178,39 @@ pub struct GitPanel {
     pub selected: usize,
 }
 
+/// One row of the right-click context menu: an i18n label key and the action to
+/// run (or [`SEP_ACTION`] for a separator).
+type ContextItem = (&'static str, &'static str);
+
+/// Sentinel action marking a context-menu separator.
+const SEP_ACTION: &str = "menu.separator";
+
+/// The editor right-click context menu items (clipboard / selection / find),
+/// dispatched through [`App::run_action`].
+pub const CONTEXT_ITEMS: &[ContextItem] = &[
+    ("menu.item.edit.cut", "edit.cut"),
+    ("menu.item.edit.copy", "edit.copy"),
+    ("menu.item.edit.paste", "edit.paste"),
+    ("menu.separator", SEP_ACTION),
+    ("menu.item.edit.select_all", "edit.select_all"),
+    ("menu.item.edit.select_more", "edit.select_more"),
+    ("menu.item.edit.select_less", "edit.select_less"),
+    ("menu.separator", SEP_ACTION),
+    ("menu.item.edit.find", "edit.find"),
+    ("menu.item.edit.find_next", "edit.find_next"),
+    ("menu.item.edit.find_prev", "edit.find_prev"),
+];
+
+/// Right-click context-menu overlay state: where it is and which row is selected.
+pub struct ContextMenu {
+    /// Highlighted row index into [`CONTEXT_ITEMS`].
+    pub selected: usize,
+    /// Top-left screen position (clamped on render).
+    pub x: u16,
+    /// Top-left screen position.
+    pub y: u16,
+}
+
 /// The branch switcher: a list of local branches to check out.
 pub struct BranchChooser {
     /// Local branch names (current first).
@@ -347,6 +380,8 @@ pub struct Layout {
     /// Suggestion-list rectangle of the open spell-suggestion popup, so a click
     /// can hit-test which suggestion was picked.
     pub spell_suggest: Rect,
+    /// Rectangle of the open right-click context menu, for click hit-testing.
+    pub context_menu: Rect,
     /// File-list rectangle of the open git changes panel, so a click can hit-test
     /// which row was picked.
     pub git_panel: Rect,
@@ -392,6 +427,8 @@ pub struct App {
     pub unsaved: Option<UnsavedPrompt>,
     /// Spell-suggestion popup (Ctrl+;), when open.
     pub spell_suggest: Option<SpellSuggest>,
+    /// Editor right-click context menu, when open.
+    pub context_menu: Option<ContextMenu>,
     /// Git changes panel (stage/unstage/commit), when open.
     pub git_panel: Option<GitPanel>,
     /// Git branch switcher, when open.
@@ -540,6 +577,7 @@ impl App {
             confirm: None,
             unsaved: None,
             spell_suggest: None,
+            context_menu: None,
             git_panel: None,
             branch_chooser: None,
             theme_chooser: None,
@@ -706,6 +744,10 @@ impl App {
         }
         if self.spell_suggest.is_some() {
             self.spell_suggest_key(key);
+            return;
+        }
+        if self.context_menu.is_some() {
+            self.context_menu_key(key);
             return;
         }
         if self.git_panel.is_some() {
@@ -1665,6 +1707,67 @@ impl App {
         self.refresh_spellcheck();
     }
 
+    // ----- right-click context menu ---------------------------------------
+
+    /// Open the editor context menu at screen position `(x, y)`.
+    fn open_context_menu(&mut self, x: u16, y: u16) {
+        let selected = CONTEXT_ITEMS.iter().position(|(_, a)| *a != SEP_ACTION).unwrap_or(0);
+        self.context_menu = Some(ContextMenu { selected, x, y });
+    }
+
+    fn context_menu_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => self.context_move(false),
+            KeyCode::Down => self.context_move(true),
+            KeyCode::Enter => self.run_context_selected(),
+            KeyCode::Esc => self.context_menu = None,
+            _ => {}
+        }
+    }
+
+    /// Move the context-menu selection to the next/previous non-separator row.
+    fn context_move(&mut self, down: bool) {
+        let Some(cm) = self.context_menu.as_mut() else { return };
+        let n = CONTEXT_ITEMS.len();
+        let mut i = cm.selected;
+        for _ in 0..n {
+            i = if down { (i + 1) % n } else { (i + n - 1) % n };
+            if CONTEXT_ITEMS[i].1 != SEP_ACTION {
+                break;
+            }
+        }
+        cm.selected = i;
+    }
+
+    fn context_menu_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.context_menu;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            self.context_menu = None; // click outside dismisses
+            return;
+        }
+        let row = (mouse.row.saturating_sub(r.y + 1)) as usize; // +1 for the top border
+        if row < CONTEXT_ITEMS.len() && CONTEXT_ITEMS[row].1 != SEP_ACTION {
+            if let Some(cm) = self.context_menu.as_mut() {
+                cm.selected = row;
+            }
+            self.run_context_selected();
+        }
+    }
+
+    /// Run the highlighted context-menu action and close the menu.
+    fn run_context_selected(&mut self) {
+        let action = self.context_menu.as_ref().map(|cm| CONTEXT_ITEMS[cm.selected].1);
+        self.context_menu = None;
+        if let Some(action) = action {
+            if action != SEP_ACTION {
+                self.run_action(action);
+            }
+        }
+    }
+
     // ----- git changes panel ----------------------------------------------
 
     /// Open the git changes panel (refreshing status first). Reports a status when
@@ -2563,6 +2666,19 @@ impl App {
 
     /// Handle a mouse event, dispatching to whichever pane it lands in.
     pub fn on_mouse(&mut self, mouse: MouseEvent) {
+        // The right-click context menu takes all clicks while open (a click on a
+        // row runs it; a click elsewhere dismisses it).
+        if self.context_menu.is_some() {
+            self.context_menu_mouse(mouse);
+            return;
+        }
+        // A right-click in the editor opens the context menu.
+        if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Right))
+            && rect_contains(self.layout.editor, mouse.column, mouse.row)
+        {
+            self.open_context_menu(mouse.column, mouse.row);
+            return;
+        }
         // Overlays swallow mouse input rather than acting on panes underneath.
         // The info dialog is modal. Within a text-field dialog, clicks/drags in
         // the field select text (for copying); a left click anywhere else acts as

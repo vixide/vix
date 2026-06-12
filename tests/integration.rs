@@ -1961,6 +1961,23 @@ fn submenu_opens_and_runs_a_nested_action() {
 }
 
 #[test]
+fn context_menu_runs_the_selected_action() {
+    let mut app = app_at(Path::new("."));
+    for c in "hello world".chars() {
+        app.on_key(key(c));
+    }
+    // Open the menu directly (the right-click path needs a rendered layout) and
+    // select "Select All" (index 4 in CONTEXT_ITEMS), then run it with Enter.
+    app.context_menu = Some(vix::app::ContextMenu { selected: 4, x: 0, y: 0 });
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.context_menu.is_none(), "Enter closes the context menu");
+    assert!(
+        app.editor.active_tab_mut().unwrap().editor.get_selection_text().is_some(),
+        "the Select All action ran",
+    );
+}
+
+#[test]
 fn ctrl_tab_switches_tabs() {
     let mut app = app_at(Path::new("."));
     app.run_action("file.new"); // open a second tab

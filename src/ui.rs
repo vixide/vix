@@ -185,6 +185,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.spell_suggest.is_some() {
         draw_spell_suggest(app, frame, area);
     }
+    if app.context_menu.is_some() {
+        draw_context_menu(app, frame, area);
+    }
     if app.git_panel.is_some() {
         draw_git_panel(app, frame, area);
     }
@@ -402,6 +405,48 @@ fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         width: chunks[0].width,
         height: (app.git_status.len() as u16).min(chunks[0].height),
     };
+}
+
+fn draw_context_menu(app: &mut App, frame: &mut Frame, area: Rect) {
+    use crate::app::CONTEXT_ITEMS;
+    let Some(cm) = app.context_menu.as_ref() else { return };
+    let labels: Vec<String> =
+        CONTEXT_ITEMS.iter().map(|&(label, action)| {
+            if action == "menu.separator" { String::new() } else { t!(label).to_string() }
+        }).collect();
+    let width = (labels.iter().map(|l| l.chars().count()).max().unwrap_or(8) as u16 + 4).min(area.width);
+    let height = (CONTEXT_ITEMS.len() as u16 + 2).min(area.height);
+    // Clamp so the menu stays on screen near the click.
+    let x = cm.x.min(area.right().saturating_sub(width));
+    let y = cm.y.min(area.bottom().saturating_sub(height));
+    let rect = Rect { x, y, width, height };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let lines: Vec<Line> = CONTEXT_ITEMS
+        .iter()
+        .enumerate()
+        .map(|(i, (_, action))| {
+            if *action == "menu.separator" {
+                Line::from(Span::styled("─".repeat(inner.width as usize), theme::dim()))
+            } else {
+                let text = format!(" {} ", labels[i]);
+                if i == cm.selected {
+                    Line::from(Span::styled(text, theme::selected()))
+                } else {
+                    Line::from(Span::raw(text))
+                }
+            }
+        })
+        .collect();
+    frame.render_widget(Paragraph::new(lines), inner);
+    app.layout.context_menu = rect;
 }
 
 fn draw_spell_suggest(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -1702,7 +1747,7 @@ fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
             .split(inner);
         frame.render_widget(Paragraph::new(input), rows[0]);
         let on = |b: bool| if b { "on" } else { "off" };
-        let hint = format!("Alt+C case: {}   Alt+R regex: {}", on(p.case_sensitive), on(p.regex));
+        let hint = format!("Alt C case: {}   Alt R regex: {}", on(p.case_sensitive), on(p.regex));
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(hint, theme::dim()))),
             rows[1],
