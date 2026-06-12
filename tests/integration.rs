@@ -2105,6 +2105,36 @@ fn git_panel_stages_and_commits() {
 }
 
 #[test]
+#[ignore = "needs git; creates a throwaway repo with branches"]
+fn branch_chooser_switches_branches() {
+    let dir = unique_dir("gitbranch");
+    fs::create_dir_all(&dir).unwrap();
+    let run = |args: &[&str]| {
+        std::process::Command::new("git").current_dir(&dir).args(args).output().unwrap();
+    };
+    run(&["init", "-q"]);
+    run(&["config", "user.email", "t@example.com"]);
+    run(&["config", "user.name", "Test"]);
+    fs::write(dir.join("a.txt"), "hello\n").unwrap();
+    run(&["add", "."]);
+    run(&["commit", "-q", "-m", "init"]);
+    run(&["branch", "feature"]);
+
+    let mut app = app_at(&dir);
+    app.refresh_git();
+    let start = app.git_branch.clone();
+    app.run_action("git.switch_branch");
+    let chooser = app.branch_chooser.as_ref().expect("branch chooser opens");
+    let idx = chooser.branches.iter().position(|b| Some(b) != start.as_ref()).unwrap();
+    let target = chooser.branches[idx].clone();
+    app.branch_chooser.as_mut().unwrap().selected = idx;
+    app.on_key(keycode(KeyCode::Enter));
+    app.refresh_git();
+    assert_eq!(app.git_branch.as_deref(), Some(target.as_str()), "checked out the chosen branch");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn refresh_git_populates_branch_when_in_a_repo() {
     let mut app = app_at(Path::new("."));
     app.refresh_git();

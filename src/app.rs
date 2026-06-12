@@ -164,6 +164,14 @@ pub struct GitPanel {
     pub selected: usize,
 }
 
+/// The branch switcher: a list of local branches to check out.
+pub struct BranchChooser {
+    /// Local branch names (current first).
+    pub branches: Vec<String>,
+    /// Index of the highlighted branch.
+    pub selected: usize,
+}
+
 /// The spell-suggestion popup (Ctrl+;): corrections for the misspelled word at
 /// the cursor, plus Add-to-dictionary / Ignore actions.
 pub struct SpellSuggest {
@@ -359,6 +367,8 @@ pub struct App {
     pub spell_suggest: Option<SpellSuggest>,
     /// Git changes panel (stage/unstage/commit), when open.
     pub git_panel: Option<GitPanel>,
+    /// Git branch switcher, when open.
+    pub branch_chooser: Option<BranchChooser>,
     /// Theme chooser overlay, when open.
     pub theme_chooser: Option<ThemeChooser>,
     /// Locale chooser overlay, when open.
@@ -498,6 +508,7 @@ impl App {
             unsaved: None,
             spell_suggest: None,
             git_panel: None,
+            branch_chooser: None,
             theme_chooser: None,
             locale_chooser: None,
             keyway_chooser: None,
@@ -653,6 +664,10 @@ impl App {
         }
         if self.git_panel.is_some() {
             self.git_panel_key(key);
+            return;
+        }
+        if self.branch_chooser.is_some() {
+            self.branch_key(key);
             return;
         }
         if self.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
@@ -1168,6 +1183,10 @@ impl App {
             "view.spellcheck" => self.toggle_spellcheck(),
             "spell.suggest" => self.open_spell_suggest(),
             "git.changes" => self.open_git_panel(),
+            "git.push" => self.git_remote_command("git push"),
+            "git.pull" => self.git_remote_command("git pull"),
+            "git.fetch" => self.git_remote_command("git fetch"),
+            "git.switch_branch" => self.open_branch_chooser(),
             "view.bottom_dock" => self.toggle_bottom_dock(),
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
@@ -1650,6 +1669,81 @@ impl App {
             Err(e) => self.messages.error(t!("msg.git_commit_failed", error = e).to_string()),
         }
         self.refresh_git();
+    }
+
+    /// Run a remote git command (push/pull/fetch) asynchronously, streaming its
+    /// output to the bottom dock. Git state refreshes when it completes.
+    fn git_remote_command(&mut self, cmd: &str) {
+        if !vix_git::is_repo(&self.root) {
+            self.status = t!("status.git_not_repo").into();
+            return;
+        }
+        self.git_panel = None;
+        self.run_command(cmd);
+    }
+
+    // ----- git branch switcher --------------------------------------------
+
+    fn open_branch_chooser(&mut self) {
+        if !vix_git::is_repo(&self.root) {
+            self.status = t!("status.git_not_repo").into();
+            return;
+        }
+        let branches = vix_git::local_branches(&self.root);
+        if branches.is_empty() {
+            self.status = t!("status.git_no_branches").into();
+            return;
+        }
+        self.branch_chooser = Some(BranchChooser { branches, selected: 0 });
+    }
+
+    fn branch_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => {
+                if let Some(c) = self.branch_chooser.as_mut() {
+                    let n = c.branches.len();
+                    c.selected = (c.selected + n - 1) % n;
+                }
+            }
+            KeyCode::Down => {
+                if let Some(c) = self.branch_chooser.as_mut() {
+                    c.selected = (c.selected + 1) % c.branches.len();
+                }
+            }
+            KeyCode::Enter => self.checkout_selected_branch(),
+            KeyCode::Esc => self.branch_chooser = None,
+            _ => {}
+        }
+    }
+
+    fn branch_mouse(&mut self, mouse: MouseEvent) {
+        if let Some(idx) = self.chooser_row(mouse) {
+            if let Some(c) = self.branch_chooser.as_mut() {
+                if idx < c.branches.len() {
+                    c.selected = idx;
+                    self.checkout_selected_branch();
+                }
+            }
+        }
+    }
+
+    /// Check out the highlighted branch and close the chooser.
+    fn checkout_selected_branch(&mut self) {
+        let Some(c) = self.branch_chooser.take() else {
+            return;
+        };
+        let Some(branch) = c.branches.get(c.selected).cloned() else {
+            return;
+        };
+        match vix_git::checkout(&self.root, &branch) {
+            Ok(()) => {
+                self.status = t!("status.git_switched", branch = branch).to_string();
+                self.refresh_git();
+                // Files on disk may now differ; refresh the explorer tree.
+                self.explorer.rebuild();
+            }
+            Err(e) => self.messages.error(t!("msg.git_checkout_failed", error = e).to_string()),
+        }
     }
 
     /// Toggle the editor's line-number gutter, driven by the editor panel's own
@@ -2407,6 +2501,10 @@ impl App {
             self.git_panel_mouse(mouse);
             return;
         }
+        if self.branch_chooser.is_some() {
+            self.branch_mouse(mouse);
+            return;
+        }
         // The find / replace box: a left click focuses the Find or Replace field.
         if self.search.is_some() {
             self.search_mouse(mouse);
@@ -2428,6 +2526,7 @@ impl App {
             || self.unsaved.is_some()
             || self.spell_suggest.is_some()
             || self.git_panel.is_some()
+            || self.branch_chooser.is_some()
             || self.paste.as_ref().is_some_and(|p| p.conflict.is_some())
         {
             return;
@@ -4647,6 +4746,9 @@ impl App {
         }
         if done {
             self.running_command = None;
+            // A finished command may have changed the working tree or HEAD (e.g.
+            // git push/pull/checkout); refresh the cached git state.
+            self.refresh_git();
         }
     }
 

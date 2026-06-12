@@ -188,6 +188,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.git_panel.is_some() {
         draw_git_panel(app, frame, area);
     }
+    if app.branch_chooser.is_some() {
+        draw_branch_chooser(app, frame, area);
+    }
     if app.theme_chooser.is_some() {
         draw_theme_chooser(app, frame, area);
     }
@@ -314,6 +317,13 @@ fn draw_unsaved(app: &App, frame: &mut Frame, area: Rect) {
         Line::from(Span::styled(choices.to_string(), theme::dim())),
     ];
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+fn draw_branch_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(c) = app.branch_chooser.as_ref() else { return };
+    let hint = t!("ui.branch_hint");
+    app.layout.chooser =
+        draw_list_chooser(frame, area, &t!("ui.branch"), &hint, &c.branches, c.selected);
 }
 
 fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {

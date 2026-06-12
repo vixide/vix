@@ -120,9 +120,14 @@ The **Editor** submenu:
 
 ## Git menu
 
-| Item      | Action                                                        |
-| --------- | ------------------------------------------------------------- |
-| Changes…  | Open the git changes panel: stage/unstage files and commit (`git-integration.md`) |
+| Item            | Action                                                        |
+| --------------- | ------------------------------------------------------------- |
+| Changes…        | Open the git changes panel: stage/unstage files and commit (`git-integration.md`) |
+| Switch Branch…  | Choose a local branch to check out                            |
+| *— separator —* |                                                               |
+| Pull            | `git pull` (streamed to the bottom dock)                      |
+| Push            | `git push` (streamed to the bottom dock)                      |
+| Fetch           | `git fetch` (streamed to the bottom dock)                     |
 
 ## Help menu
 

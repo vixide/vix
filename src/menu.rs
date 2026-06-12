@@ -154,7 +154,14 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.palette", "tools.palette", "Ctrl+P"),
 ];
 
-const GIT: &[Item] = &[Item::leaf("menu.item.git.changes", "git.changes", "")];
+const GIT: &[Item] = &[
+    Item::leaf("menu.item.git.changes", "git.changes", ""),
+    Item::leaf("menu.item.git.switch_branch", "git.switch_branch", ""),
+    SEP,
+    Item::leaf("menu.item.git.pull", "git.pull", ""),
+    Item::leaf("menu.item.git.push", "git.push", ""),
+    Item::leaf("menu.item.git.fetch", "git.fetch", ""),
+];
 
 const HELP: &[Item] = &[Item::leaf("menu.item.help.shortcuts", "help.shortcuts", "F1")];
 

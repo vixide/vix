@@ -5,8 +5,9 @@ credential helpers, SSH agents, and hooks behave exactly as on the command line)
 and computing in-editor diff gutters in-process. The logic lives in the internal
 `vix-git` crate; the host caches git state and renders it.
 
-**Status:** Phase 1 shipped — read-only awareness plus a stage/unstage/commit
-changes panel. Push/pull and conflict resolution are future phases.
+**Status:** Phases 1–2 shipped — read-only awareness, a stage/unstage/commit
+changes panel, branch switching, and push/pull/fetch. Conflict resolution is a
+future phase.
 
 ## Awareness (read-only)
 
@@ -38,10 +39,19 @@ letter:
 
 A left click on a row toggles its staged state.
 
+## Branches and remotes (Git menu / command palette)
+
+- **Switch Branch…** lists local branches in a chooser; `Enter` checks out the
+  highlighted branch (`git switch`), then refreshes the cached state and the
+  explorer.
+- **Pull / Push / Fetch** run `git pull` / `git push` / `git fetch` through the
+  async Run Command pipeline, streaming output to the bottom dock; the cached git
+  state refreshes when the command finishes.
+
 ## Roadmap
 
-- Push / pull / fetch.
-- Branch switching and creation.
+- Branch creation and deletion.
 - Merge-conflict resolution UI.
 - Diff gutter in the soft-wrap renderer.
 - Multi-line commit messages.
+- Reloading open buffers after a branch switch changes files on disk.

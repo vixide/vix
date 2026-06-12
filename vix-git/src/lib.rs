@@ -236,6 +236,32 @@ pub fn unstage(dir: &Path, rel_path: &str) -> bool {
     git(dir, &["restore", "--staged", "--", rel_path]).is_ok_and(|o| o.status.success())
 }
 
+/// The local branch names, current branch first when it can be determined.
+#[must_use]
+pub fn local_branches(dir: &Path) -> Vec<String> {
+    let out = git_stdout(dir, &["branch", "--format=%(refname:short)"]).unwrap_or_default();
+    let mut names: Vec<String> = out.lines().map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect();
+    if let Some(cur) = branch(dir) {
+        if let Some(pos) = names.iter().position(|n| *n == cur) {
+            names.swap(0, pos);
+        }
+    }
+    names
+}
+
+/// Check out an existing branch (`git switch <branch>`). Returns `Ok(())` on
+/// success, or the captured stderr on failure (e.g. a conflicting dirty tree).
+///
+/// # Errors
+/// Returns the trimmed stderr text when `git switch` exits non-zero or cannot run.
+pub fn checkout(dir: &Path, branch: &str) -> Result<(), String> {
+    match git(dir, &["switch", branch]) {
+        Ok(o) if o.status.success() => Ok(()),
+        Ok(o) => Err(String::from_utf8_lossy(&o.stderr).trim().to_string()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 /// Commit the staged changes with `message`. Returns `Ok(())` on success, or the
 /// captured stderr on failure (e.g. nothing staged, hook rejected).
 ///
