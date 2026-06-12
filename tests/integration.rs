@@ -2034,8 +2034,38 @@ fn spellcheck_toggle_persists_and_clears_when_off() {
     );
 }
 
+#[test]
+fn spell_suggest_is_a_noop_without_a_dictionary() {
+    // With spellcheck off (and no dictionary loaded), Ctrl+; just sets a status
+    // and does not open the popup.
+    let mut app = app_at(Path::new("."));
+    app.run_action("spell.suggest");
+    assert!(app.spell_suggest.is_none());
+}
+
 // End-to-end spellcheck needs the untracked ./dictionaries set and the Rust
 // grammar; run with `cargo test -p vix --test integration -- --ignored`.
+#[test]
+#[ignore = "needs the untracked ./dictionaries set and the Rust grammar"]
+fn spell_suggest_popup_replaces_a_misspelling() {
+    let dir = unique_dir("spellsug");
+    let file = dir.join("a.rs");
+    fs::write(&file, "// helllo world\nfn main() {}\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+    app.run_action("view.spellcheck");
+    // Put the cursor inside "helllo" (chars 3..9) and open the popup.
+    app.editor.active_tab_mut().unwrap().editor.set_cursor(5);
+    app.run_action("spell.suggest");
+    let sug = app.spell_suggest.as_ref().expect("popup opens on a misspelling");
+    assert!(!sug.suggestions.is_empty(), "offers suggestions");
+    // Apply the highlighted suggestion; the misspelling is gone.
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.spell_suggest.is_none(), "popup closes after applying");
+    let line0 = app.editor.active_tab().unwrap().lines()[0].clone();
+    assert!(!line0.contains("helllo"), "misspelling replaced; got: {line0:?}");
+    fs::remove_dir_all(&dir).ok();
+}
 #[test]
 #[ignore = "needs the untracked ./dictionaries set and the Rust grammar"]
 fn spellcheck_underlines_a_misspelling_in_a_comment() {

@@ -2,10 +2,12 @@
 
 The `vix-spellcheck` crate.
 
-**Status:** Shipped (first cut) — **View → Editor → Toggle Spellcheck** (or the
-command palette / `view.spellcheck`) underlines misspelled words **in comments
-and string literals only**, in red. Off by default; the choice persists via the
-`spellcheck` setting.
+**Status:** Shipped — **View → Editor → Toggle Spellcheck** (or the command
+palette / `view.spellcheck`) underlines misspelled words **in comments and
+string literals only**, in red. Off by default; the choice persists via the
+`spellcheck` setting. With the cursor on a misspelled word, **`Ctrl+;`** opens a
+suggestions popup: `↑`/`↓` select, `Enter` replaces, `a` adds the word to the
+session dictionary, `i` ignores it for the session, `Esc` closes.
 
 ## How it works
 
@@ -28,10 +30,7 @@ and string literals only**, in red. Off by default; the choice persists via the
 
 ## Roadmap
 
-- `Ctrl+;` suggestions popup at the cursor word, with **Add to dictionary** and
-  **Ignore** actions (the crate API for this — `suggest`, `add_word`,
-  `ignore_word` — already exists; the UI is pending).
-- Persisting the user dictionary across sessions.
+- Persisting the user dictionary across sessions (it is currently per-session).
 
 [`spellbook`]: https://crates.io/crates/spellbook
 [wooorm/dictionaries]: https://github.com/wooorm/dictionaries

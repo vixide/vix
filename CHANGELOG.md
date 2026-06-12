@@ -17,7 +17,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   words in comments and string literals in red, using Hunspell dictionaries from
   the `dictionaries/<locale>/` directory (`dictionaries_dir` setting) via the new
   pure-Rust `vix-spellcheck` crate. The language follows the UI locale; code-like
-  tokens (acronyms, camelCase identifiers) are skipped. Off by default.
+  tokens (acronyms, camelCase identifiers) are skipped. Off by default. With the
+  cursor on a misspelled word, **`Ctrl+;`** opens a suggestions popup with
+  replace, add-to-dictionary, and ignore actions.
 - **System Information panel** (Tools → System Information): a scrolling,
   read-only snapshot of the host — OS, CPU, memory, swap, disks, uptime, and
   environment (via the `sysinfo` crate). Enter or a click inserts the highlighted

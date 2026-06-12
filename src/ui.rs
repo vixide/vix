@@ -179,6 +179,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.unsaved.is_some() {
         draw_unsaved(app, frame, area);
     }
+    if app.spell_suggest.is_some() {
+        draw_spell_suggest(app, frame, area);
+    }
     if app.theme_chooser.is_some() {
         draw_theme_chooser(app, frame, area);
     }
@@ -305,6 +308,69 @@ fn draw_unsaved(app: &App, frame: &mut Frame, area: Rect) {
         Line::from(Span::styled(choices.to_string(), theme::dim())),
     ];
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+fn draw_spell_suggest(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(p) = app.spell_suggest.as_ref() else { return };
+    let title = t!("ui.spell_suggest", word = p.word).to_string();
+    let hint = t!("ui.spell_suggest_hint");
+    let rows = p.suggestions.len().max(1);
+    let widest = p
+        .suggestions
+        .iter()
+        .map(|s| s.chars().count())
+        .max()
+        .unwrap_or(0)
+        .max(title.chars().count())
+        .max(hint.chars().count());
+    let width = (widest as u16 + 6).min(area.width);
+    // Borders (2) + suggestion rows + hint (1).
+    let height = (rows as u16 + 3).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {title} "));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    if p.suggestions.is_empty() {
+        let none = Line::from(Span::styled(t!("ui.spell_no_suggestions").to_string(), theme::dim()));
+        frame.render_widget(Paragraph::new(none), chunks[0]);
+    } else {
+        let items: Vec<ListItem> = p
+            .suggestions
+            .iter()
+            .map(|s| ListItem::new(Line::from(format!("  {s}"))))
+            .collect();
+        let list = List::new(items).highlight_style(theme::selected());
+        let mut state = ListState::default();
+        state.select(Some(p.selected));
+        frame.render_stateful_widget(list, chunks[0], &mut state);
+    }
+
+    let hint = Line::from(Span::styled(hint.to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
+
+    app.layout.spell_suggest = Rect {
+        x: chunks[0].x,
+        y: chunks[0].y,
+        width: chunks[0].width,
+        height: (p.suggestions.len() as u16).min(chunks[0].height),
+    };
 }
 
 /// Render a centered list-chooser overlay (theme/locale/keyway): a titled box

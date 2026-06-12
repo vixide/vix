@@ -48,6 +48,7 @@ Switch via **View → Keyway…**; the choice persists. See [Keyways](#keyways).
 | `Alt+↑` / `Alt+↓` | Move the current line up / down       |
 | `Ctrl+]`          | Jump to the matching bracket          |
 | `Ctrl+/`          | Toggle line comment (line or selection) |
+| `Ctrl+;`          | Spelling suggestions for the word at the cursor |
 | Arrows / `End` / `PgUp` / `PgDn` | Move the cursor                |
 | `Home`            | Smart Home: first non-blank, then column 0 |
 | `Enter`           | New line, carrying the previous line's indentation |

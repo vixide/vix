@@ -155,6 +155,19 @@ pub enum UnsavedMode {
     Quit,
 }
 
+/// The spell-suggestion popup (Ctrl+;): corrections for the misspelled word at
+/// the cursor, plus Add-to-dictionary / Ignore actions.
+pub struct SpellSuggest {
+    /// The misspelled word.
+    pub word: String,
+    /// Its char range `[start, end)` in the buffer.
+    pub span: (usize, usize),
+    /// Suggested corrections (may be empty).
+    pub suggestions: Vec<String>,
+    /// Index of the highlighted suggestion.
+    pub selected: usize,
+}
+
 /// A modal "you have unsaved changes" prompt offering **Save**, **Don't Save**,
 /// and **Cancel**. Raised when closing a tab or quitting with a dirty buffer.
 pub struct UnsavedPrompt {
@@ -291,6 +304,9 @@ pub struct Layout {
     /// Row-list rectangle of the open System Information panel, so a click can
     /// hit-test which row was picked.
     pub system_info: Rect,
+    /// Suggestion-list rectangle of the open spell-suggestion popup, so a click
+    /// can hit-test which suggestion was picked.
+    pub spell_suggest: Rect,
     /// Inner content rectangle of the open find / replace box, so a click can
     /// focus the Find or Replace field.
     pub search: Rect,
@@ -327,6 +343,8 @@ pub struct App {
     pub confirm: Option<Confirm>,
     /// Pending unsaved-changes prompt (close tab / quit), when active.
     pub unsaved: Option<UnsavedPrompt>,
+    /// Spell-suggestion popup (Ctrl+;), when open.
+    pub spell_suggest: Option<SpellSuggest>,
     /// Theme chooser overlay, when open.
     pub theme_chooser: Option<ThemeChooser>,
     /// Locale chooser overlay, when open.
@@ -455,6 +473,7 @@ impl App {
             paste: None,
             confirm: None,
             unsaved: None,
+            spell_suggest: None,
             theme_chooser: None,
             locale_chooser: None,
             keyway_chooser: None,
@@ -600,6 +619,10 @@ impl App {
             self.unsaved_key(key);
             return;
         }
+        if self.spell_suggest.is_some() {
+            self.spell_suggest_key(key);
+            return;
+        }
         if self.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
             self.paste_key(key);
             return;
@@ -713,6 +736,7 @@ impl App {
                     'r' => self.run_action("edit.replace"),
                     '/' => self.run_action("edit.toggle_comment"),
                     ']' => self.run_action("edit.match_bracket"),
+                    ';' => self.run_action("spell.suggest"),
                     _ => return false,
                 }
                 return true;
@@ -1109,6 +1133,7 @@ impl App {
             "view.status_bar" => self.toggle_status_bar(),
             "view.scrollbar" => self.toggle_scrollbar(),
             "view.spellcheck" => self.toggle_spellcheck(),
+            "spell.suggest" => self.open_spell_suggest(),
             "view.bottom_dock" => self.toggle_bottom_dock(),
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
@@ -1285,6 +1310,115 @@ impl App {
         if let Some(t) = self.editor.active_tab_mut() {
             t.editor.set_spell_marks(spans);
         }
+    }
+
+    /// Open the spell-suggestion popup (Ctrl+;) for the misspelled word at the
+    /// cursor. Reports a status when spell-checking is off/unavailable, the cursor
+    /// is not on a word, or that word is spelled correctly.
+    fn open_spell_suggest(&mut self) {
+        if self.spellcheck {
+            self.ensure_speller();
+        }
+        if self.speller.is_none() {
+            self.status = t!("status.spell_unavailable").into();
+            return;
+        }
+        let found = self.editor.active_tab().and_then(|t| {
+            if t.is_image() {
+                return None;
+            }
+            t.editor.word_at(t.editor.get_cursor())
+        });
+        let Some((start, end, word)) = found else {
+            self.status = t!("status.spell_no_word").into();
+            return;
+        };
+        let sc = self.speller.as_ref().unwrap();
+        if sc.check(&word) {
+            self.status = t!("status.spell_ok").into();
+            return;
+        }
+        let suggestions = sc.suggest(&word);
+        self.spell_suggest = Some(SpellSuggest { word, span: (start, end), suggestions, selected: 0 });
+    }
+
+    fn spell_suggest_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.spell_suggest.as_mut() {
+                    p.selected = p.selected.saturating_sub(1);
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.spell_suggest.as_mut() {
+                    if p.selected + 1 < p.suggestions.len() {
+                        p.selected += 1;
+                    }
+                }
+            }
+            KeyCode::Enter => self.spell_apply_selected(),
+            KeyCode::Char('a' | 'A') => self.spell_add_word(),
+            KeyCode::Char('i' | 'I') => self.spell_ignore_word(),
+            KeyCode::Esc => self.spell_suggest = None,
+            _ => {}
+        }
+    }
+
+    fn spell_suggest_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.spell_suggest;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row = (mouse.row - r.y) as usize;
+        if let Some(p) = self.spell_suggest.as_mut() {
+            if row < p.suggestions.len() {
+                p.selected = row;
+                self.spell_apply_selected();
+            }
+        }
+    }
+
+    /// Replace the misspelled word with the highlighted suggestion.
+    fn spell_apply_selected(&mut self) {
+        let Some(p) = self.spell_suggest.take() else {
+            return;
+        };
+        let Some(rep) = p.suggestions.get(p.selected).cloned() else {
+            return;
+        };
+        if let Some(t) = self.editor.active_tab_mut() {
+            replace_char_span(t, p.span, &rep);
+            t.dirty = true;
+            t.preview = false;
+        }
+        self.refresh_spellcheck();
+    }
+
+    /// Add the misspelled word to the session user dictionary.
+    fn spell_add_word(&mut self) {
+        let Some(p) = self.spell_suggest.take() else {
+            return;
+        };
+        if let Some(sc) = self.speller.as_mut() {
+            sc.add_word(&p.word);
+        }
+        self.status = t!("status.spell_added", word = p.word).to_string();
+        self.refresh_spellcheck();
+    }
+
+    /// Ignore the misspelled word for the rest of the session.
+    fn spell_ignore_word(&mut self) {
+        let Some(p) = self.spell_suggest.take() else {
+            return;
+        };
+        if let Some(sc) = self.speller.as_mut() {
+            sc.ignore_word(&p.word);
+        }
+        self.status = t!("status.spell_ignored", word = p.word).to_string();
+        self.refresh_spellcheck();
     }
 
     /// Toggle the editor's line-number gutter, driven by the editor panel's own
@@ -2034,6 +2168,10 @@ impl App {
             self.system_info_mouse(mouse);
             return;
         }
+        if self.spell_suggest.is_some() {
+            self.spell_suggest_mouse(mouse);
+            return;
+        }
         // The find / replace box: a left click focuses the Find or Replace field.
         if self.search.is_some() {
             self.search_mouse(mouse);
@@ -2053,6 +2191,7 @@ impl App {
             || self.project_search.is_some()
             || self.confirm.is_some()
             || self.unsaved.is_some()
+            || self.spell_suggest.is_some()
             || self.paste.as_ref().is_some_and(|p| p.conflict.is_some())
         {
             return;
@@ -4369,6 +4508,20 @@ fn do_replace(t: &mut Tab, re: &Regex, regex: bool, template: &str, current: (us
         }
         None => current.1,
     }
+}
+
+/// Replace the char range `[span.0, span.1)` with `replacement` (whole-buffer
+/// rebuild, mirroring [`do_replace`]), leaving the cursor after the new text.
+fn replace_char_span(t: &mut Tab, span: (usize, usize), replacement: &str) {
+    let content = t.text();
+    let bs = t.editor.code_ref().char_to_byte(span.0);
+    let be = t.editor.code_ref().char_to_byte(span.1);
+    let mut new = String::with_capacity(content.len() + replacement.len());
+    new.push_str(&content[..bs]);
+    new.push_str(replacement);
+    new.push_str(&content[be..]);
+    t.editor.set_content(&new);
+    t.editor.set_cursor(span.0 + replacement.chars().count());
 }
 
 /// Move the cursor to a match, select it, and add a search highlight mark.
