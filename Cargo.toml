@@ -13,6 +13,7 @@ members = [
     "vix-ascii-panel",
     "vix-system-information-panel",
     "vix-spellcheck",
+    "vix-git",
     "vix-find-panel",
     "vix-right-dock",
     "vix-left-dock",
