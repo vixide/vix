@@ -1557,6 +1557,56 @@ fn project_search_finds_matches_across_files() {
 }
 
 #[test]
+fn project_search_include_path_filter_narrows_results() {
+    let dir = unique_dir("psfilter");
+    fs::write(dir.join("a.rs"), "needle here\n").unwrap();
+    fs::write(dir.join("b.txt"), "needle here\n").unwrap();
+    let mut app = app_at(&dir);
+
+    app.run_action("search.project");
+    for c in "needle".chars() {
+        app.on_key(key(c));
+    }
+    // Both files match before filtering.
+    assert_eq!(app.project_search.as_ref().unwrap().hits.len(), 2);
+
+    // Tab to the Include-path field and restrict to .rs files.
+    app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    for c in r"\.rs$".chars() {
+        app.on_key(key(c));
+    }
+    let hits = &app.project_search.as_ref().unwrap().hits;
+    assert_eq!(hits.len(), 1, "only the .rs file remains");
+    assert!(hits[0].path.to_string_lossy().ends_with("a.rs"));
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn project_search_exclude_path_filter_drops_results() {
+    let dir = unique_dir("psexclude");
+    fs::write(dir.join("a.rs"), "needle here\n").unwrap();
+    fs::write(dir.join("b.txt"), "needle here\n").unwrap();
+    let mut app = app_at(&dir);
+
+    app.run_action("search.project");
+    for c in "needle".chars() {
+        app.on_key(key(c));
+    }
+    // Tab twice (query → include → exclude) and exclude .txt files.
+    app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    for c in r"\.txt$".chars() {
+        app.on_key(key(c));
+    }
+    let hits = &app.project_search.as_ref().unwrap().hits;
+    assert_eq!(hits.len(), 1, "the .txt file is excluded");
+    assert!(hits[0].path.to_string_lossy().ends_with("a.rs"));
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn project_replace_rewrites_files() {
     let dir = unique_dir("preplace");
     fs::write(dir.join("a.txt"), "beta and beta\n").unwrap();

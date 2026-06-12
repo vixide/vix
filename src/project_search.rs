@@ -26,6 +26,10 @@ pub struct ProjectSearch {
     pub query: String,
     /// Replacement text.
     pub replace: String,
+    /// Regex limiting the search to file paths that match it (empty = no limit).
+    pub include_path: String,
+    /// Regex excluding file paths that match it (empty = no exclusion).
+    pub exclude_path: String,
     /// Whether the replacement field is shown and used.
     pub replacing: bool,
     /// Which input field has focus.
@@ -52,6 +56,8 @@ impl ProjectSearch {
         ProjectSearch {
             query: String::new(),
             replace: String::new(),
+            include_path: String::new(),
+            exclude_path: String::new(),
             replacing,
             field: Field::Query,
             case_sensitive: false,
@@ -68,17 +74,26 @@ impl ProjectSearch {
         match self.field {
             Field::Query => &mut self.query,
             Field::Replace => &mut self.replace,
+            Field::IncludePath => &mut self.include_path,
+            Field::ExcludePath => &mut self.exclude_path,
         }
     }
 
-    /// Switch focus between the query and replace fields (replace mode only).
+    /// Cycle focus across the visible fields: query → (replace, if replacing) →
+    /// include-path → exclude-path → query.
     pub fn toggle_field(&mut self) {
-        if self.replacing {
-            self.field = match self.field {
-                Field::Query => Field::Replace,
-                Field::Replace => Field::Query,
-            };
-        }
+        self.field = match self.field {
+            Field::Query if self.replacing => Field::Replace,
+            Field::Query | Field::Replace => Field::IncludePath,
+            Field::IncludePath => Field::ExcludePath,
+            Field::ExcludePath => Field::Query,
+        };
+    }
+
+    /// The compiled path filter from the include/exclude regexes.
+    #[must_use]
+    pub fn path_filter(&self) -> vix_find_panel::PathFilter {
+        vix_find_panel::PathFilter::new(&self.include_path, &self.exclude_path)
     }
 
     /// Effective regex pattern from the query and toggles (no whole-word here).

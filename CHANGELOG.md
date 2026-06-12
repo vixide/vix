@@ -16,6 +16,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Project search path filters**: the project-wide search/replace panel gains
+  **Include path** and **Exclude path** regex fields that narrow the searched
+  files by their project-relative path (`Tab` cycles to them).
 - **Git integration** via the new `vix-git` crate, shelling out to the `git`
   CLI. The status bar shows the current branch and a dirty dot; the file explorer
   shows colored M/A/?/D/R/U badges on changed files; the editor draws a colored

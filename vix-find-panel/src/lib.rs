@@ -129,6 +129,45 @@ pub enum Field {
     Query,
     /// The replacement field.
     Replace,
+    /// The "include paths matching this regex" filter (project search).
+    IncludePath,
+    /// The "exclude paths matching this regex" filter (project search).
+    ExcludePath,
+}
+
+/// A path filter for project-wide search: optional include and exclude regexes
+/// tested against a file path. Empty patterns mean "no constraint".
+pub struct PathFilter {
+    include: Option<Regex>,
+    exclude: Option<Regex>,
+}
+
+impl PathFilter {
+    /// Compile a filter from `include` / `exclude` patterns. An empty string
+    /// disables that side. Invalid patterns are ignored (treated as empty), so a
+    /// half-typed regex never hides every file.
+    #[must_use]
+    pub fn new(include: &str, exclude: &str) -> Self {
+        let compile = |p: &str| (!p.is_empty()).then(|| Regex::new(p).ok()).flatten();
+        PathFilter { include: compile(include), exclude: compile(exclude) }
+    }
+
+    /// Whether `path` passes the filter: it must match the include regex (when
+    /// set) and must not match the exclude regex (when set).
+    #[must_use]
+    pub fn allows(&self, path: &str) -> bool {
+        if let Some(inc) = &self.include {
+            if !inc.is_match(path) {
+                return false;
+            }
+        }
+        if let Some(exc) = &self.exclude {
+            if exc.is_match(path) {
+                return false;
+            }
+        }
+        true
+    }
 }
 
 /// State of the find / find-and-replace box.
@@ -170,11 +209,13 @@ impl SearchBar {
         }
     }
 
-    /// Mutable access to the currently focused field's text.
+    /// Mutable access to the currently focused field's text. The box uses only
+    /// [`Field::Query`] / [`Field::Replace`]; the path-filter fields are for
+    /// project search, so they fall back to the query field here.
     pub fn active_field_mut(&mut self) -> &mut String {
         match self.field {
-            Field::Query => &mut self.query,
             Field::Replace => &mut self.replace,
+            _ => &mut self.query,
         }
     }
 
@@ -183,7 +224,7 @@ impl SearchBar {
         if self.replacing {
             self.field = match self.field {
                 Field::Query => Field::Replace,
-                Field::Replace => Field::Query,
+                _ => Field::Query,
             };
         }
     }
@@ -313,5 +354,36 @@ mod tests {
         assert_eq!(unescape(r"a\nb\tc"), "a\nb\tc");
         assert_eq!(unescape(r"\\"), "\\");
         assert_eq!(unescape(r"$1\x"), r"$1\x"); // unknown escape kept verbatim
+    }
+
+    #[test]
+    fn path_filter_include_and_exclude() {
+        // No constraints: everything passes.
+        let f = PathFilter::new("", "");
+        assert!(f.allows("src/app.rs"));
+
+        // Include only Rust files.
+        let f = PathFilter::new(r"\.rs$", "");
+        assert!(f.allows("src/app.rs"));
+        assert!(!f.allows("README.md"));
+
+        // Exclude anything under target/.
+        let f = PathFilter::new("", r"^target/");
+        assert!(f.allows("src/app.rs"));
+        assert!(!f.allows("target/debug/x"));
+
+        // Both: Rust files not under tests/.
+        let f = PathFilter::new(r"\.rs$", r"(^|/)tests/");
+        assert!(f.allows("src/app.rs"));
+        assert!(!f.allows("tests/integration.rs"));
+        assert!(!f.allows("docs/x.md"));
+    }
+
+    #[test]
+    fn path_filter_ignores_invalid_regex() {
+        // An unclosed group is treated as "no constraint" rather than matching
+        // nothing, so a half-typed pattern never hides every file.
+        let f = PathFilter::new("(", "");
+        assert!(f.allows("anything"));
     }
 }

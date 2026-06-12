@@ -4178,17 +4178,21 @@ impl App {
             }
         };
 
+        let filter = ps.path_filter();
         let mut hits: Vec<Hit> = Vec::new();
         let mut files = 0usize;
         'outer: for path in &self.file_index {
-            let Some(content) = self.current_text(path) else {
-                continue;
-            };
             let rel = path
                 .strip_prefix(&self.root)
                 .unwrap_or(path)
                 .to_string_lossy()
                 .into_owned();
+            if !filter.allows(&rel.replace('\\', "/")) {
+                continue;
+            }
+            let Some(content) = self.current_text(path) else {
+                continue;
+            };
             let mut file_had_hit = false;
             for (i, line) in content.lines().enumerate() {
                 if let Some(m) = re.find(line) {
@@ -4323,20 +4327,22 @@ impl App {
                 self.run_project_search();
             }
             KeyCode::Backspace => {
-                let in_query = self.project_search.as_ref().map(|p| p.field) == Some(Field::Query);
+                // Editing any field except Replace (query or the path filters)
+                // changes the result set, so re-run the search.
+                let affects = self.project_search.as_ref().map(|p| p.field) != Some(Field::Replace);
                 if let Some(p) = self.project_search.as_mut() {
                     p.active_field_mut().pop();
                 }
-                if in_query {
+                if affects {
                     self.run_project_search();
                 }
             }
             KeyCode::Char(c) => {
-                let in_query = self.project_search.as_ref().map(|p| p.field) == Some(Field::Query);
+                let affects = self.project_search.as_ref().map(|p| p.field) != Some(Field::Replace);
                 if let Some(p) = self.project_search.as_mut() {
                     p.active_field_mut().push(c);
                 }
-                if in_query {
+                if affects {
                     self.run_project_search();
                 }
             }

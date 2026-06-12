@@ -1,4 +1,4 @@
-# Search and Replace
+# Vix Find Panel
 
 **Status:** Shipped — `Ctrl+F` find, `Ctrl+R` replace, `F3`/`Shift+F3` next/prev,
 the Case/Word/Regex toggles (`Alt+C`/`Alt+W`/`Alt+R`), capture groups, the
@@ -37,9 +37,12 @@ field's row; the hint line reads `Tab / click: switch field` in replace mode.
 With the cursor in the Replace field, **`Enter`** (or **`Alt+Enter`** from either
 field) replaces all matches; `Enter` from the Find field finds the next match.
 
-The box's state — the query and replacement text, the focused field, the toggles,
-and the effective-pattern builder — lives in the internal `vix-find-panel` crate;
-the app renders the box and runs the search / replacement against the buffer.
+The internal `vix-find-panel` crate owns both the box's **state** (query and
+replacement text, focused field, toggles, effective-pattern builder) and the
+**search/replace engine** over text — `matches`, `next_match`, `replace_all`,
+`replace_one`, and the replacement-template `unescape` (all pure functions over
+`&str` with character offsets). The app renders the box, owns the buffer, and
+applies the returned text.
 
 ## Search toolbar
 
@@ -67,6 +70,14 @@ field and `Alt+Enter` (or Enter from the replace field) rewrites every match
 across the project. Open buffers are searched and replaced in their current
 (possibly unsaved) state; files larger than 2 MB and binary files are skipped,
 and results are capped at 5,000.
+
+**Path filters.** Two extra fields narrow the file set by regular expression
+against each file's project-relative path (forward-slashed): **Include path**
+(only paths matching the regex are searched) and **Exclude path** (paths matching
+the regex are skipped). `Tab` cycles through Find → (Replace) → Include path →
+Exclude path. Empty filters impose no constraint, and an invalid (half-typed)
+regex is treated as empty rather than hiding every file. For example, Include
+`\.rs$` searches only Rust files; Exclude `(^|/)target/` skips the build dir.
 
 ## Search in Project → Dock
 

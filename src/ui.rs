@@ -1421,7 +1421,8 @@ fn draw_project_search(app: &App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
 
-    let head = if ps.replacing { 4 } else { 3 };
+    // find (+ replace) + include-path + exclude-path + toggles + status.
+    let head = if ps.replacing { 6 } else { 5 };
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(head), Constraint::Min(1), Constraint::Length(1)])
@@ -1433,6 +1434,8 @@ fn draw_project_search(app: &App, frame: &mut Frame, area: Rect) {
     if ps.replacing {
         header.push(field_line(&t!("ui.field_replace"), &ps.replace, ps.field == Field::Replace));
     }
+    header.push(field_line(&t!("ui.field_include"), &ps.include_path, ps.field == Field::IncludePath));
+    header.push(field_line(&t!("ui.field_exclude"), &ps.exclude_path, ps.field == Field::ExcludePath));
     let toggle = |on: bool, label: &str| {
         let style = if on { theme::selected() } else { theme::dim() };
         Span::styled(format!(" {label} "), style)
