@@ -25,6 +25,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.spellcheck {
         app.refresh_spellcheck();
     }
+    if app.git_repo {
+        app.refresh_git_gutter();
+    }
     let area = frame.area();
     // Paint the whole frame in the theme's background so every pane (and the gaps
     // between them) shares one background — important for the light theme.

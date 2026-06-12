@@ -54,6 +54,22 @@ impl Editor {
                 let line_number = format!("{:>width$}", line_idx + 1, width = line_number_digits);
                 buf.set_string(area.left(), draw_y, &line_number, line_number_style);
             }
+            // git diff gutter: a colored bar in the gutter gap (just before the
+            // text), or column 0 when line numbers are hidden.
+            if let Some(ref gmarks) = self.gutter_marks {
+                if let Some(&(_, color)) = gmarks.iter().find(|&&(l, _)| l == line_idx) {
+                    let sign_x = if self.show_line_numbers {
+                        area.left() + line_number_digits as u16
+                    } else {
+                        area.left()
+                    };
+                    if sign_x < area.right() {
+                        buf[(sign_x, draw_y)]
+                            .set_symbol("\u{258e}")
+                            .set_style(Style::default().fg(color));
+                    }
+                }
+            }
             let line_len = code.line_len(line_idx);
             let max_x = (area.width as usize).saturating_sub(line_number_width);
         

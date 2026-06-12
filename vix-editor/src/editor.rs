@@ -57,6 +57,10 @@ pub struct Editor {
     /// search hits).
     pub(crate) spell_marks: Option<Vec<(usize, usize)>>,
 
+    /// Git diff gutter marks: `(line index, color)`, drawn as a colored bar in
+    /// the line-number gutter.
+    pub(crate) gutter_marks: Option<Vec<(usize, Color)>>,
+
     /// Syntax highlight cache by intervals to speed up rendering
     pub(crate) highlights_cache: RefCell<HightlightCache>,
 
@@ -125,6 +129,7 @@ impl Editor {
             clipboard: None,
             marks: None,
             spell_marks: None,
+            gutter_marks: None,
             highlights_cache,
             show_line_numbers: true,
             show_whitespace: false,
@@ -513,6 +518,34 @@ impl Editor {
     #[must_use]
     pub fn spell_marks(&self) -> Option<&Vec<(usize, usize)>> {
         self.spell_marks.as_ref()
+    }
+
+    /// Set the git diff gutter marks: `(line index, hex color)` per changed line.
+    pub fn set_gutter_marks(&mut self, marks: Vec<(usize, &str)>) {
+        self.gutter_marks = if marks.is_empty() {
+            None
+        } else {
+            Some(
+                marks
+                    .into_iter()
+                    .map(|(line, color)| {
+                        let (r, g, b) = utils::rgb(color);
+                        (line, Color::Rgb(r, g, b))
+                    })
+                    .collect(),
+            )
+        };
+    }
+
+    /// Clear all git diff gutter marks.
+    pub fn clear_gutter_marks(&mut self) {
+        self.gutter_marks = None;
+    }
+
+    /// The current git diff gutter marks (`line index`, color), if any.
+    #[must_use]
+    pub fn gutter_marks(&self) -> Option<&Vec<(usize, Color)>> {
+        self.gutter_marks.as_ref()
     }
 
     /// Char ranges of comment and string tokens in the buffer, for the host's

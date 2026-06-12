@@ -390,6 +390,9 @@ pub struct App {
     pub git_branch: Option<String>,
     /// Cached `git status` rows (changed files), refreshed on save / git actions.
     pub git_status: Vec<vix_git::FileStatus>,
+    /// Cached HEAD blob text per file path, for the editor diff gutter. Cleared
+    /// on save / git actions so it refetches.
+    git_head_cache: std::collections::HashMap<PathBuf, String>,
     /// Whether spell-checking (red underline in comments/strings) is enabled.
     pub spellcheck: bool,
     /// Loaded spell checker for the active locale, when spell-checking is on and
@@ -500,6 +503,7 @@ impl App {
             git_repo: false,
             git_branch: None,
             git_status: Vec::new(),
+            git_head_cache: std::collections::HashMap::new(),
             spellcheck: settings.spellcheck,
             speller: None,
             speller_locale: None,
@@ -1244,12 +1248,52 @@ impl App {
     /// root. Cheap enough to call after saves and git actions; not per-frame.
     pub fn refresh_git(&mut self) {
         self.git_repo = vix_git::is_repo(&self.root);
+        // HEAD may have moved (commit/checkout) or the working tree changed; drop
+        // the cached HEAD blobs so the diff gutter refetches.
+        self.git_head_cache.clear();
         if self.git_repo {
             self.git_branch = vix_git::branch(&self.root);
             self.git_status = vix_git::status(&self.root);
         } else {
             self.git_branch = None;
             self.git_status.clear();
+        }
+    }
+
+    /// Recompute the editor diff gutter for the active tab: a colored bar on each
+    /// line that differs from its committed (HEAD) version. The HEAD blob is
+    /// fetched once per path and cached.
+    pub fn refresh_git_gutter(&mut self) {
+        if !self.git_repo {
+            if let Some(t) = self.editor.active_tab_mut() {
+                t.editor.clear_gutter_marks();
+            }
+            return;
+        }
+        let Some((path, current)) = self.editor.active_tab().and_then(|t| {
+            if t.is_image() {
+                return None;
+            }
+            t.path.clone().map(|p| (p, t.text()))
+        }) else {
+            if let Some(t) = self.editor.active_tab_mut() {
+                t.editor.clear_gutter_marks();
+            }
+            return;
+        };
+        if !self.git_head_cache.contains_key(&path) {
+            let head = path
+                .strip_prefix(&self.root)
+                .ok()
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                .and_then(|rel| vix_git::head_blob(&self.root, &rel))
+                .unwrap_or_default();
+            self.git_head_cache.insert(path.clone(), head);
+        }
+        let marks = vix_git::diff_marks(&self.git_head_cache[&path], &current);
+        let styled: Vec<(usize, &str)> = marks.iter().map(|&(line, m)| (line, gutter_hex(m))).collect();
+        if let Some(t) = self.editor.active_tab_mut() {
+            t.editor.set_gutter_marks(styled);
         }
     }
 
@@ -4550,6 +4594,15 @@ fn do_replace(t: &mut Tab, re: &Regex, regex: bool, template: &str, current: (us
             resume
         }
         None => current.1,
+    }
+}
+
+/// Hex color for a diff-gutter line mark (green add, yellow modify, red delete).
+fn gutter_hex(mark: vix_git::LineMark) -> &'static str {
+    match mark {
+        vix_git::LineMark::Added => "#3fb950",
+        vix_git::LineMark::Modified => "#d29922",
+        vix_git::LineMark::Deleted => "#f85149",
     }
 }
 

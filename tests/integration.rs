@@ -2035,6 +2035,35 @@ fn spellcheck_toggle_persists_and_clears_when_off() {
 }
 
 #[test]
+fn editor_gutter_marks_round_trip() {
+    let mut app = app_at(Path::new("."));
+    let t = app.editor.active_tab_mut().unwrap();
+    t.editor.set_gutter_marks(vec![(0, "#3fb950"), (2, "#d29922")]);
+    assert_eq!(t.editor.gutter_marks().map(std::vec::Vec::len), Some(2));
+    t.editor.clear_gutter_marks();
+    assert!(t.editor.gutter_marks().is_none());
+}
+
+#[test]
+#[ignore = "needs git and an in-tree checkout"]
+fn git_gutter_marks_a_modified_line() {
+    let mut app = app_at(Path::new("."));
+    app.refresh_git();
+    app.open_initial(PathBuf::from("Cargo.toml"));
+    app.on_key(key('x')); // modify the first line
+    app.refresh_git_gutter();
+    let marks = app
+        .editor
+        .active_tab()
+        .unwrap()
+        .editor
+        .gutter_marks()
+        .cloned()
+        .unwrap_or_default();
+    assert!(!marks.is_empty(), "a modified line is marked in the gutter");
+}
+
+#[test]
 fn refresh_git_populates_branch_when_in_a_repo() {
     let mut app = app_at(Path::new("."));
     app.refresh_git();
