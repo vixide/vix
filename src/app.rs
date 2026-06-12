@@ -2451,10 +2451,11 @@ impl App {
     fn record_recent(&mut self, path: &Path) {
         let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         let entry = canon.to_string_lossy().into_owned();
+        let max = self.settings.recent_files_max;
         let recent = &mut self.settings.recent_files;
         recent.retain(|p| p != &entry);
         recent.insert(0, entry);
-        recent.truncate(crate::settings::MAX_RECENT_FILES);
+        recent.truncate(max);
     }
 
     // ----- position history (Alt+Left / Alt+Right) -----------------------

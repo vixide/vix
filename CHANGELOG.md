@@ -8,6 +8,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Recent-files count is configurable** via the `recent_files_max` setting
+  (default 15), controlling how many entries **File → Open Recent…** keeps.
 - **Spellcheck autodetects Hunspell dictionaries** from the platform's standard
   locations (`/usr/share/hunspell`, `/Library/Spelling`,
   `/opt/homebrew/share/hunspell`, `$XDG_DATA_HOME/hunspell`, and `hunspell -D`).

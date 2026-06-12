@@ -2091,6 +2091,20 @@ fn spellcheck_toggle_persists_and_clears_when_off() {
 }
 
 #[test]
+fn recent_files_max_caps_the_list() {
+    let dir = unique_dir("recentmax");
+    let mut app = app_at(&dir);
+    app.settings.recent_files_max = 2;
+    for name in ["a.txt", "b.txt", "c.txt"] {
+        let p = dir.join(name);
+        fs::write(&p, "x\n").unwrap();
+        app.open_initial(p);
+    }
+    assert_eq!(app.settings.recent_files.len(), 2, "kept only recent_files_max entries");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn select_more_and_less_extend_selection_by_word() {
     let mut app = app_at(Path::new("."));
     for c in "alpha beta gamma".chars() {

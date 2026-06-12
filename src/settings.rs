@@ -72,9 +72,12 @@ pub struct Settings {
     /// Width (columns) of the right dock (message drawer); drag its left edge to
     /// resize.
     pub messages_width: u16,
-    /// Recently opened files, most-recent first (absolute paths). Capped to a
-    /// small number; surfaced by **File → Open Recent…**.
+    /// Recently opened files, most-recent first (absolute paths). Capped to
+    /// [`recent_files_max`](Self::recent_files_max); surfaced by **File → Open
+    /// Recent…**.
     pub recent_files: Vec<String>,
+    /// How many entries to keep in [`recent_files`](Self::recent_files).
+    pub recent_files_max: usize,
     /// Underline misspelled words in comments and strings.
     pub spellcheck: bool,
     /// Extra directory to search for Hunspell dictionaries, on top of the
@@ -83,7 +86,7 @@ pub struct Settings {
     pub dictionary_path: String,
 }
 
-/// Maximum number of entries kept in [`Settings::recent_files`].
+/// Default cap for [`Settings::recent_files`] (the `recent_files_max` setting).
 pub const MAX_RECENT_FILES: usize = 15;
 
 impl Default for Settings {
@@ -110,6 +113,7 @@ impl Default for Settings {
             explorer_width: 30,
             messages_width: 32,
             recent_files: Vec::new(),
+            recent_files_max: MAX_RECENT_FILES,
             spellcheck: false,
             dictionary_path: String::new(),
         }
