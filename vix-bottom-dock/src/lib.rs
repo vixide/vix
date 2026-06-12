@@ -8,8 +8,8 @@
 #![deny(missing_docs)]
 #![warn(clippy::pedantic)]
 
-/// Maximum lines retained; the oldest are dropped past this.
-const CAP: usize = 5_000;
+/// Default scrollback: maximum lines retained before the oldest are dropped.
+pub const DEFAULT_SCROLLBACK: usize = 1_000;
 
 /// The bottom dock's line buffer and scroll offset.
 pub struct BottomDock {
@@ -17,6 +17,8 @@ pub struct BottomDock {
     pub lines: Vec<String>,
     /// Index of the first visible line (scroll offset).
     pub scroll: usize,
+    /// Maximum lines retained (scrollback); the oldest are dropped past this.
+    cap: usize,
     /// Whether the view sticks to the newest line. While `true`, [`BottomDock::push`]
     /// keeps the bottom in view; scrolling up clears it, scrolling back to the
     /// bottom restores it.
@@ -25,27 +27,45 @@ pub struct BottomDock {
 
 impl Default for BottomDock {
     fn default() -> Self {
-        BottomDock { lines: Vec::new(), scroll: 0, follow: true }
+        BottomDock { lines: Vec::new(), scroll: 0, cap: DEFAULT_SCROLLBACK, follow: true }
     }
 }
 
 impl BottomDock {
-    /// An empty dock (following the newest line).
+    /// An empty dock (following the newest line) with the default scrollback.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Append a line, capping the buffer. The view is pinned to the newest line
-    /// only while *following* (i.e. the user has not scrolled up) — so streamed
-    /// output does not yank the view away from something being read.
-    pub fn push(&mut self, line: impl Into<String>) {
-        self.lines.push(line.into());
-        if self.lines.len() > CAP {
-            let drop = self.lines.len() - CAP;
+    /// An empty dock with a specific scrollback (minimum 1 line).
+    #[must_use]
+    pub fn with_scrollback(cap: usize) -> Self {
+        BottomDock { cap: cap.max(1), ..Self::default() }
+    }
+
+    /// Change the scrollback (minimum 1 line), trimming the buffer if it now
+    /// exceeds the new cap.
+    pub fn set_scrollback(&mut self, cap: usize) {
+        self.cap = cap.max(1);
+        self.trim();
+    }
+
+    /// Drop the oldest lines past the cap, keeping `scroll` aligned.
+    fn trim(&mut self) {
+        if self.lines.len() > self.cap {
+            let drop = self.lines.len() - self.cap;
             self.lines.drain(0..drop);
             self.scroll = self.scroll.saturating_sub(drop);
         }
+    }
+
+    /// Append a line, capping the buffer at the scrollback. The view is pinned to
+    /// the newest line only while *following* (i.e. the user has not scrolled up)
+    /// — so streamed output does not yank the view away from something being read.
+    pub fn push(&mut self, line: impl Into<String>) {
+        self.lines.push(line.into());
+        self.trim();
         if self.follow {
             self.scroll = self.lines.len();
         }
@@ -140,6 +160,21 @@ mod tests {
         assert_eq!(d.visible(3), ["line 7", "line 8", "line 9"]);
         d.scroll_up(100);
         assert_eq!(d.visible(3), ["line 0", "line 1", "line 2"]);
+    }
+
+    #[test]
+    fn scrollback_caps_the_buffer_and_can_change() {
+        let mut d = BottomDock::with_scrollback(3);
+        for i in 0..5 {
+            d.push(format!("l{i}"));
+        }
+        assert_eq!(d.lines, ["l2", "l3", "l4"], "oldest lines drop past the cap");
+        // Lowering the cap trims what is already there.
+        d.set_scrollback(2);
+        assert_eq!(d.lines, ["l3", "l4"]);
+        // A cap of 0 is clamped to 1.
+        d.set_scrollback(0);
+        assert_eq!(d.lines, ["l4"]);
     }
 
     #[test]

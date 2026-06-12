@@ -495,7 +495,7 @@ impl App {
             speller: None,
             speller_locale: None,
             show_bottom_dock: settings.show_bottom_dock,
-            bottom_dock: vix_bottom_dock::BottomDock::new(),
+            bottom_dock: vix_bottom_dock::BottomDock::with_scrollback(settings.scrollback),
             show_calendar: false,
             calendar: crate::calendar::Calendar::new(),
             show_help: false,

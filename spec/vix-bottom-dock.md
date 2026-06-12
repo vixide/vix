@@ -22,9 +22,12 @@ routes the toggle (`src/app.rs`). Pure data, no dependencies.
 
 ## State (`vix-bottom-dock`)
 
-- `BottomDock` — the `lines` buffer (oldest first, capped at 5,000) and the
-  `scroll` offset.
-  - `push` appends a line and pins the view to the bottom.
+- `BottomDock` — the `lines` buffer (oldest first, capped at the configurable
+  **scrollback**, default 1,000 — see the `scrollback` setting in
+  `docs/configuration.md`) and the `scroll` offset.
+  - `with_scrollback(n)` / `set_scrollback(n)` set the cap (minimum 1), trimming
+    the buffer when it shrinks.
+  - `push` appends a line, trims past the cap, and pins the view to the bottom.
   - `clear` empties the buffer.
   - `scroll_up`/`scroll_down` move the viewport.
   - `visible(height)` returns the lines for a `height`-row viewport.

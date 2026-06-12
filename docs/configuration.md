@@ -26,6 +26,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `show_scrollbar` | bool  | `true`   | Show the editor's right-side scroll bar.                             |
 | `show_bottom_dock` | bool | `false` | Show the bottom dock (log/output/data panel).                        |
 | `bottom_dock_height` | int | `9`   | Height (rows) of the bottom dock; drag its top edge to resize.       |
+| `scrollback`    | int    | `1000`   | Maximum lines kept in the bottom dock; the oldest are dropped past this. |
 | `preview_tabs`  | bool   | `true`   | Open single-clicked / arrow-scanned files in an ephemeral preview tab. |
 | `indent_style`  | string | `"spaces"`| What Tab inserts: `"spaces"` or `"tabs"`.                           |
 | `tab_width`     | int    | `4`      | Number of spaces per indent when `indent_style = "spaces"`.          |

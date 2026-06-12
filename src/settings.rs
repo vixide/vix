@@ -47,6 +47,8 @@ pub struct Settings {
     pub show_bottom_dock: bool,
     /// Height (rows) of the bottom dock; drag its top edge to resize.
     pub bottom_dock_height: u16,
+    /// Maximum lines retained in the bottom dock (scrollback); oldest dropped past this.
+    pub scrollback: usize,
     /// Open single-clicked / arrow-scanned files in an ephemeral preview tab.
     pub preview_tabs: bool,
     /// On save, strip trailing spaces/tabs from every line.
@@ -95,6 +97,7 @@ impl Default for Settings {
             show_scrollbar: true,
             show_bottom_dock: false,
             bottom_dock_height: 9,
+            scrollback: 1000,
             preview_tabs: true,
             trim_trailing_whitespace: true,
             ensure_final_newline: true,

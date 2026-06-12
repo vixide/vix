@@ -8,6 +8,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Bottom-dock scrollback is configurable** via the `scrollback` setting
+  (default 1000 lines, down from a hard-coded 5000); the oldest lines are dropped
+  past the limit.
 - **Redo shortcut is now `Ctrl+Shift+Z`** (was `Ctrl+Y`), matching the common
   undo/redo pairing.
 
