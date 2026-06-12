@@ -5,3 +5,7 @@ target/
 
 # Workspace members share the root Cargo.lock; ignore stale per-member lockfiles.
 vix-*/Cargo.lock
+
+# Hunspell spell-check dictionaries (~287 MB); fetched separately, not vendored.
+# See spec/dictionaries.md.
+dictionaries/
