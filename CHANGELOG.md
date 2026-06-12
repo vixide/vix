@@ -22,6 +22,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Outline panel** (`Ctrl+Shift+B`, or the palette "Outline"): a list of the
+  active buffer's symbols (kind prefix + name); Enter or a click jumps to the
+  symbol, and the cursor's enclosing symbol is selected on open. New internal
+  `vix-outline-panel` crate.
 - **Project Dashboard** (Tools → Project Dashboard): a live overlay showing the
   project folder name, disk usage (`du`), file count, and git commit count, each
   computed asynchronously and filled in as it completes. New internal

@@ -1,0 +1,15 @@
+# vix-outline-panel: the code-outline list (symbol kind + name + line) and the
+# panel's selection/scroll state. Pure data — the host extracts the symbols from
+# the active buffer, renders the list, and jumps to a chosen symbol's line.
+
+[package]
+name = "vix-outline-panel"
+version = "0.1.0"
+edition = "2021"
+description = "Code outline (symbol list) and selection state for Vix."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_outline_panel"
+path = "src/lib.rs"

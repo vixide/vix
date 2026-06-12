@@ -43,6 +43,8 @@ pub mod icon {
     pub const TABLE: &str = "\u{f0ce}";
     /// Git branch (Powerline).
     pub const BRANCH: &str = "\u{e0a0}";
+    /// Code / outline glyph.
+    pub const CODE: &str = "\u{f121}";
 }
 
 /// Pick a file icon from a path's extension.

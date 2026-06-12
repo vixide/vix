@@ -49,6 +49,7 @@ Switch via **View → Keyway…**; the choice persists. See [Keyways](#keyways).
 | `Ctrl+]`          | Jump to the matching bracket          |
 | `Ctrl+/`          | Toggle line comment (line or selection) |
 | `Ctrl+;`          | Spelling suggestions for the word at the cursor |
+| `Ctrl+Shift+B`    | Open the code outline panel (symbols)  |
 | Arrows / `End` / `PgUp` / `PgDn` | Move the cursor                |
 | `Home`            | Smart Home: first non-blank, then column 0 |
 | `Enter`           | New line, carrying the previous line's indentation |

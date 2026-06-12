@@ -2276,6 +2276,26 @@ fn spellcheck_underlines_a_misspelling_in_a_comment() {
 }
 
 #[test]
+fn outline_panel_lists_symbols_and_jumps() {
+    let dir = unique_dir("outline");
+    let file = dir.join("a.rs");
+    fs::write(&file, "fn alpha() {}\n\nstruct Beta;\n\nfn gamma() {}\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+
+    app.run_action("nav.outline");
+    let o = app.outline.as_ref().expect("outline opens");
+    assert_eq!(o.len(), 3, "alpha, Beta, gamma");
+
+    // Jump to the last symbol (fn gamma, line 5).
+    app.on_key(keycode(KeyCode::End));
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.outline.is_none(), "panel closes after a jump");
+    assert_eq!(app.editor.cursor_1based().0, 5, "cursor jumps to fn gamma");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn project_dashboard_opens_counts_files_and_closes() {
     let dir = unique_dir("dashboard");
     fs::write(dir.join("a.txt"), "x\n").unwrap();

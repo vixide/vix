@@ -183,6 +183,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.search_replace_project", "search.project_replace"),
     ("cmd.goto_definition", "nav.goto_definition"),
     ("cmd.goto_symbol", "nav.goto_symbol"),
+    ("cmd.outline", "nav.outline"),
     ("cmd.theme", "view.theme"),
     ("cmd.locale", "view.locale"),
     ("cmd.keyway", "view.keyway"),
@@ -207,8 +208,12 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.prev_tab", "tab.prev"),
 ];
 
-/// One declaration found in a buffer, for the `@` go-to-symbol mode.
+/// One declaration found in a buffer, for the `@` go-to-symbol mode and the
+/// outline panel.
 pub struct Symbol {
+    /// The structural keyword (`fn`, `struct`, `mod`, `impl`, …), for the outline
+    /// type prefix. May be empty for `#define`-style matches.
+    pub kind: String,
     /// The declared identifier (used for fuzzy matching).
     pub name: String,
     /// 1-based line of the declaration.
@@ -225,10 +230,10 @@ pub struct Symbol {
 /// to top-level structure.
 #[must_use]
 pub fn symbols(text: &str) -> Vec<Symbol> {
-    let kw = "fn|func|function|def|class|struct|enum|trait|interface|type|mod|\
+    let kw = "fn|func|function|def|class|struct|enum|trait|impl|interface|type|mod|\
               namespace|package|macro_rules!";
     let pat = format!(
-        r"(?:\b(?:{kw})\s+([A-Za-z_][A-Za-z0-9_]*)|#define\s+([A-Za-z_][A-Za-z0-9_]*))"
+        r"(?:\b({kw})\s+([A-Za-z_][A-Za-z0-9_]*)|(#define)\s+([A-Za-z_][A-Za-z0-9_]*))"
     );
     let Ok(re) = regex::Regex::new(&pat) else {
         return Vec::new();
@@ -236,8 +241,13 @@ pub fn symbols(text: &str) -> Vec<Symbol> {
     let mut out = Vec::new();
     for (i, line) in text.lines().enumerate() {
         if let Some(caps) = re.captures(line) {
-            if let Some(name) = caps.get(1).or_else(|| caps.get(2)) {
+            if let Some(name) = caps.get(2).or_else(|| caps.get(4)) {
+                let kind = caps
+                    .get(1)
+                    .or_else(|| caps.get(3))
+                    .map_or_else(String::new, |m| m.as_str().to_string());
                 out.push(Symbol {
+                    kind,
                     name: name.as_str().to_string(),
                     line: i + 1,
                     text: line.trim_start().chars().take(120).collect(),

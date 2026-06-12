@@ -17,6 +17,7 @@ Vix is a Cargo workspace. Shared reference for where everything lives.
 | `vix-ascii-panel`              | `vix-ascii-panel/`              | ASCII reference table (dec/hex/char) + row-selection state.         |
 | `vix-system-information-panel` | `vix-system-information-panel/` | Host OS/CPU/memory/disk snapshot (via `sysinfo`) + row state.       |
 | `vix-project-dashboard-panel`  | `vix-project-dashboard-panel/`  | Project metrics state (folder, disk, file count, commit count); host computes async. |
+| `vix-outline-panel`            | `vix-outline-panel/`            | Code outline list (symbol kind + name + line) + selection/scroll state. |
 | `vix-find-panel`               | `vix-find-panel/`               | Find/replace box state + the search/replace engine (matches, replace_all, unescape) + path filters. |
 | `vix-spellcheck`               | `vix-spellcheck/`               | Hunspell spell checking (via `spellbook`): dictionary discovery, check/suggest, misspelling tokenizer. |
 | `vix-git`                      | `vix-git/`                      | Git status/diff/staging via the `git` CLI; diff marks via `similar`. |

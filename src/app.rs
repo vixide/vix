@@ -255,6 +255,11 @@ pub use vix_system_information_panel::Panel as SystemInfoPanel;
 /// [`vix_project_dashboard_panel`]. Its metrics fill in asynchronously; Esc closes.
 pub use vix_project_dashboard_panel::Dashboard;
 
+/// Code-outline overlay state (Ctrl+Shift+O), re-exported from
+/// [`vix_outline_panel`]. Lists the active buffer's symbols; Enter/click jumps to
+/// one, Esc closes.
+pub use vix_outline_panel::Outline;
+
 /// The active keyboard navigation style, derived from `settings.keyway`. It
 /// decides how raw key events are dispatched (see [`App::on_key`]): `Apple` uses
 /// modifier shortcuts, `Emacs` uses `Ctrl` chords, `Vim` is modal.
@@ -343,6 +348,8 @@ pub struct Layout {
     pub git_panel: Rect,
     /// Status-bar git/branch segment rectangle, so a click opens the Git panel.
     pub git_status_bar: Rect,
+    /// Row-list rectangle of the open outline panel, so a click can hit-test a row.
+    pub outline: Rect,
     /// Inner content rectangle of the open find / replace box, so a click can
     /// focus the Find or Replace field.
     pub search: Rect,
@@ -403,6 +410,8 @@ pub struct App {
     pub dashboard: Option<Dashboard>,
     /// Receiver for the dashboard's background metric computations.
     dashboard_rx: Option<std::sync::mpsc::Receiver<DashMsg>>,
+    /// Code outline overlay, when open.
+    pub outline: Option<Outline>,
     /// Modal info dialog (Vix menu About / Website / Email), when open.
     pub dialog: Option<Dialog>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
@@ -538,6 +547,7 @@ impl App {
             system_info: None,
             dashboard: None,
             dashboard_rx: None,
+            outline: None,
             dialog: None,
             clip: Vec::new(),
             clip_cut: false,
@@ -668,6 +678,10 @@ impl App {
             if matches!(key.code, KeyCode::Esc | KeyCode::Enter) {
                 self.close_dashboard();
             }
+            return;
+        }
+        if self.outline.is_some() {
+            self.outline_key(key);
             return;
         }
         if self.query_replace.is_some() {
@@ -801,6 +815,7 @@ impl App {
                     'w' => self.run_action("file.close"),
                     't' if Self::shift(&key) => self.run_action("file.reopen_closed"),
                     'p' => self.run_action("tools.palette"),
+                    'b' if Self::shift(&key) => self.run_action("nav.outline"),
                     'b' => self.run_action("view.explorer"),
                     'e' => self.toggle_focus_explorer_editor(),
                     'f' if Self::shift(&key) => self.run_action("search.project"),
@@ -1187,6 +1202,7 @@ impl App {
             "search.prev_selection" => self.find_selection(false),
             "nav.goto_definition" => self.goto_definition(),
             "nav.goto_symbol" => self.open_palette_seeded("@"),
+            "nav.outline" => self.open_outline(),
             "view.theme" => self.open_theme_chooser(),
             "view.locale" => self.open_locale_chooser(),
             "view.keyway" => self.open_keyway_chooser(),
@@ -2564,6 +2580,10 @@ impl App {
             self.branch_mouse(mouse);
             return;
         }
+        if self.outline.is_some() {
+            self.outline_mouse(mouse);
+            return;
+        }
         // The find / replace box: a left click focuses the Find or Replace field.
         if self.search.is_some() {
             self.search_mouse(mouse);
@@ -2587,6 +2607,7 @@ impl App {
             || self.git_panel.is_some()
             || self.branch_chooser.is_some()
             || self.dashboard.is_some()
+            || self.outline.is_some()
             || self.paste.as_ref().is_some_and(|p| p.conflict.is_some())
         {
             return;
@@ -3617,6 +3638,102 @@ impl App {
                 }
             }
         }
+    }
+
+    // ----- code outline ---------------------------------------------------
+
+    /// Open the outline panel for the active buffer, selecting the symbol the
+    /// cursor is currently inside. Reports a status when there are no symbols.
+    fn open_outline(&mut self) {
+        let cursor_line = self.editor.cursor_1based().0;
+        let entries: Vec<vix_outline_panel::Entry> = self
+            .editor
+            .active_tab()
+            .filter(|t| !t.is_image())
+            .map(|t| {
+                crate::palette::symbols(&t.text())
+                    .into_iter()
+                    .map(|s| vix_outline_panel::Entry { kind: s.kind, name: s.name, line: s.line })
+                    .collect()
+            })
+            .unwrap_or_default();
+        if entries.is_empty() {
+            self.status = t!("status.outline_empty").into();
+            return;
+        }
+        let mut outline = Outline::new(entries);
+        outline.select_nearest(cursor_line);
+        self.outline = Some(outline);
+    }
+
+    fn outline_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.outline.height as usize).max(1);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(o) = self.outline.as_mut() {
+                    o.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(o) = self.outline.as_mut() {
+                    o.down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(o) = self.outline.as_mut() {
+                    o.page_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(o) = self.outline.as_mut() {
+                    o.page_down(page);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(o) = self.outline.as_mut() {
+                    o.page_up(o.len());
+                }
+            }
+            KeyCode::End => {
+                if let Some(o) = self.outline.as_mut() {
+                    o.page_down(o.len());
+                }
+            }
+            KeyCode::Enter => self.jump_to_outline(),
+            KeyCode::Esc => self.outline = None,
+            _ => {}
+        }
+    }
+
+    fn outline_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.outline;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row = (mouse.row - r.y) as usize;
+        if let Some(o) = self.outline.as_mut() {
+            let idx = o.scroll + row;
+            if o.select_index(idx) {
+                self.jump_to_outline();
+            }
+        }
+    }
+
+    /// Jump the cursor to the highlighted outline symbol and close the panel.
+    fn jump_to_outline(&mut self) {
+        let Some(line) = self.outline.as_ref().and_then(vix_outline_panel::Outline::selected_line)
+        else {
+            return;
+        };
+        self.outline = None;
+        self.with_jump(|s| {
+            let area = s.editor_view();
+            s.editor.goto(line, None, area);
+            s.focus = Focus::Editor;
+        });
     }
 
     // ----- command palette ------------------------------------------------

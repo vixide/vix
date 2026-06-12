@@ -13,6 +13,7 @@ members = [
     "vix-ascii-panel",
     "vix-system-information-panel",
     "vix-project-dashboard-panel",
+    "vix-outline-panel",
     "vix-spellcheck",
     "vix-git",
     "vix-find-panel",
@@ -76,6 +77,8 @@ vix-ascii-panel = { path = "vix-ascii-panel" }
 vix-system-information-panel = { path = "vix-system-information-panel" }
 # Project Dashboard panel (Tools menu): live folder/disk/file/commit metrics.
 vix-project-dashboard-panel = { path = "vix-project-dashboard-panel" }
+# Outline panel: code symbol list (kind + name + line) + selection state.
+vix-outline-panel = { path = "vix-outline-panel" }
 # Spell checking: Hunspell-backed checker over comment/string ranges.
 vix-spellcheck = { path = "vix-spellcheck" }
 # Git integration: status/diff/staging via the git CLI.
