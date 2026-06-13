@@ -11,7 +11,7 @@ name`) rather than a semantic LSP — a real LSP client could replace it later.
 Go to Definition: Press `F12`, or use the command palette (Ctrl+P >) and search
 for "Go to Definition", to jump to the definition of the symbol under the cursor.
 A single match jumps directly; multiple matches open a chooser. The lookup scans
-the project for declaration-style lines, so it works for any language without a
+the workspace for declaration-style lines, so it works for any language without a
 language server (but is heuristic, not semantically precise).
 
 Go to Symbol in File: Open the command palette and type `@` (or run the

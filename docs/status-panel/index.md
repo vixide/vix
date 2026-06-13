@@ -1,7 +1,7 @@
 # Status Bar
 
 The status bar is the bottom band of the window. It shows, at a glance, the
-active file and its state, the keyway mode, the latest status message, and — on
+active file and its state, the keymap mode, the latest status message, and — on
 the right — details about the current buffer and cursor. A full-width top border
 separates it from the body above.
 
@@ -14,14 +14,14 @@ setting).
 
 The left segment shows:
 
-- the **keyway mode** indicator (for Vim or Emacs keyways), when active;
+- the **keymap mode** indicator (for Vim or Emacs keymaps), when active;
 - the **file path** of the active buffer;
 - a **dirty flag** glyph when the buffer has unsaved changes;
 - the latest **status message**, after an em-dash separator.
 
 ## Git Branch
 
-When the project is a git repository, the bar shows the current **branch name**,
+When the workspace is a git repository, the bar shows the current **branch name**,
 with a `•` dirty dot when the working tree has changes. **Clicking the branch
 indicator opens the Git Changes panel.** See `docs/git-panel/index.md`.
 

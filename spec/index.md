@@ -37,7 +37,7 @@ clipboard, mouse handling, theme-aware styles, and soft wrap), which tracks
 `ratatui` 0.30. The file explorer, scrollbar, command
 palette, popups, menu bar, and calendar box are implemented in-house on
 `ratatui` primitives (`List`, `Scrollbar`, `Clear`, `Tabs`). The month grid is
-computed with `jiff`, so the project depends on one date library only.
+computed with `jiff`, so the workspace depends on one date library only.
 
 ## Build and run
 
@@ -67,7 +67,7 @@ command-palette file finder operate within it.
   - Show/hide line numbers, whitespace, scroll bar, soft wrap (`View ▸ Editor`)
   - Editing comforts: select all (`Ctrl+A`), duplicate line (`Ctrl+D`), delete
     line (`Ctrl+K`), move line up/down (`Alt+↑`/`Alt+↓`), jump to the matching
-    bracket (`Ctrl+]`), and auto-indent on Enter (see `code-editor.md`)
+    bracket (`Ctrl+]`), and auto-indent on Enter (see `vix-editor/spec/index.md`)
   - Right-side scroll bar (`ratatui::widgets::Scrollbar`)
   - Opening an image file (png/jpg/gif/bmp/webp/…) shows it in a read-only
     image tab via `ratatui-image` (needs a graphics-capable terminal)
@@ -75,11 +75,11 @@ command-palette file finder operate within it.
   - List of advice and notifications; each item shows a close `x`
     (dismiss with `x`, `Delete`, or `Enter` while the drawer is focused)
 - Bottom dock (toggle with `View ▸ Show/Hide Bottom Dock`; see
-  `vix-bottom-dock.md`) — a full-width, resizable, scrollable line panel pinned
+  `vix-bottom-dock/spec/index.md`) — a full-width, resizable, scrollable line panel pinned
   above the status bar for logs/output/data
   - **Run Command** (`Tools ▸ Run Command…`) streams a shell command's output
     here; **Cancel Command** kills it
-  - **Search in Project → Dock** (`Edit ▸ Find`) lists `path:line:col` hits here
+  - **Search in Workspace → Dock** (`Edit ▸ Find`) lists `path:line:col` hits here
   - Lines that name a `path:line[:col]` location are **click-to-jump**; the dock
     can be focused (click) and scrolled, and follows new output only at the bottom
 - Bottom status bar (toggle with `View ▸ Show/Hide Bottom Status`)
@@ -102,13 +102,13 @@ testable.
 
 | Module           | Responsibility                                                 |
 | ---------------- | -------------------------------------------------------------- |
-| `app`            | Central state, event routing, action dispatch, keyway dispatch |
+| `app`            | Central state, event routing, action dispatch, keymap dispatch |
 | `editor`         | Tabs/buffers wrapping `vix-editor`; open/save/goto  |
 | `explorer`       | Left-drawer directory tree                                     |
 | `menu`           | Menu-bar definitions (i18n-keyed) and dropdown state           |
 | `palette`        | Command palette (file/`>`/`#`/`:`/`@` modes) + fuzzy matching  |
 | `search`         | Find / find-and-replace toolbar state                          |
-| `project_search` | Project-wide search/replace panel state                        |
+| `workspace_search` | Workspace-wide search/replace panel state                        |
 | `query`          | Interactive query-replace session                              |
 | `messages`       | Right-drawer notifications                                     |
 | `fileops`        | Explorer copy/cut/paste/delete filesystem helpers              |
@@ -116,11 +116,11 @@ testable.
 | `theme`          | Nerd Font icons + re-export of `vix-theme-chooser`             |
 | `ui`             | All rendering; lays out the frame and draws each pane          |
 
-The calendar date/time logic, theme model, locale list, keyway (keyboard
+The calendar date/time logic, theme model, locale list, keymap (keyboard
 navigation style) list, keyboard-help rows, Nerd Font glyph set, and find /
 replace box state live in the internal crates `vix-date-time-calendar-panel`,
-`vix-theme-chooser`, `vix-locale-chooser`, `vix-keyway-chooser`,
-`vix-keyboard-shortcut-panel`, `vix-nerd-font-palette`, `vix-find-panel`,
+`vix-theme-chooser`, `vix-locale-chooser`, `vix-keymap-chooser`,
+`vix-keyboard-shortcut-panel`, `vix-nerd-font-picker`, `vix-find-panel`,
 `vix-left-dock` (explorer), `vix-right-dock` (messages), `vix-bottom-dock`, and
 `vix-status-bar-panel`. Bundled themes are embedded in the binary with
 `include_dir`. See `docs/architecture.md`.
@@ -128,11 +128,11 @@ replace box state live in the internal crates `vix-date-time-calendar-panel`,
 Event flow: `main` runs the loop, calling `ui::draw(&mut app)` (which records
 each pane's rectangle for mouse hit-testing) then feeding each `crossterm` event
 to `App::on_key` or `App::on_mouse`. `on_key` resolves modal layers in priority
-order — help, dialog, calendar, theme/locale/keyway/recent choosers, Nerd Font
-palette, query-replace, project search, confirm, paste-conflict, prompt, palette,
+order — help, dialog, calendar, theme/locale/keymap/recent choosers, Nerd Font
+palette, query-replace, workspace search, confirm, paste-conflict, prompt, palette,
 search, menu — before
-the active **keyway** dispatch (Apple shortcuts / Emacs chords / Vim modal; see
-`keyway-chooser.md`) and, finally, the focused pane (editor / explorer /
+the active **keymap** dispatch (Apple shortcuts / Emacs chords / Vim modal; see
+`vix-keymap-chooser/spec/index.md`) and, finally, the focused pane (editor / explorer /
 messages / bottom dock). Each loop iteration also drains any streamed
 command output into the bottom dock. Menu items and palette commands share one
 set of action identifiers dispatched by `App::run_action`.
@@ -150,7 +150,7 @@ image viewing, and the `F1` keyboard-shortcut help overlay.
 Also shipped: explorer file clipboard (copy/cut/paste with conflict prompt),
 multi-selection, delete-with-confirm, and buffers that follow file moves.
 
-Also shipped: project-wide search & replace (`Ctrl+Shift+F`, searches open
+Also shipped: workspace-wide search & replace (`Ctrl+Shift+F`, searches open
 buffers in their unsaved state), position history (`Alt+Left`/`Alt+Right`), and
 "go to definition" (`F12`) — a fast offline heuristic over declaration-style
 lines rather than a semantic LSP.
@@ -159,8 +159,8 @@ Also shipped: **internationalization** (`rust-i18n`; 27 selectable languages
 including Klingon and Sindarin, English fallback, `--locale` flag + `locale`
 setting + live **View → Locale…**), **themes** (every theme is a JSON theme;
 Dark, Light, and more ship bundled, plus user-installed; live **View → Theme…**;
-see `theme-chooser.md`), **keyways** (Apple / Emacs / Vim keyboard
-navigation styles, live **View → Keyway…**; see `keyway-chooser.md`),
+see `vix-theme-chooser/spec/index.md`), **keymaps** (Apple / Emacs / Vim keyboard
+navigation styles, live **View → Keymap…**; see `vix-keymap-chooser/spec/index.md`),
 **configuration** (`confy` TOML), a **CLI** (`clap`), the **Vix menu**
 (About / Website / Email modal dialogs), **resizable docks** (drag a dock's inner
 edge), **dock toggle icons** in the menu bar, **Open Recent**, **go-to-symbol**
@@ -168,7 +168,7 @@ edge), **dock toggle icons** in the menu bar, **Open Recent**, **go-to-symbol**
 (`trim_trailing_whitespace` / `ensure_final_newline` settings).
 
 Also shipped (editor widget): the center editor is now **`vix-editor`**, Vix's
-fully-custom widget (replacing the vendored fork; see `code-editor.md`), with
+fully-custom widget (replacing the vendored fork; see `vix-editor/spec/index.md`), with
 **soft wrap** (**View → Editor → Show/Hide Soft Wrap**, the `soft_wrap` setting),
 **bracket matching** (highlight the partner of the bracket at the cursor; no
 auto-insert), **indentation settings** (`indent_style` / `tab_width` drive what
@@ -179,7 +179,7 @@ Tab inserts), **Smart Home** (`Home` → first non-blank, then column 0),
 (language, line ending, encoding, selection char/line count).
 
 Also shipped: **menu separators** grouping dropdown items (File/Edit/View);
-**Nerd Font Palette** (Tools → a glyph picker, `vix-nerd-font-palette`);
+**Nerd Font Palette** (Tools → a glyph picker, `vix-nerd-font-picker`);
 **Show/Hide Bottom Status** (`View → Show/Hide Bottom Status`, `show_status_bar`
 setting); more **editing comforts** — Select All (`Ctrl+A`), Duplicate Line
 (`Ctrl+D`), Move Line Up/Down (`Alt+↑`/`Alt+↓`), Jump to Matching Bracket
@@ -193,7 +193,7 @@ crates (`vix-left-dock`, `vix-right-dock`, `vix-status-bar-panel`); a new
 **bottom dock** (`vix-bottom-dock`, `View → Show/Hide Bottom Dock`) — resizable
 (drag its top edge), scrollable (sticky-bottom), with **click-to-jump** on
 `path:line` lines — fed by **Run Command** / **Cancel Command** (Tools) and
-**Search in Project → Dock** (Edit → Find; `Alt+C` case / `Alt+R` regex). Also:
+**Search in Workspace → Dock** (Edit → Find; `Alt+C` case / `Alt+R` regex). Also:
 nested **submenus** (View → Editor, Edit → Find), **menu type-ahead** (type a
 letter to jump to the next matching item), **Close All Tabs**, **Reopen Closed
 Tab** (`Ctrl+Shift+T`), **Find Next/Previous** (`Ctrl+G`/`Ctrl+Shift+G`, remember
@@ -201,11 +201,11 @@ the last search), and the **calendar** gained click-to-insert and clickable
 month-nav arrows.
 
 Also shipped: an **unsaved-changes prompt** on tab close / quit (Save / Don't
-Save / Cancel); the **ASCII panel** (Tools → ASCII; `vix-ascii-panel`); the
+Save / Cancel); the **ASCII panel** (Tools → ASCII; `vix-ascii-character-picker`); the
 **System Information panel** (Tools → System Information; `vix-system-information-panel`,
 via `sysinfo`); **case transforms** (Edit → Case: upper/lower/title/kebab/snake/
 camel/pascal; `src/case.rs`); a configurable bottom-dock **scrollback** setting;
-and **project-search path filters** (Include/Exclude path regex).
+and **workspace-search path filters** (Include/Exclude path regex).
 
 Also shipped: **spell checking** (`vix-spellcheck`, via `spellbook`) — red
 underline of misspellings in comments/strings (View → Editor → Toggle

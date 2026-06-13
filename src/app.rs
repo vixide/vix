@@ -21,7 +21,7 @@ use crate::explorer::Explorer;
 use crate::menu::{Menu, MENUS};
 use crate::messages::{Level, Messages};
 use crate::palette::{self, Action as PAction, Entry, Mode as PMode, Palette};
-use crate::project_search::{Hit, ProjectSearch};
+use crate::workspace_search::{Hit, WorkspaceSearch};
 use crate::query::{Decision, QueryReplace};
 use crate::search::{Field, SearchBar};
 use crate::settings::Settings;
@@ -72,10 +72,14 @@ pub enum PromptKind {
     SaveAs,
     /// Run a shell command, streaming its output to the bottom dock.
     RunCommand,
-    /// Search the project, listing hits in the bottom dock (click-to-jump).
+    /// Search the workspace, listing hits in the bottom dock (click-to-jump).
     SearchToDock,
     /// Enter a git commit message for the staged changes.
     GitCommit,
+    /// Enter a name for a new topic branch to create and switch to.
+    GitNewBranch,
+    /// Enter a repository URL to clone into the workspace.
+    GitClone,
     /// Enter the file-explorer "include" path regex filter.
     ExplorerInclude,
     /// Enter the file-explorer "exclude" path regex filter.
@@ -117,11 +121,11 @@ enum CmdMsg {
     Done(Option<i32>),
 }
 
-/// A computed project-dashboard metric, sent from a background thread.
+/// A computed workspace-dashboard metric, sent from a background thread.
 enum DashMsg {
     /// Human-readable disk usage from `du`.
     Disk(String),
-    /// Recursive file count under the project root.
+    /// Recursive file count under the workspace root.
     Files(u64),
     /// Commit count reachable from HEAD.
     Commits(u64),
@@ -267,20 +271,31 @@ pub use vix_theme_chooser::Chooser as ThemeChooser;
 /// Enter commits and persists it, Esc reverts.
 pub use vix_locale_chooser::Chooser as LocaleChooser;
 
-/// Keyway chooser overlay state (View -> Keyway), re-exported from
-/// [`vix_keyway_chooser`]. Moving the selection highlights a keyboard navigation
+/// Keymap chooser overlay state (View -> Keymap), re-exported from
+/// [`vix_keymap_chooser`]. Moving the selection highlights a keyboard navigation
 /// style; Enter commits and persists it, Esc reverts.
-pub use vix_keyway_chooser::Chooser as KeywayChooser;
+pub use vix_keymap_chooser::Chooser as KeymapChooser;
 
 /// Nerd Font palette overlay state (Tools -> Nerd Font Palette), re-exported from
-/// [`vix_nerd_font_palette`]. Arrow keys move within the glyph grid; Enter (or a
+/// [`vix_nerd_font_picker`]. Arrow keys move within the glyph grid; Enter (or a
 /// click) inserts the highlighted glyph into the active editor, Esc closes.
-pub use vix_nerd_font_palette::Palette as NerdPalette;
+pub use vix_nerd_font_picker::Palette as NerdPalette;
 
 /// ASCII panel overlay state (Tools -> ASCII), re-exported from
-/// [`vix_ascii_panel`]. Arrow keys move within the table; Enter (or a click)
+/// [`vix_ascii_character_picker`]. Arrow keys move within the table; Enter (or a click)
 /// inserts the highlighted character into the active editor, Esc closes.
-pub use vix_ascii_panel::Panel as AsciiPanel;
+pub use vix_ascii_character_picker::Panel as AsciiPanel;
+
+/// X11 color palette overlay state (Tools -> X11 Colors), re-exported from
+/// [`vix_x11_color_picker`]. Arrow keys move within the table; Enter (or a click)
+/// inserts the highlighted color's hex into the active editor, Esc closes.
+pub use vix_x11_color_picker::Panel as X11Panel;
+
+/// HTML character palette overlay state (Tools -> HTML Characters), re-exported
+/// from [`vix_html_character_picker`]. Arrow keys move within the table; Enter
+/// (or a click) inserts the highlighted entity reference into the editor, Esc
+/// closes.
+pub use vix_html_character_picker::Panel as HtmlPanel;
 
 /// System Information panel overlay state (Tools -> System Information),
 /// re-exported from [`vix_system_information_panel`]. Arrow keys move within the
@@ -288,35 +303,40 @@ pub use vix_ascii_panel::Panel as AsciiPanel;
 /// editor, Esc closes.
 pub use vix_system_information_panel::Panel as SystemInfoPanel;
 
-/// Project dashboard overlay state (Tools -> Project Dashboard), re-exported from
-/// [`vix_project_dashboard_panel`]. Its metrics fill in asynchronously; Esc closes.
-pub use vix_project_dashboard_panel::Dashboard;
+/// Workspace dashboard overlay state (Tools -> Workspace Dashboard), re-exported from
+/// [`vix_workspace_dashboard_panel`]. Its metrics fill in asynchronously; Esc closes.
+pub use vix_workspace_dashboard_panel::Dashboard;
 
 /// Code-outline overlay state (Ctrl+Shift+O), re-exported from
 /// [`vix_outline_panel`]. Lists the active buffer's symbols; Enter/click jumps to
 /// one, Esc closes.
 pub use vix_outline_panel::Outline;
 
-/// The active keyboard navigation style, derived from `settings.keyway`. It
+/// The active keyboard navigation style, derived from `settings.keymap`. It
 /// decides how raw key events are dispatched (see [`App::on_key`]): `Apple` uses
-/// modifier shortcuts, `Emacs` uses `Ctrl` chords, `Vim` is modal.
+/// modifier shortcuts, `Vscode` mirrors VS Code's signature shortcuts, `Emacs`
+/// uses `Ctrl` chords, `Vim` is modal.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Keyway {
+enum Keymap {
     /// Modifier-key shortcuts (the default), e.g. `Ctrl+O` to open.
     Apple,
+    /// VS Code (macOS) shortcuts, e.g. `Ctrl+P` Quick Open, `Ctrl+Shift+P`
+    /// Command Palette, `Ctrl+G` Go to Line.
+    Vscode,
     /// `Ctrl` chords and the `Ctrl+X` prefix, e.g. `Ctrl+X Ctrl+F` to open.
     Emacs,
     /// Modal editing: a Normal mode for motions/commands and an Insert mode.
     Vim,
 }
 
-impl Keyway {
-    /// Parse a persisted keyway id; anything unrecognized is [`Keyway::Apple`].
+impl Keymap {
+    /// Parse a persisted keymap id; anything unrecognized is [`Keymap::Apple`].
     fn from_id(id: &str) -> Self {
         match id {
-            "emacs" => Keyway::Emacs,
-            "vim" => Keyway::Vim,
-            _ => Keyway::Apple,
+            "vscode" => Keymap::Vscode,
+            "emacs" => Keymap::Emacs,
+            "vim" => Keymap::Vim,
+            _ => Keymap::Apple,
         }
     }
 }
@@ -365,7 +385,7 @@ pub struct Layout {
     pub messages: Rect,
     /// Bottom-dock rectangle (valid while the bottom dock is shown).
     pub bottom_dock: Rect,
-    /// Row list rectangle of the open chooser overlay (theme/locale/keyway), so a
+    /// Row list rectangle of the open chooser overlay (theme/locale/keymap), so a
     /// click can hit-test which row was picked.
     pub chooser: Rect,
     /// Glyph-grid rectangle of the open Nerd Font palette, so a click can
@@ -374,6 +394,12 @@ pub struct Layout {
     /// Row-list rectangle of the open ASCII panel, so a click can hit-test which
     /// row was picked.
     pub ascii_panel: Rect,
+    /// Row-list rectangle of the open X11 color palette, so a click can hit-test
+    /// which row was picked.
+    pub x11_panel: Rect,
+    /// Row-list rectangle of the open HTML character palette, so a click can
+    /// hit-test which row was picked.
+    pub html_panel: Rect,
     /// Row-list rectangle of the open System Information panel, so a click can
     /// hit-test which row was picked.
     pub system_info: Rect,
@@ -397,9 +423,24 @@ pub struct Layout {
     pub calendar: Rect,
 }
 
+/// LSP hover tooltip overlay: the text the server returned for the symbol under
+/// the cursor.
+pub struct HoverPopup {
+    /// Hover text (plain text / lightly-rendered markdown).
+    pub text: String,
+}
+
+/// LSP completion overlay: the candidate list and the highlighted row.
+pub struct CompletionPopup {
+    /// Candidate items, in server order.
+    pub items: Vec<vix_lsp::CompletionItem>,
+    /// Index of the highlighted candidate.
+    pub selected: usize,
+}
+
 /// The whole application state.
 pub struct App {
-    /// Project root directory.
+    /// Workspace root directory.
     pub root: PathBuf,
     /// Tabbed text editor.
     pub editor: Editor,
@@ -415,8 +456,8 @@ pub struct App {
     pub search: Option<SearchBar>,
     /// Interactive query-replace session, when active.
     pub query_replace: Option<QueryReplace>,
-    /// Project-wide search panel, when open.
-    pub project_search: Option<ProjectSearch>,
+    /// Workspace-wide search panel, when open.
+    pub workspace_search: Option<WorkspaceSearch>,
     /// Single-line prompt, when open.
     pub prompt: Option<Prompt>,
     /// In-progress paste operation, when active.
@@ -437,22 +478,35 @@ pub struct App {
     pub theme_chooser: Option<ThemeChooser>,
     /// Locale chooser overlay, when open.
     pub locale_chooser: Option<LocaleChooser>,
-    /// Keyway chooser overlay, when open.
-    pub keyway_chooser: Option<KeywayChooser>,
+    /// Keymap chooser overlay, when open.
+    pub keymap_chooser: Option<KeymapChooser>,
     /// Recent-files chooser overlay, when open.
     pub recent_chooser: Option<RecentChooser>,
     /// Nerd Font palette (character picker) overlay, when open.
     pub nerd_palette: Option<NerdPalette>,
     /// ASCII panel (reference table) overlay, when open.
     pub ascii_panel: Option<AsciiPanel>,
+    /// X11 color palette overlay, when open.
+    pub x11_panel: Option<X11Panel>,
+    /// HTML character palette overlay, when open.
+    pub html_panel: Option<HtmlPanel>,
     /// System Information panel overlay, when open.
     pub system_info: Option<SystemInfoPanel>,
-    /// Project Dashboard overlay, when open.
+    /// Workspace Dashboard overlay, when open.
     pub dashboard: Option<Dashboard>,
     /// Receiver for the dashboard's background metric computations.
     dashboard_rx: Option<std::sync::mpsc::Receiver<DashMsg>>,
     /// Code outline overlay, when open.
     pub outline: Option<Outline>,
+    /// LSP client: language-server process management and document sync.
+    pub lsp: crate::lsp::Lsp,
+    /// Last document revision pushed to a language server, keyed by file path, so
+    /// edits sync once per change rather than once per frame.
+    lsp_synced: std::collections::HashMap<PathBuf, u64>,
+    /// LSP hover tooltip overlay, when shown.
+    pub hover: Option<HoverPopup>,
+    /// LSP completion overlay, when shown.
+    pub completion: Option<CompletionPopup>,
     /// Modal info dialog (Vix menu About / Website / Email), when open.
     pub dialog: Option<Dialog>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
@@ -478,7 +532,7 @@ pub struct App {
     pub show_status_bar: bool,
     /// Whether the editor's right-side scroll bar is shown.
     pub show_scrollbar: bool,
-    /// Whether the project root is a git work tree (checked once at startup).
+    /// Whether the workspace root is a git work tree (checked once at startup).
     pub git_repo: bool,
     /// Cached current git branch (or short hash when detached), when in a repo.
     pub git_branch: Option<String>,
@@ -511,7 +565,7 @@ pub struct App {
     pub should_quit: bool,
     /// Pane rectangles recorded during the last render.
     pub layout: Layout,
-    /// File paths under the project root, for the palette file finder.
+    /// File paths under the workspace root, for the palette file finder.
     file_index: Vec<PathBuf>,
     /// Cursor offset captured when the palette opened, so the `:` go-to-line
     /// preview can revert on cancel and the jump records the true origin.
@@ -529,13 +583,13 @@ pub struct App {
     scrollbar_active: bool,
     /// Which dock (if any) is being resized by an in-progress edge drag.
     dock_resize: Option<DockResize>,
-    /// Emacs keyway: a `Ctrl+X` prefix has been pressed and the next key
-    /// completes the chord. Always false in other keyways.
+    /// Emacs keymap: a `Ctrl+X` prefix has been pressed and the next key
+    /// completes the chord. Always false in other keymaps.
     emacs_prefix: bool,
-    /// Vim keyway: true in Insert mode, false in Normal mode. Meaningless in
-    /// other keyways.
+    /// Vim keymap: true in Insert mode, false in Normal mode. Meaningless in
+    /// other keymaps.
     vim_insert: bool,
-    /// Vim keyway: the in-progress `:` command-line text, when the command line
+    /// Vim keymap: the in-progress `:` command-line text, when the command line
     /// is open.
     vim_cmd: Option<String>,
 }
@@ -562,6 +616,12 @@ impl App {
         messages.advice(t!("msg.welcome").to_string());
         messages.info(t!("msg.welcome_hint").to_string());
 
+        let lsp = crate::lsp::Lsp::new(
+            settings.lsp_enabled,
+            settings.lsp_servers.clone(),
+            &root,
+        );
+
         App {
             explorer: Explorer::new(root.clone()),
             root,
@@ -571,7 +631,7 @@ impl App {
             palette: None,
             search: None,
             query_replace: None,
-            project_search: None,
+            workspace_search: None,
             prompt: None,
             paste: None,
             confirm: None,
@@ -582,14 +642,20 @@ impl App {
             branch_chooser: None,
             theme_chooser: None,
             locale_chooser: None,
-            keyway_chooser: None,
+            keymap_chooser: None,
             recent_chooser: None,
             nerd_palette: None,
             ascii_panel: None,
+            x11_panel: None,
+            html_panel: None,
             system_info: None,
             dashboard: None,
             dashboard_rx: None,
             outline: None,
+            lsp,
+            lsp_synced: std::collections::HashMap::new(),
+            hover: None,
+            completion: None,
             dialog: None,
             clip: Vec::new(),
             clip_cut: false,
@@ -641,6 +707,18 @@ impl App {
     pub fn on_key(&mut self, key: KeyEvent) {
         if key.kind == KeyEventKind::Release {
             return;
+        }
+        // LSP completion popup captures navigation/accept/cancel keys; any other
+        // key dismisses it and falls through to normal handling.
+        if self.completion.is_some() && self.completion_key(key) {
+            return;
+        }
+        // A hover tooltip is dismissed by the next keypress (Esc just dismisses).
+        if self.hover.is_some() {
+            self.hover = None;
+            if key.code == KeyCode::Esc {
+                return;
+            }
         }
         // Modal layers, in priority order.
         if self.show_help {
@@ -696,8 +774,8 @@ impl App {
             self.locale_key(key);
             return;
         }
-        if self.keyway_chooser.is_some() {
-            self.keyway_key(key);
+        if self.keymap_chooser.is_some() {
+            self.keymap_key(key);
             return;
         }
         if self.recent_chooser.is_some() {
@@ -710,6 +788,14 @@ impl App {
         }
         if self.ascii_panel.is_some() {
             self.ascii_key(key);
+            return;
+        }
+        if self.x11_panel.is_some() {
+            self.x11_key(key);
+            return;
+        }
+        if self.html_panel.is_some() {
+            self.html_key(key);
             return;
         }
         if self.system_info.is_some() {
@@ -730,7 +816,7 @@ impl App {
             self.qr_key(key);
             return;
         }
-        if self.project_search.is_some() {
+        if self.workspace_search.is_some() {
             self.ps_key(key);
             return;
         }
@@ -778,21 +864,26 @@ impl App {
             self.menu_key(key);
             return;
         }
-        // Keyway-specific dispatch. Each keyway first gets a chance to consume the
+        // Keymap-specific dispatch. Each keymap first gets a chance to consume the
         // key; `Emacs`/`Vim` then fall back to the shared keys (menu mnemonics and
         // function keys) before the focused pane handles it.
-        match self.active_keyway() {
-            Keyway::Apple => {
+        match self.active_keymap() {
+            Keymap::Apple => {
                 if self.global_key(key) {
                     return;
                 }
             }
-            Keyway::Emacs => {
+            Keymap::Vscode => {
+                if self.vscode_key(key) {
+                    return;
+                }
+            }
+            Keymap::Emacs => {
                 if self.emacs_key(key) || self.global_shared_key(key) {
                     return;
                 }
             }
-            Keyway::Vim => {
+            Keymap::Vim => {
                 if self.vim_key(key) || self.global_shared_key(key) {
                     return;
                 }
@@ -807,24 +898,24 @@ impl App {
     }
 
     /// The keyboard navigation style currently in effect.
-    fn active_keyway(&self) -> Keyway {
-        Keyway::from_id(&self.settings.keyway)
+    fn active_keymap(&self) -> Keymap {
+        Keymap::from_id(&self.settings.keymap)
     }
 
-    /// A short keyway-mode indicator for the status bar (Vim's mode / command
+    /// A short keymap-mode indicator for the status bar (Vim's mode / command
     /// line, or Emacs's pending chord prefix), or `None` when there is nothing to
-    /// show (e.g. the Apple keyway).
+    /// show (e.g. the Apple keymap).
     #[must_use]
     pub fn mode_indicator(&self) -> Option<String> {
-        match self.active_keyway() {
-            Keyway::Vim => Some(if let Some(cmd) = &self.vim_cmd {
+        match self.active_keymap() {
+            Keymap::Vim => Some(if let Some(cmd) = &self.vim_cmd {
                 format!(":{cmd}")
             } else if self.vim_insert {
                 t!("status.vim_insert").to_string()
             } else {
                 t!("status.vim_normal").to_string()
             }),
-            Keyway::Emacs if self.emacs_prefix => Some("C-x-".to_string()),
+            Keymap::Emacs if self.emacs_prefix => Some("C-x-".to_string()),
             _ => None,
         }
     }
@@ -841,13 +932,13 @@ impl App {
         key.modifiers.contains(KeyModifiers::SHIFT)
     }
 
-    /// Global shortcuts available when no modal is active (Apple keyway). Returns
+    /// Global shortcuts available when no modal is active (Apple keymap). Returns
     /// true if the key was consumed.
     fn global_key(&mut self, key: KeyEvent) -> bool {
         self.apple_ctrl_key(key) || self.global_shared_key(key)
     }
 
-    /// The Apple keyway's `Ctrl`-letter shortcuts. Returns true if consumed.
+    /// The Apple keymap's `Ctrl`-letter shortcuts. Returns true if consumed.
     fn apple_ctrl_key(&mut self, key: KeyEvent) -> bool {
         if Self::ctrl(&key) {
             if let KeyCode::Char(c) = key.code {
@@ -864,7 +955,7 @@ impl App {
                     'b' if Self::shift(&key) => self.run_action("nav.outline"),
                     'b' => self.run_action("view.explorer"),
                     'e' => self.toggle_focus_explorer_editor(),
-                    'f' if Self::shift(&key) => self.run_action("search.project"),
+                    'f' if Self::shift(&key) => self.run_action("search.workspace"),
                     'f' => self.run_action("edit.find"),
                     'g' if Self::shift(&key) => self.run_action("edit.find_prev"),
                     'g' => self.run_action("edit.find_next"),
@@ -881,7 +972,50 @@ impl App {
         false
     }
 
-    /// Keys shared by every keyway: menu-bar mnemonics and function keys. Returns
+    // ----- keymap: VS Code (macOS) ----------------------------------------
+
+    /// VS Code (macOS) keymap dispatch: VS Code's signature shortcuts — Quick
+    /// Open (`Ctrl+P`), Command Palette (`Ctrl+Shift+P`), Go to Symbol
+    /// (`Ctrl+Shift+O`), Go to Line (`Ctrl+G`) — plus the familiar editing
+    /// chords, then the shared menu mnemonics and function keys. Returns true if
+    /// the key was consumed.
+    fn vscode_key(&mut self, key: KeyEvent) -> bool {
+        self.vscode_ctrl_key(key) || self.global_shared_key(key)
+    }
+
+    /// The VS Code keymap's `Ctrl`-key shortcuts (VS Code's `Cmd` bindings, with
+    /// `Ctrl` standing in for `Cmd`). Returns true if consumed.
+    fn vscode_ctrl_key(&mut self, key: KeyEvent) -> bool {
+        if Self::ctrl(&key) {
+            if let KeyCode::Char(c) = key.code {
+                match c.to_ascii_lowercase() {
+                    'q' => self.run_action("file.quit"),
+                    'n' => self.run_action("file.new"),
+                    's' if Self::shift(&key) => self.run_action("file.save_as"),
+                    's' => self.run_action("file.save"),
+                    'w' => self.run_action("file.close"),
+                    't' if Self::shift(&key) => self.run_action("file.reopen_closed"),
+                    'p' if Self::shift(&key) => self.run_action("tools.palette"),
+                    'p' => self.run_action("file.open"),
+                    'o' if Self::shift(&key) => self.run_action("nav.goto_symbol"),
+                    'g' if Self::shift(&key) => self.run_action("edit.find_prev"),
+                    'g' => self.open_palette_seeded(":"),
+                    'e' if Self::shift(&key) => self.toggle_focus_explorer_editor(),
+                    'b' => self.run_action("view.explorer"),
+                    'f' if Self::shift(&key) => self.run_action("search.workspace"),
+                    'f' => self.run_action("edit.find"),
+                    'r' => self.run_action("edit.replace"),
+                    '/' => self.run_action("edit.toggle_comment"),
+                    ']' => self.run_action("edit.match_bracket"),
+                    _ => return false,
+                }
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Keys shared by every keymap: menu-bar mnemonics and function keys. Returns
     /// true if consumed.
     fn global_shared_key(&mut self, key: KeyEvent) -> bool {
         if Self::alt(&key) {
@@ -903,6 +1037,11 @@ impl App {
             }
         }
         match key.code {
+            // Ctrl+Space triggers LSP completion (terminal support varies).
+            KeyCode::Char(' ') if Self::ctrl(&key) => {
+                self.run_action("lsp.complete");
+                true
+            }
             KeyCode::Tab if Self::ctrl(&key) => {
                 self.run_action("tab.next");
                 true
@@ -976,10 +1115,10 @@ impl App {
         };
     }
 
-    // ----- keyway: Emacs --------------------------------------------------
+    // ----- keymap: Emacs --------------------------------------------------
 
     /// Feed a key to the editor as if it were typed with no modifiers, but only
-    /// when the editor pane is focused. Used to translate keyway motions
+    /// when the editor pane is focused. Used to translate keymap motions
     /// (`Ctrl+F`, `l`, …) into the editor's existing handling.
     fn editor_motion(&mut self, code: KeyCode) {
         if self.focus == Focus::Editor {
@@ -987,7 +1126,7 @@ impl App {
         }
     }
 
-    /// Emacs keyway dispatch: the `Ctrl+X` prefix and `Ctrl`-key chords. Returns
+    /// Emacs keymap dispatch: the `Ctrl+X` prefix and `Ctrl`-key chords. Returns
     /// true if the key was consumed (so it should not fall through).
     fn emacs_key(&mut self, key: KeyEvent) -> bool {
         // Second key of a `Ctrl+X …` chord.
@@ -1033,9 +1172,9 @@ impl App {
         false
     }
 
-    // ----- keyway: Vim ----------------------------------------------------
+    // ----- keymap: Vim ----------------------------------------------------
 
-    /// Vim keyway dispatch: Normal-mode motions/commands, Insert mode, and the
+    /// Vim keymap dispatch: Normal-mode motions/commands, Insert mode, and the
     /// `:` command line. Returns true if the key was consumed.
     fn vim_key(&mut self, key: KeyEvent) -> bool {
         if self.vim_cmd.is_some() {
@@ -1252,6 +1391,14 @@ impl App {
                 let area = self.editor_view();
                 self.editor.select_word(false, area);
             }
+            "edit.select_paragraph" => {
+                let area = self.editor_view();
+                self.editor.select_paragraph(area);
+            }
+            "edit.select_section" => {
+                let area = self.editor_view();
+                self.editor.select_section(area);
+            }
             "edit.find" => self.start_search(false),
             "edit.find_next" => self.find_step(true),
             "edit.find_prev" => self.find_step(false),
@@ -1262,15 +1409,44 @@ impl App {
                     s.interactive = true;
                 }
             }
-            "search.project" => self.open_project_search(false),
-            "search.project_replace" => self.open_project_search(true),
-            "search.project_dock" => {
+            "search.workspace" => self.open_workspace_search(false),
+            "search.workspace_replace" => self.open_workspace_search(true),
+            "search.workspace_dock" => {
                 self.prompt =
                     Some(Prompt::new(PromptKind::SearchToDock, t!("prompt.search_dock").to_string()));
             }
             "search.next_selection" => self.find_selection(true),
             "search.prev_selection" => self.find_selection(false),
+            "edit.go_first" => {
+                let area = self.editor_view();
+                self.editor.cursor_document_start(area);
+            }
+            "edit.go_last" => {
+                let area = self.editor_view();
+                self.editor.cursor_document_end(area);
+            }
+            "edit.line_start" => self.editor.cursor_line_start(),
+            "edit.line_end" => self.editor.cursor_line_end(),
+            "edit.para_start" => {
+                let area = self.editor_view();
+                self.editor.cursor_paragraph_start(area);
+            }
+            "edit.para_end" => {
+                let area = self.editor_view();
+                self.editor.cursor_paragraph_end(area);
+            }
+            "edit.section_start" => {
+                let area = self.editor_view();
+                self.editor.cursor_section_start(area);
+            }
+            "edit.section_end" => {
+                let area = self.editor_view();
+                self.editor.cursor_section_end(area);
+            }
+            "nav.goto_line" => self.open_palette_seeded(":"),
             "nav.goto_definition" => self.goto_definition(),
+            "lsp.hover" => self.lsp_hover(),
+            "lsp.complete" => self.lsp_complete(),
             "nav.goto_symbol" => self.open_palette_seeded("@"),
             "nav.outline" => self.open_outline(),
             "explorer.filter_include" => {
@@ -1289,7 +1465,7 @@ impl App {
             }
             "view.theme" => self.open_theme_chooser(),
             "view.locale" => self.open_locale_chooser(),
-            "view.keyway" => self.open_keyway_chooser(),
+            "view.keymap" => self.open_keymap_chooser(),
             "tools.calendar" => {
                 self.show_calendar = !self.show_calendar;
                 // Always open on the present month; navigation is per-session.
@@ -1299,6 +1475,8 @@ impl App {
             }
             "tools.nerd_palette" => self.open_nerd_palette(),
             "tools.ascii" => self.open_ascii_panel(),
+            "tools.x11_colors" => self.open_x11_panel(),
+            "tools.html_chars" => self.open_html_panel(),
             "tools.system_info" => self.open_system_info(),
             "tools.dashboard" => self.open_dashboard(),
             "tools.run_command" => {
@@ -1323,6 +1501,10 @@ impl App {
             "git.pull" => self.git_remote_command("git pull"),
             "git.fetch" => self.git_remote_command("git fetch"),
             "git.switch_branch" => self.open_branch_chooser(),
+            "git.new_branch" => self.git_begin_new_branch(),
+            "git.log" => self.git_log(),
+            "git.status" => self.git_status_to_dock(),
+            "git.clone" => self.git_begin_clone(),
             "view.bottom_dock" => self.toggle_bottom_dock(),
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
@@ -1336,7 +1518,7 @@ impl App {
             }
             "vix.website" => self.open_text_dialog(
                 t!("menu.item.vix.website").to_string(),
-                "https://github.com/joelparkerhenderson/vix",
+                "https://github.com/vixide/vix",
             ),
             "vix.email" => self.open_text_dialog(
                 t!("menu.item.vix.email").to_string(),
@@ -1444,7 +1626,7 @@ impl App {
         }
     }
 
-    /// Refresh the cached git state (repo?, branch, changed files) for the project
+    /// Refresh the cached git state (repo?, branch, changed files) for the workspace
     /// root. Cheap enough to call after saves and git actions; not per-frame.
     pub fn refresh_git(&mut self) {
         self.git_repo = vix_git::is_repo(&self.root);
@@ -1504,7 +1686,7 @@ impl App {
         !self.git_status.is_empty()
     }
 
-    /// The git change for a file `path` (absolute, under the project root), from
+    /// The git change for a file `path` (absolute, under the workspace root), from
     /// the cached status — `None` when not in a repo or the file is unchanged.
     #[must_use]
     pub fn git_change_for(&self, path: &Path) -> Option<vix_git::Change> {
@@ -1771,7 +1953,7 @@ impl App {
     // ----- git changes panel ----------------------------------------------
 
     /// Open the git changes panel (refreshing status first). Reports a status when
-    /// the project root is not a git repository.
+    /// the workspace root is not a git repository.
     fn open_git_panel(&mut self) {
         self.refresh_git();
         if !self.git_repo {
@@ -1889,6 +2071,73 @@ impl App {
             Err(e) => self.messages.error(t!("msg.git_commit_failed", error = e).to_string()),
         }
         self.refresh_git();
+    }
+
+    /// Begin creating a topic branch: prompt for its name (only in a repo).
+    fn git_begin_new_branch(&mut self) {
+        if !vix_git::is_repo(&self.root) {
+            self.status = t!("status.git_not_repo").into();
+            return;
+        }
+        self.git_panel = None;
+        self.prompt = Some(Prompt::new(
+            PromptKind::GitNewBranch,
+            t!("prompt.git_new_branch").to_string(),
+        ));
+    }
+
+    /// Create a new topic branch named `name` and switch to it.
+    fn git_create_branch(&mut self, name: &str) {
+        let name = name.trim();
+        if name.is_empty() {
+            self.status = t!("status.git_empty_branch").into();
+            return;
+        }
+        match vix_git::create_branch(&self.root, name) {
+            Ok(()) => {
+                self.status = t!("status.git_switched", branch = name).to_string();
+                self.refresh_git();
+                // Files on disk may now differ; refresh the explorer tree.
+                self.explorer.rebuild();
+            }
+            Err(e) => self.messages.error(t!("msg.git_branch_failed", error = e).to_string()),
+        }
+    }
+
+    /// Show the commit history, streaming `git log` into the bottom dock.
+    fn git_log(&mut self) {
+        if !vix_git::is_repo(&self.root) {
+            self.status = t!("status.git_not_repo").into();
+            return;
+        }
+        self.git_panel = None;
+        self.run_command("git --no-pager log --oneline --graph --decorate -n 200");
+    }
+
+    /// Show the working-tree status, streaming `git status` into the bottom dock.
+    fn git_status_to_dock(&mut self) {
+        if !vix_git::is_repo(&self.root) {
+            self.status = t!("status.git_not_repo").into();
+            return;
+        }
+        self.git_panel = None;
+        self.run_command("git --no-pager status");
+    }
+
+    /// Begin cloning a repository: prompt for its URL (works outside a repo too).
+    fn git_begin_clone(&mut self) {
+        self.git_panel = None;
+        self.prompt = Some(Prompt::new(PromptKind::GitClone, t!("prompt.git_clone").to_string()));
+    }
+
+    /// Clone `url` into the workspace, streaming `git clone` into the bottom dock.
+    fn git_clone(&mut self, url: &str) {
+        let url = url.trim();
+        if url.is_empty() {
+            self.status = t!("status.git_empty_url").into();
+            return;
+        }
+        self.run_command(&format!("git clone {url}"));
     }
 
     /// Run a remote git command (push/pull/fetch) asynchronously, streaming its
@@ -2091,6 +2340,233 @@ impl App {
         if let Some(t) = self.editor.active_tab_mut() {
             t.dirty = true;
             t.preview = false;
+        }
+    }
+
+    // ----- LSP ------------------------------------------------------------
+
+    /// The active tab's file path, if it has one.
+    fn active_path(&self) -> Option<PathBuf> {
+        self.editor.active_tab().and_then(|t| t.path.clone())
+    }
+
+    /// The cursor's LSP `(line, character)` for `path`'s server encoding.
+    fn cursor_lsp_position(&self, path: &Path) -> (u32, u32) {
+        let enc = self.lsp.encoding_for(path);
+        let Some(t) = self.editor.active_tab() else { return (0, 0) };
+        let code = t.editor.code_ref();
+        let cur = t.editor.get_cursor();
+        let line = code.char_to_line(cur);
+        let line_start = code.line_to_char(line);
+        let line_text = code.slice(line_start, line_start + code.line_len(line));
+        let character = vix_lsp::position::char_to_col(&line_text, cur - line_start, enc);
+        (u32::try_from(line).unwrap_or(0), character)
+    }
+
+    /// Push the active document to its language server when it has changed since
+    /// the last sync (sending `didOpen` the first time, then `didChange`).
+    fn lsp_sync_active(&mut self) {
+        let Some(path) = self.active_path() else { return };
+        if !self.lsp.handles(&path) {
+            return;
+        }
+        let Some(rev) = self.editor.active_tab().map(|t| t.editor.revision()) else { return };
+        let last = self.lsp_synced.get(&path).copied();
+        if last == Some(rev) {
+            return;
+        }
+        let Some(text) = self.editor.active_tab().map(|t| t.editor.get_content()) else { return };
+        if last.is_none() {
+            self.lsp.did_open(&path, &text);
+        } else {
+            self.lsp.did_change(&path, &text);
+        }
+        self.lsp_synced.insert(path, rev);
+    }
+
+    /// Tell the language server a file closed and forget its sync state.
+    fn lsp_close(&mut self, path: &Path) {
+        if self.lsp_synced.remove(path).is_some() {
+            self.lsp.did_close(path);
+        }
+    }
+
+    /// Drain language-server messages and act on them (diagnostics, hover,
+    /// definition jumps, completion). Called once per event-loop iteration.
+    pub fn poll_lsp(&mut self) {
+        if !self.lsp.is_active() {
+            return;
+        }
+        self.lsp_sync_active();
+        for event in self.lsp.poll() {
+            match event {
+                crate::lsp::LspEvent::Diagnostics(_) => {}
+                crate::lsp::LspEvent::Hover(text) => self.hover = Some(HoverPopup { text }),
+                crate::lsp::LspEvent::Definition { path, line, character } => {
+                    self.lsp_jump(&path, line, character);
+                }
+                crate::lsp::LspEvent::Completion(items) => {
+                    if !items.is_empty() {
+                        self.completion = Some(CompletionPopup { items, selected: 0 });
+                    }
+                }
+            }
+        }
+        // Rebuild the active editor's diagnostic underlines every tick so they
+        // stay correct across new publishes and tab switches alike (cheap — it
+        // just maps the stored diagnostics for the active file).
+        self.refresh_diagnostic_marks();
+    }
+
+    /// Whether a language-server request is in flight or starting up (the event
+    /// loop ticks faster then, so responses feel prompt).
+    #[must_use]
+    pub fn lsp_busy(&self) -> bool {
+        self.lsp.busy()
+    }
+
+    /// Rebuild the active editor's diagnostic underline marks from the latest
+    /// diagnostics for its file.
+    fn refresh_diagnostic_marks(&mut self) {
+        let Some(path) = self.active_path() else { return };
+        if !self.lsp.handles(&path) {
+            if let Some(t) = self.editor.active_tab_mut() {
+                t.editor.clear_diagnostic_marks();
+            }
+            return;
+        }
+        let enc = self.lsp.encoding_for(&path);
+        let ranges: Vec<(vix_lsp::Range, vix_lsp::Severity)> = self
+            .lsp
+            .diagnostics_for(&path)
+            .iter()
+            .map(|d| (d.range, d.severity))
+            .collect();
+        let Some(t) = self.editor.active_tab_mut() else { return };
+        let marks = {
+            let code = t.editor.code_ref();
+            ranges
+                .iter()
+                .map(|(range, sev)| {
+                    let start = lsp_pos_to_char(code, range.start.line, range.start.character, enc);
+                    let mut end = lsp_pos_to_char(code, range.end.line, range.end.character, enc);
+                    if end <= start {
+                        end = start + 1; // make a zero-width diagnostic visible
+                    }
+                    (start, end, severity_color(*sev))
+                })
+                .collect::<Vec<_>>()
+        };
+        t.editor.set_diagnostic_marks(marks);
+    }
+
+    /// Open `path` and move the cursor to LSP `(line, character)` (0-based).
+    fn lsp_jump(&mut self, path: &Path, line: u32, character: u32) {
+        let path = path.to_path_buf();
+        self.with_jump(|s| {
+            s.open_path(&path, false);
+            s.focus = Focus::Editor;
+            let enc = s.lsp.encoding_for(&path);
+            let (target_line, target_col) = {
+                let Some(t) = s.editor.active_tab() else { return };
+                let code = t.editor.code_ref();
+                let ln = (line as usize).min(code.len_lines().saturating_sub(1));
+                let line_start = code.line_to_char(ln);
+                let line_text = code.slice(line_start, line_start + code.line_len(ln));
+                let col = vix_lsp::position::col_to_char(&line_text, character, enc);
+                (ln + 1, col + 1)
+            };
+            let area = s.editor_view();
+            s.editor.goto(target_line, Some(target_col), area);
+        });
+    }
+
+    /// Request hover info for the symbol under the cursor.
+    fn lsp_hover(&mut self) {
+        let Some(path) = self.active_path() else { return };
+        if !self.lsp.handles(&path) {
+            self.status = t!("status.lsp_inactive").to_string();
+            return;
+        }
+        let (line, character) = self.cursor_lsp_position(&path);
+        self.lsp.request_hover(&path, line, character);
+    }
+
+    /// Request completion candidates at the cursor.
+    fn lsp_complete(&mut self) {
+        let Some(path) = self.active_path() else { return };
+        if !self.lsp.handles(&path) {
+            self.status = t!("status.lsp_inactive").to_string();
+            return;
+        }
+        let (line, character) = self.cursor_lsp_position(&path);
+        self.lsp.request_completion(&path, line, character);
+    }
+
+    /// The identifier characters immediately before the cursor (the typed prefix
+    /// a completion should extend).
+    fn word_prefix_before_cursor(&self) -> String {
+        let Some(t) = self.editor.active_tab() else { return String::new() };
+        let code = t.editor.code_ref();
+        let cur = t.editor.get_cursor();
+        let line = code.char_to_line(cur);
+        let line_start = code.line_to_char(line);
+        let before: String = code.slice(line_start, cur);
+        before
+            .chars()
+            .rev()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect()
+    }
+
+    /// Insert the highlighted completion, extending the already-typed prefix.
+    fn accept_completion(&mut self) {
+        let Some(popup) = self.completion.take() else { return };
+        let Some(item) = popup.items.get(popup.selected) else { return };
+        let prefix = self.word_prefix_before_cursor();
+        // If the candidate begins with what's typed, insert only the remainder so
+        // the prefix is not duplicated; otherwise insert it whole.
+        let insert = if !prefix.is_empty() && item.insert_text.starts_with(&prefix) {
+            item.insert_text[prefix.len()..].to_string()
+        } else {
+            item.insert_text.clone()
+        };
+        let area = self.layout.editor;
+        if self.editor.insert_str(&insert, area) {
+            self.mark_active_dirty();
+        }
+    }
+
+    /// Handle a key while the completion popup is open. Returns true if consumed.
+    fn completion_key(&mut self, key: KeyEvent) -> bool {
+        let Some(popup) = self.completion.as_mut() else { return false };
+        match key.code {
+            KeyCode::Up => {
+                popup.selected = popup.selected.saturating_sub(1);
+                true
+            }
+            KeyCode::Down => {
+                if popup.selected + 1 < popup.items.len() {
+                    popup.selected += 1;
+                }
+                true
+            }
+            KeyCode::Enter | KeyCode::Tab => {
+                self.accept_completion();
+                true
+            }
+            KeyCode::Esc => {
+                self.completion = None;
+                true
+            }
+            _ => {
+                // Any other key dismisses the popup and is handled normally.
+                self.completion = None;
+                false
+            }
         }
     }
 
@@ -2321,6 +2797,7 @@ impl App {
     /// Close the active tab unconditionally.
     fn do_close_active(&mut self) {
         if let Some(p) = self.editor.close_active() {
+            self.lsp_close(&p);
             self.push_closed_tab(p);
         }
         self.status = t!("status.closed_buffer").into();
@@ -2707,8 +3184,8 @@ impl App {
             self.locale_mouse(mouse);
             return;
         }
-        if self.keyway_chooser.is_some() {
-            self.keyway_mouse(mouse);
+        if self.keymap_chooser.is_some() {
+            self.keymap_mouse(mouse);
             return;
         }
         if self.recent_chooser.is_some() {
@@ -2721,6 +3198,14 @@ impl App {
         }
         if self.ascii_panel.is_some() {
             self.ascii_mouse(mouse);
+            return;
+        }
+        if self.x11_panel.is_some() {
+            self.x11_mouse(mouse);
+            return;
+        }
+        if self.html_panel.is_some() {
+            self.html_mouse(mouse);
             return;
         }
         if self.system_info.is_some() {
@@ -2759,7 +3244,7 @@ impl App {
             || self.palette.is_some()
             || self.prompt.is_some()
             || self.query_replace.is_some()
-            || self.project_search.is_some()
+            || self.workspace_search.is_some()
             || self.confirm.is_some()
             || self.unsaved.is_some()
             || self.spell_suggest.is_some()
@@ -3103,7 +3588,7 @@ impl App {
                 let idx = row.saturating_sub(top) as usize;
                 if row >= top && idx < items.len() && !items[idx].is_separator() {
                     if items[idx].has_submenu() {
-                        self.menu.item = idx;
+                        self.menu.item = Some(idx);
                         self.menu.sub = None;
                         self.menu.right(); // opens the submenu
                     } else {
@@ -3181,7 +3666,7 @@ impl App {
                 let items = MENUS[mi].items;
                 let idx = row.saturating_sub(top) as usize;
                 if row >= top && idx < items.len() && !items[idx].is_separator() {
-                    self.menu.item = idx;
+                    self.menu.item = Some(idx);
                     self.menu.sub = None;
                     if items[idx].has_submenu() {
                         self.menu.right(); // reveal the submenu on hover
@@ -3345,16 +3830,16 @@ impl App {
         }
     }
 
-    // ----- keyway chooser -------------------------------------------------
+    // ----- keymap chooser -------------------------------------------------
 
-    fn open_keyway_chooser(&mut self) {
-        self.keyway_chooser = Some(KeywayChooser::open(&self.settings.keyway));
+    fn open_keymap_chooser(&mut self) {
+        self.keymap_chooser = Some(KeymapChooser::open(&self.settings.keymap));
     }
 
-    fn keyway_key(&mut self, key: KeyEvent) {
+    fn keymap_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Up | KeyCode::Down => {
-                if let Some(kc) = self.keyway_chooser.as_mut() {
+                if let Some(kc) = self.keymap_chooser.as_mut() {
                     if key.code == KeyCode::Up {
                         kc.up();
                     } else {
@@ -3363,25 +3848,25 @@ impl App {
                 }
             }
             KeyCode::Enter => {
-                if let Some(kc) = self.keyway_chooser.take() {
+                if let Some(kc) = self.keymap_chooser.take() {
                     let id = kc.selected_id();
-                    self.settings.keyway = id.to_string();
-                    self.reset_keyway_modes();
-                    self.status = t!("status.keyway", keyway = id).to_string();
+                    self.settings.keymap = id.to_string();
+                    self.reset_keymap_modes();
+                    self.status = t!("status.keymap", keymap = id).to_string();
                 }
             }
             KeyCode::Esc => {
                 // Only reachable while the chooser is open, so just discard it.
-                self.keyway_chooser = None;
-                self.status = t!("status.keyway_unchanged").to_string();
+                self.keymap_chooser = None;
+                self.status = t!("status.keymap_unchanged").to_string();
             }
             _ => {}
         }
     }
 
-    /// Reset per-keyway session state (Emacs chord prefix, Vim mode/command line)
-    /// so a freshly chosen keyway starts clean — Vim begins in Normal mode.
-    fn reset_keyway_modes(&mut self) {
+    /// Reset per-keymap session state (Emacs chord prefix, Vim mode/command line)
+    /// so a freshly chosen keymap starts clean — Vim begins in Normal mode.
+    fn reset_keymap_modes(&mut self) {
         self.emacs_prefix = false;
         self.vim_insert = false;
         self.vim_cmd = None;
@@ -3487,10 +3972,10 @@ impl App {
         }
     }
 
-    fn keyway_mouse(&mut self, mouse: MouseEvent) {
+    fn keymap_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse) {
-            if let Some(kc) = self.keyway_chooser.as_mut() {
-                if idx < vix_keyway_chooser::KEYWAYS.len() {
+            if let Some(kc) = self.keymap_chooser.as_mut() {
+                if idx < vix_keymap_chooser::KEYMAPS.len() {
                     kc.selected = idx;
                 }
             }
@@ -3642,6 +4127,169 @@ impl App {
         }
     }
 
+    // ----- X11 color palette ----------------------------------------------
+
+    fn open_x11_panel(&mut self) {
+        self.x11_panel = Some(X11Panel::open());
+    }
+
+    fn x11_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.x11_panel.height as usize).max(1);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.x11_panel.as_mut() {
+                    p.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.x11_panel.as_mut() {
+                    p.down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(p) = self.x11_panel.as_mut() {
+                    p.page_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(p) = self.x11_panel.as_mut() {
+                    p.page_down(page);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(p) = self.x11_panel.as_mut() {
+                    p.page_up(p.len());
+                }
+            }
+            KeyCode::End => {
+                if let Some(p) = self.x11_panel.as_mut() {
+                    p.page_down(p.len());
+                }
+            }
+            // Enter inserts and keeps the panel open so several colors can be
+            // picked in a row; Esc closes it.
+            KeyCode::Enter => self.insert_selected_x11(),
+            KeyCode::Esc => self.x11_panel = None,
+            _ => {}
+        }
+    }
+
+    fn x11_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.x11_panel;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row_in_view = (mouse.row - r.y) as usize;
+        if let Some(p) = self.x11_panel.as_mut() {
+            let idx = p.scroll + row_in_view;
+            if p.select_index(idx) {
+                self.insert_selected_x11();
+            }
+        }
+    }
+
+    /// Insert the highlighted color's hex (e.g. `#F0F8FF`) into the active editor
+    /// (leaving the panel open). No-op when there is no editable buffer.
+    fn insert_selected_x11(&mut self) {
+        let Some(p) = self.x11_panel.as_ref() else {
+            return;
+        };
+        let hex = p.selected_hex().to_string();
+        let name = p.selected_name().to_string();
+        let area = self.layout.editor;
+        if self.editor.insert_str(&hex, area) {
+            self.status = t!("status.x11_inserted", name = name).to_string();
+        }
+    }
+
+    // ----- HTML character palette -----------------------------------------
+
+    fn open_html_panel(&mut self) {
+        self.html_panel = Some(HtmlPanel::open());
+    }
+
+    fn html_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.html_panel.height as usize).max(1);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.html_panel.as_mut() {
+                    p.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.html_panel.as_mut() {
+                    p.down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(p) = self.html_panel.as_mut() {
+                    p.page_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(p) = self.html_panel.as_mut() {
+                    p.page_down(page);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(p) = self.html_panel.as_mut() {
+                    p.page_up(p.len());
+                }
+            }
+            KeyCode::End => {
+                if let Some(p) = self.html_panel.as_mut() {
+                    p.page_down(p.len());
+                }
+            }
+            // Enter inserts and keeps the panel open so several entities can be
+            // picked in a row; Esc closes it.
+            KeyCode::Enter => self.insert_selected_html(),
+            KeyCode::Esc => self.html_panel = None,
+            _ => {}
+        }
+    }
+
+    fn html_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.html_panel;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row_in_view = (mouse.row - r.y) as usize;
+        let rel_col = mouse.column.saturating_sub(r.x) as usize;
+        // A click picks the individual cell under the pointer — glyph, name, or
+        // code — and inserts just that cell's text.
+        let cell = self.html_panel.as_mut().and_then(|p| {
+            let idx = p.scroll + row_in_view;
+            p.select_index(idx).then(|| html_cell_at(p.selected_entity(), rel_col))
+        });
+        if let Some(text) = cell {
+            let area = self.layout.editor;
+            if self.editor.insert_str(&text, area) {
+                self.status = t!("status.html_inserted", name = text).to_string();
+            }
+        }
+    }
+
+    /// Insert the highlighted entity's glyph into the active editor (leaving the
+    /// panel open) — the keyboard equivalent of clicking the glyph cell. No-op
+    /// when there is no editable buffer.
+    fn insert_selected_html(&mut self) {
+        let Some(p) = self.html_panel.as_ref() else {
+            return;
+        };
+        let glyph = p.selected_entity().glyph.to_string();
+        let area = self.layout.editor;
+        if self.editor.insert_str(&glyph, area) {
+            self.status = t!("status.html_inserted", name = glyph).to_string();
+        }
+    }
+
     // ----- System Information panel ---------------------------------------
 
     fn open_system_info(&mut self) {
@@ -3721,9 +4369,9 @@ impl App {
         }
     }
 
-    // ----- project dashboard ----------------------------------------------
+    // ----- workspace dashboard ----------------------------------------------
 
-    /// Open the Project Dashboard and kick off the background metric computations
+    /// Open the Workspace Dashboard and kick off the background metric computations
     /// (disk usage via `du`, a recursive file count, and the git commit count).
     fn open_dashboard(&mut self) {
         let folder = self
@@ -4447,12 +5095,20 @@ impl App {
         }
     }
 
-    // ----- project-wide search / replace ---------------------------------
+    // ----- workspace-wide search / replace ---------------------------------
 
-    /// Heuristic "go to definition": find likely definitions of the identifier
-    /// under the cursor across the project (keyword-prefixed declarations). Not
-    /// a semantic LSP — fast, offline, and language-agnostic.
+    /// Go to the definition of the symbol under the cursor. When a language
+    /// server handles the active file, ask it (`textDocument/definition`, the
+    /// result arrives asynchronously and jumps via [`App::poll_lsp`]). Otherwise
+    /// fall back to the heuristic, keyword-prefixed cross-workspace search below.
     fn goto_definition(&mut self) {
+        if let Some(path) = self.active_path() {
+            if self.lsp.handles(&path) {
+                let (line, character) = self.cursor_lsp_position(&path);
+                self.lsp.request_definition(&path, line, character);
+                return;
+            }
+        }
         let Some(symbol) = self.symbol_under_cursor() else {
             self.messages.warn(t!("msg.no_symbol"));
             return;
@@ -4474,12 +5130,12 @@ impl App {
                 self.status = t!("status.definition_of", symbol = symbol).to_string();
             }
             n => {
-                let mut ps = ProjectSearch::new(false);
+                let mut ps = WorkspaceSearch::new(false);
                 ps.query.clone_from(&symbol);
                 ps.static_results = true;
                 ps.hits = hits;
                 ps.status = t!("status.definitions_n", n = n, symbol = symbol).to_string();
-                self.project_search = Some(ps);
+                self.workspace_search = Some(ps);
             }
         }
     }
@@ -4549,10 +5205,10 @@ impl App {
         hits
     }
 
-    fn open_project_search(&mut self, replacing: bool) {
+    fn open_workspace_search(&mut self, replacing: bool) {
         self.build_file_index();
-        self.project_search = Some(ProjectSearch::new(replacing));
-        self.run_project_search();
+        self.workspace_search = Some(WorkspaceSearch::new(replacing));
+        self.run_workspace_search();
     }
 
     /// The current text for a path: the open buffer if one points at it (so
@@ -4574,26 +5230,26 @@ impl App {
         std::fs::read_to_string(path).ok()
     }
 
-    fn run_project_search(&mut self) {
+    fn run_workspace_search(&mut self) {
         // Static result lists (e.g. go-to-definition) are not re-searched.
-        if self.project_search.as_ref().is_some_and(|p| p.static_results) {
+        if self.workspace_search.as_ref().is_some_and(|p| p.static_results) {
             return;
         }
-        let Some(ps) = self.project_search.as_ref() else {
+        let Some(ps) = self.workspace_search.as_ref() else {
             return;
         };
         let Some(pat) = ps.pattern() else {
-            if let Some(p) = self.project_search.as_mut() {
+            if let Some(p) = self.workspace_search.as_mut() {
                 p.hits.clear();
                 p.selected = 0;
-                p.status = t!("status.project_search_prompt").into();
+                p.status = t!("status.workspace_search_prompt").into();
             }
             return;
         };
         let re = match Regex::new(&pat) {
             Ok(r) => r,
             Err(e) => {
-                if let Some(p) = self.project_search.as_mut() {
+                if let Some(p) = self.workspace_search.as_mut() {
                     p.status = t!("msg.bad_regex", error = e).to_string();
                 }
                 return;
@@ -4636,7 +5292,7 @@ impl App {
             }
         }
 
-        if let Some(p) = self.project_search.as_mut() {
+        if let Some(p) = self.workspace_search.as_mut() {
             p.status = if hits.is_empty() {
                 t!("status.no_matches_cap").into()
             } else {
@@ -4649,8 +5305,8 @@ impl App {
         }
     }
 
-    fn project_replace_all(&mut self) {
-        let Some(ps) = self.project_search.as_ref() else {
+    fn workspace_replace_all(&mut self) {
+        let Some(ps) = self.workspace_search.as_ref() else {
             return;
         };
         if !ps.replacing {
@@ -4662,7 +5318,7 @@ impl App {
         let re = match Regex::new(&pat) {
             Ok(r) => r,
             Err(e) => {
-                if let Some(p) = self.project_search.as_mut() {
+                if let Some(p) = self.workspace_search.as_mut() {
                     p.status = t!("msg.bad_regex", error = e).to_string();
                 }
                 return;
@@ -4705,67 +5361,67 @@ impl App {
             files += 1;
         }
 
-        self.run_project_search();
-        if let Some(p) = self.project_search.as_mut() {
+        self.run_workspace_search();
+        if let Some(p) = self.workspace_search.as_mut() {
             p.status = t!("status.replaced_in_files", replaced = replaced, files = files).to_string();
         }
     }
 
     fn ps_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Esc => self.project_search = None,
+            KeyCode::Esc => self.workspace_search = None,
             KeyCode::Up => {
-                if let Some(p) = self.project_search.as_mut() {
+                if let Some(p) = self.workspace_search.as_mut() {
                     p.up();
                 }
             }
             KeyCode::Down => {
-                if let Some(p) = self.project_search.as_mut() {
+                if let Some(p) = self.workspace_search.as_mut() {
                     p.down();
                 }
             }
             KeyCode::Tab => {
-                if let Some(p) = self.project_search.as_mut() {
+                if let Some(p) = self.workspace_search.as_mut() {
                     p.toggle_field();
                 }
             }
             KeyCode::Enter => {
-                let replacing = self.project_search.as_ref().is_some_and(|p| p.replacing);
-                let on_replace = self.project_search.as_ref().map(|p| p.field) == Some(Field::Replace);
+                let replacing = self.workspace_search.as_ref().is_some_and(|p| p.replacing);
+                let on_replace = self.workspace_search.as_ref().map(|p| p.field) == Some(Field::Replace);
                 if replacing && (Self::alt(&key) || on_replace) {
-                    self.project_replace_all();
+                    self.workspace_replace_all();
                 } else {
                     self.open_selected_hit();
                 }
             }
             KeyCode::Char(c) if Self::alt(&key) => {
-                if let Some(p) = self.project_search.as_mut() {
+                if let Some(p) = self.workspace_search.as_mut() {
                     match c.to_ascii_lowercase() {
                         'c' => p.case_sensitive = !p.case_sensitive,
                         'r' => p.regex = !p.regex,
                         _ => {}
                     }
                 }
-                self.run_project_search();
+                self.run_workspace_search();
             }
             KeyCode::Backspace => {
                 // Editing any field except Replace (query or the path filters)
                 // changes the result set, so re-run the search.
-                let affects = self.project_search.as_ref().map(|p| p.field) != Some(Field::Replace);
-                if let Some(p) = self.project_search.as_mut() {
+                let affects = self.workspace_search.as_ref().map(|p| p.field) != Some(Field::Replace);
+                if let Some(p) = self.workspace_search.as_mut() {
                     p.active_field_mut().pop();
                 }
                 if affects {
-                    self.run_project_search();
+                    self.run_workspace_search();
                 }
             }
             KeyCode::Char(c) => {
-                let affects = self.project_search.as_ref().map(|p| p.field) != Some(Field::Replace);
-                if let Some(p) = self.project_search.as_mut() {
+                let affects = self.workspace_search.as_ref().map(|p| p.field) != Some(Field::Replace);
+                if let Some(p) = self.workspace_search.as_mut() {
                     p.active_field_mut().push(c);
                 }
                 if affects {
-                    self.run_project_search();
+                    self.run_workspace_search();
                 }
             }
             _ => {}
@@ -4774,12 +5430,12 @@ impl App {
 
     fn open_selected_hit(&mut self) {
         let target = self
-            .project_search
+            .workspace_search
             .as_ref()
             .and_then(|p| p.selected_hit())
             .map(|h| (h.path.clone(), h.line, h.col));
         if let Some((path, line, col)) = target {
-            self.project_search = None;
+            self.workspace_search = None;
             self.with_jump(|s| {
                 s.open_path(&path, false);
                 let area = s.editor_view();
@@ -4945,7 +5601,7 @@ impl App {
                     p.input.pop();
                 }
             }
-            // Alt+C / Alt+R toggle case / regex for the project→dock search.
+            // Alt+C / Alt+R toggle case / regex for the workspace→dock search.
             KeyCode::Char(c) if Self::alt(&key) => {
                 if let Some(p) = self.prompt.as_mut() {
                     if matches!(p.kind, PromptKind::SearchToDock) {
@@ -5003,9 +5659,11 @@ impl App {
             }
             PromptKind::RunCommand => self.run_command(&prompt.input),
             PromptKind::SearchToDock => {
-                self.search_project_to_dock(&prompt.input, prompt.case_sensitive, prompt.regex);
+                self.search_workspace_to_dock(&prompt.input, prompt.case_sensitive, prompt.regex);
             }
             PromptKind::GitCommit => self.git_commit(&prompt.input),
+            PromptKind::GitNewBranch => self.git_create_branch(&prompt.input),
+            PromptKind::GitClone => self.git_clone(&prompt.input),
             PromptKind::ExplorerInclude => {
                 let exclude = self.explorer.exclude_filter.clone();
                 self.explorer.set_filter(prompt.input.trim(), &exclude);
@@ -5017,11 +5675,11 @@ impl App {
         }
     }
 
-    /// Search every project file for `query` and list the hits in the bottom dock
+    /// Search every workspace file for `query` and list the hits in the bottom dock
     /// as `relpath:line:col: text` lines, which are click-to-jump. `regex` treats
     /// the query as a regular expression (else literal); `case_sensitive` matches
     /// case exactly. Shows the dock.
-    fn search_project_to_dock(&mut self, query: &str, case_sensitive: bool, regex: bool) {
+    fn search_workspace_to_dock(&mut self, query: &str, case_sensitive: bool, regex: bool) {
         let query = query.trim();
         if query.is_empty() {
             return;
@@ -5082,7 +5740,7 @@ impl App {
         self.status = t!("status.matches_in_files", count = count, files = files).to_string();
     }
 
-    /// Run a shell command in the project root, streaming its output (stdout and
+    /// Run a shell command in the workspace root, streaming its output (stdout and
     /// stderr merged) into the bottom dock, which is shown. The command runs in a
     /// background thread; [`App::poll_command`] drains its output each frame and
     /// [`App::cancel_command`] kills it.
@@ -5198,6 +5856,7 @@ impl App {
 
     /// Persist settings on exit; failures become a status message only.
     pub fn on_exit(&mut self) {
+        self.lsp.shutdown();
         if let Err(e) = self.settings.save() {
             self.messages
                 .push(Level::Warn, t!("msg.settings_save_failed", error = e).to_string());
@@ -5207,6 +5866,48 @@ impl App {
 
 fn rect_contains(r: Rect, col: u16, row: u16) -> bool {
     col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height
+}
+
+/// The char offset within `code` of LSP position `(line, character)`, where
+/// `character` is in the server's `enc` units. Out-of-range positions clamp.
+fn lsp_pos_to_char(
+    code: &vix_editor::code::Code,
+    line: u32,
+    character: u32,
+    enc: vix_lsp::Encoding,
+) -> usize {
+    let line = line as usize;
+    if line >= code.len_lines() {
+        return code.len();
+    }
+    let line_start = code.line_to_char(line);
+    let line_text = code.slice(line_start, line_start + code.line_len(line));
+    line_start + vix_lsp::position::col_to_char(&line_text, character, enc)
+}
+
+/// The underline color for a diagnostic severity.
+fn severity_color(sev: vix_lsp::Severity) -> ratatui::style::Color {
+    use ratatui::style::Color;
+    match sev {
+        vix_lsp::Severity::Error => Color::Red,
+        vix_lsp::Severity::Warning => Color::Yellow,
+        vix_lsp::Severity::Information => Color::Cyan,
+        vix_lsp::Severity::Hint => Color::Blue,
+    }
+}
+
+/// The text of the HTML-palette row cell at `rel_col` (columns measured from the
+/// row's left edge): the glyph, the entity name, or the code point. The column
+/// bands track the row format rendered by `ui::draw_html_panel`
+/// (`"  {glyph:2}  {name:26}  {code}"`).
+fn html_cell_at(e: &vix_html_character_picker::Entity, rel_col: usize) -> String {
+    if rel_col < 6 {
+        e.glyph.to_string()
+    } else if rel_col < 34 {
+        e.name.to_string()
+    } else {
+        e.code.to_string()
+    }
 }
 
 /// Decode an image file into a `DynamicImage` the picker can turn into a
@@ -5314,22 +6015,22 @@ mod tests {
     }
 
     #[test]
-    fn renders_project_search_panel_with_hits() {
+    fn renders_workspace_search_panel_with_hits() {
         let dir = std::env::temp_dir().join(format!("vix-ps-unit-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("note.txt"), "the needle is here\n").unwrap();
 
         let mut app = App::new(dir.clone(), Settings::default());
-        app.run_action("search.project");
+        app.run_action("search.workspace");
         for c in "needle".chars() {
             app.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
         }
-        assert_eq!(app.project_search.as_ref().unwrap().hits.len(), 1);
+        assert_eq!(app.workspace_search.as_ref().unwrap().hits.len(), 1);
 
         let mut terminal = Terminal::new(TestBackend::new(100, 40)).unwrap();
         terminal.draw(|f| crate::ui::draw(&mut app, f)).unwrap();
         let text = buffer_text(&terminal);
-        assert!(text.contains("Search in Project"), "panel title rendered");
+        assert!(text.contains("Search in Workspace"), "panel title rendered");
         assert!(text.contains("needle"), "the matching line is shown");
 
         std::fs::remove_dir_all(&dir).ok();

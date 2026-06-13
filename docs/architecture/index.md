@@ -19,7 +19,7 @@ genuinely needs it:
 | `vix-date-time-calendar-panel`   | Calendar date/time strings and the navigable Monday-first month grid (owns the `jiff` dependency). |
 | `vix-theme-chooser`              | The theme model: monochrome Dark/Light modes, the ratatui styles derived from them, **custom JSON themes** (per-region RGB), and chooser state. |
 | `vix-locale-chooser`             | The list of available UI languages and chooser state.                 |
-| `vix-keyway-chooser`             | The keyboard navigation styles (Apple / Emacs / Vim) and chooser state. |
+| `vix-keymap-chooser`             | The keyboard navigation styles (Apple / Emacs / Vim) and chooser state. |
 | `vix-keyboard-shortcut-panel`    | The keyboard-help rows (key combo + i18n description key).            |
 
 The pattern for the panel/chooser crates is **data and logic in the crate, host
@@ -39,7 +39,7 @@ same ones `ratatui` re-exports, so they flow straight into the app's rendering.
 | `menu`           | Menu-bar definitions (i18n-keyed) and `Menu` dropdown state          |
 | `palette`        | `Palette`, mode detection, fuzzy matching, `path:line:col` parsing   |
 | `search`         | `SearchBar`: query/replace/toggles; builds the regex pattern         |
-| `project_search` | `ProjectSearch`: the project-wide search/replace panel state         |
+| `workspace_search` | `WorkspaceSearch`: the workspace-wide search/replace panel state         |
 | `query`          | `QueryReplace`: interactive step-through replace session             |
 | `messages`       | `Messages`: the notifications drawer model                           |
 | `fileops`        | Filesystem helpers for explorer copy/cut/paste/delete                |
@@ -61,21 +61,21 @@ main()                         ui::draw(&app, frame)         App::on_key(event)
         terminal.draw(draw) ──────────┘                    │ theme chooser   │
         if should_quit: break                              │ locale chooser  │
         if poll(500ms):                                    │ query-replace   │
-            on_key(read()) ─────────────────────────────▶  │ project search  │
+            on_key(read()) ─────────────────────────────▶  │ workspace search  │
                                                            │ confirm / paste │
                                                            │ prompt          │
                                                            │ palette         │
                                                            │ search          │
                                                            │ menu            │
-                                                           ├─ keyway dispatch
+                                                           ├─ keymap dispatch
                                                            └─ focused pane:
                                                               editor/explorer/
                                                               messages
 ```
 
 `App::on_key` resolves input in strict priority order: each modal overlay
-consumes input while open (the theme, locale, and keyway choosers are overlays in
-this chain). With no modal active, the active **keyway** dispatches the key —
+consumes input while open (the theme, locale, and keymap choosers are overlays in
+this chain). With no modal active, the active **keymap** dispatches the key —
 Apple modifier shortcuts, Emacs `Ctrl` chords, or Vim modal motions, all routing
 through `run_action` and the editor's own handling — and anything it does not
 consume routes to the focused pane.
@@ -87,7 +87,7 @@ explorer/messages/tab/menu clicks map to the corresponding row or item, and the
 menu bar's right-edge dock-toggle icons toggle the drawers.
 
 Menu items and palette `>`-commands share one set of **action identifiers**
-(strings like `file.save`, `view.theme`, `view.locale`, `view.keyway`). Both funnel through
+(strings like `file.save`, `view.theme`, `view.locale`, `view.keymap`). Both funnel through
 `App::run_action`, so a command has exactly one implementation regardless of how
 it is invoked.
 
@@ -104,11 +104,11 @@ visible. The editor band is itself split into a tab bar and the text area plus a
 itself — including syntax highlighting, the block cursor, visible-whitespace
 glyphs, **bracket matching**, and **soft wrap** (a shared visual-row layout drives
 its renderer, cursor scroll, and mouse hit-testing). The status bar shows the
-keyway mode indicator (Vim's `-- NORMAL --` / `-- INSERT --` / `:` line, or
+keymap mode indicator (Vim's `-- NORMAL --` / `-- INSERT --` / `:` line, or
 Emacs's pending `Ctrl+X-` prefix) plus the buffer's language, line ending
 (LF/CRLF), encoding, selection char/line count, and line:column.
 Overlays (calendar, menu dropdown, search, palette, prompt, dialogs, and the
-theme / locale / keyway / recent choosers, …) are drawn last, each clearing its
+theme / locale / keymap / recent choosers, …) are drawn last, each clearing its
 rectangle with `Clear` and painting a bordered box in the theme background so it
 reads correctly in either light or dark mode.
 

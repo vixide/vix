@@ -26,7 +26,7 @@ pub struct Node {
 
 /// The file-explorer tree and its selection/scroll state.
 pub struct Explorer {
-    /// Project root the tree is rooted at.
+    /// Workspace root the tree is rooted at.
     pub root: PathBuf,
     /// Flattened list of currently visible rows.
     pub nodes: Vec<Node>,

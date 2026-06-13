@@ -1,7 +1,7 @@
 # File Explorer
 
 The file explorer is Vix's built-in **left dock**: a directory tree for browsing,
-opening, and managing your project files without leaving the keyboard.
+opening, and managing your workspace files without leaving the keyboard.
 
 **Status:** Shipped.
 

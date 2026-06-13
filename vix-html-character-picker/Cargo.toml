@@ -1,0 +1,17 @@
+# vix-html-character-picker: the HTML named-character table (entity name, Unicode
+# code point, rendered glyph) and the picker's row-selection + scroll state. Pure
+# data (no dependencies); the data is bundled as a TSV and parsed once on first
+# use. The host renders the rows and inserts the chosen entity reference (`&name;`)
+# into the editor.
+
+[package]
+name = "vix-html-character-picker"
+version = "0.1.0"
+edition = "2021"
+description = "HTML named-character table and row-selection state for Vix."
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_html_character_picker"
+path = "src/lib.rs"

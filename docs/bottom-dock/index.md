@@ -40,9 +40,9 @@ command output and search results actionable directly from the dock.
 
 Two features write into the bottom dock.
 
-### Search in Project → Dock
+### Search in Workspace → Dock
 
-From **Edit → Find**, this prompts for a term, scans every project file, and
+From **Edit → Find**, this prompts for a term, scans every workspace file, and
 lists hits in the dock as `relpath:line:col: text`. Each result is
 click-to-jumpable. In the prompt, `Alt+C` toggles case-sensitivity and `Alt+R`
 toggles regex; the current state is shown under the input. The default is a
@@ -50,7 +50,7 @@ case-insensitive literal search.
 
 ### Run Command
 
-From **Tools → Run Command…**, this runs a shell command in the project root on
+From **Tools → Run Command…**, this runs a shell command in the workspace root on
 a background thread and streams its output into the dock (showing it):
 
 - a `$ command` header,

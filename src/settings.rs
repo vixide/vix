@@ -64,8 +64,9 @@ pub struct Settings {
     /// UI language as a locale code (e.g. `"en"`, `"es"`, `"fr"`, `"de"`, `"cy"`).
     /// Used as the default; a `--locale` CLI flag overrides it for one run.
     pub locale: String,
-    /// Keyboard navigation style id: `"apple"` (default), `"emacs"`, or `"vim"`.
-    pub keyway: String,
+    /// Keyboard navigation style id: `"apple"` (default), `"vscode"`, `"emacs"`,
+    /// or `"vim"`.
+    pub keymap: String,
     /// Width (columns) of the left dock (file explorer); drag its right edge to
     /// resize.
     pub explorer_width: u16,
@@ -84,6 +85,26 @@ pub struct Settings {
     /// autodetected standard locations. Empty = autodetect only. Both the
     /// `<dir>/<name>.{aff,dic}` and `<dir>/<name>/index.{aff,dic}` layouts work.
     pub dictionary_path: String,
+    /// Master switch for Language Server Protocol features (diagnostics, hover,
+    /// go-to-definition, completion). When off, no servers are launched.
+    pub lsp_enabled: bool,
+    /// Configured language servers, matched to files by extension. Each entry is
+    /// a language id (sent to the server), the file extensions it handles, and
+    /// the command (program + args) to launch. Empty by default — Vix ships no
+    /// built-in server, so add the ones you have installed, e.g.
+    /// `{ language_id = "rust", extensions = ["rs"], command = ["rust-analyzer"] }`.
+    pub lsp_servers: Vec<LspServer>,
+}
+
+/// One configured language server (a `lsp_servers` entry).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LspServer {
+    /// LSP `languageId` sent in `didOpen` (e.g. `"rust"`, `"python"`).
+    pub language_id: String,
+    /// File extensions (without the dot) this server handles, e.g. `["rs"]`.
+    pub extensions: Vec<String>,
+    /// Launch command: program then args, e.g. `["rust-analyzer"]`.
+    pub command: Vec<String>,
 }
 
 /// Default cap for [`Settings::recent_files`] (the `recent_files_max` setting).
@@ -109,13 +130,15 @@ impl Default for Settings {
             tab_width: 4,
             theme: "dark".to_string(),
             locale: "en".to_string(),
-            keyway: "apple".to_string(),
+            keymap: "apple".to_string(),
             explorer_width: 30,
             messages_width: 32,
             recent_files: Vec::new(),
             recent_files_max: MAX_RECENT_FILES,
             spellcheck: false,
             dictionary_path: String::new(),
+            lsp_enabled: true,
+            lsp_servers: Vec::new(),
         }
     }
 }

@@ -57,6 +57,10 @@ pub struct Editor {
     /// search hits).
     pub(crate) spell_marks: Option<Vec<(usize, usize)>>,
 
+    /// LSP diagnostic marks: `(start char, end char, color)`, drawn as a colored
+    /// underline. A separate channel from `spell_marks` so the two coexist.
+    pub(crate) diagnostic_marks: Option<Vec<(usize, usize, Color)>>,
+
     /// Git diff gutter marks: `(line index, color)`, drawn as a colored bar in
     /// the line-number gutter.
     pub(crate) gutter_marks: Option<Vec<(usize, Color)>>,
@@ -129,6 +133,7 @@ impl Editor {
             clipboard: None,
             marks: None,
             spell_marks: None,
+            diagnostic_marks: None,
             gutter_marks: None,
             highlights_cache,
             show_line_numbers: true,
@@ -428,6 +433,19 @@ impl Editor {
         self.fit_cursor();
     }
 
+    /// Select the range `[anchor, cursor)`, putting the caret at `cursor`. An
+    /// empty range (`anchor == cursor`) just clears the selection.
+    pub fn set_selection_range(&mut self, anchor: usize, cursor: usize) {
+        if anchor == cursor {
+            self.selection = None;
+        } else {
+            self.selection = Some(Selection::from_anchor_and_cursor(anchor, cursor));
+        }
+        self.selection_snap = SelectionSnap::None;
+        self.cursor = cursor;
+        self.fit_cursor();
+    }
+
     pub fn fit_cursor(&mut self) {
         // make sure cursor is not out of bounds 
         let len = self.code.len_chars();
@@ -518,6 +536,22 @@ impl Editor {
     #[must_use]
     pub fn spell_marks(&self) -> Option<&Vec<(usize, usize)>> {
         self.spell_marks.as_ref()
+    }
+
+    /// Set the LSP diagnostic underline marks: `(start char, end char, color)`.
+    pub fn set_diagnostic_marks(&mut self, marks: Vec<(usize, usize, Color)>) {
+        self.diagnostic_marks = if marks.is_empty() { None } else { Some(marks) };
+    }
+
+    /// Clear all LSP diagnostic underline marks.
+    pub fn clear_diagnostic_marks(&mut self) {
+        self.diagnostic_marks = None;
+    }
+
+    /// The current LSP diagnostic underline marks, if any.
+    #[must_use]
+    pub fn diagnostic_marks(&self) -> Option<&Vec<(usize, usize, Color)>> {
+        self.diagnostic_marks.as_ref()
     }
 
     /// Set the git diff gutter marks: `(line index, hex color)` per changed line.
@@ -618,6 +652,13 @@ impl Editor {
 
     pub fn code_ref(&self) -> &Code {
         &self.code
+    }
+
+    /// A counter that increases on every content edit, for cheap change detection
+    /// (e.g. deciding when to push a `didChange` to a language server).
+    #[must_use]
+    pub fn revision(&self) -> u64 {
+        self.code.revision()
     }
 
     /// The buffer's language identifier (e.g. `"rust"`, `"text"`).

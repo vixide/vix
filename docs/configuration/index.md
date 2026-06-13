@@ -34,12 +34,14 @@ their defaults, so it is safe to delete or hand-edit.
 | `ensure_final_newline`     | bool | `true` | On save, append a final newline if the file lacks one. |
 | `theme`         | string | `"dark"` | `"dark"`, `"light"`, or the `name` of a custom theme.                |
 | `locale`        | string | `"en"`   | UI language code (`en`, `es`, `fr`, `de`, `cy`, …).                  |
-| `keyway`        | string | `"apple"`| Keyboard navigation style: `"apple"`, `"emacs"`, or `"vim"`.         |
+| `keymap`        | string | `"apple"`| Keyboard navigation style: `"apple"`, `"emacs"`, or `"vim"`.         |
 | `explorer_width`| int    | `30`     | Width (columns) of the left dock; drag its right edge to resize.    |
 | `messages_width`| int    | `32`     | Width (columns) of the right dock; drag its left edge to resize.    |
 | `recent_files`  | list   | `[]`     | Recently opened files (absolute paths), most-recent first, capped at 15. Updated automatically; surfaced by **File → Open Recent…**. |
 | `spellcheck`    | bool   | `false`  | Underline misspelled words in comments/strings (**View → Editor → Toggle Spellcheck**). |
 | `dictionary_path` | string | `""` | Extra directory to search for Hunspell dictionaries, on top of the autodetected standard locations (`/usr/share/hunspell`, `/Library/Spelling`, `~/.local/share/hunspell`, `hunspell -D`, …). Empty = autodetect only. Both `<dir>/<name>.{aff,dic}` and `<dir>/<name>/index.{aff,dic}` layouts work. The spellcheck language follows the UI `locale`. |
+| `lsp_enabled`   | bool   | `true`   | Master switch for Language Server Protocol features (diagnostics, hover, go-to-definition, completion). When off, no servers launch. See `spec/lsp.md`. |
+| `lsp_servers`   | list   | `[]`     | Language servers, matched to files by extension. Each entry has `language_id`, `extensions`, and `command`. Empty by default — Vix ships no built-in server. |
 
 Example `config.toml`:
 
@@ -59,9 +61,16 @@ trim_trailing_whitespace = true
 ensure_final_newline = true
 theme = "dark"
 locale = "en"
-keyway = "apple"
+keymap = "apple"
 explorer_width = 30
 messages_width = 32
+lsp_enabled = true
+
+# One [[lsp_servers]] block per language server you have installed:
+[[lsp_servers]]
+language_id = "rust"
+extensions = ["rs"]
+command = ["rust-analyzer"]
 ```
 
 `trim_trailing_whitespace` and `ensure_final_newline` normalize each file when it
@@ -72,8 +81,8 @@ them.
 Most settings are also changed from inside the app and saved on quit: toggling
 line numbers / visible whitespace / explorer / messages, resizing a dock (drag
 its inner edge), and
-choosing a theme (**View → Theme…**), language (**View → Locale…**), or keyway
-(**View → Keyway…**).
+choosing a theme (**View → Theme…**), language (**View → Locale…**), or keymap
+(**View → Keymap…**).
 
 ## Custom themes directory
 

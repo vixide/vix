@@ -91,8 +91,7 @@ const EDIT_FIND: &[Item] = &[
     Item::leaf("menu.item.edit.find_next", "edit.find_next", "Ctrl G"),
     Item::leaf("menu.item.edit.find_prev", "edit.find_prev", "Ctrl Shift G"),
     Item::leaf("menu.item.edit.find_selection", "search.next_selection", "Alt N"),
-    Item::leaf("menu.item.edit.search_project_dock", "search.project_dock", ""),
-    Item::leaf("menu.item.edit.replace", "edit.replace", "Ctrl R"),
+    Item::leaf("menu.item.edit.search_workspace_dock", "search.workspace_dock", ""),
 ];
 
 const EDIT: &[Item] = &[
@@ -102,17 +101,47 @@ const EDIT: &[Item] = &[
     Item::leaf("menu.item.edit.cut", "edit.cut", "Ctrl X"),
     Item::leaf("menu.item.edit.copy", "edit.copy", "Ctrl C"),
     Item::leaf("menu.item.edit.paste", "edit.paste", "Ctrl V"),
-    Item::leaf("menu.item.edit.select_all", "edit.select_all", "Ctrl A"),
-    Item::leaf("menu.item.edit.select_more", "edit.select_more", "Ctrl Shift →"),
-    Item::leaf("menu.item.edit.select_less", "edit.select_less", "Ctrl Shift ←"),
-    SEP,
-    Item::leaf("menu.item.edit.move_up", "edit.move_line_up", "Alt ↑"),
-    Item::leaf("menu.item.edit.move_down", "edit.move_line_down", "Alt ↓"),
+    Item::sub("menu.item.edit.select_menu", EDIT_SELECT),
+    Item::sub("menu.item.edit.move_menu", EDIT_MOVE),
+    Item::sub("menu.item.edit.go_menu", EDIT_GO),
     SEP,
     Item::sub("menu.item.edit.find_menu", EDIT_FIND),
     Item::sub("menu.item.edit.case", EDIT_CASE),
     SEP,
     Item::leaf("menu.item.edit.toggle_comment", "edit.toggle_comment", "Ctrl /"),
+];
+
+/// Cursor jump commands, grouped under Edit → Go.
+const EDIT_GO: &[Item] = &[
+    Item::leaf("menu.item.edit.go_line", "nav.goto_line", ""),
+    SEP,
+    Item::leaf("menu.item.edit.line_start", "edit.line_start", ""),
+    Item::leaf("menu.item.edit.line_end", "edit.line_end", ""),
+    SEP,
+    Item::leaf("menu.item.edit.para_start", "edit.para_start", ""),
+    Item::leaf("menu.item.edit.para_end", "edit.para_end", ""),
+    SEP,
+    Item::leaf("menu.item.edit.section_start", "edit.section_start", ""),
+    Item::leaf("menu.item.edit.section_end", "edit.section_end", ""),
+    SEP,
+    Item::leaf("menu.item.edit.go_first", "edit.go_first", ""),
+    Item::leaf("menu.item.edit.go_last", "edit.go_last", ""),
+];
+
+/// Line-move commands, grouped under Edit → Move.
+const EDIT_MOVE: &[Item] = &[
+    Item::leaf("menu.item.edit.move_up", "edit.move_line_up", "Alt ↑"),
+    Item::leaf("menu.item.edit.move_down", "edit.move_line_down", "Alt ↓"),
+];
+
+/// Selection commands, grouped under Edit → Select.
+const EDIT_SELECT: &[Item] = &[
+    Item::leaf("menu.item.edit.select_all", "edit.select_all", "Ctrl A"),
+    Item::leaf("menu.item.edit.select_more", "edit.select_more", "Ctrl Shift →"),
+    Item::leaf("menu.item.edit.select_less", "edit.select_less", "Ctrl Shift ←"),
+    SEP,
+    Item::leaf("menu.item.edit.select_paragraph", "edit.select_paragraph", ""),
+    Item::leaf("menu.item.edit.select_section", "edit.select_section", ""),
 ];
 
 /// Case transforms applied to the selection, grouped under Edit → Case.
@@ -140,6 +169,7 @@ const VIEW_EDITOR: &[Item] = &[
     Item::leaf("menu.item.view.whitespace", "view.whitespace", ""),
     Item::leaf("menu.item.view.scrollbar", "view.scrollbar", ""),
     Item::leaf("menu.item.view.soft_wrap", "view.soft_wrap", ""),
+    SEP,
     Item::leaf("menu.item.view.spellcheck", "view.spellcheck", ""),
     SEP,
     Item::leaf("menu.item.view.next_tab", "tab.next", "Ctrl Tab"),
@@ -149,7 +179,7 @@ const VIEW_EDITOR: &[Item] = &[
 const VIEW: &[Item] = &[
     Item::leaf("menu.item.view.theme", "view.theme", ""),
     Item::leaf("menu.item.view.locale", "view.locale", ""),
-    Item::leaf("menu.item.view.keyway", "view.keyway", ""),
+    Item::leaf("menu.item.view.keymap", "view.keymap", ""),
     SEP,
     Item::sub("menu.item.view.layout", VIEW_LAYOUT),
     Item::sub("menu.item.view.editor", VIEW_EDITOR),
@@ -165,23 +195,40 @@ const VIX: &[Item] = &[
 
 const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.palette", "tools.palette", "Ctrl P"),
+    Item::leaf("menu.item.tools.dashboard", "tools.dashboard", ""),
+    Item::leaf("menu.item.tools.system_info", "tools.system_info", ""),
     SEP,
     Item::leaf("menu.item.tools.run_command", "tools.run_command", ""),
     Item::leaf("menu.item.tools.cancel_command", "tools.cancel_command", ""),
+    SEP,
     Item::leaf("menu.item.tools.calendar", "tools.calendar", ""),
     Item::leaf("menu.item.tools.nerd_palette", "tools.nerd_palette", ""),
     Item::leaf("menu.item.tools.ascii", "tools.ascii", ""),
-    Item::leaf("menu.item.tools.system_info", "tools.system_info", ""),
-    Item::leaf("menu.item.tools.dashboard", "tools.dashboard", ""),
+    Item::leaf("menu.item.tools.html_chars", "tools.html_chars", ""),
+    SEP,
+    Item::sub("menu.item.tools.lsp", TOOLS_LSP),
+    Item::leaf("menu.item.tools.x11_colors", "tools.x11_colors", ""),
+];
+
+/// Language-server (LSP) actions, grouped under Tools → Language Server.
+const TOOLS_LSP: &[Item] = &[
+    Item::leaf("menu.item.lsp.definition", "nav.goto_definition", "F12"),
+    Item::leaf("menu.item.lsp.hover", "lsp.hover", ""),
+    Item::leaf("menu.item.lsp.complete", "lsp.complete", "Ctrl Space"),
 ];
 
 const GIT: &[Item] = &[
+    Item::leaf("menu.item.git.status", "git.status", ""),
     Item::leaf("menu.item.git.changes", "git.changes", ""),
+    Item::leaf("menu.item.git.log", "git.log", ""),
+    SEP,
+    Item::leaf("menu.item.git.new_branch", "git.new_branch", ""),
     Item::leaf("menu.item.git.switch_branch", "git.switch_branch", ""),
     SEP,
     Item::leaf("menu.item.git.pull", "git.pull", ""),
     Item::leaf("menu.item.git.push", "git.push", ""),
     Item::leaf("menu.item.git.fetch", "git.fetch", ""),
+    Item::leaf("menu.item.git.clone", "git.clone", ""),
 ];
 
 const HELP: &[Item] = &[Item::leaf("menu.item.help.shortcuts", "help.shortcuts", "F1")];
@@ -248,8 +295,10 @@ fn prev_selectable(items: &[Item], from: usize) -> usize {
 pub struct Menu {
     /// Which top-level menu is open, if any.
     pub open: Option<usize>,
-    /// Highlighted item within the open dropdown.
-    pub item: usize,
+    /// Highlighted item within the open dropdown, or `None` when the dropdown has
+    /// just opened and nothing is highlighted yet (the user must arrow, hover, or
+    /// type to pick an item).
+    pub item: Option<usize>,
     /// When `Some`, the highlighted item's submenu is open and this is the
     /// highlighted index within it.
     pub sub: Option<usize>,
@@ -274,15 +323,16 @@ impl Menu {
     /// Close any open dropdown.
     pub fn close(&mut self) {
         self.open = None;
-        self.item = 0;
+        self.item = None;
         self.sub = None;
     }
 
-    /// Open the menu at index `i` (no-op if out of range).
+    /// Open the menu at index `i` (no-op if out of range). No item is highlighted
+    /// yet — the user picks one by arrowing, hovering, or typing.
     pub fn open_index(&mut self, i: usize) {
         if i < MENUS.len() {
             self.open = Some(i);
-            self.item = first_selectable(MENUS[i].items);
+            self.item = None;
             self.sub = None;
         }
     }
@@ -291,7 +341,8 @@ impl Menu {
     #[must_use]
     pub fn submenu_items(&self) -> Option<&'static [Item]> {
         let i = self.open?;
-        MENUS[i].items[self.item].submenu
+        let it = self.item?;
+        MENUS[i].items[it].submenu
     }
 
     /// Move to the previous top-level menu; or, if a submenu is open, close it.
@@ -310,9 +361,11 @@ impl Menu {
     pub fn right(&mut self) {
         let Some(i) = self.open else { return };
         if self.sub.is_none() {
-            if let Some(sub) = MENUS[i].items[self.item].submenu {
-                self.sub = Some(first_selectable(sub));
-                return;
+            if let Some(it) = self.item {
+                if let Some(sub) = MENUS[i].items[it].submenu {
+                    self.sub = Some(first_selectable(sub));
+                    return;
+                }
             }
         } else {
             return;
@@ -321,37 +374,52 @@ impl Menu {
         self.open_index((i + 1) % n);
     }
 
-    /// Highlight the previous selectable item (in the submenu if open).
+    /// Highlight the previous selectable item (in the submenu if open). With
+    /// nothing highlighted yet, highlights the last selectable item.
     pub fn up(&mut self) {
         let Some(i) = self.open else { return };
-        if let (Some(sidx), Some(sub)) = (self.sub, MENUS[i].items[self.item].submenu) {
-            self.sub = Some(prev_selectable(sub, sidx));
-        } else {
-            self.item = prev_selectable(MENUS[i].items, self.item);
+        let items = MENUS[i].items;
+        match self.item {
+            Some(it) => {
+                if let (Some(sidx), Some(sub)) = (self.sub, items[it].submenu) {
+                    self.sub = Some(prev_selectable(sub, sidx));
+                } else {
+                    self.item = Some(prev_selectable(items, it));
+                }
+            }
+            None => self.item = Some(prev_selectable(items, 0)),
         }
     }
 
-    /// Highlight the next selectable item (in the submenu if open).
+    /// Highlight the next selectable item (in the submenu if open). With nothing
+    /// highlighted yet, highlights the first selectable item.
     pub fn down(&mut self) {
         let Some(i) = self.open else { return };
-        if let (Some(sidx), Some(sub)) = (self.sub, MENUS[i].items[self.item].submenu) {
-            self.sub = Some(next_selectable(sub, sidx));
-        } else {
-            self.item = next_selectable(MENUS[i].items, self.item);
+        let items = MENUS[i].items;
+        match self.item {
+            Some(it) => {
+                if let (Some(sidx), Some(sub)) = (self.sub, items[it].submenu) {
+                    self.sub = Some(next_selectable(sub, sidx));
+                } else {
+                    self.item = Some(next_selectable(items, it));
+                }
+            }
+            None => self.item = Some(first_selectable(items)),
         }
     }
 
     /// Activate the highlighted item: open its submenu (returning `None`) or
-    /// return the leaf action to run.
+    /// return the leaf action to run. Does nothing when nothing is highlighted.
     pub fn enter(&mut self) -> Option<&'static str> {
         let i = self.open?;
         let items = MENUS[i].items;
+        let it_idx = self.item?;
         if let Some(sidx) = self.sub {
-            let sub = items[self.item].submenu?;
+            let sub = items[it_idx].submenu?;
             let it = &sub[sidx];
             return (!it.is_separator()).then_some(it.action);
         }
-        let it = &items[self.item];
+        let it = &items[it_idx];
         if let Some(sub) = it.submenu {
             self.sub = Some(first_selectable(sub));
             return None;
@@ -361,30 +429,39 @@ impl Menu {
 
     /// Type-ahead: highlight the next item whose label starts with `c` (cycling
     /// from the current selection), within the open submenu if one is open, else
-    /// the top dropdown. Lets the user press e.g. `S`, `S` to step Save → Save As.
+    /// the top dropdown. With nothing highlighted yet, searches from the top.
+    /// Lets the user press e.g. `S`, `S` to step Save → Save As.
     pub fn type_ahead(&mut self, c: char) {
         let Some(i) = self.open else { return };
-        if let (Some(sidx), Some(items)) = (self.sub, MENUS[i].items[self.item].submenu) {
-            if let Some(j) = label_starting(items, sidx, c) {
-                self.sub = Some(j);
+        let items = MENUS[i].items;
+        if let Some(it) = self.item {
+            if let (Some(sidx), Some(sub)) = (self.sub, items[it].submenu) {
+                if let Some(j) = label_starting(sub, sidx, c) {
+                    self.sub = Some(j);
+                }
+            } else if let Some(j) = label_starting(items, it, c) {
+                self.item = Some(j);
             }
-        } else if let Some(j) = label_starting(MENUS[i].items, self.item, c) {
-            self.item = j;
+        } else if let Some(j) = label_starting(items, items.len().saturating_sub(1), c) {
+            // Start the search just before index 0 so the first match from the
+            // top wins.
+            self.item = Some(j);
         }
     }
 
-    /// The action of the highlighted leaf item, or `None` for a separator or a
-    /// submenu parent. Non-mutating (unlike [`Menu::enter`]).
+    /// The action of the highlighted leaf item, or `None` for a separator, a
+    /// submenu parent, or nothing highlighted. Non-mutating (unlike [`Menu::enter`]).
     #[must_use]
     pub fn selected_action(&self) -> Option<&'static str> {
         let i = self.open?;
         let items = MENUS[i].items;
+        let it_idx = self.item?;
         if let Some(sidx) = self.sub {
-            let sub = items[self.item].submenu?;
+            let sub = items[it_idx].submenu?;
             let it = &sub[sidx];
             return (!it.is_separator()).then_some(it.action);
         }
-        let it = &items[self.item];
+        let it = &items[it_idx];
         if it.has_submenu() {
             return None;
         }

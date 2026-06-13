@@ -1,0 +1,21 @@
+# vix-lsp: a pure Language Server Protocol client core — JSON-RPC 2.0 message
+# framing (Content-Length headers), request/notification builders, response and
+# diagnostic parsers, and char<->UTF-16 position conversion. No process or socket
+# IO: the host spawns the language server and pumps bytes through this crate's
+# encoder/decoder, so all the protocol logic stays unit-testable on its own.
+
+[package]
+name = "vix-lsp"
+version = "0.1.0"
+edition = "2021"
+description = "Pure Language Server Protocol client core (framing, messages, parsing) for Vix."
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_lsp"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

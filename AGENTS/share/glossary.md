@@ -40,8 +40,8 @@ Shared terms used across the code, specs, and docs.
 - **Monochrome** — the built-in theme style: one foreground, one background, no
   hue; emphasis via dim and full intensity (no bold/italic); reversed only for
   selections/cursor.
-- **Keyway** — the keyboard navigation style: **Apple** (modifier shortcuts, the
+- **Keymap** — the keyboard navigation style: **Apple** (modifier shortcuts, the
   default), **Emacs** (`Ctrl` chords), or **Vim** (modal). Exactly one is active;
-  chosen in **View → Keyway…** and persisted in the `keyway` setting.
-- **Mode (Vim)** — within the Vim keyway, **Normal** (motions/commands) vs
+  chosen in **View → Keymap…** and persisted in the `keymap` setting.
+- **Mode (Vim)** — within the Vim keymap, **Normal** (motions/commands) vs
   **Insert** (typing); the `:` command line is a third input state.

@@ -1,7 +1,7 @@
 # Left Dock
 
 The left dock is the **file explorer**: a lazily-expanded directory tree rooted
-at the project directory. Directories are listed first, then files, sorted
+at the workspace directory. Directories are listed first, then files, sorted
 case-insensitively by name; dotfiles are hidden.
 
 ## Show / Hide and Focus

@@ -24,7 +24,7 @@ the menus are **Vix · File · Edit · View · Tools · Git · Help**.
 
 - **About Vix** — modal dialog showing `Vix <version>` and an **Ok** button.
 - **Website** — modal dialog with a selectable/copyable text field
-  `https://github.com/joelparkerhenderson/vix` and an **Ok** button.
+  `https://github.com/vixide/vix` and an **Ok** button.
 - **Email** — modal dialog with a selectable/copyable text field
   `joel@joelparkerhenderson.com` and an **Ok** button.
 - **Quit** (`Ctrl+Q`) — quit Vix.
@@ -51,14 +51,41 @@ the menus are **Vix · File · Edit · View · Tools · Git · Help**.
 | Cut         | `Ctrl+X`       | Cut to clipboard                        |
 | Copy        | `Ctrl+C`       | Copy to clipboard                       |
 | Paste       | `Ctrl+V`       | Paste from clipboard                    |
-| Select All  | `Ctrl+A`       | Select the whole buffer                 |
-| Select More | `Ctrl+Shift+→` | Extend the selection right by a word    |
-| Select Less | `Ctrl+Shift+←` | Retract the selection left by a word    |
-| Move Up     | `Alt+↑`        | Move the current line up                |
-| Move Down   | `Alt+↓`        | Move the current line down              |
+| Select ▸    |                | Submenu of selection commands (below)   |
+| Move ▸      |                | Submenu of line-move commands (below)   |
+| Go ▸        |                | Submenu of cursor-jump commands (below) |
 | Find ▸      |                | Submenu of find-related items (below)   |
 | Case ▸      |                | Submenu of case transforms for the selection |
 | Comment     | `Ctrl+/`       | Comment/uncomment the line or selection |
+
+The **Select** submenu:
+
+| Item        | Shortcut       | Action                                  |
+| ----------- | -------------- | --------------------------------------- |
+| Select All  | `Ctrl+A`       | Select the whole buffer                 |
+| Select More | `Ctrl+Shift+→` | Extend the selection right by a word    |
+| Select Less | `Ctrl+Shift+←` | Retract the selection left by a word    |
+
+The **Move** submenu:
+
+| Item      | Shortcut | Action                   |
+| --------- | -------- | ------------------------ |
+| Move Up   | `Alt+↑`  | Move the current line up |
+| Move Down | `Alt+↓`  | Move the current line down |
+
+The **Go** submenu:
+
+| Item            | Action                                       |
+| --------------- | -------------------------------------------- |
+| Line Number     | Jump to a line number                        |
+| Line Start      | Move to the start of the current line        |
+| Line End        | Move to the end of the current line          |
+| Paragraph Start | Move to the start of the paragraph           |
+| Paragraph End   | Move to the end of the paragraph             |
+| Section Start   | Move to the start of the section             |
+| Section End     | Move to the end of the section               |
+| File Start      | Move the cursor to the start of the file     |
+| File End        | Move the cursor to the end of the file       |
 
 The **Find** submenu:
 
@@ -68,8 +95,10 @@ The **Find** submenu:
 | Find Next          | `Ctrl+G`       | Repeat the last search forward               |
 | Find Previous      | `Ctrl+Shift+G` | Repeat the last search backward              |
 | Find Selection     | `Alt+N`        | Jump to the next occurrence of the selection |
-| Search in Project… |                | List project-wide hits in the bottom dock    |
-| Replace            | `Ctrl+R`       | Find-and-replace in the file                 |
+| Find In Workspace… |                | List workspace-wide hits in the bottom dock    |
+
+Replace is part of the Find panel itself — press `Ctrl+R`, or `Tab` to the
+Replace field in the find box, to reveal it.
 
 The **Case** submenu applies a case transform to the current selection:
 Upper, Lower, Title, Kebab, Snake, Camel, and Pascal.
@@ -80,7 +109,7 @@ Upper, Lower, Title, Kebab, Snake, Camel, and Pascal.
 | -------- | ---------------------------- |
 | Theme…   | Open the theme chooser       |
 | Locale…  | Open the locale chooser      |
-| Keyway…  | Open the keyway chooser      |
+| Keymap…  | Open the keymap chooser      |
 | Layout ▸ | Submenu of dock/status toggles |
 | Editor ▸ | Submenu of editor display toggles |
 
@@ -97,21 +126,28 @@ and strings).
 
 | Item                | Action                                       |
 | ------------------- | -------------------------------------------- |
-| Calendar…           | Toggle the calendar box                      |
-| Nerd Font…          | Open the glyph picker                        |
-| ASCII Characters…   | Open the ASCII reference table               |
+| Command Palette     | Open the palette (`Ctrl+P`)                  |
+| Workspace Dashboard…  | Live folder/disk/file/commit metrics         |
 | System Information… | Host OS/CPU/memory/disk snapshot             |
-| Project Dashboard…  | Live folder/disk/file/commit metrics         |
+| *— separator —*     |                                              |
 | Run Command…        | Run a shell command into the bottom dock     |
 | Cancel Command      | Kill the running command                     |
-| Command Palette     | Open the palette (`Ctrl+P`)                  |
+| *— separator —*     |                                              |
+| Calendar…           | Toggle the calendar box                      |
+| Nerd Font Characters… | Open the glyph picker                      |
+| ASCII Characters…   | Open the ASCII reference table               |
+| X11 Colors…         | Pick an X11 color; inserts its hex           |
+| HTML Characters…    | Pick an HTML character; click a cell to insert it |
+| Language Server ▸   | LSP actions: Go to Definition, Hover, Completion |
 
 ## Git menu
 
 | Item           | Action                                                   |
 | -------------- | -------------------------------------------------------- |
 | Changes…       | Open the git changes panel: stage/unstage and commit     |
+| Log…           | Show the commit history (`git log`)                      |
 | Switch Branch… | Choose a local branch to check out                       |
+| New Branch…    | Create a new branch and switch to it                     |
 | Pull           | `git pull` (streamed to the bottom dock)                 |
 | Push           | `git push` (streamed to the bottom dock)                 |
 | Fetch          | `git fetch` (streamed to the bottom dock)                |

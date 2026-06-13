@@ -21,7 +21,7 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 
 - About Vix — modal dialog showing `Vix <version>` and an **Ok** button.
 - Website — modal dialog with a selectable/copyable text field
-  `https://github.com/joelparkerhenderson/vix` and an **Ok** button.
+  `https://github.com/vixide/vix` and an **Ok** button.
 - Email — modal dialog with a selectable/copyable text field
   `joel@joelparkerhenderson.com` and an **Ok** button.
 - *separator*
@@ -54,17 +54,45 @@ The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
 | Cut     | `Ctrl+X` | Cut to clipboard             |
 | Copy    | `Ctrl+C` | Copy to clipboard            |
 | Paste   | `Ctrl+V` | Paste from clipboard         |
-| Select All | `Ctrl+A` | Select the whole buffer    |
-| Select More | `Ctrl+Shift+→` | Extend the selection right by a word |
-| Select Less | `Ctrl+Shift+←` | Retract the selection left by a word |
-| *— separator —* | | |
-| Move Up | `Alt+↑` | Move the current line up    |
-| Move Down | `Alt+↓` | Move the current line down  |
+| Select ▸ | | Submenu of selection commands (below) |
+| Move ▸  | | Submenu of line-move commands (below) |
+| Go ▸    | | Submenu of cursor-jump commands (below) |
 | *— separator —* | | |
 | Find ▸  | | Submenu of find-related items (below) |
 | Case ▸  | | Submenu of case transforms for the selection (below) |
 | *— separator —* | | |
 | Comment | `Ctrl+/` | Comment/uncomment the line or selection |
+
+The **Select** submenu:
+
+| Item    | Shortcut | Action                       |
+| ------- | -------- | ---------------------------- |
+| Select All | `Ctrl+A` | Select the whole buffer    |
+| Select More | `Ctrl+Shift+→` | Extend the selection right by a word |
+| Select Less | `Ctrl+Shift+←` | Retract the selection left by a word |
+
+The **Move** submenu:
+
+| Item    | Shortcut | Action                       |
+| ------- | -------- | ---------------------------- |
+| Move Up | `Alt+↑` | Move the current line up    |
+| Move Down | `Alt+↓` | Move the current line down  |
+
+The **Go** submenu:
+
+| Item            | Action                                              |
+| --------------- | --------------------------------------------------- |
+| Line Number     | Jump to a line number (opens the `:` palette prompt) |
+| *— separator —* |                                                     |
+| Line Start      | Move to column 0 of the current line                |
+| Line End        | Move to the end of the current line                 |
+| Paragraph Start | Move to the first line of the paragraph (blank-line delimited) |
+| Paragraph End   | Move to the last line of the paragraph              |
+| Section Start   | Move to the first line of the section (2+ blank lines delimit) |
+| Section End     | Move to the last line of the section                |
+| *— separator —* |                                                     |
+| File Start      | Move the cursor to the start of the file            |
+| File End        | Move the cursor to the end of the file              |
 
 The **Find** submenu:
 
@@ -74,8 +102,11 @@ The **Find** submenu:
 | Find Next | `Ctrl+G` | Repeat the last search forward (works after the box closes) |
 | Find Previous | `Ctrl+Shift+G` | Repeat the last search backward |
 | Find Selection | `Alt+N` | Jump to the next occurrence of the selection |
-| Search in Project… | | List project-wide hits in the bottom dock (click-to-jump) |
-| Replace | `Ctrl+R` | Find-and-replace in the file |
+| Find In Workspace… | | List workspace-wide hits in the bottom dock (click-to-jump) |
+
+Replace lives inside the Find panel itself: `Ctrl+R` (or `Tab` to the Replace
+field in the find box) reveals it, so there is no separate menu item. See
+`vix-find-panel/spec/index.md`.
 
 The **Case** submenu (applies to the current selection):
 
@@ -89,17 +120,17 @@ The **Case** submenu (applies to the current selection):
 | Camel (fooBar)     | `fooBar`  |
 | Pascal (FooBar)    | `FooBar`  |
 
-(Project-wide search/replace is `Ctrl+Shift+F`; interactive query-replace is
+(Workspace-wide search/replace is `Ctrl+Shift+F`; interactive query-replace is
 `Ctrl+Alt+R`. Both are reachable from the command palette — see
-`search-and-replace.md`.)
+`vix-find-panel/spec/index.md`.)
 
 ## View menu
 
 | Item                             | Action                                        |
 | -------------------------------- | --------------------------------------------- |
-| Theme…                           | Open the theme chooser (`theme-chooser.md`)   |
-| Locale…                          | Open the locale chooser (`locale-chooser.md`) |
-| Keyway…                          | Open the keyway chooser (`keyway-chooser.md`) |
+| Theme…                           | Open the theme chooser (`vix-theme-chooser/spec/index.md`)   |
+| Locale…                          | Open the locale chooser (`vix-locale-chooser/spec/index.md`) |
+| Keymap…                          | Open the keymap chooser (`vix-keymap-chooser/spec/index.md`) |
 | *— separator —*                  |                                               |
 | Layout ▸                         | Submenu of dock/status toggles (below)        |
 | Editor ▸                         | Submenu of editor display toggles (below)     |
@@ -121,6 +152,7 @@ The **Editor** submenu:
 | Show/Hide Whitespace             | Show/hide visible space, tab, newline, return |
 | Show/Hide Scroll Bar             | Show/hide the editor's right-side scroll bar  |
 | Show/Hide Soft Wrap              | Wrap long lines vs. scroll horizontally       |
+| *— separator —*                  |                                               |
 | Toggle Spellcheck                | Underline misspellings in comments/strings (`vix-spellcheck.md`) |
 | *— separator —*                  |                                               |
 | Next Tab                         | Switch to the next tab (`Ctrl+Tab`)           |
@@ -131,21 +163,37 @@ The **Editor** submenu:
 | Item               | Action                                            |
 | ------------------ | ------------------------------------------------- |
 | Command Palette    | Open the palette (`Ctrl+P`)                       |
+| Workspace Dashboard… | Live folder/disk/file/commit metrics (`vix-workspace-dashboard-panel/spec/index.md`) |
+| System Information… | Host OS/CPU/memory/disk snapshot (`vix-system-information-panel/spec/index.md`) |
 | *— separator —*    |                                                   |
-| Calendar…          | Toggle the calendar box                           |
-| Nerd Font Characters… | Open the glyph picker (`nerd-font-palette.md`) |
-| ASCII Characters…  | Open the ASCII reference table (`vix-ascii-panel.md`) |
-| System Information… | Host OS/CPU/memory/disk snapshot (`vix-system-information-panel.md`) |
-| Project Dashboard… | Live folder/disk/file/commit metrics (`vix-project-dashboard-panel.md`) |
 | Run Command…       | Run a shell command into the bottom dock          |
 | Cancel Command     | Kill the running command                          |
+| *— separator —*    |                                                   |
+| Calendar…          | Toggle the calendar box                           |
+| Nerd Font Characters… | Open the glyph picker (`vix-nerd-font-picker/spec/index.md`) |
+| ASCII Characters…  | Open the ASCII reference table (`vix-ascii-character-picker/spec/index.md`) |
+| X11 Colors…        | Open the X11 color picker; inserts the chosen hex (`vix-x11-color-picker/spec/index.md`) |
+| HTML Characters…   | Open the HTML character picker; click a cell to insert it (`vix-html-character-picker/spec/index.md`) |
+| *— separator —*    |                                                   |
+| Language Server ▸  | Submenu of LSP actions (below); see `lsp.md`      |
+
+The **Language Server** submenu:
+
+| Item             | Shortcut     | Action                                          |
+| ---------------- | ------------ | ----------------------------------------------- |
+| Go to Definition | `F12`        | Jump to the definition (LSP, else heuristic)    |
+| Hover            |              | Show type/doc info for the symbol under the cursor |
+| Completion       | `Ctrl+Space` | Open the completion list at the cursor          |
 
 ## Git menu
 
 | Item            | Action                                                        |
 | --------------- | ------------------------------------------------------------- |
 | Changes…        | Open the git changes panel: stage/unstage files and commit (`git-integration.md`) |
+| Log…            | Show the commit history (`git log`, streamed to the bottom dock) |
+| *— separator —* |                                                               |
 | Switch Branch…  | Choose a local branch to check out                            |
+| New Branch…     | Create a new branch and switch to it (`git switch -c`)        |
 | *— separator —* |                                                               |
 | Pull            | `git pull` (streamed to the bottom dock)                      |
 | Push            | `git push` (streamed to the bottom dock)                      |
@@ -168,5 +216,5 @@ The **Editor** submenu:
 These appear in the design but are not implemented yet:
 
 - View ▸ **Zoom In / Out / Zero** (terminal font zoom).
-- Separate Edit menu entries for project-wide find/replace (today these live on
+- Separate Edit menu entries for workspace-wide find/replace (today these live on
   shortcuts and the palette, not the menu).

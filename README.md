@@ -6,7 +6,7 @@ tabbed buffers, a message drawer, a command palette, find & replace, a calendar
 box, switchable themes, a switchable UI language, and switchable keyboard
 navigation styles. It is built on [`ratatui`] and an in-house code-editor widget.
 By default it uses familiar macOS/Windows shortcuts (Ctrl+C / Ctrl+V, not modal),
-and you can switch to Emacs or Vim "keyways" if you prefer. Mouse and keyboard
+and you can switch to Emacs or Vim "keymaps" if you prefer. Mouse and keyboard
 both work.
 
 ```
@@ -51,9 +51,9 @@ both work.
   matching.
 - **Find & Replace** — incremental search, `F3`/`Shift+F3` navigation, Case /
   Whole-Word / Regex toggles, capture groups (`$1`, `${name}`) and escapes;
-  project-wide search/replace and interactive query-replace.
+  workspace-wide search/replace and interactive query-replace.
 - **Go to definition** (`F12`) — heuristic, language-agnostic jump to a symbol's
-  likely definition across the project.
+  likely definition across the workspace.
 - **Position history** (`Alt+Left` / `Alt+Right`) — jump back and forward
   through cursor positions, like a browser.
 - **Message drawer** — advice and notifications, each individually dismissable.
@@ -70,7 +70,7 @@ both work.
   Klingon and Sindarin. Any untranslated key falls back to English. Choose one in
   **View → Locale…**, via the `locale` setting, or with `--locale`. See
   [`docs/i18n.md`](docs/i18n.md).
-- **Keyways** — switch the keyboard navigation style in **View → Keyway…**:
+- **Keymaps** — switch the keyboard navigation style in **View → Keymap…**:
   **Apple** (default; modifier shortcuts), **Emacs** (`Ctrl` chords with a
   `Ctrl+X` prefix), or **Vim** (modal Normal/Insert + `:` command line). See
   [`docs/keybindings.md`](docs/keybindings.md).
@@ -130,7 +130,7 @@ the full reference, or press `F1` in the app.
 | `Ctrl+Z` | Undo                  | `F10`      | Open menu bar     |
 | `F12`    | Go to definition      | `F1`       | Keyboard help     |
 
-## Project layout
+## Workspace layout
 
 Vix is a Cargo workspace: a main `vix` crate (the application) plus several small
 internal crates, each owning one self-contained, separately-testable concern.
@@ -145,7 +145,7 @@ src/                            the vix application crate
   menu.rs        menu-bar definitions + dropdown state
   palette.rs     command palette + fuzzy matching
   search.rs      re-export of the find/replace box state (vix-find-panel)
-  project_search.rs  project-wide search/replace panel
+  workspace_search.rs  workspace-wide search/replace panel
   query.rs       interactive query-replace session
   messages.rs    re-export of the message-drawer state (vix-right-dock)
   fileops.rs     explorer copy/cut/paste/delete helpers
@@ -158,9 +158,9 @@ vix-editor/                     Vix's fully-custom editor widget (Tree-sitter, s
 vix-date-time-calendar-panel/   calendar date/time logic + navigable month grid
 vix-theme-chooser/              theme model, styles, custom JSON themes, chooser
 vix-locale-chooser/             available UI languages + chooser
-vix-keyway-chooser/             keyboard navigation styles (Apple/Emacs/Vim) + chooser
+vix-keymap-chooser/             keyboard navigation styles (Apple/Emacs/Vim) + chooser
 vix-keyboard-shortcut-panel/    keyboard-help rows
-vix-nerd-font-palette/          curated Nerd Font glyph set + character-picker grid state
+vix-nerd-font-picker/          curated Nerd Font glyph set + character-picker grid state
 vix-find-panel/                 find / find-and-replace box state + pattern builder
 vix-left-dock/                  left-dock file-explorer tree state
 vix-right-dock/                 right-dock message-drawer state
@@ -195,7 +195,7 @@ cargo clippy --workspace   # lints (the tree is warning-clean)
 The editing logic lives in the library crate and is exercised by
 `tests/integration.rs` without needing a live terminal — typing, open/save round
 trips, go-to-line, fuzzy matching, the search-pattern builder, regex replace with
-capture groups, theme/locale/keyway switching, the Emacs and Vim keyways, and the
+capture groups, theme/locale/keymap switching, the Emacs and Vim keymaps, and the
 ISO/date formatting are all covered. Each internal crate carries its own focused
 unit tests.
 

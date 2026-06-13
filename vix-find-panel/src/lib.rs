@@ -129,13 +129,13 @@ pub enum Field {
     Query,
     /// The replacement field.
     Replace,
-    /// The "include paths matching this regex" filter (project search).
+    /// The "include paths matching this regex" filter (workspace search).
     IncludePath,
-    /// The "exclude paths matching this regex" filter (project search).
+    /// The "exclude paths matching this regex" filter (workspace search).
     ExcludePath,
 }
 
-/// A path filter for project-wide search: optional include and exclude regexes
+/// A path filter for workspace-wide search: optional include and exclude regexes
 /// tested against a file path. Empty patterns mean "no constraint".
 pub struct PathFilter {
     include: Option<Regex>,
@@ -211,7 +211,7 @@ impl SearchBar {
 
     /// Mutable access to the currently focused field's text. The box uses only
     /// [`Field::Query`] / [`Field::Replace`]; the path-filter fields are for
-    /// project search, so they fall back to the query field here.
+    /// workspace search, so they fall back to the query field here.
     pub fn active_field_mut(&mut self) -> &mut String {
         match self.field {
             Field::Replace => &mut self.replace,

@@ -367,6 +367,67 @@ impl Editor {
             }
         }
 
+        // draw LSP diagnostic marks: a colored underline per severity, on a
+        // channel separate from spell marks so the two coexist.
+        if let Some(ref diags) = self.diagnostic_marks {
+            for &(start, end, color) in diags {
+                if start >= end || end > total_chars { continue }
+                let diag_style = Style {
+                    fg: Some(color),
+                    ..Style::default().add_modifier(Modifier::UNDERLINED)
+                };
+
+                let start_line = code.char_to_line(start);
+                let end_line = code.char_to_line(end);
+
+                for line_idx in start_line..=end_line {
+                    if line_idx < self.offset_y || line_idx >= self.offset_y + area.height as usize {
+                        continue;
+                    }
+
+                    let line_start_char = code.line_to_char(line_idx);
+                    let line_len = code.line_len(line_idx);
+                    let line_end_char = line_start_char + line_len;
+
+                    let highlight_start = start.max(line_start_char);
+                    let highlight_end = end.min(line_end_char);
+
+                    let rel_start = highlight_start - line_start_char;
+                    let rel_end = highlight_end - line_start_char;
+
+                    let start_col = self.offset_x.min(line_len);
+                    let max_text_width = (area.width as usize).saturating_sub(line_number_width);
+                    let end_col = (start_col + max_text_width).min(line_len);
+
+                    let char_slice_start = line_start_char + start_col;
+                    let char_slice_end = line_start_char + end_col;
+
+                    let visible_chars = code.char_slice(char_slice_start, char_slice_end);
+
+                    let draw_y = area.top() + (line_idx - self.offset_y) as u16;
+                    let mut visual_x: u16 = 0;
+                    let mut char_col = start_col;
+
+                    for g in RopeGraphemes::new(&visible_chars) {
+                        let (g_width, g_chars) = grapheme_width_and_chars_len(g);
+
+                        if char_col < rel_end && char_col + g_chars > rel_start {
+                            let start_x = area.left() + line_number_width as u16 + visual_x;
+                            for dx in 0..g_width as u16 {
+                                let draw_x = start_x + dx;
+                                if draw_x < area.right() && draw_y < area.bottom() {
+                                    buf[(draw_x, draw_y)].set_style(diag_style);
+                                }
+                            }
+                        }
+
+                        visual_x = visual_x.saturating_add(g_width as u16);
+                        char_col += g_chars;
+                    }
+                }
+            }
+        }
+
         // draw cursor (topmost): a one-cell block at the caret, themed by the host
         if let Some(cursor_style) = self.cursor_style {
             let cur = self.cursor.min(total_chars);

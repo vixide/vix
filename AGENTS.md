@@ -57,10 +57,10 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
   [`docs/themes.md`](docs/themes.md).
 - **Keep the logic terminal-independent.** Editing/state logic lives in the
   library and is tested without a TTY. Rendering lives only in `src/ui.rs`.
-- **Input dispatch is keyway-aware.** Raw keys route through the active _keyway_
-  (Apple / Emacs / Vim) in `App::on_key`; keyways translate keys into the same
+- **Input dispatch is keymap-aware.** Raw keys route through the active _keymap_
+  (Apple / Emacs / Vim) in `App::on_key`; keymaps translate keys into the same
   `run_action` calls and editor motions rather than duplicating behavior. See
-  `spec/keyway-chooser.md`.
+  `spec/vix-keymap-chooser/spec/index.md`.
 - **One `ratatui` version.** The whole widget stack must agree on `ratatui` 0.30
   / `crossterm` 0.29. Don't add a widget crate on a different version.
 
@@ -76,7 +76,7 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 | Change soft-wrap / bracket rendering | `vix-editor/src/wrap.rs`, `vix-editor/src/brackets.rs`       |
 | Change theme colors/model            | `vix-theme-chooser/`                                         |
 | Change available UI languages        | `vix-locale-chooser/`                                        |
-| Change keyboard navigation styles    | `vix-keyway-chooser/` + keyway dispatch in `src/app.rs`      |
+| Change keyboard navigation styles    | `vix-keymap-chooser/` + keymap dispatch in `src/app.rs`      |
 | Change the calendar                  | `vix-date-time-calendar-panel/`                              |
 | Change spell checking                | `vix-spellcheck/` + wiring in `src/app.rs` / `src/ui.rs`     |
 | Change git status/diff/staging       | `vix-git/` + wiring in `src/app.rs` / `src/ui.rs`           |

@@ -11,11 +11,31 @@ use std::path::{Path, PathBuf};
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use vix_editor::actions::{Delete, Duplicate, InsertText, MoveDown, MoveRight, MoveUp, SelectAll};
+use vix_editor::code::Code;
 pub use vix_editor::editor::Editor as CodeEditor;
 use vix_editor::utils::get_lang;
 use ratatui_image::protocol::StatefulProtocol;
 
 use crate::theme;
+
+/// Whether line `row` is blank — empty or only whitespace. Out-of-range rows are
+/// treated as blank.
+fn line_is_blank(code: &Code, row: usize) -> bool {
+    if row >= code.len_lines() {
+        return true;
+    }
+    let start = code.line_to_char(row);
+    let len = code.line_len(row);
+    code.char_slice(start, start + len).chars().all(|c: char| c.is_whitespace())
+}
+
+/// Whether `row` is part of a section break: a run of two or more consecutive
+/// blank lines. `n` is the total line count.
+fn is_section_break(code: &Code, row: usize, n: usize) -> bool {
+    line_is_blank(code, row)
+        && ((row > 0 && line_is_blank(code, row - 1))
+            || (row + 1 < n && line_is_blank(code, row + 1)))
+}
 
 /// On-save text-normalization options (from [`crate::settings::Settings`]).
 #[derive(Clone, Copy)]
@@ -490,6 +510,27 @@ impl Editor {
         }
     }
 
+    /// Move the active cursor to the very start of the buffer and scroll it into
+    /// `area`.
+    pub fn cursor_document_start(&mut self, area: Rect) {
+        if let Some(t) = self.active_tab_mut() {
+            t.editor.set_cursor(0);
+            t.editor.focus(&area);
+        }
+    }
+
+    /// Move the active cursor to the very end of the buffer (past the last
+    /// character) and scroll it into `area`.
+    pub fn cursor_document_end(&mut self, area: Rect) {
+        if let Some(t) = self.active_tab_mut() {
+            let code = t.editor.code_ref();
+            let last = code.len_lines().saturating_sub(1);
+            let off = code.line_to_char(last) + code.line_len(last);
+            t.editor.set_cursor(off);
+            t.editor.focus(&area);
+        }
+    }
+
     /// Move the active cursor to the end of its current line.
     pub fn cursor_line_end(&mut self) {
         if let Some(t) = self.active_tab_mut() {
@@ -498,6 +539,159 @@ impl Editor {
             let row = code.char_to_line(cur);
             let off = code.line_to_char(row) + code.line_len(row);
             t.editor.set_cursor(off);
+        }
+    }
+
+    /// Move the active cursor to column 0 of its current line (the literal line
+    /// start, unlike the smart-Home [`cursor_line_home`](Self::cursor_line_home)).
+    pub fn cursor_line_start(&mut self) {
+        if let Some(t) = self.active_tab_mut() {
+            let cur = t.editor.get_cursor();
+            let code = t.editor.code_ref();
+            let row = code.char_to_line(cur);
+            let off = code.line_to_char(row);
+            t.editor.set_cursor(off);
+        }
+    }
+
+    /// Move the active cursor to the first line of the current paragraph and
+    /// scroll it into `area`. Paragraphs are delimited by blank (empty or
+    /// whitespace-only) lines; from a blank line, climbs to the paragraph above.
+    pub fn cursor_paragraph_start(&mut self, area: Rect) {
+        if let Some(t) = self.active_tab_mut() {
+            let cur = t.editor.get_cursor();
+            let off = {
+                let code = t.editor.code_ref();
+                let is_blank = |r: usize| line_is_blank(code, r);
+                let mut r = code.char_to_line(cur);
+                while r > 0 && is_blank(r) {
+                    r -= 1;
+                }
+                while r > 0 && !is_blank(r - 1) {
+                    r -= 1;
+                }
+                code.line_to_char(r)
+            };
+            t.editor.set_cursor(off);
+            t.editor.focus(&area);
+        }
+    }
+
+    /// Move the active cursor to the end of the last line of the current
+    /// paragraph and scroll it into `area`. See [`cursor_paragraph_start`].
+    pub fn cursor_paragraph_end(&mut self, area: Rect) {
+        if let Some(t) = self.active_tab_mut() {
+            let cur = t.editor.get_cursor();
+            let off = {
+                let code = t.editor.code_ref();
+                let n = code.len_lines().max(1);
+                let is_blank = |r: usize| line_is_blank(code, r);
+                let mut r = code.char_to_line(cur);
+                while r + 1 < n && is_blank(r) {
+                    r += 1;
+                }
+                while r + 1 < n && !is_blank(r + 1) {
+                    r += 1;
+                }
+                code.line_to_char(r) + code.line_len(r)
+            };
+            t.editor.set_cursor(off);
+            t.editor.focus(&area);
+        }
+    }
+
+    /// Move the active cursor to the first line of the current section and scroll
+    /// it into `area`. Sections are delimited by a run of two or more consecutive
+    /// blank lines (a larger break than a paragraph).
+    pub fn cursor_section_start(&mut self, area: Rect) {
+        if let Some(t) = self.active_tab_mut() {
+            let cur = t.editor.get_cursor();
+            let off = {
+                let code = t.editor.code_ref();
+                let n = code.len_lines().max(1);
+                let sep = |r: usize| is_section_break(code, r, n);
+                let mut r = code.char_to_line(cur);
+                while r > 0 && !sep(r - 1) {
+                    r -= 1;
+                }
+                code.line_to_char(r)
+            };
+            t.editor.set_cursor(off);
+            t.editor.focus(&area);
+        }
+    }
+
+    /// Move the active cursor to the end of the last line of the current section
+    /// and scroll it into `area`. See [`cursor_section_start`].
+    pub fn cursor_section_end(&mut self, area: Rect) {
+        if let Some(t) = self.active_tab_mut() {
+            let cur = t.editor.get_cursor();
+            let off = {
+                let code = t.editor.code_ref();
+                let n = code.len_lines().max(1);
+                let sep = |r: usize| is_section_break(code, r, n);
+                let mut r = code.char_to_line(cur);
+                while r + 1 < n && !sep(r + 1) {
+                    r += 1;
+                }
+                code.line_to_char(r) + code.line_len(r)
+            };
+            t.editor.set_cursor(off);
+            t.editor.focus(&area);
+        }
+    }
+
+    /// Select the whole paragraph under the cursor (blank-line delimited) and
+    /// scroll it into `area`.
+    pub fn select_paragraph(&mut self, area: Rect) {
+        if let Some(t) = self.active_tab_mut() {
+            let (start, end) = {
+                let code = t.editor.code_ref();
+                let n = code.len_lines().max(1);
+                let is_blank = |r: usize| line_is_blank(code, r);
+                let row = code.char_to_line(t.editor.get_cursor());
+                let mut s = row;
+                while s > 0 && is_blank(s) {
+                    s -= 1;
+                }
+                while s > 0 && !is_blank(s - 1) {
+                    s -= 1;
+                }
+                let mut e = row;
+                while e + 1 < n && is_blank(e) {
+                    e += 1;
+                }
+                while e + 1 < n && !is_blank(e + 1) {
+                    e += 1;
+                }
+                (code.line_to_char(s), code.line_to_char(e) + code.line_len(e))
+            };
+            t.editor.set_selection_range(start, end);
+            t.editor.focus(&area);
+        }
+    }
+
+    /// Select the whole section under the cursor (delimited by runs of two or
+    /// more blank lines) and scroll it into `area`.
+    pub fn select_section(&mut self, area: Rect) {
+        if let Some(t) = self.active_tab_mut() {
+            let (start, end) = {
+                let code = t.editor.code_ref();
+                let n = code.len_lines().max(1);
+                let sep = |r: usize| is_section_break(code, r, n);
+                let row = code.char_to_line(t.editor.get_cursor());
+                let mut s = row;
+                while s > 0 && !sep(s - 1) {
+                    s -= 1;
+                }
+                let mut e = row;
+                while e + 1 < n && !sep(e + 1) {
+                    e += 1;
+                }
+                (code.line_to_char(s), code.line_to_char(e) + code.line_len(e))
+            };
+            t.editor.set_selection_range(start, end);
+            t.editor.focus(&area);
         }
     }
 

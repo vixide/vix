@@ -1,9 +1,9 @@
 # Vix Keybindings
 
 Every shortcut Vix currently implements. The bindings below are the **Apple**
-keyway (the default): familiar macOS/Windows modifier shortcuts. Two other
-keyways change this dispatch — **Emacs** (`Ctrl` chords) and **Vim** (modal).
-Switch via **View → Keyway…**; the choice persists. See [Keyways](#keyways).
+keymap (the default): familiar macOS/Windows modifier shortcuts. Two other
+keymaps change this dispatch — **Emacs** (`Ctrl` chords) and **Vim** (modal).
+Switch via **View → Keymap…**; the choice persists. See [Keymaps](#keymaps).
 
 ## Global
 
@@ -21,7 +21,7 @@ Switch via **View → Keyway…**; the choice persists. See [Keyways](#keyways).
 | `Ctrl+F`         | Find                                                 |
 | `Ctrl+R`         | Find & Replace                                       |
 | `Ctrl+Alt+R`     | Interactive query-replace (y/n/!/q)                  |
-| `Ctrl+Shift+F`   | Search across the whole project                      |
+| `Ctrl+Shift+F`   | Search across the whole workspace                      |
 | `F3` / `Shift+F3`| Find next / previous                                 |
 | `Ctrl+G` / `Ctrl+Shift+G` | Find next / previous (repeats the last search, even after the box closes) |
 | `Alt+N` / `Alt+P`| Find next / previous occurrence of the selection     |
@@ -154,7 +154,7 @@ The **View** menu opens small chooser overlays:
 | ---------------------- | ------------------------------------------------------ |
 | **Theme…**            | `↑`/`↓` preview live, `Enter` apply & save, `Esc` cancel |
 | **Locale…** (language) | `↑`/`↓` preview live, `Enter` apply & save, `Esc` cancel |
-| **Keyway…**            | `↑`/`↓` highlight, `Enter` apply & save, `Esc` cancel    |
+| **Keymap…**            | `↑`/`↓` highlight, `Enter` apply & save, `Esc` cancel    |
 
 In every chooser a left **click** on a row highlights it (Themes/Locale also
 preview live).
@@ -172,11 +172,11 @@ of scrolling), and the explorer / messages docks.
 
 The date/time area always shows the present; only the month grid navigates.
 
-## Keyways
+## Keymaps
 
-A *keyway* is the keyboard navigation style. Exactly one is active at a time;
-choose it in **View → Keyway…**. Menu mnemonics (`Alt+F/E/V/T/H`) and function
-keys (`F1`, `F3`, `F10`, `F12`) work in every keyway.
+A *keymap* is the keyboard navigation style. Exactly one is active at a time;
+choose it in **View → Keymap…**. Menu mnemonics (`Alt+F/E/V/T/H`) and function
+keys (`F1`, `F3`, `F10`, `F12`) work in every keymap.
 
 ### Apple (default)
 

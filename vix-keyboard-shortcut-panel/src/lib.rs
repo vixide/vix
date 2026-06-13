@@ -29,7 +29,7 @@ pub const ROWS: &[Row] = &[
     Row { keys: "Ctrl F / Ctrl R", desc: "help.find_replace" },
     Row { keys: "F3 / Shift F3", desc: "help.find_next_prev" },
     Row { keys: "Ctrl B / Ctrl E", desc: "help.toggle_focus_explorer" },
-    Row { keys: "Ctrl Shift F", desc: "help.search_project" },
+    Row { keys: "Ctrl Shift F", desc: "help.search_workspace" },
     Row { keys: "F12", desc: "help.goto_definition" },
     Row { keys: "Alt Left / Alt Right", desc: "help.position_history" },
     Row { keys: "F10 / Alt F,E,T,H", desc: "help.menu_bar" },
