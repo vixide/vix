@@ -274,7 +274,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bundled one.
 - New internal crates: `vix-theme-chooser`, `vix-locale-chooser`,
   `vix-keymap-chooser`, `vix-keyboard-shortcut-panel`,
-  `vix-date-time-calendar-panel`, `vix-nerd-font-picker`, and `vix-find-panel`
+  `vix-calendar-panel`, `vix-nerd-font-picker`, and `vix-find-panel`
   (the find / find-and-replace box state).
 - New docs: `docs/themes.md`, `docs/i18n.md`, `docs/configuration.md`,
   `index.md`, `AGENTS.md` (+ `AGENTS/`), and this changelog.
@@ -292,7 +292,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The editor widget crate was renamed `ratatui-code-editor` →
   `vix-editor` and made **theme-aware** (configurable text,
   line-number, selection, and cursor styles, and a settable syntax palette).
-- The calendar logic moved into `vix-date-time-calendar-panel` and gained
+- The calendar logic moved into `vix-calendar-panel` and gained
   month navigation (Left/Right while the calendar is open).
 - **Every theme is now a JSON theme.** The hardcoded monochrome Dark/Light
   *modes* were removed; **Dark** and **Light** are now ordinary bundled themes

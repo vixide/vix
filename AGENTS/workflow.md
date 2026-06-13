@@ -44,7 +44,7 @@ Fix drift by aligning all three (code, spec, docs).
 | `vix-theme-chooser/spec/index.md`                  | Theme model + custom JSON format             |
 | `vix-locale-chooser/spec/index.md`                 | Internationalization / languages             |
 | `spec/vix-keymap-chooser/spec/index.md`                 | Keyboard navigation styles (Apple/Emacs/Vim) |
-| `vix-date-time-calendar-panel/spec/index.md`                   | Calendar box                                 |
+| `vix-calendar-panel/spec/index.md`                   | Calendar box                                 |
 | `spec/hover.md`                          | Mouse any-motion (menu hover) tracking       |
 | `spec/main-rs-and-lib-rs-boilerplate.md` | Entry-point conventions                      |
 | `spec/rust-clippy-pedantic.md`           | `clippy::pedantic` on all targets            |

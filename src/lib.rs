@@ -71,4 +71,4 @@ pub mod ui;
 
 /// The calendar box's date/time logic lives in its own crate; re-export it as
 /// `vix::calendar` so the app and tests share one path.
-pub use vix_date_time_calendar_panel as calendar;
+pub use vix_calendar_panel as calendar;

@@ -95,6 +95,8 @@ pub fn month_grid(month: Date) -> MonthGrid {
 pub struct Calendar {
     /// First day of the month currently displayed.
     shown: Date,
+    /// The selected day (the keyboard cursor). The displayed month follows it.
+    selected: Date,
 }
 
 impl Default for Calendar {
@@ -104,26 +106,79 @@ impl Default for Calendar {
 }
 
 impl Calendar {
-    /// A calendar showing the current local month.
+    /// A calendar showing the current local month, with today selected.
     pub fn new() -> Self {
-        Calendar {
-            shown: first_of_month(now_local().date()),
-        }
+        let today = now_local().date();
+        Calendar { shown: first_of_month(today), selected: today }
     }
 
-    /// Move the view to the next month.
+    /// Keep the displayed month in sync with the selected day.
+    fn sync_shown(&mut self) {
+        self.shown = first_of_month(self.selected);
+    }
+
+    /// Move the selection by `days` (negative = earlier); the view follows.
+    pub fn move_days(&mut self, days: i64) {
+        self.selected = if days >= 0 {
+            self.selected.saturating_add(days.days())
+        } else {
+            self.selected.saturating_sub((-days).days())
+        };
+        self.sync_shown();
+    }
+
+    /// Move the selection by `months` (negative = earlier); the view follows.
+    pub fn move_months(&mut self, months: i64) {
+        self.selected = if months >= 0 {
+            self.selected.saturating_add(months.months())
+        } else {
+            self.selected.saturating_sub((-months).months())
+        };
+        self.sync_shown();
+    }
+
+    /// Move the selection by `years` (negative = earlier); the view follows.
+    pub fn move_years(&mut self, years: i64) {
+        self.selected = if years >= 0 {
+            self.selected.saturating_add(years.years())
+        } else {
+            self.selected.saturating_sub((-years).years())
+        };
+        self.sync_shown();
+    }
+
+    /// The selected date.
+    pub fn selected(&self) -> Date {
+        self.selected
+    }
+
+    /// The selected day-of-month, only when the selection is in the displayed
+    /// month (so the host can highlight that cell).
+    pub fn selected_day_in_shown(&self) -> Option<u8> {
+        (self.selected.year() == self.shown.year() && self.selected.month() == self.shown.month())
+            .then_some(self.selected.day() as u8)
+    }
+
+    /// The selected date formatted with a `strftime` `pattern`.
+    pub fn selected_formatted(&self, pattern: &str) -> String {
+        self.selected.strftime(pattern).to_string()
+    }
+
+    /// Move the view (and selection) to the next month.
     pub fn next_month(&mut self) {
-        self.shown = self.shown.saturating_add(1.month());
+        self.move_months(1);
     }
 
-    /// Move the view to the previous month.
+    /// Move the view (and selection) to the previous month.
     pub fn prev_month(&mut self) {
-        self.shown = self.shown.saturating_sub(1.month());
+        self.move_months(-1);
     }
 
-    /// Snap the view back to the current local month.
+    /// Snap the view and selection back to today.
     pub fn reset(&mut self) {
-        self.shown = first_of_month(now_local().date());
+        let today = now_local().date();
+        self.selected = today;
+        self.shown = first_of_month(today);
     }
 
     /// First day of the displayed month.

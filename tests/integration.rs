@@ -999,12 +999,16 @@ fn calendar_left_right_pages_months() {
     let start = app.calendar.shown_month();
     assert!(app.calendar.grid().today.is_some(), "today shows in the current month");
 
-    // Right pages forward, left pages back to where we started.
+    // Ctrl pages months; Ctrl+Right forward, Ctrl+Left back to where we started.
+    app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL));
+    assert_ne!(app.calendar.shown_month(), start, "Ctrl+Right advances the month");
+    app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL));
+    assert_eq!(app.calendar.shown_month(), start, "Ctrl+Left returns to the start month");
+
+    // Plain arrows move the selected day.
+    let sel = app.calendar.selected();
     app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
-    assert_ne!(app.calendar.shown_month(), start, "Right advances the month");
-    assert!(app.calendar.grid().today.is_none(), "no today highlight off-month");
-    app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
-    assert_eq!(app.calendar.shown_month(), start, "Left returns to the start month");
+    assert_ne!(app.calendar.selected(), sel, "Right moves the selected day");
 
     // Esc closes the box.
     app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
@@ -1079,10 +1083,10 @@ fn calendar_nav_arrows_change_the_month() {
     let cal = app.layout.calendar;
     let title = app.calendar.title();
 
-    // The nav arrows sit on the month-header row (row 4): ◀ at col 0, ▶ at col 20.
-    app.on_mouse(click(cal.x + 20, cal.y + 4)); // ▶ next month
+    // The nav arrows sit on the month-header row (row 0): ◀ at col 0, ▶ at col 20.
+    app.on_mouse(click(cal.x + 20, cal.y)); // ▶ next month
     assert_ne!(app.calendar.title(), title, "▶ advanced to the next month");
-    app.on_mouse(click(cal.x, cal.y + 4)); // ◀ previous month
+    app.on_mouse(click(cal.x, cal.y)); // ◀ previous month
     assert_eq!(app.calendar.title(), title, "◀ returned to the original month");
     assert!(app.show_calendar, "an arrow click keeps the calendar open");
 }
@@ -1098,14 +1102,16 @@ fn calendar_click_inserts_into_editor() {
     let cal = app.layout.calendar;
     assert!(cal.width > 0, "the calendar rect was recorded");
 
-    // Click the first info line (local date-time) → inserts a date-time string.
-    app.on_mouse(click(cal.x + 1, cal.y));
+    // The date-time lines sit at the bottom of the box; the local date-time line
+    // is the first of them (the line after the spacer at `info_start`).
+    let info_start = cal.height - 5;
+    app.on_mouse(click(cal.x + 1, cal.y + info_start + 1));
     let text = app.editor.active_tab().unwrap().text();
     assert!(text.contains(':') && text.contains('-'), "inserted a date-time: {text:?}");
     assert!(app.show_calendar, "an in-box click keeps the calendar open");
 
-    // Click a populated day cell (cells are 3 columns wide; the grid starts at
-    // row 6 of the box).
+    // Click a populated day cell (cells are 3 columns wide; the grid's weekday
+    // header is row 1 and the week rows start at row 2).
     let grid = app.calendar.grid();
     let (wk, col) = grid
         .weeks
@@ -1114,7 +1120,7 @@ fn calendar_click_inserts_into_editor() {
         .find_map(|(w, week)| week.iter().position(Option::is_some).map(|c| (w, c)))
         .unwrap();
     let before = app.editor.active_tab().unwrap().text().len();
-    app.on_mouse(click(cal.x + col as u16 * 3 + 1, cal.y + 6 + wk as u16));
+    app.on_mouse(click(cal.x + col as u16 * 3 + 1, cal.y + 2 + wk as u16));
     let after = app.editor.active_tab().unwrap().text();
     assert!(after.len() > before, "clicking a day inserted a date");
 

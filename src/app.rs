@@ -791,9 +791,28 @@ impl App {
         }
         // While the calendar box is open it captures left/right to page months.
         if self.show_calendar {
+            let ctrl = Self::ctrl(&key);
+            let shift = Self::shift(&key);
             match key.code {
-                KeyCode::Left => self.calendar.prev_month(),
-                KeyCode::Right => self.calendar.next_month(),
+                KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => {
+                    let sign: i64 = if matches!(key.code, KeyCode::Right | KeyCode::Down) { 1 } else { -1 };
+                    if ctrl && shift {
+                        self.calendar.move_years(sign); // Ctrl+Shift+arrows: year
+                    } else if ctrl {
+                        self.calendar.move_months(sign); // Ctrl+arrows: month
+                    } else {
+                        // Plain arrows move the selected day: Left/Right by a day,
+                        // Up/Down by a week.
+                        let step = if matches!(key.code, KeyCode::Up | KeyCode::Down) { 7 } else { 1 };
+                        self.calendar.move_days(sign * step);
+                    }
+                }
+                KeyCode::Enter => {
+                    let text = self.calendar.selected_formatted(Self::locale_date_pattern());
+                    let area = self.editor_view();
+                    self.editor.insert_str(&text, area);
+                    self.show_calendar = false;
+                }
                 KeyCode::Esc | KeyCode::Char('q') => self.show_calendar = false,
                 _ => {}
             }
@@ -3615,6 +3634,24 @@ impl App {
     fn messages_mouse(&mut self, mouse: MouseEvent) {
         let area = self.layout.messages;
         let inner_top = area.y + 1;
+        // Scrollbar (rightmost column) press/drag scrolls the message list.
+        let total = self.messages.items.len();
+        let viewport = area.height.saturating_sub(1) as usize;
+        let sb_shown = self.settings.show_scrollbar && total > viewport && area.width > 1;
+        let sb_col = area.x + area.width.saturating_sub(1);
+        if sb_shown
+            && mouse.column == sb_col
+            && matches!(
+                mouse.kind,
+                MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left)
+            )
+        {
+            self.focus = Focus::Messages;
+            let sb_rect = Rect { x: sb_col, y: inner_top, width: 1, height: area.height - 1 };
+            let off = crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total, viewport);
+            self.messages.selected = off.min(total.saturating_sub(1));
+            return;
+        }
         match mouse.kind {
             MouseEventKind::ScrollUp => self.messages.up(),
             MouseEventKind::ScrollDown => self.messages.down(),
@@ -5312,9 +5349,10 @@ impl App {
         }
         let rel_y = mouse.row - r.y;
         let rel_x = mouse.column - r.x;
-        // The month-header row (row 4) carries the `◀`/`▶` nav arrows: `◀` at
-        // column 0, `▶` at column 20.
-        if rel_y == 4 {
+        // The calendar is laid out with the month header + grid on top and the
+        // date/time lines beneath. Row 0 is the month header carrying the `◀`/`▶`
+        // nav arrows (`◀` at column 0, `▶` at column 20).
+        if rel_y == 0 {
             if rel_x == 0 {
                 self.calendar.prev_month();
             } else if rel_x == 20 {
@@ -5322,18 +5360,20 @@ impl App {
             }
             return;
         }
-        // Rows 0..=2 are the local / UTC-ISO / ISO-week lines; the month grid
-        // starts at row 6 (after the blank line, title, and weekday header), each
-        // day cell being three columns wide.
-        let text = if rel_y <= 2 {
+        // The date/time lines occupy the last block (`info_start` is its blank
+        // spacer; the three lines follow). The weekday header is row 1 and the
+        // week rows start at row 2, each day cell three columns wide.
+        let info_start = r.height.saturating_sub(5);
+        let text = if rel_y > info_start {
             let now = crate::calendar::now_local();
-            Some(match rel_y {
-                0 => crate::calendar::local_datetime(&now),
-                1 => crate::calendar::utc_iso(&now),
-                _ => crate::calendar::iso_week_date(&now),
-            })
-        } else if rel_y >= 6 {
-            let week = (rel_y - 6) as usize;
+            match rel_y - info_start {
+                1 => Some(crate::calendar::local_datetime(&now)),
+                2 => Some(crate::calendar::utc_iso(&now)),
+                3 => Some(crate::calendar::iso_week_date(&now)),
+                _ => None,
+            }
+        } else if rel_y >= 2 {
+            let week = (rel_y - 2) as usize;
             let col = (rel_x / 3) as usize;
             self.calendar
                 .grid()

@@ -155,7 +155,7 @@ src/                            the vix application crate
 locales/         rust-i18n translation files (en/es/fr/de/cy)
 
 vix-editor/                     Vix's fully-custom editor widget (Tree-sitter, soft wrap, themeable)
-vix-date-time-calendar-panel/   calendar date/time logic + navigable month grid
+vix-calendar-panel/   calendar date/time logic + navigable month grid
 vix-theme-chooser/              theme model, styles, custom JSON themes, chooser
 vix-locale-chooser/             available UI languages + chooser
 vix-keymap-chooser/             keyboard navigation styles (Apple/Emacs/Vim) + chooser

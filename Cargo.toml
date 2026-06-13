@@ -4,7 +4,7 @@
 [workspace]
 members = [
     "vix-editor",
-    "vix-date-time-calendar-panel",
+    "vix-calendar-panel",
     "vix-theme-chooser",
     "vix-locale-chooser",
     "vix-keymap-chooser",
@@ -65,7 +65,7 @@ ratatui = { version = "0.30", features = ["crossterm"] }
 vix-editor = { path = "vix-editor", default-features = false, features = ["crossterm"] }
 # Calendar box: date/time strings and the navigable month grid. Internal crate so
 # the calendar logic stays unit-testable on its own (it owns the jiff dependency).
-vix-date-time-calendar-panel = { path = "vix-date-time-calendar-panel" }
+vix-calendar-panel = { path = "vix-calendar-panel" }
 # Theme: the monochrome Dark/Light model, ratatui styles, and chooser state.
 vix-theme-chooser = { path = "vix-theme-chooser" }
 # Locale chooser: available UI languages + selection state.

@@ -3322,7 +3322,7 @@ dependencies = [
  "serde_json",
  "vix-ascii-character-picker",
  "vix-bottom-dock",
- "vix-date-time-calendar-panel",
+ "vix-calendar-panel",
  "vix-editor",
  "vix-file-information-panel",
  "vix-find-panel",
@@ -3354,7 +3354,7 @@ name = "vix-bottom-dock"
 version = "0.1.0"
 
 [[package]]
-name = "vix-date-time-calendar-panel"
+name = "vix-calendar-panel"
 version = "0.1.0"
 dependencies = [
  "jiff",

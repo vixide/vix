@@ -1,23 +1,27 @@
 # Vix Calendar
 
-The `vix-date-time-calendar-panel` crate (originally drafted as `vix-calendar`).
+The `vix-calendar-panel` crate (originally drafted as `vix-calendar`).
 
-Calendar box:
+Calendar box (top to bottom — the month grid sits above the date/time entries):
 
-- Datetime area
-  - Current localized local date and current localized local time using seconds precision.
+- Calendar month area
+  - a month header showing `◀  Month Year  ▶` — the `◀`/`▶` glyphs are clickable
+    month-nav arrows (the panel crate is render-free, so the host draws them)
+  - an in-house Monday-first day grid computed with `jiff`. The **selected day**
+    (keyboard cursor) is reverse-highlighted; **today** is underlined.
+- Datetime area (beneath the calendar)
+  - Current localized local date and time using seconds precision.
   - Current UTC time in ISO 8601 format `YYYY-MM-DDTHH:MM:SSZ`
   - Current ISO 8601 commercial week date `YYYY-Www-D` — the ISO week-numbering
     year (which may occasionally differ from the Gregorian year), `Www` the week
     number `01..53`, and `D` the day of week `1` (Monday) .. `7` (Sunday)
-  - Blank spacer line
-- Calendar month area
-  - a month header showing `◀  Month Year  ▶` — the `◀`/`▶` glyphs are clickable
-    month-nav arrows (the panel crate is render-free, so the host draws them)
-  - an in-house Monday-first day grid computed with `jiff`, highlighting today
-  - `→` / next-arrow click -> next month
-  - `←` / previous-arrow click -> previous month
-  - a bottom help line: `◀ ▶ month   Esc close`
+
+## Selection and navigation
+
+- **Arrow keys** move the selected day: `←`/`→` by one day, `↑`/`↓` by one week.
+  The displayed month follows the selection.
+- **Ctrl + arrows** change the month; **Ctrl + Shift + arrows** change the year.
+- **Enter** inserts the selected date (locale-formatted) and closes the box.
 
 Mouse:
 
