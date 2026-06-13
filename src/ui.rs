@@ -1249,6 +1249,15 @@ fn draw_bottom_dock(app: &App, frame: &mut Frame, area: Rect) {
         .title(format!(" {} {} ", icon::INFO, t!("ui.bottom_dock")));
     let inner = block.inner(area);
     frame.render_widget(block, area);
+    // Reserve a one-column gutter for a scrollbar when the buffer overflows.
+    let total = app.bottom_dock.lines.len();
+    let h = inner.height as usize;
+    let show_bar = app.settings.show_scrollbar && total > h && inner.width > 1;
+    let text_area = if show_bar {
+        Rect { width: inner.width - 1, ..inner }
+    } else {
+        inner
+    };
     let lines: Vec<Line> = if app.bottom_dock.is_empty() {
         vec![Line::from(Span::styled(
             t!("ui.bottom_dock_empty").to_string(),
@@ -1256,12 +1265,21 @@ fn draw_bottom_dock(app: &App, frame: &mut Frame, area: Rect) {
         ))]
     } else {
         app.bottom_dock
-            .visible(inner.height as usize)
+            .visible(text_area.height as usize)
             .iter()
             .map(|l| Line::from(l.clone()))
             .collect()
     };
-    frame.render_widget(Paragraph::new(lines), inner);
+    frame.render_widget(Paragraph::new(lines), text_area);
+    if show_bar {
+        let sb_area = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: inner.height };
+        let mut sb_state = ScrollbarState::new(total).position(app.bottom_dock.scroll);
+        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(None)
+            .end_symbol(None)
+            .style(theme::dim());
+        frame.render_stateful_widget(bar, sb_area, &mut sb_state);
+    }
 }
 
 fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
