@@ -407,7 +407,8 @@ fn view_themes_menu_switches_theme() {
     assert!(app.theme_chooser.is_none());
 
     // Open the menu bar, move right to the View menu, and run its first item
-    // ("Themes…"), which opens the theme chooser.
+    // ("Themes…"), which opens the theme chooser. The dropdown opens with nothing
+    // highlighted, so Down first selects the first item.
     app.on_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
     let view_idx = vix::menu::MENUS
         .iter()
@@ -416,6 +417,7 @@ fn view_themes_menu_switches_theme() {
     for _ in 0..view_idx {
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     }
+    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert!(app.theme_chooser.is_some(), "Themes… opens the chooser");
 
@@ -460,7 +462,7 @@ fn vix_menu_dialogs_open_and_close() {
     // Website is a selectable/copyable text field, shows the URL, closes on Esc.
     app.run_action("vix.website");
     let web = app.dialog.as_ref().unwrap();
-    assert!(web.body.contains("github.com/joelparkerhenderson/vix"));
+    assert!(web.body.contains("github.com/vixide/vix"));
     assert!(web.editor.is_some(), "Website is a selectable text field");
     // Enter does NOT close a text-field dialog (it edits the field); Esc does.
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
@@ -1172,13 +1174,13 @@ fn cancel_command_kills_a_running_command() {
 }
 
 #[test]
-fn project_dock_search_regex_and_case_toggles() {
+fn workspace_dock_search_regex_and_case_toggles() {
     let dir = unique_dir("dockre");
     fs::write(dir.join("a.txt"), "foo123\nFOObar\nbaz\n").unwrap();
     let mut app = app_at(&dir);
 
     // Regex search `fo+\d` (Alt+R) → matches foo123 on line 1 only.
-    app.run_action("search.project_dock");
+    app.run_action("search.workspace_dock");
     app.on_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::ALT));
     assert!(app.prompt.as_ref().unwrap().regex, "Alt+R turned regex on");
     for c in r"fo+\d".chars() {
@@ -1191,7 +1193,7 @@ fn project_dock_search_regex_and_case_toggles() {
 
     // Case-sensitive literal `FOO` (Alt+C) → matches line 2 (FOObar) only.
     app.bottom_dock.clear();
-    app.run_action("search.project_dock");
+    app.run_action("search.workspace_dock");
     app.on_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::ALT));
     for c in "FOO".chars() {
         app.on_key(key(c));
@@ -1205,7 +1207,7 @@ fn project_dock_search_regex_and_case_toggles() {
 }
 
 #[test]
-fn search_in_project_to_dock_lists_and_jumps() {
+fn search_in_workspace_to_dock_lists_and_jumps() {
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
     let dir = unique_dir("searchdock");
@@ -1213,7 +1215,7 @@ fn search_in_project_to_dock_lists_and_jumps() {
     fs::write(dir.join("b.txt"), "nothing\n").unwrap();
     let mut app = app_at(&dir);
 
-    app.run_action("search.project_dock");
+    app.run_action("search.workspace_dock");
     assert!(app.prompt.is_some(), "opens a search prompt");
     for c in "NEEDLE".chars() {
         app.on_key(key(c));
@@ -1473,7 +1475,7 @@ fn goto_definition_single_jumps() {
     let tab = app.editor.active_tab().unwrap();
     assert!(tab.path.as_ref().unwrap().ends_with("lib.rs"), "jumped to the definition file");
     assert_eq!(app.editor.cursor_1based().0, 1);
-    assert!(app.project_search.is_none(), "single match jumps directly");
+    assert!(app.workspace_search.is_none(), "single match jumps directly");
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -1487,7 +1489,7 @@ fn goto_definition_multiple_opens_panel() {
     app.editor.goto(1, Some(4), Rect::new(0, 0, 80, 24)); // cursor on "dup"
 
     app.on_key(KeyEvent::new(KeyCode::F(12), KeyModifiers::NONE));
-    let ps = app.project_search.as_ref().expect("panel of candidates");
+    let ps = app.workspace_search.as_ref().expect("panel of candidates");
     assert!(ps.static_results);
     assert_eq!(ps.hits.len(), 2, "two definitions of dup");
     fs::remove_dir_all(&dir).ok();
@@ -1530,17 +1532,17 @@ fn position_history_back_and_forward() {
 }
 
 #[test]
-fn project_search_finds_matches_across_files() {
+fn workspace_search_finds_matches_across_files() {
     let dir = unique_dir("psearch");
     fs::write(dir.join("a.txt"), "alpha beta\nbeta gamma\n").unwrap();
     fs::write(dir.join("b.txt"), "delta beta\n").unwrap();
     let mut app = app_at(&dir);
 
-    app.run_action("search.project");
+    app.run_action("search.workspace");
     for c in "beta".chars() {
         app.on_key(key(c));
     }
-    let ps = app.project_search.as_ref().unwrap();
+    let ps = app.workspace_search.as_ref().unwrap();
     assert_eq!(ps.hits.len(), 3, "two in a.txt, one in b.txt");
     let expected = ps.selected_hit().unwrap();
     let expected_name = expected.path.file_name().unwrap().to_owned();
@@ -1548,7 +1550,7 @@ fn project_search_finds_matches_across_files() {
 
     // Enter opens the selected match and jumps to it.
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(app.project_search.is_none());
+    assert!(app.workspace_search.is_none());
     let tab = app.editor.active_tab().unwrap();
     assert!(tab.path.as_ref().unwrap().ends_with(&expected_name));
     assert_eq!(app.editor.cursor_1based().0, expected_line);
@@ -1557,25 +1559,25 @@ fn project_search_finds_matches_across_files() {
 }
 
 #[test]
-fn project_search_include_path_filter_narrows_results() {
+fn workspace_search_include_path_filter_narrows_results() {
     let dir = unique_dir("psfilter");
     fs::write(dir.join("a.rs"), "needle here\n").unwrap();
     fs::write(dir.join("b.txt"), "needle here\n").unwrap();
     let mut app = app_at(&dir);
 
-    app.run_action("search.project");
+    app.run_action("search.workspace");
     for c in "needle".chars() {
         app.on_key(key(c));
     }
     // Both files match before filtering.
-    assert_eq!(app.project_search.as_ref().unwrap().hits.len(), 2);
+    assert_eq!(app.workspace_search.as_ref().unwrap().hits.len(), 2);
 
     // Tab to the Include-path field and restrict to .rs files.
     app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
     for c in r"\.rs$".chars() {
         app.on_key(key(c));
     }
-    let hits = &app.project_search.as_ref().unwrap().hits;
+    let hits = &app.workspace_search.as_ref().unwrap().hits;
     assert_eq!(hits.len(), 1, "only the .rs file remains");
     assert!(hits[0].path.to_string_lossy().ends_with("a.rs"));
 
@@ -1583,13 +1585,13 @@ fn project_search_include_path_filter_narrows_results() {
 }
 
 #[test]
-fn project_search_exclude_path_filter_drops_results() {
+fn workspace_search_exclude_path_filter_drops_results() {
     let dir = unique_dir("psexclude");
     fs::write(dir.join("a.rs"), "needle here\n").unwrap();
     fs::write(dir.join("b.txt"), "needle here\n").unwrap();
     let mut app = app_at(&dir);
 
-    app.run_action("search.project");
+    app.run_action("search.workspace");
     for c in "needle".chars() {
         app.on_key(key(c));
     }
@@ -1599,7 +1601,7 @@ fn project_search_exclude_path_filter_drops_results() {
     for c in r"\.txt$".chars() {
         app.on_key(key(c));
     }
-    let hits = &app.project_search.as_ref().unwrap().hits;
+    let hits = &app.workspace_search.as_ref().unwrap().hits;
     assert_eq!(hits.len(), 1, "the .txt file is excluded");
     assert!(hits[0].path.to_string_lossy().ends_with("a.rs"));
 
@@ -1607,13 +1609,13 @@ fn project_search_exclude_path_filter_drops_results() {
 }
 
 #[test]
-fn project_replace_rewrites_files() {
+fn workspace_replace_rewrites_files() {
     let dir = unique_dir("preplace");
     fs::write(dir.join("a.txt"), "beta and beta\n").unwrap();
     fs::write(dir.join("b.txt"), "gamma beta\n").unwrap();
     let mut app = app_at(&dir);
 
-    app.run_action("search.project_replace");
+    app.run_action("search.workspace_replace");
     for c in "beta".chars() {
         app.on_key(key(c));
     }
@@ -1621,7 +1623,7 @@ fn project_replace_rewrites_files() {
     for c in "ZZ".chars() {
         app.on_key(key(c));
     }
-    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // replace all in project
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // replace all in workspace
 
     let a = fs::read_to_string(dir.join("a.txt")).unwrap();
     let b = fs::read_to_string(dir.join("b.txt")).unwrap();
@@ -1775,10 +1777,10 @@ fn ctrl_r_opens_replace() {
 }
 
 #[test]
-fn ctrl_shift_f_opens_project_search() {
+fn ctrl_shift_f_opens_workspace_search() {
     let mut app = app_at(Path::new("."));
     app.on_key(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
-    assert!(app.project_search.is_some(), "Ctrl+Shift+F opens project search");
+    assert!(app.workspace_search.is_some(), "Ctrl+Shift+F opens workspace search");
 }
 
 #[test]
@@ -1939,14 +1941,17 @@ fn submenu_opens_and_runs_a_nested_action() {
     }
     // Walk down to the Find submenu parent.
     let edit_items = vix::menu::MENUS[edit_idx].items;
-    let find_parent = edit_items.iter().position(vix::menu::Item::has_submenu).unwrap();
+    let find_parent = edit_items
+        .iter()
+        .position(|it| it.label == "menu.item.edit.find_menu")
+        .unwrap();
     for _ in 0..=edit_items.len() {
-        if app.menu.item == find_parent {
+        if app.menu.item == Some(find_parent) {
             break;
         }
         app.on_key(keycode(KeyCode::Down));
     }
-    assert_eq!(app.menu.item, find_parent);
+    assert_eq!(app.menu.item, Some(find_parent));
     assert!(app.menu.sub.is_none(), "submenu starts closed");
 
     // Right opens the submenu; its first item is a find action.
@@ -2363,14 +2368,14 @@ fn outline_panel_lists_symbols_and_jumps() {
 }
 
 #[test]
-fn project_dashboard_opens_counts_files_and_closes() {
+fn workspace_dashboard_opens_counts_files_and_closes() {
     let dir = unique_dir("dashboard");
     fs::write(dir.join("a.txt"), "x\n").unwrap();
     fs::write(dir.join("b.txt"), "y\n").unwrap();
     let mut app = app_at(&dir);
 
     app.run_action("tools.dashboard");
-    assert!(app.dashboard.is_some(), "Tools → Project Dashboard opens");
+    assert!(app.dashboard.is_some(), "Tools → Workspace Dashboard opens");
     assert!(!app.dashboard.as_ref().unwrap().folder.is_empty(), "folder is shown immediately");
 
     // Wait (bounded) for the async file-count metric to arrive.
@@ -2445,12 +2450,15 @@ fn menu_navigation_skips_separators() {
     for _ in 0..file_idx {
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     }
+    // The dropdown opens with nothing highlighted; the user must move to select.
+    assert_eq!(app.menu.item, None, "no item is auto-selected on open");
+    assert_eq!(app.menu.selected_action(), None);
     // Walking the whole menu with Down must never land on (or commit) a separator.
     let len = vix::menu::MENUS[file_idx].items.len();
     for _ in 0..=len {
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         let action = app.menu.selected_action().expect("never a separator");
         assert_ne!(action, vix::menu::SEPARATOR);
-        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
     }
 }
 
@@ -2538,11 +2546,11 @@ fn hover_moves_menu_dropdown_selection() {
     // Hover (no button) over the third item; the highlight follows the pointer
     // without committing or closing.
     app.on_mouse(mouse(MouseEventKind::Moved, dd.x + 2, dd.y + 1 + 2));
-    assert_eq!(app.menu.item, 2, "hover highlights the item under the pointer");
+    assert_eq!(app.menu.item, Some(2), "hover highlights the item under the pointer");
     assert!(app.menu.is_open(), "hover must not commit or close");
     // Move back up to the first item.
     app.on_mouse(mouse(MouseEventKind::Moved, dd.x + 2, dd.y + 1));
-    assert_eq!(app.menu.item, 0);
+    assert_eq!(app.menu.item, Some(0));
 }
 
 #[test]
@@ -2690,46 +2698,46 @@ fn click_theme_chooser_row_highlights_it() {
 }
 
 #[test]
-fn view_keyway_chooser_opens_navigates_and_selects() {
+fn view_keymap_chooser_opens_navigates_and_selects() {
     let mut app = app_at(Path::new("."));
-    assert!(app.keyway_chooser.is_none());
-    assert_eq!(app.settings.keyway, "apple", "default keyway");
+    assert!(app.keymap_chooser.is_none());
+    assert_eq!(app.settings.keymap, "apple", "default keymap");
 
-    app.run_action("view.keyway");
-    assert!(app.keyway_chooser.is_some(), "View -> Keyway opens the chooser");
+    app.run_action("view.keymap");
+    assert!(app.keymap_chooser.is_some(), "View -> Keymap opens the chooser");
 
-    // Down moves Apple → Emacs; Enter commits and persists it.
+    // Down moves Apple → VSCode; Enter commits and persists it.
     app.on_key(keycode(KeyCode::Down));
     app.on_key(keycode(KeyCode::Enter));
-    assert!(app.keyway_chooser.is_none(), "Enter closes the chooser");
-    assert_eq!(app.settings.keyway, "emacs");
+    assert!(app.keymap_chooser.is_none(), "Enter closes the chooser");
+    assert_eq!(app.settings.keymap, "vscode");
 
-    // Reopen, move, then Esc reverts (the committed keyway is unchanged).
-    app.run_action("view.keyway");
+    // Reopen, move, then Esc reverts (the committed keymap is unchanged).
+    app.run_action("view.keymap");
     app.on_key(keycode(KeyCode::Down));
     app.on_key(esc());
-    assert!(app.keyway_chooser.is_none(), "Esc closes the chooser");
-    assert_eq!(app.settings.keyway, "emacs", "Esc does not change the keyway");
+    assert!(app.keymap_chooser.is_none(), "Esc closes the chooser");
+    assert_eq!(app.settings.keymap, "vscode", "Esc does not change the keymap");
 }
 
 #[test]
-fn click_keyway_chooser_row_highlights_it() {
+fn click_keymap_chooser_row_highlights_it() {
     let mut app = app_at(Path::new("."));
-    app.run_action("view.keyway");
-    assert!(app.keyway_chooser.is_some());
+    app.run_action("view.keymap");
+    assert!(app.keymap_chooser.is_some());
     app.layout.chooser = Rect::new(10, 5, 34, 3);
-    // Click the second row (index 1 → Emacs).
+    // Click the second row (index 1 → VSCode).
     app.on_mouse(click(12, 6));
-    assert_eq!(app.keyway_chooser.as_ref().unwrap().selected, 1, "click highlights the row");
-    // Committing with Enter persists the clicked keyway.
+    assert_eq!(app.keymap_chooser.as_ref().unwrap().selected, 1, "click highlights the row");
+    // Committing with Enter persists the clicked keymap.
     app.on_key(keycode(KeyCode::Enter));
-    assert_eq!(app.settings.keyway, "emacs");
+    assert_eq!(app.settings.keymap, "vscode");
 }
 
 #[test]
-fn emacs_keyway_ctrl_movement() {
+fn emacs_keymap_ctrl_movement() {
     let mut app = app_at(Path::new("."));
-    app.settings.keyway = "emacs".to_string();
+    app.settings.keymap = "emacs".to_string();
     // Plain letters still type (no modifier).
     for c in "abc".chars() {
         app.on_key(key(c));
@@ -2749,9 +2757,9 @@ fn emacs_keyway_ctrl_movement() {
 }
 
 #[test]
-fn emacs_keyway_chords_open_find_and_quit() {
+fn emacs_keymap_chords_open_find_and_quit() {
     let mut app = app_at(Path::new("."));
-    app.settings.keyway = "emacs".to_string();
+    app.settings.keymap = "emacs".to_string();
     // C-x C-f opens the file prompt.
     app.on_key(ctrl('x'));
     app.on_key(ctrl('f'));
@@ -2769,9 +2777,30 @@ fn emacs_keyway_chords_open_find_and_quit() {
 }
 
 #[test]
-fn vim_keyway_normal_mode_is_modal() {
+fn vscode_keymap_quick_open_command_palette_and_goto_line() {
     let mut app = app_at(Path::new("."));
-    app.settings.keyway = "vim".to_string();
+    app.settings.keymap = "vscode".to_string();
+
+    // Ctrl+P is Quick Open (the file prompt), not the Command Palette.
+    app.on_key(ctrl('p'));
+    assert!(app.prompt.is_some(), "Ctrl+P opens Quick Open");
+    assert!(app.palette.is_none());
+    app.on_key(esc());
+
+    // Ctrl+Shift+P opens the Command Palette.
+    app.on_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
+    assert!(app.palette.is_some(), "Ctrl+Shift+P opens the Command Palette");
+    app.on_key(esc());
+
+    // Ctrl+G opens Go to Line (the palette).
+    app.on_key(ctrl('g'));
+    assert!(app.palette.is_some(), "Ctrl+G opens Go to Line");
+}
+
+#[test]
+fn vim_keymap_normal_mode_is_modal() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "vim".to_string();
     assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"));
 
     // Normal-mode letters are commands, not text.
@@ -2800,9 +2829,9 @@ fn vim_keyway_normal_mode_is_modal() {
 }
 
 #[test]
-fn vim_keyway_command_line_quits() {
+fn vim_keymap_command_line_quits() {
     let mut app = app_at(Path::new("."));
-    app.settings.keyway = "vim".to_string();
+    app.settings.keymap = "vim".to_string();
     // `:` opens the command line (shown in the mode indicator).
     app.on_key(key(':'));
     assert_eq!(app.mode_indicator().as_deref(), Some(":"));
@@ -2814,17 +2843,17 @@ fn vim_keyway_command_line_quits() {
 }
 
 #[test]
-fn switching_keyway_resets_vim_to_normal() {
+fn switching_keymap_resets_vim_to_normal() {
     let mut app = app_at(Path::new("."));
-    app.settings.keyway = "vim".to_string();
+    app.settings.keymap = "vim".to_string();
     app.on_key(key('i')); // enter Insert
     assert_eq!(app.mode_indicator().as_deref(), Some("-- INSERT --"));
-    // Choose the Vim keyway again via the chooser; modes reset to Normal.
-    app.run_action("view.keyway");
+    // Choose the Vim keymap again via the chooser; modes reset to Normal.
+    app.run_action("view.keymap");
     // Move selection to Vim and commit.
-    app.keyway_chooser.as_mut().unwrap().selected = 2;
+    app.keymap_chooser.as_mut().unwrap().selected = 3;
     app.on_key(keycode(KeyCode::Enter));
-    assert_eq!(app.settings.keyway, "vim");
+    assert_eq!(app.settings.keymap, "vim");
     assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"), "reset to Normal");
 }
 

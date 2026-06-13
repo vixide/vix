@@ -70,6 +70,9 @@ pub struct Code {
     custom_highlights: Option<HashMap<String, String>>,
     /// Overrides the per-language indent string when set (host configuration).
     indent_override: Option<String>,
+    /// Monotonic counter bumped on every content insert/remove, so callers (e.g.
+    /// the LSP client) can cheaply detect "the text changed since I last looked".
+    revision: u64,
 }
 
 impl Code {
@@ -93,6 +96,7 @@ impl Code {
             change_callback: None,
             custom_highlights,
             indent_override: None,
+            revision: 0,
         };
 
         if let Some(language) = Self::get_language(lang) {
@@ -223,6 +227,12 @@ impl Code {
         self.content.len_chars()
     }
 
+    /// A counter that increases on every content insert/remove. Two reads being
+    /// equal means the text is unchanged between them (cheap edit detection).
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     pub fn len_lines(&self) -> usize {
         self.content.len_lines()
     }
@@ -295,7 +305,8 @@ impl Code {
     pub fn insert(&mut self, from: usize, text: &str) {
         let byte_idx = self.content.char_to_byte(from);
         let byte_len: usize = text.chars().map(|ch| ch.len_utf8()).sum();
-        
+
+        self.revision = self.revision.wrapping_add(1);
         self.content.insert(from, text);
         
         if self.applying_history {
@@ -323,7 +334,8 @@ impl Code {
         let from_byte = self.content.char_to_byte(from);
         let to_byte = self.content.char_to_byte(to);
         let removed_text = self.content.slice(from..to).to_string();
-        
+
+        self.revision = self.revision.wrapping_add(1);
         self.content.remove(from..to);
         
         if self.applying_history {

@@ -10,7 +10,7 @@ A leading prefix character selects the mode:
 
 | Prefix | Mode        | Description                                  |
 | ------ | ----------- | -------------------------------------------- |
-| (none) | File finder | Fuzzy search for files in your project       |
+| (none) | File finder | Fuzzy search for files in your workspace       |
 | `>`    | Commands    | Search and run editor commands               |
 | `#`    | Buffers     | Switch between open buffers by name          |
 | `:`    | Go to line  | Jump to a specific line number               |
@@ -26,7 +26,7 @@ A leading prefix character selects the mode:
 
 ## File finder
 
-With no prefix, type to fuzzy-match files in the project. Append
+With no prefix, type to fuzzy-match files in the workspace. Append
 `:<line>[:<col>]` to a file to jump to that position after opening — for
 example, `src/main.rs:42:10` opens `src/main.rs` and moves to line 42,
 column 10.

@@ -6,7 +6,7 @@
 
 The Git Panel shows the state of your working tree and Git's staging area.
 
-In the panel you can see the state of your project at a glance: the active branch
+In the panel you can see the state of your workspace at a glance: the active branch
 (shown in the panel title and the status bar), which files have changed, and the
 current staging state of each file (a `[✓]` checkbox plus the M/A/?/D/R/U change
 letter). Stage/unstage with `Space`/`s`/`u`, commit with `c`, refresh with `r`.

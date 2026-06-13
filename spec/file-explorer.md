@@ -1,8 +1,12 @@
 # File Explorer
 
 The file explorer is the **left dock**; its tree state lives in the internal
-`vix-left-dock` crate (see `vix-left-dock.md`), and the host renders it and runs
+`vix-left-dock` crate (see `vix-left-dock/spec/index.md`), and the host renders it and runs
 the file operations.
+
+When the tree is taller than the dock, a vertical **scrollbar** appears in a
+one-column gutter on the right edge (its thumb tracks the highlighted entry). It
+honors the same **Show/Hide Scroll Bar** toggle (`show_scrollbar`) as the editor.
 
 **Status:** Shipped — keyboard navigation (`→`/`Enter` opens a file or expands a
 directory; `←` collapses an expanded directory or jumps to its parent, and never

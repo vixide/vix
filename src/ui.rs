@@ -167,8 +167,8 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.palette.is_some() {
         draw_palette(app, frame, area);
     }
-    if app.project_search.is_some() {
-        draw_project_search(app, frame, area);
+    if app.workspace_search.is_some() {
+        draw_workspace_search(app, frame, area);
     }
     if app.prompt.is_some() {
         draw_prompt(app, frame, area);
@@ -200,8 +200,8 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.locale_chooser.is_some() {
         draw_locale_chooser(app, frame, area);
     }
-    if app.keyway_chooser.is_some() {
-        draw_keyway_chooser(app, frame, area);
+    if app.keymap_chooser.is_some() {
+        draw_keymap_chooser(app, frame, area);
     }
     if app.recent_chooser.is_some() {
         draw_recent_chooser(app, frame, area);
@@ -212,14 +212,29 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.ascii_panel.is_some() {
         draw_ascii_panel(app, frame, area);
     }
+    if app.x11_panel.is_some() {
+        draw_x11_panel(app, frame, area);
+    }
+    if app.html_panel.is_some() {
+        draw_html_panel(app, frame, area);
+    }
     if app.system_info.is_some() {
         draw_system_info(app, frame, area);
+    }
+    if app.file_info.is_some() {
+        draw_file_info(app, frame, area);
     }
     if app.dashboard.is_some() {
         draw_dashboard(app, frame, area);
     }
     if app.outline.is_some() {
         draw_outline(app, frame, area);
+    }
+    if app.completion.is_some() {
+        draw_completion(app, frame);
+    }
+    if app.hover.is_some() {
+        draw_hover(app, frame);
     }
     if app.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
         draw_paste_conflict(app, frame, area);
@@ -230,6 +245,186 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.dialog.is_some() {
         draw_dialog(app, frame, area);
     }
+    if app.welcome.is_some() {
+        draw_welcome(app, frame, area);
+    }
+}
+
+fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.welcome.is_none() {
+        return;
+    }
+    let total = app.welcome.as_ref().map_or(0, vix_welcome_panel::Panel::len);
+    let width = 72u16.min(area.width.saturating_sub(2)).max(24);
+    let height = area.height.saturating_sub(2).clamp(6, 24);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::INFO, t!("ui.welcome")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+    let body = chunks[0];
+    let view_h = body.height as usize;
+
+    if let Some(w) = app.welcome.as_mut() {
+        w.clamp(view_h);
+    }
+    let scroll = app.welcome.as_ref().map_or(0, |w| w.scroll);
+    let show_bar = total > view_h && body.width > 1;
+    let text_area = if show_bar {
+        Rect { width: body.width - 1, ..body }
+    } else {
+        body
+    };
+    let visible: Vec<Line> = app
+        .welcome
+        .as_ref()
+        .map(|w| {
+            w.lines()[scroll..(scroll + view_h).min(total)]
+                .iter()
+                .map(|l| Line::from(Span::raw(l.clone())))
+                .collect()
+        })
+        .unwrap_or_default();
+    frame.render_widget(Paragraph::new(visible).wrap(Wrap { trim: false }), text_area);
+    if show_bar {
+        let sb_area = Rect { x: body.x + body.width - 1, ..body };
+        let mut sb_state = ScrollbarState::new(total).position(scroll);
+        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(None)
+            .end_symbol(None)
+            .style(theme::dim());
+        frame.render_stateful_widget(bar, sb_area, &mut sb_state);
+    }
+
+    let hint = Line::from(Span::styled(t!("ui.welcome_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
+
+    app.layout.welcome = body;
+}
+
+/// The active editor cursor's screen position within the editor text area, as
+/// `(x, y)`, accounting for vertical scroll. The x is approximate (it does not
+/// subtract the line-number gutter), which is fine for anchoring a popup.
+fn cursor_screen_yx(app: &App) -> Option<(u16, u16)> {
+    let area = app.layout.editor;
+    let t = app.editor.active_tab()?;
+    let (line, col) = app.editor.cursor_1based();
+    let off_y = t.editor.get_offset_y();
+    let y = area.y + u16::try_from(line.saturating_sub(1).saturating_sub(off_y)).unwrap_or(0);
+    let x = area.x + u16::try_from(col.saturating_sub(1)).unwrap_or(0).min(area.width);
+    Some((x.min(area.x + area.width.saturating_sub(1)), y.min(area.y + area.height.saturating_sub(1))))
+}
+
+/// Draw the LSP completion popup as a small list anchored at the cursor.
+fn draw_completion(app: &App, frame: &mut Frame) {
+    let Some(popup) = app.completion.as_ref() else { return };
+    if popup.items.is_empty() {
+        return;
+    }
+    let area = app.layout.editor;
+    if area.width < 16 || area.height < 4 {
+        return;
+    }
+    let max_rows = 10.min(popup.items.len());
+    // Scroll so the highlighted row stays visible.
+    let start = if popup.selected >= max_rows { popup.selected + 1 - max_rows } else { 0 };
+    let end = (start + max_rows).min(popup.items.len());
+
+    // Width from the widest visible label (+detail), capped to the area.
+    let widest = popup.items[start..end]
+        .iter()
+        .map(|it| it.label.chars().count() + it.detail.as_ref().map_or(0, |d| d.chars().count() + 3))
+        .max()
+        .unwrap_or(10);
+    let width = (widest as u16 + 2).clamp(16, area.width.saturating_sub(2));
+    let height = max_rows as u16 + 2;
+
+    let (cx, cy) = cursor_screen_yx(app).unwrap_or((area.x + 2, area.y));
+    // Below the cursor if it fits, else above.
+    let y = if cy + 1 + height <= area.y + area.height {
+        cy + 1
+    } else {
+        cy.saturating_sub(height)
+    };
+    let x = cx.min(area.x + area.width.saturating_sub(width));
+    let rect = Rect { x, y, width, height };
+
+    frame.render_widget(Clear, rect);
+    let rows: Vec<ListItem> = popup.items[start..end]
+        .iter()
+        .map(|it| {
+            let mut spans = vec![Span::raw(it.label.clone())];
+            if let Some(detail) = &it.detail {
+                spans.push(Span::styled(format!("  {detail}"), theme::dim()));
+            }
+            ListItem::new(Line::from(spans))
+        })
+        .collect();
+    let list = List::new(rows)
+        .block(
+            Block::default()
+                .style(theme::base())
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(theme::title(true))
+                .title(format!(" {} ", t!("ui.completion"))),
+        )
+        .highlight_style(theme::selected());
+    let mut state = ListState::default();
+    state.select(Some(popup.selected - start));
+    frame.render_stateful_widget(list, rect, &mut state);
+}
+
+/// Draw the LSP hover tooltip as a wrapped, bordered box near the cursor.
+fn draw_hover(app: &App, frame: &mut Frame) {
+    let Some(h) = app.hover.as_ref() else { return };
+    let area = app.layout.editor;
+    if area.width < 12 || area.height < 4 {
+        return;
+    }
+    let text = h.text.replace('\r', "");
+    let width = 64u16.min(area.width.saturating_sub(2)).max(20);
+    let inner_w = width.saturating_sub(2).max(1) as usize;
+    // Estimate wrapped height.
+    let mut rows = 0usize;
+    for line in text.lines() {
+        rows += line.chars().count() / inner_w + 1;
+    }
+    let height = (rows as u16 + 2).clamp(3, 12.min(area.height));
+
+    let (cx, cy) = cursor_screen_yx(app).unwrap_or((area.x + 2, area.y));
+    let y = if cy + 1 + height <= area.y + area.height {
+        cy + 1
+    } else {
+        cy.saturating_sub(height)
+    };
+    let x = cx.min(area.x + area.width.saturating_sub(width));
+    let rect = Rect { x, y, width, height };
+
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} ", t!("ui.hover")));
+    let para = Paragraph::new(text).block(block).wrap(Wrap { trim: false });
+    frame.render_widget(para, rect);
 }
 
 fn draw_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -512,7 +707,7 @@ fn draw_spell_suggest(app: &mut App, frame: &mut Frame, area: Rect) {
     };
 }
 
-/// Render a centered list-chooser overlay (theme/locale/keyway): a titled box
+/// Render a centered list-chooser overlay (theme/locale/keymap): a titled box
 /// with one row per `labels` entry, the `selected` row highlighted, and a hint
 /// line. Returns the list's rectangle so the caller can record it for mouse
 /// hit-testing.
@@ -580,15 +775,15 @@ fn draw_locale_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.locale"), &hint, &labels, selected);
 }
 
-fn draw_keyway_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(kc) = app.keyway_chooser.as_ref() else { return };
+fn draw_keymap_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(kc) = app.keymap_chooser.as_ref() else { return };
     let selected = kc.selected;
-    let labels: Vec<String> = vix_keyway_chooser::KEYWAYS
+    let labels: Vec<String> = vix_keymap_chooser::KEYMAPS
         .iter()
         .map(|k| format!("{}  —  {}", k.name, k.tooltip))
         .collect();
     let hint = t!("ui.theme_hint");
-    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.keyway"), &hint, &labels, selected);
+    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.keymap"), &hint, &labels, selected);
 }
 
 fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -782,7 +977,7 @@ pub fn menu_dropdown_rect(frame_area: Rect, bar: Rect, index: usize) -> Rect {
 }
 
 /// Render one dropdown (Clear + bordered list) at `area`, highlighting `selected`.
-fn render_dropdown(frame: &mut Frame, area: Rect, items: &[crate::menu::Item], selected: usize) {
+fn render_dropdown(frame: &mut Frame, area: Rect, items: &[crate::menu::Item], selected: Option<usize>) {
     frame.render_widget(Clear, area);
     let rows: Vec<ListItem> = items
         .iter()
@@ -815,7 +1010,7 @@ fn render_dropdown(frame: &mut Frame, area: Rect, items: &[crate::menu::Item], s
         )
         .highlight_style(theme::selected());
     let mut state = ListState::default();
-    state.select(Some(selected));
+    state.select(selected);
     frame.render_stateful_widget(list, area, &mut state);
 }
 
@@ -830,7 +1025,8 @@ fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
         let sub_w = dropdown_width(subitems);
         let sub_h = subitems.len() as u16 + 2;
         let sub_x = (area.x + area.width).min(fa.width.saturating_sub(sub_w));
-        let sub_y = (area.y + app.menu.item as u16).min(fa.height.saturating_sub(sub_h));
+        let parent_row = app.menu.item.unwrap_or(0) as u16;
+        let sub_y = (area.y + parent_row).min(fa.height.saturating_sub(sub_h));
         let sub_area = Rect {
             x: sub_x,
             y: sub_y,
@@ -838,7 +1034,7 @@ fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
             height: sub_h.min(fa.height.saturating_sub(sub_y)),
         };
         app.layout.submenu_dropdown = sub_area;
-        render_dropdown(frame, sub_area, subitems, sidx);
+        render_dropdown(frame, sub_area, subitems, Some(sidx));
     }
 }
 
@@ -871,6 +1067,15 @@ fn draw_explorer(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(block, area);
 
     let h = inner.height as usize;
+    let total = app.explorer.nodes.len();
+    // Reserve a one-column gutter on the right for a scrollbar when the tree
+    // overflows the viewport and the scrollbar is enabled.
+    let show_bar = app.settings.show_scrollbar && total > h && inner.width > 1;
+    let list_area = if show_bar {
+        Rect { width: inner.width - 1, ..inner }
+    } else {
+        inner
+    };
     let top = app.explorer.top.min(app.explorer.nodes.len());
     let end = (top + h).min(app.explorer.nodes.len());
     let items: Vec<ListItem> = app.explorer.nodes[top..end]
@@ -921,7 +1126,18 @@ fn draw_explorer(app: &App, frame: &mut Frame, area: Rect) {
     if app.explorer.selected >= top && app.explorer.selected < end {
         state.select(Some(app.explorer.selected - top));
     }
-    frame.render_stateful_widget(list, inner, &mut state);
+    frame.render_stateful_widget(list, list_area, &mut state);
+
+    if show_bar {
+        let sb_area = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: inner.height };
+        let pos = app.explorer.selected.min(total.saturating_sub(1));
+        let mut sb_state = ScrollbarState::new(total).position(pos);
+        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(None)
+            .end_symbol(None)
+            .style(theme::dim());
+        frame.render_stateful_widget(bar, sb_area, &mut sb_state);
+    }
 }
 
 fn draw_tabs(app: &App, frame: &mut Frame, area: Rect) {
@@ -1186,7 +1402,7 @@ pub const CAL_NEXT: char = '\u{25b6}';
 pub const NERD_CELL_W: u16 = 4;
 
 fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
-    use vix_nerd_font_palette::{COLS, GLYPHS};
+    use vix_nerd_font_picker::{COLS, GLYPHS};
     let Some(p) = app.nerd_palette.as_ref() else {
         return;
     };
@@ -1255,7 +1471,7 @@ fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
-    use vix_ascii_panel::{self as ascii, LEN};
+    use vix_ascii_character_picker::{self as ascii, LEN};
     if app.ascii_panel.is_none() {
         return;
     }
@@ -1314,6 +1530,164 @@ fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         x: chunks[1].x,
         y: chunks[1].y,
         width: chunks[1].width,
+        height: (view_h as u16).min(chunks[1].height),
+    };
+}
+
+fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
+    let colors = vix_x11_color_picker::colors();
+    let total = colors.len();
+    if app.x11_panel.is_none() || total == 0 {
+        return;
+    }
+    let width = 36u16.min(area.width);
+    let max_rows = area.height.saturating_sub(4).max(1);
+    let rows = (total as u16).min(max_rows);
+    let height = (rows + 4).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::PALETTE, t!("ui.x11")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let header = Line::from(Span::styled(t!("ui.x11_header").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(header), chunks[0]);
+
+    let view_h = chunks[1].height as usize;
+    if let Some(p) = app.x11_panel.as_mut() {
+        p.ensure_visible(view_h);
+    }
+    let p = app.x11_panel.as_ref().unwrap();
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for c in &colors[p.scroll..(p.scroll + view_h).min(total)] {
+        let swatch = Span::styled("██", Style::default().fg(Color::Rgb(c.r, c.g, c.b)));
+        let text = format!(" {:7} {}", c.hex, c.name);
+        let idx = p.scroll + lines.len();
+        let label = if idx == p.selected {
+            Span::styled(text, theme::selected())
+        } else {
+            Span::raw(text)
+        };
+        lines.push(Line::from(vec![Span::raw(" "), swatch, label]));
+    }
+    // Reserve a one-column gutter for the scrollbar when the table overflows.
+    let show_bar = total > view_h && chunks[1].width > 1;
+    let row_area = if show_bar {
+        Rect { width: chunks[1].width - 1, ..chunks[1] }
+    } else {
+        chunks[1]
+    };
+    frame.render_widget(Paragraph::new(lines), row_area);
+    if show_bar {
+        let sb_area = Rect { x: chunks[1].x + chunks[1].width - 1, ..chunks[1] };
+        let mut sb_state = ScrollbarState::new(total).position(p.selected.min(total - 1));
+        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(None)
+            .end_symbol(None)
+            .style(theme::dim());
+        frame.render_stateful_widget(bar, sb_area, &mut sb_state);
+    }
+
+    let hint = Line::from(Span::styled(t!("ui.x11_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[2]);
+
+    app.layout.x11_panel = Rect {
+        x: chunks[1].x,
+        y: chunks[1].y,
+        width: row_area.width,
+        height: (view_h as u16).min(chunks[1].height),
+    };
+}
+
+fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
+    let entities = vix_html_character_picker::entities();
+    let total = entities.len();
+    if app.html_panel.is_none() || total == 0 {
+        return;
+    }
+    let width = 46u16.min(area.width);
+    let max_rows = area.height.saturating_sub(4).max(1);
+    let rows = (total as u16).min(max_rows);
+    let height = (rows + 4).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::TABLE, t!("ui.html")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let header = Line::from(Span::styled(t!("ui.html_header").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(header), chunks[0]);
+
+    let view_h = chunks[1].height as usize;
+    if let Some(p) = app.html_panel.as_mut() {
+        p.ensure_visible(view_h);
+    }
+    let p = app.html_panel.as_ref().unwrap();
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for (i, e) in entities[p.scroll..(p.scroll + view_h).min(total)].iter().enumerate() {
+        let text = format!("  {:2}  {:26}  {}", e.glyph, e.name, e.code);
+        let idx = p.scroll + i;
+        if idx == p.selected {
+            lines.push(Line::from(Span::styled(text, theme::selected())));
+        } else {
+            lines.push(Line::from(Span::raw(text)));
+        }
+    }
+    // Reserve a one-column gutter for the scrollbar when the table overflows.
+    let show_bar = total > view_h && chunks[1].width > 1;
+    let row_area = if show_bar {
+        Rect { width: chunks[1].width - 1, ..chunks[1] }
+    } else {
+        chunks[1]
+    };
+    frame.render_widget(Paragraph::new(lines), row_area);
+    if show_bar {
+        let sb_area = Rect { x: chunks[1].x + chunks[1].width - 1, ..chunks[1] };
+        let mut sb_state = ScrollbarState::new(total).position(p.selected.min(total - 1));
+        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(None)
+            .end_symbol(None)
+            .style(theme::dim());
+        frame.render_stateful_widget(bar, sb_area, &mut sb_state);
+    }
+
+    let hint = Line::from(Span::styled(t!("ui.html_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[2]);
+
+    app.layout.html_panel = Rect {
+        x: chunks[1].x,
+        y: chunks[1].y,
+        width: row_area.width,
         height: (view_h as u16).min(chunks[1].height),
     };
 }
@@ -1430,6 +1804,64 @@ fn draw_dashboard(app: &App, frame: &mut Frame, area: Rect) {
 
     let hint = Line::from(Span::styled(t!("ui.dashboard_hint").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
+}
+
+fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.file_info.is_none() {
+        return;
+    }
+    let n = app.file_info.as_ref().unwrap().len();
+    let width = 64u16.min(area.width);
+    let max_rows = area.height.saturating_sub(3).max(1);
+    let rows = (n as u16).min(max_rows);
+    let height = (rows + 3).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 4,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::INFO, t!("ui.file_info")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let view_h = chunks[0].height as usize;
+    if let Some(p) = app.file_info.as_mut() {
+        p.ensure_visible(view_h);
+    }
+    let p = app.file_info.as_ref().unwrap();
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for idx in p.scroll..(p.scroll + view_h).min(p.len()) {
+        let row = &p.rows[idx];
+        let text = format!("  {:<14} {}", row.label, row.value);
+        if idx == p.selected {
+            lines.push(Line::from(Span::styled(text, theme::selected())));
+        } else {
+            lines.push(Line::from(Span::raw(text)));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines), chunks[0]);
+
+    let hint = Line::from(Span::styled(t!("ui.system_info_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
+
+    app.layout.file_info = Rect {
+        x: chunks[0].x,
+        y: chunks[0].y,
+        width: chunks[0].width,
+        height: (view_h as u16).min(chunks[0].height),
+    };
 }
 
 fn draw_system_info(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -1580,16 +2012,16 @@ fn draw_palette(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(hint), rows[2]);
 }
 
-fn draw_project_search(app: &App, frame: &mut Frame, area: Rect) {
-    let Some(ps) = app.project_search.as_ref() else { return };
+fn draw_workspace_search(app: &App, frame: &mut Frame, area: Rect) {
+    let Some(ps) = app.workspace_search.as_ref() else { return };
     let rect = centered(area, 80, 80);
     frame.render_widget(Clear, rect);
     let title = if ps.static_results {
         format!(" {} {} ", icon::SEARCH, t!("ui.goto_definition"))
     } else if ps.replacing {
-        format!(" {} {} ", icon::SEARCH, t!("ui.search_replace_project"))
+        format!(" {} {} ", icon::SEARCH, t!("ui.search_replace_workspace"))
     } else {
-        format!(" {} {} ", icon::SEARCH, t!("ui.search_project"))
+        format!(" {} {} ", icon::SEARCH, t!("ui.search_workspace"))
     };
     let block = Block::default()
         .style(theme::base())
@@ -1716,7 +2148,7 @@ fn field_line(label: &str, value: &str, focused: bool) -> Line<'static> {
 
 fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
     let Some(p) = app.prompt.as_ref() else { return };
-    // The project→dock search prompt shows case/regex toggles on a second line.
+    // The workspace→dock search prompt shows case/regex toggles on a second line.
     let toggles = matches!(p.kind, crate::app::PromptKind::SearchToDock);
     let width = (f32::from(area.width) * 0.6) as u16;
     let rect = Rect {

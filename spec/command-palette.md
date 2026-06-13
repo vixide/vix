@@ -10,7 +10,7 @@ Use prefix characters to switch modes:
 
 | Prefix | Mode | Description |
 |-|-|-|
-| (none) | File finder | Fuzzy search for files in your project
+| (none) | File finder | Fuzzy search for files in your workspace
 | > | Commands | Search and run editor commands |
 | #	| Buffers | Switch between open buffers by name |
 | :	| Go to line | Jump to a specific line number |

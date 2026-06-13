@@ -39,12 +39,12 @@ Fix drift by aligning all three (code, spec, docs).
 | `spec/navigation.md`                     | Position history, go-to-definition/symbol    |
 | `spec/command-palette.md`                | Palette modes and behavior                   |
 | `spec/file-explorer.md`                  | Explorer tree and file ops                   |
-| `spec/search-and-replace.md`             | Find/replace, project search, query-replace  |
-| `spec/code-editor.md`                    | The `vix-editor` widget (soft wrap, brackets, …) |
-| `spec/theme-chooser.md`                  | Theme model + custom JSON format             |
-| `spec/locale-chooser.md`                 | Internationalization / languages             |
-| `spec/keyway-chooser.md`                 | Keyboard navigation styles (Apple/Emacs/Vim) |
-| `spec/vix-calendar.md`                   | Calendar box                                 |
+| `vix-find-panel/spec/index.md`             | Find/replace, workspace search, query-replace  |
+| `vix-editor/spec/index.md`                    | The `vix-editor` widget (soft wrap, brackets, …) |
+| `vix-theme-chooser/spec/index.md`                  | Theme model + custom JSON format             |
+| `vix-locale-chooser/spec/index.md`                 | Internationalization / languages             |
+| `spec/vix-keymap-chooser/spec/index.md`                 | Keyboard navigation styles (Apple/Emacs/Vim) |
+| `vix-date-time-calendar-panel/spec/index.md`                   | Calendar box                                 |
 | `spec/hover.md`                          | Mouse any-motion (menu hover) tracking       |
 | `spec/main-rs-and-lib-rs-boilerplate.md` | Entry-point conventions                      |
 | `spec/rust-clippy-pedantic.md`           | `clippy::pedantic` on all targets            |

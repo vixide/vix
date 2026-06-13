@@ -1,7 +1,7 @@
 //! Formatting for the bottom status bar's two segments.
 //!
 //! Pure string logic — the host (the `vix` app) gathers the live data (cursor,
-//! path, dirty flag, keyway mode, language, line ending, selection) and the Nerd
+//! path, dirty flag, keymap mode, language, line ending, selection) and the Nerd
 //! Font glyphs, calls these builders, and renders the resulting strings.
 
 #![forbid(unsafe_code)]
@@ -10,7 +10,7 @@
 
 /// The left segment: `" {mode}{path}{dirty}  —  {status}"`.
 ///
-/// `mode` is the keyway mode indicator (with trailing spacing) or empty; `dirty`
+/// `mode` is the keymap mode indicator (with trailing spacing) or empty; `dirty`
 /// is the unsaved-buffer glyph (with leading space) or empty.
 #[must_use]
 pub fn left_segment(mode: &str, path: &str, dirty: &str, status: &str) -> String {

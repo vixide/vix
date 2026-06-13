@@ -1,6 +1,6 @@
 # Vix documentation index
 
-A map of all documentation in this repository. Start with the
+A map of the documentation in this repository. Start with the
 [README](README.md) for an overview, or jump to a topic below.
 
 ## Getting started
@@ -10,45 +10,45 @@ A map of all documentation in this repository. Start with the
 
 ## User guides (`docs/`)
 
-- [Architecture](docs/architecture.md) — workspace shape, modules, event flow,
-  rendering, theming, i18n, configuration, dependency pinning, testing.
-- [Keybindings](docs/keybindings.md) — every keyboard shortcut and mouse gesture.
-- [Themes](docs/themes.md) — built-in monochrome themes and the custom JSON
-  theme format.
-- [Internationalization](docs/i18n.md) — bundled languages, switching, and adding
-  a language.
-- [Configuration](docs/configuration.md) — settings file, every key, CLI flags.
+Each guide is `docs/<topic>/index.md`. Highlights:
+
+- [Architecture](docs/architecture/index.md) — workspace shape, modules, event
+  flow, rendering, theming, i18n, configuration, testing.
+- [Keybindings](docs/keybindings/index.md) — every keyboard shortcut and mouse
+  gesture, including keymaps.
+- [Configuration](docs/configuration/index.md) — settings file, every key, CLI
+  flags.
+- [Themes](docs/themes/index.md) · [Internationalization](docs/internationalization/index.md)
+  · [Keymaps](docs/keymaps/index.md) · [Menus](docs/menus/index.md)
+- [Language Server Protocol](docs/language-server-protocol/index.md) — diagnostics,
+  hover, go-to-definition, completion.
+- Panels & tools: [Command Palette](docs/command-palette/index.md),
+  [File Explorer](docs/file-explorer/index.md), [Find Panel](docs/find-panel/index.md),
+  [Outline](docs/outline-panel/index.md), [Git Panel](docs/git-panel/index.md),
+  [Calendar](docs/calendar-panel/index.md),
+  [Nerd Font Picker](docs/nerd-font-picker/index.md),
+  [ASCII Picker](docs/ascii-code-picker/index.md),
+  [System Information](docs/system-information-panel/index.md), and more under
+  `docs/`.
 
 ## Specification (`spec/`) — source of truth
 
-- [index.md](spec/index.md) — overview, crate set, build/run, implementation status.
-- [menus.md](spec/menus.md) · [keyboard.md](spec/keyboard.md) ·
-  [navigation.md](spec/navigation.md)
-- [command-palette.md](spec/command-palette.md) ·
-  [file-explorer.md](spec/file-explorer.md) ·
-  [vix-find-panel.md](spec/vix-find-panel.md)
-- [code-editor.md](spec/code-editor.md) ·
-  [theme-chooser.md](spec/theme-chooser.md) ·
-  [locale-chooser.md](spec/locale-chooser.md) ·
-  [keyway-chooser.md](spec/keyway-chooser.md) ·
-  [nerd-font-palette.md](spec/nerd-font-palette.md) ·
-  [vix-date-time-calendar-panel.md](spec/vix-date-time-calendar-panel.md) ·
-  [hover.md](spec/hover.md)
-- [vix-ascii-panel.md](spec/vix-ascii-panel.md) ·
-  [vix-system-information-panel.md](spec/vix-system-information-panel.md) ·
-  [case-change.md](spec/case-change.md)
-- [vix-spellcheck.md](spec/vix-spellcheck.md) ·
-  [dictionaries.md](spec/dictionaries.md) ·
-  [hunspell-dictionary-path.md](spec/hunspell-dictionary-path.md)
-- [git-integration.md](spec/git-integration.md)
-- [vix-left-dock.md](spec/vix-left-dock.md) ·
-  [vix-right-dock.md](spec/vix-right-dock.md) ·
-  [vix-bottom-dock.md](spec/vix-bottom-dock.md) ·
-  [vix-status-bar-panel.md](spec/vix-status-bar-panel.md)
-- [main-rs-and-lib-rs-boilerplate.md](spec/main-rs-and-lib-rs-boilerplate.md) ·
-  [rust-clippy-pedantic.md](spec/rust-clippy-pedantic.md) ·
-  [rust-cargo-config-toml-musl.md](spec/rust-cargo-config-toml-musl.md)
-- [comparisons.md](spec/comparisons.md) · [test.md](spec/test.md)
+App-level specs live in `spec/`; each crate's own behavior is specified in
+`vix-<crate>/spec/index.md`.
+
+- App: [index.md](spec/index.md) · [menus.md](spec/menus.md) ·
+  [keyboard.md](spec/keyboard.md) · [navigation.md](spec/navigation.md) ·
+  [command-palette.md](spec/command-palette.md) ·
+  [file-explorer.md](spec/file-explorer.md) · [hover.md](spec/hover.md) ·
+  [lsp.md](spec/lsp.md) · [git-integration.md](spec/git-integration.md) ·
+  [spellcheck.md](spec/spellcheck.md) · [case-change.md](spec/case-change.md) ·
+  [comparisons.md](spec/comparisons.md)
+- Per-crate: each `vix-*/spec/index.md` (e.g.
+  [vix-editor](vix-editor/spec/index.md),
+  [vix-find-panel](vix-find-panel/spec/index.md),
+  [vix-keymap-chooser](vix-keymap-chooser/spec/index.md),
+  [vix-x11-color-picker](vix-x11-color-picker/spec/index.md),
+  [vix-workspace-dashboard-panel](vix-workspace-dashboard-panel/spec/index.md)).
 
 ## Contributor & agent guidance (`AGENTS/`)
 

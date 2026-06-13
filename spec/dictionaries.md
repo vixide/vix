@@ -31,7 +31,7 @@ exactly the layout above). Fetch the locales you need into `dictionaries/`, for
 example:
 
 - Clone <https://github.com/wooorm/dictionaries> and copy its `dictionaries/<locale>`
-  folders into this project's `dictionaries/`, or
+  folders into this workspace's `dictionaries/`, or
 - Install the matching `dictionary-<locale>` npm packages and copy their
   `index.aff` / `index.dic` into `dictionaries/<locale>/`.
 

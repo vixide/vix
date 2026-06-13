@@ -269,6 +269,20 @@ pub fn checkout(dir: &Path, branch: &str) -> Result<(), String> {
     }
 }
 
+/// Create a new branch and switch to it (`git switch -c <name>`). Returns
+/// `Ok(())` on success, or the captured stderr on failure (e.g. the name already
+/// exists or is invalid).
+///
+/// # Errors
+/// Returns the trimmed stderr text when `git switch -c` exits non-zero or cannot run.
+pub fn create_branch(dir: &Path, name: &str) -> Result<(), String> {
+    match git(dir, &["switch", "-c", name]) {
+        Ok(o) if o.status.success() => Ok(()),
+        Ok(o) => Err(String::from_utf8_lossy(&o.stderr).trim().to_string()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 /// Commit the staged changes with `message`. Returns `Ok(())` on success, or the
 /// captured stderr on failure (e.g. nothing staged, hook rejected).
 ///

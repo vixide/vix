@@ -1,7 +1,7 @@
 //! The Vix theme model and chooser state.
 //!
 //! Every theme is a JSON [`CustomTheme`] with per-region colors and font
-//! attributes (see `spec/themes.md`). There is always exactly one active theme;
+//! attributes (see `spec/index.md`). There is always exactly one active theme;
 //! the bundled `Dark` and `Light` themes (from `themes/dark.json` /
 //! `themes/light.json`) are just ordinary themes the host ships. The style
 //! helpers ([`fg`], [`bg`], [`region_base`], …) read the active theme.
@@ -91,7 +91,7 @@ pub fn dim() -> Style {
 }
 
 // ===========================================================================
-// Theme model (per-region RGB), loaded from JSON. See spec/themes.md.
+// Theme model (per-region RGB), loaded from JSON. See spec/index.md.
 // ===========================================================================
 
 /// An `[R, G, B]` color, 0-255 per channel.

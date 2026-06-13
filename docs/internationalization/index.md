@@ -88,4 +88,4 @@ you have, and the rest stay in English until you fill them in.
 
 ## See also
 
-- `spec/locale-chooser.md` — the localization specification (source of truth).
+- `vix-locale-chooser/spec/index.md` — the localization specification (source of truth).

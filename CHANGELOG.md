@@ -1,13 +1,45 @@
 # Changelog
 
 All notable changes to Vix are documented here. The format is based on
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims to
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this workspace aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Language Server Protocol (LSP)** support: diagnostics (colored underlines),
+  hover, go-to-definition, and completion. Servers are configured per language
+  via the `lsp_enabled` and `lsp_servers` settings (no built-in server). New
+  pure-protocol `vix-lsp` crate (JSON-RPC framing, message builders, parsers,
+  position maths) with the process IO in `src/lsp.rs`. See `spec/lsp.md`.
+- **X11 Colors picker** (Tools → X11 Colors) — swatch + hex + name; inserts the
+  hex. New `vix-x11-color-picker` crate.
+- **HTML Characters picker** (Tools → HTML Characters) — glyph / entity / code
+  point; clicking a cell inserts that cell's text. New `vix-html-character-picker`
+  crate.
+- **macOS VSCode keymap** — Quick Open (`Ctrl+P`), Command Palette
+  (`Ctrl+Shift+P`), Go to Symbol, Go to Line, and the familiar VS Code chords.
+- **Edit → Go submenu** — File Start/End, Line Number, and Line / Paragraph /
+  Section Start & End cursor jumps.
+- **Edit → Select** gains **Select Paragraph** and **Select Section**.
+- **Scrollbars** on the file explorer and the character/color pickers.
+
 ### Changed
 
+- **Renamed "keyway" → "keymap"** throughout (setting, chooser crate, menus, docs).
+- **Renamed "project" → "workspace"** throughout — **Find In Workspace…**,
+  **Workspace Dashboard**, workspace-wide search/replace, the `vix-workspace-dashboard-panel`
+  crate, and the `workspace_search` module.
+- **Renamed the picker crates** from `-palette`/`-panel` to `-picker`:
+  `vix-ascii-character-picker`, `vix-html-character-picker`, `vix-nerd-font-picker`,
+  `vix-x11-color-picker` (the ASCII one was `vix-ascii-panel`).
+- **Menu dropdowns open with nothing highlighted** — the user arrows, hovers, or
+  types to pick an item (no auto-selected first row).
+- **Removed the standalone Find & Replace menu item** — replace now lives inside
+  the Find panel (`Ctrl+R` or `Tab` to the Replace field).
+- **Per-crate specifications** moved into each crate's `spec/index.md`; the
+  top-level `spec/` keeps the app-level specs.
 - **Shortcut labels use spaces** instead of `+` (e.g. `Ctrl Shift Z` rather than
   `Ctrl+Shift+Z`) in menus and the keyboard-help overlay.
 - **Recent-files count is configurable** via the `recent_files_max` setting
@@ -30,25 +62,25 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Select More / Select Less, and Find / Find Next / Find Previous.
 - **File-explorer path filters**: filter the tree by **Include regex** and
   **Exclude regex** (command palette "Explorer: Include/Exclude Regex Filter").
-  Files whose project-relative path fails the filter are hidden; directories
+  Files whose workspace-relative path fails the filter are hidden; directories
   stay visible. The explorer title shows `(filtered)` when active.
 - **Outline panel** (`Ctrl+Shift+B`, or the palette "Outline"): a list of the
   active buffer's symbols (kind prefix + name); Enter or a click jumps to the
   symbol, and the cursor's enclosing symbol is selected on open. New internal
   `vix-outline-panel` crate.
-- **Project Dashboard** (Tools → Project Dashboard): a live overlay showing the
-  project folder name, disk usage (`du`), file count, and git commit count, each
+- **Workspace Dashboard** (Tools → Workspace Dashboard): a live overlay showing the
+  workspace folder name, disk usage (`du`), file count, and git commit count, each
   computed asynchronously and filled in as it completes. New internal
-  `vix-project-dashboard-panel` crate.
+  `vix-workspace-dashboard-panel` crate.
 - **Select More / Select Less** (Edit menu; `Ctrl+Shift+→` / `Ctrl+Shift+←`):
   grow or shrink the selection by a word. **Move Up / Move Down** (Edit menu;
   `Alt+↑` / `Alt+↓`) are now also surfaced in the menu.
 - **Case transforms** (Edit → Case): convert the selection to Upper, Lower,
   Title, Kebab (`foo-bar`), Snake (`foo_bar`), Camel (`fooBar`), or Pascal
   (`FooBar`).
-- **Project search path filters**: the project-wide search/replace panel gains
+- **Workspace search path filters**: the workspace-wide search/replace panel gains
   **Include path** and **Exclude path** regex fields that narrow the searched
-  files by their project-relative path (`Tab` cycles to them).
+  files by their workspace-relative path (`Tab` cycles to them).
 - **Git integration** via the new `vix-git` crate, shelling out to the `git`
   CLI. The status bar shows the current branch and a dirty dot; the file explorer
   shows colored M/A/?/D/R/U badges on changed files; the editor draws a colored
@@ -75,19 +107,19 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   showing each code's decimal, hexadecimal, and character representation. Arrow
   keys / PageUp / PageDown / Home / End move the highlight; Enter or a click
   inserts the highlighted character into the active editor; Esc closes. Lives in
-  the new internal `vix-ascii-panel` crate.
+  the new internal `vix-ascii-character-picker` crate.
 - **View → Layout submenu.** The dock and status-bar toggles (Show/Hide Left
   Dock, Right Dock, Bottom Dock, Bottom Status) now live under a **Layout**
   submenu, alongside the existing **Editor** submenu.
 - **Menu type-ahead.** With a menu open, typing a letter jumps to the next item
   whose label starts with it, cycling — e.g. in File, `S` → Save, `S` → Save As.
   Works inside an open submenu too.
-- **Search in Project → Dock** (Edit → Find submenu, or the palette): search
-  every project file for a term and list the hits in the bottom dock as
+- **Search in Workspace → Dock** (Edit → Find submenu, or the palette): search
+  every workspace file for a term and list the hits in the bottom dock as
   `path:line:col` lines — each one click-to-jumps to the match. In the prompt,
   `Alt+C` toggles case-sensitivity and `Alt+R` toggles regex.
 - **Run Command** (Tools → Run Command…, or the palette): prompt for a shell
-  command, run it in the project root in a **background thread**, and **stream**
+  command, run it in the workspace root in a **background thread**, and **stream**
   its merged stdout/stderr into the bottom dock (shown automatically) line by
   line, with a `$ command` header and an `[exit N]` footer. The UI stays
   responsive; **Cancel Command** (Tools menu / palette) kills a running command.
@@ -142,7 +174,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the palette). Auto-indent on Enter (carry the previous line's leading
   whitespace) was already present and is now covered by tests.
 - **Nerd Font Palette** (Tools → Nerd Font Palette…, crate
-  `vix-nerd-font-palette`): a character picker showing a grid of curated Nerd
+  `vix-nerd-font-picker`): a character picker showing a grid of curated Nerd
   Font glyphs. Browse with the arrow keys or the mouse; Enter or a click inserts
   the highlighted glyph into the active editor and leaves the palette open so
   several can be picked in a row; Esc closes it.
@@ -183,9 +215,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   **Website**, and **Email** — each opens a modal dialog with an **Ok** button.
   The Website/Email dialogs show the text in a selectable text field (drag or
   arrow-select, `Ctrl+C` to copy).
-- **Keyways** (**View → Keyway…**, crate `vix-keyway-chooser`): choose the
+- **Keymaps** (**View → Keymap…**, crate `vix-keymap-chooser`): choose the
   keyboard navigation style, which changes how keys are dispatched. The choice
-  persists (`keyway` setting); Apple is the default.
+  persists (`keymap` setting); Apple is the default.
   - **Apple** — modifier shortcuts (e.g. `Ctrl+O` open, `Ctrl+Q` quit).
   - **Emacs** — `Ctrl` chords and the `Ctrl+X` prefix: `Ctrl+X Ctrl+F` open,
     `Ctrl+X Ctrl+S` save, `Ctrl+X Ctrl+C` quit, `Ctrl+X k` close; cursor motion
@@ -193,7 +225,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - **Vim** — modal: a Normal mode (`h/j/k/l`, `0`, `$`, `x`, `i/a/o/O` to enter
     Insert, `Esc` back to Normal) and a `:` command line (`:w`, `:q`, `:q!`,
     `:wq`/`:x`, `:Ex`). The status bar shows the current mode.
-- **View menu** with theme, locale, and keyway choosers and the drawer/line-number
+- **View menu** with theme, locale, and keymap choosers and the drawer/line-number
   toggles.
 - **Indentation settings** — `indent_style` (`"spaces"` / `"tabs"`) and
   `tab_width` control what the Tab key inserts (default: 4 spaces), overriding the
@@ -241,8 +273,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   installation. A same-named theme in `~/.config/vix/themes/` overrides a
   bundled one.
 - New internal crates: `vix-theme-chooser`, `vix-locale-chooser`,
-  `vix-keyway-chooser`, `vix-keyboard-shortcut-panel`,
-  `vix-date-time-calendar-panel`, `vix-nerd-font-palette`, and `vix-find-panel`
+  `vix-keymap-chooser`, `vix-keyboard-shortcut-panel`,
+  `vix-date-time-calendar-panel`, `vix-nerd-font-picker`, and `vix-find-panel`
   (the find / find-and-replace box state).
 - New docs: `docs/themes.md`, `docs/i18n.md`, `docs/configuration.md`,
   `index.md`, `AGENTS.md` (+ `AGENTS/`), and this changelog.
@@ -291,13 +323,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   line.
 - Menu dropdown items keep at least one space between the label and the
   right-aligned keyboard shortcut (the widest item used to let them touch).
-- Keyboard-only modal overlays (the calendar box, find, query-replace, project
+- Keyboard-only modal overlays (the calendar box, find, query-replace, workspace
   search, confirm, paste-conflict) now swallow mouse clicks instead of letting
   them fall through to the editor underneath.
 - Menu mouseover now moves the selection: with a dropdown open, hovering a row
   highlights it and hovering another top-level name switches menus (any-motion
   mouse tracking is enabled for this; other panes ignore button-less motion).
-- The theme, locale, and keyway choosers now respond to the mouse: clicking a
+- The theme, locale, and keymap choosers now respond to the mouse: clicking a
   row highlights (and, for theme/locale, live-previews) that entry instead of
   being ignored.
 - The active editor tab keeps the theme background (marked with an underline)

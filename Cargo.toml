@@ -7,13 +7,18 @@ members = [
     "vix-date-time-calendar-panel",
     "vix-theme-chooser",
     "vix-locale-chooser",
-    "vix-keyway-chooser",
+    "vix-keymap-chooser",
     "vix-keyboard-shortcut-panel",
-    "vix-nerd-font-palette",
-    "vix-ascii-panel",
+    "vix-nerd-font-picker",
+    "vix-ascii-character-picker",
+    "vix-x11-color-picker",
+    "vix-html-character-picker",
     "vix-system-information-panel",
-    "vix-project-dashboard-panel",
+    "vix-file-information-panel",
+    "vix-workspace-dashboard-panel",
     "vix-outline-panel",
+    "vix-welcome-panel",
+    "vix-lsp",
     "vix-spellcheck",
     "vix-git",
     "vix-find-panel",
@@ -65,20 +70,30 @@ vix-date-time-calendar-panel = { path = "vix-date-time-calendar-panel" }
 vix-theme-chooser = { path = "vix-theme-chooser" }
 # Locale chooser: available UI languages + selection state.
 vix-locale-chooser = { path = "vix-locale-chooser" }
-# Keyway chooser: available keyboard navigation styles + selection state.
-vix-keyway-chooser = { path = "vix-keyway-chooser" }
+# Keymap chooser: available keyboard navigation styles + selection state.
+vix-keymap-chooser = { path = "vix-keymap-chooser" }
 # Keyboard-shortcut help rows (key combo + i18n description key).
 vix-keyboard-shortcut-panel = { path = "vix-keyboard-shortcut-panel" }
 # Nerd Font palette (Tools menu): curated glyph set + character-picker grid state.
-vix-nerd-font-palette = { path = "vix-nerd-font-palette" }
+vix-nerd-font-picker = { path = "vix-nerd-font-picker" }
 # ASCII panel (Tools menu): the ASCII reference table + row-selection state.
-vix-ascii-panel = { path = "vix-ascii-panel" }
+vix-ascii-character-picker = { path = "vix-ascii-character-picker" }
+# X11 Colors panel (Tools menu): the X11 color table + row-selection state.
+vix-x11-color-picker = { path = "vix-x11-color-picker" }
+# HTML Characters panel (Tools menu): HTML named-character table + row-selection state.
+vix-html-character-picker = { path = "vix-html-character-picker" }
 # System Information panel (Tools menu): host OS/CPU/memory/disk snapshot.
 vix-system-information-panel = { path = "vix-system-information-panel" }
-# Project Dashboard panel (Tools menu): live folder/disk/file/commit metrics.
-vix-project-dashboard-panel = { path = "vix-project-dashboard-panel" }
+# File Information panel (Tools menu): active-file name/counts/size/perms/mtime.
+vix-file-information-panel = { path = "vix-file-information-panel" }
+# Workspace Dashboard panel (Tools menu): live folder/disk/file/commit metrics.
+vix-workspace-dashboard-panel = { path = "vix-workspace-dashboard-panel" }
 # Outline panel: code symbol list (kind + name + line) + selection state.
 vix-outline-panel = { path = "vix-outline-panel" }
+# Welcome panel: first-run welcome text + scroll state.
+vix-welcome-panel = { path = "vix-welcome-panel" }
+# LSP client core: JSON-RPC framing, message builders, parsers, position maths.
+vix-lsp = { path = "vix-lsp" }
 # Spell checking: Hunspell-backed checker over comment/string ranges.
 vix-spellcheck = { path = "vix-spellcheck" }
 # Git integration: status/diff/staging via the git CLI.
@@ -99,6 +114,8 @@ crossterm = "0.29"
 regex = "1"
 # Settings serialization (confy handles the TOML; serde derives the schema).
 serde = { version = "1", features = ["derive"] }
+# JSON for the LSP client's JSON-RPC traffic.
+serde_json = "1"
 ratatui-image = "11.0.4"
 image = "0.25"
 confy = "2.0.0"

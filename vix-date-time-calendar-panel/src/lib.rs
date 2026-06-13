@@ -1,5 +1,5 @@
 //! Vix Calendar: the date/time strings and the navigable month grid shown in
-//! Vix's calendar box. See `spec/vix-calendar.md`.
+//! Vix's calendar box. See `spec/index.md`.
 //!
 //! This crate is pure logic over [`jiff`] — it computes strings and a day grid
 //! but does no rendering, so the host draws it in whatever style it likes and
