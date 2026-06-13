@@ -3429,6 +3429,23 @@ impl App {
     /// A left click focuses the bottom dock (and jumps to a `path:line` location
     /// on the clicked line, if any); the wheel scrolls it.
     fn bottomdock_mouse(&mut self, mouse: MouseEvent) {
+        let a = self.layout.bottom_dock;
+        let total = self.bottom_dock.lines.len();
+        let viewport = a.height.saturating_sub(1) as usize;
+        let sb_shown = self.settings.show_scrollbar && total > viewport && a.width > 1;
+        let sb_col = a.x + a.width.saturating_sub(1);
+        if sb_shown
+            && mouse.column == sb_col
+            && matches!(
+                mouse.kind,
+                MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left)
+            )
+        {
+            self.focus = Focus::BottomDock;
+            let sb_rect = Rect { x: sb_col, y: a.y + 1, width: 1, height: a.height - 1 };
+            self.bottom_dock.scroll = crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total, viewport);
+            return;
+        }
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 self.focus = Focus::BottomDock;
@@ -3542,7 +3559,28 @@ impl App {
     }
 
     fn explorer_mouse(&mut self, mouse: MouseEvent) {
-        let inner_top = self.layout.explorer.y + 1; // inside the border
+        let a = self.layout.explorer;
+        let inner_top = a.y + 1; // inside the border
+        // Pressing or dragging the scrollbar (rightmost inner column) scrolls the
+        // tree instead of selecting a row.
+        let total = self.explorer.nodes.len();
+        let viewport = a.height.saturating_sub(1) as usize;
+        let sb_shown = self.settings.show_scrollbar && total > viewport && a.width > 1;
+        let sb_col = a.x + a.width.saturating_sub(2);
+        if sb_shown
+            && mouse.column == sb_col
+            && matches!(
+                mouse.kind,
+                MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left)
+            )
+        {
+            self.focus = Focus::Explorer;
+            let sb_rect = Rect { x: sb_col, y: inner_top, width: 1, height: a.height - 1 };
+            let off = crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total, viewport);
+            self.explorer.top = off;
+            self.explorer.selected = off.min(total.saturating_sub(1));
+            return;
+        }
         match mouse.kind {
             MouseEventKind::ScrollUp => {
                 self.explorer.up();

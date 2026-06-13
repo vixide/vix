@@ -3,8 +3,7 @@
 
 use ratatui::prelude::*;
 use ratatui::widgets::{
-    Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph, Scrollbar,
-    ScrollbarOrientation, ScrollbarState, Tabs, Wrap,
+    Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap,
 };
 
 use ratatui_image::protocol::StatefulProtocol;
@@ -303,12 +302,7 @@ fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(visible).wrap(Wrap { trim: false }), text_area);
     if show_bar {
         let sb_area = Rect { x: body.x + body.width - 1, ..body };
-        let mut sb_state = ScrollbarState::new(total).position(scroll);
-        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(None)
-            .end_symbol(None)
-            .style(theme::dim());
-        frame.render_stateful_widget(bar, sb_area, &mut sb_state);
+        draw_scrollbar(frame, sb_area, total, view_h, scroll);
     }
 
     let hint = Line::from(Span::styled(t!("ui.welcome_hint").to_string(), theme::dim()));
@@ -1130,13 +1124,7 @@ fn draw_explorer(app: &App, frame: &mut Frame, area: Rect) {
 
     if show_bar {
         let sb_area = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: inner.height };
-        let pos = app.explorer.selected.min(total.saturating_sub(1));
-        let mut sb_state = ScrollbarState::new(total).position(pos);
-        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(None)
-            .end_symbol(None)
-            .style(theme::dim());
-        frame.render_stateful_widget(bar, sb_area, &mut sb_state);
+        draw_scrollbar(frame, sb_area, total, h, app.explorer.selected);
     }
 }
 
@@ -1185,12 +1173,7 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         if scrollbar.width > 0 {
             let total = app.editor.active_line_count().max(1);
             let pos = app.editor.cursor_1based().0.saturating_sub(1);
-            let mut sb_state = ScrollbarState::new(total).position(pos);
-            let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some("\u{2191}"))
-                .end_symbol(Some("\u{2193}"))
-                .style(theme::dim());
-            frame.render_stateful_widget(bar, scrollbar, &mut sb_state);
+            draw_scrollbar(frame, scrollbar, total, scrollbar.height as usize, pos);
         }
     }
 }
@@ -1239,6 +1222,64 @@ fn draw_messages(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_stateful_widget(list, inner, &mut state);
 }
 
+/// Vix's one-character scrollbar, drawn into the vertical one-column `area`: a
+/// `↑` top cap, a `↓` bottom cap, a dim track, and a single `●` thumb positioned
+/// **proportionally** to `pos` within `0..=(total - viewport)`. The thumb is
+/// always one cell tall (never proportional height).
+fn draw_scrollbar(frame: &mut Frame, area: Rect, total: usize, viewport: usize, pos: usize) {
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+    let h = area.height as usize;
+    let max = total.saturating_sub(viewport);
+    let frac = if max == 0 { 0.0 } else { pos.min(max) as f64 / max as f64 };
+    let thumb_glyph = Span::styled("●", theme::title(true));
+    let track_glyph = || Span::styled("│", theme::dim());
+    let mut lines: Vec<Line> = Vec::with_capacity(h);
+    if h <= 2 {
+        let thumb = (frac * (h.saturating_sub(1)) as f64).round() as usize;
+        for r in 0..h {
+            lines.push(Line::from(if r == thumb { thumb_glyph.clone() } else { track_glyph() }));
+        }
+    } else {
+        let track = h - 2;
+        let thumb = (frac * track.saturating_sub(1) as f64).round() as usize;
+        lines.push(Line::from(Span::styled("↑", theme::dim())));
+        for r in 0..track {
+            lines.push(Line::from(if r == thumb { thumb_glyph.clone() } else { track_glyph() }));
+        }
+        lines.push(Line::from(Span::styled("↓", theme::dim())));
+    }
+    frame.render_widget(Paragraph::new(lines), area);
+}
+
+/// Map a mouse `row` within a scrollbar `area` to a content position in
+/// `0..=(total - viewport)`, accounting for the arrow caps: an arrow cap jumps to
+/// the extreme, the track maps proportionally. Used for click and drag.
+#[must_use]
+pub fn scrollbar_pos_from_row(area: Rect, row: u16, total: usize, viewport: usize) -> usize {
+    let max = total.saturating_sub(viewport);
+    if max == 0 || area.height == 0 {
+        return 0;
+    }
+    let h = area.height;
+    let pos = if h > 2 {
+        if row <= area.y {
+            0
+        } else if row >= area.y + h - 1 {
+            max
+        } else {
+            let track = f64::from(h - 2);
+            let rel = f64::from(row - area.y - 1);
+            (rel / (track - 1.0).max(1.0) * max as f64).round() as usize
+        }
+    } else {
+        let rel = f64::from(row.saturating_sub(area.y));
+        (rel / f64::from((h.max(1) - 1).max(1)) * max as f64).round() as usize
+    };
+    pos.min(max)
+}
+
 fn draw_bottom_dock(app: &App, frame: &mut Frame, area: Rect) {
     let focused = app.focus == Focus::BottomDock;
     let block = Block::default()
@@ -1273,12 +1314,7 @@ fn draw_bottom_dock(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), text_area);
     if show_bar {
         let sb_area = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: inner.height };
-        let mut sb_state = ScrollbarState::new(total).position(app.bottom_dock.scroll);
-        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(None)
-            .end_symbol(None)
-            .style(theme::dim());
-        frame.render_stateful_widget(bar, sb_area, &mut sb_state);
+        draw_scrollbar(frame, sb_area, total, inner.height as usize, app.bottom_dock.scroll);
     }
 }
 
@@ -1613,12 +1649,7 @@ fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect { x: chunks[1].x + chunks[1].width - 1, ..chunks[1] };
-        let mut sb_state = ScrollbarState::new(total).position(p.selected.min(total - 1));
-        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(None)
-            .end_symbol(None)
-            .style(theme::dim());
-        frame.render_stateful_widget(bar, sb_area, &mut sb_state);
+        draw_scrollbar(frame, sb_area, total, view_h, p.selected);
     }
 
     let hint = Line::from(Span::styled(t!("ui.x11_hint").to_string(), theme::dim()));
@@ -1691,12 +1722,7 @@ fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect { x: chunks[1].x + chunks[1].width - 1, ..chunks[1] };
-        let mut sb_state = ScrollbarState::new(total).position(p.selected.min(total - 1));
-        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(None)
-            .end_symbol(None)
-            .style(theme::dim());
-        frame.render_stateful_widget(bar, sb_area, &mut sb_state);
+        draw_scrollbar(frame, sb_area, total, view_h, p.selected);
     }
 
     let hint = Line::from(Span::styled(t!("ui.html_hint").to_string(), theme::dim()));
