@@ -307,6 +307,10 @@ pub use vix_system_information_panel::Panel as SystemInfoPanel;
 /// [`vix_workspace_dashboard_panel`]. Its metrics fill in asynchronously; Esc closes.
 pub use vix_workspace_dashboard_panel::Dashboard;
 
+/// First-run welcome overlay state, re-exported from [`vix_welcome_panel`].
+/// Scrollable, informational; Esc closes.
+pub use vix_welcome_panel::Panel as WelcomePanel;
+
 /// Code-outline overlay state (Ctrl+Shift+O), re-exported from
 /// [`vix_outline_panel`]. Lists the active buffer's symbols; Enter/click jumps to
 /// one, Esc closes.
@@ -403,6 +407,8 @@ pub struct Layout {
     /// Row-list rectangle of the open System Information panel, so a click can
     /// hit-test which row was picked.
     pub system_info: Rect,
+    /// Text rectangle of the open welcome panel, for mouse-wheel scrolling.
+    pub welcome: Rect,
     /// Suggestion-list rectangle of the open spell-suggestion popup, so a click
     /// can hit-test which suggestion was picked.
     pub spell_suggest: Rect,
@@ -498,6 +504,8 @@ pub struct App {
     dashboard_rx: Option<std::sync::mpsc::Receiver<DashMsg>>,
     /// Code outline overlay, when open.
     pub outline: Option<Outline>,
+    /// First-run welcome overlay, when shown.
+    pub welcome: Option<WelcomePanel>,
     /// LSP client: language-server process management and document sync.
     pub lsp: crate::lsp::Lsp,
     /// Last document revision pushed to a language server, keyed by file path, so
@@ -652,6 +660,7 @@ impl App {
             dashboard: None,
             dashboard_rx: None,
             outline: None,
+            welcome: None,
             lsp,
             lsp_synced: std::collections::HashMap::new(),
             hover: None,
@@ -696,6 +705,16 @@ impl App {
         }
     }
 
+    /// On first run, open the welcome screen and mark it seen (persisted on exit)
+    /// so it does not reappear. Called by `main` after construction; kept out of
+    /// [`App::new`] so tests build a clean, overlay-free app.
+    pub fn maybe_show_welcome(&mut self) {
+        if !self.settings.welcomed {
+            self.welcome = Some(WelcomePanel::open());
+            self.settings.welcomed = true;
+        }
+    }
+
     /// Open a path given on the command line.
     pub fn open_initial(&mut self, path: PathBuf) {
         self.open_path(&path, false);
@@ -721,6 +740,10 @@ impl App {
             }
         }
         // Modal layers, in priority order.
+        if self.welcome.is_some() {
+            self.welcome_key(key);
+            return;
+        }
         if self.show_help {
             match key.code {
                 KeyCode::Esc | KeyCode::F(1) | KeyCode::Char('q') => self.show_help = false,
@@ -949,6 +972,7 @@ impl App {
                     'o' => self.run_action("file.open"),
                     's' if Self::shift(&key) => self.run_action("file.save_as"),
                     's' => self.run_action("file.save"),
+                    'w' if Self::shift(&key) => self.run_action("file.close_all"),
                     'w' => self.run_action("file.close"),
                     't' if Self::shift(&key) => self.run_action("file.reopen_closed"),
                     'p' => self.run_action("tools.palette"),
@@ -961,7 +985,9 @@ impl App {
                     'g' => self.run_action("edit.find_next"),
                     'r' if Self::alt(&key) => self.run_action("edit.query_replace"),
                     'r' => self.run_action("edit.replace"),
-                    '/' => self.run_action("edit.toggle_comment"),
+                    // Many terminals emit the same control byte (0x1F) for
+                    // Ctrl+/, Ctrl+7, and Ctrl+_, so accept all three for Comment.
+                    '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
                     ']' => self.run_action("edit.match_bracket"),
                     ';' => self.run_action("spell.suggest"),
                     _ => return false,
@@ -993,6 +1019,7 @@ impl App {
                     'n' => self.run_action("file.new"),
                     's' if Self::shift(&key) => self.run_action("file.save_as"),
                     's' => self.run_action("file.save"),
+                    'w' if Self::shift(&key) => self.run_action("file.close_all"),
                     'w' => self.run_action("file.close"),
                     't' if Self::shift(&key) => self.run_action("file.reopen_closed"),
                     'p' if Self::shift(&key) => self.run_action("tools.palette"),
@@ -1005,7 +1032,9 @@ impl App {
                     'f' if Self::shift(&key) => self.run_action("search.workspace"),
                     'f' => self.run_action("edit.find"),
                     'r' => self.run_action("edit.replace"),
-                    '/' => self.run_action("edit.toggle_comment"),
+                    // Many terminals emit the same control byte (0x1F) for
+                    // Ctrl+/, Ctrl+7, and Ctrl+_, so accept all three for Comment.
+                    '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
                     ']' => self.run_action("edit.match_bracket"),
                     _ => return false,
                 }
@@ -1509,6 +1538,8 @@ impl App {
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
             "help.shortcuts" => self.show_help = true,
+            "help.welcome" => self.open_welcome(),
+            "vix.settings" => self.open_settings_file(),
             "vix.about" => {
                 self.dialog = Some(Dialog {
                     title: t!("menu.item.vix.about").to_string(),
@@ -3143,6 +3174,11 @@ impl App {
 
     /// Handle a mouse event, dispatching to whichever pane it lands in.
     pub fn on_mouse(&mut self, mouse: MouseEvent) {
+        // The welcome overlay is modal: the wheel scrolls it, nothing else.
+        if self.welcome.is_some() {
+            self.welcome_mouse(mouse);
+            return;
+        }
         // The right-click context menu takes all clicks while open (a click on a
         // row runs it; a click elsewhere dismisses it).
         if self.context_menu.is_some() {
@@ -4287,6 +4323,83 @@ impl App {
         let area = self.layout.editor;
         if self.editor.insert_str(&glyph, area) {
             self.status = t!("status.html_inserted", name = glyph).to_string();
+        }
+    }
+
+    // ----- Welcome panel --------------------------------------------------
+
+    fn open_welcome(&mut self) {
+        self.welcome = Some(WelcomePanel::open());
+    }
+
+    /// Open the user's settings file in the editor. Saves the current settings
+    /// first so the file exists (and reflects in-app changes) before opening.
+    fn open_settings_file(&mut self) {
+        let Some(path) = Settings::config_path() else {
+            self.status = t!("status.settings_no_path").to_string();
+            return;
+        };
+        let _ = self.settings.save();
+        self.with_jump(|s| {
+            s.open_path(&path, false);
+            s.focus = Focus::Editor;
+        });
+    }
+
+    fn welcome_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.welcome.height as usize).max(1);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(w) = self.welcome.as_mut() {
+                    w.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(w) = self.welcome.as_mut() {
+                    w.down(page);
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(w) = self.welcome.as_mut() {
+                    w.page_up(page);
+                }
+            }
+            KeyCode::PageDown | KeyCode::Char(' ') => {
+                if let Some(w) = self.welcome.as_mut() {
+                    w.page_down(page);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(w) = self.welcome.as_mut() {
+                    w.page_up(w.len());
+                }
+            }
+            KeyCode::End => {
+                if let Some(w) = self.welcome.as_mut() {
+                    w.page_down(w.len());
+                }
+            }
+            KeyCode::Esc | KeyCode::Enter | KeyCode::F(1) | KeyCode::Char('q') => {
+                self.welcome = None;
+            }
+            _ => {}
+        }
+    }
+
+    fn welcome_mouse(&mut self, mouse: MouseEvent) {
+        let page = (self.layout.welcome.height as usize).max(1);
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                if let Some(w) = self.welcome.as_mut() {
+                    w.up();
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                if let Some(w) = self.welcome.as_mut() {
+                    w.down(page);
+                }
+            }
+            _ => {}
         }
     }
 

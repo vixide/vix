@@ -3339,6 +3339,7 @@ dependencies = [
  "vix-status-bar-panel",
  "vix-system-information-panel",
  "vix-theme-chooser",
+ "vix-welcome-panel",
  "vix-workspace-dashboard-panel",
  "vix-x11-color-picker",
 ]
@@ -3473,6 +3474,10 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "vix-welcome-panel"
+version = "0.1.0"
 
 [[package]]
 name = "vix-workspace-dashboard-panel"

@@ -49,6 +49,8 @@ fn main() -> io::Result<()> {
     let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let mut app = App::new(root, settings);
     app.refresh_git();
+    // First-run welcome screen (no-op after it has been seen once).
+    app.maybe_show_welcome();
 
     // Optional file argument(s): open each, focusing the last.
     for path in cli.files {

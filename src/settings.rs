@@ -94,6 +94,9 @@ pub struct Settings {
     /// built-in server, so add the ones you have installed, e.g.
     /// `{ language_id = "rust", extensions = ["rs"], command = ["rust-analyzer"] }`.
     pub lsp_servers: Vec<LspServer>,
+    /// Whether the first-run welcome screen has been shown. Set true after the
+    /// welcome panel first appears, so it does not pop up on every launch.
+    pub welcomed: bool,
 }
 
 /// One configured language server (a `lsp_servers` entry).
@@ -139,6 +142,7 @@ impl Default for Settings {
             dictionary_path: String::new(),
             lsp_enabled: true,
             lsp_servers: Vec::new(),
+            welcomed: false,
         }
     }
 }
@@ -170,6 +174,13 @@ impl Settings {
     /// created or the file cannot be written/serialized.
     pub fn save(&self) -> Result<(), confy::ConfyError> {
         confy::store(APP_NAME, Some(CONFIG_NAME), self)
+    }
+
+    /// The on-disk settings file path (e.g. `~/.config/vix/config.toml`), or
+    /// `None` if the config location cannot be determined.
+    #[must_use]
+    pub fn config_path() -> Option<std::path::PathBuf> {
+        confy::get_configuration_file_path(APP_NAME, Some(CONFIG_NAME)).ok()
     }
 
     /// Directory holding custom JSON themes (`<config dir>/themes/`), or `None`

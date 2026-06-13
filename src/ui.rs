@@ -242,6 +242,71 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.dialog.is_some() {
         draw_dialog(app, frame, area);
     }
+    if app.welcome.is_some() {
+        draw_welcome(app, frame, area);
+    }
+}
+
+fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.welcome.is_none() {
+        return;
+    }
+    let lines = vix_welcome_panel::LINES;
+    let total = lines.len();
+    let width = 72u16.min(area.width.saturating_sub(2)).max(24);
+    let height = area.height.saturating_sub(2).clamp(6, 24);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::INFO, t!("ui.welcome")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+    let body = chunks[0];
+    let view_h = body.height as usize;
+
+    if let Some(w) = app.welcome.as_mut() {
+        w.clamp(view_h);
+    }
+    let scroll = app.welcome.as_ref().map_or(0, |w| w.scroll);
+    let show_bar = total > view_h && body.width > 1;
+    let text_area = if show_bar {
+        Rect { width: body.width - 1, ..body }
+    } else {
+        body
+    };
+    let visible: Vec<Line> = lines[scroll..(scroll + view_h).min(total)]
+        .iter()
+        .map(|l| Line::from(Span::raw(*l)))
+        .collect();
+    frame.render_widget(Paragraph::new(visible), text_area);
+    if show_bar {
+        let sb_area = Rect { x: body.x + body.width - 1, ..body };
+        let mut sb_state = ScrollbarState::new(total).position(scroll);
+        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(None)
+            .end_symbol(None)
+            .style(theme::dim());
+        frame.render_stateful_widget(bar, sb_area, &mut sb_state);
+    }
+
+    let hint = Line::from(Span::styled(t!("ui.welcome_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
+
+    app.layout.welcome = body;
 }
 
 /// The active editor cursor's screen position within the editor text area, as

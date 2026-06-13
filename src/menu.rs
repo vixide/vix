@@ -81,7 +81,7 @@ const FILE: &[Item] = &[
     Item::leaf("menu.item.file.save_as", "file.save_as", "Ctrl Shift S"),
     SEP,
     Item::leaf("menu.item.file.close", "file.close", "Ctrl W"),
-    Item::leaf("menu.item.file.close_all", "file.close_all", ""),
+    Item::leaf("menu.item.file.close_all", "file.close_all", "Ctrl Shift W"),
     Item::leaf("menu.item.file.reopen_closed", "file.reopen_closed", "Ctrl Shift T"),
 ];
 
@@ -190,6 +190,8 @@ const VIX: &[Item] = &[
     Item::leaf("menu.item.vix.website", "vix.website", ""),
     Item::leaf("menu.item.vix.email", "vix.email", ""),
     SEP,
+    Item::leaf("menu.item.vix.settings", "vix.settings", ""),
+    SEP,
     Item::leaf("menu.item.file.quit", "file.quit", "Ctrl Q"),
 ];
 
@@ -231,7 +233,10 @@ const GIT: &[Item] = &[
     Item::leaf("menu.item.git.clone", "git.clone", ""),
 ];
 
-const HELP: &[Item] = &[Item::leaf("menu.item.help.shortcuts", "help.shortcuts", "F1")];
+const HELP: &[Item] = &[
+    Item::leaf("menu.item.help.welcome", "help.welcome", ""),
+    Item::leaf("menu.item.help.shortcuts", "help.shortcuts", "F1"),
+];
 
 /// The full menu bar, left to right.
 pub const MENUS: &[MenuDef] = &[

@@ -16,6 +16,7 @@ members = [
     "vix-system-information-panel",
     "vix-workspace-dashboard-panel",
     "vix-outline-panel",
+    "vix-welcome-panel",
     "vix-lsp",
     "vix-spellcheck",
     "vix-git",
@@ -86,6 +87,8 @@ vix-system-information-panel = { path = "vix-system-information-panel" }
 vix-workspace-dashboard-panel = { path = "vix-workspace-dashboard-panel" }
 # Outline panel: code symbol list (kind + name + line) + selection state.
 vix-outline-panel = { path = "vix-outline-panel" }
+# Welcome panel: first-run welcome text + scroll state.
+vix-welcome-panel = { path = "vix-welcome-panel" }
 # LSP client core: JSON-RPC framing, message builders, parsers, position maths.
 vix-lsp = { path = "vix-lsp" }
 # Spell checking: Hunspell-backed checker over comment/string ranges.
