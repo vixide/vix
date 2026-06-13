@@ -3324,6 +3324,7 @@ dependencies = [
  "vix-bottom-dock",
  "vix-date-time-calendar-panel",
  "vix-editor",
+ "vix-file-information-panel",
  "vix-find-panel",
  "vix-git",
  "vix-html-character-picker",
@@ -3390,6 +3391,10 @@ dependencies = [
  "unicode-segmentation",
  "unicode-width",
 ]
+
+[[package]]
+name = "vix-file-information-panel"
+version = "0.1.0"
 
 [[package]]
 name = "vix-find-panel"

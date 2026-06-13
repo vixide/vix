@@ -1,31 +1,31 @@
 {
-  "name": "Matrix",
+  "name": "Green Phosphor",
   "menu-bar": {
-    "foreground": [0, 255, 0],
+    "foreground": [255, 191, 0],
     "background": [0, 0, 0],
     "font-style": "normal",
     "font-weight": "normal"
   },
   "status-bar": {
-    "foreground": [0, 255, 0],
+    "foreground": [255, 191, 0],
     "background": [0, 0, 0],
     "font-style": "normal",
     "font-weight": "normal"
   },
   "left-dock": {
-    "foreground": [0, 255, 0],
+    "foreground": [255, 191, 0],
     "background": [0, 0, 0],
     "font-style": "normal",
     "font-weight": "normal"
   },
   "right-dock": {
-    "foreground": [0, 255, 0],
+    "foreground": [255, 191, 0],
     "background": [0, 0, 0],
     "font-style": "normal",
     "font-weight": "normal"
   },
   "editor": {
-    "foreground": [0, 255, 0],
+    "foreground": [255, 191, 0],
     "background": [0, 0, 0],
     "font-style": "normal",
     "font-weight": "normal",

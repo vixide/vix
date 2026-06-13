@@ -6,10 +6,12 @@ started, what it can do, and how to send feedback.
 
 ## As implemented in Vix
 
-**Status:** Shipped. The text and scroll state live in the internal
-`vix-welcome-panel` crate (`LINES` is the content; `Panel` tracks the scroll
-offset); the host (`src/app.rs`, `src/ui.rs`) renders the overlay with a
-scrollbar and forwards scroll keys.
+**Status:** Shipped. The text lives in the host's i18n catalog (the
+`welcome.body` locale key) so it is translatable; the `vix-welcome-panel` crate
+is pure state — `Panel` holds the lines the host hands it and tracks the scroll
+offset. The host (`src/app.rs`, `src/ui.rs`) splits `welcome.body` into lines,
+renders the overlay with a scrollbar, and forwards scroll keys. The text is
+soft-wrapped to the panel width.
 
 **First run.** The `welcomed` setting (default `false`) gates the automatic
 appearance: the panel opens once on first launch, then `welcomed` is set so it

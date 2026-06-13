@@ -14,6 +14,7 @@ members = [
     "vix-x11-color-picker",
     "vix-html-character-picker",
     "vix-system-information-panel",
+    "vix-file-information-panel",
     "vix-workspace-dashboard-panel",
     "vix-outline-panel",
     "vix-welcome-panel",
@@ -83,6 +84,8 @@ vix-x11-color-picker = { path = "vix-x11-color-picker" }
 vix-html-character-picker = { path = "vix-html-character-picker" }
 # System Information panel (Tools menu): host OS/CPU/memory/disk snapshot.
 vix-system-information-panel = { path = "vix-system-information-panel" }
+# File Information panel (Tools menu): active-file name/counts/size/perms/mtime.
+vix-file-information-panel = { path = "vix-file-information-panel" }
 # Workspace Dashboard panel (Tools menu): live folder/disk/file/commit metrics.
 vix-workspace-dashboard-panel = { path = "vix-workspace-dashboard-panel" }
 # Outline panel: code symbol list (kind + name + line) + selection state.

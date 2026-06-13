@@ -1545,6 +1545,22 @@ menu.item.tools.system_info:
   bn: "সিস্টেম তথ্য…"
   zh: "系统信息…"
   ja: "システム情報…"
+menu.item.tools.file_info:
+  en: "File Information…"
+  es: "Información del archivo…"
+  fr: "Informations sur le fichier…"
+  de: "Dateiinformationen…"
+  cy: "Gwybodaeth Ffeil…"
+  ga: "Eolas Comhaid…"
+  gd: "Fiosrachadh Faidhle…"
+  pl: "Informacje o pliku…"
+  pt: "Informações do arquivo…"
+  ru: "Сведения о файле…"
+  ar: "معلومات الملف…"
+  hi: "फ़ाइल जानकारी…"
+  bn: "ফাইল তথ্য…"
+  zh: "文件信息…"
+  ja: "ファイル情報…"
 menu.item.tools.dashboard:
   en: "Workspace Dashboard…"
   es: "Panel del proyecto…"
@@ -3182,6 +3198,54 @@ ui.html_header:
   fr: "  Car   Nom                   Code"
   de: "  Zeich Name                  Code"
   cy: "  Nod   Enw                   Cod"
+welcome.body:
+  en: |
+    Welcome to Vix!
+
+    Vix is a simple, keyboard-friendly text editor and IDE that runs right in
+    your terminal. It is fast, mouse-aware, and works the same on macOS, Linux,
+    and Windows. This screen is here to help you get started — press Esc to
+    close it at any time, and reopen it later from Help → Welcome.
+
+    Getting started
+    ───────────────
+    • Open the menus with F10, or click a menu name. Arrow keys move, Enter
+      runs, Esc backs out. Each menu has an Alt shortcut too (Alt+F for File).
+    • Open a file with Ctrl+O, save with Ctrl+S, and close a tab with Ctrl+W.
+    • Toggle the file explorer (left dock) with Ctrl+B, and switch focus between
+      the explorer and the editor with Ctrl+E.
+    • Press Ctrl+P for the Command Palette — a searchable list of every command.
+      If you ever forget a shortcut, start there.
+    • Press F1 for the full keyboard-shortcut reference.
+
+    What Vix can do
+    ───────────────
+    • Edit code with syntax highlighting, soft wrap, undo/redo, and tabs.
+    • Find and replace in the current file or across the whole workspace.
+    • Browse and edit files in the explorer, with cut/copy/paste and multi-select.
+    • Use Git: status and log, stage and commit, branches, pull/push/fetch, clone.
+    • Pick characters and colors from the Tools menu: Nerd Font glyphs, ASCII,
+      HTML entities, and X11 colors.
+    • Turn on Language Server Protocol features (diagnostics, hover, go-to-
+      definition, completion) by configuring a server for your language.
+    • Choose a color theme, a language, and a keymap (Apple, VS Code, Emacs, or
+      Vim) from the View menu — Vix adapts to how you like to work.
+
+    Make it yours
+    ─────────────
+    Vix remembers your choices in a settings file, so the editor looks and
+    behaves the way you set it up the next time you open it. Open it from
+    Vix → Settings.
+
+    Feedback is welcome
+    ───────────────────
+    Vix is open source and we would love to hear from you — bug reports, ideas,
+    and questions are all appreciated.
+
+    • Website: https://github.com/joelparkerhenderson/vix
+    • Email:   joel@joelparkerhenderson.com
+
+    Happy editing!
 ui.welcome:
   en: "Welcome to Vix"
   es: "Bienvenido a Vix"
@@ -3204,6 +3268,22 @@ ui.welcome_hint:
   fr: "↑↓ défiler   PgPréc/PgSuiv page   Échap fermer"
   de: "↑↓ scrollen   Bild↑/Bild↓ Seite   Esc schließen"
   cy: "↑↓ sgrolio   PgUp/PgDn tudalen   Esc cau"
+ui.file_info:
+  en: "File Information"
+  es: "Información del archivo"
+  fr: "Informations sur le fichier"
+  de: "Dateiinformationen"
+  cy: "Gwybodaeth Ffeil"
+  ga: "Eolas Comhaid"
+  gd: "Fiosrachadh Faidhle"
+  pl: "Informacje o pliku"
+  pt: "Informações do arquivo"
+  ru: "Сведения о файле"
+  ar: "معلومات الملف"
+  hi: "फ़ाइल जानकारी"
+  bn: "ফাইল তথ্য"
+  zh: "文件信息"
+  ja: "ファイル情報"
 ui.system_info:
   en: "System Information"
   es: "Información del sistema"

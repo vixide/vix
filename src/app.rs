@@ -311,6 +311,11 @@ pub use vix_workspace_dashboard_panel::Dashboard;
 /// Scrollable, informational; Esc closes.
 pub use vix_welcome_panel::Panel as WelcomePanel;
 
+/// File Information overlay state (Tools -> File Information), re-exported from
+/// [`vix_file_information_panel`]. Arrow keys move within the table; Enter (or a
+/// click) inserts the highlighted value into the active editor, Esc closes.
+pub use vix_file_information_panel::Panel as FileInfoPanel;
+
 /// Code-outline overlay state (Ctrl+Shift+O), re-exported from
 /// [`vix_outline_panel`]. Lists the active buffer's symbols; Enter/click jumps to
 /// one, Esc closes.
@@ -409,6 +414,8 @@ pub struct Layout {
     pub system_info: Rect,
     /// Text rectangle of the open welcome panel, for mouse-wheel scrolling.
     pub welcome: Rect,
+    /// Row-list rectangle of the open File Information panel, for click hit-testing.
+    pub file_info: Rect,
     /// Suggestion-list rectangle of the open spell-suggestion popup, so a click
     /// can hit-test which suggestion was picked.
     pub spell_suggest: Rect,
@@ -506,6 +513,8 @@ pub struct App {
     pub outline: Option<Outline>,
     /// First-run welcome overlay, when shown.
     pub welcome: Option<WelcomePanel>,
+    /// File Information overlay, when open.
+    pub file_info: Option<FileInfoPanel>,
     /// LSP client: language-server process management and document sync.
     pub lsp: crate::lsp::Lsp,
     /// Last document revision pushed to a language server, keyed by file path, so
@@ -661,6 +670,7 @@ impl App {
             dashboard_rx: None,
             outline: None,
             welcome: None,
+            file_info: None,
             lsp,
             lsp_synced: std::collections::HashMap::new(),
             hover: None,
@@ -710,7 +720,7 @@ impl App {
     /// [`App::new`] so tests build a clean, overlay-free app.
     pub fn maybe_show_welcome(&mut self) {
         if !self.settings.welcomed {
-            self.welcome = Some(WelcomePanel::open());
+            self.welcome = Some(WelcomePanel::open(Self::welcome_lines()));
             self.settings.welcomed = true;
         }
     }
@@ -823,6 +833,10 @@ impl App {
         }
         if self.system_info.is_some() {
             self.system_info_key(key);
+            return;
+        }
+        if self.file_info.is_some() {
+            self.file_info_key(key);
             return;
         }
         if self.dashboard.is_some() {
@@ -1507,6 +1521,7 @@ impl App {
             "tools.x11_colors" => self.open_x11_panel(),
             "tools.html_chars" => self.open_html_panel(),
             "tools.system_info" => self.open_system_info(),
+            "tools.file_info" => self.open_file_info(),
             "tools.dashboard" => self.open_dashboard(),
             "tools.run_command" => {
                 self.prompt =
@@ -3248,6 +3263,10 @@ impl App {
             self.system_info_mouse(mouse);
             return;
         }
+        if self.file_info.is_some() {
+            self.file_info_mouse(mouse);
+            return;
+        }
         if self.spell_suggest.is_some() {
             self.spell_suggest_mouse(mouse);
             return;
@@ -4329,7 +4348,12 @@ impl App {
     // ----- Welcome panel --------------------------------------------------
 
     fn open_welcome(&mut self) {
-        self.welcome = Some(WelcomePanel::open());
+        self.welcome = Some(WelcomePanel::open(Self::welcome_lines()));
+    }
+
+    /// The welcome text from the i18n catalog, split into lines.
+    fn welcome_lines() -> Vec<String> {
+        t!("welcome.body").lines().map(str::to_string).collect()
     }
 
     /// Open the user's settings file in the editor. Saves the current settings
@@ -4400,6 +4424,119 @@ impl App {
                 }
             }
             _ => {}
+        }
+    }
+
+    // ----- File Information panel -----------------------------------------
+
+    fn open_file_info(&mut self) {
+        let info = self.gather_file_info();
+        self.file_info = Some(FileInfoPanel::open(&info));
+    }
+
+    /// Collect facts about the active file: counts from the buffer, and size /
+    /// permissions / modified-time from the filesystem when it is saved.
+    fn gather_file_info(&self) -> vix_file_information_panel::FileInfo {
+        use vix_file_information_panel::FileInfo;
+        let mut info = FileInfo::default();
+        let Some(t) = self.editor.active_tab() else { return info };
+        let content = t.editor.get_content();
+        info.language = t.editor.language().to_string();
+        info.chars = content.chars().count();
+        info.words = content.split_whitespace().count();
+        info.lines = t.editor.code_ref().len_lines();
+        info.dirty = t.dirty;
+        if let Some(path) = &t.path {
+            info.name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            info.path = path.display().to_string();
+            if let Ok(meta) = std::fs::metadata(path) {
+                info.bytes = Some(meta.len());
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    info.mode = Some(meta.permissions().mode());
+                }
+                if let Ok(modified) = meta.modified() {
+                    if let Ok(d) = modified.duration_since(std::time::UNIX_EPOCH) {
+                        info.modified_secs = i64::try_from(d.as_secs()).ok();
+                    }
+                }
+            }
+        }
+        info
+    }
+
+    fn file_info_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.file_info.height as usize).max(1);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.file_info.as_mut() {
+                    p.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.file_info.as_mut() {
+                    p.down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(p) = self.file_info.as_mut() {
+                    p.page_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(p) = self.file_info.as_mut() {
+                    p.page_down(page);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(p) = self.file_info.as_mut() {
+                    p.page_up(p.len());
+                }
+            }
+            KeyCode::End => {
+                if let Some(p) = self.file_info.as_mut() {
+                    p.page_down(p.len());
+                }
+            }
+            KeyCode::Enter => self.insert_selected_file_info(),
+            KeyCode::Esc => self.file_info = None,
+            _ => {}
+        }
+    }
+
+    fn file_info_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.file_info;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row_in_view = (mouse.row - r.y) as usize;
+        if let Some(p) = self.file_info.as_mut() {
+            let idx = p.scroll + row_in_view;
+            if p.select_index(idx) {
+                self.insert_selected_file_info();
+            }
+        }
+    }
+
+    /// Insert the highlighted value into the active editor (leaving the panel open).
+    fn insert_selected_file_info(&mut self) {
+        let Some(p) = self.file_info.as_ref() else {
+            return;
+        };
+        let value = p.selected_value();
+        if value.is_empty() {
+            return;
+        }
+        let area = self.layout.editor;
+        if self.editor.insert_str(&value, area) {
+            self.status = t!("status.ascii_inserted", name = value).to_string();
         }
     }
 

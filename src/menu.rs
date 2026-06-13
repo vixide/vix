@@ -199,6 +199,7 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.palette", "tools.palette", "Ctrl P"),
     Item::leaf("menu.item.tools.dashboard", "tools.dashboard", ""),
     Item::leaf("menu.item.tools.system_info", "tools.system_info", ""),
+    Item::leaf("menu.item.tools.file_info", "tools.file_info", ""),
     SEP,
     Item::leaf("menu.item.tools.run_command", "tools.run_command", ""),
     Item::leaf("menu.item.tools.cancel_command", "tools.cancel_command", ""),
