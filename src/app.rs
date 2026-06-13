@@ -311,6 +311,15 @@ pub use vix_workspace_dashboard_panel::Dashboard;
 /// Scrollable, informational; Esc closes.
 pub use vix_welcome_panel::Panel as WelcomePanel;
 
+/// Contact-browser overlay state (Tools -> Contacts), re-exported from
+/// [`vix_contact_panel`]. Lists the vCard files in a directory; Enter/click opens
+/// the highlighted contact's [`VcardPanel`].
+pub use vix_contact_panel::Panel as ContactPanel;
+
+/// Single-vCard view overlay state, re-exported from [`vix_vcard_panel`]. Shows
+/// one contact's fields; Enter/click inserts a value, Esc returns to the browser.
+pub use vix_vcard_panel::Panel as VcardPanel;
+
 /// File Information overlay state (Tools -> File Information), re-exported from
 /// [`vix_file_information_panel`]. Arrow keys move within the table; Enter (or a
 /// click) inserts the highlighted value into the active editor, Esc closes.
@@ -416,6 +425,10 @@ pub struct Layout {
     pub welcome: Rect,
     /// Row-list rectangle of the open File Information panel, for click hit-testing.
     pub file_info: Rect,
+    /// Row-list rectangle of the open contact browser, for click hit-testing.
+    pub contacts: Rect,
+    /// Row-list rectangle of the open vCard view, for click hit-testing.
+    pub vcard: Rect,
     /// Suggestion-list rectangle of the open spell-suggestion popup, so a click
     /// can hit-test which suggestion was picked.
     pub spell_suggest: Rect,
@@ -515,6 +528,10 @@ pub struct App {
     pub welcome: Option<WelcomePanel>,
     /// File Information overlay, when open.
     pub file_info: Option<FileInfoPanel>,
+    /// Contact-browser overlay, when open.
+    pub contacts: Option<ContactPanel>,
+    /// Single-vCard view overlay, when open (above the contact browser).
+    pub vcard: Option<VcardPanel>,
     /// LSP client: language-server process management and document sync.
     pub lsp: crate::lsp::Lsp,
     /// Last document revision pushed to a language server, keyed by file path, so
@@ -671,6 +688,8 @@ impl App {
             outline: None,
             welcome: None,
             file_info: None,
+            contacts: None,
+            vcard: None,
             lsp,
             lsp_synced: std::collections::HashMap::new(),
             hover: None,
@@ -856,6 +875,14 @@ impl App {
         }
         if self.file_info.is_some() {
             self.file_info_key(key);
+            return;
+        }
+        if self.vcard.is_some() {
+            self.vcard_key(key);
+            return;
+        }
+        if self.contacts.is_some() {
+            self.contacts_key(key);
             return;
         }
         if self.dashboard.is_some() {
@@ -1541,6 +1568,7 @@ impl App {
             "tools.html_chars" => self.open_html_panel(),
             "tools.system_info" => self.open_system_info(),
             "tools.file_info" => self.open_file_info(),
+            "tools.contacts" => self.open_contacts(),
             "tools.dashboard" => self.open_dashboard(),
             "tools.run_command" => {
                 self.prompt =
@@ -3286,6 +3314,14 @@ impl App {
             self.file_info_mouse(mouse);
             return;
         }
+        if self.vcard.is_some() {
+            self.vcard_mouse(mouse);
+            return;
+        }
+        if self.contacts.is_some() {
+            self.contacts_mouse(mouse);
+            return;
+        }
         if self.spell_suggest.is_some() {
             self.spell_suggest_mouse(mouse);
             return;
@@ -4499,6 +4535,177 @@ impl App {
                 }
             }
             _ => {}
+        }
+    }
+
+    // ----- Contacts (vCard browser) ---------------------------------------
+
+    /// Open the contact browser over the configured vCard directory (or the
+    /// workspace root), parsing each `.vcf`'s display name.
+    fn open_contacts(&mut self) {
+        let dir = if self.settings.contacts_dir.trim().is_empty() {
+            self.root.clone()
+        } else {
+            PathBuf::from(self.settings.contacts_dir.trim())
+        };
+        let mut contacts = Vec::new();
+        if let Ok(read) = std::fs::read_dir(&dir) {
+            for entry in read.flatten() {
+                let path = entry.path();
+                let is_vcf = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("vcf"));
+                if !is_vcf {
+                    continue;
+                }
+                let name = std::fs::read_to_string(&path)
+                    .ok()
+                    .map(|t| vix_vcard_parser::parse(&t).display_name())
+                    .filter(|n| n != "(unnamed)")
+                    .unwrap_or_else(|| {
+                        path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
+                    });
+                contacts.push(vix_contact_panel::Contact { name, path });
+            }
+        }
+        contacts.sort_by_key(|c| c.name.to_lowercase());
+        if contacts.is_empty() {
+            self.status = t!("status.no_contacts").to_string();
+        }
+        self.contacts = Some(ContactPanel::open(contacts));
+    }
+
+    /// Open the highlighted contact's vCard in the single-vCard view.
+    fn open_selected_vcard(&mut self) {
+        let Some(path) = self.contacts.as_ref().and_then(ContactPanel::selected_path) else {
+            return;
+        };
+        match std::fs::read_to_string(&path) {
+            Ok(text) => self.vcard = Some(VcardPanel::open(vix_vcard_parser::parse(&text))),
+            Err(e) => self.messages.error(t!("msg.open_failed", error = e).to_string()),
+        }
+    }
+
+    fn contacts_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.contacts.height as usize).max(1);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.contacts.as_mut() {
+                    p.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.contacts.as_mut() {
+                    p.down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(p) = self.contacts.as_mut() {
+                    p.page_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(p) = self.contacts.as_mut() {
+                    p.page_down(page);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(p) = self.contacts.as_mut() {
+                    p.page_up(p.len());
+                }
+            }
+            KeyCode::End => {
+                if let Some(p) = self.contacts.as_mut() {
+                    p.page_down(p.len());
+                }
+            }
+            KeyCode::Enter => self.open_selected_vcard(),
+            KeyCode::Esc => self.contacts = None,
+            _ => {}
+        }
+    }
+
+    fn contacts_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.contacts;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row_in_view = (mouse.row - r.y) as usize;
+        let hit = self.contacts.as_mut().is_some_and(|p| p.select_index(p.scroll + row_in_view));
+        if hit {
+            self.open_selected_vcard();
+        }
+    }
+
+    fn vcard_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.vcard.height as usize).max(1);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.vcard.as_mut() {
+                    p.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.vcard.as_mut() {
+                    p.down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(p) = self.vcard.as_mut() {
+                    p.page_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(p) = self.vcard.as_mut() {
+                    p.page_down(page);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(p) = self.vcard.as_mut() {
+                    p.page_up(p.len());
+                }
+            }
+            KeyCode::End => {
+                if let Some(p) = self.vcard.as_mut() {
+                    p.page_down(p.len());
+                }
+            }
+            KeyCode::Enter => self.insert_selected_vcard_value(),
+            // Esc returns to the contact browser (or closes if opened directly).
+            KeyCode::Esc => self.vcard = None,
+            _ => {}
+        }
+    }
+
+    fn vcard_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.vcard;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row_in_view = (mouse.row - r.y) as usize;
+        let hit = self.vcard.as_mut().is_some_and(|p| p.select_index(p.scroll + row_in_view));
+        if hit {
+            self.insert_selected_vcard_value();
+        }
+    }
+
+    /// Insert the highlighted vCard field's value into the active editor.
+    fn insert_selected_vcard_value(&mut self) {
+        let Some(p) = self.vcard.as_ref() else { return };
+        let value = p.selected_value();
+        if value.is_empty() {
+            return;
+        }
+        let area = self.layout.editor;
+        if self.editor.insert_str(&value, area) {
+            self.status = t!("status.ascii_inserted", name = value).to_string();
         }
     }
 

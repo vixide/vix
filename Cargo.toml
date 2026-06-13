@@ -18,6 +18,9 @@ members = [
     "vix-workspace-dashboard-panel",
     "vix-outline-panel",
     "vix-welcome-panel",
+    "vix-vcard-parser",
+    "vix-vcard-panel",
+    "vix-contact-panel",
     "vix-lsp",
     "vix-spellcheck",
     "vix-git",
@@ -92,6 +95,10 @@ vix-workspace-dashboard-panel = { path = "vix-workspace-dashboard-panel" }
 vix-outline-panel = { path = "vix-outline-panel" }
 # Welcome panel: first-run welcome text + scroll state.
 vix-welcome-panel = { path = "vix-welcome-panel" }
+# vCard (RFC 6350) parser, and the contact-browser / single-vcard view panels.
+vix-vcard-parser = { path = "vix-vcard-parser" }
+vix-vcard-panel = { path = "vix-vcard-panel" }
+vix-contact-panel = { path = "vix-contact-panel" }
 # LSP client core: JSON-RPC framing, message builders, parsers, position maths.
 vix-lsp = { path = "vix-lsp" }
 # Spell checking: Hunspell-backed checker over comment/string ranges.

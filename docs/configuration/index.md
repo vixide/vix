@@ -42,6 +42,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `dictionary_path` | string | `""` | Extra directory to search for Hunspell dictionaries, on top of the autodetected standard locations (`/usr/share/hunspell`, `/Library/Spelling`, `~/.local/share/hunspell`, `hunspell -D`, …). Empty = autodetect only. Both `<dir>/<name>.{aff,dic}` and `<dir>/<name>/index.{aff,dic}` layouts work. The spellcheck language follows the UI `locale`. |
 | `lsp_enabled`   | bool   | `true`   | Master switch for Language Server Protocol features (diagnostics, hover, go-to-definition, completion). When off, no servers launch. See `spec/lsp.md`. |
 | `lsp_servers`   | list   | `[]`     | Language servers, matched to files by extension. Each entry has `language_id`, `extensions`, and `command`. Empty by default — Vix ships no built-in server. |
+| `contacts_dir`  | string | `""`     | Directory of vCard (`.vcf`) files for **Tools → Contacts…**. Empty = the workspace root. |
 
 Example `config.toml`:
 

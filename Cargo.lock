@@ -3323,6 +3323,7 @@ dependencies = [
  "vix-ascii-character-picker",
  "vix-bottom-dock",
  "vix-calendar-panel",
+ "vix-contact-panel",
  "vix-editor",
  "vix-file-information-panel",
  "vix-find-panel",
@@ -3340,6 +3341,8 @@ dependencies = [
  "vix-status-bar-panel",
  "vix-system-information-panel",
  "vix-theme-chooser",
+ "vix-vcard-panel",
+ "vix-vcard-parser",
  "vix-welcome-panel",
  "vix-workspace-dashboard-panel",
  "vix-x11-color-picker",
@@ -3359,6 +3362,10 @@ version = "0.1.0"
 dependencies = [
  "jiff",
 ]
+
+[[package]]
+name = "vix-contact-panel"
+version = "0.1.0"
 
 [[package]]
 name = "vix-editor"
@@ -3479,6 +3486,17 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "vix-vcard-panel"
+version = "0.1.0"
+dependencies = [
+ "vix-vcard-parser",
+]
+
+[[package]]
+name = "vix-vcard-parser"
+version = "0.1.0"
 
 [[package]]
 name = "vix-welcome-panel"

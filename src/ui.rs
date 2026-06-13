@@ -223,6 +223,12 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.file_info.is_some() {
         draw_file_info(app, frame, area);
     }
+    if app.contacts.is_some() {
+        draw_contacts(app, frame, area);
+    }
+    if app.vcard.is_some() {
+        draw_vcard(app, frame, area);
+    }
     if app.dashboard.is_some() {
         draw_dashboard(app, frame, area);
     }
@@ -1861,6 +1867,116 @@ fn draw_dashboard(app: &App, frame: &mut Frame, area: Rect) {
 
     let hint = Line::from(Span::styled(t!("ui.dashboard_hint").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
+}
+
+fn draw_contacts(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(total) = app.contacts.as_ref().map(vix_contact_panel::Panel::len) else { return };
+    let width = 40u16.min(area.width);
+    let max_rows = area.height.saturating_sub(3).max(1);
+    let rows = (total.max(1) as u16).min(max_rows);
+    let height = (rows + 3).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 4,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::FOLDER, t!("ui.contacts")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+    let view_h = chunks[0].height as usize;
+    if let Some(p) = app.contacts.as_mut() {
+        p.ensure_visible(view_h);
+    }
+    let p = app.contacts.as_ref().unwrap();
+    let show_bar = total > view_h && chunks[0].width > 1;
+    let list_area = if show_bar { Rect { width: chunks[0].width - 1, ..chunks[0] } } else { chunks[0] };
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    if p.is_empty() {
+        lines.push(Line::from(Span::styled(t!("ui.no_contacts").to_string(), theme::dim())));
+    } else {
+        for idx in p.scroll..(p.scroll + view_h).min(total) {
+            let text = format!("  {}", p.contacts[idx].name);
+            if idx == p.selected {
+                lines.push(Line::from(Span::styled(text, theme::selected())));
+            } else {
+                lines.push(Line::from(Span::raw(text)));
+            }
+        }
+    }
+    frame.render_widget(Paragraph::new(lines), list_area);
+    if show_bar {
+        let sb_area = Rect { x: chunks[0].x + chunks[0].width - 1, ..chunks[0] };
+        draw_scrollbar(frame, sb_area, total, view_h, p.selected);
+    }
+    let hint = Line::from(Span::styled(t!("ui.contacts_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    app.layout.contacts = Rect { x: chunks[0].x, y: chunks[0].y, width: list_area.width, height: (view_h as u16).min(chunks[0].height) };
+}
+
+fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(total) = app.vcard.as_ref().map(vix_vcard_panel::Panel::len) else { return };
+    let title = app.vcard.as_ref().map(vix_vcard_panel::Panel::title).unwrap_or_default();
+    let width = 60u16.min(area.width);
+    let max_rows = area.height.saturating_sub(3).max(1);
+    let rows = (total.max(1) as u16).min(max_rows);
+    let height = (rows + 3).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::INFO, title));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+    let view_h = chunks[0].height as usize;
+    if let Some(p) = app.vcard.as_mut() {
+        p.ensure_visible(view_h);
+    }
+    let p = app.vcard.as_ref().unwrap();
+    let show_bar = total > view_h && chunks[0].width > 1;
+    let list_area = if show_bar { Rect { width: chunks[0].width - 1, ..chunks[0] } } else { chunks[0] };
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for idx in p.scroll..(p.scroll + view_h).min(total) {
+        let row = &p.rows[idx];
+        let text = format!("  {:<14} {}", row.label, row.value);
+        if idx == p.selected {
+            lines.push(Line::from(Span::styled(text, theme::selected())));
+        } else {
+            lines.push(Line::from(Span::raw(text)));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines), list_area);
+    if show_bar {
+        let sb_area = Rect { x: chunks[0].x + chunks[0].width - 1, ..chunks[0] };
+        draw_scrollbar(frame, sb_area, total, view_h, p.selected);
+    }
+    let hint = Line::from(Span::styled(t!("ui.vcard_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    app.layout.vcard = Rect { x: chunks[0].x, y: chunks[0].y, width: list_area.width, height: (view_h as u16).min(chunks[0].height) };
 }
 
 fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {
