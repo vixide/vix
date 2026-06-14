@@ -144,8 +144,9 @@ and strings).
 
 | Item      | Action                                                                 |
 | --------- | --------------------------------------------------------------------- |
-| Summarize | Run `claude` to summarize the active file; output to the bottom dock   |
+| Summarize | Run `claude` to summarize the selection (or the whole file); to the dock |
 | Explain   | Run `claude` to explain the selection (or the whole file); to the dock |
+| Annotate  | Run `claude` to annotate the selection (or the whole file); to the dock |
 
 ## Git menu
 

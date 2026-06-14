@@ -225,6 +225,7 @@ const TOOLS_LSP: &[Item] = &[
 const AI: &[Item] = &[
     Item::leaf("menu.item.ai.summarize", "ai.summarize", ""),
     Item::leaf("menu.item.ai.explain", "ai.explain", ""),
+    Item::leaf("menu.item.ai.annotate", "ai.annotate", ""),
 ];
 
 const GIT: &[Item] = &[

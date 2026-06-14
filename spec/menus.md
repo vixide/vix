@@ -190,10 +190,13 @@ The **Language Server** submenu:
 
 Each item runs the `claude` CLI and streams the response into the bottom dock.
 
+Each acts on the selection, or the whole file when nothing is selected.
+
 | Item      | Action                                                          |
 | --------- | -------------------------------------------------------------- |
-| Summarize | Summarize the active file's contents                           |
-| Explain   | Explain the selected text, or the whole file when nothing is selected |
+| Summarize | Summarize the text                                             |
+| Explain   | Explain the text                                               |
+| Annotate  | Annotate the text                                              |
 
 ## Git menu
 

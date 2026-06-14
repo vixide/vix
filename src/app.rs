@@ -1602,6 +1602,7 @@ impl App {
             "git.switch_branch" => self.open_branch_chooser(),
             "ai.summarize" => self.ai_summarize(),
             "ai.explain" => self.ai_explain(),
+            "ai.annotate" => self.ai_annotate(),
             "git.merge_branch" => self.open_branch_chooser_mode(true),
             "git.init" => self.git_init(),
             "git.new_branch" => self.git_begin_new_branch(),
@@ -4593,21 +4594,34 @@ impl App {
         self.run_command(&format!("claude -p \"{prompt}\" < \"{path}\""));
     }
 
-    /// Summarize the active file's contents with `claude` (output to the dock).
-    fn ai_summarize(&mut self) {
-        let text = self.editor.active_tab().map(|t| t.editor.get_content()).unwrap_or_default();
-        self.ai_run_on_text("Summarize this file.", &text);
-    }
-
-    /// Explain the selected text (or the whole file when nothing is selected)
-    /// with `claude` (output to the dock).
-    fn ai_explain(&mut self) {
+    /// The selected text, or the whole active buffer when nothing is selected.
+    fn selected_or_all_text(&mut self) -> String {
         let selection = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text());
-        let text = match selection {
+        match selection {
             Some(s) if !s.trim().is_empty() => s,
             _ => self.editor.active_tab().map(|t| t.editor.get_content()).unwrap_or_default(),
-        };
+        }
+    }
+
+    /// Summarize the selection (or the whole file when nothing is selected) with
+    /// `claude` (output to the dock).
+    fn ai_summarize(&mut self) {
+        let text = self.selected_or_all_text();
+        self.ai_run_on_text("Summarize this text.", &text);
+    }
+
+    /// Explain the selection (or the whole file when nothing is selected) with
+    /// `claude` (output to the dock).
+    fn ai_explain(&mut self) {
+        let text = self.selected_or_all_text();
         self.ai_run_on_text("Explain this text.", &text);
+    }
+
+    /// Annotate the selection (or the whole file when nothing is selected) with
+    /// `claude` (output to the dock).
+    fn ai_annotate(&mut self) {
+        let text = self.selected_or_all_text();
+        self.ai_run_on_text("Annotate this text.", &text);
     }
 
     // ----- Contacts (vCard browser) ---------------------------------------
