@@ -221,6 +221,7 @@ whole buffer.
 | Status          | `git status` (streamed to the bottom dock)                    |
 | Changes…        | Open the git changes panel: stage/unstage files and commit (`git-integration.md`) |
 | Log ▸           | Submenu: Graph / Since 1 day/week/month ago / All — `git log …` to the dock |
+| Grep…           | Prompt for a regex and `git grep -n` the repository (to the dock) |
 | *— separator —* |                                                               |
 | Branch ▸        | Submenu of branch commands (below)                            |
 | *— separator —* |                                                               |

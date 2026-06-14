@@ -86,6 +86,8 @@ pub enum PromptKind {
     GitEditDescription,
     /// Enter the name of a branch to delete (`git branch --delete`).
     GitDeleteBranch,
+    /// Enter a regex to search the repository with `git grep`.
+    GitGrep,
     /// Enter the file-explorer "include" path regex filter.
     ExplorerInclude,
     /// Enter the file-explorer "exclude" path regex filter.
@@ -1700,6 +1702,10 @@ impl App {
                     t!("prompt.git_delete_branch").to_string(),
                 ));
             }
+            "git.grep" => {
+                self.prompt =
+                    Some(Prompt::new(PromptKind::GitGrep, t!("prompt.git_grep").to_string()));
+            }
             "view.bottom_dock" => self.toggle_bottom_dock(),
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
@@ -2400,6 +2406,23 @@ impl App {
         }
         self.git_panel = None;
         self.run_command(&format!("git branch --delete {name}"));
+    }
+
+    /// Search the repository for `pattern` (`git grep`), streaming matches with
+    /// line numbers into the bottom dock.
+    fn git_grep(&mut self, pattern: &str) {
+        let pattern = pattern.trim();
+        if pattern.is_empty() {
+            return;
+        }
+        if !vix_git::is_repo(&self.root) {
+            self.status = t!("status.git_not_repo").into();
+            return;
+        }
+        self.git_panel = None;
+        // Single-quote the pattern so shell metacharacters in the regex are safe.
+        let quoted = format!("'{}'", pattern.replace('\'', "'\\''"));
+        self.run_command(&format!("git --no-pager grep -n -e {quoted}"));
     }
 
     /// Run a remote git command (push/pull/fetch) asynchronously, streaming its
@@ -6685,6 +6708,7 @@ impl App {
             PromptKind::GitClone => self.git_clone(&prompt.input),
             PromptKind::GitEditDescription => self.git_edit_description(&prompt.input),
             PromptKind::GitDeleteBranch => self.git_delete_branch(&prompt.input),
+            PromptKind::GitGrep => self.git_grep(&prompt.input),
             PromptKind::ExplorerInclude => {
                 let exclude = self.explorer.exclude_filter.clone();
                 self.explorer.set_filter(prompt.input.trim(), &exclude);
