@@ -163,7 +163,7 @@ Improve run in the background and **replace** the text with the result (undoable
 | -------------- | -------------------------------------------------------- |
 | Status         | `git status` (streamed to the bottom dock)               |
 | Changes…       | Open the git changes panel: stage/unstage and commit     |
-| Log ▸          | Submenu: Graph / Since 1 day/week/month ago / All (`git log …`) |
+| Log ▸          | Submenu: Summary / Since 1 day/week/month ago / All (`git log …`) |
 | Grep…          | Prompt for a regex and `git grep` the repository         |
 | Branch ▸       | Submenu of branch commands (below)                       |
 | Pull           | `git pull` (streamed to the bottom dock)                 |
