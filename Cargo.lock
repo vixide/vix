@@ -3341,6 +3341,7 @@ dependencies = [
  "vix-status-bar-panel",
  "vix-system-information-panel",
  "vix-theme-chooser",
+ "vix-time-zone-model",
  "vix-vcard-panel",
  "vix-vcard-parser",
  "vix-welcome-panel",
@@ -3486,6 +3487,10 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "vix-time-zone-model"
+version = "0.1.0"
 
 [[package]]
 name = "vix-vcard-panel"
