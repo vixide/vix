@@ -254,7 +254,6 @@ fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.welcome.is_none() {
         return;
     }
-    let total = app.welcome.as_ref().map_or(0, vix_welcome_panel::Panel::len);
     let width = 72u16.min(area.width.saturating_sub(2)).max(24);
     let height = area.height.saturating_sub(2).clamp(6, 24);
     let rect = Rect {
@@ -280,9 +279,14 @@ fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
     let body = chunks[0];
     let view_h = body.height as usize;
 
+    // Wrap the paragraphs to the text width (reserving the scrollbar column), so
+    // the lines below are already soft-wrapped; then clamp the scroll to them.
+    let text_width = body.width.saturating_sub(1).max(1) as usize;
     if let Some(w) = app.welcome.as_mut() {
+        w.wrap_to(text_width);
         w.clamp(view_h);
     }
+    let total = app.welcome.as_ref().map_or(0, vix_welcome_panel::Panel::len);
     let scroll = app.welcome.as_ref().map_or(0, |w| w.scroll);
     let show_bar = total > view_h && body.width > 1;
     let text_area = if show_bar {
@@ -300,7 +304,7 @@ fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
                 .collect()
         })
         .unwrap_or_default();
-    frame.render_widget(Paragraph::new(visible).wrap(Wrap { trim: false }), text_area);
+    frame.render_widget(Paragraph::new(visible), text_area);
     if show_bar {
         let sb_area = Rect { x: body.x + body.width - 1, ..body };
         draw_scrollbar(frame, sb_area, scroll, total.saturating_sub(view_h));
