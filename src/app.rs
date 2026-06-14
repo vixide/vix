@@ -50,6 +50,19 @@ enum DockResize {
     Bottom,
 }
 
+/// Which view's horizontal scrollbar is being dragged.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum HBar {
+    /// The center editor.
+    Editor,
+    /// The file explorer (left dock).
+    Explorer,
+    /// The message drawer (right dock).
+    Messages,
+    /// The bottom dock.
+    Bottom,
+}
+
 /// Which pane currently has keyboard focus.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Focus {
@@ -431,12 +444,21 @@ pub struct Layout {
     pub editor: Rect,
     /// Editor vertical-scrollbar rectangle (the column right of the editor text).
     pub scrollbar: Rect,
+    /// Editor horizontal-scrollbar rectangle (the row below the editor text),
+    /// shown when not soft-wrapping and a line overflows.
+    pub editor_hscrollbar: Rect,
     /// Explorer pane rectangle.
     pub explorer: Rect,
+    /// Explorer horizontal-scrollbar rectangle (bottom row), on overflow.
+    pub explorer_hscrollbar: Rect,
     /// Message-drawer rectangle.
     pub messages: Rect,
+    /// Message-drawer horizontal-scrollbar rectangle (bottom row), on overflow.
+    pub messages_hscrollbar: Rect,
     /// Bottom-dock rectangle (valid while the bottom dock is shown).
     pub bottom_dock: Rect,
+    /// Bottom-dock horizontal-scrollbar rectangle (bottom row), on overflow.
+    pub bottom_hscrollbar: Rect,
     /// Row list rectangle of the open chooser overlay (recent files), so a
     /// click can hit-test which row was picked.
     pub chooser: Rect,
@@ -632,6 +654,12 @@ pub struct App {
     pub show_bottom_dock: bool,
     /// Bottom-dock line buffer.
     pub bottom_dock: vix_bottom_dock::BottomDock,
+    /// Horizontal scroll offset (chars) of the bottom dock.
+    pub bottom_hscroll: usize,
+    /// Horizontal scroll offset (chars) of the file explorer.
+    pub explorer_hscroll: usize,
+    /// Horizontal scroll offset (chars) of the message drawer.
+    pub messages_hscroll: usize,
     /// Whether the calendar box is shown.
     pub show_calendar: bool,
     /// Month navigation state for the calendar box.
@@ -669,6 +697,17 @@ pub struct App {
     /// True while the editor scrollbar thumb is being dragged, so the drag keeps
     /// scrolling even if the pointer drifts off the one-column track.
     scrollbar_active: bool,
+    /// Which view's horizontal scrollbar is being dragged, if any.
+    hbar_active: Option<HBar>,
+    /// Max horizontal scroll (`content_width − viewport`) recorded each render for
+    /// the editor, explorer, message drawer, and bottom dock, for scrollbar drag.
+    pub editor_hmax: usize,
+    /// See [`Self::editor_hmax`].
+    pub explorer_hmax: usize,
+    /// See [`Self::editor_hmax`].
+    pub messages_hmax: usize,
+    /// See [`Self::editor_hmax`].
+    pub bottom_hmax: usize,
     /// Which dock (if any) is being resized by an in-progress edge drag.
     dock_resize: Option<DockResize>,
     /// Emacs keymap: a `Ctrl+X` prefix has been pressed and the next key
@@ -770,6 +809,9 @@ impl App {
             speller_locale: None,
             show_bottom_dock: settings.show_bottom_dock,
             bottom_dock: vix_bottom_dock::BottomDock::with_scrollback(settings.scrollback),
+            bottom_hscroll: 0,
+            explorer_hscroll: 0,
+            messages_hscroll: 0,
             show_calendar: false,
             calendar: crate::calendar::Calendar::new(),
             show_clock: false,
@@ -788,6 +830,11 @@ impl App {
             ai_replace: None,
             theme_preview: None,
             scrollbar_active: false,
+            hbar_active: None,
+            editor_hmax: 0,
+            explorer_hmax: 0,
+            messages_hmax: 0,
+            bottom_hmax: 0,
             dock_resize: None,
             emacs_prefix: false,
             vim_insert: false,
@@ -3593,6 +3640,35 @@ impl App {
             _ => {}
         }
 
+        // Horizontal scrollbars (editor + docks): press the track to jump there,
+        // then drag to scroll. Tracked by `hbar_active` so the drag continues off
+        // the one-row track.
+        let hbars = [
+            (self.layout.editor_hscrollbar, HBar::Editor),
+            (self.layout.explorer_hscrollbar, HBar::Explorer),
+            (self.layout.messages_hscrollbar, HBar::Messages),
+            (self.layout.bottom_hscrollbar, HBar::Bottom),
+        ];
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                for (rect, target) in hbars {
+                    if rect.width > 0 && rect_contains(rect, col, row) {
+                        self.hbar_active = Some(target);
+                        self.hbar_drag(target, col);
+                        return;
+                    }
+                }
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                if let Some(target) = self.hbar_active {
+                    self.hbar_drag(target, col);
+                    return;
+                }
+            }
+            MouseEventKind::Up(MouseButton::Left) => self.hbar_active = None,
+            _ => {}
+        }
+
         // Dock resizing: press a dock's inner edge (the explorer's right border
         // or the messages drawer's left border) and drag to resize it. The drag
         // continues even if the pointer drifts off that column.
@@ -3769,6 +3845,28 @@ impl App {
         let area = self.editor_view();
         self.editor.goto(line, None, area);
         self.focus = Focus::Editor;
+    }
+
+    /// Set a view's horizontal scroll offset from a pointer column `col` on its
+    /// horizontal scrollbar.
+    fn hbar_drag(&mut self, target: HBar, col: u16) {
+        let (rect, max) = match target {
+            HBar::Editor => (self.layout.editor_hscrollbar, self.editor_hmax),
+            HBar::Explorer => (self.layout.explorer_hscrollbar, self.explorer_hmax),
+            HBar::Messages => (self.layout.messages_hscrollbar, self.messages_hmax),
+            HBar::Bottom => (self.layout.bottom_hscrollbar, self.bottom_hmax),
+        };
+        let pos = crate::ui::scrollbar_pos_from_col(rect, col, max);
+        match target {
+            HBar::Editor => {
+                if let Some(tab) = self.editor.active_tab_mut() {
+                    tab.editor.set_offset_x(pos);
+                }
+            }
+            HBar::Explorer => self.explorer_hscroll = pos,
+            HBar::Messages => self.messages_hscroll = pos,
+            HBar::Bottom => self.bottom_hscroll = pos,
+        }
     }
 
     /// Resize the dock currently being dragged so its edge follows column `col`,
