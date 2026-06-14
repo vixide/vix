@@ -150,7 +150,7 @@ enum AiMsg {
     Failed,
 }
 
-/// Where a finished AI transform should write its result.
+/// Which part of a buffer an AI transform replaces.
 #[derive(Clone, Copy)]
 enum AiTarget {
     /// Replace the whole buffer.
@@ -159,15 +159,23 @@ enum AiTarget {
     Range(usize, usize),
 }
 
-/// A background AI transform (e.g. Annotate, Improve) whose captured output
-/// replaces the selection — or whole buffer — it was launched from.
+/// Where a finished AI task's captured output goes.
+#[derive(Clone, Copy)]
+enum AiDest {
+    /// Replace text in tab `tab` (the whole buffer or a range).
+    Replace { tab: usize, target: AiTarget },
+    /// Open the result in a new editor tab.
+    NewTab,
+}
+
+/// A background AI task whose captured output is applied when it finishes —
+/// either replacing editor text (Annotate, Improve) or opening a new tab
+/// (Summarize, Explain, Define).
 struct AiReplace {
     /// Receiver for the captured result.
     rx: std::sync::mpsc::Receiver<AiMsg>,
-    /// Index of the tab to write the result back into.
-    tab: usize,
-    /// The range (or whole buffer) to replace when the result arrives.
-    target: AiTarget,
+    /// Where to put the result.
+    dest: AiDest,
     /// Localized action label, for status messages.
     label: String,
 }
@@ -4525,22 +4533,6 @@ impl App {
 
     // ----- AI -------------------------------------------------------------
 
-    /// Run the `claude` CLI with `prompt`, feeding it `text` on stdin and
-    /// streaming the response into the bottom dock.
-    fn ai_run_on_text(&mut self, prompt: &str, text: &str) {
-        if text.trim().is_empty() {
-            self.status = t!("status.ai_no_input").to_string();
-            return;
-        }
-        let tmp = std::env::temp_dir().join(format!("vix-ai-{}.txt", std::process::id()));
-        if std::fs::write(&tmp, text).is_err() {
-            self.status = t!("status.ai_no_input").to_string();
-            return;
-        }
-        let path = tmp.display();
-        self.run_command(&format!("claude -p \"{prompt}\" < \"{path}\""));
-    }
-
     /// The selected text, or the whole active buffer when nothing is selected.
     fn selected_or_all_text(&mut self) -> String {
         let selection = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text());
@@ -4551,25 +4543,26 @@ impl App {
     }
 
     /// Summarize the selection (or the whole file when nothing is selected) with
-    /// `claude` (output to the dock).
+    /// `claude`; the result opens in a new editor tab.
     fn ai_summarize(&mut self) {
         let text = self.selected_or_all_text();
-        self.ai_run_on_text("Summarize this text.", &text);
+        self.ai_to_new_tab("Summarize this text.", &text, &t!("menu.item.ai.summarize"));
     }
 
     /// Explain the selection (or the whole file when nothing is selected) with
-    /// `claude` (output to the dock).
+    /// `claude`; the result opens in a new editor tab.
     fn ai_explain(&mut self) {
         let text = self.selected_or_all_text();
-        self.ai_run_on_text("Explain this text.", &text);
+        self.ai_to_new_tab("Explain this text.", &text, &t!("menu.item.ai.explain"));
     }
 
-    /// Define a word with `claude` (output to the dock). The input is the
-    /// selection if there is one; otherwise the word under the cursor, or the
-    /// next word when the cursor sits between words. Never the whole buffer.
+    /// Define a word with `claude`; the result opens in a new editor tab. The
+    /// input is the selection if there is one; otherwise the word under the
+    /// cursor, or the next word when the cursor sits between words. Never the
+    /// whole buffer.
     fn ai_define(&mut self) {
         let text = self.selected_or_word_text();
-        self.ai_run_on_text("Define this text.", &text);
+        self.ai_to_new_tab("Define this text.", &text, &t!("menu.item.ai.define"));
     }
 
     /// The selection, else the word at the cursor, else the next word after it.
@@ -4632,15 +4625,38 @@ impl App {
                 _ => (tab.editor.get_content(), AiTarget::Whole),
             }
         };
-        if text.trim().is_empty() {
-            self.status = t!("status.ai_no_input").to_string();
+        if let Some(rx) = self.spawn_ai(prompt, &text) {
+            self.ai_replace =
+                Some(AiReplace { rx, dest: AiDest::Replace { tab: tab_idx, target }, label: label.to_string() });
+            self.status = t!("status.ai_running", action = label).to_string();
+        }
+    }
+
+    /// Launch `claude -p <prompt>` over `text`, capturing its full output to open
+    /// in a new editor tab when it finishes (Summarize/Explain/Define).
+    fn ai_to_new_tab(&mut self, prompt: &str, text: &str, label: &str) {
+        if self.ai_replace.is_some() {
+            self.status = t!("status.ai_busy").to_string();
             return;
         }
+        if let Some(rx) = self.spawn_ai(prompt, text) {
+            self.ai_replace = Some(AiReplace { rx, dest: AiDest::NewTab, label: label.to_string() });
+            self.status = t!("status.ai_running", action = label).to_string();
+        }
+    }
 
-        let tmp = std::env::temp_dir().join(format!("vix-ai-{}.txt", std::process::id()));
-        if std::fs::write(&tmp, &text).is_err() {
+    /// Spawn `claude -p <prompt>` reading `text` on stdin, returning a receiver
+    /// for its captured stdout (or `None` after reporting an empty input or a
+    /// spawn failure). The reader thread sends one [`AiMsg`] when the CLI exits.
+    fn spawn_ai(&mut self, prompt: &str, text: &str) -> Option<std::sync::mpsc::Receiver<AiMsg>> {
+        if text.trim().is_empty() {
             self.status = t!("status.ai_no_input").to_string();
-            return;
+            return None;
+        }
+        let tmp = std::env::temp_dir().join(format!("vix-ai-{}.txt", std::process::id()));
+        if std::fs::write(&tmp, text).is_err() {
+            self.status = t!("status.ai_no_input").to_string();
+            return None;
         }
         let path = tmp.display();
         let cmd = format!("claude -p \"{prompt}\" < \"{path}\"");
@@ -4655,7 +4671,7 @@ impl App {
             Ok(c) => c,
             Err(e) => {
                 self.messages.error(t!("msg.command_failed", error = e).to_string());
-                return;
+                return None;
             }
         };
         let stdout = child.stdout.take().expect("piped stdout");
@@ -4670,12 +4686,11 @@ impl App {
             let success = ok && status.and_then(|s| s.code()) == Some(0);
             let _ = tx.send(if success { AiMsg::Done(out) } else { AiMsg::Failed });
         });
-        self.ai_replace = Some(AiReplace { rx, tab: tab_idx, target, label: label.to_string() });
-        self.status = t!("status.ai_running", action = label).to_string();
+        Some(rx)
     }
 
-    /// Drain a finished AI transform and apply its result. Called once per
-    /// event-loop iteration; cheap when none is running.
+    /// Drain a finished AI task and apply its result. Called once per event-loop
+    /// iteration; cheap when none is running.
     pub fn poll_ai_replace(&mut self) {
         let msg = {
             let Some(ar) = self.ai_replace.as_ref() else {
@@ -4697,7 +4712,13 @@ impl App {
                     self.status = t!("status.ai_failed", action = ar.label).to_string();
                     return;
                 }
-                self.apply_ai_replace(ar.tab, ar.target, text);
+                match ar.dest {
+                    AiDest::Replace { tab, target } => self.apply_ai_replace(tab, target, text),
+                    AiDest::NewTab => {
+                        self.editor.new_tab_with_content(text);
+                        self.focus = Focus::Editor;
+                    }
+                }
                 self.status = t!("status.ai_done", action = ar.label).to_string();
             }
             AiMsg::Failed => {

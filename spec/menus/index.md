@@ -191,10 +191,10 @@ The **Language Server** submenu:
 
 ## AI menu
 
-Each item runs the `claude` CLI. **Summarize**, **Explain**, and **Define**
-stream the response into the bottom dock (read-only); **Annotate** and
-**Improve** run in the background and **replace** the text with the result (an
-undoable edit). Only one replace task runs at a time.
+Each item runs the `claude` CLI in the background. **Summarize**, **Explain**,
+and **Define** open the result in a new editor tab; **Annotate** and **Improve**
+**replace** the text with the result (an undoable edit). Only one AI task runs at
+a time.
 
 Summarize / Explain / Annotate / Improve act on the selection, or the whole file
 when nothing is selected. **Define** instead acts on the selection, or the word
@@ -203,9 +203,9 @@ whole buffer.
 
 | Item      | Action                                                          |
 | --------- | -------------------------------------------------------------- |
-| Summarize | Summarize the text → bottom dock                               |
-| Explain   | Explain the text → bottom dock                                 |
-| Define    | Define the word → bottom dock                                  |
+| Summarize | Summarize the text → new tab                                   |
+| Explain   | Explain the text → new tab                                     |
+| Define    | Define the word → new tab                                      |
 | *— separator —* |                                                          |
 | Annotate  | Annotate the text → replaces the text                         |
 | Improve   | Improve the text → replaces the text                         |

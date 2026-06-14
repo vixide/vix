@@ -151,9 +151,9 @@ Improve run in the background and **replace** the text with the result (undoable
 
 | Item      | Action                                                                 |
 | --------- | --------------------------------------------------------------------- |
-| Summarize | Run `claude` to summarize the selection (or the whole file); to the dock |
-| Explain   | Run `claude` to explain the selection (or the whole file); to the dock |
-| Define    | Run `claude` to define the selection (or the word at/after the cursor); to the dock |
+| Summarize | Run `claude` to summarize the selection (or the whole file); to a new tab |
+| Explain   | Run `claude` to explain the selection (or the whole file); to a new tab |
+| Define    | Run `claude` to define the selection (or the word at/after the cursor); to a new tab |
 | Annotate  | Run `claude` to annotate the selection (or the whole file); replaces it |
 | Improve   | Run `claude` to improve the selection (or the whole file); replaces it |
 
