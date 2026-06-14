@@ -451,7 +451,7 @@ menu.item.git.log_graph:
   bn: "গ্রাফ"
   zh: "图形"
   ja: "グラフ"
-menu.item.git.log_month:
+menu.item.git.log_1_month:
   en: "Since 1 month ago"
   es: "Desde hace 1 mes"
   fr: "Depuis 1 mois"
@@ -467,7 +467,7 @@ menu.item.git.log_month:
   bn: "১ মাস আগে থেকে"
   zh: "近 1 个月"
   ja: "1 か月前から"
-menu.item.git.log_day:
+menu.item.git.log_1_day:
   en: "Since 1 day ago"
   es: "Desde hace 1 día"
   fr: "Depuis 1 jour"
@@ -483,7 +483,7 @@ menu.item.git.log_day:
   bn: "১ দিন আগে থেকে"
   zh: "近 1 天"
   ja: "1 日前から"
-menu.item.git.log_week:
+menu.item.git.log_1_week:
   en: "Since 1 week ago"
   es: "Desde hace 1 semana"
   fr: "Depuis 1 semaine"
