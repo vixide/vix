@@ -222,6 +222,11 @@ const TOOLS_LSP: &[Item] = &[
     Item::leaf("menu.item.lsp.complete", "lsp.complete", "Ctrl Space"),
 ];
 
+const AI: &[Item] = &[
+    Item::leaf("menu.item.ai.summarize", "ai.summarize", ""),
+    Item::leaf("menu.item.ai.explain", "ai.explain", ""),
+];
+
 const GIT: &[Item] = &[
     Item::leaf("menu.item.git.status", "git.status", ""),
     Item::leaf("menu.item.git.changes", "git.changes", ""),
@@ -251,6 +256,7 @@ pub const MENUS: &[MenuDef] = &[
     MenuDef { name: "menu.edit", items: EDIT },
     MenuDef { name: "menu.view", items: VIEW },
     MenuDef { name: "menu.tools", items: TOOLS },
+    MenuDef { name: "menu.ai", items: AI },
     MenuDef { name: "menu.git", items: GIT },
     MenuDef { name: "menu.help", items: HELP },
 ];

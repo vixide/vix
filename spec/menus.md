@@ -2,7 +2,7 @@
 
 Top menu bar.
 
-- Open with `F10`, or `Alt+F/E/V/T/H` for File/Edit/View/Tools/Help.
+- Open with `F10`, or `Alt+F/E/V/T/A/G/H` for File/Edit/View/Tools/AI/Git/Help.
 - Arrows navigate, `Enter` runs, `Esc` closes.
 - A mouse click on a menu name opens it; a click on a dropdown item runs it.
 - While a menu is open, moving the pointer follows the selection: hovering a
@@ -15,7 +15,8 @@ Top menu bar.
   label starts with it, cycling. E.g. in File, `S` selects Save, `S` again selects
   Save As. Works inside an open submenu too.
 
-The menus, left to right, are **Vix · File · Edit · View · Tools · Help**.
+The menus, left to right, are
+**Vix · File · Edit · View · Tools · AI · Git · Help**.
 
 ## Vix menu
 
@@ -184,6 +185,15 @@ The **Language Server** submenu:
 | Go to Definition | `F12`        | Jump to the definition (LSP, else heuristic)    |
 | Hover            |              | Show type/doc info for the symbol under the cursor |
 | Completion       | `Ctrl+Space` | Open the completion list at the cursor          |
+
+## AI menu
+
+Each item runs the `claude` CLI and streams the response into the bottom dock.
+
+| Item      | Action                                                          |
+| --------- | -------------------------------------------------------------- |
+| Summarize | Summarize the active file's contents                           |
+| Explain   | Explain the selected text, or the whole file when nothing is selected |
 
 ## Git menu
 

@@ -1112,14 +1112,15 @@ impl App {
     fn global_shared_key(&mut self, key: KeyEvent) -> bool {
         if Self::alt(&key) {
             if let KeyCode::Char(c) = key.code {
-                // The Vix menu is index 0; the rest follow (File=1, …, Help=6).
+                // The Vix menu is index 0; the rest follow (File=1, …, Help=7).
                 let idx = match c.to_ascii_lowercase() {
                     'f' => Some(1),
                     'e' => Some(2),
                     'v' => Some(3),
                     't' => Some(4),
-                    'g' => Some(5),
-                    'h' => Some(6),
+                    'a' => Some(5),
+                    'g' => Some(6),
+                    'h' => Some(7),
                     _ => None,
                 };
                 if let Some(i) = idx {
@@ -1599,6 +1600,8 @@ impl App {
             "git.pull" => self.git_remote_command("git pull"),
             "git.fetch" => self.git_remote_command("git fetch"),
             "git.switch_branch" => self.open_branch_chooser(),
+            "ai.summarize" => self.ai_summarize(),
+            "ai.explain" => self.ai_explain(),
             "git.merge_branch" => self.open_branch_chooser_mode(true),
             "git.init" => self.git_init(),
             "git.new_branch" => self.git_begin_new_branch(),
@@ -4570,6 +4573,41 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    // ----- AI -------------------------------------------------------------
+
+    /// Run the `claude` CLI with `prompt`, feeding it `text` on stdin and
+    /// streaming the response into the bottom dock.
+    fn ai_run_on_text(&mut self, prompt: &str, text: &str) {
+        if text.trim().is_empty() {
+            self.status = t!("status.ai_no_input").to_string();
+            return;
+        }
+        let tmp = std::env::temp_dir().join(format!("vix-ai-{}.txt", std::process::id()));
+        if std::fs::write(&tmp, text).is_err() {
+            self.status = t!("status.ai_no_input").to_string();
+            return;
+        }
+        let path = tmp.display();
+        self.run_command(&format!("claude -p \"{prompt}\" < \"{path}\""));
+    }
+
+    /// Summarize the active file's contents with `claude` (output to the dock).
+    fn ai_summarize(&mut self) {
+        let text = self.editor.active_tab().map(|t| t.editor.get_content()).unwrap_or_default();
+        self.ai_run_on_text("Summarize this file.", &text);
+    }
+
+    /// Explain the selected text (or the whole file when nothing is selected)
+    /// with `claude` (output to the dock).
+    fn ai_explain(&mut self) {
+        let selection = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text());
+        let text = match selection {
+            Some(s) if !s.trim().is_empty() => s,
+            _ => self.editor.active_tab().map(|t| t.editor.get_content()).unwrap_or_default(),
+        };
+        self.ai_run_on_text("Explain this text.", &text);
     }
 
     // ----- Contacts (vCard browser) ---------------------------------------

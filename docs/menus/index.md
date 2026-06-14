@@ -1,12 +1,12 @@
 # Menus
 
 The top menu bar groups every command into dropdown menus. From left to right
-the menus are **Vix · File · Edit · View · Tools · Git · Help**.
+the menus are **Vix · File · Edit · View · Tools · AI · Git · Help**.
 
 ## Navigating the menus
 
 - Open the bar with **F10**, or jump straight to a menu with its Alt mnemonic:
-  **Alt+F/E/V/T/H** for File / Edit / View / Tools / Help.
+  **Alt+F/E/V/T/A/G/H** for File / Edit / View / Tools / AI / Git / Help.
 - **Arrows** navigate, **Enter** runs the highlighted item, **Esc** closes.
 - A mouse click on a menu name opens it; a click on a dropdown item runs it.
 - While a menu is open, moving the pointer follows the selection: hovering a
@@ -140,17 +140,28 @@ and strings).
 | HTML Characters…    | Pick an HTML character; click a cell to insert it |
 | Language Server ▸   | LSP actions: Go to Definition, Hover, Completion |
 
+## AI menu
+
+| Item      | Action                                                                 |
+| --------- | --------------------------------------------------------------------- |
+| Summarize | Run `claude` to summarize the active file; output to the bottom dock   |
+| Explain   | Run `claude` to explain the selection (or the whole file); to the dock |
+
 ## Git menu
 
 | Item           | Action                                                   |
 | -------------- | -------------------------------------------------------- |
+| Status         | `git status` (streamed to the bottom dock)               |
 | Changes…       | Open the git changes panel: stage/unstage and commit     |
 | Log…           | Show the commit history (`git log`)                      |
-| Switch Branch… | Choose a local branch to check out                       |
 | New Branch…    | Create a new branch and switch to it                     |
+| Switch Branch… | Choose a local branch to check out                       |
+| Merge Branch…  | Choose a branch to merge into the current one            |
 | Pull           | `git pull` (streamed to the bottom dock)                 |
 | Push           | `git push` (streamed to the bottom dock)                 |
 | Fetch          | `git fetch` (streamed to the bottom dock)                |
+| Init           | `git init` (refuses if a `.git` repo already exists)     |
+| Clone…         | Prompt for a URL and `git clone` it                      |
 
 ## Help menu
 
