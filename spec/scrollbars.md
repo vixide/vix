@@ -14,7 +14,8 @@ screen and the character/color pickers).
   cursor/selection views the thumb tracks the cursor/selected item (so it reaches
   the bottom exactly when the last line/item is selected); for scroll-only views
   (welcome, bottom dock) it tracks the scroll offset.
-- The track is a dim `│`, capped with `↑` (top) and `↓` (bottom) arrows.
+- The track is a dim `│` spanning the full height of the gutter — no end-cap
+  arrows.
 - The scrollbar appears only when the content overflows the viewport, and (for
   the editor, explorer, and bottom dock) honors the **Show/Hide Scroll Bar**
   toggle (`show_scrollbar`).
@@ -22,8 +23,8 @@ screen and the character/color pickers).
 ## Interaction
 
 - **Mouse wheel** and the keyboard scroll the view as usual.
-- **Click** a point on the track to jump there; clicking the `↑`/`↓` arrow caps
-  jumps to the top/bottom.
+- **Click** a point on the track to jump there (the top cell jumps to the start,
+  the bottom cell to the end).
 - **Press and drag** the scrollbar to scroll continuously.
 
 ## As implemented in Vix

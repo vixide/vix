@@ -1241,11 +1241,12 @@ fn draw_messages(app: &App, frame: &mut Frame, area: Rect) {
 }
 
 /// Vix's one-character scrollbar, drawn into the vertical one-column `area`: a
-/// `↑` top cap, a `↓` bottom cap, a dim track, and a single `●` thumb positioned
-/// **proportionally** to `pos` within `0..=max`. The thumb is always one cell
-/// tall (never proportional height). For cursor/selection views pass
-/// `pos = selected`, `max = total - 1` (so the thumb reaches the bottom only on
-/// the last item); for scroll views pass `pos = scroll`, `max = total - viewport`.
+/// dim track and a single `●` thumb positioned **proportionally** to `pos`
+/// within `0..=max`. The thumb is always one cell tall (never proportional
+/// height) and the track spans the whole `area` (no end-cap arrows). For
+/// cursor/selection views pass `pos = selected`, `max = total - 1` (so the thumb
+/// reaches the bottom only on the last item); for scroll views pass
+/// `pos = scroll`, `max = total - viewport`.
 fn draw_scrollbar(frame: &mut Frame, area: Rect, pos: usize, max: usize) {
     if area.width == 0 || area.height == 0 {
         return;
@@ -1254,47 +1255,25 @@ fn draw_scrollbar(frame: &mut Frame, area: Rect, pos: usize, max: usize) {
     let frac = if max == 0 { 0.0 } else { pos.min(max) as f64 / max as f64 };
     let thumb_glyph = Span::styled("●", theme::title(true));
     let track_glyph = || Span::styled("│", theme::dim());
+    let thumb = (frac * h.saturating_sub(1) as f64).round() as usize;
     let mut lines: Vec<Line> = Vec::with_capacity(h);
-    if h <= 2 {
-        let thumb = (frac * (h.saturating_sub(1)) as f64).round() as usize;
-        for r in 0..h {
-            lines.push(Line::from(if r == thumb { thumb_glyph.clone() } else { track_glyph() }));
-        }
-    } else {
-        let track = h - 2;
-        let thumb = (frac * track.saturating_sub(1) as f64).round() as usize;
-        lines.push(Line::from(Span::styled("↑", theme::dim())));
-        for r in 0..track {
-            lines.push(Line::from(if r == thumb { thumb_glyph.clone() } else { track_glyph() }));
-        }
-        lines.push(Line::from(Span::styled("↓", theme::dim())));
+    for r in 0..h {
+        lines.push(Line::from(if r == thumb { thumb_glyph.clone() } else { track_glyph() }));
     }
     frame.render_widget(Paragraph::new(lines), area);
 }
 
-/// Map a mouse `row` within a scrollbar `area` to a position in `0..=max`,
-/// accounting for the arrow caps: an arrow cap jumps to the extreme, the track
-/// maps proportionally. Used for click and drag.
+/// Map a mouse `row` within a scrollbar `area` to a position in `0..=max`. The
+/// track spans the whole `area` (no end-cap arrows), so the row maps
+/// proportionally. Used for click and drag.
 #[must_use]
 pub fn scrollbar_pos_from_row(area: Rect, row: u16, max: usize) -> usize {
     if max == 0 || area.height == 0 {
         return 0;
     }
     let h = area.height;
-    let pos = if h > 2 {
-        if row <= area.y {
-            0
-        } else if row >= area.y + h - 1 {
-            max
-        } else {
-            let track = f64::from(h - 2);
-            let rel = f64::from(row - area.y - 1);
-            (rel / (track - 1.0).max(1.0) * max as f64).round() as usize
-        }
-    } else {
-        let rel = f64::from(row.saturating_sub(area.y));
-        (rel / f64::from((h.max(1) - 1).max(1)) * max as f64).round() as usize
-    };
+    let rel = f64::from(row.saturating_sub(area.y));
+    let pos = (rel / f64::from((h - 1).max(1)) * max as f64).round() as usize;
     pos.min(max)
 }
 
