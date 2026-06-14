@@ -3,8 +3,7 @@
 
 use ratatui::prelude::*;
 use ratatui::widgets::{
-    Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph, Scrollbar,
-    ScrollbarOrientation, ScrollbarState, Tabs, Wrap,
+    Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap,
 };
 
 use ratatui_image::protocol::StatefulProtocol;
@@ -224,6 +223,12 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.file_info.is_some() {
         draw_file_info(app, frame, area);
     }
+    if app.contacts.is_some() {
+        draw_contacts(app, frame, area);
+    }
+    if app.vcard.is_some() {
+        draw_vcard(app, frame, area);
+    }
     if app.dashboard.is_some() {
         draw_dashboard(app, frame, area);
     }
@@ -303,12 +308,7 @@ fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(visible).wrap(Wrap { trim: false }), text_area);
     if show_bar {
         let sb_area = Rect { x: body.x + body.width - 1, ..body };
-        let mut sb_state = ScrollbarState::new(total).position(scroll);
-        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(None)
-            .end_symbol(None)
-            .style(theme::dim());
-        frame.render_stateful_widget(bar, sb_area, &mut sb_state);
+        draw_scrollbar(frame, sb_area, scroll, total.saturating_sub(view_h));
     }
 
     let hint = Line::from(Span::styled(t!("ui.welcome_hint").to_string(), theme::dim()));
@@ -1130,13 +1130,7 @@ fn draw_explorer(app: &App, frame: &mut Frame, area: Rect) {
 
     if show_bar {
         let sb_area = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: inner.height };
-        let pos = app.explorer.selected.min(total.saturating_sub(1));
-        let mut sb_state = ScrollbarState::new(total).position(pos);
-        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(None)
-            .end_symbol(None)
-            .style(theme::dim());
-        frame.render_stateful_widget(bar, sb_area, &mut sb_state);
+        draw_scrollbar(frame, sb_area, app.explorer.selected, total.saturating_sub(1));
     }
 }
 
@@ -1185,12 +1179,7 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         if scrollbar.width > 0 {
             let total = app.editor.active_line_count().max(1);
             let pos = app.editor.cursor_1based().0.saturating_sub(1);
-            let mut sb_state = ScrollbarState::new(total).position(pos);
-            let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some("\u{2191}"))
-                .end_symbol(Some("\u{2193}"))
-                .style(theme::dim());
-            frame.render_stateful_widget(bar, scrollbar, &mut sb_state);
+            draw_scrollbar(frame, scrollbar, pos, total.saturating_sub(1));
         }
     }
 }
@@ -1233,10 +1222,80 @@ fn draw_messages(app: &App, frame: &mut Frame, area: Rect) {
             ListItem::new(line)
         })
         .collect();
+    let total = app.messages.items.len();
+    let h = inner.height as usize;
+    let show_bar = app.settings.show_scrollbar && total > h && inner.width > 1;
+    let list_area = if show_bar {
+        Rect { width: inner.width - 1, ..inner }
+    } else {
+        inner
+    };
     let list = List::new(items).highlight_style(theme::selected());
     let mut state = ListState::default();
     state.select(Some(app.messages.selected));
-    frame.render_stateful_widget(list, inner, &mut state);
+    frame.render_stateful_widget(list, list_area, &mut state);
+    if show_bar {
+        let sb_area = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: inner.height };
+        draw_scrollbar(frame, sb_area, app.messages.selected, total.saturating_sub(1));
+    }
+}
+
+/// Vix's one-character scrollbar, drawn into the vertical one-column `area`: a
+/// `↑` top cap, a `↓` bottom cap, a dim track, and a single `●` thumb positioned
+/// **proportionally** to `pos` within `0..=max`. The thumb is always one cell
+/// tall (never proportional height). For cursor/selection views pass
+/// `pos = selected`, `max = total - 1` (so the thumb reaches the bottom only on
+/// the last item); for scroll views pass `pos = scroll`, `max = total - viewport`.
+fn draw_scrollbar(frame: &mut Frame, area: Rect, pos: usize, max: usize) {
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+    let h = area.height as usize;
+    let frac = if max == 0 { 0.0 } else { pos.min(max) as f64 / max as f64 };
+    let thumb_glyph = Span::styled("●", theme::title(true));
+    let track_glyph = || Span::styled("│", theme::dim());
+    let mut lines: Vec<Line> = Vec::with_capacity(h);
+    if h <= 2 {
+        let thumb = (frac * (h.saturating_sub(1)) as f64).round() as usize;
+        for r in 0..h {
+            lines.push(Line::from(if r == thumb { thumb_glyph.clone() } else { track_glyph() }));
+        }
+    } else {
+        let track = h - 2;
+        let thumb = (frac * track.saturating_sub(1) as f64).round() as usize;
+        lines.push(Line::from(Span::styled("↑", theme::dim())));
+        for r in 0..track {
+            lines.push(Line::from(if r == thumb { thumb_glyph.clone() } else { track_glyph() }));
+        }
+        lines.push(Line::from(Span::styled("↓", theme::dim())));
+    }
+    frame.render_widget(Paragraph::new(lines), area);
+}
+
+/// Map a mouse `row` within a scrollbar `area` to a position in `0..=max`,
+/// accounting for the arrow caps: an arrow cap jumps to the extreme, the track
+/// maps proportionally. Used for click and drag.
+#[must_use]
+pub fn scrollbar_pos_from_row(area: Rect, row: u16, max: usize) -> usize {
+    if max == 0 || area.height == 0 {
+        return 0;
+    }
+    let h = area.height;
+    let pos = if h > 2 {
+        if row <= area.y {
+            0
+        } else if row >= area.y + h - 1 {
+            max
+        } else {
+            let track = f64::from(h - 2);
+            let rel = f64::from(row - area.y - 1);
+            (rel / (track - 1.0).max(1.0) * max as f64).round() as usize
+        }
+    } else {
+        let rel = f64::from(row.saturating_sub(area.y));
+        (rel / f64::from((h.max(1) - 1).max(1)) * max as f64).round() as usize
+    };
+    pos.min(max)
 }
 
 fn draw_bottom_dock(app: &App, frame: &mut Frame, area: Rect) {
@@ -1249,6 +1308,15 @@ fn draw_bottom_dock(app: &App, frame: &mut Frame, area: Rect) {
         .title(format!(" {} {} ", icon::INFO, t!("ui.bottom_dock")));
     let inner = block.inner(area);
     frame.render_widget(block, area);
+    // Reserve a one-column gutter for a scrollbar when the buffer overflows.
+    let total = app.bottom_dock.lines.len();
+    let h = inner.height as usize;
+    let show_bar = app.settings.show_scrollbar && total > h && inner.width > 1;
+    let text_area = if show_bar {
+        Rect { width: inner.width - 1, ..inner }
+    } else {
+        inner
+    };
     let lines: Vec<Line> = if app.bottom_dock.is_empty() {
         vec![Line::from(Span::styled(
             t!("ui.bottom_dock_empty").to_string(),
@@ -1256,12 +1324,16 @@ fn draw_bottom_dock(app: &App, frame: &mut Frame, area: Rect) {
         ))]
     } else {
         app.bottom_dock
-            .visible(inner.height as usize)
+            .visible(text_area.height as usize)
             .iter()
             .map(|l| Line::from(l.clone()))
             .collect()
     };
-    frame.render_widget(Paragraph::new(lines), inner);
+    frame.render_widget(Paragraph::new(lines), text_area);
+    if show_bar {
+        let sb_area = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: inner.height };
+        draw_scrollbar(frame, sb_area, app.bottom_dock.scroll, total.saturating_sub(inner.height as usize));
+    }
 }
 
 fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -1360,32 +1432,33 @@ fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.calendar = inner;
     frame.render_widget(block, rect);
 
+    // The calendar (month nav + grid) sits above the date/time entries.
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(4), // info
             Constraint::Length(1), // month header + nav arrows
             Constraint::Min(6),    // weekday header + weeks
+            Constraint::Length(4), // info
             Constraint::Length(1), // help
         ])
         .split(inner);
-
-    let info = vec![
-        // Local date/time (no leading icon), then UTC ISO, then the commercial
-        // (ISO week) date in the foreground color, then a blank spacer line.
-        Line::from(Span::raw(calendar::local_datetime(&now))),
-        Line::from(Span::raw(calendar::utc_iso(&now))),
-        Line::from(Span::raw(calendar::iso_week_date(&now))),
-        Line::from(""),
-    ];
-    frame.render_widget(Paragraph::new(info), rows[0]);
 
     // Month header: a left arrow, the centered month title, and a right arrow
     // (`◀`/`▶`). The arrows are clickable (see `App::calendar_mouse`) and mirror
     // the Left/Right keys.
     let header = Line::from(format!("{CAL_PREV}{:^19}{CAL_NEXT}", app.calendar.title()));
-    frame.render_widget(Paragraph::new(header), rows[1]);
-    frame.render_widget(Paragraph::new(month_lines(&app.calendar)), rows[2]);
+    frame.render_widget(Paragraph::new(header), rows[0]);
+    frame.render_widget(Paragraph::new(month_lines(&app.calendar)), rows[1]);
+
+    let info = vec![
+        // A blank spacer, then local date/time, UTC ISO, and the commercial
+        // (ISO week) date.
+        Line::from(""),
+        Line::from(Span::raw(calendar::local_datetime(&now))),
+        Line::from(Span::raw(calendar::utc_iso(&now))),
+        Line::from(Span::raw(calendar::iso_week_date(&now))),
+    ];
+    frame.render_widget(Paragraph::new(info), rows[2]);
 
     let help = Line::from(Span::styled(t!("ui.calendar_hint").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(help), rows[3]);
@@ -1595,12 +1668,7 @@ fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect { x: chunks[1].x + chunks[1].width - 1, ..chunks[1] };
-        let mut sb_state = ScrollbarState::new(total).position(p.selected.min(total - 1));
-        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(None)
-            .end_symbol(None)
-            .style(theme::dim());
-        frame.render_stateful_widget(bar, sb_area, &mut sb_state);
+        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
     }
 
     let hint = Line::from(Span::styled(t!("ui.x11_hint").to_string(), theme::dim()));
@@ -1673,12 +1741,7 @@ fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect { x: chunks[1].x + chunks[1].width - 1, ..chunks[1] };
-        let mut sb_state = ScrollbarState::new(total).position(p.selected.min(total - 1));
-        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(None)
-            .end_symbol(None)
-            .style(theme::dim());
-        frame.render_stateful_widget(bar, sb_area, &mut sb_state);
+        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
     }
 
     let hint = Line::from(Span::styled(t!("ui.html_hint").to_string(), theme::dim()));
@@ -1806,6 +1869,116 @@ fn draw_dashboard(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 }
 
+fn draw_contacts(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(total) = app.contacts.as_ref().map(vix_contact_panel::Panel::len) else { return };
+    let width = 40u16.min(area.width);
+    let max_rows = area.height.saturating_sub(3).max(1);
+    let rows = (total.max(1) as u16).min(max_rows);
+    let height = (rows + 3).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 4,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::FOLDER, t!("ui.contacts")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+    let view_h = chunks[0].height as usize;
+    if let Some(p) = app.contacts.as_mut() {
+        p.ensure_visible(view_h);
+    }
+    let p = app.contacts.as_ref().unwrap();
+    let show_bar = total > view_h && chunks[0].width > 1;
+    let list_area = if show_bar { Rect { width: chunks[0].width - 1, ..chunks[0] } } else { chunks[0] };
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    if p.is_empty() {
+        lines.push(Line::from(Span::styled(t!("ui.no_contacts").to_string(), theme::dim())));
+    } else {
+        for idx in p.scroll..(p.scroll + view_h).min(total) {
+            let text = format!("  {}", p.contacts[idx].name);
+            if idx == p.selected {
+                lines.push(Line::from(Span::styled(text, theme::selected())));
+            } else {
+                lines.push(Line::from(Span::raw(text)));
+            }
+        }
+    }
+    frame.render_widget(Paragraph::new(lines), list_area);
+    if show_bar {
+        let sb_area = Rect { x: chunks[0].x + chunks[0].width - 1, ..chunks[0] };
+        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
+    }
+    let hint = Line::from(Span::styled(t!("ui.contacts_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    app.layout.contacts = Rect { x: chunks[0].x, y: chunks[0].y, width: list_area.width, height: (view_h as u16).min(chunks[0].height) };
+}
+
+fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(total) = app.vcard.as_ref().map(vix_vcard_panel::Panel::len) else { return };
+    let title = app.vcard.as_ref().map(vix_vcard_panel::Panel::title).unwrap_or_default();
+    let width = 60u16.min(area.width);
+    let max_rows = area.height.saturating_sub(3).max(1);
+    let rows = (total.max(1) as u16).min(max_rows);
+    let height = (rows + 3).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::INFO, title));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+    let view_h = chunks[0].height as usize;
+    if let Some(p) = app.vcard.as_mut() {
+        p.ensure_visible(view_h);
+    }
+    let p = app.vcard.as_ref().unwrap();
+    let show_bar = total > view_h && chunks[0].width > 1;
+    let list_area = if show_bar { Rect { width: chunks[0].width - 1, ..chunks[0] } } else { chunks[0] };
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for idx in p.scroll..(p.scroll + view_h).min(total) {
+        let row = &p.rows[idx];
+        let text = format!("  {:<14} {}", row.label, row.value);
+        if idx == p.selected {
+            lines.push(Line::from(Span::styled(text, theme::selected())));
+        } else {
+            lines.push(Line::from(Span::raw(text)));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines), list_area);
+    if show_bar {
+        let sb_area = Rect { x: chunks[0].x + chunks[0].width - 1, ..chunks[0] };
+        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
+    }
+    let hint = Line::from(Span::styled(t!("ui.vcard_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    app.layout.vcard = Rect { x: chunks[0].x, y: chunks[0].y, width: list_area.width, height: (view_h as u16).min(chunks[0].height) };
+}
+
 fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.file_info.is_none() {
         return;
@@ -1929,6 +2102,7 @@ fn draw_system_info(app: &mut App, frame: &mut Frame, area: Rect) {
 
 fn month_lines(cal: &calendar::Calendar) -> Vec<Line<'static>> {
     let grid = cal.grid();
+    let selected = cal.selected_day_in_shown();
     let mut lines = vec![Line::from(Span::styled(t!("ui.weekdays"), theme::dim()))];
     for week in &grid.weeks {
         let mut spans = Vec::with_capacity(7);
@@ -1937,8 +2111,16 @@ fn month_lines(cal: &calendar::Calendar) -> Vec<Line<'static>> {
                 spans.push(Span::raw(" "));
             }
             match cell {
-                Some(d) if grid.today == Some(*d) => {
+                // The selected day (keyboard cursor) is reverse-highlighted;
+                // today (when not selected) is underlined.
+                Some(d) if selected == Some(*d) => {
                     spans.push(Span::styled(format!("{d:>2}"), theme::selected()));
+                }
+                Some(d) if grid.today == Some(*d) => {
+                    spans.push(Span::styled(
+                        format!("{d:>2}"),
+                        Style::default().add_modifier(Modifier::UNDERLINED),
+                    ));
                 }
                 Some(d) => spans.push(Span::raw(format!("{d:>2}"))),
                 None => spans.push(Span::raw("  ")),

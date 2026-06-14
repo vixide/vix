@@ -101,10 +101,10 @@ const EDIT: &[Item] = &[
     Item::leaf("menu.item.edit.cut", "edit.cut", "Ctrl X"),
     Item::leaf("menu.item.edit.copy", "edit.copy", "Ctrl C"),
     Item::leaf("menu.item.edit.paste", "edit.paste", "Ctrl V"),
+    SEP,
     Item::sub("menu.item.edit.select_menu", EDIT_SELECT),
     Item::sub("menu.item.edit.move_menu", EDIT_MOVE),
     Item::sub("menu.item.edit.go_menu", EDIT_GO),
-    SEP,
     Item::sub("menu.item.edit.find_menu", EDIT_FIND),
     Item::sub("menu.item.edit.case", EDIT_CASE),
     SEP,
@@ -136,12 +136,14 @@ const EDIT_MOVE: &[Item] = &[
 
 /// Selection commands, grouped under Edit → Select.
 const EDIT_SELECT: &[Item] = &[
-    Item::leaf("menu.item.edit.select_all", "edit.select_all", "Ctrl A"),
     Item::leaf("menu.item.edit.select_more", "edit.select_more", "Ctrl Shift →"),
     Item::leaf("menu.item.edit.select_less", "edit.select_less", "Ctrl Shift ←"),
     SEP,
+    Item::leaf("menu.item.edit.select_line", "edit.select_line", ""),
     Item::leaf("menu.item.edit.select_paragraph", "edit.select_paragraph", ""),
     Item::leaf("menu.item.edit.select_section", "edit.select_section", ""),
+    SEP,
+    Item::leaf("menu.item.edit.select_all", "edit.select_all", "Ctrl A"),
 ];
 
 /// Case transforms applied to the selection, grouped under Edit → Case.
@@ -197,9 +199,11 @@ const VIX: &[Item] = &[
 
 const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.palette", "tools.palette", "Ctrl P"),
+    Item::sub("menu.item.tools.lsp", TOOLS_LSP),
     Item::leaf("menu.item.tools.dashboard", "tools.dashboard", ""),
     Item::leaf("menu.item.tools.system_info", "tools.system_info", ""),
     Item::leaf("menu.item.tools.file_info", "tools.file_info", ""),
+    Item::leaf("menu.item.tools.contacts", "tools.contacts", ""),
     SEP,
     Item::leaf("menu.item.tools.run_command", "tools.run_command", ""),
     Item::leaf("menu.item.tools.cancel_command", "tools.cancel_command", ""),
@@ -208,8 +212,6 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.nerd_palette", "tools.nerd_palette", ""),
     Item::leaf("menu.item.tools.ascii", "tools.ascii", ""),
     Item::leaf("menu.item.tools.html_chars", "tools.html_chars", ""),
-    SEP,
-    Item::sub("menu.item.tools.lsp", TOOLS_LSP),
     Item::leaf("menu.item.tools.x11_colors", "tools.x11_colors", ""),
 ];
 

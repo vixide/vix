@@ -1,0 +1,19 @@
+# vix-vcard-panel: displays a single parsed vCard as a table of labelled fields,
+# plus the panel's row-selection + scroll state. Pure data: it turns a parsed
+# `Vcard` (from vix-vcard-parser) into display rows; the host renders them and can
+# insert a chosen value into the editor.
+
+[package]
+name = "vix-vcard-panel"
+version = "0.1.0"
+edition = "2021"
+description = "Single-vCard display rows and row-selection state for Vix."
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_vcard_panel"
+path = "src/lib.rs"
+
+[dependencies]
+vix-vcard-parser = { path = "../vix-vcard-parser" }

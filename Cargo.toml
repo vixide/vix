@@ -4,7 +4,7 @@
 [workspace]
 members = [
     "vix-editor",
-    "vix-date-time-calendar-panel",
+    "vix-calendar-panel",
     "vix-theme-chooser",
     "vix-locale-chooser",
     "vix-keymap-chooser",
@@ -18,6 +18,9 @@ members = [
     "vix-workspace-dashboard-panel",
     "vix-outline-panel",
     "vix-welcome-panel",
+    "vix-vcard-parser",
+    "vix-vcard-panel",
+    "vix-contact-panel",
     "vix-lsp",
     "vix-spellcheck",
     "vix-git",
@@ -65,7 +68,7 @@ ratatui = { version = "0.30", features = ["crossterm"] }
 vix-editor = { path = "vix-editor", default-features = false, features = ["crossterm"] }
 # Calendar box: date/time strings and the navigable month grid. Internal crate so
 # the calendar logic stays unit-testable on its own (it owns the jiff dependency).
-vix-date-time-calendar-panel = { path = "vix-date-time-calendar-panel" }
+vix-calendar-panel = { path = "vix-calendar-panel" }
 # Theme: the monochrome Dark/Light model, ratatui styles, and chooser state.
 vix-theme-chooser = { path = "vix-theme-chooser" }
 # Locale chooser: available UI languages + selection state.
@@ -92,6 +95,10 @@ vix-workspace-dashboard-panel = { path = "vix-workspace-dashboard-panel" }
 vix-outline-panel = { path = "vix-outline-panel" }
 # Welcome panel: first-run welcome text + scroll state.
 vix-welcome-panel = { path = "vix-welcome-panel" }
+# vCard (RFC 6350) parser, and the contact-browser / single-vcard view panels.
+vix-vcard-parser = { path = "vix-vcard-parser" }
+vix-vcard-panel = { path = "vix-vcard-panel" }
+vix-contact-panel = { path = "vix-contact-panel" }
 # LSP client core: JSON-RPC framing, message builders, parsers, position maths.
 vix-lsp = { path = "vix-lsp" }
 # Spell checking: Hunspell-backed checker over comment/string ranges.

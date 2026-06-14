@@ -118,7 +118,7 @@ testable.
 
 The calendar date/time logic, theme model, locale list, keymap (keyboard
 navigation style) list, keyboard-help rows, Nerd Font glyph set, and find /
-replace box state live in the internal crates `vix-date-time-calendar-panel`,
+replace box state live in the internal crates `vix-calendar-panel`,
 `vix-theme-chooser`, `vix-locale-chooser`, `vix-keymap-chooser`,
 `vix-keyboard-shortcut-panel`, `vix-nerd-font-picker`, `vix-find-panel`,
 `vix-left-dock` (explorer), `vix-right-dock` (messages), `vix-bottom-dock`, and

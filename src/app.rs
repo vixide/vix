@@ -311,6 +311,15 @@ pub use vix_workspace_dashboard_panel::Dashboard;
 /// Scrollable, informational; Esc closes.
 pub use vix_welcome_panel::Panel as WelcomePanel;
 
+/// Contact-browser overlay state (Tools -> Contacts), re-exported from
+/// [`vix_contact_panel`]. Lists the vCard files in a directory; Enter/click opens
+/// the highlighted contact's [`VcardPanel`].
+pub use vix_contact_panel::Panel as ContactPanel;
+
+/// Single-vCard view overlay state, re-exported from [`vix_vcard_panel`]. Shows
+/// one contact's fields; Enter/click inserts a value, Esc returns to the browser.
+pub use vix_vcard_panel::Panel as VcardPanel;
+
 /// File Information overlay state (Tools -> File Information), re-exported from
 /// [`vix_file_information_panel`]. Arrow keys move within the table; Enter (or a
 /// click) inserts the highlighted value into the active editor, Esc closes.
@@ -416,6 +425,10 @@ pub struct Layout {
     pub welcome: Rect,
     /// Row-list rectangle of the open File Information panel, for click hit-testing.
     pub file_info: Rect,
+    /// Row-list rectangle of the open contact browser, for click hit-testing.
+    pub contacts: Rect,
+    /// Row-list rectangle of the open vCard view, for click hit-testing.
+    pub vcard: Rect,
     /// Suggestion-list rectangle of the open spell-suggestion popup, so a click
     /// can hit-test which suggestion was picked.
     pub spell_suggest: Rect,
@@ -515,6 +528,10 @@ pub struct App {
     pub welcome: Option<WelcomePanel>,
     /// File Information overlay, when open.
     pub file_info: Option<FileInfoPanel>,
+    /// Contact-browser overlay, when open.
+    pub contacts: Option<ContactPanel>,
+    /// Single-vCard view overlay, when open (above the contact browser).
+    pub vcard: Option<VcardPanel>,
     /// LSP client: language-server process management and document sync.
     pub lsp: crate::lsp::Lsp,
     /// Last document revision pushed to a language server, keyed by file path, so
@@ -671,6 +688,8 @@ impl App {
             outline: None,
             welcome: None,
             file_info: None,
+            contacts: None,
+            vcard: None,
             lsp,
             lsp_synced: std::collections::HashMap::new(),
             hover: None,
@@ -791,9 +810,28 @@ impl App {
         }
         // While the calendar box is open it captures left/right to page months.
         if self.show_calendar {
+            let ctrl = Self::ctrl(&key);
+            let shift = Self::shift(&key);
             match key.code {
-                KeyCode::Left => self.calendar.prev_month(),
-                KeyCode::Right => self.calendar.next_month(),
+                KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => {
+                    let sign: i64 = if matches!(key.code, KeyCode::Right | KeyCode::Down) { 1 } else { -1 };
+                    if ctrl && shift {
+                        self.calendar.move_years(sign); // Ctrl+Shift+arrows: year
+                    } else if ctrl {
+                        self.calendar.move_months(sign); // Ctrl+arrows: month
+                    } else {
+                        // Plain arrows move the selected day: Left/Right by a day,
+                        // Up/Down by a week.
+                        let step = if matches!(key.code, KeyCode::Up | KeyCode::Down) { 7 } else { 1 };
+                        self.calendar.move_days(sign * step);
+                    }
+                }
+                KeyCode::Enter => {
+                    let text = self.calendar.selected_formatted(Self::locale_date_pattern());
+                    let area = self.editor_view();
+                    self.editor.insert_str(&text, area);
+                    self.show_calendar = false;
+                }
                 KeyCode::Esc | KeyCode::Char('q') => self.show_calendar = false,
                 _ => {}
             }
@@ -837,6 +875,14 @@ impl App {
         }
         if self.file_info.is_some() {
             self.file_info_key(key);
+            return;
+        }
+        if self.vcard.is_some() {
+            self.vcard_key(key);
+            return;
+        }
+        if self.contacts.is_some() {
+            self.contacts_key(key);
             return;
         }
         if self.dashboard.is_some() {
@@ -1434,6 +1480,10 @@ impl App {
                 let area = self.editor_view();
                 self.editor.select_word(false, area);
             }
+            "edit.select_line" => {
+                let area = self.editor_view();
+                self.editor.select_line(area);
+            }
             "edit.select_paragraph" => {
                 let area = self.editor_view();
                 self.editor.select_paragraph(area);
@@ -1522,6 +1572,7 @@ impl App {
             "tools.html_chars" => self.open_html_panel(),
             "tools.system_info" => self.open_system_info(),
             "tools.file_info" => self.open_file_info(),
+            "tools.contacts" => self.open_contacts(),
             "tools.dashboard" => self.open_dashboard(),
             "tools.run_command" => {
                 self.prompt =
@@ -3267,6 +3318,14 @@ impl App {
             self.file_info_mouse(mouse);
             return;
         }
+        if self.vcard.is_some() {
+            self.vcard_mouse(mouse);
+            return;
+        }
+        if self.contacts.is_some() {
+            self.contacts_mouse(mouse);
+            return;
+        }
         if self.spell_suggest.is_some() {
             self.spell_suggest_mouse(mouse);
             return;
@@ -3429,6 +3488,24 @@ impl App {
     /// A left click focuses the bottom dock (and jumps to a `path:line` location
     /// on the clicked line, if any); the wheel scrolls it.
     fn bottomdock_mouse(&mut self, mouse: MouseEvent) {
+        let a = self.layout.bottom_dock;
+        let total = self.bottom_dock.lines.len();
+        let viewport = a.height.saturating_sub(1) as usize;
+        let sb_shown = self.settings.show_scrollbar && total > viewport && a.width > 1;
+        let sb_col = a.x + a.width.saturating_sub(1);
+        if sb_shown
+            && mouse.column == sb_col
+            && matches!(
+                mouse.kind,
+                MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left)
+            )
+        {
+            self.focus = Focus::BottomDock;
+            let sb_rect = Rect { x: sb_col, y: a.y + 1, width: 1, height: a.height - 1 };
+            self.bottom_dock.scroll =
+                crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total.saturating_sub(viewport));
+            return;
+        }
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 self.focus = Focus::BottomDock;
@@ -3542,7 +3619,29 @@ impl App {
     }
 
     fn explorer_mouse(&mut self, mouse: MouseEvent) {
-        let inner_top = self.layout.explorer.y + 1; // inside the border
+        let a = self.layout.explorer;
+        let inner_top = a.y + 1; // inside the border
+        // Pressing or dragging the scrollbar (rightmost inner column) scrolls the
+        // tree instead of selecting a row.
+        let total = self.explorer.nodes.len();
+        let viewport = a.height.saturating_sub(1) as usize;
+        let sb_shown = self.settings.show_scrollbar && total > viewport && a.width > 1;
+        let sb_col = a.x + a.width.saturating_sub(2);
+        if sb_shown
+            && mouse.column == sb_col
+            && matches!(
+                mouse.kind,
+                MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left)
+            )
+        {
+            self.focus = Focus::Explorer;
+            let sb_rect = Rect { x: sb_col, y: inner_top, width: 1, height: a.height - 1 };
+            // The thumb tracks the selection, so map the drag to a selected row;
+            // `ensure_visible` (in draw) scrolls the view to follow it.
+            self.explorer.selected =
+                crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total.saturating_sub(1));
+            return;
+        }
         match mouse.kind {
             MouseEventKind::ScrollUp => {
                 self.explorer.up();
@@ -3577,6 +3676,24 @@ impl App {
     fn messages_mouse(&mut self, mouse: MouseEvent) {
         let area = self.layout.messages;
         let inner_top = area.y + 1;
+        // Scrollbar (rightmost column) press/drag scrolls the message list.
+        let total = self.messages.items.len();
+        let viewport = area.height.saturating_sub(1) as usize;
+        let sb_shown = self.settings.show_scrollbar && total > viewport && area.width > 1;
+        let sb_col = area.x + area.width.saturating_sub(1);
+        if sb_shown
+            && mouse.column == sb_col
+            && matches!(
+                mouse.kind,
+                MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left)
+            )
+        {
+            self.focus = Focus::Messages;
+            let sb_rect = Rect { x: sb_col, y: inner_top, width: 1, height: area.height - 1 };
+            self.messages.selected =
+                crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total.saturating_sub(1));
+            return;
+        }
         match mouse.kind {
             MouseEventKind::ScrollUp => self.messages.up(),
             MouseEventKind::ScrollDown => self.messages.down(),
@@ -4427,6 +4544,177 @@ impl App {
         }
     }
 
+    // ----- Contacts (vCard browser) ---------------------------------------
+
+    /// Open the contact browser over the configured vCard directory (or the
+    /// workspace root), parsing each `.vcf`'s display name.
+    fn open_contacts(&mut self) {
+        let dir = if self.settings.contacts_dir.trim().is_empty() {
+            self.root.clone()
+        } else {
+            PathBuf::from(self.settings.contacts_dir.trim())
+        };
+        let mut contacts = Vec::new();
+        if let Ok(read) = std::fs::read_dir(&dir) {
+            for entry in read.flatten() {
+                let path = entry.path();
+                let is_vcf = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("vcf"));
+                if !is_vcf {
+                    continue;
+                }
+                let name = std::fs::read_to_string(&path)
+                    .ok()
+                    .map(|t| vix_vcard_parser::parse(&t).display_name())
+                    .filter(|n| n != "(unnamed)")
+                    .unwrap_or_else(|| {
+                        path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
+                    });
+                contacts.push(vix_contact_panel::Contact { name, path });
+            }
+        }
+        contacts.sort_by_key(|c| c.name.to_lowercase());
+        if contacts.is_empty() {
+            self.status = t!("status.no_contacts").to_string();
+        }
+        self.contacts = Some(ContactPanel::open(contacts));
+    }
+
+    /// Open the highlighted contact's vCard in the single-vCard view.
+    fn open_selected_vcard(&mut self) {
+        let Some(path) = self.contacts.as_ref().and_then(ContactPanel::selected_path) else {
+            return;
+        };
+        match std::fs::read_to_string(&path) {
+            Ok(text) => self.vcard = Some(VcardPanel::open(vix_vcard_parser::parse(&text))),
+            Err(e) => self.messages.error(t!("msg.open_failed", error = e).to_string()),
+        }
+    }
+
+    fn contacts_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.contacts.height as usize).max(1);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.contacts.as_mut() {
+                    p.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.contacts.as_mut() {
+                    p.down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(p) = self.contacts.as_mut() {
+                    p.page_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(p) = self.contacts.as_mut() {
+                    p.page_down(page);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(p) = self.contacts.as_mut() {
+                    p.page_up(p.len());
+                }
+            }
+            KeyCode::End => {
+                if let Some(p) = self.contacts.as_mut() {
+                    p.page_down(p.len());
+                }
+            }
+            KeyCode::Enter => self.open_selected_vcard(),
+            KeyCode::Esc => self.contacts = None,
+            _ => {}
+        }
+    }
+
+    fn contacts_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.contacts;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row_in_view = (mouse.row - r.y) as usize;
+        let hit = self.contacts.as_mut().is_some_and(|p| p.select_index(p.scroll + row_in_view));
+        if hit {
+            self.open_selected_vcard();
+        }
+    }
+
+    fn vcard_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.vcard.height as usize).max(1);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.vcard.as_mut() {
+                    p.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.vcard.as_mut() {
+                    p.down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(p) = self.vcard.as_mut() {
+                    p.page_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(p) = self.vcard.as_mut() {
+                    p.page_down(page);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(p) = self.vcard.as_mut() {
+                    p.page_up(p.len());
+                }
+            }
+            KeyCode::End => {
+                if let Some(p) = self.vcard.as_mut() {
+                    p.page_down(p.len());
+                }
+            }
+            KeyCode::Enter => self.insert_selected_vcard_value(),
+            // Esc returns to the contact browser (or closes if opened directly).
+            KeyCode::Esc => self.vcard = None,
+            _ => {}
+        }
+    }
+
+    fn vcard_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.vcard;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row_in_view = (mouse.row - r.y) as usize;
+        let hit = self.vcard.as_mut().is_some_and(|p| p.select_index(p.scroll + row_in_view));
+        if hit {
+            self.insert_selected_vcard_value();
+        }
+    }
+
+    /// Insert the highlighted vCard field's value into the active editor.
+    fn insert_selected_vcard_value(&mut self) {
+        let Some(p) = self.vcard.as_ref() else { return };
+        let value = p.selected_value();
+        if value.is_empty() {
+            return;
+        }
+        let area = self.layout.editor;
+        if self.editor.insert_str(&value, area) {
+            self.status = t!("status.ascii_inserted", name = value).to_string();
+        }
+    }
+
     // ----- File Information panel -----------------------------------------
 
     fn open_file_info(&mut self) {
@@ -5274,9 +5562,10 @@ impl App {
         }
         let rel_y = mouse.row - r.y;
         let rel_x = mouse.column - r.x;
-        // The month-header row (row 4) carries the `◀`/`▶` nav arrows: `◀` at
-        // column 0, `▶` at column 20.
-        if rel_y == 4 {
+        // The calendar is laid out with the month header + grid on top and the
+        // date/time lines beneath. Row 0 is the month header carrying the `◀`/`▶`
+        // nav arrows (`◀` at column 0, `▶` at column 20).
+        if rel_y == 0 {
             if rel_x == 0 {
                 self.calendar.prev_month();
             } else if rel_x == 20 {
@@ -5284,18 +5573,20 @@ impl App {
             }
             return;
         }
-        // Rows 0..=2 are the local / UTC-ISO / ISO-week lines; the month grid
-        // starts at row 6 (after the blank line, title, and weekday header), each
-        // day cell being three columns wide.
-        let text = if rel_y <= 2 {
+        // The date/time lines occupy the last block (`info_start` is its blank
+        // spacer; the three lines follow). The weekday header is row 1 and the
+        // week rows start at row 2, each day cell three columns wide.
+        let info_start = r.height.saturating_sub(5);
+        let text = if rel_y > info_start {
             let now = crate::calendar::now_local();
-            Some(match rel_y {
-                0 => crate::calendar::local_datetime(&now),
-                1 => crate::calendar::utc_iso(&now),
-                _ => crate::calendar::iso_week_date(&now),
-            })
-        } else if rel_y >= 6 {
-            let week = (rel_y - 6) as usize;
+            match rel_y - info_start {
+                1 => Some(crate::calendar::local_datetime(&now)),
+                2 => Some(crate::calendar::utc_iso(&now)),
+                3 => Some(crate::calendar::iso_week_date(&now)),
+                _ => None,
+            }
+        } else if rel_y >= 2 {
+            let week = (rel_y - 2) as usize;
             let col = (rel_x / 3) as usize;
             self.calendar
                 .grid()

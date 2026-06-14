@@ -8,7 +8,7 @@ Vix is a Cargo workspace. Shared reference for where everything lives.
 | ------------------------------ | ------------------------------- | ------------------------------------------------------------------- |
 | `vix`                          | `./` (`src/`)                   | The application: state, routing, rendering, i18n, settings.         |
 | `vix-editor`                   | `vix-editor/`                   | Fully-custom center editor widget (Tree-sitter, history, soft wrap, themeable styles). |
-| `vix-date-time-calendar-panel` | `vix-date-time-calendar-panel/` | Calendar date/time + navigable month grid (owns `jiff`).            |
+| `vix-calendar-panel` | `vix-calendar-panel/` | Calendar date/time + navigable month grid (owns `jiff`).            |
 | `vix-theme-chooser`            | `vix-theme-chooser/`            | Theme model, ratatui styles, custom JSON themes, chooser state.     |
 | `vix-locale-chooser`           | `vix-locale-chooser/`           | Available UI languages + chooser state.                             |
 | `vix-keymap-chooser`           | `vix-keymap-chooser/`           | Keyboard navigation styles (Apple/Emacs/Vim) + chooser state.       |
@@ -19,7 +19,12 @@ Vix is a Cargo workspace. Shared reference for where everything lives.
 | `vix-html-character-picker`   | `vix-html-character-picker/`   | HTML named-character table (name/code/glyph, bundled TSV) + row state. |
 | `vix-lsp`                      | `vix-lsp/`                      | Pure LSP client core: JSON-RPC framing, message builders, parsers, char↔UTF-16 positions. Host (`src/lsp.rs`) does the process IO. |
 | `vix-system-information-panel` | `vix-system-information-panel/` | Host OS/CPU/memory/disk snapshot (via `sysinfo`) + row state.       |
+| `vix-file-information-panel`   | `vix-file-information-panel/`    | Active-file facts (name/counts/size/perms/mtime) as rows + row state. |
 | `vix-workspace-dashboard-panel`  | `vix-workspace-dashboard-panel/`  | Workspace metrics state (folder, disk, file count, commit count); host computes async. |
+| `vix-welcome-panel`            | `vix-welcome-panel/`            | First-run welcome scroll state (text from the `welcome.body` locale). |
+| `vix-vcard-parser`             | `vix-vcard-parser/`             | Dependency-free vCard 4.0 (RFC 6350) parser.                        |
+| `vix-vcard-panel`              | `vix-vcard-panel/`              | Single-vCard display rows + selection (uses `vix-vcard-parser`).     |
+| `vix-contact-panel`            | `vix-contact-panel/`            | vCard directory browser (contact list) + selection.                 |
 | `vix-outline-panel`            | `vix-outline-panel/`            | Code outline list (symbol kind + name + line) + selection/scroll state. |
 | `vix-find-panel`               | `vix-find-panel/`               | Find/replace box state + the search/replace engine (matches, replace_all, unescape) + path filters. |
 | `vix-spellcheck`               | `vix-spellcheck/`               | Hunspell spell checking (via `spellbook`): dictionary discovery, check/suggest, misspelling tokenizer. |

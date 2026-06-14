@@ -77,7 +77,7 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 | Change theme colors/model            | `vix-theme-chooser/`                                         |
 | Change available UI languages        | `vix-locale-chooser/`                                        |
 | Change keyboard navigation styles    | `vix-keymap-chooser/` + keymap dispatch in `src/app.rs`      |
-| Change the calendar                  | `vix-date-time-calendar-panel/`                              |
+| Change the calendar                  | `vix-calendar-panel/`                              |
 | Change spell checking                | `vix-spellcheck/` + wiring in `src/app.rs` / `src/ui.rs`     |
 | Change git status/diff/staging       | `vix-git/` + wiring in `src/app.rs` / `src/ui.rs`           |
 | Change the find/replace engine       | `vix-find-panel/` (matches/replace_all/unescape/PathFilter) |

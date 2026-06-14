@@ -16,7 +16,7 @@ genuinely needs it:
 | Crate                            | Responsibility                                                        |
 | -------------------------------- | --------------------------------------------------------------------- |
 | `vix-editor`          | Vix's fully-custom center editor widget: Tree-sitter highlighting, history, selection, clipboard, mouse, **soft wrap**, and **themeable** text/line-number/selection/cursor styles. The highlighting engine was adapted from `ratatui-code-editor`; grammars are gated behind features. |
-| `vix-date-time-calendar-panel`   | Calendar date/time strings and the navigable Monday-first month grid (owns the `jiff` dependency). |
+| `vix-calendar-panel`   | Calendar date/time strings and the navigable Monday-first month grid (owns the `jiff` dependency). |
 | `vix-theme-chooser`              | The theme model: monochrome Dark/Light modes, the ratatui styles derived from them, **custom JSON themes** (per-region RGB), and chooser state. |
 | `vix-locale-chooser`             | The list of available UI languages and chooser state.                 |
 | `vix-keymap-chooser`             | The keyboard navigation styles (Apple / Emacs / Vim) and chooser state. |

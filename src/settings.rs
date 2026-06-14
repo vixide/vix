@@ -97,6 +97,9 @@ pub struct Settings {
     /// Whether the first-run welcome screen has been shown. Set true after the
     /// welcome panel first appears, so it does not pop up on every launch.
     pub welcomed: bool,
+    /// Directory of vCard (`.vcf`) files for the contact browser (Tools →
+    /// Contacts…). Empty = use the workspace root.
+    pub contacts_dir: String,
 }
 
 /// One configured language server (a `lsp_servers` entry).
@@ -143,6 +146,7 @@ impl Default for Settings {
             lsp_enabled: true,
             lsp_servers: Vec::new(),
             welcomed: false,
+            contacts_dir: String::new(),
         }
     }
 }
