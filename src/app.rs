@@ -70,6 +70,8 @@ pub enum PromptKind {
     Open,
     /// Save-as prompt.
     SaveAs,
+    /// Rename the active file (input seeded with its current name).
+    Rename,
     /// Run a shell command, streaming its output to the bottom dock.
     RunCommand,
     /// Search the workspace, listing hits in the bottom dock (click-to-jump).
@@ -1483,6 +1485,7 @@ impl App {
                 self.prompt =
                     Some(Prompt::new(PromptKind::SaveAs, t!("prompt.save_as").to_string()).with_input(cur));
             }
+            "file.rename" => self.open_rename_prompt(),
             "file.close" => self.request_close_active(),
             "file.close_all" => {
                 for p in self.editor.close_all() {
@@ -6659,6 +6662,7 @@ impl App {
                     Err(e) => self.messages.error(t!("msg.save_failed", error = e).to_string()),
                 }
             }
+            PromptKind::Rename => self.rename_file(&prompt.input),
             PromptKind::RunCommand => self.run_command(&prompt.input),
             PromptKind::SearchToDock => {
                 self.search_workspace_to_dock(&prompt.input, prompt.case_sensitive, prompt.regex);
@@ -6746,6 +6750,54 @@ impl App {
     /// stderr merged) into the bottom dock, which is shown. The command runs in a
     /// background thread; [`App::poll_command`] drains its output each frame and
     /// [`App::cancel_command`] kills it.
+    /// Open the rename prompt for the active file, seeded with its current name.
+    fn open_rename_prompt(&mut self) {
+        let Some(cur) = self.editor.active_tab().and_then(|t| t.path.clone()) else {
+            self.status = t!("status.rename_no_file").to_string();
+            return;
+        };
+        let name = cur.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        self.prompt =
+            Some(Prompt::new(PromptKind::Rename, t!("prompt.rename").to_string()).with_input(name));
+    }
+
+    /// Rename the active file on disk to `input`. A bare name stays in the same
+    /// directory; a value containing `/` is resolved against the workspace root.
+    /// Updates the active tab's path and refreshes the explorer and git state.
+    fn rename_file(&mut self, input: &str) {
+        let raw = input.trim();
+        if raw.is_empty() {
+            return;
+        }
+        let Some(cur) = self.editor.active_tab().and_then(|t| t.path.clone()) else {
+            self.status = t!("status.rename_no_file").to_string();
+            return;
+        };
+        let new_path = if raw.contains('/') {
+            self.resolve(raw)
+        } else {
+            cur.parent().map_or_else(|| PathBuf::from(raw), |d| d.join(raw))
+        };
+        if new_path == cur {
+            return;
+        }
+        if new_path.exists() {
+            self.status = t!("status.rename_exists", name = new_path.display()).to_string();
+            return;
+        }
+        match std::fs::rename(&cur, &new_path) {
+            Ok(()) => {
+                if let Some(t) = self.editor.active_tab_mut() {
+                    t.path = Some(new_path.clone());
+                }
+                self.status = t!("status.renamed", path = new_path.display()).to_string();
+                self.explorer.rebuild();
+                self.refresh_git();
+            }
+            Err(e) => self.messages.error(t!("msg.rename_failed", error = e).to_string()),
+        }
+    }
+
     fn run_command(&mut self, cmd: &str) {
         let cmd = cmd.trim();
         if cmd.is_empty() {

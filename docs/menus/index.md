@@ -38,6 +38,7 @@ the menus are **Vix · File · Edit · View · Tools · AI · Git · Help**.
 | Open Recent…      | `Ctrl+Shift+O` | Reopen a recently opened file (chooser) |
 | Save              | `Ctrl+S`       | Save the file                           |
 | Save As…          | `Ctrl+Shift+S` | Save under a different name             |
+| Rename…           |                | Rename the active file on disk          |
 | Close             | `Ctrl+W`       | Close the active buffer                 |
 | Close All Tabs    |                | Close every buffer (leaves one empty)   |
 | Reopen Closed Tab | `Ctrl+Shift+T` | Reopen the most recently closed file    |
