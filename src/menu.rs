@@ -239,9 +239,11 @@ const AI: &[Item] = &[
 
 /// Log views, grouped under Git → Log.
 const GIT_LOG: &[Item] = &[
+    Item::leaf("menu.item.git.log_graph", "git.log_graph", ""),
+    Item::leaf("menu.item.git.log_day", "git.log_1_day", ""),
+    Item::leaf("menu.item.git.log_week", "git.log_1_week", ""),
+    Item::leaf("menu.item.git.log_month", "git.log_1_month", ""),
     Item::leaf("menu.item.git.log_all", "git.log", ""),
-    Item::leaf("menu.item.git.log_day", "git.log_day", ""),
-    Item::leaf("menu.item.git.log_week", "git.log_week", ""),
 ];
 
 /// Branch commands, grouped under Git → Branch.

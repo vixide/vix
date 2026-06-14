@@ -1682,8 +1682,10 @@ impl App {
             "git.init" => self.git_init(),
             "git.new_branch" => self.git_begin_new_branch(),
             "git.log" => self.git_log(),
-            "git.log_day" => self.git_log_since(Some("1-day-ago")),
-            "git.log_week" => self.git_log_since(Some("1-week-ago")),
+            "git.log_graph" => self.git_log_graph(),
+            "git.log_1_day" => self.git_log_since(Some("1-day-ago")),
+            "git.log_1_week" => self.git_log_since(Some("1-week-ago")),
+            "git.log_1_month" => self.git_log_since(Some("1-month-ago")),
             "git.status" => self.git_status_to_dock(),
             "git.clone" => self.git_begin_clone(),
             "git.edit_description" => {
@@ -2313,9 +2315,22 @@ impl App {
         }
         self.git_panel = None;
         let filter = since.map(|s| format!(" --since={s}")).unwrap_or_default();
-        self.run_command(&format!(
-            "git --no-pager log --oneline --graph --decorate -n 200{filter}"
-        ));
+        self.run_command(&format!("git --no-pager log{filter}"));
+    }
+
+    /// Show a decorated commit graph across all refs, streaming it into the
+    /// bottom dock.
+    fn git_log_graph(&mut self) {
+        if !vix_git::is_repo(&self.root) {
+            self.status = t!("status.git_not_repo").into();
+            return;
+        }
+        self.git_panel = None;
+        self.run_command(
+            "git --no-pager log --graph --topo-order --date=iso8601-strict \
+             --no-abbrev-commit --decorate --all --boundary \
+             --pretty=format:'%ad %h -%d %s [%aN <%aE>] %G?'",
+        );
     }
 
     /// Show the working-tree status, streaming `git status` into the bottom dock.
