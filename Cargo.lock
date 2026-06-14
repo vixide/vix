@@ -3341,7 +3341,7 @@ dependencies = [
  "vix-spellcheck",
  "vix-status-bar-panel",
  "vix-system-information-panel",
- "vix-theme-chooser",
+ "vix-theme-model",
  "vix-time-zone-chooser",
  "vix-time-zone-model",
  "vix-vcard-panel",
@@ -3497,7 +3497,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "vix-theme-chooser"
+name = "vix-theme-model"
 version = "0.1.0"
 dependencies = [
  "ratatui-core",

@@ -35,7 +35,7 @@ fn bundled_themes() -> Vec<crate::theme::CustomTheme> {
     BUNDLED_THEMES
         .files()
         .filter(|f| f.path().extension().and_then(|e| e.to_str()) == Some("json"))
-        .filter_map(|f| f.contents_utf8().and_then(vix_theme_chooser::parse_theme))
+        .filter_map(|f| f.contents_utf8().and_then(vix_theme_model::parse_theme))
         .collect()
 }
 
@@ -297,9 +297,9 @@ pub struct Dialog {
 }
 
 /// Theme chooser overlay state (View -> Themes), re-exported from
-/// [`vix_theme_chooser`]. Moving the selection previews the theme live; Enter
+/// [`vix_theme_model`]. Moving the selection previews the theme live; Enter
 /// commits and persists it, Esc reverts.
-pub use vix_theme_chooser::Chooser as ThemeChooser;
+pub use vix_theme_model::Chooser as ThemeChooser;
 
 /// Locale chooser overlay state (View -> Locale), re-exported from
 /// [`vix_locale_chooser`]. Moving the selection previews the language live;
@@ -4002,7 +4002,7 @@ impl App {
     /// bundled into the binary.
     fn available_custom_themes() -> Vec<crate::theme::CustomTheme> {
         let mut themes = Settings::themes_dir()
-            .map(|d| vix_theme_chooser::load_custom_themes(&d))
+            .map(|d| vix_theme_model::load_custom_themes(&d))
             .unwrap_or_default();
         themes.extend(bundled_themes());
         themes
@@ -4036,14 +4036,14 @@ impl App {
                         tc.down();
                     }
                     // Preview the highlighted theme live.
-                    vix_theme_chooser::apply(tc.selected_theme());
+                    vix_theme_model::apply(tc.selected_theme());
                 }
                 self.editor.refresh_theme();
             }
             KeyCode::Enter => {
                 if let Some(tc) = self.theme_chooser.take() {
                     let theme = tc.selected_theme().clone();
-                    vix_theme_chooser::apply(&theme);
+                    vix_theme_model::apply(&theme);
                     self.editor.refresh_theme();
                     self.settings.theme.clone_from(&theme.name);
                     self.status = t!("status.theme", theme = theme.name).to_string();
@@ -4051,7 +4051,7 @@ impl App {
             }
             KeyCode::Esc => {
                 if let Some(tc) = self.theme_chooser.take() {
-                    vix_theme_chooser::apply(tc.original_theme());
+                    vix_theme_model::apply(tc.original_theme());
                     self.editor.refresh_theme();
                     self.status = t!("status.theme_unchanged").into();
                 }
@@ -4279,7 +4279,7 @@ impl App {
                 if idx < tc.choices.len() {
                     tc.selected = idx;
                     // Preview the highlighted theme live, as Up/Down does.
-                    vix_theme_chooser::apply(tc.selected_theme());
+                    vix_theme_model::apply(tc.selected_theme());
                     self.editor.refresh_theme();
                 }
             }

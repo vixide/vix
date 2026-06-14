@@ -6,7 +6,7 @@ members = [
     "vix-editor",
     "vix-calendar-panel",
     "vix-clock-panel",
-    "vix-theme-chooser",
+    "vix-theme-model",
     "vix-locale-model",
     "vix-locale-chooser",
     "vix-keymap-model",
@@ -75,8 +75,8 @@ vix-editor = { path = "vix-editor", default-features = false, features = ["cross
 vix-calendar-panel = { path = "vix-calendar-panel" }
 # Clock box: live date/time strings (local, UTC, ISO week, active zone) + rows.
 vix-clock-panel = { path = "vix-clock-panel" }
-# Theme: the monochrome Dark/Light model, ratatui styles, and chooser state.
-vix-theme-chooser = { path = "vix-theme-chooser" }
+# Theme model: the JSON theme model, ratatui styles, and theme loading.
+vix-theme-model = { path = "vix-theme-model" }
 # Locale chooser: available UI languages + selection state.
 vix-locale-chooser = { path = "vix-locale-chooser" }
 # Keymap model: available keyboard navigation styles (the View → Keymap submenu).
