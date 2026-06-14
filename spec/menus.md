@@ -188,15 +188,19 @@ The **Language Server** submenu:
 
 ## AI menu
 
-Each item runs the `claude` CLI and streams the response into the bottom dock.
-
-Each acts on the selection, or the whole file when nothing is selected.
+Each item runs the `claude` CLI on the selection, or the whole file when nothing
+is selected. **Summarize** and **Explain** stream the response into the bottom
+dock (read-only). **Annotate** and **Improve** run in the background and, when
+the result arrives, **replace** the selected text (or the whole buffer) with it —
+an undoable edit. Only one AI task runs at a time.
 
 | Item      | Action                                                          |
 | --------- | -------------------------------------------------------------- |
-| Summarize | Summarize the text                                             |
-| Explain   | Explain the text                                               |
-| Annotate  | Annotate the text                                              |
+| Summarize | Summarize the text → bottom dock                               |
+| Explain   | Explain the text → bottom dock                                 |
+| *— separator —* |                                                          |
+| Annotate  | Annotate the text → replaces the text                         |
+| Improve   | Improve the text → replaces the text                         |
 
 ## Git menu
 

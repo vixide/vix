@@ -140,6 +140,36 @@ struct RunningCommand {
     child: std::sync::Arc<std::sync::Mutex<std::process::Child>>,
 }
 
+/// Result of a background AI text transform whose output replaces editor text.
+enum AiMsg {
+    /// The CLI finished successfully, carrying its full stdout.
+    Done(String),
+    /// The CLI failed (non-zero exit, or it died before producing output).
+    Failed,
+}
+
+/// Where a finished AI transform should write its result.
+#[derive(Clone, Copy)]
+enum AiTarget {
+    /// Replace the whole buffer.
+    Whole,
+    /// Replace this character range `[start, end)`.
+    Range(usize, usize),
+}
+
+/// A background AI transform (e.g. Annotate, Improve) whose captured output
+/// replaces the selection — or whole buffer — it was launched from.
+struct AiReplace {
+    /// Receiver for the captured result.
+    rx: std::sync::mpsc::Receiver<AiMsg>,
+    /// Index of the tab to write the result back into.
+    tab: usize,
+    /// The range (or whole buffer) to replace when the result arrives.
+    target: AiTarget,
+    /// Localized action label, for status messages.
+    label: String,
+}
+
 /// An in-progress paste, processed one source at a time so a name conflict can
 /// pause for an (o)verwrite / (s)kip / (c)ancel decision.
 pub struct PasteOp {
@@ -615,6 +645,8 @@ pub struct App {
     closed_tabs: Vec<PathBuf>,
     /// The command currently streaming into the bottom dock, if any.
     running_command: Option<RunningCommand>,
+    /// A background AI transform whose result will replace editor text, if any.
+    ai_replace: Option<AiReplace>,
     /// True while the editor scrollbar thumb is being dragged, so the drag keeps
     /// scrolling even if the pointer drifts off the one-column track.
     scrollbar_active: bool,
@@ -729,6 +761,7 @@ impl App {
             last_search: None,
             closed_tabs: Vec::new(),
             running_command: None,
+            ai_replace: None,
             scrollbar_active: false,
             dock_resize: None,
             emacs_prefix: false,
@@ -1603,6 +1636,7 @@ impl App {
             "ai.summarize" => self.ai_summarize(),
             "ai.explain" => self.ai_explain(),
             "ai.annotate" => self.ai_annotate(),
+            "ai.improve" => self.ai_improve(),
             "git.merge_branch" => self.open_branch_chooser_mode(true),
             "git.init" => self.git_init(),
             "git.new_branch" => self.git_begin_new_branch(),
@@ -4618,10 +4652,142 @@ impl App {
     }
 
     /// Annotate the selection (or the whole file when nothing is selected) with
-    /// `claude` (output to the dock).
+    /// `claude`, replacing it with the result.
     fn ai_annotate(&mut self) {
-        let text = self.selected_or_all_text();
-        self.ai_run_on_text("Annotate this text.", &text);
+        self.ai_replace_text("Annotate this text.", &t!("menu.item.ai.annotate"));
+    }
+
+    /// Improve the selection (or the whole file when nothing is selected) with
+    /// `claude`, replacing it with the result.
+    fn ai_improve(&mut self) {
+        self.ai_replace_text("Improve this text.", &t!("menu.item.ai.improve"));
+    }
+
+    /// Launch `claude -p <prompt>` over the selection (or the whole buffer when
+    /// nothing is selected), capturing its full output to replace that text when
+    /// it finishes. The transform runs in the background; [`Self::poll_ai_replace`]
+    /// applies the result.
+    fn ai_replace_text(&mut self, prompt: &str, label: &str) {
+        if self.ai_replace.is_some() {
+            self.status = t!("status.ai_busy").to_string();
+            return;
+        }
+        let tab_idx = self.editor.active;
+        let (text, target) = {
+            let Some(tab) = self.editor.active_tab_mut() else { return };
+            if tab.is_image() {
+                self.status = t!("status.ai_no_input").to_string();
+                return;
+            }
+            match tab.editor.get_selection() {
+                Some(sel) if !sel.is_empty() => {
+                    (tab.editor.get_content_slice(sel.start, sel.end), AiTarget::Range(sel.start, sel.end))
+                }
+                _ => (tab.editor.get_content(), AiTarget::Whole),
+            }
+        };
+        if text.trim().is_empty() {
+            self.status = t!("status.ai_no_input").to_string();
+            return;
+        }
+
+        let tmp = std::env::temp_dir().join(format!("vix-ai-{}.txt", std::process::id()));
+        if std::fs::write(&tmp, &text).is_err() {
+            self.status = t!("status.ai_no_input").to_string();
+            return;
+        }
+        let path = tmp.display();
+        let cmd = format!("claude -p \"{prompt}\" < \"{path}\"");
+        let mut child = match std::process::Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .current_dir(&self.root)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                self.messages.error(t!("msg.command_failed", error = e).to_string());
+                return;
+            }
+        };
+        let stdout = child.stdout.take().expect("piped stdout");
+        let child = std::sync::Arc::new(std::sync::Mutex::new(child));
+        let (tx, rx) = std::sync::mpsc::channel();
+        let reader_child = child.clone();
+        std::thread::spawn(move || {
+            use std::io::Read;
+            let mut out = String::new();
+            let ok = std::io::BufReader::new(stdout).read_to_string(&mut out).is_ok();
+            let status = reader_child.lock().expect("ai lock").wait().ok();
+            let success = ok && status.and_then(|s| s.code()) == Some(0);
+            let _ = tx.send(if success { AiMsg::Done(out) } else { AiMsg::Failed });
+        });
+        self.ai_replace = Some(AiReplace { rx, tab: tab_idx, target, label: label.to_string() });
+        self.status = t!("status.ai_running", action = label).to_string();
+    }
+
+    /// Drain a finished AI transform and apply its result. Called once per
+    /// event-loop iteration; cheap when none is running.
+    pub fn poll_ai_replace(&mut self) {
+        let msg = {
+            let Some(ar) = self.ai_replace.as_ref() else {
+                return;
+            };
+            match ar.rx.try_recv() {
+                Ok(m) => m,
+                Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => AiMsg::Failed,
+            }
+        };
+        let Some(ar) = self.ai_replace.take() else {
+            return;
+        };
+        match msg {
+            AiMsg::Done(out) => {
+                let text = out.trim_end_matches('\n');
+                if text.is_empty() {
+                    self.status = t!("status.ai_failed", action = ar.label).to_string();
+                    return;
+                }
+                self.apply_ai_replace(ar.tab, ar.target, text);
+                self.status = t!("status.ai_done", action = ar.label).to_string();
+            }
+            AiMsg::Failed => {
+                self.status = t!("status.ai_failed", action = ar.label).to_string();
+            }
+        }
+    }
+
+    /// Write an AI transform's `text` back into tab `tab_idx`, replacing either
+    /// the whole buffer or the recorded character range.
+    fn apply_ai_replace(&mut self, tab_idx: usize, target: AiTarget, text: &str) {
+        let Some(tab) = self.editor.tabs.get_mut(tab_idx) else {
+            return;
+        };
+        let new = match target {
+            AiTarget::Whole => text.to_string(),
+            AiTarget::Range(start, end) => {
+                let chars: Vec<char> = tab.editor.get_content().chars().collect();
+                let n = chars.len();
+                let start = start.min(n);
+                let end = end.min(n).max(start);
+                let mut out: String = chars[..start].iter().collect();
+                out.push_str(text);
+                out.extend(&chars[end..]);
+                out
+            }
+        };
+        tab.editor.set_content(&new);
+        tab.editor.set_selection(None);
+        tab.dirty = true;
+    }
+
+    /// Whether a background AI transform is in progress.
+    #[must_use]
+    pub fn ai_replace_running(&self) -> bool {
+        self.ai_replace.is_some()
     }
 
     // ----- Contacts (vCard browser) ---------------------------------------
