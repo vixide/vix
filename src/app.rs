@@ -296,16 +296,6 @@ pub struct Dialog {
     pub editor: Option<crate::editor::CodeEditor>,
 }
 
-/// Locale chooser overlay state (View -> Locale), re-exported from
-/// [`vix_locale_chooser`]. Moving the selection previews the language live;
-/// Enter commits and persists it, Esc reverts.
-pub use vix_locale_chooser::Chooser as LocaleChooser;
-
-/// Time Zone chooser overlay state (Tools -> Time Zone), re-exported from
-/// [`vix_time_zone_chooser`]. A filterable list; Enter sets the application-wide
-/// active zone in [`vix_time_zone_model`] and persists it, Esc cancels.
-pub use vix_time_zone_chooser::Chooser as TimeZoneChooser;
-
 /// Nerd Font palette overlay state (Tools -> Nerd Font Palette), re-exported from
 /// [`vix_nerd_font_picker`]. Arrow keys move within the glyph grid; Enter (or a
 /// click) inserts the highlighted glyph into the active editor, Esc closes.
@@ -433,14 +423,9 @@ pub struct Layout {
     pub messages: Rect,
     /// Bottom-dock rectangle (valid while the bottom dock is shown).
     pub bottom_dock: Rect,
-    /// Row list rectangle of the open chooser overlay (theme/locale/keymap), so a
+    /// Row list rectangle of the open chooser overlay (recent files), so a
     /// click can hit-test which row was picked.
     pub chooser: Rect,
-    /// Row-list rectangle of the open Time Zone chooser, so a click can hit-test
-    /// which row was picked.
-    pub tz_chooser: Rect,
-    /// Scrollbar gutter rectangle of the open Time Zone chooser, for click/drag.
-    pub tz_scrollbar: Rect,
     /// Glyph-grid rectangle of the open Nerd Font palette, so a click can
     /// hit-test which cell was picked.
     pub nerd_palette: Rect,
@@ -538,10 +523,6 @@ pub struct App {
     pub git_panel: Option<GitPanel>,
     /// Git branch switcher, when open.
     pub branch_chooser: Option<BranchChooser>,
-    /// Locale chooser overlay, when open.
-    pub locale_chooser: Option<LocaleChooser>,
-    /// Time Zone chooser overlay, when open.
-    pub time_zone_chooser: Option<TimeZoneChooser>,
     /// Recent-files chooser overlay, when open.
     pub recent_chooser: Option<RecentChooser>,
     /// Nerd Font palette (character picker) overlay, when open.
@@ -722,8 +703,6 @@ impl App {
             context_menu: None,
             git_panel: None,
             branch_chooser: None,
-            locale_chooser: None,
-            time_zone_chooser: None,
             recent_chooser: None,
             nerd_palette: None,
             ascii_panel: None,
@@ -904,14 +883,6 @@ impl App {
                 KeyCode::Esc | KeyCode::Char('q') => self.show_clock = false,
                 _ => {}
             }
-            return;
-        }
-        if self.locale_chooser.is_some() {
-            self.locale_key(key);
-            return;
-        }
-        if self.time_zone_chooser.is_some() {
-            self.time_zone_key(key);
             return;
         }
         if self.recent_chooser.is_some() {
@@ -1624,7 +1595,7 @@ impl App {
                 );
             }
             a if a.starts_with("view.theme:") => self.set_theme_by_name(&a["view.theme:".len()..]),
-            "view.locale" => self.open_locale_chooser(),
+            a if a.starts_with("view.locale:") => self.set_locale_by_code(&a["view.locale:".len()..]),
             a if a.starts_with("view.keymap:") => self.set_keymap(&a["view.keymap:".len()..]),
             "tools.calendar" => {
                 self.show_calendar = !self.show_calendar;
@@ -1646,7 +1617,9 @@ impl App {
                     self.clock.selected = 0;
                 }
             }
-            "view.time_zone" => self.open_time_zone_chooser(),
+            a if a.starts_with("view.time_zone:") => {
+                self.set_time_zone_by_name(&a["view.time_zone:".len()..]);
+            }
             "tools.dashboard" => self.open_dashboard(),
             "tools.run_command" => {
                 self.prompt =
@@ -3380,16 +3353,8 @@ impl App {
             }
             return;
         }
-        // Choosers are list overlays: a left click on a row highlights it (and,
-        // for the theme chooser, previews live), mirroring keyboard Up/Down.
-        if self.locale_chooser.is_some() {
-            self.locale_mouse(mouse);
-            return;
-        }
-        if self.time_zone_chooser.is_some() {
-            self.time_zone_mouse(mouse);
-            return;
-        }
+        // The recent-files chooser is a list overlay: a left click on a row
+        // highlights it, mirroring keyboard Up/Down.
         if self.recent_chooser.is_some() {
             self.recent_mouse(mouse);
             return;
@@ -4046,41 +4011,17 @@ impl App {
         }
     }
 
-    // ----- locale chooser -------------------------------------------------
+    // ----- locale ---------------------------------------------------------
 
-    fn open_locale_chooser(&mut self) {
-        self.locale_chooser = Some(LocaleChooser::open(&rust_i18n::locale()));
-    }
-
-    fn locale_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Up | KeyCode::Down => {
-                if let Some(lc) = self.locale_chooser.as_mut() {
-                    if key.code == KeyCode::Up {
-                        lc.up();
-                    } else {
-                        lc.down();
-                    }
-                    // Preview the highlighted language live.
-                    rust_i18n::set_locale(lc.selected_code());
-                }
-            }
-            KeyCode::Enter => {
-                if let Some(lc) = self.locale_chooser.take() {
-                    let code = lc.selected_code();
-                    rust_i18n::set_locale(code);
-                    self.settings.locale = code.to_string();
-                    self.status = t!("status.locale", locale = code).to_string();
-                }
-            }
-            KeyCode::Esc => {
-                if let Some(lc) = self.locale_chooser.take() {
-                    rust_i18n::set_locale(lc.original_code());
-                    self.status = t!("status.locale_unchanged").to_string();
-                }
-            }
-            _ => {}
-        }
+    /// Apply the locale with the given `code` (from the View → Locale submenu),
+    /// persist it, and update the UI language. Unknown codes are ignored.
+    fn set_locale_by_code(&mut self, code: &str) {
+        let Some(loc) = vix_locale_model::by_code(code) else {
+            return;
+        };
+        rust_i18n::set_locale(loc.code);
+        self.settings.locale = loc.code.to_string();
+        self.status = t!("status.locale", locale = loc.code).to_string();
     }
 
     // ----- keymap ---------------------------------------------------------
@@ -4096,60 +4037,15 @@ impl App {
         self.status = t!("status.keymap", keymap = km.id).to_string();
     }
 
-    // ----- time zone chooser ----------------------------------------------
+    // ----- time zone ------------------------------------------------------
 
-    fn open_time_zone_chooser(&mut self) {
-        self.time_zone_chooser = Some(TimeZoneChooser::open(vix_time_zone_model::active_name()));
-    }
-
-    fn time_zone_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.tz_chooser.height as usize).max(1);
-        match key.code {
-            KeyCode::Up => {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    c.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    c.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    c.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    c.page_down(page);
-                }
-            }
-            KeyCode::Char(ch) => {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    c.push(ch);
-                }
-            }
-            KeyCode::Backspace => {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    c.backspace();
-                }
-            }
-            KeyCode::Enter => {
-                if let Some(zone) =
-                    self.time_zone_chooser.as_ref().and_then(TimeZoneChooser::selected_zone)
-                {
-                    vix_time_zone_model::set_active(zone.name);
-                    self.settings.time_zone = zone.name.to_string();
-                    self.status = t!("status.time_zone", zone = zone.name).to_string();
-                }
-                self.time_zone_chooser = None;
-            }
-            KeyCode::Esc => {
-                self.time_zone_chooser = None;
-                self.status = t!("status.time_zone_unchanged").to_string();
-            }
-            _ => {}
+    /// Apply the time zone with the given canonical `name` (from the View → Time
+    /// Zone submenu), persist it, and update the app-wide active zone. Unknown
+    /// names are ignored.
+    fn set_time_zone_by_name(&mut self, name: &str) {
+        if vix_time_zone_model::set_active(name) {
+            self.settings.time_zone = name.to_string();
+            self.status = t!("status.time_zone", zone = name).to_string();
         }
     }
 
@@ -4235,65 +4131,6 @@ impl App {
         (matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
             && rect_contains(r, mouse.column, mouse.row))
         .then(|| (mouse.row - r.y) as usize)
-    }
-
-    fn locale_mouse(&mut self, mouse: MouseEvent) {
-        if let Some(idx) = self.chooser_row(mouse) {
-            if let Some(lc) = self.locale_chooser.as_mut() {
-                if idx < vix_locale_chooser::LOCALES.len() {
-                    lc.selected = idx;
-                    rust_i18n::set_locale(lc.selected_code());
-                }
-            }
-        }
-    }
-
-    fn time_zone_mouse(&mut self, mouse: MouseEvent) {
-        let list = self.layout.tz_chooser;
-        let sb = self.layout.tz_scrollbar;
-        let viewport = (list.height as usize).max(1);
-        match mouse.kind {
-            // Press or drag on the scrollbar gutter moves the highlight.
-            MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left)
-                if rect_contains(sb, mouse.column, mouse.row) =>
-            {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    let max = c.len().saturating_sub(1);
-                    let pos = crate::ui::scrollbar_pos_from_row(sb, mouse.row, max);
-                    c.select(pos);
-                    c.ensure_visible(viewport);
-                }
-            }
-            // A click on a row accepts that zone.
-            MouseEventKind::Down(MouseButton::Left) if rect_contains(list, mouse.column, mouse.row) => {
-                let row_in_view = (mouse.row - list.y) as usize;
-                let pick = self.time_zone_chooser.as_mut().and_then(|c| {
-                    let idx = c.scroll + row_in_view;
-                    (idx < c.len()).then(|| {
-                        c.select(idx);
-                        c.selected_zone()
-                    })?
-                });
-                if let Some(zone) = pick {
-                    vix_time_zone_model::set_active(zone.name);
-                    self.settings.time_zone = zone.name.to_string();
-                    self.status = t!("status.time_zone", zone = zone.name).to_string();
-                    self.time_zone_chooser = None;
-                }
-            }
-            MouseEventKind::ScrollUp => {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    c.scroll = c.scroll.saturating_sub(3);
-                }
-            }
-            MouseEventKind::ScrollDown => {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    let max = c.len().saturating_sub(viewport);
-                    c.scroll = (c.scroll + 3).min(max);
-                }
-            }
-            _ => {}
-        }
     }
 
     // ----- Nerd Font palette ----------------------------------------------

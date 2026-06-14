@@ -8,10 +8,8 @@ members = [
     "vix-clock-panel",
     "vix-theme-model",
     "vix-locale-model",
-    "vix-locale-chooser",
     "vix-keymap-model",
     "vix-time-zone-model",
-    "vix-time-zone-chooser",
     "vix-keyboard-shortcut-panel",
     "vix-nerd-font-picker",
     "vix-ascii-character-picker",
@@ -77,14 +75,13 @@ vix-calendar-panel = { path = "vix-calendar-panel" }
 vix-clock-panel = { path = "vix-clock-panel" }
 # Theme model: the JSON theme model, ratatui styles, and theme loading.
 vix-theme-model = { path = "vix-theme-model" }
-# Locale chooser: available UI languages + selection state.
-vix-locale-chooser = { path = "vix-locale-chooser" }
+# Locale model: available UI languages (the View → Locale submenu).
+vix-locale-model = { path = "vix-locale-model" }
 # Keymap model: available keyboard navigation styles (the View → Keymap submenu).
 vix-keymap-model = { path = "vix-keymap-model" }
-# Time-zone model: full IANA canonical zone table + the app-wide active zone.
+# Time-zone model: full IANA canonical zone table + the app-wide active zone
+# (the View → Time Zone submenu).
 vix-time-zone-model = { path = "vix-time-zone-model" }
-# Time-zone chooser (Tools menu): filterable zone list + selection state.
-vix-time-zone-chooser = { path = "vix-time-zone-chooser" }
 # Keyboard-shortcut help rows (key combo + i18n description key).
 vix-keyboard-shortcut-panel = { path = "vix-keyboard-shortcut-panel" }
 # Nerd Font palette (Tools menu): curated glyph set + character-picker grid state.

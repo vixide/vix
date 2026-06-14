@@ -102,33 +102,14 @@ it is the fallback; the constructed languages are listed last.
 The codes are the canonical `rust-i18n` lookup keys; `vix_locale_model::by_code`
 resolves a code back to its `Locale`, or `None` if it is not bundled.
 
-## Changing the language: the Locale chooser
+## Changing the language: the Locale submenu
 
-The UI language is chosen through **View → Locale**, which opens an overlay
-listing every language by its endonym. The chooser is built on the
-`vix-locale-chooser` crate, which re-exports `Locale`/`LOCALES` and adds a small
-selection state.
-
-Behavior:
-
-- **Open** — the overlay opens highlighting the currently active language (or the
-  first locale, English, if the active code is somehow not in the list).
-- **Up / Down** — move the highlight, wrapping around at the ends. Moving the
-  highlight calls `rust_i18n::set_locale` for the highlighted language, so the
-  **entire UI re-renders in that language as a live preview** while you browse.
-- **Mouse** — clicking a row in the overlay selects that language and previews it
-  live, the same as moving with the arrow keys.
-- **Enter** — commits the highlighted language: it stays applied, the choice is
-  saved to `settings.locale`, and the status bar confirms with
-  `status.locale` (`"Language: <code>"`).
-- **Esc** — cancels: the language active when the chooser opened is restored
-  (the chooser remembers it as `original`), nothing is persisted, and the status
-  bar shows `status.locale_unchanged` (`"Language unchanged"`).
-
-Because Up/Down preview by actually setting the locale, Esc must restore the
-original — which is exactly why the chooser tracks both the `selected` and the
-`original` index. The committed value `settings.locale` is reloaded on the next
-launch, so the chosen language is sticky across runs.
+The UI language is chosen through **View → Locale**, a submenu listing every
+language by its endonym (built from `vix_locale_model::LOCALES`). Selecting a
+language applies it immediately, saves it to `settings.locale`, and confirms with
+`status.locale` (`"Language: <code>"`). Each item dispatches `view.locale:<code>`.
+The committed value is reloaded on the next launch, so the chosen language is
+sticky across runs.
 
 A locale change also drives spell-checking: the editor reloads the Hunspell
 dictionary for the new UI locale when spell-checking is on (a missing dictionary
@@ -151,7 +132,7 @@ otherwise the persisted `settings.locale`, and applies it with
 `rust_i18n::set_locale` before the UI is built (so even the first-run welcome
 screen appears in the right language). The flag is **not written back** to
 settings — it is a transient override. Changing the language in the Locale
-chooser during that session still persists normally.
+submenu during that session still persists normally.
 
 ## Key namespaces
 
@@ -181,14 +162,10 @@ follow later thanks to the English fallback.
   struct (`code` + `name` endonym), the `LOCALES` array in chooser order (English
   first as the fallback, constructed languages last), and the `by_code` lookup.
   It has no UI dependencies. See `vix-locale-model/src/lib.rs`.
-- **`vix-locale-chooser`** re-exports `Locale`/`LOCALES` and adds the overlay's
-  `Chooser` state: `open(current_code)`, `up`/`down` (wrapping), and the
-  `selected_code` / `original_code` accessors used to preview, commit, and revert.
-  See `vix-locale-chooser/src/lib.rs`.
-- The **host** (`src/app.rs`) wires it together as `LocaleChooser`:
-  `open_locale_chooser`, the `locale_key` / `locale_mouse` handlers (live preview
-  via `rust_i18n::set_locale`, Enter persists to `settings.locale`, Esc reverts),
-  and `view.locale` as the menu action.
+- The **host** (`src/app.rs`) builds the View → Locale submenu from `LOCALES` and
+  applies a chosen language by code (`set_locale_by_code`): it calls
+  `rust_i18n::set_locale`, persists to `settings.locale`, and confirms via
+  `status.locale`. Each submenu item dispatches `view.locale:<code>`.
 - The **binary** (`src/main.rs`) parses `--locale`, resolves it against
   `settings.locale`, and calls `rust_i18n::set_locale` at startup.
 - The **bundle** lives in `locales/app.yml`, loaded by `i18n!("locales",

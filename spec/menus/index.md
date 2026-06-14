@@ -131,8 +131,8 @@ The **Case** submenu (applies to the current selection):
 | Item                             | Action                                        |
 | -------------------------------- | --------------------------------------------- |
 | Theme ▸                          | Submenu of available themes — bundled + user JSON (`vix-theme-model/spec/index.md`); pick one to apply |
-| Locale…                          | Open the locale chooser (`vix-locale-chooser/spec/index.md`) |
-| Time Zone…                       | Pick the app-wide active IANA time zone; filterable (`vix-time-zone-chooser/spec/index.md`) |
+| Locale ▸                         | Submenu of UI languages (`vix-locale-model/spec/index.md`); pick one to apply |
+| Time Zone ▸                      | Submenu of IANA zones, sorted by UTC offset then name (`vix-time-zone-model/spec/index.md`); pick one |
 | Keymap ▸                         | Submenu of keyboard navigation styles (`vix-keymap-model/spec/index.md`) |
 | *— separator —*                  |                                               |
 | Layout ▸                         | Submenu of dock/status toggles (below)        |

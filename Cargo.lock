@@ -3333,7 +3333,7 @@ dependencies = [
  "vix-keyboard-shortcut-panel",
  "vix-keymap-model",
  "vix-left-dock",
- "vix-locale-chooser",
+ "vix-locale-model",
  "vix-lsp",
  "vix-nerd-font-picker",
  "vix-outline-panel",
@@ -3342,7 +3342,6 @@ dependencies = [
  "vix-status-bar-panel",
  "vix-system-information-panel",
  "vix-theme-model",
- "vix-time-zone-chooser",
  "vix-time-zone-model",
  "vix-vcard-panel",
  "vix-vcard-parser",
@@ -3448,13 +3447,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vix-locale-chooser"
-version = "0.1.0"
-dependencies = [
- "vix-locale-model",
-]
-
-[[package]]
 name = "vix-locale-model"
 version = "0.1.0"
 
@@ -3503,13 +3495,6 @@ dependencies = [
  "ratatui-core",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "vix-time-zone-chooser"
-version = "0.1.0"
-dependencies = [
- "vix-time-zone-model",
 ]
 
 [[package]]

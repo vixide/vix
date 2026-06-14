@@ -448,15 +448,47 @@ fn vix_menu_dialogs_open_and_close() {
 }
 
 #[test]
-fn view_locale_chooser_opens_and_cancels() {
+fn view_locale_submenu_lists_locales() {
+    // Structural check only — applying a locale mutates the process-global
+    // rust-i18n locale, which would race other parallel tests.
+    let _app = app_at(Path::new("."));
+    let view = vix::menu::menus().iter().find(|m| m.name == "menu.view").unwrap();
+    let sub = view
+        .items
+        .iter()
+        .find(|it| it.label == "menu.item.view.locale")
+        .and_then(|it| it.submenu)
+        .expect("Locale is a submenu");
+    let actions: Vec<&str> = sub.iter().map(|it| it.action).collect();
+    for code in ["view.locale:en", "view.locale:fr", "view.locale:ja"] {
+        assert!(actions.contains(&code), "locale submenu offers {code}; got {actions:?}");
+    }
+}
+
+#[test]
+fn view_time_zone_submenu_lists_zones() {
+    let _app = app_at(Path::new("."));
+    let view = vix::menu::menus().iter().find(|m| m.name == "menu.view").unwrap();
+    let sub = view
+        .items
+        .iter()
+        .find(|it| it.label == "menu.item.view.time_zone")
+        .and_then(|it| it.submenu)
+        .expect("Time Zone is a submenu");
+    let actions: Vec<&str> = sub.iter().map(|it| it.action).collect();
+    assert!(actions.contains(&"view.time_zone:UTC"));
+    assert!(actions.contains(&"view.time_zone:America/New_York"));
+    assert!(sub.len() > 100, "lists the full IANA zone set");
+}
+
+#[test]
+fn view_time_zone_action_sets_active_zone() {
     let mut app = app_at(Path::new("."));
-    assert!(app.locale_chooser.is_none());
-    app.run_action("view.locale");
-    assert!(app.locale_chooser.is_some(), "View -> Locale opens the chooser");
-    // Esc cancels without persisting a change (and leaves the global locale as
-    // it was, so concurrent tests are unaffected).
-    app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert!(app.locale_chooser.is_none(), "Esc closes the chooser");
+    app.run_action("view.time_zone:America/New_York");
+    assert_eq!(app.settings.time_zone, "America/New_York");
+    app.run_action("view.time_zone:Not/AZone"); // unknown ignored
+    assert_eq!(app.settings.time_zone, "America/New_York");
+    app.run_action("view.time_zone:UTC"); // restore the process-global active zone
 }
 
 #[test]
