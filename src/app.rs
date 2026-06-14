@@ -18,7 +18,7 @@ use regex::Regex;
 
 use crate::editor::{is_image_path, Editor, Tab, SEARCH_MARK};
 use crate::explorer::Explorer;
-use crate::menu::{Menu, MENUS};
+use crate::menu::{menus, Menu};
 use crate::messages::{Level, Messages};
 use crate::palette::{self, Action as PAction, Entry, Mode as PMode, Palette};
 use crate::workspace_search::{Hit, WorkspaceSearch};
@@ -296,11 +296,6 @@ pub struct Dialog {
     pub editor: Option<crate::editor::CodeEditor>,
 }
 
-/// Theme chooser overlay state (View -> Themes), re-exported from
-/// [`vix_theme_model`]. Moving the selection previews the theme live; Enter
-/// commits and persists it, Esc reverts.
-pub use vix_theme_model::Chooser as ThemeChooser;
-
 /// Locale chooser overlay state (View -> Locale), re-exported from
 /// [`vix_locale_chooser`]. Moving the selection previews the language live;
 /// Enter commits and persists it, Esc reverts.
@@ -543,8 +538,6 @@ pub struct App {
     pub git_panel: Option<GitPanel>,
     /// Git branch switcher, when open.
     pub branch_chooser: Option<BranchChooser>,
-    /// Theme chooser overlay, when open.
-    pub theme_chooser: Option<ThemeChooser>,
     /// Locale chooser overlay, when open.
     pub locale_chooser: Option<LocaleChooser>,
     /// Time Zone chooser overlay, when open.
@@ -689,6 +682,10 @@ impl App {
         // styled correctly. A theme value that is not a built-in mode is treated
         // as the name of a custom JSON theme.
         Self::apply_saved_theme(&settings.theme);
+        // Populate the View → Theme submenu with the available theme names before
+        // the menu bar is first rendered.
+        let theme_names = vix_theme_model::theme_names(&Self::available_custom_themes());
+        crate::menu::set_theme_names(theme_names);
         // Apply the saved time zone so the clock panel and status bar use it.
         vix_time_zone_model::set_active(&settings.time_zone);
         let editor = Editor::new(
@@ -725,7 +722,6 @@ impl App {
             context_menu: None,
             git_panel: None,
             branch_chooser: None,
-            theme_chooser: None,
             locale_chooser: None,
             time_zone_chooser: None,
             recent_chooser: None,
@@ -908,10 +904,6 @@ impl App {
                 KeyCode::Esc | KeyCode::Char('q') => self.show_clock = false,
                 _ => {}
             }
-            return;
-        }
-        if self.theme_chooser.is_some() {
-            self.theme_key(key);
             return;
         }
         if self.locale_chooser.is_some() {
@@ -1631,7 +1623,7 @@ impl App {
                         .with_input(cur),
                 );
             }
-            "view.theme" => self.open_theme_chooser(),
+            a if a.starts_with("view.theme:") => self.set_theme_by_name(&a["view.theme:".len()..]),
             "view.locale" => self.open_locale_chooser(),
             a if a.starts_with("view.keymap:") => self.set_keymap(&a["view.keymap:".len()..]),
             "tools.calendar" => {
@@ -3390,10 +3382,6 @@ impl App {
         }
         // Choosers are list overlays: a left click on a row highlights it (and,
         // for the theme chooser, previews live), mirroring keyboard Up/Down.
-        if self.theme_chooser.is_some() {
-            self.theme_mouse(mouse);
-            return;
-        }
         if self.locale_chooser.is_some() {
             self.locale_mouse(mouse);
             return;
@@ -3873,7 +3861,7 @@ impl App {
             // Items start one row below the dropdown's top border.
             let top = dd.y + 1;
             if let Some(mi) = self.menu.open {
-                let items = MENUS[mi].items;
+                let items = menus()[mi].items;
                 let idx = row.saturating_sub(top) as usize;
                 if row >= top && idx < items.len() && !items[idx].is_separator() {
                     if items[idx].has_submenu() {
@@ -3912,7 +3900,7 @@ impl App {
     /// Index of the top-level menu whose title spans column `col`, if any.
     fn top_menu_index_at(&self, col: u16) -> Option<usize> {
         let mut x = self.layout.menu.x + 1;
-        for (i, m) in MENUS.iter().enumerate() {
+        for (i, m) in menus().iter().enumerate() {
             let w = m.title().chars().count() as u16 + 2;
             if col >= x && col < x + w {
                 return Some(i);
@@ -3952,7 +3940,7 @@ impl App {
             // Items start one row below the dropdown's top border.
             let top = dd.y + 1;
             if let Some(mi) = self.menu.open {
-                let items = MENUS[mi].items;
+                let items = menus()[mi].items;
                 let idx = row.saturating_sub(top) as usize;
                 if row >= top && idx < items.len() && !items[idx].is_separator() {
                     self.menu.item = Some(idx);
@@ -4022,42 +4010,18 @@ impl App {
         crate::theme::set_custom(chosen);
     }
 
-    fn open_theme_chooser(&mut self) {
-        self.theme_chooser = Some(ThemeChooser::open(Self::available_custom_themes()));
-    }
-
-    fn theme_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Up | KeyCode::Down => {
-                if let Some(tc) = self.theme_chooser.as_mut() {
-                    if key.code == KeyCode::Up {
-                        tc.up();
-                    } else {
-                        tc.down();
-                    }
-                    // Preview the highlighted theme live.
-                    vix_theme_model::apply(tc.selected_theme());
-                }
-                self.editor.refresh_theme();
-            }
-            KeyCode::Enter => {
-                if let Some(tc) = self.theme_chooser.take() {
-                    let theme = tc.selected_theme().clone();
-                    vix_theme_model::apply(&theme);
-                    self.editor.refresh_theme();
-                    self.settings.theme.clone_from(&theme.name);
-                    self.status = t!("status.theme", theme = theme.name).to_string();
-                }
-            }
-            KeyCode::Esc => {
-                if let Some(tc) = self.theme_chooser.take() {
-                    vix_theme_model::apply(tc.original_theme());
-                    self.editor.refresh_theme();
-                    self.status = t!("status.theme_unchanged").into();
-                }
-            }
-            _ => {}
-        }
+    /// Apply the theme with display `name` (chosen from the View → Theme submenu),
+    /// persist it, and restyle the editor. Unknown names are ignored.
+    fn set_theme_by_name(&mut self, name: &str) {
+        let Some(theme) =
+            Self::available_custom_themes().into_iter().find(|t| t.name == name)
+        else {
+            return;
+        };
+        vix_theme_model::apply(&theme);
+        self.editor.refresh_theme();
+        self.settings.theme.clone_from(&theme.name);
+        self.status = t!("status.theme", theme = theme.name).to_string();
     }
 
     // ----- info dialog ----------------------------------------------------
@@ -4271,19 +4235,6 @@ impl App {
         (matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
             && rect_contains(r, mouse.column, mouse.row))
         .then(|| (mouse.row - r.y) as usize)
-    }
-
-    fn theme_mouse(&mut self, mouse: MouseEvent) {
-        if let Some(idx) = self.chooser_row(mouse) {
-            if let Some(tc) = self.theme_chooser.as_mut() {
-                if idx < tc.choices.len() {
-                    tc.selected = idx;
-                    // Preview the highlighted theme live, as Up/Down does.
-                    vix_theme_model::apply(tc.selected_theme());
-                    self.editor.refresh_theme();
-                }
-            }
-        }
     }
 
     fn locale_mouse(&mut self, mouse: MouseEvent) {

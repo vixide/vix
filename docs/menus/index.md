@@ -108,7 +108,7 @@ Upper, Lower, Title, Kebab, Snake, Camel, and Pascal.
 
 | Item     | Action                       |
 | -------- | ---------------------------- |
-| Theme…   | Open the theme chooser       |
+| Theme ▸  | Submenu of available themes (bundled + user JSON); pick one to apply |
 | Locale…  | Open the locale chooser      |
 | Time Zone… | Pick the app-wide active IANA time zone (filterable) |
 | Keymap ▸ | Submenu of keyboard navigation styles (Apple/VSCode/Emacs/Vim) |

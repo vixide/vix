@@ -130,7 +130,7 @@ The **Case** submenu (applies to the current selection):
 
 | Item                             | Action                                        |
 | -------------------------------- | --------------------------------------------- |
-| Theme…                           | Open the theme chooser (`vix-theme-chooser/spec/index.md`)   |
+| Theme ▸                          | Submenu of available themes — bundled + user JSON (`vix-theme-model/spec/index.md`); pick one to apply |
 | Locale…                          | Open the locale chooser (`vix-locale-chooser/spec/index.md`) |
 | Time Zone…                       | Pick the app-wide active IANA time zone; filterable (`vix-time-zone-chooser/spec/index.md`) |
 | Keymap ▸                         | Submenu of keyboard navigation styles (`vix-keymap-model/spec/index.md`) |

@@ -1,10 +1,12 @@
-//! The Vix theme model and chooser state.
+//! The Vix theme model.
 //!
 //! Every theme is a JSON [`CustomTheme`] with per-region colors and font
 //! attributes (see `spec/index.md`). There is always exactly one active theme;
 //! the bundled `Dark` and `Light` themes (from `themes/dark.json` /
 //! `themes/light.json`) are just ordinary themes the host ships. The style
 //! helpers ([`fg`], [`bg`], [`region_base`], …) read the active theme.
+//! [`theme_names`] produces the de-duplicated, sorted list for the View → Theme
+//! submenu.
 //!
 //! Theme names are plain strings (also the value persisted in settings), so this
 //! crate stays free of any localization dependency.
@@ -340,73 +342,23 @@ pub fn apply(theme: &CustomTheme) {
     set_custom(Some(theme.clone()));
 }
 
-/// Selection state for the theme chooser overlay. Lists every available theme,
-/// sorted by name. Moving the selection previews the theme live; the host commits
-/// or reverts.
-pub struct Chooser {
-    /// All themes, in display order.
-    pub choices: Vec<CustomTheme>,
-    /// Index of the highlighted theme.
-    pub selected: usize,
-    /// Index of the theme active when the chooser opened, restored on cancel.
-    pub original: usize,
-}
-
-impl Chooser {
-    /// Open the chooser listing `themes`, highlighting the active one.
-    ///
-    /// Themes are de-duplicated by name (case-insensitively): the first of any
-    /// repeated name wins (so user-installed themes shadow bundled ones). The
-    /// result is sorted alphabetically by name.
-    #[must_use]
-    pub fn open(themes: Vec<CustomTheme>) -> Self {
-        let mut seen: Vec<String> = Vec::new();
-        let mut choices: Vec<CustomTheme> = Vec::new();
-        for theme in themes {
-            let key = theme.name.to_lowercase();
-            if seen.contains(&key) {
-                continue;
-            }
-            seen.push(key);
-            choices.push(theme);
+/// The display names for a list of `themes`, for the View → Theme submenu:
+/// de-duplicated by name (case-insensitively; the first of any repeated name
+/// wins, so user-installed themes shadow bundled ones) and sorted by name.
+#[must_use]
+pub fn theme_names(themes: &[CustomTheme]) -> Vec<String> {
+    let mut seen: Vec<String> = Vec::new();
+    let mut names: Vec<String> = Vec::new();
+    for theme in themes {
+        let key = theme.name.to_lowercase();
+        if seen.contains(&key) {
+            continue;
         }
-        choices.sort_by_key(|c| c.name.to_lowercase());
-
-        let active = custom_name();
-        let selected = active
-            .and_then(|name| choices.iter().position(|c| c.name == name))
-            .unwrap_or(0);
-        Chooser { choices, selected, original: selected }
+        seen.push(key);
+        names.push(theme.name.clone());
     }
-
-    /// Highlight the previous theme, wrapping around.
-    pub fn up(&mut self) {
-        if self.choices.is_empty() {
-            return;
-        }
-        let n = self.choices.len();
-        self.selected = (self.selected + n - 1) % n;
-    }
-
-    /// Highlight the next theme, wrapping around.
-    pub fn down(&mut self) {
-        if self.choices.is_empty() {
-            return;
-        }
-        self.selected = (self.selected + 1) % self.choices.len();
-    }
-
-    /// The highlighted theme.
-    #[must_use]
-    pub fn selected_theme(&self) -> &CustomTheme {
-        &self.choices[self.selected]
-    }
-
-    /// The theme active when the chooser opened.
-    #[must_use]
-    pub fn original_theme(&self) -> &CustomTheme {
-        &self.choices[self.original]
-    }
+    names.sort_by_key(|n| n.to_lowercase());
+    names
 }
 
 #[cfg(test)]
@@ -419,7 +371,7 @@ mod tests {
 
     // One test to keep the process-global theme state sequential.
     #[test]
-    fn parsing_regions_and_chooser() {
+    fn parsing_regions_and_names() {
         let t = theme(
             r#"{
                 "name": "test",
@@ -437,15 +389,13 @@ mod tests {
         assert_eq!(region_bg(Region::LeftDock), Color::Rgb(10, 11, 12));
         assert_eq!(custom_name().as_deref(), Some("test"));
 
-        // The chooser lists, de-dups (case-insensitively), and sorts by name.
-        let ch = Chooser::open(vec![
+        // theme_names de-dups (case-insensitively) and sorts by name.
+        let names = theme_names(&[
             theme(r#"{ "name": "Nord" }"#),
             theme(r#"{ "name": "Dark" }"#),
             theme(r#"{ "name": "dark" }"#), // duplicate of "Dark"
         ]);
-        assert_eq!(ch.choices.len(), 2);
-        assert_eq!(ch.choices[0].name, "Dark");
-        assert_eq!(ch.choices[1].name, "Nord");
+        assert_eq!(names, vec!["Dark".to_string(), "Nord".to_string()]);
 
         // Applying a theme makes it active.
         apply(&theme(r#"{ "name": "Light", "editor": { "foreground": [40, 40, 40] } }"#));

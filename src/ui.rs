@@ -12,7 +12,7 @@ use ratatui_image::StatefulImage;
 use crate::app::{App, Focus};
 use crate::calendar;
 use crate::clock;
-use crate::menu::MENUS;
+use crate::menu::menus;
 use crate::messages::Level;
 use crate::search::Field;
 use crate::theme::{self, icon};
@@ -196,9 +196,6 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     }
     if app.branch_chooser.is_some() {
         draw_branch_chooser(app, frame, area);
-    }
-    if app.theme_chooser.is_some() {
-        draw_theme_chooser(app, frame, area);
     }
     if app.locale_chooser.is_some() {
         draw_locale_chooser(app, frame, area);
@@ -760,14 +757,6 @@ fn draw_list_chooser(
     rows[0]
 }
 
-fn draw_theme_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(tc) = app.theme_chooser.as_ref() else { return };
-    let selected = tc.selected;
-    let labels: Vec<String> = tc.choices.iter().map(|c| c.name.clone()).collect();
-    let hint = t!("ui.theme_hint");
-    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.theme"), &hint, &labels, selected);
-}
-
 fn draw_locale_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(lc) = app.locale_chooser.as_ref() else { return };
     let selected = lc.selected;
@@ -941,7 +930,7 @@ fn draw_query_replace(app: &App, frame: &mut Frame, area: Rect) {
 fn menu_offsets() -> Vec<u16> {
     let mut offsets = Vec::new();
     let mut pos: u16 = 1;
-    for m in MENUS {
+    for m in menus() {
         offsets.push(pos);
         pos += m.title().chars().count() as u16 + 2;
     }
@@ -950,7 +939,7 @@ fn menu_offsets() -> Vec<u16> {
 
 fn draw_menu_bar(app: &App, frame: &mut Frame, area: Rect) {
     let mut spans = vec![Span::raw(" ")];
-    for (i, m) in MENUS.iter().enumerate() {
+    for (i, m) in menus().iter().enumerate() {
         let open = app.menu.open == Some(i);
         let style = if open {
             theme::selected()
@@ -1027,7 +1016,7 @@ fn dropdown_width(items: &[crate::menu::Item]) -> u16 {
 /// by mouse hit-testing (`App::on_mouse`) so clicks land on the right item.
 #[must_use]
 pub fn menu_dropdown_rect(frame_area: Rect, bar: Rect, index: usize) -> Rect {
-    let def = &MENUS[index];
+    let def = &menus()[index];
     let x = bar.x + menu_offsets()[index];
     let width = dropdown_width(def.items);
     let height = def.items.len() as u16 + 2;
@@ -1081,7 +1070,7 @@ fn render_dropdown(frame: &mut Frame, area: Rect, items: &[crate::menu::Item], s
 fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
     let Some(i) = app.menu.open else { return };
     let area = app.layout.menu_dropdown;
-    render_dropdown(frame, area, MENUS[i].items, app.menu.item);
+    render_dropdown(frame, area, menus()[i].items, app.menu.item);
 
     // An open submenu is drawn to the right of its parent item.
     if let (Some(sidx), Some(subitems)) = (app.menu.sub, app.menu.submenu_items()) {

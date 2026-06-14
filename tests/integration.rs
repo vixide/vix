@@ -374,7 +374,7 @@ fn vix_menu_quit_quits_program() {
 
     // Open the menu bar (the Vix menu is first), then walk down to "Quit".
     app.on_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
-    let vix_idx = vix::menu::MENUS
+    let vix_idx = vix::menu::menus()
         .iter()
         .position(|m| m.name == "menu.vix")
         .expect("a Vix menu exists");
@@ -383,7 +383,7 @@ fn vix_menu_quit_quits_program() {
     }
     // Walk down until "Quit" is highlighted (Down skips separators, so we cannot
     // assume the number of presses equals the item's array index).
-    let item_count = vix::menu::MENUS[vix_idx].items.len();
+    let item_count = vix::menu::menus()[vix_idx].items.len();
     for _ in 0..=item_count {
         if app.menu.selected_action() == Some("file.quit") {
             break;
@@ -403,47 +403,16 @@ fn vix_menu_quit_quits_program() {
 }
 
 #[test]
-fn view_themes_menu_switches_theme() {
+fn view_theme_submenu_actions_switch_theme() {
     let mut app = app_at(Path::new("."));
-    assert!(app.theme_chooser.is_none());
-
-    // Open the menu bar, move right to the View menu, and run its first item
-    // ("Themes…"), which opens the theme chooser. The dropdown opens with nothing
-    // highlighted, so Down first selects the first item.
-    app.on_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
-    let view_idx = vix::menu::MENUS
-        .iter()
-        .position(|m| m.name == "menu.view")
-        .expect("a View menu exists");
-    for _ in 0..view_idx {
-        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
-    }
-    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
-    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(app.theme_chooser.is_some(), "Themes… opens the chooser");
-
-    // Pick Light deterministically and apply; the choice is persisted by name.
-    app.theme_chooser.as_mut().unwrap().selected = theme_choice_index(&app, "Light");
-    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(app.theme_chooser.is_none(), "Enter closes the chooser");
+    // The View → Theme submenu dispatches `view.theme:<name>` per item.
+    app.run_action("view.theme:Light");
     assert_eq!(app.settings.theme, "Light");
-
-    // Reopen via the command action and switch back to Dark.
-    app.run_action("view.theme");
-    app.theme_chooser.as_mut().unwrap().selected = theme_choice_index(&app, "Dark");
-    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    app.run_action("view.theme:Dark");
     assert_eq!(app.settings.theme, "Dark");
-}
-
-/// Index of the theme named `name` within the open theme chooser's sorted list.
-fn theme_choice_index(app: &App, name: &str) -> usize {
-    app.theme_chooser
-        .as_ref()
-        .unwrap()
-        .choices
-        .iter()
-        .position(|c| c.name == name)
-        .unwrap_or_else(|| panic!("theme {name} is in the chooser"))
+    // An unknown theme name is ignored.
+    app.run_action("view.theme:Nonexistent");
+    assert_eq!(app.settings.theme, "Dark");
 }
 
 #[test]
@@ -491,42 +460,29 @@ fn view_locale_chooser_opens_and_cancels() {
 }
 
 #[test]
-fn theme_chooser_lists_bundled_themes() {
-    let mut app = app_at(Path::new("."));
-    app.run_action("view.theme");
-    let tc = app.theme_chooser.as_ref().expect("theme chooser open");
-    let names: Vec<&str> = tc.choices.iter().map(|c| c.name.as_str()).collect();
-    // Dark/Light are now ordinary bundled themes, listed alongside the rest.
-    for expected in ["Dark", "Light", "Dracula", "Nord", "Tokyo Night", "Gruvbox Dark"] {
+fn view_theme_submenu_lists_bundled_themes() {
+    // app_at builds an App, which populates the View → Theme submenu from the
+    // available themes.
+    let _app = app_at(Path::new("."));
+    let view = vix::menu::menus().iter().find(|m| m.name == "menu.view").unwrap();
+    let theme_parent = view
+        .items
+        .iter()
+        .find(|it| it.label == "menu.item.view.theme")
+        .expect("a Theme submenu item");
+    let sub = theme_parent.submenu.expect("Theme is a submenu");
+    let actions: Vec<&str> = sub.iter().map(|it| it.action).collect();
+    // The menu is built (and cached) on first use; Dark and Light are always
+    // present (bundled, and the fallback). Each item dispatches `view.theme:<name>`.
+    for expected in ["Dark", "Light"] {
+        let action = format!("view.theme:{expected}");
         assert!(
-            names.contains(&expected),
-            "chooser should list bundled theme {expected}; got {names:?}"
+            actions.contains(&action.as_str()),
+            "submenu should offer theme {expected}; got {actions:?}"
         );
     }
-
-    // The list is sorted alphabetically (case-insensitively) by name.
-    let keys: Vec<String> = names.iter().map(|n| n.to_lowercase()).collect();
-    let mut sorted = keys.clone();
-    sorted.sort();
-    assert_eq!(keys, sorted, "theme chooser is sorted alphabetically");
-}
-
-#[test]
-fn theme_chooser_esc_reverts() {
-    let mut app = app_at(Path::new("."));
-    // Apply Light first so we have a known baseline.
-    app.run_action("view.theme");
-    app.theme_chooser.as_mut().unwrap().selected = theme_choice_index(&app, "Light");
-    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert_eq!(app.settings.theme, "Light");
-
-    // Open again, move the highlight to Dark, then cancel with Esc: the
-    // persisted theme must stay Light.
-    app.run_action("view.theme");
-    app.theme_chooser.as_mut().unwrap().selected = theme_choice_index(&app, "Dark");
-    app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert!(app.theme_chooser.is_none());
-    assert_eq!(app.settings.theme, "Light", "Esc must not persist a change");
+    // The full de-dup/sort behavior over a theme list is unit-tested in
+    // vix-theme-model (`theme_names`).
 }
 
 #[test]
@@ -1825,7 +1781,7 @@ fn f10_toggles_menu_bar() {
 fn alt_letters_open_specific_menus() {
     let alt = |c: char| KeyEvent::new(KeyCode::Char(c), KeyModifiers::ALT);
     let menu_index = |name: &str| {
-        vix::menu::MENUS.iter().position(|m| m.name == name).unwrap()
+        vix::menu::menus().iter().position(|m| m.name == name).unwrap()
     };
     for (letter, name) in [
         ('f', "menu.file"),
@@ -1909,7 +1865,7 @@ fn menu_dropdown_keeps_a_gap_before_shortcuts() {
     // at least one space between its label and the right-aligned shortcut.
     let bar = Rect::new(0, 0, 200, 1);
     let frame = Rect::new(0, 0, 200, 40);
-    for (i, m) in vix::menu::MENUS.iter().enumerate() {
+    for (i, m) in vix::menu::menus().iter().enumerate() {
         let rect = vix::ui::menu_dropdown_rect(frame, bar, i);
         for it in m.items {
             if it.shortcut.is_empty() {
@@ -1935,7 +1891,7 @@ fn menus_have_separators_in_the_specified_places() {
         ("menu.edit", &["edit.cut", "edit.toggle_comment"]),
     ];
     for (menu, befores) in cases {
-        let items = vix::menu::MENUS
+        let items = vix::menu::menus()
             .iter()
             .find(|m| m.name == *menu)
             .unwrap_or_else(|| panic!("{menu} exists"))
@@ -1954,12 +1910,12 @@ fn menus_have_separators_in_the_specified_places() {
 fn submenu_opens_and_runs_a_nested_action() {
     let mut app = app_at(Path::new("."));
     app.on_key(keycode(KeyCode::F(10)));
-    let edit_idx = vix::menu::MENUS.iter().position(|m| m.name == "menu.edit").unwrap();
+    let edit_idx = vix::menu::menus().iter().position(|m| m.name == "menu.edit").unwrap();
     for _ in 0..edit_idx {
         app.on_key(keycode(KeyCode::Right));
     }
     // Walk down to the Find submenu parent.
-    let edit_items = vix::menu::MENUS[edit_idx].items;
+    let edit_items = vix::menu::menus()[edit_idx].items;
     let find_parent = edit_items
         .iter()
         .position(|it| it.label == "menu.item.edit.find_menu")
@@ -2012,7 +1968,7 @@ fn ctrl_tab_switches_tabs() {
 
 #[test]
 fn view_editor_submenu_rolls_up_the_editor_toggles() {
-    let view = vix::menu::MENUS.iter().find(|m| m.name == "menu.view").unwrap();
+    let view = vix::menu::menus().iter().find(|m| m.name == "menu.view").unwrap();
     let editor = view
         .items
         .iter()
@@ -2029,7 +1985,7 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
 
 #[test]
 fn view_layout_submenu_rolls_up_the_dock_toggles() {
-    let view = vix::menu::MENUS.iter().find(|m| m.name == "menu.view").unwrap();
+    let view = vix::menu::menus().iter().find(|m| m.name == "menu.view").unwrap();
     let layout = view
         .items
         .iter()
@@ -2444,7 +2400,7 @@ fn system_info_panel_opens_inserts_and_closes() {
 fn menu_type_ahead_selects_by_first_letter() {
     let mut app = app_at(Path::new("."));
     app.on_key(keycode(KeyCode::F(10)));
-    let file_idx = vix::menu::MENUS.iter().position(|m| m.name == "menu.file").unwrap();
+    let file_idx = vix::menu::menus().iter().position(|m| m.name == "menu.file").unwrap();
     for _ in 0..file_idx {
         app.on_key(keycode(KeyCode::Right));
     }
@@ -2465,7 +2421,7 @@ fn menu_type_ahead_selects_by_first_letter() {
 fn menu_navigation_skips_separators() {
     let mut app = app_at(Path::new("."));
     app.on_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
-    let file_idx = vix::menu::MENUS.iter().position(|m| m.name == "menu.file").unwrap();
+    let file_idx = vix::menu::menus().iter().position(|m| m.name == "menu.file").unwrap();
     for _ in 0..file_idx {
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     }
@@ -2473,7 +2429,7 @@ fn menu_navigation_skips_separators() {
     assert_eq!(app.menu.item, None, "no item is auto-selected on open");
     assert_eq!(app.menu.selected_action(), None);
     // Walking the whole menu with Down must never land on (or commit) a separator.
-    let len = vix::menu::MENUS[file_idx].items.len();
+    let len = vix::menu::menus()[file_idx].items.len();
     for _ in 0..=len {
         app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         let action = app.menu.selected_action().expect("never a separator");
@@ -2547,7 +2503,7 @@ fn click_dropdown_item_runs_its_action() {
 /// computed from the actual titles so it is locale-independent.
 fn top_menu_col(app: &App, idx: usize) -> u16 {
     let mut x = app.layout.menu.x + 1;
-    for m in &vix::menu::MENUS[..idx] {
+    for m in &vix::menu::menus()[..idx] {
         x += m.title().chars().count() as u16 + 2;
     }
     x + 1
@@ -2693,27 +2649,6 @@ fn click_dock_toggle_icons() {
     let messages_before = app.show_messages;
     app.on_mouse(click(right, 0));
     assert_ne!(app.show_messages, messages_before, "right dock icon toggles the messages");
-}
-
-#[test]
-fn click_theme_chooser_row_highlights_it() {
-    let mut app = app_at(Path::new("."));
-    app.run_action("view.theme");
-    let count = app.theme_chooser.as_ref().unwrap().choices.len();
-    assert!(count >= 3, "need a few themes to click");
-    // The list rect is normally recorded during render; set it directly.
-    app.layout.chooser = Rect::new(10, 5, 34, count as u16);
-    // Click the third row (index 2).
-    app.on_mouse(click(12, 7));
-    assert!(app.theme_chooser.is_some(), "a click highlights, it does not close");
-    assert_eq!(
-        app.theme_chooser.as_ref().unwrap().selected,
-        2,
-        "clicking a row highlights that theme"
-    );
-    // A click below the list (out of bounds) is ignored.
-    app.on_mouse(click(12, 5 + count as u16 + 3));
-    assert_eq!(app.theme_chooser.as_ref().unwrap().selected, 2, "out-of-list click ignored");
 }
 
 #[test]

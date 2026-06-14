@@ -6,8 +6,7 @@
 
 pub use vix_theme_model::{
     base, bg, custom_name, dim, editor_cursor, fg, region_base, region_bg, region_fg,
-    region_modifiers, region_title, selected, set_custom, syntax_theme, title, Chooser,
-    CustomTheme, Region,
+    region_modifiers, region_title, selected, set_custom, syntax_theme, title, CustomTheme, Region,
 };
 
 /// Nerd Font glyphs (monospace). They render best with a patched "Nerd Font"
