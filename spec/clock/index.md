@@ -22,7 +22,8 @@ that zone's **standard** (non-DST) offset (see `spec/time-zone/index.md`).
 
 - **↑ / ↓** move the highlight; **Enter** inserts the highlighted value into the
   active editor and closes the box.
-- **Click** a row to insert it and close; a click outside the box closes it.
+- **Click** a row to insert it; the box stays open so several values can be
+  picked. A click outside the box closes it.
 - **Esc** / **q** close without inserting.
 
 ## Relationship to the calendar

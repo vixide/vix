@@ -1091,11 +1091,16 @@ fn clock_box_inserts_a_time_row() {
     let r = app.layout.clock;
     assert!(r.width > 0, "the clock rect was recorded");
 
-    // Click the first row (local date-time): inserts a date-time and closes.
+    // Click the first row (local date-time): inserts a date-time; the box stays
+    // open so several values can be picked.
     app.on_mouse(click(r.x + 1, r.y));
     let text = app.editor.active_tab().unwrap().text();
     assert!(text.contains(':') && text.contains('-'), "inserted a date-time: {text:?}");
-    assert!(!app.show_clock, "a row click closes the clock box");
+    assert!(app.show_clock, "a row click keeps the clock box open");
+
+    // A click outside the box closes it.
+    app.on_mouse(click(0, 23));
+    assert!(!app.show_clock, "an outside click closes the clock box");
 }
 
 #[test]
