@@ -1561,7 +1561,7 @@ menu.item.tools.clock:
   bn: "ঘড়ি…"
   zh: "时钟…"
   ja: "時計…"
-menu.item.tools.time_zone:
+menu.item.view.time_zone:
   en: "Time Zone…"
   es: "Zona horaria…"
   fr: "Fuseau horaire…"

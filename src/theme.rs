@@ -45,6 +45,8 @@ pub mod icon {
     pub const BRANCH: &str = "\u{e0a0}";
     /// Code / outline glyph.
     pub const CODE: &str = "\u{f121}";
+    /// Symbolic link (Octicons `nf-oct-link`).
+    pub const LINK: &str = "\u{f44c}";
 }
 
 /// Pick a file icon from a path's extension.

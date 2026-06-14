@@ -182,6 +182,7 @@ const VIEW_EDITOR: &[Item] = &[
 const VIEW: &[Item] = &[
     Item::leaf("menu.item.view.theme", "view.theme", ""),
     Item::leaf("menu.item.view.locale", "view.locale", ""),
+    Item::leaf("menu.item.view.time_zone", "view.time_zone", ""),
     Item::leaf("menu.item.view.keymap", "view.keymap", ""),
     SEP,
     Item::sub("menu.item.view.layout", VIEW_LAYOUT),
@@ -212,7 +213,6 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.contacts", "tools.contacts", ""),
     Item::leaf("menu.item.tools.calendar", "tools.calendar", ""),
     Item::leaf("menu.item.tools.clock", "tools.clock", ""),
-    Item::leaf("menu.item.tools.time_zone", "tools.time_zone", ""),
     Item::leaf("menu.item.tools.nerd_palette", "tools.nerd_palette", ""),
     Item::leaf("menu.item.tools.ascii", "tools.ascii", ""),
     Item::leaf("menu.item.tools.html_chars", "tools.html_chars", ""),

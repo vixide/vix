@@ -109,6 +109,7 @@ Upper, Lower, Title, Kebab, Snake, Camel, and Pascal.
 | -------- | ---------------------------- |
 | Theme…   | Open the theme chooser       |
 | Locale…  | Open the locale chooser      |
+| Time Zone… | Pick the app-wide active IANA time zone (filterable) |
 | Keymap…  | Open the keymap chooser      |
 | Layout ▸ | Submenu of dock/status toggles |
 | Editor ▸ | Submenu of editor display toggles |
@@ -135,7 +136,6 @@ and strings).
 | *— separator —*     |                                              |
 | Calendar…           | Toggle the calendar box                      |
 | Clock…              | Toggle the clock box (local/UTC/ISO week/active zone) |
-| Time Zone…          | Pick the app-wide active IANA time zone (filterable) |
 | Nerd Font Characters… | Open the glyph picker                      |
 | ASCII Characters…   | Open the ASCII reference table               |
 | X11 Colors…         | Pick an X11 color; inserts its hex           |

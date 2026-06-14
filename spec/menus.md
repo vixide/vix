@@ -131,6 +131,7 @@ The **Case** submenu (applies to the current selection):
 | -------------------------------- | --------------------------------------------- |
 | Theme…                           | Open the theme chooser (`vix-theme-chooser/spec/index.md`)   |
 | Locale…                          | Open the locale chooser (`vix-locale-chooser/spec/index.md`) |
+| Time Zone…                       | Pick the app-wide active IANA time zone; filterable (`vix-time-zone-chooser/spec/index.md`) |
 | Keymap…                          | Open the keymap chooser (`vix-keymap-chooser/spec/index.md`) |
 | *— separator —*                  |                                               |
 | Layout ▸                         | Submenu of dock/status toggles (below)        |
@@ -172,7 +173,6 @@ The **Editor** submenu:
 | *— separator —*    |                                                   |
 | Calendar…          | Toggle the calendar box                           |
 | Clock…             | Toggle the clock box: local/UTC/ISO week/active-zone times (`vix-clock-panel/spec/index.md`) |
-| Time Zone…         | Pick the app-wide active IANA time zone; filterable (`vix-time-zone-chooser/spec/index.md`) |
 | Nerd Font Characters… | Open the glyph picker (`vix-nerd-font-picker/spec/index.md`) |
 | ASCII Characters…  | Open the ASCII reference table (`vix-ascii-character-picker/spec/index.md`) |
 | X11 Colors…        | Open the X11 color picker; inserts the chosen hex (`vix-x11-color-picker/spec/index.md`) |

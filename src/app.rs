@@ -1663,7 +1663,7 @@ impl App {
                     self.clock.selected = 0;
                 }
             }
-            "tools.time_zone" => self.open_time_zone_chooser(),
+            "view.time_zone" => self.open_time_zone_chooser(),
             "tools.dashboard" => self.open_dashboard(),
             "tools.run_command" => {
                 self.prompt =

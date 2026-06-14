@@ -18,8 +18,10 @@ pub struct Node {
     pub name: String,
     /// Indentation depth from the root.
     pub depth: usize,
-    /// Whether this entry is a directory.
+    /// Whether this entry is a directory (following symlinks).
     pub is_dir: bool,
+    /// Whether this entry is a symbolic link (the link itself, not its target).
+    pub is_symlink: bool,
     /// Whether this directory is currently expanded.
     pub expanded: bool,
 }
@@ -201,6 +203,9 @@ impl Explorer {
                 continue; // hide dotfiles
             }
             let is_dir = path.is_dir();
+            // The link itself, regardless of what it points at.
+            let is_symlink = std::fs::symlink_metadata(&path)
+                .is_ok_and(|m| m.file_type().is_symlink());
             // Files must pass the include/exclude filters; directories are kept so
             // the tree stays navigable.
             if !is_dir && !self.allows(&path) {
@@ -212,6 +217,7 @@ impl Explorer {
                 name,
                 depth,
                 is_dir,
+                is_symlink,
                 expanded,
             });
             if expanded {

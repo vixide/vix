@@ -1160,7 +1160,9 @@ fn draw_explorer(app: &App, frame: &mut Frame, area: Rect) {
         .iter()
         .map(|n| {
             let indent = "  ".repeat(n.depth);
-            let glyph = if n.is_dir {
+            let glyph = if n.is_symlink {
+                icon::LINK
+            } else if n.is_dir {
                 if n.expanded {
                     icon::FOLDER_OPEN
                 } else {
