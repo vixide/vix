@@ -180,11 +180,22 @@ const VIEW_EDITOR: &[Item] = &[
     Item::leaf("menu.item.view.prev_tab", "tab.prev", "Ctrl Shift Tab"),
 ];
 
+/// Keyboard navigation styles, grouped under View → Keymap. The labels are the
+/// proper-noun keymap names (not translated); the actions carry the keymap id
+/// after `view.keymap:`. Kept in sync with `vix_keymap_model::KEYMAPS` (a unit
+/// test guards the ids).
+const VIEW_KEYMAP: &[Item] = &[
+    Item::leaf("Apple", "view.keymap:apple", ""),
+    Item::leaf("macOS VSCode", "view.keymap:vscode", ""),
+    Item::leaf("Emacs", "view.keymap:emacs", ""),
+    Item::leaf("Vim", "view.keymap:vim", ""),
+];
+
 const VIEW: &[Item] = &[
     Item::leaf("menu.item.view.theme", "view.theme", ""),
     Item::leaf("menu.item.view.locale", "view.locale", ""),
     Item::leaf("menu.item.view.time_zone", "view.time_zone", ""),
-    Item::leaf("menu.item.view.keymap", "view.keymap", ""),
+    Item::sub("menu.item.view.keymap", VIEW_KEYMAP),
     SEP,
     Item::sub("menu.item.view.layout", VIEW_LAYOUT),
     Item::sub("menu.item.view.editor", VIEW_EDITOR),
@@ -492,5 +503,22 @@ impl Menu {
             return None;
         }
         (!it.is_separator()).then_some(it.action)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The View → Keymap submenu must stay in sync with the keymap model: one
+    /// item per keymap, each action `view.keymap:<id>` in list order.
+    #[test]
+    fn keymap_submenu_matches_model() {
+        let ids: Vec<&str> = VIEW_KEYMAP
+            .iter()
+            .map(|it| it.action.strip_prefix("view.keymap:").expect("keymap action prefix"))
+            .collect();
+        let model: Vec<&str> = vix_keymap_model::KEYMAPS.iter().map(|k| k.id).collect();
+        assert_eq!(ids, model);
     }
 }

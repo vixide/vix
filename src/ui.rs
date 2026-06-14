@@ -203,9 +203,6 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.locale_chooser.is_some() {
         draw_locale_chooser(app, frame, area);
     }
-    if app.keymap_chooser.is_some() {
-        draw_keymap_chooser(app, frame, area);
-    }
     if app.time_zone_chooser.is_some() {
         draw_time_zone_chooser(app, frame, area);
     }
@@ -780,17 +777,6 @@ fn draw_locale_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
         .collect();
     let hint = t!("ui.theme_hint");
     app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.locale"), &hint, &labels, selected);
-}
-
-fn draw_keymap_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(kc) = app.keymap_chooser.as_ref() else { return };
-    let selected = kc.selected;
-    let labels: Vec<String> = vix_keymap_chooser::KEYMAPS
-        .iter()
-        .map(|k| format!("{}  —  {}", k.name, k.tooltip))
-        .collect();
-    let hint = t!("ui.theme_hint");
-    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.keymap"), &hint, &labels, selected);
 }
 
 fn draw_time_zone_chooser(app: &mut App, frame: &mut Frame, area: Rect) {

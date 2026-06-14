@@ -8,7 +8,7 @@ members = [
     "vix-clock-panel",
     "vix-theme-chooser",
     "vix-locale-chooser",
-    "vix-keymap-chooser",
+    "vix-keymap-model",
     "vix-time-zone-model",
     "vix-time-zone-chooser",
     "vix-keyboard-shortcut-panel",
@@ -78,8 +78,8 @@ vix-clock-panel = { path = "vix-clock-panel" }
 vix-theme-chooser = { path = "vix-theme-chooser" }
 # Locale chooser: available UI languages + selection state.
 vix-locale-chooser = { path = "vix-locale-chooser" }
-# Keymap chooser: available keyboard navigation styles + selection state.
-vix-keymap-chooser = { path = "vix-keymap-chooser" }
+# Keymap model: available keyboard navigation styles (the View → Keymap submenu).
+vix-keymap-model = { path = "vix-keymap-model" }
 # Time-zone model: full IANA canonical zone table + the app-wide active zone.
 vix-time-zone-model = { path = "vix-time-zone-model" }
 # Time-zone chooser (Tools menu): filterable zone list + selection state.

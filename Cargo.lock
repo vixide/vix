@@ -3331,7 +3331,7 @@ dependencies = [
  "vix-git",
  "vix-html-character-picker",
  "vix-keyboard-shortcut-panel",
- "vix-keymap-chooser",
+ "vix-keymap-model",
  "vix-left-dock",
  "vix-locale-chooser",
  "vix-lsp",
@@ -3437,7 +3437,7 @@ name = "vix-keyboard-shortcut-panel"
 version = "0.1.0"
 
 [[package]]
-name = "vix-keymap-chooser"
+name = "vix-keymap-model"
 version = "0.1.0"
 
 [[package]]

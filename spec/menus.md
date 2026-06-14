@@ -133,7 +133,7 @@ The **Case** submenu (applies to the current selection):
 | Theme…                           | Open the theme chooser (`vix-theme-chooser/spec/index.md`)   |
 | Locale…                          | Open the locale chooser (`vix-locale-chooser/spec/index.md`) |
 | Time Zone…                       | Pick the app-wide active IANA time zone; filterable (`vix-time-zone-chooser/spec/index.md`) |
-| Keymap…                          | Open the keymap chooser (`vix-keymap-chooser/spec/index.md`) |
+| Keymap ▸                         | Submenu of keyboard navigation styles (`vix-keymap-model/spec/index.md`) |
 | *— separator —*                  |                                               |
 | Layout ▸                         | Submenu of dock/status toggles (below)        |
 | Editor ▸                         | Submenu of editor display toggles (below)     |

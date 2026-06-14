@@ -306,11 +306,6 @@ pub use vix_theme_chooser::Chooser as ThemeChooser;
 /// Enter commits and persists it, Esc reverts.
 pub use vix_locale_chooser::Chooser as LocaleChooser;
 
-/// Keymap chooser overlay state (View -> Keymap), re-exported from
-/// [`vix_keymap_chooser`]. Moving the selection highlights a keyboard navigation
-/// style; Enter commits and persists it, Esc reverts.
-pub use vix_keymap_chooser::Chooser as KeymapChooser;
-
 /// Time Zone chooser overlay state (Tools -> Time Zone), re-exported from
 /// [`vix_time_zone_chooser`]. A filterable list; Enter sets the application-wide
 /// active zone in [`vix_time_zone_model`] and persists it, Esc cancels.
@@ -552,8 +547,6 @@ pub struct App {
     pub theme_chooser: Option<ThemeChooser>,
     /// Locale chooser overlay, when open.
     pub locale_chooser: Option<LocaleChooser>,
-    /// Keymap chooser overlay, when open.
-    pub keymap_chooser: Option<KeymapChooser>,
     /// Time Zone chooser overlay, when open.
     pub time_zone_chooser: Option<TimeZoneChooser>,
     /// Recent-files chooser overlay, when open.
@@ -734,7 +727,6 @@ impl App {
             branch_chooser: None,
             theme_chooser: None,
             locale_chooser: None,
-            keymap_chooser: None,
             time_zone_chooser: None,
             recent_chooser: None,
             nerd_palette: None,
@@ -924,10 +916,6 @@ impl App {
         }
         if self.locale_chooser.is_some() {
             self.locale_key(key);
-            return;
-        }
-        if self.keymap_chooser.is_some() {
-            self.keymap_key(key);
             return;
         }
         if self.time_zone_chooser.is_some() {
@@ -1645,7 +1633,7 @@ impl App {
             }
             "view.theme" => self.open_theme_chooser(),
             "view.locale" => self.open_locale_chooser(),
-            "view.keymap" => self.open_keymap_chooser(),
+            a if a.starts_with("view.keymap:") => self.set_keymap(&a["view.keymap:".len()..]),
             "tools.calendar" => {
                 self.show_calendar = !self.show_calendar;
                 // Always open on the present month; navigation is per-session.
@@ -3410,10 +3398,6 @@ impl App {
             self.locale_mouse(mouse);
             return;
         }
-        if self.keymap_chooser.is_some() {
-            self.keymap_mouse(mouse);
-            return;
-        }
         if self.time_zone_chooser.is_some() {
             self.time_zone_mouse(mouse);
             return;
@@ -4135,38 +4119,17 @@ impl App {
         }
     }
 
-    // ----- keymap chooser -------------------------------------------------
+    // ----- keymap ---------------------------------------------------------
 
-    fn open_keymap_chooser(&mut self) {
-        self.keymap_chooser = Some(KeymapChooser::open(&self.settings.keymap));
-    }
-
-    fn keymap_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Up | KeyCode::Down => {
-                if let Some(kc) = self.keymap_chooser.as_mut() {
-                    if key.code == KeyCode::Up {
-                        kc.up();
-                    } else {
-                        kc.down();
-                    }
-                }
-            }
-            KeyCode::Enter => {
-                if let Some(kc) = self.keymap_chooser.take() {
-                    let id = kc.selected_id();
-                    self.settings.keymap = id.to_string();
-                    self.reset_keymap_modes();
-                    self.status = t!("status.keymap", keymap = id).to_string();
-                }
-            }
-            KeyCode::Esc => {
-                // Only reachable while the chooser is open, so just discard it.
-                self.keymap_chooser = None;
-                self.status = t!("status.keymap_unchanged").to_string();
-            }
-            _ => {}
-        }
+    /// Apply the keymap with the given `id` (from the View → Keymap submenu),
+    /// persist it, and reset per-keymap session state. Unknown ids are ignored.
+    fn set_keymap(&mut self, id: &str) {
+        let Some(km) = vix_keymap_model::by_id(id) else {
+            return;
+        };
+        self.settings.keymap = km.id.to_string();
+        self.reset_keymap_modes();
+        self.status = t!("status.keymap", keymap = km.id).to_string();
     }
 
     // ----- time zone chooser ----------------------------------------------
@@ -4329,16 +4292,6 @@ impl App {
                 if idx < vix_locale_chooser::LOCALES.len() {
                     lc.selected = idx;
                     rust_i18n::set_locale(lc.selected_code());
-                }
-            }
-        }
-    }
-
-    fn keymap_mouse(&mut self, mouse: MouseEvent) {
-        if let Some(idx) = self.chooser_row(mouse) {
-            if let Some(kc) = self.keymap_chooser.as_mut() {
-                if idx < vix_keymap_chooser::KEYMAPS.len() {
-                    kc.selected = idx;
                 }
             }
         }

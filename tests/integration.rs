@@ -2717,40 +2717,20 @@ fn click_theme_chooser_row_highlights_it() {
 }
 
 #[test]
-fn view_keymap_chooser_opens_navigates_and_selects() {
+fn view_keymap_submenu_actions_set_the_keymap() {
     let mut app = app_at(Path::new("."));
-    assert!(app.keymap_chooser.is_none());
     assert_eq!(app.settings.keymap, "apple", "default keymap");
 
-    app.run_action("view.keymap");
-    assert!(app.keymap_chooser.is_some(), "View -> Keymap opens the chooser");
-
-    // Down moves Apple → VSCode; Enter commits and persists it.
-    app.on_key(keycode(KeyCode::Down));
-    app.on_key(keycode(KeyCode::Enter));
-    assert!(app.keymap_chooser.is_none(), "Enter closes the chooser");
+    // The View → Keymap submenu dispatches `view.keymap:<id>` per item.
+    app.run_action("view.keymap:vscode");
     assert_eq!(app.settings.keymap, "vscode");
 
-    // Reopen, move, then Esc reverts (the committed keymap is unchanged).
-    app.run_action("view.keymap");
-    app.on_key(keycode(KeyCode::Down));
-    app.on_key(esc());
-    assert!(app.keymap_chooser.is_none(), "Esc closes the chooser");
-    assert_eq!(app.settings.keymap, "vscode", "Esc does not change the keymap");
-}
+    app.run_action("view.keymap:vim");
+    assert_eq!(app.settings.keymap, "vim");
 
-#[test]
-fn click_keymap_chooser_row_highlights_it() {
-    let mut app = app_at(Path::new("."));
-    app.run_action("view.keymap");
-    assert!(app.keymap_chooser.is_some());
-    app.layout.chooser = Rect::new(10, 5, 34, 3);
-    // Click the second row (index 1 → VSCode).
-    app.on_mouse(click(12, 6));
-    assert_eq!(app.keymap_chooser.as_ref().unwrap().selected, 1, "click highlights the row");
-    // Committing with Enter persists the clicked keymap.
-    app.on_key(keycode(KeyCode::Enter));
-    assert_eq!(app.settings.keymap, "vscode");
+    // An unknown id is ignored.
+    app.run_action("view.keymap:nope");
+    assert_eq!(app.settings.keymap, "vim");
 }
 
 #[test]
@@ -2867,11 +2847,8 @@ fn switching_keymap_resets_vim_to_normal() {
     app.settings.keymap = "vim".to_string();
     app.on_key(key('i')); // enter Insert
     assert_eq!(app.mode_indicator().as_deref(), Some("-- INSERT --"));
-    // Choose the Vim keymap again via the chooser; modes reset to Normal.
-    app.run_action("view.keymap");
-    // Move selection to Vim and commit.
-    app.keymap_chooser.as_mut().unwrap().selected = 3;
-    app.on_key(keycode(KeyCode::Enter));
+    // Choose the Vim keymap again via the submenu action; modes reset to Normal.
+    app.run_action("view.keymap:vim");
     assert_eq!(app.settings.keymap, "vim");
     assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"), "reset to Normal");
 }

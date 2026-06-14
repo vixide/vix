@@ -111,7 +111,7 @@ Upper, Lower, Title, Kebab, Snake, Camel, and Pascal.
 | Theme…   | Open the theme chooser       |
 | Locale…  | Open the locale chooser      |
 | Time Zone… | Pick the app-wide active IANA time zone (filterable) |
-| Keymap…  | Open the keymap chooser      |
+| Keymap ▸ | Submenu of keyboard navigation styles (Apple/VSCode/Emacs/Vim) |
 | Layout ▸ | Submenu of dock/status toggles |
 | Editor ▸ | Submenu of editor display toggles |
 
