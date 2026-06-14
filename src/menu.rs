@@ -355,10 +355,10 @@ fn time_zone_submenu() -> &'static [Item] {
 fn build_menus() -> Vec<MenuDef> {
     let view_items: &'static [Item] = Box::leak(
         vec![
+            Item::sub("menu.item.view.keymap", VIEW_KEYMAP),
             Item::sub("menu.item.view.theme", theme_submenu()),
             Item::sub("menu.item.view.locale", locale_submenu()),
             Item::sub("menu.item.view.time_zone", time_zone_submenu()),
-            Item::sub("menu.item.view.keymap", VIEW_KEYMAP),
             SEP,
             Item::sub("menu.item.view.layout", VIEW_LAYOUT),
             Item::sub("menu.item.view.editor", VIEW_EDITOR),

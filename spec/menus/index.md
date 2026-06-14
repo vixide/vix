@@ -138,10 +138,10 @@ The **Case** submenu (applies to the current selection):
 
 | Item                             | Action                                        |
 | -------------------------------- | --------------------------------------------- |
+| Keymap ▸                         | Submenu of keyboard navigation styles (`vix-keymap-model/spec/index.md`) |
 | Theme ▸                          | Submenu of available themes — bundled + user JSON (`vix-theme-model/spec/index.md`); pick one to apply |
 | Locale ▸                         | Submenu of UI languages (`vix-locale-model/spec/index.md`); pick one to apply |
 | Time Zone ▸                      | Submenu of IANA zones, sorted by UTC offset then name (`vix-time-zone-model/spec/index.md`); pick one |
-| Keymap ▸                         | Submenu of keyboard navigation styles (`vix-keymap-model/spec/index.md`) |
 | *— separator —*                  |                                               |
 | Layout ▸                         | Submenu of dock/status toggles (below)        |
 | Editor ▸                         | Submenu of editor display toggles (below)     |
