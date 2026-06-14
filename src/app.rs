@@ -1683,9 +1683,9 @@ impl App {
             "git.new_branch" => self.git_begin_new_branch(),
             "git.log" => self.git_log(),
             "git.log_graph" => self.git_log_graph(),
-            "git.log_1_day" => self.git_log_since(Some("1-day-ago")),
-            "git.log_1_week" => self.git_log_since(Some("1-week-ago")),
-            "git.log_1_month" => self.git_log_since(Some("1-month-ago")),
+            "git.log_since_1_day_ago" => self.git_log_since(Some("1-day-ago")),
+            "git.log_since_1_week_ago" => self.git_log_since(Some("1-week-ago")),
+            "git.log_since_1_month_ago" => self.git_log_since(Some("1-month-ago")),
             "git.status" => self.git_status_to_dock(),
             "git.clone" => self.git_begin_clone(),
             "git.edit_description" => {
