@@ -308,7 +308,7 @@ fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(visible).wrap(Wrap { trim: false }), text_area);
     if show_bar {
         let sb_area = Rect { x: body.x + body.width - 1, ..body };
-        draw_scrollbar(frame, sb_area, total, view_h, scroll);
+        draw_scrollbar(frame, sb_area, scroll, total.saturating_sub(view_h));
     }
 
     let hint = Line::from(Span::styled(t!("ui.welcome_hint").to_string(), theme::dim()));
@@ -1130,7 +1130,7 @@ fn draw_explorer(app: &App, frame: &mut Frame, area: Rect) {
 
     if show_bar {
         let sb_area = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: inner.height };
-        draw_scrollbar(frame, sb_area, total, h, app.explorer.selected);
+        draw_scrollbar(frame, sb_area, app.explorer.selected, total.saturating_sub(1));
     }
 }
 
@@ -1179,7 +1179,7 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         if scrollbar.width > 0 {
             let total = app.editor.active_line_count().max(1);
             let pos = app.editor.cursor_1based().0.saturating_sub(1);
-            draw_scrollbar(frame, scrollbar, total, scrollbar.height as usize, pos);
+            draw_scrollbar(frame, scrollbar, pos, total.saturating_sub(1));
         }
     }
 }
@@ -1236,20 +1236,21 @@ fn draw_messages(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_stateful_widget(list, list_area, &mut state);
     if show_bar {
         let sb_area = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: inner.height };
-        draw_scrollbar(frame, sb_area, total, h, app.messages.selected);
+        draw_scrollbar(frame, sb_area, app.messages.selected, total.saturating_sub(1));
     }
 }
 
 /// Vix's one-character scrollbar, drawn into the vertical one-column `area`: a
 /// `↑` top cap, a `↓` bottom cap, a dim track, and a single `●` thumb positioned
-/// **proportionally** to `pos` within `0..=(total - viewport)`. The thumb is
-/// always one cell tall (never proportional height).
-fn draw_scrollbar(frame: &mut Frame, area: Rect, total: usize, viewport: usize, pos: usize) {
+/// **proportionally** to `pos` within `0..=max`. The thumb is always one cell
+/// tall (never proportional height). For cursor/selection views pass
+/// `pos = selected`, `max = total - 1` (so the thumb reaches the bottom only on
+/// the last item); for scroll views pass `pos = scroll`, `max = total - viewport`.
+fn draw_scrollbar(frame: &mut Frame, area: Rect, pos: usize, max: usize) {
     if area.width == 0 || area.height == 0 {
         return;
     }
     let h = area.height as usize;
-    let max = total.saturating_sub(viewport);
     let frac = if max == 0 { 0.0 } else { pos.min(max) as f64 / max as f64 };
     let thumb_glyph = Span::styled("●", theme::title(true));
     let track_glyph = || Span::styled("│", theme::dim());
@@ -1271,12 +1272,11 @@ fn draw_scrollbar(frame: &mut Frame, area: Rect, total: usize, viewport: usize, 
     frame.render_widget(Paragraph::new(lines), area);
 }
 
-/// Map a mouse `row` within a scrollbar `area` to a content position in
-/// `0..=(total - viewport)`, accounting for the arrow caps: an arrow cap jumps to
-/// the extreme, the track maps proportionally. Used for click and drag.
+/// Map a mouse `row` within a scrollbar `area` to a position in `0..=max`,
+/// accounting for the arrow caps: an arrow cap jumps to the extreme, the track
+/// maps proportionally. Used for click and drag.
 #[must_use]
-pub fn scrollbar_pos_from_row(area: Rect, row: u16, total: usize, viewport: usize) -> usize {
-    let max = total.saturating_sub(viewport);
+pub fn scrollbar_pos_from_row(area: Rect, row: u16, max: usize) -> usize {
     if max == 0 || area.height == 0 {
         return 0;
     }
@@ -1332,7 +1332,7 @@ fn draw_bottom_dock(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), text_area);
     if show_bar {
         let sb_area = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: inner.height };
-        draw_scrollbar(frame, sb_area, total, inner.height as usize, app.bottom_dock.scroll);
+        draw_scrollbar(frame, sb_area, app.bottom_dock.scroll, total.saturating_sub(inner.height as usize));
     }
 }
 
@@ -1668,7 +1668,7 @@ fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect { x: chunks[1].x + chunks[1].width - 1, ..chunks[1] };
-        draw_scrollbar(frame, sb_area, total, view_h, p.selected);
+        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
     }
 
     let hint = Line::from(Span::styled(t!("ui.x11_hint").to_string(), theme::dim()));
@@ -1741,7 +1741,7 @@ fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect { x: chunks[1].x + chunks[1].width - 1, ..chunks[1] };
-        draw_scrollbar(frame, sb_area, total, view_h, p.selected);
+        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
     }
 
     let hint = Line::from(Span::styled(t!("ui.html_hint").to_string(), theme::dim()));
@@ -1918,7 +1918,7 @@ fn draw_contacts(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), list_area);
     if show_bar {
         let sb_area = Rect { x: chunks[0].x + chunks[0].width - 1, ..chunks[0] };
-        draw_scrollbar(frame, sb_area, total, view_h, p.selected);
+        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
     }
     let hint = Line::from(Span::styled(t!("ui.contacts_hint").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
@@ -1972,7 +1972,7 @@ fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), list_area);
     if show_bar {
         let sb_area = Rect { x: chunks[0].x + chunks[0].width - 1, ..chunks[0] };
-        draw_scrollbar(frame, sb_area, total, view_h, p.selected);
+        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
     }
     let hint = Line::from(Span::styled(t!("ui.vcard_hint").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunks[1]);

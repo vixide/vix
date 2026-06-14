@@ -9,9 +9,11 @@ screen and the character/color pickers).
 - A vertical, one-column scrollbar in a gutter on the right edge of the view.
 - **The thumb is always exactly one character** — a `●` — never sized
   proportionally to the content length.
-- The thumb's **position** along the track is proportional to the scroll
-  position: at the very top it sits in the top track cell, at the very bottom in
-  the bottom track cell, interpolating in between.
+- The thumb's **position** along the track is proportional: it sits in the top
+  cell at the start and the bottom cell at the end, interpolating in between. For
+  cursor/selection views the thumb tracks the cursor/selected item (so it reaches
+  the bottom exactly when the last line/item is selected); for scroll-only views
+  (welcome, bottom dock) it tracks the scroll offset.
 - The track is a dim `│`, capped with `↑` (top) and `↓` (bottom) arrows.
 - The scrollbar appears only when the content overflows the viewport, and (for
   the editor, explorer, and bottom dock) honors the **Show/Hide Scroll Bar**

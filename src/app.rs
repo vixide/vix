@@ -1480,6 +1480,10 @@ impl App {
                 let area = self.editor_view();
                 self.editor.select_word(false, area);
             }
+            "edit.select_line" => {
+                let area = self.editor_view();
+                self.editor.select_line(area);
+            }
             "edit.select_paragraph" => {
                 let area = self.editor_view();
                 self.editor.select_paragraph(area);
@@ -3498,7 +3502,8 @@ impl App {
         {
             self.focus = Focus::BottomDock;
             let sb_rect = Rect { x: sb_col, y: a.y + 1, width: 1, height: a.height - 1 };
-            self.bottom_dock.scroll = crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total, viewport);
+            self.bottom_dock.scroll =
+                crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total.saturating_sub(viewport));
             return;
         }
         match mouse.kind {
@@ -3631,9 +3636,10 @@ impl App {
         {
             self.focus = Focus::Explorer;
             let sb_rect = Rect { x: sb_col, y: inner_top, width: 1, height: a.height - 1 };
-            let off = crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total, viewport);
-            self.explorer.top = off;
-            self.explorer.selected = off.min(total.saturating_sub(1));
+            // The thumb tracks the selection, so map the drag to a selected row;
+            // `ensure_visible` (in draw) scrolls the view to follow it.
+            self.explorer.selected =
+                crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total.saturating_sub(1));
             return;
         }
         match mouse.kind {
@@ -3684,8 +3690,8 @@ impl App {
         {
             self.focus = Focus::Messages;
             let sb_rect = Rect { x: sb_col, y: inner_top, width: 1, height: area.height - 1 };
-            let off = crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total, viewport);
-            self.messages.selected = off.min(total.saturating_sub(1));
+            self.messages.selected =
+                crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total.saturating_sub(1));
             return;
         }
         match mouse.kind {

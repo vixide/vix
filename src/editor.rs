@@ -641,6 +641,26 @@ impl Editor {
         }
     }
 
+    /// Select the current line, including its trailing newline (so it can be cut
+    /// as a whole line), and scroll it into `area`.
+    pub fn select_line(&mut self, area: Rect) {
+        if let Some(t) = self.active_tab_mut() {
+            let (start, end) = {
+                let code = t.editor.code_ref();
+                let row = code.char_to_line(t.editor.get_cursor());
+                let start = code.line_to_char(row);
+                let end = if row + 1 < code.len_lines() {
+                    code.line_to_char(row + 1)
+                } else {
+                    start + code.line_len(row)
+                };
+                (start, end)
+            };
+            t.editor.set_selection_range(start, end);
+            t.editor.focus(&area);
+        }
+    }
+
     /// Select the whole paragraph under the cursor (blank-line delimited) and
     /// scroll it into `area`.
     pub fn select_paragraph(&mut self, area: Rect) {

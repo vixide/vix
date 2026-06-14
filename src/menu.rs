@@ -136,12 +136,14 @@ const EDIT_MOVE: &[Item] = &[
 
 /// Selection commands, grouped under Edit → Select.
 const EDIT_SELECT: &[Item] = &[
-    Item::leaf("menu.item.edit.select_all", "edit.select_all", "Ctrl A"),
     Item::leaf("menu.item.edit.select_more", "edit.select_more", "Ctrl Shift →"),
     Item::leaf("menu.item.edit.select_less", "edit.select_less", "Ctrl Shift ←"),
     SEP,
+    Item::leaf("menu.item.edit.select_line", "edit.select_line", ""),
     Item::leaf("menu.item.edit.select_paragraph", "edit.select_paragraph", ""),
     Item::leaf("menu.item.edit.select_section", "edit.select_section", ""),
+    SEP,
+    Item::leaf("menu.item.edit.select_all", "edit.select_all", "Ctrl A"),
 ];
 
 /// Case transforms applied to the selection, grouped under Edit → Case.
