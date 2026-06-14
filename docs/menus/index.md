@@ -15,7 +15,9 @@ the menus are **Vix · File · Edit · View · Tools · AI · Git · Help**.
 - Dropdowns may contain **separators** — non-selectable divider lines that
   group related items. Arrow navigation, hover, and clicks all skip them.
 - An item marked `▸` opens a **submenu** (one level deep). **Right** or a click
-  opens it; **Left** or **Esc** backs out to the parent.
+  opens it; **Left** or **Esc** backs out to the parent. A submenu opens with
+  nothing highlighted — arrow, hover, or type to pick. Long submenus scroll, and
+  hovering a Theme item previews it live.
 - **Type-ahead:** with a menu open, typing a letter jumps to the next item
   whose label starts with it, cycling. For example, in File, `S` selects Save
   and `S` again selects Save As. This works inside an open submenu too.

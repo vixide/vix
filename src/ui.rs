@@ -1009,22 +1009,25 @@ fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
     let area = app.layout.menu_dropdown;
     render_dropdown(frame, area, menus()[i].items, app.menu.item);
 
-    // An open submenu is drawn to the right of its parent item.
-    if let (Some(sidx), Some(subitems)) = (app.menu.sub, app.menu.submenu_items()) {
-        let fa = frame.area();
-        let sub_w = dropdown_width(subitems);
-        let sub_h = subitems.len() as u16 + 2;
-        let sub_x = (area.x + area.width).min(fa.width.saturating_sub(sub_w));
-        let parent_row = app.menu.item.unwrap_or(0) as u16;
-        let sub_y = (area.y + parent_row).min(fa.height.saturating_sub(sub_h));
-        let sub_area = Rect {
-            x: sub_x,
-            y: sub_y,
-            width: sub_w.min(fa.width),
-            height: sub_h.min(fa.height.saturating_sub(sub_y)),
-        };
-        app.layout.submenu_dropdown = sub_area;
-        render_dropdown(frame, sub_area, subitems, Some(sidx));
+    // An open submenu is drawn to the right of its parent item. It may be open
+    // with nothing highlighted yet (`app.menu.sub == None`).
+    if app.menu.submenu_open() {
+        if let Some(subitems) = app.menu.submenu_items() {
+            let fa = frame.area();
+            let sub_w = dropdown_width(subitems);
+            let sub_h = subitems.len() as u16 + 2;
+            let sub_x = (area.x + area.width).min(fa.width.saturating_sub(sub_w));
+            let parent_row = app.menu.item.unwrap_or(0) as u16;
+            let sub_y = (area.y + parent_row).min(fa.height.saturating_sub(sub_h));
+            let sub_area = Rect {
+                x: sub_x,
+                y: sub_y,
+                width: sub_w.min(fa.width),
+                height: sub_h.min(fa.height.saturating_sub(sub_y)),
+            };
+            app.layout.submenu_dropdown = sub_area;
+            render_dropdown(frame, sub_area, subitems, app.menu.sub);
+        }
     }
 }
 
