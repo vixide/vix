@@ -3450,6 +3450,13 @@ dependencies = [
 [[package]]
 name = "vix-locale-chooser"
 version = "0.1.0"
+dependencies = [
+ "vix-locale-model",
+]
+
+[[package]]
+name = "vix-locale-model"
+version = "0.1.0"
 
 [[package]]
 name = "vix-lsp"

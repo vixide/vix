@@ -7,6 +7,7 @@ members = [
     "vix-calendar-panel",
     "vix-clock-panel",
     "vix-theme-chooser",
+    "vix-locale-model",
     "vix-locale-chooser",
     "vix-keymap-model",
     "vix-time-zone-model",

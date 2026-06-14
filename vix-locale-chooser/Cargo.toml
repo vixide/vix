@@ -1,15 +1,18 @@
-# vix-locale-chooser: the list of available UI languages and the chooser's
-# selection state, parallel to vix-theme-chooser. Pure data (no dependencies);
-# the host applies the chosen locale via rust-i18n and persists it.
+# vix-locale-chooser: the locale chooser's selection state. The language list
+# lives in vix-locale-model, which this crate re-exports; the host applies the
+# chosen locale via rust-i18n and persists it.
 
 [package]
 name = "vix-locale-chooser"
 version = "0.1.0"
 edition = "2021"
-description = "Available UI locales and chooser state for Vix."
+description = "Locale chooser state for Vix (over vix-locale-model)."
 license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
 repository = "https://github.com/sixarm/vix"
 
 [lib]
 name = "vix_locale_chooser"
 path = "src/lib.rs"
+
+[dependencies]
+vix-locale-model = { path = "../vix-locale-model" }
