@@ -1043,7 +1043,7 @@ fn git_change_color(change: vix_git::Change) -> Color {
     }
 }
 
-fn draw_explorer(app: &App, frame: &mut Frame, area: Rect) {
+fn draw_explorer(app: &mut App, frame: &mut Frame, area: Rect) {
     let focused = app.focus == Focus::Explorer;
     let block = Block::default()
         .style(theme::region_base(theme::Region::LeftDock))
@@ -1059,47 +1059,34 @@ fn draw_explorer(app: &App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let h = inner.height as usize;
     let total = app.explorer.nodes.len();
-    // Reserve a one-column gutter on the right for a scrollbar when the tree
-    // overflows the viewport and the scrollbar is enabled.
-    let show_bar = app.settings.show_scrollbar && total > h && inner.width > 1;
-    let list_area = if show_bar {
-        Rect { width: inner.width - 1, ..inner }
-    } else {
-        inner
-    };
-    let top = app.explorer.top.min(app.explorer.nodes.len());
-    let end = (top + h).min(app.explorer.nodes.len());
-    let items: Vec<ListItem> = app.explorer.nodes[top..end]
+    let allow_bars = app.settings.show_scrollbar && inner.width > 1 && inner.height > 1;
+    let vbar = allow_bars && total > inner.height as usize;
+    let text_w = if vbar { inner.width - 1 } else { inner.width } as usize;
+
+    let top = app.explorer.top.min(total);
+    // Build the full (unsliced) styled rows for the visible window.
+    let win_h = inner.height as usize;
+    let end = (top + win_h).min(total);
+    let rows: Vec<Vec<Span<'static>>> = app.explorer.nodes[top..end]
         .iter()
         .map(|n| {
             let indent = "  ".repeat(n.depth);
             let glyph = if n.is_symlink {
                 icon::LINK
             } else if n.is_dir {
-                if n.expanded {
-                    icon::FOLDER_OPEN
-                } else {
-                    icon::FOLDER
-                }
+                if n.expanded { icon::FOLDER_OPEN } else { icon::FOLDER }
             } else {
                 theme::file_icon(&n.name)
             };
-            // Directories are distinguished by their folder glyph, not a font
-            // style (the built-in themes use no bold).
             let mut style = Style::default();
-            let marked = app.explorer.marked.contains(&n.path);
             let cut_pending = app.clip_cut && app.clip.contains(&n.path);
             if cut_pending {
                 style = style.add_modifier(Modifier::DIM);
             }
-            let mark = if marked { "● " } else { "" };
-            let mut spans = vec![
-                Span::raw(indent),
-                Span::styled(format!("{mark}{glyph} {}", n.name), style),
-            ];
-            // Git status badge (a colored letter) for changed, tracked files.
+            let mark = if app.explorer.marked.contains(&n.path) { "● " } else { "" };
+            let mut spans =
+                vec![Span::raw(indent), Span::styled(format!("{mark}{glyph} {}", n.name), style)];
             if !n.is_dir {
                 if let Some(change) = app.git_change_for(&n.path) {
                     spans.push(Span::styled(
@@ -1108,25 +1095,42 @@ fn draw_explorer(app: &App, frame: &mut Frame, area: Rect) {
                     ));
                 }
             }
-            let mut item = ListItem::new(Line::from(spans));
-            if marked {
-                item = item.style(Style::default());
-            }
-            item
+            spans
         })
         .collect();
 
+    let content_w = rows.iter().map(|s| span_line_width(s)).max().unwrap_or(0);
+    let hbar = allow_bars && content_w > text_w;
+    let body_h = if hbar { inner.height - 1 } else { inner.height } as usize;
+    let hmax = content_w.saturating_sub(text_w);
+    app.explorer_hmax = hmax;
+    app.explorer_hscroll = app.explorer_hscroll.min(hmax);
+    let off = app.explorer_hscroll;
+
+    let visible = body_h.min(rows.len());
+    let items: Vec<ListItem> = rows[..visible]
+        .iter()
+        .map(|spans| ListItem::new(Line::from(hslice_spans(spans, off, text_w))))
+        .collect();
+    let list_area = Rect { width: text_w as u16, height: body_h as u16, ..inner };
     let list = List::new(items).highlight_style(theme::selected());
     let mut state = ListState::default();
-    if app.explorer.selected >= top && app.explorer.selected < end {
+    if app.explorer.selected >= top && app.explorer.selected < top + visible {
         state.select(Some(app.explorer.selected - top));
     }
     frame.render_stateful_widget(list, list_area, &mut state);
 
-    if show_bar {
-        let sb_area = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: inner.height };
-        draw_scrollbar(frame, sb_area, app.explorer.selected, total.saturating_sub(1));
+    if vbar {
+        let sb = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: body_h as u16 };
+        draw_scrollbar(frame, sb, app.explorer.selected, total.saturating_sub(1));
     }
+    app.layout.explorer_hscrollbar = if hbar {
+        let hb = Rect { x: inner.x, y: inner.y + inner.height - 1, width: text_w as u16, height: 1 };
+        draw_hscrollbar(frame, hb, off, hmax);
+        hb
+    } else {
+        Rect::default()
+    };
 }
 
 fn draw_tabs(app: &App, frame: &mut Frame, area: Rect) {
@@ -1168,18 +1172,49 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         }
         return;
     }
+    let mut hbar_rect: Option<Rect> = None;
     if let Some(tab) = app.editor.active_tab() {
-        frame.render_widget(&tab.editor, text);
+        let soft = tab.editor.soft_wrap_enabled();
+        let gutter = tab.editor.gutter_width();
+        let maxw = tab.editor.max_line_width();
+        let off = tab.editor.get_offset_x();
+        let text_visible = (text.width as usize).saturating_sub(gutter);
+        // A horizontal scrollbar appears when not soft-wrapping and a line
+        // overflows the visible text width (and the scrollbar is enabled).
+        let hbar = app.settings.show_scrollbar && !soft && text.height > 1 && maxw > text_visible;
+        let editor_area = if hbar { Rect { height: text.height - 1, ..text } } else { text };
+        let vsb = if hbar {
+            Rect { height: scrollbar.height.saturating_sub(1), ..scrollbar }
+        } else {
+            scrollbar
+        };
+        frame.render_widget(&tab.editor, editor_area);
 
-        if scrollbar.width > 0 {
+        if vsb.width > 0 {
             let total = app.editor.active_line_count().max(1);
             let pos = app.editor.cursor_1based().0.saturating_sub(1);
-            draw_scrollbar(frame, scrollbar, pos, total.saturating_sub(1));
+            draw_scrollbar(frame, vsb, pos, total.saturating_sub(1));
+        }
+        if hbar {
+            let hb = Rect {
+                x: text.x + gutter as u16,
+                y: text.y + text.height - 1,
+                width: text.width - gutter as u16,
+                height: 1,
+            };
+            draw_hscrollbar(frame, hb, off, maxw.saturating_sub(text_visible));
+            hbar_rect = Some(hb);
+            app.layout.editor = editor_area;
+            app.editor_hmax = maxw.saturating_sub(text_visible);
         }
     }
+    if hbar_rect.is_none() {
+        app.editor_hmax = 0;
+    }
+    app.layout.editor_hscrollbar = hbar_rect.unwrap_or_default();
 }
 
-fn draw_messages(app: &App, frame: &mut Frame, area: Rect) {
+fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
     let focused = app.focus == Focus::Messages;
     let block = Block::default()
         .style(theme::region_base(theme::Region::RightDock))
@@ -1199,7 +1234,7 @@ fn draw_messages(app: &App, frame: &mut Frame, area: Rect) {
         return;
     }
 
-    let items: Vec<ListItem> = app
+    let rows: Vec<Vec<Span<'static>>> = app
         .messages
         .items
         .iter()
@@ -1209,30 +1244,43 @@ fn draw_messages(app: &App, frame: &mut Frame, area: Rect) {
                 Level::Warn => (icon::BELL, Style::default()),
                 Level::Error => (icon::CLOSE, Style::default()),
             };
-            let line = Line::from(vec![
+            vec![
                 Span::styled(format!("{sym} "), sym_style),
                 Span::raw(m.text.clone()),
                 Span::styled(format!("  {}", icon::CLOSE), theme::dim()),
-            ]);
-            ListItem::new(line)
+            ]
         })
         .collect();
     let total = app.messages.items.len();
-    let h = inner.height as usize;
-    let show_bar = app.settings.show_scrollbar && total > h && inner.width > 1;
-    let list_area = if show_bar {
-        Rect { width: inner.width - 1, ..inner }
-    } else {
-        inner
-    };
+    let allow_bars = app.settings.show_scrollbar && inner.width > 1 && inner.height > 1;
+    let vbar = allow_bars && total > inner.height as usize;
+    let text_w = if vbar { inner.width - 1 } else { inner.width } as usize;
+    let content_w = rows.iter().map(|s| span_line_width(s)).max().unwrap_or(0);
+    let hbar = allow_bars && content_w > text_w;
+    let body_h = if hbar { inner.height - 1 } else { inner.height };
+    let hmax = content_w.saturating_sub(text_w);
+    app.messages_hmax = hmax;
+    app.messages_hscroll = app.messages_hscroll.min(hmax);
+    let off = app.messages_hscroll;
+
+    let items: Vec<ListItem> =
+        rows.iter().map(|s| ListItem::new(Line::from(hslice_spans(s, off, text_w)))).collect();
+    let list_area = Rect { width: text_w as u16, height: body_h, ..inner };
     let list = List::new(items).highlight_style(theme::selected());
     let mut state = ListState::default();
     state.select(Some(app.messages.selected));
     frame.render_stateful_widget(list, list_area, &mut state);
-    if show_bar {
-        let sb_area = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: inner.height };
-        draw_scrollbar(frame, sb_area, app.messages.selected, total.saturating_sub(1));
+    if vbar {
+        let sb = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: body_h };
+        draw_scrollbar(frame, sb, app.messages.selected, total.saturating_sub(1));
     }
+    app.layout.messages_hscrollbar = if hbar {
+        let hb = Rect { x: inner.x, y: inner.y + inner.height - 1, width: text_w as u16, height: 1 };
+        draw_hscrollbar(frame, hb, off, hmax);
+        hb
+    } else {
+        Rect::default()
+    };
 }
 
 /// Vix's one-character scrollbar, drawn into the vertical one-column `area`: a
@@ -1272,7 +1320,83 @@ pub fn scrollbar_pos_from_row(area: Rect, row: u16, max: usize) -> usize {
     pos.min(max)
 }
 
-fn draw_bottom_dock(app: &App, frame: &mut Frame, area: Rect) {
+/// Vix's one-row horizontal scrollbar, drawn into the one-row `area`: a dim `─`
+/// track and a single `●` thumb positioned **proportionally** to `pos` within
+/// `0..=max` (`max = content_width - viewport_width`). Mirrors [`draw_scrollbar`].
+fn draw_hscrollbar(frame: &mut Frame, area: Rect, pos: usize, max: usize) {
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+    let w = area.width as usize;
+    let frac = if max == 0 { 0.0 } else { pos.min(max) as f64 / max as f64 };
+    let thumb = (frac * w.saturating_sub(1) as f64).round() as usize;
+    let spans: Vec<Span> = (0..w)
+        .map(|c| {
+            if c == thumb {
+                Span::styled("●", theme::title(true))
+            } else {
+                Span::styled("─", theme::dim())
+            }
+        })
+        .collect();
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
+}
+
+/// Map a mouse `col` within a horizontal scrollbar `area` to a position in
+/// `0..=max`, proportionally. Used for click and drag.
+#[must_use]
+pub fn scrollbar_pos_from_col(area: Rect, col: u16, max: usize) -> usize {
+    if max == 0 || area.width == 0 {
+        return 0;
+    }
+    let w = area.width;
+    let rel = f64::from(col.saturating_sub(area.x));
+    let pos = (rel / f64::from((w - 1).max(1)) * max as f64).round() as usize;
+    pos.min(max)
+}
+
+/// The longest line width (in chars) among `lines`.
+fn max_line_width<'a>(lines: impl Iterator<Item = &'a str>) -> usize {
+    lines.map(|l| l.chars().count()).max().unwrap_or(0)
+}
+
+/// Slice `line` to the horizontal window `[offset, offset + width)` by character.
+fn hslice(line: &str, offset: usize, width: usize) -> String {
+    line.chars().skip(offset).take(width).collect()
+}
+
+/// Total display width (chars) of a styled line's spans.
+fn span_line_width(spans: &[Span]) -> usize {
+    spans.iter().map(|s| s.content.chars().count()).sum()
+}
+
+/// Slice a styled line's `spans` to the horizontal window `[offset, offset +
+/// width)`, preserving each span's style. Used to horizontally scroll list rows.
+fn hslice_spans(spans: &[Span], offset: usize, width: usize) -> Vec<Span<'static>> {
+    let mut out: Vec<Span<'static>> = Vec::new();
+    let mut skip = offset;
+    let mut remaining = width;
+    for sp in spans {
+        if remaining == 0 {
+            break;
+        }
+        let chars: Vec<char> = sp.content.chars().collect();
+        let len = chars.len();
+        if skip >= len {
+            skip -= len;
+            continue;
+        }
+        let start = skip;
+        skip = 0;
+        let take = remaining.min(len - start);
+        let text: String = chars[start..start + take].iter().collect();
+        remaining -= take;
+        out.push(Span::styled(text, sp.style));
+    }
+    out
+}
+
+fn draw_bottom_dock(app: &mut App, frame: &mut Frame, area: Rect) {
     let focused = app.focus == Focus::BottomDock;
     let block = Block::default()
         .style(theme::base())
@@ -1282,32 +1406,45 @@ fn draw_bottom_dock(app: &App, frame: &mut Frame, area: Rect) {
         .title(format!(" {} {} ", icon::INFO, t!("ui.bottom_dock")));
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    // Reserve a one-column gutter for a scrollbar when the buffer overflows.
     let total = app.bottom_dock.lines.len();
     let h = inner.height as usize;
-    let show_bar = app.settings.show_scrollbar && total > h && inner.width > 1;
-    let text_area = if show_bar {
-        Rect { width: inner.width - 1, ..inner }
-    } else {
-        inner
-    };
+    let allow_bars = app.settings.show_scrollbar && inner.width > 1 && inner.height > 1;
+    let vbar = allow_bars && total > h;
+
+    // The visible rows, and whether they overflow horizontally → a bottom hbar.
+    let view_h = if allow_bars { inner.height.saturating_sub(1) } else { inner.height } as usize;
+    let visible: Vec<String> = app.bottom_dock.visible(view_h).to_vec();
+    let content_w = max_line_width(visible.iter().map(String::as_str));
+    let text_w_full = if vbar { inner.width - 1 } else { inner.width } as usize;
+    let hbar = allow_bars && content_w > text_w_full;
+
+    let text_w = text_w_full;
+    let body_h = if hbar { inner.height - 1 } else { inner.height };
+    let text_area = Rect { width: text_w as u16, height: body_h, ..inner };
+
+    let hmax = content_w.saturating_sub(text_w);
+    app.bottom_hmax = hmax;
+    app.bottom_hscroll = app.bottom_hscroll.min(hmax);
+    let off = app.bottom_hscroll;
+
     let lines: Vec<Line> = if app.bottom_dock.is_empty() {
-        vec![Line::from(Span::styled(
-            t!("ui.bottom_dock_empty").to_string(),
-            theme::dim(),
-        ))]
+        vec![Line::from(Span::styled(t!("ui.bottom_dock_empty").to_string(), theme::dim()))]
     } else {
-        app.bottom_dock
-            .visible(text_area.height as usize)
-            .iter()
-            .map(|l| Line::from(l.clone()))
-            .collect()
+        visible.iter().map(|l| Line::from(hslice(l, off, text_w))).collect()
     };
     frame.render_widget(Paragraph::new(lines), text_area);
-    if show_bar {
-        let sb_area = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: inner.height };
-        draw_scrollbar(frame, sb_area, app.bottom_dock.scroll, total.saturating_sub(inner.height as usize));
+
+    if vbar {
+        let sb = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: body_h };
+        draw_scrollbar(frame, sb, app.bottom_dock.scroll, total.saturating_sub(view_h));
     }
+    app.layout.bottom_hscrollbar = if hbar {
+        let hb = Rect { x: inner.x, y: inner.y + inner.height - 1, width: text_w as u16, height: 1 };
+        draw_hscrollbar(frame, hb, off, hmax);
+        hb
+    } else {
+        Rect::default()
+    };
 }
 
 fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {

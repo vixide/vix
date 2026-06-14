@@ -2,34 +2,39 @@
 
 Vix draws one consistent scrollbar everywhere a view can scroll: the editor, the
 file explorer, the bottom dock, and the scrollable overlay panels (the welcome
-screen and the character/color pickers).
+screen and the character/color pickers). Views that can overflow **horizontally**
+— the editor (when soft wrap is off), the file explorer, the message drawer, and
+the bottom dock — also get a matching horizontal scrollbar.
 
 ## Appearance
 
-- A vertical, one-column scrollbar in a gutter on the right edge of the view.
+- A vertical, one-column scrollbar in a gutter on the right edge of the view, and
+  — when content overflows sideways — a horizontal, one-row scrollbar along the
+  bottom edge of the view.
 - **The thumb is always exactly one character** — a `●` — never sized
   proportionally to the content length.
-- The thumb's **position** along the track is proportional: it sits in the top
-  cell at the start and the bottom cell at the end, interpolating in between. For
-  cursor/selection views the thumb tracks the cursor/selected item (so it reaches
-  the bottom exactly when the last line/item is selected); for scroll-only views
-  (welcome, bottom dock) it tracks the scroll offset.
-- The track is a dim `│` spanning the full height of the gutter — no end-cap
-  arrows.
-- The scrollbar appears only when the content overflows the viewport, and (for
-  the editor, explorer, and bottom dock) honors the **Show/Hide Scroll Bar**
-  toggle (`show_scrollbar`).
+- The thumb's **position** along the track is proportional: it sits at the
+  start cell at the start and the end cell at the end, interpolating in between.
+  For cursor/selection views the vertical thumb tracks the cursor/selected item;
+  for scroll-only views it tracks the scroll offset. The horizontal thumb tracks
+  the horizontal scroll offset within `content_width − viewport_width`.
+- The vertical track is a dim `│` spanning the gutter; the horizontal track is a
+  dim `─` spanning the bottom row — neither has end-cap arrows.
+- A scrollbar appears only when the content overflows that axis, and honors the
+  **Show/Hide Scroll Bar** toggle (`show_scrollbar`).
 
 ## Interaction
 
-- **Mouse wheel** and the keyboard scroll the view as usual.
-- **Click** a point on the track to jump there (the top cell jumps to the start,
-  the bottom cell to the end).
-- **Press and drag** the scrollbar to scroll continuously.
+- **Mouse wheel** and the keyboard scroll the view vertically as usual.
+- **Click** a point on a track to jump there.
+- **Press and drag** a scrollbar to scroll continuously (vertical or horizontal).
 
 ## As implemented in Vix
 
-`src/ui.rs` owns the shared renderer (`draw_scrollbar`) and the click/drag
-position mapping (`scrollbar_pos_from_row`); each scrollable view passes its
-`total`, `viewport`, and current position and records the gutter rectangle for
-hit-testing.
+`src/ui.rs` owns the shared renderers — `draw_scrollbar` (vertical) and
+`draw_hscrollbar` (horizontal) — and the click/drag position mapping
+(`scrollbar_pos_from_row` / `scrollbar_pos_from_col`). Each scrollable view
+records its scrollbar rectangle(s) for hit-testing. Horizontal rendering slices
+rows to the visible window (`hslice` for plain lines, `hslice_spans` for styled
+list rows); the editor uses its own `offset_x`, while the docks track an
+`*_hscroll` offset in `App` and `*_hmax` for drag.

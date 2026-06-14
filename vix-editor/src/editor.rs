@@ -646,6 +646,26 @@ impl Editor {
         self.offset_x
     }
 
+    /// Whether soft wrap is on (no horizontal scrolling when it is).
+    #[must_use]
+    pub fn soft_wrap_enabled(&self) -> bool {
+        self.soft_wrap
+    }
+
+    /// Width (columns) of the line-number gutter, so the host can compute the
+    /// visible text width for a horizontal scrollbar.
+    #[must_use]
+    pub fn gutter_width(&self) -> usize {
+        self.get_line_number_width()
+    }
+
+    /// The longest line's width in characters (used to size a horizontal
+    /// scrollbar). A tab counts as one character.
+    #[must_use]
+    pub fn max_line_width(&self) -> usize {
+        self.get_content().lines().map(|l| l.chars().count()).max().unwrap_or(0)
+    }
+
     pub fn code_mut(&mut self) -> &mut Code {
         &mut self.code
     }
