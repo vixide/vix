@@ -887,9 +887,9 @@ fn click_focuses_the_replace_field() {
     let mut app = app_at(Path::new("."));
     app.run_action("edit.replace");
     // The box's inner rect is recorded during render; set it directly. Row 0 is
-    // the Find field, row 1 the Replace field.
-    app.layout.search = Rect::new(0, 5, 40, 4);
-    app.on_mouse(click(2, 6)); // click the Replace row
+    // the Find field, row 1 the toggle buttons, row 2 the Replace field.
+    app.layout.search = Rect::new(0, 5, 40, 6);
+    app.on_mouse(click(2, 7)); // click the Replace row (row 2)
 
     // Typing now lands in the Replace field, not the Find field.
     for c in "xyz".chars() {

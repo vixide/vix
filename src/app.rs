@@ -472,6 +472,20 @@ pub struct Layout {
     /// Inner content rectangle of the open find / replace box, so a click can
     /// focus the Find or Replace field.
     pub search: Rect,
+    /// Clickable button rectangles in the find box: the Case/Word/Regex toggles
+    /// and, in replace mode, the Once/Ask/All replace buttons. `Rect::default()`
+    /// when not shown.
+    pub search_case: Rect,
+    /// See [`Self::search_case`].
+    pub search_word: Rect,
+    /// See [`Self::search_case`].
+    pub search_regex: Rect,
+    /// See [`Self::search_case`].
+    pub search_once: Rect,
+    /// See [`Self::search_case`].
+    pub search_ask: Rect,
+    /// See [`Self::search_case`].
+    pub search_all: Rect,
     /// Inner content rectangle of the open calendar box, so a click can insert a
     /// date-time line or a calendar day.
     pub calendar: Rect,
@@ -5729,24 +5743,111 @@ impl App {
         }
     }
 
-    /// A left click inside the find / replace box focuses the field whose row was
-    /// clicked (the second row is the Replace field in replace mode). Clicks
-    /// elsewhere are ignored so the box stays open.
+    /// A left click inside the find / replace box: a Case/Word/Regex toggle
+    /// button flips that option; an Once/Ask/All button runs that replacement; a
+    /// click on a field row focuses that field. Clicks elsewhere are ignored so
+    /// the box stays open.
     fn search_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;
         }
-        let r = self.layout.search;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let (col, row) = (mouse.column, mouse.row);
+        let hit = |r: Rect| rect_contains(r, col, row);
+
+        // Toggle buttons.
+        if hit(self.layout.search_case)
+            || hit(self.layout.search_word)
+            || hit(self.layout.search_regex)
+        {
+            if let Some(s) = self.search.as_mut() {
+                if hit(self.layout.search_case) {
+                    s.case_sensitive = !s.case_sensitive;
+                } else if hit(self.layout.search_word) {
+                    s.whole_word = !s.whole_word;
+                } else {
+                    s.regex = !s.regex;
+                }
+            }
+            if self.search.as_ref().is_some_and(|s| !s.interactive) {
+                self.find_step(true);
+            }
             return;
         }
-        let rel = mouse.row - r.y;
+        // Replace action buttons.
+        if hit(self.layout.search_once) {
+            self.replace_once();
+            return;
+        }
+        if hit(self.layout.search_ask) {
+            self.begin_query_replace();
+            return;
+        }
+        if hit(self.layout.search_all) {
+            self.replace_all();
+            return;
+        }
+
+        // Field rows: Find is row 0; in replace mode Replace is row 2.
+        let r = self.layout.search;
+        if !rect_contains(r, col, row) {
+            return;
+        }
+        let rel = row - r.y;
         if let Some(s) = self.search.as_mut() {
             if rel == 0 {
                 s.field = Field::Query;
-            } else if s.replacing && rel == 1 {
+            } else if s.replacing && rel == 2 {
                 s.field = Field::Replace;
             }
+        }
+    }
+
+    /// Replace the next match at or after the cursor once, then highlight the
+    /// following match (the find box stays open).
+    fn replace_once(&mut self) {
+        let Some(sb) = self.search.as_ref() else {
+            return;
+        };
+        let Some(pat) = sb.pattern() else {
+            return;
+        };
+        let re = match Regex::new(&pat) {
+            Ok(r) => r,
+            Err(e) => {
+                if let Some(s) = self.search.as_mut() {
+                    s.status = t!("msg.bad_regex", error = e).to_string();
+                }
+                return;
+            }
+        };
+        let regex = sb.regex;
+        let template =
+            if regex { vix_find_panel::unescape(&sb.replace) } else { sb.replace.clone() };
+        let area = self.editor_view();
+        let replaced = {
+            let Some(t) = self.editor.active_tab_mut() else {
+                return;
+            };
+            let from = t.editor.get_cursor();
+            match next_match_from(t, &re, from) {
+                Some(current) => {
+                    let resume = do_replace(t, &re, regex, &template, current);
+                    t.dirty = true;
+                    t.preview = false;
+                    if let Some(next) = next_match_from(t, &re, resume) {
+                        highlight_match(t, next.0, next.1, area);
+                    }
+                    true
+                }
+                None => false,
+            }
+        };
+        if let Some(s) = self.search.as_mut() {
+            s.status = if replaced {
+                t!("status.replaced", count = 1).to_string()
+            } else {
+                t!("status.qr_no_matches").to_string()
+            };
         }
     }
 

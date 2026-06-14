@@ -2248,9 +2248,32 @@ fn draw_workspace_search(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(Line::from(Span::styled(hint, theme::dim()))), rows[2]);
 }
 
+/// Render a left-to-right row of labeled buttons (each ` label `, one-cell gap),
+/// returning each button's clickable rectangle (`Rect::default()` if it did not
+/// fit).
+fn button_row(frame: &mut Frame, row: Rect, buttons: &[(String, Style)]) -> Vec<Rect> {
+    let mut rects = vec![Rect::default(); buttons.len()];
+    let mut x = row.x;
+    let right = row.x + row.width;
+    for (i, (label, style)) in buttons.iter().enumerate() {
+        let text = format!(" {label} ");
+        let w = text.chars().count() as u16;
+        if x >= right {
+            break;
+        }
+        let w = w.min(right - x);
+        let r = Rect { x, y: row.y, width: w, height: 1 };
+        frame.render_widget(Paragraph::new(Line::from(Span::styled(text, *style))), r);
+        rects[i] = r;
+        x = x.saturating_add(w + 1);
+    }
+    rects
+}
+
 fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(s) = app.search.as_ref() else { return };
-    let height = if s.replacing { 5 } else { 4 };
+    let replacing = s.replacing;
+    let height = if replacing { 6 } else { 4 };
     let width = (f32::from(area.width) * 0.7) as u16;
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
@@ -2261,7 +2284,7 @@ fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Clear, rect);
     let title = if s.interactive {
         format!(" {} {} ", icon::SEARCH, t!("ui.query_replace"))
-    } else if s.replacing {
+    } else if replacing {
         format!(" {} {} ", icon::SEARCH, t!("ui.find_replace"))
     } else {
         format!(" {} {} ", icon::SEARCH, t!("ui.find"))
@@ -2275,35 +2298,67 @@ fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
     app.layout.search = inner;
+    // Forget any stale button rects (they are re-recorded below when shown).
+    app.layout.search_case = Rect::default();
+    app.layout.search_word = Rect::default();
+    app.layout.search_regex = Rect::default();
+    app.layout.search_once = Rect::default();
+    app.layout.search_ask = Rect::default();
+    app.layout.search_all = Rect::default();
 
-    let mut lines = Vec::new();
-    let q_focus = !s.replacing || s.field == Field::Query;
-    lines.push(field_line(&t!("ui.field_find"), &s.query, q_focus));
-    if s.replacing {
-        lines.push(field_line(&t!("ui.field_replace"), &s.replace, s.field == Field::Replace));
-    }
-    let toggle = |on: bool, label: &str| {
-        let style = if on { theme::selected() } else { theme::dim() };
-        Span::styled(format!(" {label} "), style)
+    // Rows: Find field, toggle buttons, [Replace field, replace buttons,]? status.
+    let constraints: Vec<Constraint> = if replacing {
+        vec![Constraint::Length(1); 5]
+    } else {
+        vec![Constraint::Length(1); 3]
     };
-    lines.push(Line::from(vec![
-        toggle(s.case_sensitive, &t!("ui.toggle_case")),
-        Span::raw(" "),
-        toggle(s.whole_word, &t!("ui.toggle_word")),
-        Span::raw(" "),
-        toggle(s.regex, &t!("ui.toggle_regex")),
-    ]));
+    let rows = Layout::default().direction(Direction::Vertical).constraints(constraints).split(inner);
+
+    let q_focus = !replacing || s.field == Field::Query;
+    frame.render_widget(Paragraph::new(field_line(&t!("ui.field_find"), &s.query, q_focus)), rows[0]);
+
+    // Case / Word / Regex toggle buttons (highlighted when on).
+    let toggle_style = |on: bool| if on { theme::selected() } else { theme::dim() };
+    let toggles = vec![
+        (t!("ui.toggle_case").to_string(), toggle_style(s.case_sensitive)),
+        (t!("ui.toggle_word").to_string(), toggle_style(s.whole_word)),
+        (t!("ui.toggle_regex").to_string(), toggle_style(s.regex)),
+    ];
+    let trects = button_row(frame, rows[1], &toggles);
+    app.layout.search_case = trects[0];
+    app.layout.search_word = trects[1];
+    app.layout.search_regex = trects[2];
+
+    if replacing {
+        frame.render_widget(
+            Paragraph::new(field_line(&t!("ui.field_replace"), &s.replace, s.field == Field::Replace)),
+            rows[2],
+        );
+        // Once / Ask / All replace buttons (reverse-video, like pressable buttons).
+        let actions = vec![
+            (t!("ui.btn_once").to_string(), theme::selected()),
+            (t!("ui.btn_ask").to_string(), theme::selected()),
+            (t!("ui.btn_all").to_string(), theme::selected()),
+        ];
+        let arects = button_row(frame, rows[3], &actions);
+        app.layout.search_once = arects[0];
+        app.layout.search_ask = arects[1];
+        app.layout.search_all = arects[2];
+    }
+
     let status = if !s.status.is_empty() {
         s.status.clone()
     } else if s.interactive {
         t!("ui.search_hint_interactive").to_string()
-    } else if s.replacing {
+    } else if replacing {
         t!("ui.search_hint_replace").to_string()
     } else {
         t!("ui.search_hint").to_string()
     };
-    lines.push(Line::from(Span::styled(status, theme::dim())));
-    frame.render_widget(Paragraph::new(lines), inner);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(status, theme::dim()))),
+        rows[rows.len() - 1],
+    );
 }
 
 fn field_line(label: &str, value: &str, focused: bool) -> Line<'static> {
