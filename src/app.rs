@@ -5903,7 +5903,8 @@ impl App {
     }
 
     /// A left click in the clock box inserts the clicked time row into the active
-    /// editor and closes the box; a click outside closes it.
+    /// editor; the box stays open so several values can be picked. A click
+    /// outside the box closes it.
     fn clock_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;
@@ -5921,7 +5922,6 @@ impl App {
                 let area = self.editor_view();
                 self.editor.insert_str(&text, area);
             }
-            self.show_clock = false;
         }
     }
 
