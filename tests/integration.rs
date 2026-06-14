@@ -1964,11 +1964,14 @@ fn submenu_opens_and_runs_a_nested_action() {
         app.on_key(keycode(KeyCode::Down));
     }
     assert_eq!(app.menu.item, Some(find_parent));
-    assert!(app.menu.sub.is_none(), "submenu starts closed");
+    assert!(!app.menu.submenu_open(), "submenu starts closed");
 
-    // Right opens the submenu; its first item is a find action.
+    // Right opens the submenu but highlights nothing yet; Down picks the first
+    // item (a find action).
     app.on_key(keycode(KeyCode::Right));
-    assert!(app.menu.sub.is_some(), "Right opens the submenu");
+    assert!(app.menu.submenu_open(), "Right opens the submenu");
+    assert!(app.menu.sub.is_none(), "no submenu item auto-selected");
+    app.on_key(keycode(KeyCode::Down));
     assert_eq!(app.menu.selected_action(), Some("edit.find"));
 
     // Enter runs the nested action (opens the find box) and closes the menu.

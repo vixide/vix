@@ -205,9 +205,9 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.palette", "tools.palette", "Ctrl P"),
     Item::sub("menu.item.tools.lsp", TOOLS_LSP),
     SEP,
+    Item::leaf("menu.item.tools.file_info", "tools.file_info", ""),
     Item::leaf("menu.item.tools.dashboard", "tools.dashboard", ""),
     Item::leaf("menu.item.tools.system_info", "tools.system_info", ""),
-    Item::leaf("menu.item.tools.file_info", "tools.file_info", ""),
     SEP,
     Item::leaf("menu.item.tools.run_command", "tools.run_command", ""),
     Item::leaf("menu.item.tools.cancel_command", "tools.cancel_command", ""),
@@ -432,9 +432,13 @@ pub struct Menu {
     /// just opened and nothing is highlighted yet (the user must arrow, hover, or
     /// type to pick an item).
     pub item: Option<usize>,
-    /// When `Some`, the highlighted item's submenu is open and this is the
-    /// highlighted index within it.
+    /// The highlighted index within the open submenu, or `None` when the submenu
+    /// has just opened and nothing is highlighted yet. Only meaningful while
+    /// [`Self::sub_open`] is true.
     pub sub: Option<usize>,
+    /// Whether the highlighted item's submenu is open (independent of whether a
+    /// submenu row is highlighted — opening one highlights nothing).
+    pub sub_open: bool,
 }
 
 impl Menu {
@@ -458,6 +462,7 @@ impl Menu {
         self.open = None;
         self.item = None;
         self.sub = None;
+        self.sub_open = false;
     }
 
     /// Open the menu at index `i` (no-op if out of range). No item is highlighted
@@ -467,7 +472,14 @@ impl Menu {
             self.open = Some(i);
             self.item = None;
             self.sub = None;
+            self.sub_open = false;
         }
+    }
+
+    /// Whether the highlighted item's submenu is open.
+    #[must_use]
+    pub fn submenu_open(&self) -> bool {
+        self.sub_open
     }
 
     /// The submenu items of the currently highlighted top item, if it has one.
@@ -481,7 +493,8 @@ impl Menu {
     /// Move to the previous top-level menu; or, if a submenu is open, close it.
     pub fn left(&mut self) {
         let Some(i) = self.open else { return };
-        if self.sub.is_some() {
+        if self.sub_open {
+            self.sub_open = false;
             self.sub = None;
             return;
         }
@@ -490,53 +503,59 @@ impl Menu {
     }
 
     /// Move to the next top-level menu; or, if the highlighted item has a closed
-    /// submenu, open it.
+    /// submenu, open it (without highlighting any submenu item yet).
     pub fn right(&mut self) {
         let Some(i) = self.open else { return };
-        if self.sub.is_none() {
-            if let Some(it) = self.item {
-                if let Some(sub) = menus()[i].items[it].submenu {
-                    self.sub = Some(first_selectable(sub));
-                    return;
-                }
-            }
-        } else {
+        if self.sub_open {
             return;
+        }
+        if let Some(it) = self.item {
+            if menus()[i].items[it].submenu.is_some() {
+                self.sub_open = true;
+                self.sub = None;
+                return;
+            }
         }
         let n = menus().len();
         self.open_index((i + 1) % n);
     }
 
-    /// Highlight the previous selectable item (in the submenu if open). With
+    /// Highlight the previous selectable item (in the open submenu if any). With
     /// nothing highlighted yet, highlights the last selectable item.
     pub fn up(&mut self) {
         let Some(i) = self.open else { return };
         let items = menus()[i].items;
-        match self.item {
-            Some(it) => {
-                if let (Some(sidx), Some(sub)) = (self.sub, items[it].submenu) {
-                    self.sub = Some(prev_selectable(sub, sidx));
-                } else {
-                    self.item = Some(prev_selectable(items, it));
-                }
+        if self.sub_open {
+            if let Some(sub) = self.item.and_then(|it| items[it].submenu) {
+                self.sub = Some(match self.sub {
+                    Some(s) => prev_selectable(sub, s),
+                    None => prev_selectable(sub, 0),
+                });
             }
+            return;
+        }
+        match self.item {
+            Some(it) => self.item = Some(prev_selectable(items, it)),
             None => self.item = Some(prev_selectable(items, 0)),
         }
     }
 
-    /// Highlight the next selectable item (in the submenu if open). With nothing
-    /// highlighted yet, highlights the first selectable item.
+    /// Highlight the next selectable item (in the open submenu if any). With
+    /// nothing highlighted yet, highlights the first selectable item.
     pub fn down(&mut self) {
         let Some(i) = self.open else { return };
         let items = menus()[i].items;
-        match self.item {
-            Some(it) => {
-                if let (Some(sidx), Some(sub)) = (self.sub, items[it].submenu) {
-                    self.sub = Some(next_selectable(sub, sidx));
-                } else {
-                    self.item = Some(next_selectable(items, it));
-                }
+        if self.sub_open {
+            if let Some(sub) = self.item.and_then(|it| items[it].submenu) {
+                self.sub = Some(match self.sub {
+                    Some(s) => next_selectable(sub, s),
+                    None => first_selectable(sub),
+                });
             }
+            return;
+        }
+        match self.item {
+            Some(it) => self.item = Some(next_selectable(items, it)),
             None => self.item = Some(first_selectable(items)),
         }
     }
@@ -547,14 +566,17 @@ impl Menu {
         let i = self.open?;
         let items = menus()[i].items;
         let it_idx = self.item?;
-        if let Some(sidx) = self.sub {
+        if self.sub_open {
             let sub = items[it_idx].submenu?;
+            let sidx = self.sub?;
             let it = &sub[sidx];
             return (!it.is_separator()).then_some(it.action);
         }
         let it = &items[it_idx];
-        if let Some(sub) = it.submenu {
-            self.sub = Some(first_selectable(sub));
+        if it.submenu.is_some() {
+            // Open the submenu; highlight nothing yet.
+            self.sub_open = true;
+            self.sub = None;
             return None;
         }
         (!it.is_separator()).then_some(it.action)
@@ -567,12 +589,17 @@ impl Menu {
     pub fn type_ahead(&mut self, c: char) {
         let Some(i) = self.open else { return };
         let items = menus()[i].items;
-        if let Some(it) = self.item {
-            if let (Some(sidx), Some(sub)) = (self.sub, items[it].submenu) {
-                if let Some(j) = label_starting(sub, sidx, c) {
+        if self.sub_open {
+            if let Some(sub) = self.item.and_then(|it| items[it].submenu) {
+                let from = self.sub.unwrap_or_else(|| sub.len().saturating_sub(1));
+                if let Some(j) = label_starting(sub, from, c) {
                     self.sub = Some(j);
                 }
-            } else if let Some(j) = label_starting(items, it, c) {
+            }
+            return;
+        }
+        if let Some(it) = self.item {
+            if let Some(j) = label_starting(items, it, c) {
                 self.item = Some(j);
             }
         } else if let Some(j) = label_starting(items, items.len().saturating_sub(1), c) {
@@ -589,8 +616,9 @@ impl Menu {
         let i = self.open?;
         let items = menus()[i].items;
         let it_idx = self.item?;
-        if let Some(sidx) = self.sub {
+        if self.sub_open {
             let sub = items[it_idx].submenu?;
+            let sidx = self.sub?;
             let it = &sub[sidx];
             return (!it.is_separator()).then_some(it.action);
         }

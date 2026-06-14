@@ -10,7 +10,11 @@ Top menu bar.
 - Dropdowns may contain **separators** — non-selectable divider lines that group
   related items. Arrow navigation, hover, and clicks all skip them.
 - An item marked `▸` opens a **submenu** (one level deep). `Right` or a click
-  opens it; `Left` or `Esc` backs out to the parent.
+  opens it; `Left` or `Esc` backs out to the parent. Like a top-level dropdown, a
+  submenu opens with **nothing highlighted** — arrow, hover, or type to pick.
+- Hovering (or arrowing to) a **View → Theme** item previews that theme live;
+  moving off it, or closing the menu without choosing, reverts to the current
+  theme.
 - A dropdown or submenu taller than the screen **scrolls** to keep the highlight
   visible (arrow keys, type-ahead, or the mouse wheel move it); a `●` scrollbar
   marks the right edge. This matters for long lists like the View → Time Zone and
@@ -220,7 +224,7 @@ whole buffer.
 | --------------- | ------------------------------------------------------------- |
 | Status          | `git status` (streamed to the bottom dock)                    |
 | Changes…        | Open the git changes panel: stage/unstage files and commit (`git-integration.md`) |
-| Log ▸           | Submenu: Graph / Since 1 day/week/month ago / All — `git log …` to the dock |
+| Log ▸           | Submenu: Summary / Since 1 day/week/month ago / All — `git log …` to the dock |
 | Grep…           | Prompt for a regex and `git grep -n` the repository (to the dock) |
 | *— separator —* |                                                               |
 | Branch ▸        | Submenu of branch commands (below)                            |

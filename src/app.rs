@@ -663,9 +663,9 @@ pub struct App {
     running_command: Option<RunningCommand>,
     /// A background AI transform whose result will replace editor text, if any.
     ai_replace: Option<AiReplace>,
-    /// True while a theme is applied as a menu hover-preview (reverted to the
-    /// committed theme when the menu closes).
-    theme_preview: bool,
+    /// The theme name currently applied as a menu hover/keyboard preview (reverted
+    /// to the committed theme when the menu closes or the pointer leaves it).
+    theme_preview: Option<String>,
     /// True while the editor scrollbar thumb is being dragged, so the drag keeps
     /// scrolling even if the pointer drifts off the one-column track.
     scrollbar_active: bool,
@@ -786,7 +786,7 @@ impl App {
             closed_tabs: Vec::new(),
             running_command: None,
             ai_replace: None,
-            theme_preview: false,
+            theme_preview: None,
             scrollbar_active: false,
             dock_resize: None,
             emacs_prefix: false,
@@ -3940,7 +3940,7 @@ impl App {
             return;
         }
         // The open submenu (drawn to the right of its parent) takes priority.
-        if self.menu.sub.is_some() {
+        if self.menu.submenu_open() {
             let sd = self.layout.submenu_dropdown;
             if rect_contains(sd, col, row) {
                 let top = sd.y + 1;
@@ -3970,7 +3970,8 @@ impl App {
                     if items[idx].has_submenu() {
                         self.menu.item = Some(idx);
                         self.menu.sub = None;
-                        self.menu.right(); // opens the submenu
+                        self.menu.sub_open = false;
+                        self.menu.right(); // opens the submenu (nothing highlighted)
                     } else {
                         let action = items[idx].action;
                         self.run_action(action);
@@ -4023,12 +4024,15 @@ impl App {
                     self.menu.open_index(i);
                 }
             }
+            // Left any open submenu: drop a live theme preview.
+            self.revert_theme_preview();
             return;
         }
-        if self.menu.sub.is_some() {
+        if self.menu.submenu_open() {
             let sd = self.layout.submenu_dropdown;
             if rect_contains(sd, col, row) {
                 let top = sd.y + 1;
+                let mut previewed = false;
                 if let Some(items) = self.menu.submenu_items() {
                     let offset =
                         crate::ui::dropdown_scroll(self.menu.sub, sd.height.saturating_sub(2) as usize, items.len());
@@ -4036,7 +4040,12 @@ impl App {
                     if row >= top && idx < items.len() && !items[idx].is_separator() {
                         self.menu.sub = Some(idx);
                         self.preview_menu_theme(items[idx].action);
+                        previewed = true;
                     }
+                }
+                // Hovering a gap/separator in the submenu is not a choice.
+                if !previewed {
+                    self.revert_theme_preview();
                 }
                 return;
             }
@@ -4053,26 +4062,35 @@ impl App {
                 if row >= top && idx < items.len() && !items[idx].is_separator() {
                     self.menu.item = Some(idx);
                     self.menu.sub = None;
+                    self.menu.sub_open = false;
                     if items[idx].has_submenu() {
-                        self.menu.right(); // reveal the submenu on hover
+                        self.menu.right(); // reveal the submenu on hover (nothing highlighted)
                     }
                 }
             }
+            // Pointer is over the parent dropdown, not a theme item.
+            self.revert_theme_preview();
+            return;
         }
+        // Pointer is off every dropdown: drop a live theme preview.
+        self.revert_theme_preview();
     }
 
     /// If `action` is a `view.theme:<name>` item, apply that theme live as a
     /// hover preview (without persisting it); [`Self::close_menu`] reverts to the
     /// committed theme when the menu closes.
     fn preview_menu_theme(&mut self, action: &str) {
-        if let Some(name) = action.strip_prefix("view.theme:") {
-            if let Some(theme) =
-                Self::available_custom_themes().into_iter().find(|t| t.name == name)
-            {
-                vix_theme_model::apply(&theme);
-                self.editor.refresh_theme();
-                self.theme_preview = true;
-            }
+        let Some(name) = action.strip_prefix("view.theme:") else {
+            return;
+        };
+        // Already previewing this theme — avoid re-reading themes from disk.
+        if self.theme_preview.as_deref() == Some(name) {
+            return;
+        }
+        if let Some(theme) = Self::available_custom_themes().into_iter().find(|t| t.name == name) {
+            vix_theme_model::apply(&theme);
+            self.editor.refresh_theme();
+            self.theme_preview = Some(name.to_string());
         }
     }
 
@@ -4136,10 +4154,9 @@ impl App {
 
     /// Revert a live theme hover/keyboard preview to the committed theme.
     fn revert_theme_preview(&mut self) {
-        if self.theme_preview {
+        if self.theme_preview.take().is_some() {
             Self::apply_saved_theme(&self.settings.theme);
             self.editor.refresh_theme();
-            self.theme_preview = false;
         }
     }
 
@@ -4181,6 +4198,8 @@ impl App {
         vix_theme_model::apply(&theme);
         self.editor.refresh_theme();
         self.settings.theme.clone_from(&theme.name);
+        // The committed theme is now the baseline; no preview to revert.
+        self.theme_preview = None;
         self.status = t!("status.theme", theme = theme.name).to_string();
     }
 
