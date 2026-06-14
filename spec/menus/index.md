@@ -11,6 +11,10 @@ Top menu bar.
   related items. Arrow navigation, hover, and clicks all skip them.
 - An item marked `▸` opens a **submenu** (one level deep). `Right` or a click
   opens it; `Left` or `Esc` backs out to the parent.
+- A dropdown or submenu taller than the screen **scrolls** to keep the highlight
+  visible (arrow keys, type-ahead, or the mouse wheel move it); a `●` scrollbar
+  marks the right edge. This matters for long lists like the View → Time Zone and
+  View → Theme submenus.
 - **Type-ahead:** with a menu open, typing a letter jumps to the next item whose
   label starts with it, cycling. E.g. in File, `S` selects Save, `S` again selects
   Save As. Works inside an open submenu too.
@@ -214,15 +218,28 @@ whole buffer.
 
 | Item            | Action                                                        |
 | --------------- | ------------------------------------------------------------- |
+| Status          | `git status` (streamed to the bottom dock)                    |
 | Changes…        | Open the git changes panel: stage/unstage files and commit (`git-integration.md`) |
-| Log…            | Show the commit history (`git log`, streamed to the bottom dock) |
+| Log ▸           | Submenu: Graph / Since 1 day/week/month ago / All — `git log …` to the dock |
 | *— separator —* |                                                               |
-| Switch Branch…  | Choose a local branch to check out                            |
-| New Branch…     | Create a new branch and switch to it (`git switch -c`)        |
+| Branch ▸        | Submenu of branch commands (below)                            |
 | *— separator —* |                                                               |
 | Pull            | `git pull` (streamed to the bottom dock)                      |
 | Push            | `git push` (streamed to the bottom dock)                      |
 | Fetch           | `git fetch` (streamed to the bottom dock)                     |
+| *— separator —* |                                                               |
+| Init            | `git init` (refuses if a `.git` repo already exists)          |
+| Clone…          | Prompt for a URL and `git clone` it                           |
+
+The **Branch** submenu:
+
+| Item              | Action                                                       |
+| ----------------- | ------------------------------------------------------------ |
+| New…              | Create a new branch and switch to it (`git switch -c`)       |
+| Switch…           | Choose a local branch to check out                           |
+| Merge…            | Choose a branch to merge into the current one                |
+| Delete…           | Prompt for a branch name and `git branch --delete` it        |
+| Edit Description… | Prompt for text, set via `git branch --edit-description` (a throwaway `GIT_EDITOR` writes it) |
 
 ## Help menu
 

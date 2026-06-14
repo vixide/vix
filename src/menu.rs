@@ -237,14 +237,30 @@ const AI: &[Item] = &[
     Item::leaf("menu.item.ai.improve", "ai.improve", ""),
 ];
 
-const GIT: &[Item] = &[
-    Item::leaf("menu.item.git.status", "git.status", ""),
-    Item::leaf("menu.item.git.changes", "git.changes", ""),
-    Item::leaf("menu.item.git.log", "git.log", ""),
-    SEP,
+/// Log views, grouped under Git → Log.
+const GIT_LOG: &[Item] = &[
+    Item::leaf("menu.item.git.log_graph", "git.log_graph", ""),
+    Item::leaf("menu.item.git.log_day", "git.log_1_day", ""),
+    Item::leaf("menu.item.git.log_week", "git.log_1_week", ""),
+    Item::leaf("menu.item.git.log_month", "git.log_1_month", ""),
+    Item::leaf("menu.item.git.log_all", "git.log", ""),
+];
+
+/// Branch commands, grouped under Git → Branch.
+const GIT_BRANCH: &[Item] = &[
     Item::leaf("menu.item.git.new_branch", "git.new_branch", ""),
     Item::leaf("menu.item.git.switch_branch", "git.switch_branch", ""),
     Item::leaf("menu.item.git.merge_branch", "git.merge_branch", ""),
+    Item::leaf("menu.item.git.delete_branch", "git.delete_branch", ""),
+    Item::leaf("menu.item.git.edit_description", "git.edit_description", ""),
+];
+
+const GIT: &[Item] = &[
+    Item::leaf("menu.item.git.status", "git.status", ""),
+    Item::leaf("menu.item.git.changes", "git.changes", ""),
+    Item::sub("menu.item.git.log", GIT_LOG),
+    SEP,
+    Item::sub("menu.item.git.branch", GIT_BRANCH),
     SEP,
     Item::leaf("menu.item.git.pull", "git.pull", ""),
     Item::leaf("menu.item.git.push", "git.push", ""),

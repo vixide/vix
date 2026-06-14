@@ -163,15 +163,23 @@ Improve run in the background and **replace** the text with the result (undoable
 | -------------- | -------------------------------------------------------- |
 | Status         | `git status` (streamed to the bottom dock)               |
 | Changes…       | Open the git changes panel: stage/unstage and commit     |
-| Log…           | Show the commit history (`git log`)                      |
-| New Branch…    | Create a new branch and switch to it                     |
-| Switch Branch… | Choose a local branch to check out                       |
-| Merge Branch…  | Choose a branch to merge into the current one            |
+| Log ▸          | Submenu: Graph / Since 1 day/week/month ago / All (`git log …`) |
+| Branch ▸       | Submenu of branch commands (below)                       |
 | Pull           | `git pull` (streamed to the bottom dock)                 |
 | Push           | `git push` (streamed to the bottom dock)                 |
 | Fetch          | `git fetch` (streamed to the bottom dock)                |
 | Init           | `git init` (refuses if a `.git` repo already exists)     |
 | Clone…         | Prompt for a URL and `git clone` it                      |
+
+The **Branch** submenu:
+
+| Item             | Action                                                |
+| ---------------- | ----------------------------------------------------- |
+| New…             | Create a new branch and switch to it                  |
+| Switch…          | Choose a local branch to check out                    |
+| Merge…           | Choose a branch to merge into the current one         |
+| Delete…          | Prompt for a branch name and `git branch --delete` it |
+| Edit Description… | Prompt for text and set it via `git branch --edit-description` |
 
 ## Help menu
 
