@@ -1,13 +1,12 @@
-//! Nerd Font icons, plus a re-export of the [`vix_theme_chooser`] theme model.
+//! Nerd Font icons, plus a re-export of the [`vix_theme_model`] theme model.
 //!
-//! The JSON theme model and its ratatui styles live in the `vix-theme-chooser`
+//! The JSON theme model and its ratatui styles live in the `vix-theme-model`
 //! crate; this module re-exports them as `crate::theme::*` and keeps the icon set
 //! (which is not part of the theme model).
 
-pub use vix_theme_chooser::{
+pub use vix_theme_model::{
     base, bg, custom_name, dim, editor_cursor, fg, region_base, region_bg, region_fg,
-    region_modifiers, region_title, selected, set_custom, syntax_theme, title, Chooser,
-    CustomTheme, Region,
+    region_modifiers, region_title, selected, set_custom, syntax_theme, title, CustomTheme, Region,
 };
 
 /// Nerd Font glyphs (monospace). They render best with a patched "Nerd Font"
@@ -45,6 +44,8 @@ pub mod icon {
     pub const BRANCH: &str = "\u{e0a0}";
     /// Code / outline glyph.
     pub const CODE: &str = "\u{f121}";
+    /// Symbolic link (Octicons `nf-oct-link`).
+    pub const LINK: &str = "\u{f44c}";
 }
 
 /// Pick a file icon from a path's extension.

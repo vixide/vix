@@ -13,6 +13,7 @@ use ratatui::layout::Rect;
 
 use vix::app::{App, Focus};
 use vix::calendar;
+use vix::clock;
 use vix::fileops;
 use vix::settings::Settings;
 use vix::palette::{fuzzy_match, parse_path_target};
@@ -373,7 +374,7 @@ fn vix_menu_quit_quits_program() {
 
     // Open the menu bar (the Vix menu is first), then walk down to "Quit".
     app.on_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
-    let vix_idx = vix::menu::MENUS
+    let vix_idx = vix::menu::menus()
         .iter()
         .position(|m| m.name == "menu.vix")
         .expect("a Vix menu exists");
@@ -382,7 +383,7 @@ fn vix_menu_quit_quits_program() {
     }
     // Walk down until "Quit" is highlighted (Down skips separators, so we cannot
     // assume the number of presses equals the item's array index).
-    let item_count = vix::menu::MENUS[vix_idx].items.len();
+    let item_count = vix::menu::menus()[vix_idx].items.len();
     for _ in 0..=item_count {
         if app.menu.selected_action() == Some("file.quit") {
             break;
@@ -402,47 +403,16 @@ fn vix_menu_quit_quits_program() {
 }
 
 #[test]
-fn view_themes_menu_switches_theme() {
+fn view_theme_submenu_actions_switch_theme() {
     let mut app = app_at(Path::new("."));
-    assert!(app.theme_chooser.is_none());
-
-    // Open the menu bar, move right to the View menu, and run its first item
-    // ("Themes…"), which opens the theme chooser. The dropdown opens with nothing
-    // highlighted, so Down first selects the first item.
-    app.on_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
-    let view_idx = vix::menu::MENUS
-        .iter()
-        .position(|m| m.name == "menu.view")
-        .expect("a View menu exists");
-    for _ in 0..view_idx {
-        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
-    }
-    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
-    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(app.theme_chooser.is_some(), "Themes… opens the chooser");
-
-    // Pick Light deterministically and apply; the choice is persisted by name.
-    app.theme_chooser.as_mut().unwrap().selected = theme_choice_index(&app, "Light");
-    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(app.theme_chooser.is_none(), "Enter closes the chooser");
+    // The View → Theme submenu dispatches `view.theme:<name>` per item.
+    app.run_action("view.theme:Light");
     assert_eq!(app.settings.theme, "Light");
-
-    // Reopen via the command action and switch back to Dark.
-    app.run_action("view.theme");
-    app.theme_chooser.as_mut().unwrap().selected = theme_choice_index(&app, "Dark");
-    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    app.run_action("view.theme:Dark");
     assert_eq!(app.settings.theme, "Dark");
-}
-
-/// Index of the theme named `name` within the open theme chooser's sorted list.
-fn theme_choice_index(app: &App, name: &str) -> usize {
-    app.theme_chooser
-        .as_ref()
-        .unwrap()
-        .choices
-        .iter()
-        .position(|c| c.name == name)
-        .unwrap_or_else(|| panic!("theme {name} is in the chooser"))
+    // An unknown theme name is ignored.
+    app.run_action("view.theme:Nonexistent");
+    assert_eq!(app.settings.theme, "Dark");
 }
 
 #[test]
@@ -490,42 +460,29 @@ fn view_locale_chooser_opens_and_cancels() {
 }
 
 #[test]
-fn theme_chooser_lists_bundled_themes() {
-    let mut app = app_at(Path::new("."));
-    app.run_action("view.theme");
-    let tc = app.theme_chooser.as_ref().expect("theme chooser open");
-    let names: Vec<&str> = tc.choices.iter().map(|c| c.name.as_str()).collect();
-    // Dark/Light are now ordinary bundled themes, listed alongside the rest.
-    for expected in ["Dark", "Light", "Dracula", "Nord", "Tokyo Night", "Gruvbox Dark"] {
+fn view_theme_submenu_lists_bundled_themes() {
+    // app_at builds an App, which populates the View → Theme submenu from the
+    // available themes.
+    let _app = app_at(Path::new("."));
+    let view = vix::menu::menus().iter().find(|m| m.name == "menu.view").unwrap();
+    let theme_parent = view
+        .items
+        .iter()
+        .find(|it| it.label == "menu.item.view.theme")
+        .expect("a Theme submenu item");
+    let sub = theme_parent.submenu.expect("Theme is a submenu");
+    let actions: Vec<&str> = sub.iter().map(|it| it.action).collect();
+    // The menu is built (and cached) on first use; Dark and Light are always
+    // present (bundled, and the fallback). Each item dispatches `view.theme:<name>`.
+    for expected in ["Dark", "Light"] {
+        let action = format!("view.theme:{expected}");
         assert!(
-            names.contains(&expected),
-            "chooser should list bundled theme {expected}; got {names:?}"
+            actions.contains(&action.as_str()),
+            "submenu should offer theme {expected}; got {actions:?}"
         );
     }
-
-    // The list is sorted alphabetically (case-insensitively) by name.
-    let keys: Vec<String> = names.iter().map(|n| n.to_lowercase()).collect();
-    let mut sorted = keys.clone();
-    sorted.sort();
-    assert_eq!(keys, sorted, "theme chooser is sorted alphabetically");
-}
-
-#[test]
-fn theme_chooser_esc_reverts() {
-    let mut app = app_at(Path::new("."));
-    // Apply Light first so we have a known baseline.
-    app.run_action("view.theme");
-    app.theme_chooser.as_mut().unwrap().selected = theme_choice_index(&app, "Light");
-    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert_eq!(app.settings.theme, "Light");
-
-    // Open again, move the highlight to Dark, then cancel with Esc: the
-    // persisted theme must stay Light.
-    app.run_action("view.theme");
-    app.theme_chooser.as_mut().unwrap().selected = theme_choice_index(&app, "Dark");
-    app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert!(app.theme_chooser.is_none());
-    assert_eq!(app.settings.theme, "Light", "Esc must not persist a change");
+    // The full de-dup/sort behavior over a theme list is unit-tested in
+    // vix-theme-model (`theme_names`).
 }
 
 #[test]
@@ -968,22 +925,22 @@ fn interactive_query_replace_bang_replaces_rest() {
 
 #[test]
 fn iso_formats_have_expected_shape() {
-    let now = calendar::now_local();
-    let utc = calendar::utc_iso(&now);
+    let now = clock::now_local();
+    let utc = clock::utc_iso(&now);
     assert_eq!(utc.len(), 20, "{utc}"); // YYYY-MM-DDTHH:MM:SSZ
     assert!(utc.ends_with('Z'));
     assert_eq!(&utc[4..5], "-");
     assert_eq!(&utc[10..11], "T");
 
-    let week = calendar::iso_week_date(&now);
+    let week = clock::iso_week_date(&now);
     assert!(week.contains("-W"), "{week}"); // YYYY-Www-D
     let day = week.chars().last().unwrap();
     assert!(('1'..='7').contains(&day), "weekday digit: {week}");
 
-    let clock = calendar::local_clock(&now);
-    assert_eq!(clock.len(), 8, "{clock}"); // HH:MM:SS
+    let clk = clock::local_clock(&now);
+    assert_eq!(clk.len(), 8, "{clk}"); // HH:MM:SS
 
-    let local = calendar::local_datetime(&now);
+    let local = clock::local_datetime(&now);
     assert_eq!(local.len(), 19, "{local}"); // YYYY-MM-DD HH:MM:SS
 
     let grid = calendar::month_grid(now.date());
@@ -1102,16 +1059,9 @@ fn calendar_click_inserts_into_editor() {
     let cal = app.layout.calendar;
     assert!(cal.width > 0, "the calendar rect was recorded");
 
-    // The date-time lines sit at the bottom of the box; the local date-time line
-    // is the first of them (the line after the spacer at `info_start`).
-    let info_start = cal.height - 5;
-    app.on_mouse(click(cal.x + 1, cal.y + info_start + 1));
-    let text = app.editor.active_tab().unwrap().text();
-    assert!(text.contains(':') && text.contains('-'), "inserted a date-time: {text:?}");
-    assert!(app.show_calendar, "an in-box click keeps the calendar open");
-
     // Click a populated day cell (cells are 3 columns wide; the grid's weekday
-    // header is row 1 and the week rows start at row 2).
+    // header is row 1 and the week rows start at row 2). Date-time lines moved to
+    // the clock box, so the calendar only inserts days now.
     let grid = app.calendar.grid();
     let (wk, col) = grid
         .weeks
@@ -1127,6 +1077,25 @@ fn calendar_click_inserts_into_editor() {
     // A click outside the box closes it.
     app.on_mouse(click(0, 23));
     assert!(!app.show_calendar, "an outside click closes the calendar");
+}
+
+#[test]
+fn clock_box_inserts_a_time_row() {
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.clock");
+    assert!(app.show_clock, "the action opens the clock box");
+    let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let r = app.layout.clock;
+    assert!(r.width > 0, "the clock rect was recorded");
+
+    // Click the first row (local date-time): inserts a date-time and closes.
+    app.on_mouse(click(r.x + 1, r.y));
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains(':') && text.contains('-'), "inserted a date-time: {text:?}");
+    assert!(!app.show_clock, "a row click closes the clock box");
 }
 
 #[test]
@@ -1812,7 +1781,7 @@ fn f10_toggles_menu_bar() {
 fn alt_letters_open_specific_menus() {
     let alt = |c: char| KeyEvent::new(KeyCode::Char(c), KeyModifiers::ALT);
     let menu_index = |name: &str| {
-        vix::menu::MENUS.iter().position(|m| m.name == name).unwrap()
+        vix::menu::menus().iter().position(|m| m.name == name).unwrap()
     };
     for (letter, name) in [
         ('f', "menu.file"),
@@ -1896,7 +1865,7 @@ fn menu_dropdown_keeps_a_gap_before_shortcuts() {
     // at least one space between its label and the right-aligned shortcut.
     let bar = Rect::new(0, 0, 200, 1);
     let frame = Rect::new(0, 0, 200, 40);
-    for (i, m) in vix::menu::MENUS.iter().enumerate() {
+    for (i, m) in vix::menu::menus().iter().enumerate() {
         let rect = vix::ui::menu_dropdown_rect(frame, bar, i);
         for it in m.items {
             if it.shortcut.is_empty() {
@@ -1922,7 +1891,7 @@ fn menus_have_separators_in_the_specified_places() {
         ("menu.edit", &["edit.cut", "edit.toggle_comment"]),
     ];
     for (menu, befores) in cases {
-        let items = vix::menu::MENUS
+        let items = vix::menu::menus()
             .iter()
             .find(|m| m.name == *menu)
             .unwrap_or_else(|| panic!("{menu} exists"))
@@ -1941,12 +1910,12 @@ fn menus_have_separators_in_the_specified_places() {
 fn submenu_opens_and_runs_a_nested_action() {
     let mut app = app_at(Path::new("."));
     app.on_key(keycode(KeyCode::F(10)));
-    let edit_idx = vix::menu::MENUS.iter().position(|m| m.name == "menu.edit").unwrap();
+    let edit_idx = vix::menu::menus().iter().position(|m| m.name == "menu.edit").unwrap();
     for _ in 0..edit_idx {
         app.on_key(keycode(KeyCode::Right));
     }
     // Walk down to the Find submenu parent.
-    let edit_items = vix::menu::MENUS[edit_idx].items;
+    let edit_items = vix::menu::menus()[edit_idx].items;
     let find_parent = edit_items
         .iter()
         .position(|it| it.label == "menu.item.edit.find_menu")
@@ -1999,7 +1968,7 @@ fn ctrl_tab_switches_tabs() {
 
 #[test]
 fn view_editor_submenu_rolls_up_the_editor_toggles() {
-    let view = vix::menu::MENUS.iter().find(|m| m.name == "menu.view").unwrap();
+    let view = vix::menu::menus().iter().find(|m| m.name == "menu.view").unwrap();
     let editor = view
         .items
         .iter()
@@ -2016,7 +1985,7 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
 
 #[test]
 fn view_layout_submenu_rolls_up_the_dock_toggles() {
-    let view = vix::menu::MENUS.iter().find(|m| m.name == "menu.view").unwrap();
+    let view = vix::menu::menus().iter().find(|m| m.name == "menu.view").unwrap();
     let layout = view
         .items
         .iter()
@@ -2431,7 +2400,7 @@ fn system_info_panel_opens_inserts_and_closes() {
 fn menu_type_ahead_selects_by_first_letter() {
     let mut app = app_at(Path::new("."));
     app.on_key(keycode(KeyCode::F(10)));
-    let file_idx = vix::menu::MENUS.iter().position(|m| m.name == "menu.file").unwrap();
+    let file_idx = vix::menu::menus().iter().position(|m| m.name == "menu.file").unwrap();
     for _ in 0..file_idx {
         app.on_key(keycode(KeyCode::Right));
     }
@@ -2452,7 +2421,7 @@ fn menu_type_ahead_selects_by_first_letter() {
 fn menu_navigation_skips_separators() {
     let mut app = app_at(Path::new("."));
     app.on_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
-    let file_idx = vix::menu::MENUS.iter().position(|m| m.name == "menu.file").unwrap();
+    let file_idx = vix::menu::menus().iter().position(|m| m.name == "menu.file").unwrap();
     for _ in 0..file_idx {
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     }
@@ -2460,7 +2429,7 @@ fn menu_navigation_skips_separators() {
     assert_eq!(app.menu.item, None, "no item is auto-selected on open");
     assert_eq!(app.menu.selected_action(), None);
     // Walking the whole menu with Down must never land on (or commit) a separator.
-    let len = vix::menu::MENUS[file_idx].items.len();
+    let len = vix::menu::menus()[file_idx].items.len();
     for _ in 0..=len {
         app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         let action = app.menu.selected_action().expect("never a separator");
@@ -2534,7 +2503,7 @@ fn click_dropdown_item_runs_its_action() {
 /// computed from the actual titles so it is locale-independent.
 fn top_menu_col(app: &App, idx: usize) -> u16 {
     let mut x = app.layout.menu.x + 1;
-    for m in &vix::menu::MENUS[..idx] {
+    for m in &vix::menu::menus()[..idx] {
         x += m.title().chars().count() as u16 + 2;
     }
     x + 1
@@ -2683,61 +2652,20 @@ fn click_dock_toggle_icons() {
 }
 
 #[test]
-fn click_theme_chooser_row_highlights_it() {
+fn view_keymap_submenu_actions_set_the_keymap() {
     let mut app = app_at(Path::new("."));
-    app.run_action("view.theme");
-    let count = app.theme_chooser.as_ref().unwrap().choices.len();
-    assert!(count >= 3, "need a few themes to click");
-    // The list rect is normally recorded during render; set it directly.
-    app.layout.chooser = Rect::new(10, 5, 34, count as u16);
-    // Click the third row (index 2).
-    app.on_mouse(click(12, 7));
-    assert!(app.theme_chooser.is_some(), "a click highlights, it does not close");
-    assert_eq!(
-        app.theme_chooser.as_ref().unwrap().selected,
-        2,
-        "clicking a row highlights that theme"
-    );
-    // A click below the list (out of bounds) is ignored.
-    app.on_mouse(click(12, 5 + count as u16 + 3));
-    assert_eq!(app.theme_chooser.as_ref().unwrap().selected, 2, "out-of-list click ignored");
-}
-
-#[test]
-fn view_keymap_chooser_opens_navigates_and_selects() {
-    let mut app = app_at(Path::new("."));
-    assert!(app.keymap_chooser.is_none());
     assert_eq!(app.settings.keymap, "apple", "default keymap");
 
-    app.run_action("view.keymap");
-    assert!(app.keymap_chooser.is_some(), "View -> Keymap opens the chooser");
-
-    // Down moves Apple → VSCode; Enter commits and persists it.
-    app.on_key(keycode(KeyCode::Down));
-    app.on_key(keycode(KeyCode::Enter));
-    assert!(app.keymap_chooser.is_none(), "Enter closes the chooser");
+    // The View → Keymap submenu dispatches `view.keymap:<id>` per item.
+    app.run_action("view.keymap:vscode");
     assert_eq!(app.settings.keymap, "vscode");
 
-    // Reopen, move, then Esc reverts (the committed keymap is unchanged).
-    app.run_action("view.keymap");
-    app.on_key(keycode(KeyCode::Down));
-    app.on_key(esc());
-    assert!(app.keymap_chooser.is_none(), "Esc closes the chooser");
-    assert_eq!(app.settings.keymap, "vscode", "Esc does not change the keymap");
-}
+    app.run_action("view.keymap:vim");
+    assert_eq!(app.settings.keymap, "vim");
 
-#[test]
-fn click_keymap_chooser_row_highlights_it() {
-    let mut app = app_at(Path::new("."));
-    app.run_action("view.keymap");
-    assert!(app.keymap_chooser.is_some());
-    app.layout.chooser = Rect::new(10, 5, 34, 3);
-    // Click the second row (index 1 → VSCode).
-    app.on_mouse(click(12, 6));
-    assert_eq!(app.keymap_chooser.as_ref().unwrap().selected, 1, "click highlights the row");
-    // Committing with Enter persists the clicked keymap.
-    app.on_key(keycode(KeyCode::Enter));
-    assert_eq!(app.settings.keymap, "vscode");
+    // An unknown id is ignored.
+    app.run_action("view.keymap:nope");
+    assert_eq!(app.settings.keymap, "vim");
 }
 
 #[test]
@@ -2854,11 +2782,8 @@ fn switching_keymap_resets_vim_to_normal() {
     app.settings.keymap = "vim".to_string();
     app.on_key(key('i')); // enter Insert
     assert_eq!(app.mode_indicator().as_deref(), Some("-- INSERT --"));
-    // Choose the Vim keymap again via the chooser; modes reset to Normal.
-    app.run_action("view.keymap");
-    // Move selection to Vim and commit.
-    app.keymap_chooser.as_mut().unwrap().selected = 3;
-    app.on_key(keycode(KeyCode::Enter));
+    // Choose the Vim keymap again via the submenu action; modes reset to Normal.
+    app.run_action("view.keymap:vim");
     assert_eq!(app.settings.keymap, "vim");
     assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"), "reset to Normal");
 }

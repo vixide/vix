@@ -77,8 +77,10 @@ const FILE: &[Item] = &[
     SEP,
     Item::leaf("menu.item.file.open", "file.open", "Ctrl O"),
     Item::leaf("menu.item.file.open_recent", "file.open_recent", "Ctrl Shift O"),
+    SEP,
     Item::leaf("menu.item.file.save", "file.save", "Ctrl S"),
     Item::leaf("menu.item.file.save_as", "file.save_as", "Ctrl Shift S"),
+    Item::leaf("menu.item.file.rename", "file.rename", ""),
     SEP,
     Item::leaf("menu.item.file.close", "file.close", "Ctrl W"),
     Item::leaf("menu.item.file.close_all", "file.close_all", "Ctrl Shift W"),
@@ -178,13 +180,15 @@ const VIEW_EDITOR: &[Item] = &[
     Item::leaf("menu.item.view.prev_tab", "tab.prev", "Ctrl Shift Tab"),
 ];
 
-const VIEW: &[Item] = &[
-    Item::leaf("menu.item.view.theme", "view.theme", ""),
-    Item::leaf("menu.item.view.locale", "view.locale", ""),
-    Item::leaf("menu.item.view.keymap", "view.keymap", ""),
-    SEP,
-    Item::sub("menu.item.view.layout", VIEW_LAYOUT),
-    Item::sub("menu.item.view.editor", VIEW_EDITOR),
+/// Keyboard navigation styles, grouped under View → Keymap. The labels are the
+/// proper-noun keymap names (not translated); the actions carry the keymap id
+/// after `view.keymap:`. Kept in sync with `vix_keymap_model::KEYMAPS` (a unit
+/// test guards the ids).
+const VIEW_KEYMAP: &[Item] = &[
+    Item::leaf("Apple", "view.keymap:apple", ""),
+    Item::leaf("macOS VSCode", "view.keymap:vscode", ""),
+    Item::leaf("Emacs", "view.keymap:emacs", ""),
+    Item::leaf("Vim", "view.keymap:vim", ""),
 ];
 
 const VIX: &[Item] = &[
@@ -200,15 +204,17 @@ const VIX: &[Item] = &[
 const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.palette", "tools.palette", "Ctrl P"),
     Item::sub("menu.item.tools.lsp", TOOLS_LSP),
+    SEP,
     Item::leaf("menu.item.tools.dashboard", "tools.dashboard", ""),
     Item::leaf("menu.item.tools.system_info", "tools.system_info", ""),
     Item::leaf("menu.item.tools.file_info", "tools.file_info", ""),
-    Item::leaf("menu.item.tools.contacts", "tools.contacts", ""),
     SEP,
     Item::leaf("menu.item.tools.run_command", "tools.run_command", ""),
     Item::leaf("menu.item.tools.cancel_command", "tools.cancel_command", ""),
     SEP,
+    Item::leaf("menu.item.tools.contacts", "tools.contacts", ""),
     Item::leaf("menu.item.tools.calendar", "tools.calendar", ""),
+    Item::leaf("menu.item.tools.clock", "tools.clock", ""),
     Item::leaf("menu.item.tools.nerd_palette", "tools.nerd_palette", ""),
     Item::leaf("menu.item.tools.ascii", "tools.ascii", ""),
     Item::leaf("menu.item.tools.html_chars", "tools.html_chars", ""),
@@ -220,6 +226,15 @@ const TOOLS_LSP: &[Item] = &[
     Item::leaf("menu.item.lsp.definition", "nav.goto_definition", "F12"),
     Item::leaf("menu.item.lsp.hover", "lsp.hover", ""),
     Item::leaf("menu.item.lsp.complete", "lsp.complete", "Ctrl Space"),
+];
+
+const AI: &[Item] = &[
+    Item::leaf("menu.item.ai.summarize", "ai.summarize", ""),
+    Item::leaf("menu.item.ai.explain", "ai.explain", ""),
+    Item::leaf("menu.item.ai.define", "ai.define", ""),
+    SEP,
+    Item::leaf("menu.item.ai.annotate", "ai.annotate", ""),
+    Item::leaf("menu.item.ai.improve", "ai.improve", ""),
 ];
 
 const GIT: &[Item] = &[
@@ -244,16 +259,70 @@ const HELP: &[Item] = &[
     Item::leaf("menu.item.help.shortcuts", "help.shortcuts", "F1"),
 ];
 
-/// The full menu bar, left to right.
-pub const MENUS: &[MenuDef] = &[
-    MenuDef { name: "menu.vix", items: VIX },
-    MenuDef { name: "menu.file", items: FILE },
-    MenuDef { name: "menu.edit", items: EDIT },
-    MenuDef { name: "menu.view", items: VIEW },
-    MenuDef { name: "menu.tools", items: TOOLS },
-    MenuDef { name: "menu.git", items: GIT },
-    MenuDef { name: "menu.help", items: HELP },
-];
+/// Available theme names for the View → Theme submenu, set once by the host at
+/// startup (before the menu is first used).
+static THEME_NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+
+/// The fully-built menu bar, cached on first use.
+static MENUS_CELL: std::sync::OnceLock<Vec<MenuDef>> = std::sync::OnceLock::new();
+
+/// Provide the theme names that populate the View → Theme submenu. Call once at
+/// startup, before [`menus`] is first called; later calls are ignored (the menu
+/// is built and cached on first use).
+pub fn set_theme_names(names: Vec<String>) {
+    let _ = THEME_NAMES.set(names);
+}
+
+/// The full menu bar, left to right. Built once: every menu is static except
+/// View → Theme, whose items are the runtime theme list (see [`set_theme_names`]).
+#[must_use]
+pub fn menus() -> &'static [MenuDef] {
+    MENUS_CELL.get_or_init(build_menus).as_slice()
+}
+
+/// Build the View → Theme submenu items from the available theme names, leaking
+/// them to `'static`. Falls back to the bundled Dark/Light when none are set.
+fn theme_submenu() -> &'static [Item] {
+    let names = THEME_NAMES.get().cloned().unwrap_or_default();
+    let mut items: Vec<Item> = names
+        .iter()
+        .map(|n| {
+            let label: &'static str = Box::leak(n.clone().into_boxed_str());
+            let action: &'static str = Box::leak(format!("view.theme:{n}").into_boxed_str());
+            Item::leaf(label, action, "")
+        })
+        .collect();
+    if items.is_empty() {
+        items.push(Item::leaf("Dark", "view.theme:Dark", ""));
+        items.push(Item::leaf("Light", "view.theme:Light", ""));
+    }
+    Box::leak(items.into_boxed_slice())
+}
+
+fn build_menus() -> Vec<MenuDef> {
+    let view_items: &'static [Item] = Box::leak(
+        vec![
+            Item::sub("menu.item.view.theme", theme_submenu()),
+            Item::leaf("menu.item.view.locale", "view.locale", ""),
+            Item::leaf("menu.item.view.time_zone", "view.time_zone", ""),
+            Item::sub("menu.item.view.keymap", VIEW_KEYMAP),
+            SEP,
+            Item::sub("menu.item.view.layout", VIEW_LAYOUT),
+            Item::sub("menu.item.view.editor", VIEW_EDITOR),
+        ]
+        .into_boxed_slice(),
+    );
+    vec![
+        MenuDef { name: "menu.vix", items: VIX },
+        MenuDef { name: "menu.file", items: FILE },
+        MenuDef { name: "menu.edit", items: EDIT },
+        MenuDef { name: "menu.view", items: view_items },
+        MenuDef { name: "menu.tools", items: TOOLS },
+        MenuDef { name: "menu.ai", items: AI },
+        MenuDef { name: "menu.git", items: GIT },
+        MenuDef { name: "menu.help", items: HELP },
+    ]
+}
 
 /// Index of the first non-separator item in `items` (0 if none).
 fn first_selectable(items: &[Item]) -> usize {
@@ -341,7 +410,7 @@ impl Menu {
     /// Open the menu at index `i` (no-op if out of range). No item is highlighted
     /// yet — the user picks one by arrowing, hovering, or typing.
     pub fn open_index(&mut self, i: usize) {
-        if i < MENUS.len() {
+        if i < menus().len() {
             self.open = Some(i);
             self.item = None;
             self.sub = None;
@@ -353,7 +422,7 @@ impl Menu {
     pub fn submenu_items(&self) -> Option<&'static [Item]> {
         let i = self.open?;
         let it = self.item?;
-        MENUS[i].items[it].submenu
+        menus()[i].items[it].submenu
     }
 
     /// Move to the previous top-level menu; or, if a submenu is open, close it.
@@ -363,7 +432,7 @@ impl Menu {
             self.sub = None;
             return;
         }
-        let n = MENUS.len();
+        let n = menus().len();
         self.open_index((i + n - 1) % n);
     }
 
@@ -373,7 +442,7 @@ impl Menu {
         let Some(i) = self.open else { return };
         if self.sub.is_none() {
             if let Some(it) = self.item {
-                if let Some(sub) = MENUS[i].items[it].submenu {
+                if let Some(sub) = menus()[i].items[it].submenu {
                     self.sub = Some(first_selectable(sub));
                     return;
                 }
@@ -381,7 +450,7 @@ impl Menu {
         } else {
             return;
         }
-        let n = MENUS.len();
+        let n = menus().len();
         self.open_index((i + 1) % n);
     }
 
@@ -389,7 +458,7 @@ impl Menu {
     /// nothing highlighted yet, highlights the last selectable item.
     pub fn up(&mut self) {
         let Some(i) = self.open else { return };
-        let items = MENUS[i].items;
+        let items = menus()[i].items;
         match self.item {
             Some(it) => {
                 if let (Some(sidx), Some(sub)) = (self.sub, items[it].submenu) {
@@ -406,7 +475,7 @@ impl Menu {
     /// highlighted yet, highlights the first selectable item.
     pub fn down(&mut self) {
         let Some(i) = self.open else { return };
-        let items = MENUS[i].items;
+        let items = menus()[i].items;
         match self.item {
             Some(it) => {
                 if let (Some(sidx), Some(sub)) = (self.sub, items[it].submenu) {
@@ -423,7 +492,7 @@ impl Menu {
     /// return the leaf action to run. Does nothing when nothing is highlighted.
     pub fn enter(&mut self) -> Option<&'static str> {
         let i = self.open?;
-        let items = MENUS[i].items;
+        let items = menus()[i].items;
         let it_idx = self.item?;
         if let Some(sidx) = self.sub {
             let sub = items[it_idx].submenu?;
@@ -444,7 +513,7 @@ impl Menu {
     /// Lets the user press e.g. `S`, `S` to step Save → Save As.
     pub fn type_ahead(&mut self, c: char) {
         let Some(i) = self.open else { return };
-        let items = MENUS[i].items;
+        let items = menus()[i].items;
         if let Some(it) = self.item {
             if let (Some(sidx), Some(sub)) = (self.sub, items[it].submenu) {
                 if let Some(j) = label_starting(sub, sidx, c) {
@@ -465,7 +534,7 @@ impl Menu {
     #[must_use]
     pub fn selected_action(&self) -> Option<&'static str> {
         let i = self.open?;
-        let items = MENUS[i].items;
+        let items = menus()[i].items;
         let it_idx = self.item?;
         if let Some(sidx) = self.sub {
             let sub = items[it_idx].submenu?;
@@ -477,5 +546,22 @@ impl Menu {
             return None;
         }
         (!it.is_separator()).then_some(it.action)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The View → Keymap submenu must stay in sync with the keymap model: one
+    /// item per keymap, each action `view.keymap:<id>` in list order.
+    #[test]
+    fn keymap_submenu_matches_model() {
+        let ids: Vec<&str> = VIEW_KEYMAP
+            .iter()
+            .map(|it| it.action.strip_prefix("view.keymap:").expect("keymap action prefix"))
+            .collect();
+        let model: Vec<&str> = vix_keymap_model::KEYMAPS.iter().map(|k| k.id).collect();
+        assert_eq!(ids, model);
     }
 }

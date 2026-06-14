@@ -87,6 +87,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
         // Drain any streamed output from a running command into the bottom dock,
         // and any finished dashboard metrics into the dashboard panel.
         app.poll_command();
+        app.poll_ai_replace();
         app.poll_dashboard();
         // Drain language-server messages (diagnostics, hover/definition/completion
         // responses) and sync the active document.
@@ -98,7 +99,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
         // Poll with a timeout so the calendar clock refreshes while idle; poll
         // faster while a command is streaming, dashboard metrics are computing,
         // or a language-server request is in flight so output appears promptly.
-        let timeout = if app.command_running() || app.dashboard_loading() || app.lsp_busy() {
+        let timeout = if app.command_running() || app.ai_replace_running() || app.dashboard_loading() || app.lsp_busy() {
             Duration::from_millis(50)
         } else {
             Duration::from_millis(500)

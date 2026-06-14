@@ -1,12 +1,12 @@
 # Menus
 
 The top menu bar groups every command into dropdown menus. From left to right
-the menus are **Vix · File · Edit · View · Tools · Git · Help**.
+the menus are **Vix · File · Edit · View · Tools · AI · Git · Help**.
 
 ## Navigating the menus
 
 - Open the bar with **F10**, or jump straight to a menu with its Alt mnemonic:
-  **Alt+F/E/V/T/H** for File / Edit / View / Tools / Help.
+  **Alt+F/E/V/T/A/G/H** for File / Edit / View / Tools / AI / Git / Help.
 - **Arrows** navigate, **Enter** runs the highlighted item, **Esc** closes.
 - A mouse click on a menu name opens it; a click on a dropdown item runs it.
 - While a menu is open, moving the pointer follows the selection: hovering a
@@ -38,6 +38,7 @@ the menus are **Vix · File · Edit · View · Tools · Git · Help**.
 | Open Recent…      | `Ctrl+Shift+O` | Reopen a recently opened file (chooser) |
 | Save              | `Ctrl+S`       | Save the file                           |
 | Save As…          | `Ctrl+Shift+S` | Save under a different name             |
+| Rename…           |                | Rename the active file on disk          |
 | Close             | `Ctrl+W`       | Close the active buffer                 |
 | Close All Tabs    |                | Close every buffer (leaves one empty)   |
 | Reopen Closed Tab | `Ctrl+Shift+T` | Reopen the most recently closed file    |
@@ -107,9 +108,10 @@ Upper, Lower, Title, Kebab, Snake, Camel, and Pascal.
 
 | Item     | Action                       |
 | -------- | ---------------------------- |
-| Theme…   | Open the theme chooser       |
+| Theme ▸  | Submenu of available themes (bundled + user JSON); pick one to apply |
 | Locale…  | Open the locale chooser      |
-| Keymap…  | Open the keymap chooser      |
+| Time Zone… | Pick the app-wide active IANA time zone (filterable) |
+| Keymap ▸ | Submenu of keyboard navigation styles (Apple/VSCode/Emacs/Vim) |
 | Layout ▸ | Submenu of dock/status toggles |
 | Editor ▸ | Submenu of editor display toggles |
 
@@ -134,23 +136,42 @@ and strings).
 | Cancel Command      | Kill the running command                     |
 | *— separator —*     |                                              |
 | Calendar…           | Toggle the calendar box                      |
+| Clock…              | Toggle the clock box (local/UTC/ISO week/active zone) |
 | Nerd Font Characters… | Open the glyph picker                      |
 | ASCII Characters…   | Open the ASCII reference table               |
 | X11 Colors…         | Pick an X11 color; inserts its hex           |
 | HTML Characters…    | Pick an HTML character; click a cell to insert it |
 | Language Server ▸   | LSP actions: Go to Definition, Hover, Completion |
 
+## AI menu
+
+Each item runs the `claude` CLI on the selection, or the whole file when nothing
+is selected. Summarize and Explain stream into the bottom dock; Annotate and
+Improve run in the background and **replace** the text with the result (undoable).
+
+| Item      | Action                                                                 |
+| --------- | --------------------------------------------------------------------- |
+| Summarize | Run `claude` to summarize the selection (or the whole file); to the dock |
+| Explain   | Run `claude` to explain the selection (or the whole file); to the dock |
+| Define    | Run `claude` to define the selection (or the word at/after the cursor); to the dock |
+| Annotate  | Run `claude` to annotate the selection (or the whole file); replaces it |
+| Improve   | Run `claude` to improve the selection (or the whole file); replaces it |
+
 ## Git menu
 
 | Item           | Action                                                   |
 | -------------- | -------------------------------------------------------- |
+| Status         | `git status` (streamed to the bottom dock)               |
 | Changes…       | Open the git changes panel: stage/unstage and commit     |
 | Log…           | Show the commit history (`git log`)                      |
-| Switch Branch… | Choose a local branch to check out                       |
 | New Branch…    | Create a new branch and switch to it                     |
+| Switch Branch… | Choose a local branch to check out                       |
+| Merge Branch…  | Choose a branch to merge into the current one            |
 | Pull           | `git pull` (streamed to the bottom dock)                 |
 | Push           | `git push` (streamed to the bottom dock)                 |
 | Fetch          | `git fetch` (streamed to the bottom dock)                |
+| Init           | `git init` (refuses if a `.git` repo already exists)     |
+| Clone…         | Prompt for a URL and `git clone` it                      |
 
 ## Help menu
 

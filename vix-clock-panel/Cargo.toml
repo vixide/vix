@@ -1,0 +1,23 @@
+# vix-clock-panel: the clock box's date/time strings (local, UTC, ISO commercial
+# week date, and the application-wide active time zone) plus a small selectable
+# row model. Pure logic over `jiff` and vix-time-zone-model (no UI framework), so
+# it is unit-testable on its own; the host renders it. See spec/index.md.
+
+[package]
+name = "vix-clock-panel"
+version = "0.1.0"
+edition = "2021"
+description = "Date/time clock strings (local, UTC, ISO week, active zone) for Vix."
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_clock_panel"
+path = "src/lib.rs"
+
+[dependencies]
+# Date/time: local + UTC, ISO 8601, ISO week date, and fixed-offset conversion
+# for the active time zone. Packaged in Debian as librust-jiff-dev.
+jiff = "0.2"
+# The application-wide active time zone (name + standard UTC offset).
+vix-time-zone-model = { path = "../vix-time-zone-model" }
