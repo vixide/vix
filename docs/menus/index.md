@@ -109,8 +109,8 @@ Upper, Lower, Title, Kebab, Snake, Camel, and Pascal.
 | Item     | Action                       |
 | -------- | ---------------------------- |
 | Theme ▸  | Submenu of available themes (bundled + user JSON); pick one to apply |
-| Locale…  | Open the locale chooser      |
-| Time Zone… | Pick the app-wide active IANA time zone (filterable) |
+| Locale ▸ | Submenu of UI languages; pick one to apply |
+| Time Zone ▸ | Submenu of IANA zones (sorted by UTC offset, then name); pick one |
 | Keymap ▸ | Submenu of keyboard navigation styles (Apple/VSCode/Emacs/Vim) |
 | Layout ▸ | Submenu of dock/status toggles |
 | Editor ▸ | Submenu of editor display toggles |
@@ -151,9 +151,9 @@ Improve run in the background and **replace** the text with the result (undoable
 
 | Item      | Action                                                                 |
 | --------- | --------------------------------------------------------------------- |
-| Summarize | Run `claude` to summarize the selection (or the whole file); to the dock |
-| Explain   | Run `claude` to explain the selection (or the whole file); to the dock |
-| Define    | Run `claude` to define the selection (or the word at/after the cursor); to the dock |
+| Summarize | Run `claude` to summarize the selection (or the whole file); to a new tab |
+| Explain   | Run `claude` to explain the selection (or the whole file); to a new tab |
+| Define    | Run `claude` to define the selection (or the word at/after the cursor); to a new tab |
 | Annotate  | Run `claude` to annotate the selection (or the whole file); replaces it |
 | Improve   | Run `claude` to improve the selection (or the whole file); replaces it |
 

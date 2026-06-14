@@ -150,7 +150,7 @@ enum AiMsg {
     Failed,
 }
 
-/// Where a finished AI transform should write its result.
+/// Which part of a buffer an AI transform replaces.
 #[derive(Clone, Copy)]
 enum AiTarget {
     /// Replace the whole buffer.
@@ -159,15 +159,23 @@ enum AiTarget {
     Range(usize, usize),
 }
 
-/// A background AI transform (e.g. Annotate, Improve) whose captured output
-/// replaces the selection — or whole buffer — it was launched from.
+/// Where a finished AI task's captured output goes.
+#[derive(Clone, Copy)]
+enum AiDest {
+    /// Replace text in tab `tab` (the whole buffer or a range).
+    Replace { tab: usize, target: AiTarget },
+    /// Open the result in a new editor tab.
+    NewTab,
+}
+
+/// A background AI task whose captured output is applied when it finishes —
+/// either replacing editor text (Annotate, Improve) or opening a new tab
+/// (Summarize, Explain, Define).
 struct AiReplace {
     /// Receiver for the captured result.
     rx: std::sync::mpsc::Receiver<AiMsg>,
-    /// Index of the tab to write the result back into.
-    tab: usize,
-    /// The range (or whole buffer) to replace when the result arrives.
-    target: AiTarget,
+    /// Where to put the result.
+    dest: AiDest,
     /// Localized action label, for status messages.
     label: String,
 }
@@ -296,16 +304,6 @@ pub struct Dialog {
     pub editor: Option<crate::editor::CodeEditor>,
 }
 
-/// Locale chooser overlay state (View -> Locale), re-exported from
-/// [`vix_locale_chooser`]. Moving the selection previews the language live;
-/// Enter commits and persists it, Esc reverts.
-pub use vix_locale_chooser::Chooser as LocaleChooser;
-
-/// Time Zone chooser overlay state (Tools -> Time Zone), re-exported from
-/// [`vix_time_zone_chooser`]. A filterable list; Enter sets the application-wide
-/// active zone in [`vix_time_zone_model`] and persists it, Esc cancels.
-pub use vix_time_zone_chooser::Chooser as TimeZoneChooser;
-
 /// Nerd Font palette overlay state (Tools -> Nerd Font Palette), re-exported from
 /// [`vix_nerd_font_picker`]. Arrow keys move within the glyph grid; Enter (or a
 /// click) inserts the highlighted glyph into the active editor, Esc closes.
@@ -433,14 +431,9 @@ pub struct Layout {
     pub messages: Rect,
     /// Bottom-dock rectangle (valid while the bottom dock is shown).
     pub bottom_dock: Rect,
-    /// Row list rectangle of the open chooser overlay (theme/locale/keymap), so a
+    /// Row list rectangle of the open chooser overlay (recent files), so a
     /// click can hit-test which row was picked.
     pub chooser: Rect,
-    /// Row-list rectangle of the open Time Zone chooser, so a click can hit-test
-    /// which row was picked.
-    pub tz_chooser: Rect,
-    /// Scrollbar gutter rectangle of the open Time Zone chooser, for click/drag.
-    pub tz_scrollbar: Rect,
     /// Glyph-grid rectangle of the open Nerd Font palette, so a click can
     /// hit-test which cell was picked.
     pub nerd_palette: Rect,
@@ -479,6 +472,20 @@ pub struct Layout {
     /// Inner content rectangle of the open find / replace box, so a click can
     /// focus the Find or Replace field.
     pub search: Rect,
+    /// Clickable button rectangles in the find box: the Case/Word/Regex toggles
+    /// and, in replace mode, the Once/Ask/All replace buttons. `Rect::default()`
+    /// when not shown.
+    pub search_case: Rect,
+    /// See [`Self::search_case`].
+    pub search_word: Rect,
+    /// See [`Self::search_case`].
+    pub search_regex: Rect,
+    /// See [`Self::search_case`].
+    pub search_once: Rect,
+    /// See [`Self::search_case`].
+    pub search_ask: Rect,
+    /// See [`Self::search_case`].
+    pub search_all: Rect,
     /// Inner content rectangle of the open calendar box, so a click can insert a
     /// date-time line or a calendar day.
     pub calendar: Rect,
@@ -538,10 +545,6 @@ pub struct App {
     pub git_panel: Option<GitPanel>,
     /// Git branch switcher, when open.
     pub branch_chooser: Option<BranchChooser>,
-    /// Locale chooser overlay, when open.
-    pub locale_chooser: Option<LocaleChooser>,
-    /// Time Zone chooser overlay, when open.
-    pub time_zone_chooser: Option<TimeZoneChooser>,
     /// Recent-files chooser overlay, when open.
     pub recent_chooser: Option<RecentChooser>,
     /// Nerd Font palette (character picker) overlay, when open.
@@ -722,8 +725,6 @@ impl App {
             context_menu: None,
             git_panel: None,
             branch_chooser: None,
-            locale_chooser: None,
-            time_zone_chooser: None,
             recent_chooser: None,
             nerd_palette: None,
             ascii_panel: None,
@@ -904,14 +905,6 @@ impl App {
                 KeyCode::Esc | KeyCode::Char('q') => self.show_clock = false,
                 _ => {}
             }
-            return;
-        }
-        if self.locale_chooser.is_some() {
-            self.locale_key(key);
-            return;
-        }
-        if self.time_zone_chooser.is_some() {
-            self.time_zone_key(key);
             return;
         }
         if self.recent_chooser.is_some() {
@@ -1624,7 +1617,7 @@ impl App {
                 );
             }
             a if a.starts_with("view.theme:") => self.set_theme_by_name(&a["view.theme:".len()..]),
-            "view.locale" => self.open_locale_chooser(),
+            a if a.starts_with("view.locale:") => self.set_locale_by_code(&a["view.locale:".len()..]),
             a if a.starts_with("view.keymap:") => self.set_keymap(&a["view.keymap:".len()..]),
             "tools.calendar" => {
                 self.show_calendar = !self.show_calendar;
@@ -1646,7 +1639,9 @@ impl App {
                     self.clock.selected = 0;
                 }
             }
-            "view.time_zone" => self.open_time_zone_chooser(),
+            a if a.starts_with("view.time_zone:") => {
+                self.set_time_zone_by_name(&a["view.time_zone:".len()..]);
+            }
             "tools.dashboard" => self.open_dashboard(),
             "tools.run_command" => {
                 self.prompt =
@@ -3380,16 +3375,8 @@ impl App {
             }
             return;
         }
-        // Choosers are list overlays: a left click on a row highlights it (and,
-        // for the theme chooser, previews live), mirroring keyboard Up/Down.
-        if self.locale_chooser.is_some() {
-            self.locale_mouse(mouse);
-            return;
-        }
-        if self.time_zone_chooser.is_some() {
-            self.time_zone_mouse(mouse);
-            return;
-        }
+        // The recent-files chooser is a list overlay: a left click on a row
+        // highlights it, mirroring keyboard Up/Down.
         if self.recent_chooser.is_some() {
             self.recent_mouse(mouse);
             return;
@@ -4046,41 +4033,17 @@ impl App {
         }
     }
 
-    // ----- locale chooser -------------------------------------------------
+    // ----- locale ---------------------------------------------------------
 
-    fn open_locale_chooser(&mut self) {
-        self.locale_chooser = Some(LocaleChooser::open(&rust_i18n::locale()));
-    }
-
-    fn locale_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Up | KeyCode::Down => {
-                if let Some(lc) = self.locale_chooser.as_mut() {
-                    if key.code == KeyCode::Up {
-                        lc.up();
-                    } else {
-                        lc.down();
-                    }
-                    // Preview the highlighted language live.
-                    rust_i18n::set_locale(lc.selected_code());
-                }
-            }
-            KeyCode::Enter => {
-                if let Some(lc) = self.locale_chooser.take() {
-                    let code = lc.selected_code();
-                    rust_i18n::set_locale(code);
-                    self.settings.locale = code.to_string();
-                    self.status = t!("status.locale", locale = code).to_string();
-                }
-            }
-            KeyCode::Esc => {
-                if let Some(lc) = self.locale_chooser.take() {
-                    rust_i18n::set_locale(lc.original_code());
-                    self.status = t!("status.locale_unchanged").to_string();
-                }
-            }
-            _ => {}
-        }
+    /// Apply the locale with the given `code` (from the View → Locale submenu),
+    /// persist it, and update the UI language. Unknown codes are ignored.
+    fn set_locale_by_code(&mut self, code: &str) {
+        let Some(loc) = vix_locale_model::by_code(code) else {
+            return;
+        };
+        rust_i18n::set_locale(loc.code);
+        self.settings.locale = loc.code.to_string();
+        self.status = t!("status.locale", locale = loc.code).to_string();
     }
 
     // ----- keymap ---------------------------------------------------------
@@ -4096,60 +4059,15 @@ impl App {
         self.status = t!("status.keymap", keymap = km.id).to_string();
     }
 
-    // ----- time zone chooser ----------------------------------------------
+    // ----- time zone ------------------------------------------------------
 
-    fn open_time_zone_chooser(&mut self) {
-        self.time_zone_chooser = Some(TimeZoneChooser::open(vix_time_zone_model::active_name()));
-    }
-
-    fn time_zone_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.tz_chooser.height as usize).max(1);
-        match key.code {
-            KeyCode::Up => {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    c.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    c.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    c.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    c.page_down(page);
-                }
-            }
-            KeyCode::Char(ch) => {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    c.push(ch);
-                }
-            }
-            KeyCode::Backspace => {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    c.backspace();
-                }
-            }
-            KeyCode::Enter => {
-                if let Some(zone) =
-                    self.time_zone_chooser.as_ref().and_then(TimeZoneChooser::selected_zone)
-                {
-                    vix_time_zone_model::set_active(zone.name);
-                    self.settings.time_zone = zone.name.to_string();
-                    self.status = t!("status.time_zone", zone = zone.name).to_string();
-                }
-                self.time_zone_chooser = None;
-            }
-            KeyCode::Esc => {
-                self.time_zone_chooser = None;
-                self.status = t!("status.time_zone_unchanged").to_string();
-            }
-            _ => {}
+    /// Apply the time zone with the given canonical `name` (from the View → Time
+    /// Zone submenu), persist it, and update the app-wide active zone. Unknown
+    /// names are ignored.
+    fn set_time_zone_by_name(&mut self, name: &str) {
+        if vix_time_zone_model::set_active(name) {
+            self.settings.time_zone = name.to_string();
+            self.status = t!("status.time_zone", zone = name).to_string();
         }
     }
 
@@ -4235,65 +4153,6 @@ impl App {
         (matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
             && rect_contains(r, mouse.column, mouse.row))
         .then(|| (mouse.row - r.y) as usize)
-    }
-
-    fn locale_mouse(&mut self, mouse: MouseEvent) {
-        if let Some(idx) = self.chooser_row(mouse) {
-            if let Some(lc) = self.locale_chooser.as_mut() {
-                if idx < vix_locale_chooser::LOCALES.len() {
-                    lc.selected = idx;
-                    rust_i18n::set_locale(lc.selected_code());
-                }
-            }
-        }
-    }
-
-    fn time_zone_mouse(&mut self, mouse: MouseEvent) {
-        let list = self.layout.tz_chooser;
-        let sb = self.layout.tz_scrollbar;
-        let viewport = (list.height as usize).max(1);
-        match mouse.kind {
-            // Press or drag on the scrollbar gutter moves the highlight.
-            MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left)
-                if rect_contains(sb, mouse.column, mouse.row) =>
-            {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    let max = c.len().saturating_sub(1);
-                    let pos = crate::ui::scrollbar_pos_from_row(sb, mouse.row, max);
-                    c.select(pos);
-                    c.ensure_visible(viewport);
-                }
-            }
-            // A click on a row accepts that zone.
-            MouseEventKind::Down(MouseButton::Left) if rect_contains(list, mouse.column, mouse.row) => {
-                let row_in_view = (mouse.row - list.y) as usize;
-                let pick = self.time_zone_chooser.as_mut().and_then(|c| {
-                    let idx = c.scroll + row_in_view;
-                    (idx < c.len()).then(|| {
-                        c.select(idx);
-                        c.selected_zone()
-                    })?
-                });
-                if let Some(zone) = pick {
-                    vix_time_zone_model::set_active(zone.name);
-                    self.settings.time_zone = zone.name.to_string();
-                    self.status = t!("status.time_zone", zone = zone.name).to_string();
-                    self.time_zone_chooser = None;
-                }
-            }
-            MouseEventKind::ScrollUp => {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    c.scroll = c.scroll.saturating_sub(3);
-                }
-            }
-            MouseEventKind::ScrollDown => {
-                if let Some(c) = self.time_zone_chooser.as_mut() {
-                    let max = c.len().saturating_sub(viewport);
-                    c.scroll = (c.scroll + 3).min(max);
-                }
-            }
-            _ => {}
-        }
     }
 
     // ----- Nerd Font palette ----------------------------------------------
@@ -4688,22 +4547,6 @@ impl App {
 
     // ----- AI -------------------------------------------------------------
 
-    /// Run the `claude` CLI with `prompt`, feeding it `text` on stdin and
-    /// streaming the response into the bottom dock.
-    fn ai_run_on_text(&mut self, prompt: &str, text: &str) {
-        if text.trim().is_empty() {
-            self.status = t!("status.ai_no_input").to_string();
-            return;
-        }
-        let tmp = std::env::temp_dir().join(format!("vix-ai-{}.txt", std::process::id()));
-        if std::fs::write(&tmp, text).is_err() {
-            self.status = t!("status.ai_no_input").to_string();
-            return;
-        }
-        let path = tmp.display();
-        self.run_command(&format!("claude -p \"{prompt}\" < \"{path}\""));
-    }
-
     /// The selected text, or the whole active buffer when nothing is selected.
     fn selected_or_all_text(&mut self) -> String {
         let selection = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text());
@@ -4714,25 +4557,26 @@ impl App {
     }
 
     /// Summarize the selection (or the whole file when nothing is selected) with
-    /// `claude` (output to the dock).
+    /// `claude`; the result opens in a new editor tab.
     fn ai_summarize(&mut self) {
         let text = self.selected_or_all_text();
-        self.ai_run_on_text("Summarize this text.", &text);
+        self.ai_to_new_tab("Summarize this text.", &text, &t!("menu.item.ai.summarize"));
     }
 
     /// Explain the selection (or the whole file when nothing is selected) with
-    /// `claude` (output to the dock).
+    /// `claude`; the result opens in a new editor tab.
     fn ai_explain(&mut self) {
         let text = self.selected_or_all_text();
-        self.ai_run_on_text("Explain this text.", &text);
+        self.ai_to_new_tab("Explain this text.", &text, &t!("menu.item.ai.explain"));
     }
 
-    /// Define a word with `claude` (output to the dock). The input is the
-    /// selection if there is one; otherwise the word under the cursor, or the
-    /// next word when the cursor sits between words. Never the whole buffer.
+    /// Define a word with `claude`; the result opens in a new editor tab. The
+    /// input is the selection if there is one; otherwise the word under the
+    /// cursor, or the next word when the cursor sits between words. Never the
+    /// whole buffer.
     fn ai_define(&mut self) {
         let text = self.selected_or_word_text();
-        self.ai_run_on_text("Define this text.", &text);
+        self.ai_to_new_tab("Define this text.", &text, &t!("menu.item.ai.define"));
     }
 
     /// The selection, else the word at the cursor, else the next word after it.
@@ -4795,15 +4639,38 @@ impl App {
                 _ => (tab.editor.get_content(), AiTarget::Whole),
             }
         };
-        if text.trim().is_empty() {
-            self.status = t!("status.ai_no_input").to_string();
+        if let Some(rx) = self.spawn_ai(prompt, &text) {
+            self.ai_replace =
+                Some(AiReplace { rx, dest: AiDest::Replace { tab: tab_idx, target }, label: label.to_string() });
+            self.status = t!("status.ai_running", action = label).to_string();
+        }
+    }
+
+    /// Launch `claude -p <prompt>` over `text`, capturing its full output to open
+    /// in a new editor tab when it finishes (Summarize/Explain/Define).
+    fn ai_to_new_tab(&mut self, prompt: &str, text: &str, label: &str) {
+        if self.ai_replace.is_some() {
+            self.status = t!("status.ai_busy").to_string();
             return;
         }
+        if let Some(rx) = self.spawn_ai(prompt, text) {
+            self.ai_replace = Some(AiReplace { rx, dest: AiDest::NewTab, label: label.to_string() });
+            self.status = t!("status.ai_running", action = label).to_string();
+        }
+    }
 
-        let tmp = std::env::temp_dir().join(format!("vix-ai-{}.txt", std::process::id()));
-        if std::fs::write(&tmp, &text).is_err() {
+    /// Spawn `claude -p <prompt>` reading `text` on stdin, returning a receiver
+    /// for its captured stdout (or `None` after reporting an empty input or a
+    /// spawn failure). The reader thread sends one [`AiMsg`] when the CLI exits.
+    fn spawn_ai(&mut self, prompt: &str, text: &str) -> Option<std::sync::mpsc::Receiver<AiMsg>> {
+        if text.trim().is_empty() {
             self.status = t!("status.ai_no_input").to_string();
-            return;
+            return None;
+        }
+        let tmp = std::env::temp_dir().join(format!("vix-ai-{}.txt", std::process::id()));
+        if std::fs::write(&tmp, text).is_err() {
+            self.status = t!("status.ai_no_input").to_string();
+            return None;
         }
         let path = tmp.display();
         let cmd = format!("claude -p \"{prompt}\" < \"{path}\"");
@@ -4818,7 +4685,7 @@ impl App {
             Ok(c) => c,
             Err(e) => {
                 self.messages.error(t!("msg.command_failed", error = e).to_string());
-                return;
+                return None;
             }
         };
         let stdout = child.stdout.take().expect("piped stdout");
@@ -4833,12 +4700,11 @@ impl App {
             let success = ok && status.and_then(|s| s.code()) == Some(0);
             let _ = tx.send(if success { AiMsg::Done(out) } else { AiMsg::Failed });
         });
-        self.ai_replace = Some(AiReplace { rx, tab: tab_idx, target, label: label.to_string() });
-        self.status = t!("status.ai_running", action = label).to_string();
+        Some(rx)
     }
 
-    /// Drain a finished AI transform and apply its result. Called once per
-    /// event-loop iteration; cheap when none is running.
+    /// Drain a finished AI task and apply its result. Called once per event-loop
+    /// iteration; cheap when none is running.
     pub fn poll_ai_replace(&mut self) {
         let msg = {
             let Some(ar) = self.ai_replace.as_ref() else {
@@ -4860,7 +4726,13 @@ impl App {
                     self.status = t!("status.ai_failed", action = ar.label).to_string();
                     return;
                 }
-                self.apply_ai_replace(ar.tab, ar.target, text);
+                match ar.dest {
+                    AiDest::Replace { tab, target } => self.apply_ai_replace(tab, target, text),
+                    AiDest::NewTab => {
+                        self.editor.new_tab_with_content(text);
+                        self.focus = Focus::Editor;
+                    }
+                }
                 self.status = t!("status.ai_done", action = ar.label).to_string();
             }
             AiMsg::Failed => {
@@ -5871,24 +5743,111 @@ impl App {
         }
     }
 
-    /// A left click inside the find / replace box focuses the field whose row was
-    /// clicked (the second row is the Replace field in replace mode). Clicks
-    /// elsewhere are ignored so the box stays open.
+    /// A left click inside the find / replace box: a Case/Word/Regex toggle
+    /// button flips that option; an Once/Ask/All button runs that replacement; a
+    /// click on a field row focuses that field. Clicks elsewhere are ignored so
+    /// the box stays open.
     fn search_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;
         }
-        let r = self.layout.search;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let (col, row) = (mouse.column, mouse.row);
+        let hit = |r: Rect| rect_contains(r, col, row);
+
+        // Toggle buttons.
+        if hit(self.layout.search_case)
+            || hit(self.layout.search_word)
+            || hit(self.layout.search_regex)
+        {
+            if let Some(s) = self.search.as_mut() {
+                if hit(self.layout.search_case) {
+                    s.case_sensitive = !s.case_sensitive;
+                } else if hit(self.layout.search_word) {
+                    s.whole_word = !s.whole_word;
+                } else {
+                    s.regex = !s.regex;
+                }
+            }
+            if self.search.as_ref().is_some_and(|s| !s.interactive) {
+                self.find_step(true);
+            }
             return;
         }
-        let rel = mouse.row - r.y;
+        // Replace action buttons.
+        if hit(self.layout.search_once) {
+            self.replace_once();
+            return;
+        }
+        if hit(self.layout.search_ask) {
+            self.begin_query_replace();
+            return;
+        }
+        if hit(self.layout.search_all) {
+            self.replace_all();
+            return;
+        }
+
+        // Field rows: Find is row 0; in replace mode Replace is row 2.
+        let r = self.layout.search;
+        if !rect_contains(r, col, row) {
+            return;
+        }
+        let rel = row - r.y;
         if let Some(s) = self.search.as_mut() {
             if rel == 0 {
                 s.field = Field::Query;
-            } else if s.replacing && rel == 1 {
+            } else if s.replacing && rel == 2 {
                 s.field = Field::Replace;
             }
+        }
+    }
+
+    /// Replace the next match at or after the cursor once, then highlight the
+    /// following match (the find box stays open).
+    fn replace_once(&mut self) {
+        let Some(sb) = self.search.as_ref() else {
+            return;
+        };
+        let Some(pat) = sb.pattern() else {
+            return;
+        };
+        let re = match Regex::new(&pat) {
+            Ok(r) => r,
+            Err(e) => {
+                if let Some(s) = self.search.as_mut() {
+                    s.status = t!("msg.bad_regex", error = e).to_string();
+                }
+                return;
+            }
+        };
+        let regex = sb.regex;
+        let template =
+            if regex { vix_find_panel::unescape(&sb.replace) } else { sb.replace.clone() };
+        let area = self.editor_view();
+        let replaced = {
+            let Some(t) = self.editor.active_tab_mut() else {
+                return;
+            };
+            let from = t.editor.get_cursor();
+            match next_match_from(t, &re, from) {
+                Some(current) => {
+                    let resume = do_replace(t, &re, regex, &template, current);
+                    t.dirty = true;
+                    t.preview = false;
+                    if let Some(next) = next_match_from(t, &re, resume) {
+                        highlight_match(t, next.0, next.1, area);
+                    }
+                    true
+                }
+                None => false,
+            }
+        };
+        if let Some(s) = self.search.as_mut() {
+            s.status = if replaced {
+                t!("status.replaced", count = 1).to_string()
+            } else {
+                t!("status.qr_no_matches").to_string()
+            };
         }
     }
 
@@ -5903,7 +5862,8 @@ impl App {
     }
 
     /// A left click in the clock box inserts the clicked time row into the active
-    /// editor and closes the box; a click outside closes it.
+    /// editor; the box stays open so several values can be picked. A click
+    /// outside the box closes it.
     fn clock_mouse(&mut self, mouse: MouseEvent) {
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return;
@@ -5921,7 +5881,6 @@ impl App {
                 let area = self.editor_view();
                 self.editor.insert_str(&text, area);
             }
-            self.show_clock = false;
         }
     }
 

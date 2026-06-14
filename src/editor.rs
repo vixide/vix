@@ -278,6 +278,21 @@ impl Editor {
         self.active = self.tabs.len() - 1;
     }
 
+    /// Open a new untitled tab pre-filled with `content` (e.g. AI output), marked
+    /// dirty so the user is reminded to save it. Becomes the active tab.
+    pub fn new_tab_with_content(&mut self, content: &str) {
+        let editor =
+            make_editor(None, content, self.line_numbers, self.show_whitespace, self.soft_wrap, &self.indent);
+        self.tabs.push(Tab {
+            editor,
+            path: None,
+            dirty: true,
+            preview: false,
+            image: None,
+        });
+        self.active = self.tabs.len() - 1;
+    }
+
     /// Open an image file in a tab, rendered with the given protocol.
     pub fn open_image(&mut self, path: &Path, proto: StatefulProtocol) {
         let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());

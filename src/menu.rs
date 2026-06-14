@@ -299,12 +299,48 @@ fn theme_submenu() -> &'static [Item] {
     Box::leak(items.into_boxed_slice())
 }
 
+/// The View → Locale submenu: one item per bundled locale (endonym label),
+/// dispatching `view.locale:<code>`.
+fn locale_submenu() -> &'static [Item] {
+    let items: Vec<Item> = vix_locale_model::LOCALES
+        .iter()
+        .map(|l| {
+            let action: &'static str = Box::leak(format!("view.locale:{}", l.code).into_boxed_str());
+            Item::leaf(l.name, action, "")
+        })
+        .collect();
+    Box::leak(items.into_boxed_slice())
+}
+
+/// The View → Time Zone submenu: one item per IANA zone, ordered by UTC offset
+/// then name, labeled `UTC±HH:MM  Name` and dispatching `view.time_zone:<name>`.
+fn time_zone_submenu() -> &'static [Item] {
+    let mut zones: Vec<&'static vix_time_zone_model::Zone> =
+        vix_time_zone_model::ZONES.iter().collect();
+    zones.sort_by(|a, b| {
+        a.std_offset_minutes
+            .cmp(&b.std_offset_minutes)
+            .then_with(|| a.name.cmp(b.name))
+    });
+    let items: Vec<Item> = zones
+        .iter()
+        .map(|z| {
+            let label: &'static str =
+                Box::leak(format!("{}  {}", z.offset_label(), z.name).into_boxed_str());
+            let action: &'static str =
+                Box::leak(format!("view.time_zone:{}", z.name).into_boxed_str());
+            Item::leaf(label, action, "")
+        })
+        .collect();
+    Box::leak(items.into_boxed_slice())
+}
+
 fn build_menus() -> Vec<MenuDef> {
     let view_items: &'static [Item] = Box::leak(
         vec![
             Item::sub("menu.item.view.theme", theme_submenu()),
-            Item::leaf("menu.item.view.locale", "view.locale", ""),
-            Item::leaf("menu.item.view.time_zone", "view.time_zone", ""),
+            Item::sub("menu.item.view.locale", locale_submenu()),
+            Item::sub("menu.item.view.time_zone", time_zone_submenu()),
             Item::sub("menu.item.view.keymap", VIEW_KEYMAP),
             SEP,
             Item::sub("menu.item.view.layout", VIEW_LAYOUT),

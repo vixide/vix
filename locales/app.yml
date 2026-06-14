@@ -1272,21 +1272,21 @@ menu.item.edit.search_workspace_dock:
   zh: "在工作区中查找…"
   ja: "ワークスペース内を検索…"
 menu.item.view.theme:
-  en: "Theme…"
-  es: "Tema…"
-  fr: "Thème…"
-  de: "Design…"
-  cy: "Thema…"
-  ga: "Téama…"
-  gd: "Ùrlar…"
-  pl: "Motyw…"
-  pt: "Tema…"
-  ru: "Тема…"
-  ar: "السمة…"
-  hi: "थीम…"
-  bn: "থিম…"
-  zh: "主题…"
-  ja: "テーマ…"
+  en: "Theme"
+  es: "Tema"
+  fr: "Thème"
+  de: "Design"
+  cy: "Thema"
+  ga: "Téama"
+  gd: "Ùrlar"
+  pl: "Motyw"
+  pt: "Tema"
+  ru: "Тема"
+  ar: "السمة"
+  hi: "थीम"
+  bn: "থিম"
+  zh: "主题"
+  ja: "テーマ"
 menu.item.view.locale:
   en: "Locale…"
   es: "Idioma…"
@@ -3554,20 +3554,14 @@ welcome.body:
   en: |
     Welcome to Vix!
 
-    Vix is a simple, keyboard-friendly text editor and IDE that runs right in
-    your terminal. It is fast, mouse-aware, and works the same on macOS, Linux,
-    and Windows. This screen is here to help you get started — press Esc to
-    close it at any time, and reopen it later from Help → Welcome.
+    Vix is a simple, keyboard-friendly text editor and IDE that runs right in your terminal. It is fast, mouse-aware, and works the same on macOS, Linux, and Windows. This screen is here to help you get started — press Esc to close it at any time, and reopen it later from Help → Welcome.
 
     Getting started
     ───────────────
-    • Open the menus with F10, or click a menu name. Arrow keys move, Enter
-      runs, Esc backs out. Each menu has an Alt shortcut too (Alt+F for File).
+    • Open the menus with F10, or click a menu name. Arrow keys move, Enter runs, Esc backs out. Each menu has an Alt shortcut too (Alt+F for File).
     • Open a file with Ctrl+O, save with Ctrl+S, and close a tab with Ctrl+W.
-    • Toggle the file explorer (left dock) with Ctrl+B, and switch focus between
-      the explorer and the editor with Ctrl+E.
-    • Press Ctrl+P for the Command Palette — a searchable list of every command.
-      If you ever forget a shortcut, start there.
+    • Toggle the file explorer (left dock) with Ctrl+B, and switch focus between the explorer and the editor with Ctrl+E.
+    • Press Ctrl+P for the Command Palette — a searchable list of every command. If you ever forget a shortcut, start there.
     • Press F1 for the full keyboard-shortcut reference.
 
     What Vix can do
@@ -3576,26 +3570,20 @@ welcome.body:
     • Find and replace in the current file or across the whole workspace.
     • Browse and edit files in the explorer, with cut/copy/paste and multi-select.
     • Use Git: status and log, stage and commit, branches, pull/push/fetch, clone.
-    • Pick characters and colors from the Tools menu: Nerd Font glyphs, ASCII,
-      HTML entities, and X11 colors.
-    • Turn on Language Server Protocol features (diagnostics, hover, go-to-
-      definition, completion) by configuring a server for your language.
-    • Choose a color theme, a language, and a keymap (Apple, VS Code, Emacs, or
-      Vim) from the View menu — Vix adapts to how you like to work.
+    • Pick characters and colors from the Tools menu: Nerd Font glyphs, ASCII, HTML entities, and X11 colors.
+    • Turn on Language Server Protocol features (diagnostics, hover, go-to-definition, completion) by configuring a server for your language.
+    • Choose a color theme, a language, and a keymap (Apple, VS Code, Emacs, or Vim) from the View menu — Vix adapts to how you like to work.
 
     Make it yours
     ─────────────
-    Vix remembers your choices in a settings file, so the editor looks and
-    behaves the way you set it up the next time you open it. Open it from
-    Vix → Settings.
+    Vix remembers your choices in a settings file, so the editor looks and behaves the way you set it up the next time you open it. Open it from Vix → Settings.
 
     Feedback is welcome
     ───────────────────
-    Vix is open source and we would love to hear from you — bug reports, ideas,
-    and questions are all appreciated.
+    Vix is open source and we would love to hear from you — bug reports, ideas, and questions are all appreciated.
 
     • Website: https://github.com/joelparkerhenderson/vix
-    • Email:   joel@joelparkerhenderson.com
+    • Email: joel@joelparkerhenderson.com
 
     Happy editing!
 ui.welcome:
@@ -4236,6 +4224,54 @@ ui.toggle_regex:
   bn: "Regex (Alt R)"
   zh: "正则 (Alt R)"
   ja: "正規表現 (Alt R)"
+ui.btn_once:
+  en: "Once"
+  es: "Una vez"
+  fr: "Une fois"
+  de: "Einmal"
+  cy: "Unwaith"
+  ga: "Uair"
+  gd: "Aon uair"
+  pl: "Raz"
+  pt: "Uma vez"
+  ru: "Один раз"
+  ar: "مرة"
+  hi: "एक बार"
+  bn: "একবার"
+  zh: "一次"
+  ja: "一回"
+ui.btn_ask:
+  en: "Ask"
+  es: "Preguntar"
+  fr: "Demander"
+  de: "Fragen"
+  cy: "Gofyn"
+  ga: "Fiafraigh"
+  gd: "Faighnich"
+  pl: "Pytaj"
+  pt: "Perguntar"
+  ru: "Спросить"
+  ar: "اسأل"
+  hi: "पूछें"
+  bn: "জিজ্ঞাসা"
+  zh: "询问"
+  ja: "確認"
+ui.btn_all:
+  en: "All"
+  es: "Todo"
+  fr: "Tout"
+  de: "Alle"
+  cy: "Popeth"
+  ga: "Uile"
+  gd: "Na h-uile"
+  pl: "Wszystko"
+  pt: "Tudo"
+  ru: "Все"
+  ar: "الكل"
+  hi: "सभी"
+  bn: "সব"
+  zh: "全部"
+  ja: "すべて"
 ui.ps_hint:
   en: "Enter: open match   ↑↓: navigate   Esc: close"
   es: "Enter: abrir coincidencia   ↑↓: navegar   Esc: cerrar"

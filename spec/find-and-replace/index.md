@@ -60,6 +60,17 @@ With focus on the **Find** field, `Enter` runs Find Next. With focus on the
 either field. Replace All rewrites every match in the buffer in one pass, marks the
 buffer dirty, and reports the count (e.g. `Replaced 7`).
 
+## Clickable buttons
+
+The find box renders clickable buttons (in addition to the keyboard shortcuts):
+
+- A toggle-button row under the Find field for **Case**, **Word**, and **Regex** —
+  clicking one flips that option (highlighted when on), the same as `Alt+C` /
+  `Alt+W` / `Alt+R`.
+- In replace mode, a button row under the Replace field with **Once** (replace the
+  next match at/after the cursor, then highlight the following one), **Ask** (start
+  the interactive query-replace), and **All** (Replace All).
+
 ## Find Next / Find Previous
 
 `Ctrl+G` (`F3`) finds the next match and `Ctrl+Shift+G` (`Shift+F3`) the previous.

@@ -197,12 +197,6 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.branch_chooser.is_some() {
         draw_branch_chooser(app, frame, area);
     }
-    if app.locale_chooser.is_some() {
-        draw_locale_chooser(app, frame, area);
-    }
-    if app.time_zone_chooser.is_some() {
-        draw_time_zone_chooser(app, frame, area);
-    }
     if app.recent_chooser.is_some() {
         draw_recent_chooser(app, frame, area);
     }
@@ -260,7 +254,6 @@ fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.welcome.is_none() {
         return;
     }
-    let total = app.welcome.as_ref().map_or(0, vix_welcome_panel::Panel::len);
     let width = 72u16.min(area.width.saturating_sub(2)).max(24);
     let height = area.height.saturating_sub(2).clamp(6, 24);
     let rect = Rect {
@@ -286,9 +279,14 @@ fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
     let body = chunks[0];
     let view_h = body.height as usize;
 
+    // Wrap the paragraphs to the text width (reserving the scrollbar column), so
+    // the lines below are already soft-wrapped; then clamp the scroll to them.
+    let text_width = body.width.saturating_sub(1).max(1) as usize;
     if let Some(w) = app.welcome.as_mut() {
+        w.wrap_to(text_width);
         w.clamp(view_h);
     }
+    let total = app.welcome.as_ref().map_or(0, vix_welcome_panel::Panel::len);
     let scroll = app.welcome.as_ref().map_or(0, |w| w.scroll);
     let show_bar = total > view_h && body.width > 1;
     let text_area = if show_bar {
@@ -306,7 +304,7 @@ fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
                 .collect()
         })
         .unwrap_or_default();
-    frame.render_widget(Paragraph::new(visible).wrap(Wrap { trim: false }), text_area);
+    frame.render_widget(Paragraph::new(visible), text_area);
     if show_bar {
         let sb_area = Rect { x: body.x + body.width - 1, ..body };
         draw_scrollbar(frame, sb_area, scroll, total.saturating_sub(view_h));
@@ -755,88 +753,6 @@ fn draw_list_chooser(
     let hint = Line::from(Span::styled(hint.to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), rows[1]);
     rows[0]
-}
-
-fn draw_locale_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(lc) = app.locale_chooser.as_ref() else { return };
-    let selected = lc.selected;
-    let labels: Vec<String> = vix_locale_chooser::LOCALES
-        .iter()
-        .map(|l| l.name.to_string())
-        .collect();
-    let hint = t!("ui.theme_hint");
-    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.locale"), &hint, &labels, selected);
-}
-
-fn draw_time_zone_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    use vix_time_zone_model::ZONES;
-    let Some(c) = app.time_zone_chooser.as_mut() else { return };
-
-    let width = 52u16.min(area.width);
-    let height = ((ZONES.len() as u16).saturating_add(5)).min(area.height.saturating_sub(2)).min(24);
-    let rect = Rect {
-        x: area.x + (area.width.saturating_sub(width)) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
-        width,
-        height,
-    };
-    frame.render_widget(Clear, rect);
-    let active = vix_time_zone_model::active_name();
-    let block = Block::default()
-        .style(theme::base())
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(theme::title(true))
-        .title(format!(" {} {} ", icon::CLOCK, t!("ui.time_zone")));
-    let inner = block.inner(rect);
-    frame.render_widget(block, rect);
-
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
-        .split(inner);
-
-    // Query line: a filter prompt showing the typed text, plus the active zone.
-    let query = Line::from(vec![
-        Span::styled(format!(" {} ", icon::SEARCH), theme::dim()),
-        Span::raw(c.query.clone()),
-        Span::styled(t!("ui.time_zone_active", zone = active).to_string(), theme::dim()),
-    ]);
-    frame.render_widget(Paragraph::new(query), rows[0]);
-
-    // Body: the scrollable list plus a one-column scrollbar gutter.
-    let body = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
-        .split(rows[1]);
-    let list_area = body[0];
-    let sb_area = body[1];
-    let viewport = list_area.height as usize;
-    c.ensure_visible(viewport);
-
-    let matches = c.matches();
-    let start = c.scroll.min(matches.len());
-    let end = (start + viewport).min(matches.len());
-    let items: Vec<ListItem> = matches[start..end]
-        .iter()
-        .map(|&i| {
-            let z = &ZONES[i];
-            ListItem::new(Line::from(format!("  {:>9}  {}", z.offset_label(), z.name)))
-        })
-        .collect();
-    let list = List::new(items).highlight_style(theme::selected());
-    let mut state = ListState::default();
-    if !matches.is_empty() {
-        state.select(Some(c.selected.saturating_sub(start)));
-    }
-    frame.render_stateful_widget(list, list_area, &mut state);
-    draw_scrollbar(frame, sb_area, c.selected, matches.len().saturating_sub(1));
-
-    let hint = Line::from(Span::styled(t!("ui.time_zone_hint").to_string(), theme::dim()));
-    frame.render_widget(Paragraph::new(hint), rows[2]);
-
-    app.layout.tz_chooser = list_area;
-    app.layout.tz_scrollbar = sb_area;
 }
 
 fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -2332,9 +2248,32 @@ fn draw_workspace_search(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(Line::from(Span::styled(hint, theme::dim()))), rows[2]);
 }
 
+/// Render a left-to-right row of labeled buttons (each ` label `, one-cell gap),
+/// returning each button's clickable rectangle (`Rect::default()` if it did not
+/// fit).
+fn button_row(frame: &mut Frame, row: Rect, buttons: &[(String, Style)]) -> Vec<Rect> {
+    let mut rects = vec![Rect::default(); buttons.len()];
+    let mut x = row.x;
+    let right = row.x + row.width;
+    for (i, (label, style)) in buttons.iter().enumerate() {
+        let text = format!(" {label} ");
+        let w = text.chars().count() as u16;
+        if x >= right {
+            break;
+        }
+        let w = w.min(right - x);
+        let r = Rect { x, y: row.y, width: w, height: 1 };
+        frame.render_widget(Paragraph::new(Line::from(Span::styled(text, *style))), r);
+        rects[i] = r;
+        x = x.saturating_add(w + 1);
+    }
+    rects
+}
+
 fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(s) = app.search.as_ref() else { return };
-    let height = if s.replacing { 5 } else { 4 };
+    let replacing = s.replacing;
+    let height = if replacing { 6 } else { 4 };
     let width = (f32::from(area.width) * 0.7) as u16;
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
@@ -2345,7 +2284,7 @@ fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Clear, rect);
     let title = if s.interactive {
         format!(" {} {} ", icon::SEARCH, t!("ui.query_replace"))
-    } else if s.replacing {
+    } else if replacing {
         format!(" {} {} ", icon::SEARCH, t!("ui.find_replace"))
     } else {
         format!(" {} {} ", icon::SEARCH, t!("ui.find"))
@@ -2359,35 +2298,67 @@ fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
     app.layout.search = inner;
+    // Forget any stale button rects (they are re-recorded below when shown).
+    app.layout.search_case = Rect::default();
+    app.layout.search_word = Rect::default();
+    app.layout.search_regex = Rect::default();
+    app.layout.search_once = Rect::default();
+    app.layout.search_ask = Rect::default();
+    app.layout.search_all = Rect::default();
 
-    let mut lines = Vec::new();
-    let q_focus = !s.replacing || s.field == Field::Query;
-    lines.push(field_line(&t!("ui.field_find"), &s.query, q_focus));
-    if s.replacing {
-        lines.push(field_line(&t!("ui.field_replace"), &s.replace, s.field == Field::Replace));
-    }
-    let toggle = |on: bool, label: &str| {
-        let style = if on { theme::selected() } else { theme::dim() };
-        Span::styled(format!(" {label} "), style)
+    // Rows: Find field, toggle buttons, [Replace field, replace buttons,]? status.
+    let constraints: Vec<Constraint> = if replacing {
+        vec![Constraint::Length(1); 5]
+    } else {
+        vec![Constraint::Length(1); 3]
     };
-    lines.push(Line::from(vec![
-        toggle(s.case_sensitive, &t!("ui.toggle_case")),
-        Span::raw(" "),
-        toggle(s.whole_word, &t!("ui.toggle_word")),
-        Span::raw(" "),
-        toggle(s.regex, &t!("ui.toggle_regex")),
-    ]));
+    let rows = Layout::default().direction(Direction::Vertical).constraints(constraints).split(inner);
+
+    let q_focus = !replacing || s.field == Field::Query;
+    frame.render_widget(Paragraph::new(field_line(&t!("ui.field_find"), &s.query, q_focus)), rows[0]);
+
+    // Case / Word / Regex toggle buttons (highlighted when on).
+    let toggle_style = |on: bool| if on { theme::selected() } else { theme::dim() };
+    let toggles = vec![
+        (t!("ui.toggle_case").to_string(), toggle_style(s.case_sensitive)),
+        (t!("ui.toggle_word").to_string(), toggle_style(s.whole_word)),
+        (t!("ui.toggle_regex").to_string(), toggle_style(s.regex)),
+    ];
+    let trects = button_row(frame, rows[1], &toggles);
+    app.layout.search_case = trects[0];
+    app.layout.search_word = trects[1];
+    app.layout.search_regex = trects[2];
+
+    if replacing {
+        frame.render_widget(
+            Paragraph::new(field_line(&t!("ui.field_replace"), &s.replace, s.field == Field::Replace)),
+            rows[2],
+        );
+        // Once / Ask / All replace buttons (reverse-video, like pressable buttons).
+        let actions = vec![
+            (t!("ui.btn_once").to_string(), theme::selected()),
+            (t!("ui.btn_ask").to_string(), theme::selected()),
+            (t!("ui.btn_all").to_string(), theme::selected()),
+        ];
+        let arects = button_row(frame, rows[3], &actions);
+        app.layout.search_once = arects[0];
+        app.layout.search_ask = arects[1];
+        app.layout.search_all = arects[2];
+    }
+
     let status = if !s.status.is_empty() {
         s.status.clone()
     } else if s.interactive {
         t!("ui.search_hint_interactive").to_string()
-    } else if s.replacing {
+    } else if replacing {
         t!("ui.search_hint_replace").to_string()
     } else {
         t!("ui.search_hint").to_string()
     };
-    lines.push(Line::from(Span::styled(status, theme::dim())));
-    frame.render_widget(Paragraph::new(lines), inner);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(status, theme::dim()))),
+        rows[rows.len() - 1],
+    );
 }
 
 fn field_line(label: &str, value: &str, focused: bool) -> Line<'static> {

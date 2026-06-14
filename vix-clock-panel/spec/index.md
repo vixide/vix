@@ -26,5 +26,5 @@ move the highlight (clamped), `select(row)` sets it from a click, and
 `selected_value(now)` is the string the host inserts on accept.
 
 The host draws the box (one row per time, a help line), routes keys (↑↓ select,
-Enter insert + close, Esc/q close) and mouse (click a row to insert + close).
-This crate is pure logic with no rendering.
+Enter insert + close, Esc/q close) and mouse (click a row to insert, keeping the
+box open; click outside to close). This crate is pure logic with no rendering.

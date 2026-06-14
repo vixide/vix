@@ -6,15 +6,9 @@ persisted across sessions.
 
 ## Choosing a zone
 
-**View → Time Zone…** opens a filterable chooser:
-
-- Type to filter by a case-insensitive substring of the zone name or its
-  abbreviation.
-- Rows are ordered by **UTC offset** (the offset is the leftmost column), then by
-  name.
-- **↑ / ↓** and **PageUp / PageDown** move the highlight; the list scrolls with a
-  one-character scrollbar (click or drag it, or use the mouse wheel).
-- **Enter** or a **row click** sets the active zone and closes; **Esc** cancels.
+**View → Time Zone** is a submenu listing every IANA zone, each labeled
+`UTC±HH:MM  Name` and ordered by **UTC offset** then name. Selecting one sets the
+active zone; the item dispatches `view.time_zone:<name>`.
 
 The chosen zone's canonical name is saved in `settings.time_zone` (default
 `"UTC"`) and re-applied at startup.
@@ -36,8 +30,7 @@ clock box) therefore use the standard offset.
 
 `vix-time-zone-model` owns the zone table (`ZONES`, `Zone`), offset formatting
 (`format_offset`, `Zone::offset_label`), and the active-zone state (`set_active`,
-`active`, `active_name`, `active_offset_minutes`), mirroring the theme model.
-`vix-time-zone-chooser` holds the filterable selection state (query, matches,
-scroll, highlight). The host wires the `view.time_zone` action, key/mouse, the
-`draw_time_zone_chooser` overlay, and persistence. See
-`vix-time-zone-chooser/spec/index.md`.
+`active`, `active_name`, `active_offset_minutes`), mirroring the theme model. The
+host builds the View → Time Zone submenu from `ZONES` (sorted by offset then
+name) and applies a chosen zone by name (`set_time_zone_by_name`), persisting it.
+See `vix-time-zone-model/spec/index.md`.
