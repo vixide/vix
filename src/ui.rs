@@ -945,42 +945,63 @@ pub fn menu_dropdown_rect(frame_area: Rect, bar: Rect, index: usize) -> Rect {
     }
 }
 
-/// Render one dropdown (Clear + bordered list) at `area`, highlighting `selected`.
+/// First visible item index for a dropdown of `len` items in an inner viewport of
+/// `inner_h` rows, keeping `selected` visible. Shared by rendering and mouse
+/// hit-testing so a scrolled dropdown maps clicks to the right item.
+#[must_use]
+pub fn dropdown_scroll(selected: Option<usize>, inner_h: usize, len: usize) -> usize {
+    if len <= inner_h || inner_h == 0 {
+        return 0;
+    }
+    let max = len - inner_h;
+    match selected {
+        Some(s) if s >= inner_h => (s + 1 - inner_h).min(max),
+        _ => 0,
+    }
+}
+
+/// Render one dropdown (Clear + bordered list) at `area`, highlighting `selected`
+/// and scrolling so it stays visible. A `●` scrollbar marks the right edge when
+/// the items overflow.
 fn render_dropdown(frame: &mut Frame, area: Rect, items: &[crate::menu::Item], selected: Option<usize>) {
     frame.render_widget(Clear, area);
-    let rows: Vec<ListItem> = items
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let inner_h = inner.height as usize;
+    let offset = dropdown_scroll(selected, inner_h, items.len());
+    let end = (offset + inner_h).min(items.len());
+    let text_w = inner.width as usize;
+    let rows: Vec<Line> = items[offset..end]
         .iter()
-        .map(|it| {
+        .enumerate()
+        .map(|(vis, it)| {
             if it.is_separator() {
-                let w = (area.width as usize).saturating_sub(2);
-                return ListItem::new(Line::from(Span::styled("─".repeat(w), theme::dim())));
+                return Line::from(Span::styled("─".repeat(text_w), theme::dim()));
             }
             let label = it.label();
             let right = item_right(it);
-            let pad = (area.width as usize)
-                .saturating_sub(label.chars().count() + right.chars().count() + 4);
-            let line = Line::from(vec![
-                Span::raw(format!(" {label}")),
-                Span::raw(" ".repeat(pad)),
-                Span::styled(format!("{right} "), theme::dim()),
-            ]);
-            ListItem::new(line)
+            let pad = text_w.saturating_sub(label.chars().count() + right.chars().count() + 2);
+            let style = if selected == Some(offset + vis) { theme::selected() } else { theme::base() };
+            Line::from(vec![
+                Span::styled(format!(" {label}"), style),
+                Span::styled(" ".repeat(pad), style),
+                Span::styled(format!("{right} "), if selected == Some(offset + vis) { style } else { theme::dim() }),
+            ])
         })
         .collect();
-    // No title — the open menu is already indicated in the bar, and a title would
-    // otherwise display the raw i18n key.
-    let list = List::new(rows)
-        .block(
-            Block::default()
-                .style(theme::base())
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(theme::title(true)),
-        )
-        .highlight_style(theme::selected());
-    let mut state = ListState::default();
-    state.select(selected);
-    frame.render_stateful_widget(list, area, &mut state);
+    frame.render_widget(Paragraph::new(rows), inner);
+
+    if items.len() > inner_h {
+        // Draw the thumb over the right border column.
+        let sb = Rect { x: area.x + area.width - 1, y: inner.y, width: 1, height: inner.height };
+        draw_scrollbar(frame, sb, selected.unwrap_or(0), items.len().saturating_sub(1));
+    }
 }
 
 fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {

@@ -82,6 +82,10 @@ pub enum PromptKind {
     GitNewBranch,
     /// Enter a repository URL to clone into the workspace.
     GitClone,
+    /// Enter a description for the current branch (`git branch --edit-description`).
+    GitEditDescription,
+    /// Enter the name of a branch to delete (`git branch --delete`).
+    GitDeleteBranch,
     /// Enter the file-explorer "include" path regex filter.
     ExplorerInclude,
     /// Enter the file-explorer "exclude" path regex filter.
@@ -657,6 +661,9 @@ pub struct App {
     running_command: Option<RunningCommand>,
     /// A background AI transform whose result will replace editor text, if any.
     ai_replace: Option<AiReplace>,
+    /// True while a theme is applied as a menu hover-preview (reverted to the
+    /// committed theme when the menu closes).
+    theme_preview: bool,
     /// True while the editor scrollbar thumb is being dragged, so the drag keeps
     /// scrolling even if the pointer drifts off the one-column track.
     scrollbar_active: bool,
@@ -777,6 +784,7 @@ impl App {
             closed_tabs: Vec::new(),
             running_command: None,
             ai_replace: None,
+            theme_preview: false,
             scrollbar_active: false,
             dock_resize: None,
             emacs_prefix: false,
@@ -1674,8 +1682,22 @@ impl App {
             "git.init" => self.git_init(),
             "git.new_branch" => self.git_begin_new_branch(),
             "git.log" => self.git_log(),
+            "git.log_day" => self.git_log_since(Some("1-day-ago")),
+            "git.log_week" => self.git_log_since(Some("1-week-ago")),
             "git.status" => self.git_status_to_dock(),
             "git.clone" => self.git_begin_clone(),
+            "git.edit_description" => {
+                self.prompt = Some(Prompt::new(
+                    PromptKind::GitEditDescription,
+                    t!("prompt.git_edit_description").to_string(),
+                ));
+            }
+            "git.delete_branch" => {
+                self.prompt = Some(Prompt::new(
+                    PromptKind::GitDeleteBranch,
+                    t!("prompt.git_delete_branch").to_string(),
+                ));
+            }
             "view.bottom_dock" => self.toggle_bottom_dock(),
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
@@ -2279,12 +2301,21 @@ impl App {
 
     /// Show the commit history, streaming `git log` into the bottom dock.
     fn git_log(&mut self) {
+        self.git_log_since(None);
+    }
+
+    /// Show the commit log, optionally limited to commits newer than `since`
+    /// (a git date spec like `1-day-ago`), streaming it into the bottom dock.
+    fn git_log_since(&mut self, since: Option<&str>) {
         if !vix_git::is_repo(&self.root) {
             self.status = t!("status.git_not_repo").into();
             return;
         }
         self.git_panel = None;
-        self.run_command("git --no-pager log --oneline --graph --decorate -n 200");
+        let filter = since.map(|s| format!(" --since={s}")).unwrap_or_default();
+        self.run_command(&format!(
+            "git --no-pager log --oneline --graph --decorate -n 200{filter}"
+        ));
     }
 
     /// Show the working-tree status, streaming `git status` into the bottom dock.
@@ -2321,6 +2352,39 @@ impl App {
             return;
         }
         self.run_command(&format!("git clone {url}"));
+    }
+
+    /// Set the current branch's description (`git branch --edit-description`),
+    /// feeding the prompted text via a throwaway `GIT_EDITOR` that copies it into
+    /// the description file (so no interactive editor opens).
+    fn git_edit_description(&mut self, desc: &str) {
+        if !vix_git::is_repo(&self.root) {
+            self.status = t!("status.git_not_repo").into();
+            return;
+        }
+        let tmp = std::env::temp_dir().join(format!("vix-branchdesc-{}.txt", std::process::id()));
+        if std::fs::write(&tmp, desc).is_err() {
+            self.status = t!("status.git_not_repo").into();
+            return;
+        }
+        let path = tmp.display();
+        self.git_panel = None;
+        self.run_command(&format!("GIT_EDITOR='cp \"{path}\"' git branch --edit-description"));
+    }
+
+    /// Delete the named branch (`git branch --delete`), streaming the result to
+    /// the bottom dock.
+    fn git_delete_branch(&mut self, name: &str) {
+        let name = name.trim();
+        if name.is_empty() {
+            return;
+        }
+        if !vix_git::is_repo(&self.root) {
+            self.status = t!("status.git_not_repo").into();
+            return;
+        }
+        self.git_panel = None;
+        self.run_command(&format!("git branch --delete {name}"));
     }
 
     /// Run a remote git command (push/pull/fetch) asynchronously, streaming its
@@ -3537,6 +3601,16 @@ impl App {
                 MouseEventKind::Moved | MouseEventKind::Drag(MouseButton::Left) => {
                     self.menu_hover(col, row);
                 }
+                // The wheel scrolls a long (sub)menu by moving the highlight,
+                // which the renderer keeps in view.
+                MouseEventKind::ScrollDown => {
+                    self.menu.down();
+                    self.preview_current_theme();
+                }
+                MouseEventKind::ScrollUp => {
+                    self.menu.up();
+                    self.preview_current_theme();
+                }
                 _ => {}
             }
             return;
@@ -3833,11 +3907,13 @@ impl App {
             if rect_contains(sd, col, row) {
                 let top = sd.y + 1;
                 if let Some(items) = self.menu.submenu_items() {
-                    let idx = row.saturating_sub(top) as usize;
+                    let offset =
+                        crate::ui::dropdown_scroll(self.menu.sub, sd.height.saturating_sub(2) as usize, items.len());
+                    let idx = offset + row.saturating_sub(top) as usize;
                     if row >= top && idx < items.len() && !items[idx].is_separator() {
                         let action = items[idx].action;
-                        self.menu.close();
                         self.run_action(action);
+                        self.close_menu();
                     }
                 }
                 return;
@@ -3849,7 +3925,9 @@ impl App {
             let top = dd.y + 1;
             if let Some(mi) = self.menu.open {
                 let items = menus()[mi].items;
-                let idx = row.saturating_sub(top) as usize;
+                let offset =
+                    crate::ui::dropdown_scroll(self.menu.item, dd.height.saturating_sub(2) as usize, items.len());
+                let idx = offset + row.saturating_sub(top) as usize;
                 if row >= top && idx < items.len() && !items[idx].is_separator() {
                     if items[idx].has_submenu() {
                         self.menu.item = Some(idx);
@@ -3857,15 +3935,15 @@ impl App {
                         self.menu.right(); // opens the submenu
                     } else {
                         let action = items[idx].action;
-                        self.menu.close();
                         self.run_action(action);
+                        self.close_menu();
                     }
                 }
             }
             return;
         }
         // Clicked outside the bar and every dropdown: dismiss the menu.
-        self.menu.close();
+        self.close_menu();
     }
 
     fn menu_click(&mut self, col: u16) {
@@ -3914,9 +3992,12 @@ impl App {
             if rect_contains(sd, col, row) {
                 let top = sd.y + 1;
                 if let Some(items) = self.menu.submenu_items() {
-                    let idx = row.saturating_sub(top) as usize;
+                    let offset =
+                        crate::ui::dropdown_scroll(self.menu.sub, sd.height.saturating_sub(2) as usize, items.len());
+                    let idx = offset + row.saturating_sub(top) as usize;
                     if row >= top && idx < items.len() && !items[idx].is_separator() {
                         self.menu.sub = Some(idx);
+                        self.preview_menu_theme(items[idx].action);
                     }
                 }
                 return;
@@ -3928,7 +4009,9 @@ impl App {
             let top = dd.y + 1;
             if let Some(mi) = self.menu.open {
                 let items = menus()[mi].items;
-                let idx = row.saturating_sub(top) as usize;
+                let offset =
+                    crate::ui::dropdown_scroll(self.menu.item, dd.height.saturating_sub(2) as usize, items.len());
+                let idx = offset + row.saturating_sub(top) as usize;
                 if row >= top && idx < items.len() && !items[idx].is_separator() {
                     self.menu.item = Some(idx);
                     self.menu.sub = None;
@@ -3940,33 +4023,85 @@ impl App {
         }
     }
 
+    /// If `action` is a `view.theme:<name>` item, apply that theme live as a
+    /// hover preview (without persisting it); [`Self::close_menu`] reverts to the
+    /// committed theme when the menu closes.
+    fn preview_menu_theme(&mut self, action: &str) {
+        if let Some(name) = action.strip_prefix("view.theme:") {
+            if let Some(theme) =
+                Self::available_custom_themes().into_iter().find(|t| t.name == name)
+            {
+                vix_theme_model::apply(&theme);
+                self.editor.refresh_theme();
+                self.theme_preview = true;
+            }
+        }
+    }
+
+    /// Close the menu bar, reverting any live theme hover-preview to the
+    /// committed theme (`settings.theme`).
+    fn close_menu(&mut self) {
+        self.menu.close();
+        self.revert_theme_preview();
+    }
+
     // ----- menu -----------------------------------------------------------
 
     fn menu_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Left => self.menu.left(),
-            KeyCode::Right => self.menu.right(),
-            KeyCode::Up => self.menu.up(),
-            KeyCode::Down => self.menu.down(),
+            KeyCode::Right => {
+                self.menu.right();
+                self.preview_current_theme();
+            }
+            KeyCode::Up => {
+                self.menu.up();
+                self.preview_current_theme();
+            }
+            KeyCode::Down => {
+                self.menu.down();
+                self.preview_current_theme();
+            }
             KeyCode::Enter => {
                 if let Some(action) = self.menu.enter() {
-                    self.menu.close();
                     self.run_action(action);
+                    self.close_menu();
                 }
             }
             KeyCode::Esc => {
                 if self.menu.sub.is_some() {
                     self.menu.sub = None;
+                    self.revert_theme_preview();
                 } else {
-                    self.menu.close();
+                    self.close_menu();
                 }
             }
-            KeyCode::F(10) => self.menu.close(),
+            KeyCode::F(10) => self.close_menu(),
             // Type-ahead: a plain letter jumps to the next matching item.
             KeyCode::Char(c) if !Self::ctrl(&key) && !Self::alt(&key) => {
                 self.menu.type_ahead(c);
+                self.preview_current_theme();
             }
             _ => {}
+        }
+    }
+
+    /// Preview the theme of the currently-highlighted submenu item, if it is a
+    /// `view.theme:<name>` entry (for keyboard navigation, mirroring hover).
+    fn preview_current_theme(&mut self) {
+        if let (Some(sidx), Some(items)) = (self.menu.sub, self.menu.submenu_items()) {
+            if let Some(it) = items.get(sidx) {
+                self.preview_menu_theme(it.action);
+            }
+        }
+    }
+
+    /// Revert a live theme hover/keyboard preview to the committed theme.
+    fn revert_theme_preview(&mut self) {
+        if self.theme_preview {
+            Self::apply_saved_theme(&self.settings.theme);
+            self.editor.refresh_theme();
+            self.theme_preview = false;
         }
     }
 
@@ -6533,6 +6668,8 @@ impl App {
             PromptKind::GitCommit => self.git_commit(&prompt.input),
             PromptKind::GitNewBranch => self.git_create_branch(&prompt.input),
             PromptKind::GitClone => self.git_clone(&prompt.input),
+            PromptKind::GitEditDescription => self.git_edit_description(&prompt.input),
+            PromptKind::GitDeleteBranch => self.git_delete_branch(&prompt.input),
             PromptKind::ExplorerInclude => {
                 let exclude = self.explorer.exclude_filter.clone();
                 self.explorer.set_filter(prompt.input.trim(), &exclude);
