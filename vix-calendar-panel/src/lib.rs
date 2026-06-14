@@ -1,9 +1,10 @@
-//! Vix Calendar: the date/time strings and the navigable month grid shown in
-//! Vix's calendar box. See `spec/index.md`.
+//! Vix Calendar: the navigable month grid shown in Vix's calendar box. See
+//! `spec/index.md`.
 //!
-//! This crate is pure logic over [`jiff`] — it computes strings and a day grid
-//! but does no rendering, so the host draws it in whatever style it likes and
-//! the logic stays unit-testable without a terminal.
+//! This crate is pure logic over [`jiff`] — it computes a day grid but does no
+//! rendering, so the host draws it in whatever style it likes and the logic
+//! stays unit-testable without a terminal. The live date/time strings (local,
+//! UTC, ISO week, active zone) moved to `vix-clock-panel`.
 
 use jiff::civil::Date;
 use jiff::{ToSpan, Zoned};
@@ -11,36 +12,6 @@ use jiff::{ToSpan, Zoned};
 /// Current time in the system's local time zone.
 pub fn now_local() -> Zoned {
     Zoned::now()
-}
-
-/// `HH:MM:SS` in the local zone.
-pub fn local_clock(now: &Zoned) -> String {
-    now.strftime("%H:%M:%S").to_string()
-}
-
-/// Localized local date and time with seconds precision: `YYYY-MM-DD HH:MM:SS`
-/// in the system zone (as opposed to the UTC instant).
-pub fn local_datetime(now: &Zoned) -> String {
-    now.strftime("%Y-%m-%d %H:%M:%S").to_string()
-}
-
-/// ISO 8601 instant in UTC: `YYYY-MM-DDTHH:MM:SSZ`.
-pub fn utc_iso(now: &Zoned) -> String {
-    now.timestamp()
-        .strftime("%Y-%m-%dT%H:%M:%SZ")
-        .to_string()
-}
-
-/// ISO 8601 commercial date: `YYYY-Www-D` (week-numbering year, week 01..53,
-/// day 1=Monday..7=Sunday).
-pub fn iso_week_date(now: &Zoned) -> String {
-    let iso = now.date().iso_week_date();
-    format!(
-        "{:04}-W{:02}-{}",
-        iso.year(),
-        iso.week(),
-        iso.weekday().to_monday_one_offset()
-    )
 }
 
 /// The first day of the month containing `date`.

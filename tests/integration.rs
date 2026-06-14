@@ -13,6 +13,7 @@ use ratatui::layout::Rect;
 
 use vix::app::{App, Focus};
 use vix::calendar;
+use vix::clock;
 use vix::fileops;
 use vix::settings::Settings;
 use vix::palette::{fuzzy_match, parse_path_target};
@@ -968,22 +969,22 @@ fn interactive_query_replace_bang_replaces_rest() {
 
 #[test]
 fn iso_formats_have_expected_shape() {
-    let now = calendar::now_local();
-    let utc = calendar::utc_iso(&now);
+    let now = clock::now_local();
+    let utc = clock::utc_iso(&now);
     assert_eq!(utc.len(), 20, "{utc}"); // YYYY-MM-DDTHH:MM:SSZ
     assert!(utc.ends_with('Z'));
     assert_eq!(&utc[4..5], "-");
     assert_eq!(&utc[10..11], "T");
 
-    let week = calendar::iso_week_date(&now);
+    let week = clock::iso_week_date(&now);
     assert!(week.contains("-W"), "{week}"); // YYYY-Www-D
     let day = week.chars().last().unwrap();
     assert!(('1'..='7').contains(&day), "weekday digit: {week}");
 
-    let clock = calendar::local_clock(&now);
-    assert_eq!(clock.len(), 8, "{clock}"); // HH:MM:SS
+    let clk = clock::local_clock(&now);
+    assert_eq!(clk.len(), 8, "{clk}"); // HH:MM:SS
 
-    let local = calendar::local_datetime(&now);
+    let local = clock::local_datetime(&now);
     assert_eq!(local.len(), 19, "{local}"); // YYYY-MM-DD HH:MM:SS
 
     let grid = calendar::month_grid(now.date());
@@ -1102,16 +1103,9 @@ fn calendar_click_inserts_into_editor() {
     let cal = app.layout.calendar;
     assert!(cal.width > 0, "the calendar rect was recorded");
 
-    // The date-time lines sit at the bottom of the box; the local date-time line
-    // is the first of them (the line after the spacer at `info_start`).
-    let info_start = cal.height - 5;
-    app.on_mouse(click(cal.x + 1, cal.y + info_start + 1));
-    let text = app.editor.active_tab().unwrap().text();
-    assert!(text.contains(':') && text.contains('-'), "inserted a date-time: {text:?}");
-    assert!(app.show_calendar, "an in-box click keeps the calendar open");
-
     // Click a populated day cell (cells are 3 columns wide; the grid's weekday
-    // header is row 1 and the week rows start at row 2).
+    // header is row 1 and the week rows start at row 2). Date-time lines moved to
+    // the clock box, so the calendar only inserts days now.
     let grid = app.calendar.grid();
     let (wk, col) = grid
         .weeks
@@ -1127,6 +1121,25 @@ fn calendar_click_inserts_into_editor() {
     // A click outside the box closes it.
     app.on_mouse(click(0, 23));
     assert!(!app.show_calendar, "an outside click closes the calendar");
+}
+
+#[test]
+fn clock_box_inserts_a_time_row() {
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.clock");
+    assert!(app.show_clock, "the action opens the clock box");
+    let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let r = app.layout.clock;
+    assert!(r.width > 0, "the clock rect was recorded");
+
+    // Click the first row (local date-time): inserts a date-time and closes.
+    app.on_mouse(click(r.x + 1, r.y));
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains(':') && text.contains('-'), "inserted a date-time: {text:?}");
+    assert!(!app.show_clock, "a row click closes the clock box");
 }
 
 #[test]

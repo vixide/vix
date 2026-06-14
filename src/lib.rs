@@ -69,6 +69,10 @@ pub mod settings;
 pub mod theme;
 pub mod ui;
 
-/// The calendar box's date/time logic lives in its own crate; re-export it as
+/// The calendar box's month-grid logic lives in its own crate; re-export it as
 /// `vix::calendar` so the app and tests share one path.
 pub use vix_calendar_panel as calendar;
+
+/// The clock box's date/time strings live in their own crate; re-export them as
+/// `vix::clock` so the app and tests share one path.
+pub use vix_clock_panel as clock;

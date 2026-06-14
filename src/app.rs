@@ -490,6 +490,9 @@ pub struct Layout {
     /// Inner content rectangle of the open calendar box, so a click can insert a
     /// date-time line or a calendar day.
     pub calendar: Rect,
+    /// Inner content rectangle of the open clock box, so a click can hit-test
+    /// which time row was picked.
+    pub clock: Rect,
 }
 
 /// LSP hover tooltip overlay: the text the server returned for the symbol under
@@ -636,6 +639,10 @@ pub struct App {
     pub show_calendar: bool,
     /// Month navigation state for the calendar box.
     pub calendar: crate::calendar::Calendar,
+    /// Whether the clock box is shown.
+    pub show_clock: bool,
+    /// Row-selection state for the clock box.
+    pub clock: crate::clock::Clock,
     /// Whether the keyboard-help overlay is shown.
     pub show_help: bool,
     /// Status-bar text.
@@ -765,6 +772,8 @@ impl App {
             bottom_dock: vix_bottom_dock::BottomDock::with_scrollback(settings.scrollback),
             show_calendar: false,
             calendar: crate::calendar::Calendar::new(),
+            show_clock: false,
+            clock: crate::clock::Clock::new(),
             show_help: false,
             focus: Focus::Editor,
             status: t!("status.ready").to_string(),
@@ -884,6 +893,25 @@ impl App {
                     self.show_calendar = false;
                 }
                 KeyCode::Esc | KeyCode::Char('q') => self.show_calendar = false,
+                _ => {}
+            }
+            return;
+        }
+        // While the clock box is open it captures up/down to pick a time row and
+        // Enter to insert it.
+        if self.show_clock {
+            match key.code {
+                KeyCode::Up => self.clock.up(),
+                KeyCode::Down => self.clock.down(),
+                KeyCode::Enter => {
+                    let now = crate::clock::now_local();
+                    if let Some(text) = self.clock.selected_value(&now) {
+                        let area = self.editor_view();
+                        self.editor.insert_str(&text, area);
+                    }
+                    self.show_clock = false;
+                }
+                KeyCode::Esc | KeyCode::Char('q') => self.show_clock = false,
                 _ => {}
             }
             return;
@@ -1629,6 +1657,12 @@ impl App {
             "tools.system_info" => self.open_system_info(),
             "tools.file_info" => self.open_file_info(),
             "tools.contacts" => self.open_contacts(),
+            "tools.clock" => {
+                self.show_clock = !self.show_clock;
+                if self.show_clock {
+                    self.clock.selected = 0;
+                }
+            }
             "tools.time_zone" => self.open_time_zone_chooser(),
             "tools.dashboard" => self.open_dashboard(),
             "tools.run_command" => {
@@ -1655,6 +1689,7 @@ impl App {
             "git.switch_branch" => self.open_branch_chooser(),
             "ai.summarize" => self.ai_summarize(),
             "ai.explain" => self.ai_explain(),
+            "ai.define" => self.ai_define(),
             "ai.annotate" => self.ai_annotate(),
             "ai.improve" => self.ai_improve(),
             "git.merge_branch" => self.open_branch_chooser_mode(true),
@@ -3442,6 +3477,11 @@ impl App {
             self.calendar_mouse(mouse);
             return;
         }
+        // The clock box: a left click inserts the picked time row.
+        if self.show_clock {
+            self.clock_mouse(mouse);
+            return;
+        }
         // Keyboard-only modal overlays swallow all mouse input rather than
         // letting a click fall through to the editor/explorer underneath.
         if self.show_help
@@ -4780,6 +4820,39 @@ impl App {
         self.ai_run_on_text("Explain this text.", &text);
     }
 
+    /// Define a word with `claude` (output to the dock). The input is the
+    /// selection if there is one; otherwise the word under the cursor, or the
+    /// next word when the cursor sits between words. Never the whole buffer.
+    fn ai_define(&mut self) {
+        let text = self.selected_or_word_text();
+        self.ai_run_on_text("Define this text.", &text);
+    }
+
+    /// The selection, else the word at the cursor, else the next word after it.
+    /// Returns an empty string when there is no editable buffer or no word ahead.
+    fn selected_or_word_text(&mut self) -> String {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return String::new();
+        };
+        if let Some(sel) = tab.editor.get_selection_text() {
+            if !sel.trim().is_empty() {
+                return sel;
+            }
+        }
+        let cursor = tab.editor.get_cursor();
+        if let Some((_, _, word)) = tab.editor.word_at(cursor) {
+            return word;
+        }
+        // Cursor is between words: scan forward to the next word.
+        let len = tab.editor.get_content().chars().count();
+        for pos in cursor..=len {
+            if let Some((_, _, word)) = tab.editor.word_at(pos) {
+                return word;
+            }
+        }
+        String::new()
+    }
+
     /// Annotate the selection (or the whole file when nothing is selected) with
     /// `claude`, replacing it with the result.
     fn ai_annotate(&mut self) {
@@ -5922,6 +5995,29 @@ impl App {
         }
     }
 
+    /// A left click in the clock box inserts the clicked time row into the active
+    /// editor and closes the box; a click outside closes it.
+    fn clock_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.clock;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            self.show_clock = false;
+            return;
+        }
+        let row = (mouse.row - r.y) as usize;
+        if row < self.clock.row_count() {
+            self.clock.select(row);
+            let now = crate::clock::now_local();
+            if let Some(text) = self.clock.selected_value(&now) {
+                let area = self.editor_view();
+                self.editor.insert_str(&text, area);
+            }
+            self.show_clock = false;
+        }
+    }
+
     /// A left click in the calendar box inserts text into the active editor: one
     /// of the three date-time info lines, or a clicked day formatted per locale.
     /// A click outside the box closes it. The box stays open after an insert so
@@ -5937,9 +6033,9 @@ impl App {
         }
         let rel_y = mouse.row - r.y;
         let rel_x = mouse.column - r.x;
-        // The calendar is laid out with the month header + grid on top and the
-        // date/time lines beneath. Row 0 is the month header carrying the `◀`/`▶`
-        // nav arrows (`◀` at column 0, `▶` at column 20).
+        // The calendar is the month header on top and the day grid beneath. Row 0
+        // is the month header carrying the `◀`/`▶` nav arrows (`◀` at column 0,
+        // `▶` at column 20).
         if rel_y == 0 {
             if rel_x == 0 {
                 self.calendar.prev_month();
@@ -5948,19 +6044,9 @@ impl App {
             }
             return;
         }
-        // The date/time lines occupy the last block (`info_start` is its blank
-        // spacer; the three lines follow). The weekday header is row 1 and the
-        // week rows start at row 2, each day cell three columns wide.
-        let info_start = r.height.saturating_sub(5);
-        let text = if rel_y > info_start {
-            let now = crate::calendar::now_local();
-            match rel_y - info_start {
-                1 => Some(crate::calendar::local_datetime(&now)),
-                2 => Some(crate::calendar::utc_iso(&now)),
-                3 => Some(crate::calendar::iso_week_date(&now)),
-                _ => None,
-            }
-        } else if rel_y >= 2 {
+        // The weekday header is row 1 and the week rows start at row 2, each day
+        // cell three columns wide. Clicking a day inserts it.
+        let text = if rel_y >= 2 {
             let week = (rel_y - 2) as usize;
             let col = (rel_x / 3) as usize;
             self.calendar

@@ -26,12 +26,12 @@ pub struct Chooser {
 }
 
 impl Chooser {
-    /// Open the chooser with an empty query (all zones), highlighting
-    /// `active_name` if present (else the first row).
+    /// Open the chooser with an empty query (all zones, ordered by UTC offset),
+    /// highlighting `active_name` if present (else the first row).
     #[must_use]
     pub fn open(active_name: &str) -> Self {
-        let matches: Vec<usize> = (0..ZONES.len()).collect();
-        let selected = ZONES.iter().position(|z| z.name == active_name).unwrap_or(0);
+        let matches = sorted_matches("");
+        let selected = matches.iter().position(|&i| ZONES[i].name == active_name).unwrap_or(0);
         Chooser { query: String::new(), selected, scroll: 0, matches }
     }
 
@@ -120,20 +120,33 @@ impl Chooser {
     // possible and clamping the selection/scroll.
     fn recompute(&mut self) {
         let prev = self.selected_zone().map(|z| z.name);
-        let q = self.query.to_ascii_lowercase();
-        self.matches = (0..ZONES.len())
-            .filter(|&i| {
-                let z = &ZONES[i];
-                q.is_empty()
-                    || z.name.to_ascii_lowercase().contains(&q)
-                    || z.abbrev.to_ascii_lowercase().contains(&q)
-            })
-            .collect();
+        self.matches = sorted_matches(&self.query);
         self.selected = prev
             .and_then(|name| self.matches.iter().position(|&i| ZONES[i].name == name))
             .unwrap_or(0);
         self.scroll = 0;
     }
+}
+
+/// Indices into [`ZONES`] matching `query` (case-insensitive substring of name
+/// or abbreviation), ordered by UTC offset and then by name.
+fn sorted_matches(query: &str) -> Vec<usize> {
+    let q = query.to_ascii_lowercase();
+    let mut idx: Vec<usize> = (0..ZONES.len())
+        .filter(|&i| {
+            let z = &ZONES[i];
+            q.is_empty()
+                || z.name.to_ascii_lowercase().contains(&q)
+                || z.abbrev.to_ascii_lowercase().contains(&q)
+        })
+        .collect();
+    idx.sort_by(|&a, &b| {
+        ZONES[a]
+            .std_offset_minutes
+            .cmp(&ZONES[b].std_offset_minutes)
+            .then_with(|| ZONES[a].name.cmp(ZONES[b].name))
+    });
+    idx
 }
 
 #[cfg(test)]

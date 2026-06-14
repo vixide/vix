@@ -5,6 +5,7 @@
 members = [
     "vix-editor",
     "vix-calendar-panel",
+    "vix-clock-panel",
     "vix-theme-chooser",
     "vix-locale-chooser",
     "vix-keymap-chooser",
@@ -71,6 +72,8 @@ vix-editor = { path = "vix-editor", default-features = false, features = ["cross
 # Calendar box: date/time strings and the navigable month grid. Internal crate so
 # the calendar logic stays unit-testable on its own (it owns the jiff dependency).
 vix-calendar-panel = { path = "vix-calendar-panel" }
+# Clock box: live date/time strings (local, UTC, ISO week, active zone) + rows.
+vix-clock-panel = { path = "vix-clock-panel" }
 # Theme: the monochrome Dark/Light model, ratatui styles, and chooser state.
 vix-theme-chooser = { path = "vix-theme-chooser" }
 # Locale chooser: available UI languages + selection state.

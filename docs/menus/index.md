@@ -134,6 +134,7 @@ and strings).
 | Cancel Command      | Kill the running command                     |
 | *— separator —*     |                                              |
 | Calendar…           | Toggle the calendar box                      |
+| Clock…              | Toggle the clock box (local/UTC/ISO week/active zone) |
 | Time Zone…          | Pick the app-wide active IANA time zone (filterable) |
 | Nerd Font Characters… | Open the glyph picker                      |
 | ASCII Characters…   | Open the ASCII reference table               |
@@ -151,6 +152,7 @@ Improve run in the background and **replace** the text with the result (undoable
 | --------- | --------------------------------------------------------------------- |
 | Summarize | Run `claude` to summarize the selection (or the whole file); to the dock |
 | Explain   | Run `claude` to explain the selection (or the whole file); to the dock |
+| Define    | Run `claude` to define the selection (or the word at/after the cursor); to the dock |
 | Annotate  | Run `claude` to annotate the selection (or the whole file); replaces it |
 | Improve   | Run `claude` to improve the selection (or the whole file); replaces it |
 

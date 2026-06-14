@@ -77,6 +77,7 @@ const FILE: &[Item] = &[
     SEP,
     Item::leaf("menu.item.file.open", "file.open", "Ctrl O"),
     Item::leaf("menu.item.file.open_recent", "file.open_recent", "Ctrl Shift O"),
+    SEP,
     Item::leaf("menu.item.file.save", "file.save", "Ctrl S"),
     Item::leaf("menu.item.file.save_as", "file.save_as", "Ctrl Shift S"),
     SEP,
@@ -210,6 +211,7 @@ const TOOLS: &[Item] = &[
     SEP,
     Item::leaf("menu.item.tools.contacts", "tools.contacts", ""),
     Item::leaf("menu.item.tools.calendar", "tools.calendar", ""),
+    Item::leaf("menu.item.tools.clock", "tools.clock", ""),
     Item::leaf("menu.item.tools.time_zone", "tools.time_zone", ""),
     Item::leaf("menu.item.tools.nerd_palette", "tools.nerd_palette", ""),
     Item::leaf("menu.item.tools.ascii", "tools.ascii", ""),
@@ -227,6 +229,7 @@ const TOOLS_LSP: &[Item] = &[
 const AI: &[Item] = &[
     Item::leaf("menu.item.ai.summarize", "ai.summarize", ""),
     Item::leaf("menu.item.ai.explain", "ai.explain", ""),
+    Item::leaf("menu.item.ai.define", "ai.define", ""),
     SEP,
     Item::leaf("menu.item.ai.annotate", "ai.annotate", ""),
     Item::leaf("menu.item.ai.improve", "ai.improve", ""),

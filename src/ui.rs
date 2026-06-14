@@ -11,6 +11,7 @@ use ratatui_image::StatefulImage;
 
 use crate::app::{App, Focus};
 use crate::calendar;
+use crate::clock;
 use crate::menu::MENUS;
 use crate::messages::Level;
 use crate::search::Field;
@@ -153,6 +154,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     // Overlays.
     if app.show_calendar {
         draw_calendar(app, frame, area);
+    }
+    if app.show_clock {
+        draw_clock(app, frame, area);
     }
     if app.menu.is_open() {
         if let Some(i) = app.menu.open {
@@ -842,11 +846,7 @@ fn draw_time_zone_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
         .iter()
         .map(|&i| {
             let z = &ZONES[i];
-            let dst = if z.has_dst { " *" } else { "" };
-            ListItem::new(Line::from(format!(
-                "  {:<28} {:>10}  {}{}",
-                z.name, z.offset_label(), z.abbrev, dst
-            )))
+            ListItem::new(Line::from(format!("  {:>9}  {}", z.offset_label(), z.name)))
         })
         .collect();
     let list = List::new(items).highlight_style(theme::selected());
@@ -1465,11 +1465,10 @@ fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
-    // The date/time area always reflects the present; the month area follows the
-    // user's navigation (see `App::calendar`).
-    let now = calendar::now_local();
+    // The month area follows the user's navigation (see `App::calendar`). Live
+    // date/time strings now live in the separate clock box (Tools → Clock…).
     let width = 28u16.min(area.width);
-    let height = 16u16.min(area.height);
+    let height = 11u16.min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width + 1),
         y: area.y + 2,
@@ -1482,20 +1481,18 @@ fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(theme::title(true))
-        .title(format!(" {} {} ", icon::CLOCK, t!("ui.calendar")));
+        .title(format!(" {} {} ", icon::CALENDAR, t!("ui.calendar")));
     let inner = block.inner(rect);
-    // Record the inner rect so a click can hit-test info lines, the month-nav
-    // arrows, and day cells.
+    // Record the inner rect so a click can hit-test the month-nav arrows and day
+    // cells.
     app.layout.calendar = inner;
     frame.render_widget(block, rect);
 
-    // The calendar (month nav + grid) sits above the date/time entries.
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1), // month header + nav arrows
             Constraint::Min(6),    // weekday header + weeks
-            Constraint::Length(4), // info
             Constraint::Length(1), // help
         ])
         .split(inner);
@@ -1507,18 +1504,58 @@ fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(header), rows[0]);
     frame.render_widget(Paragraph::new(month_lines(&app.calendar)), rows[1]);
 
-    let info = vec![
-        // A blank spacer, then local date/time, UTC ISO, and the commercial
-        // (ISO week) date.
-        Line::from(""),
-        Line::from(Span::raw(calendar::local_datetime(&now))),
-        Line::from(Span::raw(calendar::utc_iso(&now))),
-        Line::from(Span::raw(calendar::iso_week_date(&now))),
-    ];
-    frame.render_widget(Paragraph::new(info), rows[2]);
-
     let help = Line::from(Span::styled(t!("ui.calendar_hint").to_string(), theme::dim()));
-    frame.render_widget(Paragraph::new(help), rows[3]);
+    frame.render_widget(Paragraph::new(help), rows[2]);
+}
+
+fn draw_clock(app: &mut App, frame: &mut Frame, area: Rect) {
+    let now = clock::now_local();
+    let rows_data = app.clock.rows(&now);
+    let zone = vix_time_zone_model::active_name();
+
+    let width = 38u16.min(area.width);
+    let height = (rows_data.len() as u16 + 3).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width + 1),
+        y: area.y + 2,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::CLOCK, t!("ui.clock")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let items: Vec<ListItem> = rows_data
+        .iter()
+        .map(|r| {
+            let label = match r.key {
+                "local" => t!("ui.clock_local").to_string(),
+                "utc" => t!("ui.clock_utc").to_string(),
+                "iso_week" => t!("ui.clock_iso_week").to_string(),
+                _ => t!("ui.clock_zone", zone = zone).to_string(),
+            };
+            ListItem::new(Line::from(format!(" {label:<10} {}", r.value)))
+        })
+        .collect();
+    let list = List::new(items).highlight_style(theme::selected());
+    let mut state = ListState::default();
+    state.select(Some(app.clock.selected));
+    frame.render_stateful_widget(list, rows[0], &mut state);
+    app.layout.clock = rows[0];
+
+    let help = Line::from(Span::styled(t!("ui.clock_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(help), rows[1]);
 }
 
 /// Previous-month arrow glyph, at column 0 of the calendar's month-header row.

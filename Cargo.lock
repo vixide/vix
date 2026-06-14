@@ -3323,6 +3323,7 @@ dependencies = [
  "vix-ascii-character-picker",
  "vix-bottom-dock",
  "vix-calendar-panel",
+ "vix-clock-panel",
  "vix-contact-panel",
  "vix-editor",
  "vix-file-information-panel",
@@ -3363,6 +3364,14 @@ name = "vix-calendar-panel"
 version = "0.1.0"
 dependencies = [
  "jiff",
+]
+
+[[package]]
+name = "vix-clock-panel"
+version = "0.1.0"
+dependencies = [
+ "jiff",
+ "vix-time-zone-model",
 ]
 
 [[package]]

@@ -171,6 +171,7 @@ The **Editor** submenu:
 | Cancel Command     | Kill the running command                          |
 | *— separator —*    |                                                   |
 | Calendar…          | Toggle the calendar box                           |
+| Clock…             | Toggle the clock box: local/UTC/ISO week/active-zone times (`vix-clock-panel/spec/index.md`) |
 | Time Zone…         | Pick the app-wide active IANA time zone; filterable (`vix-time-zone-chooser/spec/index.md`) |
 | Nerd Font Characters… | Open the glyph picker (`vix-nerd-font-picker/spec/index.md`) |
 | ASCII Characters…  | Open the ASCII reference table (`vix-ascii-character-picker/spec/index.md`) |
@@ -189,16 +190,21 @@ The **Language Server** submenu:
 
 ## AI menu
 
-Each item runs the `claude` CLI on the selection, or the whole file when nothing
-is selected. **Summarize** and **Explain** stream the response into the bottom
-dock (read-only). **Annotate** and **Improve** run in the background and, when
-the result arrives, **replace** the selected text (or the whole buffer) with it —
-an undoable edit. Only one AI task runs at a time.
+Each item runs the `claude` CLI. **Summarize**, **Explain**, and **Define**
+stream the response into the bottom dock (read-only); **Annotate** and
+**Improve** run in the background and **replace** the text with the result (an
+undoable edit). Only one replace task runs at a time.
+
+Summarize / Explain / Annotate / Improve act on the selection, or the whole file
+when nothing is selected. **Define** instead acts on the selection, or the word
+at the cursor (or the next word when the cursor is between words) — never the
+whole buffer.
 
 | Item      | Action                                                          |
 | --------- | -------------------------------------------------------------- |
 | Summarize | Summarize the text → bottom dock                               |
 | Explain   | Explain the text → bottom dock                                 |
+| Define    | Define the word → bottom dock                                  |
 | *— separator —* |                                                          |
 | Annotate  | Annotate the text → replaces the text                         |
 | Improve   | Improve the text → replaces the text                         |
