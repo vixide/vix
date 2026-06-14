@@ -309,6 +309,11 @@ pub use vix_locale_chooser::Chooser as LocaleChooser;
 /// style; Enter commits and persists it, Esc reverts.
 pub use vix_keymap_chooser::Chooser as KeymapChooser;
 
+/// Time Zone chooser overlay state (Tools -> Time Zone), re-exported from
+/// [`vix_time_zone_chooser`]. A filterable list; Enter sets the application-wide
+/// active zone in [`vix_time_zone_model`] and persists it, Esc cancels.
+pub use vix_time_zone_chooser::Chooser as TimeZoneChooser;
+
 /// Nerd Font palette overlay state (Tools -> Nerd Font Palette), re-exported from
 /// [`vix_nerd_font_picker`]. Arrow keys move within the glyph grid; Enter (or a
 /// click) inserts the highlighted glyph into the active editor, Esc closes.
@@ -439,6 +444,11 @@ pub struct Layout {
     /// Row list rectangle of the open chooser overlay (theme/locale/keymap), so a
     /// click can hit-test which row was picked.
     pub chooser: Rect,
+    /// Row-list rectangle of the open Time Zone chooser, so a click can hit-test
+    /// which row was picked.
+    pub tz_chooser: Rect,
+    /// Scrollbar gutter rectangle of the open Time Zone chooser, for click/drag.
+    pub tz_scrollbar: Rect,
     /// Glyph-grid rectangle of the open Nerd Font palette, so a click can
     /// hit-test which cell was picked.
     pub nerd_palette: Rect,
@@ -539,6 +549,8 @@ pub struct App {
     pub locale_chooser: Option<LocaleChooser>,
     /// Keymap chooser overlay, when open.
     pub keymap_chooser: Option<KeymapChooser>,
+    /// Time Zone chooser overlay, when open.
+    pub time_zone_chooser: Option<TimeZoneChooser>,
     /// Recent-files chooser overlay, when open.
     pub recent_chooser: Option<RecentChooser>,
     /// Nerd Font palette (character picker) overlay, when open.
@@ -675,6 +687,8 @@ impl App {
         // styled correctly. A theme value that is not a built-in mode is treated
         // as the name of a custom JSON theme.
         Self::apply_saved_theme(&settings.theme);
+        // Apply the saved time zone so the clock panel and status bar use it.
+        vix_time_zone_model::set_active(&settings.time_zone);
         let editor = Editor::new(
             settings.line_numbers,
             settings.show_whitespace,
@@ -712,6 +726,7 @@ impl App {
             theme_chooser: None,
             locale_chooser: None,
             keymap_chooser: None,
+            time_zone_chooser: None,
             recent_chooser: None,
             nerd_palette: None,
             ascii_panel: None,
@@ -883,6 +898,10 @@ impl App {
         }
         if self.keymap_chooser.is_some() {
             self.keymap_key(key);
+            return;
+        }
+        if self.time_zone_chooser.is_some() {
+            self.time_zone_key(key);
             return;
         }
         if self.recent_chooser.is_some() {
@@ -1610,6 +1629,7 @@ impl App {
             "tools.system_info" => self.open_system_info(),
             "tools.file_info" => self.open_file_info(),
             "tools.contacts" => self.open_contacts(),
+            "tools.time_zone" => self.open_time_zone_chooser(),
             "tools.dashboard" => self.open_dashboard(),
             "tools.run_command" => {
                 self.prompt =
@@ -3356,6 +3376,10 @@ impl App {
             self.keymap_mouse(mouse);
             return;
         }
+        if self.time_zone_chooser.is_some() {
+            self.time_zone_mouse(mouse);
+            return;
+        }
         if self.recent_chooser.is_some() {
             self.recent_mouse(mouse);
             return;
@@ -4102,6 +4126,63 @@ impl App {
         }
     }
 
+    // ----- time zone chooser ----------------------------------------------
+
+    fn open_time_zone_chooser(&mut self) {
+        self.time_zone_chooser = Some(TimeZoneChooser::open(vix_time_zone_model::active_name()));
+    }
+
+    fn time_zone_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.tz_chooser.height as usize).max(1);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(c) = self.time_zone_chooser.as_mut() {
+                    c.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(c) = self.time_zone_chooser.as_mut() {
+                    c.down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(c) = self.time_zone_chooser.as_mut() {
+                    c.page_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(c) = self.time_zone_chooser.as_mut() {
+                    c.page_down(page);
+                }
+            }
+            KeyCode::Char(ch) => {
+                if let Some(c) = self.time_zone_chooser.as_mut() {
+                    c.push(ch);
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(c) = self.time_zone_chooser.as_mut() {
+                    c.backspace();
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(zone) =
+                    self.time_zone_chooser.as_ref().and_then(TimeZoneChooser::selected_zone)
+                {
+                    vix_time_zone_model::set_active(zone.name);
+                    self.settings.time_zone = zone.name.to_string();
+                    self.status = t!("status.time_zone", zone = zone.name).to_string();
+                }
+                self.time_zone_chooser = None;
+            }
+            KeyCode::Esc => {
+                self.time_zone_chooser = None;
+                self.status = t!("status.time_zone_unchanged").to_string();
+            }
+            _ => {}
+        }
+    }
+
     /// Reset per-keymap session state (Emacs chord prefix, Vim mode/command line)
     /// so a freshly chosen keymap starts clean — Vim begins in Normal mode.
     fn reset_keymap_modes(&mut self) {
@@ -4217,6 +4298,54 @@ impl App {
                     kc.selected = idx;
                 }
             }
+        }
+    }
+
+    fn time_zone_mouse(&mut self, mouse: MouseEvent) {
+        let list = self.layout.tz_chooser;
+        let sb = self.layout.tz_scrollbar;
+        let viewport = (list.height as usize).max(1);
+        match mouse.kind {
+            // Press or drag on the scrollbar gutter moves the highlight.
+            MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left)
+                if rect_contains(sb, mouse.column, mouse.row) =>
+            {
+                if let Some(c) = self.time_zone_chooser.as_mut() {
+                    let max = c.len().saturating_sub(1);
+                    let pos = crate::ui::scrollbar_pos_from_row(sb, mouse.row, max);
+                    c.select(pos);
+                    c.ensure_visible(viewport);
+                }
+            }
+            // A click on a row accepts that zone.
+            MouseEventKind::Down(MouseButton::Left) if rect_contains(list, mouse.column, mouse.row) => {
+                let row_in_view = (mouse.row - list.y) as usize;
+                let pick = self.time_zone_chooser.as_mut().and_then(|c| {
+                    let idx = c.scroll + row_in_view;
+                    (idx < c.len()).then(|| {
+                        c.select(idx);
+                        c.selected_zone()
+                    })?
+                });
+                if let Some(zone) = pick {
+                    vix_time_zone_model::set_active(zone.name);
+                    self.settings.time_zone = zone.name.to_string();
+                    self.status = t!("status.time_zone", zone = zone.name).to_string();
+                    self.time_zone_chooser = None;
+                }
+            }
+            MouseEventKind::ScrollUp => {
+                if let Some(c) = self.time_zone_chooser.as_mut() {
+                    c.scroll = c.scroll.saturating_sub(3);
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                if let Some(c) = self.time_zone_chooser.as_mut() {
+                    let max = c.len().saturating_sub(viewport);
+                    c.scroll = (c.scroll + 3).min(max);
+                }
+            }
+            _ => {}
         }
     }
 

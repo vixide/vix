@@ -202,6 +202,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.keymap_chooser.is_some() {
         draw_keymap_chooser(app, frame, area);
     }
+    if app.time_zone_chooser.is_some() {
+        draw_time_zone_chooser(app, frame, area);
+    }
     if app.recent_chooser.is_some() {
         draw_recent_chooser(app, frame, area);
     }
@@ -784,6 +787,81 @@ fn draw_keymap_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
         .collect();
     let hint = t!("ui.theme_hint");
     app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.keymap"), &hint, &labels, selected);
+}
+
+fn draw_time_zone_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    use vix_time_zone_model::ZONES;
+    let Some(c) = app.time_zone_chooser.as_mut() else { return };
+
+    let width = 52u16.min(area.width);
+    let height = ((ZONES.len() as u16).saturating_add(5)).min(area.height.saturating_sub(2)).min(24);
+    let rect = Rect {
+        x: area.x + (area.width.saturating_sub(width)) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let active = vix_time_zone_model::active_name();
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::CLOCK, t!("ui.time_zone")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    // Query line: a filter prompt showing the typed text, plus the active zone.
+    let query = Line::from(vec![
+        Span::styled(format!(" {} ", icon::SEARCH), theme::dim()),
+        Span::raw(c.query.clone()),
+        Span::styled(t!("ui.time_zone_active", zone = active).to_string(), theme::dim()),
+    ]);
+    frame.render_widget(Paragraph::new(query), rows[0]);
+
+    // Body: the scrollable list plus a one-column scrollbar gutter.
+    let body = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(rows[1]);
+    let list_area = body[0];
+    let sb_area = body[1];
+    let viewport = list_area.height as usize;
+    c.ensure_visible(viewport);
+
+    let matches = c.matches();
+    let start = c.scroll.min(matches.len());
+    let end = (start + viewport).min(matches.len());
+    let items: Vec<ListItem> = matches[start..end]
+        .iter()
+        .map(|&i| {
+            let z = &ZONES[i];
+            let dst = if z.has_dst { " *" } else { "" };
+            ListItem::new(Line::from(format!(
+                "  {:<28} {:>10}  {}{}",
+                z.name, z.offset_label(), z.abbrev, dst
+            )))
+        })
+        .collect();
+    let list = List::new(items).highlight_style(theme::selected());
+    let mut state = ListState::default();
+    if !matches.is_empty() {
+        state.select(Some(c.selected.saturating_sub(start)));
+    }
+    frame.render_stateful_widget(list, list_area, &mut state);
+    draw_scrollbar(frame, sb_area, c.selected, matches.len().saturating_sub(1));
+
+    let hint = Line::from(Span::styled(t!("ui.time_zone_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), rows[2]);
+
+    app.layout.tz_chooser = list_area;
+    app.layout.tz_scrollbar = sb_area;
 }
 
 fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) {

@@ -1,0 +1,19 @@
+# vix-time-zone-chooser: filterable selection state for the Time Zone chooser
+# overlay (Tools → Time Zone…). Pure data over vix-time-zone-model: it tracks the
+# search query, the filtered match list, and the highlighted row; the host draws
+# it and, on accept, sets the active zone in vix-time-zone-model.
+
+[package]
+name = "vix-time-zone-chooser"
+version = "0.1.0"
+edition = "2021"
+description = "Filterable Time Zone chooser state for Vix."
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_time_zone_chooser"
+path = "src/lib.rs"
+
+[dependencies]
+vix-time-zone-model = { path = "../vix-time-zone-model" }

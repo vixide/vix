@@ -171,6 +171,7 @@ The **Editor** submenu:
 | Cancel Command     | Kill the running command                          |
 | *— separator —*    |                                                   |
 | Calendar…          | Toggle the calendar box                           |
+| Time Zone…         | Pick the app-wide active IANA time zone; filterable (`vix-time-zone-chooser/spec/index.md`) |
 | Nerd Font Characters… | Open the glyph picker (`vix-nerd-font-picker/spec/index.md`) |
 | ASCII Characters…  | Open the ASCII reference table (`vix-ascii-character-picker/spec/index.md`) |
 | X11 Colors…        | Open the X11 color picker; inserts the chosen hex (`vix-x11-color-picker/spec/index.md`) |

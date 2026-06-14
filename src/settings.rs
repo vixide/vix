@@ -100,6 +100,10 @@ pub struct Settings {
     /// Directory of vCard (`.vcf`) files for the contact browser (Tools →
     /// Contacts…). Empty = use the workspace root.
     pub contacts_dir: String,
+    /// Active time zone as an IANA canonical name (e.g. `"UTC"`,
+    /// `"America/New_York"`). Chosen via Tools → Time Zone…; used app-wide
+    /// (e.g. the clock panel).
+    pub time_zone: String,
 }
 
 /// One configured language server (a `lsp_servers` entry).
@@ -147,6 +151,7 @@ impl Default for Settings {
             lsp_servers: Vec::new(),
             welcomed: false,
             contacts_dir: String::new(),
+            time_zone: "UTC".to_string(),
         }
     }
 }

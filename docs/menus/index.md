@@ -134,6 +134,7 @@ and strings).
 | Cancel Command      | Kill the running command                     |
 | *— separator —*     |                                              |
 | Calendar…           | Toggle the calendar box                      |
+| Time Zone…          | Pick the app-wide active IANA time zone (filterable) |
 | Nerd Font Characters… | Open the glyph picker                      |
 | ASCII Characters…   | Open the ASCII reference table               |
 | X11 Colors…         | Pick an X11 color; inserts its hex           |

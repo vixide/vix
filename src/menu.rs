@@ -210,6 +210,7 @@ const TOOLS: &[Item] = &[
     SEP,
     Item::leaf("menu.item.tools.contacts", "tools.contacts", ""),
     Item::leaf("menu.item.tools.calendar", "tools.calendar", ""),
+    Item::leaf("menu.item.tools.time_zone", "tools.time_zone", ""),
     Item::leaf("menu.item.tools.nerd_palette", "tools.nerd_palette", ""),
     Item::leaf("menu.item.tools.ascii", "tools.ascii", ""),
     Item::leaf("menu.item.tools.html_chars", "tools.html_chars", ""),

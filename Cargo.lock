@@ -3341,6 +3341,7 @@ dependencies = [
  "vix-status-bar-panel",
  "vix-system-information-panel",
  "vix-theme-chooser",
+ "vix-time-zone-chooser",
  "vix-time-zone-model",
  "vix-vcard-panel",
  "vix-vcard-parser",
@@ -3486,6 +3487,13 @@ dependencies = [
  "ratatui-core",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "vix-time-zone-chooser"
+version = "0.1.0"
+dependencies = [
+ "vix-time-zone-model",
 ]
 
 [[package]]
