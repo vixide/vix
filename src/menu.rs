@@ -229,10 +229,13 @@ const GIT: &[Item] = &[
     SEP,
     Item::leaf("menu.item.git.new_branch", "git.new_branch", ""),
     Item::leaf("menu.item.git.switch_branch", "git.switch_branch", ""),
+    Item::leaf("menu.item.git.merge_branch", "git.merge_branch", ""),
     SEP,
     Item::leaf("menu.item.git.pull", "git.pull", ""),
     Item::leaf("menu.item.git.push", "git.push", ""),
     Item::leaf("menu.item.git.fetch", "git.fetch", ""),
+    SEP,
+    Item::leaf("menu.item.git.init", "git.init", ""),
     Item::leaf("menu.item.git.clone", "git.clone", ""),
 ];
 

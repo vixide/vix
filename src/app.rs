@@ -221,6 +221,9 @@ pub struct BranchChooser {
     pub branches: Vec<String>,
     /// Index of the highlighted branch.
     pub selected: usize,
+    /// When true, the chosen branch is merged into the current branch; otherwise
+    /// it is checked out.
+    pub merge: bool,
 }
 
 /// The spell-suggestion popup (Ctrl+;): corrections for the misspelled word at
@@ -1596,6 +1599,8 @@ impl App {
             "git.pull" => self.git_remote_command("git pull"),
             "git.fetch" => self.git_remote_command("git fetch"),
             "git.switch_branch" => self.open_branch_chooser(),
+            "git.merge_branch" => self.open_branch_chooser_mode(true),
+            "git.init" => self.git_init(),
             "git.new_branch" => self.git_begin_new_branch(),
             "git.log" => self.git_log(),
             "git.status" => self.git_status_to_dock(),
@@ -2221,6 +2226,16 @@ impl App {
         self.run_command("git --no-pager status");
     }
 
+    /// Initialize a git repository in the workspace, refusing (for safety) if one
+    /// already exists (a `.git` directory or a detected repo).
+    fn git_init(&mut self) {
+        if self.root.join(".git").exists() || vix_git::is_repo(&self.root) {
+            self.status = t!("status.git_already_init").to_string();
+            return;
+        }
+        self.run_command("git init");
+    }
+
     /// Begin cloning a repository: prompt for its URL (works outside a repo too).
     fn git_begin_clone(&mut self) {
         self.git_panel = None;
@@ -2251,6 +2266,12 @@ impl App {
     // ----- git branch switcher --------------------------------------------
 
     fn open_branch_chooser(&mut self) {
+        self.open_branch_chooser_mode(false);
+    }
+
+    /// Open the branch chooser; `merge` picks merge-into-current rather than
+    /// checkout.
+    fn open_branch_chooser_mode(&mut self, merge: bool) {
         if !vix_git::is_repo(&self.root) {
             self.status = t!("status.git_not_repo").into();
             return;
@@ -2260,7 +2281,7 @@ impl App {
             self.status = t!("status.git_no_branches").into();
             return;
         }
-        self.branch_chooser = Some(BranchChooser { branches, selected: 0 });
+        self.branch_chooser = Some(BranchChooser { branches, selected: 0, merge });
     }
 
     fn branch_key(&mut self, key: KeyEvent) {
@@ -2293,7 +2314,8 @@ impl App {
         }
     }
 
-    /// Check out the highlighted branch and close the chooser.
+    /// Apply the highlighted branch and close the chooser: merge it into the
+    /// current branch (merge mode) or check it out.
     fn checkout_selected_branch(&mut self) {
         let Some(c) = self.branch_chooser.take() else {
             return;
@@ -2301,6 +2323,12 @@ impl App {
         let Some(branch) = c.branches.get(c.selected).cloned() else {
             return;
         };
+        if c.merge {
+            // Merge streams its output (and any conflicts) to the bottom dock;
+            // git state and the tree refresh when it finishes.
+            self.run_command(&format!("git merge {branch}"));
+            return;
+        }
         match vix_git::checkout(&self.root, &branch) {
             Ok(()) => {
                 self.status = t!("status.git_switched", branch = branch).to_string();
