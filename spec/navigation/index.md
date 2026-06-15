@@ -23,4 +23,6 @@ bindings are excluded to keep the outline structural), not a semantic LSP.
 
 Position History: Navigate back and forward through your edit locations using Alt+Left and Alt+Right.
 
+Recent Locations (jump list): Press Alt+J (or **Go → Recent Locations…**, or the command palette command "Recent Locations") to open a chooser listing the recorded position history, most-recent first with consecutive duplicates removed. Each row shows the file name, line, and directory; ↑/↓ select, Enter (or a click) jumps to the location, Esc cancels. Where Alt+Left/Right step linearly through the history one entry at a time, this lists them all so you can jump straight to any one.
+
 Open File Jump: The Open File prompt and Quick Open (Ctrl+O) support path:line[:col] syntax to jump directly to a location after opening (e.g. src/main.rs:42:10).

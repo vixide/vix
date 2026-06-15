@@ -287,6 +287,56 @@ fn palette_goto_line_commit_records_origin_in_history() {
 }
 
 #[test]
+fn recent_locations_chooser_lists_and_jumps() {
+    let dir = unique_dir("locations");
+    let file = dir.join("g.txt");
+    let body: String = (1..=40).map(|i| format!("L{i}\n")).collect();
+    fs::write(&file, body).unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+
+    // Make two jumps so the position history has several entries.
+    app.run_action("tools.palette");
+    for c in ":12".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+    app.run_action("tools.palette");
+    for c in ":30".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+    assert_eq!(app.editor.cursor_1based().0, 30);
+
+    // Alt+J opens the recent-locations chooser, most-recent first.
+    app.on_key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::ALT));
+    let lc = app.location_chooser.as_ref().expect("location chooser opens");
+    assert!(lc.entries.len() >= 2, "history has multiple locations: {}", lc.entries.len());
+    assert_eq!(lc.entries[0].line, 30, "most recent location first");
+
+    // Move the cursor away, then jump to the second entry from the chooser.
+    let target = app.location_chooser.as_ref().unwrap().entries[1].line;
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.location_chooser.is_none(), "Enter closes the chooser");
+    assert_eq!(app.editor.cursor_1based().0, target, "jumped to the chosen location");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn recent_locations_empty_history_reports_status() {
+    let dir = unique_dir("locations-empty");
+    let file = dir.join("g.txt");
+    fs::write(&file, "one\ntwo\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+    app.run_action("nav.recent_locations");
+    assert!(app.location_chooser.is_none(), "no chooser without history");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn find_selection_jumps_between_occurrences() {
     let dir = unique_dir("findsel");
     let file = dir.join("f.txt");

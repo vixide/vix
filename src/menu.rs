@@ -116,6 +116,7 @@ const EDIT: &[Item] = &[
 /// Cursor jump commands, grouped under Edit → Go.
 const EDIT_GO: &[Item] = &[
     Item::leaf("menu.item.edit.go_line", "nav.goto_line", ""),
+    Item::leaf("menu.item.edit.recent_locations", "nav.recent_locations", ""),
     SEP,
     Item::leaf("menu.item.edit.line_start", "edit.line_start", ""),
     Item::leaf("menu.item.edit.line_end", "edit.line_end", ""),
