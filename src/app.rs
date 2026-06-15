@@ -1772,6 +1772,7 @@ impl App {
                 self.prompt =
                     Some(Prompt::new(PromptKind::GitGrep, t!("prompt.git_grep").to_string()));
             }
+            "git.blame" => self.git_blame_line(),
             "view.bottom_dock" => self.toggle_bottom_dock(),
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
@@ -2659,6 +2660,47 @@ impl App {
         // Single-quote the pattern so shell metacharacters in the regex are safe.
         let quoted = format!("'{}'", pattern.replace('\'', "'\\''"));
         self.run_command(&format!("git --no-pager grep -n -e {quoted}"));
+    }
+
+    /// Annotate the cursor's current line with its `git blame` attribution
+    /// (short hash, author, date, and commit summary) in the status bar.
+    fn git_blame_line(&mut self) {
+        if !vix_git::is_repo(&self.root) {
+            self.status = t!("status.git_not_repo").into();
+            return;
+        }
+        let Some((path, line)) = self
+            .editor
+            .active_tab()
+            .and_then(|t| t.path.clone().map(|p| (p, t.editor.cursor_line() + 1)))
+        else {
+            self.status = t!("status.blame_no_file").into();
+            return;
+        };
+        // Blame from the file's own directory so git resolves the repo itself —
+        // robust to symlinked roots (e.g. macOS `/var` → `/private/var`).
+        let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else {
+            self.status = t!("status.blame_no_file").into();
+            return;
+        };
+        let rel = name.to_string_lossy();
+        match vix_git::blame_line(dir, &rel, line) {
+            Some(b) if b.is_uncommitted() => {
+                self.status = t!("status.blame_uncommitted", line = line).to_string();
+            }
+            Some(b) => {
+                self.status = t!(
+                    "status.blame",
+                    line = line,
+                    hash = b.hash,
+                    author = b.author,
+                    date = b.date,
+                    summary = b.summary
+                )
+                .to_string();
+            }
+            None => self.status = t!("status.blame_none").into(),
+        }
     }
 
     /// Run a remote git command (push/pull/fetch) asynchronously, streaming its

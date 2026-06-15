@@ -497,6 +497,12 @@ impl Editor {
         self.cursor
     }
 
+    /// The 0-based line (row) the cursor is on.
+    #[must_use]
+    pub fn cursor_line(&self) -> usize {
+        self.code.char_to_line(self.cursor)
+    }
+
     pub fn set_clipboard(&mut self, text: &str) -> Result<()> {
         arboard::Clipboard::new()
             .and_then(|mut c| c.set_text(text.to_string()))

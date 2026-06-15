@@ -2286,6 +2286,62 @@ fn git_panel_stages_and_commits() {
 }
 
 #[test]
+#[ignore = "needs git; creates a throwaway repo and commits in it"]
+fn git_blame_annotates_the_current_line() {
+    let dir = unique_dir("gitblame");
+    fs::create_dir_all(&dir).unwrap();
+    let run = |args: &[&str]| {
+        std::process::Command::new("git").current_dir(&dir).args(args).output().unwrap();
+    };
+    run(&["init", "-q"]);
+    run(&["config", "user.email", "t@example.com"]);
+    run(&["config", "user.name", "Ada Lovelace"]);
+    let file = dir.join("a.txt");
+    fs::write(&file, "one\ntwo\nthree\n").unwrap();
+    run(&["add", "."]);
+    run(&["commit", "-q", "-m", "seed the file"]);
+
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+    // Cursor starts on line 1; blame should attribute it to the seed commit.
+    app.run_action("git.blame");
+    assert!(app.status.contains("Ada Lovelace"), "blame names the author: {}", app.status);
+    assert!(app.status.contains("seed the file"), "blame shows the summary: {}", app.status);
+    assert!(app.status.starts_with("L1:"), "blame labels the line: {}", app.status);
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+#[ignore = "needs git; creates a throwaway repo and commits in it"]
+fn git_blame_flags_an_uncommitted_line() {
+    let dir = unique_dir("gitblameunc");
+    fs::create_dir_all(&dir).unwrap();
+    let run = |args: &[&str]| {
+        std::process::Command::new("git").current_dir(&dir).args(args).output().unwrap();
+    };
+    run(&["init", "-q"]);
+    run(&["config", "user.email", "t@example.com"]);
+    run(&["config", "user.name", "Test"]);
+    let file = dir.join("a.txt");
+    fs::write(&file, "committed\n").unwrap();
+    run(&["add", "."]);
+    run(&["commit", "-q", "-m", "init"]);
+    // A second, uncommitted line on disk.
+    fs::write(&file, "committed\nbrand new\n").unwrap();
+
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+    app.run_action("cursor_down"); // move to line 2 (the new line)
+    app.run_action("git.blame");
+    assert!(
+        app.status.contains("L2") && app.status.to_lowercase().contains("commit"),
+        "uncommitted line is flagged: {}",
+        app.status
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 #[ignore = "needs git; creates a throwaway repo with branches"]
 fn branch_chooser_switches_branches() {
     let dir = unique_dir("gitbranch");
