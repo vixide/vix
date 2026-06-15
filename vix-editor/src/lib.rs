@@ -33,6 +33,7 @@ pub mod editor;
 #[allow(clippy::all, clippy::pedantic)]
 pub mod editor_crossterm;
 pub mod multicursor;
+pub mod named;
 #[allow(clippy::all, clippy::pedantic)]
 pub mod history;
 #[allow(clippy::all, clippy::pedantic)]
