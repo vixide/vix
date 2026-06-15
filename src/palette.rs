@@ -1,12 +1,13 @@
 //! Command palette (Ctrl+P) with prefix-driven modes.
 //!
-//! | Prefix | Mode        |
-//! |--------|-------------|
-//! | (none) | File finder |
-//! | `>`    | Commands    |
-//! | `#`    | Buffers     |
-//! | `:`    | Go to line  |
-//! | `@`    | Symbols     |
+//! | Prefix | Mode               |
+//! |--------|--------------------|
+//! | (none) | File finder        |
+//! | `>`    | Commands           |
+//! | `#`    | Buffers            |
+//! | `:`    | Go to line         |
+//! | `@`    | Symbols (file)     |
+//! | `@@`   | Symbols (workspace)|
 
 use std::path::PathBuf;
 
@@ -23,12 +24,17 @@ pub enum Mode {
     GotoLine,
     /// Jump to a declaration in the current file (`@` prefix).
     Symbols,
+    /// Jump to a declaration anywhere in the workspace (`@@` prefix).
+    WorkspaceSymbols,
 }
 
 impl Mode {
-    /// Infer the mode from the palette input's first character.
+    /// Infer the mode from the palette input's leading prefix.
     #[must_use]
     pub fn from_input(input: &str) -> Mode {
+        if input.starts_with("@@") {
+            return Mode::WorkspaceSymbols;
+        }
         match input.chars().next() {
             Some('>') => Mode::Commands,
             Some('#') => Mode::Buffers,
@@ -47,6 +53,7 @@ impl Mode {
             Mode::Buffers => t!("palette.mode.buffers"),
             Mode::GotoLine => t!("palette.mode.goto_line"),
             Mode::Symbols => t!("palette.mode.symbols"),
+            Mode::WorkspaceSymbols => t!("palette.mode.workspace_symbols"),
         }
         .to_string()
     }
@@ -113,6 +120,7 @@ impl Palette {
         let s = self.input.as_str();
         match self.mode() {
             Mode::Files => s,
+            Mode::WorkspaceSymbols => s.get(2..).unwrap_or(""),
             _ => s.get(1..).unwrap_or(""),
         }
     }
@@ -194,6 +202,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.lsp_hover", "lsp.hover"),
     ("cmd.lsp_complete", "lsp.complete"),
     ("cmd.goto_symbol", "nav.goto_symbol"),
+    ("cmd.goto_workspace_symbol", "nav.goto_workspace_symbol"),
     ("cmd.outline", "nav.outline"),
     ("cmd.explorer_filter_include", "explorer.filter_include"),
     ("cmd.explorer_filter_exclude", "explorer.filter_exclude"),
@@ -310,5 +319,28 @@ pub fn parse_path_target(input: &str) -> (String, Option<(usize, usize)>) {
     match line {
         Some(l) => (path, Some((l, col.unwrap_or(1)))),
         None => (path, None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_input_distinguishes_at_and_double_at() {
+        assert!(matches!(Mode::from_input("@foo"), Mode::Symbols));
+        assert!(matches!(Mode::from_input("@@foo"), Mode::WorkspaceSymbols));
+        assert!(matches!(Mode::from_input("@@"), Mode::WorkspaceSymbols));
+    }
+
+    #[test]
+    fn query_strips_the_right_prefix_width() {
+        let mut p = Palette::new();
+        p.input = "@@Widget".into();
+        assert!(matches!(p.mode(), Mode::WorkspaceSymbols));
+        assert_eq!(p.query(), "Widget");
+        p.input = "@local".into();
+        assert!(matches!(p.mode(), Mode::Symbols));
+        assert_eq!(p.query(), "local");
     }
 }

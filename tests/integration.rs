@@ -702,6 +702,38 @@ fn goto_symbol_mode_lists_and_jumps() {
 }
 
 #[test]
+fn goto_workspace_symbol_finds_symbols_across_files_and_jumps() {
+    let dir = unique_dir("wssymbols");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("a.rs"), "fn alpha() {}\nstruct Widget {}\n").unwrap();
+    fs::write(dir.join("b.rs"), "fn beta() {}\nfn widget_helper() {}\n").unwrap();
+    let mut app = app_at(&dir);
+    // Start on an empty buffer (no file open) to prove it searches the workspace.
+    app.run_action("nav.goto_workspace_symbol");
+    let p = app.palette.as_ref().expect("palette open");
+    assert!(
+        matches!(p.mode(), vix::palette::Mode::WorkspaceSymbols),
+        "@@ enters workspace-symbols mode"
+    );
+    assert!(p.entries.is_empty(), "empty query lists nothing");
+
+    // Query "widget" should match Widget (a.rs) and widget_helper (b.rs).
+    for c in "widget".chars() {
+        app.on_key(key(c));
+    }
+    let p = app.palette.as_ref().unwrap();
+    assert_eq!(p.entries.len(), 2, "two matches across files");
+
+    // Accept the first match and confirm a file opened (the symbol lives in a
+    // file that was not open before).
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.palette.is_none(), "Enter accepts and closes the palette");
+    assert!(app.editor.active_tab().and_then(|t| t.path.as_ref()).is_some(), "a file opened");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn open_recent_empty_shows_status_only() {
     let mut app = app_at(Path::new("."));
     assert!(app.settings.recent_files.is_empty());

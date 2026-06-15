@@ -1,6 +1,6 @@
 # Command Palette
 
-**Status:** Shipped — all five prefix modes, space-separated fuzzy matching, Tab
+**Status:** Shipped — all six prefix modes, space-separated fuzzy matching, Tab
 to accept, `path:line[:col]` jumping, and the live cursor *preview* while typing
 a `:` line number (the cursor follows the number; `Esc` reverts).
 
@@ -15,6 +15,7 @@ Use prefix characters to switch modes:
 | #	| Buffers | Switch between open buffers by name |
 | :	| Go to line | Jump to a specific line number |
 | @	| Symbols | Jump to a declaration in the current file |
+| @@	| Workspace symbols | Jump to a declaration anywhere in the workspace |
 
 Tips:
 
@@ -25,3 +26,4 @@ Tips:
 - In file finder mode, use path:line[:col] syntax to jump to a location after opening (e.g. src/main.rs:42:10)
 - In go-to-line mode (:) the cursor previews the target line *as you type* the number and scrolls it into view; press Enter to commit (recording the original position in the jump history) or Esc to revert to where you were. In file-finder mode, append `:<N>` (optionally `:<col>`) to jump to that position after opening.
 - In symbol mode (@), type to fuzzy-filter the current file's declarations (functions, types, classes, traits, modules, `#define`s, …) and press Enter to jump to one. The list is a fast, offline heuristic (the same family as go-to-definition), so it works for any language without a language server. Also reachable as the palette command "Go to Symbol in File".
+- In workspace-symbol mode (@@, or Ctrl+T, or the command "Go to Symbol in Workspace"), type to fuzzy-filter declarations across every file in the workspace; each result shows the symbol with its `file:line`, and Enter opens that file at the symbol. The query is required (an empty `@@` lists nothing, since the workspace is too large to enumerate); the search reads files on demand, skips images and files over 512 KB, and caps results at 200 to stay responsive.
