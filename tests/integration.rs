@@ -960,6 +960,67 @@ fn find_next_repeats_after_the_box_closes() {
 }
 
 #[test]
+fn search_highlights_are_sticky_after_closing() {
+    let dir = unique_dir("sticky");
+    let file = dir.join("f.txt");
+    fs::write(&file, "ab xx ab xx ab\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+
+    app.run_action("edit.find");
+    for c in "ab".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(esc());
+    assert!(app.search.is_none(), "box closed");
+    assert!(
+        app.editor.active_tab().unwrap().editor.has_marks(),
+        "highlights stay after the find box closes (sticky)"
+    );
+}
+
+#[test]
+fn search_reports_match_index_and_total() {
+    let dir = unique_dir("matchof");
+    let file = dir.join("f.txt");
+    fs::write(&file, "ab xx ab xx ab\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+
+    app.run_action("edit.find");
+    for c in "ab".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(esc());
+    // Find Next with the box closed reports "Match N of 3".
+    app.on_key(ctrl('g'));
+    assert!(app.status.contains("of 3"), "match total shown: {}", app.status);
+}
+
+#[test]
+fn toggle_highlight_search_clears_and_restores() {
+    let dir = unique_dir("togglehl");
+    let file = dir.join("f.txt");
+    fs::write(&file, "ab xx ab\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+
+    app.run_action("edit.find");
+    for c in "ab".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(esc());
+    assert!(app.editor.active_tab().unwrap().editor.has_marks());
+
+    app.run_action("toggle_highlight_search");
+    assert!(!app.editor.active_tab().unwrap().editor.has_marks(), "toggled off");
+    app.run_action("toggle_highlight_search");
+    assert!(app.editor.active_tab().unwrap().editor.has_marks(), "toggled back on");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn literal_replace_all_after_preview() {
     let dir = unique_dir("litrep");
     let file = dir.join("l.txt");
