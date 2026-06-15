@@ -1253,6 +1253,7 @@ impl App {
                     'w' if Self::shift(&key) => self.run_action("file.close_all"),
                     'w' => self.run_action("file.close"),
                     't' if Self::shift(&key) => self.run_action("file.reopen_closed"),
+                    't' => self.run_action("nav.goto_workspace_symbol"),
                     'p' => self.run_action("tools.palette"),
                     'b' if Self::shift(&key) => self.run_action("nav.outline"),
                     'b' => self.run_action("view.explorer"),
@@ -1300,6 +1301,7 @@ impl App {
                     'w' if Self::shift(&key) => self.run_action("file.close_all"),
                     'w' => self.run_action("file.close"),
                     't' if Self::shift(&key) => self.run_action("file.reopen_closed"),
+                    't' => self.run_action("nav.goto_workspace_symbol"),
                     'p' if Self::shift(&key) => self.run_action("tools.palette"),
                     'p' => self.run_action("file.open"),
                     'o' if Self::shift(&key) => self.run_action("nav.goto_symbol"),
@@ -1765,6 +1767,7 @@ impl App {
             "lsp.hover" => self.lsp_hover(),
             "lsp.complete" => self.lsp_complete(),
             "nav.goto_symbol" => self.open_palette_seeded("@"),
+            "nav.goto_workspace_symbol" => self.open_palette_seeded("@@"),
             "nav.outline" => self.open_outline(),
             "explorer.filter_include" => {
                 let cur = self.explorer.include_filter.clone();
@@ -6145,6 +6148,9 @@ impl App {
                     }
                 }
             }
+            PMode::WorkspaceSymbols => {
+                entries = self.workspace_symbol_entries(&query);
+            }
         }
         if let Some(p) = self.palette.as_mut() {
             if p.selected >= entries.len() {
@@ -6152,6 +6158,48 @@ impl App {
             }
             p.entries = entries;
         }
+    }
+
+    /// Scan the workspace's indexed files for declaration symbols matching
+    /// `query`, returning palette entries that open the file at the symbol's
+    /// line. An empty query returns nothing (the workspace is too large to list
+    /// every symbol); results and files scanned are capped to stay responsive.
+    fn workspace_symbol_entries(&self, query: &str) -> Vec<Entry> {
+        const MAX_RESULTS: usize = 200;
+        const MAX_FILE_BYTES: u64 = 512 * 1024;
+        let mut entries = Vec::new();
+        if query.trim().is_empty() {
+            return entries;
+        }
+        for path in &self.file_index {
+            if entries.len() >= MAX_RESULTS {
+                break;
+            }
+            // Skip obviously-binary or oversized files cheaply by extension/size.
+            if is_image_path(path) {
+                continue;
+            }
+            if std::fs::metadata(path).is_ok_and(|m| m.len() > MAX_FILE_BYTES) {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(path) else {
+                continue;
+            };
+            let rel = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().into_owned();
+            for sym in palette::symbols(&text) {
+                if !palette::fuzzy_match(&sym.name, query) {
+                    continue;
+                }
+                entries.push(Entry {
+                    label: format!("@ {}  ·  {}:{}", sym.name, rel, sym.line),
+                    action: PAction::OpenFile(path.clone(), Some((sym.line, 1))),
+                });
+                if entries.len() >= MAX_RESULTS {
+                    break;
+                }
+            }
+        }
+        entries
     }
 
     fn palette_key(&mut self, key: KeyEvent) {
