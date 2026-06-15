@@ -213,6 +213,35 @@ impl Tab {
         let col = cur - code.line_to_char(row);
         (row + 1, col + 1)
     }
+
+    /// Total line count of this buffer (for the scrollbar).
+    #[must_use]
+    pub fn line_count(&self) -> usize {
+        self.editor.code_ref().len_lines()
+    }
+}
+
+/// Orientation of an editor split.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SplitDir {
+    /// Two panes side by side.
+    Vertical,
+    /// Two panes stacked top/bottom.
+    Horizontal,
+}
+
+/// Editor split state: a second pane showing another tab beside/below the
+/// focused one. The focused pane always shows the active tab, so all the
+/// single-pane code keeps working; this records only the *other* pane.
+pub struct Split {
+    /// Side-by-side or stacked.
+    pub dir: SplitDir,
+    /// Tab index shown in the non-focused pane.
+    pub other: usize,
+    /// Which side is focused: 0 = left/top, 1 = right/bottom.
+    pub focused_side: usize,
+    /// Percentage width/height of the left/top pane (clamped to 10..=90).
+    pub ratio: u16,
 }
 
 /// The tab strip: a stack of open buffers and the active index.
@@ -229,6 +258,8 @@ pub struct Editor {
     pub soft_wrap: bool,
     /// String Tab inserts in every buffer (spaces or a tab).
     pub indent: String,
+    /// The split, when the editor area is divided into two panes.
+    pub split: Option<Split>,
 }
 
 impl Default for Editor {
@@ -249,6 +280,7 @@ impl Editor {
             show_whitespace,
             soft_wrap,
             indent,
+            split: None,
         };
         e.new_tab();
         e
@@ -263,6 +295,50 @@ impl Editor {
     /// Mutable access to the active tab, if any.
     pub fn active_tab_mut(&mut self) -> Option<&mut Tab> {
         self.tabs.get_mut(self.active)
+    }
+
+    /// Split the editor area in `dir`, showing another tab in the second pane
+    /// (the next tab if there is one, else the same buffer). The focused pane
+    /// keeps the active tab. Re-splitting just changes the direction.
+    pub fn set_split(&mut self, dir: SplitDir) {
+        if let Some(s) = self.split.as_mut() {
+            s.dir = dir;
+            return;
+        }
+        let other = (0..self.tabs.len()).find(|&i| i != self.active).unwrap_or(self.active);
+        self.split = Some(Split { dir, other, focused_side: 0, ratio: 50 });
+    }
+
+    /// Remove the split, leaving a single pane.
+    pub fn unsplit(&mut self) {
+        self.split = None;
+    }
+
+    /// Whether the editor area is split into two panes.
+    #[must_use]
+    pub fn is_split(&self) -> bool {
+        self.split.is_some()
+    }
+
+    /// Move focus to the other pane, swapping which tab is active.
+    pub fn focus_other_pane(&mut self) {
+        if let Some(s) = self.split.as_mut() {
+            let old_active = self.active;
+            self.active = s.other.min(self.tabs.len().saturating_sub(1));
+            s.other = old_active;
+            s.focused_side ^= 1;
+        }
+    }
+
+    /// The (left/top, right/bottom) tab indices for the two panes, clamped to the
+    /// open tabs. `None` when not split.
+    #[must_use]
+    pub fn split_pane_tabs(&self) -> Option<(usize, usize)> {
+        let s = self.split.as_ref()?;
+        let last = self.tabs.len().saturating_sub(1);
+        let focused = self.active.min(last);
+        let other = s.other.min(last);
+        Some(if s.focused_side == 0 { (focused, other) } else { (other, focused) })
     }
 
     /// Create an empty untitled buffer and focus it.

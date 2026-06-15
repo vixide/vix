@@ -104,20 +104,6 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         .border_type(BorderType::Rounded)
         .border_style(theme::region_title(theme::Region::Editor, app.focus == Focus::Editor));
     let editor_inner = editor_block.inner(center[1]);
-    // The right-side scroll bar is optional; when hidden, the text reclaims its
-    // column and the scrollbar rect collapses to zero (so hit-testing/drawing skip
-    // it).
-    let (editor_area, scrollbar_area) = if app.show_scrollbar {
-        let s = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(1), Constraint::Length(1)])
-            .split(editor_inner);
-        (s[0], s[1])
-    } else {
-        (editor_inner, Rect { width: 0, height: 0, ..editor_inner })
-    };
-    app.layout.editor = editor_area;
-    app.layout.scrollbar = scrollbar_area;
 
     if let Some(r) = explorer_rect {
         app.layout.explorer = r;
@@ -139,7 +125,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     }
     draw_tabs(app, frame, center[0]);
     frame.render_widget(editor_block, center[1]);
-    draw_center(app, frame, editor_area, scrollbar_area);
+    draw_editor_region(app, frame, editor_inner);
     if let Some(r) = messages_rect {
         draw_messages(app, frame, r);
     }
@@ -1160,6 +1146,117 @@ fn draw_tabs(app: &App, frame: &mut Frame, area: Rect) {
         )
         .divider(Span::styled("│", theme::dim()));
     frame.render_widget(tabs, area);
+}
+
+/// Render the editor region: a single pane, or two split panes with a divider.
+fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) {
+    use crate::editor::SplitDir;
+    app.layout.editor_region = inner;
+    let Some((left_tab, right_tab)) = app.editor.split_pane_tabs() else {
+        app.layout.split_panes = [Rect::default(); 2];
+        app.layout.split_divider = Rect::default();
+        let (editor_area, scrollbar_area) = if app.show_scrollbar {
+            let s = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
+            (s[0], s[1])
+        } else {
+            (inner, Rect { width: 0, height: 0, ..inner })
+        };
+        app.layout.editor = editor_area;
+        app.layout.scrollbar = scrollbar_area;
+        draw_center(app, frame, editor_area, scrollbar_area);
+        return;
+    };
+
+    let (dir, ratio, focused_side) = {
+        let s = app.editor.split.as_ref().unwrap();
+        (s.dir, s.ratio.clamp(10, 90), s.focused_side)
+    };
+    let (pane0, divider, pane1) = match dir {
+        SplitDir::Vertical => {
+            let total = inner.width;
+            let w0 = (u32::from(total) * u32::from(ratio) / 100) as u16;
+            let w0 = w0.clamp(1, total.saturating_sub(2).max(1));
+            (
+                Rect { width: w0, ..inner },
+                Rect { x: inner.x + w0, y: inner.y, width: 1, height: inner.height },
+                Rect {
+                    x: inner.x + w0 + 1,
+                    y: inner.y,
+                    width: total.saturating_sub(w0 + 1),
+                    height: inner.height,
+                },
+            )
+        }
+        SplitDir::Horizontal => {
+            let total = inner.height;
+            let h0 = (u32::from(total) * u32::from(ratio) / 100) as u16;
+            let h0 = h0.clamp(1, total.saturating_sub(2).max(1));
+            (
+                Rect { height: h0, ..inner },
+                Rect { x: inner.x, y: inner.y + h0, width: inner.width, height: 1 },
+                Rect {
+                    x: inner.x,
+                    y: inner.y + h0 + 1,
+                    width: inner.width,
+                    height: total.saturating_sub(h0 + 1),
+                },
+            )
+        }
+    };
+
+    // Divider line.
+    let dstyle = theme::region_title(theme::Region::Editor, true);
+    if dir == SplitDir::Vertical {
+        let col: Vec<Line> = (0..divider.height).map(|_| Line::from(Span::styled("│", dstyle))).collect();
+        frame.render_widget(Paragraph::new(col), divider);
+    } else {
+        let row = "─".repeat(divider.width as usize);
+        frame.render_widget(Paragraph::new(Line::from(Span::styled(row, dstyle))), divider);
+    }
+    app.layout.split_divider = divider;
+
+    let t0 = draw_pane(app, frame, pane0, left_tab);
+    let t1 = draw_pane(app, frame, pane1, right_tab);
+    app.layout.split_panes = [t0, t1];
+    // The focused pane drives cursor/mouse mapping; no shared single-pane bars.
+    app.layout.editor = if focused_side == 0 { t0 } else { t1 };
+    app.layout.scrollbar = Rect::default();
+    app.layout.editor_hscrollbar = Rect::default();
+}
+
+/// Render one split pane (tab `tab_index`) into `area` with its own vertical
+/// scrollbar; returns the text rectangle (for mouse hit-testing).
+fn draw_pane(app: &mut App, frame: &mut Frame, area: Rect, tab_index: usize) -> Rect {
+    let (text, sb) = if app.show_scrollbar && area.width > 1 {
+        let s = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(1), Constraint::Length(1)])
+            .split(area);
+        (s[0], s[1])
+    } else {
+        (area, Rect { width: 0, height: 0, ..area })
+    };
+
+    if app.editor.tabs.get(tab_index).is_some_and(super::editor::Tab::is_image) {
+        if let Some(tab) = app.editor.tabs.get_mut(tab_index) {
+            if let Some(proto) = tab.image.as_mut() {
+                frame.render_stateful_widget(StatefulImage::<StatefulProtocol>::new(), text, proto);
+            }
+        }
+        return text;
+    }
+    if let Some(tab) = app.editor.tabs.get(tab_index) {
+        frame.render_widget(&tab.editor, text);
+        if sb.width > 0 {
+            let total = tab.line_count().max(1);
+            let pos = tab.cursor_1based().0.saturating_sub(1);
+            draw_scrollbar(frame, sb, pos, total.saturating_sub(1));
+        }
+    }
+    text
 }
 
 fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {

@@ -16,7 +16,7 @@ use vix_editor::selection::Selection;
 use ratatui_image::picker::Picker;
 use regex::Regex;
 
-use crate::editor::{is_image_path, Editor, Tab, SEARCH_MARK};
+use crate::editor::{is_image_path, Editor, SplitDir, Tab, SEARCH_MARK};
 use crate::explorer::Explorer;
 use crate::menu::{menus, Menu};
 use crate::messages::{Level, Messages};
@@ -447,6 +447,14 @@ pub struct Layout {
     /// Editor horizontal-scrollbar rectangle (the row below the editor text),
     /// shown when not soft-wrapping and a line overflows.
     pub editor_hscrollbar: Rect,
+    /// Text rectangles of the two split panes (valid while the editor is split),
+    /// for mouse focus/cursor hit-testing.
+    pub split_panes: [Rect; 2],
+    /// The split divider rectangle (draggable to resize the panes).
+    pub split_divider: Rect,
+    /// The whole editor region (inner of the editor block), used to map a divider
+    /// drag to a split ratio.
+    pub editor_region: Rect,
     /// Explorer pane rectangle.
     pub explorer: Rect,
     /// Explorer horizontal-scrollbar rectangle (bottom row), on overflow.
@@ -699,6 +707,8 @@ pub struct App {
     scrollbar_active: bool,
     /// Which view's horizontal scrollbar is being dragged, if any.
     hbar_active: Option<HBar>,
+    /// True while the split divider is being dragged to resize the panes.
+    split_resize: bool,
     /// Max horizontal scroll (`content_width − viewport`) recorded each render for
     /// the editor, explorer, message drawer, and bottom dock, for scrollbar drag.
     pub editor_hmax: usize,
@@ -831,6 +841,7 @@ impl App {
             theme_preview: None,
             scrollbar_active: false,
             hbar_active: None,
+            split_resize: false,
             editor_hmax: 0,
             explorer_hmax: 0,
             messages_hmax: 0,
@@ -1287,6 +1298,10 @@ impl App {
                 self.run_action("nav.goto_definition");
                 true
             }
+            KeyCode::F(6) => {
+                self.editor.focus_other_pane();
+                true
+            }
             KeyCode::F(10) => {
                 self.menu.toggle();
                 true
@@ -1708,6 +1723,10 @@ impl App {
             "tools.palette" => self.open_palette(),
             // The left/right docks are the explorer and message drawers. Both the
             // old action ids and the new dock-named ones route to one method.
+            "view.split_vertical" => self.editor.set_split(SplitDir::Vertical),
+            "view.split_horizontal" => self.editor.set_split(SplitDir::Horizontal),
+            "view.unsplit" => self.editor.unsplit(),
+            "view.focus_other_pane" => self.editor.focus_other_pane(),
             "view.line_numbers" | "tools.line_numbers" => self.toggle_editor_line_numbers(),
             "view.whitespace" => self.toggle_editor_whitespace(),
             "view.soft_wrap" => self.toggle_editor_soft_wrap(),
@@ -3705,6 +3724,24 @@ impl App {
             _ => {}
         }
 
+        // Split divider: press and drag to change the pane ratio.
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left)
+                if self.editor.is_split()
+                    && rect_contains(self.layout.split_divider, col, row) =>
+            {
+                self.split_resize = true;
+                self.resize_split(col, row);
+                return;
+            }
+            MouseEventKind::Drag(MouseButton::Left) if self.split_resize => {
+                self.resize_split(col, row);
+                return;
+            }
+            MouseEventKind::Up(MouseButton::Left) => self.split_resize = false,
+            _ => {}
+        }
+
         // While a menu is open, a left click runs the dropdown item under the
         // pointer, switches menus when on the bar, or closes the menu when
         // clicked away. Moving the pointer (hover, or drag from the bar) follows
@@ -3751,6 +3788,17 @@ impl App {
                 self.tab_click(col);
             }
             return;
+        }
+        // Split panes: a click focuses the pane under the pointer, then maps the
+        // click within it.
+        if self.editor.is_split() {
+            for side in 0..2 {
+                if rect_contains(self.layout.split_panes[side], col, row) {
+                    self.focus_split_pane(side);
+                    self.editor_mouse(mouse);
+                    return;
+                }
+            }
         }
         if rect_contains(self.layout.editor, col, row) {
             self.editor_mouse(mouse);
@@ -3905,6 +3953,34 @@ impl App {
             .max(MIN_DOCK);
         let h = bottom.saturating_sub(row).clamp(MIN_DOCK, max);
         self.settings.bottom_dock_height = h;
+    }
+
+    /// Resize the split so the divider follows the pointer, as a percentage of
+    /// the editor region (clamped to 10..=90).
+    fn resize_split(&mut self, col: u16, row: u16) {
+        let r = self.layout.editor_region;
+        if let Some(s) = self.editor.split.as_mut() {
+            let pct = match s.dir {
+                crate::editor::SplitDir::Vertical if r.width > 1 => {
+                    u32::from(col.saturating_sub(r.x)) * 100 / u32::from(r.width)
+                }
+                crate::editor::SplitDir::Horizontal if r.height > 1 => {
+                    u32::from(row.saturating_sub(r.y)) * 100 / u32::from(r.height)
+                }
+                _ => 50,
+            };
+            s.ratio = (pct as u16).clamp(10, 90);
+        }
+    }
+
+    /// Focus split pane `side` (0 = left/top, 1 = right/bottom): swap the active
+    /// tab to that pane and point cursor/mouse mapping at its rect.
+    fn focus_split_pane(&mut self, side: usize) {
+        if self.editor.split.as_ref().is_some_and(|s| s.focused_side != side) {
+            self.editor.focus_other_pane();
+        }
+        self.layout.editor = self.layout.split_panes[side];
+        self.focus = Focus::Editor;
     }
 
     fn editor_mouse(&mut self, mouse: MouseEvent) {
