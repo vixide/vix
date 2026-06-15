@@ -268,6 +268,7 @@ const GIT: &[Item] = &[
     Item::leaf("menu.item.git.changes", "git.changes", ""),
     Item::sub("menu.item.git.log", GIT_LOG),
     Item::leaf("menu.item.git.grep", "git.grep", ""),
+    Item::leaf("menu.item.git.blame", "git.blame", ""),
     SEP,
     Item::sub("menu.item.git.branch", GIT_BRANCH),
     SEP,

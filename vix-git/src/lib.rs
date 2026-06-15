@@ -170,6 +170,98 @@ pub fn diff_marks(head: &str, current: &str) -> Vec<(usize, LineMark)> {
     marks
 }
 
+/// One line's `git blame` attribution: the short commit hash, author name,
+/// `YYYY-MM-DD` authored date, and the commit summary.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub struct BlameLine {
+    /// Abbreviated commit hash (8 hex chars), or all-zero for uncommitted lines.
+    pub hash: String,
+    /// Author name (e.g. `Not Committed Yet` for unsaved/unstaged lines).
+    pub author: String,
+    /// Authored date as `YYYY-MM-DD`, in the author's own time zone.
+    pub date: String,
+    /// First line of the commit message.
+    pub summary: String,
+}
+
+impl BlameLine {
+    /// Whether this line is not yet committed (zero hash).
+    #[must_use]
+    pub fn is_uncommitted(&self) -> bool {
+        self.hash.chars().all(|c| c == '0')
+    }
+}
+
+/// Parse one entry of `git blame --line-porcelain` output into a [`BlameLine`].
+/// Returns `None` if no header (hash) line is present.
+#[must_use]
+pub fn parse_blame_porcelain(output: &str) -> Option<BlameLine> {
+    let mut hash = None;
+    let mut author = String::new();
+    let mut summary = String::new();
+    let mut time: i64 = 0;
+    let mut tz: i32 = 0;
+    for line in output.lines() {
+        if hash.is_none() {
+            // First line: "<40-hex> <orig> <final> [<count>]".
+            if let Some(h) = line.split(' ').next().filter(|h| h.len() == 40) {
+                hash = Some(h.chars().take(8).collect::<String>());
+            }
+            continue;
+        }
+        if let Some(name) = line.strip_prefix("author ") {
+            author = name.to_string();
+        } else if let Some(secs) = line.strip_prefix("author-time ") {
+            time = secs.trim().parse().unwrap_or(0);
+        } else if let Some(off) = line.strip_prefix("author-tz ") {
+            tz = parse_tz_offset(off.trim());
+        } else if let Some(s) = line.strip_prefix("summary ") {
+            summary = s.to_string();
+        }
+    }
+    let hash = hash?;
+    Some(BlameLine { hash, author, date: epoch_to_date(time, tz), summary })
+}
+
+/// Parse a git tz offset like `+0200` / `-0500` into seconds east of UTC.
+fn parse_tz_offset(tz: &str) -> i32 {
+    let sign = if tz.starts_with('-') { -1 } else { 1 };
+    let digits: String = tz.chars().filter(char::is_ascii_digit).collect();
+    if digits.len() < 4 {
+        return 0;
+    }
+    let hours: i32 = digits[0..2].parse().unwrap_or(0);
+    let mins: i32 = digits[2..4].parse().unwrap_or(0);
+    sign * (hours * 3600 + mins * 60)
+}
+
+/// Convert a Unix `secs` (+ `tz_offset` seconds east of UTC) to a `YYYY-MM-DD`
+/// calendar date, via Howard Hinnant's `civil_from_days` algorithm.
+#[must_use]
+fn epoch_to_date(secs: i64, tz_offset: i32) -> String {
+    let days = (secs + i64::from(tz_offset)).div_euclid(86_400);
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = y + i64::from(m <= 2);
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+/// `git blame` for a single 1-based line of a repo-relative path, parsed into a
+/// [`BlameLine`]. `None` when not a repo, the path is untracked, or on error.
+#[must_use]
+pub fn blame_line(dir: &Path, rel_path: &str, line: usize) -> Option<BlameLine> {
+    let spec = format!("{line},{line}");
+    let out = git_stdout(dir, &["blame", "--line-porcelain", "-L", &spec, "--", rel_path])?;
+    parse_blame_porcelain(&out)
+}
+
 // ----- runners (shell out to `git`) --------------------------------------
 
 fn git(dir: &Path, args: &[&str]) -> std::io::Result<std::process::Output> {
@@ -361,6 +453,51 @@ mod tests {
     #[test]
     fn diff_marks_empty_when_identical() {
         assert!(diff_marks("x\ny\n", "x\ny\n").is_empty());
+    }
+
+    #[test]
+    fn parse_blame_porcelain_extracts_fields() {
+        let out = "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b 12 12 1\n\
+            author Ada Lovelace\n\
+            author-mail <ada@example.com>\n\
+            author-time 1700000000\n\
+            author-tz +0000\n\
+            committer Ada Lovelace\n\
+            summary Add the analytical engine\n\
+            filename engine.rs\n\
+            \tlet x = 1;\n";
+        let b = parse_blame_porcelain(out).expect("parsed");
+        assert_eq!(b.hash, "1a2b3c4d");
+        assert_eq!(b.author, "Ada Lovelace");
+        assert_eq!(b.date, "2023-11-14");
+        assert_eq!(b.summary, "Add the analytical engine");
+        assert!(!b.is_uncommitted());
+    }
+
+    #[test]
+    fn parse_blame_porcelain_flags_uncommitted() {
+        let out = "0000000000000000000000000000000000000000 1 1 1\n\
+            author Not Committed Yet\n\
+            author-time 1700000000\n\
+            author-tz +0000\n\
+            summary Version of engine.rs from engine.rs\n\
+            \tlet y = 2;\n";
+        let b = parse_blame_porcelain(out).expect("parsed");
+        assert!(b.is_uncommitted());
+        assert_eq!(b.author, "Not Committed Yet");
+    }
+
+    #[test]
+    fn parse_blame_porcelain_none_without_header() {
+        assert!(parse_blame_porcelain("not a blame\n").is_none());
+    }
+
+    #[test]
+    fn epoch_to_date_applies_tz_offset() {
+        // 1700000000 is 2023-11-14 22:13:20 UTC; +0200 rolls it into the 15th.
+        assert_eq!(epoch_to_date(1_700_000_000, 0), "2023-11-14");
+        assert_eq!(epoch_to_date(1_700_000_000, 2 * 3600), "2023-11-15");
+        assert_eq!(epoch_to_date(0, 0), "1970-01-01");
     }
 
     #[test]

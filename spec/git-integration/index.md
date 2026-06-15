@@ -39,6 +39,19 @@ letter:
 
 A left click on a row toggles its staged state.
 
+## Blame (Git → Blame Line, action `git.blame`)
+
+Annotates the **cursor's current line** with its `git blame` attribution in the
+status bar: `L<line>: <short-hash> <author>, <YYYY-MM-DD> · <commit summary>`.
+Lines not yet committed report `L<line>: not committed yet`.
+
+Blame runs `git blame --line-porcelain -L <n>,<n>` for the single line, invoked
+from the file's own directory so git resolves the repository itself (robust to
+symlinked workspace roots such as macOS `/var` → `/private/var`). The porcelain
+output is parsed by `vix_git::parse_blame_porcelain` into a `BlameLine`
+(`hash`, `author`, `date`, `summary`); the authored date is rendered in the
+author's own time zone via a dependency-free epoch→civil-date conversion.
+
 ## Branches and remotes (Git menu / command palette)
 
 - **Switch Branch…** lists local branches in a chooser; `Enter` checks out the
@@ -50,8 +63,8 @@ A left click on a row toggles its staged state.
 
 ## Roadmap
 
-- Branch creation and deletion.
 - Merge-conflict resolution UI.
 - Diff gutter in the soft-wrap renderer.
 - Multi-line commit messages.
 - Reloading open buffers after a branch switch changes files on disk.
+- Persistent inline (end-of-line) blame annotations, not just the status bar.
