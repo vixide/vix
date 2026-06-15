@@ -183,6 +183,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.branch_chooser.is_some() {
         draw_branch_chooser(app, frame, area);
     }
+    if app.location_chooser.is_some() {
+        draw_location_chooser(app, frame, area);
+    }
     if app.recent_chooser.is_some() {
         draw_recent_chooser(app, frame, area);
     }
@@ -763,6 +766,32 @@ fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
         .collect();
     let hint = t!("ui.recent_hint");
     app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.recent"), &hint, &labels, selected);
+}
+
+fn draw_location_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(lc) = app.location_chooser.as_ref() else { return };
+    let selected = lc.selected;
+    // Show the file name and line first (survives truncation), then its directory.
+    let labels: Vec<String> = lc
+        .entries
+        .iter()
+        .map(|loc| {
+            let name = loc
+                .path
+                .file_name()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            match loc.path.parent() {
+                Some(dir) if !dir.as_os_str().is_empty() => {
+                    format!("{name}:{}  —  {}", loc.line, dir.display())
+                }
+                _ => format!("{name}:{}", loc.line),
+            }
+        })
+        .collect();
+    let hint = t!("ui.locations_hint");
+    app.layout.chooser =
+        draw_list_chooser(frame, area, &t!("ui.locations"), &hint, &labels, selected);
 }
 
 fn draw_paste_conflict(app: &App, frame: &mut Frame, area: Rect) {

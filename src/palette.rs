@@ -203,6 +203,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.lsp_complete", "lsp.complete"),
     ("cmd.goto_symbol", "nav.goto_symbol"),
     ("cmd.goto_workspace_symbol", "nav.goto_workspace_symbol"),
+    ("cmd.recent_locations", "nav.recent_locations"),
     ("cmd.outline", "nav.outline"),
     ("cmd.explorer_filter_include", "explorer.filter_include"),
     ("cmd.explorer_filter_exclude", "explorer.filter_exclude"),

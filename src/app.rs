@@ -426,6 +426,16 @@ pub struct RecentChooser {
     pub selected: usize,
 }
 
+/// Recent-locations (jump list) chooser overlay state (Go -> Recent Locations,
+/// Alt+E). Lists the cursor positions recorded in the position history,
+/// most-recent first; Enter (or a click) jumps to the highlighted one.
+pub struct LocationChooser {
+    /// Recorded locations, most-recent first, de-duplicated.
+    pub entries: Vec<Location>,
+    /// Index of the highlighted entry.
+    pub selected: usize,
+}
+
 /// Rectangles recorded during rendering, used for mouse hit-testing and for
 /// telling the code editor which viewport to scroll within.
 #[derive(Default)]
@@ -583,6 +593,8 @@ pub struct App {
     pub branch_chooser: Option<BranchChooser>,
     /// Recent-files chooser overlay, when open.
     pub recent_chooser: Option<RecentChooser>,
+    /// Recent-locations (jump list) chooser overlay, when open.
+    pub location_chooser: Option<LocationChooser>,
     /// Nerd Font palette (character picker) overlay, when open.
     pub nerd_palette: Option<NerdPalette>,
     /// ASCII panel (reference table) overlay, when open.
@@ -784,6 +796,7 @@ impl App {
             git_panel: None,
             branch_chooser: None,
             recent_chooser: None,
+            location_chooser: None,
             nerd_palette: None,
             ascii_panel: None,
             x11_panel: None,
@@ -1069,6 +1082,10 @@ impl App {
         }
         if self.recent_chooser.is_some() {
             self.recent_key(key);
+            return;
+        }
+        if self.location_chooser.is_some() {
+            self.location_key(key);
             return;
         }
         if self.nerd_palette.is_some() {
@@ -1416,6 +1433,10 @@ impl App {
                 self.run_action("search.prev_selection");
                 true
             }
+            KeyCode::Char('j' | 'J') if Self::alt(&key) => {
+                self.run_action("nav.recent_locations");
+                true
+            }
             _ => false,
         }
     }
@@ -1613,6 +1634,7 @@ impl App {
                 self.prompt = Some(Prompt::new(PromptKind::Open, t!("prompt.open").to_string()));
             }
             "file.open_recent" => self.open_recent_chooser(),
+            "nav.recent_locations" => self.open_location_chooser(),
             "file.save" => self.save(),
             "file.save_as" => {
                 let cur = self
@@ -3863,6 +3885,10 @@ impl App {
             self.recent_mouse(mouse);
             return;
         }
+        if self.location_chooser.is_some() {
+            self.location_mouse(mouse);
+            return;
+        }
         if self.nerd_palette.is_some() {
             self.nerd_mouse(mouse);
             return;
@@ -4830,6 +4856,63 @@ impl App {
                     // justify a two-step interaction).
                     rc.selected = idx;
                     self.open_selected_recent();
+                }
+            }
+        }
+    }
+
+    /// Open the recent-locations (jump list) chooser, listing the position
+    /// history most-recent first with consecutive duplicates removed.
+    fn open_location_chooser(&mut self) {
+        let mut entries: Vec<Location> = Vec::new();
+        for loc in self.nav_history.iter().rev() {
+            if entries.last() != Some(loc) {
+                entries.push(loc.clone());
+            }
+        }
+        if entries.is_empty() {
+            self.status = t!("status.no_recent_locations").to_string();
+            return;
+        }
+        self.location_chooser = Some(LocationChooser { entries, selected: 0 });
+    }
+
+    fn location_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => {
+                if let Some(lc) = self.location_chooser.as_mut() {
+                    let n = lc.entries.len();
+                    lc.selected = (lc.selected + n - 1) % n;
+                }
+            }
+            KeyCode::Down => {
+                if let Some(lc) = self.location_chooser.as_mut() {
+                    lc.selected = (lc.selected + 1) % lc.entries.len();
+                }
+            }
+            KeyCode::Enter => self.open_selected_location(),
+            KeyCode::Esc => {
+                self.location_chooser = None;
+            }
+            _ => {}
+        }
+    }
+
+    /// Jump to the highlighted location and close the chooser.
+    fn open_selected_location(&mut self) {
+        if let Some(lc) = self.location_chooser.take() {
+            if let Some(loc) = lc.entries.get(lc.selected).cloned() {
+                self.navigate_to(loc);
+            }
+        }
+    }
+
+    fn location_mouse(&mut self, mouse: MouseEvent) {
+        if let Some(idx) = self.chooser_row(mouse) {
+            if let Some(lc) = self.location_chooser.as_mut() {
+                if idx < lc.entries.len() {
+                    lc.selected = idx;
+                    self.open_selected_location();
                 }
             }
         }
