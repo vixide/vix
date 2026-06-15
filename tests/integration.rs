@@ -2286,6 +2286,56 @@ fn git_panel_stages_and_commits() {
 }
 
 #[test]
+fn session_snapshot_and_restore_round_trip() {
+    let dir = unique_dir("session");
+    let a = dir.join("a.txt");
+    let b = dir.join("b.txt");
+    fs::write(&a, "alpha\nbeta\ngamma\n").unwrap();
+    fs::write(&b, "one\ntwo\n").unwrap();
+
+    // Open two files, focus the second, move its cursor, then snapshot.
+    let mut app = app_at(&dir);
+    app.open_initial(a.clone());
+    app.open_initial(b.clone());
+    app.run_action("cursor_down"); // line 2 of b.txt
+    app.run_action("cursor_right");
+    let snap = app.workspace_session();
+    assert_eq!(snap.files.len(), 2, "both files captured");
+    assert_eq!(snap.active, 1, "second file is focused");
+    let saved_cursor = snap.cursors[1];
+    assert!(saved_cursor > 0, "cursor offset captured: {saved_cursor}");
+
+    // A fresh app at the same root restores the snapshot.
+    let mut restored = app_at(&dir);
+    let opened = restored.apply_session(&snap);
+    assert_eq!(opened, 2, "both files reopened");
+    assert_eq!(restored.editor.tabs.len(), 2, "blank buffer dropped");
+    assert_eq!(restored.editor.active, 1, "focus restored");
+    let tab = restored.editor.active_tab().unwrap();
+    assert_eq!(tab.editor.get_cursor(), saved_cursor, "cursor restored");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn session_apply_skips_missing_files() {
+    let dir = unique_dir("session-missing");
+    fs::create_dir_all(&dir).unwrap();
+    let ws = vix::session::WorkspaceSession {
+        root: dir.to_string_lossy().into_owned(),
+        files: vec![dir.join("gone.txt").to_string_lossy().into_owned()],
+        active: 0,
+        cursors: vec![0],
+    };
+    let mut app = app_at(&dir);
+    let opened = app.apply_session(&ws);
+    assert_eq!(opened, 0, "missing file is skipped");
+    // The blank untitled buffer is left intact when nothing reopened.
+    assert_eq!(app.editor.tabs.len(), 1);
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 #[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_blame_annotates_the_current_line() {
     let dir = unique_dir("gitblame");

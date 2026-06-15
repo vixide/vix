@@ -52,9 +52,14 @@ fn main() -> io::Result<()> {
     // First-run welcome screen (no-op after it has been seen once).
     app.maybe_show_welcome();
 
-    // Optional file argument(s): open each, focusing the last.
-    for path in cli.files {
-        app.open_initial(path);
+    // Optional file argument(s): open each, focusing the last. With no file
+    // given, reopen the previous session for this workspace (if enabled).
+    if cli.files.is_empty() {
+        app.restore_session();
+    } else {
+        for path in cli.files {
+            app.open_initial(path);
+        }
     }
 
     let mut terminal = ratatui::init();
