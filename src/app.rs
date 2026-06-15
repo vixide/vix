@@ -2046,6 +2046,7 @@ impl App {
                     t.editor.remove_marks();
                 }
             }
+            "toggle_highlight_search" => self.toggle_search_highlight(),
             // files
             "save" | "save_all" => self.save(),
             "save_as" => self.run_action("file.save_as"),
@@ -2078,7 +2079,7 @@ impl App {
             // not implemented yet (modes, macros, suspend, autocomplete, …)
             "shell_mode" | "command_mode" | "toggle_overwrite_mode" | "toggle_macro"
             | "play_macro" | "suspend" | "autocomplete" | "cycle_autocomplete_back"
-            | "toggle_key_menu" | "toggle_ruler" | "toggle_highlight_search" | "diff_next"
+            | "toggle_key_menu" | "toggle_ruler" | "diff_next"
             | "diff_previous" | "spawn_multi_cursor_up" | "spawn_multi_cursor_down" => todo_action!(),
             _ => return false,
         }
@@ -6413,16 +6414,21 @@ impl App {
             }
         };
         self.last_search = Some(pat);
-        let count = self.find_with(&re, forward);
-        let msg = if count == 0 {
-            t!("status.no_matches").to_string()
-        } else {
-            t!("status.matches", count = count).to_string()
-        };
+        let (index, total) = self.find_with(&re, forward);
+        let msg = Self::match_status(index, total);
         if let Some(s) = self.search.as_mut() {
             s.status = msg;
         } else {
             self.status = msg;
+        }
+    }
+
+    /// Format a "N of M matches" status (or the no-matches message).
+    fn match_status(index: usize, total: usize) -> String {
+        if total == 0 {
+            t!("status.no_matches").to_string()
+        } else {
+            t!("status.match_of", index = index, total = total).to_string()
         }
     }
 
@@ -6445,7 +6451,82 @@ impl App {
             return;
         };
         self.last_search = Some(pat);
-        let count = self.find_with(&re, forward);
+        let (index, total) = self.find_with(&re, forward);
+        self.status = Self::match_status(index, total);
+    }
+
+    /// Mark every match of `re` in the active buffer and move the cursor to the
+    /// next/previous one (wrapping at the ends). Returns `(index, total)` where
+    /// `index` is the 1-based position of the landed-on match; zero matches
+    /// clears the marks and returns `(0, 0)`.
+    fn find_with(&mut self, re: &Regex, forward: bool) -> (usize, usize) {
+        let area = self.editor_view();
+        let Some(t) = self.editor.active_tab_mut() else {
+            return (0, 0);
+        };
+        let content = t.text();
+        let matches = vix_find_panel::matches(&content, re);
+        if matches.is_empty() {
+            t.editor.remove_marks();
+            return (0, 0);
+        }
+        let marks: Vec<(usize, usize, &str)> =
+            matches.iter().map(|(s, e)| (*s, *e, SEARCH_MARK)).collect();
+        t.editor.set_marks(marks);
+
+        // Pick the next/previous match relative to the cursor, wrapping around
+        // the ends (first match after the last, last match before the first).
+        let cur = t.editor.get_cursor();
+        let target_idx = if forward {
+            matches
+                .iter()
+                .position(|(s, _)| *s > cur)
+                .unwrap_or(0) // past the last match: wrap to the first
+        } else {
+            matches
+                .iter()
+                .rposition(|(s, _)| *s < cur)
+                .unwrap_or(matches.len() - 1) // before the first: wrap to the last
+        };
+        let target = matches[target_idx];
+        t.editor.set_cursor(target.0);
+        t.editor.set_selection(Some(Selection::new(target.0, target.1)));
+        t.editor.focus(&area);
+        (target_idx + 1, matches.len())
+    }
+
+    fn clear_marks(&mut self) {
+        if let Some(t) = self.editor.active_tab_mut() {
+            t.editor.remove_marks();
+        }
+    }
+
+    fn end_search(&mut self) {
+        // Sticky highlights stay visible after the Find box closes; otherwise
+        // clear them. Either way the search bar itself goes away.
+        if !self.settings.sticky_search_highlight {
+            self.clear_marks();
+        }
+        self.search = None;
+    }
+
+    /// Toggle the search-match highlights for the active buffer: clear them if
+    /// any are shown, otherwise re-highlight the last search term.
+    fn toggle_search_highlight(&mut self) {
+        let has = self.editor.active_tab().is_some_and(|t| t.editor.has_marks());
+        if has {
+            self.clear_marks();
+            self.status = t!("status.highlights_off").into();
+            return;
+        }
+        let Some(pat) = self.last_search.clone() else {
+            self.status = t!("status.no_matches").into();
+            return;
+        };
+        let Ok(re) = Regex::new(&pat) else {
+            return;
+        };
+        let count = self.highlight_all(&re);
         self.status = if count == 0 {
             t!("status.no_matches").into()
         } else {
@@ -6453,11 +6534,9 @@ impl App {
         };
     }
 
-    /// Mark every match of `re` in the active buffer and move the cursor to the
-    /// next/previous one (wrapping at the ends). Returns the match count; zero
-    /// matches clears the marks.
-    fn find_with(&mut self, re: &Regex, forward: bool) -> usize {
-        let area = self.editor_view();
+    /// Highlight every match of `re` in the active buffer without moving the
+    /// cursor. Returns the match count.
+    fn highlight_all(&mut self, re: &Regex) -> usize {
         let Some(t) = self.editor.active_tab_mut() else {
             return 0;
         };
@@ -6470,39 +6549,7 @@ impl App {
         let marks: Vec<(usize, usize, &str)> =
             matches.iter().map(|(s, e)| (*s, *e, SEARCH_MARK)).collect();
         t.editor.set_marks(marks);
-
-        // Pick the next/previous match relative to the cursor, wrapping around
-        // the ends (first match after the last, last match before the first).
-        let cur = t.editor.get_cursor();
-        let target = if forward {
-            matches
-                .iter()
-                .find(|(s, _)| *s > cur)
-                .copied()
-                .unwrap_or(matches[0]) // past the last match: wrap to the first
-        } else {
-            matches
-                .iter()
-                .rev()
-                .find(|(s, _)| *s < cur)
-                .copied()
-                .unwrap_or(*matches.last().unwrap()) // before the first: wrap to the last
-        };
-        t.editor.set_cursor(target.0);
-        t.editor.set_selection(Some(Selection::new(target.0, target.1)));
-        t.editor.focus(&area);
         matches.len()
-    }
-
-    fn clear_marks(&mut self) {
-        if let Some(t) = self.editor.active_tab_mut() {
-            t.editor.remove_marks();
-        }
-    }
-
-    fn end_search(&mut self) {
-        self.clear_marks();
-        self.search = None;
     }
 
     fn search_key(&mut self, key: KeyEvent) {

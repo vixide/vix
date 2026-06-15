@@ -39,13 +39,23 @@ along with **Find Selection** (`Alt+N`) and **Find In Workspace…**.
 
 `Ctrl+F` (Edit → Find → Find…) opens the Find box for the active buffer. As you
 type in the Find field the next match is **previewed live** — the cursor moves to
-and selects the next match, and every match in the buffer is highlighted. The
-status line reports the match count (e.g. `12 matches`) or `no matches`.
+and selects the next match, and every match in the buffer is highlighted. As you
+step through matches the status line reports the **current position and total**,
+e.g. `Match 3 of 12`, or `no matches`.
 
 The Find box keeps state for the duration it is open: the search pattern, the
 replacement text, which field has focus, and the three toggles. Press `Esc` to
-close it; closing clears the in-buffer highlight marks but **remembers the last
-completed search** so `Find Next` / `Find Previous` keep working afterward.
+close it; it **remembers the last completed search** so `Find Next` / `Find
+Previous` keep working afterward.
+
+## Sticky highlights
+
+By default the in-buffer match highlights are **sticky**: they stay visible after
+the Find box closes (controlled by the `sticky_search_highlight` setting, default
+`true`; set it `false` to clear highlights on close). **Toggle Search Highlights**
+(Edit → Find, or the command palette) clears the highlights when shown, or
+re-applies the last search when hidden; **Reset Search** / **Unhighlight Search**
+clears them outright.
 
 ## Revealing Replace
 

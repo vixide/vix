@@ -108,6 +108,10 @@ pub struct Settings {
     /// when Vix is launched in a workspace with no file given on the command
     /// line. The session is saved per workspace root in `session.toml`.
     pub restore_session: bool,
+    /// Keep search-match highlights visible after the Find box closes ("sticky"
+    /// highlights), until they are explicitly toggled off. When false, closing
+    /// Find clears the highlights.
+    pub sticky_search_highlight: bool,
 }
 
 /// One configured language server (a `lsp_servers` entry).
@@ -157,6 +161,7 @@ impl Default for Settings {
             contacts_dir: String::new(),
             time_zone: "UTC".to_string(),
             restore_session: true,
+            sticky_search_highlight: true,
         }
     }
 }
