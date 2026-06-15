@@ -104,6 +104,10 @@ pub struct Settings {
     /// `"America/New_York"`). Chosen via Tools → Time Zone…; used app-wide
     /// (e.g. the clock panel).
     pub time_zone: String,
+    /// Reopen the previous session (open files, focused tab, cursor positions)
+    /// when Vix is launched in a workspace with no file given on the command
+    /// line. The session is saved per workspace root in `session.toml`.
+    pub restore_session: bool,
 }
 
 /// One configured language server (a `lsp_servers` entry).
@@ -152,6 +156,7 @@ impl Default for Settings {
             welcomed: false,
             contacts_dir: String::new(),
             time_zone: "UTC".to_string(),
+            restore_session: true,
         }
     }
 }

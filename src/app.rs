@@ -868,6 +868,98 @@ impl App {
         self.open_path(&path, false);
     }
 
+    /// A stable string key for the current workspace root (canonicalized when
+    /// possible, so symlinked paths map to one session entry).
+    fn session_key(&self) -> String {
+        self.root
+            .canonicalize()
+            .unwrap_or_else(|_| self.root.clone())
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    /// Reopen the previous session for this workspace: its open files, focused
+    /// tab, and per-file cursor positions. No-op when session restore is
+    /// disabled or there is no saved session for this root. Called by `main`
+    /// only when no file was given on the command line.
+    pub fn restore_session(&mut self) {
+        if !self.settings.restore_session {
+            return;
+        }
+        let key = self.session_key();
+        let session = crate::session::Session::load();
+        let Some(ws) = session.workspace(&key).cloned() else {
+            return;
+        };
+        let opened = self.apply_session(&ws);
+        if opened > 0 {
+            self.status = t!("status.session_restored", count = opened).to_string();
+        }
+    }
+
+    /// Reopen the files/cursors/active tab described by `ws`, returning how many
+    /// files were actually opened. Pure (no config IO) so it can be tested
+    /// directly; the fresh app's blank untitled buffer is dropped once at least
+    /// one real file is reopened.
+    pub fn apply_session(&mut self, ws: &crate::session::WorkspaceSession) -> usize {
+        let had_blank = self.editor.tabs.len() == 1
+            && self.editor.tabs[0].path.is_none()
+            && !self.editor.tabs[0].dirty
+            && self.editor.tabs[0].text().trim().is_empty();
+
+        let mut opened = 0usize;
+        for (i, file) in ws.files.iter().enumerate() {
+            let path = PathBuf::from(file);
+            if !path.is_file() {
+                continue;
+            }
+            self.open_path(&path, false);
+            if let Some(t) = self.editor.active_tab_mut() {
+                let max = t.editor.code_ref().len_chars();
+                let pos = ws.cursors.get(i).copied().unwrap_or(0).min(max);
+                t.editor.set_cursor(pos);
+            }
+            opened += 1;
+        }
+
+        if opened > 0 {
+            if had_blank {
+                self.editor.tabs.remove(0);
+            }
+            self.editor.active = ws.active.min(self.editor.tabs.len().saturating_sub(1));
+        }
+        opened
+    }
+
+    /// Capture the current open files, focused tab, and cursor positions as a
+    /// [`WorkspaceSession`](crate::session::WorkspaceSession). Untitled and image
+    /// tabs are skipped. Pure (no config IO) so it can be tested directly.
+    #[must_use]
+    pub fn workspace_session(&self) -> crate::session::WorkspaceSession {
+        let mut files = Vec::new();
+        let mut cursors = Vec::new();
+        let mut active = 0;
+        for (i, tab) in self.editor.tabs.iter().enumerate() {
+            let Some(path) = tab.path.as_ref().filter(|_| !tab.is_image()) else {
+                continue;
+            };
+            if i == self.editor.active {
+                active = files.len();
+            }
+            files.push(path.to_string_lossy().into_owned());
+            cursors.push(tab.editor.get_cursor());
+        }
+        crate::session::WorkspaceSession { root: self.session_key(), files, active, cursors }
+    }
+
+    /// Capture the current session and persist it to the per-workspace store.
+    fn save_session(&self) {
+        let ws = self.workspace_session();
+        let mut session = crate::session::Session::load();
+        session.set_workspace(ws);
+        let _ = session.save();
+    }
+
     // ----- top-level event entry -----------------------------------------
 
     /// Handle a key event, routing it to the active modal layer or focused pane.
@@ -7373,6 +7465,7 @@ impl App {
     /// Persist settings on exit; failures become a status message only.
     pub fn on_exit(&mut self) {
         self.lsp.shutdown();
+        self.save_session();
         if let Err(e) = self.settings.save() {
             self.messages
                 .push(Level::Warn, t!("msg.settings_save_failed", error = e).to_string());

@@ -71,6 +71,7 @@ field is absent.
 | `welcomed` | boolean | `false` | Whether the first-run welcome screen has been shown. Set true after the welcome panel first appears, so it does not pop up on every launch. |
 | `contacts_dir` | string | `""` | Directory of vCard (`.vcf`) files for the contact browser (**Tools → Contacts…**). Empty = use the workspace root. |
 | `time_zone` | string | `"UTC"` | Active time zone as an IANA canonical name (e.g. `"UTC"`, `"America/New_York"`). Chosen via **Tools → Time Zone…**; used app-wide (e.g. the clock panel). |
+| `restore_session` | bool | `true` | Reopen the previous [session](../session-restore/index.md) (open files, focused tab, cursor positions) when launched in a workspace with no file argument. Saved per workspace in `session.toml`. |
 
 ### Indentation
 

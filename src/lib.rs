@@ -65,6 +65,7 @@ pub mod palette;
 pub mod workspace_search;
 pub mod query;
 pub mod search;
+pub mod session;
 pub mod settings;
 pub mod theme;
 pub mod ui;
