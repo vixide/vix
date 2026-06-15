@@ -45,6 +45,13 @@ Capabilities:
   them.
 - **Bracket matching** — the partner of the bracket under the cursor is
   highlighted, and a command jumps to it (see below).
+- **Bracket / quote auto-pairing** — typing an opener `( [ { " ' ``` inserts the
+  matching closer and leaves the cursor between them; with a non-empty selection
+  it wraps the selection instead; typing a closer when it already sits at the
+  cursor steps over it. Quotes are not paired next to a word character (so
+  apostrophes in prose/identifiers are untouched).
+- **Auto-indent** — pressing Enter copies the current line's leading indentation
+  (and the language's brace-depth indent) onto the new line.
 - **Smart indent** — pressing Tab inserts the buffer's configured indent string
   (spaces or a tab).
 

@@ -38,7 +38,7 @@ impl Editor {
         None
     }
 
-    fn char_at(&self, i: usize) -> Option<char> {
+    pub(crate) fn char_at(&self, i: usize) -> Option<char> {
         let code = self.code_ref();
         if i >= code.len_chars() {
             return None;
