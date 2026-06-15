@@ -102,6 +102,10 @@ pub struct Editor {
     /// (the original behavior); `Some` draws a visible block cursor so the host
     /// can theme it (e.g. a custom cursor color).
     pub(crate) cursor_style: Option<Style>,
+
+    /// Extra cursors beyond the primary one (multiple-cursor editing). Empty for
+    /// the normal single-cursor case. See `multicursor.rs`.
+    pub(crate) carets: Vec<crate::multicursor::Caret>,
 }
 
 impl Editor {
@@ -146,6 +150,7 @@ impl Editor {
             line_number_style: Style::default().fg(Color::DarkGray),
             selection_style: Style::default().add_modifier(Modifier::REVERSED),
             cursor_style: None,
+            carets: Vec::new(),
         })
     }
 

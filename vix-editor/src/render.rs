@@ -195,11 +195,8 @@ impl Editor {
             }
         }
 
-        // draw selection
-        if let Some(selection) = self.selection && !selection.is_empty() {
-            let start = selection.start.min(selection.end);
-            let end = selection.start.max(selection.end);
-        
+        // draw selection(s) — one range per caret (multiple-cursor aware)
+        for (start, end) in self.caret_selections() {
             let start_line = code.char_to_line(start);
             let end_line = code.char_to_line(end);
         
@@ -428,9 +425,11 @@ impl Editor {
             }
         }
 
-        // draw cursor (topmost): a one-cell block at the caret, themed by the host
+        // draw cursor(s) (topmost): a one-cell block at each caret, themed by the
+        // host (multiple-cursor aware).
         if let Some(cursor_style) = self.cursor_style {
-            let cur = self.cursor.min(total_chars);
+          for cur in self.caret_positions() {
+            let cur = cur.min(total_chars);
             let line_idx = code.char_to_line(cur);
             if line_idx >= self.offset_y && line_idx < self.offset_y + area.height as usize {
                 let line_start_char = code.line_to_char(line_idx);
@@ -460,6 +459,7 @@ impl Editor {
                     }
                 }
             }
+          }
         }
 
         // highlight the bracket matching the one at the cursor

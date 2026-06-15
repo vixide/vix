@@ -104,8 +104,26 @@ fn select_all_action_selects_whole_buffer() {
 fn duplicate_line_copies_the_current_line() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "abc");
-    app.on_key(ctrl('d')); // Ctrl+D duplicates the cursor line
+    // Ctrl+Shift+D duplicates the cursor line (Ctrl+D now adds a caret).
+    app.on_key(KeyEvent::new(KeyCode::Char('D'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
     assert_eq!(app.editor.active_tab().unwrap().lines(), vec!["abc", "abc"]);
+}
+
+#[test]
+fn ctrl_d_adds_a_caret_and_edits_all_occurrences() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "foo foo foo");
+    // Cursor is at end; move to the start so the first word is "foo".
+    app.on_key(ctrl('a')); // select all, then collapse to start via Left
+    app.on_key(keycode(KeyCode::Left));
+    // Ctrl+D selects the word, then again adds the next occurrence as a caret.
+    app.on_key(ctrl('d'));
+    app.on_key(ctrl('d'));
+    app.on_key(ctrl('d'));
+    assert!(app.editor.active_tab().unwrap().editor.has_multi_carets(), "carets added");
+    // Typing replaces every selected occurrence at once.
+    type_str(&mut app, "bar");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "bar bar bar");
 }
 
 #[test]

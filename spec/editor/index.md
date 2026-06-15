@@ -52,6 +52,9 @@ Capabilities:
   apostrophes in prose/identifiers are untouched).
 - **Auto-indent** — pressing Enter copies the current line's leading indentation
   (and the language's brace-depth indent) onto the new line.
+- **Multiple cursors** — `Ctrl+D` adds the next occurrence of the word/selection
+  as a caret, `Alt`+click adds one, and editing/movement then apply at every
+  caret at once (see `spec/multiple-cursors/index.md`).
 - **Smart indent** — pressing Tab inserts the buffer's configured indent string
   (spaces or a tab).
 
