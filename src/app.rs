@@ -1793,8 +1793,178 @@ impl App {
                 t!("menu.item.vix.email").to_string(),
                 "joel@joelparkerhenderson.com",
             ),
+            other if self.run_named_action(other) => {}
             other => self.messages.warn(t!("msg.unknown_action", action = other).to_string()),
         }
+    }
+
+    /// Dispatch a `snake_case` action from the `spec/actions/actions.tsv` catalog.
+    /// Returns `true` if the id was handled. Editing actions are applied to the
+    /// active tab's editor; app-level ones delegate to existing behavior; a few
+    /// mode/macro actions are not yet implemented (they report via the status).
+    #[allow(clippy::too_many_lines)]
+    fn run_named_action(&mut self, id: &str) -> bool {
+        let view_h = self.editor_view().height as usize;
+        // Editor motion/selection (no buffer change).
+        macro_rules! ed {
+            ($m:ident) => {{
+                if let Some(t) = self.editor.active_tab_mut() {
+                    t.editor.$m();
+                }
+            }};
+        }
+        // Editor motion that needs the viewport height.
+        macro_rules! edh {
+            ($m:ident) => {{
+                if let Some(t) = self.editor.active_tab_mut() {
+                    t.editor.$m(view_h);
+                }
+            }};
+        }
+        // Editor edit (marks the buffer dirty).
+        macro_rules! edm {
+            ($m:ident) => {{
+                if let Some(t) = self.editor.active_tab_mut() {
+                    t.editor.$m();
+                }
+                self.mark_active_dirty();
+            }};
+        }
+        // A catalog action that is not implemented yet.
+        macro_rules! todo_action {
+            () => {{
+                self.status = t!("status.action_todo", action = id).to_string();
+            }};
+        }
+        match id {
+            // cursor movement
+            "cursor_up" => ed!(cursor_up),
+            "cursor_down" => ed!(cursor_down),
+            "cursor_left" => ed!(cursor_left),
+            "cursor_right" => ed!(cursor_right),
+            "cursor_start" | "start" => ed!(cursor_start),
+            "cursor_end" | "end" => ed!(cursor_end),
+            "cursor_page_up" | "page_up" => edh!(page_up),
+            "cursor_page_down" | "page_down" => edh!(page_down),
+            "half_page_up" => edh!(half_page_up),
+            "half_page_down" => edh!(half_page_down),
+            "cursor_to_view_top" => ed!(cursor_to_view_top),
+            "cursor_to_view_center" => edh!(cursor_to_view_center),
+            "cursor_to_view_bottom" => edh!(cursor_to_view_bottom),
+            "center" => edh!(center),
+            "scroll_up" => ed!(scroll_up),
+            "scroll_down" => edh!(scroll_down),
+            // selection
+            "select_up" => ed!(select_up),
+            "select_down" => ed!(select_down),
+            "select_left" => ed!(select_left),
+            "select_right" => ed!(select_right),
+            "select_to_start" => ed!(select_to_start),
+            "select_to_end" => ed!(select_to_end),
+            "select_page_up" => edh!(select_page_up),
+            "select_page_down" => edh!(select_page_down),
+            "select_all" => ed!(select_all),
+            "select_line" => ed!(select_line),
+            "deselect" => ed!(deselect),
+            // word / sub-word
+            "word_right" => ed!(word_right),
+            "word_left" => ed!(word_left),
+            "sub_word_right" => ed!(sub_word_right),
+            "sub_word_left" => ed!(sub_word_left),
+            "select_word_right" => ed!(select_word_right),
+            "select_word_left" => ed!(select_word_left),
+            "select_sub_word_right" => ed!(select_sub_word_right),
+            "select_sub_word_left" => ed!(select_sub_word_left),
+            "delete_word_right" => edm!(delete_word_right),
+            "delete_word_left" => edm!(delete_word_left),
+            "delete_sub_word_right" => edm!(delete_sub_word_right),
+            "delete_sub_word_left" => edm!(delete_sub_word_left),
+            // line motions
+            "start_of_line" => ed!(start_of_line),
+            "end_of_line" => ed!(end_of_line),
+            "start_of_text" => ed!(start_of_text),
+            "start_of_text_toggle" => ed!(start_of_text_toggle),
+            "select_to_start_of_line" => ed!(select_to_start_of_line),
+            "select_to_end_of_line" => ed!(select_to_end_of_line),
+            "select_to_start_of_text" => ed!(select_to_start_of_text),
+            "select_to_start_of_text_toggle" => ed!(select_to_start_of_text_toggle),
+            // paragraph
+            "paragraph_next" => ed!(paragraph_next),
+            "paragraph_previous" => ed!(paragraph_previous),
+            "select_to_paragraph_next" => ed!(select_to_paragraph_next),
+            "select_to_paragraph_previous" => ed!(select_to_paragraph_previous),
+            // editing
+            "insert_newline" => edm!(insert_newline),
+            "insert_tab" => edm!(insert_tab),
+            "backspace" => edm!(backspace),
+            "delete" => edm!(delete),
+            "undo" => edm!(undo),
+            "redo" => edm!(redo),
+            "copy" => ed!(copy),
+            "copy_line" => ed!(copy_line),
+            "cut" => edm!(cut),
+            "cut_line" => edm!(cut_line),
+            "paste" | "paste_primary" => edm!(paste),
+            "duplicate" => edm!(duplicate),
+            "duplicate_line" => edm!(duplicate_line),
+            "delete_line" => edm!(delete_line),
+            "indent_line" | "indent_selection" => edm!(indent_line),
+            "outdent_line" | "outdent_selection" => edm!(outdent_line),
+            "move_lines_up" => self.run_action("edit.move_line_up"),
+            "move_lines_down" => self.run_action("edit.move_line_down"),
+            // multiple cursors
+            "spawn_multi_cursor" | "spawn_multi_cursor_select" | "skip_multi_cursor"
+            | "skip_multi_cursor_back" => edm!(add_next_occurrence),
+            "remove_multi_cursor" | "remove_all_multi_cursors" => ed!(clear_carets),
+            // navigation
+            "jump_to_matching_brace" => self.run_action("edit.match_bracket"),
+            "jump_line" => self.run_action("nav.goto_line"),
+            // search
+            "find" | "find_literal" => self.run_action("edit.find"),
+            "find_next" => self.run_action("edit.find_next"),
+            "find_previous" => self.run_action("edit.find_prev"),
+            "unhighlight_search" | "reset_search" => {
+                if let Some(t) = self.editor.active_tab_mut() {
+                    t.editor.remove_marks();
+                }
+            }
+            // files
+            "save" | "save_all" => self.save(),
+            "save_as" => self.run_action("file.save_as"),
+            "open_file" => self.run_action("file.open"),
+            // tabs
+            "add_tab" => self.run_action("file.new"),
+            "next_tab" => self.run_action("tab.next"),
+            "previous_tab" => self.run_action("tab.prev"),
+            "first_tab" => self.editor.active = 0,
+            "last_tab" => self.editor.active = self.editor.tabs.len().saturating_sub(1),
+            // splits
+            "vsplit" => self.run_action("view.split_vertical"),
+            "hsplit" => self.run_action("view.split_horizontal"),
+            "unsplit" => self.run_action("view.unsplit"),
+            "next_split" | "previous_split" => self.run_action("view.focus_other_pane"),
+            "first_split" => self.focus_split_pane(0),
+            "last_split" => self.focus_split_pane(1),
+            // toggles / app
+            "toggle_help" => self.show_help = !self.show_help,
+            "toggle_diff_gutter" => self.run_action("view.scrollbar"),
+            "escape" => {
+                if let Some(t) = self.editor.active_tab_mut() {
+                    t.editor.clear_carets();
+                    t.editor.clear_selection();
+                }
+            }
+            "clear_status" | "clear_info" => self.status = String::new(),
+            "quit" | "quit_all" | "force_quit" => self.run_action("file.quit"),
+            "none" => {}
+            // not implemented yet (modes, macros, suspend, autocomplete, …)
+            "shell_mode" | "command_mode" | "toggle_overwrite_mode" | "toggle_macro"
+            | "play_macro" | "suspend" | "autocomplete" | "cycle_autocomplete_back"
+            | "toggle_key_menu" | "toggle_ruler" | "toggle_highlight_search" | "diff_next"
+            | "diff_previous" | "spawn_multi_cursor_up" | "spawn_multi_cursor_down" => todo_action!(),
+            _ => return false,
+        }
+        true
     }
 
     fn save(&mut self) {
