@@ -114,6 +114,7 @@ Upper, Lower, Title, Kebab, Snake, Camel, and Pascal.
 | Theme ▸  | Submenu of available themes (bundled + user JSON); pick one to apply |
 | Locale ▸ | Submenu of UI languages; pick one to apply |
 | Time Zone ▸ | Submenu of IANA zones (sorted by UTC offset, then name); pick one |
+| Split ▸  | Split the editor: Vertical / Horizontal / Other Pane (F6) / Unsplit |
 | Layout ▸ | Submenu of dock/status toggles |
 | Editor ▸ | Submenu of editor display toggles |
 

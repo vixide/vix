@@ -143,6 +143,7 @@ The **Case** submenu (applies to the current selection):
 | Locale ▸                         | Submenu of UI languages (`vix-locale-model/spec/index.md`); pick one to apply |
 | Time Zone ▸                      | Submenu of IANA zones, sorted by UTC offset then name (`vix-time-zone-model/spec/index.md`); pick one |
 | *— separator —*                  |                                               |
+| Split ▸                          | Split the editor into two panes (`split-panes.md`): Vertical / Horizontal / Other Pane (F6) / Unsplit |
 | Layout ▸                         | Submenu of dock/status toggles (below)        |
 | Editor ▸                         | Submenu of editor display toggles (below)     |
 

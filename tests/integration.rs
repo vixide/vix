@@ -2862,3 +2862,22 @@ fn auto_pair_wraps_a_selection() {
     let t = app.editor.active_tab().unwrap();
     assert_eq!(t.text(), "(abc)", "typing an opener wraps the selection");
 }
+
+#[test]
+fn split_panes_open_focus_and_close() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("file.new"); // a second tab, so the panes differ
+    assert!(!app.editor.is_split());
+
+    app.run_action("view.split_vertical");
+    assert!(app.editor.is_split(), "Split Vertical splits the editor");
+    let (left, right) = app.editor.split_pane_tabs().unwrap();
+    assert_ne!(left, right, "the two panes show different tabs");
+
+    let before = app.editor.active;
+    app.run_action("view.focus_other_pane");
+    assert_ne!(app.editor.active, before, "focusing the other pane swaps the active tab");
+
+    app.run_action("view.unsplit");
+    assert!(!app.editor.is_split(), "Unsplit returns to one pane");
+}

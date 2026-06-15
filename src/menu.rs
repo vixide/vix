@@ -159,6 +159,14 @@ const EDIT_CASE: &[Item] = &[
     Item::leaf("menu.item.edit.case_pascal", "edit.case_pascal", ""),
 ];
 
+/// Editor split commands, grouped under View → Split.
+const VIEW_SPLIT: &[Item] = &[
+    Item::leaf("menu.item.view.split_vertical", "view.split_vertical", ""),
+    Item::leaf("menu.item.view.split_horizontal", "view.split_horizontal", ""),
+    Item::leaf("menu.item.view.focus_other_pane", "view.focus_other_pane", "F6"),
+    Item::leaf("menu.item.view.unsplit", "view.unsplit", ""),
+];
+
 /// Dock/status-bar visibility toggles, grouped under View → Layout.
 const VIEW_LAYOUT: &[Item] = &[
     Item::leaf("menu.item.view.left_dock", "view.left_dock", "Ctrl B"),
@@ -360,6 +368,7 @@ fn build_menus() -> Vec<MenuDef> {
             Item::sub("menu.item.view.locale", locale_submenu()),
             Item::sub("menu.item.view.time_zone", time_zone_submenu()),
             SEP,
+            Item::sub("menu.item.view.split", VIEW_SPLIT),
             Item::sub("menu.item.view.layout", VIEW_LAYOUT),
             Item::sub("menu.item.view.editor", VIEW_EDITOR),
         ]
