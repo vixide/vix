@@ -32,6 +32,7 @@ pub mod editor;
 #[cfg(feature = "crossterm")]
 #[allow(clippy::all, clippy::pedantic)]
 pub mod editor_crossterm;
+pub mod multicursor;
 #[allow(clippy::all, clippy::pedantic)]
 pub mod history;
 #[allow(clippy::all, clippy::pedantic)]

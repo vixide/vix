@@ -1,5 +1,6 @@
 use crate::actions::*;
 use crate::editor::Editor;
+use crate::multicursor::CaretMove;
 use crate::selection::SelectionSnap;
 use anyhow::Result;
 use crossterm::event::{
@@ -26,8 +27,20 @@ impl Editor {
             KeyCode::Char('v') if ctrl => self.apply(Paste { }),
             KeyCode::Char('x') if ctrl => self.apply(Cut { }),
             KeyCode::Char('k') if ctrl => self.apply(DeleteLine { }),
-            KeyCode::Char('d') if ctrl => self.apply(Duplicate { }),
+            // Ctrl+Shift+D duplicates the line/selection; Ctrl+D adds the next
+            // occurrence of the selection/word as a caret.
+            KeyCode::Char('d' | 'D') if ctrl && shift => self.apply(Duplicate { }),
+            KeyCode::Char('d') if ctrl => self.add_next_occurrence(),
             KeyCode::Char('a') if ctrl => self.apply(SelectAll { }),
+            // Multiple-caret routing: while extra carets exist, edit/move them all.
+            KeyCode::Esc       if self.has_multi_carets() => self.clear_carets(),
+            KeyCode::Left      if self.has_multi_carets() => self.multi_move(CaretMove::Left, shift),
+            KeyCode::Right     if self.has_multi_carets() => self.multi_move(CaretMove::Right, shift),
+            KeyCode::Up        if self.has_multi_carets() => self.multi_move(CaretMove::Up, shift),
+            KeyCode::Down      if self.has_multi_carets() => self.multi_move(CaretMove::Down, shift),
+            KeyCode::Backspace if self.has_multi_carets() => self.multi_delete(false),
+            KeyCode::Enter     if self.has_multi_carets() => self.multi_insert("\n"),
+            KeyCode::Char(c)   if self.has_multi_carets() && !ctrl => self.multi_insert(&c.to_string()),
             KeyCode::Left      => self.apply(MoveLeft { shift }),
             KeyCode::Right     => self.apply(MoveRight { shift }),
             KeyCode::Up        => self.apply(MoveUp { shift }),

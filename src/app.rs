@@ -2659,7 +2659,14 @@ impl App {
             KeyCode::Home => return self.editor.cursor_line_home(),
             KeyCode::End => return self.editor.cursor_line_end(),
             KeyCode::Delete => {
-                self.editor.delete_forward();
+                let multi = self.editor.active_tab().is_some_and(|t| t.editor.has_multi_carets());
+                if multi {
+                    if let Some(t) = self.editor.active_tab_mut() {
+                        t.editor.multi_delete(true);
+                    }
+                } else {
+                    self.editor.delete_forward();
+                }
                 self.mark_active_dirty();
                 return;
             }
@@ -3986,9 +3993,20 @@ impl App {
     fn editor_mouse(&mut self, mouse: MouseEvent) {
         self.focus = Focus::Editor;
         let area = self.layout.editor;
+        let alt = mouse.modifiers.contains(crossterm::event::KeyModifiers::ALT);
         if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+            // Alt+click adds an extra caret; a plain click collapses to one.
+            if alt {
+                if let Some(t) = self.editor.active_tab_mut() {
+                    if let Some(pos) = t.editor.cursor_from_mouse(mouse.column, mouse.row, &area) {
+                        t.editor.add_caret_at(pos);
+                    }
+                }
+                return;
+            }
             if let Some(t) = self.editor.active_tab_mut() {
                 t.preview = false;
+                t.editor.clear_carets();
             }
         }
         if let Some(t) = self.editor.active_tab_mut() {

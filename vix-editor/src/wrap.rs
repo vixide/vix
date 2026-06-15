@@ -50,11 +50,8 @@ impl Editor {
         let bracket = self.matching_bracket();
 
         // Sorted selection range as char offsets, if non-empty.
-        let sel = self
-            .selection
-            .as_ref()
-            .filter(|s| !s.is_empty())
-            .map(|s| (s.start.min(s.end), s.start.max(s.end)));
+        // Every caret's selection range (multiple-cursor aware).
+        let caret_sels = self.caret_selections();
 
         for (i, vr) in rows.iter().enumerate() {
             let draw_y = area.top() + i as u16;
@@ -122,10 +119,7 @@ impl Editor {
                         break;
                     }
                 }
-                if let Some((ss, se)) = sel
-                    && ss <= ch
-                    && ch < se
-                {
+                if caret_sels.iter().any(|&(ss, se)| ss <= ch && ch < se) {
                     paint(buf, cell_x, gw, right, draw_y, self.selection_style);
                 }
                 if let Some(marks) = self.marks.as_ref()
@@ -160,6 +154,15 @@ impl Editor {
                 }
                 if self.cursor == ch {
                     caret = Some(vx);
+                } else if let Some(cs) = self.cursor_style {
+                    // Extra carets are painted inline (only the primary uses the
+                    // end-of-line caret handling below).
+                    if self.carets.iter().any(|c| c.pos == ch) {
+                        let cx = text_x0 + vx;
+                        if cx < right && draw_y < area.bottom() {
+                            buf[(cx, draw_y)].set_style(cs);
+                        }
+                    }
                 }
 
                 vx = vx.saturating_add(gw);
