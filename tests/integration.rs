@@ -2832,3 +2832,33 @@ fn switching_keymap_resets_vim_to_normal() {
 
 
 
+
+#[test]
+fn typing_brackets_auto_pairs_and_steps_over() {
+    let mut app = app_at(Path::new("."));
+    app.on_key(key('('));
+    {
+        let t = app.editor.active_tab().unwrap();
+        assert_eq!(t.text(), "()", "opener inserts the matching closer");
+        assert_eq!(t.editor.get_cursor(), 1, "cursor sits between the pair");
+    }
+    // Typing the closer steps over the auto-inserted one (no doubling).
+    app.on_key(key(')'));
+    {
+        let t = app.editor.active_tab().unwrap();
+        assert_eq!(t.text(), "()");
+        assert_eq!(t.editor.get_cursor(), 2);
+    }
+}
+
+#[test]
+fn auto_pair_wraps_a_selection() {
+    let mut app = app_at(Path::new("."));
+    for c in "abc".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(ctrl('a')); // select all
+    app.on_key(key('('));
+    let t = app.editor.active_tab().unwrap();
+    assert_eq!(t.text(), "(abc)", "typing an opener wraps the selection");
+}

@@ -34,6 +34,7 @@ impl Editor {
             KeyCode::Down      => self.apply(MoveDown { shift }),
             KeyCode::Backspace => self.apply(Delete { }),
             KeyCode::Enter     => self.apply(InsertNewline { }),
+            KeyCode::Char(c) if self.auto_pair(c) => {}
             KeyCode::Char(c)   => self.apply(InsertText { text: c.to_string() }),
             KeyCode::Tab       => self.apply(Indent { }),
             KeyCode::BackTab   => self.apply(UnIndent { }),
@@ -43,6 +44,54 @@ impl Editor {
         Ok(())
     }
     
+    /// Bracket/quote auto-pairing for a typed character `c`. Returns `true` when
+    /// it consumed the key (so the caller skips the plain insert):
+    ///
+    /// - Typing an opener `( [ { " ' \`` inserts the matching closer and leaves
+    ///   the cursor between them; with a non-empty selection it wraps it instead.
+    /// - Typing a closer when the next character is that same closer just steps
+    ///   over it (so you can type through the auto-inserted closer).
+    /// - Quotes are not paired right next to a word character (so apostrophes in
+    ///   prose/identifiers are left alone).
+    fn auto_pair(&mut self, c: char) -> bool {
+        const PAIRS: &[(char, char)] =
+            &[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"'), ('\'', '\''), ('`', '`')];
+
+        let cursor = self.get_cursor();
+        let next = self.char_at(cursor);
+
+        // Step over an existing closer.
+        if PAIRS.iter().any(|&(_, cl)| cl == c) && next == Some(c) {
+            self.apply(MoveRight { shift: false });
+            return true;
+        }
+
+        let Some(&(_, closer)) = PAIRS.iter().find(|&&(op, _)| op == c) else {
+            return false;
+        };
+
+        // Wrap a non-empty selection.
+        if let Some(sel) = self.get_selection() {
+            if !sel.is_empty() {
+                let text = self.get_content_slice(sel.start, sel.end);
+                self.apply(InsertText { text: format!("{c}{text}{closer}") });
+                return true;
+            }
+        }
+
+        // Don't auto-pair a quote adjacent to a word character.
+        if matches!(c, '"' | '\'' | '`') {
+            let prev = cursor.checked_sub(1).and_then(|p| self.char_at(p));
+            if prev.is_some_and(char::is_alphanumeric) || next.is_some_and(char::is_alphanumeric) {
+                return false;
+            }
+        }
+
+        self.apply(InsertText { text: format!("{c}{closer}") });
+        self.apply(MoveLeft { shift: false });
+        true
+    }
+
     pub fn mouse(
         &mut self, mouse: MouseEvent, area: &Rect,
     ) -> Result<()> {
