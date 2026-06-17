@@ -3532,12 +3532,19 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "vix"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "clap",
  "confy",
  "crossterm",
+ "evalexpr",
+ "getrandom 0.2.17",
+ "htmd",
  "image",
  "include_dir",
+ "jiff",
  "markdown",
+ "percent-encoding",
+ "pulldown-cmark",
  "ratatui",
  "ratatui-image",
  "regex",
@@ -3545,203 +3552,13 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "vix-ascii-character-picker",
- "vix-base64-tool",
- "vix-bottom-dock",
- "vix-calculator-tool",
- "vix-calendar-panel",
- "vix-checksum-tool",
- "vix-clock-panel",
- "vix-color-converter-tool",
- "vix-contact-panel",
- "vix-convert-from-csv-into-json-tool",
- "vix-convert-from-csv-into-tsv-tool",
- "vix-convert-from-html-into-markdown-tool",
- "vix-convert-from-json-into-csv-tool",
- "vix-convert-from-json-into-toml-tool",
- "vix-convert-from-json-into-tsv-tool",
- "vix-convert-from-json-into-yaml-tool",
- "vix-convert-from-markdown-into-html-tool",
- "vix-convert-from-toml-into-json-tool",
- "vix-convert-from-tsv-into-csv-tool",
- "vix-convert-from-tsv-into-json-tool",
- "vix-convert-from-yaml-into-json-tool",
- "vix-editor",
- "vix-file-information-panel",
- "vix-find-panel",
- "vix-git",
- "vix-html-character-picker",
- "vix-keyboard-shortcut-panel",
- "vix-keymap-model",
- "vix-left-dock",
- "vix-locale-model",
- "vix-lsp",
- "vix-nerd-font-picker",
- "vix-outline-panel",
- "vix-pomodoro-tool",
- "vix-right-dock",
- "vix-spellcheck",
- "vix-status-bar-panel",
- "vix-system-information-panel",
- "vix-text-information-panel",
- "vix-theme-model",
- "vix-time-zone-model",
- "vix-unit-converter-tool",
- "vix-url-tool",
- "vix-uuid-tool",
- "vix-vcard-panel",
- "vix-vcard-parser",
- "vix-welcome-panel",
- "vix-workspace-dashboard-panel",
- "vix-x11-color-picker",
- "vix-zid-tool",
-]
-
-[[package]]
-name = "vix-ascii-character-picker"
-version = "0.1.0"
-
-[[package]]
-name = "vix-base64-tool"
-version = "0.1.0"
-dependencies = [
- "base64",
-]
-
-[[package]]
-name = "vix-bottom-dock"
-version = "0.1.0"
-
-[[package]]
-name = "vix-calculator-tool"
-version = "0.1.0"
-dependencies = [
- "evalexpr",
-]
-
-[[package]]
-name = "vix-calendar-panel"
-version = "0.1.0"
-dependencies = [
- "jiff",
-]
-
-[[package]]
-name = "vix-checksum-tool"
-version = "0.1.0"
-dependencies = [
  "sha2",
-]
-
-[[package]]
-name = "vix-clock-panel"
-version = "0.1.0"
-dependencies = [
- "jiff",
- "vix-time-zone-model",
-]
-
-[[package]]
-name = "vix-color-converter-tool"
-version = "0.1.0"
-
-[[package]]
-name = "vix-contact-panel"
-version = "0.1.0"
-
-[[package]]
-name = "vix-convert-from-csv-into-json-tool"
-version = "0.1.0"
-dependencies = [
- "vix-convert-tabular",
-]
-
-[[package]]
-name = "vix-convert-from-csv-into-tsv-tool"
-version = "0.1.0"
-dependencies = [
- "vix-convert-tabular",
-]
-
-[[package]]
-name = "vix-convert-from-html-into-markdown-tool"
-version = "0.1.0"
-dependencies = [
- "htmd",
-]
-
-[[package]]
-name = "vix-convert-from-json-into-csv-tool"
-version = "0.1.0"
-dependencies = [
- "vix-convert-tabular",
-]
-
-[[package]]
-name = "vix-convert-from-json-into-toml-tool"
-version = "0.1.0"
-dependencies = [
- "serde_json",
+ "similar",
+ "spellbook",
+ "sysinfo",
  "toml 0.8.23",
-]
-
-[[package]]
-name = "vix-convert-from-json-into-tsv-tool"
-version = "0.1.0"
-dependencies = [
- "vix-convert-tabular",
-]
-
-[[package]]
-name = "vix-convert-from-json-into-yaml-tool"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "serde_yaml",
-]
-
-[[package]]
-name = "vix-convert-from-markdown-into-html-tool"
-version = "0.1.0"
-dependencies = [
- "pulldown-cmark",
-]
-
-[[package]]
-name = "vix-convert-from-toml-into-json-tool"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "toml 0.8.23",
-]
-
-[[package]]
-name = "vix-convert-from-tsv-into-csv-tool"
-version = "0.1.0"
-dependencies = [
- "vix-convert-tabular",
-]
-
-[[package]]
-name = "vix-convert-from-tsv-into-json-tool"
-version = "0.1.0"
-dependencies = [
- "vix-convert-tabular",
-]
-
-[[package]]
-name = "vix-convert-from-yaml-into-json-tool"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "serde_yaml",
-]
-
-[[package]]
-name = "vix-convert-tabular"
-version = "0.1.0"
-dependencies = [
- "serde_json",
+ "uuid",
+ "vix-editor",
 ]
 
 [[package]]
@@ -3774,154 +3591,6 @@ dependencies = [
  "tree-sitter-yaml",
  "unicode-segmentation",
  "unicode-width",
-]
-
-[[package]]
-name = "vix-file-information-panel"
-version = "0.1.0"
-
-[[package]]
-name = "vix-find-panel"
-version = "0.1.0"
-dependencies = [
- "regex",
-]
-
-[[package]]
-name = "vix-git"
-version = "0.1.0"
-dependencies = [
- "similar",
-]
-
-[[package]]
-name = "vix-html-character-picker"
-version = "0.1.0"
-
-[[package]]
-name = "vix-keyboard-shortcut-panel"
-version = "0.1.0"
-
-[[package]]
-name = "vix-keymap-model"
-version = "0.1.0"
-
-[[package]]
-name = "vix-left-dock"
-version = "0.1.0"
-dependencies = [
- "regex",
-]
-
-[[package]]
-name = "vix-locale-model"
-version = "0.1.0"
-
-[[package]]
-name = "vix-lsp"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "vix-nerd-font-picker"
-version = "0.1.0"
-
-[[package]]
-name = "vix-outline-panel"
-version = "0.1.0"
-
-[[package]]
-name = "vix-pomodoro-tool"
-version = "0.1.0"
-
-[[package]]
-name = "vix-right-dock"
-version = "0.1.0"
-
-[[package]]
-name = "vix-spellcheck"
-version = "0.1.0"
-dependencies = [
- "spellbook",
-]
-
-[[package]]
-name = "vix-status-bar-panel"
-version = "0.1.0"
-
-[[package]]
-name = "vix-system-information-panel"
-version = "0.1.0"
-dependencies = [
- "sysinfo",
-]
-
-[[package]]
-name = "vix-text-information-panel"
-version = "0.1.0"
-
-[[package]]
-name = "vix-theme-model"
-version = "0.1.0"
-dependencies = [
- "ratatui-core",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "vix-time-zone-model"
-version = "0.1.0"
-
-[[package]]
-name = "vix-unit-converter-tool"
-version = "0.1.0"
-
-[[package]]
-name = "vix-url-tool"
-version = "0.1.0"
-dependencies = [
- "percent-encoding",
-]
-
-[[package]]
-name = "vix-uuid-tool"
-version = "0.1.0"
-dependencies = [
- "uuid",
-]
-
-[[package]]
-name = "vix-vcard-panel"
-version = "0.1.0"
-dependencies = [
- "vix-vcard-parser",
-]
-
-[[package]]
-name = "vix-vcard-parser"
-version = "0.1.0"
-
-[[package]]
-name = "vix-welcome-panel"
-version = "0.1.0"
-
-[[package]]
-name = "vix-workspace-dashboard-panel"
-version = "0.1.0"
-
-[[package]]
-name = "vix-x11-color-picker"
-version = "0.1.0"
-
-[[package]]
-name = "vix-zid-tool"
-version = "0.1.0"
-dependencies = [
- "getrandom 0.2.17",
 ]
 
 [[package]]

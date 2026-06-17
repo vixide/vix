@@ -92,8 +92,8 @@ impl WorkspaceSearch {
 
     /// The compiled path filter from the include/exclude regexes.
     #[must_use]
-    pub fn path_filter(&self) -> vix_find_panel::PathFilter {
-        vix_find_panel::PathFilter::new(&self.include_path, &self.exclude_path)
+    pub fn path_filter(&self) -> crate::find_panel::PathFilter {
+        crate::find_panel::PathFilter::new(&self.include_path, &self.exclude_path)
     }
 
     /// Effective regex pattern from the query and toggles (no whole-word here).

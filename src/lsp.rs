@@ -1,5 +1,5 @@
 //! Language Server Protocol client: process management and document sync layered
-//! over the pure [`vix_lsp`] protocol crate.
+//! over the pure [`crate::lsp_core`] protocol crate.
 //!
 //! This module owns the IO the protocol crate deliberately avoids: it launches a
 //! configured server per language, reads its framed stdout on a background thread
@@ -10,7 +10,7 @@
 //! completion list).
 //!
 //! Positions cross this boundary as raw LSP `(line, character)` pairs — the host
-//! converts them to/from char offsets with [`vix_lsp::position`], since only it
+//! converts them to/from char offsets with [`crate::lsp_core::position`], since only it
 //! holds the buffer text.
 
 use std::collections::HashMap;
@@ -22,7 +22,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use serde_json::{json, Value};
 
 use crate::settings::LspServer as ServerConfig;
-use vix_lsp::{frame, message, Diagnostic, Encoding};
+use crate::lsp_core::{frame, message, Diagnostic, Encoding};
 
 /// The reserved JSON-RPC id of the `initialize` request.
 const INITIALIZE_ID: i64 = 1;
@@ -57,7 +57,7 @@ pub enum LspEvent {
         character: u32,
     },
     /// A completion response: candidates to offer.
-    Completion(Vec<vix_lsp::CompletionItem>),
+    Completion(Vec<crate::lsp_core::CompletionItem>),
 }
 
 /// One running language server.
