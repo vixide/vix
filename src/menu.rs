@@ -270,6 +270,8 @@ const TOOLS_CONVERT: &[Item] = &[
     Item::sub("TSV", TOOLS_CONVERT_TSV),
     Item::sub("JSON", TOOLS_CONVERT_JSON),
     Item::sub("YAML", TOOLS_CONVERT_YAML),
+    SEP,
+    Item::leaf("menu.item.tools.convert.unit", "tools.convert.unit", ""),
 ];
 
 const TOOLS: &[Item] = &[

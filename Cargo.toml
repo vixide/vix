@@ -46,6 +46,7 @@ members = [
     "vix-convert-yaml-to-json-tool",
     "vix-convert-json-to-yaml-tool",
     "vix-color-converter-tool",
+    "vix-unit-converter-tool",
 ]
 
 [package]
@@ -156,6 +157,8 @@ vix-convert-yaml-to-json-tool = { path = "vix-convert-yaml-to-json-tool" }
 vix-convert-json-to-yaml-tool = { path = "vix-convert-json-to-yaml-tool" }
 # Tools → Color Converter: live HEX/RGB/HSL conversion dialog.
 vix-color-converter-tool = { path = "vix-color-converter-tool" }
+# Tools → Convert → Unit Converter: number + unit selectors with live output.
+vix-unit-converter-tool = { path = "vix-unit-converter-tool" }
 # Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
 crossterm = "0.29"
 # Regular expressions for find/replace.

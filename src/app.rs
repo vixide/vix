@@ -450,6 +450,8 @@ pub struct Layout {
     pub subsubmenu_dropdown: Rect,
     /// Color Converter dialog field rows (valid while it is open), for click-to-focus.
     pub color_converter_rows: [Rect; 3],
+    /// Unit Converter dialog rows (value, from, to), for click-to-focus.
+    pub unit_converter_rows: [Rect; 3],
     /// Info-dialog text-field rectangle (valid while a text dialog is open).
     pub dialog_body: Rect,
     /// Tab-strip rectangle.
@@ -636,6 +638,8 @@ pub struct App {
     pub dialog: Option<Dialog>,
     /// Color Converter dialog (Tools → Color Converter…), when open.
     pub color_converter: Option<vix_color_converter_tool::Converter>,
+    /// Unit Converter dialog (Tools → Convert → Unit Converter…), when open.
+    pub unit_converter: Option<vix_unit_converter_tool::Converter>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
     pub clip: Vec<PathBuf>,
     /// Whether [`App::clip`] holds a cut (move) rather than a copy.
@@ -821,6 +825,7 @@ impl App {
             completion: None,
             dialog: None,
             color_converter: None,
+            unit_converter: None,
             clip: Vec::new(),
             clip_cut: false,
             nav_history: Vec::new(),
@@ -1041,6 +1046,10 @@ impl App {
         }
         if self.color_converter.is_some() {
             self.color_converter_key(key);
+            return;
+        }
+        if self.unit_converter.is_some() {
+            self.unit_converter_key(key);
             return;
         }
         // While the calendar box is open it captures left/right to page months.
@@ -1895,6 +1904,7 @@ impl App {
             "tools.convert.yaml.json" => {
                 self.transform_selection_or_buffer_try(vix_convert_yaml_to_json_tool::convert);
             }
+            "tools.convert.unit" => self.open_unit_converter(),
             "tools.run_command" => {
                 self.prompt =
                     Some(Prompt::new(PromptKind::RunCommand, t!("prompt.run_command").to_string()));
@@ -2380,6 +2390,67 @@ impl App {
         self.editor.insert_str(&value, area);
         self.status = t!("status.generated", text = value).to_string();
         self.color_converter = None;
+    }
+
+    // ----- Unit Converter -------------------------------------------------
+
+    /// Open the Unit Converter dialog (seeded with `1 m → km`).
+    fn open_unit_converter(&mut self) {
+        self.unit_converter = Some(vix_unit_converter_tool::Converter::new());
+    }
+
+    /// Handle a key for the Unit Converter dialog: type a number into the value
+    /// field, Tab/Up/Down to switch field, Left/Right to cycle the focused unit
+    /// selector, Enter to insert the result, Esc to close.
+    fn unit_converter_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => self.unit_converter = None,
+            KeyCode::Tab | KeyCode::Down => {
+                if let Some(c) = self.unit_converter.as_mut() {
+                    c.focus_next();
+                }
+            }
+            KeyCode::BackTab | KeyCode::Up => {
+                if let Some(c) = self.unit_converter.as_mut() {
+                    c.focus_prev();
+                }
+            }
+            KeyCode::Left => {
+                if let Some(c) = self.unit_converter.as_mut() {
+                    c.cycle(-1);
+                }
+            }
+            KeyCode::Right => {
+                if let Some(c) = self.unit_converter.as_mut() {
+                    c.cycle(1);
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(c) = self.unit_converter.as_mut() {
+                    c.backspace();
+                }
+            }
+            KeyCode::Enter => self.insert_unit_value(),
+            KeyCode::Char(ch) if !Self::ctrl(&key) && !Self::alt(&key) => {
+                if let Some(c) = self.unit_converter.as_mut() {
+                    c.push(ch);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Insert the converted `<value> <unit>` into the editor and close the dialog.
+    fn insert_unit_value(&mut self) {
+        let Some(text) = self.unit_converter.as_ref().map(vix_unit_converter_tool::Converter::insert_text) else {
+            return;
+        };
+        if !text.is_empty() {
+            let area = self.layout.editor;
+            self.editor.insert_str(&text, area);
+            self.status = t!("status.generated", text = text).to_string();
+        }
+        self.unit_converter = None;
     }
 
     /// Refresh the cached git state (repo?, branch, changed files) for the workspace
@@ -4086,6 +4157,21 @@ impl App {
                     if rect_contains(self.layout.color_converter_rows[field.index()], mouse.column, mouse.row) {
                         if let Some(c) = self.color_converter.as_mut() {
                             c.set_focus(field);
+                        }
+                        break;
+                    }
+                }
+            }
+            return;
+        }
+        // The Unit Converter dialog: a left click on a row focuses it.
+        if self.unit_converter.is_some() {
+            if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+                use vix_unit_converter_tool::Focus;
+                for (i, focus) in [Focus::Value, Focus::From, Focus::To].into_iter().enumerate() {
+                    if rect_contains(self.layout.unit_converter_rows[i], mouse.column, mouse.row) {
+                        if let Some(c) = self.unit_converter.as_mut() {
+                            c.focus = focus;
                         }
                         break;
                     }

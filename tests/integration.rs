@@ -92,6 +92,17 @@ fn select_all_then_typing_replaces_buffer() {
 }
 
 #[test]
+fn unit_converter_inserts_converted_value() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.convert.unit");
+    assert!(app.unit_converter.is_some(), "dialog opened");
+    // Default is 1 m → km; the output is "0.001 km".
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.unit_converter.is_none(), "dialog closed after insert");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "0.001 km");
+}
+
+#[test]
 fn color_converter_syncs_fields_and_inserts() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.color_converter");
