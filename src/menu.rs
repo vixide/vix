@@ -269,16 +269,14 @@ const TOOLS_CONVERT_MARKDOWN: &[Item] = &[Item::leaf("HTML", "tools.convert.mark
 /// Converters, grouped under Tools → Convert.
 const TOOLS_CONVERT: &[Item] = &[
     Item::sub("Base64", TOOLS_CONVERT_BASE64),
-    Item::sub("URL", TOOLS_CONVERT_URL),
     Item::sub("CSV", TOOLS_CONVERT_CSV),
-    Item::sub("TSV", TOOLS_CONVERT_TSV),
-    Item::sub("JSON", TOOLS_CONVERT_JSON),
-    Item::sub("YAML", TOOLS_CONVERT_YAML),
-    Item::sub("TOML", TOOLS_CONVERT_TOML),
     Item::sub("HTML", TOOLS_CONVERT_HTML),
+    Item::sub("JSON", TOOLS_CONVERT_JSON),
     Item::sub("Markdown", TOOLS_CONVERT_MARKDOWN),
-    SEP,
-    Item::leaf("menu.item.tools.convert.unit", "tools.convert.unit", ""),
+    Item::sub("TOML", TOOLS_CONVERT_TOML),
+    Item::sub("TSV", TOOLS_CONVERT_TSV),
+    Item::sub("URL", TOOLS_CONVERT_URL),
+    Item::sub("YAML", TOOLS_CONVERT_YAML),
 ];
 
 const TOOLS: &[Item] = &[
@@ -288,6 +286,7 @@ const TOOLS: &[Item] = &[
     Item::sub("menu.item.tools.checksum", TOOLS_CHECKSUM),
     Item::sub("menu.item.tools.convert", TOOLS_CONVERT),
     Item::leaf("menu.item.tools.color_converter", "tools.color_converter", ""),
+    Item::leaf("menu.item.tools.convert.unit", "tools.convert.unit", ""),
     Item::leaf("menu.item.tools.calculator", "tools.calculator", ""),
     Item::leaf("menu.item.tools.pomodoro", "tools.pomodoro", ""),
     SEP,
