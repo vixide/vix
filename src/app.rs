@@ -454,6 +454,8 @@ pub struct Layout {
     pub unit_converter_rows: [Rect; 3],
     /// Calculator dialog hit rects: input field, Run button, Insert button.
     pub calculator_rects: [Rect; 3],
+    /// Pomodoro dialog primary-button (Start/Stop/Cancel) hit rect.
+    pub pomodoro_button: Rect,
     /// Info-dialog text-field rectangle (valid while a text dialog is open).
     pub dialog_body: Rect,
     /// Tab-strip rectangle.
@@ -644,8 +646,12 @@ pub struct App {
     pub unit_converter: Option<vix_unit_converter_tool::Converter>,
     /// Calculator dialog (Tools → Calculator…), when open.
     pub calculator: Option<vix_calculator_tool::Calculator>,
-    /// Pomodoro Timer dialog (Tools → Pomodoro Timer…), when open.
-    pub pomodoro: Option<vix_pomodoro_timer_tool::Timer>,
+    /// Pomodoro timer state (Tools → Pomodoro…). Stays `Some` and keeps counting
+    /// down even after the dialog is closed via Start; see [`Self::pomodoro_open`].
+    pub pomodoro: Option<vix_pomodoro_tool::Timer>,
+    /// Whether the Pomodoro dialog is currently visible. The timer keeps running
+    /// in the background while this is `false`; the break alert re-opens it.
+    pub pomodoro_open: bool,
     /// Wall-clock anchor for the running Pomodoro countdown; `None` while idle.
     pomodoro_last_tick: Option<std::time::Instant>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
@@ -836,6 +842,7 @@ impl App {
             unit_converter: None,
             calculator: None,
             pomodoro: None,
+            pomodoro_open: false,
             pomodoro_last_tick: None,
             clip: Vec::new(),
             clip_cut: false,
@@ -1067,7 +1074,7 @@ impl App {
             self.calculator_key(key);
             return;
         }
-        if self.pomodoro.is_some() {
+        if self.pomodoro_open {
             self.pomodoro_key(key);
             return;
         }
@@ -2558,25 +2565,51 @@ impl App {
         }
     }
 
-    // ----- Pomodoro Timer -------------------------------------------------
+    // ----- Pomodoro -------------------------------------------------------
 
-    /// Open the Pomodoro Timer dialog (idle at the default 25 minutes).
+    /// Open the Pomodoro dialog. Reveals an already-running timer if there is
+    /// one; otherwise starts a fresh idle timer at the default 25 minutes.
     fn open_pomodoro(&mut self) {
-        self.pomodoro = Some(vix_pomodoro_timer_tool::Timer::new());
-        self.pomodoro_last_tick = None;
+        if self.pomodoro.is_none() {
+            self.pomodoro = Some(vix_pomodoro_tool::Timer::new());
+            self.pomodoro_last_tick = None;
+        }
+        self.pomodoro_open = true;
+    }
+
+    /// Run the dialog's primary button: Start while idle (which closes the dialog
+    /// and lets the countdown run in the background), or Stop/Cancel while
+    /// running (which resets to idle and keeps the dialog open).
+    fn pomodoro_primary(&mut self) {
+        use vix_pomodoro_tool::Phase;
+        match self.pomodoro.as_ref().map(|t| t.phase) {
+            Some(Phase::Idle) => {
+                self.pomodoro_last_tick = Some(std::time::Instant::now());
+                if let Some(t) = self.pomodoro.as_mut() {
+                    t.start();
+                }
+                self.pomodoro_open = false; // run in the background
+            }
+            Some(_) => {
+                if let Some(t) = self.pomodoro.as_mut() {
+                    t.stop();
+                }
+            }
+            None => {}
+        }
     }
 
     /// Whether a Pomodoro countdown is currently running (so the event loop
     /// ticks faster to keep the display current).
     #[must_use]
     pub fn pomodoro_running(&self) -> bool {
-        self.pomodoro.as_ref().is_some_and(vix_pomodoro_timer_tool::Timer::is_running)
+        self.pomodoro.as_ref().is_some_and(vix_pomodoro_tool::Timer::is_running)
     }
 
     /// Advance a running Pomodoro countdown by the real time elapsed since the
     /// last tick, performing phase transitions. Called once per event-loop pass.
     pub fn poll_pomodoro(&mut self) {
-        use vix_pomodoro_timer_tool::Tick;
+        use vix_pomodoro_tool::Tick;
         if !self.pomodoro_running() {
             self.pomodoro_last_tick = None;
             return;
@@ -2591,19 +2624,25 @@ impl App {
         self.pomodoro_last_tick = Some(last + std::time::Duration::from_secs(secs));
         if let Some(timer) = self.pomodoro.as_mut() {
             match timer.tick(secs) {
-                Tick::BreakStarted => self.status = t!("status.pomodoro_break").to_string(),
-                Tick::Finished => self.status = t!("status.pomodoro_done").to_string(),
+                Tick::BreakStarted => {
+                    self.status = t!("status.pomodoro_break").to_string();
+                    self.pomodoro_open = true; // surface the break alert
+                }
+                Tick::Finished => {
+                    self.status = t!("status.pomodoro_done").to_string();
+                    self.pomodoro = None;
+                    self.pomodoro_open = false;
+                }
                 Tick::None => {}
             }
         }
     }
 
     /// Handle a key for the Pomodoro dialog. While idle, ↑/↓ adjust the work
-    /// length and Enter starts; while running, Enter stops; during the break,
-    /// Enter/Esc cancel. Esc closes the dialog when idle.
+    /// length and Enter starts (closing the dialog); while running, Enter stops;
+    /// during the break, Enter cancels. Esc closes the dialog (cancelling a run).
     fn pomodoro_key(&mut self, key: KeyEvent) {
-        use vix_pomodoro_timer_tool::Phase;
-        let phase = self.pomodoro.as_ref().map(|t| t.phase);
+        use vix_pomodoro_tool::Phase;
         match key.code {
             KeyCode::Up | KeyCode::Right => {
                 if let Some(t) = self.pomodoro.as_mut() {
@@ -2615,30 +2654,17 @@ impl App {
                     t.adjust_minutes(-1);
                 }
             }
-            KeyCode::Enter | KeyCode::Char(' ') => match phase {
-                Some(Phase::Idle) => {
-                    self.pomodoro_last_tick = Some(std::time::Instant::now());
-                    if let Some(t) = self.pomodoro.as_mut() {
-                        t.start();
-                    }
+            KeyCode::Enter | KeyCode::Char(' ') => self.pomodoro_primary(),
+            KeyCode::Esc => {
+                // Cancel a running work/break and drop the timer, then hide.
+                if let Some(t) = self.pomodoro.as_mut() {
+                    t.stop();
                 }
-                Some(_) => {
-                    // Stop a running work timer, or cancel the break.
-                    if let Some(t) = self.pomodoro.as_mut() {
-                        t.stop();
-                    }
+                if matches!(self.pomodoro.as_ref().map(|t| t.phase), Some(Phase::Idle) | None) {
+                    self.pomodoro = None;
                 }
-                None => {}
-            },
-            KeyCode::Esc => match phase {
-                // Esc cancels a running work/break back to idle; from idle it closes.
-                Some(Phase::Break | Phase::Work) => {
-                    if let Some(t) = self.pomodoro.as_mut() {
-                        t.stop();
-                    }
-                }
-                _ => self.pomodoro = None,
-            },
+                self.pomodoro_open = false;
+            }
             _ => {}
         }
     }
@@ -4466,6 +4492,16 @@ impl App {
             self.clock_mouse(mouse);
             return;
         }
+        // The Pomodoro dialog: a left click on the Start/Stop/Cancel button runs
+        // it (Start closes the dialog and keeps the countdown running).
+        if self.pomodoro_open {
+            if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+                if rect_contains(self.layout.pomodoro_button, mouse.column, mouse.row) {
+                    self.pomodoro_primary();
+                }
+            }
+            return;
+        }
         // Keyboard-only modal overlays swallow all mouse input rather than
         // letting a click fall through to the editor/explorer underneath.
         if self.show_help
@@ -4480,7 +4516,6 @@ impl App {
             || self.branch_chooser.is_some()
             || self.dashboard.is_some()
             || self.outline.is_some()
-            || self.pomodoro.is_some()
             || self.paste.as_ref().is_some_and(|p| p.conflict.is_some())
         {
             return;

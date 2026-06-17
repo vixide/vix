@@ -1,9 +1,9 @@
-# vix-pomodoro-timer-tool: a Pomodoro work/break countdown state machine. Pure
+# vix-pomodoro-tool: a Pomodoro work/break countdown state machine. Pure
 # logic driven by elapsed-second ticks (no clock dependency), so it is fully
 # deterministic in tests; the host feeds it real time and renders it.
 
 [package]
-name = "vix-pomodoro-timer-tool"
+name = "vix-pomodoro-tool"
 version = "0.1.0"
 edition = "2021"
 description = "Pomodoro work/break countdown state machine for Vix."
@@ -11,5 +11,5 @@ license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
 repository = "https://github.com/sixarm/vix"
 
 [lib]
-name = "vix_pomodoro_timer_tool"
+name = "vix_pomodoro_tool"
 path = "src/lib.rs"

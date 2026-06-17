@@ -92,20 +92,26 @@ fn select_all_then_typing_replaces_buffer() {
 }
 
 #[test]
-fn pomodoro_opens_starts_and_stops() {
+fn pomodoro_start_closes_dialog_and_runs_in_background() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.pomodoro");
-    let t = app.pomodoro.as_ref().unwrap();
-    assert_eq!(t.label(), "25:00");
+    assert!(app.pomodoro_open, "dialog visible");
+    assert_eq!(app.pomodoro.as_ref().unwrap().label(), "25:00");
     assert!(!app.pomodoro_running());
     app.on_key(keycode(KeyCode::Down)); // 24 minutes
-    app.on_key(keycode(KeyCode::Enter)); // start
-    assert!(app.pomodoro_running(), "timer started");
+    app.on_key(keycode(KeyCode::Enter)); // Start
+    // Start hides the dialog but the countdown keeps running.
+    assert!(!app.pomodoro_open, "dialog closed on Start");
+    assert!(app.pomodoro_running(), "timer still running in background");
     assert_eq!(app.pomodoro.as_ref().unwrap().label(), "24:00");
-    app.on_key(keycode(KeyCode::Enter)); // stop
+    // Reopening reveals the still-running timer.
+    app.run_action("tools.pomodoro");
+    assert!(app.pomodoro_open);
+    app.on_key(keycode(KeyCode::Enter)); // Stop → back to idle, dialog stays open
     assert!(!app.pomodoro_running(), "timer stopped");
+    assert!(app.pomodoro_open);
     app.on_key(keycode(KeyCode::Esc)); // close
-    assert!(app.pomodoro.is_none(), "dialog closed");
+    assert!(!app.pomodoro_open && app.pomodoro.is_none(), "dialog closed and timer dropped");
 }
 
 #[test]

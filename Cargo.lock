@@ -3578,7 +3578,7 @@ dependencies = [
  "vix-lsp",
  "vix-nerd-font-picker",
  "vix-outline-panel",
- "vix-pomodoro-timer-tool",
+ "vix-pomodoro-tool",
  "vix-right-dock",
  "vix-spellcheck",
  "vix-status-bar-panel",
@@ -3833,7 +3833,7 @@ name = "vix-outline-panel"
 version = "0.1.0"
 
 [[package]]
-name = "vix-pomodoro-timer-tool"
+name = "vix-pomodoro-tool"
 version = "0.1.0"
 
 [[package]]

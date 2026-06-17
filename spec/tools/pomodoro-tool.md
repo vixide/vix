@@ -1,14 +1,14 @@
-# Pomodoro Timer
+# Pomodoro
 
-Subcrate vix-pomodoro-timer-tool.
+Subcrate vix-pomodoro-tool.
 
-In menu "Tools", add menuitem "Pomodoro Timer...".
+In menu "Tools", add menuitem "Pomodoro...".
 
-This opens vix-pomodoro-timer-tool.
+This opens vix-pomodoro-tool.
 
 The user sees a timer that the user can set. Default is 25 minutes.
 
-When the user clicks "Start", then the timer starts a countdown in the background async.
+When the user clicks "Start", then the dialog box closes and the timer starts a countdown in the background async (the countdown keeps tracking while the dialog is closed).
 
 When the user clicks "Stop", then the timer stops a countdown, and the time resets to the previous start time.
 
