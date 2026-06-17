@@ -34,6 +34,17 @@ members = [
     "vix-uuid-tool",
     "vix-zid-tool",
     "vix-checksum-tool",
+    "vix-base64-tool",
+    "vix-url-tool",
+    "vix-convert-tabular",
+    "vix-convert-csv-to-json-tool",
+    "vix-convert-json-to-csv-tool",
+    "vix-convert-csv-to-tsv-tool",
+    "vix-convert-tsv-to-csv-tool",
+    "vix-convert-tsv-to-json-tool",
+    "vix-convert-json-to-tsv-tool",
+    "vix-convert-yaml-to-json-tool",
+    "vix-convert-json-to-yaml-tool",
 ]
 
 [package]
@@ -130,6 +141,18 @@ vix-uuid-tool = { path = "vix-uuid-tool" }
 vix-zid-tool = { path = "vix-zid-tool" }
 # Tools → Checksum: SHA-256 / SHA-512 digests of the selection or buffer.
 vix-checksum-tool = { path = "vix-checksum-tool" }
+# Tools → Convert: encoders and tabular/structured converters over the selection
+# or buffer (Base64, URL, CSV/TSV/JSON, YAML/JSON).
+vix-base64-tool = { path = "vix-base64-tool" }
+vix-url-tool = { path = "vix-url-tool" }
+vix-convert-csv-to-json-tool = { path = "vix-convert-csv-to-json-tool" }
+vix-convert-json-to-csv-tool = { path = "vix-convert-json-to-csv-tool" }
+vix-convert-csv-to-tsv-tool = { path = "vix-convert-csv-to-tsv-tool" }
+vix-convert-tsv-to-csv-tool = { path = "vix-convert-tsv-to-csv-tool" }
+vix-convert-tsv-to-json-tool = { path = "vix-convert-tsv-to-json-tool" }
+vix-convert-json-to-tsv-tool = { path = "vix-convert-json-to-tsv-tool" }
+vix-convert-yaml-to-json-tool = { path = "vix-convert-yaml-to-json-tool" }
+vix-convert-json-to-yaml-tool = { path = "vix-convert-json-to-yaml-tool" }
 # Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
 crossterm = "0.29"
 # Regular expressions for find/replace.

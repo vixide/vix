@@ -1849,6 +1849,42 @@ impl App {
             "tools.checksum.sha512" => {
                 self.transform_selection_or_buffer(vix_checksum_tool::sha512_hex);
             }
+            "tools.convert.base64.encode" => {
+                self.transform_selection_or_buffer_try(vix_base64_tool::encode);
+            }
+            "tools.convert.base64.decode" => {
+                self.transform_selection_or_buffer_try(vix_base64_tool::decode);
+            }
+            "tools.convert.url.encode" => {
+                self.transform_selection_or_buffer_try(vix_url_tool::encode);
+            }
+            "tools.convert.url.decode" => {
+                self.transform_selection_or_buffer_try(vix_url_tool::decode);
+            }
+            "tools.convert.csv.json" => {
+                self.transform_selection_or_buffer_try(vix_convert_csv_to_json_tool::convert);
+            }
+            "tools.convert.csv.tsv" => {
+                self.transform_selection_or_buffer_try(vix_convert_csv_to_tsv_tool::convert);
+            }
+            "tools.convert.tsv.csv" => {
+                self.transform_selection_or_buffer_try(vix_convert_tsv_to_csv_tool::convert);
+            }
+            "tools.convert.tsv.json" => {
+                self.transform_selection_or_buffer_try(vix_convert_tsv_to_json_tool::convert);
+            }
+            "tools.convert.json.csv" => {
+                self.transform_selection_or_buffer_try(vix_convert_json_to_csv_tool::convert);
+            }
+            "tools.convert.json.tsv" => {
+                self.transform_selection_or_buffer_try(vix_convert_json_to_tsv_tool::convert);
+            }
+            "tools.convert.json.yaml" => {
+                self.transform_selection_or_buffer_try(vix_convert_json_to_yaml_tool::convert);
+            }
+            "tools.convert.yaml.json" => {
+                self.transform_selection_or_buffer_try(vix_convert_yaml_to_json_tool::convert);
+            }
             "tools.run_command" => {
                 self.prompt =
                     Some(Prompt::new(PromptKind::RunCommand, t!("prompt.run_command").to_string()));
@@ -2205,6 +2241,17 @@ impl App {
     /// nothing is selected, replacing it with the result. Used by the Convert and
     /// Checksum tools. No-op (with a status) on an image tab or empty input.
     fn transform_selection_or_buffer(&mut self, f: impl Fn(&str) -> String) {
+        self.transform_selection_or_buffer_try(|input| Ok(f(input)));
+    }
+
+    /// Like [`Self::transform_selection_or_buffer`] but for fallible transforms
+    /// (Convert tools that parse their input). On `Err` the buffer is left
+    /// untouched and the error is shown in the status line. No-op (with a status)
+    /// on an image tab or empty input.
+    fn transform_selection_or_buffer_try(
+        &mut self,
+        f: impl Fn(&str) -> Result<String, String>,
+    ) {
         let Some(tab) = self.editor.active_tab_mut() else {
             return;
         };
@@ -2224,7 +2271,13 @@ impl App {
             self.status = t!("status.no_selection").into();
             return;
         }
-        let output = f(&input);
+        let output = match f(&input) {
+            Ok(out) => out,
+            Err(e) => {
+                self.status = t!("status.convert_failed", error = e).to_string();
+                return;
+            }
+        };
         if let Some(tab) = self.editor.active_tab_mut() {
             let new = match target {
                 None => output,

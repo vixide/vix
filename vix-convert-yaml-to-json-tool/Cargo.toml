@@ -1,0 +1,18 @@
+# vix-convert-yaml-to-json-tool: convert YAML into JSON (Tools → Convert →
+# YAML → JSON). Pure logic over serde.
+
+[package]
+name = "vix-convert-yaml-to-json-tool"
+version = "0.1.0"
+edition = "2021"
+description = "Convert YAML to JSON for Vix."
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_convert_yaml_to_json_tool"
+path = "src/lib.rs"
+
+[dependencies]
+serde_json = "1"
+serde_yaml = "0.9"
