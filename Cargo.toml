@@ -4,55 +4,6 @@
 [workspace]
 members = [
     "vix-editor",
-    "vix-calendar-panel",
-    "vix-clock-panel",
-    "vix-theme-model",
-    "vix-locale-model",
-    "vix-keymap-model",
-    "vix-time-zone-model",
-    "vix-keyboard-shortcut-panel",
-    "vix-nerd-font-picker",
-    "vix-ascii-character-picker",
-    "vix-x11-color-picker",
-    "vix-html-character-picker",
-    "vix-system-information-panel",
-    "vix-file-information-panel",
-    "vix-workspace-dashboard-panel",
-    "vix-outline-panel",
-    "vix-welcome-panel",
-    "vix-vcard-parser",
-    "vix-vcard-panel",
-    "vix-contact-panel",
-    "vix-lsp",
-    "vix-spellcheck",
-    "vix-git",
-    "vix-find-panel",
-    "vix-right-dock",
-    "vix-left-dock",
-    "vix-status-bar-panel",
-    "vix-bottom-dock",
-    "vix-uuid-tool",
-    "vix-zid-tool",
-    "vix-checksum-tool",
-    "vix-base64-tool",
-    "vix-url-tool",
-    "vix-convert-tabular",
-    "vix-convert-from-csv-into-json-tool",
-    "vix-convert-from-json-into-csv-tool",
-    "vix-convert-from-csv-into-tsv-tool",
-    "vix-convert-from-tsv-into-csv-tool",
-    "vix-convert-from-tsv-into-json-tool",
-    "vix-convert-from-json-into-tsv-tool",
-    "vix-convert-from-yaml-into-json-tool",
-    "vix-convert-from-json-into-yaml-tool",
-    "vix-color-converter-tool",
-    "vix-unit-converter-tool",
-    "vix-calculator-tool",
-    "vix-pomodoro-tool",
-    "vix-convert-from-markdown-into-html-tool",
-    "vix-convert-from-html-into-markdown-tool",
-    "vix-convert-from-json-into-toml-tool",
-    "vix-convert-from-toml-into-json-tool",
 ]
 
 [package]
@@ -92,89 +43,32 @@ ratatui = { version = "0.30", features = ["crossterm"] }
 vix-editor = { path = "vix-editor", default-features = false, features = ["crossterm"] }
 # Calendar box: date/time strings and the navigable month grid. Internal crate so
 # the calendar logic stays unit-testable on its own (it owns the jiff dependency).
-vix-calendar-panel = { path = "vix-calendar-panel" }
 # Clock box: live date/time strings (local, UTC, ISO week, active zone) + rows.
-vix-clock-panel = { path = "vix-clock-panel" }
 # Theme model: the JSON theme model, ratatui styles, and theme loading.
-vix-theme-model = { path = "vix-theme-model" }
 # Locale model: available UI languages (the View → Locale submenu).
-vix-locale-model = { path = "vix-locale-model" }
 # Keymap model: available keyboard navigation styles (the View → Keymap submenu).
-vix-keymap-model = { path = "vix-keymap-model" }
 # Time-zone model: full IANA canonical zone table + the app-wide active zone
 # (the View → Time Zone submenu).
-vix-time-zone-model = { path = "vix-time-zone-model" }
 # Keyboard-shortcut help rows (key combo + i18n description key).
-vix-keyboard-shortcut-panel = { path = "vix-keyboard-shortcut-panel" }
 # Nerd Font palette (Tools menu): curated glyph set + character-picker grid state.
-vix-nerd-font-picker = { path = "vix-nerd-font-picker" }
 # ASCII panel (Tools menu): the ASCII reference table + row-selection state.
-vix-ascii-character-picker = { path = "vix-ascii-character-picker" }
 # X11 Colors panel (Tools menu): the X11 color table + row-selection state.
-vix-x11-color-picker = { path = "vix-x11-color-picker" }
 # HTML Characters panel (Tools menu): HTML named-character table + row-selection state.
-vix-html-character-picker = { path = "vix-html-character-picker" }
 # System Information panel (Tools menu): host OS/CPU/memory/disk snapshot.
-vix-system-information-panel = { path = "vix-system-information-panel" }
 # File Information panel (Tools menu): active-file name/counts/size/perms/mtime.
-vix-file-information-panel = { path = "vix-file-information-panel" }
 # Workspace Dashboard panel (Tools menu): live folder/disk/file/commit metrics.
-vix-workspace-dashboard-panel = { path = "vix-workspace-dashboard-panel" }
 # Outline panel: code symbol list (kind + name + line) + selection state.
-vix-outline-panel = { path = "vix-outline-panel" }
 # Welcome panel: first-run welcome text + scroll state.
-vix-welcome-panel = { path = "vix-welcome-panel" }
 # vCard (RFC 6350) parser, and the contact-browser / single-vcard view panels.
-vix-vcard-parser = { path = "vix-vcard-parser" }
-vix-vcard-panel = { path = "vix-vcard-panel" }
-vix-contact-panel = { path = "vix-contact-panel" }
 # LSP client core: JSON-RPC framing, message builders, parsers, position maths.
-vix-lsp = { path = "vix-lsp" }
 # Spell checking: Hunspell-backed checker over comment/string ranges.
-vix-spellcheck = { path = "vix-spellcheck" }
 # Git integration: status/diff/staging via the git CLI.
-vix-git = { path = "vix-git" }
 # Find / find-and-replace box state (query, replacement, toggles, pattern builder).
-vix-find-panel = { path = "vix-find-panel" }
 # Right dock: message-drawer state (advice/notifications + selection).
-vix-right-dock = { path = "vix-right-dock" }
 # Left dock: file-explorer tree state (lazy expand, selection, multi-select).
-vix-left-dock = { path = "vix-left-dock" }
 # Status bar: formatting for the left/right segments.
-vix-status-bar-panel = { path = "vix-status-bar-panel" }
 # Bottom dock: scrollable line buffer (logs, output, data views).
-vix-bottom-dock = { path = "vix-bottom-dock" }
-# Tools → Generate: UUID (all versions) and ZID (secure random hex) generators.
-vix-uuid-tool = { path = "vix-uuid-tool" }
-vix-zid-tool = { path = "vix-zid-tool" }
-# Tools → Checksum: SHA-256 / SHA-512 digests of the selection or buffer.
-vix-checksum-tool = { path = "vix-checksum-tool" }
-# Tools → Convert: encoders and tabular/structured converters over the selection
 # or buffer (Base64, URL, CSV/TSV/JSON, YAML/JSON).
-vix-base64-tool = { path = "vix-base64-tool" }
-vix-url-tool = { path = "vix-url-tool" }
-vix-convert-from-csv-into-json-tool = { path = "vix-convert-from-csv-into-json-tool" }
-vix-convert-from-json-into-csv-tool = { path = "vix-convert-from-json-into-csv-tool" }
-vix-convert-from-csv-into-tsv-tool = { path = "vix-convert-from-csv-into-tsv-tool" }
-vix-convert-from-tsv-into-csv-tool = { path = "vix-convert-from-tsv-into-csv-tool" }
-vix-convert-from-tsv-into-json-tool = { path = "vix-convert-from-tsv-into-json-tool" }
-vix-convert-from-json-into-tsv-tool = { path = "vix-convert-from-json-into-tsv-tool" }
-vix-convert-from-yaml-into-json-tool = { path = "vix-convert-from-yaml-into-json-tool" }
-vix-convert-from-json-into-yaml-tool = { path = "vix-convert-from-json-into-yaml-tool" }
-vix-convert-from-markdown-into-html-tool = { path = "vix-convert-from-markdown-into-html-tool" }
-vix-convert-from-html-into-markdown-tool = { path = "vix-convert-from-html-into-markdown-tool" }
-vix-convert-from-json-into-toml-tool = { path = "vix-convert-from-json-into-toml-tool" }
-vix-convert-from-toml-into-json-tool = { path = "vix-convert-from-toml-into-json-tool" }
-# Tools → Color Converter: live HEX/RGB/HSL conversion dialog.
-vix-color-converter-tool = { path = "vix-color-converter-tool" }
-# Tools → Convert → Unit Converter: number + unit selectors with live output.
-vix-unit-converter-tool = { path = "vix-unit-converter-tool" }
-# Tools → Calculator: evaluate a typed formula and insert the result.
-vix-calculator-tool = { path = "vix-calculator-tool" }
-# Tools → Pomodoro Timer: work/break countdown state machine.
-vix-pomodoro-tool = { path = "vix-pomodoro-tool" }
-# Tools → About → Text: text statistics panel.
-vix-text-information-panel = { path = "vix-text-information-panel" }
 # Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
 crossterm = "0.29"
 # Regular expressions for find/replace.
@@ -188,6 +82,21 @@ image = "0.25"
 confy = "2.0.0"
 clap = { version = "4.6.1", features = ["derive"] }
 rust-i18n = "4.1.0"
+
+# Dependencies absorbed from the former subcrates (now modules under src/).
+base64 = "0.22"
+evalexpr = "13"
+getrandom = "0.2"
+htmd = "0.5"
+jiff = "0.2"
+percent-encoding = "2"
+pulldown-cmark = "0.13"
+sha2 = "0.10"
+similar = "2"
+spellbook = "0.4"
+sysinfo = "0.33"
+toml = "0.8"
+uuid = { version = "1", features = ["v1", "v3", "v4", "v5", "v6", "v7", "v8"] }
 include_dir = "0.7.4"
 serde_yaml = "0.9.34"
 markdown = "1.0.0"

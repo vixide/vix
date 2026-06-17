@@ -255,7 +255,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
 }
 
 fn draw_pomodoro(app: &mut App, frame: &mut Frame, area: Rect) {
-    use vix_pomodoro_tool::Phase;
+    use crate::pomodoro_tool::Phase;
     let Some(timer) = app.pomodoro.as_ref() else { return };
     let phase = timer.phase;
 
@@ -349,7 +349,7 @@ fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
         w.wrap_to(text_width);
         w.clamp(view_h);
     }
-    let total = app.welcome.as_ref().map_or(0, vix_welcome_panel::Panel::len);
+    let total = app.welcome.as_ref().map_or(0, crate::welcome_panel::Panel::len);
     let scroll = app.welcome.as_ref().map_or(0, |w| w.scroll);
     let show_bar = total > view_h && body.width > 1;
     let text_area = if show_bar {
@@ -538,7 +538,7 @@ fn draw_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect) {
-    use vix_color_converter_tool::Field;
+    use crate::color_converter_tool::Field;
     let Some(conv) = app.color_converter.as_ref() else { return };
 
     let title = t!("menu.item.tools.color_converter");
@@ -599,7 +599,7 @@ fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_calculator(app: &mut App, frame: &mut Frame, area: Rect) {
-    use vix_calculator_tool::{Focus, Outcome};
+    use crate::calculator_tool::{Focus, Outcome};
     let Some(calc) = app.calculator.as_ref() else { return };
 
     let title = t!("menu.item.tools.calculator");
@@ -671,7 +671,7 @@ fn draw_calculator(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) {
-    use vix_unit_converter_tool::{Focus, UNITS};
+    use crate::unit_converter_tool::{Focus, UNITS};
     let Some(conv) = app.unit_converter.as_ref() else { return };
 
     let title = t!("menu.item.tools.convert.unit");
@@ -842,7 +842,7 @@ fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
                 // "[x] M  path" — [x] when staged; the letter is colored by change.
                 let staged = if s.is_staged() { "[\u{2713}]" } else { "[ ]" };
                 let change = s.primary();
-                let letter = change.map_or(' ', vix_git::Change::letter);
+                let letter = change.map_or(' ', crate::git::Change::letter);
                 let color = change.map_or(Color::Gray, git_change_color);
                 ListItem::new(Line::from(vec![
                     Span::raw(format!("  {staged} ")),
@@ -1344,8 +1344,8 @@ fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
 }
 
 /// The badge color for a git change in the file explorer.
-fn git_change_color(change: vix_git::Change) -> Color {
-    use vix_git::Change;
+fn git_change_color(change: crate::git::Change) -> Color {
+    use crate::git::Change;
     match change {
         Change::Added | Change::Untracked => Color::Green,
         Change::Modified => Color::Yellow,
@@ -1902,13 +1902,13 @@ fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
                 let code = t.editor.code_ref();
                 (e - s, code.char_to_line(e) - code.char_to_line(s) + 1)
             });
-            vix_status_bar_panel::info_segment(Some(lang), t.editor.line_ending(), sel)
+            crate::status_bar_panel::info_segment(Some(lang), t.editor.line_ending(), sel)
         })
         .unwrap_or_default();
 
-    let git = vix_status_bar_panel::git_segment(app.git_branch.as_deref(), icon::BRANCH, app.git_dirty());
-    let left = vix_status_bar_panel::left_segment(&mode, &path, &dirty_flag, &app.status);
-    let right = vix_status_bar_panel::right_segment(&format!("{git}{info}"), line, col, icon::CALENDAR);
+    let git = crate::status_bar_panel::git_segment(app.git_branch.as_deref(), icon::BRANCH, app.git_dirty());
+    let left = crate::status_bar_panel::left_segment(&mode, &path, &dirty_flag, &app.status);
+    let right = crate::status_bar_panel::right_segment(&format!("{git}{info}"), line, col, icon::CALENDAR);
 
     let bg = theme::region_base(theme::Region::StatusBar);
     // A top border separates the status bar from the body above it.
@@ -1988,7 +1988,7 @@ fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
 fn draw_clock(app: &mut App, frame: &mut Frame, area: Rect) {
     let now = clock::now_local();
     let rows_data = app.clock.rows(&now);
-    let zone = vix_time_zone_model::active_name();
+    let zone = crate::time_zone_model::active_name();
 
     let width = 38u16.min(area.width);
     let height = (rows_data.len() as u16 + 3).min(area.height);
@@ -2046,7 +2046,7 @@ pub const CAL_NEXT: char = '\u{25b6}';
 pub const NERD_CELL_W: u16 = 4;
 
 fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
-    use vix_nerd_font_picker::{COLS, GLYPHS};
+    use crate::nerd_font_picker::{COLS, GLYPHS};
     let Some(p) = app.nerd_palette.as_ref() else {
         return;
     };
@@ -2115,7 +2115,7 @@ fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
-    use vix_ascii_character_picker::{self as ascii, LEN};
+    use crate::ascii_character_picker::{self as ascii, LEN};
     if app.ascii_panel.is_none() {
         return;
     }
@@ -2179,7 +2179,7 @@ fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
-    let colors = vix_x11_color_picker::colors();
+    let colors = crate::x11_color_picker::colors();
     let total = colors.len();
     if app.x11_panel.is_none() || total == 0 {
         return;
@@ -2254,7 +2254,7 @@ fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
-    let entities = vix_html_character_picker::entities();
+    let entities = crate::html_character_picker::entities();
     let total = entities.len();
     if app.html_panel.is_none() || total == 0 {
         return;
@@ -2441,7 +2441,7 @@ fn draw_dashboard(app: &App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_contacts(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(total) = app.contacts.as_ref().map(vix_contact_panel::Panel::len) else { return };
+    let Some(total) = app.contacts.as_ref().map(crate::contact_panel::Panel::len) else { return };
     let width = 40u16.min(area.width);
     let max_rows = area.height.saturating_sub(3).max(1);
     let rows = (total.max(1) as u16).min(max_rows);
@@ -2497,8 +2497,8 @@ fn draw_contacts(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(total) = app.vcard.as_ref().map(vix_vcard_panel::Panel::len) else { return };
-    let title = app.vcard.as_ref().map(vix_vcard_panel::Panel::title).unwrap_or_default();
+    let Some(total) = app.vcard.as_ref().map(crate::vcard_panel::Panel::len) else { return };
+    let title = app.vcard.as_ref().map(crate::vcard_panel::Panel::title).unwrap_or_default();
     let width = 60u16.min(area.width);
     let max_rows = area.height.saturating_sub(3).max(1);
     let rows = (total.max(1) as u16).min(max_rows);
@@ -2551,7 +2551,7 @@ fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_text_info(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(n) = app.text_info.as_ref().map(vix_text_information_panel::Panel::len) else {
+    let Some(n) = app.text_info.as_ref().map(crate::text_information_panel::Panel::len) else {
         return;
     };
     let width = 40u16.min(area.width).max(24);
@@ -3060,7 +3060,7 @@ fn draw_help(frame: &mut Frame, area: Rect) {
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
 
-    let rows = vix_keyboard_shortcut_panel::ROWS;
+    let rows = crate::keyboard_shortcut_panel::ROWS;
     let key_w = rows.iter().map(|r| r.keys.len()).max().unwrap_or(0);
     let lines: Vec<Line> = rows
         .iter()

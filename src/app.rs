@@ -35,7 +35,7 @@ fn bundled_themes() -> Vec<crate::theme::CustomTheme> {
     BUNDLED_THEMES
         .files()
         .filter(|f| f.path().extension().and_then(|e| e.to_str()) == Some("json"))
-        .filter_map(|f| f.contents_utf8().and_then(vix_theme_model::parse_theme))
+        .filter_map(|f| f.contents_utf8().and_then(crate::theme_model::parse_theme))
         .collect()
 }
 
@@ -324,63 +324,63 @@ pub struct Dialog {
 }
 
 /// Nerd Font palette overlay state (Tools -> Nerd Font Palette), re-exported from
-/// [`vix_nerd_font_picker`]. Arrow keys move within the glyph grid; Enter (or a
+/// [`crate::nerd_font_picker`]. Arrow keys move within the glyph grid; Enter (or a
 /// click) inserts the highlighted glyph into the active editor, Esc closes.
-pub use vix_nerd_font_picker::Palette as NerdPalette;
+pub use crate::nerd_font_picker::Palette as NerdPalette;
 
 /// ASCII panel overlay state (Tools -> ASCII), re-exported from
-/// [`vix_ascii_character_picker`]. Arrow keys move within the table; Enter (or a click)
+/// [`crate::ascii_character_picker`]. Arrow keys move within the table; Enter (or a click)
 /// inserts the highlighted character into the active editor, Esc closes.
-pub use vix_ascii_character_picker::Panel as AsciiPanel;
+pub use crate::ascii_character_picker::Panel as AsciiPanel;
 
 /// X11 color palette overlay state (Tools -> X11 Colors), re-exported from
-/// [`vix_x11_color_picker`]. Arrow keys move within the table; Enter (or a click)
+/// [`crate::x11_color_picker`]. Arrow keys move within the table; Enter (or a click)
 /// inserts the highlighted color's hex into the active editor, Esc closes.
-pub use vix_x11_color_picker::Panel as X11Panel;
+pub use crate::x11_color_picker::Panel as X11Panel;
 
 /// HTML character palette overlay state (Tools -> HTML Characters), re-exported
-/// from [`vix_html_character_picker`]. Arrow keys move within the table; Enter
+/// from [`crate::html_character_picker`]. Arrow keys move within the table; Enter
 /// (or a click) inserts the highlighted entity reference into the editor, Esc
 /// closes.
-pub use vix_html_character_picker::Panel as HtmlPanel;
+pub use crate::html_character_picker::Panel as HtmlPanel;
 
 /// System Information panel overlay state (Tools -> System Information),
-/// re-exported from [`vix_system_information_panel`]. Arrow keys move within the
+/// re-exported from [`crate::system_information_panel`]. Arrow keys move within the
 /// table; Enter (or a click) inserts the highlighted value into the active
 /// editor, Esc closes.
-pub use vix_system_information_panel::Panel as SystemInfoPanel;
+pub use crate::system_information_panel::Panel as SystemInfoPanel;
 
 /// Workspace dashboard overlay state (Tools -> Workspace Dashboard), re-exported from
-/// [`vix_workspace_dashboard_panel`]. Its metrics fill in asynchronously; Esc closes.
-pub use vix_workspace_dashboard_panel::Dashboard;
+/// [`crate::workspace_dashboard_panel`]. Its metrics fill in asynchronously; Esc closes.
+pub use crate::workspace_dashboard_panel::Dashboard;
 
-/// First-run welcome overlay state, re-exported from [`vix_welcome_panel`].
+/// First-run welcome overlay state, re-exported from [`crate::welcome_panel`].
 /// Scrollable, informational; Esc closes.
-pub use vix_welcome_panel::Panel as WelcomePanel;
+pub use crate::welcome_panel::Panel as WelcomePanel;
 
 /// Contact-browser overlay state (Tools -> Contacts), re-exported from
-/// [`vix_contact_panel`]. Lists the vCard files in a directory; Enter/click opens
+/// [`crate::contact_panel`]. Lists the vCard files in a directory; Enter/click opens
 /// the highlighted contact's [`VcardPanel`].
-pub use vix_contact_panel::Panel as ContactPanel;
+pub use crate::contact_panel::Panel as ContactPanel;
 
-/// Single-vCard view overlay state, re-exported from [`vix_vcard_panel`]. Shows
+/// Single-vCard view overlay state, re-exported from [`crate::vcard_panel`]. Shows
 /// one contact's fields; Enter/click inserts a value, Esc returns to the browser.
-pub use vix_vcard_panel::Panel as VcardPanel;
+pub use crate::vcard_panel::Panel as VcardPanel;
 
 /// File Information overlay state (Tools -> File Information), re-exported from
-/// [`vix_file_information_panel`]. Arrow keys move within the table; Enter (or a
+/// [`crate::file_information_panel`]. Arrow keys move within the table; Enter (or a
 /// click) inserts the highlighted value into the active editor, Esc closes.
-pub use vix_file_information_panel::Panel as FileInfoPanel;
+pub use crate::file_information_panel::Panel as FileInfoPanel;
 
 /// Text Information overlay state (Tools -> About -> Text), re-exported from
-/// [`vix_text_information_panel`]. Shows character/word/line/sentence/paragraph
+/// [`crate::text_information_panel`]. Shows character/word/line/sentence/paragraph
 /// counts for the selection (or buffer); Enter/click inserts a value, Esc closes.
-pub use vix_text_information_panel::Panel as TextInfoPanel;
+pub use crate::text_information_panel::Panel as TextInfoPanel;
 
 /// Code-outline overlay state (Ctrl+Shift+O), re-exported from
-/// [`vix_outline_panel`]. Lists the active buffer's symbols; Enter/click jumps to
+/// [`crate::outline_panel`]. Lists the active buffer's symbols; Enter/click jumps to
 /// one, Esc closes.
-pub use vix_outline_panel::Outline;
+pub use crate::outline_panel::Outline;
 
 /// The active keyboard navigation style, derived from `settings.keymap`. It
 /// decides how raw key events are dispatched (see [`App::on_key`]): `Apple` uses
@@ -567,7 +567,7 @@ pub struct HoverPopup {
 /// LSP completion overlay: the candidate list and the highlighted row.
 pub struct CompletionPopup {
     /// Candidate items, in server order.
-    pub items: Vec<vix_lsp::CompletionItem>,
+    pub items: Vec<crate::lsp_core::CompletionItem>,
     /// Index of the highlighted candidate.
     pub selected: usize,
 }
@@ -650,14 +650,14 @@ pub struct App {
     /// Modal info dialog (Vix menu About / Website / Email), when open.
     pub dialog: Option<Dialog>,
     /// Color Converter dialog (Tools → Color Converter…), when open.
-    pub color_converter: Option<vix_color_converter_tool::Converter>,
+    pub color_converter: Option<crate::color_converter_tool::Converter>,
     /// Unit Converter dialog (Tools → Convert → Unit Converter…), when open.
-    pub unit_converter: Option<vix_unit_converter_tool::Converter>,
+    pub unit_converter: Option<crate::unit_converter_tool::Converter>,
     /// Calculator dialog (Tools → Calculator…), when open.
-    pub calculator: Option<vix_calculator_tool::Calculator>,
+    pub calculator: Option<crate::calculator_tool::Calculator>,
     /// Pomodoro timer state (Tools → Pomodoro…). Stays `Some` and keeps counting
     /// down even after the dialog is closed via Start; see [`Self::pomodoro_open`].
-    pub pomodoro: Option<vix_pomodoro_tool::Timer>,
+    pub pomodoro: Option<crate::pomodoro_tool::Timer>,
     /// Whether the Pomodoro dialog is currently visible. The timer keeps running
     /// in the background while this is `false`; the break alert re-opens it.
     pub pomodoro_open: bool,
@@ -691,7 +691,7 @@ pub struct App {
     /// Cached current git branch (or short hash when detached), when in a repo.
     pub git_branch: Option<String>,
     /// Cached `git status` rows (changed files), refreshed on save / git actions.
-    pub git_status: Vec<vix_git::FileStatus>,
+    pub git_status: Vec<crate::git::FileStatus>,
     /// Cached HEAD blob text per file path, for the editor diff gutter. Cleared
     /// on save / git actions so it refetches.
     git_head_cache: std::collections::HashMap<PathBuf, String>,
@@ -699,14 +699,14 @@ pub struct App {
     pub spellcheck: bool,
     /// Loaded spell checker for the active locale, when spell-checking is on and
     /// a dictionary was found.
-    pub speller: Option<vix_spellcheck::SpellChecker>,
+    pub speller: Option<crate::spellcheck::SpellChecker>,
     /// Locale the loaded (or last-attempted) [`speller`](Self::speller) is for, so
     /// it is reloaded only on a locale change.
     speller_locale: Option<String>,
     /// Whether the bottom dock (log/output/data panel) is shown.
     pub show_bottom_dock: bool,
     /// Bottom-dock line buffer.
-    pub bottom_dock: vix_bottom_dock::BottomDock,
+    pub bottom_dock: crate::bottom_dock::BottomDock,
     /// Horizontal scroll offset (chars) of the bottom dock.
     pub bottom_hscroll: usize,
     /// Horizontal scroll offset (chars) of the file explorer.
@@ -794,10 +794,10 @@ impl App {
         Self::apply_saved_theme(&settings.theme);
         // Populate the View → Theme submenu with the available theme names before
         // the menu bar is first rendered.
-        let theme_names = vix_theme_model::theme_names(&Self::available_custom_themes());
+        let theme_names = crate::theme_model::theme_names(&Self::available_custom_themes());
         crate::menu::set_theme_names(theme_names);
         // Apply the saved time zone so the clock panel and status bar use it.
-        vix_time_zone_model::set_active(&settings.time_zone);
+        crate::time_zone_model::set_active(&settings.time_zone);
         let editor = Editor::new(
             settings.line_numbers,
             settings.show_whitespace,
@@ -875,7 +875,7 @@ impl App {
             speller: None,
             speller_locale: None,
             show_bottom_dock: settings.show_bottom_dock,
-            bottom_dock: vix_bottom_dock::BottomDock::with_scrollback(settings.scrollback),
+            bottom_dock: crate::bottom_dock::BottomDock::with_scrollback(settings.scrollback),
             bottom_hscroll: 0,
             explorer_hscroll: 0,
             messages_hscroll: 0,
@@ -1903,70 +1903,70 @@ impl App {
             "tools.color_converter" => self.open_color_converter(),
             "tools.calculator" => self.open_calculator(),
             "tools.pomodoro" => self.open_pomodoro(),
-            "tools.generate.uuid.v1" => self.insert_generated(&vix_uuid_tool::v1()),
-            "tools.generate.uuid.v2" => self.insert_generated(&vix_uuid_tool::v2()),
-            "tools.generate.uuid.v3" => self.insert_generated(&vix_uuid_tool::v3()),
-            "tools.generate.uuid.v4" => self.insert_generated(&vix_uuid_tool::v4()),
-            "tools.generate.uuid.v5" => self.insert_generated(&vix_uuid_tool::v5()),
-            "tools.generate.uuid.v6" => self.insert_generated(&vix_uuid_tool::v6()),
-            "tools.generate.uuid.v7" => self.insert_generated(&vix_uuid_tool::v7()),
-            "tools.generate.uuid.v8" => self.insert_generated(&vix_uuid_tool::v8()),
-            "tools.generate.zid.128" => self.insert_generated(&vix_zid_tool::generate(16)),
-            "tools.generate.zid.256" => self.insert_generated(&vix_zid_tool::generate(32)),
-            "tools.generate.zid.512" => self.insert_generated(&vix_zid_tool::generate(64)),
+            "tools.generate.uuid.v1" => self.insert_generated(&crate::uuid_tool::v1()),
+            "tools.generate.uuid.v2" => self.insert_generated(&crate::uuid_tool::v2()),
+            "tools.generate.uuid.v3" => self.insert_generated(&crate::uuid_tool::v3()),
+            "tools.generate.uuid.v4" => self.insert_generated(&crate::uuid_tool::v4()),
+            "tools.generate.uuid.v5" => self.insert_generated(&crate::uuid_tool::v5()),
+            "tools.generate.uuid.v6" => self.insert_generated(&crate::uuid_tool::v6()),
+            "tools.generate.uuid.v7" => self.insert_generated(&crate::uuid_tool::v7()),
+            "tools.generate.uuid.v8" => self.insert_generated(&crate::uuid_tool::v8()),
+            "tools.generate.zid.128" => self.insert_generated(&crate::zid_tool::generate(16)),
+            "tools.generate.zid.256" => self.insert_generated(&crate::zid_tool::generate(32)),
+            "tools.generate.zid.512" => self.insert_generated(&crate::zid_tool::generate(64)),
             "tools.checksum.sha256" => {
-                self.transform_selection_or_buffer(vix_checksum_tool::sha256_hex);
+                self.transform_selection_or_buffer(crate::checksum_tool::sha256_hex);
             }
             "tools.checksum.sha512" => {
-                self.transform_selection_or_buffer(vix_checksum_tool::sha512_hex);
+                self.transform_selection_or_buffer(crate::checksum_tool::sha512_hex);
             }
             "tools.convert.base64.encode" => {
-                self.transform_selection_or_buffer_try(vix_base64_tool::encode);
+                self.transform_selection_or_buffer_try(crate::base64_tool::encode);
             }
             "tools.convert.base64.decode" => {
-                self.transform_selection_or_buffer_try(vix_base64_tool::decode);
+                self.transform_selection_or_buffer_try(crate::base64_tool::decode);
             }
             "tools.convert.url.encode" => {
-                self.transform_selection_or_buffer_try(vix_url_tool::encode);
+                self.transform_selection_or_buffer_try(crate::url_tool::encode);
             }
             "tools.convert.url.decode" => {
-                self.transform_selection_or_buffer_try(vix_url_tool::decode);
+                self.transform_selection_or_buffer_try(crate::url_tool::decode);
             }
             "tools.convert.csv.json" => {
-                self.transform_selection_or_buffer_try(vix_convert_from_csv_into_json_tool::convert);
+                self.transform_selection_or_buffer_try(crate::convert_from_csv_into_json_tool::convert);
             }
             "tools.convert.csv.tsv" => {
-                self.transform_selection_or_buffer_try(vix_convert_from_csv_into_tsv_tool::convert);
+                self.transform_selection_or_buffer_try(crate::convert_from_csv_into_tsv_tool::convert);
             }
             "tools.convert.tsv.csv" => {
-                self.transform_selection_or_buffer_try(vix_convert_from_tsv_into_csv_tool::convert);
+                self.transform_selection_or_buffer_try(crate::convert_from_tsv_into_csv_tool::convert);
             }
             "tools.convert.tsv.json" => {
-                self.transform_selection_or_buffer_try(vix_convert_from_tsv_into_json_tool::convert);
+                self.transform_selection_or_buffer_try(crate::convert_from_tsv_into_json_tool::convert);
             }
             "tools.convert.json.csv" => {
-                self.transform_selection_or_buffer_try(vix_convert_from_json_into_csv_tool::convert);
+                self.transform_selection_or_buffer_try(crate::convert_from_json_into_csv_tool::convert);
             }
             "tools.convert.json.tsv" => {
-                self.transform_selection_or_buffer_try(vix_convert_from_json_into_tsv_tool::convert);
+                self.transform_selection_or_buffer_try(crate::convert_from_json_into_tsv_tool::convert);
             }
             "tools.convert.json.yaml" => {
-                self.transform_selection_or_buffer_try(vix_convert_from_json_into_yaml_tool::convert);
+                self.transform_selection_or_buffer_try(crate::convert_from_json_into_yaml_tool::convert);
             }
             "tools.convert.yaml.json" => {
-                self.transform_selection_or_buffer_try(vix_convert_from_yaml_into_json_tool::convert);
+                self.transform_selection_or_buffer_try(crate::convert_from_yaml_into_json_tool::convert);
             }
             "tools.convert.json.toml" => {
-                self.transform_selection_or_buffer_try(vix_convert_from_json_into_toml_tool::convert);
+                self.transform_selection_or_buffer_try(crate::convert_from_json_into_toml_tool::convert);
             }
             "tools.convert.toml.json" => {
-                self.transform_selection_or_buffer_try(vix_convert_from_toml_into_json_tool::convert);
+                self.transform_selection_or_buffer_try(crate::convert_from_toml_into_json_tool::convert);
             }
             "tools.convert.markdown.html" => {
-                self.transform_selection_or_buffer_try(vix_convert_from_markdown_into_html_tool::convert);
+                self.transform_selection_or_buffer_try(crate::convert_from_markdown_into_html_tool::convert);
             }
             "tools.convert.html.markdown" => {
-                self.transform_selection_or_buffer_try(vix_convert_from_html_into_markdown_tool::convert);
+                self.transform_selection_or_buffer_try(crate::convert_from_html_into_markdown_tool::convert);
             }
             "tools.convert.unit" => self.open_unit_converter(),
             "tools.run_command" => {
@@ -2409,12 +2409,12 @@ impl App {
     /// Open the Color Converter dialog, seeding it from the selection when that
     /// text parses as a HEX/RGB/HSL color.
     fn open_color_converter(&mut self) {
-        let mut conv = vix_color_converter_tool::Converter::new();
+        let mut conv = crate::color_converter_tool::Converter::new();
         if let Some(sel) = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text()) {
             let s = sel.trim();
-            let color = vix_color_converter_tool::Color::from_hex(s)
-                .or_else(|| vix_color_converter_tool::Color::from_rgb(s))
-                .or_else(|| vix_color_converter_tool::Color::from_hsl(s));
+            let color = crate::color_converter_tool::Color::from_hex(s)
+                .or_else(|| crate::color_converter_tool::Color::from_rgb(s))
+                .or_else(|| crate::color_converter_tool::Color::from_hsl(s));
             if let Some(c) = color {
                 conv.set_color(c);
             }
@@ -2472,7 +2472,7 @@ impl App {
 
     /// Open the Unit Converter dialog (seeded with `1 m → km`).
     fn open_unit_converter(&mut self) {
-        self.unit_converter = Some(vix_unit_converter_tool::Converter::new());
+        self.unit_converter = Some(crate::unit_converter_tool::Converter::new());
     }
 
     /// Handle a key for the Unit Converter dialog: type a number into the value
@@ -2518,7 +2518,7 @@ impl App {
 
     /// Insert the converted `<value> <unit>` into the editor and close the dialog.
     fn insert_unit_value(&mut self) {
-        let Some(text) = self.unit_converter.as_ref().map(vix_unit_converter_tool::Converter::insert_text) else {
+        let Some(text) = self.unit_converter.as_ref().map(crate::unit_converter_tool::Converter::insert_text) else {
             return;
         };
         if !text.is_empty() {
@@ -2533,7 +2533,7 @@ impl App {
 
     /// Open the Calculator dialog, seeding the formula from the selection.
     fn open_calculator(&mut self) {
-        let mut calc = vix_calculator_tool::Calculator::new();
+        let mut calc = crate::calculator_tool::Calculator::new();
         if let Some(sel) = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text()) {
             calc.input = sel.trim().to_string();
         }
@@ -2544,7 +2544,7 @@ impl App {
     /// (or, with the Insert button focused, inserts the result), Tab cycles the
     /// Input/Run/Insert controls, Esc closes.
     fn calculator_key(&mut self, key: KeyEvent) {
-        use vix_calculator_tool::Focus;
+        use crate::calculator_tool::Focus;
         match key.code {
             KeyCode::Esc => self.calculator = None,
             KeyCode::Tab => {
@@ -2602,7 +2602,7 @@ impl App {
     /// one; otherwise starts a fresh idle timer at the default 25 minutes.
     fn open_pomodoro(&mut self) {
         if self.pomodoro.is_none() {
-            self.pomodoro = Some(vix_pomodoro_tool::Timer::new());
+            self.pomodoro = Some(crate::pomodoro_tool::Timer::new());
             self.pomodoro_last_tick = None;
         }
         self.pomodoro_open = true;
@@ -2612,7 +2612,7 @@ impl App {
     /// and lets the countdown run in the background), or Stop/Cancel while
     /// running (which resets to idle and keeps the dialog open).
     fn pomodoro_primary(&mut self) {
-        use vix_pomodoro_tool::Phase;
+        use crate::pomodoro_tool::Phase;
         match self.pomodoro.as_ref().map(|t| t.phase) {
             Some(Phase::Idle) => {
                 self.pomodoro_last_tick = Some(std::time::Instant::now());
@@ -2634,13 +2634,13 @@ impl App {
     /// ticks faster to keep the display current).
     #[must_use]
     pub fn pomodoro_running(&self) -> bool {
-        self.pomodoro.as_ref().is_some_and(vix_pomodoro_tool::Timer::is_running)
+        self.pomodoro.as_ref().is_some_and(crate::pomodoro_tool::Timer::is_running)
     }
 
     /// Advance a running Pomodoro countdown by the real time elapsed since the
     /// last tick, performing phase transitions. Called once per event-loop pass.
     pub fn poll_pomodoro(&mut self) {
-        use vix_pomodoro_tool::Tick;
+        use crate::pomodoro_tool::Tick;
         if !self.pomodoro_running() {
             self.pomodoro_last_tick = None;
             return;
@@ -2673,7 +2673,7 @@ impl App {
     /// length and Enter starts (closing the dialog); while running, Enter stops;
     /// during the break, Enter cancels. Esc closes the dialog (cancelling a run).
     fn pomodoro_key(&mut self, key: KeyEvent) {
-        use vix_pomodoro_tool::Phase;
+        use crate::pomodoro_tool::Phase;
         match key.code {
             KeyCode::Up | KeyCode::Right => {
                 if let Some(t) = self.pomodoro.as_mut() {
@@ -2703,13 +2703,13 @@ impl App {
     /// Refresh the cached git state (repo?, branch, changed files) for the workspace
     /// root. Cheap enough to call after saves and git actions; not per-frame.
     pub fn refresh_git(&mut self) {
-        self.git_repo = vix_git::is_repo(&self.root);
+        self.git_repo = crate::git::is_repo(&self.root);
         // HEAD may have moved (commit/checkout) or the working tree changed; drop
         // the cached HEAD blobs so the diff gutter refetches.
         self.git_head_cache.clear();
         if self.git_repo {
-            self.git_branch = vix_git::branch(&self.root);
-            self.git_status = vix_git::status(&self.root);
+            self.git_branch = crate::git::branch(&self.root);
+            self.git_status = crate::git::status(&self.root);
         } else {
             self.git_branch = None;
             self.git_status.clear();
@@ -2742,11 +2742,11 @@ impl App {
                 .strip_prefix(&self.root)
                 .ok()
                 .map(|p| p.to_string_lossy().replace('\\', "/"))
-                .and_then(|rel| vix_git::head_blob(&self.root, &rel))
+                .and_then(|rel| crate::git::head_blob(&self.root, &rel))
                 .unwrap_or_default();
             self.git_head_cache.insert(path.clone(), head);
         }
-        let marks = vix_git::diff_marks(&self.git_head_cache[&path], &current);
+        let marks = crate::git::diff_marks(&self.git_head_cache[&path], &current);
         let styled: Vec<(usize, &str)> = marks.iter().map(|&(line, m)| (line, gutter_hex(m))).collect();
         if let Some(t) = self.editor.active_tab_mut() {
             t.editor.set_gutter_marks(styled);
@@ -2756,7 +2756,7 @@ impl App {
     /// The diff hunks for the active tab (committed HEAD vs the current buffer),
     /// populating the HEAD blob cache on demand. Empty outside a repo or for
     /// images / unsaved buffers.
-    fn active_hunks(&mut self) -> Vec<vix_git::Hunk> {
+    fn active_hunks(&mut self) -> Vec<crate::git::Hunk> {
         if !self.git_repo {
             return Vec::new();
         }
@@ -2773,11 +2773,11 @@ impl App {
                 .strip_prefix(&self.root)
                 .ok()
                 .map(|p| p.to_string_lossy().replace('\\', "/"))
-                .and_then(|rel| vix_git::head_blob(&self.root, &rel))
+                .and_then(|rel| crate::git::head_blob(&self.root, &rel))
                 .unwrap_or_default();
             self.git_head_cache.insert(path.clone(), head);
         }
-        vix_git::hunks(&self.git_head_cache[&path], &current)
+        crate::git::hunks(&self.git_head_cache[&path], &current)
     }
 
     /// Move the cursor to the next (or previous) changed hunk, wrapping around.
@@ -2846,12 +2846,12 @@ impl App {
     /// The git change for a file `path` (absolute, under the workspace root), from
     /// the cached status — `None` when not in a repo or the file is unchanged.
     #[must_use]
-    pub fn git_change_for(&self, path: &Path) -> Option<vix_git::Change> {
+    pub fn git_change_for(&self, path: &Path) -> Option<crate::git::Change> {
         if !self.git_repo {
             return None;
         }
         let rel = path.strip_prefix(&self.root).ok()?.to_string_lossy().replace('\\', "/");
-        self.git_status.iter().find(|s| s.path == rel).and_then(vix_git::FileStatus::primary)
+        self.git_status.iter().find(|s| s.path == rel).and_then(crate::git::FileStatus::primary)
     }
 
     /// Toggle spell-checking (red underline in comments/strings), persisting the
@@ -2886,7 +2886,7 @@ impl App {
         if self.speller_locale.as_deref() == Some(locale.as_str()) {
             return;
         }
-        self.speller = vix_spellcheck::load_for(&self.settings.dictionary_path, &locale).ok();
+        self.speller = crate::spellcheck::load_for(&self.settings.dictionary_path, &locale).ok();
         self.speller_locale = Some(locale);
     }
 
@@ -3183,9 +3183,9 @@ impl App {
             return;
         };
         let ok = if stage {
-            vix_git::stage(&self.root, &path)
+            crate::git::stage(&self.root, &path)
         } else {
-            vix_git::unstage(&self.root, &path)
+            crate::git::unstage(&self.root, &path)
         };
         if !ok {
             self.messages.error(t!("msg.git_failed").to_string());
@@ -3201,13 +3201,13 @@ impl App {
             .git_panel
             .as_ref()
             .and_then(|p| self.git_status.get(p.selected))
-            .is_some_and(vix_git::FileStatus::is_staged);
+            .is_some_and(crate::git::FileStatus::is_staged);
         self.git_stage_selected(!staged);
     }
 
     /// Begin a commit: prompt for a message (only when something is staged).
     fn git_begin_commit(&mut self) {
-        let any_staged = self.git_status.iter().any(vix_git::FileStatus::is_staged);
+        let any_staged = self.git_status.iter().any(crate::git::FileStatus::is_staged);
         if !any_staged {
             self.status = t!("status.git_nothing_staged").into();
             return;
@@ -3223,7 +3223,7 @@ impl App {
             self.status = t!("status.git_empty_message").into();
             return;
         }
-        match vix_git::commit(&self.root, message) {
+        match crate::git::commit(&self.root, message) {
             Ok(()) => self.status = t!("status.git_committed").into(),
             Err(e) => self.messages.error(t!("msg.git_commit_failed", error = e).to_string()),
         }
@@ -3232,7 +3232,7 @@ impl App {
 
     /// Begin creating a topic branch: prompt for its name (only in a repo).
     fn git_begin_new_branch(&mut self) {
-        if !vix_git::is_repo(&self.root) {
+        if !crate::git::is_repo(&self.root) {
             self.status = t!("status.git_not_repo").into();
             return;
         }
@@ -3250,7 +3250,7 @@ impl App {
             self.status = t!("status.git_empty_branch").into();
             return;
         }
-        match vix_git::create_branch(&self.root, name) {
+        match crate::git::create_branch(&self.root, name) {
             Ok(()) => {
                 self.status = t!("status.git_switched", branch = name).to_string();
                 self.refresh_git();
@@ -3269,7 +3269,7 @@ impl App {
     /// Show the commit log, optionally limited to commits newer than `since`
     /// (a git date spec like `1-day-ago`), streaming it into the bottom dock.
     fn git_log_since(&mut self, since: Option<&str>) {
-        if !vix_git::is_repo(&self.root) {
+        if !crate::git::is_repo(&self.root) {
             self.status = t!("status.git_not_repo").into();
             return;
         }
@@ -3281,7 +3281,7 @@ impl App {
     /// Show a decorated commit graph across all refs, streaming it into the
     /// bottom dock.
     fn git_log_graph(&mut self) {
-        if !vix_git::is_repo(&self.root) {
+        if !crate::git::is_repo(&self.root) {
             self.status = t!("status.git_not_repo").into();
             return;
         }
@@ -3295,7 +3295,7 @@ impl App {
 
     /// Show the working-tree status, streaming `git status` into the bottom dock.
     fn git_status_to_dock(&mut self) {
-        if !vix_git::is_repo(&self.root) {
+        if !crate::git::is_repo(&self.root) {
             self.status = t!("status.git_not_repo").into();
             return;
         }
@@ -3306,7 +3306,7 @@ impl App {
     /// Initialize a git repository in the workspace, refusing (for safety) if one
     /// already exists (a `.git` directory or a detected repo).
     fn git_init(&mut self) {
-        if self.root.join(".git").exists() || vix_git::is_repo(&self.root) {
+        if self.root.join(".git").exists() || crate::git::is_repo(&self.root) {
             self.status = t!("status.git_already_init").to_string();
             return;
         }
@@ -3333,7 +3333,7 @@ impl App {
     /// feeding the prompted text via a throwaway `GIT_EDITOR` that copies it into
     /// the description file (so no interactive editor opens).
     fn git_edit_description(&mut self, desc: &str) {
-        if !vix_git::is_repo(&self.root) {
+        if !crate::git::is_repo(&self.root) {
             self.status = t!("status.git_not_repo").into();
             return;
         }
@@ -3354,7 +3354,7 @@ impl App {
         if name.is_empty() {
             return;
         }
-        if !vix_git::is_repo(&self.root) {
+        if !crate::git::is_repo(&self.root) {
             self.status = t!("status.git_not_repo").into();
             return;
         }
@@ -3369,7 +3369,7 @@ impl App {
         if pattern.is_empty() {
             return;
         }
-        if !vix_git::is_repo(&self.root) {
+        if !crate::git::is_repo(&self.root) {
             self.status = t!("status.git_not_repo").into();
             return;
         }
@@ -3382,7 +3382,7 @@ impl App {
     /// Annotate the cursor's current line with its `git blame` attribution
     /// (short hash, author, date, and commit summary) in the status bar.
     fn git_blame_line(&mut self) {
-        if !vix_git::is_repo(&self.root) {
+        if !crate::git::is_repo(&self.root) {
             self.status = t!("status.git_not_repo").into();
             return;
         }
@@ -3401,7 +3401,7 @@ impl App {
             return;
         };
         let rel = name.to_string_lossy();
-        match vix_git::blame_line(dir, &rel, line) {
+        match crate::git::blame_line(dir, &rel, line) {
             Some(b) if b.is_uncommitted() => {
                 self.status = t!("status.blame_uncommitted", line = line).to_string();
             }
@@ -3423,7 +3423,7 @@ impl App {
     /// Run a remote git command (push/pull/fetch) asynchronously, streaming its
     /// output to the bottom dock. Git state refreshes when it completes.
     fn git_remote_command(&mut self, cmd: &str) {
-        if !vix_git::is_repo(&self.root) {
+        if !crate::git::is_repo(&self.root) {
             self.status = t!("status.git_not_repo").into();
             return;
         }
@@ -3440,11 +3440,11 @@ impl App {
     /// Open the branch chooser; `merge` picks merge-into-current rather than
     /// checkout.
     fn open_branch_chooser_mode(&mut self, merge: bool) {
-        if !vix_git::is_repo(&self.root) {
+        if !crate::git::is_repo(&self.root) {
             self.status = t!("status.git_not_repo").into();
             return;
         }
-        let branches = vix_git::local_branches(&self.root);
+        let branches = crate::git::local_branches(&self.root);
         if branches.is_empty() {
             self.status = t!("status.git_no_branches").into();
             return;
@@ -3497,7 +3497,7 @@ impl App {
             self.run_command(&format!("git merge {branch}"));
             return;
         }
-        match vix_git::checkout(&self.root, &branch) {
+        match crate::git::checkout(&self.root, &branch) {
             Ok(()) => {
                 self.status = t!("status.git_switched", branch = branch).to_string();
                 self.refresh_git();
@@ -3659,7 +3659,7 @@ impl App {
         let line = code.char_to_line(cur);
         let line_start = code.line_to_char(line);
         let line_text = code.slice(line_start, line_start + code.line_len(line));
-        let character = vix_lsp::position::char_to_col(&line_text, cur - line_start, enc);
+        let character = crate::lsp_core::position::char_to_col(&line_text, cur - line_start, enc);
         (u32::try_from(line).unwrap_or(0), character)
     }
 
@@ -3736,7 +3736,7 @@ impl App {
             return;
         }
         let enc = self.lsp.encoding_for(&path);
-        let ranges: Vec<(vix_lsp::Range, vix_lsp::Severity)> = self
+        let ranges: Vec<(crate::lsp_core::Range, crate::lsp_core::Severity)> = self
             .lsp
             .diagnostics_for(&path)
             .iter()
@@ -3773,7 +3773,7 @@ impl App {
                 let ln = (line as usize).min(code.len_lines().saturating_sub(1));
                 let line_start = code.line_to_char(ln);
                 let line_text = code.slice(line_start, line_start + code.line_len(ln));
-                let col = vix_lsp::position::col_to_char(&line_text, character, enc);
+                let col = crate::lsp_core::position::col_to_char(&line_text, character, enc);
                 (ln + 1, col + 1)
             };
             let area = s.editor_view();
@@ -4482,7 +4482,7 @@ impl App {
         // The Color Converter dialog: a left click on a field row focuses it.
         if self.color_converter.is_some() {
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
-                use vix_color_converter_tool::Field;
+                use crate::color_converter_tool::Field;
                 for field in Field::ALL {
                     if rect_contains(self.layout.color_converter_rows[field.index()], mouse.column, mouse.row) {
                         if let Some(c) = self.color_converter.as_mut() {
@@ -4498,7 +4498,7 @@ impl App {
         // evaluates; clicking Insert inserts the result.
         if self.calculator.is_some() {
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
-                use vix_calculator_tool::Focus;
+                use crate::calculator_tool::Focus;
                 let (col, row) = (mouse.column, mouse.row);
                 if rect_contains(self.layout.calculator_rects[0], col, row) {
                     if let Some(c) = self.calculator.as_mut() {
@@ -4521,7 +4521,7 @@ impl App {
         // The Unit Converter dialog: a left click on a row focuses it.
         if self.unit_converter.is_some() {
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
-                use vix_unit_converter_tool::Focus;
+                use crate::unit_converter_tool::Focus;
                 for (i, focus) in [Focus::Value, Focus::From, Focus::To].into_iter().enumerate() {
                     if rect_contains(self.layout.unit_converter_rows[i], mouse.column, mouse.row) {
                         if let Some(c) = self.unit_converter.as_mut() {
@@ -5320,7 +5320,7 @@ impl App {
             return;
         }
         if let Some(theme) = Self::available_custom_themes().into_iter().find(|t| t.name == name) {
-            vix_theme_model::apply(&theme);
+            crate::theme_model::apply(&theme);
             self.editor.refresh_theme();
             self.theme_preview = Some(name.to_string());
         }
@@ -5402,7 +5402,7 @@ impl App {
     /// bundled into the binary.
     fn available_custom_themes() -> Vec<crate::theme::CustomTheme> {
         let mut themes = Settings::themes_dir()
-            .map(|d| vix_theme_model::load_custom_themes(&d))
+            .map(|d| crate::theme_model::load_custom_themes(&d))
             .unwrap_or_default();
         themes.extend(bundled_themes());
         themes
@@ -5430,7 +5430,7 @@ impl App {
         else {
             return;
         };
-        vix_theme_model::apply(&theme);
+        crate::theme_model::apply(&theme);
         self.editor.refresh_theme();
         self.settings.theme.clone_from(&theme.name);
         // The committed theme is now the baseline; no preview to revert.
@@ -5465,7 +5465,7 @@ impl App {
     /// Apply the locale with the given `code` (from the View → Locale submenu),
     /// persist it, and update the UI language. Unknown codes are ignored.
     fn set_locale_by_code(&mut self, code: &str) {
-        let Some(loc) = vix_locale_model::by_code(code) else {
+        let Some(loc) = crate::locale_model::by_code(code) else {
             return;
         };
         rust_i18n::set_locale(loc.code);
@@ -5478,7 +5478,7 @@ impl App {
     /// Apply the keymap with the given `id` (from the View → Keymap submenu),
     /// persist it, and reset per-keymap session state. Unknown ids are ignored.
     fn set_keymap(&mut self, id: &str) {
-        let Some(km) = vix_keymap_model::by_id(id) else {
+        let Some(km) = crate::keymap_model::by_id(id) else {
             return;
         };
         self.settings.keymap = km.id.to_string();
@@ -5492,7 +5492,7 @@ impl App {
     /// Zone submenu), persist it, and update the app-wide active zone. Unknown
     /// names are ignored.
     fn set_time_zone_by_name(&mut self, name: &str) {
-        if vix_time_zone_model::set_active(name) {
+        if crate::time_zone_model::set_active(name) {
             self.settings.time_zone = name.to_string();
             self.status = t!("status.time_zone", zone = name).to_string();
         }
@@ -6282,12 +6282,12 @@ impl App {
                 }
                 let name = std::fs::read_to_string(&path)
                     .ok()
-                    .map(|t| vix_vcard_parser::parse(&t).display_name())
+                    .map(|t| crate::vcard_parser::parse(&t).display_name())
                     .filter(|n| n != "(unnamed)")
                     .unwrap_or_else(|| {
                         path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
                     });
-                contacts.push(vix_contact_panel::Contact { name, path });
+                contacts.push(crate::contact_panel::Contact { name, path });
             }
         }
         contacts.sort_by_key(|c| c.name.to_lowercase());
@@ -6303,7 +6303,7 @@ impl App {
             return;
         };
         match std::fs::read_to_string(&path) {
-            Ok(text) => self.vcard = Some(VcardPanel::open(vix_vcard_parser::parse(&text))),
+            Ok(text) => self.vcard = Some(VcardPanel::open(crate::vcard_parser::parse(&text))),
             Err(e) => self.messages.error(t!("msg.open_failed", error = e).to_string()),
         }
     }
@@ -6439,8 +6439,8 @@ impl App {
 
     /// Collect facts about the active file: counts from the buffer, and size /
     /// permissions / modified-time from the filesystem when it is saved.
-    fn gather_file_info(&self) -> vix_file_information_panel::FileInfo {
-        use vix_file_information_panel::FileInfo;
+    fn gather_file_info(&self) -> crate::file_information_panel::FileInfo {
+        use crate::file_information_panel::FileInfo;
         let mut info = FileInfo::default();
         let Some(t) = self.editor.active_tab() else { return info };
         let content = t.editor.get_content();
@@ -6549,7 +6549,7 @@ impl App {
     /// when nothing is selected.
     fn open_text_info(&mut self) {
         let text = self.selected_or_all_text();
-        let stats = vix_text_information_panel::analyze(&text);
+        let stats = crate::text_information_panel::analyze(&text);
         self.text_info = Some(TextInfoPanel::open(&stats));
     }
 
@@ -6717,7 +6717,7 @@ impl App {
         });
 
         std::thread::spawn(move || {
-            let _ = tx.send(DashMsg::Commits(vix_git::commit_count(&root).unwrap_or(0)));
+            let _ = tx.send(DashMsg::Commits(crate::git::commit_count(&root).unwrap_or(0)));
         });
 
         self.dashboard_rx = Some(rx);
@@ -6765,14 +6765,14 @@ impl App {
     /// cursor is currently inside. Reports a status when there are no symbols.
     fn open_outline(&mut self) {
         let cursor_line = self.editor.cursor_1based().0;
-        let entries: Vec<vix_outline_panel::Entry> = self
+        let entries: Vec<crate::outline_panel::Entry> = self
             .editor
             .active_tab()
             .filter(|t| !t.is_image())
             .map(|t| {
                 crate::palette::symbols(&t.text())
                     .into_iter()
-                    .map(|s| vix_outline_panel::Entry { kind: s.kind, name: s.name, line: s.line })
+                    .map(|s| crate::outline_panel::Entry { kind: s.kind, name: s.name, line: s.line })
                     .collect()
             })
             .unwrap_or_default();
@@ -6843,7 +6843,7 @@ impl App {
 
     /// Jump the cursor to the highlighted outline symbol and close the panel.
     fn jump_to_outline(&mut self) {
-        let Some(line) = self.outline.as_ref().and_then(vix_outline_panel::Outline::selected_line)
+        let Some(line) = self.outline.as_ref().and_then(crate::outline_panel::Outline::selected_line)
         else {
             return;
         };
@@ -7267,7 +7267,7 @@ impl App {
             return (0, 0);
         };
         let content = t.text();
-        let matches = vix_find_panel::matches(&content, re);
+        let matches = crate::find_panel::matches(&content, re);
         if matches.is_empty() {
             t.editor.remove_marks();
             return (0, 0);
@@ -7343,7 +7343,7 @@ impl App {
             return 0;
         };
         let content = t.text();
-        let matches = vix_find_panel::matches(&content, re);
+        let matches = crate::find_panel::matches(&content, re);
         if matches.is_empty() {
             t.editor.remove_marks();
             return 0;
@@ -7490,7 +7490,7 @@ impl App {
         };
         let regex = sb.regex;
         let template =
-            if regex { vix_find_panel::unescape(&sb.replace) } else { sb.replace.clone() };
+            if regex { crate::find_panel::unescape(&sb.replace) } else { sb.replace.clone() };
         let area = self.editor_view();
         let replaced = {
             let Some(t) = self.editor.active_tab_mut() else {
@@ -7621,7 +7621,7 @@ impl App {
             return;
         };
         let text = tab.text();
-        let (new_text, count) = vix_find_panel::replace_all(&text, &re, use_regex, &replacement);
+        let (new_text, count) = crate::find_panel::replace_all(&text, &re, use_regex, &replacement);
         tab.editor.set_content(&new_text);
         tab.editor.remove_marks();
         tab.dirty = true;
@@ -7874,7 +7874,7 @@ impl App {
             let Some(content) = self.current_text(path) else {
                 continue;
             };
-            let (new, count) = vix_find_panel::replace_all(&content, &re, use_regex, &replacement);
+            let (new, count) = crate::find_panel::replace_all(&content, &re, use_regex, &replacement);
             if count == 0 {
                 continue;
             }
@@ -8003,7 +8003,7 @@ impl App {
             }
         };
         let template = if sb.regex {
-            vix_find_panel::unescape(&sb.replace)
+            crate::find_panel::unescape(&sb.replace)
         } else {
             sb.replace.clone()
         };
@@ -8463,7 +8463,7 @@ fn lsp_pos_to_char(
     code: &vix_editor::code::Code,
     line: u32,
     character: u32,
-    enc: vix_lsp::Encoding,
+    enc: crate::lsp_core::Encoding,
 ) -> usize {
     let line = line as usize;
     if line >= code.len_lines() {
@@ -8471,17 +8471,17 @@ fn lsp_pos_to_char(
     }
     let line_start = code.line_to_char(line);
     let line_text = code.slice(line_start, line_start + code.line_len(line));
-    line_start + vix_lsp::position::col_to_char(&line_text, character, enc)
+    line_start + crate::lsp_core::position::col_to_char(&line_text, character, enc)
 }
 
 /// The underline color for a diagnostic severity.
-fn severity_color(sev: vix_lsp::Severity) -> ratatui::style::Color {
+fn severity_color(sev: crate::lsp_core::Severity) -> ratatui::style::Color {
     use ratatui::style::Color;
     match sev {
-        vix_lsp::Severity::Error => Color::Red,
-        vix_lsp::Severity::Warning => Color::Yellow,
-        vix_lsp::Severity::Information => Color::Cyan,
-        vix_lsp::Severity::Hint => Color::Blue,
+        crate::lsp_core::Severity::Error => Color::Red,
+        crate::lsp_core::Severity::Warning => Color::Yellow,
+        crate::lsp_core::Severity::Information => Color::Cyan,
+        crate::lsp_core::Severity::Hint => Color::Blue,
     }
 }
 
@@ -8489,7 +8489,7 @@ fn severity_color(sev: vix_lsp::Severity) -> ratatui::style::Color {
 /// row's left edge): the glyph, the entity name, or the code point. The column
 /// bands track the row format rendered by `ui::draw_html_panel`
 /// (`"  {glyph:2}  {name:26}  {code}"`).
-fn html_cell_at(e: &vix_html_character_picker::Entity, rel_col: usize) -> String {
+fn html_cell_at(e: &crate::html_character_picker::Entity, rel_col: usize) -> String {
     if rel_col < 6 {
         e.glyph.to_string()
     } else if rel_col < 34 {
@@ -8512,16 +8512,16 @@ fn decode_image(path: &Path) -> Result<image::DynamicImage, String> {
 
 /// First match whose (char) start is at or after `from_char`, as char offsets.
 /// Editor adapter: the first match of `re` at/after char offset `from_char` in
-/// `t`'s buffer. Pure matching lives in [`vix_find_panel::next_match`].
+/// `t`'s buffer. Pure matching lives in [`crate::find_panel::next_match`].
 fn next_match_from(t: &Tab, re: &Regex, from_char: usize) -> Option<(usize, usize)> {
-    vix_find_panel::next_match(&t.text(), re, from_char)
+    crate::find_panel::next_match(&t.text(), re, from_char)
 }
 
 /// Editor adapter: replace the single match at char offset `current.0` in `t`,
 /// returning the char offset just past the inserted text (where searching should
-/// resume). Pure replacement lives in [`vix_find_panel::replace_one`].
+/// resume). Pure replacement lives in [`crate::find_panel::replace_one`].
 fn do_replace(t: &mut Tab, re: &Regex, regex: bool, template: &str, current: (usize, usize)) -> usize {
-    match vix_find_panel::replace_one(&t.text(), re, regex, template, current.0) {
+    match crate::find_panel::replace_one(&t.text(), re, regex, template, current.0) {
         Some((new, resume)) => {
             t.editor.set_content(&new);
             resume
@@ -8552,11 +8552,11 @@ fn count_files(dir: &Path) -> u64 {
 }
 
 /// Hex color for a diff-gutter line mark (green add, yellow modify, red delete).
-fn gutter_hex(mark: vix_git::LineMark) -> &'static str {
+fn gutter_hex(mark: crate::git::LineMark) -> &'static str {
     match mark {
-        vix_git::LineMark::Added => "#3fb950",
-        vix_git::LineMark::Modified => "#d29922",
-        vix_git::LineMark::Deleted => "#f85149",
+        crate::git::LineMark::Added => "#3fb950",
+        crate::git::LineMark::Modified => "#d29922",
+        crate::git::LineMark::Deleted => "#f85149",
     }
 }
 

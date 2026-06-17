@@ -70,10 +70,63 @@ pub mod settings;
 pub mod theme;
 pub mod ui;
 
-/// The calendar box's month-grid logic lives in its own crate; re-export it as
-/// `vix::calendar` so the app and tests share one path.
-pub use vix_calendar_panel as calendar;
+// Folded-in modules (formerly separate `vix-*` subcrates; vix-editor remains a
+// crate for its Tree-sitter grammar feature gates).
+pub mod ascii_character_picker;
+pub mod base64_tool;
+pub mod bottom_dock;
+pub mod calculator_tool;
+pub mod calendar_panel;
+pub mod checksum_tool;
+pub mod clock_panel;
+pub mod color_converter_tool;
+pub mod contact_panel;
+pub mod convert_from_csv_into_json_tool;
+pub mod convert_from_csv_into_tsv_tool;
+pub mod convert_from_html_into_markdown_tool;
+pub mod convert_from_json_into_csv_tool;
+pub mod convert_from_json_into_toml_tool;
+pub mod convert_from_json_into_tsv_tool;
+pub mod convert_from_json_into_yaml_tool;
+pub mod convert_from_markdown_into_html_tool;
+pub mod convert_from_toml_into_json_tool;
+pub mod convert_from_tsv_into_csv_tool;
+pub mod convert_from_tsv_into_json_tool;
+pub mod convert_from_yaml_into_json_tool;
+pub mod convert_tabular;
+pub mod file_information_panel;
+pub mod find_panel;
+pub mod git;
+pub mod html_character_picker;
+pub mod keyboard_shortcut_panel;
+pub mod keymap_model;
+pub mod left_dock;
+pub mod locale_model;
+pub mod lsp_core;
+pub mod nerd_font_picker;
+pub mod outline_panel;
+pub mod pomodoro_tool;
+pub mod right_dock;
+pub mod spellcheck;
+pub mod status_bar_panel;
+pub mod system_information_panel;
+pub mod text_information_panel;
+pub mod theme_model;
+pub mod time_zone_model;
+pub mod unit_converter_tool;
+pub mod url_tool;
+pub mod uuid_tool;
+pub mod vcard_panel;
+pub mod vcard_parser;
+pub mod welcome_panel;
+pub mod workspace_dashboard_panel;
+pub mod x11_color_picker;
+pub mod zid_tool;
 
-/// The clock box's date/time strings live in their own crate; re-export them as
-/// `vix::clock` so the app and tests share one path.
-pub use vix_clock_panel as clock;
+/// The calendar box's month-grid logic; re-exported as `vix::calendar` so the
+/// app and tests share one path.
+pub use crate::calendar_panel as calendar;
+
+/// The clock box's date/time strings; re-exported as `vix::clock` so the app and
+/// tests share one path.
+pub use crate::clock_panel as clock;

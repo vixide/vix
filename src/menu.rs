@@ -197,7 +197,7 @@ const VIEW_EDITOR: &[Item] = &[
 
 /// Keyboard navigation styles, grouped under View → Keymap. The labels are the
 /// proper-noun keymap names (not translated); the actions carry the keymap id
-/// after `view.keymap:`. Kept in sync with `vix_keymap_model::KEYMAPS` (a unit
+/// after `view.keymap:`. Kept in sync with `crate::keymap_model::KEYMAPS` (a unit
 /// test guards the ids).
 const VIEW_KEYMAP: &[Item] = &[
     Item::leaf("Apple", "view.keymap:apple", ""),
@@ -432,7 +432,7 @@ fn theme_submenu() -> &'static [Item] {
 /// The View → Locale submenu: one item per bundled locale (endonym label),
 /// dispatching `view.locale:<code>`.
 fn locale_submenu() -> &'static [Item] {
-    let items: Vec<Item> = vix_locale_model::LOCALES
+    let items: Vec<Item> = crate::locale_model::LOCALES
         .iter()
         .map(|l| {
             let action: &'static str = Box::leak(format!("view.locale:{}", l.code).into_boxed_str());
@@ -445,8 +445,8 @@ fn locale_submenu() -> &'static [Item] {
 /// The View → Time Zone submenu: one item per IANA zone, ordered by UTC offset
 /// then name, labeled `UTC±HH:MM  Name` and dispatching `view.time_zone:<name>`.
 fn time_zone_submenu() -> &'static [Item] {
-    let mut zones: Vec<&'static vix_time_zone_model::Zone> =
-        vix_time_zone_model::ZONES.iter().collect();
+    let mut zones: Vec<&'static crate::time_zone_model::Zone> =
+        crate::time_zone_model::ZONES.iter().collect();
     zones.sort_by(|a, b| {
         a.std_offset_minutes
             .cmp(&b.std_offset_minutes)
@@ -851,7 +851,7 @@ mod tests {
             .iter()
             .map(|it| it.action.strip_prefix("view.keymap:").expect("keymap action prefix"))
             .collect();
-        let model: Vec<&str> = vix_keymap_model::KEYMAPS.iter().map(|k| k.id).collect();
+        let model: Vec<&str> = crate::keymap_model::KEYMAPS.iter().map(|k| k.id).collect();
         assert_eq!(ids, model);
     }
 
