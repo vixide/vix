@@ -1,6 +1,6 @@
-# Convert YAML to JSON tool
+# Convert from YAML into JSON tool
 
-Subcrate vix-convert-yaml-to-json-tool.
+Subcrate vix-convert-from-yaml-into-json-tool.
 
 - menu "Tools"
   - submenu "Convert"

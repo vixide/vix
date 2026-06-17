@@ -3554,18 +3554,18 @@ dependencies = [
  "vix-clock-panel",
  "vix-color-converter-tool",
  "vix-contact-panel",
- "vix-convert-csv-to-json-tool",
- "vix-convert-csv-to-tsv-tool",
- "vix-convert-html-to-markdown-tool",
- "vix-convert-json-to-csv-tool",
- "vix-convert-json-to-toml-tool",
- "vix-convert-json-to-tsv-tool",
- "vix-convert-json-to-yaml-tool",
- "vix-convert-markdown-to-html-tool",
- "vix-convert-toml-to-json-tool",
- "vix-convert-tsv-to-csv-tool",
- "vix-convert-tsv-to-json-tool",
- "vix-convert-yaml-to-json-tool",
+ "vix-convert-from-csv-into-json-tool",
+ "vix-convert-from-csv-into-tsv-tool",
+ "vix-convert-from-html-into-markdown-tool",
+ "vix-convert-from-json-into-csv-tool",
+ "vix-convert-from-json-into-toml-tool",
+ "vix-convert-from-json-into-tsv-tool",
+ "vix-convert-from-json-into-yaml-tool",
+ "vix-convert-from-markdown-into-html-tool",
+ "vix-convert-from-toml-into-json-tool",
+ "vix-convert-from-tsv-into-csv-tool",
+ "vix-convert-from-tsv-into-json-tool",
+ "vix-convert-from-yaml-into-json-tool",
  "vix-editor",
  "vix-file-information-panel",
  "vix-find-panel",
@@ -3649,35 +3649,35 @@ name = "vix-contact-panel"
 version = "0.1.0"
 
 [[package]]
-name = "vix-convert-csv-to-json-tool"
+name = "vix-convert-from-csv-into-json-tool"
 version = "0.1.0"
 dependencies = [
  "vix-convert-tabular",
 ]
 
 [[package]]
-name = "vix-convert-csv-to-tsv-tool"
+name = "vix-convert-from-csv-into-tsv-tool"
 version = "0.1.0"
 dependencies = [
  "vix-convert-tabular",
 ]
 
 [[package]]
-name = "vix-convert-html-to-markdown-tool"
+name = "vix-convert-from-html-into-markdown-tool"
 version = "0.1.0"
 dependencies = [
  "htmd",
 ]
 
 [[package]]
-name = "vix-convert-json-to-csv-tool"
+name = "vix-convert-from-json-into-csv-tool"
 version = "0.1.0"
 dependencies = [
  "vix-convert-tabular",
 ]
 
 [[package]]
-name = "vix-convert-json-to-toml-tool"
+name = "vix-convert-from-json-into-toml-tool"
 version = "0.1.0"
 dependencies = [
  "serde_json",
@@ -3685,14 +3685,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "vix-convert-json-to-tsv-tool"
+name = "vix-convert-from-json-into-tsv-tool"
 version = "0.1.0"
 dependencies = [
  "vix-convert-tabular",
 ]
 
 [[package]]
-name = "vix-convert-json-to-yaml-tool"
+name = "vix-convert-from-json-into-yaml-tool"
 version = "0.1.0"
 dependencies = [
  "serde_json",
@@ -3700,10 +3700,40 @@ dependencies = [
 ]
 
 [[package]]
-name = "vix-convert-markdown-to-html-tool"
+name = "vix-convert-from-markdown-into-html-tool"
 version = "0.1.0"
 dependencies = [
  "pulldown-cmark",
+]
+
+[[package]]
+name = "vix-convert-from-toml-into-json-tool"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "vix-convert-from-tsv-into-csv-tool"
+version = "0.1.0"
+dependencies = [
+ "vix-convert-tabular",
+]
+
+[[package]]
+name = "vix-convert-from-tsv-into-json-tool"
+version = "0.1.0"
+dependencies = [
+ "vix-convert-tabular",
+]
+
+[[package]]
+name = "vix-convert-from-yaml-into-json-tool"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -3711,36 +3741,6 @@ name = "vix-convert-tabular"
 version = "0.1.0"
 dependencies = [
  "serde_json",
-]
-
-[[package]]
-name = "vix-convert-toml-to-json-tool"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "toml 0.8.23",
-]
-
-[[package]]
-name = "vix-convert-tsv-to-csv-tool"
-version = "0.1.0"
-dependencies = [
- "vix-convert-tabular",
-]
-
-[[package]]
-name = "vix-convert-tsv-to-json-tool"
-version = "0.1.0"
-dependencies = [
- "vix-convert-tabular",
-]
-
-[[package]]
-name = "vix-convert-yaml-to-json-tool"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "serde_yaml",
 ]
 
 [[package]]

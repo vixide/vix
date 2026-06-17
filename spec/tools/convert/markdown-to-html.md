@@ -1,6 +1,6 @@
-# Convert Markdown to HTML
+# Convert from Markdown into HTML
 
-Subcrate vix-convert-markdown-to-html-tool
+Subcrate vix-convert-from-markdown-into-html-tool
 
 - menu "Tools"
   - submenu "Convert"

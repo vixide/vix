@@ -1902,40 +1902,40 @@ impl App {
                 self.transform_selection_or_buffer_try(vix_url_tool::decode);
             }
             "tools.convert.csv.json" => {
-                self.transform_selection_or_buffer_try(vix_convert_csv_to_json_tool::convert);
+                self.transform_selection_or_buffer_try(vix_convert_from_csv_into_json_tool::convert);
             }
             "tools.convert.csv.tsv" => {
-                self.transform_selection_or_buffer_try(vix_convert_csv_to_tsv_tool::convert);
+                self.transform_selection_or_buffer_try(vix_convert_from_csv_into_tsv_tool::convert);
             }
             "tools.convert.tsv.csv" => {
-                self.transform_selection_or_buffer_try(vix_convert_tsv_to_csv_tool::convert);
+                self.transform_selection_or_buffer_try(vix_convert_from_tsv_into_csv_tool::convert);
             }
             "tools.convert.tsv.json" => {
-                self.transform_selection_or_buffer_try(vix_convert_tsv_to_json_tool::convert);
+                self.transform_selection_or_buffer_try(vix_convert_from_tsv_into_json_tool::convert);
             }
             "tools.convert.json.csv" => {
-                self.transform_selection_or_buffer_try(vix_convert_json_to_csv_tool::convert);
+                self.transform_selection_or_buffer_try(vix_convert_from_json_into_csv_tool::convert);
             }
             "tools.convert.json.tsv" => {
-                self.transform_selection_or_buffer_try(vix_convert_json_to_tsv_tool::convert);
+                self.transform_selection_or_buffer_try(vix_convert_from_json_into_tsv_tool::convert);
             }
             "tools.convert.json.yaml" => {
-                self.transform_selection_or_buffer_try(vix_convert_json_to_yaml_tool::convert);
+                self.transform_selection_or_buffer_try(vix_convert_from_json_into_yaml_tool::convert);
             }
             "tools.convert.yaml.json" => {
-                self.transform_selection_or_buffer_try(vix_convert_yaml_to_json_tool::convert);
+                self.transform_selection_or_buffer_try(vix_convert_from_yaml_into_json_tool::convert);
             }
             "tools.convert.json.toml" => {
-                self.transform_selection_or_buffer_try(vix_convert_json_to_toml_tool::convert);
+                self.transform_selection_or_buffer_try(vix_convert_from_json_into_toml_tool::convert);
             }
             "tools.convert.toml.json" => {
-                self.transform_selection_or_buffer_try(vix_convert_toml_to_json_tool::convert);
+                self.transform_selection_or_buffer_try(vix_convert_from_toml_into_json_tool::convert);
             }
             "tools.convert.markdown.html" => {
-                self.transform_selection_or_buffer_try(vix_convert_markdown_to_html_tool::convert);
+                self.transform_selection_or_buffer_try(vix_convert_from_markdown_into_html_tool::convert);
             }
             "tools.convert.html.markdown" => {
-                self.transform_selection_or_buffer_try(vix_convert_html_to_markdown_tool::convert);
+                self.transform_selection_or_buffer_try(vix_convert_from_html_into_markdown_tool::convert);
             }
             "tools.convert.unit" => self.open_unit_converter(),
             "tools.run_command" => {

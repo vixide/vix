@@ -1,6 +1,6 @@
-# Convert TOML to JSON tool
+# Convert from TOML into JSON tool
 
-Subcrate vix-convert-toml-to-json-tool.
+Subcrate vix-convert-from-toml-into-json-tool.
 
 - menu "Tools"
   - submenu "Convert"
