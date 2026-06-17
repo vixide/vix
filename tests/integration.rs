@@ -171,6 +171,16 @@ fn convert_base64_round_trips_via_actions() {
 }
 
 #[test]
+fn format_json_pretty_and_minify() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "{\"a\":1,\"b\":2}");
+    app.run_action("tools.format.json_pretty");
+    assert!(app.editor.active_tab().unwrap().text().contains("\n  \"a\": 1"));
+    app.run_action("tools.format.json_minify");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "{\"a\":1,\"b\":2}");
+}
+
+#[test]
 fn convert_markdown_to_html_action_transforms_buffer() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "# Title");

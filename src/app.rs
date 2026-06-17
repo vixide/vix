@@ -1973,6 +1973,18 @@ impl App {
                 self.transform_selection_or_buffer_try(crate::convert_from_html_into_markdown_tool::convert);
             }
             "tools.convert.unit" => self.open_unit_converter(),
+            "tools.format.json_pretty" => {
+                self.transform_selection_or_buffer_try(crate::format_tool::json_pretty);
+            }
+            "tools.format.json_minify" => {
+                self.transform_selection_or_buffer_try(crate::format_tool::json_minify);
+            }
+            "tools.format.yaml" => {
+                self.transform_selection_or_buffer_try(crate::format_tool::yaml_format);
+            }
+            "tools.format.toml" => {
+                self.transform_selection_or_buffer_try(crate::format_tool::toml_format);
+            }
             "tools.run_command" => {
                 self.prompt =
                     Some(Prompt::new(PromptKind::RunCommand, t!("prompt.run_command").to_string()));

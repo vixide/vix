@@ -287,6 +287,14 @@ const TOOLS_CONVERT_YAML: &[Item] = &[Item::leaf("JSON", "tools.convert.yaml.jso
 const TOOLS_CONVERT_HTML: &[Item] = &[Item::leaf("Markdown", "tools.convert.html.markdown", "")];
 const TOOLS_CONVERT_MARKDOWN: &[Item] = &[Item::leaf("HTML", "tools.convert.markdown.html", "")];
 
+/// In-place reformatters, grouped under Tools → Format.
+const TOOLS_FORMAT: &[Item] = &[
+    Item::leaf("menu.item.tools.format.json_pretty", "tools.format.json_pretty", ""),
+    Item::leaf("menu.item.tools.format.json_minify", "tools.format.json_minify", ""),
+    Item::leaf("YAML", "tools.format.yaml", ""),
+    Item::leaf("TOML", "tools.format.toml", ""),
+];
+
 /// Converters, grouped under Tools → Convert.
 const TOOLS_CONVERT: &[Item] = &[
     Item::sub("Base64", TOOLS_CONVERT_BASE64),
@@ -325,6 +333,7 @@ const TOOLS: &[Item] = &[
     Item::sub("menu.item.tools.generate", TOOLS_GENERATE),
     Item::sub("menu.item.tools.checksum", TOOLS_CHECKSUM),
     Item::sub("menu.item.tools.convert", TOOLS_CONVERT),
+    Item::sub("menu.item.tools.format", TOOLS_FORMAT),
     Item::leaf("menu.item.tools.color_converter", "tools.color_converter", ""),
     Item::leaf("menu.item.tools.convert.unit", "tools.convert.unit", ""),
     SEP,
