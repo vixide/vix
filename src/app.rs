@@ -1925,6 +1925,12 @@ impl App {
             "tools.convert.yaml.json" => {
                 self.transform_selection_or_buffer_try(vix_convert_yaml_to_json_tool::convert);
             }
+            "tools.convert.json.toml" => {
+                self.transform_selection_or_buffer_try(vix_convert_json_to_toml_tool::convert);
+            }
+            "tools.convert.toml.json" => {
+                self.transform_selection_or_buffer_try(vix_convert_toml_to_json_tool::convert);
+            }
             "tools.convert.markdown.html" => {
                 self.transform_selection_or_buffer_try(vix_convert_markdown_to_html_tool::convert);
             }

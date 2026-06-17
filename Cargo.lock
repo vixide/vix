@@ -3558,9 +3558,11 @@ dependencies = [
  "vix-convert-csv-to-tsv-tool",
  "vix-convert-html-to-markdown-tool",
  "vix-convert-json-to-csv-tool",
+ "vix-convert-json-to-toml-tool",
  "vix-convert-json-to-tsv-tool",
  "vix-convert-json-to-yaml-tool",
  "vix-convert-markdown-to-html-tool",
+ "vix-convert-toml-to-json-tool",
  "vix-convert-tsv-to-csv-tool",
  "vix-convert-tsv-to-json-tool",
  "vix-convert-yaml-to-json-tool",
@@ -3675,6 +3677,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-convert-json-to-toml-tool"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "toml 0.8.23",
+]
+
+[[package]]
 name = "vix-convert-json-to-tsv-tool"
 version = "0.1.0"
 dependencies = [
@@ -3701,6 +3711,14 @@ name = "vix-convert-tabular"
 version = "0.1.0"
 dependencies = [
  "serde_json",
+]
+
+[[package]]
+name = "vix-convert-toml-to-json-tool"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "toml 0.8.23",
 ]
 
 [[package]]

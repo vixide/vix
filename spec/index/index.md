@@ -34,6 +34,8 @@ widget pins that.
 | evalexpr      | Evaluate expression (solely for calculator tool)      | https://crates.io/crates/evalexpr      | librust-evalexpr-dev                                                                           | ?                       | ?                       |
 | rand          | Randomness functionality, number generators           | https://crates.io/crates/rand          | librust-rand-dev                                                                               | ?                       | ?                       |
 | markdown      | Markdown parser & converter                           | https://crates.io/crate/markdown       | librust-markdown-dev                                                                           |
+| csv           | Comma Separated Values                                | https://crates.io/crate/csv            | librust-csv-dev                                                                                |
+| toml          | Tom's Obvious Minimal Language                        | https://crates.io/crate/toml           | librust-toml-dev                                                                               |
 
 The center editing area uses **`vix-editor`** — Vix's fully-custom code-editor
 widget (Tree-sitter syntax highlighting, undo/redo history, selection, system

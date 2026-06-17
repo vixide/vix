@@ -1,0 +1,18 @@
+# vix-convert-json-to-toml-tool: convert a JSON object into TOML
+# (Tools → Convert → JSON → TOML). Pure logic over serde.
+
+[package]
+name = "vix-convert-json-to-toml-tool"
+version = "0.1.0"
+edition = "2021"
+description = "Convert JSON to TOML for Vix."
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_convert_json_to_toml_tool"
+path = "src/lib.rs"
+
+[dependencies]
+serde_json = "1"
+toml = "0.8"
