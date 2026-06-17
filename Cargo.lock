@@ -3372,6 +3372,7 @@ dependencies = [
  "vix-system-information-panel",
  "vix-theme-model",
  "vix-time-zone-model",
+ "vix-unit-converter-tool",
  "vix-url-tool",
  "vix-uuid-tool",
  "vix-vcard-panel",
@@ -3614,6 +3615,10 @@ dependencies = [
 
 [[package]]
 name = "vix-time-zone-model"
+version = "0.1.0"
+
+[[package]]
+name = "vix-unit-converter-tool"
 version = "0.1.0"
 
 [[package]]

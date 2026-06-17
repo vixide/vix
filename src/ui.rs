@@ -237,6 +237,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.color_converter.is_some() {
         draw_color_converter(app, frame, area);
     }
+    if app.unit_converter.is_some() {
+        draw_unit_converter(app, frame, area);
+    }
     if app.welcome.is_some() {
         draw_welcome(app, frame, area);
     }
@@ -524,6 +527,77 @@ fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim()))),
         rows[5],
+    );
+}
+
+fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) {
+    use vix_unit_converter_tool::{Focus, UNITS};
+    let Some(conv) = app.unit_converter.as_ref() else { return };
+
+    let title = t!("menu.item.tools.convert.unit");
+    let hint = t!("ui.unit_converter_hint");
+    let width = 46u16.min(area.width.saturating_sub(2)).max(28);
+    let height = 8u16.min(area.height); // border + value + from + to + blank + hint + border
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    };
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {title} "));
+    let inner = block.inner(rect);
+    frame.render_widget(Clear, rect);
+    frame.render_widget(block, rect);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // value
+            Constraint::Length(1), // from
+            Constraint::Length(1), // to + output
+            Constraint::Length(1), // blank
+            Constraint::Min(1),    // hint
+        ])
+        .split(inner);
+
+    let field_style = |focused: bool| if focused { theme::selected() } else { theme::base() };
+
+    // Value field.
+    let caret = if conv.focus == Focus::Value { "_" } else { "" };
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled(format!(" {:<8}", t!("ui.unit_value")), theme::dim()),
+            Span::styled(format!("{}{caret}", conv.value), field_style(conv.focus == Focus::Value)),
+        ])),
+        rows[0],
+    );
+    // From selector.
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled(format!(" {:<8}", t!("ui.unit_from")), theme::dim()),
+            Span::styled(format!("‹ {} ›", UNITS[conv.from].label), field_style(conv.focus == Focus::From)),
+        ])),
+        rows[1],
+    );
+    // To selector, with the live output to its right.
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled(format!(" {:<8}", t!("ui.unit_to")), theme::dim()),
+            Span::styled(format!("‹ {} ›", UNITS[conv.to].label), field_style(conv.focus == Focus::To)),
+            Span::styled(format!("   = {}", conv.output_text()), theme::base()),
+        ])),
+        rows[2],
+    );
+    app.layout.unit_converter_rows = [rows[0], rows[1], rows[2]];
+
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim()))),
+        rows[4],
     );
 }
 
