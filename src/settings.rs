@@ -79,6 +79,9 @@ pub struct Settings {
     pub recent_files: Vec<String>,
     /// How many entries to keep in [`recent_files`](Self::recent_files).
     pub recent_files_max: usize,
+    /// Action ids of commands recently run from the command palette, most-recent
+    /// first; surfaced at the top of the `>` command list.
+    pub command_recents: Vec<String>,
     /// Underline misspelled words in comments and strings.
     pub spellcheck: bool,
     /// Extra directory to search for Hunspell dictionaries, on top of the
@@ -153,6 +156,7 @@ impl Default for Settings {
             messages_width: 32,
             recent_files: Vec::new(),
             recent_files_max: MAX_RECENT_FILES,
+            command_recents: Vec::new(),
             spellcheck: false,
             dictionary_path: String::new(),
             lsp_enabled: true,
