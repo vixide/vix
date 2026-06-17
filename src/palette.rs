@@ -229,6 +229,9 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.toggle_calendar", "tools.calendar"),
     ("cmd.run_command", "tools.run_command"),
     ("cmd.cancel_command", "tools.cancel_command"),
+    ("cmd.generate_uuid_v4", "tools.generate.uuid.v4"),
+    ("cmd.generate_uuid_v7", "tools.generate.uuid.v7"),
+    ("cmd.generate_zid", "tools.generate.zid"),
     ("cmd.next_tab", "tab.next"),
     ("cmd.prev_tab", "tab.prev"),
 ];

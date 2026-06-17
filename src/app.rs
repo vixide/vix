@@ -446,6 +446,8 @@ pub struct Layout {
     pub menu_dropdown: Rect,
     /// Open submenu dropdown rectangle (valid while a submenu is open).
     pub submenu_dropdown: Rect,
+    /// Open third-level submenu dropdown rectangle (valid while one is open).
+    pub subsubmenu_dropdown: Rect,
     /// Info-dialog text-field rectangle (valid while a text dialog is open).
     pub dialog_body: Rect,
     /// Tab-strip rectangle.
@@ -1832,6 +1834,15 @@ impl App {
                 self.set_time_zone_by_name(&a["view.time_zone:".len()..]);
             }
             "tools.dashboard" => self.open_dashboard(),
+            "tools.generate.uuid.v1" => self.insert_generated(&vix_uuid_tool::v1()),
+            "tools.generate.uuid.v2" => self.insert_generated(&vix_uuid_tool::v2()),
+            "tools.generate.uuid.v3" => self.insert_generated(&vix_uuid_tool::v3()),
+            "tools.generate.uuid.v4" => self.insert_generated(&vix_uuid_tool::v4()),
+            "tools.generate.uuid.v5" => self.insert_generated(&vix_uuid_tool::v5()),
+            "tools.generate.uuid.v6" => self.insert_generated(&vix_uuid_tool::v6()),
+            "tools.generate.uuid.v7" => self.insert_generated(&vix_uuid_tool::v7()),
+            "tools.generate.uuid.v8" => self.insert_generated(&vix_uuid_tool::v8()),
+            "tools.generate.zid" => self.insert_generated(&vix_zid_tool::generate()),
             "tools.run_command" => {
                 self.prompt =
                     Some(Prompt::new(PromptKind::RunCommand, t!("prompt.run_command").to_string()));
@@ -2181,6 +2192,15 @@ impl App {
             t.editor.set_selection(Some(Selection::new(s, s + new_len)));
             t.dirty = true;
             t.preview = false;
+        }
+    }
+
+    /// Insert generator output (a UUID, ZID, …) at the cursor in the active
+    /// editor, reporting it in the status line. No-op when no buffer is editable.
+    fn insert_generated(&mut self, text: &str) {
+        let area = self.layout.editor;
+        if self.editor.insert_str(text, area) {
+            self.status = t!("status.generated", text = text).to_string();
         }
     }
 
@@ -4465,6 +4485,24 @@ impl App {
             self.menu_click(col);
             return;
         }
+        // The third-level submenu (drawn rightmost) takes top priority.
+        if self.menu.subsubmenu_open() {
+            let sd = self.layout.subsubmenu_dropdown;
+            if rect_contains(sd, col, row) {
+                let top = sd.y + 1;
+                if let Some(items) = self.menu.subsubmenu_items() {
+                    let offset =
+                        crate::ui::dropdown_scroll(self.menu.subsub, sd.height.saturating_sub(2) as usize, items.len());
+                    let idx = offset + row.saturating_sub(top) as usize;
+                    if row >= top && idx < items.len() && !items[idx].is_separator() {
+                        let action = items[idx].action;
+                        self.run_action(action);
+                        self.close_menu();
+                    }
+                }
+                return;
+            }
+        }
         // The open submenu (drawn to the right of its parent) takes priority.
         if self.menu.submenu_open() {
             let sd = self.layout.submenu_dropdown;
@@ -4475,9 +4513,16 @@ impl App {
                         crate::ui::dropdown_scroll(self.menu.sub, sd.height.saturating_sub(2) as usize, items.len());
                     let idx = offset + row.saturating_sub(top) as usize;
                     if row >= top && idx < items.len() && !items[idx].is_separator() {
-                        let action = items[idx].action;
-                        self.run_action(action);
-                        self.close_menu();
+                        if items[idx].has_submenu() {
+                            self.menu.sub = Some(idx);
+                            self.menu.subsub = None;
+                            self.menu.subsub_open = false;
+                            self.menu.right(); // opens the third level (nothing highlighted)
+                        } else {
+                            let action = items[idx].action;
+                            self.run_action(action);
+                            self.close_menu();
+                        }
                     }
                 }
                 return;
@@ -4554,6 +4599,23 @@ impl App {
             self.revert_theme_preview();
             return;
         }
+        // Third-level submenu (drawn rightmost) takes priority while open.
+        if self.menu.subsubmenu_open() {
+            let sd = self.layout.subsubmenu_dropdown;
+            if rect_contains(sd, col, row) {
+                let top = sd.y + 1;
+                if let Some(items) = self.menu.subsubmenu_items() {
+                    let offset =
+                        crate::ui::dropdown_scroll(self.menu.subsub, sd.height.saturating_sub(2) as usize, items.len());
+                    let idx = offset + row.saturating_sub(top) as usize;
+                    if row >= top && idx < items.len() && !items[idx].is_separator() {
+                        self.menu.subsub = Some(idx);
+                    }
+                }
+                self.revert_theme_preview();
+                return;
+            }
+        }
         if self.menu.submenu_open() {
             let sd = self.layout.submenu_dropdown;
             if rect_contains(sd, col, row) {
@@ -4565,6 +4627,11 @@ impl App {
                     let idx = offset + row.saturating_sub(top) as usize;
                     if row >= top && idx < items.len() && !items[idx].is_separator() {
                         self.menu.sub = Some(idx);
+                        self.menu.subsub = None;
+                        self.menu.subsub_open = false;
+                        if items[idx].has_submenu() {
+                            self.menu.right(); // reveal the third level on hover
+                        }
                         self.preview_menu_theme(items[idx].action);
                         previewed = true;
                     }
@@ -4651,7 +4718,10 @@ impl App {
                 }
             }
             KeyCode::Esc => {
-                if self.menu.sub.is_some() {
+                if self.menu.subsub_open {
+                    self.menu.subsub_open = false;
+                    self.menu.subsub = None;
+                } else if self.menu.sub.is_some() {
                     self.menu.sub = None;
                     self.revert_theme_preview();
                 } else {

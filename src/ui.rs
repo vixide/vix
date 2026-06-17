@@ -1042,6 +1042,25 @@ fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
             };
             app.layout.submenu_dropdown = sub_area;
             render_dropdown(frame, sub_area, subitems, app.menu.sub);
+
+            // A third-level submenu is drawn to the right of its parent row.
+            if app.menu.subsubmenu_open() {
+                if let Some(ssitems) = app.menu.subsubmenu_items() {
+                    let ss_w = dropdown_width(ssitems);
+                    let ss_h = ssitems.len() as u16 + 2;
+                    let ss_x = (sub_area.x + sub_area.width).min(fa.width.saturating_sub(ss_w));
+                    let prow = app.menu.sub.unwrap_or(0) as u16;
+                    let ss_y = (sub_area.y + prow).min(fa.height.saturating_sub(ss_h));
+                    let ss_area = Rect {
+                        x: ss_x,
+                        y: ss_y,
+                        width: ss_w.min(fa.width),
+                        height: ss_h.min(fa.height.saturating_sub(ss_y)),
+                    };
+                    app.layout.subsubmenu_dropdown = ss_area;
+                    render_dropdown(frame, ss_area, ssitems, app.menu.subsub);
+                }
+            }
         }
     }
 }
