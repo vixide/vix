@@ -106,7 +106,7 @@ const EDIT: &[Item] = &[
     Item::leaf("menu.item.edit.paste", "edit.paste", "Ctrl V"),
     SEP,
     Item::sub("menu.item.edit.select_menu", EDIT_SELECT),
-    Item::sub("menu.item.edit.move_menu", EDIT_MOVE),
+    Item::sub("menu.item.edit.lines_menu", EDIT_MOVE),
     Item::sub("menu.item.edit.go_menu", EDIT_GO),
     Item::sub("menu.item.edit.find_menu", EDIT_FIND),
     Item::sub("menu.item.edit.case", EDIT_CASE),
@@ -133,9 +133,14 @@ const EDIT_GO: &[Item] = &[
 ];
 
 /// Line-move commands, grouped under Edit → Move.
+/// Line operations, grouped under Edit → Lines.
 const EDIT_MOVE: &[Item] = &[
     Item::leaf("menu.item.edit.move_up", "edit.move_line_up", "Alt ↑"),
     Item::leaf("menu.item.edit.move_down", "edit.move_line_down", "Alt ↓"),
+    SEP,
+    Item::leaf("menu.item.edit.duplicate", "edit.duplicate_line", ""),
+    Item::leaf("menu.item.edit.join", "edit.join_lines", ""),
+    Item::leaf("menu.item.edit.sort", "edit.sort_lines", ""),
 ];
 
 /// Selection commands, grouped under Edit → Select.
