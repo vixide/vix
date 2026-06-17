@@ -2331,9 +2331,13 @@ impl App {
                 return;
             }
         };
+        let output_len = output.chars().count();
         if let Some(tab) = self.editor.active_tab_mut() {
-            let new = match target {
-                None => output,
+            // Place the caret at the end of the replacement so it stays in range
+            // even when the new text is shorter than the old (set_content leaves
+            // the old cursor untouched, which would otherwise point past the end).
+            let (new, caret) = match target {
+                None => (output, output_len),
                 Some((start, end)) => {
                     let chars: Vec<char> = tab.editor.get_content().chars().collect();
                     let n = chars.len();
@@ -2342,11 +2346,12 @@ impl App {
                     let mut out: String = chars[..start].iter().collect();
                     out.push_str(&output);
                     out.extend(&chars[end..]);
-                    out
+                    (out, start + output_len)
                 }
             };
             tab.editor.set_content(&new);
             tab.editor.set_selection(None);
+            tab.editor.set_cursor(caret);
             tab.dirty = true;
             tab.preview = false;
         }
@@ -6096,6 +6101,10 @@ impl App {
         };
         tab.editor.set_content(&new);
         tab.editor.set_selection(None);
+        // Keep the caret in range: set_content leaves the old cursor untouched,
+        // which can point past the end when the replacement is shorter.
+        let caret = tab.editor.get_cursor();
+        tab.editor.set_cursor(caret);
         tab.dirty = true;
     }
 

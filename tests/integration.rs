@@ -211,6 +211,19 @@ fn checksum_sha256_hashes_whole_buffer_when_unselected() {
 }
 
 #[test]
+fn checksum_on_long_buffer_keeps_caret_in_range() {
+    // Regression: a transform that shrinks the buffer (120 chars → 64-char hash)
+    // must move the caret back in range, or the next render panics in char_to_line.
+    use ratatui::{backend::TestBackend, Terminal};
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, &"x".repeat(120));
+    app.run_action("tools.checksum.sha256");
+    assert_eq!(app.editor.active_tab().unwrap().text().len(), 64);
+    let mut term = Terminal::new(TestBackend::new(100, 30)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap(); // must not panic
+}
+
+#[test]
 fn generate_uuid_v4_inserts_a_canonical_uuid() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.generate.uuid.v4");
@@ -4328,3 +4341,8 @@ fn catalog_none() {
     app.run_action("none");
     assert!(app.editor.active_tab().is_some());
 }
+
+
+
+
+
