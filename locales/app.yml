@@ -1965,6 +1965,26 @@ menu.item.tools.generate.uuid:
   en: "UUID"
 menu.item.tools.generate.zid:
   en: "ZID"
+menu.item.tools.checksum:
+  en: "Checksum"
+  es: "Suma de verificación"
+  fr: "Somme de contrôle"
+  de: "Prüfsumme"
+  cy: "Swm gwirio"
+  ga: "Suim sheiceála"
+  gd: "Suim-dhearbhaidh"
+  pl: "Suma kontrolna"
+  pt: "Soma de verificação"
+  ru: "Контрольная сумма"
+  ar: "المجموع الاختباري"
+  hi: "चेकसम"
+  bn: "চেকসাম"
+  zh: "校验和"
+  ja: "チェックサム"
+menu.item.tools.checksum.sha256:
+  en: "SHA-256"
+menu.item.tools.checksum.sha512:
+  en: "SHA-512"
 menu.item.lsp.definition:
   en: "Go to Definition"
   es: "Ir a la definición"

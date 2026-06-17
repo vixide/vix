@@ -230,10 +230,18 @@ const TOOLS_GENERATE: &[Item] = &[
     Item::leaf("menu.item.tools.generate.zid", "tools.generate.zid", ""),
 ];
 
+/// Checksum digests, grouped under Tools → Checksum. Each replaces the selection
+/// (or whole buffer) with its hex digest.
+const TOOLS_CHECKSUM: &[Item] = &[
+    Item::leaf("menu.item.tools.checksum.sha256", "tools.checksum.sha256", ""),
+    Item::leaf("menu.item.tools.checksum.sha512", "tools.checksum.sha512", ""),
+];
+
 const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.palette", "tools.palette", "Ctrl P"),
     Item::sub("menu.item.tools.lsp", TOOLS_LSP),
     Item::sub("menu.item.tools.generate", TOOLS_GENERATE),
+    Item::sub("menu.item.tools.checksum", TOOLS_CHECKSUM),
     SEP,
     Item::leaf("menu.item.tools.file_info", "tools.file_info", ""),
     Item::leaf("menu.item.tools.dashboard", "tools.dashboard", ""),

@@ -92,6 +92,17 @@ fn select_all_then_typing_replaces_buffer() {
 }
 
 #[test]
+fn checksum_sha256_hashes_whole_buffer_when_unselected() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "abc");
+    app.run_action("tools.checksum.sha256");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
+}
+
+#[test]
 fn generate_uuid_v4_inserts_a_canonical_uuid() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.generate.uuid.v4");
