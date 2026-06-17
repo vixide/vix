@@ -5064,9 +5064,7 @@ impl App {
                     let idx = offset + row.saturating_sub(top) as usize;
                     if row >= top && idx < items.len() && !items[idx].is_separator() {
                         if items[idx].has_submenu() {
-                            self.menu.sub = Some(idx);
-                            self.menu.subsub = None;
-                            self.menu.subsub_open = false;
+                            self.menu.highlight_sub(idx);
                             self.menu.right(); // opens the third level (nothing highlighted)
                         } else {
                             let action = items[idx].action;
@@ -5089,9 +5087,7 @@ impl App {
                 let idx = offset + row.saturating_sub(top) as usize;
                 if row >= top && idx < items.len() && !items[idx].is_separator() {
                     if items[idx].has_submenu() {
-                        self.menu.item = Some(idx);
-                        self.menu.sub = None;
-                        self.menu.sub_open = false;
+                        self.menu.highlight_item(idx);
                         self.menu.right(); // opens the submenu (nothing highlighted)
                     } else {
                         let action = items[idx].action;
@@ -5176,9 +5172,7 @@ impl App {
                         crate::ui::dropdown_scroll(self.menu.sub, sd.height.saturating_sub(2) as usize, items.len());
                     let idx = offset + row.saturating_sub(top) as usize;
                     if row >= top && idx < items.len() && !items[idx].is_separator() {
-                        self.menu.sub = Some(idx);
-                        self.menu.subsub = None;
-                        self.menu.subsub_open = false;
+                        self.menu.highlight_sub(idx);
                         if items[idx].has_submenu() {
                             self.menu.right(); // reveal the third level on hover
                         }
@@ -5203,9 +5197,7 @@ impl App {
                     crate::ui::dropdown_scroll(self.menu.item, dd.height.saturating_sub(2) as usize, items.len());
                 let idx = offset + row.saturating_sub(top) as usize;
                 if row >= top && idx < items.len() && !items[idx].is_separator() {
-                    self.menu.item = Some(idx);
-                    self.menu.sub = None;
-                    self.menu.sub_open = false;
+                    self.menu.highlight_item(idx);
                     if items[idx].has_submenu() {
                         self.menu.right(); // reveal the submenu on hover (nothing highlighted)
                     }

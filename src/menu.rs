@@ -586,6 +586,25 @@ impl Menu {
         }
     }
 
+    /// Highlight top-level dropdown item `idx`, collapsing any open submenu and
+    /// sub-submenu. Used when the pointer moves to a different top item, so a
+    /// later [`Self::right`] can open the new item's submenu (a stale
+    /// `subsub_open` would otherwise make `right` a no-op).
+    pub fn highlight_item(&mut self, idx: usize) {
+        self.item = Some(idx);
+        self.sub = None;
+        self.sub_open = false;
+        self.subsub = None;
+        self.subsub_open = false;
+    }
+
+    /// Highlight submenu row `idx`, collapsing any open sub-submenu.
+    pub fn highlight_sub(&mut self, idx: usize) {
+        self.sub = Some(idx);
+        self.subsub = None;
+        self.subsub_open = false;
+    }
+
     /// Whether the highlighted item's submenu is open.
     #[must_use]
     pub fn submenu_open(&self) -> bool {
@@ -870,5 +889,30 @@ mod tests {
         assert!(!m.subsub_open && m.sub_open);
         m.left();
         assert!(!m.sub_open);
+    }
+
+    /// Regression: after descending into a third-level submenu, moving the
+    /// pointer to a *different* top item (via `highlight_item`) must still let
+    /// `right` open that item's submenu — a stale `subsub_open` used to block it.
+    #[test]
+    fn reanchoring_after_three_levels_reopens_submenu() {
+        let (tools, gen) = tools_and_generate();
+        let mut m = Menu::default();
+        m.open_index(tools);
+        m.highlight_item(gen);
+        m.right(); // Generate submenu
+        m.highlight_sub(0); // UUID row
+        m.right(); // third level open
+        assert!(m.subsub_open);
+        // Move to another top item that has a submenu (find one after Generate).
+        let other = menus()[tools]
+            .items
+            .iter()
+            .position(|it| it.has_submenu() && it.label != "menu.item.tools.generate")
+            .expect("another submenu item");
+        m.highlight_item(other);
+        m.right();
+        assert!(m.sub_open, "the new item's submenu must open");
+        assert!(!m.subsub_open, "no stale third level remains");
     }
 }
