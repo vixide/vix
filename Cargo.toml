@@ -33,6 +33,7 @@ members = [
     "vix-bottom-dock",
     "vix-uuid-tool",
     "vix-zid-tool",
+    "vix-checksum-tool",
 ]
 
 [package]
@@ -127,6 +128,8 @@ vix-bottom-dock = { path = "vix-bottom-dock" }
 # Tools → Generate: UUID (all versions) and ZID (secure random hex) generators.
 vix-uuid-tool = { path = "vix-uuid-tool" }
 vix-zid-tool = { path = "vix-zid-tool" }
+# Tools → Checksum: SHA-256 / SHA-512 digests of the selection or buffer.
+vix-checksum-tool = { path = "vix-checksum-tool" }
 # Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
 crossterm = "0.29"
 # Regular expressions for find/replace.

@@ -1843,6 +1843,12 @@ impl App {
             "tools.generate.uuid.v7" => self.insert_generated(&vix_uuid_tool::v7()),
             "tools.generate.uuid.v8" => self.insert_generated(&vix_uuid_tool::v8()),
             "tools.generate.zid" => self.insert_generated(&vix_zid_tool::generate()),
+            "tools.checksum.sha256" => {
+                self.transform_selection_or_buffer(vix_checksum_tool::sha256_hex);
+            }
+            "tools.checksum.sha512" => {
+                self.transform_selection_or_buffer(vix_checksum_tool::sha512_hex);
+            }
             "tools.run_command" => {
                 self.prompt =
                     Some(Prompt::new(PromptKind::RunCommand, t!("prompt.run_command").to_string()));
@@ -2192,6 +2198,51 @@ impl App {
             t.editor.set_selection(Some(Selection::new(s, s + new_len)));
             t.dirty = true;
             t.preview = false;
+        }
+    }
+
+    /// Apply a text transform to the selection, or to the whole buffer when
+    /// nothing is selected, replacing it with the result. Used by the Convert and
+    /// Checksum tools. No-op (with a status) on an image tab or empty input.
+    fn transform_selection_or_buffer(&mut self, f: impl Fn(&str) -> String) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        if tab.is_image() {
+            self.status = t!("status.no_selection").into();
+            return;
+        }
+        let target = match tab.editor.get_selection() {
+            Some(sel) if !sel.is_empty() => Some((sel.start, sel.end)),
+            _ => None,
+        };
+        let input = match target {
+            Some((s, e)) => tab.editor.get_content_slice(s, e),
+            None => tab.editor.get_content(),
+        };
+        if input.is_empty() {
+            self.status = t!("status.no_selection").into();
+            return;
+        }
+        let output = f(&input);
+        if let Some(tab) = self.editor.active_tab_mut() {
+            let new = match target {
+                None => output,
+                Some((start, end)) => {
+                    let chars: Vec<char> = tab.editor.get_content().chars().collect();
+                    let n = chars.len();
+                    let start = start.min(n);
+                    let end = end.min(n).max(start);
+                    let mut out: String = chars[..start].iter().collect();
+                    out.push_str(&output);
+                    out.extend(&chars[end..]);
+                    out
+                }
+            };
+            tab.editor.set_content(&new);
+            tab.editor.set_selection(None);
+            tab.dirty = true;
+            tab.preview = false;
         }
     }
 

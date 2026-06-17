@@ -3341,6 +3341,7 @@ dependencies = [
  "vix-ascii-character-picker",
  "vix-bottom-dock",
  "vix-calendar-panel",
+ "vix-checksum-tool",
  "vix-clock-panel",
  "vix-contact-panel",
  "vix-editor",
@@ -3383,6 +3384,13 @@ name = "vix-calendar-panel"
 version = "0.1.0"
 dependencies = [
  "jiff",
+]
+
+[[package]]
+name = "vix-checksum-tool"
+version = "0.1.0"
+dependencies = [
+ "sha2",
 ]
 
 [[package]]
