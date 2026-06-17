@@ -92,6 +92,34 @@ fn select_all_then_typing_replaces_buffer() {
 }
 
 #[test]
+fn convert_base64_round_trips_via_actions() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "hello");
+    app.run_action("tools.convert.base64.encode");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "aGVsbG8=");
+    app.run_action("tools.convert.base64.decode");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "hello");
+}
+
+#[test]
+fn convert_csv_to_json_action_transforms_buffer() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "a,b\n1,2\n");
+    app.run_action("tools.convert.csv.json");
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains("\"a\": \"1\""), "got: {text}");
+}
+
+#[test]
+fn convert_failure_leaves_buffer_unchanged() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "not json");
+    app.run_action("tools.convert.json.csv");
+    // Invalid JSON: the buffer is left intact.
+    assert_eq!(app.editor.active_tab().unwrap().text(), "not json");
+}
+
+#[test]
 fn checksum_sha256_hashes_whole_buffer_when_unselected() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "abc");

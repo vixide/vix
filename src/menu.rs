@@ -237,11 +237,47 @@ const TOOLS_CHECKSUM: &[Item] = &[
     Item::leaf("menu.item.tools.checksum.sha512", "tools.checksum.sha512", ""),
 ];
 
+// Tools → Convert: each entry converts the selection (or whole buffer). Format
+// names (CSV/TSV/JSON/…) are shown literally; only Encode/Decode are translated.
+const TOOLS_CONVERT_BASE64: &[Item] = &[
+    Item::leaf("menu.item.tools.convert.encode", "tools.convert.base64.encode", ""),
+    Item::leaf("menu.item.tools.convert.decode", "tools.convert.base64.decode", ""),
+];
+const TOOLS_CONVERT_URL: &[Item] = &[
+    Item::leaf("menu.item.tools.convert.encode", "tools.convert.url.encode", ""),
+    Item::leaf("menu.item.tools.convert.decode", "tools.convert.url.decode", ""),
+];
+const TOOLS_CONVERT_CSV: &[Item] = &[
+    Item::leaf("JSON", "tools.convert.csv.json", ""),
+    Item::leaf("TSV", "tools.convert.csv.tsv", ""),
+];
+const TOOLS_CONVERT_TSV: &[Item] = &[
+    Item::leaf("CSV", "tools.convert.tsv.csv", ""),
+    Item::leaf("JSON", "tools.convert.tsv.json", ""),
+];
+const TOOLS_CONVERT_JSON: &[Item] = &[
+    Item::leaf("CSV", "tools.convert.json.csv", ""),
+    Item::leaf("TSV", "tools.convert.json.tsv", ""),
+    Item::leaf("YAML", "tools.convert.json.yaml", ""),
+];
+const TOOLS_CONVERT_YAML: &[Item] = &[Item::leaf("JSON", "tools.convert.yaml.json", "")];
+
+/// Converters, grouped under Tools → Convert.
+const TOOLS_CONVERT: &[Item] = &[
+    Item::sub("Base64", TOOLS_CONVERT_BASE64),
+    Item::sub("URL", TOOLS_CONVERT_URL),
+    Item::sub("CSV", TOOLS_CONVERT_CSV),
+    Item::sub("TSV", TOOLS_CONVERT_TSV),
+    Item::sub("JSON", TOOLS_CONVERT_JSON),
+    Item::sub("YAML", TOOLS_CONVERT_YAML),
+];
+
 const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.palette", "tools.palette", "Ctrl P"),
     Item::sub("menu.item.tools.lsp", TOOLS_LSP),
     Item::sub("menu.item.tools.generate", TOOLS_GENERATE),
     Item::sub("menu.item.tools.checksum", TOOLS_CHECKSUM),
+    Item::sub("menu.item.tools.convert", TOOLS_CONVERT),
     SEP,
     Item::leaf("menu.item.tools.file_info", "tools.file_info", ""),
     Item::leaf("menu.item.tools.dashboard", "tools.dashboard", ""),

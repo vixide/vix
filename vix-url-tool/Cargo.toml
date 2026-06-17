@@ -1,0 +1,17 @@
+# vix-url-tool: percent-encode text for use in URLs, or decode percent-encoded
+# text back (Tools → Convert → URL → Encode / Decode). Pure logic.
+
+[package]
+name = "vix-url-tool"
+version = "0.1.0"
+edition = "2021"
+description = "URL percent-encode/decode for Vix."
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_url_tool"
+path = "src/lib.rs"
+
+[dependencies]
+percent-encoding = "2"

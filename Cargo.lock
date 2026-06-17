@@ -3339,11 +3339,20 @@ dependencies = [
  "serde",
  "serde_json",
  "vix-ascii-character-picker",
+ "vix-base64-tool",
  "vix-bottom-dock",
  "vix-calendar-panel",
  "vix-checksum-tool",
  "vix-clock-panel",
  "vix-contact-panel",
+ "vix-convert-csv-to-json-tool",
+ "vix-convert-csv-to-tsv-tool",
+ "vix-convert-json-to-csv-tool",
+ "vix-convert-json-to-tsv-tool",
+ "vix-convert-json-to-yaml-tool",
+ "vix-convert-tsv-to-csv-tool",
+ "vix-convert-tsv-to-json-tool",
+ "vix-convert-yaml-to-json-tool",
  "vix-editor",
  "vix-file-information-panel",
  "vix-find-panel",
@@ -3362,6 +3371,7 @@ dependencies = [
  "vix-system-information-panel",
  "vix-theme-model",
  "vix-time-zone-model",
+ "vix-url-tool",
  "vix-uuid-tool",
  "vix-vcard-panel",
  "vix-vcard-parser",
@@ -3374,6 +3384,13 @@ dependencies = [
 [[package]]
 name = "vix-ascii-character-picker"
 version = "0.1.0"
+
+[[package]]
+name = "vix-base64-tool"
+version = "0.1.0"
+dependencies = [
+ "base64",
+]
 
 [[package]]
 name = "vix-bottom-dock"
@@ -3404,6 +3421,71 @@ dependencies = [
 [[package]]
 name = "vix-contact-panel"
 version = "0.1.0"
+
+[[package]]
+name = "vix-convert-csv-to-json-tool"
+version = "0.1.0"
+dependencies = [
+ "vix-convert-tabular",
+]
+
+[[package]]
+name = "vix-convert-csv-to-tsv-tool"
+version = "0.1.0"
+dependencies = [
+ "vix-convert-tabular",
+]
+
+[[package]]
+name = "vix-convert-json-to-csv-tool"
+version = "0.1.0"
+dependencies = [
+ "vix-convert-tabular",
+]
+
+[[package]]
+name = "vix-convert-json-to-tsv-tool"
+version = "0.1.0"
+dependencies = [
+ "vix-convert-tabular",
+]
+
+[[package]]
+name = "vix-convert-json-to-yaml-tool"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "serde_yaml",
+]
+
+[[package]]
+name = "vix-convert-tabular"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "vix-convert-tsv-to-csv-tool"
+version = "0.1.0"
+dependencies = [
+ "vix-convert-tabular",
+]
+
+[[package]]
+name = "vix-convert-tsv-to-json-tool"
+version = "0.1.0"
+dependencies = [
+ "vix-convert-tabular",
+]
+
+[[package]]
+name = "vix-convert-yaml-to-json-tool"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "serde_yaml",
+]
 
 [[package]]
 name = "vix-editor"
@@ -3528,6 +3610,13 @@ dependencies = [
 [[package]]
 name = "vix-time-zone-model"
 version = "0.1.0"
+
+[[package]]
+name = "vix-url-tool"
+version = "0.1.0"
+dependencies = [
+ "percent-encoding",
+]
 
 [[package]]
 name = "vix-uuid-tool"
