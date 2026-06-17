@@ -261,6 +261,8 @@ const TOOLS_CONVERT_JSON: &[Item] = &[
     Item::leaf("YAML", "tools.convert.json.yaml", ""),
 ];
 const TOOLS_CONVERT_YAML: &[Item] = &[Item::leaf("JSON", "tools.convert.yaml.json", "")];
+const TOOLS_CONVERT_HTML: &[Item] = &[Item::leaf("Markdown", "tools.convert.html.markdown", "")];
+const TOOLS_CONVERT_MARKDOWN: &[Item] = &[Item::leaf("HTML", "tools.convert.markdown.html", "")];
 
 /// Converters, grouped under Tools → Convert.
 const TOOLS_CONVERT: &[Item] = &[
@@ -270,6 +272,8 @@ const TOOLS_CONVERT: &[Item] = &[
     Item::sub("TSV", TOOLS_CONVERT_TSV),
     Item::sub("JSON", TOOLS_CONVERT_JSON),
     Item::sub("YAML", TOOLS_CONVERT_YAML),
+    Item::sub("HTML", TOOLS_CONVERT_HTML),
+    Item::sub("Markdown", TOOLS_CONVERT_MARKDOWN),
     SEP,
     Item::leaf("menu.item.tools.convert.unit", "tools.convert.unit", ""),
 ];

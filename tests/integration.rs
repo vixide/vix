@@ -165,6 +165,14 @@ fn convert_base64_round_trips_via_actions() {
 }
 
 #[test]
+fn convert_markdown_to_html_action_transforms_buffer() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "# Title");
+    app.run_action("tools.convert.markdown.html");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "<h1>Title</h1>\n");
+}
+
+#[test]
 fn convert_csv_to_json_action_transforms_buffer() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "a,b\n1,2\n");

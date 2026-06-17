@@ -1925,6 +1925,12 @@ impl App {
             "tools.convert.yaml.json" => {
                 self.transform_selection_or_buffer_try(vix_convert_yaml_to_json_tool::convert);
             }
+            "tools.convert.markdown.html" => {
+                self.transform_selection_or_buffer_try(vix_convert_markdown_to_html_tool::convert);
+            }
+            "tools.convert.html.markdown" => {
+                self.transform_selection_or_buffer_try(vix_convert_html_to_markdown_tool::convert);
+            }
             "tools.convert.unit" => self.open_unit_converter(),
             "tools.run_command" => {
                 self.prompt =
