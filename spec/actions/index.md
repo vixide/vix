@@ -96,6 +96,8 @@ Every action has a smoke test in `tests/integration.rs`
 | `delete-line` | `delete_line` | `DeleteLine` |
 | `move-lines-up` | `move_lines_up` | `MoveLinesUp` |
 | `move-lines-down` | `move_lines_down` | `MoveLinesDown` |
+| `join-lines` | `join_lines` | `JoinLines` |
+| `sort-lines` | `sort_lines` | `SortLines` |
 | `indent-selection` | `indent_selection` | `IndentSelection` |
 | `outdent-selection` | `outdent_selection` | `OutdentSelection` |
 | `autocomplete` | `autocomplete` | `Autocomplete` |

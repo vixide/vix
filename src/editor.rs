@@ -842,6 +842,32 @@ impl Editor {
         }
     }
 
+    /// Join the active buffer's current line with the next (or all selected
+    /// lines into one).
+    pub fn join_lines(&mut self) {
+        if let Some(t) = self.active_tab_mut() {
+            if t.is_image() {
+                return;
+            }
+            t.editor.join_lines();
+            t.dirty = true;
+            t.preview = false;
+        }
+    }
+
+    /// Sort the active buffer's selected lines ascending, or the whole buffer
+    /// when nothing is selected.
+    pub fn sort_lines(&mut self) {
+        if let Some(t) = self.active_tab_mut() {
+            if t.is_image() {
+                return;
+            }
+            t.editor.sort_lines();
+            t.dirty = true;
+            t.preview = false;
+        }
+    }
+
     /// Move the active buffer's cursor line up or down by one row, scrolling it
     /// into `area`.
     pub fn move_line(&mut self, down: bool, area: Rect) {

@@ -284,6 +284,23 @@ fn duplicate_line_copies_the_current_line() {
 }
 
 #[test]
+fn join_lines_merges_current_line_with_next() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "foo\nbar\nbaz");
+    app.run_action("edit.go_first"); // cursor to the first line
+    app.run_action("edit.join_lines");
+    assert_eq!(app.editor.active_tab().unwrap().lines(), vec!["foo bar", "baz"]);
+}
+
+#[test]
+fn sort_lines_orders_whole_buffer() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "banana\napple\ncherry");
+    app.run_action("edit.sort_lines");
+    assert_eq!(app.editor.active_tab().unwrap().lines(), vec!["apple", "banana", "cherry"]);
+}
+
+#[test]
 fn ctrl_d_adds_a_caret_and_edits_all_occurrences() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "foo foo foo");
@@ -3827,6 +3844,22 @@ fn catalog_move_lines_down() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "alpha beta gamma\ndelta epsilon\n");
     app.run_action("move_lines_down");
+    assert!(app.editor.active_tab().is_some());
+}
+
+#[test]
+fn catalog_join_lines() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "alpha beta gamma\ndelta epsilon\n");
+    app.run_action("join_lines");
+    assert!(app.editor.active_tab().is_some());
+}
+
+#[test]
+fn catalog_sort_lines() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "alpha beta gamma\ndelta epsilon\n");
+    app.run_action("sort_lines");
     assert!(app.editor.active_tab().is_some());
 }
 

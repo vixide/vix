@@ -1768,6 +1768,8 @@ impl App {
             "edit.case_pascal" => self.change_case(crate::case::pascal),
             "edit.select_all" => self.editor.select_all(),
             "edit.duplicate_line" => self.editor.duplicate_line(),
+            "edit.join_lines" => self.editor.join_lines(),
+            "edit.sort_lines" => self.editor.sort_lines(),
             "edit.move_line_up" => {
                 let area = self.editor_view();
                 self.editor.move_line(false, area);
@@ -2160,6 +2162,8 @@ impl App {
             "outdent_line" | "outdent_selection" => edm!(outdent_line),
             "move_lines_up" => self.run_action("edit.move_line_up"),
             "move_lines_down" => self.run_action("edit.move_line_down"),
+            "join_lines" => self.run_action("edit.join_lines"),
+            "sort_lines" => self.run_action("edit.sort_lines"),
             // multiple cursors
             "spawn_multi_cursor" | "spawn_multi_cursor_select" | "skip_multi_cursor"
             | "skip_multi_cursor_back" => edm!(add_next_occurrence),
