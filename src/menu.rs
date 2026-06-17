@@ -94,6 +94,9 @@ const EDIT_FIND: &[Item] = &[
     Item::leaf("menu.item.edit.find_prev", "edit.find_prev", "Ctrl Shift G"),
     Item::leaf("menu.item.edit.find_selection", "search.next_selection", "Alt N"),
     Item::leaf("menu.item.edit.toggle_highlight", "toggle_highlight_search", ""),
+    SEP,
+    Item::leaf("menu.item.edit.find_in_files", "search.workspace", "Ctrl Shift F"),
+    Item::leaf("menu.item.edit.replace_in_files", "search.workspace_replace", ""),
     Item::leaf("menu.item.edit.search_workspace_dock", "search.workspace_dock", ""),
 ];
 
