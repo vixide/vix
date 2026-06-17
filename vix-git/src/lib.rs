@@ -170,6 +170,76 @@ pub fn diff_marks(head: &str, current: &str) -> Vec<(usize, LineMark)> {
     marks
 }
 
+/// A contiguous changed region between the committed text and the current
+/// buffer, for hunk navigation and revert.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Hunk {
+    /// First current-buffer line (0-based) the hunk covers.
+    pub current_start: usize,
+    /// One past the last current line the hunk covers. Equal to `current_start`
+    /// for a pure deletion (nothing remains in the current buffer there).
+    pub current_end: usize,
+    /// The committed (HEAD) text for this region, with line endings, used to
+    /// restore the hunk on revert. Empty for a pure addition.
+    pub head_text: String,
+}
+
+impl Hunk {
+    /// Whether current line `line` falls within this hunk (a pure deletion is
+    /// matched at its single anchor line).
+    #[must_use]
+    pub fn contains(&self, line: usize) -> bool {
+        if self.current_start == self.current_end {
+            line == self.current_start
+        } else {
+            line >= self.current_start && line < self.current_end
+        }
+    }
+}
+
+/// Group the line diff between committed text (`head`) and the current buffer
+/// into [`Hunk`]s — maximal runs of adjacent changed lines — in current-line
+/// order. Pairs with [`diff_marks`] (which colors individual gutter lines).
+#[must_use]
+pub fn hunks(head: &str, current: &str) -> Vec<Hunk> {
+    use similar::{Algorithm, DiffOp, TextDiff};
+
+    let diff = TextDiff::configure().algorithm(Algorithm::Myers).diff_lines(head, current);
+    let head_lines: Vec<&str> = head.split_inclusive('\n').collect();
+    let mut out: Vec<Hunk> = Vec::new();
+    // Accumulated (new_lo, new_hi, old_lo, old_hi) for the run in progress.
+    let mut run: Option<(usize, usize, usize, usize)> = None;
+
+    let flush = |run: &mut Option<(usize, usize, usize, usize)>, out: &mut Vec<Hunk>| {
+        if let Some((nlo, nhi, olo, ohi)) = run.take() {
+            let head_text = head_lines.get(olo..ohi).map(<[&str]>::concat).unwrap_or_default();
+            out.push(Hunk { current_start: nlo, current_end: nhi, head_text });
+        }
+    };
+
+    for op in diff.ops() {
+        let (ni, nl, oi, ol) = match *op {
+            DiffOp::Equal { .. } => {
+                flush(&mut run, &mut out);
+                continue;
+            }
+            DiffOp::Insert { new_index, new_len, old_index, .. } => (new_index, new_len, old_index, 0),
+            DiffOp::Delete { new_index, old_index, old_len, .. } => (new_index, 0, old_index, old_len),
+            DiffOp::Replace { new_index, new_len, old_index, old_len, .. } => {
+                (new_index, new_len, old_index, old_len)
+            }
+        };
+        run = Some(match run {
+            Some((nlo, nhi, olo, ohi)) => {
+                (nlo.min(ni), nhi.max(ni + nl), olo.min(oi), ohi.max(oi + ol))
+            }
+            None => (ni, ni + nl, oi, oi + ol),
+        });
+    }
+    flush(&mut run, &mut out);
+    out
+}
+
 /// One line's `git blame` attribution: the short commit hash, author name,
 /// `YYYY-MM-DD` authored date, and the commit summary.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
@@ -313,7 +383,10 @@ pub fn status(dir: &Path) -> Vec<FileStatus> {
 /// is not in HEAD (newly added/untracked) or on any error.
 #[must_use]
 pub fn head_blob(dir: &Path, rel_path: &str) -> Option<String> {
-    git_stdout(dir, &["show", &format!("HEAD:{rel_path}")])
+    // Use the raw (untrimmed) output: a blob's trailing newline is significant
+    // for line-accurate diffing, gutter marks, and hunk revert.
+    let out = git(dir, &["show", &format!("HEAD:{rel_path}")]).ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
 /// Stage a path (`git add -- <path>`). Returns whether the command succeeded.
@@ -391,6 +464,47 @@ pub fn commit(dir: &Path, message: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hunks_groups_a_modified_line() {
+        let h = hunks("a\nb\nc\n", "a\nB\nc\n");
+        assert_eq!(h.len(), 1);
+        assert_eq!(h[0].current_start, 1);
+        assert_eq!(h[0].current_end, 2);
+        assert_eq!(h[0].head_text, "b\n");
+        assert!(h[0].contains(1));
+        assert!(!h[0].contains(0));
+    }
+
+    #[test]
+    fn hunks_addition_has_empty_head_text() {
+        let h = hunks("a\nc\n", "a\nb1\nb2\nc\n");
+        assert_eq!(h.len(), 1);
+        assert_eq!((h[0].current_start, h[0].current_end), (1, 3));
+        assert_eq!(h[0].head_text, ""); // pure addition restores to nothing
+    }
+
+    #[test]
+    fn hunks_deletion_anchors_a_zero_width_range() {
+        let h = hunks("a\nb\nc\n", "a\nc\n");
+        assert_eq!(h.len(), 1);
+        assert_eq!(h[0].current_start, h[0].current_end); // pure deletion
+        assert_eq!(h[0].head_text, "b\n"); // reverting re-inserts the committed line
+        assert!(h[0].contains(h[0].current_start));
+    }
+
+    #[test]
+    fn hunks_finds_multiple_regions() {
+        let h = hunks("a\nb\nc\nd\ne\n", "A\nb\nc\nD\ne\n");
+        assert_eq!(h.len(), 2);
+        assert_eq!(h[0].current_start, 0);
+        assert_eq!(h[1].current_start, 3);
+    }
+
+    #[test]
+    fn hunks_identical_text_is_empty() {
+        assert!(hunks("x\ny\n", "x\ny\n").is_empty());
+    }
 
     #[test]
     fn parse_status_reads_xy_codes_and_paths() {
