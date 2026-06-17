@@ -214,14 +214,14 @@ const VIX: &[Item] = &[
 /// UUID versions, grouped under Tools → Generate → UUID. Labels are the bare
 /// version digit (RFC 4122 / RFC 9562 v1–v8).
 const TOOLS_GENERATE_UUID: &[Item] = &[
-    Item::leaf("1", "tools.generate.uuid.v1", ""),
-    Item::leaf("2", "tools.generate.uuid.v2", ""),
-    Item::leaf("3", "tools.generate.uuid.v3", ""),
-    Item::leaf("4", "tools.generate.uuid.v4", ""),
-    Item::leaf("5", "tools.generate.uuid.v5", ""),
-    Item::leaf("6", "tools.generate.uuid.v6", ""),
-    Item::leaf("7", "tools.generate.uuid.v7", ""),
-    Item::leaf("8", "tools.generate.uuid.v8", ""),
+    Item::leaf("1 = Time + MAC", "tools.generate.uuid.v1", ""),
+    Item::leaf("2 = DCE Security", "tools.generate.uuid.v2", ""),
+    Item::leaf("3 = MD5 Name", "tools.generate.uuid.v3", ""),
+    Item::leaf("4 = Random", "tools.generate.uuid.v4", ""),
+    Item::leaf("5 = SHA-1 Name", "tools.generate.uuid.v5", ""),
+    Item::leaf("6 = Time + MAC", "tools.generate.uuid.v6", ""),
+    Item::leaf("7 = Time + Random", "tools.generate.uuid.v7", ""),
+    Item::leaf("8 = Custom Placeholder", "tools.generate.uuid.v8", ""),
 ];
 
 /// ZID sizes, grouped under Tools → Generate → ZID. Labels show the bit width
