@@ -1,6 +1,6 @@
-# Convert CSV to TSV
+# Convert from CSV into TSV
 
-Subcrate vix-convert-csv-to-tsv-tool
+Subcrate vix-convert-from-csv-into-tsv-tool
 
 - menu "Tools"
   - submenu "Convert"

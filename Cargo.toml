@@ -37,22 +37,22 @@ members = [
     "vix-base64-tool",
     "vix-url-tool",
     "vix-convert-tabular",
-    "vix-convert-csv-to-json-tool",
-    "vix-convert-json-to-csv-tool",
-    "vix-convert-csv-to-tsv-tool",
-    "vix-convert-tsv-to-csv-tool",
-    "vix-convert-tsv-to-json-tool",
-    "vix-convert-json-to-tsv-tool",
-    "vix-convert-yaml-to-json-tool",
-    "vix-convert-json-to-yaml-tool",
+    "vix-convert-from-csv-into-json-tool",
+    "vix-convert-from-json-into-csv-tool",
+    "vix-convert-from-csv-into-tsv-tool",
+    "vix-convert-from-tsv-into-csv-tool",
+    "vix-convert-from-tsv-into-json-tool",
+    "vix-convert-from-json-into-tsv-tool",
+    "vix-convert-from-yaml-into-json-tool",
+    "vix-convert-from-json-into-yaml-tool",
     "vix-color-converter-tool",
     "vix-unit-converter-tool",
     "vix-calculator-tool",
     "vix-pomodoro-timer-tool",
-    "vix-convert-markdown-to-html-tool",
-    "vix-convert-html-to-markdown-tool",
-    "vix-convert-json-to-toml-tool",
-    "vix-convert-toml-to-json-tool",
+    "vix-convert-from-markdown-into-html-tool",
+    "vix-convert-from-html-into-markdown-tool",
+    "vix-convert-from-json-into-toml-tool",
+    "vix-convert-from-toml-into-json-tool",
 ]
 
 [package]
@@ -153,18 +153,18 @@ vix-checksum-tool = { path = "vix-checksum-tool" }
 # or buffer (Base64, URL, CSV/TSV/JSON, YAML/JSON).
 vix-base64-tool = { path = "vix-base64-tool" }
 vix-url-tool = { path = "vix-url-tool" }
-vix-convert-csv-to-json-tool = { path = "vix-convert-csv-to-json-tool" }
-vix-convert-json-to-csv-tool = { path = "vix-convert-json-to-csv-tool" }
-vix-convert-csv-to-tsv-tool = { path = "vix-convert-csv-to-tsv-tool" }
-vix-convert-tsv-to-csv-tool = { path = "vix-convert-tsv-to-csv-tool" }
-vix-convert-tsv-to-json-tool = { path = "vix-convert-tsv-to-json-tool" }
-vix-convert-json-to-tsv-tool = { path = "vix-convert-json-to-tsv-tool" }
-vix-convert-yaml-to-json-tool = { path = "vix-convert-yaml-to-json-tool" }
-vix-convert-json-to-yaml-tool = { path = "vix-convert-json-to-yaml-tool" }
-vix-convert-markdown-to-html-tool = { path = "vix-convert-markdown-to-html-tool" }
-vix-convert-html-to-markdown-tool = { path = "vix-convert-html-to-markdown-tool" }
-vix-convert-json-to-toml-tool = { path = "vix-convert-json-to-toml-tool" }
-vix-convert-toml-to-json-tool = { path = "vix-convert-toml-to-json-tool" }
+vix-convert-from-csv-into-json-tool = { path = "vix-convert-from-csv-into-json-tool" }
+vix-convert-from-json-into-csv-tool = { path = "vix-convert-from-json-into-csv-tool" }
+vix-convert-from-csv-into-tsv-tool = { path = "vix-convert-from-csv-into-tsv-tool" }
+vix-convert-from-tsv-into-csv-tool = { path = "vix-convert-from-tsv-into-csv-tool" }
+vix-convert-from-tsv-into-json-tool = { path = "vix-convert-from-tsv-into-json-tool" }
+vix-convert-from-json-into-tsv-tool = { path = "vix-convert-from-json-into-tsv-tool" }
+vix-convert-from-yaml-into-json-tool = { path = "vix-convert-from-yaml-into-json-tool" }
+vix-convert-from-json-into-yaml-tool = { path = "vix-convert-from-json-into-yaml-tool" }
+vix-convert-from-markdown-into-html-tool = { path = "vix-convert-from-markdown-into-html-tool" }
+vix-convert-from-html-into-markdown-tool = { path = "vix-convert-from-html-into-markdown-tool" }
+vix-convert-from-json-into-toml-tool = { path = "vix-convert-from-json-into-toml-tool" }
+vix-convert-from-toml-into-json-tool = { path = "vix-convert-from-toml-into-json-tool" }
 # Tools → Color Converter: live HEX/RGB/HSL conversion dialog.
 vix-color-converter-tool = { path = "vix-color-converter-tool" }
 # Tools → Convert → Unit Converter: number + unit selectors with live output.

@@ -1,16 +1,16 @@
-# vix-convert-csv-to-tsv-tool: convert CSV text into TSV (Tools → Convert →
+# vix-convert-from-csv-into-tsv-tool: convert CSV text into TSV (Tools → Convert →
 # CSV → TSV). A thin wrapper over vix-convert-tabular.
 
 [package]
-name = "vix-convert-csv-to-tsv-tool"
+name = "vix-convert-from-csv-into-tsv-tool"
 version = "0.1.0"
 edition = "2021"
-description = "Convert CSV to TSV for Vix."
+description = "Convert from CSV into TSV for Vix."
 license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
 repository = "https://github.com/sixarm/vix"
 
 [lib]
-name = "vix_convert_csv_to_tsv_tool"
+name = "vix_convert_from_csv_into_tsv_tool"
 path = "src/lib.rs"
 
 [dependencies]
