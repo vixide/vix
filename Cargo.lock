@@ -3344,6 +3344,7 @@ dependencies = [
  "vix-calendar-panel",
  "vix-checksum-tool",
  "vix-clock-panel",
+ "vix-color-converter-tool",
  "vix-contact-panel",
  "vix-convert-csv-to-json-tool",
  "vix-convert-csv-to-tsv-tool",
@@ -3417,6 +3418,10 @@ dependencies = [
  "jiff",
  "vix-time-zone-model",
 ]
+
+[[package]]
+name = "vix-color-converter-tool"
+version = "0.1.0"
 
 [[package]]
 name = "vix-contact-panel"

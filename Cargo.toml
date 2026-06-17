@@ -45,6 +45,7 @@ members = [
     "vix-convert-json-to-tsv-tool",
     "vix-convert-yaml-to-json-tool",
     "vix-convert-json-to-yaml-tool",
+    "vix-color-converter-tool",
 ]
 
 [package]
@@ -153,6 +154,8 @@ vix-convert-tsv-to-json-tool = { path = "vix-convert-tsv-to-json-tool" }
 vix-convert-json-to-tsv-tool = { path = "vix-convert-json-to-tsv-tool" }
 vix-convert-yaml-to-json-tool = { path = "vix-convert-yaml-to-json-tool" }
 vix-convert-json-to-yaml-tool = { path = "vix-convert-json-to-yaml-tool" }
+# Tools → Color Converter: live HEX/RGB/HSL conversion dialog.
+vix-color-converter-tool = { path = "vix-color-converter-tool" }
 # Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
 crossterm = "0.29"
 # Regular expressions for find/replace.
