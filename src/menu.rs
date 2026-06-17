@@ -116,8 +116,8 @@ const EDIT: &[Item] = &[
 
 /// Cursor jump commands, grouped under Edit → Go.
 const EDIT_GO: &[Item] = &[
-    Item::leaf("menu.item.edit.go_line", "nav.goto_line", ""),
     Item::leaf("menu.item.edit.recent_locations", "nav.recent_locations", ""),
+    Item::leaf("menu.item.edit.go_line", "nav.goto_line", ""),
     SEP,
     Item::leaf("menu.item.edit.line_start", "edit.line_start", ""),
     Item::leaf("menu.item.edit.line_end", "edit.line_end", ""),
@@ -219,12 +219,12 @@ const VIX: &[Item] = &[
 /// UUID versions, grouped under Tools → Generate → UUID. Labels are the bare
 /// version digit (RFC 4122 / RFC 9562 v1–v8).
 const TOOLS_GENERATE_UUID: &[Item] = &[
-    Item::leaf("1 = Time + MAC", "tools.generate.uuid.v1", ""),
+    Item::leaf("1 = Unsortable Time Count MAC", "tools.generate.uuid.v1", ""),
     Item::leaf("2 = DCE Security", "tools.generate.uuid.v2", ""),
     Item::leaf("3 = MD5 Name", "tools.generate.uuid.v3", ""),
     Item::leaf("4 = Random", "tools.generate.uuid.v4", ""),
     Item::leaf("5 = SHA-1 Name", "tools.generate.uuid.v5", ""),
-    Item::leaf("6 = Time + MAC", "tools.generate.uuid.v6", ""),
+    Item::leaf("6 = Sortable Time Count MAC", "tools.generate.uuid.v6", ""),
     Item::leaf("7 = Time + Random", "tools.generate.uuid.v7", ""),
     Item::leaf("8 = Custom Placeholder", "tools.generate.uuid.v8", ""),
 ];
@@ -292,6 +292,13 @@ const TOOLS_CONVERT: &[Item] = &[
     Item::sub("YAML", TOOLS_CONVERT_YAML),
 ];
 
+/// Character pickers, grouped under Tools → Characters.
+const TOOLS_CHARACTERS: &[Item] = &[
+    Item::leaf("menu.item.tools.nerd_palette", "tools.nerd_palette", ""),
+    Item::leaf("menu.item.tools.html_chars", "tools.html_chars", ""),
+    Item::leaf("menu.item.tools.ascii", "tools.ascii", ""),
+];
+
 /// Information panels, grouped under Tools → About.
 const TOOLS_ABOUT: &[Item] = &[
     Item::leaf("menu.item.tools.about.text", "tools.text_info", ""),
@@ -318,9 +325,7 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.clock", "tools.clock", ""),
     Item::leaf("menu.item.tools.pomodoro", "tools.pomodoro", ""),
     Item::leaf("menu.item.tools.calculator", "tools.calculator", ""),
-    Item::leaf("menu.item.tools.nerd_palette", "tools.nerd_palette", ""),
-    Item::leaf("menu.item.tools.ascii", "tools.ascii", ""),
-    Item::leaf("menu.item.tools.html_chars", "tools.html_chars", ""),
+    Item::sub("menu.item.tools.characters", TOOLS_CHARACTERS),
     Item::leaf("menu.item.tools.x11_colors", "tools.x11_colors", ""),
 ];
 
