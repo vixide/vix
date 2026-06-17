@@ -292,27 +292,69 @@ pub fn symbols(text: &str) -> Vec<Symbol> {
 /// must appear (in order, as a subsequence) in `haystack`.
 #[must_use] 
 pub fn fuzzy_match(haystack: &str, query: &str) -> bool {
-    let hay = haystack.to_lowercase();
-    query
-        .split_whitespace()
-        .all(|term| subsequence(&hay, &term.to_lowercase()))
+    fuzzy_score(haystack, query).is_some()
 }
 
-fn subsequence(hay: &str, needle: &str) -> bool {
-    if needle.is_empty() {
-        return true;
+/// Score how well `query` fuzzy-matches `haystack`: `None` when any whitespace
+/// term is not a subsequence, else a score where higher is a better match.
+///
+/// The heuristic rewards contiguous runs, matches at word boundaries, and early
+/// matches, and lightly prefers shorter haystacks — so typing `sl` ranks
+/// "Sort Lines" above "Toggle Spell**l**check" and an exact/prefix hit wins.
+#[must_use]
+pub fn fuzzy_score(haystack: &str, query: &str) -> Option<i32> {
+    let hay: Vec<char> = haystack.to_lowercase().chars().collect();
+    let mut total = 0;
+    for term in query.split_whitespace() {
+        total += term_score(&hay, &term.to_lowercase())?;
     }
-    let mut chars = hay.chars();
-    for nc in needle.chars() {
-        loop {
-            match chars.next() {
-                Some(hc) if hc == nc => break,
-                Some(_) => {}
-                None => return false,
-            }
+    let q = query.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+    if !q.is_empty() {
+        let hs: String = hay.iter().collect();
+        if hs == q {
+            total += 100; // exact match
+        } else if hs.starts_with(&q) {
+            total += 40; // prefix match
         }
     }
-    true
+    Some(total)
+}
+
+/// Score a single (already-lowercased) term against `hay`, or `None` if it is
+/// not a subsequence.
+fn term_score(hay: &[char], needle: &str) -> Option<i32> {
+    if needle.is_empty() {
+        return Some(0);
+    }
+    let mut hi = 0usize;
+    let mut score = 0i32;
+    let mut prev: Option<usize> = None;
+    let mut first: Option<usize> = None;
+    for nc in needle.chars() {
+        let mut found = None;
+        while hi < hay.len() {
+            let here = hi;
+            hi += 1;
+            if hay[here] == nc {
+                found = Some(here);
+                break;
+            }
+        }
+        let idx = found?;
+        if first.is_none() {
+            first = Some(idx);
+        }
+        if prev.is_some_and(|p| p + 1 == idx) {
+            score += 15; // contiguous with the previous matched char
+        }
+        if idx == 0 || !hay[idx - 1].is_alphanumeric() {
+            score += 10; // start of a word
+        }
+        prev = Some(idx);
+    }
+    score -= i32::try_from(first.unwrap_or(0)).unwrap_or(0); // earlier is better
+    score -= i32::try_from(hay.len()).unwrap_or(0) / 4; // shorter is slightly better
+    Some(score)
 }
 
 /// Parse a `path:line[:col]` suffix. Returns the path part and an optional
@@ -338,6 +380,32 @@ mod tests {
         assert!(matches!(Mode::from_input("@foo"), Mode::Symbols));
         assert!(matches!(Mode::from_input("@@foo"), Mode::WorkspaceSymbols));
         assert!(matches!(Mode::from_input("@@"), Mode::WorkspaceSymbols));
+    }
+
+    #[test]
+    fn fuzzy_score_matches_like_fuzzy_match() {
+        assert!(fuzzy_score("Sort Lines", "sl").is_some());
+        assert!(fuzzy_score("Sort Lines", "xz").is_none());
+        assert!(fuzzy_score("anything", "").is_some()); // empty query matches
+        assert!(fuzzy_match("Sort Lines", "sl"));
+        assert!(!fuzzy_match("Sort Lines", "qq"));
+    }
+
+    #[test]
+    fn fuzzy_score_ranks_word_starts_above_mid_word() {
+        // "sl" as word-initials of Sort Lines beats the mid-word run in Spellcheck.
+        let a = fuzzy_score("Sort Lines", "sl").unwrap();
+        let b = fuzzy_score("Toggle Spellcheck", "sl").unwrap();
+        assert!(a > b, "word-start match {a} should beat mid-word {b}");
+    }
+
+    #[test]
+    fn fuzzy_score_prefers_exact_and_prefix() {
+        let exact = fuzzy_score("undo", "undo").unwrap();
+        let prefix = fuzzy_score("undo selection", "undo").unwrap();
+        let scattered = fuzzy_score("under do", "undo").unwrap();
+        assert!(exact > prefix, "exact {exact} > prefix {prefix}");
+        assert!(prefix > scattered, "prefix {prefix} > scattered {scattered}");
     }
 
     #[test]

@@ -734,6 +734,10 @@ pub struct App {
     /// Cursor offset captured when the palette opened, so the `:` go-to-line
     /// preview can revert on cancel and the jump records the true origin.
     palette_origin: Option<usize>,
+    /// Action ids of commands recently run from the palette, most-recent first
+    /// (capped). Surfaced at the top of the `>` command list when the query is
+    /// empty, and used as a tiebreak when ranking matches.
+    command_recents: Vec<String>,
     /// The most recent search pattern (regex), so Find Next / Find Previous can
     /// repeat it after the find box has closed.
     last_search: Option<String>,
@@ -887,6 +891,7 @@ impl App {
             settings,
             file_index: Vec::new(),
             palette_origin: None,
+            command_recents: Vec::new(),
             last_search: None,
             closed_tabs: Vec::new(),
             running_command: None,
@@ -6867,15 +6872,33 @@ impl App {
                 }
             }
             PMode::Commands => {
-                for (label_key, action) in palette::COMMANDS {
+                // Score every command: when the query is empty, order by recency
+                // (recently-run first) then catalog order; otherwise rank by fuzzy
+                // score with recency as a tiebreak.
+                let recent_rank = |action: &str| self.command_recents.iter().position(|a| a == action);
+                let mut scored: Vec<(i32, usize, Entry)> = Vec::new();
+                for (cat_idx, (label_key, action)) in palette::COMMANDS.iter().enumerate() {
                     let label = t!(*label_key).to_string();
-                    if query.is_empty() || palette::fuzzy_match(&label, &query) {
-                        entries.push(Entry {
-                            label: format!("> {label}"),
-                            action: PAction::RunCommand((*action).to_string()),
-                        });
+                    let entry = Entry {
+                        label: format!("> {label}"),
+                        action: PAction::RunCommand((*action).to_string()),
+                    };
+                    if query.is_empty() {
+                        // Recents (rank 0..) sort above everything; non-recents keep
+                        // catalog order after them.
+                        let key = recent_rank(action)
+                            .map_or(1000 + i32::try_from(cat_idx).unwrap_or(0), |r| {
+                                i32::try_from(r).unwrap_or(0)
+                            });
+                        scored.push((-key, cat_idx, entry));
+                    } else if let Some(score) = palette::fuzzy_score(&label, &query) {
+                        let boost = recent_rank(action)
+                            .map_or(0, |r| (12 - i32::try_from(r).unwrap_or(12)).max(0));
+                        scored.push((score + boost, cat_idx, entry));
                     }
                 }
+                scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+                entries = scored.into_iter().map(|(_, _, e)| e).collect();
             }
             PMode::Buffers => {
                 for (i, tab) in self.editor.tabs.iter().enumerate() {
@@ -7008,6 +7031,15 @@ impl App {
         }
     }
 
+    /// Record `action` as the most-recently-run palette command (deduped,
+    /// most-recent first, capped).
+    fn record_command_recent(&mut self, action: &str) {
+        const MAX_RECENTS: usize = 12;
+        self.command_recents.retain(|a| a != action);
+        self.command_recents.insert(0, action.to_string());
+        self.command_recents.truncate(MAX_RECENTS);
+    }
+
     fn accept_palette(&mut self) {
         let Some(p) = self.palette.as_ref() else {
             return;
@@ -7031,7 +7063,10 @@ impl App {
                     s.focus = Focus::Editor;
                 });
             }
-            PAction::RunCommand(action) => self.run_action(&action),
+            PAction::RunCommand(action) => {
+                self.record_command_recent(&action);
+                self.run_action(&action);
+            }
             PAction::SwitchBuffer(i) => {
                 self.with_jump(|s| {
                     if i < s.editor.tabs.len() {
