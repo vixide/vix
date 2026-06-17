@@ -167,8 +167,9 @@ const EDIT_CASE: &[Item] = &[
 
 /// Editor split commands, grouped under View → Split.
 const VIEW_SPLIT: &[Item] = &[
-    Item::leaf("menu.item.view.split_vertical", "view.split_vertical", ""),
     Item::leaf("menu.item.view.split_horizontal", "view.split_horizontal", ""),
+    Item::leaf("menu.item.view.split_vertical", "view.split_vertical", ""),
+    SEP,
     Item::leaf("menu.item.view.focus_other_pane", "view.focus_other_pane", "F6"),
     Item::leaf("menu.item.view.unsplit", "view.unsplit", ""),
 ];
