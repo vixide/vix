@@ -49,6 +49,8 @@ members = [
     "vix-unit-converter-tool",
     "vix-calculator-tool",
     "vix-pomodoro-timer-tool",
+    "vix-convert-markdown-to-html-tool",
+    "vix-convert-html-to-markdown-tool",
 ]
 
 [package]
@@ -157,6 +159,8 @@ vix-convert-tsv-to-json-tool = { path = "vix-convert-tsv-to-json-tool" }
 vix-convert-json-to-tsv-tool = { path = "vix-convert-json-to-tsv-tool" }
 vix-convert-yaml-to-json-tool = { path = "vix-convert-yaml-to-json-tool" }
 vix-convert-json-to-yaml-tool = { path = "vix-convert-json-to-yaml-tool" }
+vix-convert-markdown-to-html-tool = { path = "vix-convert-markdown-to-html-tool" }
+vix-convert-html-to-markdown-tool = { path = "vix-convert-html-to-markdown-tool" }
 # Tools → Color Converter: live HEX/RGB/HSL conversion dialog.
 vix-color-converter-tool = { path = "vix-color-converter-tool" }
 # Tools → Convert → Unit Converter: number + unit selectors with live output.
