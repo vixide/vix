@@ -644,6 +644,10 @@ pub struct App {
     pub unit_converter: Option<vix_unit_converter_tool::Converter>,
     /// Calculator dialog (Tools → Calculator…), when open.
     pub calculator: Option<vix_calculator_tool::Calculator>,
+    /// Pomodoro Timer dialog (Tools → Pomodoro Timer…), when open.
+    pub pomodoro: Option<vix_pomodoro_timer_tool::Timer>,
+    /// Wall-clock anchor for the running Pomodoro countdown; `None` while idle.
+    pomodoro_last_tick: Option<std::time::Instant>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
     pub clip: Vec<PathBuf>,
     /// Whether [`App::clip`] holds a cut (move) rather than a copy.
@@ -831,6 +835,8 @@ impl App {
             color_converter: None,
             unit_converter: None,
             calculator: None,
+            pomodoro: None,
+            pomodoro_last_tick: None,
             clip: Vec::new(),
             clip_cut: false,
             nav_history: Vec::new(),
@@ -1059,6 +1065,10 @@ impl App {
         }
         if self.calculator.is_some() {
             self.calculator_key(key);
+            return;
+        }
+        if self.pomodoro.is_some() {
+            self.pomodoro_key(key);
             return;
         }
         // While the calendar box is open it captures left/right to page months.
@@ -1863,6 +1873,7 @@ impl App {
             "tools.dashboard" => self.open_dashboard(),
             "tools.color_converter" => self.open_color_converter(),
             "tools.calculator" => self.open_calculator(),
+            "tools.pomodoro" => self.open_pomodoro(),
             "tools.generate.uuid.v1" => self.insert_generated(&vix_uuid_tool::v1()),
             "tools.generate.uuid.v2" => self.insert_generated(&vix_uuid_tool::v2()),
             "tools.generate.uuid.v3" => self.insert_generated(&vix_uuid_tool::v3()),
@@ -2527,6 +2538,91 @@ impl App {
             self.editor.insert_str(&value, area);
             self.status = t!("status.generated", text = value).to_string();
             self.calculator = None;
+        }
+    }
+
+    // ----- Pomodoro Timer -------------------------------------------------
+
+    /// Open the Pomodoro Timer dialog (idle at the default 25 minutes).
+    fn open_pomodoro(&mut self) {
+        self.pomodoro = Some(vix_pomodoro_timer_tool::Timer::new());
+        self.pomodoro_last_tick = None;
+    }
+
+    /// Whether a Pomodoro countdown is currently running (so the event loop
+    /// ticks faster to keep the display current).
+    #[must_use]
+    pub fn pomodoro_running(&self) -> bool {
+        self.pomodoro.as_ref().is_some_and(vix_pomodoro_timer_tool::Timer::is_running)
+    }
+
+    /// Advance a running Pomodoro countdown by the real time elapsed since the
+    /// last tick, performing phase transitions. Called once per event-loop pass.
+    pub fn poll_pomodoro(&mut self) {
+        use vix_pomodoro_timer_tool::Tick;
+        if !self.pomodoro_running() {
+            self.pomodoro_last_tick = None;
+            return;
+        }
+        let now = std::time::Instant::now();
+        let last = *self.pomodoro_last_tick.get_or_insert(now);
+        let secs = now.duration_since(last).as_secs();
+        if secs == 0 {
+            return;
+        }
+        // Keep the fractional remainder so the countdown stays accurate over time.
+        self.pomodoro_last_tick = Some(last + std::time::Duration::from_secs(secs));
+        if let Some(timer) = self.pomodoro.as_mut() {
+            match timer.tick(secs) {
+                Tick::BreakStarted => self.status = t!("status.pomodoro_break").to_string(),
+                Tick::Finished => self.status = t!("status.pomodoro_done").to_string(),
+                Tick::None => {}
+            }
+        }
+    }
+
+    /// Handle a key for the Pomodoro dialog. While idle, ↑/↓ adjust the work
+    /// length and Enter starts; while running, Enter stops; during the break,
+    /// Enter/Esc cancel. Esc closes the dialog when idle.
+    fn pomodoro_key(&mut self, key: KeyEvent) {
+        use vix_pomodoro_timer_tool::Phase;
+        let phase = self.pomodoro.as_ref().map(|t| t.phase);
+        match key.code {
+            KeyCode::Up | KeyCode::Right => {
+                if let Some(t) = self.pomodoro.as_mut() {
+                    t.adjust_minutes(1);
+                }
+            }
+            KeyCode::Down | KeyCode::Left => {
+                if let Some(t) = self.pomodoro.as_mut() {
+                    t.adjust_minutes(-1);
+                }
+            }
+            KeyCode::Enter | KeyCode::Char(' ') => match phase {
+                Some(Phase::Idle) => {
+                    self.pomodoro_last_tick = Some(std::time::Instant::now());
+                    if let Some(t) = self.pomodoro.as_mut() {
+                        t.start();
+                    }
+                }
+                Some(_) => {
+                    // Stop a running work timer, or cancel the break.
+                    if let Some(t) = self.pomodoro.as_mut() {
+                        t.stop();
+                    }
+                }
+                None => {}
+            },
+            KeyCode::Esc => match phase {
+                // Esc cancels a running work/break back to idle; from idle it closes.
+                Some(Phase::Break | Phase::Work) => {
+                    if let Some(t) = self.pomodoro.as_mut() {
+                        t.stop();
+                    }
+                }
+                _ => self.pomodoro = None,
+            },
+            _ => {}
         }
     }
 
@@ -4367,6 +4463,7 @@ impl App {
             || self.branch_chooser.is_some()
             || self.dashboard.is_some()
             || self.outline.is_some()
+            || self.pomodoro.is_some()
             || self.paste.as_ref().is_some_and(|p| p.conflict.is_some())
         {
             return;
