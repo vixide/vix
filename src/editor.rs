@@ -868,6 +868,38 @@ impl Editor {
         }
     }
 
+    /// Strip trailing whitespace from the selected lines (or the whole buffer).
+    pub fn trim_trailing_whitespace(&mut self) {
+        self.edit_active_lines(CodeEditor::trim_trailing_whitespace);
+    }
+
+    /// Remove duplicate lines in the selection (or the whole buffer).
+    pub fn remove_duplicate_lines(&mut self) {
+        self.edit_active_lines(CodeEditor::remove_duplicate_lines);
+    }
+
+    /// Reverse the order of the selected lines (or the whole buffer).
+    pub fn reverse_lines(&mut self) {
+        self.edit_active_lines(CodeEditor::reverse_lines);
+    }
+
+    /// Sort the selected lines ascending and drop duplicates (or the whole buffer).
+    pub fn sort_unique(&mut self) {
+        self.edit_active_lines(CodeEditor::sort_unique);
+    }
+
+    /// Run a line-editing op on the active (non-image) buffer, marking it dirty.
+    fn edit_active_lines(&mut self, f: impl FnOnce(&mut CodeEditor)) {
+        if let Some(t) = self.active_tab_mut() {
+            if t.is_image() {
+                return;
+            }
+            f(&mut t.editor);
+            t.dirty = true;
+            t.preview = false;
+        }
+    }
+
     /// Move the active buffer's cursor line up or down by one row, scrolling it
     /// into `area`.
     pub fn move_line(&mut self, down: bool, area: Rect) {

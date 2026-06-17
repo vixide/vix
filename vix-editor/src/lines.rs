@@ -106,6 +106,68 @@ impl Editor {
         self.replace_all(&new_text, offset);
     }
 
+    /// Strip trailing whitespace from each line in range (selection, or the whole
+    /// buffer when nothing is selected).
+    pub fn trim_trailing_whitespace(&mut self) {
+        self.edit_line_range(|lines| lines.iter().map(|l| l.trim_end().to_string()).collect());
+    }
+
+    /// Remove duplicate lines in range, keeping the first occurrence of each.
+    pub fn remove_duplicate_lines(&mut self) {
+        self.edit_line_range(|lines| {
+            let mut seen = std::collections::HashSet::new();
+            lines.iter().filter(|l| seen.insert(l.to_string())).map(|l| (*l).to_string()).collect()
+        });
+    }
+
+    /// Reverse the order of the lines in range.
+    pub fn reverse_lines(&mut self) {
+        self.edit_line_range(|lines| lines.iter().rev().map(|l| (*l).to_string()).collect());
+    }
+
+    /// Sort the lines in range ascending and drop duplicates.
+    pub fn sort_unique(&mut self) {
+        self.edit_line_range(|lines| {
+            let mut v: Vec<String> = lines.iter().map(|l| (*l).to_string()).collect();
+            v.sort_unstable();
+            v.dedup();
+            v
+        });
+    }
+
+    /// Apply `f` to the lines in range (selection, or the whole buffer when
+    /// nothing is selected), replacing them with its result as one undoable edit.
+    /// The caret lands at the start of the range.
+    fn edit_line_range(&mut self, f: impl FnOnce(&[&str]) -> Vec<String>) {
+        let text = {
+            let code = self.code_ref();
+            code.slice(0, code.len_chars())
+        };
+        let had_final_newline = text.ends_with('\n');
+        let mut lines: Vec<&str> = text.split('\n').collect();
+        if had_final_newline {
+            lines.pop();
+        }
+        let n = lines.len();
+        if n == 0 {
+            return;
+        }
+        let (a, b) = match self.get_selection() {
+            Some(s) if !s.is_empty() => self.line_span(),
+            _ => (0, n - 1),
+        };
+        let (a, b) = (a.min(n - 1), b.min(n - 1));
+        let mut parts: Vec<String> = lines[..a].iter().map(|s| (*s).to_string()).collect();
+        parts.extend(f(&lines[a..=b]));
+        parts.extend(lines[b + 1..].iter().map(|s| (*s).to_string()));
+        let mut new_text = parts.join("\n");
+        if had_final_newline {
+            new_text.push('\n');
+        }
+        let offset: usize = lines[..a].iter().map(|l| l.chars().count() + 1).sum();
+        self.replace_all(&new_text, offset);
+    }
+
     /// The inclusive `(first, last)` line range covered by the selection, or the
     /// cursor line twice when there is no selection.
     fn line_span(&mut self) -> (usize, usize) {
@@ -314,5 +376,41 @@ mod tests {
         let mut e = ed("only", 0);
         e.sort_lines();
         assert_eq!(content(&e), "only");
+    }
+
+    #[test]
+    fn trim_trailing_whitespace_clears_line_ends() {
+        let mut e = ed("foo  \nbar\t\nbaz", 0);
+        e.trim_trailing_whitespace();
+        assert_eq!(content(&e), "foo\nbar\nbaz");
+    }
+
+    #[test]
+    fn remove_duplicate_lines_keeps_first() {
+        let mut e = ed("a\nb\na\nc\nb\n", 0);
+        e.remove_duplicate_lines();
+        assert_eq!(content(&e), "a\nb\nc\n");
+    }
+
+    #[test]
+    fn reverse_lines_flips_order() {
+        let mut e = ed("one\ntwo\nthree\n", 0);
+        e.reverse_lines();
+        assert_eq!(content(&e), "three\ntwo\none\n");
+    }
+
+    #[test]
+    fn sort_unique_sorts_and_dedupes() {
+        let mut e = ed("banana\napple\nbanana\ncherry\napple", 0);
+        e.sort_unique();
+        assert_eq!(content(&e), "apple\nbanana\ncherry");
+    }
+
+    #[test]
+    fn line_transforms_respect_selection() {
+        let mut e = ed("z\na\nkeep\n", 0);
+        e.set_selection_range(0, 4); // covers "z","a"
+        e.sort_lines();
+        assert_eq!(content(&e), "a\nz\nkeep\n");
     }
 }

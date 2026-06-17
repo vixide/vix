@@ -1775,6 +1775,10 @@ impl App {
             "edit.duplicate_line" => self.editor.duplicate_line(),
             "edit.join_lines" => self.editor.join_lines(),
             "edit.sort_lines" => self.editor.sort_lines(),
+            "edit.trim_trailing_whitespace" => self.editor.trim_trailing_whitespace(),
+            "edit.remove_duplicate_lines" => self.editor.remove_duplicate_lines(),
+            "edit.reverse_lines" => self.editor.reverse_lines(),
+            "edit.sort_unique" => self.editor.sort_unique(),
             "edit.move_line_up" => {
                 let area = self.editor_view();
                 self.editor.move_line(false, area);
@@ -2172,6 +2176,10 @@ impl App {
             "move_lines_down" => self.run_action("edit.move_line_down"),
             "join_lines" => self.run_action("edit.join_lines"),
             "sort_lines" => self.run_action("edit.sort_lines"),
+            "trim_trailing_whitespace" => self.run_action("edit.trim_trailing_whitespace"),
+            "remove_duplicate_lines" => self.run_action("edit.remove_duplicate_lines"),
+            "reverse_lines" => self.run_action("edit.reverse_lines"),
+            "sort_unique" => self.run_action("edit.sort_unique"),
             // multiple cursors
             "spawn_multi_cursor" | "spawn_multi_cursor_select" | "skip_multi_cursor"
             | "skip_multi_cursor_back" => edm!(add_next_occurrence),

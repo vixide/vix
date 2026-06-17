@@ -98,6 +98,10 @@ Every action has a smoke test in `tests/integration.rs`
 | `move-lines-down` | `move_lines_down` | `MoveLinesDown` |
 | `join-lines` | `join_lines` | `JoinLines` |
 | `sort-lines` | `sort_lines` | `SortLines` |
+| `sort-unique` | `sort_unique` | `SortUnique` |
+| `reverse-lines` | `reverse_lines` | `ReverseLines` |
+| `remove-duplicate-lines` | `remove_duplicate_lines` | `RemoveDuplicateLines` |
+| `trim-trailing-whitespace` | `trim_trailing_whitespace` | `TrimTrailingWhitespace` |
 | `indent-selection` | `indent_selection` | `IndentSelection` |
 | `outdent-selection` | `outdent_selection` | `OutdentSelection` |
 | `autocomplete` | `autocomplete` | `Autocomplete` |
