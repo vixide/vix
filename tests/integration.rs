@@ -301,6 +301,29 @@ fn sort_lines_orders_whole_buffer() {
 }
 
 #[test]
+fn line_transforms_via_actions() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "b\na\nb\na\n");
+    app.run_action("edit.sort_unique");
+    assert_eq!(app.editor.active_tab().unwrap().lines(), vec!["a", "b"]);
+
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "one\ntwo\nthree");
+    app.run_action("edit.reverse_lines");
+    assert_eq!(app.editor.active_tab().unwrap().lines(), vec!["three", "two", "one"]);
+
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "x\ny\nx");
+    app.run_action("edit.remove_duplicate_lines");
+    assert_eq!(app.editor.active_tab().unwrap().lines(), vec!["x", "y"]);
+
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "foo   ");
+    app.run_action("edit.trim_trailing_whitespace");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "foo");
+}
+
+#[test]
 fn ctrl_d_adds_a_caret_and_edits_all_occurrences() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "foo foo foo");
@@ -3924,6 +3947,16 @@ fn catalog_join_lines() {
     type_str(&mut app, "alpha beta gamma\ndelta epsilon\n");
     app.run_action("join_lines");
     assert!(app.editor.active_tab().is_some());
+}
+
+#[test]
+fn catalog_line_transforms() {
+    for action in ["sort_unique", "reverse_lines", "remove_duplicate_lines", "trim_trailing_whitespace"] {
+        let mut app = app_at(Path::new("."));
+        type_str(&mut app, "alpha\nbeta\nalpha  \n");
+        app.run_action(action);
+        assert!(app.editor.active_tab().is_some(), "{action} kept the app sane");
+    }
 }
 
 #[test]
