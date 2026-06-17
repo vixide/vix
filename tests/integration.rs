@@ -2656,6 +2656,41 @@ fn git_panel_stages_and_commits() {
 }
 
 #[test]
+#[ignore = "needs git; creates a throwaway repo and commits in it"]
+fn revert_hunk_restores_committed_text() {
+    let dir = unique_dir("reverthunk");
+    fs::create_dir_all(&dir).unwrap();
+    // Canonicalize so the workspace root and the file share a prefix even when
+    // the temp dir lives under a symlink (e.g. macOS /var → /private/var); the
+    // diff gutter and revert key the HEAD cache off that shared prefix.
+    let dir = dir.canonicalize().unwrap();
+    let run = |args: &[&str]| {
+        std::process::Command::new("git").current_dir(&dir).args(args).output().unwrap();
+    };
+    run(&["init", "-q"]);
+    run(&["config", "user.email", "t@example.com"]);
+    run(&["config", "user.name", "Test"]);
+    let file = dir.join("a.txt");
+    fs::write(&file, "one\ntwo\n").unwrap();
+    run(&["add", "."]);
+    run(&["commit", "-q", "-m", "init"]);
+
+    let mut app = app_at(&dir);
+    app.refresh_git();
+    app.open_initial(file);
+    app.on_key(key('X')); // modify line 0: "one" -> "Xone"
+    assert_eq!(app.editor.active_tab().unwrap().text(), "Xone\ntwo\n");
+
+    app.run_action("git.revert_hunk");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "one\ntwo\n",
+        "the modified hunk is restored to HEAD"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn session_snapshot_and_restore_round_trip() {
     let dir = unique_dir("session");
     let a = dir.join("a.txt");

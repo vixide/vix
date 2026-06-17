@@ -2027,6 +2027,9 @@ impl App {
                     Some(Prompt::new(PromptKind::GitGrep, t!("prompt.git_grep").to_string()));
             }
             "git.blame" => self.git_blame_line(),
+            "git.revert_hunk" => self.revert_hunk(),
+            "git.diff_next" => self.diff_goto(true),
+            "git.diff_prev" => self.diff_goto(false),
             "view.bottom_dock" => self.toggle_bottom_dock(),
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
@@ -2216,10 +2219,12 @@ impl App {
             "quit" | "quit_all" | "force_quit" => self.run_action("file.quit"),
             "none" => {}
             // not implemented yet (modes, macros, suspend, autocomplete, …)
+            "diff_next" => self.diff_goto(true),
+            "diff_previous" => self.diff_goto(false),
             "shell_mode" | "command_mode" | "toggle_overwrite_mode" | "toggle_macro"
             | "play_macro" | "suspend" | "autocomplete" | "cycle_autocomplete_back"
-            | "toggle_key_menu" | "toggle_ruler" | "diff_next"
-            | "diff_previous" | "spawn_multi_cursor_up" | "spawn_multi_cursor_down" => todo_action!(),
+            | "toggle_key_menu" | "toggle_ruler"
+            | "spawn_multi_cursor_up" | "spawn_multi_cursor_down" => todo_action!(),
             _ => return false,
         }
         true
@@ -2746,6 +2751,89 @@ impl App {
         if let Some(t) = self.editor.active_tab_mut() {
             t.editor.set_gutter_marks(styled);
         }
+    }
+
+    /// The diff hunks for the active tab (committed HEAD vs the current buffer),
+    /// populating the HEAD blob cache on demand. Empty outside a repo or for
+    /// images / unsaved buffers.
+    fn active_hunks(&mut self) -> Vec<vix_git::Hunk> {
+        if !self.git_repo {
+            return Vec::new();
+        }
+        let Some((path, current)) = self.editor.active_tab().and_then(|t| {
+            if t.is_image() {
+                return None;
+            }
+            t.path.clone().map(|p| (p, t.text()))
+        }) else {
+            return Vec::new();
+        };
+        if !self.git_head_cache.contains_key(&path) {
+            let head = path
+                .strip_prefix(&self.root)
+                .ok()
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                .and_then(|rel| vix_git::head_blob(&self.root, &rel))
+                .unwrap_or_default();
+            self.git_head_cache.insert(path.clone(), head);
+        }
+        vix_git::hunks(&self.git_head_cache[&path], &current)
+    }
+
+    /// Move the cursor to the next (or previous) changed hunk, wrapping around.
+    fn diff_goto(&mut self, forward: bool) {
+        let hunks = self.active_hunks();
+        if hunks.is_empty() {
+            self.status = t!("status.no_changes").to_string();
+            return;
+        }
+        let line = self.editor.active_tab().map_or(0, |t| t.editor.cursor_line());
+        let target = if forward {
+            hunks.iter().map(|h| h.current_start).find(|&s| s > line)
+        } else {
+            hunks.iter().rev().map(|h| h.current_start).find(|&s| s < line)
+        };
+        // Wrap to the first/last hunk when there is none beyond the cursor.
+        let target = target.unwrap_or_else(|| {
+            if forward { hunks[0].current_start } else { hunks[hunks.len() - 1].current_start }
+        });
+        let area = self.editor_view();
+        self.editor.goto(target + 1, None, area);
+    }
+
+    /// Restore the committed (HEAD) version of the hunk under the cursor in the
+    /// working buffer. No-op (with a status) when there is no hunk there.
+    fn revert_hunk(&mut self) {
+        let hunks = self.active_hunks();
+        if hunks.is_empty() {
+            self.status = t!("status.no_changes").to_string();
+            return;
+        }
+        let line = self.editor.active_tab().map_or(0, |t| t.editor.cursor_line());
+        let Some(hunk) = hunks.into_iter().find(|h| h.contains(line)) else {
+            self.status = t!("status.no_hunk").to_string();
+            return;
+        };
+        let Some(content) = self.editor.active_tab().map(Tab::text) else {
+            return;
+        };
+        let lines: Vec<&str> = content.split_inclusive('\n').collect();
+        let start = hunk.current_start.min(lines.len());
+        let end = hunk.current_end.min(lines.len()).max(start);
+        let mut rebuilt = String::new();
+        rebuilt.push_str(&lines[..start].concat());
+        rebuilt.push_str(&hunk.head_text);
+        rebuilt.push_str(&lines[end..].concat());
+        let caret: usize = lines[..start].iter().map(|l| l.chars().count()).sum();
+        if let Some(t) = self.editor.active_tab_mut() {
+            t.editor.set_content(&rebuilt);
+            t.editor.set_cursor(caret);
+            t.editor.set_selection(None);
+            t.dirty = true;
+            t.preview = false;
+        }
+        self.refresh_git_gutter();
+        self.status = t!("status.hunk_reverted").to_string();
     }
 
     /// Whether the working tree has uncommitted changes (derived from the cached
