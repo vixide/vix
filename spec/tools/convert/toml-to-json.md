@@ -7,4 +7,4 @@ Subcrate vix-convert-from-toml-into-json-tool.
     - submenu "TOML"
       - menuitem "JSON"
 
-Convert the selected text (or if no selected text then the entire buffer) from TOML to JSON.
+Convert the selected text (or if no selected text then the entire buffer) from TOML into JSON.

@@ -7,4 +7,4 @@ Subcrate vix-convert-from-csv-into-json-tool.
     - submenu "CSV"
       - menuitem "JSON"
 
-Convert the selected text (or if no selected text then the entire buffer) from CSV to JSON.
+Convert the selected text (or if no selected text then the entire buffer) from CSV into JSON.

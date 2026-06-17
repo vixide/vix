@@ -7,4 +7,4 @@ Subcrate vix-convert-from-yaml-into-json-tool.
     - submenu "YAML"
       - menuitem "JSON"
 
-Convert the selected text (or if no selected text then the entire buffer) from YAML to JSON.
+Convert the selected text (or if no selected text then the entire buffer) from YAML into JSON.
