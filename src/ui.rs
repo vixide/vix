@@ -243,9 +243,54 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.calculator.is_some() {
         draw_calculator(app, frame, area);
     }
+    if app.pomodoro.is_some() {
+        draw_pomodoro(app, frame, area);
+    }
     if app.welcome.is_some() {
         draw_welcome(app, frame, area);
     }
+}
+
+fn draw_pomodoro(app: &App, frame: &mut Frame, area: Rect) {
+    use vix_pomodoro_timer_tool::Phase;
+    let Some(timer) = app.pomodoro.as_ref() else { return };
+
+    let (title, hint) = if timer.phase == Phase::Break {
+        (t!("ui.pomodoro_break_label"), t!("ui.pomodoro_break_hint"))
+    } else {
+        (t!("menu.item.tools.pomodoro"), t!("ui.pomodoro_hint"))
+    };
+    let big = timer.label();
+    let width = 36u16.min(area.width.saturating_sub(2)).max(24);
+    let height = 6u16.min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    };
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {title} "));
+    let inner = block.inner(rect);
+    frame.render_widget(Clear, rect);
+    frame.render_widget(block, rect);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Min(1)])
+        .split(inner);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(big, theme::selected()))).alignment(Alignment::Center),
+        rows[1],
+    );
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim()))).alignment(Alignment::Center),
+        rows[2],
+    );
 }
 
 fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {

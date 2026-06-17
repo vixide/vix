@@ -92,6 +92,23 @@ fn select_all_then_typing_replaces_buffer() {
 }
 
 #[test]
+fn pomodoro_opens_starts_and_stops() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.pomodoro");
+    let t = app.pomodoro.as_ref().unwrap();
+    assert_eq!(t.label(), "25:00");
+    assert!(!app.pomodoro_running());
+    app.on_key(keycode(KeyCode::Down)); // 24 minutes
+    app.on_key(keycode(KeyCode::Enter)); // start
+    assert!(app.pomodoro_running(), "timer started");
+    assert_eq!(app.pomodoro.as_ref().unwrap().label(), "24:00");
+    app.on_key(keycode(KeyCode::Enter)); // stop
+    assert!(!app.pomodoro_running(), "timer stopped");
+    app.on_key(keycode(KeyCode::Esc)); // close
+    assert!(app.pomodoro.is_none(), "dialog closed");
+}
+
+#[test]
 fn calculator_runs_and_inserts_result() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.calculator");
