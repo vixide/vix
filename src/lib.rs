@@ -58,6 +58,7 @@ pub mod case;
 pub mod editor;
 pub mod explorer;
 pub mod fileops;
+pub mod format_tool;
 pub mod lsp;
 pub mod menu;
 pub mod messages;
