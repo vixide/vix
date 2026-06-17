@@ -2205,6 +2205,19 @@ fn palette_command_fuzzy_ranks_best_match_first() {
 }
 
 #[test]
+fn palette_recents_seed_from_persisted_settings() {
+    let settings = Settings { command_recents: vec!["edit.select_all".to_string()], ..Settings::default() };
+    let mut app = app_with(settings);
+    app.on_key(ctrl('p'));
+    app.on_key(key('>')); // empty command query → recents first
+    let p = app.palette.as_ref().unwrap();
+    match &p.entries[0].action {
+        vix::palette::Action::RunCommand(a) => assert_eq!(a, "edit.select_all", "persisted recent floats up"),
+        _ => panic!("expected a command entry"),
+    }
+}
+
+#[test]
 fn palette_recent_command_floats_to_top() {
     let mut app = app_at(Path::new("."));
     // Run "Select All" from the palette so it is recorded as a recent.

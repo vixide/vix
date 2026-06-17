@@ -792,6 +792,8 @@ impl App {
         // styled correctly. A theme value that is not a built-in mode is treated
         // as the name of a custom JSON theme.
         Self::apply_saved_theme(&settings.theme);
+        // Seed the in-memory palette recents from the persisted list.
+        let command_recents = settings.command_recents.clone();
         // Populate the View → Theme submenu with the available theme names before
         // the menu bar is first rendered.
         let theme_names = crate::theme_model::theme_names(&Self::available_custom_themes());
@@ -891,7 +893,7 @@ impl App {
             settings,
             file_index: Vec::new(),
             palette_origin: None,
-            command_recents: Vec::new(),
+            command_recents,
             last_search: None,
             closed_tabs: Vec::new(),
             running_command: None,
@@ -7146,6 +7148,9 @@ impl App {
         self.command_recents.retain(|a| a != action);
         self.command_recents.insert(0, action.to_string());
         self.command_recents.truncate(MAX_RECENTS);
+        // Persist so the order survives across sessions.
+        self.settings.command_recents.clone_from(&self.command_recents);
+        let _ = self.settings.save();
     }
 
     fn accept_palette(&mut self) {
