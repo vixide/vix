@@ -234,6 +234,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.dialog.is_some() {
         draw_dialog(app, frame, area);
     }
+    if app.color_converter.is_some() {
+        draw_color_converter(app, frame, area);
+    }
     if app.welcome.is_some() {
         draw_welcome(app, frame, area);
     }
@@ -460,6 +463,67 @@ fn draw_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
         )))
         .alignment(Alignment::Center),
         rows[2],
+    );
+}
+
+fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect) {
+    use vix_color_converter_tool::Field;
+    let Some(conv) = app.color_converter.as_ref() else { return };
+
+    let title = t!("menu.item.tools.color_converter");
+    let hint = t!("ui.color_converter_hint");
+    let width = 44u16.min(area.width.saturating_sub(2)).max(24);
+    // border + 3 field rows + blank + swatch + blank + hint + border.
+    let height = 9u16.min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    };
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {title} "));
+    let inner = block.inner(rect);
+    frame.render_widget(Clear, rect);
+    frame.render_widget(block, rect);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // HEX
+            Constraint::Length(1), // RGB
+            Constraint::Length(1), // HSL
+            Constraint::Length(1), // blank
+            Constraint::Length(1), // swatch
+            Constraint::Min(1),    // hint
+        ])
+        .split(inner);
+
+    for (i, field) in Field::ALL.iter().enumerate() {
+        let focused = conv.focus == *field;
+        let text = &conv.fields[field.index()];
+        let style = if focused { theme::selected() } else { theme::base() };
+        let caret = if focused { "_" } else { "" };
+        let line = Line::from(vec![
+            Span::styled(format!(" {:<4}", field.label()), theme::dim()),
+            Span::styled(format!("{text}{caret}"), style),
+        ]);
+        frame.render_widget(Paragraph::new(line), rows[i]);
+        app.layout.color_converter_rows[i] = rows[i];
+    }
+
+    // A swatch of the current color, when the focused field parses.
+    if let Some(c) = conv.color() {
+        let swatch = Block::default().style(Style::default().bg(Color::Rgb(c.r, c.g, c.b)));
+        frame.render_widget(swatch, rows[4]);
+    }
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim()))),
+        rows[5],
     );
 }
 

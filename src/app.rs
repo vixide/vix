@@ -448,6 +448,8 @@ pub struct Layout {
     pub submenu_dropdown: Rect,
     /// Open third-level submenu dropdown rectangle (valid while one is open).
     pub subsubmenu_dropdown: Rect,
+    /// Color Converter dialog field rows (valid while it is open), for click-to-focus.
+    pub color_converter_rows: [Rect; 3],
     /// Info-dialog text-field rectangle (valid while a text dialog is open).
     pub dialog_body: Rect,
     /// Tab-strip rectangle.
@@ -632,6 +634,8 @@ pub struct App {
     pub completion: Option<CompletionPopup>,
     /// Modal info dialog (Vix menu About / Website / Email), when open.
     pub dialog: Option<Dialog>,
+    /// Color Converter dialog (Tools → Color Converter…), when open.
+    pub color_converter: Option<vix_color_converter_tool::Converter>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
     pub clip: Vec<PathBuf>,
     /// Whether [`App::clip`] holds a cut (move) rather than a copy.
@@ -816,6 +820,7 @@ impl App {
             hover: None,
             completion: None,
             dialog: None,
+            color_converter: None,
             clip: Vec::new(),
             clip_cut: false,
             nav_history: Vec::new(),
@@ -1032,6 +1037,10 @@ impl App {
                     let _ = ed.input(key, &area);
                 }
             }
+            return;
+        }
+        if self.color_converter.is_some() {
+            self.color_converter_key(key);
             return;
         }
         // While the calendar box is open it captures left/right to page months.
@@ -1834,6 +1843,7 @@ impl App {
                 self.set_time_zone_by_name(&a["view.time_zone:".len()..]);
             }
             "tools.dashboard" => self.open_dashboard(),
+            "tools.color_converter" => self.open_color_converter(),
             "tools.generate.uuid.v1" => self.insert_generated(&vix_uuid_tool::v1()),
             "tools.generate.uuid.v2" => self.insert_generated(&vix_uuid_tool::v2()),
             "tools.generate.uuid.v3" => self.insert_generated(&vix_uuid_tool::v3()),
@@ -2306,6 +2316,70 @@ impl App {
         if self.editor.insert_str(text, area) {
             self.status = t!("status.generated", text = text).to_string();
         }
+    }
+
+    // ----- Color Converter ------------------------------------------------
+
+    /// Open the Color Converter dialog, seeding it from the selection when that
+    /// text parses as a HEX/RGB/HSL color.
+    fn open_color_converter(&mut self) {
+        let mut conv = vix_color_converter_tool::Converter::new();
+        if let Some(sel) = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text()) {
+            let s = sel.trim();
+            let color = vix_color_converter_tool::Color::from_hex(s)
+                .or_else(|| vix_color_converter_tool::Color::from_rgb(s))
+                .or_else(|| vix_color_converter_tool::Color::from_hsl(s));
+            if let Some(c) = color {
+                conv.set_color(c);
+            }
+        }
+        self.color_converter = Some(conv);
+    }
+
+    /// Handle a key for the Color Converter dialog: type into the focused field
+    /// (live-updating the others), Tab/arrows to switch fields, Enter to insert
+    /// the focused value into the editor, Esc to close.
+    fn color_converter_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => self.color_converter = None,
+            KeyCode::Tab | KeyCode::Down => {
+                if let Some(c) = self.color_converter.as_mut() {
+                    c.focus_next();
+                }
+            }
+            KeyCode::BackTab | KeyCode::Up => {
+                if let Some(c) = self.color_converter.as_mut() {
+                    c.focus_prev();
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(c) = self.color_converter.as_mut() {
+                    c.backspace();
+                }
+            }
+            KeyCode::Enter => self.insert_color_value(),
+            KeyCode::Char(ch) if !Self::ctrl(&key) && !Self::alt(&key) => {
+                if let Some(c) = self.color_converter.as_mut() {
+                    c.push(ch);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Insert the focused field's value into the editor and close the dialog.
+    fn insert_color_value(&mut self) {
+        let Some(value) = self.color_converter.as_ref().map(|c| c.current().to_string()) else {
+            return;
+        };
+        if value.is_empty() {
+            self.color_converter = None;
+            return;
+        }
+        let area = self.layout.editor;
+        self.editor.insert_str(&value, area);
+        self.status = t!("status.generated", text = value).to_string();
+        self.color_converter = None;
     }
 
     /// Refresh the cached git state (repo?, branch, changed files) for the workspace
@@ -4001,6 +4075,21 @@ impl App {
                 }
             } else if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
                 self.dialog = None;
+            }
+            return;
+        }
+        // The Color Converter dialog: a left click on a field row focuses it.
+        if self.color_converter.is_some() {
+            if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+                use vix_color_converter_tool::Field;
+                for field in Field::ALL {
+                    if rect_contains(self.layout.color_converter_rows[field.index()], mouse.column, mouse.row) {
+                        if let Some(c) = self.color_converter.as_mut() {
+                            c.set_focus(field);
+                        }
+                        break;
+                    }
+                }
             }
             return;
         }

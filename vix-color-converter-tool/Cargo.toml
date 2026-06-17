@@ -1,0 +1,15 @@
+# vix-color-converter-tool: parse and convert colors between HEX, RGB, and HSL.
+# Pure logic; the host's Color Converter dialog (Tools → Color Converter…) keeps
+# three live-updating fields backed by these functions.
+
+[package]
+name = "vix-color-converter-tool"
+version = "0.1.0"
+edition = "2021"
+description = "HEX/RGB/HSL color parsing and conversion for Vix."
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_color_converter_tool"
+path = "src/lib.rs"

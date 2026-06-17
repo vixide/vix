@@ -92,6 +92,24 @@ fn select_all_then_typing_replaces_buffer() {
 }
 
 #[test]
+fn color_converter_syncs_fields_and_inserts() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.color_converter");
+    assert!(app.color_converter.is_some(), "dialog opened");
+    for ch in "#ff0000".chars() {
+        app.on_key(key(ch));
+    }
+    {
+        let conv = app.color_converter.as_ref().unwrap();
+        assert_eq!(conv.fields[1], "rgb(255, 0, 0)", "RGB field synced");
+        assert_eq!(conv.fields[2], "hsl(0, 100%, 50%)", "HSL field synced");
+    }
+    app.on_key(keycode(KeyCode::Enter)); // insert the focused (HEX) value
+    assert!(app.color_converter.is_none(), "dialog closed after insert");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "#ff0000");
+}
+
+#[test]
 fn convert_base64_round_trips_via_actions() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "hello");
