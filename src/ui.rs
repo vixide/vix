@@ -240,6 +240,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.unit_converter.is_some() {
         draw_unit_converter(app, frame, area);
     }
+    if app.calculator.is_some() {
+        draw_calculator(app, frame, area);
+    }
     if app.welcome.is_some() {
         draw_welcome(app, frame, area);
     }
@@ -527,6 +530,78 @@ fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim()))),
         rows[5],
+    );
+}
+
+fn draw_calculator(app: &mut App, frame: &mut Frame, area: Rect) {
+    use vix_calculator_tool::{Focus, Outcome};
+    let Some(calc) = app.calculator.as_ref() else { return };
+
+    let title = t!("menu.item.tools.calculator");
+    let hint = t!("ui.calculator_hint");
+    let width = 50u16.min(area.width.saturating_sub(2)).max(28);
+    let height = 8u16.min(area.height); // border + input + blank + buttons + blank + result + hint + border
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    };
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {title} "));
+    let inner = block.inner(rect);
+    frame.render_widget(Clear, rect);
+    frame.render_widget(block, rect);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // input
+            Constraint::Length(1), // buttons
+            Constraint::Length(1), // result
+            Constraint::Min(1),    // hint
+        ])
+        .split(inner);
+
+    let input_style = if calc.focus == Focus::Input { theme::selected() } else { theme::base() };
+    let caret = if calc.focus == Focus::Input { "_" } else { "" };
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(format!(" {}{caret}", calc.input), input_style))),
+        rows[0],
+    );
+    app.layout.calculator_rects[0] = rows[0];
+
+    // Buttons: [ Run ] [ Insert ].
+    let btn = |label: String, focused: bool| {
+        let style = if focused { theme::selected() } else { theme::dim() };
+        Span::styled(format!("[ {label} ] "), style)
+    };
+    let buttons = Line::from(vec![
+        Span::raw(" "),
+        btn(t!("ui.calculator_run").to_string(), calc.focus == Focus::Run),
+        btn(t!("ui.calculator_insert").to_string(), calc.focus == Focus::Insert),
+    ]);
+    frame.render_widget(Paragraph::new(buttons), rows[1]);
+    // Approximate button hit rects: split the buttons row in two halves.
+    let half = rows[1].width / 2;
+    app.layout.calculator_rects[1] = Rect { x: rows[1].x, y: rows[1].y, width: half, height: 1 };
+    app.layout.calculator_rects[2] =
+        Rect { x: rows[1].x + half, y: rows[1].y, width: rows[1].width - half, height: 1 };
+
+    // Result or error line.
+    let result_line = match &calc.outcome {
+        Some(Outcome::Ok(v)) => Line::from(Span::styled(format!(" = {v}"), theme::base())),
+        Some(Outcome::Err(e)) => Line::from(Span::styled(format!(" {e}"), theme::dim())),
+        None => Line::from(""),
+    };
+    frame.render_widget(Paragraph::new(result_line), rows[2]);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim()))),
+        rows[3],
     );
 }
 
