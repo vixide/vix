@@ -2157,6 +2157,42 @@ fn ctrl_p_opens_palette_and_esc_closes() {
 }
 
 #[test]
+fn palette_command_fuzzy_ranks_best_match_first() {
+    let mut app = app_at(Path::new("."));
+    app.on_key(ctrl('p'));
+    for c in ">sortlines".chars() {
+        app.on_key(key(c));
+    }
+    let p = app.palette.as_ref().unwrap();
+    assert!(!p.entries.is_empty(), "fuzzy query matched commands");
+    match &p.entries[0].action {
+        vix::palette::Action::RunCommand(a) => assert_eq!(a, "edit.sort_lines"),
+        _ => panic!("expected a command entry"),
+    }
+}
+
+#[test]
+fn palette_recent_command_floats_to_top() {
+    let mut app = app_at(Path::new("."));
+    // Run "Select All" from the palette so it is recorded as a recent.
+    app.on_key(ctrl('p'));
+    for c in ">select all".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter)); // accept → records the recent + runs it
+    assert!(app.palette.is_none(), "palette closed after accepting");
+
+    // Reopen the command list with no query: the recent is first.
+    app.on_key(ctrl('p'));
+    app.on_key(key('>'));
+    let p = app.palette.as_ref().unwrap();
+    match &p.entries[0].action {
+        vix::palette::Action::RunCommand(a) => assert_eq!(a, "edit.select_all", "recent floats up"),
+        _ => panic!("expected a command entry"),
+    }
+}
+
+#[test]
 fn f10_toggles_menu_bar() {
     let mut app = app_at(Path::new("."));
     assert!(!app.menu.is_open());
