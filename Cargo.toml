@@ -47,6 +47,7 @@ members = [
     "vix-convert-json-to-yaml-tool",
     "vix-color-converter-tool",
     "vix-unit-converter-tool",
+    "vix-calculator-tool",
 ]
 
 [package]
@@ -159,6 +160,8 @@ vix-convert-json-to-yaml-tool = { path = "vix-convert-json-to-yaml-tool" }
 vix-color-converter-tool = { path = "vix-color-converter-tool" }
 # Tools → Convert → Unit Converter: number + unit selectors with live output.
 vix-unit-converter-tool = { path = "vix-unit-converter-tool" }
+# Tools → Calculator: evaluate a typed formula and insert the result.
+vix-calculator-tool = { path = "vix-calculator-tool" }
 # Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
 crossterm = "0.29"
 # Regular expressions for find/replace.
@@ -173,6 +176,8 @@ confy = "2.0.0"
 clap = { version = "4.6.1", features = ["derive"] }
 rust-i18n = "4.1.0"
 include_dir = "0.7.4"
+serde_yaml = "0.9.34"
+markdown = "1.0.0"
 
 [profile.release]
 lto = true

@@ -92,6 +92,23 @@ fn select_all_then_typing_replaces_buffer() {
 }
 
 #[test]
+fn calculator_runs_and_inserts_result() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.calculator");
+    assert!(app.calculator.is_some(), "dialog opened");
+    for ch in "6*7".chars() {
+        app.on_key(key(ch));
+    }
+    app.on_key(keycode(KeyCode::Enter)); // Run (input focused)
+    assert_eq!(app.calculator.as_ref().unwrap().result(), Some("42"));
+    app.on_key(keycode(KeyCode::Tab)); // focus Run
+    app.on_key(keycode(KeyCode::Tab)); // focus Insert
+    app.on_key(keycode(KeyCode::Enter)); // insert
+    assert!(app.calculator.is_none(), "dialog closed after insert");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "42");
+}
+
+#[test]
 fn unit_converter_inserts_converted_value() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.convert.unit");

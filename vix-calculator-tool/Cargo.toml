@@ -1,0 +1,18 @@
+# vix-calculator-tool: evaluate an arithmetic/boolean formula to a string, plus
+# the Calculator dialog's editing state. The host's Tools → Calculator… dialog
+# renders it and inserts the result into the editor.
+
+[package]
+name = "vix-calculator-tool"
+version = "0.1.0"
+edition = "2021"
+description = "Formula evaluator and Calculator dialog state for Vix."
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_calculator_tool"
+path = "src/lib.rs"
+
+[dependencies]
+evalexpr = "13"

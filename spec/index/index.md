@@ -14,7 +14,8 @@ widget pins that.
 | Name          | Purpose                                               | URL                                    | Debian equivalent?                                                                             | Debian unstable version | Debian 14 Forky version |
 | ------------- | ----------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------- | ----------------------- |
 | serde         | Settings + theme (de)serialization                    | https://crates.io/crates/serde         | librust-serde-dev                                                                              | ?                       | ?                       |
-| serde_json    | Custom theme JSON files                               | https://crates.io/crates/serde_json    | librust-serde-json-dev                                                                         | ?                       | ?                       |
+| serde-json    | Serialize/Deserialize JSON (and Vix config files)     | https://crates.io/crate/serde_json     | librust-serde-json-dev                                                                         | ?                       | ?                       |
+| serde-yaml    | Serialize/Deserialize YAML                            | https://crates.io/crate/serde-yaml     | librust-serde-yaml-dev                                                                         | ?                       | ?                       |
 | ratatui       | Terminal UI (layout, widgets)                         | https://crates.io/crates/ratatui       | librust-ratatui-dev                                                                            | ?                       | ?                       |
 | ratatui-image | In-terminal image viewing (png/jpg/…)                 | https://crates.io/crates/ratatui-image |                                                                                                | ?                       | ?                       |
 | image         | Image decoding for the viewer                         | https://crates.io/crates/image         | librust-image-dev, librust-image+default-dev                                                   | 0.25.x                  |
@@ -32,6 +33,7 @@ widget pins that.
 | similar       | Text diffing for the git diff gutter                  | https://crates.io/crates/similar       | librust-similar-dev                                                                            | ?                       | ?                       |
 | evalexpr      | Evaluate expression (solely for calculator tool)      | https://crates.io/crates/evalexpr      | librust-evalexpr-dev                                                                           | ?                       | ?                       |
 | rand          | Randomness functionality, number generators           | https://crates.io/crates/rand          | librust-rand-dev                                                                               | ?                       | ?                       |
+| markdown      | Markdown parser & converter                           | https://crates.io/crate/markdown       | librust-markdown-dev                                                                           |
 
 The center editing area uses **`vix-editor`** — Vix's fully-custom code-editor
 widget (Tree-sitter syntax highlighting, undo/redo history, selection, system

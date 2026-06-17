@@ -452,6 +452,8 @@ pub struct Layout {
     pub color_converter_rows: [Rect; 3],
     /// Unit Converter dialog rows (value, from, to), for click-to-focus.
     pub unit_converter_rows: [Rect; 3],
+    /// Calculator dialog hit rects: input field, Run button, Insert button.
+    pub calculator_rects: [Rect; 3],
     /// Info-dialog text-field rectangle (valid while a text dialog is open).
     pub dialog_body: Rect,
     /// Tab-strip rectangle.
@@ -640,6 +642,8 @@ pub struct App {
     pub color_converter: Option<vix_color_converter_tool::Converter>,
     /// Unit Converter dialog (Tools → Convert → Unit Converter…), when open.
     pub unit_converter: Option<vix_unit_converter_tool::Converter>,
+    /// Calculator dialog (Tools → Calculator…), when open.
+    pub calculator: Option<vix_calculator_tool::Calculator>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
     pub clip: Vec<PathBuf>,
     /// Whether [`App::clip`] holds a cut (move) rather than a copy.
@@ -826,6 +830,7 @@ impl App {
             dialog: None,
             color_converter: None,
             unit_converter: None,
+            calculator: None,
             clip: Vec::new(),
             clip_cut: false,
             nav_history: Vec::new(),
@@ -1050,6 +1055,10 @@ impl App {
         }
         if self.unit_converter.is_some() {
             self.unit_converter_key(key);
+            return;
+        }
+        if self.calculator.is_some() {
+            self.calculator_key(key);
             return;
         }
         // While the calendar box is open it captures left/right to page months.
@@ -1853,6 +1862,7 @@ impl App {
             }
             "tools.dashboard" => self.open_dashboard(),
             "tools.color_converter" => self.open_color_converter(),
+            "tools.calculator" => self.open_calculator(),
             "tools.generate.uuid.v1" => self.insert_generated(&vix_uuid_tool::v1()),
             "tools.generate.uuid.v2" => self.insert_generated(&vix_uuid_tool::v2()),
             "tools.generate.uuid.v3" => self.insert_generated(&vix_uuid_tool::v3()),
@@ -2451,6 +2461,73 @@ impl App {
             self.status = t!("status.generated", text = text).to_string();
         }
         self.unit_converter = None;
+    }
+
+    // ----- Calculator -----------------------------------------------------
+
+    /// Open the Calculator dialog, seeding the formula from the selection.
+    fn open_calculator(&mut self) {
+        let mut calc = vix_calculator_tool::Calculator::new();
+        if let Some(sel) = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text()) {
+            calc.input = sel.trim().to_string();
+        }
+        self.calculator = Some(calc);
+    }
+
+    /// Handle a key for the Calculator dialog: type the formula, Enter runs it
+    /// (or, with the Insert button focused, inserts the result), Tab cycles the
+    /// Input/Run/Insert controls, Esc closes.
+    fn calculator_key(&mut self, key: KeyEvent) {
+        use vix_calculator_tool::Focus;
+        match key.code {
+            KeyCode::Esc => self.calculator = None,
+            KeyCode::Tab => {
+                if let Some(c) = self.calculator.as_mut() {
+                    c.focus_next();
+                }
+            }
+            KeyCode::BackTab => {
+                if let Some(c) = self.calculator.as_mut() {
+                    c.focus_prev();
+                }
+            }
+            KeyCode::Enter => {
+                let focus = self.calculator.as_ref().map(|c| c.focus);
+                match focus {
+                    Some(Focus::Insert) => self.insert_calculator_result(),
+                    Some(_) => {
+                        if let Some(c) = self.calculator.as_mut() {
+                            c.run();
+                        }
+                    }
+                    None => {}
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(c) = self.calculator.as_mut() {
+                    c.backspace();
+                }
+            }
+            KeyCode::Char(ch) if !Self::ctrl(&key) && !Self::alt(&key) => {
+                if let Some(c) = self.calculator.as_mut() {
+                    if c.focus == Focus::Input {
+                        c.push(ch);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Insert the Calculator's current result into the editor and close it.
+    fn insert_calculator_result(&mut self) {
+        let result = self.calculator.as_ref().and_then(|c| c.result().map(str::to_string));
+        if let Some(value) = result {
+            let area = self.layout.editor;
+            self.editor.insert_str(&value, area);
+            self.status = t!("status.generated", text = value).to_string();
+            self.calculator = None;
+        }
     }
 
     /// Refresh the cached git state (repo?, branch, changed files) for the workspace
@@ -4160,6 +4237,30 @@ impl App {
                         }
                         break;
                     }
+                }
+            }
+            return;
+        }
+        // The Calculator dialog: clicking the input focuses it; clicking Run
+        // evaluates; clicking Insert inserts the result.
+        if self.calculator.is_some() {
+            if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+                use vix_calculator_tool::Focus;
+                let (col, row) = (mouse.column, mouse.row);
+                if rect_contains(self.layout.calculator_rects[0], col, row) {
+                    if let Some(c) = self.calculator.as_mut() {
+                        c.focus = Focus::Input;
+                    }
+                } else if rect_contains(self.layout.calculator_rects[1], col, row) {
+                    if let Some(c) = self.calculator.as_mut() {
+                        c.focus = Focus::Run;
+                        c.run();
+                    }
+                } else if rect_contains(self.layout.calculator_rects[2], col, row) {
+                    if let Some(c) = self.calculator.as_mut() {
+                        c.focus = Focus::Insert;
+                    }
+                    self.insert_calculator_result();
                 }
             }
             return;
