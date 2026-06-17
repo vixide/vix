@@ -372,6 +372,11 @@ pub use vix_vcard_panel::Panel as VcardPanel;
 /// click) inserts the highlighted value into the active editor, Esc closes.
 pub use vix_file_information_panel::Panel as FileInfoPanel;
 
+/// Text Information overlay state (Tools -> About -> Text), re-exported from
+/// [`vix_text_information_panel`]. Shows character/word/line/sentence/paragraph
+/// counts for the selection (or buffer); Enter/click inserts a value, Esc closes.
+pub use vix_text_information_panel::Panel as TextInfoPanel;
+
 /// Code-outline overlay state (Ctrl+Shift+O), re-exported from
 /// [`vix_outline_panel`]. Lists the active buffer's symbols; Enter/click jumps to
 /// one, Esc closes.
@@ -509,6 +514,8 @@ pub struct Layout {
     pub welcome: Rect,
     /// Row-list rectangle of the open File Information panel, for click hit-testing.
     pub file_info: Rect,
+    /// Text Information panel row list rect (for click-to-select).
+    pub text_info: Rect,
     /// Row-list rectangle of the open contact browser, for click hit-testing.
     pub contacts: Rect,
     /// Row-list rectangle of the open vCard view, for click hit-testing.
@@ -625,6 +632,8 @@ pub struct App {
     pub welcome: Option<WelcomePanel>,
     /// File Information overlay, when open.
     pub file_info: Option<FileInfoPanel>,
+    /// Text Information overlay, when open.
+    pub text_info: Option<TextInfoPanel>,
     /// Contact-browser overlay, when open.
     pub contacts: Option<ContactPanel>,
     /// Single-vCard view overlay, when open (above the contact browser).
@@ -831,6 +840,7 @@ impl App {
             outline: None,
             welcome: None,
             file_info: None,
+            text_info: None,
             contacts: None,
             vcard: None,
             lsp,
@@ -1156,6 +1166,10 @@ impl App {
         }
         if self.file_info.is_some() {
             self.file_info_key(key);
+            return;
+        }
+        if self.text_info.is_some() {
+            self.text_info_key(key);
             return;
         }
         if self.vcard.is_some() {
@@ -1867,6 +1881,7 @@ impl App {
             "tools.html_chars" => self.open_html_panel(),
             "tools.system_info" => self.open_system_info(),
             "tools.file_info" => self.open_file_info(),
+            "tools.text_info" => self.open_text_info(),
             "tools.contacts" => self.open_contacts(),
             "tools.clock" => {
                 self.show_clock = !self.show_clock;
@@ -4453,6 +4468,10 @@ impl App {
             self.file_info_mouse(mouse);
             return;
         }
+        if self.text_info.is_some() {
+            self.text_info_mouse(mouse);
+            return;
+        }
         if self.vcard.is_some() {
             self.vcard_mouse(mouse);
             return;
@@ -6421,6 +6440,65 @@ impl App {
     /// Insert the highlighted value into the active editor (leaving the panel open).
     fn insert_selected_file_info(&mut self) {
         let Some(p) = self.file_info.as_ref() else {
+            return;
+        };
+        let value = p.selected_value();
+        if value.is_empty() {
+            return;
+        }
+        let area = self.layout.editor;
+        if self.editor.insert_str(&value, area) {
+            self.status = t!("status.ascii_inserted", name = value).to_string();
+        }
+    }
+
+    // ----- Text Information panel -----------------------------------------
+
+    /// Open the Text Information panel over the selection, or the whole buffer
+    /// when nothing is selected.
+    fn open_text_info(&mut self) {
+        let text = self.selected_or_all_text();
+        let stats = vix_text_information_panel::analyze(&text);
+        self.text_info = Some(TextInfoPanel::open(&stats));
+    }
+
+    fn text_info_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.text_info.as_mut() {
+                    p.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.text_info.as_mut() {
+                    p.down();
+                }
+            }
+            KeyCode::Enter => self.insert_selected_text_info(),
+            KeyCode::Esc => self.text_info = None,
+            _ => {}
+        }
+    }
+
+    fn text_info_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.text_info;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row_in_view = (mouse.row - r.y) as usize;
+        if let Some(p) = self.text_info.as_mut() {
+            if p.select_index(row_in_view) {
+                self.insert_selected_text_info();
+            }
+        }
+    }
+
+    /// Insert the highlighted value into the active editor (leaving the panel open).
+    fn insert_selected_text_info(&mut self) {
+        let Some(p) = self.text_info.as_ref() else {
             return;
         };
         let value = p.selected_value();

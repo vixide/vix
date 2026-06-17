@@ -290,6 +290,7 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.calculator", "tools.calculator", ""),
     Item::leaf("menu.item.tools.pomodoro", "tools.pomodoro", ""),
     SEP,
+    Item::leaf("menu.item.tools.text_info", "tools.text_info", ""),
     Item::leaf("menu.item.tools.file_info", "tools.file_info", ""),
     Item::leaf("menu.item.tools.dashboard", "tools.dashboard", ""),
     Item::leaf("menu.item.tools.system_info", "tools.system_info", ""),

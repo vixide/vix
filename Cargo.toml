@@ -173,6 +173,8 @@ vix-unit-converter-tool = { path = "vix-unit-converter-tool" }
 vix-calculator-tool = { path = "vix-calculator-tool" }
 # Tools → Pomodoro Timer: work/break countdown state machine.
 vix-pomodoro-tool = { path = "vix-pomodoro-tool" }
+# Tools → About → Text: text statistics panel.
+vix-text-information-panel = { path = "vix-text-information-panel" }
 # Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
 crossterm = "0.29"
 # Regular expressions for find/replace.
