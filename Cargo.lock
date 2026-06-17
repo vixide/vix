@@ -3583,6 +3583,7 @@ dependencies = [
  "vix-spellcheck",
  "vix-status-bar-panel",
  "vix-system-information-panel",
+ "vix-text-information-panel",
  "vix-theme-model",
  "vix-time-zone-model",
  "vix-unit-converter-tool",
@@ -3857,6 +3858,10 @@ version = "0.1.0"
 dependencies = [
  "sysinfo",
 ]
+
+[[package]]
+name = "vix-text-information-panel"
+version = "0.1.0"
 
 [[package]]
 name = "vix-theme-model"

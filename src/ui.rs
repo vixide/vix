@@ -207,6 +207,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.file_info.is_some() {
         draw_file_info(app, frame, area);
     }
+    if app.text_info.is_some() {
+        draw_text_info(app, frame, area);
+    }
     if app.contacts.is_some() {
         draw_contacts(app, frame, area);
     }
@@ -2545,6 +2548,57 @@ fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
     let hint = Line::from(Span::styled(t!("ui.vcard_hint").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
     app.layout.vcard = Rect { x: chunks[0].x, y: chunks[0].y, width: list_area.width, height: (view_h as u16).min(chunks[0].height) };
+}
+
+fn draw_text_info(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(n) = app.text_info.as_ref().map(vix_text_information_panel::Panel::len) else {
+        return;
+    };
+    let width = 40u16.min(area.width).max(24);
+    let height = (n as u16 + 3).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 4,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::INFO, t!("ui.text_info")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let p = app.text_info.as_ref().unwrap();
+    let view_h = chunks[0].height as usize;
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for (idx, row) in p.rows.iter().take(view_h).enumerate() {
+        let text = format!("  {:<12} {}", row.label, row.value);
+        if idx == p.selected {
+            lines.push(Line::from(Span::styled(text, theme::selected())));
+        } else {
+            lines.push(Line::from(Span::raw(text)));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(t!("ui.system_info_hint").to_string(), theme::dim()))),
+        chunks[1],
+    );
+    app.layout.text_info = Rect {
+        x: chunks[0].x,
+        y: chunks[0].y,
+        width: chunks[0].width,
+        height: (view_h as u16).min(chunks[0].height),
+    };
 }
 
 fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {

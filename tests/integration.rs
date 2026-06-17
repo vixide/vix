@@ -206,6 +206,20 @@ fn convert_failure_leaves_buffer_unchanged() {
 }
 
 #[test]
+fn text_information_reports_counts() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "Hello world.\nHow are you?");
+    app.run_action("tools.text_info");
+    let p = app.text_info.as_ref().expect("panel open");
+    assert_eq!(p.rows[0].label, "Characters");
+    assert_eq!(p.rows[0].value, "25");
+    assert_eq!(p.rows[1].value, "5"); // words
+    assert_eq!(p.rows[3].value, "2"); // sentences
+    app.on_key(keycode(KeyCode::Enter)); // insert Characters value (25)
+    assert!(app.editor.active_tab().unwrap().text().contains("25"));
+}
+
+#[test]
 fn checksum_sha256_hashes_whole_buffer_when_unselected() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "abc");
