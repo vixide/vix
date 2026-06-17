@@ -31,6 +31,8 @@ members = [
     "vix-left-dock",
     "vix-status-bar-panel",
     "vix-bottom-dock",
+    "vix-uuid-tool",
+    "vix-zid-tool",
 ]
 
 [package]
@@ -122,6 +124,9 @@ vix-left-dock = { path = "vix-left-dock" }
 vix-status-bar-panel = { path = "vix-status-bar-panel" }
 # Bottom dock: scrollable line buffer (logs, output, data views).
 vix-bottom-dock = { path = "vix-bottom-dock" }
+# Tools → Generate: UUID (all versions) and ZID (secure random hex) generators.
+vix-uuid-tool = { path = "vix-uuid-tool" }
+vix-zid-tool = { path = "vix-zid-tool" }
 # Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
 crossterm = "0.29"
 # Regular expressions for find/replace.

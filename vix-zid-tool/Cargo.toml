@@ -1,0 +1,18 @@
+# vix-zid-tool: generate a secure random ZID — a 32-character lowercase
+# hexadecimal string (128 bits of randomness). Pure logic; the host inserts the
+# result into the active editor (Tools → Generate → ZID).
+
+[package]
+name = "vix-zid-tool"
+version = "0.1.0"
+edition = "2021"
+description = "Secure random ZID (32-char lowercase hex) generator for Vix."
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
+repository = "https://github.com/sixarm/vix"
+
+[lib]
+name = "vix_zid_tool"
+path = "src/lib.rs"
+
+[dependencies]
+getrandom = "0.2"

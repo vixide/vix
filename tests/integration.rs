@@ -92,6 +92,24 @@ fn select_all_then_typing_replaces_buffer() {
 }
 
 #[test]
+fn generate_uuid_v4_inserts_a_canonical_uuid() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.generate.uuid.v4");
+    let text = app.editor.active_tab().unwrap().text();
+    assert_eq!(text.len(), 36, "v4 UUID is 36 chars: {text:?}");
+    assert_eq!(text.chars().nth(14), Some('4'), "version digit is 4");
+}
+
+#[test]
+fn generate_zid_inserts_32_hex_chars() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.generate.zid");
+    let text = app.editor.active_tab().unwrap().text();
+    assert_eq!(text.len(), 32, "ZID is 32 chars: {text:?}");
+    assert!(text.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)));
+}
+
+#[test]
 fn select_all_action_selects_whole_buffer() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "hello");

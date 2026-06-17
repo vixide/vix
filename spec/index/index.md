@@ -11,25 +11,27 @@ Vix is built on a deliberately small, version-compatible crate set. The whole
 `ratatui` widget ecosystem must agree on one `ratatui` version (0.30); the editor
 widget pins that.
 
-| Name          | Purpose                                               | URL                                    | Debian equivalent?                                                                             | Debian unstable version |
-| ------------- | ----------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------- |
-| serde         | Settings + theme (de)serialization                    | https://crates.io/crates/serde         | librust-serde-dev                                                                              |
-| serde_json    | Custom theme JSON files                               | https://crates.io/crates/serde_json    | librust-serde-json-dev                                                                         |
-| ratatui       | Terminal UI (layout, widgets)                         | https://crates.io/crates/ratatui       | librust-ratatui-dev                                                                            |
-| ratatui-image | In-terminal image viewing (png/jpg/…)                 | https://crates.io/crates/ratatui-image |                                                                                                |                         |
+| Name          | Purpose                                               | URL                                    | Debian equivalent?                                                                             | Debian unstable version | Debian 14 Forky version |
+| ------------- | ----------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------- | ----------------------- |
+| serde         | Settings + theme (de)serialization                    | https://crates.io/crates/serde         | librust-serde-dev                                                                              | ?                       | ?                       |
+| serde_json    | Custom theme JSON files                               | https://crates.io/crates/serde_json    | librust-serde-json-dev                                                                         | ?                       | ?                       |
+| ratatui       | Terminal UI (layout, widgets)                         | https://crates.io/crates/ratatui       | librust-ratatui-dev                                                                            | ?                       | ?                       |
+| ratatui-image | In-terminal image viewing (png/jpg/…)                 | https://crates.io/crates/ratatui-image |                                                                                                | ?                       | ?                       |
 | image         | Image decoding for the viewer                         | https://crates.io/crates/image         | librust-image-dev, librust-image+default-dev                                                   | 0.25.x                  |
-| crossterm     | Cross-platform terminal backend / events / mouse      | https://crates.io/crates/crossterm     | librust-crossterm-dev                                                                          |
-| regex         | Regular expressions for find/replace; Unicode feature | https://crates.io/crates/regex         | librust-regex-dev, librust-regex+unicode-dev                                                   |
-| jiff          | Date & time (local, UTC, ISO week)                    | https://crates.io/crates/jiff          | librust-jiff-dev                                                                               |
-| rust-i18n     | Internationalization YAML files                       | https://crates.io/crates/rust-i18n     | librust-regex-dev                                                                              |
-| confy         | Configuration                                         | https://crates.io/crates/confy         | librust-confy-dev                                                                              |
+| crossterm     | Cross-platform terminal backend / events / mouse      | https://crates.io/crates/crossterm     | librust-crossterm-dev                                                                          | ?                       | ?                       |
+| regex         | Regular expressions for find/replace; Unicode feature | https://crates.io/crates/regex         | librust-regex-dev, librust-regex+unicode-dev                                                   | ?                       | ?                       |
+| jiff          | Date & time (local, UTC, ISO week)                    | https://crates.io/crates/jiff          | librust-jiff-dev                                                                               | ?                       | ?                       |
+| rust-i18n     | Internationalization YAML files                       | https://crates.io/crates/rust-i18n     | librust-regex-dev                                                                              | ?                       | ?                       |
+| confy         | Configuration                                         | https://crates.io/crates/confy         | librust-confy-dev                                                                              | ?                       | ?                       |
 | clap          | Command Line Argument Parsing                         | https://crates.io/crates/clap          | librust-clap-dev, librust-clap-complete-dev, librust-clap-derive-dev, librust-clap-builder-dev | 4.6.1                   |
-| mimalloc      | MiMalloc custom memory allocator for MUSL             | https://crates.io/crates/mimalloc      |                                                                                                |
-| include_dir   | Embed bundled theme JSON files into the binary        | https://crates.io/crates/include_dir   |                                                                                                |                         |
-| tree-sitter   | Rust bindings to the Tree-sitter parsing library      | https://crates.io/crates/tree-sitter   | librust-tree-sitter-dev                                                                        |
-| sysinfo       | Host system snapshot (System Information panel)       | https://crates.io/crates/sysinfo       | librust-sysinfo-dev                                                                            |
-| spellbook     | Pure-Rust Hunspell spell checker                      | https://crates.io/crates/spellbook     |                                                                                                |
-| similar       | Text diffing for the git diff gutter                  | https://crates.io/crates/similar       | librust-similar-dev                                                                            |
+| mimalloc      | MiMalloc custom memory allocator for MUSL             | https://crates.io/crates/mimalloc      |                                                                                                | ?                       | ?                       |
+| include_dir   | Embed bundled theme JSON files into the binary        | https://crates.io/crates/include_dir   |                                                                                                | ?                       | ?                       |
+| tree-sitter   | Rust bindings to the Tree-sitter parsing library      | https://crates.io/crates/tree-sitter   | librust-tree-sitter-dev                                                                        | ?                       | ?                       |
+| sysinfo       | Host system snapshot (System Information panel)       | https://crates.io/crates/sysinfo       | librust-sysinfo-dev                                                                            | ?                       | ?                       |
+| spellbook     | Pure-Rust Hunspell spell checker                      | https://crates.io/crates/spellbook     |                                                                                                | ?                       | ?                       |
+| similar       | Text diffing for the git diff gutter                  | https://crates.io/crates/similar       | librust-similar-dev                                                                            | ?                       | ?                       |
+| evalexpr      | Evaluate expression (solely for calculator tool)      | https://crates.io/crates/evalexpr      | librust-evalexpr-dev                                                                           | ?                       | ?                       |
+| rand          | Randomness functionality, number generators           | https://crates.io/crates/rand          | librust-rand-dev                                                                               | ?                       | ?                       |
 
 The center editing area uses **`vix-editor`** — Vix's fully-custom code-editor
 widget (Tree-sitter syntax highlighting, undo/redo history, selection, system
@@ -100,21 +102,21 @@ The crate exposes a library (`src/lib.rs`) plus a thin binary (`src/main.rs`).
 Splitting it this way keeps all editing logic terminal-independent and unit
 testable.
 
-| Module           | Responsibility                                                 |
-| ---------------- | -------------------------------------------------------------- |
-| `app`            | Central state, event routing, action dispatch, keymap dispatch |
-| `editor`         | Tabs/buffers wrapping `vix-editor`; open/save/goto  |
-| `explorer`       | Left-drawer directory tree                                     |
-| `menu`           | Menu-bar definitions (i18n-keyed) and dropdown state           |
-| `palette`        | Command palette (file/`>`/`#`/`:`/`@` modes) + fuzzy matching  |
-| `search`         | Find / find-and-replace toolbar state                          |
-| `workspace_search` | Workspace-wide search/replace panel state                        |
-| `query`          | Interactive query-replace session                              |
-| `messages`       | Right-drawer notifications                                     |
-| `fileops`        | Explorer copy/cut/paste/delete filesystem helpers              |
-| `settings`       | confy-backed settings (TOML) at `~/.config/vix/config.toml`    |
-| `theme`          | Nerd Font icons + re-export of `vix-theme-chooser`             |
-| `ui`             | All rendering; lays out the frame and draws each pane          |
+| Module             | Responsibility                                                 |
+| ------------------ | -------------------------------------------------------------- |
+| `app`              | Central state, event routing, action dispatch, keymap dispatch |
+| `editor`           | Tabs/buffers wrapping `vix-editor`; open/save/goto             |
+| `explorer`         | Left-drawer directory tree                                     |
+| `menu`             | Menu-bar definitions (i18n-keyed) and dropdown state           |
+| `palette`          | Command palette (file/`>`/`#`/`:`/`@` modes) + fuzzy matching  |
+| `search`           | Find / find-and-replace toolbar state                          |
+| `workspace_search` | Workspace-wide search/replace panel state                      |
+| `query`            | Interactive query-replace session                              |
+| `messages`         | Right-drawer notifications                                     |
+| `fileops`          | Explorer copy/cut/paste/delete filesystem helpers              |
+| `settings`         | confy-backed settings (TOML) at `~/.config/vix/config.toml`    |
+| `theme`            | Nerd Font icons + re-export of `vix-theme-chooser`             |
+| `ui`               | All rendering; lays out the frame and draws each pane          |
 
 The calendar date/time logic, theme model, locale list, keymap (keyboard
 navigation style) list, keyboard-help rows, Nerd Font glyph set, and find /

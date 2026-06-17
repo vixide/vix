@@ -211,9 +211,29 @@ const VIX: &[Item] = &[
     Item::leaf("menu.item.file.quit", "file.quit", "Ctrl Q"),
 ];
 
+/// UUID versions, grouped under Tools → Generate → UUID. Labels are the bare
+/// version digit (RFC 4122 / RFC 9562 v1–v8).
+const TOOLS_GENERATE_UUID: &[Item] = &[
+    Item::leaf("1", "tools.generate.uuid.v1", ""),
+    Item::leaf("2", "tools.generate.uuid.v2", ""),
+    Item::leaf("3", "tools.generate.uuid.v3", ""),
+    Item::leaf("4", "tools.generate.uuid.v4", ""),
+    Item::leaf("5", "tools.generate.uuid.v5", ""),
+    Item::leaf("6", "tools.generate.uuid.v6", ""),
+    Item::leaf("7", "tools.generate.uuid.v7", ""),
+    Item::leaf("8", "tools.generate.uuid.v8", ""),
+];
+
+/// Generators, grouped under Tools → Generate.
+const TOOLS_GENERATE: &[Item] = &[
+    Item::sub("menu.item.tools.generate.uuid", TOOLS_GENERATE_UUID),
+    Item::leaf("menu.item.tools.generate.zid", "tools.generate.zid", ""),
+];
+
 const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.palette", "tools.palette", "Ctrl P"),
     Item::sub("menu.item.tools.lsp", TOOLS_LSP),
+    Item::sub("menu.item.tools.generate", TOOLS_GENERATE),
     SEP,
     Item::leaf("menu.item.tools.file_info", "tools.file_info", ""),
     Item::leaf("menu.item.tools.dashboard", "tools.dashboard", ""),
@@ -451,6 +471,11 @@ pub struct Menu {
     /// Whether the highlighted item's submenu is open (independent of whether a
     /// submenu row is highlighted — opening one highlights nothing).
     pub sub_open: bool,
+    /// The highlighted index within the open sub-submenu (third level), or `None`
+    /// when it has just opened. Only meaningful while [`Self::subsub_open`] is true.
+    pub subsub: Option<usize>,
+    /// Whether the highlighted submenu item's own submenu (third level) is open.
+    pub subsub_open: bool,
 }
 
 impl Menu {
@@ -475,6 +500,8 @@ impl Menu {
         self.item = None;
         self.sub = None;
         self.sub_open = false;
+        self.subsub = None;
+        self.subsub_open = false;
     }
 
     /// Open the menu at index `i` (no-op if out of range). No item is highlighted
@@ -485,6 +512,8 @@ impl Menu {
             self.item = None;
             self.sub = None;
             self.sub_open = false;
+            self.subsub = None;
+            self.subsub_open = false;
         }
     }
 
@@ -502,9 +531,30 @@ impl Menu {
         menus()[i].items[it].submenu
     }
 
-    /// Move to the previous top-level menu; or, if a submenu is open, close it.
+    /// Whether the highlighted submenu item's own (third-level) submenu is open.
+    #[must_use]
+    pub fn subsubmenu_open(&self) -> bool {
+        self.subsub_open
+    }
+
+    /// The third-level submenu items of the currently highlighted submenu item, if
+    /// it has any.
+    #[must_use]
+    pub fn subsubmenu_items(&self) -> Option<&'static [Item]> {
+        let sub = self.submenu_items()?;
+        let sidx = self.sub?;
+        sub.get(sidx).and_then(|it| it.submenu)
+    }
+
+    /// Move to the previous top-level menu; or, if a deeper level is open, close
+    /// the deepest one.
     pub fn left(&mut self) {
         let Some(i) = self.open else { return };
+        if self.subsub_open {
+            self.subsub_open = false;
+            self.subsub = None;
+            return;
+        }
         if self.sub_open {
             self.sub_open = false;
             self.sub = None;
@@ -515,10 +565,18 @@ impl Menu {
     }
 
     /// Move to the next top-level menu; or, if the highlighted item has a closed
-    /// submenu, open it (without highlighting any submenu item yet).
+    /// submenu, open it (without highlighting any item yet). Works at every depth.
     pub fn right(&mut self) {
         let Some(i) = self.open else { return };
+        if self.subsub_open {
+            return;
+        }
         if self.sub_open {
+            // Open the third level if the highlighted submenu row has one.
+            if self.subsubmenu_items().is_some() {
+                self.subsub_open = true;
+                self.subsub = None;
+            }
             return;
         }
         if let Some(it) = self.item {
@@ -532,17 +590,20 @@ impl Menu {
         self.open_index((i + 1) % n);
     }
 
-    /// Highlight the previous selectable item (in the open submenu if any). With
+    /// Highlight the previous selectable item in the deepest open level. With
     /// nothing highlighted yet, highlights the last selectable item.
     pub fn up(&mut self) {
         let Some(i) = self.open else { return };
         let items = menus()[i].items;
+        if self.subsub_open {
+            if let Some(ss) = self.subsubmenu_items() {
+                self.subsub = Some(prev_selectable(ss, self.subsub.unwrap_or(0)));
+            }
+            return;
+        }
         if self.sub_open {
             if let Some(sub) = self.item.and_then(|it| items[it].submenu) {
-                self.sub = Some(match self.sub {
-                    Some(s) => prev_selectable(sub, s),
-                    None => prev_selectable(sub, 0),
-                });
+                self.sub = Some(prev_selectable(sub, self.sub.unwrap_or(0)));
             }
             return;
         }
@@ -552,11 +613,20 @@ impl Menu {
         }
     }
 
-    /// Highlight the next selectable item (in the open submenu if any). With
-    /// nothing highlighted yet, highlights the first selectable item.
+    /// Highlight the next selectable item in the deepest open level. With nothing
+    /// highlighted yet, highlights the first selectable item.
     pub fn down(&mut self) {
         let Some(i) = self.open else { return };
         let items = menus()[i].items;
+        if self.subsub_open {
+            if let Some(ss) = self.subsubmenu_items() {
+                self.subsub = Some(match self.subsub {
+                    Some(s) => next_selectable(ss, s),
+                    None => first_selectable(ss),
+                });
+            }
+            return;
+        }
         if self.sub_open {
             if let Some(sub) = self.item.and_then(|it| items[it].submenu) {
                 self.sub = Some(match self.sub {
@@ -578,10 +648,20 @@ impl Menu {
         let i = self.open?;
         let items = menus()[i].items;
         let it_idx = self.item?;
+        if self.subsub_open {
+            let ss = self.subsubmenu_items()?;
+            let it = &ss[self.subsub?];
+            return (!it.is_separator()).then_some(it.action);
+        }
         if self.sub_open {
             let sub = items[it_idx].submenu?;
-            let sidx = self.sub?;
-            let it = &sub[sidx];
+            let it = &sub[self.sub?];
+            if it.submenu.is_some() {
+                // Open the third level; highlight nothing yet.
+                self.subsub_open = true;
+                self.subsub = None;
+                return None;
+            }
             return (!it.is_separator()).then_some(it.action);
         }
         let it = &items[it_idx];
@@ -595,12 +675,21 @@ impl Menu {
     }
 
     /// Type-ahead: highlight the next item whose label starts with `c` (cycling
-    /// from the current selection), within the open submenu if one is open, else
-    /// the top dropdown. With nothing highlighted yet, searches from the top.
-    /// Lets the user press e.g. `S`, `S` to step Save → Save As.
+    /// from the current selection), within the deepest open level. With nothing
+    /// highlighted yet, searches from the top. Lets the user press e.g. `S`, `S`
+    /// to step Save → Save As.
     pub fn type_ahead(&mut self, c: char) {
         let Some(i) = self.open else { return };
         let items = menus()[i].items;
+        if self.subsub_open {
+            if let Some(ss) = self.subsubmenu_items() {
+                let from = self.subsub.unwrap_or_else(|| ss.len().saturating_sub(1));
+                if let Some(j) = label_starting(ss, from, c) {
+                    self.subsub = Some(j);
+                }
+            }
+            return;
+        }
         if self.sub_open {
             if let Some(sub) = self.item.and_then(|it| items[it].submenu) {
                 let from = self.sub.unwrap_or_else(|| sub.len().saturating_sub(1));
@@ -628,10 +717,17 @@ impl Menu {
         let i = self.open?;
         let items = menus()[i].items;
         let it_idx = self.item?;
+        if self.subsub_open {
+            let ss = self.subsubmenu_items()?;
+            let it = &ss[self.subsub?];
+            return (!it.is_separator()).then_some(it.action);
+        }
         if self.sub_open {
             let sub = items[it_idx].submenu?;
-            let sidx = self.sub?;
-            let it = &sub[sidx];
+            let it = &sub[self.sub?];
+            if it.has_submenu() {
+                return None;
+            }
             return (!it.is_separator()).then_some(it.action);
         }
         let it = &items[it_idx];
@@ -656,5 +752,54 @@ mod tests {
             .collect();
         let model: Vec<&str> = vix_keymap_model::KEYMAPS.iter().map(|k| k.id).collect();
         assert_eq!(ids, model);
+    }
+
+    /// Index of the Tools menu and of its Generate item, derived from the live
+    /// menu so the test is independent of ordering.
+    fn tools_and_generate() -> (usize, usize) {
+        let tools = menus().iter().position(|m| m.name == "menu.tools").expect("tools menu");
+        let gen = menus()[tools]
+            .items
+            .iter()
+            .position(|it| it.label == "menu.item.tools.generate")
+            .expect("generate item");
+        (tools, gen)
+    }
+
+    /// Tools → Generate → UUID offers exactly v1…v8, dispatching the matching
+    /// `tools.generate.uuid.vN` actions.
+    #[test]
+    fn generate_uuid_submenu_lists_all_versions() {
+        let actions: Vec<&str> = TOOLS_GENERATE_UUID.iter().map(|it| it.action).collect();
+        assert_eq!(
+            actions,
+            (1..=8).map(|n| format!("tools.generate.uuid.v{n}")).collect::<Vec<_>>()
+        );
+    }
+
+    /// Keyboard navigation can descend all three levels: Tools → Generate → UUID
+    /// → "4" and `enter` returns the v4 action; `left` walks back up level by level.
+    #[test]
+    fn three_level_navigation_reaches_uuid_leaf() {
+        let (tools, gen) = tools_and_generate();
+        let mut m = Menu::default();
+        m.open_index(tools);
+        m.item = Some(gen);
+        m.right(); // open Generate
+        assert!(m.sub_open && !m.subsub_open);
+        // Highlight the UUID submenu row (index 0) and open it.
+        m.sub = Some(0);
+        m.right();
+        assert!(m.subsub_open, "third level should be open");
+        // Step down to the 4th version and activate it.
+        for _ in 0..4 {
+            m.down();
+        }
+        assert_eq!(m.enter(), Some("tools.generate.uuid.v4"));
+        // Walking left collapses one level at a time.
+        m.left();
+        assert!(!m.subsub_open && m.sub_open);
+        m.left();
+        assert!(!m.sub_open);
     }
 }
