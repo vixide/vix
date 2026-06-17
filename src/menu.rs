@@ -279,28 +279,33 @@ const TOOLS_CONVERT: &[Item] = &[
     Item::sub("YAML", TOOLS_CONVERT_YAML),
 ];
 
+/// Information panels, grouped under Tools → About.
+const TOOLS_ABOUT: &[Item] = &[
+    Item::leaf("menu.item.tools.about.text", "tools.text_info", ""),
+    Item::leaf("menu.item.tools.about.file", "tools.file_info", ""),
+    Item::leaf("menu.item.tools.about.workspace", "tools.dashboard", ""),
+    Item::leaf("menu.item.tools.about.system", "tools.system_info", ""),
+];
+
 const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.palette", "tools.palette", "Ctrl P"),
+    Item::leaf("menu.item.tools.run_command", "tools.run_command", ""),
+    Item::leaf("menu.item.tools.cancel_command", "tools.cancel_command", ""),
+    SEP,
     Item::sub("menu.item.tools.lsp", TOOLS_LSP),
     Item::sub("menu.item.tools.generate", TOOLS_GENERATE),
     Item::sub("menu.item.tools.checksum", TOOLS_CHECKSUM),
     Item::sub("menu.item.tools.convert", TOOLS_CONVERT),
     Item::leaf("menu.item.tools.color_converter", "tools.color_converter", ""),
     Item::leaf("menu.item.tools.convert.unit", "tools.convert.unit", ""),
-    Item::leaf("menu.item.tools.calculator", "tools.calculator", ""),
     Item::leaf("menu.item.tools.pomodoro", "tools.pomodoro", ""),
     SEP,
-    Item::leaf("menu.item.tools.text_info", "tools.text_info", ""),
-    Item::leaf("menu.item.tools.file_info", "tools.file_info", ""),
-    Item::leaf("menu.item.tools.dashboard", "tools.dashboard", ""),
-    Item::leaf("menu.item.tools.system_info", "tools.system_info", ""),
-    SEP,
-    Item::leaf("menu.item.tools.run_command", "tools.run_command", ""),
-    Item::leaf("menu.item.tools.cancel_command", "tools.cancel_command", ""),
+    Item::sub("menu.item.tools.about", TOOLS_ABOUT),
     SEP,
     Item::leaf("menu.item.tools.contacts", "tools.contacts", ""),
     Item::leaf("menu.item.tools.calendar", "tools.calendar", ""),
     Item::leaf("menu.item.tools.clock", "tools.clock", ""),
+    Item::leaf("menu.item.tools.calculator", "tools.calculator", ""),
     Item::leaf("menu.item.tools.nerd_palette", "tools.nerd_palette", ""),
     Item::leaf("menu.item.tools.ascii", "tools.ascii", ""),
     Item::leaf("menu.item.tools.html_chars", "tools.html_chars", ""),
