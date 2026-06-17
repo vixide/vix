@@ -224,10 +224,18 @@ const TOOLS_GENERATE_UUID: &[Item] = &[
     Item::leaf("8", "tools.generate.uuid.v8", ""),
 ];
 
+/// ZID sizes, grouped under Tools → Generate → ZID. Labels show the bit width
+/// and the resulting hex length.
+const TOOLS_GENERATE_ZID: &[Item] = &[
+    Item::leaf("128 bit = 32 hex", "tools.generate.zid.128", ""),
+    Item::leaf("256 bit = 64 hex", "tools.generate.zid.256", ""),
+    Item::leaf("512 bit = 128 hex", "tools.generate.zid.512", ""),
+];
+
 /// Generators, grouped under Tools → Generate.
 const TOOLS_GENERATE: &[Item] = &[
     Item::sub("menu.item.tools.generate.uuid", TOOLS_GENERATE_UUID),
-    Item::leaf("menu.item.tools.generate.zid", "tools.generate.zid", ""),
+    Item::sub("menu.item.tools.generate.zid", TOOLS_GENERATE_ZID),
 ];
 
 /// Checksum digests, grouped under Tools → Checksum. Each replaces the selection

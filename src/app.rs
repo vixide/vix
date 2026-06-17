@@ -1904,7 +1904,9 @@ impl App {
             "tools.generate.uuid.v6" => self.insert_generated(&vix_uuid_tool::v6()),
             "tools.generate.uuid.v7" => self.insert_generated(&vix_uuid_tool::v7()),
             "tools.generate.uuid.v8" => self.insert_generated(&vix_uuid_tool::v8()),
-            "tools.generate.zid" => self.insert_generated(&vix_zid_tool::generate()),
+            "tools.generate.zid.128" => self.insert_generated(&vix_zid_tool::generate(16)),
+            "tools.generate.zid.256" => self.insert_generated(&vix_zid_tool::generate(32)),
+            "tools.generate.zid.512" => self.insert_generated(&vix_zid_tool::generate(64)),
             "tools.checksum.sha256" => {
                 self.transform_selection_or_buffer(vix_checksum_tool::sha256_hex);
             }

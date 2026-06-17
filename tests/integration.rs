@@ -253,12 +253,16 @@ fn generate_uuid_v4_inserts_a_canonical_uuid() {
 }
 
 #[test]
-fn generate_zid_inserts_32_hex_chars() {
+fn generate_zid_sizes_insert_hex_of_the_right_length() {
     let mut app = app_at(Path::new("."));
-    app.run_action("tools.generate.zid");
+    app.run_action("tools.generate.zid.128");
     let text = app.editor.active_tab().unwrap().text();
-    assert_eq!(text.len(), 32, "ZID is 32 chars: {text:?}");
+    assert_eq!(text.len(), 32, "128-bit ZID is 32 hex chars: {text:?}");
     assert!(text.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)));
+
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.generate.zid.512");
+    assert_eq!(app.editor.active_tab().unwrap().text().len(), 128, "512-bit ZID is 128 hex chars");
 }
 
 #[test]

@@ -1,25 +1,23 @@
-//! Generate a secure random **ZID**: a 32-character lowercase hexadecimal
-//! string carrying 128 bits of cryptographic randomness.
+//! Generate a secure random **ZID**: a lowercase hexadecimal string carrying a
+//! chosen number of bits of cryptographic randomness.
 //!
-//! Vix's Tools → Generate → ZID command calls [`generate`] and inserts the
-//! result at the cursor. The bytes come from the operating system's secure
-//! random source (`getrandom`), so each ZID is unpredictable and collision-safe
-//! for practical purposes — handy as an opaque identifier in code or data.
+//! Vix's Tools → Generate → ZID submenu offers three sizes — 128, 256, and 512
+//! bits (32, 64, and 128 hex characters) — each calling [`generate`] with the
+//! matching byte count and inserting the result at the cursor. The bytes come
+//! from the operating system's secure random source (`getrandom`), so each ZID
+//! is unpredictable and collision-safe for practical purposes.
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-/// Number of random bytes behind a ZID (128 bits → 32 hex characters).
-const ZID_BYTES: usize = 16;
-
-/// Generate a fresh ZID: 16 secure-random bytes rendered as 32 lowercase hex
-/// characters. Falls back to an all-zero string only if the OS RNG is somehow
-/// unavailable (never expected on supported platforms).
+/// Generate a fresh ZID of `byte_len` secure-random bytes, rendered as
+/// `2 * byte_len` lowercase hex characters. Falls back to all-zero bytes only if
+/// the OS RNG is somehow unavailable (never expected on supported platforms).
 #[must_use]
-pub fn generate() -> String {
-    let mut bytes = [0u8; ZID_BYTES];
+pub fn generate(byte_len: usize) -> String {
+    let mut bytes = vec![0u8; byte_len];
     if getrandom::getrandom(&mut bytes).is_err() {
-        bytes = [0u8; ZID_BYTES];
+        bytes.iter_mut().for_each(|b| *b = 0);
     }
     to_hex(&bytes)
 }
@@ -39,20 +37,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn is_32_lowercase_hex() {
-        let z = generate();
-        assert_eq!(z.len(), 32, "ZID is 32 characters: {z}");
-        assert!(
-            z.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
-            "ZID is lowercase hex: {z}"
-        );
+    fn lengths_match_bit_sizes() {
+        assert_eq!(generate(16).len(), 32, "128-bit ZID is 32 hex chars");
+        assert_eq!(generate(32).len(), 64, "256-bit ZID is 64 hex chars");
+        assert_eq!(generate(64).len(), 128, "512-bit ZID is 128 hex chars");
+    }
+
+    #[test]
+    fn is_lowercase_hex() {
+        let z = generate(16);
+        assert!(z.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)), "lowercase hex: {z}");
     }
 
     #[test]
     fn successive_zids_differ() {
         // Collisions across 128 bits are astronomically unlikely; a repeat here
         // means the RNG is broken or the fallback path fired.
-        assert_ne!(generate(), generate());
+        assert_ne!(generate(16), generate(16));
     }
 
     #[test]
