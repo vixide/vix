@@ -173,6 +173,15 @@ fn convert_markdown_to_html_action_transforms_buffer() {
 }
 
 #[test]
+fn convert_toml_to_json_action_transforms_buffer() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "name = \"Vix\"\n");
+    app.run_action("tools.convert.toml.json");
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains("\"name\": \"Vix\""), "got: {text}");
+}
+
+#[test]
 fn convert_csv_to_json_action_transforms_buffer() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "a,b\n1,2\n");
