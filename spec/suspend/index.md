@@ -10,5 +10,5 @@ Editor action `suspend`.
 
 Run it from the command palette or a key binding via the action id `suspend`.
 It is dispatched by `App::run_action("suspend")` and, for editing actions, backed
-by `Editor::suspend` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::suspend` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

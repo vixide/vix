@@ -10,5 +10,5 @@ Editor action `autocomplete`.
 
 Run it from the command palette or a key binding via the action id `autocomplete`.
 It is dispatched by `App::run_action("autocomplete")` and, for editing actions, backed
-by `Editor::autocomplete` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::autocomplete` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

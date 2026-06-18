@@ -1,6 +1,6 @@
-# vix-spellcheck
+# spellcheck
 
-The `vix-spellcheck` crate.
+The `spellcheck` crate.
 
 **Status:** Shipped — **View → Editor → Toggle Spellcheck** (or the command
 palette / `view.spellcheck`) underlines misspelled words **in comments and

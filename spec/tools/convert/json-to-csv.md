@@ -1,6 +1,6 @@
 # Convert from JSON into CSV tool
 
-Subcrate vix-convert-from-json-into-csv-tool
+Module convert_from_json_into_csv_tool
 
 - menu "Tools"
   - submenu "Convert"

@@ -10,5 +10,5 @@ Editor action `paste`.
 
 Run it from the command palette or a key binding via the action id `paste`.
 It is dispatched by `App::run_action("paste")` and, for editing actions, backed
-by `Editor::paste` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::paste` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

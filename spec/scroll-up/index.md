@@ -10,5 +10,5 @@ Editor action `scroll-up`.
 
 Run it from the command palette or a key binding via the action id `scroll_up`.
 It is dispatched by `App::run_action("scroll_up")` and, for editing actions, backed
-by `Editor::scroll_up` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::scroll_up` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

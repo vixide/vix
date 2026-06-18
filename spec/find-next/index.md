@@ -10,5 +10,5 @@ Editor action `find-next`.
 
 Run it from the command palette or a key binding via the action id `find_next`.
 It is dispatched by `App::run_action("find_next")` and, for editing actions, backed
-by `Editor::find_next` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::find_next` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

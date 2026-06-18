@@ -5,22 +5,24 @@ on top.
 
 ## Documentation
 
-- `#![deny(missing_docs)]` is on for the `vix` crate and every `vix-*` internal
-  crate. Document all public items with `///`; module headers use `//!`.
+- `#![deny(missing_docs)]` is on at the crate root. Document all public items
+  with `///`; module headers use `//!`.
 - Doc comments say *what and why*, briefly. Implementation details that would
   surprise a reader get an inline `//` comment explaining the *why*.
 
 ## Lints
 
-- `#![forbid(unsafe_code)]` and `#![warn(clippy::pedantic)]` on every `vix` target
-  (each `tests/`/`examples/` file repeats the inner attribute — lints are
-  per-crate-root). Keep `cargo clippy --workspace` clean.
-- `vix-editor` also has crate-root `#![warn(clippy::pedantic)]`. New code goes in
-  a **Vix-owned** module (e.g. `wrap`, `brackets`, `lines`), held to pedantic by
-  default — not in the reused engine modules, which carry
-  `#[allow(clippy::all, clippy::pedantic)]` to track upstream style.
-- A small, *documented* `allow` list for genuinely-noisy pedantic lints (casts to
-  `u16` cell coords, `too_many_lines`, …) is fine; prefer fixing the rest.
+- `#![forbid(unsafe_code)]` and `#![warn(clippy::pedantic)]` at the crate root,
+  and `#![warn(clippy::pedantic)]` is repeated in **every module file** (lints are
+  per-module). Keep `cargo clippy --workspace --all-targets -- -D warnings` clean.
+- **No blanket allows.** There is no `#![allow(clippy::pedantic)]` and no
+  `#![allow(missing_docs)]`; fix findings in code (saturating `try_from` casts,
+  extract helpers for `too_many_lines`, context structs for `too_many_arguments`,
+  add `# Errors`/`# Panics`, etc.). The reused `editor_core` engine modules keep
+  `#[allow(clippy::all, clippy::pedantic)]` for upstream style; new editor code
+  goes in a Vix-owned module (`wrap`, `brackets`, `lines`), held to pedantic.
+- The only sanctioned exceptions are four targeted
+  `#[allow(clippy::struct_excessive_bools)]` on `App`/`Settings`/`SearchBar`/`WorkspaceSearch`.
 
 ## Internationalization
 
@@ -29,7 +31,7 @@ on top.
   `msg.*`, `help.*`, `prompt.*`, `theme.*`, `palette.*`).
 - Interpolation uses `%{name}` in YAML and `t!("k", name = value)` in code.
 - `t!` returns `Cow<str>`; call `.to_string()` when a `String` is required.
-- Data crates (menu/palette/theme/keyboard) hold keys; only `src/` calls `t!`.
+- Data modules (menu/palette/theme/keyboard) hold keys; the host calls `t!`.
 
 ## Actions
 
@@ -41,7 +43,7 @@ on top.
 ## Rendering
 
 - All of the *app's* drawing is in `src/ui.rs`; no editing/state logic there. The
-  editor widget renders itself (in `vix-editor`); the app just hands it a `Rect`.
+  editor widget renders itself (in `editor_core`); the app just hands it a `Rect`.
 - Paint the whole frame in the theme background first, then panes, then overlays.
 - Overlays `Clear` their rect and set the block `.style(theme::base())` so they
   read correctly in light mode.
@@ -58,8 +60,8 @@ on top.
 
 - `App` holds all state. Overlays are `Option<…>` fields; an open overlay is a
   modal handled near the top of `App::on_key` (strict priority order).
-- The chooser crates expose `open()/up()/down()/selected_*()`; the app wires keys
-  and applies the result.
+- The chooser/model modules expose `open()/up()/down()/selected_*()`; the app
+  wires keys and applies the result.
 
 ## Errors and panics
 

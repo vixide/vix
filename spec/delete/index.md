@@ -10,5 +10,5 @@ Editor action `delete`.
 
 Run it from the command palette or a key binding via the action id `delete`.
 It is dispatched by `App::run_action("delete")` and, for editing actions, backed
-by `Editor::delete` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::delete` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

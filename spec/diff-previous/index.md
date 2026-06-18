@@ -10,5 +10,5 @@ Editor action `diff-previous`.
 
 Run it from the command palette or a key binding via the action id `diff_previous`.
 It is dispatched by `App::run_action("diff_previous")` and, for editing actions, backed
-by `Editor::diff_previous` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::diff_previous` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

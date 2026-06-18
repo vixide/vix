@@ -10,5 +10,5 @@ Editor action `first-tab`.
 
 Run it from the command palette or a key binding via the action id `first_tab`.
 It is dispatched by `App::run_action("first_tab")` and, for editing actions, backed
-by `Editor::first_tab` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::first_tab` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

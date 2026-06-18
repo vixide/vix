@@ -1,6 +1,6 @@
 # Dictionaries
 
-Spell checking (see `vix-spellcheck.md`) reads **Hunspell** dictionaries from a
+Spell checking (see `spellcheck.md`) reads **Hunspell** dictionaries from a
 `dictionaries/` directory, one subdirectory per locale, each holding the standard
 `index.aff` (affix rules) and `index.dic` (word list) pair:
 

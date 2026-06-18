@@ -410,6 +410,33 @@ fn diagnostics_panel_empty_reports_none() {
 }
 
 #[test]
+fn specs_have_no_stale_subcrate_references() {
+    // Guard against architecture drift: after folding the subcrates into modules,
+    // no spec should mention the old `vix-editor`/`vix_editor` crate or a
+    // "Subcrate".
+    fn walk(dir: &Path, hits: &mut Vec<String>) {
+        let Ok(entries) = fs::read_dir(dir) else { return };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, hits);
+            } else if path.extension().is_some_and(|e| e == "md" || e == "tsv") {
+                let text = fs::read_to_string(&path).unwrap_or_default();
+                for needle in ["vix-editor", "vix_editor", "Subcrate ", "subcrate "] {
+                    if text.contains(needle) {
+                        hits.push(format!("{}: {needle}", path.display()));
+                    }
+                }
+            }
+        }
+    }
+    let spec = Path::new(env!("CARGO_MANIFEST_DIR")).join("spec");
+    let mut hits = Vec::new();
+    walk(&spec, &mut hits);
+    assert!(hits.is_empty(), "stale subcrate references in spec:\n{}", hits.join("\n"));
+}
+
+#[test]
 fn mode_and_suspend_actions() {
     let mut app = app_at(Path::new("."));
     app.run_action("command_mode");

@@ -122,18 +122,18 @@ with `/`), and `display_name` (the `FN`, else `Given Family` from `N`, else
 **Status:** Shipped. The feature spans three pure-data crates plus host glue in
 `src/app.rs` and `src/ui.rs`.
 
-- **`vix-vcard-parser`** — the vCard 4.0 / RFC 6350 parser. `parse(text)`
+- **`vcard_parser`** — the vCard 4.0 / RFC 6350 parser. `parse(text)`
   returns a `Vcard` of `Property { name, params, value }` after unfolding,
   group-prefix stripping, parameter parsing, and value unescaping. No IO. See
-  `vix-vcard-parser/spec/index.md`.
-- **`vix-contact-panel`** — the contact list. Holds `Contact { name, path }`
+  `vcard_parser/spec/index.md`.
+- **`contact_panel`** — the contact list. Holds `Contact { name, path }`
   rows and the selection + scroll state (`up`/`down`, `page_up`/`page_down`,
   `select_index`, `ensure_visible`, `selected_path`). See
-  `vix-contact-panel/spec/index.md`.
-- **`vix-vcard-panel`** — the single-vCard view. Turns a parsed `Vcard` into
+  `contact_panel/spec/index.md`.
+- **`vcard_panel`** — the single-vCard view. Turns a parsed `Vcard` into
   `(label, value)` rows (label mapping, `TYPE` suffixing, `N`/`ADR` flattening,
   hiding of binary/bookkeeping properties) and tracks selection + scroll;
-  `selected_value` is what gets inserted. See `vix-vcard-panel/spec/index.md`.
+  `selected_value` is what gets inserted. See `vcard_panel/spec/index.md`.
 
 The host owns the filesystem work and wiring: `open_contacts` resolves the
 directory (`settings.contacts_dir`, else the workspace root), reads each `.vcf`,

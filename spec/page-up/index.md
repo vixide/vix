@@ -10,5 +10,5 @@ Editor action `page-up`.
 
 Run it from the command palette or a key binding via the action id `page_up`.
 It is dispatched by `App::run_action("page_up")` and, for editing actions, backed
-by `Editor::page_up` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::page_up` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

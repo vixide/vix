@@ -1,6 +1,6 @@
 # URL
 
-Subcrate vix-url-tool.
+Module url_tool.
 
 - menu "Tools"
   - submenu "Convert"

@@ -13,5 +13,5 @@ is selected. The sort is stable, so equal lines keep their relative order.
 
 Run it from the command palette or a key binding via the action id `sort_lines`.
 It is dispatched by `App::run_action("sort_lines")` and backed by
-`Editor::sort_lines` in `vix-editor`. See `spec/actions/index.md` for the full
+`Editor::sort_lines` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

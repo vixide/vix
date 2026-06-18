@@ -10,5 +10,5 @@ Editor action `insert-newline`.
 
 Run it from the command palette or a key binding via the action id `insert_newline`.
 It is dispatched by `App::run_action("insert_newline")` and, for editing actions, backed
-by `Editor::insert_newline` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::insert_newline` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

@@ -55,7 +55,7 @@ Switch via **View → Keymap…**; the choice persists. See [Keymaps](#keymaps).
 | `Enter`           | New line, carrying the previous line's indentation |
 | Typing / `Backspace` / `Delete` / `Tab` | Edit text               |
 
-The editor wraps the internal `vix-editor` widget, which adds Tree-sitter
+The editor is the `editor_core` widget, which adds Tree-sitter
 syntax highlighting and the line operations above.
 
 ## Mouse

@@ -1,4 +1,4 @@
-# vix-git-panel
+# git_panel
 
 **Status:** Shipped — the Git Panel is the **Git → Changes…** panel (see
 `git-integration.md`). Open it from the **Git** menu, the command palette

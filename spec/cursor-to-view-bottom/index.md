@@ -10,5 +10,5 @@ Editor action `cursor-to-view-bottom`.
 
 Run it from the command palette or a key binding via the action id `cursor_to_view_bottom`.
 It is dispatched by `App::run_action("cursor_to_view_bottom")` and, for editing actions, backed
-by `Editor::cursor_to_view_bottom` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::cursor_to_view_bottom` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

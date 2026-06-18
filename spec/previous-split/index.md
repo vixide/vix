@@ -10,5 +10,5 @@ Editor action `previous-split`.
 
 Run it from the command palette or a key binding via the action id `previous_split`.
 It is dispatched by `App::run_action("previous_split")` and, for editing actions, backed
-by `Editor::previous_split` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::previous_split` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

@@ -1,6 +1,6 @@
 # Unit Converter
 
-Subcrate vix-unit-converter-tool.
+Module unit_converter_tool.
 
 - menu "Tools"
   - submenu "Convert"

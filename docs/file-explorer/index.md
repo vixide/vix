@@ -36,7 +36,7 @@ Use the arrow keys to move through the tree:
 - **Double-click** opens the file in a permanent tab and focuses the editor.
 
 Preview tabs are enabled by default. Turn them off with the `preview_tabs`
-setting (see `docs/configuration.md`) if you prefer every click to open a
+setting (see `../configuration/index.md`) if you prefer every click to open a
 permanent tab.
 
 ## Mouse Support

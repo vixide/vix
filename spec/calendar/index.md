@@ -2,7 +2,7 @@
 
 The **calendar box** shows a navigable month grid and inserts a chosen date into
 the editor. Open it with **Tools → Calendar…** (a toggle). Its logic lives in the
-`vix-calendar-panel` crate; the host renders the box and routes input.
+`calendar_panel` crate; the host renders the box and routes input.
 
 Live date/time strings are **not** part of the calendar — they live in the clock
 box (**Tools → Clock…**, see `spec/clock/index.md`). The calendar is just the
@@ -34,9 +34,9 @@ month area.
 
 ## As implemented in Vix
 
-`vix-calendar-panel` is pure logic over `jiff`: `now_local`, the `Calendar`
+`calendar_panel` is pure logic over `jiff`: `now_local`, the `Calendar`
 navigation state (`move_days`/`move_months`/`move_years`, `selected`,
 `selected_formatted`, `reset`, `title`), and `month_grid` (a `MonthGrid` of
 optional day numbers, with `today` set only for the current month). The host owns
 `show_calendar`, the `Calendar` state, the `tools.calendar` toggle, key/mouse
-routing, and `draw_calendar`. See `vix-calendar-panel/spec/index.md`.
+routing, and `draw_calendar`. See `calendar_panel/spec/index.md`.

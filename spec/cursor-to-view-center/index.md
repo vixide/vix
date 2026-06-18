@@ -10,5 +10,5 @@ Editor action `cursor-to-view-center`.
 
 Run it from the command palette or a key binding via the action id `cursor_to_view_center`.
 It is dispatched by `App::run_action("cursor_to_view_center")` and, for editing actions, backed
-by `Editor::cursor_to_view_center` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::cursor_to_view_center` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

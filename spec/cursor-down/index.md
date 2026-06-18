@@ -10,5 +10,5 @@ Editor action `cursor-down`.
 
 Run it from the command palette or a key binding via the action id `cursor_down`.
 It is dispatched by `App::run_action("cursor_down")` and, for editing actions, backed
-by `Editor::cursor_down` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::cursor_down` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

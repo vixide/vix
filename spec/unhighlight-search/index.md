@@ -10,5 +10,5 @@ Editor action `unhighlight-search`.
 
 Run it from the command palette or a key binding via the action id `unhighlight_search`.
 It is dispatched by `App::run_action("unhighlight_search")` and, for editing actions, backed
-by `Editor::unhighlight_search` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::unhighlight_search` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

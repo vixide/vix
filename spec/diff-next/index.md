@@ -10,5 +10,5 @@ Editor action `diff-next`.
 
 Run it from the command palette or a key binding via the action id `diff_next`.
 It is dispatched by `App::run_action("diff_next")` and, for editing actions, backed
-by `Editor::diff_next` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::diff_next` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

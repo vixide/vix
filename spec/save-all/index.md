@@ -10,5 +10,5 @@ Editor action `save-all`.
 
 Run it from the command palette or a key binding via the action id `save_all`.
 It is dispatched by `App::run_action("save_all")` and, for editing actions, backed
-by `Editor::save_all` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::save_all` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

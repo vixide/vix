@@ -32,7 +32,7 @@ a single undo step:
 
 ## As implemented in Vix
 
-`vix-editor`'s `Editor` holds extra `carets: Vec<Caret { pos, anchor }>` beyond
+`editor_core`'s `Editor` holds extra `carets: Vec<Caret { pos, anchor }>` beyond
 its primary `cursor`/`selection` (see `multicursor.rs`). `multi_insert` /
 `multi_delete` edit the rope once, processing carets in ascending order with a
 running offset shift so each edit's coordinates stay valid; `multi_move` drives

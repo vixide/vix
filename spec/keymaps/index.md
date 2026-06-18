@@ -117,8 +117,8 @@ An unrecognized command reports "no command" in the status bar.
 
 ## As implemented in Vix
 
-The list of keymaps is pure data in the `vix-keymap-model` crate
-(`vix-keymap-model/src/lib.rs`): the `Keymap { id, name, tooltip }` struct, the
+The list of keymaps is pure data in the `keymap_model` crate
+(`keymap_model/src/lib.rs`): the `Keymap { id, name, tooltip }` struct, the
 `KEYMAPS` slice (Apple, macOS VSCode, Emacs, Vim — in menu order), and the
 `by_id` lookup.
 

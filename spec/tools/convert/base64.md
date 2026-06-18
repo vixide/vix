@@ -1,6 +1,6 @@
 # Base64
 
-Subcrate vix-base64-tool.
+Module base64_tool.
 
 - menu "Tools"
   - submenu "Convert"

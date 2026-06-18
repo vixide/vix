@@ -116,7 +116,7 @@ The **Find** submenu:
 
 Replace lives inside the Find panel itself: `Ctrl+R` (or `Tab` to the Replace
 field in the find box) reveals it, so there is no separate menu item. See
-`vix-find-panel/spec/index.md`.
+`find_panel/spec/index.md`.
 
 The **Case** submenu (applies to the current selection):
 
@@ -132,16 +132,16 @@ The **Case** submenu (applies to the current selection):
 
 (Workspace-wide search/replace is `Ctrl+Shift+F`; interactive query-replace is
 `Ctrl+Alt+R`. Both are reachable from the command palette — see
-`vix-find-panel/spec/index.md`.)
+`find_panel/spec/index.md`.)
 
 ## View menu
 
 | Item                             | Action                                        |
 | -------------------------------- | --------------------------------------------- |
-| Keymap ▸                         | Submenu of keyboard navigation styles (`vix-keymap-model/spec/index.md`) |
-| Theme ▸                          | Submenu of available themes — bundled + user JSON (`vix-theme-model/spec/index.md`); pick one to apply |
-| Locale ▸                         | Submenu of UI languages (`vix-locale-model/spec/index.md`); pick one to apply |
-| Time Zone ▸                      | Submenu of IANA zones, sorted by UTC offset then name (`vix-time-zone-model/spec/index.md`); pick one |
+| Keymap ▸                         | Submenu of keyboard navigation styles (`keymap_model/spec/index.md`) |
+| Theme ▸                          | Submenu of available themes — bundled + user JSON (`theme_model/spec/index.md`); pick one to apply |
+| Locale ▸                         | Submenu of UI languages (`locale_model/spec/index.md`); pick one to apply |
+| Time Zone ▸                      | Submenu of IANA zones, sorted by UTC offset then name (`time_zone_model/spec/index.md`); pick one |
 | *— separator —*                  |                                               |
 | Split ▸                          | Split the editor into two panes (`split-panes.md`): Vertical / Horizontal / Other Pane (F6) / Unsplit |
 | Layout ▸                         | Submenu of dock/status toggles (below)        |
@@ -165,7 +165,7 @@ The **Editor** submenu:
 | Show/Hide Scroll Bar             | Show/hide the editor's right-side scroll bar  |
 | Show/Hide Soft Wrap              | Wrap long lines vs. scroll horizontally       |
 | *— separator —*                  |                                               |
-| Toggle Spellcheck                | Underline misspellings in comments/strings (`vix-spellcheck.md`) |
+| Toggle Spellcheck                | Underline misspellings in comments/strings (`spellcheck.md`) |
 | *— separator —*                  |                                               |
 | Next Tab                         | Switch to the next tab (`Ctrl+Tab`)           |
 | Previous Tab                     | Switch to the previous tab (`Ctrl+Shift+Tab`) |
@@ -175,18 +175,18 @@ The **Editor** submenu:
 | Item               | Action                                            |
 | ------------------ | ------------------------------------------------- |
 | Command Palette    | Open the palette (`Ctrl+P`)                       |
-| Workspace Dashboard… | Live folder/disk/file/commit metrics (`vix-workspace-dashboard-panel/spec/index.md`) |
-| System Information… | Host OS/CPU/memory/disk snapshot (`vix-system-information-panel/spec/index.md`) |
+| Workspace Dashboard… | Live folder/disk/file/commit metrics (`workspace_dashboard_panel/spec/index.md`) |
+| System Information… | Host OS/CPU/memory/disk snapshot (`system_information_panel/spec/index.md`) |
 | *— separator —*    |                                                   |
 | Run Command…       | Run a shell command into the bottom dock          |
 | Cancel Command     | Kill the running command                          |
 | *— separator —*    |                                                   |
 | Calendar…          | Toggle the calendar box                           |
-| Clock…             | Toggle the clock box: local/UTC/ISO week/active-zone times (`vix-clock-panel/spec/index.md`) |
-| Nerd Font Characters… | Open the glyph picker (`vix-nerd-font-picker/spec/index.md`) |
-| ASCII Characters…  | Open the ASCII reference table (`vix-ascii-character-picker/spec/index.md`) |
-| X11 Colors…        | Open the X11 color picker; inserts the chosen hex (`vix-x11-color-picker/spec/index.md`) |
-| HTML Characters…   | Open the HTML character picker; click a cell to insert it (`vix-html-character-picker/spec/index.md`) |
+| Clock…             | Toggle the clock box: local/UTC/ISO week/active-zone times (`clock_panel/spec/index.md`) |
+| Nerd Font Characters… | Open the glyph picker (`nerd_font_picker/spec/index.md`) |
+| ASCII Characters…  | Open the ASCII reference table (`ascii_character_picker/spec/index.md`) |
+| X11 Colors…        | Open the X11 color picker; inserts the chosen hex (`x11_color_picker/spec/index.md`) |
+| HTML Characters…   | Open the HTML character picker; click a cell to insert it (`html_character_picker/spec/index.md`) |
 | *— separator —*    |                                                   |
 | Language Server ▸  | Submenu of LSP actions (below); see `lsp.md`      |
 

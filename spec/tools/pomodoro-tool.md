@@ -1,10 +1,10 @@
 # Pomodoro
 
-Subcrate vix-pomodoro-tool.
+Module pomodoro_tool.
 
 In menu "Tools", add menuitem "Pomodoro...".
 
-This opens vix-pomodoro-tool.
+This opens pomodoro_tool.
 
 The user sees a timer that the user can set. Default is 25 minutes.
 

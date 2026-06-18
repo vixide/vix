@@ -10,5 +10,5 @@ Editor action `reset-search`.
 
 Run it from the command palette or a key binding via the action id `reset_search`.
 It is dispatched by `App::run_action("reset_search")` and, for editing actions, backed
-by `Editor::reset_search` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::reset_search` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

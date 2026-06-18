@@ -1,33 +1,32 @@
 # Vix Architecture
 
-## Workspace shape: application crate + internal crates
+## Shape: one crate, many modules
 
-Vix is a Cargo workspace. The `vix` crate is the application: a library
+Vix is a **single Cargo crate** (edition 2024, no workspace members): a library
 (`src/lib.rs`) with a thin binary (`src/main.rs`) on top. The binary owns only
-the CLI, the terminal lifecycle, and the event loop; everything else is a public
-module in the library. This keeps the editing logic terminal-independent, so it
-can be unit-tested and driven from examples without a real TTY (see
-`tests/integration.rs` and `examples/`).
+the CLI, the terminal lifecycle, the event loop, and process suspend; everything
+else is a module in the library. This keeps the editing logic
+terminal-independent, so it can be unit-tested and driven from examples without a
+real TTY (see `tests/integration.rs` and `examples/`).
 
-Several self-contained concerns are split into their own small internal crates,
-each independently testable and free of UI-framework or i18n coupling unless it
-genuinely needs it:
+Self-contained concerns live in their own modules under `src/` (formerly separate
+`vix-*` subcrates), each independently testable. The editor widget is the
+`editor_core` module; key examples:
 
-| Crate                            | Responsibility                                                        |
-| -------------------------------- | --------------------------------------------------------------------- |
-| `vix-editor`          | Vix's fully-custom center editor widget: Tree-sitter highlighting, history, selection, clipboard, mouse, **soft wrap**, and **themeable** text/line-number/selection/cursor styles. The highlighting engine was adapted from `ratatui-code-editor`; grammars are gated behind features. |
-| `vix-calendar-panel`   | Calendar date/time strings and the navigable Monday-first month grid (owns the `jiff` dependency). |
-| `vix-theme-chooser`              | The theme model: monochrome Dark/Light modes, the ratatui styles derived from them, **custom JSON themes** (per-region RGB), and chooser state. |
-| `vix-locale-chooser`             | The list of available UI languages and chooser state.                 |
-| `vix-keymap-chooser`             | The keyboard navigation styles (Apple / Emacs / Vim) and chooser state. |
-| `vix-keyboard-shortcut-panel`    | The keyboard-help rows (key combo + i18n description key).            |
+| Module                       | Responsibility                                                        |
+| ---------------------------- | --------------------------------------------------------------------- |
+| `editor_core`                | Vix's fully-custom center editor widget: Tree-sitter highlighting, history, selection, clipboard, mouse, **soft wrap**, **bracket match**, **folds**, **inlay hints**, and **themeable** styles. The highlighting engine was adapted from `ratatui-code-editor`; grammars are gated behind `lang-*` features (queries in `langs/`). |
+| `lsp` / `lsp_core`           | Language Server Protocol: process IO + host wiring (`lsp`) over a pure JSON-RPC protocol core (`lsp_core`). |
+| `git` / `conflict_tool`      | Git status/diff/staging via the git CLI; merge-conflict marker parsing. |
+| `calendar_panel`             | Calendar date/time strings and the navigable Monday-first month grid (owns `jiff`). |
+| `theme_model`                | Monochrome Dark/Light modes, the ratatui styles derived from them, **custom JSON themes** (per-region RGB), and chooser state. |
+| `locale_model` / `keymap_model` | Available UI languages; keyboard navigation styles (Apple/Emacs/Vim). |
+| `keyboard_shortcut_panel`    | The keyboard-help rows (key combo + i18n description key).            |
 
-The pattern for the panel/chooser crates is **data and logic in the crate, host
-renders**: each exposes pure state and helpers; `src/ui.rs` draws them. The crates
-return i18n *keys* (not translated text) so they need no localization dependency
-— the host translates. The one exception is `vix-theme-chooser`, which depends on
-`ratatui-core` because its job is to produce ratatui `Style`s; those types are the
-same ones `ratatui` re-exports, so they flow straight into the app's rendering.
+The pattern for the panel/model modules is **data and logic in the module, host
+renders**: each exposes pure state and helpers; `src/ui.rs` draws them, and they
+return i18n *keys* (not translated text) so the host translates. See
+`AGENTS/share/crate-map.md` for the full module map.
 
 ## Application modules (`src/`)
 
@@ -44,7 +43,7 @@ same ones `ratatui` re-exports, so they flow straight into the app's rendering.
 | `messages`       | `Messages`: the notifications drawer model                           |
 | `fileops`        | Filesystem helpers for explorer copy/cut/paste/delete                |
 | `settings`       | confy-backed `Settings`; the custom-themes directory                 |
-| `theme`          | Nerd Font icon constants + re-export of `vix-theme-chooser`          |
+| `theme`          | Nerd Font icon constants + theme style helpers          |
 | `ui`             | Pure rendering: lays out the frame and draws each pane/overlay       |
 
 ## Event flow
@@ -100,7 +99,7 @@ clock keeps ticking while the editor is idle.
 three vertical bands — menu bar, body, status bar — and splits the body
 horizontally into explorer / editor / messages according to which drawers are
 visible. The editor band is itself split into a tab bar and the text area plus a
-`Scrollbar`. The text area is handed to the **`vix-editor`** widget, which renders
+`Scrollbar`. The text area is handed to the **`editor_core`** widget, which renders
 itself — including syntax highlighting, the block cursor, visible-whitespace
 glyphs, **bracket matching**, and **soft wrap** (a shared visual-row layout drives
 its renderer, cursor scroll, and mouse hit-testing). The status bar shows the
@@ -114,7 +113,7 @@ reads correctly in either light or dark mode.
 
 ## Theming
 
-The theme model lives in `vix-theme-chooser`. Two built-in modes are strictly
+The theme model lives in the `theme_model` module. Two built-in modes are strictly
 monochrome (one foreground, one background; emphasis via dim and full intensity,
 no bold or italic; reversed video only for selections and the cursor). A
 process-global holds the active mode so the static style helpers (`fg`, `bg`,
@@ -170,5 +169,5 @@ Because the logic is terminal-independent, `tests/integration.rs` constructs an
 state — typing, open/save round trips, tab lifecycle, go-to-line, fuzzy matching,
 the search-pattern builder, end-to-end regex replace with capture groups,
 theme/locale switching, and date formatting. A couple of unit tests render into a
-sized in-memory `TestBackend` to check panel output. Each internal crate adds its
-own focused unit tests. Run everything with `cargo test --workspace`.
+sized in-memory `TestBackend` to check panel output, and each module adds its own
+focused unit tests. Run everything with `cargo test`.

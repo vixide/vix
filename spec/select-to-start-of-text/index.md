@@ -10,5 +10,5 @@ Editor action `select-to-start-of-text`.
 
 Run it from the command palette or a key binding via the action id `select_to_start_of_text`.
 It is dispatched by `App::run_action("select_to_start_of_text")` and, for editing actions, backed
-by `Editor::select_to_start_of_text` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::select_to_start_of_text` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

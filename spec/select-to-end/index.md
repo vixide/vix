@@ -10,5 +10,5 @@ Editor action `select-to-end`.
 
 Run it from the command palette or a key binding via the action id `select_to_end`.
 It is dispatched by `App::run_action("select_to_end")` and, for editing actions, backed
-by `Editor::select_to_end` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::select_to_end` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

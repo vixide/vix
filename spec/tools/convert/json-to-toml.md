@@ -1,6 +1,6 @@
 # Convert from JSON into TOML tool
 
-Subcrate vix-convert-from-json-into-toml-tool
+Module convert_from_json_into_toml_tool
 
 - menu "Tools"
   - submenu "Convert"

@@ -49,7 +49,7 @@ Powerline, Octicons) that virtually every patched font ships, so the picker is
 useful regardless of which Nerd Font the terminal uses. A glyph a particular font
 lacks simply renders as a fallback box; nothing breaks.
 
-See the per-crate spec: `vix-nerd-font-picker/spec/index.md`.
+See the per-crate spec: `nerd_font_picker/spec/index.md`.
 
 ## ASCII Characters
 
@@ -71,7 +71,7 @@ columns:
   label.
 - **Mouse:** a click selects the clicked row and inserts its character.
 
-See the per-crate spec: `vix-ascii-character-picker/spec/index.md`.
+See the per-crate spec: `ascii_character_picker/spec/index.md`.
 
 ## HTML Characters
 
@@ -97,7 +97,7 @@ Note: the crate also exposes an entity `reference()` helper that prepends `&` to
 the name (e.g. `&Aacute;`); the shipped picker inserts the glyph or the chosen
 cell's text rather than the `&name;` reference.
 
-See the per-crate spec: `vix-html-character-picker/spec/index.md`.
+See the per-crate spec: `html_character_picker/spec/index.md`.
 
 ## X11 Colors
 
@@ -110,7 +110,7 @@ shows a color swatch, the `#RRGGBB` hex string, and the color name.
   `AliceBlue`) at the cursor.
 - **Mouse:** a click selects the clicked row and inserts its hex.
 
-See the per-crate spec: `vix-x11-color-picker/spec/index.md`.
+See the per-crate spec: `x11_color_picker/spec/index.md`.
 
 ## As implemented in Vix
 
@@ -119,10 +119,10 @@ plus selection state, and is wired into the host via a Tools-menu action:
 
 | Picker | Action | Crate | Host type |
 |-|-|-|-|
-| Nerd Font Characters | `tools.nerd_palette` | `vix-nerd-font-picker` | `NerdPalette` |
-| ASCII Characters | `tools.ascii` | `vix-ascii-character-picker` | `AsciiPanel` |
-| HTML Characters | `tools.html_chars` | `vix-html-character-picker` | `HtmlPanel` |
-| X11 Colors | `tools.x11_colors` | `vix-x11-color-picker` | `X11Panel` |
+| Nerd Font Characters | `tools.nerd_palette` | `nerd_font_picker` | `NerdPalette` |
+| ASCII Characters | `tools.ascii` | `ascii_character_picker` | `AsciiPanel` |
+| HTML Characters | `tools.html_chars` | `html_character_picker` | `HtmlPanel` |
+| X11 Colors | `tools.x11_colors` | `x11_color_picker` | `X11Panel` |
 
 - The Tools menu entries live in `src/menu.rs` (`menu.item.tools.nerd_palette`,
   `…ascii`, `…html_chars`, `…x11_colors`).

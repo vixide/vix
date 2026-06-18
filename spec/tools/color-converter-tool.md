@@ -1,6 +1,6 @@
 # Color converter
 
-Subcrate vix-color-converter-tool
+Module color_converter_tool
 
 In menu "Tools", add menuitem "Color Converter..."
 

@@ -26,9 +26,9 @@ sessions in your settings.
 
 | Dock | Position | Shows | Toggle | State crate |
 |------|----------|-------|--------|-------------|
-| **Left** | Left edge | File explorer tree | `Ctrl+B` (or View → Layout) | `vix-left-dock` |
-| **Right** | Right edge | Message drawer (advice and notifications) | View → Layout | `vix-right-dock` |
-| **Bottom** | Below the editor | Scrollable line buffer (logs, command output, data) | View → Layout | `vix-bottom-dock` |
+| **Left** | Left edge | File explorer tree | `Ctrl+B` (or View → Layout) | `left_dock` |
+| **Right** | Right edge | Message drawer (advice and notifications) | View → Layout | `right_dock` |
+| **Bottom** | Below the editor | Scrollable line buffer (logs, command output, data) | View → Layout | `bottom_dock` |
 
 Each dock's logic lives in a small, pure crate that owns only its own data; the
 `vix` host renders the dock, routes keyboard and mouse events to it, and feeds it
@@ -168,11 +168,11 @@ editor.
 
 ## As implemented in Vix
 
-- **State crates.** `vix-left-dock` owns the explorer tree (`Explorer`,
+- **State crates.** `left_dock` owns the explorer tree (`Explorer`,
   flattened `Node` rows, selection, multi-selection, expansion set, include/
-  exclude regex filters, scroll). `vix-right-dock` owns the `Messages` drawer
+  exclude regex filters, scroll). `right_dock` owns the `Messages` drawer
   (`Message` rows with a `Level`, selection, `push`/`info`/`advice`/`warn`/`error`,
-  `close_selected`). `vix-bottom-dock` owns `BottomDock` (a capped `Vec<String>`
+  `close_selected`). `bottom_dock` owns `BottomDock` (a capped `Vec<String>`
   line buffer with `scroll`, a `follow` flag, and a `DEFAULT_SCROLLBACK` of
   `1000`). All three are pure logic with no rendering; each `#![forbid(unsafe_code)]`,
   `#![deny(missing_docs)]`, and `#![warn(clippy::pedantic)]`.
@@ -190,7 +190,7 @@ editor.
 - **Rendering** is in `src/ui.rs`: `draw_messages` (title `ui.messages`,
   top+left borders, per-level icons, close marks), `draw_bottom_dock` (title
   `ui.bottom_dock` = "Output", a `visible(height)` window, follow-aware scroll),
-  and `draw_status_bar` (segments built by the `vix-status-bar-panel` crate). Each
+  and `draw_status_bar` (segments built by the `status_bar_panel` crate). Each
   dock reserves a one-column scrollbar gutter via the shared `draw_scrollbar`
   helper when its content overflows and `show_scrollbar` is on.
 - **Menu** entries are defined in `src/menu.rs` under `VIEW_LAYOUT`; labels are

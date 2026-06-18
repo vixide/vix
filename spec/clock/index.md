@@ -2,7 +2,7 @@
 
 The **clock box** shows the current date and time in several forms and inserts
 any of them into the editor. Open it with **Tools → Clock…** (a toggle). Its logic
-lives in the `vix-clock-panel` crate; the host renders the box and routes input.
+lives in the `clock_panel` crate; the host renders the box and routes input.
 
 ## Rows
 
@@ -35,9 +35,9 @@ calendar box; they moved to the clock so each box does one thing. See
 
 ## As implemented in Vix
 
-`vix-clock-panel` is pure logic over `jiff` and `vix-time-zone-model`: the string
+`clock_panel` is pure logic over `jiff` and `time_zone_model`: the string
 builders (`local_clock`, `local_datetime`, `utc_iso`, `iso_week_date`,
 `datetime_at_offset`, `active_zone_datetime`) and a `Clock` row model
 (`rows`, `up`/`down`/`select`, `selected_value`). The host owns `show_clock`, the
 `Clock` state, the `tools.clock` toggle, key/mouse routing, and `draw_clock`. See
-`vix-clock-panel/spec/index.md`.
+`clock_panel/spec/index.md`.

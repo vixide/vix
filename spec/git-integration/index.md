@@ -3,7 +3,7 @@
 Vix integrates with git by **shelling out to the user's `git` CLI** (so
 credential helpers, SSH agents, and hooks behave exactly as on the command line)
 and computing in-editor diff gutters in-process. The logic lives in the internal
-`vix-git` crate; the host caches git state and renders it.
+`git` crate; the host caches git state and renders it.
 
 **Status:** Phases 1–2 shipped — read-only awareness, a stage/unstage/commit
 changes panel, branch switching, and push/pull/fetch. Conflict resolution is a
