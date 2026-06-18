@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Convert HTML into Markdown (Tools → Convert → HTML → Markdown).
 //!
 //! Uses `htmd` (a Turndown-inspired converter) to turn an HTML fragment into

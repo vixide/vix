@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Data for the keyboard-shortcut help overlay.
 //!
 //! Each [`Row`] pairs a key combo (shown verbatim, never translated) with an

@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! The code-outline list (symbol kind + name + line) and the panel's
 //! selection/scroll state.
 //!

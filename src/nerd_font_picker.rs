@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! A curated set of [Nerd Font](https://www.nerdfonts.com/) glyphs and the
 //! character picker's grid-selection state.
 //!

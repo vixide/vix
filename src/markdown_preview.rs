@@ -1,11 +1,12 @@
-#![allow(clippy::pedantic)] // event-walking renderer, kept lint-light
 //! Render Markdown to formatted plain-text lines for a read-only preview pane.
 //!
-//! Parses CommonMark with `pulldown-cmark` and flattens it to readable lines:
+//! Parses `CommonMark` with `pulldown-cmark` and flattens it to readable lines:
 //! headings get an underline rule, list items a `• ` bullet, block quotes a
 //! `│ ` rail, fenced code its raw lines, and thematic breaks a `───` rule.
 //! Inline emphasis/strong/code keep their text (the markup is dropped) and links
 //! render as `text (url)`. The host shows the [`Panel`]'s lines, scrollable.
+
+use std::fmt::Write;
 
 use pulldown_cmark::{Event, HeadingLevel, Parser, Tag, TagEnd};
 
@@ -41,7 +42,7 @@ pub fn render(markdown: &str) -> Vec<String> {
                 out.push(String::new());
                 heading = None;
             }
-            Event::Start(Tag::Paragraph) => flush(&mut cur, &mut out),
+            Event::Start(Tag::Paragraph) | Event::End(TagEnd::Item) => flush(&mut cur, &mut out),
             Event::End(TagEnd::Paragraph) => {
                 flush(&mut cur, &mut out);
                 out.push(String::new());
@@ -58,13 +59,12 @@ pub fn render(markdown: &str) -> Vec<String> {
                 let indent = "  ".repeat(list_stack.len().saturating_sub(1));
                 match list_stack.last_mut() {
                     Some(Some(n)) => {
-                        cur.push_str(&format!("{indent}{n}. "));
+                        write!(cur, "{indent}{n}. ").unwrap();
                         *n += 1;
                     }
-                    _ => cur.push_str(&format!("{indent}• ")),
+                    _ => write!(cur, "{indent}• ").unwrap(),
                 }
             }
-            Event::End(TagEnd::Item) => flush(&mut cur, &mut out),
             Event::Start(Tag::BlockQuote(_)) => {
                 flush(&mut cur, &mut out);
                 quote = true;
@@ -87,7 +87,7 @@ pub fn render(markdown: &str) -> Vec<String> {
             }
             Event::End(TagEnd::Link) => {
                 if let Some(url) = link_url.take() {
-                    cur.push_str(&format!(" ({url})"));
+                    write!(cur, " ({url})").unwrap();
                 }
             }
             Event::Text(t) => {
@@ -96,7 +96,7 @@ pub fn render(markdown: &str) -> Vec<String> {
                         out.push(format!("    {line}"));
                     }
                 } else if quote {
-                    cur.push_str(&format!("│ {t}"));
+                    write!(cur, "│ {t}").unwrap();
                 } else {
                     cur.push_str(&t);
                 }

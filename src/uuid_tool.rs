@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Generate UUIDs of every version, v1 through v8.
 //!
 //! Vix's Tools → Generate → UUID submenu offers one item per version; each calls

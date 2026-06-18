@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Convert TSV text into CSV (Tools → Convert → TSV → CSV).
 //!
 //! Fields containing commas, quotes or newlines are RFC 4180 quoted on output.

@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! A small, dependency-free vCard 4.0 ([RFC 6350]) parser.
 //!
 //! [`parse`] turns vCard text into a [`Vcard`] — a flat list of [`Property`]s,
@@ -123,14 +122,13 @@ fn unescape(s: &str) -> String {
         if c == '\\' {
             match chars.next() {
                 Some('n' | 'N') => out.push('\n'),
-                Some('\\') => out.push('\\'),
                 Some(',') => out.push(','),
                 Some(';') => out.push(';'),
+                Some('\\') | None => out.push('\\'),
                 Some(other) => {
                     out.push('\\');
                     out.push(other);
                 }
-                None => out.push('\\'),
             }
         } else {
             out.push(c);

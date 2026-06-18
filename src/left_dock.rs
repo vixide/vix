@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! State for the left dock: the file explorer's lazily-expanded directory tree,
 //! its selection, multi-selection, and scroll offset.
 //!

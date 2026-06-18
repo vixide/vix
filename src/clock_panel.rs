@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Vix Clock: the date/time strings shown in Vix's clock box, plus a small
 //! selectable row model. Moved out of the calendar panel so the clock (live
 //! times) and the calendar (a navigable month grid) are independent.

@@ -1,7 +1,6 @@
-#![allow(clippy::pedantic)] // small decoding helper
 //! Decode a JSON Web Token's header and payload into readable JSON.
 //!
-//! A JWT is `header.payload.signature`, each part Base64URL (no padding). This
+//! A JWT is `header.payload.signature`, each part `Base64URL` (no padding). This
 //! decodes the first two parts and pretty-prints them; the signature is left
 //! untouched (it cannot be verified without the key). Used by Tools → Convert →
 //! JWT Decode via `App::transform_selection_or_buffer_try`.
@@ -13,7 +12,7 @@ use base64::Engine;
 ///
 /// # Errors
 /// Returns an error when the token does not have at least two dot-separated
-/// parts, a part is not valid Base64URL, or a part is not valid JSON.
+/// parts, a part is not valid `Base64URL`, or a part is not valid JSON.
 pub fn decode(input: &str) -> Result<String, String> {
     let token = input.trim();
     let mut parts = token.split('.');

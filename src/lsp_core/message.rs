@@ -154,8 +154,8 @@ fn hover_contents_text(contents: &Value) -> String {
     }
 }
 
-/// Parse a `textDocument/definition` result (Location, Location[], or
-/// LocationLink[]) into the first target location.
+/// Parse a `textDocument/definition` result (`Location`, `Location[]`, or
+/// `LocationLink[]`) into the first target location.
 #[must_use]
 pub fn parse_definition(result: &Value) -> Option<Location> {
     match result {
@@ -181,8 +181,8 @@ fn parse_location(v: &Value) -> Option<Location> {
     Some(Location { uri, range })
 }
 
-/// Parse a `textDocument/completion` result (CompletionItem[] or a
-/// CompletionList `{ items: [...] }`) into completion candidates.
+/// Parse a `textDocument/completion` result (`CompletionItem[]` or a
+/// `CompletionList` `{ items: [...] }`) into completion candidates.
 #[must_use]
 pub fn parse_completion(result: &Value) -> Vec<CompletionItem> {
     let items = match result {

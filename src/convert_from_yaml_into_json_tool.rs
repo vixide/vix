@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Convert YAML into JSON (Tools → Convert → YAML → JSON).
 //!
 //! The YAML document is parsed into a generic value and re-serialized as

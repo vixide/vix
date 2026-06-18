@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Browse a directory of vCard files as a table of contacts.
 //!
 //! The host scans a directory for `.vcf` files, parses each one's display name

@@ -69,9 +69,8 @@ pub fn count_indent_units(
             }
         }
         count += 1;
-        if let Some(max) = max_col {
-            if col >= max { break; }
-        }
+        if let Some(max) = max_col
+            && col >= max { break; }
     }
 
     count
@@ -88,7 +87,7 @@ pub fn rgb(hex: &str) -> (u8, u8, u8) {
 }
 
 /// Calculate end position by walking through the text
-/// Returns (end_row, end_col) starting from (start_row, start_col)
+/// Returns (`end_row`, `end_col`) starting from (`start_row`, `start_col`)
 pub fn calculate_end_position(
     start_row: usize, start_col: usize, text: &str
 ) -> (usize, usize) {

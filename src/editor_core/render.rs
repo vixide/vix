@@ -42,13 +42,12 @@ impl Editor {
         let line_number_digits = max_line_number.to_string().len().max(5);
         let line_number_width = self.get_line_number_width();
 
-        let mut draw_y = area.top();
-        
         let line_number_style = self.line_number_style;
         let default_text_style = self.text_style;
 
         // draw line numbers and text
         for line_idx in self.offset_y..total_lines {
+            let draw_y = area.top() + (line_idx - self.offset_y) as u16;
             if draw_y >= area.bottom() { break }
             if self.show_line_numbers {
                 let line_number = format!("{:>width$}", line_idx + 1, width = line_number_digits);
@@ -56,8 +55,8 @@ impl Editor {
             }
             // git diff gutter: a colored bar in the gutter gap (just before the
             // text), or column 0 when line numbers are hidden.
-            if let Some(ref gmarks) = self.gutter_marks {
-                if let Some(&(_, color)) = gmarks.iter().find(|&&(l, _)| l == line_idx) {
+            if let Some(ref gmarks) = self.gutter_marks
+                && let Some(&(_, color)) = gmarks.iter().find(|&&(l, _)| l == line_idx) {
                     let sign_x = if self.show_line_numbers {
                         area.left() + line_number_digits as u16
                     } else {
@@ -69,7 +68,6 @@ impl Editor {
                             .set_style(Style::default().fg(color));
                     }
                 }
-            }
             let line_len = code.line_len(line_idx);
             let max_x = (area.width as usize).saturating_sub(line_number_width);
         
@@ -123,13 +121,11 @@ impl Editor {
                     }
                 }
             } else {
-                let displayed_line = visible_chars.to_string().replace("\t", " ");
+                let displayed_line = visible_chars.to_string().replace('\t', " ");
                 if text_x < right_edge && draw_y < area.top() + area.height {
                     buf.set_string(text_x, draw_y, &displayed_line, default_text_style);
                 }
             }
-
-            draw_y += 1;
         }
 
         // draw syntax highlighting

@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! The ASCII reference table and the picker's row-selection + scroll state.
 //!
 //! Vix's Tools menu offers an *ASCII* panel: a scrollable table of the 128 ASCII

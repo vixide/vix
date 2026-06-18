@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Evaluate a typed formula, plus the Calculator dialog's editing state.
 //!
 //! [`eval`] runs an arithmetic/boolean expression through `evalexpr` and renders
@@ -24,7 +23,7 @@ pub fn eval(formula: &str) -> Result<String, String> {
         Value::Boolean(b) => Ok(b.to_string()),
         Value::String(s) => Ok(s),
         Value::Empty => Ok(String::new()),
-        other => Ok(other.to_string()),
+        other @ Value::Tuple(_) => Ok(other.to_string()),
     }
 }
 

@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Time-zone modeling for Vix.
 //!
 //! This crate owns two things:
@@ -70,6 +69,9 @@ static ACTIVE: RwLock<Option<usize>> = RwLock::new(None);
 
 /// Set the active zone by canonical `name`. Returns `true` if the name is known
 /// (and was applied); `false` leaves the active zone unchanged.
+///
+/// # Panics
+/// Panics if the active-zone lock is poisoned.
 pub fn set_active(name: &str) -> bool {
     match index_of(name) {
         Some(i) => {
@@ -81,6 +83,9 @@ pub fn set_active(name: &str) -> bool {
 }
 
 /// The active [`Zone`] (UTC until one is set).
+///
+/// # Panics
+/// Panics if the active-zone lock is poisoned.
 #[must_use]
 pub fn active() -> &'static Zone {
     let idx = ACTIVE.read().expect("time-zone lock").unwrap_or_else(utc_index);

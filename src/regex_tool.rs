@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // dialog state + regex evaluation
 //! A live regular-expression tester, plus the dialog's editing state.
 //!
 //! The dialog has two fields — the pattern and the subject text — and shows the

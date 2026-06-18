@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! A Pomodoro work/break countdown as a small state machine.
 //!
 //! The timer has three phases: **Idle** (set the work length, default 25

@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Spell-checking for the Vix editor.
 //!
 //! Wraps the pure-Rust [`spellbook`] Hunspell checker. A [`SpellChecker`] loads a
@@ -216,7 +215,7 @@ fn should_check(word: &str) -> bool {
         return false;
     }
     let has_upper = word.chars().any(char::is_uppercase);
-    let all_caps = has_upper && word.chars().filter(|c| c.is_alphabetic()).all(|c| c.is_uppercase());
+    let all_caps = has_upper && word.chars().filter(|c| c.is_alphabetic()).all(char::is_uppercase);
     if all_caps {
         return false;
     }

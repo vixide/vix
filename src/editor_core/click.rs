@@ -22,15 +22,13 @@ impl ClickTracker {
     pub fn register(&mut self, cursor: usize) -> ClickKind {
         let now = Instant::now();
         let dbl = self.last
-            .map(|(t, p)| p == cursor && now.duration_since(t) < self.max_dt)
-            .unwrap_or(false);
+            .is_some_and(|(t, p)| p == cursor && now.duration_since(t) < self.max_dt);
         let tpl = self.last.zip(self.prev)
-            .map(|((t1, p1), (t0, p0))| {
+            .is_some_and(|((t1, p1), (t0, p0))| {
                 p0 == cursor && p1 == cursor &&
                 now.duration_since(t0) < self.max_dt &&
                 t1.duration_since(t0) < self.max_dt
-            })
-            .unwrap_or(false);
+            });
 
         self.prev = self.last;
         self.last = Some((now, cursor));

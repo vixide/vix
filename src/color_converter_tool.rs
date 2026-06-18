@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Parse and convert colors between HEX, RGB, and HSL.
 //!
 //! A [`Color`] is stored as 8-bit RGB. It parses from any of the three textual
@@ -135,7 +134,7 @@ fn rgb_to_hsl(c: Color) -> (f64, f64, f64) {
     let b = f64::from(c.b) / 255.0;
     let max = r.max(g).max(b);
     let min = r.min(g).min(b);
-    let l = (max + min) / 2.0;
+    let l = f64::midpoint(max, min);
     let d = max - min;
     if d.abs() < f64::EPSILON {
         return (0.0, 0.0, l);

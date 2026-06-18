@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! The Vix theme model.
 //!
 //! Every theme is a JSON [`CustomTheme`] with per-region colors and font
@@ -27,6 +26,9 @@ const FALLBACK_FG: Color = Color::Rgb(215, 215, 215);
 const FALLBACK_BG: Color = Color::Rgb(40, 40, 40);
 
 /// Primary foreground: the active theme's editor foreground (or the dark default).
+///
+/// # Panics
+/// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn fg() -> Color {
     CUSTOM
@@ -38,6 +40,9 @@ pub fn fg() -> Color {
 }
 
 /// Primary background: the active theme's editor background (or the dark default).
+///
+/// # Panics
+/// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn bg() -> Color {
     CUSTOM
@@ -222,11 +227,17 @@ impl RegionColors {
 static CUSTOM: RwLock<Option<CustomTheme>> = RwLock::new(None);
 
 /// Set (or clear) the active theme.
+///
+/// # Panics
+/// Panics if the active-theme lock is poisoned.
 pub fn set_custom(theme: Option<CustomTheme>) {
     *CUSTOM.write().expect("theme lock") = theme;
 }
 
 /// Name of the active theme, if one is active.
+///
+/// # Panics
+/// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn custom_name() -> Option<String> {
     CUSTOM.read().expect("theme lock").as_ref().map(|c| c.name.clone())
@@ -237,6 +248,9 @@ fn rgb(c: Rgb) -> Color {
 }
 
 /// Foreground color for `region`: the theme's, or the primary editor foreground.
+///
+/// # Panics
+/// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn region_fg(region: Region) -> Color {
     if let Some(ct) = CUSTOM.read().expect("theme lock").as_ref()
@@ -247,6 +261,9 @@ pub fn region_fg(region: Region) -> Color {
 }
 
 /// Background color for `region`: the theme's, or the primary editor background.
+///
+/// # Panics
+/// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn region_bg(region: Region) -> Color {
     if let Some(ct) = CUSTOM.read().expect("theme lock").as_ref()
@@ -257,14 +274,15 @@ pub fn region_bg(region: Region) -> Color {
 }
 
 /// Font attributes (`ITALIC` / `BOLD`) the active theme requests for `region`.
+///
+/// # Panics
+/// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn region_modifiers(region: Region) -> Modifier {
     CUSTOM
         .read()
         .expect("theme lock")
-        .as_ref()
-        .map(|ct| ct.region_colors(region).modifiers())
-        .unwrap_or_else(Modifier::empty)
+        .as_ref().map_or_else(Modifier::empty, |ct| ct.region_colors(region).modifiers())
 }
 
 /// Base style (fg on bg, plus any custom font attributes) for `region`.
@@ -277,6 +295,9 @@ pub fn region_base(region: Region) -> Style {
 }
 
 /// Cursor color from the active theme, if one specifies it.
+///
+/// # Panics
+/// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn editor_cursor() -> Option<Color> {
     CUSTOM
@@ -289,6 +310,9 @@ pub fn editor_cursor() -> Option<Color> {
 
 /// Syntax-highlight colors as `(token, "#rrggbb")` pairs from the active theme.
 /// Empty when the theme specifies no token colors (so the editor stays plain).
+///
+/// # Panics
+/// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn syntax_theme() -> Vec<(&'static str, String)> {
     let guard = CUSTOM.read().expect("theme lock");

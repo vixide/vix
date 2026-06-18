@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Base64 encode and decode for Vix's Tools → Convert → Base64 menu.
 //!
 //! [`encode`] renders the text's UTF-8 bytes as standard Base64 (RFC 4648, with

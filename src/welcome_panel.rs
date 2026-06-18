@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! The first-run welcome screen's scroll state.
 //!
 //! Vix shows this overlay the first time it runs (and on demand from **Help →

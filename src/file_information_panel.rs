@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Information about the active editor file and the panel's row-selection state.
 //!
 //! Vix's Tools menu offers a *File Information* panel: a small table of facts

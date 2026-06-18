@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! A pure Language Server Protocol (LSP) client core.
 //!
 //! This crate owns the *protocol*, not the *process*: JSON-RPC 2.0 message

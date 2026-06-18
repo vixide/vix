@@ -37,9 +37,14 @@
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::cast_possible_wrap,
     clippy::too_many_lines,
     clippy::struct_excessive_bools,
-    clippy::needless_pass_by_value
+    clippy::needless_pass_by_value,
+    // Color (r/g/b/h/s/l/a) and grid (x/y/w/h) math reads best with the
+    // conventional one-letter names.
+    clippy::many_single_char_names,
+    clippy::similar_names
 )]
 
 #[macro_use]
