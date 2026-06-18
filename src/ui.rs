@@ -1390,8 +1390,8 @@ fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
 
     // An open submenu is drawn to the right of its parent item. It may be open
     // with nothing highlighted yet (`app.menu.sub == None`).
-    if app.menu.submenu_open() {
-        if let Some(subitems) = app.menu.submenu_items() {
+    if app.menu.submenu_open()
+        && let Some(subitems) = app.menu.submenu_items() {
             let fa = frame.area();
             let sub_w = dropdown_width(subitems);
             let sub_h = subitems.len() as u16 + 2;
@@ -1408,8 +1408,8 @@ fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
             render_dropdown(frame, sub_area, subitems, app.menu.sub);
 
             // A third-level submenu is drawn to the right of its parent row.
-            if app.menu.subsubmenu_open() {
-                if let Some(ssitems) = app.menu.subsubmenu_items() {
+            if app.menu.subsubmenu_open()
+                && let Some(ssitems) = app.menu.subsubmenu_items() {
                     let ss_w = dropdown_width(ssitems);
                     let ss_h = ssitems.len() as u16 + 2;
                     let ss_x = (sub_area.x + sub_area.width).min(fa.width.saturating_sub(ss_w));
@@ -1424,9 +1424,7 @@ fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
                     app.layout.subsubmenu_dropdown = ss_area;
                     render_dropdown(frame, ss_area, ssitems, app.menu.subsub);
                 }
-            }
         }
-    }
 }
 
 /// The badge color for a git change in the file explorer.
@@ -1485,14 +1483,13 @@ fn draw_explorer(app: &mut App, frame: &mut Frame, area: Rect) {
             let mark = if app.explorer.marked.contains(&n.path) { "● " } else { "" };
             let mut spans =
                 vec![Span::raw(indent), Span::styled(format!("{mark}{glyph} {}", n.name), style)];
-            if !n.is_dir {
-                if let Some(change) = app.git_change_for(&n.path) {
+            if !n.is_dir
+                && let Some(change) = app.git_change_for(&n.path) {
                     spans.push(Span::styled(
                         format!("  {}", change.letter()),
                         Style::default().fg(git_change_color(change)),
                     ));
                 }
-            }
             spans
         })
         .collect();
@@ -1653,11 +1650,10 @@ fn draw_pane(app: &mut App, frame: &mut Frame, area: Rect, tab_index: usize) -> 
     };
 
     if app.editor.tabs.get(tab_index).is_some_and(super::editor::Tab::is_image) {
-        if let Some(tab) = app.editor.tabs.get_mut(tab_index) {
-            if let Some(proto) = tab.image.as_mut() {
+        if let Some(tab) = app.editor.tabs.get_mut(tab_index)
+            && let Some(proto) = tab.image.as_mut() {
                 frame.render_stateful_widget(StatefulImage::<StatefulProtocol>::new(), text, proto);
             }
-        }
         return text;
     }
     if let Some(tab) = app.editor.tabs.get(tab_index) {
@@ -1704,11 +1700,10 @@ fn tint_ruler(frame: &mut Frame, text: Rect, editor: &super::editor::CodeEditor)
 fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
     let is_image = app.editor.active_tab().is_some_and(super::editor::Tab::is_image);
     if is_image {
-        if let Some(tab) = app.editor.active_tab_mut() {
-            if let Some(proto) = tab.image.as_mut() {
+        if let Some(tab) = app.editor.active_tab_mut()
+            && let Some(proto) = tab.image.as_mut() {
                 frame.render_stateful_widget(StatefulImage::<StatefulProtocol>::new(), text, proto);
             }
-        }
         return;
     }
     let mut hbar_rect: Option<Rect> = None;

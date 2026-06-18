@@ -2,8 +2,8 @@ use ratatui_core::{widgets::Widget};
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier, Style};
-use crate::editor::Editor;
-use crate::code::{
+use crate::editor_core::editor::Editor;
+use crate::editor_core::code::{
     RopeGraphemes, grapheme_width_and_chars_len, grapheme_width_and_bytes_len
 };
 
@@ -496,7 +496,7 @@ impl Editor {
 
 #[cfg(test)]
 mod whitespace_tests {
-    use crate::editor::Editor;
+    use crate::editor_core::editor::Editor;
     use ratatui_core::buffer::Buffer;
     use ratatui_core::layout::Rect;
     use ratatui_core::widgets::Widget;

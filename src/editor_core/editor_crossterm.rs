@@ -1,7 +1,7 @@
-use crate::actions::*;
-use crate::editor::Editor;
-use crate::multicursor::CaretMove;
-use crate::selection::SelectionSnap;
+use crate::editor_core::actions::*;
+use crate::editor_core::editor::Editor;
+use crate::editor_core::multicursor::CaretMove;
+use crate::editor_core::selection::SelectionSnap;
 use anyhow::Result;
 use crossterm::event::{
     KeyEvent, KeyModifiers,
@@ -10,6 +10,10 @@ use crossterm::event::{
 use ratatui_core::layout::Rect;
 
 impl Editor {
+    /// Handle a crossterm key event, then scroll to keep the cursor visible.
+    ///
+    /// # Errors
+    /// Returns an error when an applied action fails.
     pub fn input(
         &mut self, key: KeyEvent, area: &Rect,
     ) -> Result<()> {
@@ -105,6 +109,10 @@ impl Editor {
         true
     }
 
+    /// Handle a crossterm mouse event (scroll, click, drag, selection).
+    ///
+    /// # Errors
+    /// Returns an error when an applied action fails.
     pub fn mouse(
         &mut self, mouse: MouseEvent, area: &Rect,
     ) -> Result<()> {

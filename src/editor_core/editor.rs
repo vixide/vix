@@ -1,11 +1,11 @@
 use std::time::Duration;
-use crate::click::{ClickKind, ClickTracker};
-use crate::code::Code;
-use crate::code::{EditKind, EditBatch};
-use crate::code::{RopeGraphemes, grapheme_width_and_chars_len, grapheme_width};
-use crate::selection::{Selection, SelectionSnap};
-use crate::actions::*;
-use crate::utils;
+use crate::editor_core::click::{ClickKind, ClickTracker};
+use crate::editor_core::code::Code;
+use crate::editor_core::code::{EditKind, EditBatch};
+use crate::editor_core::code::{RopeGraphemes, grapheme_width_and_chars_len, grapheme_width};
+use crate::editor_core::selection::{Selection, SelectionSnap};
+use crate::editor_core::actions::*;
+use crate::editor_core::utils;
 use std::collections::HashMap;
 use std::cell::RefCell;
 use std::cmp::Ordering;
@@ -105,14 +105,24 @@ pub struct Editor {
 
     /// Extra cursors beyond the primary one (multiple-cursor editing). Empty for
     /// the normal single-cursor case. See `multicursor.rs`.
-    pub(crate) carets: Vec<crate::multicursor::Caret>,
+    pub(crate) carets: Vec<crate::editor_core::multicursor::Caret>,
 }
 
 impl Editor {
+    /// Create an editor for the given language, text, and syntax theme.
+    ///
+    /// # Errors
+    /// Returns an error when neither the requested language grammar nor the
+    /// `text` fallback grammar can be loaded.
     pub fn new(lang: &str, text: &str, theme: Vec<(&str, &str)>) -> Result<Self> {
         Self::new_with_highlights(lang, text, theme, None)
     }
 
+    /// Create an editor with optional custom highlight overrides.
+    ///
+    /// # Errors
+    /// Returns an error when neither the requested language grammar nor the
+    /// `text` fallback grammar can be loaded.
     pub fn new_with_highlights(
         lang: &str,
         text: &str,
@@ -199,6 +209,7 @@ impl Editor {
         }
     } 
 
+    /// Scroll the viewport so the cursor is visible within `area`.
     pub fn focus(&mut self, area: &Rect) {
         let width = area.width as usize;
         let height = area.height as usize;
@@ -395,10 +406,12 @@ impl Editor {
             .unwrap_or(self.cursor)
     }
 
+    /// Apply an editing action to the buffer.
     pub fn apply<A: Action>(&mut self, mut action: A) {
         action.apply(self);
     }
 
+    /// Replace the entire buffer contents with `content` as a single undo step.
     pub fn set_content(&mut self, content: &str) {
         self.code.tx();
         self.code.set_state_before(self.cursor, self.selection);
@@ -409,6 +422,7 @@ impl Editor {
         self.reset_highlight_cache();
     }
 
+    /// Apply a batch of edits as a single undo step.
     pub fn apply_batch(&mut self, batch: &EditBatch) {
         self.code.tx();
 
@@ -433,6 +447,7 @@ impl Editor {
         self.reset_highlight_cache();
     }
 
+    /// Move the cursor to the given char offset, clamped to the buffer.
     pub fn set_cursor(&mut self, cursor: usize) {
         self.cursor = cursor;
         self.fit_cursor();
@@ -451,8 +466,9 @@ impl Editor {
         self.fit_cursor();
     }
 
+    /// Clamp the cursor so it stays within the buffer and its current line.
     pub fn fit_cursor(&mut self) {
-        // make sure cursor is not out of bounds 
+        // make sure cursor is not out of bounds
         let len = self.code.len_chars();
         self.cursor = self.cursor.min(len);
 
@@ -463,12 +479,14 @@ impl Editor {
         }
     }
 
+    /// Scroll the viewport up one line.
     pub fn scroll_up(&mut self) {
         if self.offset_y > 0 {
             self.offset_y -= 1;
         }
     }
 
+    /// Scroll the viewport down one line, bounded by the last line.
     pub fn scroll_down(&mut self, area_height: usize) {
         let len_lines = self.code.len_lines();
         if self.offset_y < len_lines.saturating_sub(area_height) {
@@ -485,14 +503,17 @@ impl Editor {
             .collect()
     }
 
+    /// Return the entire buffer contents as an owned string.
     pub fn get_content(&self) -> String {
         self.code.get_content()
     }
 
+    /// Return the text of the char range `[start, end)` as an owned string.
     pub fn get_content_slice(&self, start: usize, end: usize) -> String {
         self.code.slice(start, end)
     }
 
+    /// Return the cursor's char offset.
     pub fn get_cursor(&self) -> usize {
         self.cursor
     }
@@ -503,6 +524,12 @@ impl Editor {
         self.code.char_to_line(self.cursor)
     }
 
+    /// Set the clipboard text, falling back to an in-memory clipboard when the
+    /// system clipboard is unavailable.
+    ///
+    /// # Errors
+    /// Currently always returns `Ok`; the system-clipboard failure path falls
+    /// back to the in-memory clipboard.
     pub fn set_clipboard(&mut self, text: &str) -> Result<()> {
         arboard::Clipboard::new()
             .and_then(|mut c| c.set_text(text.to_string()))
@@ -510,6 +537,11 @@ impl Editor {
         Ok(())
     }
 
+    /// Return the clipboard text, preferring the system clipboard and falling
+    /// back to the in-memory clipboard.
+    ///
+    /// # Errors
+    /// Returns an error when neither the system nor in-memory clipboard has text.
     pub fn get_clipboard(&self) -> Result<String> {
         arboard::Clipboard::new()
             .and_then(|mut c| c.get_text())
@@ -518,6 +550,7 @@ impl Editor {
             .ok_or_else(|| anyhow!("cant get clipboard"))
     }
 
+    /// Set the highlight marks as `(start char, end char, hex color)` ranges.
     pub fn set_marks(&mut self, marks: Vec<(usize, usize, &str)>) {
         self.marks = Some(
             marks.into_iter()
@@ -529,6 +562,7 @@ impl Editor {
         );
     }
 
+    /// Clear all highlight marks.
     pub fn remove_marks(&mut self) {
         self.marks = None;
     }
@@ -617,14 +651,17 @@ impl Editor {
         Some((start, end, self.code.slice(start, end)))
     }
 
+    /// Whether any highlight marks are set.
     pub fn has_marks(&self) -> bool {
         self.marks.is_some()
     }
 
+    /// Return the highlight marks as `(start, end, color)` ranges, if any.
     pub fn get_marks(&self) -> Option<&Vec<(usize, usize, Color)>> {
         self.marks.as_ref()
     }
 
+    /// Return the text of the current selection, or `None` when empty.
     pub fn get_selection_text(&mut self) -> Option<String> {
         if let Some(selection) = &self.selection && !selection.is_empty() {
             let text = self.code.slice(selection.start, selection.end);
@@ -633,26 +670,32 @@ impl Editor {
         None
     }
 
+    /// Return the current selection, if any.
     pub fn get_selection(&mut self) -> Option<Selection> {
        return self.selection;
     }
 
+    /// Set (or clear) the current selection.
     pub fn set_selection(&mut self, selection: Option<Selection>) {
         self.selection = selection;
     }
 
+    /// Set the vertical scroll offset (first visible line).
     pub fn set_offset_y(&mut self, offset_y: usize) {
         self.offset_y = offset_y;
     }
 
+    /// Set the horizontal scroll offset (first visible column).
     pub fn set_offset_x(&mut self, offset_x: usize) {
         self.offset_x = offset_x;
     }
-    
+
+    /// Return the vertical scroll offset (first visible line).
     pub fn get_offset_y(&self) -> usize {
         self.offset_y
     }
 
+    /// Return the horizontal scroll offset (first visible column).
     pub fn get_offset_x(&self) -> usize {
         self.offset_x
     }
@@ -677,10 +720,12 @@ impl Editor {
         self.get_content().lines().map(|l| l.chars().count()).max().unwrap_or(0)
     }
 
+    /// Return a mutable reference to the underlying code buffer.
     pub fn code_mut(&mut self) -> &mut Code {
         &mut self.code
     }
 
+    /// Return a shared reference to the underlying code buffer.
     pub fn code_ref(&self) -> &Code {
         &self.code
     }
@@ -718,6 +763,7 @@ impl Editor {
         self.code.set_change_callback(callback);
     }
 
+    /// Return cached syntax highlights for the char range `[start, end)`.
     pub fn highlight_interval(
         &self, start: usize, end: usize, theme: &Theme
     ) -> Vec<(usize, usize, Style)> {
@@ -732,11 +778,13 @@ impl Editor {
         highlights
     }
 
+    /// Clear the cached syntax highlights so they are recomputed on next render.
     pub fn reset_highlight_cache(&self) {
         self.highlights_cache.borrow_mut().clear();
     }
-    
-    /// calculates visible cursor position 
+
+    /// Compute the cursor's visible `(x, y)` cell within `area`, or `None` when
+    /// the cursor is scrolled out of view.
     pub fn get_visible_cursor(
         &self, area: &Rect
     ) -> Option<(u16, u16)> {
@@ -775,6 +823,7 @@ impl Editor {
         return None;
     }
 
+    /// Show or hide the line-number gutter.
     pub fn show_line_numbers(&mut self, show: bool) {
         self.show_line_numbers = show
     }
@@ -826,6 +875,7 @@ impl Editor {
         self.bracket_style = style;
     }
 
+    /// Set the left padding (in characters) between the gutter and the code.
     pub fn set_left_code_padding(&mut self, char_count: usize) {
         self.left_code_padding = char_count
     }

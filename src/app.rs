@@ -8,11 +8,11 @@ use crossterm::event::{
 };
 use include_dir::{include_dir, Dir};
 use ratatui::layout::Rect;
-use vix_editor::actions::{
+use crate::editor_core::actions::{
     Copy as CopyAction, Cut as CutAction, Paste as PasteAction, Redo as RedoAction,
     ToggleComment, Undo as UndoAction,
 };
-use vix_editor::selection::Selection;
+use crate::editor_core::selection::Selection;
 use ratatui_image::picker::Picker;
 use regex::Regex;
 
@@ -1387,8 +1387,8 @@ impl App {
 
     /// The Apple keymap's `Ctrl`-letter shortcuts. Returns true if consumed.
     fn apple_ctrl_key(&mut self, key: KeyEvent) -> bool {
-        if Self::ctrl(&key) {
-            if let KeyCode::Char(c) = key.code {
+        if Self::ctrl(&key)
+            && let KeyCode::Char(c) = key.code {
                 match c.to_ascii_lowercase() {
                     'q' => self.run_action("file.quit"),
                     'n' => self.run_action("file.new"),
@@ -1419,7 +1419,6 @@ impl App {
                 }
                 return true;
             }
-        }
         false
     }
 
@@ -1437,8 +1436,8 @@ impl App {
     /// The VS Code keymap's `Ctrl`-key shortcuts (VS Code's `Cmd` bindings, with
     /// `Ctrl` standing in for `Cmd`). Returns true if consumed.
     fn vscode_ctrl_key(&mut self, key: KeyEvent) -> bool {
-        if Self::ctrl(&key) {
-            if let KeyCode::Char(c) = key.code {
+        if Self::ctrl(&key)
+            && let KeyCode::Char(c) = key.code {
                 match c.to_ascii_lowercase() {
                     'q' => self.run_action("file.quit"),
                     'n' => self.run_action("file.new"),
@@ -1466,15 +1465,14 @@ impl App {
                 }
                 return true;
             }
-        }
         false
     }
 
     /// Keys shared by every keymap: menu-bar mnemonics and function keys. Returns
     /// true if consumed.
     fn global_shared_key(&mut self, key: KeyEvent) -> bool {
-        if Self::alt(&key) {
-            if let KeyCode::Char(c) = key.code {
+        if Self::alt(&key)
+            && let KeyCode::Char(c) = key.code {
                 // The Vix menu is index 0; the rest follow (File=1, …, Help=7).
                 let idx = match c.to_ascii_lowercase() {
                     'f' => Some(1),
@@ -1491,7 +1489,6 @@ impl App {
                     return true;
                 }
             }
-        }
         match key.code {
             // Ctrl+Space triggers LSP completion (terminal support varies).
             KeyCode::Char(' ') if Self::ctrl(&key) => {
@@ -1596,8 +1593,8 @@ impl App {
         // Second key of a `Ctrl+X …` chord.
         if self.emacs_prefix {
             self.emacs_prefix = false;
-            if Self::ctrl(&key) {
-                if let KeyCode::Char(c) = key.code {
+            if Self::ctrl(&key)
+                && let KeyCode::Char(c) = key.code {
                     match c.to_ascii_lowercase() {
                         'f' => self.run_action("file.open"),
                         's' => self.run_action("file.save"),
@@ -1606,7 +1603,6 @@ impl App {
                     }
                     return true;
                 }
-            }
             if let KeyCode::Char('k') = key.code {
                 self.run_action("file.close");
                 return true;
@@ -1614,8 +1610,8 @@ impl App {
             self.status = t!("status.emacs_no_chord").to_string();
             return true;
         }
-        if Self::ctrl(&key) {
-            if let KeyCode::Char(c) = key.code {
+        if Self::ctrl(&key)
+            && let KeyCode::Char(c) = key.code {
                 match c.to_ascii_lowercase() {
                     'x' => self.emacs_prefix = true,
                     'g' => self.status = t!("status.emacs_quit").to_string(),
@@ -1632,7 +1628,6 @@ impl App {
                 }
                 return true;
             }
-        }
         false
     }
 
@@ -1713,11 +1708,10 @@ impl App {
             }
             KeyCode::Backspace => {
                 // Backspacing past the empty `:` closes the command line.
-                if let Some(s) = self.vim_cmd.as_mut() {
-                    if s.pop().is_none() {
+                if let Some(s) = self.vim_cmd.as_mut()
+                    && s.pop().is_none() {
                         self.vim_cmd = None;
                     }
-                }
             }
             KeyCode::Char(c) => {
                 if let Some(s) = self.vim_cmd.as_mut() {
@@ -1822,15 +1816,14 @@ impl App {
                 }
             }
             "edit.toggle_comment" => {
-                if let Some(t) = self.editor.active_tab_mut() {
-                    if !t.is_image() {
+                if let Some(t) = self.editor.active_tab_mut()
+                    && !t.is_image() {
                         // Comments the cursor line, or every line touched by the
                         // selection; the editor picks the language's token.
                         t.editor.apply(ToggleComment {});
                         t.dirty = true;
                         t.preview = false;
                     }
-                }
             }
             "edit.case_upper" => self.change_case(crate::case::upper),
             "edit.case_lower" => self.change_case(crate::case::lower),
@@ -2390,11 +2383,10 @@ impl App {
     fn toggle_left_dock(&mut self) {
         self.show_explorer = !self.show_explorer;
         self.settings.show_explorer = self.show_explorer;
-        if self.show_explorer {
-            if let Some(p) = self.editor.active_tab().and_then(|t| t.path.clone()) {
+        if self.show_explorer
+            && let Some(p) = self.editor.active_tab().and_then(|t| t.path.clone()) {
                 self.explorer.reveal(&p);
             }
-        }
     }
 
     /// Toggle the right dock (the message drawer).
@@ -2701,11 +2693,10 @@ impl App {
                 }
             }
             KeyCode::Char(ch) if !Self::ctrl(&key) && !Self::alt(&key) => {
-                if let Some(c) = self.calculator.as_mut() {
-                    if c.focus == Focus::Input {
+                if let Some(c) = self.calculator.as_mut()
+                    && c.focus == Focus::Input {
                         c.push(ch);
                     }
-                }
             }
             _ => {}
         }
@@ -3263,11 +3254,10 @@ impl App {
                 }
             }
             KeyCode::Down => {
-                if let Some(p) = self.spell_suggest.as_mut() {
-                    if p.selected + 1 < p.suggestions.len() {
+                if let Some(p) = self.spell_suggest.as_mut()
+                    && p.selected + 1 < p.suggestions.len() {
                         p.selected += 1;
                     }
-                }
             }
             KeyCode::Enter => self.spell_apply_selected(),
             KeyCode::Char('a' | 'A') => self.spell_add_word(),
@@ -3286,12 +3276,11 @@ impl App {
             return;
         }
         let row = (mouse.row - r.y) as usize;
-        if let Some(p) = self.spell_suggest.as_mut() {
-            if row < p.suggestions.len() {
+        if let Some(p) = self.spell_suggest.as_mut()
+            && row < p.suggestions.len() {
                 p.selected = row;
                 self.spell_apply_selected();
             }
-        }
     }
 
     /// Replace the misspelled word with the highlighted suggestion.
@@ -3388,11 +3377,10 @@ impl App {
     fn run_context_selected(&mut self) {
         let action = self.context_menu.as_ref().map(|cm| CONTEXT_ITEMS[cm.selected].1);
         self.context_menu = None;
-        if let Some(action) = action {
-            if action != SEP_ACTION {
+        if let Some(action) = action
+            && action != SEP_ACTION {
                 self.run_action(action);
             }
-        }
     }
 
     // ----- git changes panel ----------------------------------------------
@@ -3416,11 +3404,10 @@ impl App {
                 }
             }
             KeyCode::Down => {
-                if let Some(p) = self.git_panel.as_mut() {
-                    if p.selected + 1 < self.git_status.len() {
+                if let Some(p) = self.git_panel.as_mut()
+                    && p.selected + 1 < self.git_status.len() {
                         p.selected += 1;
                     }
-                }
             }
             // Space / s / u toggle or set the staged state of the selected file.
             KeyCode::Char(' ') => self.git_toggle_stage(),
@@ -3760,14 +3747,12 @@ impl App {
     }
 
     fn branch_mouse(&mut self, mouse: MouseEvent) {
-        if let Some(idx) = self.chooser_row(mouse) {
-            if let Some(c) = self.branch_chooser.as_mut() {
-                if idx < c.branches.len() {
+        if let Some(idx) = self.chooser_row(mouse)
+            && let Some(c) = self.branch_chooser.as_mut()
+                && idx < c.branches.len() {
                     c.selected = idx;
                     self.checkout_selected_branch();
                 }
-            }
-        }
     }
 
     /// Apply the highlighted branch and close the chooser: merge it into the
@@ -4353,12 +4338,11 @@ impl App {
         loop {
             let front = self.paste.as_ref().and_then(|op| op.queue.front().cloned());
             let Some(src) = front else {
-                if let Some(op) = self.paste.take() {
-                    if op.cut {
+                if let Some(op) = self.paste.take()
+                    && op.cut {
                         self.clip.clear();
                         self.clip_cut = false;
                     }
-                }
                 self.explorer.clear_marks();
                 self.explorer.rebuild();
                 self.status = t!("status.paste_complete").into();
@@ -4669,12 +4653,11 @@ impl App {
         if !self.settings.preview_tabs {
             return;
         }
-        if let Some(node) = self.explorer.selected_node() {
-            if !node.is_dir && !is_image_path(&node.path) {
+        if let Some(node) = self.explorer.selected_node()
+            && !node.is_dir && !is_image_path(&node.path) {
                 let path = node.path.clone();
                 let _ = self.editor.open(&path, true);
             }
-        }
     }
 
     fn messages_key(&mut self, key: KeyEvent) {
@@ -4836,16 +4819,14 @@ impl App {
         if !self.nav_history.is_empty() {
             self.nav_history.truncate(self.nav_idx + 1);
         }
-        if let Some(o) = origin {
-            if self.nav_history.last() != Some(&o) {
+        if let Some(o) = origin
+            && self.nav_history.last() != Some(&o) {
                 self.nav_history.push(o);
             }
-        }
-        if let Some(d) = dest {
-            if self.nav_history.last() != Some(&d) {
+        if let Some(d) = dest
+            && self.nav_history.last() != Some(&d) {
                 self.nav_history.push(d);
             }
-        }
         self.nav_idx = self.nav_history.len().saturating_sub(1);
     }
 
@@ -5095,11 +5076,10 @@ impl App {
         // The Pomodoro dialog: a left click on the Start/Stop/Cancel button runs
         // it (Start closes the dialog and keeps the countdown running).
         if self.pomodoro_open {
-            if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
-                if rect_contains(self.layout.pomodoro_button, mouse.column, mouse.row) {
+            if let MouseEventKind::Down(MouseButton::Left) = mouse.kind
+                && rect_contains(self.layout.pomodoro_button, mouse.column, mouse.row) {
                     self.pomodoro_primary();
                 }
-            }
             return;
         }
         // Keyboard-only modal overlays swallow all mouse input rather than
@@ -5480,11 +5460,10 @@ impl App {
         if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
             // Alt+click adds an extra caret; a plain click collapses to one.
             if alt {
-                if let Some(t) = self.editor.active_tab_mut() {
-                    if let Some(pos) = t.editor.cursor_from_mouse(mouse.column, mouse.row, &area) {
+                if let Some(t) = self.editor.active_tab_mut()
+                    && let Some(pos) = t.editor.cursor_from_mouse(mouse.column, mouse.row, &area) {
                         t.editor.add_caret_at(pos);
                     }
-                }
                 return;
             }
             if let Some(t) = self.editor.active_tab_mut() {
@@ -5715,11 +5694,10 @@ impl App {
     /// that item. Never commits an action or closes the menu.
     fn menu_hover(&mut self, col: u16, row: u16) {
         if rect_contains(self.layout.menu, col, row) {
-            if let Some(i) = self.top_menu_index_at(col) {
-                if self.menu.open != Some(i) {
+            if let Some(i) = self.top_menu_index_at(col)
+                && self.menu.open != Some(i) {
                     self.menu.open_index(i);
                 }
-            }
             // Left any open submenu: drop a live theme preview.
             self.revert_theme_preview();
             return;
@@ -5862,11 +5840,10 @@ impl App {
     /// Preview the theme of the currently-highlighted submenu item, if it is a
     /// `view.theme:<name>` entry (for keyboard navigation, mirroring hover).
     fn preview_current_theme(&mut self) {
-        if let (Some(sidx), Some(items)) = (self.menu.sub, self.menu.submenu_items()) {
-            if let Some(it) = items.get(sidx) {
+        if let (Some(sidx), Some(items)) = (self.menu.sub, self.menu.submenu_items())
+            && let Some(it) = items.get(sidx) {
                 self.preview_menu_theme(it.action);
             }
-        }
     }
 
     /// Revert a live theme hover/keyboard preview to the committed theme.
@@ -6030,27 +6007,24 @@ impl App {
 
     /// Open the highlighted recent file and close the chooser.
     fn open_selected_recent(&mut self) {
-        if let Some(rc) = self.recent_chooser.take() {
-            if let Some(path) = rc.entries.get(rc.selected).cloned() {
+        if let Some(rc) = self.recent_chooser.take()
+            && let Some(path) = rc.entries.get(rc.selected).cloned() {
                 self.with_jump(|s| {
                     s.open_path(&path, false);
                     s.focus = Focus::Editor;
                 });
             }
-        }
     }
 
     fn recent_mouse(&mut self, mouse: MouseEvent) {
-        if let Some(idx) = self.chooser_row(mouse) {
-            if let Some(rc) = self.recent_chooser.as_mut() {
-                if idx < rc.entries.len() {
+        if let Some(idx) = self.chooser_row(mouse)
+            && let Some(rc) = self.recent_chooser.as_mut()
+                && idx < rc.entries.len() {
                     // A click selects the row and opens it (no live preview to
                     // justify a two-step interaction).
                     rc.selected = idx;
                     self.open_selected_recent();
                 }
-            }
-        }
     }
 
     /// Open the recent-locations (jump list) chooser, listing the position
@@ -6092,22 +6066,19 @@ impl App {
 
     /// Jump to the highlighted location and close the chooser.
     fn open_selected_location(&mut self) {
-        if let Some(lc) = self.location_chooser.take() {
-            if let Some(loc) = lc.entries.get(lc.selected).cloned() {
+        if let Some(lc) = self.location_chooser.take()
+            && let Some(loc) = lc.entries.get(lc.selected).cloned() {
                 self.navigate_to(loc);
             }
-        }
     }
 
     fn location_mouse(&mut self, mouse: MouseEvent) {
-        if let Some(idx) = self.chooser_row(mouse) {
-            if let Some(lc) = self.location_chooser.as_mut() {
-                if idx < lc.entries.len() {
+        if let Some(idx) = self.chooser_row(mouse)
+            && let Some(lc) = self.location_chooser.as_mut()
+                && idx < lc.entries.len() {
                     lc.selected = idx;
                     self.open_selected_location();
                 }
-            }
-        }
     }
 
     // ----- chooser mouse --------------------------------------------------
@@ -6167,11 +6138,10 @@ impl App {
         }
         let col = ((mouse.column - r.x) / crate::ui::NERD_CELL_W) as usize;
         let row = (mouse.row - r.y) as usize;
-        if let Some(p) = self.nerd_palette.as_mut() {
-            if p.select_at(row, col) {
+        if let Some(p) = self.nerd_palette.as_mut()
+            && p.select_at(row, col) {
                 self.insert_selected_glyph();
             }
-        }
     }
 
     /// Insert the highlighted glyph into the active editor (leaving the palette
@@ -6551,11 +6521,10 @@ impl App {
         let Some(tab) = self.editor.active_tab_mut() else {
             return String::new();
         };
-        if let Some(sel) = tab.editor.get_selection_text() {
-            if !sel.trim().is_empty() {
+        if let Some(sel) = tab.editor.get_selection_text()
+            && !sel.trim().is_empty() {
                 return sel;
             }
-        }
         let cursor = tab.editor.get_cursor();
         if let Some((_, _, word)) = tab.editor.word_at(cursor) {
             return word;
@@ -6944,11 +6913,10 @@ impl App {
                     use std::os::unix::fs::PermissionsExt;
                     info.mode = Some(meta.permissions().mode());
                 }
-                if let Ok(modified) = meta.modified() {
-                    if let Ok(d) = modified.duration_since(std::time::UNIX_EPOCH) {
+                if let Ok(modified) = meta.modified()
+                    && let Ok(d) = modified.duration_since(std::time::UNIX_EPOCH) {
                         info.modified_secs = i64::try_from(d.as_secs()).ok();
                     }
-                }
             }
         }
         info
@@ -7062,11 +7030,10 @@ impl App {
             return;
         }
         let row_in_view = (mouse.row - r.y) as usize;
-        if let Some(p) = self.text_info.as_mut() {
-            if p.select_index(row_in_view) {
+        if let Some(p) = self.text_info.as_mut()
+            && p.select_index(row_in_view) {
                 self.insert_selected_text_info();
             }
-        }
     }
 
     /// Insert the highlighted value into the active editor (leaving the panel open).
@@ -7156,11 +7123,10 @@ impl App {
             return;
         }
         let row = (mouse.row - r.y) as usize;
-        if let Some(p) = self.snippets.as_mut() {
-            if p.select_index(row) {
+        if let Some(p) = self.snippets.as_mut()
+            && p.select_index(row) {
                 self.insert_selected_snippet();
             }
-        }
     }
 
     /// Insert the highlighted snippet's body at the cursor and close the picker.
@@ -7273,14 +7239,13 @@ impl App {
         let dtx = tx.clone();
         let droot = root.clone();
         std::thread::spawn(move || {
-            if let Ok(out) = std::process::Command::new("du").arg("-sh").arg(&droot).output() {
-                if out.status.success() {
+            if let Ok(out) = std::process::Command::new("du").arg("-sh").arg(&droot).output()
+                && out.status.success() {
                     let text = String::from_utf8_lossy(&out.stdout);
                     if let Some(size) = text.split_whitespace().next() {
                         let _ = dtx.send(DashMsg::Disk(size.to_string()));
                     }
                 }
-            }
         });
 
         let ftx = tx.clone();
@@ -7581,8 +7546,8 @@ impl App {
                 }
             }
             PMode::Symbols => {
-                if let Some(tab) = self.editor.active_tab() {
-                    if !tab.is_image() {
+                if let Some(tab) = self.editor.active_tab()
+                    && !tab.is_image() {
                         let text = tab.text();
                         for sym in palette::symbols(&text) {
                             if query.is_empty() || palette::fuzzy_match(&sym.name, &query) {
@@ -7593,7 +7558,6 @@ impl App {
                             }
                         }
                     }
-                }
             }
             PMode::WorkspaceSymbols => {
                 entries = self.workspace_symbol_entries(&query);
@@ -8214,13 +8178,12 @@ impl App {
     /// result arrives asynchronously and jumps via [`App::poll_lsp`]). Otherwise
     /// fall back to the heuristic, keyword-prefixed cross-workspace search below.
     fn goto_definition(&mut self) {
-        if let Some(path) = self.active_path() {
-            if self.lsp.handles(&path) {
+        if let Some(path) = self.active_path()
+            && self.lsp.handles(&path) {
                 let (line, character) = self.cursor_lsp_position(&path);
                 self.lsp.request_definition(&path, line, character);
                 return;
             }
-        }
         let Some(symbol) = self.symbol_under_cursor() else {
             self.messages.warn(t!("msg.no_symbol"));
             return;
@@ -8755,15 +8718,14 @@ impl App {
             }
             // Alt+C / Alt+R toggle case / regex for the workspace→dock search.
             KeyCode::Char(c) if Self::alt(&key) => {
-                if let Some(p) = self.prompt.as_mut() {
-                    if matches!(p.kind, PromptKind::SearchToDock) {
+                if let Some(p) = self.prompt.as_mut()
+                    && matches!(p.kind, PromptKind::SearchToDock) {
                         match c.to_ascii_lowercase() {
                             'c' => p.case_sensitive = !p.case_sensitive,
                             'r' => p.regex = !p.regex,
                             _ => {}
                         }
                     }
-                }
             }
             KeyCode::Char(c) => {
                 if let Some(p) = self.prompt.as_mut() {
@@ -9076,7 +9038,7 @@ fn rect_contains(r: Rect, col: u16, row: u16) -> bool {
 /// The char offset within `code` of LSP position `(line, character)`, where
 /// `character` is in the server's `enc` units. Out-of-range positions clamp.
 fn lsp_pos_to_char(
-    code: &vix_editor::code::Code,
+    code: &crate::editor_core::code::Code,
     line: u32,
     character: u32,
     enc: crate::lsp_core::Encoding,

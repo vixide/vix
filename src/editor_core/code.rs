@@ -3,19 +3,18 @@ use ropey::{Rope, RopeSlice};
 use streaming_iterator::StreamingIterator;
 use tree_sitter::{InputEdit, Point, QueryCursor};
 use tree_sitter::{Language, Parser, Query, Tree, Node};
-use crate::history::{History};
-use crate::selection::Selection;
+use crate::editor_core::history::{History};
+use crate::editor_core::selection::Selection;
 use rust_embed::RustEmbed;
 use std::collections::HashMap;
-use crate::utils::{indent, count_indent_units, comment as lang_comment, calculate_end_position};
+use crate::editor_core::utils::{indent, count_indent_units, comment as lang_comment, calculate_end_position};
 use std::cell::RefCell;
 use std::rc::Rc;
 use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
 use unicode_width::{UnicodeWidthStr};
 
 #[derive(RustEmbed)]
-#[folder = ""]
-#[include = "langs/*/*"]
+#[folder = "langs/"]
 struct LangAssets;
 
 
@@ -162,7 +161,7 @@ impl Code {
                 return Ok(highlights.clone());
             }
         }
-        let p = format!("langs/{}/highlights.scm", lang);
+        let p = format!("{lang}/highlights.scm");
         let highlights_bytes =
             LangAssets::get(&p).ok_or_else(|| anyhow!("No highlights found for {}", lang))?;
         let highlights_bytes = highlights_bytes.data.as_ref();

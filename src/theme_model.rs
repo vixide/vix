@@ -239,22 +239,20 @@ fn rgb(c: Rgb) -> Color {
 /// Foreground color for `region`: the theme's, or the primary editor foreground.
 #[must_use]
 pub fn region_fg(region: Region) -> Color {
-    if let Some(ct) = CUSTOM.read().expect("theme lock").as_ref() {
-        if let Some(c) = ct.region_colors(region).foreground {
+    if let Some(ct) = CUSTOM.read().expect("theme lock").as_ref()
+        && let Some(c) = ct.region_colors(region).foreground {
             return rgb(c);
         }
-    }
     fg()
 }
 
 /// Background color for `region`: the theme's, or the primary editor background.
 #[must_use]
 pub fn region_bg(region: Region) -> Color {
-    if let Some(ct) = CUSTOM.read().expect("theme lock").as_ref() {
-        if let Some(c) = ct.region_colors(region).background {
+    if let Some(ct) = CUSTOM.read().expect("theme lock").as_ref()
+        && let Some(c) = ct.region_colors(region).background {
             return rgb(c);
         }
-    }
     bg()
 }
 
@@ -327,11 +325,10 @@ pub fn load_custom_themes(dir: &Path) -> Vec<CustomTheme> {
             if path.extension().and_then(|e| e.to_str()) != Some("json") {
                 continue;
             }
-            if let Ok(text) = std::fs::read_to_string(&path) {
-                if let Some(theme) = parse_theme(&text) {
+            if let Ok(text) = std::fs::read_to_string(&path)
+                && let Some(theme) = parse_theme(&text) {
                     out.push(theme);
                 }
-            }
         }
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));

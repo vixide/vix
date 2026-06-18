@@ -237,14 +237,13 @@ impl Lsp {
         }
         let Some(config) = self.config_for(path) else { return };
         let uri = path_to_uri(path);
-        if let Some(server) = self.servers.get_mut(&config.language_id) {
-            if server.docs.remove(&uri).is_some() {
+        if let Some(server) = self.servers.get_mut(&config.language_id)
+            && server.docs.remove(&uri).is_some() {
                 server.send(message::notification(
                     "textDocument/didClose",
                     message::did_close_params(&uri),
                 ));
             }
-        }
     }
 
     /// Send a feature request for `path` at `(line, character)`; the response
@@ -317,9 +316,9 @@ impl Lsp {
         }
         // Notification (method, no id).
         if let Some(method) = has_method {
-            if method == "textDocument/publishDiagnostics" {
-                if let Some(params) = msg.get("params") {
-                    if let Some((uri, diags)) = message::parse_diagnostics(params) {
+            if method == "textDocument/publishDiagnostics"
+                && let Some(params) = msg.get("params")
+                    && let Some((uri, diags)) = message::parse_diagnostics(params) {
                         let path = canonical(&uri_to_path(&uri));
                         if diags.is_empty() {
                             self.diagnostics.remove(&path);
@@ -328,8 +327,6 @@ impl Lsp {
                         }
                         events.push(LspEvent::Diagnostics(path));
                     }
-                }
-            }
             return;
         }
         // Response to one of our requests (id, no method).
@@ -509,13 +506,12 @@ pub fn uri_to_path(uri: &str) -> PathBuf {
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(b) = u8::from_str_radix(&rest[i + 1..i + 3], 16) {
+        if bytes[i] == b'%' && i + 2 < bytes.len()
+            && let Ok(b) = u8::from_str_radix(&rest[i + 1..i + 3], 16) {
                 out.push(b);
                 i += 3;
                 continue;
             }
-        }
         out.push(bytes[i]);
         i += 1;
     }

@@ -174,16 +174,14 @@ impl Explorer {
             .unwrap_or(path)
             .to_string_lossy()
             .replace('\\', "/");
-        if let Some(inc) = &self.include {
-            if !inc.is_match(&rel) {
+        if let Some(inc) = &self.include
+            && !inc.is_match(&rel) {
                 return false;
             }
-        }
-        if let Some(exc) = &self.exclude {
-            if exc.is_match(&rel) {
+        if let Some(exc) = &self.exclude
+            && exc.is_match(&rel) {
                 return false;
             }
-        }
         true
     }
 
@@ -297,12 +295,11 @@ impl Explorer {
             self.rebuild();
             return true;
         }
-        if let Some(parent) = path.parent() {
-            if let Some(i) = self.nodes.iter().position(|n| n.path == parent) {
+        if let Some(parent) = path.parent()
+            && let Some(i) = self.nodes.iter().position(|n| n.path == parent) {
                 self.selected = i;
                 return true;
             }
-        }
         false
     }
 

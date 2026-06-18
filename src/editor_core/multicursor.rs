@@ -12,9 +12,9 @@
 // values are small in-buffer offsets, so these casts cannot realistically wrap.
 #![allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
 
-use crate::actions::{MoveDown, MoveLeft, MoveRight, MoveUp};
-use crate::editor::Editor;
-use crate::selection::Selection;
+use crate::editor_core::actions::{MoveDown, MoveLeft, MoveRight, MoveUp};
+use crate::editor_core::editor::Editor;
+use crate::editor_core::selection::Selection;
 
 /// An extra caret beyond the primary cursor.
 #[derive(Clone, Copy, Debug)]
@@ -284,7 +284,7 @@ fn find_from(hay: &[char], needle: &[char], from: usize) -> Option<usize> {
 
 #[cfg(test)]
 mod caret_tests {
-    use crate::editor::Editor;
+    use crate::editor_core::editor::Editor;
 
     fn ed(text: &str, cursor: usize) -> Editor {
         let mut e = Editor::new("text", text, Vec::new()).unwrap();
