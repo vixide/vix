@@ -357,6 +357,15 @@ fn line_transforms_via_actions() {
 }
 
 #[test]
+fn spawn_multi_cursor_below_adds_a_caret() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "ab\ncd\nef");
+    app.run_action("edit.go_first"); // cursor to line 0, col 0
+    app.run_action("spawn_multi_cursor_down");
+    assert!(app.editor.active_tab().unwrap().editor.has_multi_carets(), "a caret was added below");
+}
+
+#[test]
 fn ctrl_d_adds_a_caret_and_edits_all_occurrences() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "foo foo foo");

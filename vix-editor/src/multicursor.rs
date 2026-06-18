@@ -242,6 +242,36 @@ impl Editor {
             self.carets.push(Caret { pos, anchor: None });
         }
     }
+
+    /// Add a caret on the line above the main cursor, at the same column (clamped
+    /// to that line's length). No-op on the first line.
+    pub fn add_caret_above(&mut self) {
+        self.add_caret_vertical(false);
+    }
+
+    /// Add a caret on the line below the main cursor, at the same column (clamped
+    /// to that line's length). No-op on the last line.
+    pub fn add_caret_below(&mut self) {
+        self.add_caret_vertical(true);
+    }
+
+    fn add_caret_vertical(&mut self, down: bool) {
+        let pos = {
+            let code = self.code_ref();
+            let line = code.char_to_line(self.cursor);
+            let col = self.cursor - code.line_to_char(line);
+            let n = code.len_lines();
+            if down && line + 1 >= n {
+                return;
+            }
+            if !down && line == 0 {
+                return;
+            }
+            let target = if down { line + 1 } else { line - 1 };
+            code.line_to_char(target) + col.min(code.line_len(target))
+        };
+        self.add_caret_at(pos);
+    }
 }
 
 /// First index `>= from` where `needle` occurs in `hay` (by character).
@@ -250,4 +280,41 @@ fn find_from(hay: &[char], needle: &[char], from: usize) -> Option<usize> {
         return None;
     }
     (from..=hay.len() - needle.len()).find(|&i| hay[i..i + needle.len()] == *needle)
+}
+
+#[cfg(test)]
+mod caret_tests {
+    use crate::editor::Editor;
+
+    fn ed(text: &str, cursor: usize) -> Editor {
+        let mut e = Editor::new("text", text, Vec::new()).unwrap();
+        e.set_cursor(cursor);
+        e
+    }
+
+    #[test]
+    fn add_caret_below_keeps_column() {
+        let mut e = ed("abcd\nefgh\nij", 2); // line 0, col 2
+        e.add_caret_below();
+        let mut all = e.caret_positions();
+        all.sort_unstable();
+        // main caret at 2, new caret on line 1 col 2 = index 5+2 = 7.
+        assert!(all.contains(&7), "carets: {all:?}");
+    }
+
+    #[test]
+    fn add_caret_below_clamps_to_short_line() {
+        let mut e = ed("abcd\nef", 3); // col 3; next line "ef" len 2
+        e.add_caret_below();
+        let mut all = e.caret_positions();
+        all.sort_unstable();
+        assert!(all.contains(&7), "clamped to end of 'ef' (5+2): {all:?}");
+    }
+
+    #[test]
+    fn add_caret_above_on_first_line_is_noop() {
+        let mut e = ed("abc\ndef", 1);
+        e.add_caret_above();
+        assert!(!e.has_multi_carets(), "no caret added above the first line");
+    }
 }
