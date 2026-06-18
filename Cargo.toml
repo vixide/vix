@@ -90,7 +90,10 @@ regex = "1"
 serde = { version = "1", features = ["derive"] }
 # JSON for the LSP client's JSON-RPC traffic.
 serde_json = "1"
-ratatui-image = "11.0.4"
+# Image preview. Default features pull `chafa-dyn`, which dynamically links the
+# native libchafa via pkg-config and so blocks portable cross-compilation; drop
+# it and keep the built-in protocols (Sixel/Kitty/iTerm2/Halfblocks).
+ratatui-image = { version = "11.0.4", default-features = false, features = ["image-defaults", "crossterm"] }
 image = "0.25"
 confy = "2.0.0"
 clap = { version = "4.6.1", features = ["derive"] }
@@ -145,6 +148,12 @@ tree-sitter-rust = { version = "0.24", optional = true }
 tree-sitter-toml-ng = { version = "0.7.0", optional = true }
 tree-sitter-typescript = { version = "0.23", optional = true }
 tree-sitter-yaml = { version = "0.7", optional = true }
+
+# Faster allocator for the MUSL static target (glibc's allocator is fine, but
+# musl's is slow). Used as the global allocator in lib.rs/main.rs under the same
+# cfg, so it is only pulled in — and its C code only compiled — for musl builds.
+[target.'cfg(target_env = "musl")'.dependencies]
+mimalloc = "0.1"
 
 [profile.release]
 lto = true
