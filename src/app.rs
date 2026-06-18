@@ -2282,7 +2282,7 @@ impl App {
             "first_split" => self.focus_split_pane(0),
             "last_split" => self.focus_split_pane(1),
             // toggles / app
-            "toggle_help" => self.show_help = !self.show_help,
+            "toggle_help" | "toggle_key_menu" => self.show_help = !self.show_help,
             "toggle_diff_gutter" => self.run_action("view.scrollbar"),
             "escape" => {
                 if let Some(t) = self.editor.active_tab_mut() {
@@ -2318,7 +2318,6 @@ impl App {
             "play_macro" => self.play_macro(),
             "autocomplete" => self.autocomplete(true),
             "cycle_autocomplete_back" => self.autocomplete(false),
-            "toggle_key_menu" => self.show_help = !self.show_help,
             "shell_mode" | "command_mode" | "suspend" => todo_action!(),
             _ => return false,
         }
