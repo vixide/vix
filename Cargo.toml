@@ -96,6 +96,8 @@ similar = "2"
 spellbook = "0.4"
 sysinfo = "0.33"
 toml = "0.8"
+md-5 = "0.10"
+crc32fast = "1"
 uuid = { version = "1", features = ["v1", "v3", "v4", "v5", "v6", "v7", "v8"] }
 include_dir = "0.7.4"
 serde_yaml = "0.9.34"

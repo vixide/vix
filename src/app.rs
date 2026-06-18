@@ -1978,6 +1978,8 @@ impl App {
             "tools.checksum.sha512" => {
                 self.transform_selection_or_buffer(crate::checksum_tool::sha512_hex);
             }
+            "tools.checksum.md5" => self.transform_selection_or_buffer(crate::checksum_tool::md5_hex),
+            "tools.checksum.crc32" => self.transform_selection_or_buffer(crate::checksum_tool::crc32_hex),
             "tools.convert.base64.encode" => {
                 self.transform_selection_or_buffer_try(crate::base64_tool::encode);
             }
