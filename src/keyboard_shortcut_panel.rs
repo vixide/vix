@@ -34,7 +34,7 @@ pub const ROWS: &[Row] = &[
     Row { keys: "Ctrl Shift F", desc: "help.search_workspace" },
     Row { keys: "F12", desc: "help.goto_definition" },
     Row { keys: "Alt Left / Alt Right", desc: "help.position_history" },
-    Row { keys: "F10 / Alt F,E,T,H", desc: "help.menu_bar" },
+    Row { keys: "F10 / Alt V,F,E,I,T,H", desc: "help.menu_bar" },
     Row { keys: "F1", desc: "help.this_help" },
     Row { keys: "Mouse", desc: "help.mouse" },
 ];

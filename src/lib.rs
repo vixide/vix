@@ -37,10 +37,9 @@ extern crate rust_i18n;
 // a selected language does not (yet) translate.
 i18n!("locales", fallback = "en");
 
-// When we build for MUSL static, use faster memory allocator.
-#[cfg(target_env = "musl")]
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+// The MUSL static build uses mimalloc as its global allocator; that lives in the
+// `vix` binary (main.rs) so it applies once to the whole program. Declaring it
+// here too would conflict (two `#[global_allocator]` in one binary).
 
 pub mod app;
 pub mod case;
