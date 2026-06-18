@@ -189,6 +189,16 @@ fn convert_markdown_to_html_action_transforms_buffer() {
 }
 
 #[test]
+fn convert_jwt_decode_action() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhYmMifQ.sig");
+    app.run_action("tools.convert.jwt");
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains("\"alg\": \"HS256\""), "got: {text}");
+    assert!(text.contains("\"sub\": \"abc\""), "got: {text}");
+}
+
+#[test]
 fn convert_toml_to_json_action_transforms_buffer() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "name = \"Vix\"\n");
