@@ -407,6 +407,21 @@ const GIT_BRANCH: &[Item] = &[
     Item::leaf("menu.item.git.edit_description", "git.edit_description", ""),
 ];
 
+/// Merge-conflict resolutions, grouped under Git → Resolve.
+const GIT_RESOLVE: &[Item] = &[
+    Item::leaf("menu.item.git.conflict_ours", "git.conflict_ours", ""),
+    Item::leaf("menu.item.git.conflict_theirs", "git.conflict_theirs", ""),
+    Item::leaf("menu.item.git.conflict_both", "git.conflict_both", ""),
+];
+
+/// Pull strategies, grouped under Git → Pull.
+const GIT_PULL: &[Item] = &[
+    Item::leaf("menu.item.git.pull_ff", "git.pull_ff", ""),
+    Item::leaf("menu.item.git.pull_rebase", "git.pull_rebase", ""),
+    Item::leaf("menu.item.git.pull_merge", "git.pull_merge", ""),
+    Item::leaf("menu.item.git.pull_squash", "git.pull_squash", ""),
+];
+
 const GIT: &[Item] = &[
     Item::leaf("menu.item.git.status", "git.status", ""),
     Item::leaf("menu.item.git.changes", "git.changes", ""),
@@ -420,9 +435,7 @@ const GIT: &[Item] = &[
     Item::leaf("menu.item.git.revert_hunk", "git.revert_hunk", ""),
     SEP,
     Item::leaf("menu.item.git.conflict_next", "git.conflict_next", ""),
-    Item::leaf("menu.item.git.conflict_ours", "git.conflict_ours", ""),
-    Item::leaf("menu.item.git.conflict_theirs", "git.conflict_theirs", ""),
-    Item::leaf("menu.item.git.conflict_both", "git.conflict_both", ""),
+    Item::sub("menu.item.git.resolve", GIT_RESOLVE),
     SEP,
     Item::sub("menu.item.git.branch", GIT_BRANCH),
     SEP,
@@ -430,7 +443,7 @@ const GIT: &[Item] = &[
     Item::leaf("menu.item.git.stash", "git.stash", ""),
     Item::leaf("menu.item.git.stash_pop", "git.stash_pop", ""),
     SEP,
-    Item::leaf("menu.item.git.pull", "git.pull", ""),
+    Item::sub("menu.item.git.pull", GIT_PULL),
     Item::leaf("menu.item.git.push", "git.push", ""),
     Item::leaf("menu.item.git.fetch", "git.fetch", ""),
     SEP,
