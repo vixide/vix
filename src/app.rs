@@ -2046,6 +2046,7 @@ impl App {
             }
             "git.blame" => self.git_blame_line(),
             "git.revert_hunk" => self.revert_hunk(),
+            "git.stage_hunk" => self.stage_hunk(),
             "git.diff_next" => self.diff_goto(true),
             "git.diff_prev" => self.diff_goto(false),
             "view.bottom_dock" => self.toggle_bottom_dock(),
@@ -2856,6 +2857,63 @@ impl App {
         }
         self.refresh_git_gutter();
         self.status = t!("status.hunk_reverted").to_string();
+    }
+
+    /// Stage just the hunk under the cursor into the git index, leaving the rest
+    /// of the file's changes unstaged and the working tree untouched. Safe: it
+    /// only stages when the index still matches HEAD for the hunk's region.
+    fn stage_hunk(&mut self) {
+        let hunks = self.active_hunks();
+        if hunks.is_empty() {
+            self.status = t!("status.no_changes").to_string();
+            return;
+        }
+        let line = self.editor.active_tab().map_or(0, |t| t.editor.cursor_line());
+        let Some(hunk) = hunks.into_iter().find(|h| h.contains(line)) else {
+            self.status = t!("status.no_hunk").to_string();
+            return;
+        };
+        let Some((path, current)) = self
+            .editor
+            .active_tab()
+            .and_then(|t| t.path.clone().map(|p| (p, t.text())))
+        else {
+            return;
+        };
+        let Ok(rel) = path.strip_prefix(&self.root) else {
+            self.status = t!("status.stage_hunk_failed", error = "outside workspace").to_string();
+            return;
+        };
+        let rel = rel.to_string_lossy().replace('\\', "/");
+        // Base the new index content on the currently-staged version (== HEAD
+        // when nothing is staged yet), so other hunks stay unstaged.
+        let base = crate::git::index_blob(&self.root, &rel)
+            .or_else(|| self.git_head_cache.get(&path).cloned())
+            .unwrap_or_default();
+        let base_lines: Vec<&str> = base.split_inclusive('\n').collect();
+        let head_count = hunk.head_text.split_inclusive('\n').count();
+        // The hunk's committed lines must still be present in the index region,
+        // or staging this hunk could corrupt other staged changes.
+        let region = base_lines.get(hunk.head_start..hunk.head_start + head_count);
+        if region.map(<[&str]>::concat).as_deref() != Some(hunk.head_text.as_str()) {
+            self.status = t!("status.stage_hunk_failed", error = "index diverged").to_string();
+            return;
+        }
+        let cur_lines: Vec<&str> = current.split_inclusive('\n').collect();
+        let added = cur_lines
+            .get(hunk.current_start..hunk.current_end)
+            .map(<[&str]>::concat)
+            .unwrap_or_default();
+        let mut new_index = base_lines[..hunk.head_start].concat();
+        new_index.push_str(&added);
+        new_index.push_str(&base_lines[hunk.head_start + head_count..].concat());
+        match crate::git::stage_content(&self.root, &rel, &new_index) {
+            Ok(()) => {
+                self.refresh_git();
+                self.status = t!("status.hunk_staged").to_string();
+            }
+            Err(e) => self.status = t!("status.stage_hunk_failed", error = e).to_string(),
+        }
     }
 
     /// Whether the working tree has uncommitted changes (derived from the cached
