@@ -45,6 +45,7 @@ enum Pending {
     SelectionRange,
     DocumentHighlight,
     FoldingRange,
+    CompletionResolve,
 }
 
 /// A message handed back from a server's stdout reader thread.
@@ -100,6 +101,9 @@ pub enum LspEvent {
     /// A folding-range response: foldable `(start_line, end_line)` ranges for the
     /// active file.
     FoldingRanges(Vec<(u32, u32)>),
+    /// A completion-resolve response: fuller detail/documentation for the
+    /// in-flight completion item.
+    CompletionDetail(String),
 }
 
 /// One running language server.
@@ -383,6 +387,16 @@ impl Lsp {
         });
     }
 
+    /// Resolve fuller detail/documentation for a completion item (sent to
+    /// `path`'s server). `data` is the opaque payload the server round-trips.
+    pub fn request_completion_resolve(&mut self, path: &Path, label: &str, data: Option<&Value>) {
+        let Some(config) = self.config_for(path) else { return };
+        let Some(server) = self.servers.get_mut(&config.language_id) else { return };
+        let id = server.alloc_id();
+        server.pending.insert(id, Pending::CompletionResolve);
+        server.send(message::request(id, "completionItem/resolve", &message::completion_resolve_params(label, data)));
+    }
+
     /// Request a rename of the symbol at `(line, character)` to `new_name`.
     pub fn request_rename(&mut self, path: &Path, line: u32, character: u32, new_name: &str) {
         self.send_request(path, "textDocument/rename", Pending::Rename, |uri| {
@@ -630,6 +644,11 @@ impl Lsp {
             }
             Pending::FoldingRange => {
                 events.push(LspEvent::FoldingRanges(message::parse_folding_ranges(result)));
+            }
+            Pending::CompletionResolve => {
+                if let Some(text) = message::parse_resolved_detail(result) {
+                    events.push(LspEvent::CompletionDetail(text));
+                }
             }
         }
     }

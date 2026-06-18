@@ -4399,6 +4399,14 @@ impl App {
                 crate::lsp::LspEvent::Completion(items) => {
                     if !items.is_empty() {
                         self.completion = Some(CompletionPopup { items, selected: 0 });
+                        self.resolve_selected_completion();
+                    }
+                }
+                crate::lsp::LspEvent::CompletionDetail(text) => {
+                    if let Some(popup) = self.completion.as_mut()
+                        && let Some(item) = popup.items.get_mut(popup.selected)
+                    {
+                        item.detail = Some(text);
                     }
                 }
                 crate::lsp::LspEvent::References(locs) => self.show_references(&locs),
@@ -4550,16 +4558,24 @@ impl App {
 
     /// Handle a key while the completion popup is open. Returns true if consumed.
     fn completion_key(&mut self, key: KeyEvent) -> bool {
-        let Some(popup) = self.completion.as_mut() else { return false };
+        if self.completion.is_none() {
+            return false;
+        }
         match key.code {
             KeyCode::Up => {
-                popup.selected = popup.selected.saturating_sub(1);
+                if let Some(p) = self.completion.as_mut() {
+                    p.selected = p.selected.saturating_sub(1);
+                }
+                self.resolve_selected_completion();
                 true
             }
             KeyCode::Down => {
-                if popup.selected + 1 < popup.items.len() {
-                    popup.selected += 1;
+                if let Some(p) = self.completion.as_mut()
+                    && p.selected + 1 < p.items.len()
+                {
+                    p.selected += 1;
                 }
+                self.resolve_selected_completion();
                 true
             }
             KeyCode::Enter | KeyCode::Tab => {
@@ -4576,6 +4592,24 @@ impl App {
                 false
             }
         }
+    }
+
+    /// Lazily fetch fuller detail for the highlighted completion item via
+    /// `completionItem/resolve`, when it has no detail yet but carries resolve
+    /// data.
+    fn resolve_selected_completion(&mut self) {
+        let Some(path) = self.active_path() else { return };
+        if !self.lsp.handles(&path) {
+            return;
+        }
+        let Some(popup) = self.completion.as_ref() else { return };
+        let Some(item) = popup.items.get(popup.selected) else { return };
+        if item.detail.is_some() {
+            return; // already has detail to show
+        }
+        let Some(data) = item.data.clone() else { return };
+        let label = item.label.clone();
+        self.lsp.request_completion_resolve(&path, &label, Some(&data));
     }
 
     fn explorer_key(&mut self, key: KeyEvent) {
