@@ -16,6 +16,8 @@
 //! [`spellbook`]: https://crates.io/crates/spellbook
 //! [wooorm/dictionaries]: https://github.com/wooorm/dictionaries
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -319,13 +321,13 @@ pub fn find_dictionary(dirs: &[PathBuf], locale: &str) -> Option<(PathBuf, PathB
     let base = locale.split(['-', '_']).next().unwrap_or(locale);
     for dir in dirs {
         let Ok(read) = std::fs::read_dir(dir) else { continue };
-        let mut dics: Vec<PathBuf> = read
+        let mut dic_files: Vec<PathBuf> = read
             .flatten()
-            .map(|e| e.path())
+            .map(|entry| entry.path())
             .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("dic"))
             .collect();
-        dics.sort();
-        for dic in dics {
+        dic_files.sort();
+        for dic in dic_files {
             let stem = dic.file_stem().and_then(|s| s.to_str()).unwrap_or("");
             let matches = stem == base
                 || stem.starts_with(&format!("{base}_"))

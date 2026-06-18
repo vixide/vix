@@ -3,6 +3,8 @@
 //! Fields containing commas, quotes or newlines are RFC 4180 quoted on output.
 //! See [`crate::convert_tabular`] for the shared logic.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

@@ -11,6 +11,8 @@
 //! - HSL: `h, s%, l%` with hue 0–360 and saturation/lightness 0–100 (the `%`
 //!   signs are optional).
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -28,23 +30,23 @@ pub struct Color {
 impl Color {
     /// Parse a HEX color: `#RGB`, `#RRGGBB`, or either without the `#`.
     #[must_use]
-    pub fn from_hex(s: &str) -> Option<Color> {
-        let h = s.trim().trim_start_matches('#');
-        let (r, g, b) = match h.len() {
+    pub fn from_hex(text: &str) -> Option<Color> {
+        let hex = text.trim().trim_start_matches('#');
+        let (red, green, blue) = match hex.len() {
             3 => {
-                let d = |i: usize| {
-                    let c = h.as_bytes()[i] as char;
-                    c.to_digit(16).map(|v| (v * 17) as u8) // 0xF -> 0xFF
+                let digit = |i: usize| {
+                    let ch = hex.as_bytes()[i] as char;
+                    ch.to_digit(16).and_then(|v| u8::try_from(v * 17).ok()) // 0xF -> 0xFF
                 };
-                (d(0)?, d(1)?, d(2)?)
+                (digit(0)?, digit(1)?, digit(2)?)
             }
             6 => {
-                let p = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).ok();
-                (p(0)?, p(2)?, p(4)?)
+                let pair = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
+                (pair(0)?, pair(2)?, pair(4)?)
             }
             _ => return None,
         };
-        Some(Color { r, g, b })
+        Some(Color { r: red, g: green, b: blue })
     }
 
     /// Parse an RGB color: `r, g, b` (each 0–255), optionally wrapped in `rgb(...)`.
@@ -84,9 +86,44 @@ impl Color {
     /// Render as `hsl(h, s%, l%)` with integer components.
     #[must_use]
     pub fn to_hsl(self) -> String {
-        let (h, s, l) = rgb_to_hsl(self);
-        format!("hsl({}, {}%, {}%)", h.round() as i64, (s * 100.0).round() as i64, (l * 100.0).round() as i64)
+        let (hue, sat, light) = rgb_to_hsl(self);
+        format!(
+            "hsl({}, {}%, {}%)",
+            round_bounded(hue),
+            round_bounded(sat * 100.0),
+            round_bounded(light * 100.0)
+        )
     }
+}
+
+/// Floor of a non-negative, finite `value` as a `u32`, computed without a
+/// lossy float-to-int `as` cast. Builds the result bit by bit (most significant
+/// first), keeping each bit only while the running total stays `<= value`.
+/// Saturates at [`u32::MAX`].
+fn floor_to_u32(value: f64) -> u32 {
+    // Anything not strictly positive (0.0, -0.0, negatives, NaN) floors to 0.
+    if value.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
+        return 0;
+    }
+    if value >= f64::from(u32::MAX) {
+        return u32::MAX;
+    }
+    let mut result: u32 = 0;
+    let mut bit: u32 = 1 << 31;
+    while bit != 0 {
+        let candidate = result | bit;
+        if f64::from(candidate) <= value {
+            result = candidate;
+        }
+        bit >>= 1;
+    }
+    result
+}
+
+/// Round a small non-negative bounded value (hue 0–360, percent 0–100) to the
+/// nearest integer, without a lossy float-to-int `as` cast.
+fn round_bounded(value: f64) -> u32 {
+    floor_to_u32(value.round())
 }
 
 /// Split `s` into three comma-separated parts, tolerating an optional
@@ -110,44 +147,48 @@ fn triple(s: &str, name: &str) -> Option<[String; 3]> {
 }
 
 /// Convert HSL (hue degrees, sat/light 0–1) to an RGB [`Color`].
-fn hsl_to_rgb(h: f64, s: f64, l: f64) -> Color {
-    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
-    let hp = h / 60.0;
-    let x = c * (1.0 - (hp % 2.0 - 1.0).abs());
-    let (r1, g1, b1) = match hp as u32 {
-        0 => (c, x, 0.0),
-        1 => (x, c, 0.0),
-        2 => (0.0, c, x),
-        3 => (0.0, x, c),
-        4 => (x, 0.0, c),
-        _ => (c, 0.0, x),
+fn hsl_to_rgb(hue: f64, sat: f64, light: f64) -> Color {
+    let chroma = (1.0 - (2.0 * light - 1.0).abs()) * sat;
+    let sector = hue / 60.0;
+    let mid = chroma * (1.0 - (sector % 2.0 - 1.0).abs());
+    // Truncate toward zero to pick the 60-degree sector (matches `as u32`).
+    let (red1, green1, blue1) = match floor_to_u32(sector) {
+        0 => (chroma, mid, 0.0),
+        1 => (mid, chroma, 0.0),
+        2 => (0.0, chroma, mid),
+        3 => (0.0, mid, chroma),
+        4 => (mid, 0.0, chroma),
+        _ => (chroma, 0.0, mid),
     };
-    let m = l - c / 2.0;
-    let to = |v: f64| ((v + m) * 255.0).round().clamp(0.0, 255.0) as u8;
-    Color { r: to(r1), g: to(g1), b: to(b1) }
+    let base = light - chroma / 2.0;
+    let to_byte = |channel: f64| {
+        let scaled = ((channel + base) * 255.0).round().clamp(0.0, 255.0);
+        u8::try_from(floor_to_u32(scaled)).unwrap_or(255)
+    };
+    Color { r: to_byte(red1), g: to_byte(green1), b: to_byte(blue1) }
 }
 
 /// Convert an RGB [`Color`] to HSL (hue degrees, sat/light 0–1).
-fn rgb_to_hsl(c: Color) -> (f64, f64, f64) {
-    let r = f64::from(c.r) / 255.0;
-    let g = f64::from(c.g) / 255.0;
-    let b = f64::from(c.b) / 255.0;
-    let max = r.max(g).max(b);
-    let min = r.min(g).min(b);
-    let l = f64::midpoint(max, min);
-    let d = max - min;
-    if d.abs() < f64::EPSILON {
-        return (0.0, 0.0, l);
+fn rgb_to_hsl(color: Color) -> (f64, f64, f64) {
+    let red = f64::from(color.r) / 255.0;
+    let green = f64::from(color.g) / 255.0;
+    let blue = f64::from(color.b) / 255.0;
+    let max = red.max(green).max(blue);
+    let min = red.min(green).min(blue);
+    let light = f64::midpoint(max, min);
+    let delta = max - min;
+    if delta.abs() < f64::EPSILON {
+        return (0.0, 0.0, light);
     }
-    let s = d / (1.0 - (2.0 * l - 1.0).abs());
-    let h = if (max - r).abs() < f64::EPSILON {
-        60.0 * (((g - b) / d).rem_euclid(6.0))
-    } else if (max - g).abs() < f64::EPSILON {
-        60.0 * ((b - r) / d + 2.0)
+    let sat = delta / (1.0 - (2.0 * light - 1.0).abs());
+    let hue = if (max - red).abs() < f64::EPSILON {
+        60.0 * (((green - blue) / delta).rem_euclid(6.0))
+    } else if (max - green).abs() < f64::EPSILON {
+        60.0 * ((blue - red) / delta + 2.0)
     } else {
-        60.0 * ((r - g) / d + 4.0)
+        60.0 * ((red - green) / delta + 4.0)
     };
-    (h.rem_euclid(360.0), s, l)
+    (hue.rem_euclid(360.0), sat, light)
 }
 
 /// Which of the three fields is being edited.

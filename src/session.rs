@@ -21,6 +21,8 @@
 //! assert_eq!(s.workspace("/tmp/proj").unwrap().files.len(), 1);
 //! ```
 
+#![warn(clippy::pedantic)]
+
 use serde::{Deserialize, Serialize};
 
 /// Application name used by [`confy`] to locate the config directory (matches

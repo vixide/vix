@@ -8,6 +8,8 @@
 //! tick. Keeping the clock out of this crate makes every transition
 //! deterministic and unit-testable.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -67,8 +69,9 @@ impl Timer {
     /// while idle (a running countdown ignores it).
     pub fn adjust_minutes(&mut self, delta: i64) {
         if self.phase == Phase::Idle {
-            let m = (self.work_minutes as i64 + delta).clamp(1, 180);
-            self.work_minutes = m as u64;
+            let current = i64::try_from(self.work_minutes).unwrap_or(i64::MAX);
+            let adjusted = current.saturating_add(delta).clamp(1, 180);
+            self.work_minutes = u64::try_from(adjusted).unwrap_or(1);
         }
     }
 

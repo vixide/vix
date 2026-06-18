@@ -1,3 +1,4 @@
+#![warn(clippy::pedantic)]
 use anyhow::{Result, anyhow};
 use ropey::{Rope, RopeSlice};
 use streaming_iterator::StreamingIterator;
@@ -24,25 +25,68 @@ pub(crate) type ChangeEvent = (usize, usize, usize, usize, String);
 /// Tree-sitter injection parsers and queries, each keyed by language name.
 type Injections = (HashMap<String, Rc<RefCell<Parser>>>, HashMap<String, Query>);
 
-#[derive(Clone)]
-pub enum EditKind {
-    Insert { offset: usize, text: String },
-    Remove { offset: usize, text: String },
+/// The pieces of highlighting state that thread unchanged through the recursive
+/// [`Code::highlight`] walk: the theme map and the optional injection parser and
+/// query maps. Grouping them keeps `highlight` within the argument limit and
+/// lets the recursion reuse one value. All fields are references, so the struct
+/// is `Copy`.
+struct HighlightCtx<'a, T> {
+    /// Maps a capture name to the value the host wants applied to that span.
+    theme: &'a HashMap<String, T>,
+    /// Per-language parsers for embedded (injected) languages, if any.
+    injection_parsers: Option<&'a HashMap<String, Rc<RefCell<Parser>>>>,
+    /// Per-language highlight queries for embedded languages, if any.
+    injection_queries: Option<&'a HashMap<String, Query>>,
 }
 
+impl<T> Clone for HighlightCtx<'_, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Copy for HighlightCtx<'_, T> {}
+
+#[derive(Clone)]
+/// A single primitive edit: either an insertion or a removal of text.
+pub enum EditKind {
+    /// Text inserted at a character `offset`.
+    Insert {
+        /// Character offset where the text was inserted.
+        offset: usize,
+        /// The inserted text.
+        text: String,
+    },
+    /// Text removed starting at a character `offset`.
+    Remove {
+        /// Character offset where the text was removed.
+        offset: usize,
+        /// The removed text (kept for undo).
+        text: String,
+    },
+}
+
+/// A single edit within an [`EditBatch`].
 #[derive(Clone)]
 pub struct Edit {
+    /// The insertion or removal this edit represents.
     pub kind: EditKind,
 }
 
-#[derive(Clone)]
+/// A group of edits committed together as one undo/redo step.
+#[derive(Clone, Default)]
 pub struct EditBatch {
+    /// The edits applied in this batch, in order.
     pub edits: Vec<Edit>,
+    /// Cursor/selection state before the batch, for restoring on undo.
     pub state_before: Option<EditState>,
+    /// Cursor/selection state after the batch, for restoring on redo.
     pub state_after: Option<EditState>,
 }
 
 impl EditBatch {
+    /// Create an empty edit batch with no recorded state.
+    #[must_use] 
     pub fn new() -> Self {
         Self { 
             edits: Vec::new(), 
@@ -53,13 +97,17 @@ impl EditBatch {
 
 }
 
+/// A snapshot of cursor and selection state captured around an edit.
 #[derive(Clone, Copy)]
 pub struct EditState {
+    /// Cursor character offset.
     pub offset: usize,
+    /// Active selection, if any.
     pub selection: Option<Selection>,
 }
 
 
+/// The text buffer with Tree-sitter highlighting and undo/redo support.
 pub struct Code {
     content: ropey::Rope,
     lang: String,
@@ -82,6 +130,12 @@ pub struct Code {
 
 impl Code {
     /// Create a new `Code` instance with the given text and language.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the language's highlight query cannot be loaded,
+    /// the Tree-sitter parser cannot be configured for the language, or the
+    /// highlight query fails to compile.
     pub fn new(
         text: &str,
         lang: &str,
@@ -204,6 +258,8 @@ impl Code {
         Ok((injection_parsers, injection_queries))
     }
 
+    /// Convert a character offset into a `(row, column)` position.
+    #[must_use] 
     pub fn point(&self, offset: usize) -> (usize, usize) {
         let row = self.content.char_to_line(offset);
         let line_start = self.content.line_to_char(row);
@@ -211,44 +267,73 @@ impl Code {
         (row, col)
     }
 
+    /// Convert a `(row, column)` position into a character offset.
+    #[must_use] 
     pub fn offset(&self, row: usize, col: usize) -> usize {
         let line_start = self.content.line_to_char(row);
         line_start + col
     }
     
+    /// Return the entire buffer contents as a `String`.
+    #[must_use] 
     pub fn get_content(&self) -> String {
         self.content.to_string()
     }
     
+    /// Return the text between two character offsets as a `String`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `start..end` is out of bounds for the buffer.
+    #[must_use] 
     pub fn slice(&self, start: usize, end: usize) -> String {
         self.content.slice(start..end).to_string()
     }
 
+    /// Return the number of characters in the buffer.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.content.len_chars()
     }
 
+    /// Return `true` when the buffer contains no characters.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// A counter that increases on every content insert/remove. Two reads being
     /// equal means the text is unchanged between them (cheap edit detection).
+    #[must_use] 
     pub fn revision(&self) -> u64 {
         self.revision
     }
 
+    /// Return the number of lines in the buffer.
+    #[must_use] 
     pub fn len_lines(&self) -> usize {
         self.content.len_lines()
     }
 
+    /// Return the number of characters in the buffer.
+    #[must_use] 
     pub fn len_chars(&self) -> usize {
         self.content.len_chars()
     }
 
+    /// Return the character offset of the start of line `line_idx`.
+    #[must_use] 
     pub fn line_to_char(&self, line_idx: usize) -> usize {
         self.content.line_to_char(line_idx)
     }
+    /// Convert a character index to its byte offset.
+    #[must_use] 
     pub fn char_to_byte(&self, char_idx: usize) -> usize {
         self.content.char_to_byte(char_idx)
     }
 
+    /// Return the length of line `idx` in characters, excluding the trailing newline.
+    #[must_use] 
     pub fn line_len(&self, idx: usize) -> usize {
         let line = self.content.line(idx);
         let len = line.len_chars();
@@ -259,42 +344,58 @@ impl Code {
         }
     }
     
+    /// Return line `line_idx` as a rope slice.
+    #[must_use] 
     pub fn line(&self, line_idx: usize) -> RopeSlice<'_> {
         self.content.line(line_idx)
     }
 
+    /// Return the line index containing character `char_idx`.
+    #[must_use] 
     pub fn char_to_line(&self, char_idx: usize) -> usize {
         self.content.char_to_line(char_idx)
     }
-    
+
+    /// Return the text between two character offsets as a rope slice.
+    #[must_use] 
     pub fn char_slice(&self, start: usize, end: usize) -> RopeSlice<'_> {
         self.content.slice(start..end)
     }
-    
+
+    /// Return the text between two byte offsets as a rope slice.
+    #[must_use] 
     pub fn byte_slice(&self, start: usize, end: usize) -> RopeSlice<'_> {
         self.content.byte_slice(start..end)
     }
-    
+
+    /// Return the line index containing byte `byte_idx`.
+    #[must_use] 
     pub fn byte_to_line(&self, byte_idx: usize) -> usize {
         self.content.byte_to_line(byte_idx)
     }
-    
+
+    /// Convert a byte offset to its character index.
+    #[must_use] 
     pub fn byte_to_char(&self, byte_idx: usize) -> usize {
         self.content.byte_to_char(byte_idx)
     }
-    
+
+    /// Begin a new edit transaction, discarding any uncommitted batch.
     pub fn tx(&mut self) {
         self.current_batch = EditBatch::new();
     }
 
+    /// Record the cursor/selection state before the current transaction's edits.
     pub fn set_state_before(&mut self, offset: usize, selection: Option<Selection>) {
         self.current_batch.state_before = Some(EditState { offset, selection });
     }
 
+    /// Record the cursor/selection state after the current transaction's edits.
     pub fn set_state_after(&mut self, offset: usize, selection: Option<Selection>) {
         self.current_batch.state_after = Some(EditState { offset, selection });
     }
 
+    /// Commit the current transaction to history and notify change listeners.
     pub fn commit(&mut self) {
         if !self.current_batch.edits.is_empty() {
             self.notify_changes(&self.current_batch.edits);
@@ -303,6 +404,7 @@ impl Code {
         }
     }
     
+    /// Insert `text` at character offset `from`, updating the syntax tree.
     pub fn insert(&mut self, from: usize, text: &str) {
         let byte_idx = self.content.char_to_byte(from);
         let byte_len: usize = text.chars().map(char::len_utf8).sum();
@@ -331,6 +433,7 @@ impl Code {
         }
     }
 
+    /// Remove the characters in `from..to`, updating the syntax tree.
     pub fn remove(&mut self, from: usize, to: usize) {
         let from_byte = self.content.char_to_byte(from);
         let to_byte = self.content.char_to_byte(to);
@@ -385,12 +488,19 @@ impl Code {
         }
     }
 
+    /// Return `true` if a Tree-sitter highlight query is loaded for this buffer.
+    #[must_use] 
     pub fn is_highlight(&self) -> bool {
         self.query.is_some()
     }
     
     /// Highlights the interval between `start` and `end` char indices.
-    /// Returns a list of (start byte, end byte, `token_name`) for highlighting. 
+    /// Returns a list of (start byte, end byte, `token_name`) for highlighting.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `start` is greater than `end`.
+    #[must_use]
     pub fn highlight_interval<T: Copy>(
         &self, start: usize, end: usize, theme: &HashMap<String, T>,
     ) -> Vec<(usize, usize, T)> {
@@ -402,16 +512,12 @@ impl Code {
         let text = self.content.slice(..);
         let root_node = tree.root_node();
 
-        let mut results = Self::highlight(
-            text,
-            start,
-            end,
-            query,
-            root_node,
+        let ctx = HighlightCtx {
             theme,
-            self.injection_parsers.as_ref(),
-            self.injection_queries.as_ref(),
-        );
+            injection_parsers: self.injection_parsers.as_ref(),
+            injection_queries: self.injection_queries.as_ref(),
+        };
+        let mut results = Self::highlight(ctx, text, start, end, query, root_node);
 
         results.sort_by(|a, b| {
             let len_a = a.1 - a.0;
@@ -431,6 +537,7 @@ impl Code {
     /// Char ranges of `comment` and `string` tokens across the whole buffer,
     /// for spell-checking. Returns an empty list when the language has no
     /// Tree-sitter query or no parse tree.
+    #[must_use] 
     pub fn comment_string_ranges(&self) -> Vec<(usize, usize)> {
         let Some(query) = &self.query else { return vec![] };
         let Some(tree) = &self.tree else { return vec![] };
@@ -460,19 +567,13 @@ impl Code {
         out
     }
 
-    // Tree-sitter highlighting needs the slice, byte range, query, root, theme,
-    // and the two injection maps together; grouping them would only obscure the
-    // single call site.
-    #[allow(clippy::too_many_arguments)]
     fn highlight<T: Copy>(
+        ctx: HighlightCtx<'_, T>,
         text: RopeSlice<'_>,
         start_byte: usize,
         end_byte: usize,
         query: &Query,
         root_node: Node,
-        theme: &HashMap<String, T>,
-        injection_parsers: Option<&HashMap<String, Rc<RefCell<Parser>>>>,
-        injection_queries: Option<&HashMap<String, Query>>,
     ) -> Vec<(usize, usize, usize, T)> {
         let mut cursor = QueryCursor::new();
         cursor.set_byte_range(start_byte..end_byte);
@@ -485,7 +586,7 @@ impl Code {
         while let Some(m) = matches.next() {
             for capture in m.captures {
                 let name = capture_names[capture.index as usize];
-                if let Some(value) = theme.get(name) {
+                if let Some(value) = ctx.theme.get(name) {
                     results.push((
                         capture.node.start_byte(),
                         capture.node.end_byte(),
@@ -493,8 +594,8 @@ impl Code {
                         *value,
                     ));
                 } else if let Some(lang) = name.strip_prefix("injection.content.") {
-                    let Some(injection_parsers) = injection_parsers else { continue };
-                    let Some(injection_queries) = injection_queries else { continue };
+                    let Some(injection_parsers) = ctx.injection_parsers else { continue };
+                    let Some(injection_queries) = ctx.injection_queries else { continue };
                     let Some(parser) = injection_parsers.get(lang) else { continue };
                     let Some(injection_query) = injection_queries.get(lang) else { continue };
 
@@ -506,14 +607,12 @@ impl Code {
                     let Some(inj_tree) = parser.parse(slice.to_string(), None) else { continue };
 
                     let injection_results = Self::highlight(
+                        ctx,
                         slice,
                         0,
                         end - start,
                         injection_query,
                         inj_tree.root_node(),
-                        theme,
-                        injection_parsers.into(),
-                        injection_queries.into(),
                     );
 
                     for (s, e, i, v) in injection_results {
@@ -527,6 +626,7 @@ impl Code {
     }
 
 
+    /// Undo the last committed batch, reverting its edits; return the batch if any.
     pub fn undo(&mut self) -> Option<EditBatch> {
         let batch = self.history.undo()?;
         self.applying_history = false;
@@ -546,6 +646,7 @@ impl Code {
         Some(batch)
     }
     
+    /// Redo the next undone batch, reapplying its edits; return the batch if any.
     pub fn redo(&mut self) -> Option<EditBatch> {
         let batch = self.history.redo()?;
         self.applying_history = false;
@@ -565,6 +666,8 @@ impl Code {
         Some(batch)
     }
     
+    /// Return the (start, end) character offsets of the word containing `pos`.
+    #[must_use] 
     pub fn word_boundaries(&self, pos: usize) -> (usize, usize) {
         let len = self.content.len_chars();
         if pos >= len {
@@ -594,6 +697,8 @@ impl Code {
         (start, end)
     }
 
+    /// Return the (start, end) character offsets of the line containing `pos`.
+    #[must_use] 
     pub fn line_boundaries(&self, pos: usize) -> (usize, usize) {
         let total_chars = self.content.len_chars();
         // `pos == total_chars` is the cursor sitting at end-of-buffer; it still
@@ -610,6 +715,8 @@ impl Code {
         (start, end)
     }
     
+    /// Return the indentation string to use, honoring any override.
+    #[must_use] 
     pub fn indent(&self) -> String {
         self.indent_override
             .clone()
@@ -617,11 +724,13 @@ impl Code {
     }
 
     /// The language identifier (e.g. `"rust"`, `"text"`).
+    #[must_use] 
     pub fn lang(&self) -> &str {
         &self.lang
     }
 
     /// `"CRLF"` if the first line ends with `\r\n`, else `"LF"`.
+    #[must_use] 
     pub fn first_line_ending(&self) -> &'static str {
         if self.content.len_lines() > 1 {
             let line = self.content.line(0);
@@ -639,16 +748,21 @@ impl Code {
         self.indent_override = indent;
     }
 
+    /// Return the line-comment prefix for the buffer's language.
+    #[must_use] 
     pub fn comment(&self) -> String {
         lang_comment(&self.lang).to_string()
     }
 
+    /// Return the number of indentation units before column `col` on `line`.
+    #[must_use] 
     pub fn indentation_level(&self, line: usize, col: usize) -> usize {
         if self.lang == "unknown" || self.lang.is_empty() { return 0; }
         let line_str = self.line(line);
         count_indent_units(line_str, &self.indent(), Some(col))
     }
 
+    /// Return `true` if only indentation precedes column `c` on line `r`.
     pub fn is_only_indentation_before(&self, r: usize, c: usize) -> bool {
         if self.lang == "unknown" || self.lang.is_empty() { return false; }
         if r >= self.len_lines() || c == 0 { return false; }
@@ -665,6 +779,8 @@ impl Code {
         count_units * indent_unit.chars().count() >= c
     }
 
+    /// Return the column width of the leading indentation on `line_idx`, if any.
+    #[must_use] 
     pub fn find_indent_at_line_start(&self, line_idx: usize) -> Option<usize> {
         if line_idx >= self.len_lines() { return None; }
     
@@ -733,9 +849,14 @@ impl Code {
                 continue;
             }
 
-            // diff relative to previous non-empty line in the source block
-            let diff = (line_levels[i] as isize - prev_line_level_in_block as isize).clamp(-1, 1);
-            let new_level = (prev_nonempty_level as isize + diff).max(0) as usize;
+            // diff relative to previous non-empty line in the source block,
+            // clamped to a single step in either direction.
+            let cur = line_levels[i];
+            let new_level = match cur.cmp(&prev_line_level_in_block) {
+                std::cmp::Ordering::Greater => prev_nonempty_level + 1,
+                std::cmp::Ordering::Less => prev_nonempty_level.saturating_sub(1),
+                std::cmp::Ordering::Equal => prev_nonempty_level,
+            };
             let indents = indent_unit.repeat(new_level);
             let result_line = format!("{}{}", indents, line.trim_start());
             result.push(result_line);
@@ -829,6 +950,8 @@ pub struct RopeGraphemes<'a> {
 }
 
 impl RopeGraphemes<'_> {
+    /// Create an iterator over the grapheme clusters of `slice`.
+    #[must_use] 
     pub fn new<'b>(slice: &RopeSlice<'b>) -> RopeGraphemes<'b> {
         let mut chunks = slice.chunks();
         let first_chunk = chunks.next().unwrap_or("");
@@ -885,6 +1008,8 @@ impl<'a> Iterator for RopeGraphemes<'a> {
     }
 }
 
+/// Return the display width and character count of a single grapheme.
+#[must_use] 
 pub fn grapheme_width_and_chars_len(g: RopeSlice) -> (usize, usize) {
     if let Some(g_str) = g.as_str() {
         (UnicodeWidthStr::width(g_str), g_str.chars().count())
@@ -895,6 +1020,8 @@ pub fn grapheme_width_and_chars_len(g: RopeSlice) -> (usize, usize) {
     }
 }
 
+/// Return the display width and byte length of a single grapheme.
+#[must_use] 
 pub fn grapheme_width_and_bytes_len(g: RopeSlice) -> (usize, usize) {
     if let Some(g_str) = g.as_str() {
         (UnicodeWidthStr::width(g_str), g_str.len())
@@ -905,6 +1032,8 @@ pub fn grapheme_width_and_bytes_len(g: RopeSlice) -> (usize, usize) {
     }
 }
 
+/// Return the terminal display width of a single grapheme.
+#[must_use] 
 pub fn grapheme_width(g: RopeSlice) -> usize {
     if let Some(s) = g.as_str() {
         UnicodeWidthStr::width(s)

@@ -29,23 +29,6 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 #![warn(clippy::pedantic)]
-// Intentional exceptions to pedantic: TUI layout/color math casts small `usize`
-// counts and `f32` ratios to `u16` cell coordinates (always in range), a few
-// dispatch/render functions are necessarily long, and several state structs hold
-// many independent boolean flags by design.
-#![allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_possible_wrap,
-    clippy::too_many_lines,
-    clippy::struct_excessive_bools,
-    clippy::needless_pass_by_value,
-    // Color (r/g/b/h/s/l/a) and grid (x/y/w/h) math reads best with the
-    // conventional one-letter names.
-    clippy::many_single_char_names,
-    clippy::similar_names
-)]
 
 #[macro_use]
 extern crate rust_i18n;
@@ -62,10 +45,10 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 pub mod app;
 pub mod case;
 pub mod editor;
-// The custom code-editor widget engine. Private: it is an internal implementation
-// detail reached only through `editor::CodeEditor` and a few `crate::editor_core`
-// paths, so its rich API is not part of Vix's public surface.
-mod editor_core;
+/// The custom code-editor widget engine (buffer, Tree-sitter highlighting,
+/// history, selection, soft-wrap renderer). Reached through
+/// [`editor::CodeEditor`] and `crate::editor_core` paths.
+pub mod editor_core;
 pub mod explorer;
 pub mod fileops;
 pub mod format_tool;

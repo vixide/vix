@@ -4,6 +4,8 @@
 //! crate; this module re-exports them as `crate::theme::*` and keeps the icon set
 //! (which is not part of the theme model).
 
+#![warn(clippy::pedantic)]
+
 pub use crate::theme_model::{
     base, bg, custom_name, dim, editor_cursor, fg, region_base, region_bg, region_fg,
     region_modifiers, region_title, selected, set_custom, syntax_theme, title, CustomTheme, Region,

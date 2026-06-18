@@ -4,6 +4,8 @@
 //! The code editor addresses the cursor as a flat character offset; this module
 //! converts to/from 1-based line/column for the status bar and go-to-line.
 
+#![warn(clippy::pedantic)]
+
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};

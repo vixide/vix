@@ -1,5 +1,7 @@
 //! Application state and event handling.
 
+#![warn(clippy::pedantic)]
+
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
@@ -591,6 +593,10 @@ pub struct CompletionPopup {
 }
 
 /// The whole application state.
+// Many independent UI/editor toggles; grouping them only relocates the lint
+// (a single flags struct would itself exceed the bool limit) and adds noise at
+// every call site.
+#[allow(clippy::struct_excessive_bools)]
 pub struct App {
     /// Workspace root directory.
     pub root: PathBuf,
@@ -821,19 +827,14 @@ pub struct App {
 }
 
 impl App {
-    /// Build an app rooted at `root` using the given `settings`.
-    ///
-    /// The active locale and theme should already be applied by the caller
-    /// (see `main`); the theme is (re)applied here so the first buffer is styled
-    /// correctly, and the welcome messages are produced in the current locale.
-    #[must_use]
-    pub fn new(root: PathBuf, settings: Settings) -> Self {
+    /// Build the editor, welcome messages, and LSP client for a fresh app, and
+    /// apply the saved theme, theme menu, and time zone. Extracted from
+    /// [`App::new`] so the constructor stays within the line limit.
+    fn build_core(root: &Path, settings: &Settings) -> (Editor, Messages, crate::lsp::Lsp) {
         // Apply the saved theme before building any editor so the first buffer is
         // styled correctly. A theme value that is not a built-in mode is treated
         // as the name of a custom JSON theme.
         Self::apply_saved_theme(&settings.theme);
-        // Seed the in-memory palette recents from the persisted list.
-        let command_recents = settings.command_recents.clone();
         // Populate the View → Theme submenu with the available theme names before
         // the menu bar is first rendered.
         let theme_names = crate::theme_model::theme_names(&Self::available_custom_themes());
@@ -853,8 +854,21 @@ impl App {
         let lsp = crate::lsp::Lsp::new(
             settings.lsp_enabled,
             settings.lsp_servers.clone(),
-            &root,
+            root,
         );
+        (editor, messages, lsp)
+    }
+
+    /// Build an app rooted at `root` using the given `settings`.
+    ///
+    /// The active locale and theme should already be applied by the caller
+    /// (see `main`); the theme is (re)applied here so the first buffer is styled
+    /// correctly, and the welcome messages are produced in the current locale.
+    #[must_use]
+    pub fn new(root: PathBuf, settings: Settings) -> Self {
+        // Seed the in-memory palette recents from the persisted list.
+        let command_recents = settings.command_recents.clone();
+        let (editor, messages, lsp) = Self::build_core(&root, &settings);
 
         App {
             explorer: Explorer::new(root.clone()),
@@ -862,45 +876,17 @@ impl App {
             editor,
             messages,
             menu: Menu::default(),
-            palette: None,
-            search: None,
-            query_replace: None,
-            workspace_search: None,
-            prompt: None,
-            paste: None,
-            confirm: None,
-            unsaved: None,
-            spell_suggest: None,
-            context_menu: None,
-            git_panel: None,
-            branch_chooser: None,
-            recent_chooser: None,
-            location_chooser: None,
-            nerd_palette: None,
-            ascii_panel: None,
-            x11_panel: None,
-            html_panel: None,
-            system_info: None,
-            dashboard: None,
-            dashboard_rx: None,
-            outline: None,
-            welcome: None,
-            file_info: None,
-            text_info: None,
-            markdown_preview: None,
-            snippets: None,
-            contacts: None,
-            vcard: None,
+            palette: None, search: None, query_replace: None, workspace_search: None,
+            prompt: None, paste: None, confirm: None, unsaved: None, spell_suggest: None,
+            context_menu: None, git_panel: None, branch_chooser: None, recent_chooser: None,
+            location_chooser: None, nerd_palette: None, ascii_panel: None, x11_panel: None,
+            html_panel: None, system_info: None, dashboard: None, dashboard_rx: None,
+            outline: None, welcome: None, file_info: None, text_info: None,
+            markdown_preview: None, snippets: None, contacts: None, vcard: None,
             lsp,
             lsp_synced: std::collections::HashMap::new(),
-            hover: None,
-            completion: None,
-            dialog: None,
-            color_converter: None,
-            unit_converter: None,
-            calculator: None,
-            regex_tester: None,
-            pomodoro: None,
+            hover: None, completion: None, dialog: None, color_converter: None,
+            unit_converter: None, calculator: None, regex_tester: None, pomodoro: None,
             pomodoro_open: false,
             pomodoro_last_tick: None,
             clip: Vec::new(),
@@ -974,8 +960,8 @@ impl App {
     }
 
     /// Open a path given on the command line.
-    pub fn open_initial(&mut self, path: PathBuf) {
-        self.open_path(&path, false);
+    pub fn open_initial(&mut self, path: &Path) {
+        self.open_path(path, false);
     }
 
     /// A stable string key for the current workspace root (canonicalized when
@@ -1072,34 +1058,20 @@ impl App {
 
     // ----- top-level event entry -----------------------------------------
 
-    /// Handle a key event, routing it to the active modal layer or focused pane.
-    pub fn on_key(&mut self, key: KeyEvent) {
-        if key.kind == KeyEventKind::Release {
-            return;
-        }
-        // LSP completion popup captures navigation/accept/cancel keys; any other
-        // key dismisses it and falls through to normal handling.
-        if self.completion.is_some() && self.completion_key(key) {
-            return;
-        }
-        // A hover tooltip is dismissed by the next keypress (Esc just dismisses).
-        if self.hover.is_some() {
-            self.hover = None;
-            if key.code == KeyCode::Esc {
-                return;
-            }
-        }
-        // Modal layers, in priority order.
+    /// Route `key` to the highest-priority open modal layer, if any. Returns
+    /// `true` when a layer consumed the key (so [`App::on_key`] should stop).
+    /// Extracted from `on_key` to keep that function within the line limit.
+    fn try_overlay_key(&mut self, key: KeyEvent) -> bool {
         if self.welcome.is_some() {
             self.welcome_key(key);
-            return;
+            return true;
         }
         if self.show_help {
             match key.code {
                 KeyCode::Esc | KeyCode::F(1) | KeyCode::Char('q') => self.show_help = false,
                 _ => {}
             }
-            return;
+            return true;
         }
         // The info dialog. A plain dialog (About) closes on Enter/Esc/Space/O. A
         // text-field dialog (Website/Email) closes on Esc; Ctrl+C copies the
@@ -1113,11 +1085,11 @@ impl App {
                 ) {
                     self.dialog = None;
                 }
-                return;
+                return true;
             }
             if key.code == KeyCode::Esc {
                 self.dialog = None;
-                return;
+                return true;
             }
             let area = self.dialog_field_area();
             if let Some(ed) = self.dialog.as_mut().and_then(|d| d.editor.as_mut()) {
@@ -1127,27 +1099,27 @@ impl App {
                     let _ = ed.input(key, &area);
                 }
             }
-            return;
+            return true;
         }
         if self.color_converter.is_some() {
             self.color_converter_key(key);
-            return;
+            return true;
         }
         if self.unit_converter.is_some() {
             self.unit_converter_key(key);
-            return;
+            return true;
         }
         if self.calculator.is_some() {
             self.calculator_key(key);
-            return;
+            return true;
         }
         if self.regex_tester.is_some() {
             self.regex_tester_key(key);
-            return;
+            return true;
         }
         if self.pomodoro_open {
             self.pomodoro_key(key);
-            return;
+            return true;
         }
         // While the calendar box is open it captures left/right to page months.
         if self.show_calendar {
@@ -1176,7 +1148,7 @@ impl App {
                 KeyCode::Esc | KeyCode::Char('q') => self.show_calendar = false,
                 _ => {}
             }
-            return;
+            return true;
         }
         // While the clock box is open it captures up/down to pick a time row and
         // Enter to insert it.
@@ -1195,120 +1167,86 @@ impl App {
                 KeyCode::Esc | KeyCode::Char('q') => self.show_clock = false,
                 _ => {}
             }
-            return;
+            return true;
         }
-        if self.recent_chooser.is_some() {
-            self.recent_key(key);
-            return;
+        self.try_panel_key(key)
+    }
+
+    /// Route `key` to the lower-priority list/panel overlays (choosers, tool
+    /// panels, prompt, palette, search, menu). Returns `true` when one consumed
+    /// the key. Split out of [`App::try_overlay_key`] to keep both within the
+    /// line limit; the priority order is preserved by calling this last.
+    fn try_panel_key(&mut self, key: KeyEvent) -> bool {
+        // Each panel that is open captures the key by delegating to its handler.
+        macro_rules! panel {
+            ($field:ident, $handler:ident) => {
+                if self.$field.is_some() {
+                    self.$handler(key);
+                    return true;
+                }
+            };
         }
-        if self.location_chooser.is_some() {
-            self.location_key(key);
-            return;
-        }
-        if self.nerd_palette.is_some() {
-            self.nerd_key(key);
-            return;
-        }
-        if self.ascii_panel.is_some() {
-            self.ascii_key(key);
-            return;
-        }
-        if self.x11_panel.is_some() {
-            self.x11_key(key);
-            return;
-        }
-        if self.html_panel.is_some() {
-            self.html_key(key);
-            return;
-        }
-        if self.system_info.is_some() {
-            self.system_info_key(key);
-            return;
-        }
-        if self.file_info.is_some() {
-            self.file_info_key(key);
-            return;
-        }
-        if self.text_info.is_some() {
-            self.text_info_key(key);
-            return;
-        }
-        if self.markdown_preview.is_some() {
-            self.markdown_preview_key(key);
-            return;
-        }
-        if self.snippets.is_some() {
-            self.snippets_key(key);
-            return;
-        }
-        if self.vcard.is_some() {
-            self.vcard_key(key);
-            return;
-        }
-        if self.contacts.is_some() {
-            self.contacts_key(key);
-            return;
-        }
+        panel!(recent_chooser, recent_key);
+        panel!(location_chooser, location_key);
+        panel!(nerd_palette, nerd_key);
+        panel!(ascii_panel, ascii_key);
+        panel!(x11_panel, x11_key);
+        panel!(html_panel, html_key);
+        panel!(system_info, system_info_key);
+        panel!(file_info, file_info_key);
+        panel!(text_info, text_info_key);
+        panel!(markdown_preview, markdown_preview_key);
+        panel!(snippets, snippets_key);
+        panel!(vcard, vcard_key);
+        panel!(contacts, contacts_key);
         if self.dashboard.is_some() {
             if matches!(key.code, KeyCode::Esc | KeyCode::Enter) {
                 self.close_dashboard();
             }
-            return;
+            return true;
         }
-        if self.outline.is_some() {
-            self.outline_key(key);
-            return;
-        }
-        if self.query_replace.is_some() {
-            self.qr_key(key);
-            return;
-        }
-        if self.workspace_search.is_some() {
-            self.ps_key(key);
-            return;
-        }
-        if self.confirm.is_some() {
-            self.confirm_key(key);
-            return;
-        }
-        if self.unsaved.is_some() {
-            self.unsaved_key(key);
-            return;
-        }
-        if self.spell_suggest.is_some() {
-            self.spell_suggest_key(key);
-            return;
-        }
-        if self.context_menu.is_some() {
-            self.context_menu_key(key);
-            return;
-        }
-        if self.git_panel.is_some() {
-            self.git_panel_key(key);
-            return;
-        }
-        if self.branch_chooser.is_some() {
-            self.branch_key(key);
-            return;
-        }
+        panel!(outline, outline_key);
+        panel!(query_replace, qr_key);
+        panel!(workspace_search, ps_key);
+        panel!(confirm, confirm_key);
+        panel!(unsaved, unsaved_key);
+        panel!(spell_suggest, spell_suggest_key);
+        panel!(context_menu, context_menu_key);
+        panel!(git_panel, git_panel_key);
+        panel!(branch_chooser, branch_key);
         if self.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
             self.paste_key(key);
-            return;
+            return true;
         }
-        if self.prompt.is_some() {
-            self.prompt_key(key);
-            return;
-        }
-        if self.palette.is_some() {
-            self.palette_key(key);
-            return;
-        }
-        if self.search.is_some() {
-            self.search_key(key);
-            return;
-        }
+        panel!(prompt, prompt_key);
+        panel!(palette, palette_key);
+        panel!(search, search_key);
         if self.menu.is_open() {
             self.menu_key(key);
+            return true;
+        }
+        false
+    }
+
+    /// Handle a key event, routing it to the active modal layer or focused pane.
+    pub fn on_key(&mut self, key: KeyEvent) {
+        if key.kind == KeyEventKind::Release {
+            return;
+        }
+        // LSP completion popup captures navigation/accept/cancel keys; any other
+        // key dismisses it and falls through to normal handling.
+        if self.completion.is_some() && self.completion_key(key) {
+            return;
+        }
+        // A hover tooltip is dismissed by the next keypress (Esc just dismisses).
+        if self.hover.is_some() {
+            self.hover = None;
+            if key.code == KeyCode::Esc {
+                return;
+            }
+        }
+        // Modal layers, in priority order.
+        if self.try_overlay_key(key) {
             return;
         }
         // Keymap-specific dispatch. Each keymap first gets a chance to consume the
@@ -1784,6 +1722,180 @@ impl App {
             }
             "file.reopen_closed" => self.reopen_closed_tab(),
             "file.quit" => self.request_quit(),
+            a if self.run_edit_action(a) => {}
+            a if self.run_motion_action(a) => {}
+            "explorer.filter_include" => {
+                let cur = self.explorer.include_filter.clone();
+                self.prompt = Some(
+                    Prompt::new(PromptKind::ExplorerInclude, t!("prompt.explorer_include").to_string())
+                        .with_input(cur),
+                );
+            }
+            "explorer.filter_exclude" => {
+                let cur = self.explorer.exclude_filter.clone();
+                self.prompt = Some(
+                    Prompt::new(PromptKind::ExplorerExclude, t!("prompt.explorer_exclude").to_string())
+                        .with_input(cur),
+                );
+            }
+            a if a.starts_with("view.theme:") => self.set_theme_by_name(&a["view.theme:".len()..]),
+            a if a.starts_with("view.locale:") => self.set_locale_by_code(&a["view.locale:".len()..]),
+            a if a.starts_with("view.keymap:") => self.set_keymap(&a["view.keymap:".len()..]),
+            "tools.calendar" => {
+                self.show_calendar = !self.show_calendar;
+                // Always open on the present month; navigation is per-session.
+                if self.show_calendar {
+                    self.calendar.reset();
+                }
+            }
+            "tools.nerd_palette" => self.open_nerd_palette(),
+            "tools.ascii" => self.open_ascii_panel(),
+            "tools.x11_colors" => self.open_x11_panel(),
+            "tools.html_chars" => self.open_html_panel(),
+            "tools.system_info" => self.open_system_info(),
+            "tools.file_info" => self.open_file_info(),
+            "tools.text_info" => self.open_text_info(),
+            "tools.markdown_preview" => self.open_markdown_preview(),
+            "tools.snippets" => self.open_snippets(),
+            "tools.contacts" => self.open_contacts(),
+            "tools.clock" => {
+                self.show_clock = !self.show_clock;
+                if self.show_clock {
+                    self.clock.selected = 0;
+                }
+            }
+            a if a.starts_with("view.time_zone:") => {
+                self.set_time_zone_by_name(&a["view.time_zone:".len()..]);
+            }
+            "tools.dashboard" => self.open_dashboard(),
+            "tools.color_converter" => self.open_color_converter(),
+            "tools.calculator" => self.open_calculator(),
+            "tools.regex_tester" => self.open_regex_tester(),
+            "tools.pomodoro" => self.open_pomodoro(),
+            a if self.run_text_tool_action(a) => {}
+            other if self.run_view_action(other) => {}
+            other if self.run_git_action(other) => {}
+            other if self.run_named_action(other) => {}
+            other => self.messages.warn(t!("msg.unknown_action", action = other).to_string()),
+        }
+    }
+
+    /// Dispatch a view/window, command, AI, tab, help, or `vix.*` action.
+    /// Returns `true` if `action` was handled. Extracted from
+    /// [`App::run_action`] to keep that function within the line limit.
+    fn run_view_action(&mut self, action: &str) -> bool {
+        match action {
+            "tools.run_command" => {
+                self.prompt =
+                    Some(Prompt::new(PromptKind::RunCommand, t!("prompt.run_command").to_string()));
+            }
+            "tools.cancel_command" => self.cancel_command(),
+            "tools.palette" => self.open_palette(),
+            // The left/right docks are the explorer and message drawers. Both the
+            // old action ids and the new dock-named ones route to one method.
+            "view.split_vertical" => self.editor.set_split(SplitDir::Vertical),
+            "view.split_horizontal" => self.editor.set_split(SplitDir::Horizontal),
+            "view.unsplit" => self.editor.unsplit(),
+            "view.focus_other_pane" => self.editor.focus_other_pane(),
+            "view.line_numbers" | "tools.line_numbers" => self.toggle_editor_line_numbers(),
+            "view.whitespace" => self.toggle_editor_whitespace(),
+            "view.soft_wrap" => self.toggle_editor_soft_wrap(),
+            "view.left_dock" | "view.explorer" => self.toggle_left_dock(),
+            "view.right_dock" | "view.messages" => self.toggle_right_dock(),
+            "view.status_bar" => self.toggle_status_bar(),
+            "view.scrollbar" => self.toggle_scrollbar(),
+            "view.spellcheck" => self.toggle_spellcheck(),
+            "spell.suggest" => self.open_spell_suggest(),
+            "ai.summarize" => self.ai_summarize(),
+            "ai.explain" => self.ai_explain(),
+            "ai.define" => self.ai_define(),
+            "ai.annotate" => self.ai_annotate(),
+            "ai.improve" => self.ai_improve(),
+            "view.bottom_dock" => self.toggle_bottom_dock(),
+            "tab.next" => self.editor.next_tab(),
+            "tab.prev" => self.editor.prev_tab(),
+            "help.shortcuts" => self.show_help = true,
+            "help.welcome" => self.open_welcome(),
+            "vix.settings" => self.open_settings_file(),
+            "vix.about" => {
+                self.dialog = Some(Dialog {
+                    title: t!("menu.item.vix.about").to_string(),
+                    body: format!("Vix {}", env!("CARGO_PKG_VERSION")),
+                    editor: None,
+                });
+            }
+            "vix.website" => self.open_text_dialog(
+                t!("menu.item.vix.website").to_string(),
+                "https://github.com/vixide/vix",
+            ),
+            "vix.email" => self.open_text_dialog(
+                t!("menu.item.vix.email").to_string(),
+                "joel@joelparkerhenderson.com",
+            ),
+            _ => return false,
+        }
+        true
+    }
+
+    /// Dispatch a `git.*` action. Returns `true` if `action` was handled.
+    /// Extracted from [`App::run_action`] to keep that function within the line
+    /// limit.
+    fn run_git_action(&mut self, action: &str) -> bool {
+        match action {
+            "git.changes" => self.open_git_panel(),
+            "git.push" => self.git_remote_command("git push"),
+            "git.pull" => self.git_remote_command("git pull"),
+            "git.fetch" => self.git_remote_command("git fetch"),
+            "git.switch_branch" => self.open_branch_chooser(),
+            "git.merge_branch" => self.open_branch_chooser_mode(true),
+            "git.init" => self.git_init(),
+            "git.new_branch" => self.git_begin_new_branch(),
+            "git.log" => self.git_log(),
+            "git.log_graph" => self.git_log_graph(),
+            "git.log_since_1_day_ago" => self.git_log_since(Some("1-day-ago")),
+            "git.log_since_1_week_ago" => self.git_log_since(Some("1-week-ago")),
+            "git.log_since_1_month_ago" => self.git_log_since(Some("1-month-ago")),
+            "git.status" => self.git_status_to_dock(),
+            "git.clone" => self.git_begin_clone(),
+            "git.edit_description" => {
+                self.prompt = Some(Prompt::new(
+                    PromptKind::GitEditDescription,
+                    t!("prompt.git_edit_description").to_string(),
+                ));
+            }
+            "git.delete_branch" => {
+                self.prompt = Some(Prompt::new(
+                    PromptKind::GitDeleteBranch,
+                    t!("prompt.git_delete_branch").to_string(),
+                ));
+            }
+            "git.grep" => {
+                self.prompt =
+                    Some(Prompt::new(PromptKind::GitGrep, t!("prompt.git_grep").to_string()));
+            }
+            "git.blame" => self.git_blame_line(),
+            "git.revert_hunk" => self.revert_hunk(),
+            "git.stage_hunk" => self.stage_hunk(),
+            "git.conflict_ours" => self.resolve_conflict(crate::conflict_tool::Resolution::Ours),
+            "git.conflict_theirs" => self.resolve_conflict(crate::conflict_tool::Resolution::Theirs),
+            "git.conflict_both" => self.resolve_conflict(crate::conflict_tool::Resolution::Both),
+            "git.conflict_next" => self.conflict_next(),
+            "git.stash" => self.git_op(crate::git::stash_push, "status.git_stashed"),
+            "git.stash_pop" => self.git_op(crate::git::stash_pop, "status.git_stash_popped"),
+            "git.amend" => self.git_op(crate::git::commit_amend, "status.git_amended"),
+            "git.diff_next" => self.diff_goto(true),
+            "git.diff_prev" => self.diff_goto(false),
+            _ => return false,
+        }
+        true
+    }
+
+    /// Dispatch a buffer-editing action (`edit.undo`/`redo`/`cut`/`copy`/
+    /// `paste`/`toggle_comment`, the `edit.case_*` transforms, and the
+    /// whole-line operations). Returns `true` if `action` was handled. Extracted
+    /// from [`App::run_action`] to keep that function within the line limit.
+    fn run_edit_action(&mut self, action: &str) -> bool {
+        match action {
             "edit.undo" => {
                 if let Some(t) = self.editor.active_tab_mut() {
                     t.editor.apply(UndoAction {});
@@ -1840,6 +1952,17 @@ impl App {
             "edit.remove_duplicate_lines" => self.editor.remove_duplicate_lines(),
             "edit.reverse_lines" => self.editor.reverse_lines(),
             "edit.sort_unique" => self.editor.sort_unique(),
+            _ => return false,
+        }
+        true
+    }
+
+    /// Dispatch an editor motion, selection, find/search, or navigation action
+    /// (`edit.*` motions, `search.*`, `nav.*`, `lsp.*`). Returns `true` if
+    /// `action` was handled. Extracted from [`App::run_action`] to keep that
+    /// function within the line limit.
+    fn run_motion_action(&mut self, action: &str) -> bool {
+        match action {
             "edit.move_line_up" => {
                 let area = self.editor_view();
                 self.editor.move_line(false, area);
@@ -1924,54 +2047,17 @@ impl App {
             "nav.goto_symbol" => self.open_palette_seeded("@"),
             "nav.goto_workspace_symbol" => self.open_palette_seeded("@@"),
             "nav.outline" => self.open_outline(),
-            "explorer.filter_include" => {
-                let cur = self.explorer.include_filter.clone();
-                self.prompt = Some(
-                    Prompt::new(PromptKind::ExplorerInclude, t!("prompt.explorer_include").to_string())
-                        .with_input(cur),
-                );
-            }
-            "explorer.filter_exclude" => {
-                let cur = self.explorer.exclude_filter.clone();
-                self.prompt = Some(
-                    Prompt::new(PromptKind::ExplorerExclude, t!("prompt.explorer_exclude").to_string())
-                        .with_input(cur),
-                );
-            }
-            a if a.starts_with("view.theme:") => self.set_theme_by_name(&a["view.theme:".len()..]),
-            a if a.starts_with("view.locale:") => self.set_locale_by_code(&a["view.locale:".len()..]),
-            a if a.starts_with("view.keymap:") => self.set_keymap(&a["view.keymap:".len()..]),
-            "tools.calendar" => {
-                self.show_calendar = !self.show_calendar;
-                // Always open on the present month; navigation is per-session.
-                if self.show_calendar {
-                    self.calendar.reset();
-                }
-            }
-            "tools.nerd_palette" => self.open_nerd_palette(),
-            "tools.ascii" => self.open_ascii_panel(),
-            "tools.x11_colors" => self.open_x11_panel(),
-            "tools.html_chars" => self.open_html_panel(),
-            "tools.system_info" => self.open_system_info(),
-            "tools.file_info" => self.open_file_info(),
-            "tools.text_info" => self.open_text_info(),
-            "tools.markdown_preview" => self.open_markdown_preview(),
-            "tools.snippets" => self.open_snippets(),
-            "tools.contacts" => self.open_contacts(),
-            "tools.clock" => {
-                self.show_clock = !self.show_clock;
-                if self.show_clock {
-                    self.clock.selected = 0;
-                }
-            }
-            a if a.starts_with("view.time_zone:") => {
-                self.set_time_zone_by_name(&a["view.time_zone:".len()..]);
-            }
-            "tools.dashboard" => self.open_dashboard(),
-            "tools.color_converter" => self.open_color_converter(),
-            "tools.calculator" => self.open_calculator(),
-            "tools.regex_tester" => self.open_regex_tester(),
-            "tools.pomodoro" => self.open_pomodoro(),
+            _ => return false,
+        }
+        true
+    }
+
+    /// Dispatch a text-transforming tool action (`tools.generate.*`,
+    /// `tools.checksum.*`, `tools.convert.*`, `tools.format.*`). Returns `true`
+    /// if `action` was handled. Extracted from [`App::run_action`] to keep that
+    /// function within the line limit.
+    fn run_text_tool_action(&mut self, action: &str) -> bool {
+        match action {
             "tools.generate.uuid.v1" => self.insert_generated(&crate::uuid_tool::v1()),
             "tools.generate.uuid.v2" => self.insert_generated(&crate::uuid_tool::v2()),
             "tools.generate.uuid.v3" => self.insert_generated(&crate::uuid_tool::v3()),
@@ -2057,108 +2143,21 @@ impl App {
             "tools.format.toml" => {
                 self.transform_selection_or_buffer_try(crate::format_tool::toml_format);
             }
-            "tools.run_command" => {
-                self.prompt =
-                    Some(Prompt::new(PromptKind::RunCommand, t!("prompt.run_command").to_string()));
-            }
-            "tools.cancel_command" => self.cancel_command(),
-            "tools.palette" => self.open_palette(),
-            // The left/right docks are the explorer and message drawers. Both the
-            // old action ids and the new dock-named ones route to one method.
-            "view.split_vertical" => self.editor.set_split(SplitDir::Vertical),
-            "view.split_horizontal" => self.editor.set_split(SplitDir::Horizontal),
-            "view.unsplit" => self.editor.unsplit(),
-            "view.focus_other_pane" => self.editor.focus_other_pane(),
-            "view.line_numbers" | "tools.line_numbers" => self.toggle_editor_line_numbers(),
-            "view.whitespace" => self.toggle_editor_whitespace(),
-            "view.soft_wrap" => self.toggle_editor_soft_wrap(),
-            "view.left_dock" | "view.explorer" => self.toggle_left_dock(),
-            "view.right_dock" | "view.messages" => self.toggle_right_dock(),
-            "view.status_bar" => self.toggle_status_bar(),
-            "view.scrollbar" => self.toggle_scrollbar(),
-            "view.spellcheck" => self.toggle_spellcheck(),
-            "spell.suggest" => self.open_spell_suggest(),
-            "git.changes" => self.open_git_panel(),
-            "git.push" => self.git_remote_command("git push"),
-            "git.pull" => self.git_remote_command("git pull"),
-            "git.fetch" => self.git_remote_command("git fetch"),
-            "git.switch_branch" => self.open_branch_chooser(),
-            "ai.summarize" => self.ai_summarize(),
-            "ai.explain" => self.ai_explain(),
-            "ai.define" => self.ai_define(),
-            "ai.annotate" => self.ai_annotate(),
-            "ai.improve" => self.ai_improve(),
-            "git.merge_branch" => self.open_branch_chooser_mode(true),
-            "git.init" => self.git_init(),
-            "git.new_branch" => self.git_begin_new_branch(),
-            "git.log" => self.git_log(),
-            "git.log_graph" => self.git_log_graph(),
-            "git.log_since_1_day_ago" => self.git_log_since(Some("1-day-ago")),
-            "git.log_since_1_week_ago" => self.git_log_since(Some("1-week-ago")),
-            "git.log_since_1_month_ago" => self.git_log_since(Some("1-month-ago")),
-            "git.status" => self.git_status_to_dock(),
-            "git.clone" => self.git_begin_clone(),
-            "git.edit_description" => {
-                self.prompt = Some(Prompt::new(
-                    PromptKind::GitEditDescription,
-                    t!("prompt.git_edit_description").to_string(),
-                ));
-            }
-            "git.delete_branch" => {
-                self.prompt = Some(Prompt::new(
-                    PromptKind::GitDeleteBranch,
-                    t!("prompt.git_delete_branch").to_string(),
-                ));
-            }
-            "git.grep" => {
-                self.prompt =
-                    Some(Prompt::new(PromptKind::GitGrep, t!("prompt.git_grep").to_string()));
-            }
-            "git.blame" => self.git_blame_line(),
-            "git.revert_hunk" => self.revert_hunk(),
-            "git.stage_hunk" => self.stage_hunk(),
-            "git.conflict_ours" => self.resolve_conflict(crate::conflict_tool::Resolution::Ours),
-            "git.conflict_theirs" => self.resolve_conflict(crate::conflict_tool::Resolution::Theirs),
-            "git.conflict_both" => self.resolve_conflict(crate::conflict_tool::Resolution::Both),
-            "git.conflict_next" => self.conflict_next(),
-            "git.stash" => self.git_op(crate::git::stash_push, "status.git_stashed"),
-            "git.stash_pop" => self.git_op(crate::git::stash_pop, "status.git_stash_popped"),
-            "git.amend" => self.git_op(crate::git::commit_amend, "status.git_amended"),
-            "git.diff_next" => self.diff_goto(true),
-            "git.diff_prev" => self.diff_goto(false),
-            "view.bottom_dock" => self.toggle_bottom_dock(),
-            "tab.next" => self.editor.next_tab(),
-            "tab.prev" => self.editor.prev_tab(),
-            "help.shortcuts" => self.show_help = true,
-            "help.welcome" => self.open_welcome(),
-            "vix.settings" => self.open_settings_file(),
-            "vix.about" => {
-                self.dialog = Some(Dialog {
-                    title: t!("menu.item.vix.about").to_string(),
-                    body: format!("Vix {}", env!("CARGO_PKG_VERSION")),
-                    editor: None,
-                });
-            }
-            "vix.website" => self.open_text_dialog(
-                t!("menu.item.vix.website").to_string(),
-                "https://github.com/vixide/vix",
-            ),
-            "vix.email" => self.open_text_dialog(
-                t!("menu.item.vix.email").to_string(),
-                "joel@joelparkerhenderson.com",
-            ),
-            other if self.run_named_action(other) => {}
-            other => self.messages.warn(t!("msg.unknown_action", action = other).to_string()),
+            _ => return false,
         }
+        true
     }
 
     /// Dispatch a `snake_case` action from the `spec/actions/actions.tsv` catalog.
     /// Returns `true` if the id was handled. Editing actions are applied to the
     /// active tab's editor; app-level ones delegate to existing behavior; a few
     /// mode/macro actions are not yet implemented (they report via the status).
-    #[allow(clippy::too_many_lines)]
-    fn run_named_action(&mut self, id: &str) -> bool {
-        let view_h = self.editor_view().height as usize;
+    /// Dispatch a cursor-movement, selection, word, line-motion, or paragraph
+    /// catalog action against the active editor. `view_h` is the viewport height
+    /// for page-relative motions. Returns `true` if `id` was handled. Extracted
+    /// from [`App::run_named_action`] to keep that function within the line
+    /// limit.
+    fn run_cursor_action(&mut self, id: &str, view_h: usize) -> bool {
         // Editor motion/selection (no buffer change).
         macro_rules! ed {
             ($m:ident) => {{
@@ -2173,21 +2172,6 @@ impl App {
                 if let Some(t) = self.editor.active_tab_mut() {
                     t.editor.$m(view_h);
                 }
-            }};
-        }
-        // Editor edit (marks the buffer dirty).
-        macro_rules! edm {
-            ($m:ident) => {{
-                if let Some(t) = self.editor.active_tab_mut() {
-                    t.editor.$m();
-                }
-                self.mark_active_dirty();
-            }};
-        }
-        // A catalog action that is not implemented yet.
-        macro_rules! todo_action {
-            () => {{
-                self.status = t!("status.action_todo", action = id).to_string();
             }};
         }
         match id {
@@ -2229,10 +2213,6 @@ impl App {
             "select_word_left" => ed!(select_word_left),
             "select_sub_word_right" => ed!(select_sub_word_right),
             "select_sub_word_left" => ed!(select_sub_word_left),
-            "delete_word_right" => edm!(delete_word_right),
-            "delete_word_left" => edm!(delete_word_left),
-            "delete_sub_word_right" => edm!(delete_sub_word_right),
-            "delete_sub_word_left" => edm!(delete_sub_word_left),
             // line motions
             "start_of_line" => ed!(start_of_line),
             "end_of_line" => ed!(end_of_line),
@@ -2247,23 +2227,17 @@ impl App {
             "paragraph_previous" => ed!(paragraph_previous),
             "select_to_paragraph_next" => ed!(select_to_paragraph_next),
             "select_to_paragraph_previous" => ed!(select_to_paragraph_previous),
-            // editing
-            "insert_newline" => edm!(insert_newline),
-            "insert_tab" => edm!(insert_tab),
-            "backspace" => edm!(backspace),
-            "delete" => edm!(delete),
-            "undo" => edm!(undo),
-            "redo" => edm!(redo),
-            "copy" => ed!(copy),
-            "copy_line" => ed!(copy_line),
-            "cut" => edm!(cut),
-            "cut_line" => edm!(cut_line),
-            "paste" | "paste_primary" => edm!(paste),
-            "duplicate" => edm!(duplicate),
-            "duplicate_line" => edm!(duplicate_line),
-            "delete_line" => edm!(delete_line),
-            "indent_line" | "indent_selection" => edm!(indent_line),
-            "outdent_line" | "outdent_selection" => edm!(outdent_line),
+            _ => return false,
+        }
+        true
+    }
+
+    /// Dispatch a line-operation, navigation, search, file, tab, split, or
+    /// app-toggle catalog action, mostly by delegating to [`App::run_action`].
+    /// Returns `true` if `id` was handled. Extracted from
+    /// [`App::run_named_action`] to keep that function within the line limit.
+    fn run_app_action(&mut self, id: &str) -> bool {
+        match id {
             "move_lines_up" => self.run_action("edit.move_line_up"),
             "move_lines_down" => self.run_action("edit.move_line_down"),
             "join_lines" => self.run_action("edit.join_lines"),
@@ -2272,10 +2246,6 @@ impl App {
             "remove_duplicate_lines" => self.run_action("edit.remove_duplicate_lines"),
             "reverse_lines" => self.run_action("edit.reverse_lines"),
             "sort_unique" => self.run_action("edit.sort_unique"),
-            // multiple cursors
-            "spawn_multi_cursor" | "spawn_multi_cursor_select" | "skip_multi_cursor"
-            | "skip_multi_cursor_back" => edm!(add_next_occurrence),
-            "remove_multi_cursor" | "remove_all_multi_cursors" => ed!(clear_carets),
             // navigation
             "jump_to_matching_brace" => self.run_action("edit.match_bracket"),
             "jump_line" => self.run_action("nav.goto_line"),
@@ -2318,6 +2288,64 @@ impl App {
             "clear_status" | "clear_info" => self.status = String::new(),
             "quit" | "quit_all" | "force_quit" => self.run_action("file.quit"),
             "none" => {}
+            _ => return false,
+        }
+        true
+    }
+
+    fn run_named_action(&mut self, id: &str) -> bool {
+        let view_h = self.editor_view().height as usize;
+        // Editor motion/selection (no buffer change).
+        macro_rules! ed {
+            ($m:ident) => {{
+                if let Some(t) = self.editor.active_tab_mut() {
+                    t.editor.$m();
+                }
+            }};
+        }
+        // Editor edit (marks the buffer dirty).
+        macro_rules! edm {
+            ($m:ident) => {{
+                if let Some(t) = self.editor.active_tab_mut() {
+                    t.editor.$m();
+                }
+                self.mark_active_dirty();
+            }};
+        }
+        // A catalog action that is not implemented yet.
+        macro_rules! todo_action {
+            () => {{
+                self.status = t!("status.action_todo", action = id).to_string();
+            }};
+        }
+        match id {
+            _ if self.run_cursor_action(id, view_h) => {}
+            "delete_word_right" => edm!(delete_word_right),
+            "delete_word_left" => edm!(delete_word_left),
+            "delete_sub_word_right" => edm!(delete_sub_word_right),
+            "delete_sub_word_left" => edm!(delete_sub_word_left),
+            // editing
+            "insert_newline" => edm!(insert_newline),
+            "insert_tab" => edm!(insert_tab),
+            "backspace" => edm!(backspace),
+            "delete" => edm!(delete),
+            "undo" => edm!(undo),
+            "redo" => edm!(redo),
+            "copy" => ed!(copy),
+            "copy_line" => ed!(copy_line),
+            "cut" => edm!(cut),
+            "cut_line" => edm!(cut_line),
+            "paste" | "paste_primary" => edm!(paste),
+            "duplicate" => edm!(duplicate),
+            "duplicate_line" => edm!(duplicate_line),
+            "delete_line" => edm!(delete_line),
+            "indent_line" | "indent_selection" => edm!(indent_line),
+            "outdent_line" | "outdent_selection" => edm!(outdent_line),
+            // multiple cursors
+            "spawn_multi_cursor" | "spawn_multi_cursor_select" | "skip_multi_cursor"
+            | "skip_multi_cursor_back" => edm!(add_next_occurrence),
+            "remove_multi_cursor" | "remove_all_multi_cursors" => ed!(clear_carets),
+            _ if self.run_app_action(id) => {}
             // not implemented yet (modes, macros, suspend, autocomplete, …)
             "diff_next" => self.diff_goto(true),
             "diff_previous" => self.diff_goto(false),
@@ -4836,7 +4864,8 @@ impl App {
             return;
         }
         self.nav_idx -= 1;
-        self.navigate_to(self.nav_history[self.nav_idx].clone());
+        let loc = self.nav_history[self.nav_idx].clone();
+        self.navigate_to(&loc);
     }
 
     fn nav_forward(&mut self) {
@@ -4845,11 +4874,12 @@ impl App {
             return;
         }
         self.nav_idx += 1;
-        self.navigate_to(self.nav_history[self.nav_idx].clone());
+        let loc = self.nav_history[self.nav_idx].clone();
+        self.navigate_to(&loc);
     }
 
     /// Go to a recorded location without itself recording a new jump.
-    fn navigate_to(&mut self, loc: Location) {
+    fn navigate_to(&mut self, loc: &Location) {
         self.open_path(&loc.path, false);
         self.editor.goto(loc.line, Some(loc.col), self.editor_view());
         self.focus = Focus::Editor;
@@ -4875,44 +4905,12 @@ impl App {
 
     // ----- mouse ----------------------------------------------------------
 
-    /// Handle a mouse event, dispatching to whichever pane it lands in.
-    pub fn on_mouse(&mut self, mouse: MouseEvent) {
-        // The welcome overlay is modal: the wheel scrolls it, nothing else.
-        if self.welcome.is_some() {
-            self.welcome_mouse(mouse);
-            return;
-        }
-        // The right-click context menu takes all clicks while open (a click on a
-        // row runs it; a click elsewhere dismisses it).
-        if self.context_menu.is_some() {
-            self.context_menu_mouse(mouse);
-            return;
-        }
-        // A right-click in the editor opens the context menu.
-        if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Right))
-            && rect_contains(self.layout.editor, mouse.column, mouse.row)
-        {
-            self.open_context_menu(mouse.column, mouse.row);
-            return;
-        }
-        // Overlays swallow mouse input rather than acting on panes underneath.
-        // The info dialog is modal. Within a text-field dialog, clicks/drags in
-        // the field select text (for copying); a left click anywhere else acts as
-        // the Ok button and closes.
-        if self.dialog.is_some() {
-            let (col, row) = (mouse.column, mouse.row);
-            let in_field = self.dialog.as_ref().is_some_and(|d| d.editor.is_some())
-                && rect_contains(self.layout.dialog_body, col, row);
-            if in_field {
-                let area = self.dialog_field_area();
-                if let Some(ed) = self.dialog.as_mut().and_then(|d| d.editor.as_mut()) {
-                    let _ = ed.mouse(mouse, &area);
-                }
-            } else if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
-                self.dialog = None;
-            }
-            return;
-        }
+    /// Handle a left click in one of the field-based tool dialogs (Color
+    /// Converter, Calculator, Regex tester, Unit Converter), focusing the
+    /// clicked field or running its action. Returns `true` if such a dialog was
+    /// open. Extracted from [`App::try_overlay_mouse`] to keep it within the
+    /// line limit.
+    fn try_tool_dialog_mouse(&mut self, mouse: MouseEvent) -> bool {
         // The Color Converter dialog: a left click on a field row focuses it.
         if self.color_converter.is_some() {
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
@@ -4926,7 +4924,7 @@ impl App {
                     }
                 }
             }
-            return;
+            return true;
         }
         // The Calculator dialog: clicking the input focuses it; clicking Run
         // evaluates; clicking Insert inserts the result.
@@ -4950,7 +4948,7 @@ impl App {
                     self.insert_calculator_result();
                 }
             }
-            return;
+            return true;
         }
         // The Regex tester: a left click on a field row focuses it.
         if self.regex_tester.is_some() {
@@ -4965,7 +4963,7 @@ impl App {
                     }
                 }
             }
-            return;
+            return true;
         }
         // The Unit Converter dialog: a left click on a row focuses it.
         if self.unit_converter.is_some() {
@@ -4980,46 +4978,74 @@ impl App {
                     }
                 }
             }
-            return;
+            return true;
         }
-        // The recent-files chooser is a list overlay: a left click on a row
-        // highlights it, mirroring keyboard Up/Down.
-        if self.recent_chooser.is_some() {
-            self.recent_mouse(mouse);
-            return;
+        false
+    }
+
+    /// Route `mouse` to the highest-priority open overlay, returning `true` when
+    /// one consumed it (overlays swallow mouse input rather than letting it fall
+    /// through to the panes underneath). Extracted from [`App::on_mouse`] to keep
+    /// that function within the line limit.
+    fn try_overlay_mouse(&mut self, mouse: MouseEvent) -> bool {
+        // The welcome overlay is modal: the wheel scrolls it, nothing else.
+        if self.welcome.is_some() {
+            self.welcome_mouse(mouse);
+            return true;
         }
-        if self.location_chooser.is_some() {
-            self.location_mouse(mouse);
-            return;
+        // The right-click context menu takes all clicks while open (a click on a
+        // row runs it; a click elsewhere dismisses it).
+        if self.context_menu.is_some() {
+            self.context_menu_mouse(mouse);
+            return true;
         }
-        if self.nerd_palette.is_some() {
-            self.nerd_mouse(mouse);
-            return;
+        // A right-click in the editor opens the context menu.
+        if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Right))
+            && rect_contains(self.layout.editor, mouse.column, mouse.row)
+        {
+            self.open_context_menu(mouse.column, mouse.row);
+            return true;
         }
-        if self.ascii_panel.is_some() {
-            self.ascii_mouse(mouse);
-            return;
+        // Overlays swallow mouse input rather than acting on panes underneath.
+        // The info dialog is modal. Within a text-field dialog, clicks/drags in
+        // the field select text (for copying); a left click anywhere else acts as
+        // the Ok button and closes.
+        if self.dialog.is_some() {
+            let (col, row) = (mouse.column, mouse.row);
+            let in_field = self.dialog.as_ref().is_some_and(|d| d.editor.is_some())
+                && rect_contains(self.layout.dialog_body, col, row);
+            if in_field {
+                let area = self.dialog_field_area();
+                if let Some(ed) = self.dialog.as_mut().and_then(|d| d.editor.as_mut()) {
+                    let _ = ed.mouse(mouse, &area);
+                }
+            } else if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+                self.dialog = None;
+            }
+            return true;
         }
-        if self.x11_panel.is_some() {
-            self.x11_mouse(mouse);
-            return;
+        if self.try_tool_dialog_mouse(mouse) {
+            return true;
         }
-        if self.html_panel.is_some() {
-            self.html_mouse(mouse);
-            return;
+        // List/panel overlays: an open one consumes the click by delegating to
+        // its handler (e.g. a left click on a row highlights it).
+        macro_rules! panel {
+            ($field:ident, $handler:ident) => {
+                if self.$field.is_some() {
+                    self.$handler(mouse);
+                    return true;
+                }
+            };
         }
-        if self.system_info.is_some() {
-            self.system_info_mouse(mouse);
-            return;
-        }
-        if self.file_info.is_some() {
-            self.file_info_mouse(mouse);
-            return;
-        }
-        if self.text_info.is_some() {
-            self.text_info_mouse(mouse);
-            return;
-        }
+        panel!(recent_chooser, recent_mouse);
+        panel!(location_chooser, location_mouse);
+        panel!(nerd_palette, nerd_mouse);
+        panel!(ascii_panel, ascii_mouse);
+        panel!(x11_panel, x11_mouse);
+        panel!(html_panel, html_mouse);
+        panel!(system_info, system_info_mouse);
+        panel!(file_info, file_info_mouse);
+        panel!(text_info, text_info_mouse);
         if self.markdown_preview.is_some() {
             if let Some(p) = self.markdown_preview.as_mut() {
                 match mouse.kind {
@@ -5028,50 +5054,26 @@ impl App {
                     _ => {}
                 }
             }
-            return;
+            return true;
         }
-        if self.snippets.is_some() {
-            self.snippets_mouse(mouse);
-            return;
-        }
-        if self.vcard.is_some() {
-            self.vcard_mouse(mouse);
-            return;
-        }
-        if self.contacts.is_some() {
-            self.contacts_mouse(mouse);
-            return;
-        }
-        if self.spell_suggest.is_some() {
-            self.spell_suggest_mouse(mouse);
-            return;
-        }
-        if self.git_panel.is_some() {
-            self.git_panel_mouse(mouse);
-            return;
-        }
-        if self.branch_chooser.is_some() {
-            self.branch_mouse(mouse);
-            return;
-        }
-        if self.outline.is_some() {
-            self.outline_mouse(mouse);
-            return;
-        }
+        panel!(snippets, snippets_mouse);
+        panel!(vcard, vcard_mouse);
+        panel!(contacts, contacts_mouse);
+        panel!(spell_suggest, spell_suggest_mouse);
+        panel!(git_panel, git_panel_mouse);
+        panel!(branch_chooser, branch_mouse);
+        panel!(outline, outline_mouse);
         // The find / replace box: a left click focuses the Find or Replace field.
-        if self.search.is_some() {
-            self.search_mouse(mouse);
-            return;
-        }
+        panel!(search, search_mouse);
         // The calendar box: a left click inserts a date-time line or a day.
         if self.show_calendar {
             self.calendar_mouse(mouse);
-            return;
+            return true;
         }
         // The clock box: a left click inserts the picked time row.
         if self.show_clock {
             self.clock_mouse(mouse);
-            return;
+            return true;
         }
         // The Pomodoro dialog: a left click on the Start/Stop/Cancel button runs
         // it (Start closes the dialog and keeps the countdown running).
@@ -5080,11 +5082,11 @@ impl App {
                 && rect_contains(self.layout.pomodoro_button, mouse.column, mouse.row) {
                     self.pomodoro_primary();
                 }
-            return;
+            return true;
         }
         // Keyboard-only modal overlays swallow all mouse input rather than
         // letting a click fall through to the editor/explorer underneath.
-        if self.show_help
+        self.show_help
             || self.palette.is_some()
             || self.prompt.is_some()
             || self.query_replace.is_some()
@@ -5097,19 +5099,14 @@ impl App {
             || self.dashboard.is_some()
             || self.outline.is_some()
             || self.paste.as_ref().is_some_and(|p| p.conflict.is_some())
-        {
-            return;
-        }
-        let (col, row) = (mouse.column, mouse.row);
+    }
 
-        // Clicking the status-bar git/branch indicator opens the Git panel.
-        if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
-            && rect_contains(self.layout.git_status_bar, col, row)
-        {
-            self.run_action("git.changes");
-            return;
-        }
-
+    /// Handle a press/drag on the window chrome at `(col, row)`: the vertical
+    /// scrollbar, the horizontal scrollbars, a dock resize edge, or the split
+    /// divider. Returns `true` if the event was consumed (a button release only
+    /// clears the relevant active-drag flag and returns `false`). Extracted from
+    /// [`App::on_mouse`] to keep it within the line limit.
+    fn try_chrome_mouse(&mut self, mouse: MouseEvent, col: u16, row: u16) -> bool {
         // Editor scrollbar: press the thumb/track to jump there, then drag to
         // scroll. The drag continues even if the pointer leaves the 1-column
         // track (tracked by `scrollbar_active`), and ends on button release.
@@ -5119,11 +5116,11 @@ impl App {
             {
                 self.scrollbar_active = true;
                 self.scrollbar_drag(row);
-                return;
+                return true;
             }
             MouseEventKind::Drag(MouseButton::Left) if self.scrollbar_active => {
                 self.scrollbar_drag(row);
-                return;
+                return true;
             }
             MouseEventKind::Up(MouseButton::Left) => self.scrollbar_active = false,
             _ => {}
@@ -5144,14 +5141,14 @@ impl App {
                     if rect.width > 0 && rect_contains(rect, col, row) {
                         self.hbar_active = Some(target);
                         self.hbar_drag(target, col);
-                        return;
+                        return true;
                     }
                 }
             }
             MouseEventKind::Drag(MouseButton::Left) => {
                 if let Some(target) = self.hbar_active {
                     self.hbar_drag(target, col);
-                    return;
+                    return true;
                 }
             }
             MouseEventKind::Up(MouseButton::Left) => self.hbar_active = None,
@@ -5172,15 +5169,15 @@ impl App {
             // otherwise win on that row).
             MouseEventKind::Down(MouseButton::Left) if Some(row) == bottom_edge => {
                 self.dock_resize = Some(DockResize::Bottom);
-                return;
+                return true;
             }
             MouseEventKind::Down(MouseButton::Left) if Some(col) == left_edge => {
                 self.dock_resize = Some(DockResize::Left);
-                return;
+                return true;
             }
             MouseEventKind::Down(MouseButton::Left) if Some(col) == right_edge => {
                 self.dock_resize = Some(DockResize::Right);
-                return;
+                return true;
             }
             MouseEventKind::Drag(MouseButton::Left) if self.dock_resize.is_some() => {
                 if matches!(self.dock_resize, Some(DockResize::Bottom)) {
@@ -5188,7 +5185,7 @@ impl App {
                 } else {
                     self.resize_dock(col);
                 }
-                return;
+                return true;
             }
             MouseEventKind::Up(MouseButton::Left) => self.dock_resize = None,
             _ => {}
@@ -5202,14 +5199,35 @@ impl App {
             {
                 self.split_resize = true;
                 self.resize_split(col, row);
-                return;
+                return true;
             }
             MouseEventKind::Drag(MouseButton::Left) if self.split_resize => {
                 self.resize_split(col, row);
-                return;
+                return true;
             }
             MouseEventKind::Up(MouseButton::Left) => self.split_resize = false,
             _ => {}
+        }
+        false
+    }
+
+    /// Handle a mouse event, dispatching to whichever pane it lands in.
+    pub fn on_mouse(&mut self, mouse: MouseEvent) {
+        if self.try_overlay_mouse(mouse) {
+            return;
+        }
+        let (col, row) = (mouse.column, mouse.row);
+
+        // Clicking the status-bar git/branch indicator opens the Git panel.
+        if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
+            && rect_contains(self.layout.git_status_bar, col, row)
+        {
+            self.run_action("git.changes");
+            return;
+        }
+
+        if self.try_chrome_mouse(mouse, col, row) {
+            return;
         }
 
         // While a menu is open, a left click runs the dropdown item under the
@@ -5439,7 +5457,7 @@ impl App {
                 }
                 _ => 50,
             };
-            s.ratio = (pct as u16).clamp(10, 90);
+            s.ratio = u16::try_from(pct).unwrap_or(u16::MAX).clamp(10, 90);
         }
     }
 
@@ -5575,7 +5593,7 @@ impl App {
     fn tab_click(&mut self, col: u16) {
         let mut x = self.layout.tabs.x + 1;
         for (i, tab) in self.editor.tabs.iter().enumerate() {
-            let w = tab.title().chars().count() as u16;
+            let w = u16::try_from(tab.title().chars().count()).unwrap_or(u16::MAX);
             if col >= x && col < x + w {
                 self.editor.active = i;
                 self.editor.promote_active();
@@ -5680,7 +5698,7 @@ impl App {
     fn top_menu_index_at(&self, col: u16) -> Option<usize> {
         let mut x = self.layout.menu.x + 1;
         for (i, m) in menus().iter().enumerate() {
-            let w = m.title().chars().count() as u16 + 2;
+            let w = u16::try_from(m.title().chars().count()).unwrap_or(u16::MAX) + 2;
             if col >= x && col < x + w {
                 return Some(i);
             }
@@ -6068,7 +6086,7 @@ impl App {
     fn open_selected_location(&mut self) {
         if let Some(lc) = self.location_chooser.take()
             && let Some(loc) = lc.entries.get(lc.selected).cloned() {
-                self.navigate_to(loc);
+                self.navigate_to(&loc);
             }
     }
 

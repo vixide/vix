@@ -6,6 +6,8 @@
 //! and [`MenuDef::title`], so the bar follows the active locale. An item may
 //! instead open a nested submenu (e.g. View → Editor, Edit → Find).
 
+#![warn(clippy::pedantic)]
+
 /// A single dropdown entry: a leaf action, a separator, or a submenu.
 pub struct Item {
     /// i18n key for the displayed label (e.g. `"menu.item.file.new"`).

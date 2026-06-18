@@ -6,6 +6,8 @@
 //! that contact's vCard (the host then displays it with `vix-vcard-panel`). Pure
 //! data — no filesystem IO here.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

@@ -6,6 +6,8 @@
 //! the last result or error: the host types into it, calls [`Calculator::run`]
 //! to evaluate, and inserts the result into the editor.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

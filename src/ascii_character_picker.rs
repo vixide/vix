@@ -9,6 +9,8 @@
 //! highlighted row and the scroll offset. The host renders the rows, maps clicks
 //! to rows, and inserts the chosen character.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -147,7 +149,7 @@ impl Panel {
     /// The highlighted ASCII code.
     #[must_use]
     pub fn selected_code(&self) -> u8 {
-        self.selected as u8
+        u8::try_from(self.selected).unwrap_or(u8::MAX)
     }
 
     /// The highlighted row's character (what insertion uses).

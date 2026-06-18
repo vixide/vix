@@ -1,6 +1,8 @@
 //! Line operations: move the current line up or down. Vix-owned code, held to
 //! the crate's `clippy::pedantic`.
 
+#![warn(clippy::pedantic)]
+
 use crate::editor_core::editor::Editor;
 
 impl Editor {

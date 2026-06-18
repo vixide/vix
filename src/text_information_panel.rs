@@ -14,6 +14,8 @@
 //!   with content but no terminator counts as one sentence.
 //! - **paragraphs**: maximal runs of non-blank lines.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

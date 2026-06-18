@@ -4,6 +4,8 @@
 //! i18n key for its description (translated by the host). Pure data, so this
 //! crate has no dependencies and the host owns rendering.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

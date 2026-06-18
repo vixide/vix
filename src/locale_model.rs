@@ -6,6 +6,8 @@
 //! `rust_i18n::set_locale` and persists it. Extracted from the former
 //! `vix-locale-chooser` so the data has its own home.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

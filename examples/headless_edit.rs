@@ -29,7 +29,7 @@ fn main() -> std::io::Result<()> {
     // gives the code editor a viewport to scroll the cursor within.
     let mut app = App::new(dir.clone(), Settings::default());
     app.layout.editor = Rect::new(0, 0, 80, 24);
-    app.open_initial(file.clone());
+    app.open_initial(&file.clone());
     println!("opened : {:?}", app.editor.active_tab().unwrap().lines());
 
     // Move to end of line and append "!!!".

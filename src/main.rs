@@ -58,7 +58,7 @@ fn main() -> io::Result<()> {
         app.restore_session();
     } else {
         for path in cli.files {
-            app.open_initial(path);
+            app.open_initial(&path);
         }
     }
 

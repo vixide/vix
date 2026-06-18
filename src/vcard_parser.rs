@@ -10,6 +10,8 @@
 //!
 //! [RFC 6350]: https://www.rfc-editor.org/info/rfc6350
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

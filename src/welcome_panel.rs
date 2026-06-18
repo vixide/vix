@@ -6,6 +6,8 @@
 //! lines the host hands it and tracks the scroll offset. The host renders the
 //! visible window with a scrollbar and forwards scroll keys.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

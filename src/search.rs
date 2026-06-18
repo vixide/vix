@@ -3,4 +3,6 @@
 //! search / replacement runs in [`crate::app`]; this module only re-exports the
 //! state type so the rest of the app can refer to it as `crate::search::*`.
 
+#![warn(clippy::pedantic)]
+
 pub use crate::find_panel::{Field, SearchBar};

@@ -4,6 +4,8 @@
 //! files are read from disk. `App` owns the buffers, so it drives the actual
 //! scanning; this module just holds the panel state.
 
+#![warn(clippy::pedantic)]
+
 use std::path::PathBuf;
 
 use crate::search::Field;
@@ -21,6 +23,9 @@ pub struct Hit {
 }
 
 /// State of the workspace-wide search/replace panel.
+// Independent search toggles (replacing/case/regex/static); grouping them only
+// relocates the lint and adds noise at every call site.
+#[allow(clippy::struct_excessive_bools)]
 pub struct WorkspaceSearch {
     /// Search-pattern text.
     pub query: String,

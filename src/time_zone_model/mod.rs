@@ -13,6 +13,8 @@
 //!
 //! The crate is pure data with no dependencies and no I/O.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

@@ -1,6 +1,8 @@
 //! JSON-RPC message framing: the `Content-Length: N\r\n\r\n<body>` envelope LSP
 //! uses over stdio.
 
+#![warn(clippy::pedantic)]
+
 use serde_json::Value;
 
 /// Frame a JSON value into a `Content-Length`-delimited LSP message ready to

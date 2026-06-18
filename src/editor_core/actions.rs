@@ -1,8 +1,11 @@
+#![warn(clippy::pedantic)]
 use crate::editor_core::editor::{Editor};
 use crate::editor_core::selection::{Selection};
 use crate::editor_core::code::{EditKind};
 
+/// An editing operation that can be applied to an [`Editor`].
 pub trait Action {
+    /// Apply this action to `editor`, mutating its buffer and/or cursor state.
     fn apply(&mut self, editor: &mut Editor);
 }
 
@@ -14,6 +17,7 @@ pub trait Action {
 /// to the end of the selection and the selection is cleared.
 /// Otherwise, the cursor moves one position to the right.
 pub struct MoveRight {
+    /// Whether to extend the selection instead of clearing it.
     pub shift: bool,
 }
 
@@ -49,6 +53,7 @@ impl Action for MoveRight {
 /// to the start of the selection and the selection is cleared.
 /// Otherwise, the cursor moves one position to the left.
 pub struct MoveLeft {
+    /// Whether to extend the selection instead of clearing it.
     pub shift: bool,
 }
 
@@ -83,6 +88,7 @@ impl Action for MoveLeft {
 /// If `shift` is true, the selection is extended to the new cursor position.
 /// If `shift` is false, the selection is cleared.
 pub struct MoveUp {
+    /// Whether to extend the selection instead of clearing it.
     pub shift: bool,
 }
 
@@ -118,6 +124,7 @@ impl Action for MoveUp {
 /// If `shift` is false, the selection is cleared.
 /// 
 pub struct MoveDown {
+    /// Whether to extend the selection instead of clearing it.
     pub shift: bool,
 }
 
@@ -148,6 +155,7 @@ impl Action for MoveDown {
 
 /// Inserts arbitrary text at the cursor, replacing the selection if any.
 pub struct InsertText {
+    /// The text to insert at the cursor.
     pub text: String,
 }
 
@@ -258,6 +266,7 @@ impl Action for Delete {
     }
 }
 
+/// Toggles line comments on the selected lines (or the current line).
 pub struct ToggleComment;
 
 impl Action for ToggleComment {

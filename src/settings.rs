@@ -14,6 +14,8 @@
 //! assert_eq!(defaults.locale, "en");
 //! ```
 
+#![warn(clippy::pedantic)]
+
 use serde::{Deserialize, Serialize};
 
 /// Application name used by [`confy`] to locate the config directory.
@@ -28,6 +30,9 @@ const CONFIG_NAME: &str = "config";
 /// lets older config files load even when new fields are added.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+// Independent persisted preferences; each maps to one flat TOML key. Grouping
+// them would break the on-disk format and only relocate the lint.
+#[allow(clippy::struct_excessive_bools)]
 pub struct Settings {
     /// Show the line-number gutter.
     pub line_numbers: bool,

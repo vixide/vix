@@ -3,6 +3,8 @@
 //! The CSV header is the union of all object keys (first-seen order); each
 //! object becomes one row. See [`crate::convert_tabular`] for the shared logic.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

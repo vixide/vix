@@ -6,6 +6,8 @@
 //! symbol's line. On open it can select the symbol nearest the cursor with
 //! [`Outline::select_nearest`].
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

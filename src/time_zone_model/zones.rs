@@ -5,6 +5,8 @@
 //! abbreviation computed via Python `zoneinfo`. Regenerate with the script in
 //! this crate's `spec/index.md`.
 
+#![warn(clippy::pedantic)]
+
 use crate::time_zone_model::Zone;
 
 /// Every IANA canonical zone (419 of them), sorted by name.

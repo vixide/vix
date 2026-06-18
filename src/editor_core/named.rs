@@ -7,6 +7,8 @@
 //! files, macros, shell/command/overwrite modes, suspend); those are dispatched
 //! by the host, not here.
 
+#![warn(clippy::pedantic)]
+
 #![allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
 
 use crate::editor_core::actions::{

@@ -6,6 +6,8 @@
 //! without changing its meaning. Used by the Tools → Format menu via
 //! `App::transform_selection_or_buffer_try`.
 
+#![warn(clippy::pedantic)]
+
 /// Pretty-print JSON with two-space indentation.
 ///
 /// # Errors
