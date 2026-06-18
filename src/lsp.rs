@@ -44,6 +44,7 @@ enum Pending {
     CodeAction,
     SelectionRange,
     DocumentHighlight,
+    FoldingRange,
 }
 
 /// A message handed back from a server's stdout reader thread.
@@ -96,6 +97,9 @@ pub enum LspEvent {
     /// A document-highlight response: ranges of the symbol's occurrences in the
     /// active file.
     Highlights(Vec<crate::lsp_core::Range>),
+    /// A folding-range response: foldable `(start_line, end_line)` ranges for the
+    /// active file.
+    FoldingRanges(Vec<(u32, u32)>),
 }
 
 /// One running language server.
@@ -372,6 +376,13 @@ impl Lsp {
         self.request(path, "textDocument/documentHighlight", line, character, Pending::DocumentHighlight);
     }
 
+    /// Request the foldable line ranges for `path`.
+    pub fn request_folding_range(&mut self, path: &Path) {
+        self.send_request(path, "textDocument/foldingRange", Pending::FoldingRange, |uri| {
+            message::text_document_params(uri)
+        });
+    }
+
     /// Request a rename of the symbol at `(line, character)` to `new_name`.
     pub fn request_rename(&mut self, path: &Path, line: u32, character: u32, new_name: &str) {
         self.send_request(path, "textDocument/rename", Pending::Rename, |uri| {
@@ -616,6 +627,9 @@ impl Lsp {
                 if !ranges.is_empty() {
                     events.push(LspEvent::Highlights(ranges));
                 }
+            }
+            Pending::FoldingRange => {
+                events.push(LspEvent::FoldingRanges(message::parse_folding_ranges(result)));
             }
         }
     }
