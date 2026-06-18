@@ -473,6 +473,8 @@ pub struct Layout {
     pub unit_converter_rows: [Rect; 3],
     /// Calculator dialog hit rects: input field, Run button, Insert button.
     pub calculator_rects: [Rect; 3],
+    /// Regex tester dialog field rows (pattern, subject), for click-to-focus.
+    pub regex_tester_rows: [Rect; 2],
     /// Pomodoro dialog primary-button (Start/Stop/Cancel) hit rect.
     pub pomodoro_button: Rect,
     /// Info-dialog text-field rectangle (valid while a text dialog is open).
@@ -675,6 +677,8 @@ pub struct App {
     pub unit_converter: Option<crate::unit_converter_tool::Converter>,
     /// Calculator dialog (Tools → Calculator…), when open.
     pub calculator: Option<crate::calculator_tool::Calculator>,
+    /// Regex tester dialog (Tools → Regex Tester…), when open.
+    pub regex_tester: Option<crate::regex_tool::Tester>,
     /// Pomodoro timer state (Tools → Pomodoro…). Stays `Some` and keeps counting
     /// down even after the dialog is closed via Start; see [`Self::pomodoro_open`].
     pub pomodoro: Option<crate::pomodoro_tool::Timer>,
@@ -895,6 +899,7 @@ impl App {
             color_converter: None,
             unit_converter: None,
             calculator: None,
+            regex_tester: None,
             pomodoro: None,
             pomodoro_open: false,
             pomodoro_last_tick: None,
@@ -1134,6 +1139,10 @@ impl App {
         }
         if self.calculator.is_some() {
             self.calculator_key(key);
+            return;
+        }
+        if self.regex_tester.is_some() {
+            self.regex_tester_key(key);
             return;
         }
         if self.pomodoro_open {
@@ -1968,6 +1977,7 @@ impl App {
             "tools.dashboard" => self.open_dashboard(),
             "tools.color_converter" => self.open_color_converter(),
             "tools.calculator" => self.open_calculator(),
+            "tools.regex_tester" => self.open_regex_tester(),
             "tools.pomodoro" => self.open_pomodoro(),
             "tools.generate.uuid.v1" => self.insert_generated(&crate::uuid_tool::v1()),
             "tools.generate.uuid.v2" => self.insert_generated(&crate::uuid_tool::v2()),
@@ -2709,6 +2719,42 @@ impl App {
             self.editor.insert_str(&value, area);
             self.status = t!("status.generated", text = value).to_string();
             self.calculator = None;
+        }
+    }
+
+    // ----- Regex tester ---------------------------------------------------
+
+    /// Open the regex tester, seeding the subject from the selection.
+    fn open_regex_tester(&mut self) {
+        let subject = self
+            .editor
+            .active_tab_mut()
+            .and_then(|t| t.editor.get_selection_text())
+            .unwrap_or_default();
+        self.regex_tester = Some(crate::regex_tool::Tester::new(subject));
+    }
+
+    /// Handle a key for the regex tester: type into the focused field, Tab
+    /// switches pattern/subject, Esc closes.
+    fn regex_tester_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => self.regex_tester = None,
+            KeyCode::Tab => {
+                if let Some(t) = self.regex_tester.as_mut() {
+                    t.toggle_field();
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(t) = self.regex_tester.as_mut() {
+                    t.backspace();
+                }
+            }
+            KeyCode::Char(c) if !Self::ctrl(&key) && !Self::alt(&key) => {
+                if let Some(t) = self.regex_tester.as_mut() {
+                    t.push(c);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -4921,6 +4967,21 @@ impl App {
                         c.focus = Focus::Insert;
                     }
                     self.insert_calculator_result();
+                }
+            }
+            return;
+        }
+        // The Regex tester: a left click on a field row focuses it.
+        if self.regex_tester.is_some() {
+            if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+                use crate::regex_tool::Field;
+                for (i, f) in [Field::Pattern, Field::Subject].into_iter().enumerate() {
+                    if rect_contains(self.layout.regex_tester_rows[i], mouse.column, mouse.row) {
+                        if let Some(t) = self.regex_tester.as_mut() {
+                            t.focus = f;
+                        }
+                        break;
+                    }
                 }
             }
             return;

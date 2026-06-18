@@ -252,6 +252,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.calculator.is_some() {
         draw_calculator(app, frame, area);
     }
+    if app.regex_tester.is_some() {
+        draw_regex_tester(app, frame, area);
+    }
     if app.pomodoro_open {
         draw_pomodoro(app, frame, area);
     }
@@ -601,6 +604,83 @@ fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim()))),
         rows[5],
+    );
+}
+
+fn draw_regex_tester(app: &mut App, frame: &mut Frame, area: Rect) {
+    use crate::regex_tool::{Field, Outcome};
+    let Some(t) = app.regex_tester.as_ref() else { return };
+
+    let title = t!("menu.item.tools.regex_tester");
+    let hint = t!("ui.regex_tester_hint");
+    let width = 60u16.min(area.width.saturating_sub(2)).max(28);
+    let height = 12u16.min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    };
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {title} "));
+    let inner = block.inner(rect);
+    frame.render_widget(Clear, rect);
+    frame.render_widget(block, rect);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // pattern
+            Constraint::Length(1), // subject
+            Constraint::Length(1), // blank
+            Constraint::Min(1),    // results
+            Constraint::Length(1), // hint
+        ])
+        .split(inner);
+
+    let field = |label: &str, text: &str, focused: bool| {
+        let style = if focused { theme::selected() } else { theme::base() };
+        let caret = if focused { "_" } else { "" };
+        Line::from(vec![
+            Span::styled(format!(" {label:<8}"), theme::dim()),
+            Span::styled(format!("{text}{caret}"), style),
+        ])
+    };
+    frame.render_widget(
+        Paragraph::new(field("pattern", &t.pattern, t.focus == Field::Pattern)),
+        rows[0],
+    );
+    frame.render_widget(
+        Paragraph::new(field("subject", &t.subject, t.focus == Field::Subject)),
+        rows[1],
+    );
+    app.layout.regex_tester_rows = [rows[0], rows[1]];
+
+    let result_lines: Vec<Line> = match t.result() {
+        Outcome::Error(e) => vec![Line::from(Span::styled(format!(" {e}"), theme::dim()))],
+        Outcome::Matches(m) if m.is_empty() => {
+            vec![Line::from(Span::styled(t!("status.no_matches").to_string(), theme::dim()))]
+        }
+        Outcome::Matches(m) => {
+            let mut lines = vec![Line::from(Span::styled(
+                t!("status.matches_n", n = m.len()).to_string(),
+                theme::dim(),
+            ))];
+            let view = rows[3].height.saturating_sub(1) as usize;
+            for s in m.iter().take(view) {
+                lines.push(Line::from(format!("  {s}")));
+            }
+            lines
+        }
+    };
+    frame.render_widget(Paragraph::new(result_lines), rows[3]);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim()))),
+        rows[4],
     );
 }
 

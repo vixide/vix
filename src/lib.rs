@@ -67,6 +67,7 @@ pub mod messages;
 pub mod palette;
 pub mod workspace_search;
 pub mod query;
+pub mod regex_tool;
 pub mod search;
 pub mod session;
 pub mod settings;
