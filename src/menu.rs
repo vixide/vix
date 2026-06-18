@@ -115,6 +115,9 @@ const EDIT: &[Item] = &[
     Item::sub("menu.item.edit.case", EDIT_CASE),
     SEP,
     Item::leaf("menu.item.edit.toggle_comment", "edit.toggle_comment", "Ctrl /"),
+    SEP,
+    Item::leaf("menu.item.edit.record_macro", "toggle_macro", ""),
+    Item::leaf("menu.item.edit.play_macro", "play_macro", ""),
 ];
 
 /// Cursor jump commands, grouped under Edit → Go.
