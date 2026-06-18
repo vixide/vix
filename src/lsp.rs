@@ -37,6 +37,9 @@ enum Pending {
     Completion,
     References,
     Formatting,
+    DocumentSymbols,
+    WorkspaceSymbols,
+    SignatureHelp,
 }
 
 /// A message handed back from a server's stdout reader thread.
@@ -67,6 +70,13 @@ pub enum LspEvent {
     /// A formatting response: text edits (range + replacement) for the active
     /// file, in document order.
     Edits(Vec<(crate::lsp_core::Range, String)>),
+    /// A document-symbol response for the active file: `(0-based line, character,
+    /// name)`.
+    DocumentSymbols(Vec<(u32, u32, String)>),
+    /// A workspace-symbol response: `(file, 0-based line, character, name)`.
+    WorkspaceSymbols(Vec<(PathBuf, u32, u32, String)>),
+    /// A signature-help response: the text to show in a popup.
+    SignatureHelp(String),
 }
 
 /// One running language server.
@@ -312,6 +322,25 @@ impl Lsp {
         ));
     }
 
+    /// Request the document symbols (outline) for `path`.
+    pub fn request_document_symbols(&mut self, path: &Path) {
+        self.send_request(path, "textDocument/documentSymbol", Pending::DocumentSymbols, |uri| {
+            message::text_document_params(uri)
+        });
+    }
+
+    /// Request workspace symbols matching `query` (sent to `path`'s server).
+    pub fn request_workspace_symbols(&mut self, path: &Path, query: &str) {
+        self.send_request(path, "workspace/symbol", Pending::WorkspaceSymbols, |_uri| {
+            message::workspace_symbol_params(query)
+        });
+    }
+
+    /// Request signature help at `(line, character)`.
+    pub fn request_signature_help(&mut self, path: &Path, line: u32, character: u32) {
+        self.request(path, "textDocument/signatureHelp", line, character, Pending::SignatureHelp);
+    }
+
     /// Request formatting of the whole document `path` (`tab_size`-wide indent).
     pub fn request_formatting(&mut self, path: &Path, tab_size: u32) {
         self.send_request(path, "textDocument/formatting", Pending::Formatting, |uri| {
@@ -474,6 +503,26 @@ impl Lsp {
                 let edits = message::parse_text_edits(result);
                 if !edits.is_empty() {
                     events.push(LspEvent::Edits(edits));
+                }
+            }
+            Pending::DocumentSymbols => {
+                let syms = message::parse_document_symbols(result);
+                if !syms.is_empty() {
+                    events.push(LspEvent::DocumentSymbols(syms));
+                }
+            }
+            Pending::WorkspaceSymbols => {
+                let syms: Vec<(PathBuf, u32, u32, String)> = message::parse_workspace_symbols(result)
+                    .into_iter()
+                    .map(|(uri, line, ch, name)| (uri_to_path(&uri), line, ch, name))
+                    .collect();
+                if !syms.is_empty() {
+                    events.push(LspEvent::WorkspaceSymbols(syms));
+                }
+            }
+            Pending::SignatureHelp => {
+                if let Some(text) = message::parse_signature_help(result) {
+                    events.push(LspEvent::SignatureHelp(text));
                 }
             }
         }
