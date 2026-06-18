@@ -386,6 +386,22 @@ fn conflict_resolve_keeps_chosen_side() {
 }
 
 #[test]
+fn regex_tester_finds_matches_live() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.regex_tester");
+    app.regex_tester.as_mut().unwrap().subject = "a1 b2 c3".to_string();
+    for c in r"\d".chars() {
+        app.on_key(key(c));
+    }
+    match app.regex_tester.as_ref().unwrap().result() {
+        vix::regex_tool::Outcome::Matches(m) => assert_eq!(m, vec!["1", "2", "3"]),
+        vix::regex_tool::Outcome::Error(e) => panic!("expected matches, got error: {e}"),
+    }
+    app.on_key(esc());
+    assert!(app.regex_tester.is_none());
+}
+
+#[test]
 fn diagnostics_panel_empty_reports_none() {
     let mut app = app_at(Path::new("."));
     app.run_action("lsp.diagnostics");

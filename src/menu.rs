@@ -365,6 +365,7 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.clock", "tools.clock", ""),
     Item::leaf("menu.item.tools.pomodoro", "tools.pomodoro", ""),
     Item::leaf("menu.item.tools.calculator", "tools.calculator", ""),
+    Item::leaf("menu.item.tools.regex_tester", "tools.regex_tester", ""),
     Item::sub("menu.item.tools.characters", TOOLS_CHARACTERS),
     Item::leaf("menu.item.tools.x11_colors", "tools.x11_colors", ""),
 ];
