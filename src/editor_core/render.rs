@@ -129,6 +129,39 @@ impl Editor {
         }
     }
 
+    /// Display columns that inline hints add before the real glyph at char
+    /// column `col` on `line` (sum of widths of hints with `hint_col <= col`).
+    /// Returns 0 when there are no hints or the view is horizontally scrolled, so
+    /// non-hinted rendering is unchanged.
+    fn inlay_shift(&self, line: usize, col: usize) -> u16 {
+        if self.offset_x != 0 || self.inlay_hints.is_empty() {
+            return 0;
+        }
+        let w: usize = self
+            .inlay_hints
+            .iter()
+            .filter(|(l, c, _)| *l == line && *c <= col)
+            .map(|(_, _, label)| unicode_width::UnicodeWidthStr::width(label.as_str()))
+            .sum();
+        u16::try_from(w).unwrap_or(u16::MAX)
+    }
+
+    /// The inline hints on `line` (column, label), sorted by column, when the
+    /// view is not horizontally scrolled.
+    fn line_inlays(&self, line: usize) -> Vec<(usize, &str)> {
+        if self.offset_x != 0 {
+            return Vec::new();
+        }
+        let mut hints: Vec<(usize, &str)> = self
+            .inlay_hints
+            .iter()
+            .filter(|(l, _, _)| *l == line)
+            .map(|(_, c, label)| (*c, label.as_str()))
+            .collect();
+        hints.sort_by_key(|&(c, _)| c);
+        hints
+    }
+
     /// Screen row (absolute `y`) for logical `line`, accounting for folds, or
     /// `None` if the line is hidden, above the viewport, or below it. With no
     /// active folds this is exactly `area.top() + (line - offset_y)`.
@@ -271,9 +304,65 @@ impl Editor {
                     }
                 }
             } else {
-                let displayed_line = visible_chars.to_string().replace('\t', " ");
-                if text_x < right_edge && draw_y < area.top() + area.height {
+                let hints = self.line_inlays(line_idx);
+                if !(text_x < right_edge && draw_y < area.top() + area.height) {
+                    // off the right edge / below the view
+                } else if hints.is_empty() {
+                    let displayed_line = visible_chars.to_string().replace('\t', " ");
                     buf.set_string(text_x, draw_y, &displayed_line, default_text_style);
+                } else {
+                    self.draw_line_with_inlays(
+                        buf, text_x, right_edge, draw_y, &visible_chars, &hints, default_text_style,
+                    );
+                }
+            }
+        }
+    }
+
+    /// Draw a line's text with inline hints inserted at their columns (the real
+    /// glyphs after each hint shift right); the hint cells are dimmed.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_line_with_inlays(
+        &self,
+        buf: &mut Buffer,
+        text_x: u16,
+        right_edge: u16,
+        draw_y: u16,
+        visible_chars: &ropey::RopeSlice,
+        hints: &[(usize, &str)],
+        text_style: Style,
+    ) {
+        use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+        let mut displayed = String::new();
+        let mut hint_spans: Vec<(usize, usize)> = Vec::new(); // (display col, width)
+        let mut disp_col = 0usize;
+        let mut hi = 0usize;
+        for (i, ch) in visible_chars.chars().enumerate() {
+            while hi < hints.len() && hints[hi].0 == i {
+                let w = UnicodeWidthStr::width(hints[hi].1);
+                hint_spans.push((disp_col, w));
+                displayed.push_str(hints[hi].1);
+                disp_col += w;
+                hi += 1;
+            }
+            let c = if ch == '\t' { ' ' } else { ch };
+            displayed.push(c);
+            disp_col += UnicodeWidthChar::width(c).unwrap_or(1);
+        }
+        // Hints anchored at or past the end of the visible text.
+        while hi < hints.len() {
+            let w = UnicodeWidthStr::width(hints[hi].1);
+            hint_spans.push((disp_col, w));
+            displayed.push_str(hints[hi].1);
+            disp_col += w;
+            hi += 1;
+        }
+        buf.set_string(text_x, draw_y, &displayed, text_style);
+        for (start, w) in hint_spans {
+            for dx in 0..w {
+                let x = text_x + u16::try_from(start + dx).unwrap_or(u16::MAX);
+                if x < right_edge {
+                    buf[(x, draw_y)].set_style(self.whitespace_style);
                 }
             }
         }
@@ -320,13 +409,16 @@ impl Editor {
 
             let mut x = 0;
             let mut byte_idx_in_rope = start_byte;
+            let mut char_col = self.offset_x;
 
             for g in RopeGraphemes::new(&chars) {
                 let (g_width, g_bytes) = grapheme_width_and_bytes_len(g);
 
                 if x >= max_x { break; }
 
-                let start_x = area.left() + line_number_width_u16 + u16::try_from(x).unwrap_or(u16::MAX);
+                let shift = self.inlay_shift(line_idx, char_col);
+                char_col += g.chars().count();
+                let start_x = area.left() + line_number_width_u16 + shift + u16::try_from(x).unwrap_or(u16::MAX);
                 let draw_y = area.top() + u16::try_from(screen_y).unwrap_or(u16::MAX);
 
                 for dx in 0..g_width {
@@ -392,7 +484,8 @@ impl Editor {
                 let (g_width, g_chars) = grapheme_width_and_chars_len(g);
 
                 if char_col < rel_end && char_col + g_chars > rel_start {
-                    let start_x = area.left() + line_number_width_u16 + visual_x;
+                    let shift = self.inlay_shift(line_idx, char_col);
+                    let start_x = area.left() + line_number_width_u16 + shift + visual_x;
                     for dx in 0..u16::try_from(g_width).unwrap_or(u16::MAX) {
                         let draw_x = start_x + dx;
                         if draw_x < area.right() && draw_y < area.bottom() {
@@ -448,7 +541,7 @@ impl Editor {
             visual_x = visual_x.saturating_add(u16::try_from(g_width).unwrap_or(u16::MAX));
             char_col += g_chars;
         }
-        let draw_x = area.left() + line_number_width_u16 + visual_x;
+        let draw_x = area.left() + line_number_width_u16 + self.inlay_shift(line_idx, rel) + visual_x;
         if draw_x < area.right() && draw_y < area.bottom() {
             buf[(draw_x, draw_y)].set_style(style);
         }

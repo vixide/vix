@@ -753,6 +753,8 @@ pub struct App {
     /// Direction of a pending `selectionRange` request (`true` = expand, `false`
     /// = shrink), applied when the response arrives.
     expand_selection_dir: Option<bool>,
+    /// Whether LSP inlay hints are displayed (toggled via `view.inlay_hints`).
+    show_inlay_hints: bool,
     /// Whether the workspace root is a git work tree (checked once at startup).
     pub git_repo: bool,
     /// Cached current git branch (or short hash when detached), when in a repo.
@@ -928,6 +930,7 @@ impl App {
             complete_session: None,
             rename_at: None,
             expand_selection_dir: None,
+            show_inlay_hints: true,
             git_repo: false,
             git_branch: None,
             git_status: Vec::new(),
@@ -2115,6 +2118,7 @@ impl App {
             "lsp.expand_selection" => self.request_selection_range(true),
             "lsp.shrink_selection" => self.request_selection_range(false),
             "lsp.highlight" => self.request_document_highlight(),
+            "view.inlay_hints" => self.toggle_inlay_hints(),
             "editor.fold_toggle" => self.toggle_fold_at_cursor(),
             "editor.fold_all" => {
                 if let Some(t) = self.editor.active_tab_mut() {
@@ -2873,6 +2877,64 @@ impl App {
             }
         }
         self.status = t!("status.no_fold").to_string();
+    }
+
+    // ----- Inlay hints ----------------------------------------------------
+
+    /// Request inlay hints for the whole document `path` (when display is on).
+    fn request_inlay_hints(&mut self, path: &Path) {
+        if !self.show_inlay_hints || !self.lsp.handles(path) {
+            return;
+        }
+        let lines = self
+            .editor
+            .active_tab()
+            .map_or(0, |t| t.editor.code_ref().len_lines());
+        let end = u32::try_from(lines).unwrap_or(u32::MAX);
+        self.lsp.request_inlay_hint(path, (0, 0), (end, 0));
+    }
+
+    /// Store inlay hints on the active buffer, converting each LSP `character`
+    /// (encoding units) to a char column within its line.
+    fn apply_inlay_hints(&mut self, hints: &[(u32, u32, String)]) {
+        if !self.show_inlay_hints {
+            return;
+        }
+        let Some(path) = self.active_path() else { return };
+        let enc = self.lsp.encoding_for(&path);
+        let Some(t) = self.editor.active_tab_mut() else { return };
+        let converted: Vec<(usize, usize, String)> = {
+            let code = t.editor.code_ref();
+            hints
+                .iter()
+                .filter_map(|&(line, character, ref label)| {
+                    let line_idx = line as usize;
+                    if line_idx >= code.len_lines() {
+                        return None;
+                    }
+                    let abs = lsp_pos_to_char(code, line, character, enc);
+                    let col = abs.saturating_sub(code.line_to_char(line_idx));
+                    Some((line_idx, col, label.clone()))
+                })
+                .collect()
+        };
+        t.editor.set_inlay_hints(converted);
+    }
+
+    /// Toggle inlay-hint display: clear them when turning off, refetch when on.
+    fn toggle_inlay_hints(&mut self) {
+        self.show_inlay_hints = !self.show_inlay_hints;
+        if self.show_inlay_hints {
+            if let Some(path) = self.active_path() {
+                self.request_inlay_hints(&path);
+            }
+            self.status = t!("status.inlay_on").to_string();
+        } else {
+            if let Some(t) = self.editor.active_tab_mut() {
+                t.editor.set_inlay_hints(Vec::new());
+            }
+            self.status = t!("status.inlay_off").to_string();
+        }
     }
 
     // ----- Document highlight ---------------------------------------------
@@ -4367,6 +4429,7 @@ impl App {
         if last.is_none() {
             self.lsp.did_open(&path, &text);
             self.lsp.request_folding_range(&path); // fetch foldable ranges once on open
+            self.request_inlay_hints(&path);
         } else {
             self.lsp.did_change(&path, &text);
         }
@@ -4419,6 +4482,7 @@ impl App {
                 }
                 crate::lsp::LspEvent::SelectionRanges(ranges) => self.apply_selection_range(&ranges),
                 crate::lsp::LspEvent::Highlights(ranges) => self.apply_document_highlights(&ranges),
+                crate::lsp::LspEvent::InlayHints(hints) => self.apply_inlay_hints(&hints),
                 crate::lsp::LspEvent::FoldingRanges(ranges) => {
                     let ranges: Vec<(usize, usize)> =
                         ranges.iter().map(|&(s, e)| (s as usize, e as usize)).collect();

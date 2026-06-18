@@ -74,6 +74,10 @@ pub struct Editor {
     /// visible (with a marker); lines `start+1..=end` are hidden.
     pub(crate) folds: Vec<(usize, usize)>,
 
+    /// LSP inlay hints: `(line, char column within line, label)`, 0-based. Drawn
+    /// inline (dimmed), shifting the real glyphs at/after the column to the right.
+    pub(crate) inlay_hints: Vec<(usize, usize, String)>,
+
     /// Syntax highlight cache by intervals to speed up rendering
     pub(crate) highlights_cache: RefCell<HightlightCache>,
 
@@ -160,6 +164,7 @@ impl Editor {
             gutter_marks: None,
             fold_ranges: Vec::new(),
             folds: Vec::new(),
+            inlay_hints: Vec::new(),
             highlights_cache,
             show_line_numbers: true,
             show_whitespace: false,
@@ -625,6 +630,17 @@ impl Editor {
     /// Unfold every active fold.
     pub fn unfold_all(&mut self) {
         self.folds.clear();
+    }
+
+    /// Set the inline hints to display: `(line, char column within line, label)`.
+    pub fn set_inlay_hints(&mut self, hints: Vec<(usize, usize, String)>) {
+        self.inlay_hints = hints;
+    }
+
+    /// Whether any inline hints are set.
+    #[must_use]
+    pub fn has_inlay_hints(&self) -> bool {
+        !self.inlay_hints.is_empty()
     }
 
     /// The fold marker for `line`: `Some(true)` if a folded range starts here,

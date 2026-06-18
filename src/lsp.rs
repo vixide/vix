@@ -46,6 +46,7 @@ enum Pending {
     DocumentHighlight,
     FoldingRange,
     CompletionResolve,
+    InlayHint,
 }
 
 /// A message handed back from a server's stdout reader thread.
@@ -104,6 +105,9 @@ pub enum LspEvent {
     /// A completion-resolve response: fuller detail/documentation for the
     /// in-flight completion item.
     CompletionDetail(String),
+    /// An inlay-hint response: `(line, character, label)` hints for the active
+    /// file (0-based; `character` in the server's encoding units).
+    InlayHints(Vec<(u32, u32, String)>),
 }
 
 /// One running language server.
@@ -380,6 +384,13 @@ impl Lsp {
         self.request(path, "textDocument/documentHighlight", line, character, Pending::DocumentHighlight);
     }
 
+    /// Request inlay hints covering `[start, end)` of `path`.
+    pub fn request_inlay_hint(&mut self, path: &Path, start: (u32, u32), end: (u32, u32)) {
+        self.send_request(path, "textDocument/inlayHint", Pending::InlayHint, |uri| {
+            message::inlay_hint_params(uri, start, end)
+        });
+    }
+
     /// Request the foldable line ranges for `path`.
     pub fn request_folding_range(&mut self, path: &Path) {
         self.send_request(path, "textDocument/foldingRange", Pending::FoldingRange, |uri| {
@@ -588,6 +599,14 @@ impl Lsp {
                     events.push(LspEvent::Edits(edits));
                 }
             }
+            _ => Self::response_to_events_more(kind, result, events),
+        }
+    }
+
+    /// The remaining response arms, split out of [`Lsp::response_to_events`] to
+    /// keep each within the line limit.
+    fn response_to_events_more(kind: Pending, result: &Value, events: &mut Vec<LspEvent>) {
+        match kind {
             Pending::DocumentSymbols => {
                 let syms = message::parse_document_symbols(result);
                 if !syms.is_empty() {
@@ -650,6 +669,13 @@ impl Lsp {
                     events.push(LspEvent::CompletionDetail(text));
                 }
             }
+            Pending::InlayHint => {
+                let hints = message::parse_inlay_hints(result);
+                if !hints.is_empty() {
+                    events.push(LspEvent::InlayHints(hints));
+                }
+            }
+            _ => {} // handled in response_to_events
         }
     }
 

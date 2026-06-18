@@ -218,6 +218,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.lsp_rename", "lsp.rename"),
     ("cmd.lsp_code_action", "lsp.code_action"),
     ("cmd.lsp_highlight", "lsp.highlight"),
+    ("cmd.inlay_hints", "view.inlay_hints"),
     ("cmd.fold_toggle", "editor.fold_toggle"),
     ("cmd.fold_all", "editor.fold_all"),
     ("cmd.unfold_all", "editor.unfold_all"),
