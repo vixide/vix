@@ -367,6 +367,15 @@ fn line_transforms_via_actions() {
 }
 
 #[test]
+fn conflict_resolve_keeps_chosen_side() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> b\nz\n");
+    app.run_action("edit.go_first"); // cursor to line 0
+    app.run_action("git.conflict_ours");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "a\nours\nz\n");
+}
+
+#[test]
 fn diagnostics_panel_empty_reports_none() {
     let mut app = app_at(Path::new("."));
     app.run_action("lsp.diagnostics");
