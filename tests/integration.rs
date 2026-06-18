@@ -367,6 +367,14 @@ fn line_transforms_via_actions() {
 }
 
 #[test]
+fn diagnostics_panel_empty_reports_none() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("lsp.diagnostics");
+    assert!(app.workspace_search.is_none(), "no panel without diagnostics");
+    assert!(app.status.to_lowercase().contains("diagnostic"), "status: {}", app.status);
+}
+
+#[test]
 fn bookmarks_toggle_and_list() {
     let dir = unique_dir("bookmarks");
     fs::create_dir_all(&dir).unwrap();
