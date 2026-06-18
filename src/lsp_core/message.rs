@@ -11,6 +11,11 @@ use serde_json::{json, Value};
 
 use crate::lsp_core::{CompletionItem, Diagnostic, Location, Position, Range, Severity};
 
+/// One file's text edits within a workspace edit: `(uri, [(range, new_text)])`.
+pub type UriEdits = (String, Vec<(Range, String)>);
+/// One offered code action: `(title, [per-file edits])`.
+pub type CodeActionEdit = (String, Vec<UriEdits>);
+
 // ----- envelopes ----------------------------------------------------------
 
 /// A JSON-RPC request envelope (expects a response with the same `id`).
@@ -234,11 +239,40 @@ pub fn parse_definition(result: &Value) -> Option<Location> {
     }
 }
 
+/// A `CodeActionParams` body for `[start, end)` with the overlapping
+/// `diagnostics` (raw LSP objects) in the request context.
+#[must_use]
+pub fn code_action_params(uri: &str, start: (u32, u32), end: (u32, u32), diagnostics: &Value) -> Value {
+    json!({
+        "textDocument": { "uri": uri },
+        "range": {
+            "start": { "line": start.0, "character": start.1 },
+            "end": { "line": end.0, "character": end.1 }
+        },
+        "context": { "diagnostics": diagnostics }
+    })
+}
+
+/// Parse a `textDocument/codeAction` result (`(Command | CodeAction)[]`) into
+/// `(title, workspace_edit)` pairs. Actions that carry only a command (no inline
+/// edit) yield an empty edit list.
+#[must_use]
+pub fn parse_code_actions(result: &Value) -> Vec<CodeActionEdit> {
+    let Value::Array(arr) = result else { return Vec::new() };
+    arr.iter()
+        .filter_map(|item| {
+            let title = item.get("title")?.as_str()?.to_string();
+            let edit = item.get("edit").map(parse_workspace_edit).unwrap_or_default();
+            Some((title, edit))
+        })
+        .collect()
+}
+
 /// Parse a `textDocument/rename` `WorkspaceEdit` result into per-file edits:
 /// `(uri, [(range, new_text)])`. Handles both the `changes` map and the
 /// `documentChanges` array shapes.
 #[must_use]
-pub fn parse_workspace_edit(result: &Value) -> Vec<(String, Vec<(crate::lsp_core::Range, String)>)> {
+pub fn parse_workspace_edit(result: &Value) -> Vec<UriEdits> {
     let mut out = Vec::new();
     if let Some(Value::Object(changes)) = result.get("changes") {
         for (uri, edits) in changes {
@@ -575,6 +609,22 @@ mod tests {
         assert!(help.contains("fn f(a: i32, b: i32)"));
         assert!(help.contains("b: i32"));
         assert!(parse_signature_help(&json!({"signatures": []})).is_none());
+    }
+
+    #[test]
+    fn code_actions_parse_titles_and_edits() {
+        let actions = parse_code_actions(&json!([
+            {"title": "Import Foo", "kind": "quickfix",
+             "edit": {"changes": {"file:///a.rs": [
+                 {"range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}}, "newText": "use foo;\n"}
+             ]}}},
+            {"title": "Run command only", "command": {"command": "x", "arguments": []}}
+        ]));
+        assert_eq!(actions.len(), 2);
+        assert_eq!(actions[0].0, "Import Foo");
+        assert_eq!(actions[0].1.len(), 1, "first action has an edit");
+        assert!(actions[1].1.is_empty(), "command-only action has no edit");
+        assert!(parse_code_actions(&Value::Null).is_empty());
     }
 
     #[test]

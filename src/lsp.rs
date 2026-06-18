@@ -41,6 +41,7 @@ enum Pending {
     WorkspaceSymbols,
     SignatureHelp,
     Rename,
+    CodeAction,
 }
 
 /// A message handed back from a server's stdout reader thread.
@@ -48,6 +49,11 @@ enum Incoming {
     Message(Value),
     Exited,
 }
+
+/// One file's edits in a workspace/code-action edit: `(file, [(range, new_text)])`.
+pub type FileEdits = (PathBuf, Vec<(crate::lsp_core::Range, String)>);
+/// One offered code action with its edit: `(title, [per-file edits])`.
+pub type CodeAction = (String, Vec<FileEdits>);
 
 /// Something a server told us, surfaced to the host from [`Lsp::poll`].
 pub enum LspEvent {
@@ -78,8 +84,10 @@ pub enum LspEvent {
     WorkspaceSymbols(Vec<(PathBuf, u32, u32, String)>),
     /// A signature-help response: the text to show in a popup.
     SignatureHelp(String),
-    /// A rename response: per-file edits `(file, [(range, new_text)])` to apply.
-    WorkspaceEdit(Vec<(PathBuf, Vec<(crate::lsp_core::Range, String)>)>),
+    /// A rename response: per-file edits to apply.
+    WorkspaceEdit(Vec<FileEdits>),
+    /// A code-action response: each offered action with its edit.
+    CodeActions(Vec<CodeAction>),
 }
 
 /// One running language server.
@@ -351,6 +359,20 @@ impl Lsp {
         });
     }
 
+    /// Request code actions for the range `[start, end)`, with `diagnostics`
+    /// (raw LSP objects overlapping the range) in the request context.
+    pub fn request_code_action(
+        &mut self,
+        path: &Path,
+        start: (u32, u32),
+        end: (u32, u32),
+        diagnostics: &Value,
+    ) {
+        self.send_request(path, "textDocument/codeAction", Pending::CodeAction, |uri| {
+            message::code_action_params(uri, start, end, diagnostics)
+        });
+    }
+
     /// Request formatting of the whole document `path` (`tab_size`-wide indent).
     pub fn request_formatting(&mut self, path: &Path, tab_size: u32) {
         self.send_request(path, "textDocument/formatting", Pending::Formatting, |uri| {
@@ -536,13 +558,25 @@ impl Lsp {
                 }
             }
             Pending::Rename => {
-                let edits: Vec<(PathBuf, Vec<(crate::lsp_core::Range, String)>)> =
-                    message::parse_workspace_edit(result)
-                        .into_iter()
-                        .map(|(uri, e)| (uri_to_path(&uri), e))
-                        .collect();
+                let edits: Vec<FileEdits> = message::parse_workspace_edit(result)
+                    .into_iter()
+                    .map(|(uri, e)| (uri_to_path(&uri), e))
+                    .collect();
                 if !edits.is_empty() {
                     events.push(LspEvent::WorkspaceEdit(edits));
+                }
+            }
+            Pending::CodeAction => {
+                let actions: Vec<CodeAction> = message::parse_code_actions(result)
+                    .into_iter()
+                    .map(|(title, edit)| {
+                        let edit: Vec<FileEdits> =
+                            edit.into_iter().map(|(uri, e)| (uri_to_path(&uri), e)).collect();
+                        (title, edit)
+                    })
+                    .collect();
+                if !actions.is_empty() {
+                    events.push(LspEvent::CodeActions(actions));
                 }
             }
         }
