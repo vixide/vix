@@ -210,6 +210,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.text_info.is_some() {
         draw_text_info(app, frame, area);
     }
+    if app.markdown_preview.is_some() {
+        draw_markdown_preview(app, frame, area);
+    }
     if app.contacts.is_some() {
         draw_contacts(app, frame, area);
     }
@@ -2548,6 +2551,52 @@ fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
     let hint = Line::from(Span::styled(t!("ui.vcard_hint").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
     app.layout.vcard = Rect { x: chunks[0].x, y: chunks[0].y, width: list_area.width, height: (view_h as u16).min(chunks[0].height) };
+}
+
+fn draw_markdown_preview(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(panel) = app.markdown_preview.as_mut() else { return };
+    // A large centered reading pane.
+    let width = 80u16.min(area.width.saturating_sub(2)).max(20);
+    let height = area.height.saturating_sub(2).max(6);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} ", t!("ui.markdown_preview")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let view_h = inner.height as usize;
+    let max_scroll = panel.lines.len().saturating_sub(view_h);
+    if panel.scroll > max_scroll {
+        panel.scroll = max_scroll;
+    }
+    let end = (panel.scroll + view_h).min(panel.lines.len());
+    let lines: Vec<Line> = panel.lines[panel.scroll..end]
+        .iter()
+        .map(|l| {
+            // Heading underline rules and the thematic break render dim.
+            let dim = l.chars().all(|c| matches!(c, '=' | '-' | '─')) && !l.is_empty();
+            if dim {
+                Line::from(Span::styled(l.clone(), theme::dim()))
+            } else {
+                Line::from(l.clone())
+            }
+        })
+        .collect();
+    frame.render_widget(Paragraph::new(lines), inner);
+    if panel.lines.len() > view_h {
+        let sb = Rect { x: rect.x + rect.width - 1, y: inner.y, width: 1, height: inner.height };
+        draw_scrollbar(frame, sb, panel.scroll, max_scroll);
+    }
 }
 
 fn draw_text_info(app: &mut App, frame: &mut Frame, area: Rect) {

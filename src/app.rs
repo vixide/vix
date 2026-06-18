@@ -377,6 +377,10 @@ pub use crate::file_information_panel::Panel as FileInfoPanel;
 /// counts for the selection (or buffer); Enter/click inserts a value, Esc closes.
 pub use crate::text_information_panel::Panel as TextInfoPanel;
 
+/// Markdown preview overlay state (Tools → Markdown Preview), re-exported from
+/// [`crate::markdown_preview`]. Read-only; arrows/PageUp/Down scroll, Esc closes.
+pub use crate::markdown_preview::Panel as MarkdownPreview;
+
 /// Code-outline overlay state (Ctrl+Shift+O), re-exported from
 /// [`crate::outline_panel`]. Lists the active buffer's symbols; Enter/click jumps to
 /// one, Esc closes.
@@ -634,6 +638,8 @@ pub struct App {
     pub file_info: Option<FileInfoPanel>,
     /// Text Information overlay, when open.
     pub text_info: Option<TextInfoPanel>,
+    /// Markdown preview overlay, when open.
+    pub markdown_preview: Option<MarkdownPreview>,
     /// Contact-browser overlay, when open.
     pub contacts: Option<ContactPanel>,
     /// Single-vCard view overlay, when open (above the contact browser).
@@ -847,6 +853,7 @@ impl App {
             welcome: None,
             file_info: None,
             text_info: None,
+            markdown_preview: None,
             contacts: None,
             vcard: None,
             lsp,
@@ -1177,6 +1184,10 @@ impl App {
         }
         if self.text_info.is_some() {
             self.text_info_key(key);
+            return;
+        }
+        if self.markdown_preview.is_some() {
+            self.markdown_preview_key(key);
             return;
         }
         if self.vcard.is_some() {
@@ -1895,6 +1906,7 @@ impl App {
             "tools.system_info" => self.open_system_info(),
             "tools.file_info" => self.open_file_info(),
             "tools.text_info" => self.open_text_info(),
+            "tools.markdown_preview" => self.open_markdown_preview(),
             "tools.contacts" => self.open_contacts(),
             "tools.clock" => {
                 self.show_clock = !self.show_clock;
@@ -4651,6 +4663,16 @@ impl App {
             self.text_info_mouse(mouse);
             return;
         }
+        if self.markdown_preview.is_some() {
+            if let Some(p) = self.markdown_preview.as_mut() {
+                match mouse.kind {
+                    MouseEventKind::ScrollDown => p.down(3),
+                    MouseEventKind::ScrollUp => p.up(3),
+                    _ => {}
+                }
+            }
+            return;
+        }
         if self.vcard.is_some() {
             self.vcard_mouse(mouse);
             return;
@@ -6679,6 +6701,44 @@ impl App {
         let area = self.layout.editor;
         if self.editor.insert_str(&value, area) {
             self.status = t!("status.ascii_inserted", name = value).to_string();
+        }
+    }
+
+    // ----- Markdown preview -----------------------------------------------
+
+    /// Open a read-only Markdown preview of the active buffer.
+    fn open_markdown_preview(&mut self) {
+        let Some(text) = self.editor.active_tab().filter(|t| !t.is_image()).map(Tab::text) else {
+            return;
+        };
+        self.markdown_preview = Some(MarkdownPreview::open(&text));
+    }
+
+    fn markdown_preview_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.editor.height as usize).max(1).saturating_sub(2);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.markdown_preview.as_mut() {
+                    p.up(1);
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.markdown_preview.as_mut() {
+                    p.down(1);
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(p) = self.markdown_preview.as_mut() {
+                    p.up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(p) = self.markdown_preview.as_mut() {
+                    p.down(page);
+                }
+            }
+            KeyCode::Esc | KeyCode::Char('q') => self.markdown_preview = None,
+            _ => {}
         }
     }
 
