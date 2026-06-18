@@ -689,6 +689,8 @@ pub struct App {
     pub clip_cut: bool,
     /// Position-history jump list (Alt+Left / Alt+Right).
     pub nav_history: Vec<Location>,
+    /// User bookmarks (file + line), toggled per line and navigable as a set.
+    pub bookmarks: Vec<Location>,
     /// Current index into [`App::nav_history`].
     pub nav_idx: usize,
     /// Terminal image picker; `None` until set from a real terminal (so tests
@@ -899,6 +901,7 @@ impl App {
             clip: Vec::new(),
             clip_cut: false,
             nav_history: Vec::new(),
+            bookmarks: Vec::new(),
             nav_idx: 0,
             picker: None,
             show_explorer: settings.show_explorer,
@@ -1752,6 +1755,10 @@ impl App {
             }
             "file.open_recent" => self.open_recent_chooser(),
             "nav.recent_locations" => self.open_location_chooser(),
+            "bookmark.toggle" => self.toggle_bookmark(),
+            "bookmark.next" => self.bookmark_goto(true),
+            "bookmark.prev" => self.bookmark_goto(false),
+            "bookmark.list" => self.list_bookmarks(),
             "file.save" => self.save(),
             "file.save_as" => {
                 let cur = self
@@ -4653,6 +4660,63 @@ impl App {
         let path = tab.path.clone()?;
         let (line, col) = tab.cursor_1based();
         Some(Location { path, line, col })
+    }
+
+    // ----- bookmarks ------------------------------------------------------
+
+    /// Toggle a bookmark on the current file's current line.
+    fn toggle_bookmark(&mut self) {
+        let Some(loc) = self.current_location() else {
+            return;
+        };
+        if let Some(i) = self.bookmarks.iter().position(|b| b.path == loc.path && b.line == loc.line) {
+            self.bookmarks.remove(i);
+            self.status = t!("status.bookmark_removed").to_string();
+        } else {
+            self.bookmarks.push(loc);
+            self.status = t!("status.bookmark_added").to_string();
+        }
+    }
+
+    /// Jump to the next (or previous) bookmark across all files, wrapping. Sorted
+    /// by path then line so navigation order is stable.
+    fn bookmark_goto(&mut self, forward: bool) {
+        if self.bookmarks.is_empty() {
+            self.status = t!("status.no_bookmarks").to_string();
+            return;
+        }
+        let mut marks = self.bookmarks.clone();
+        marks.sort_by(|a, b| a.path.cmp(&b.path).then(a.line.cmp(&b.line)));
+        let here = self.current_location();
+        let key = |l: &Location| (l.path.clone(), l.line);
+        let target = if forward {
+            here.as_ref()
+                .and_then(|h| marks.iter().find(|m| key(m) > key(h)))
+                .or_else(|| marks.first())
+        } else {
+            here.as_ref()
+                .and_then(|h| marks.iter().rev().find(|m| key(m) < key(h)))
+                .or_else(|| marks.last())
+        };
+        if let Some(loc) = target.cloned() {
+            let area = self.editor_view();
+            self.with_jump(|s| {
+                s.open_path(&loc.path, false);
+                s.editor.goto(loc.line, Some(loc.col), area);
+                s.focus = Focus::Editor;
+            });
+        }
+    }
+
+    /// Open the bookmark list in the location chooser (Enter jumps).
+    fn list_bookmarks(&mut self) {
+        if self.bookmarks.is_empty() {
+            self.status = t!("status.no_bookmarks").to_string();
+            return;
+        }
+        let mut entries = self.bookmarks.clone();
+        entries.sort_by(|a, b| a.path.cmp(&b.path).then(a.line.cmp(&b.line)));
+        self.location_chooser = Some(LocationChooser { entries, selected: 0 });
     }
 
     /// Run a cursor-moving jump `f`, recording the origin and destination in the
