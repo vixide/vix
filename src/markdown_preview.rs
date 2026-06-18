@@ -6,6 +6,8 @@
 //! Inline emphasis/strong/code keep their text (the markup is dropped) and links
 //! render as `text (url)`. The host shows the [`Panel`]'s lines, scrollable.
 
+#![warn(clippy::pedantic)]
+
 use std::fmt::Write;
 
 use pulldown_cmark::{Event, HeadingLevel, Parser, Tag, TagEnd};

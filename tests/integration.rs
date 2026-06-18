@@ -416,7 +416,7 @@ fn bookmarks_toggle_and_list() {
     let file = dir.join("a.txt");
     fs::write(&file, "one\ntwo\nthree\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
     app.run_action("bookmark.toggle");
     assert_eq!(app.bookmarks.len(), 1, "bookmark added");
     app.run_action("bookmark.list");
@@ -594,7 +594,7 @@ fn open_edit_save_round_trip() {
     fs::write(&file, "first line\nsecond line\n").unwrap();
 
     let mut app = app_at(&dir);
-    app.open_initial(file.clone());
+    app.open_initial(&file.clone());
     assert_eq!(app.editor.active_tab().unwrap().lines()[0], "first line");
 
     // Move to end of the first line and append text.
@@ -615,7 +615,7 @@ fn smart_home_toggles_first_nonblank_and_column0() {
     let file = dir.join("h.txt");
     fs::write(&file, "    hello\n").unwrap(); // four-space indent
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
 
     app.on_key(keycode(KeyCode::End));
     assert_eq!(app.editor.cursor_1based().1, 10, "end of '    hello'");
@@ -639,7 +639,7 @@ fn palette_goto_line_previews_and_reverts_on_esc() {
     let body: String = (1..=20).map(|i| format!("L{i}\n")).collect();
     fs::write(&file, body).unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
     assert_eq!(app.editor.cursor_1based().0, 1);
 
     app.run_action("tools.palette");
@@ -659,7 +659,7 @@ fn palette_goto_line_commit_records_origin_in_history() {
     let body: String = (1..=20).map(|i| format!("L{i}\n")).collect();
     fs::write(&file, body).unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
 
     app.run_action("tools.palette");
     for c in ":12".chars() {
@@ -682,7 +682,7 @@ fn recent_locations_chooser_lists_and_jumps() {
     let body: String = (1..=40).map(|i| format!("L{i}\n")).collect();
     fs::write(&file, body).unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
 
     // Make two jumps so the position history has several entries.
     app.run_action("tools.palette");
@@ -719,7 +719,7 @@ fn recent_locations_empty_history_reports_status() {
     let file = dir.join("g.txt");
     fs::write(&file, "one\ntwo\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
     app.run_action("nav.recent_locations");
     assert!(app.location_chooser.is_none(), "no chooser without history");
     fs::remove_dir_all(&dir).ok();
@@ -731,7 +731,7 @@ fn find_selection_jumps_between_occurrences() {
     let file = dir.join("f.txt");
     fs::write(&file, "foo bar foo baz foo\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
     // No selection: the word under the cursor ("foo") is used. Occurrences start
     // at chars 0, 8, 16.
     app.run_action("search.next_selection");
@@ -749,7 +749,7 @@ fn save_trims_trailing_whitespace_by_default() {
     let file = dir.join("t.txt");
     fs::write(&file, "abc\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file.clone());
+    app.open_initial(&file.clone());
     app.on_key(keycode(KeyCode::End));
     for _ in 0..3 {
         app.on_key(key(' '));
@@ -765,7 +765,7 @@ fn save_ensures_final_newline_by_default() {
     let file = dir.join("n.txt");
     fs::write(&file, "abc").unwrap(); // no trailing newline
     let mut app = app_at(&dir);
-    app.open_initial(file.clone());
+    app.open_initial(&file.clone());
     app.run_action("file.save");
     assert_eq!(fs::read_to_string(&file).unwrap(), "abc\n", "final newline added");
     fs::remove_dir_all(&dir).ok();
@@ -779,7 +779,7 @@ fn save_respects_disabled_normalization() {
     let mut app = app_at(&dir);
     app.settings.trim_trailing_whitespace = false;
     app.settings.ensure_final_newline = false;
-    app.open_initial(file.clone());
+    app.open_initial(&file.clone());
     app.on_key(keycode(KeyCode::End));
     for _ in 0..2 {
         app.on_key(key(' '));
@@ -811,7 +811,7 @@ fn goto_line_moves_cursor() {
     let file = dir.join("many.txt");
     fs::write(&file, "a\nb\nc\nd\ne\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
     app.editor.goto(4, Some(1), Rect::new(0, 0, 80, 24));
     assert_eq!(app.editor.cursor_1based().0, 4);
     fs::remove_dir_all(&dir).ok();
@@ -1001,7 +1001,7 @@ fn status_bar_info_accessors() {
     let file = dir.join("s.rs");
     fs::write(&file, "fn main() {}\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
     let tab = app.editor.active_tab().unwrap();
     assert_eq!(tab.editor.language(), "rust", "language from extension");
     assert_eq!(tab.editor.line_ending(), "LF");
@@ -1015,7 +1015,7 @@ fn line_ending_detects_crlf() {
     let file = dir.join("c.txt");
     fs::write(&file, "a\r\nb\r\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
     assert_eq!(app.editor.active_tab().unwrap().editor.line_ending(), "CRLF");
     fs::remove_dir_all(&dir).ok();
 }
@@ -1065,7 +1065,7 @@ fn toggle_comment_uses_language_token() {
     let file = dir.join("c.toml");
     fs::write(&file, "key = 1\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
     app.run_action("edit.toggle_comment");
     assert_eq!(app.editor.active_tab().unwrap().lines()[0], "#key = 1", "TOML uses #");
     fs::remove_dir_all(&dir).ok();
@@ -1079,14 +1079,14 @@ fn open_recent_records_dedups_and_reopens() {
     let mut app = app_at(&dir);
     assert!(app.settings.recent_files.is_empty());
 
-    app.open_initial(dir.join("a.txt"));
-    app.open_initial(dir.join("b.txt"));
+    app.open_initial(&dir.join("a.txt"));
+    app.open_initial(&dir.join("b.txt"));
     assert_eq!(app.settings.recent_files.len(), 2);
     assert!(app.settings.recent_files[0].ends_with("b.txt"), "most-recent first");
     assert!(app.settings.recent_files[1].ends_with("a.txt"));
 
     // Reopening a recorded file moves it to the front without duplicating.
-    app.open_initial(dir.join("a.txt"));
+    app.open_initial(&dir.join("a.txt"));
     assert_eq!(app.settings.recent_files.len(), 2, "deduped");
     assert!(app.settings.recent_files[0].ends_with("a.txt"));
 
@@ -1121,7 +1121,7 @@ fn goto_symbol_mode_lists_and_jumps() {
     let file = dir.join("s.rs");
     fs::write(&file, "fn alpha() {}\nlet x = 1;\nstruct Beta {}\nfn gamma() {}\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
 
     app.run_action("nav.goto_symbol");
     let p = app.palette.as_ref().expect("palette open");
@@ -1185,7 +1185,7 @@ fn click_recent_row_opens_file() {
     let dir = unique_dir("recentclick");
     fs::write(dir.join("c.txt"), "ccc").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(dir.join("c.txt"));
+    app.open_initial(&dir.join("c.txt"));
     app.run_action("file.open_recent");
     // The list rect is normally recorded during render; set it directly.
     app.layout.chooser = Rect::new(10, 5, 34, 1);
@@ -1255,7 +1255,7 @@ fn replace_all_with_capture_groups() {
     let file = dir.join("swap.txt");
     fs::write(&file, "key: value\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file.clone());
+    app.open_initial(&file.clone());
 
     // Open replace, enable regex, search `(\w+): (\w+)`, replace `$2: $1`.
     app.run_action("edit.replace");
@@ -1280,8 +1280,8 @@ fn reopen_closed_tab_restores_the_last_closed_file() {
     fs::write(dir.join("a.txt"), "aaa").unwrap();
     fs::write(dir.join("b.txt"), "bbb").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(dir.join("a.txt"));
-    app.open_initial(dir.join("b.txt")); // active: b.txt
+    app.open_initial(&dir.join("a.txt"));
+    app.open_initial(&dir.join("b.txt")); // active: b.txt
 
     // Close b.txt, then reopen it.
     app.run_action("file.close");
@@ -1304,8 +1304,8 @@ fn close_all_tabs_leaves_one_empty_buffer() {
     fs::write(dir.join("a.txt"), "aaa").unwrap();
     fs::write(dir.join("b.txt"), "bbb").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(dir.join("a.txt"));
-    app.open_initial(dir.join("b.txt"));
+    app.open_initial(&dir.join("a.txt"));
+    app.open_initial(&dir.join("b.txt"));
     assert!(app.editor.tabs.len() >= 2, "two files are open");
 
     app.run_action("file.close_all");
@@ -1323,7 +1323,7 @@ fn find_next_repeats_after_the_box_closes() {
     let file = dir.join("f.txt");
     fs::write(&file, "ab xx ab xx ab\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
 
     // Find "xx", then close the box.
     app.run_action("edit.find");
@@ -1354,7 +1354,7 @@ fn search_highlights_are_sticky_after_closing() {
     let file = dir.join("f.txt");
     fs::write(&file, "ab xx ab xx ab\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
 
     app.run_action("edit.find");
     for c in "ab".chars() {
@@ -1374,7 +1374,7 @@ fn search_reports_match_index_and_total() {
     let file = dir.join("f.txt");
     fs::write(&file, "ab xx ab xx ab\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
 
     app.run_action("edit.find");
     for c in "ab".chars() {
@@ -1392,7 +1392,7 @@ fn toggle_highlight_search_clears_and_restores() {
     let file = dir.join("f.txt");
     fs::write(&file, "ab xx ab\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
 
     app.run_action("edit.find");
     for c in "ab".chars() {
@@ -1415,7 +1415,7 @@ fn literal_replace_all_after_preview() {
     let file = dir.join("l.txt");
     fs::write(&file, "foo foo\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
 
     app.run_action("edit.replace");
     for c in "foo".chars() {
@@ -1461,7 +1461,7 @@ fn interactive_query_replace_y_n_y() {
     let file = dir.join("q.txt");
     fs::write(&file, "foo foo foo\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
 
     app.run_action("edit.query_replace");
     for c in "foo".chars() {
@@ -1490,7 +1490,7 @@ fn interactive_query_replace_bang_replaces_rest() {
     let file = dir.join("q.txt");
     fs::write(&file, "x x x x\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
 
     app.run_action("edit.query_replace");
     app.on_key(key('x'));
@@ -1976,7 +1976,7 @@ fn explorer_cut_moves_file_and_follows_buffer() {
     fs::create_dir(dir.join("sub")).unwrap();
 
     let mut app = app_at(&dir);
-    app.open_initial(dir.join("a.txt")); // buffer open on the file
+    app.open_initial(&dir.join("a.txt")); // buffer open on the file
     app.focus = Focus::Explorer;
     app.explorer.selected = node_index(&app, "a.txt");
     app.on_key(ctrl('x')); // cut
@@ -1996,7 +1996,7 @@ fn explorer_delete_closes_buffer() {
     let dir = unique_dir("del");
     fs::write(dir.join("a.txt"), "bye\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(dir.join("a.txt"));
+    app.open_initial(&dir.join("a.txt"));
     assert_eq!(app.editor.tabs.len(), 2); // initial empty buffer + a.txt
     app.focus = Focus::Explorer;
     app.explorer.selected = node_index(&app, "a.txt");
@@ -2031,7 +2031,7 @@ fn goto_definition_single_jumps() {
     fs::write(dir.join("lib.rs"), "fn target() {}\n").unwrap();
     fs::write(dir.join("main.rs"), "target()\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(dir.join("main.rs")); // cursor at offset 0 → on "target"
+    app.open_initial(&dir.join("main.rs")); // cursor at offset 0 → on "target"
 
     app.on_key(KeyEvent::new(KeyCode::F(12), KeyModifiers::NONE));
     let tab = app.editor.active_tab().unwrap();
@@ -2047,7 +2047,7 @@ fn goto_definition_multiple_opens_panel() {
     fs::write(dir.join("a.rs"), "fn dup() {}\n").unwrap();
     fs::write(dir.join("b.rs"), "fn dup() {}\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(dir.join("a.rs"));
+    app.open_initial(&dir.join("a.rs"));
     app.editor.goto(1, Some(4), Rect::new(0, 0, 80, 24)); // cursor on "dup"
 
     app.on_key(KeyEvent::new(KeyCode::F(12), KeyModifiers::NONE));
@@ -2211,7 +2211,7 @@ fn image_open_without_picker_warns_and_does_not_crash() {
     fs::write(dir.join("pic.png"), b"\x89PNG not-really").unwrap();
     let mut app = app_at(&dir); // picker is None (no terminal)
     let before = app.messages.items.len();
-    app.open_initial(dir.join("pic.png"));
+    app.open_initial(&dir.join("pic.png"));
     // No image tab opened, but the user is told why, and nothing panicked.
     assert!(app.editor.active_tab().is_none_or(|t| !t.is_image()));
     assert!(app.messages.items.len() > before, "a warning was added");
@@ -2226,7 +2226,7 @@ fn scrollbar_drag_scrolls_editor() {
     let body: String = (1..=200).map(|i| format!("line {i}\n")).collect();
     fs::write(&file, body).unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
     // Rectangles are normally set during render; set them directly here.
     app.layout.editor = Rect::new(0, 0, 80, 20);
     app.layout.scrollbar = Rect::new(80, 0, 1, 20);
@@ -2704,7 +2704,7 @@ fn unsaved_prompt_save_writes_and_closes() {
     let file = dir.join("note.txt");
     fs::write(&file, "hello\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file.clone());
+    app.open_initial(&file.clone());
     app.on_key(keycode(KeyCode::End));
     for c in "!!!".chars() {
         app.on_key(key(c));
@@ -2744,7 +2744,7 @@ fn recent_files_max_caps_the_list() {
     for name in ["a.txt", "b.txt", "c.txt"] {
         let p = dir.join(name);
         fs::write(&p, "x\n").unwrap();
-        app.open_initial(p);
+        app.open_initial(&p);
     }
     assert_eq!(app.settings.recent_files.len(), 2, "kept only recent_files_max entries");
     fs::remove_dir_all(&dir).ok();
@@ -2817,7 +2817,7 @@ fn editor_gutter_marks_round_trip() {
 fn git_gutter_marks_a_modified_line() {
     let mut app = app_at(Path::new("."));
     app.refresh_git();
-    app.open_initial(PathBuf::from("Cargo.toml"));
+    app.open_initial(&PathBuf::from("Cargo.toml"));
     app.on_key(key('x')); // modify the first line
     app.refresh_git_gutter();
     let marks = app
@@ -2888,7 +2888,7 @@ fn revert_hunk_restores_committed_text() {
 
     let mut app = app_at(&dir);
     app.refresh_git();
-    app.open_initial(file);
+    app.open_initial(&file);
     app.on_key(key('X')); // modify line 0: "one" -> "Xone"
     assert_eq!(app.editor.active_tab().unwrap().text(), "Xone\ntwo\n");
 
@@ -2952,7 +2952,7 @@ fn stage_hunk_stages_only_the_cursor_hunk() {
     fs::write(&file, "ONE\ntwo\nthree\n").unwrap();
     let mut app = app_at(&dir);
     app.refresh_git();
-    app.open_initial(file);
+    app.open_initial(&file);
     app.run_action("git.stage_hunk"); // cursor on line 0
 
     // The staged (index) version now has the change; HEAD still has "one".
@@ -2974,8 +2974,8 @@ fn session_snapshot_and_restore_round_trip() {
 
     // Open two files, focus the second, move its cursor, then snapshot.
     let mut app = app_at(&dir);
-    app.open_initial(a.clone());
-    app.open_initial(b.clone());
+    app.open_initial(&a.clone());
+    app.open_initial(&b.clone());
     app.run_action("cursor_down"); // line 2 of b.txt
     app.run_action("cursor_right");
     let snap = app.workspace_session();
@@ -3031,7 +3031,7 @@ fn git_blame_annotates_the_current_line() {
     run(&["commit", "-q", "-m", "seed the file"]);
 
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
     // Cursor starts on line 1; blame should attribute it to the seed commit.
     app.run_action("git.blame");
     assert!(app.status.contains("Ada Lovelace"), "blame names the author: {}", app.status);
@@ -3059,7 +3059,7 @@ fn git_blame_flags_an_uncommitted_line() {
     fs::write(&file, "committed\nbrand new\n").unwrap();
 
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
     app.run_action("cursor_down"); // move to line 2 (the new line)
     app.run_action("git.blame");
     assert!(
@@ -3129,7 +3129,7 @@ fn spell_suggest_popup_replaces_a_misspelling() {
     let file = dir.join("a.rs");
     fs::write(&file, "// helllo world\nfn main() {}\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
     app.run_action("view.spellcheck");
     // Put the cursor inside "helllo" (chars 3..9) and open the popup.
     app.editor.active_tab_mut().unwrap().editor.set_cursor(5);
@@ -3150,7 +3150,7 @@ fn spellcheck_underlines_a_misspelling_in_a_comment() {
     let file = dir.join("a.rs");
     fs::write(&file, "// helllo wrld\nfn main() {}\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
     app.run_action("view.spellcheck");
     app.refresh_spellcheck();
     let marks = app
@@ -3171,7 +3171,7 @@ fn outline_panel_lists_symbols_and_jumps() {
     let file = dir.join("a.rs");
     fs::write(&file, "fn alpha() {}\n\nstruct Beta;\n\nfn gamma() {}\n").unwrap();
     let mut app = app_at(&dir);
-    app.open_initial(file);
+    app.open_initial(&file);
 
     app.run_action("nav.outline");
     let o = app.outline.as_ref().expect("outline opens");

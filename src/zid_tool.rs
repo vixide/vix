@@ -7,6 +7,8 @@
 //! from the operating system's secure random source (`getrandom`), so each ZID
 //! is unpredictable and collision-safe for practical purposes.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

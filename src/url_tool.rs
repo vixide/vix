@@ -5,6 +5,8 @@
 //! URL — spaces become `%20`, not `+`. [`decode`] reverses any `%XX` escapes and
 //! reports an error when the result is not valid UTF-8.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

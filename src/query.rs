@@ -1,6 +1,8 @@
 //! Interactive query-replace: step through matches one at a time, deciding
 //! `y` (replace), `n` (skip), `!` (replace the rest), or `q` (quit) for each.
 
+#![warn(clippy::pedantic)]
+
 use regex::Regex;
 
 /// The user's choice for the current match in a query-replace session.

@@ -5,6 +5,8 @@
 //! metric stays `None` until its computation finishes, so the panel can show a
 //! "computing…" placeholder. The host owns the threads and rendering.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

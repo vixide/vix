@@ -13,6 +13,8 @@
 //! converts them to/from char offsets with [`crate::lsp_core::position`], since only it
 //! holds the buffer text.
 
+#![warn(clippy::pedantic)]
+
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -209,7 +211,7 @@ impl Lsp {
         server.docs.insert(uri.clone(), 1);
         server.send(message::notification(
             "textDocument/didOpen",
-            message::did_open_params(&uri, &lang, 1, text),
+            &message::did_open_params(&uri, &lang, 1, text),
         ));
     }
 
@@ -226,7 +228,7 @@ impl Lsp {
         let v = *version;
         server.send(message::notification(
             "textDocument/didChange",
-            message::did_change_full_params(&uri, v, text),
+            &message::did_change_full_params(&uri, v, text),
         ));
     }
 
@@ -241,7 +243,7 @@ impl Lsp {
             && server.docs.remove(&uri).is_some() {
                 server.send(message::notification(
                     "textDocument/didClose",
-                    message::did_close_params(&uri),
+                    &message::did_close_params(&uri),
                 ));
             }
     }
@@ -257,7 +259,7 @@ impl Lsp {
         }
         let id = server.alloc_id();
         server.pending.insert(id, kind);
-        server.send(message::request(id, method, message::position_params(&uri, line, character)));
+        server.send(message::request(id, method, &message::position_params(&uri, line, character)));
     }
 
     /// Request hover info at `(line, character)`.
@@ -378,7 +380,7 @@ impl Lsp {
             server.encoding = message::parse_position_encoding(result);
         }
         server.ready = true;
-        server.write_now(&message::notification("initialized", json!({})));
+        server.write_now(&message::notification("initialized", &json!({})));
         let queued = std::mem::take(&mut server.queue);
         for m in queued {
             server.write_now(&m);
@@ -406,8 +408,8 @@ impl Lsp {
     /// Politely shut down every server (best-effort; called on exit).
     pub fn shutdown(&mut self) {
         for (_, mut server) in self.servers.drain() {
-            server.write_now(&message::request(server.next_id, "shutdown", Value::Null));
-            server.write_now(&message::notification("exit", Value::Null));
+            server.write_now(&message::request(server.next_id, "shutdown", &Value::Null));
+            server.write_now(&message::notification("exit", &Value::Null));
             let _ = server.child.kill();
         }
     }
@@ -441,7 +443,7 @@ fn spawn(config: &ServerConfig, root_uri: Option<&str>) -> Option<Server> {
     let init = message::request(
         INITIALIZE_ID,
         "initialize",
-        message::initialize_params(Some(std::process::id()), root_uri),
+        &message::initialize_params(Some(std::process::id()), root_uri),
     );
     server.write_now(&init);
     Some(server)

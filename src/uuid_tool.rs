@@ -20,6 +20,8 @@
 //! namespace, so each invocation yields a distinct — but correctly constructed —
 //! identifier. The deterministic core is [`v3_named`] / [`v5_named`].
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

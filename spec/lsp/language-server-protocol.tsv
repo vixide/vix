@@ -1,0 +1,26 @@
+initialize / initialized / shutdown / exit	Server lifecycle
+completionItem/resolve	Additional details and auto-import via additionalTextEdits
+textDocument/codeAction	Source actions (organize imports, fix all) on save and via command palette
+textDocument/codeLens	Inline actions above functions
+textDocument/completion	Auto-completion with live filtering and debounce
+textDocument/definition	Jump to definition
+textDocument/didChange	Notify server of file changes (full document sync)
+textDocument/didClose	Notify server when a file is closed
+textDocument/didOpen	Notify server when a file is opened
+textDocument/didSave	Save notifications to trigger server re-analysis
+textDocument/documentHighlight	Highlight other occurrences of symbol under cursor
+textDocument/documentSymbol	Outline view, go-to-symbol within file
+textDocument/foldingRange	Code folding
+textDocument/formatting	Format entire document
+textDocument/hover	Type information and documentation popup
+textDocument/implementation	Jump to implementation
+textDocument/inlayHint	Inline type annotations
+textDocument/linkedEditingRange	Linked editing (e.g. rename HTML tag pairs)
+textDocument/publishDiagnostics	Error/warning squiggles, problems panel, hover popup, status bar
+textDocument/rangeFormatting	Format selected range
+textDocument/references	Find all references (results in bottom panel)
+textDocument/rename	Rename symbol across files via workspace edits
+textDocument/selectionRange	Smart expand/shrink selection
+textDocument/signatureHelp	Parameter hints on ( and ,
+textDocument/typeDefinition	Jump to type definition
+workspace/symbol	Search symbols across the project

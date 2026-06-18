@@ -1,3 +1,4 @@
+#![warn(clippy::pedantic)]
 use std::time::Duration;
 use crate::editor_core::click::{ClickKind, ClickTracker};
 use crate::editor_core::code::Code;
@@ -132,7 +133,7 @@ impl Editor {
         let code = Code::new(text, lang, custom_highlights.clone())
             .or_else(|_| Code::new(text, "text", custom_highlights))?;
 
-        let theme = Self::build_theme(&theme);
+        let theme = Self::build_theme(theme);
         let highlights_cache = RefCell::new(HashMap::new());
 
         Ok(Self {
@@ -317,7 +318,7 @@ impl Editor {
     pub fn cursor_from_mouse(
         &self, mouse_x: u16, mouse_y: u16, area: &Rect
     ) -> Option<usize> {
-        let line_number_width = self.get_line_number_width() as u16;
+        let line_number_width = u16::try_from(self.get_line_number_width()).unwrap_or(u16::MAX);
     
         if mouse_y < area.top()
             || mouse_y >= area.bottom()
@@ -493,8 +494,8 @@ impl Editor {
         }
     }
 
-    fn build_theme(theme: &Vec<(&str, &str)>) -> Theme {
-        theme.iter()
+    fn build_theme(theme: Vec<(&str, &str)>) -> Theme {
+        theme.into_iter()
             .map(|(name, hex)| {
                 let (r, g, b) = utils::rgb(hex);
                 (name.to_string(), Style::default().fg(Color::Rgb(r, g, b)))
@@ -811,8 +812,8 @@ impl Editor {
             let relative_visual_col = cursor_visual_col.saturating_sub(offset_visual_col);
             let visible_x = relative_visual_col.min(max_x);
         
-            let cursor_x = area.left() + (line_number_width + visible_x) as u16;
-            let cursor_y = area.top() + (cursor_line - self.offset_y) as u16;
+            let cursor_x = area.left() + u16::try_from(line_number_width + visible_x).unwrap_or(u16::MAX);
+            let cursor_y = area.top() + u16::try_from(cursor_line - self.offset_y).unwrap_or(u16::MAX);
         
             if cursor_x < area.right() && cursor_y < area.bottom() {
                 return Some((cursor_x, cursor_y));

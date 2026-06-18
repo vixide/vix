@@ -5,6 +5,8 @@
 //! [`crate::lsp_core::frame::encode`]; parsers take the already-decoded `result`/`params`
 //! value and extract a small, host-friendly shape.
 
+#![warn(clippy::pedantic)]
+
 use serde_json::{json, Value};
 
 use crate::lsp_core::{CompletionItem, Diagnostic, Location, Position, Range, Severity};
@@ -13,13 +15,13 @@ use crate::lsp_core::{CompletionItem, Diagnostic, Location, Position, Range, Sev
 
 /// A JSON-RPC request envelope (expects a response with the same `id`).
 #[must_use]
-pub fn request(id: i64, method: &str, params: Value) -> Value {
+pub fn request(id: i64, method: &str, params: &Value) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params })
 }
 
 /// A JSON-RPC notification envelope (no response).
 #[must_use]
-pub fn notification(method: &str, params: Value) -> Value {
+pub fn notification(method: &str, params: &Value) -> Value {
     json!({ "jsonrpc": "2.0", "method": method, "params": params })
 }
 
@@ -227,11 +229,11 @@ mod tests {
 
     #[test]
     fn request_and_notification_envelopes() {
-        let r = request(7, "textDocument/hover", json!({}));
-        assert_eq!(r["id"], 7);
-        assert_eq!(r["method"], "textDocument/hover");
-        let n = notification("initialized", json!({}));
-        assert!(n.get("id").is_none());
+        let req = request(7, "textDocument/hover", &json!({}));
+        assert_eq!(req["id"], 7);
+        assert_eq!(req["method"], "textDocument/hover");
+        let note = notification("initialized", &json!({}));
+        assert!(note.get("id").is_none());
     }
 
     #[test]

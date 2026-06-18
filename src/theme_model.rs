@@ -11,6 +11,8 @@
 //! Theme names are plain strings (also the value persisted in settings), so this
 //! crate stays free of any localization dependency.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

@@ -3,6 +3,8 @@
 //! The TOML document is parsed into a generic value and re-serialized as
 //! pretty-printed JSON.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

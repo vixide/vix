@@ -3,6 +3,8 @@
 //! CSV quoting is honored on the way in; the tab-separated output has no quoting.
 //! See [`crate::convert_tabular`] for the shared logic.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

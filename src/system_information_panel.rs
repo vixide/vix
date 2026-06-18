@@ -9,6 +9,8 @@
 //! data (via [`sysinfo`]) and tracks the highlighted row and scroll offset; the
 //! host renders the table, maps clicks to rows, and inserts the chosen value.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -132,6 +134,15 @@ impl Panel {
     }
 }
 
+/// Convert a `u64` to the nearest `f64` without a lossy `as` cast. The high and
+/// low 32-bit halves are each representable exactly, so the single rounding on
+/// the recombining add matches what `n as f64` would produce.
+fn u64_to_f64(n: u64) -> f64 {
+    let high = u32::try_from(n >> 32).unwrap_or(u32::MAX);
+    let low = u32::try_from(n & 0xFFFF_FFFF).unwrap_or(u32::MAX);
+    f64::from(high) * 4_294_967_296.0 + f64::from(low)
+}
+
 /// Format a byte count as a human-readable size (`16.0 GiB`).
 #[must_use]
 pub fn human_bytes(n: u64) -> String {
@@ -139,7 +150,7 @@ pub fn human_bytes(n: u64) -> String {
     if n < 1024 {
         return format!("{n} B");
     }
-    let mut value = n as f64;
+    let mut value = u64_to_f64(n);
     let mut unit = 0;
     while value >= 1024.0 && unit < UNITS.len() - 1 {
         value /= 1024.0;
@@ -175,21 +186,20 @@ fn env_or(keys: &[&str], fallback: &str) -> String {
 
 /// Gather a fresh snapshot of host system information into display rows.
 #[must_use]
-#[allow(clippy::vec_init_then_push)] // rows are appended conditionally below
 pub fn gather() -> Vec<Row> {
     let mut sys = System::new_all();
     sys.refresh_all();
     let unknown = "unknown";
-    let mut rows = Vec::new();
 
-    rows.push(Row::heading("Operating System"));
-    rows.push(Row::pair("Name", System::name().unwrap_or_else(|| unknown.into())));
-    rows.push(Row::pair("Version", System::long_os_version().unwrap_or_else(|| unknown.into())));
-    rows.push(Row::pair("Kernel", System::kernel_version().unwrap_or_else(|| unknown.into())));
-    rows.push(Row::pair("Hostname", System::host_name().unwrap_or_else(|| unknown.into())));
-    rows.push(Row::pair("Architecture", std::env::consts::ARCH));
-
-    rows.push(Row::heading("CPU"));
+    let mut rows = vec![
+        Row::heading("Operating System"),
+        Row::pair("Name", System::name().unwrap_or_else(|| unknown.into())),
+        Row::pair("Version", System::long_os_version().unwrap_or_else(|| unknown.into())),
+        Row::pair("Kernel", System::kernel_version().unwrap_or_else(|| unknown.into())),
+        Row::pair("Hostname", System::host_name().unwrap_or_else(|| unknown.into())),
+        Row::pair("Architecture", std::env::consts::ARCH),
+        Row::heading("CPU"),
+    ];
     if let Some(cpu) = sys.cpus().first() {
         let brand = cpu.brand().trim();
         if !brand.is_empty() {

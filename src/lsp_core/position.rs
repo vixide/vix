@@ -6,6 +6,8 @@
 //! scalar values (chars). These helpers convert a *column within a single line*
 //! both ways; the host pairs them with line-start offsets to map whole positions.
 
+#![warn(clippy::pedantic)]
+
 /// The position encoding negotiated with the server (`positionEncoding` in the
 /// initialize result), deciding what a `character` column counts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -34,8 +36,8 @@ impl Encoding {
     /// The number of code units one char occupies in this encoding.
     fn units(self, ch: char) -> u32 {
         match self {
-            Encoding::Utf8 => ch.len_utf8() as u32,
-            Encoding::Utf16 => ch.len_utf16() as u32,
+            Encoding::Utf8 => u32::try_from(ch.len_utf8()).unwrap_or(u32::MAX),
+            Encoding::Utf16 => u32::try_from(ch.len_utf16()).unwrap_or(u32::MAX),
             Encoding::Utf32 => 1,
         }
     }

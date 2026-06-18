@@ -5,6 +5,8 @@
 //! `regex` engine as Find/Replace. The host renders the [`Tester`]; this module
 //! holds the fields and computes [`Tester::result`].
 
+#![warn(clippy::pedantic)]
+
 /// Which field the regex-tester dialog is editing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Field {

@@ -8,6 +8,8 @@
 //! [`Panel`] tracks the highlighted row and scroll offset. The host renders the
 //! rows, maps clicks to rows, and inserts the chosen hex.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

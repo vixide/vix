@@ -1,5 +1,7 @@
 //! Filesystem helpers for the explorer's copy / cut / paste / delete.
 
+#![warn(clippy::pedantic)]
+
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};

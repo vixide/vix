@@ -3,6 +3,8 @@
 //! The YAML document is parsed into a generic value and re-serialized as
 //! pretty-printed JSON, so scalars, sequences and mappings all carry over.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

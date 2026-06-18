@@ -2,6 +2,8 @@
 //!
 //! Parses `CommonMark` with `pulldown-cmark` and renders the HTML fragment.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

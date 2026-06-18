@@ -13,6 +13,8 @@
 //! (the View → Keymap submenu is built from [`KEYMAPS`]) and maps it onto key
 //! bindings.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

@@ -8,6 +8,8 @@
 //! Edits run directly on the rope in one undo transaction, processing carets in
 //! ascending order with a running offset so each edit stays valid.
 
+#![warn(clippy::pedantic)]
+
 // Offset bookkeeping mixes `usize` positions with a signed running shift; the
 // values are small in-buffer offsets, so these casts cannot realistically wrap.
 #![allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
@@ -28,9 +30,13 @@ pub struct Caret {
 /// Which arrow movement to apply to every caret.
 #[derive(Clone, Copy)]
 pub enum CaretMove {
+    /// Move every caret one character to the left.
     Left,
+    /// Move every caret one character to the right.
     Right,
+    /// Move every caret one line up.
     Up,
+    /// Move every caret one line down.
     Down,
 }
 

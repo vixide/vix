@@ -7,6 +7,8 @@
 //! replacement-template [`unescape`]. All operate on `&str` with **character**
 //! offsets; the host owns the buffer and applies the returned text.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -169,6 +171,9 @@ impl PathFilter {
 }
 
 /// State of the find / find-and-replace box.
+// Independent search toggles (replacing/interactive/case/word/regex); grouping
+// them only relocates the lint and adds noise at every call site.
+#[allow(clippy::struct_excessive_bools)]
 pub struct SearchBar {
     /// Search-pattern text.
     pub query: String,

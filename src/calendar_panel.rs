@@ -6,6 +6,8 @@
 //! stays unit-testable without a terminal. The live date/time strings (local,
 //! UTC, ISO week, active zone) moved to `vix-clock-panel`.
 
+#![warn(clippy::pedantic)]
+
 use jiff::civil::Date;
 use jiff::{ToSpan, Zoned};
 
@@ -38,12 +40,12 @@ pub struct MonthGrid {
 pub fn month_grid(month: Date) -> MonthGrid {
     let first = first_of_month(month);
     // 0 = Monday .. 6 = Sunday — the column the 1st lands in.
-    let lead = first.weekday().to_monday_zero_offset() as usize;
-    let days = first.days_in_month() as u8;
+    let lead = usize::try_from(first.weekday().to_monday_zero_offset()).unwrap_or(0);
+    let days = u8::try_from(first.days_in_month()).unwrap_or(0);
 
     let now = now_local().date();
     let today = (now.year() == first.year() && now.month() == first.month())
-        .then_some(now.day() as u8);
+        .then_some(u8::try_from(now.day()).unwrap_or(0));
 
     let mut weeks: Vec<[Option<u8>; 7]> = Vec::new();
     let mut week = [None; 7];
@@ -134,7 +136,7 @@ impl Calendar {
     #[must_use] 
     pub fn selected_day_in_shown(&self) -> Option<u8> {
         (self.selected.year() == self.shown.year() && self.selected.month() == self.shown.month())
-            .then_some(self.selected.day() as u8)
+            .then_some(u8::try_from(self.selected.day()).unwrap_or(0))
     }
 
     /// The selected date formatted with a `strftime` `pattern`.
@@ -184,7 +186,7 @@ impl Calendar {
     /// of the displayed month. The host chooses the pattern (e.g. per locale).
     #[must_use] 
     pub fn format_day(&self, day: u8, pattern: &str) -> Option<String> {
-        let date = Date::new(self.shown.year(), self.shown.month(), day as i8).ok()?;
+        let date = Date::new(self.shown.year(), self.shown.month(), i8::try_from(day).ok()?).ok()?;
         Some(date.strftime(pattern).to_string())
     }
 }

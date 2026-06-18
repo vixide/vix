@@ -1,3 +1,6 @@
+#![warn(clippy::pedantic)]
+/// Return the language name inferred from a filename's extension, or `"unknown"`.
+#[must_use] 
 pub fn get_lang(filename: &str) -> String {
 
     let extension = std::path::Path::new(filename)
@@ -27,6 +30,8 @@ pub fn get_lang(filename: &str) -> String {
     .to_string()
 }
 
+/// Return the default indentation string for a language (spaces or a tab).
+#[must_use] 
 pub fn indent(lang: &str) -> String {
     match lang {
         "rust" |"python" | "php" | "toml" | "c"  | "cpp" |
@@ -41,6 +46,8 @@ pub fn indent(lang: &str) -> String {
     }
 }
 
+/// Return the line-comment prefix for a language (e.g. `"//"`, `"#"`, `"--"`).
+#[must_use] 
 pub fn comment(lang: &str) -> &'static str {
     match lang {
         "python" | "shell" | "toml" | "yaml" => "#",
@@ -49,6 +56,8 @@ pub fn comment(lang: &str) -> &'static str {
     }
 }
 
+/// Count how many whole `indent_unit` strings prefix `line`, up to `max_col` columns.
+#[must_use] 
 pub fn count_indent_units(
     line: ropey::RopeSlice<'_>, 
     indent_unit: &str, 
@@ -76,6 +85,10 @@ pub fn count_indent_units(
     count
 }
 
+/// Parse a `#RRGGBB` (or `RRGGBB`) hex string into an `(r, g, b)` triple.
+///
+/// Any component that is missing or invalid is treated as `0`.
+#[must_use] 
 pub fn rgb(hex: &str) -> (u8, u8, u8) {
     let hex = hex.trim_start_matches('#');
     let component = |range: std::ops::Range<usize>| {
@@ -88,6 +101,7 @@ pub fn rgb(hex: &str) -> (u8, u8, u8) {
 
 /// Calculate end position by walking through the text
 /// Returns (`end_row`, `end_col`) starting from (`start_row`, `start_col`)
+#[must_use] 
 pub fn calculate_end_position(
     start_row: usize, start_col: usize, text: &str
 ) -> (usize, usize) {

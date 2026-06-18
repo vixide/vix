@@ -9,6 +9,8 @@
 //! | `@`    | Symbols (file)     |
 //! | `@@`   | Symbols (workspace)|
 
+#![warn(clippy::pedantic)]
+
 use std::path::PathBuf;
 
 /// Which palette sub-mode is active, chosen by the input's leading prefix.

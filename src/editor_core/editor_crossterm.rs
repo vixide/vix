@@ -1,3 +1,4 @@
+#![warn(clippy::pedantic)]
 use crate::editor_core::actions::{ToggleComment, Redo, Undo, Copy, Paste, Cut, DeleteLine, Duplicate, SelectAll, MoveLeft, MoveRight, MoveUp, MoveDown, Delete, InsertNewline, InsertText, Indent, UnIndent};
 use crate::editor_core::editor::Editor;
 use crate::editor_core::multicursor::CaretMove;

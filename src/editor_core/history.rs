@@ -1,6 +1,8 @@
+#![warn(clippy::pedantic)]
 use std::collections::VecDeque;
 use crate::editor_core::code::{EditBatch};
 
+/// A bounded undo/redo stack of edit batches.
 pub struct History {
     index: usize,
     max_items: usize,
@@ -8,6 +10,8 @@ pub struct History {
 }
 
 impl History {
+    /// Create an empty history that keeps at most `max_items` edit batches.
+    #[must_use] 
     pub fn new(max_items: usize) -> Self {
         Self {
             index: 0,
@@ -16,6 +20,7 @@ impl History {
         }
     }
 
+    /// Push a new edit batch, discarding any redo entries and the oldest batch if full.
     pub fn push(&mut self, batch: EditBatch) {
         while self.edits.len() > self.index {
             self.edits.pop_back();
@@ -30,6 +35,7 @@ impl History {
         self.index += 1;
     }
 
+    /// Step back one batch and return it, or `None` if at the oldest state.
     pub fn undo(&mut self) -> Option<EditBatch> {
         if self.index == 0 {
             None
@@ -39,6 +45,7 @@ impl History {
         }
     }
 
+    /// Step forward one batch and return it, or `None` if at the newest state.
     pub fn redo(&mut self) -> Option<EditBatch> {
         if self.index >= self.edits.len() {
             None

@@ -7,6 +7,8 @@
 //! writes [`frame::encode`]d requests to its stdin — so everything here stays
 //! synchronous and unit-testable with no IO.
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

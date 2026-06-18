@@ -11,6 +11,8 @@
 //! The base units are: metre (length), gram (mass), kelvin (temperature), byte
 //! (data) and second (time).
 
+#![warn(clippy::pedantic)]
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -183,8 +185,13 @@ impl Converter {
             Focus::To => &mut self.to,
             Focus::Value => return,
         };
-        let n = UNITS.len() as i32;
-        *slot = (((*slot as i32 + delta) % n + n) % n) as usize;
+        let count = i64::try_from(UNITS.len()).unwrap_or(i64::MAX);
+        if count == 0 {
+            return;
+        }
+        let current = i64::try_from(*slot).unwrap_or(0);
+        let next = (current + i64::from(delta)).rem_euclid(count);
+        *slot = usize::try_from(next).unwrap_or(0);
     }
 
     /// The converted output value, if the typed number parses and the units are
@@ -221,7 +228,9 @@ fn unit_index(label: &str) -> Option<usize> {
 /// Format a number without a trailing `.0`, trimming float noise to 6 decimals.
 fn format_number(v: f64) -> String {
     if v.fract() == 0.0 && v.abs() < 1e15 {
-        return format!("{}", v as i64);
+        // Integer-valued: `f64`'s `Display` prints it without a trailing `.0`.
+        // Adding 0.0 normalizes `-0.0` to `0.0` to match the prior `as i64`.
+        return format!("{}", v + 0.0);
     }
     let s = format!("{v:.6}");
     let trimmed = s.trim_end_matches('0').trim_end_matches('.');

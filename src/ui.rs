@@ -1,6 +1,8 @@
 //! All rendering. `draw` lays out the frame, records pane rectangles for mouse
 //! hit-testing, and delegates to per-pane helpers.
 
+#![warn(clippy::pedantic)]
+
 use ratatui::prelude::*;
 use ratatui::widgets::{
     Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap,
@@ -137,6 +139,12 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         draw_status_bar(app, frame, r);
     }
 
+    draw_overlays(app, frame, area, rows[0]);
+}
+
+/// Draw any active overlay on top of the base frame. Split out of `draw` to keep
+/// each function focused; behavior is identical to inlining this dispatch.
+fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     // Overlays.
     if app.show_calendar {
         draw_calendar(app, frame, area);
@@ -146,7 +154,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     }
     if app.menu.is_open() {
         if let Some(i) = app.menu.open {
-            app.layout.menu_dropdown = menu_dropdown_rect(area, rows[0], i);
+            app.layout.menu_dropdown = menu_dropdown_rect(area, menu_bar, i);
         }
         draw_menu_dropdown(app, frame);
     }
@@ -201,6 +209,12 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.html_panel.is_some() {
         draw_html_panel(app, frame, area);
     }
+    draw_overlays_aux(app, frame, area);
+}
+
+/// Second half of the overlay dispatch (split from `draw_overlays` to satisfy the
+/// per-function line limit). Behavior is identical to inlining this dispatch.
+fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.system_info.is_some() {
         draw_system_info(app, frame, area);
     }
@@ -422,8 +436,8 @@ fn draw_completion(app: &App, frame: &mut Frame) {
         .map(|it| it.label.chars().count() + it.detail.as_ref().map_or(0, |d| d.chars().count() + 3))
         .max()
         .unwrap_or(10);
-    let width = (widest as u16 + 2).clamp(16, area.width.saturating_sub(2));
-    let height = max_rows as u16 + 2;
+    let width = (u16::try_from(widest).unwrap_or(u16::MAX) + 2).clamp(16, area.width.saturating_sub(2));
+    let height = u16::try_from(max_rows).unwrap_or(u16::MAX) + 2;
 
     let (cx, cy) = cursor_screen_yx(app).unwrap_or((area.x + 2, area.y));
     // Below the cursor if it fits, else above.
@@ -476,7 +490,7 @@ fn draw_hover(app: &App, frame: &mut Frame) {
     for line in text.lines() {
         rows += line.chars().count() / inner_w + 1;
     }
-    let height = (rows as u16 + 2).clamp(3, 12.min(area.height));
+    let height = (u16::try_from(rows).unwrap_or(u16::MAX) + 2).clamp(3, 12.min(area.height));
 
     let (cx, cy) = cursor_screen_yx(app).unwrap_or((area.x + 2, area.y));
     let y = if cy + 1 + height <= area.y + area.height {
@@ -503,7 +517,7 @@ fn draw_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
         Some(d) => (d.title.clone(), d.body.clone(), d.editor.is_some()),
         None => return,
     };
-    let content_w = body.chars().count().max(title.chars().count()) as u16;
+    let content_w = u16::try_from(body.chars().count().max(title.chars().count())).unwrap_or(u16::MAX);
     let width = (content_w + 6).clamp(16, area.width);
     let height = 5u16.min(area.height); // border + body + blank + Ok + border
     let rect = Rect {
@@ -829,7 +843,7 @@ fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) {
 
 fn draw_confirm(app: &App, frame: &mut Frame, area: Rect) {
     let Some(c) = app.confirm.as_ref() else { return };
-    let width = (c.message.chars().count() as u16 + 6).min(area.width);
+    let width = (u16::try_from(c.message.chars().count()).unwrap_or(u16::MAX) + 6).min(area.width);
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
         y: area.y + area.height / 3,
@@ -852,7 +866,7 @@ fn draw_unsaved(app: &App, frame: &mut Frame, area: Rect) {
     let Some(u) = app.unsaved.as_ref() else { return };
     let message = t!("ui.unsaved_prompt", name = u.name).to_string();
     let choices = t!("ui.unsaved_choices");
-    let width = (message.chars().count().max(choices.chars().count()) as u16 + 6).min(area.width);
+    let width = (u16::try_from(message.chars().count().max(choices.chars().count())).unwrap_or(u16::MAX) + 6).min(area.width);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
         y: area.y + area.height / 3,
@@ -890,7 +904,7 @@ fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     let rows = app.git_status.len().max(1);
     let width = 64u16.min(area.width);
     let max_rows = area.height.saturating_sub(4).max(1);
-    let visible = (rows as u16).min(max_rows);
+    let visible = u16::try_from(rows).unwrap_or(u16::MAX).min(max_rows);
     let height = (visible + 4).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
@@ -950,7 +964,7 @@ fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         x: chunks[0].x,
         y: chunks[0].y,
         width: chunks[0].width,
-        height: (app.git_status.len() as u16).min(chunks[0].height),
+        height: u16::try_from(app.git_status.len()).unwrap_or(u16::MAX).min(chunks[0].height),
     };
 }
 
@@ -961,8 +975,8 @@ fn draw_context_menu(app: &mut App, frame: &mut Frame, area: Rect) {
         CONTEXT_ITEMS.iter().map(|&(label, action)| {
             if action == "menu.separator" { String::new() } else { t!(label).to_string() }
         }).collect();
-    let width = (labels.iter().map(|l| l.chars().count()).max().unwrap_or(8) as u16 + 4).min(area.width);
-    let height = (CONTEXT_ITEMS.len() as u16 + 2).min(area.height);
+    let width = (u16::try_from(labels.iter().map(|l| l.chars().count()).max().unwrap_or(8)).unwrap_or(u16::MAX) + 4).min(area.width);
+    let height = (u16::try_from(CONTEXT_ITEMS.len()).unwrap_or(u16::MAX) + 2).min(area.height);
     // Clamp so the menu stays on screen near the click.
     let x = cm.x.min(area.right().saturating_sub(width));
     let y = cm.y.min(area.bottom().saturating_sub(height));
@@ -1009,9 +1023,9 @@ fn draw_spell_suggest(app: &mut App, frame: &mut Frame, area: Rect) {
         .unwrap_or(0)
         .max(title.chars().count())
         .max(hint.chars().count());
-    let width = (widest as u16 + 6).min(area.width);
+    let width = (u16::try_from(widest).unwrap_or(u16::MAX) + 6).min(area.width);
     // Borders (2) + suggestion rows + hint (1).
-    let height = (rows as u16 + 3).min(area.height);
+    let height = (u16::try_from(rows).unwrap_or(u16::MAX) + 3).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
         y: area.y + area.height.saturating_sub(height) / 3,
@@ -1055,7 +1069,7 @@ fn draw_spell_suggest(app: &mut App, frame: &mut Frame, area: Rect) {
         x: chunks[0].x,
         y: chunks[0].y,
         width: chunks[0].width,
-        height: (p.suggestions.len() as u16).min(chunks[0].height),
+        height: u16::try_from(p.suggestions.len()).unwrap_or(u16::MAX).min(chunks[0].height),
     };
 }
 
@@ -1072,7 +1086,7 @@ fn draw_list_chooser(
     selected: usize,
 ) -> Rect {
     let width = 34u16.min(area.width);
-    let height = (labels.len() as u16 + 4).min(area.height);
+    let height = (u16::try_from(labels.len()).unwrap_or(u16::MAX) + 4).min(area.height);
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
         y: area.y + area.height / 3,
@@ -1227,7 +1241,7 @@ fn menu_offsets() -> Vec<u16> {
     let mut pos: u16 = 1;
     for m in menus() {
         offsets.push(pos);
-        pos += m.title().chars().count() as u16 + 2;
+        pos += u16::try_from(m.title().chars().count()).unwrap_or(u16::MAX) + 2;
     }
     offsets
 }
@@ -1292,7 +1306,7 @@ fn item_right(it: &crate::menu::Item) -> String {
 /// space (= 4), plus a 1-column gap so the label and the right indicator never
 /// touch. Minimum 14.
 fn dropdown_width(items: &[crate::menu::Item]) -> u16 {
-    items
+    let w = items
         .iter()
         .map(|it| {
             if it.is_separator() {
@@ -1304,7 +1318,8 @@ fn dropdown_width(items: &[crate::menu::Item]) -> u16 {
         })
         .max()
         .unwrap_or(12)
-        .max(14) as u16
+        .max(14);
+    u16::try_from(w).unwrap_or(u16::MAX)
 }
 
 /// Geometry of the dropdown for the menu at `index`. Shared by the renderer and
@@ -1314,7 +1329,7 @@ pub fn menu_dropdown_rect(frame_area: Rect, bar: Rect, index: usize) -> Rect {
     let def = &menus()[index];
     let x = bar.x + menu_offsets()[index];
     let width = dropdown_width(def.items);
-    let height = def.items.len() as u16 + 2;
+    let height = u16::try_from(def.items.len()).unwrap_or(u16::MAX) + 2;
     let y = bar.y + 1;
     Rect {
         x: x.min(frame_area.width.saturating_sub(width)),
@@ -1394,9 +1409,9 @@ fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
         && let Some(subitems) = app.menu.submenu_items() {
             let fa = frame.area();
             let sub_w = dropdown_width(subitems);
-            let sub_h = subitems.len() as u16 + 2;
+            let sub_h = u16::try_from(subitems.len()).unwrap_or(u16::MAX) + 2;
             let sub_x = (area.x + area.width).min(fa.width.saturating_sub(sub_w));
-            let parent_row = app.menu.item.unwrap_or(0) as u16;
+            let parent_row = u16::try_from(app.menu.item.unwrap_or(0)).unwrap_or(u16::MAX);
             let sub_y = (area.y + parent_row).min(fa.height.saturating_sub(sub_h));
             let sub_area = Rect {
                 x: sub_x,
@@ -1411,9 +1426,9 @@ fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
             if app.menu.subsubmenu_open()
                 && let Some(ssitems) = app.menu.subsubmenu_items() {
                     let ss_w = dropdown_width(ssitems);
-                    let ss_h = ssitems.len() as u16 + 2;
+                    let ss_h = u16::try_from(ssitems.len()).unwrap_or(u16::MAX) + 2;
                     let ss_x = (sub_area.x + sub_area.width).min(fa.width.saturating_sub(ss_w));
-                    let prow = app.menu.sub.unwrap_or(0) as u16;
+                    let prow = u16::try_from(app.menu.sub.unwrap_or(0)).unwrap_or(u16::MAX);
                     let ss_y = (sub_area.y + prow).min(fa.height.saturating_sub(ss_h));
                     let ss_area = Rect {
                         x: ss_x,
@@ -1507,7 +1522,11 @@ fn draw_explorer(app: &mut App, frame: &mut Frame, area: Rect) {
         .iter()
         .map(|spans| ListItem::new(Line::from(hslice_spans(spans, off, text_w))))
         .collect();
-    let list_area = Rect { width: text_w as u16, height: body_h as u16, ..inner };
+    let list_area = Rect {
+        width: u16::try_from(text_w).unwrap_or(u16::MAX),
+        height: u16::try_from(body_h).unwrap_or(u16::MAX),
+        ..inner
+    };
     let list = List::new(items).highlight_style(theme::selected());
     let mut state = ListState::default();
     if app.explorer.selected >= top && app.explorer.selected < top + visible {
@@ -1516,11 +1535,11 @@ fn draw_explorer(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_stateful_widget(list, list_area, &mut state);
 
     if vbar {
-        let sb = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: body_h as u16 };
+        let sb = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: u16::try_from(body_h).unwrap_or(u16::MAX) };
         draw_scrollbar(frame, sb, app.explorer.selected, total.saturating_sub(1));
     }
     app.layout.explorer_hscrollbar = if hbar {
-        let hb = Rect { x: inner.x, y: inner.y + inner.height - 1, width: text_w as u16, height: 1 };
+        let hb = Rect { x: inner.x, y: inner.y + inner.height - 1, width: u16::try_from(text_w).unwrap_or(u16::MAX), height: 1 };
         draw_hscrollbar(frame, hb, off, hmax);
         hb
     } else {
@@ -1586,7 +1605,7 @@ fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) {
     let (pane0, divider, pane1) = match dir {
         SplitDir::Vertical => {
             let total = inner.width;
-            let w0 = (u32::from(total) * u32::from(ratio) / 100) as u16;
+            let w0 = u16::try_from(u32::from(total) * u32::from(ratio) / 100).unwrap_or(u16::MAX);
             let w0 = w0.clamp(1, total.saturating_sub(2).max(1));
             (
                 Rect { width: w0, ..inner },
@@ -1601,7 +1620,7 @@ fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) {
         }
         SplitDir::Horizontal => {
             let total = inner.height;
-            let h0 = (u32::from(total) * u32::from(ratio) / 100) as u16;
+            let h0 = u16::try_from(u32::from(total) * u32::from(ratio) / 100).unwrap_or(u16::MAX);
             let h0 = h0.clamp(1, total.saturating_sub(2).max(1));
             (
                 Rect { height: h0, ..inner },
@@ -1680,7 +1699,7 @@ fn tint_ruler(frame: &mut Frame, text: Rect, editor: &super::editor::CodeEditor)
     if RULER_COLUMN < off {
         return; // scrolled past the guide
     }
-    let gutter = editor.gutter_width() as u16;
+    let gutter = u16::try_from(editor.gutter_width()).unwrap_or(u16::MAX);
     let Ok(rel) = u16::try_from(RULER_COLUMN - off) else { return };
     let x = text.x + gutter + rel;
     if x < text.x || x >= text.x + text.width {
@@ -1730,10 +1749,11 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
             draw_scrollbar(frame, vsb, pos, total.saturating_sub(1));
         }
         if hbar {
+            let gutter_w = u16::try_from(gutter).unwrap_or(u16::MAX);
             let hb = Rect {
-                x: text.x + gutter as u16,
+                x: text.x + gutter_w,
                 y: text.y + text.height - 1,
-                width: text.width - gutter as u16,
+                width: text.width - gutter_w,
                 height: 1,
             };
             draw_hscrollbar(frame, hb, off, maxw.saturating_sub(text_visible));
@@ -1799,7 +1819,7 @@ fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let items: Vec<ListItem> =
         rows.iter().map(|s| ListItem::new(Line::from(hslice_spans(s, off, text_w)))).collect();
-    let list_area = Rect { width: text_w as u16, height: body_h, ..inner };
+    let list_area = Rect { width: u16::try_from(text_w).unwrap_or(u16::MAX), height: body_h, ..inner };
     let list = List::new(items).highlight_style(theme::selected());
     let mut state = ListState::default();
     state.select(Some(app.messages.selected));
@@ -1809,7 +1829,7 @@ fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
         draw_scrollbar(frame, sb, app.messages.selected, total.saturating_sub(1));
     }
     app.layout.messages_hscrollbar = if hbar {
-        let hb = Rect { x: inner.x, y: inner.y + inner.height - 1, width: text_w as u16, height: 1 };
+        let hb = Rect { x: inner.x, y: inner.y + inner.height - 1, width: u16::try_from(text_w).unwrap_or(u16::MAX), height: 1 };
         draw_hscrollbar(frame, hb, off, hmax);
         hb
     } else {
@@ -1829,10 +1849,12 @@ fn draw_scrollbar(frame: &mut Frame, area: Rect, pos: usize, max: usize) {
         return;
     }
     let h = area.height as usize;
-    let frac = if max == 0 { 0.0 } else { pos.min(max) as f64 / max as f64 };
     let thumb_glyph = Span::styled("●", theme::title(true));
     let track_glyph = || Span::styled("│", theme::dim());
-    let thumb = (frac * h.saturating_sub(1) as f64).round() as usize;
+    // Proportional thumb position: round(pos.min(max) * (h-1) / max), done in
+    // integer math to match the previous float rounding for in-range values.
+    let span = h.saturating_sub(1);
+    let thumb = (pos.min(max) * span + max / 2).checked_div(max).unwrap_or(0);
     let mut lines: Vec<Line> = Vec::with_capacity(h);
     for r in 0..h {
         lines.push(Line::from(if r == thumb { thumb_glyph.clone() } else { track_glyph() }));
@@ -1849,8 +1871,10 @@ pub fn scrollbar_pos_from_row(area: Rect, row: u16, max: usize) -> usize {
         return 0;
     }
     let h = area.height;
-    let rel = f64::from(row.saturating_sub(area.y));
-    let pos = (rel / f64::from((h - 1).max(1)) * max as f64).round() as usize;
+    let rel = usize::from(row.saturating_sub(area.y));
+    let denom = usize::from((h - 1).max(1));
+    // round(rel / denom * max) in integer math.
+    let pos = (rel * max + denom / 2) / denom;
     pos.min(max)
 }
 
@@ -1862,8 +1886,9 @@ fn draw_hscrollbar(frame: &mut Frame, area: Rect, pos: usize, max: usize) {
         return;
     }
     let w = area.width as usize;
-    let frac = if max == 0 { 0.0 } else { pos.min(max) as f64 / max as f64 };
-    let thumb = (frac * w.saturating_sub(1) as f64).round() as usize;
+    // Proportional thumb position via integer rounding (mirrors `draw_scrollbar`).
+    let span = w.saturating_sub(1);
+    let thumb = (pos.min(max) * span + max / 2).checked_div(max).unwrap_or(0);
     let spans: Vec<Span> = (0..w)
         .map(|c| {
             if c == thumb {
@@ -1884,8 +1909,10 @@ pub fn scrollbar_pos_from_col(area: Rect, col: u16, max: usize) -> usize {
         return 0;
     }
     let w = area.width;
-    let rel = f64::from(col.saturating_sub(area.x));
-    let pos = (rel / f64::from((w - 1).max(1)) * max as f64).round() as usize;
+    let rel = usize::from(col.saturating_sub(area.x));
+    let denom = usize::from((w - 1).max(1));
+    // round(rel / denom * max) in integer math.
+    let pos = (rel * max + denom / 2) / denom;
     pos.min(max)
 }
 
@@ -1954,7 +1981,7 @@ fn draw_bottom_dock(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let text_w = text_w_full;
     let body_h = if hbar { inner.height - 1 } else { inner.height };
-    let text_area = Rect { width: text_w as u16, height: body_h, ..inner };
+    let text_area = Rect { width: u16::try_from(text_w).unwrap_or(u16::MAX), height: body_h, ..inner };
 
     let hmax = content_w.saturating_sub(text_w);
     app.bottom_hmax = hmax;
@@ -1973,7 +2000,7 @@ fn draw_bottom_dock(app: &mut App, frame: &mut Frame, area: Rect) {
         draw_scrollbar(frame, sb, app.bottom_dock.scroll, total.saturating_sub(view_h));
     }
     app.layout.bottom_hscrollbar = if hbar {
-        let hb = Rect { x: inner.x, y: inner.y + inner.height - 1, width: text_w as u16, height: 1 };
+        let hb = Rect { x: inner.x, y: inner.y + inner.height - 1, width: u16::try_from(text_w).unwrap_or(u16::MAX), height: 1 };
         draw_hscrollbar(frame, hb, off, hmax);
         hb
     } else {
@@ -2034,7 +2061,7 @@ fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Min(1),
-            Constraint::Length(right.chars().count() as u16 + 1),
+            Constraint::Length(u16::try_from(right.chars().count()).unwrap_or(u16::MAX) + 1),
         ])
         .split(inner);
 
@@ -2044,7 +2071,7 @@ fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
     // Record the git/branch segment's rectangle (the leftmost part of the
     // right-aligned right segment, after its 1-cell padding) so a click on the
     // branch indicator opens the Git panel.
-    let git_w = git.chars().count() as u16;
+    let git_w = u16::try_from(git.chars().count()).unwrap_or(u16::MAX);
     app.layout.git_status_bar = if git_w > 0 {
         Rect { x: cols[1].x + 1, y: cols[1].y, width: git_w.min(cols[1].width), height: 1 }
     } else {
@@ -2102,7 +2129,7 @@ fn draw_clock(app: &mut App, frame: &mut Frame, area: Rect) {
     let zone = crate::time_zone_model::active_name();
 
     let width = 38u16.min(area.width);
-    let height = (rows_data.len() as u16 + 3).min(area.height);
+    let height = (u16::try_from(rows_data.len()).unwrap_or(u16::MAX) + 3).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width + 1),
         y: area.y + 2,
@@ -2161,9 +2188,9 @@ fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(p) = app.nerd_palette.as_ref() else {
         return;
     };
-    let grid_w = COLS as u16 * NERD_CELL_W;
+    let grid_w = u16::try_from(COLS).unwrap_or(u16::MAX) * NERD_CELL_W;
     let width = (grid_w + 2).min(area.width);
-    let grid_rows = p.rows() as u16;
+    let grid_rows = u16::try_from(p.rows()).unwrap_or(u16::MAX);
     // Borders (2) + glyph rows + the selected-name row (1) + the hint row (1).
     let height = (grid_rows + 4).min(area.height);
     let rect = Rect {
@@ -2233,7 +2260,7 @@ fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     let width = 26u16.min(area.width);
     // Borders (2) + header (1) + rows + hint (1); cap rows so the box fits.
     let max_rows = area.height.saturating_sub(4).max(1);
-    let rows = (LEN as u16).min(max_rows);
+    let rows = u16::try_from(LEN).unwrap_or(u16::MAX).min(max_rows);
     let height = (rows + 4).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
@@ -2267,7 +2294,7 @@ fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     let p = app.ascii_panel.as_ref().unwrap();
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in p.scroll..(p.scroll + view_h).min(LEN) {
-        let code = idx as u8;
+        let code = u8::try_from(idx).unwrap_or(u8::MAX);
         let text = format!("  {:>3}  {:>2}   {}", ascii::dec(code), ascii::hex(code), ascii::label(code));
         if idx == p.selected {
             lines.push(Line::from(Span::styled(text, theme::selected())));
@@ -2285,7 +2312,7 @@ fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         x: chunks[1].x,
         y: chunks[1].y,
         width: chunks[1].width,
-        height: (view_h as u16).min(chunks[1].height),
+        height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[1].height),
     };
 }
 
@@ -2297,7 +2324,7 @@ fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     let width = 36u16.min(area.width);
     let max_rows = area.height.saturating_sub(4).max(1);
-    let rows = (total as u16).min(max_rows);
+    let rows = u16::try_from(total).unwrap_or(u16::MAX).min(max_rows);
     let height = (rows + 4).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
@@ -2360,7 +2387,7 @@ fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         x: chunks[1].x,
         y: chunks[1].y,
         width: row_area.width,
-        height: (view_h as u16).min(chunks[1].height),
+        height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[1].height),
     };
 }
 
@@ -2372,7 +2399,7 @@ fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     let width = 46u16.min(area.width);
     let max_rows = area.height.saturating_sub(4).max(1);
-    let rows = (total as u16).min(max_rows);
+    let rows = u16::try_from(total).unwrap_or(u16::MAX).min(max_rows);
     let height = (rows + 4).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
@@ -2433,7 +2460,7 @@ fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         x: chunks[1].x,
         y: chunks[1].y,
         width: row_area.width,
-        height: (view_h as u16).min(chunks[1].height),
+        height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[1].height),
     };
 }
 
@@ -2444,7 +2471,7 @@ fn draw_outline(app: &mut App, frame: &mut Frame, area: Rect) {
     let n = app.outline.as_ref().unwrap().len();
     let width = 48u16.min(area.width);
     let max_rows = area.height.saturating_sub(3).max(1);
-    let rows = (n as u16).min(max_rows);
+    let rows = u16::try_from(n).unwrap_or(u16::MAX).min(max_rows);
     let height = (rows + 3).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
@@ -2499,7 +2526,7 @@ fn draw_outline(app: &mut App, frame: &mut Frame, area: Rect) {
         x: chunks[0].x,
         y: chunks[0].y,
         width: chunks[0].width,
-        height: (view_h as u16).min(chunks[0].height),
+        height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[0].height),
     };
 }
 
@@ -2514,7 +2541,7 @@ fn draw_dashboard(app: &App, frame: &mut Frame, area: Rect) {
         (t!("ui.dashboard_commits"), num(d.commit_count)),
     ];
     let width = 52u16.min(area.width);
-    let height = (rows.len() as u16 + 4).min(area.height);
+    let height = (u16::try_from(rows.len()).unwrap_or(u16::MAX) + 4).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
         y: area.y + area.height.saturating_sub(height) / 3,
@@ -2555,7 +2582,7 @@ fn draw_contacts(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(total) = app.contacts.as_ref().map(crate::contact_panel::Panel::len) else { return };
     let width = 40u16.min(area.width);
     let max_rows = area.height.saturating_sub(3).max(1);
-    let rows = (total.max(1) as u16).min(max_rows);
+    let rows = u16::try_from(total.max(1)).unwrap_or(u16::MAX).min(max_rows);
     let height = (rows + 3).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
@@ -2604,7 +2631,7 @@ fn draw_contacts(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     let hint = Line::from(Span::styled(t!("ui.contacts_hint").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
-    app.layout.contacts = Rect { x: chunks[0].x, y: chunks[0].y, width: list_area.width, height: (view_h as u16).min(chunks[0].height) };
+    app.layout.contacts = Rect { x: chunks[0].x, y: chunks[0].y, width: list_area.width, height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[0].height) };
 }
 
 fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -2612,7 +2639,7 @@ fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
     let title = app.vcard.as_ref().map(crate::vcard_panel::Panel::title).unwrap_or_default();
     let width = 60u16.min(area.width);
     let max_rows = area.height.saturating_sub(3).max(1);
-    let rows = (total.max(1) as u16).min(max_rows);
+    let rows = u16::try_from(total.max(1)).unwrap_or(u16::MAX).min(max_rows);
     let height = (rows + 3).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
@@ -2658,7 +2685,7 @@ fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     let hint = Line::from(Span::styled(t!("ui.vcard_hint").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
-    app.layout.vcard = Rect { x: chunks[0].x, y: chunks[0].y, width: list_area.width, height: (view_h as u16).min(chunks[0].height) };
+    app.layout.vcard = Rect { x: chunks[0].x, y: chunks[0].y, width: list_area.width, height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[0].height) };
 }
 
 fn draw_snippets(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -2666,7 +2693,7 @@ fn draw_snippets(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(picker) = app.snippets.as_ref() else { return };
     let n = SNIPPETS.len();
     let width = 40u16.min(area.width).max(20);
-    let height = (n as u16 + 3).min(area.height);
+    let height = (u16::try_from(n).unwrap_or(u16::MAX) + 3).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
         y: area.y + area.height.saturating_sub(height) / 3,
@@ -2708,7 +2735,7 @@ fn draw_snippets(app: &mut App, frame: &mut Frame, area: Rect) {
         x: chunks[0].x,
         y: chunks[0].y,
         width: chunks[0].width,
-        height: (n as u16).min(chunks[0].height),
+        height: u16::try_from(n).unwrap_or(u16::MAX).min(chunks[0].height),
     };
 }
 
@@ -2763,7 +2790,7 @@ fn draw_text_info(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let width = 40u16.min(area.width).max(24);
-    let height = (n as u16 + 3).min(area.height);
+    let height = (u16::try_from(n).unwrap_or(u16::MAX) + 3).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
         y: area.y + area.height.saturating_sub(height) / 4,
@@ -2805,7 +2832,7 @@ fn draw_text_info(app: &mut App, frame: &mut Frame, area: Rect) {
         x: chunks[0].x,
         y: chunks[0].y,
         width: chunks[0].width,
-        height: (view_h as u16).min(chunks[0].height),
+        height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[0].height),
     };
 }
 
@@ -2816,7 +2843,7 @@ fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {
     let n = app.file_info.as_ref().unwrap().len();
     let width = 64u16.min(area.width);
     let max_rows = area.height.saturating_sub(3).max(1);
-    let rows = (n as u16).min(max_rows);
+    let rows = u16::try_from(n).unwrap_or(u16::MAX).min(max_rows);
     let height = (rows + 3).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
@@ -2863,7 +2890,7 @@ fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {
         x: chunks[0].x,
         y: chunks[0].y,
         width: chunks[0].width,
-        height: (view_h as u16).min(chunks[0].height),
+        height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[0].height),
     };
 }
 
@@ -2874,7 +2901,7 @@ fn draw_system_info(app: &mut App, frame: &mut Frame, area: Rect) {
     let n = app.system_info.as_ref().unwrap().len();
     let width = 60u16.min(area.width);
     let max_rows = area.height.saturating_sub(3).max(1);
-    let rows = (n as u16).min(max_rows);
+    let rows = u16::try_from(n).unwrap_or(u16::MAX).min(max_rows);
     let height = (rows + 3).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
@@ -2926,7 +2953,7 @@ fn draw_system_info(app: &mut App, frame: &mut Frame, area: Rect) {
         x: chunks[0].x,
         y: chunks[0].y,
         width: chunks[0].width,
-        height: (view_h as u16).min(chunks[0].height),
+        height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[0].height),
     };
 }
 
@@ -3100,7 +3127,7 @@ fn button_row(frame: &mut Frame, row: Rect, buttons: &[(String, Style)]) -> Vec<
     let right = row.x + row.width;
     for (i, (label, style)) in buttons.iter().enumerate() {
         let text = format!(" {label} ");
-        let w = text.chars().count() as u16;
+        let w = u16::try_from(text.chars().count()).unwrap_or(u16::MAX);
         if x >= right {
             break;
         }
@@ -3117,7 +3144,7 @@ fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(s) = app.search.as_ref() else { return };
     let replacing = s.replacing;
     let height = if replacing { 6 } else { 4 };
-    let width = (f32::from(area.width) * 0.7) as u16;
+    let width = area.width * 7 / 10;
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
         y: area.y + 1,
@@ -3217,7 +3244,7 @@ fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
     let Some(p) = app.prompt.as_ref() else { return };
     // The workspace→dock search prompt shows case/regex toggles on a second line.
     let toggles = matches!(p.kind, crate::app::PromptKind::SearchToDock);
-    let width = (f32::from(area.width) * 0.6) as u16;
+    let width = area.width * 6 / 10;
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
         y: area.y + area.height / 3,
