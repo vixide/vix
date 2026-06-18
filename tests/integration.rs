@@ -189,6 +189,16 @@ fn convert_markdown_to_html_action_transforms_buffer() {
 }
 
 #[test]
+fn convert_number_base_actions() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "255");
+    app.run_action("tools.convert.number.hex");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "0xff");
+    app.run_action("tools.convert.number.dec");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "255");
+}
+
+#[test]
 fn convert_jwt_decode_action() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhYmMifQ.sig");

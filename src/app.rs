@@ -2038,6 +2038,10 @@ impl App {
             }
             "tools.convert.unit" => self.open_unit_converter(),
             "tools.convert.jwt" => self.transform_selection_or_buffer_try(crate::jwt_tool::decode),
+            "tools.convert.number.dec" => self.transform_selection_or_buffer_try(crate::base_tool::to_dec),
+            "tools.convert.number.hex" => self.transform_selection_or_buffer_try(crate::base_tool::to_hex),
+            "tools.convert.number.bin" => self.transform_selection_or_buffer_try(crate::base_tool::to_bin),
+            "tools.convert.number.oct" => self.transform_selection_or_buffer_try(crate::base_tool::to_oct),
             "tools.format.json_pretty" => {
                 self.transform_selection_or_buffer_try(crate::format_tool::json_pretty);
             }
