@@ -105,6 +105,8 @@ pub enum PromptKind {
     GitGrep,
     /// Enter a query to search symbols across the project (LSP workspace/symbol).
     WorkspaceSymbol,
+    /// Enter the new name for the symbol under the cursor (LSP rename).
+    LspRename,
     /// Enter the file-explorer "include" path regex filter.
     ExplorerInclude,
     /// Enter the file-explorer "exclude" path regex filter.
@@ -734,6 +736,9 @@ pub struct App {
     macro_playing: bool,
     /// In-progress word-completion cycle (buffer-word autocomplete).
     complete_session: Option<CompleteSession>,
+    /// Cursor position captured when an LSP rename prompt was opened, used to
+    /// send the rename request on submit: `(file, 0-based line, character)`.
+    rename_at: Option<(PathBuf, u32, u32)>,
     /// Whether the workspace root is a git work tree (checked once at startup).
     pub git_repo: bool,
     /// Cached current git branch (or short hash when detached), when in a repo.
@@ -907,6 +912,7 @@ impl App {
             macro_keys: Vec::new(),
             macro_playing: false,
             complete_session: None,
+            rename_at: None,
             git_repo: false,
             git_branch: None,
             git_status: Vec::new(),
@@ -1473,6 +1479,10 @@ impl App {
             }
             KeyCode::F(12) => {
                 self.run_action("nav.goto_definition");
+                true
+            }
+            KeyCode::F(2) => {
+                self.run_action("lsp.rename");
                 true
             }
             KeyCode::F(6) => {
@@ -2079,6 +2089,7 @@ impl App {
             "lsp.hover" => self.lsp_hover(),
             "lsp.complete" => self.lsp_complete(),
             "lsp.diagnostics" => self.open_diagnostics_panel(),
+            "lsp.rename" => self.begin_lsp_rename(),
             _ => return false,
         }
         true
@@ -4161,6 +4172,7 @@ impl App {
                 crate::lsp::LspEvent::Edits(edits) => self.apply_lsp_edits(&edits),
                 crate::lsp::LspEvent::DocumentSymbols(syms) => self.show_document_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceSymbols(syms) => self.show_workspace_symbols(&syms),
+                crate::lsp::LspEvent::WorkspaceEdit(edits) => self.apply_workspace_edit(&edits),
             }
         }
         // Rebuild the active editor's diagnostic underlines every tick so they
@@ -8335,6 +8347,61 @@ impl App {
         }
     }
 
+    /// Begin an LSP rename: capture the cursor position and prompt for the new
+    /// name (seeded with the symbol under the cursor).
+    fn begin_lsp_rename(&mut self) {
+        let Some(path) = self.active_path() else {
+            self.status = t!("status.lsp_inactive").to_string();
+            return;
+        };
+        if !self.lsp.handles(&path) {
+            self.status = t!("status.lsp_inactive").to_string();
+            return;
+        }
+        let (line, character) = self.cursor_lsp_position(&path);
+        self.rename_at = Some((path, line, character));
+        let seed = self.symbol_under_cursor().unwrap_or_default();
+        self.prompt = Some(
+            Prompt::new(PromptKind::LspRename, t!("prompt.lsp_rename").to_string()).with_input(seed),
+        );
+    }
+
+    /// Apply a rename `WorkspaceEdit`: edit open buffers in place (marking them
+    /// dirty) and rewrite closed files on disk.
+    fn apply_workspace_edit(&mut self, edits: &[(PathBuf, Vec<(crate::lsp_core::Range, String)>)]) {
+        let mut files = 0usize;
+        for (path, file_edits) in edits {
+            if file_edits.is_empty() {
+                continue;
+            }
+            let enc = self.lsp.encoding_for(path);
+            if let Some(tab) = self
+                .editor
+                .tabs
+                .iter_mut()
+                .find(|t| t.path.as_deref() == Some(path.as_path()))
+            {
+                let text = tab.editor.get_content();
+                let new = apply_edits_to_text(&text, enc, file_edits);
+                if new != text {
+                    let caret = tab.editor.get_cursor().min(new.chars().count());
+                    tab.editor.set_content(&new);
+                    tab.editor.set_cursor(caret);
+                    tab.dirty = true;
+                    tab.preview = false;
+                    files += 1;
+                }
+            } else if let Ok(text) = std::fs::read_to_string(path) {
+                let new = apply_edits_to_text(&text, enc, file_edits);
+                if new != text && std::fs::write(path, new).is_ok() {
+                    files += 1;
+                }
+            }
+        }
+        self.refresh_git();
+        self.status = t!("status.renamed_in", n = files).to_string();
+    }
+
     /// Request the document symbols (outline) for the active file (LSP).
     fn request_document_symbols(&mut self) {
         if let Some(path) = self.active_path()
@@ -9059,6 +9126,14 @@ impl App {
                     self.lsp.request_workspace_symbols(&path, prompt.input.trim());
                 }
             }
+            PromptKind::LspRename => {
+                let new_name = prompt.input.trim().to_string();
+                if let Some((path, line, character)) = self.rename_at.take()
+                    && !new_name.is_empty()
+                {
+                    self.lsp.request_rename(&path, line, character, &new_name);
+                }
+            }
             PromptKind::ExplorerInclude => {
                 let exclude = self.explorer.exclude_filter.clone();
                 self.explorer.set_filter(prompt.input.trim(), &exclude);
@@ -9329,6 +9404,51 @@ fn lsp_pos_to_char(
     line_start + crate::lsp_core::position::col_to_char(&line_text, character, enc)
 }
 
+/// Apply LSP text edits to a plain string, resolving each `(line, character)`
+/// range to a char offset (encoding-aware) and splicing highest-offset-first so
+/// earlier offsets stay valid. Used for rename edits to files that may not be
+/// open in an editor tab.
+fn apply_edits_to_text(
+    text: &str,
+    enc: crate::lsp_core::Encoding,
+    edits: &[(crate::lsp_core::Range, String)],
+) -> String {
+    // Char offset at the start of each line (line N → offset), plus the line
+    // texts, so a position resolves to `line_start[line] + col_to_char(..)`.
+    let lines: Vec<&str> = text.split_inclusive('\n').collect();
+    let mut line_start = Vec::with_capacity(lines.len() + 1);
+    let mut acc = 0usize;
+    for l in &lines {
+        line_start.push(acc);
+        acc += l.chars().count();
+    }
+    line_start.push(acc); // total length, for a position past the last line
+    let resolve = |line: u32, character: u32| -> usize {
+        let li = line as usize;
+        if li >= lines.len() {
+            return acc;
+        }
+        line_start[li] + crate::lsp_core::position::col_to_char(lines[li], character, enc)
+    };
+    let mut resolved: Vec<(usize, usize, &str)> = edits
+        .iter()
+        .map(|(r, t)| {
+            let s = resolve(r.start.line, r.start.character);
+            let e = resolve(r.end.line, r.end.character);
+            (s.min(e), s.max(e), t.as_str())
+        })
+        .collect();
+    resolved.sort_by_key(|e| std::cmp::Reverse(e.0));
+    let mut chars: Vec<char> = text.chars().collect();
+    for (start, end, new_text) in resolved {
+        let (a, b) = (start.min(chars.len()), end.min(chars.len()));
+        if a <= b {
+            chars.splice(a..b, new_text.chars());
+        }
+    }
+    chars.into_iter().collect()
+}
+
 /// Convert a buffer char offset to an LSP `(line, character)` in `enc` units.
 fn char_to_lsp_pos(
     code: &crate::editor_core::code::Code,
@@ -9461,6 +9581,18 @@ mod tests {
     use super::*;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+
+    #[test]
+    fn apply_edits_to_text_renames_across_lines() {
+        use crate::lsp_core::{Encoding, Position, Range};
+        let text = "let foo = 1;\nbar(foo);\n";
+        // Replace `foo` on line 0 (cols 4..7) and line 1 (cols 4..7) with `baz`.
+        let edit = |line: u32, s: u32, e: u32| {
+            (Range { start: Position { line, character: s }, end: Position { line, character: e } }, "baz".to_string())
+        };
+        let out = apply_edits_to_text(text, Encoding::Utf16, &[edit(0, 4, 7), edit(1, 4, 7)]);
+        assert_eq!(out, "let baz = 1;\nbar(baz);\n");
+    }
 
     fn buffer_text(terminal: &Terminal<TestBackend>) -> String {
         terminal
