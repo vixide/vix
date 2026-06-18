@@ -696,6 +696,9 @@ pub struct App {
     pub show_status_bar: bool,
     /// Whether the editor's right-side scroll bar is shown.
     pub show_scrollbar: bool,
+    /// Overwrite (type-over) mode: typed characters replace the one under the
+    /// cursor instead of inserting. Session-only; toggled with `toggle_overwrite_mode`.
+    pub overwrite: bool,
     /// Whether the workspace root is a git work tree (checked once at startup).
     pub git_repo: bool,
     /// Cached current git branch (or short hash when detached), when in a repo.
@@ -881,6 +884,7 @@ impl App {
             show_messages: settings.show_messages,
             show_status_bar: settings.show_status_bar,
             show_scrollbar: settings.show_scrollbar,
+            overwrite: false,
             git_repo: false,
             git_branch: None,
             git_status: Vec::new(),
@@ -2268,7 +2272,11 @@ impl App {
             "diff_previous" => self.diff_goto(false),
             "spawn_multi_cursor_up" => ed!(add_caret_above),
             "spawn_multi_cursor_down" => ed!(add_caret_below),
-            "shell_mode" | "command_mode" | "toggle_overwrite_mode" | "toggle_macro"
+            "toggle_overwrite_mode" => {
+                self.overwrite = !self.overwrite;
+                self.status = t!(if self.overwrite { "status.overwrite_on" } else { "status.overwrite_off" }).to_string();
+            }
+            "shell_mode" | "command_mode" | "toggle_macro"
             | "play_macro" | "suspend" | "autocomplete" | "cycle_autocomplete_back"
             | "toggle_key_menu" | "toggle_ruler" => todo_action!(),
             _ => return false,
@@ -3711,6 +3719,24 @@ impl App {
                 return;
             }
             _ => {}
+        }
+
+        // Overwrite mode: a plain character types over the one under the cursor
+        // (delete it first, then the normal insert below replaces it). Skipped at
+        // end-of-line, with a selection, or with multiple carets.
+        if self.overwrite && matches!(key.code, KeyCode::Char(_)) && !Self::ctrl(&key) && !Self::alt(&key) {
+            let over_char = self.editor.active_tab_mut().is_some_and(|t| {
+                if t.editor.has_multi_carets() || t.editor.get_selection().is_some_and(|s| !s.is_empty()) {
+                    return false;
+                }
+                let cur = t.editor.get_cursor();
+                let code = t.editor.code_ref();
+                let line = code.char_to_line(cur);
+                cur < code.line_to_char(line) + code.line_len(line)
+            });
+            if over_char {
+                self.editor.delete_forward();
+            }
         }
 
         let editing = Self::is_edit_key(&key);

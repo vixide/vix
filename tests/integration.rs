@@ -357,6 +357,22 @@ fn line_transforms_via_actions() {
 }
 
 #[test]
+fn overwrite_mode_types_over_characters() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "abc");
+    app.run_action("edit.go_first"); // cursor to start of line 0
+    app.run_action("toggle_overwrite_mode");
+    assert!(app.overwrite);
+    app.on_key(key('X'));
+    // 'X' overwrites 'a' rather than inserting before it.
+    assert_eq!(app.editor.active_tab().unwrap().text(), "Xbc");
+    // At end-of-line it inserts normally.
+    app.run_action("edit.line_end");
+    app.on_key(key('Y'));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "XbcY");
+}
+
+#[test]
 fn spawn_multi_cursor_below_adds_a_caret() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "ab\ncd\nef");
