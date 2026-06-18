@@ -699,6 +699,9 @@ pub struct App {
     /// Overwrite (type-over) mode: typed characters replace the one under the
     /// cursor instead of inserting. Session-only; toggled with `toggle_overwrite_mode`.
     pub overwrite: bool,
+    /// Show a vertical guide at the [`crate::ui::RULER_COLUMN`] text column.
+    /// Session-only; toggled with `toggle_ruler`.
+    pub show_ruler: bool,
     /// Whether the workspace root is a git work tree (checked once at startup).
     pub git_repo: bool,
     /// Cached current git branch (or short hash when detached), when in a repo.
@@ -885,6 +888,7 @@ impl App {
             show_status_bar: settings.show_status_bar,
             show_scrollbar: settings.show_scrollbar,
             overwrite: false,
+            show_ruler: false,
             git_repo: false,
             git_branch: None,
             git_status: Vec::new(),
@@ -2276,9 +2280,13 @@ impl App {
                 self.overwrite = !self.overwrite;
                 self.status = t!(if self.overwrite { "status.overwrite_on" } else { "status.overwrite_off" }).to_string();
             }
+            "toggle_ruler" => {
+                self.show_ruler = !self.show_ruler;
+                self.status = t!(if self.show_ruler { "status.ruler_on" } else { "status.ruler_off" }).to_string();
+            }
             "shell_mode" | "command_mode" | "toggle_macro"
             | "play_macro" | "suspend" | "autocomplete" | "cycle_autocomplete_back"
-            | "toggle_key_menu" | "toggle_ruler" => todo_action!(),
+            | "toggle_key_menu" => todo_action!(),
             _ => return false,
         }
         true

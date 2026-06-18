@@ -357,6 +357,19 @@ fn line_transforms_via_actions() {
 }
 
 #[test]
+fn column_ruler_toggles_and_renders() {
+    use ratatui::{backend::TestBackend, Terminal};
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "some code here\n");
+    app.run_action("toggle_ruler");
+    assert!(app.show_ruler);
+    let mut term = Terminal::new(TestBackend::new(120, 20)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap(); // ruler drawn, must not panic
+    app.run_action("toggle_ruler");
+    assert!(!app.show_ruler);
+}
+
+#[test]
 fn overwrite_mode_types_over_characters() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "abc");
