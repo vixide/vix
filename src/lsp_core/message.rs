@@ -234,6 +234,20 @@ pub fn parse_definition(result: &Value) -> Option<Location> {
     }
 }
 
+/// Parse a `textDocument/formatting`/`rangeFormatting` result (`TextEdit[]`)
+/// into `(range, new_text)` pairs, in document order.
+#[must_use]
+pub fn parse_text_edits(result: &Value) -> Vec<(crate::lsp_core::Range, String)> {
+    let Value::Array(arr) = result else { return Vec::new() };
+    arr.iter()
+        .filter_map(|e| {
+            let range = parse_range(e.get("range")?)?;
+            let new_text = e.get("newText")?.as_str()?.to_string();
+            Some((range, new_text))
+        })
+        .collect()
+}
+
 /// Parse a `textDocument/references`/`implementation`/`typeDefinition` result
 /// (`Location`, `Location[]`, or `LocationLink[]`) into all target locations.
 #[must_use]
@@ -412,6 +426,18 @@ mod tests {
         assert_eq!(many.len(), 2);
         assert_eq!(many[1].uri, "file:///b.rs");
         assert!(parse_locations(&Value::Null).is_empty());
+    }
+
+    #[test]
+    fn text_edits_parse() {
+        let edits = parse_text_edits(&json!([
+            {"range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 3}}, "newText": "let"},
+            {"range": {"start": {"line": 2, "character": 1}, "end": {"line": 2, "character": 1}}, "newText": "  "}
+        ]));
+        assert_eq!(edits.len(), 2);
+        assert_eq!(edits[0].1, "let");
+        assert_eq!(edits[1].0.start.line, 2);
+        assert!(parse_text_edits(&Value::Null).is_empty());
     }
 
     #[test]

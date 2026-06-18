@@ -378,6 +378,7 @@ const TOOLS_LSP: &[Item] = &[
     Item::leaf("menu.item.lsp.implementation", "nav.goto_implementation", ""),
     Item::leaf("menu.item.lsp.type_definition", "nav.goto_type_definition", ""),
     Item::leaf("menu.item.lsp.references", "lsp.references", ""),
+    Item::leaf("menu.item.lsp.format", "lsp.format", ""),
     Item::leaf("menu.item.lsp.hover", "lsp.hover", ""),
     Item::leaf("menu.item.lsp.complete", "lsp.complete", "Ctrl Space"),
     Item::leaf("menu.item.lsp.diagnostics", "lsp.diagnostics", ""),
