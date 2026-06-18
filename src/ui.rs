@@ -1582,6 +1582,9 @@ fn draw_pane(app: &mut App, frame: &mut Frame, area: Rect, tab_index: usize) -> 
     }
     if let Some(tab) = app.editor.tabs.get(tab_index) {
         frame.render_widget(&tab.editor, text);
+        if app.show_ruler {
+            tint_ruler(frame, text, &tab.editor);
+        }
         if sb.width > 0 {
             let total = tab.line_count().max(1);
             let pos = tab.cursor_1based().0.saturating_sub(1);
@@ -1589,6 +1592,33 @@ fn draw_pane(app: &mut App, frame: &mut Frame, area: Rect, tab_index: usize) -> 
         }
     }
     text
+}
+
+/// The text column the editor ruler guide marks.
+pub const RULER_COLUMN: usize = 80;
+
+/// Draw a faint vertical guide at [`RULER_COLUMN`] over an already-rendered
+/// editor pane, accounting for the line-number gutter and horizontal scroll.
+fn tint_ruler(frame: &mut Frame, text: Rect, editor: &super::editor::CodeEditor) {
+    let off = editor.get_offset_x();
+    if RULER_COLUMN < off {
+        return; // scrolled past the guide
+    }
+    let gutter = editor.gutter_width() as u16;
+    let Ok(rel) = u16::try_from(RULER_COLUMN - off) else { return };
+    let x = text.x + gutter + rel;
+    if x < text.x || x >= text.x + text.width {
+        return;
+    }
+    let buf = frame.buffer_mut();
+    for y in text.y..text.y + text.height {
+        if let Some(cell) = buf.cell_mut(ratatui::layout::Position::new(x, y)) {
+            if cell.symbol() == " " {
+                cell.set_symbol("│");
+            }
+            cell.set_style(theme::dim());
+        }
+    }
 }
 
 fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
