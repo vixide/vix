@@ -23,6 +23,21 @@ pub fn sha512_hex(text: &str) -> String {
     to_hex(&Sha512::digest(text.as_bytes()))
 }
 
+/// MD5 digest of `text` (UTF-8 bytes) as a 32-character lowercase hex string.
+#[must_use]
+pub fn md5_hex(text: &str) -> String {
+    use md5::Md5;
+    to_hex(&Md5::digest(text.as_bytes()))
+}
+
+/// CRC-32 (IEEE) checksum of `text` (UTF-8 bytes) as an 8-character lowercase hex.
+#[must_use]
+pub fn crc32_hex(text: &str) -> String {
+    let mut h = crc32fast::Hasher::new();
+    h.update(text.as_bytes());
+    format!("{:08x}", h.finalize())
+}
+
 /// Render bytes as a lowercase hex string (two characters per byte).
 fn to_hex(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);
@@ -68,5 +83,18 @@ mod tests {
     fn digest_lengths() {
         assert_eq!(sha256_hex("vix").len(), 64);
         assert_eq!(sha512_hex("vix").len(), 128);
+    }
+
+    #[test]
+    fn md5_known_vector() {
+        assert_eq!(md5_hex(""), "d41d8cd98f00b204e9800998ecf8427e");
+        assert_eq!(md5_hex("abc"), "900150983cd24fb0d6963f7d28e17f72");
+    }
+
+    #[test]
+    fn crc32_known_vector() {
+        // CRC-32/IEEE of "123456789" is 0xCBF43926.
+        assert_eq!(crc32_hex("123456789"), "cbf43926");
+        assert_eq!(crc32_hex("").len(), 8);
     }
 }

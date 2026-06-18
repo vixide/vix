@@ -261,6 +261,8 @@ const TOOLS_GENERATE: &[Item] = &[
 const TOOLS_CHECKSUM: &[Item] = &[
     Item::leaf("menu.item.tools.checksum.sha256", "tools.checksum.sha256", ""),
     Item::leaf("menu.item.tools.checksum.sha512", "tools.checksum.sha512", ""),
+    Item::leaf("MD5", "tools.checksum.md5", ""),
+    Item::leaf("CRC32", "tools.checksum.crc32", ""),
 ];
 
 // Tools → Convert: each entry converts the selection (or whole buffer). Format
