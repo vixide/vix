@@ -410,6 +410,27 @@ fn diagnostics_panel_empty_reports_none() {
 }
 
 #[test]
+fn folding_hides_lines_and_renders() {
+    use ratatui::{backend::TestBackend, Terminal};
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "fn a() {\n  x;\n  y;\n}\nfn b() {}\n");
+    // Mark lines 0..=3 as a foldable range (normally supplied by the server).
+    app.editor.active_tab_mut().unwrap().editor.set_fold_ranges(vec![(0, 3)]);
+    app.run_action("edit.go_first"); // cursor to line 0
+    app.run_action("editor.fold_toggle");
+    let ed = &app.editor.active_tab().unwrap().editor;
+    assert!(ed.has_folds(), "fold active");
+    assert!(ed.is_line_hidden(1) && ed.is_line_hidden(3), "inner lines hidden");
+    assert!(!ed.is_line_hidden(0), "fold start stays visible");
+    assert!(!ed.is_line_hidden(4), "line after fold visible");
+    // Rendering with a fold active must not panic.
+    let mut term = Terminal::new(TestBackend::new(80, 20)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    app.run_action("editor.unfold_all");
+    assert!(!app.editor.active_tab().unwrap().editor.has_folds());
+}
+
+#[test]
 fn lsp_navigation_actions_report_inactive_without_server() {
     // With no language server attached, the LSP nav actions are no-ops that
     // report inactivity rather than panicking.

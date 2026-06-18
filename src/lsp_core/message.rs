@@ -239,6 +239,20 @@ pub fn parse_definition(result: &Value) -> Option<Location> {
     }
 }
 
+/// Parse a `textDocument/foldingRange` result (`FoldingRange[]`) into
+/// `(start_line, end_line)` pairs (0-based), keeping only multi-line ranges.
+#[must_use]
+pub fn parse_folding_ranges(result: &Value) -> Vec<(u32, u32)> {
+    let Value::Array(arr) = result else { return Vec::new() };
+    arr.iter()
+        .filter_map(|r| {
+            let start = u32::try_from(r.get("startLine")?.as_u64()?).ok()?;
+            let end = u32::try_from(r.get("endLine")?.as_u64()?).ok()?;
+            (end > start).then_some((start, end))
+        })
+        .collect()
+}
+
 /// Parse a `textDocument/documentHighlight` result (`DocumentHighlight[]`) into
 /// the ranges to highlight.
 #[must_use]
@@ -641,6 +655,17 @@ mod tests {
         assert!(help.contains("fn f(a: i32, b: i32)"));
         assert!(help.contains("b: i32"));
         assert!(parse_signature_help(&json!({"signatures": []})).is_none());
+    }
+
+    #[test]
+    fn folding_ranges_parse_multiline_only() {
+        let fr = parse_folding_ranges(&json!([
+            {"startLine": 0, "endLine": 4, "kind": "region"},
+            {"startLine": 7, "endLine": 7},
+            {"startLine": 9, "endLine": 12}
+        ]));
+        assert_eq!(fr, vec![(0, 4), (9, 12)], "single-line range dropped");
+        assert!(parse_folding_ranges(&Value::Null).is_empty());
     }
 
     #[test]

@@ -129,6 +129,46 @@ impl Editor {
         }
     }
 
+    /// Screen row (absolute `y`) for logical `line`, accounting for folds, or
+    /// `None` if the line is hidden, above the viewport, or below it. With no
+    /// active folds this is exactly `area.top() + (line - offset_y)`.
+    fn screen_row(&self, line: usize, area: Rect) -> Option<u16> {
+        if line < self.offset_y {
+            return None;
+        }
+        let row = if self.has_folds() {
+            if self.is_line_hidden(line) {
+                return None;
+            }
+            (self.offset_y..line).filter(|&l| !self.is_line_hidden(l)).count()
+        } else {
+            line - self.offset_y
+        };
+        let draw_y = area.top().checked_add(u16::try_from(row).unwrap_or(u16::MAX))?;
+        (draw_y < area.bottom()).then_some(draw_y)
+    }
+
+    /// The logical line drawn at screen row `screen_y` (0-based within the view),
+    /// accounting for folds. With no active folds this is `offset_y + screen_y`.
+    fn line_at_row(&self, screen_y: usize) -> Option<usize> {
+        let total = self.code_ref().len_lines();
+        if !self.has_folds() {
+            let line = self.offset_y + screen_y;
+            return (line < total).then_some(line);
+        }
+        let mut count = 0;
+        for line in self.offset_y..total {
+            if self.is_line_hidden(line) {
+                continue;
+            }
+            if count == screen_y {
+                return Some(line);
+            }
+            count += 1;
+        }
+        None
+    }
+
     /// Draw line numbers, the git-diff gutter, and the (optionally
     /// whitespace-annotated) text for every visible line.
     fn draw_text_lines(
@@ -144,9 +184,12 @@ impl Editor {
         let line_number_style = self.line_number_style;
         let default_text_style = self.text_style;
 
+        let mut row: u16 = 0;
         for line_idx in self.offset_y..total_lines {
-            let draw_y = area.top() + u16::try_from(line_idx - self.offset_y).unwrap_or(u16::MAX);
+            if self.is_line_hidden(line_idx) { continue }
+            let draw_y = area.top() + row;
             if draw_y >= area.bottom() { break }
+            row = row.saturating_add(1);
             if self.show_line_numbers {
                 let line_number = format!("{:>width$}", line_idx + 1, width = line_number_digits);
                 buf.set_string(area.left(), draw_y, &line_number, line_number_style);
@@ -180,6 +223,15 @@ impl Editor {
 
             let text_x = area.left() + line_number_width_u16;
             let right_edge = area.left() + area.width;
+
+            // Fold marker in the gutter padding column just before the text.
+            if let Some(folded) = self.fold_marker(line_idx) {
+                let fx = text_x.saturating_sub(1);
+                if fx >= area.left() && fx < right_edge {
+                    let sym = if folded { "\u{25b8}" } else { "\u{25be}" }; // ▸ folded, ▾ open
+                    buf[(fx, draw_y)].set_symbol(sym).set_style(line_number_style);
+                }
+            }
 
             if self.show_whitespace {
                 // Substitute a visible glyph for each space / tab / carriage
@@ -241,7 +293,7 @@ impl Editor {
     ) {
         let code = self.code_ref();
         for screen_y in 0..(area.height as usize) {
-            let line_idx = self.offset_y + screen_y;
+            let Some(line_idx) = self.line_at_row(screen_y) else { break };
             if line_idx >= total_lines { break }
 
             let line_len = code.line_len(line_idx);
@@ -312,8 +364,7 @@ impl Editor {
         let end_line = code.char_to_line(end);
 
         for line_idx in start_line..=end_line {
-            if line_idx < self.offset_y { continue }
-            if line_idx >= self.offset_y + area.height as usize { break }
+            let Some(draw_y) = self.screen_row(line_idx, area) else { continue };
 
             let line_start_char = code.line_to_char(line_idx);
             let line_len = code.line_len(line_idx);
@@ -334,7 +385,6 @@ impl Editor {
 
             let visible_chars = code.char_slice(char_slice_start, char_slice_end);
 
-            let draw_y = area.top() + u16::try_from(line_idx - self.offset_y).unwrap_or(u16::MAX);
             let mut visual_x: u16 = 0;
             let mut char_col = start_col;
 
@@ -372,9 +422,7 @@ impl Editor {
         let line_number_width_u16 = u16::try_from(line_number_width).unwrap_or(u16::MAX);
         let code = self.code_ref();
         let line_idx = code.char_to_line(pos);
-        if line_idx < self.offset_y || line_idx >= self.offset_y + area.height as usize {
-            return;
-        }
+        let Some(draw_y) = self.screen_row(line_idx, area) else { return };
         let line_start_char = code.line_to_char(line_idx);
         let line_len = code.line_len(line_idx);
         let rel = pos - line_start_char;
@@ -401,7 +449,6 @@ impl Editor {
             char_col += g_chars;
         }
         let draw_x = area.left() + line_number_width_u16 + visual_x;
-        let draw_y = area.top() + u16::try_from(line_idx - self.offset_y).unwrap_or(u16::MAX);
         if draw_x < area.right() && draw_y < area.bottom() {
             buf[(draw_x, draw_y)].set_style(style);
         }

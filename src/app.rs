@@ -2115,6 +2115,17 @@ impl App {
             "lsp.expand_selection" => self.request_selection_range(true),
             "lsp.shrink_selection" => self.request_selection_range(false),
             "lsp.highlight" => self.request_document_highlight(),
+            "editor.fold_toggle" => self.toggle_fold_at_cursor(),
+            "editor.fold_all" => {
+                if let Some(t) = self.editor.active_tab_mut() {
+                    t.editor.fold_all();
+                }
+            }
+            "editor.unfold_all" => {
+                if let Some(t) = self.editor.active_tab_mut() {
+                    t.editor.unfold_all();
+                }
+            }
             _ => return false,
         }
         true
@@ -2847,6 +2858,21 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Toggle the fold whose range starts at the cursor's line (LSP-provided
+    /// ranges). Reports when there is nothing foldable there.
+    fn toggle_fold_at_cursor(&mut self) {
+        if let Some(t) = self.editor.active_tab_mut() {
+            let line = {
+                let code = t.editor.code_ref();
+                code.char_to_line(t.editor.get_cursor())
+            };
+            if t.editor.toggle_fold(line) {
+                return;
+            }
+        }
+        self.status = t!("status.no_fold").to_string();
     }
 
     // ----- Document highlight ---------------------------------------------
@@ -4340,6 +4366,7 @@ impl App {
         let Some(text) = self.editor.active_tab().map(|t| t.editor.get_content()) else { return };
         if last.is_none() {
             self.lsp.did_open(&path, &text);
+            self.lsp.request_folding_range(&path); // fetch foldable ranges once on open
         } else {
             self.lsp.did_change(&path, &text);
         }
@@ -4384,6 +4411,13 @@ impl App {
                 }
                 crate::lsp::LspEvent::SelectionRanges(ranges) => self.apply_selection_range(&ranges),
                 crate::lsp::LspEvent::Highlights(ranges) => self.apply_document_highlights(&ranges),
+                crate::lsp::LspEvent::FoldingRanges(ranges) => {
+                    let ranges: Vec<(usize, usize)> =
+                        ranges.iter().map(|&(s, e)| (s as usize, e as usize)).collect();
+                    if let Some(t) = self.editor.active_tab_mut() {
+                        t.editor.set_fold_ranges(ranges);
+                    }
+                }
             }
         }
         // Rebuild the active editor's diagnostic underlines every tick so they

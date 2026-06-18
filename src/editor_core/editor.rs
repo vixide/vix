@@ -66,6 +66,14 @@ pub struct Editor {
     /// the line-number gutter.
     pub(crate) gutter_marks: Option<Vec<(usize, Color)>>,
 
+    /// Foldable line ranges (from the language server): `(start_line, end_line)`,
+    /// both 0-based. A range can be folded by its start line.
+    pub(crate) fold_ranges: Vec<(usize, usize)>,
+
+    /// Currently-folded ranges: `(start_line, end_line)`. The start line stays
+    /// visible (with a marker); lines `start+1..=end` are hidden.
+    pub(crate) folds: Vec<(usize, usize)>,
+
     /// Syntax highlight cache by intervals to speed up rendering
     pub(crate) highlights_cache: RefCell<HightlightCache>,
 
@@ -150,6 +158,8 @@ impl Editor {
             spell_marks: None,
             diagnostic_marks: None,
             gutter_marks: None,
+            fold_ranges: Vec::new(),
+            folds: Vec::new(),
             highlights_cache,
             show_line_numbers: true,
             show_whitespace: false,
@@ -565,6 +575,69 @@ impl Editor {
     /// Clear all highlight marks.
     pub fn remove_marks(&mut self) {
         self.marks = None;
+    }
+
+    /// Record the foldable line ranges reported by the language server. Drops any
+    /// active fold whose range is no longer offered.
+    pub fn set_fold_ranges(&mut self, ranges: Vec<(usize, usize)>) {
+        self.folds.retain(|f| ranges.iter().any(|r| r.0 == f.0 && r.1 == f.1));
+        self.fold_ranges = ranges;
+    }
+
+    /// Toggle the fold whose start is `line`: unfold it if folded, else fold it
+    /// if a foldable range starts there. Returns `true` if anything changed.
+    pub fn toggle_fold(&mut self, line: usize) -> bool {
+        if let Some(i) = self.folds.iter().position(|f| f.0 == line) {
+            self.folds.remove(i);
+            return true;
+        }
+        if let Some(&range) = self.fold_ranges.iter().find(|r| r.0 == line && r.1 > r.0) {
+            self.folds.push(range);
+            // Keep the caret out of the now-hidden region.
+            let cursor_line = self.code_ref().char_to_line(self.cursor);
+            if self.is_line_hidden(cursor_line) {
+                let start = self.code_ref().line_to_char(range.0);
+                self.set_cursor(start);
+            }
+            return true;
+        }
+        false
+    }
+
+    /// Whether `line` is hidden inside a currently-folded range
+    /// (`start < line <= end`).
+    #[must_use]
+    pub fn is_line_hidden(&self, line: usize) -> bool {
+        self.folds.iter().any(|&(s, e)| s < line && line <= e)
+    }
+
+    /// Whether any fold is currently active.
+    #[must_use]
+    pub fn has_folds(&self) -> bool {
+        !self.folds.is_empty()
+    }
+
+    /// Fold every foldable range.
+    pub fn fold_all(&mut self) {
+        self.folds = self.fold_ranges.iter().copied().filter(|r| r.1 > r.0).collect();
+    }
+
+    /// Unfold every active fold.
+    pub fn unfold_all(&mut self) {
+        self.folds.clear();
+    }
+
+    /// The fold marker for `line`: `Some(true)` if a folded range starts here,
+    /// `Some(false)` if a foldable (but open) range starts here, else `None`.
+    #[must_use]
+    pub fn fold_marker(&self, line: usize) -> Option<bool> {
+        if self.folds.iter().any(|f| f.0 == line) {
+            Some(true)
+        } else if self.fold_ranges.iter().any(|r| r.0 == line && r.1 > r.0) {
+            Some(false)
+        } else {
+            None
+        }
     }
 
     /// Set the spell-check underline marks (char ranges of misspelled words).
