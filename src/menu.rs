@@ -375,6 +375,9 @@ const TOOLS: &[Item] = &[
 /// Language-server (LSP) actions, grouped under Tools → Language Server.
 const TOOLS_LSP: &[Item] = &[
     Item::leaf("menu.item.lsp.definition", "nav.goto_definition", "F12"),
+    Item::leaf("menu.item.lsp.implementation", "nav.goto_implementation", ""),
+    Item::leaf("menu.item.lsp.type_definition", "nav.goto_type_definition", ""),
+    Item::leaf("menu.item.lsp.references", "lsp.references", ""),
     Item::leaf("menu.item.lsp.hover", "lsp.hover", ""),
     Item::leaf("menu.item.lsp.complete", "lsp.complete", "Ctrl Space"),
     Item::leaf("menu.item.lsp.diagnostics", "lsp.diagnostics", ""),

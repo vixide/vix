@@ -410,6 +410,18 @@ fn diagnostics_panel_empty_reports_none() {
 }
 
 #[test]
+fn lsp_navigation_actions_report_inactive_without_server() {
+    // With no language server attached, the LSP nav actions are no-ops that
+    // report inactivity rather than panicking.
+    for action in ["nav.goto_implementation", "nav.goto_type_definition", "lsp.references"] {
+        let mut app = app_at(Path::new("."));
+        type_str(&mut app, "fn main() {}\n");
+        app.run_action(action);
+        assert!(app.workspace_search.is_none(), "{action} opened no panel");
+    }
+}
+
+#[test]
 fn bookmarks_toggle_and_list() {
     let dir = unique_dir("bookmarks");
     fs::create_dir_all(&dir).unwrap();

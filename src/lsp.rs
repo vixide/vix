@@ -35,6 +35,7 @@ enum Pending {
     Hover,
     Definition,
     Completion,
+    References,
 }
 
 /// A message handed back from a server's stdout reader thread.
@@ -60,6 +61,8 @@ pub enum LspEvent {
     },
     /// A completion response: candidates to offer.
     Completion(Vec<crate::lsp_core::CompletionItem>),
+    /// A references response: every (file, 0-based line, character) location.
+    References(Vec<(PathBuf, u32, u32)>),
 }
 
 /// One running language server.
@@ -277,6 +280,52 @@ impl Lsp {
         self.request(path, "textDocument/completion", line, character, Pending::Completion);
     }
 
+    /// Request the implementation location(s) at `(line, character)` (jumps to
+    /// the first, like definition).
+    pub fn request_implementation(&mut self, path: &Path, line: u32, character: u32) {
+        self.request(path, "textDocument/implementation", line, character, Pending::Definition);
+    }
+
+    /// Request the type-definition location at `(line, character)`.
+    pub fn request_type_definition(&mut self, path: &Path, line: u32, character: u32) {
+        self.request(path, "textDocument/typeDefinition", line, character, Pending::Definition);
+    }
+
+    /// Request all references to the symbol at `(line, character)`.
+    pub fn request_references(&mut self, path: &Path, line: u32, character: u32) {
+        let Some(config) = self.config_for(path) else { return };
+        let uri = path_to_uri(path);
+        let Some(server) = self.servers.get_mut(&config.language_id) else { return };
+        if !server.docs.contains_key(&uri) {
+            return;
+        }
+        let id = server.alloc_id();
+        server.pending.insert(id, Pending::References);
+        server.send(message::request(
+            id,
+            "textDocument/references",
+            &message::reference_params(&uri, line, character, true),
+        ));
+    }
+
+    /// Notify the server that `path` was saved (full text), to trigger
+    /// re-analysis.
+    pub fn did_save(&mut self, path: &Path, text: &str) {
+        if !self.enabled {
+            return;
+        }
+        let Some(config) = self.config_for(path) else { return };
+        let uri = path_to_uri(path);
+        if let Some(server) = self.servers.get_mut(&config.language_id)
+            && server.docs.contains_key(&uri)
+        {
+            server.send(message::notification(
+                "textDocument/didSave",
+                &message::did_save_params(&uri, text),
+            ));
+        }
+    }
+
     /// Drain every server's inbox, updating diagnostics and collecting events.
     /// Called once per event-loop iteration; cheap when nothing is in flight.
     pub fn poll(&mut self) -> Vec<LspEvent> {
@@ -367,6 +416,15 @@ impl Lsp {
                 let items = message::parse_completion(result);
                 if !items.is_empty() {
                     events.push(LspEvent::Completion(items));
+                }
+            }
+            Pending::References => {
+                let locs: Vec<(PathBuf, u32, u32)> = message::parse_locations(result)
+                    .into_iter()
+                    .map(|l| (uri_to_path(&l.uri), l.range.start.line, l.range.start.character))
+                    .collect();
+                if !locs.is_empty() {
+                    events.push(LspEvent::References(locs));
                 }
             }
         }

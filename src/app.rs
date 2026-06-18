@@ -2044,6 +2044,9 @@ impl App {
             }
             "nav.goto_line" => self.open_palette_seeded(":"),
             "nav.goto_definition" => self.goto_definition(),
+            "nav.goto_implementation" => self.goto_implementation(),
+            "nav.goto_type_definition" => self.goto_type_definition(),
+            "lsp.references" => self.find_references(),
             "lsp.hover" => self.lsp_hover(),
             "lsp.complete" => self.lsp_complete(),
             "lsp.diagnostics" => self.open_diagnostics_panel(),
@@ -2393,6 +2396,10 @@ impl App {
         match self.editor.save_active(opts) {
             Ok(p) => {
                 self.status = t!("status.saved", path = p.display()).to_string();
+                if self.lsp.handles(&p) {
+                    let text = self.editor.active_tab().map(Tab::text).unwrap_or_default();
+                    self.lsp.did_save(&p, &text);
+                }
                 self.refresh_git();
             }
             Err(e) => self.messages.error(t!("msg.save_failed", error = e).to_string()),
@@ -4122,6 +4129,7 @@ impl App {
                         self.completion = Some(CompletionPopup { items, selected: 0 });
                     }
                 }
+                crate::lsp::LspEvent::References(locs) => self.show_references(&locs),
             }
         }
         // Rebuild the active editor's diagnostic underlines every tick so they
@@ -8198,6 +8206,73 @@ impl App {
     /// server handles the active file, ask it (`textDocument/definition`, the
     /// result arrives asynchronously and jumps via [`App::poll_lsp`]). Otherwise
     /// fall back to the heuristic, keyword-prefixed cross-workspace search below.
+    /// Request the implementation(s) of the symbol under the cursor (LSP).
+    fn goto_implementation(&mut self) {
+        if let Some(path) = self.active_path()
+            && self.lsp.handles(&path)
+        {
+            let (line, character) = self.cursor_lsp_position(&path);
+            self.lsp.request_implementation(&path, line, character);
+        } else {
+            self.status = t!("status.lsp_inactive").to_string();
+        }
+    }
+
+    /// Request the type definition of the symbol under the cursor (LSP).
+    fn goto_type_definition(&mut self) {
+        if let Some(path) = self.active_path()
+            && self.lsp.handles(&path)
+        {
+            let (line, character) = self.cursor_lsp_position(&path);
+            self.lsp.request_type_definition(&path, line, character);
+        } else {
+            self.status = t!("status.lsp_inactive").to_string();
+        }
+    }
+
+    /// Request all references to the symbol under the cursor (LSP).
+    fn find_references(&mut self) {
+        if let Some(path) = self.active_path()
+            && self.lsp.handles(&path)
+        {
+            let (line, character) = self.cursor_lsp_position(&path);
+            self.lsp.request_references(&path, line, character);
+        } else {
+            self.status = t!("status.lsp_inactive").to_string();
+        }
+    }
+
+    /// Show LSP reference locations in the static-results panel (Enter jumps).
+    fn show_references(&mut self, locs: &[(PathBuf, u32, u32)]) {
+        let mut hits: Vec<Hit> = locs
+            .iter()
+            .map(|(path, line, character)| {
+                let rel = path
+                    .strip_prefix(&self.root)
+                    .unwrap_or(path)
+                    .to_string_lossy()
+                    .into_owned();
+                let line1 = *line as usize + 1;
+                Hit {
+                    path: path.clone(),
+                    line: line1,
+                    col: *character as usize + 1,
+                    display: format!("{rel}:{line1}"),
+                }
+            })
+            .collect();
+        if hits.is_empty() {
+            self.status = t!("status.no_references").to_string();
+            return;
+        }
+        hits.sort_by(|a, b| a.display.cmp(&b.display));
+        let mut ps = WorkspaceSearch::new(false);
+        ps.static_results = true;
+        ps.status = t!("status.references_n", n = hits.len()).to_string();
+        ps.hits = hits;
+        self.workspace_search = Some(ps);
+    }
+
     fn goto_definition(&mut self) {
         if let Some(path) = self.active_path()
             && self.lsp.handles(&path) {

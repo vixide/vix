@@ -81,13 +81,80 @@ pub fn did_close_params(uri: &str) -> Value {
     json!({ "textDocument": { "uri": uri } })
 }
 
-/// A `TextDocumentPositionParams` body (shared by hover/definition/completion).
+/// A `TextDocumentPositionParams` body (shared by hover/definition/completion/
+/// implementation/typeDefinition/signatureHelp/documentHighlight).
 #[must_use]
 pub fn position_params(uri: &str, line: u32, character: u32) -> Value {
     json!({
         "textDocument": { "uri": uri },
         "position": { "line": line, "character": character }
     })
+}
+
+/// A `ReferenceParams` body: a position plus whether to include the declaration.
+#[must_use]
+pub fn reference_params(uri: &str, line: u32, character: u32, include_declaration: bool) -> Value {
+    json!({
+        "textDocument": { "uri": uri },
+        "position": { "line": line, "character": character },
+        "context": { "includeDeclaration": include_declaration }
+    })
+}
+
+/// A `RenameParams` body: a position plus the desired new name.
+#[must_use]
+pub fn rename_params(uri: &str, line: u32, character: u32, new_name: &str) -> Value {
+    json!({
+        "textDocument": { "uri": uri },
+        "position": { "line": line, "character": character },
+        "newName": new_name
+    })
+}
+
+/// A `DocumentFormattingParams` body (spaces, `tab_size`-wide indentation).
+#[must_use]
+pub fn formatting_params(uri: &str, tab_size: u32) -> Value {
+    json!({
+        "textDocument": { "uri": uri },
+        "options": { "tabSize": tab_size, "insertSpaces": true }
+    })
+}
+
+/// A `DocumentRangeFormattingParams` body for the given range.
+#[must_use]
+pub fn range_formatting_params(
+    uri: &str,
+    start: (u32, u32),
+    end: (u32, u32),
+    tab_size: u32,
+) -> Value {
+    json!({
+        "textDocument": { "uri": uri },
+        "range": {
+            "start": { "line": start.0, "character": start.1 },
+            "end": { "line": end.0, "character": end.1 }
+        },
+        "options": { "tabSize": tab_size, "insertSpaces": true }
+    })
+}
+
+/// A `DocumentSymbolParams` / text-document-only params body (also used for
+/// `foldingRange`).
+#[must_use]
+pub fn text_document_params(uri: &str) -> Value {
+    json!({ "textDocument": { "uri": uri } })
+}
+
+/// A `WorkspaceSymbolParams` body with the query string.
+#[must_use]
+pub fn workspace_symbol_params(query: &str) -> Value {
+    json!({ "query": query })
+}
+
+/// A `DidSaveTextDocumentParams` body including the full saved text.
+#[must_use]
+pub fn did_save_params(uri: &str, text: &str) -> Value {
+    json!({ "textDocument": { "uri": uri }, "text": text })
 }
 
 // ----- parsers ------------------------------------------------------------
@@ -164,6 +231,17 @@ pub fn parse_definition(result: &Value) -> Option<Location> {
         Value::Object(_) => parse_location(result),
         Value::Array(arr) => arr.iter().find_map(parse_location),
         _ => None,
+    }
+}
+
+/// Parse a `textDocument/references`/`implementation`/`typeDefinition` result
+/// (`Location`, `Location[]`, or `LocationLink[]`) into all target locations.
+#[must_use]
+pub fn parse_locations(result: &Value) -> Vec<Location> {
+    match result {
+        Value::Object(_) => parse_location(result).into_iter().collect(),
+        Value::Array(arr) => arr.iter().filter_map(parse_location).collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -318,5 +396,30 @@ mod tests {
             parse_position_encoding(&json!({"capabilities": {"positionEncoding": "utf-8"}})),
             crate::lsp_core::Encoding::Utf8
         );
+    }
+
+    #[test]
+    fn locations_parse_single_array_and_links() {
+        let one = parse_locations(&json!({
+            "uri": "file:///a.rs", "range": {"start": {"line": 1, "character": 2}, "end": {"line": 1, "character": 5}}
+        }));
+        assert_eq!(one.len(), 1);
+        assert_eq!(one[0].range.start.line, 1);
+        let many = parse_locations(&json!([
+            {"uri": "file:///a.rs", "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 1}}},
+            {"targetUri": "file:///b.rs", "targetSelectionRange": {"start": {"line": 3, "character": 0}, "end": {"line": 3, "character": 4}}}
+        ]));
+        assert_eq!(many.len(), 2);
+        assert_eq!(many[1].uri, "file:///b.rs");
+        assert!(parse_locations(&Value::Null).is_empty());
+    }
+
+    #[test]
+    fn param_builders_shape() {
+        assert_eq!(reference_params("u", 1, 2, true)["context"]["includeDeclaration"], json!(true));
+        assert_eq!(rename_params("u", 1, 2, "x")["newName"], json!("x"));
+        assert_eq!(workspace_symbol_params("foo")["query"], json!("foo"));
+        assert_eq!(did_save_params("u", "hi")["text"], json!("hi"));
+        assert_eq!(formatting_params("u", 4)["options"]["tabSize"], json!(4));
     }
 }
