@@ -2047,6 +2047,7 @@ impl App {
             "nav.goto_implementation" => self.goto_implementation(),
             "nav.goto_type_definition" => self.goto_type_definition(),
             "lsp.references" => self.find_references(),
+            "lsp.format" => self.lsp_format(),
             "lsp.hover" => self.lsp_hover(),
             "lsp.complete" => self.lsp_complete(),
             "lsp.diagnostics" => self.open_diagnostics_panel(),
@@ -4130,6 +4131,7 @@ impl App {
                     }
                 }
                 crate::lsp::LspEvent::References(locs) => self.show_references(&locs),
+                crate::lsp::LspEvent::Edits(edits) => self.apply_lsp_edits(&edits),
             }
         }
         // Rebuild the active editor's diagnostic underlines every tick so they
@@ -8206,6 +8208,68 @@ impl App {
     /// server handles the active file, ask it (`textDocument/definition`, the
     /// result arrives asynchronously and jumps via [`App::poll_lsp`]). Otherwise
     /// fall back to the heuristic, keyword-prefixed cross-workspace search below.
+    /// Request LSP formatting of the active document (or selection, when one
+    /// exists — via range formatting).
+    fn lsp_format(&mut self) {
+        let Some(path) = self.active_path() else { return };
+        if !self.lsp.handles(&path) {
+            self.status = t!("status.lsp_inactive").to_string();
+            return;
+        }
+        let tab_size = u32::try_from(self.settings.tab_width).unwrap_or(4);
+        let enc = self.lsp.encoding_for(&path);
+        let sel = self.editor.active_tab_mut().and_then(|t| {
+            let s = t.editor.get_selection()?;
+            if s.is_empty() {
+                return None;
+            }
+            let code = t.editor.code_ref();
+            Some((
+                char_to_lsp_pos(code, s.start.min(s.end), enc),
+                char_to_lsp_pos(code, s.start.max(s.end), enc),
+            ))
+        });
+        match sel {
+            Some((start, end)) => self.lsp.request_range_formatting(&path, start, end, tab_size),
+            None => self.lsp.request_formatting(&path, tab_size),
+        }
+    }
+
+    /// Apply LSP text edits to the active buffer (highest position first, so
+    /// earlier offsets stay valid), then re-anchor the caret.
+    fn apply_lsp_edits(&mut self, edits: &[(crate::lsp_core::Range, String)]) {
+        let Some(path) = self.active_path() else { return };
+        let enc = self.lsp.encoding_for(&path);
+        let Some(t) = self.editor.active_tab_mut() else { return };
+        // Resolve every range to char offsets first, then apply tail-to-head.
+        let mut resolved: Vec<(usize, usize, String)> = {
+            let code = t.editor.code_ref();
+            edits
+                .iter()
+                .map(|(r, text)| {
+                    let start = lsp_pos_to_char(code, r.start.line, r.start.character, enc);
+                    let end = lsp_pos_to_char(code, r.end.line, r.end.character, enc);
+                    (start.min(end), start.max(end), text.clone())
+                })
+                .collect()
+        };
+        resolved.sort_by_key(|e| std::cmp::Reverse(e.0));
+        let mut content: Vec<char> = t.editor.get_content().chars().collect();
+        for (start, end, text) in resolved {
+            let (a, b) = (start.min(content.len()), end.min(content.len()));
+            if a <= b {
+                content.splice(a..b, text.chars());
+            }
+        }
+        let new_content: String = content.into_iter().collect();
+        let caret = t.editor.get_cursor().min(new_content.chars().count());
+        t.editor.set_content(&new_content);
+        t.editor.set_cursor(caret);
+        t.dirty = true;
+        t.preview = false;
+        self.status = t!("status.formatted").to_string();
+    }
+
     /// Request the implementation(s) of the symbol under the cursor (LSP).
     fn goto_implementation(&mut self) {
         if let Some(path) = self.active_path()
@@ -9146,6 +9210,20 @@ fn lsp_pos_to_char(
     let line_start = code.line_to_char(line);
     let line_text = code.slice(line_start, line_start + code.line_len(line));
     line_start + crate::lsp_core::position::col_to_char(&line_text, character, enc)
+}
+
+/// Convert a buffer char offset to an LSP `(line, character)` in `enc` units.
+fn char_to_lsp_pos(
+    code: &crate::editor_core::code::Code,
+    char_offset: usize,
+    enc: crate::lsp_core::Encoding,
+) -> (u32, u32) {
+    let offset = char_offset.min(code.len());
+    let line = code.char_to_line(offset);
+    let line_start = code.line_to_char(line);
+    let line_text = code.slice(line_start, line_start + code.line_len(line));
+    let character = crate::lsp_core::position::char_to_col(&line_text, offset - line_start, enc);
+    (u32::try_from(line).unwrap_or(u32::MAX), character)
 }
 
 /// The underline color for a diagnostic severity.

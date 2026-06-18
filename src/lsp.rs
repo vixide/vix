@@ -36,6 +36,7 @@ enum Pending {
     Definition,
     Completion,
     References,
+    Formatting,
 }
 
 /// A message handed back from a server's stdout reader thread.
@@ -63,6 +64,9 @@ pub enum LspEvent {
     Completion(Vec<crate::lsp_core::CompletionItem>),
     /// A references response: every (file, 0-based line, character) location.
     References(Vec<(PathBuf, u32, u32)>),
+    /// A formatting response: text edits (range + replacement) for the active
+    /// file, in document order.
+    Edits(Vec<(crate::lsp_core::Range, String)>),
 }
 
 /// One running language server.
@@ -308,6 +312,45 @@ impl Lsp {
         ));
     }
 
+    /// Request formatting of the whole document `path` (`tab_size`-wide indent).
+    pub fn request_formatting(&mut self, path: &Path, tab_size: u32) {
+        self.send_request(path, "textDocument/formatting", Pending::Formatting, |uri| {
+            message::formatting_params(uri, tab_size)
+        });
+    }
+
+    /// Request formatting of the range `[start, end)` (0-based positions).
+    pub fn request_range_formatting(
+        &mut self,
+        path: &Path,
+        start: (u32, u32),
+        end: (u32, u32),
+        tab_size: u32,
+    ) {
+        self.send_request(path, "textDocument/rangeFormatting", Pending::Formatting, |uri| {
+            message::range_formatting_params(uri, start, end, tab_size)
+        });
+    }
+
+    /// Send a request for an open document, building params from its URI.
+    fn send_request(
+        &mut self,
+        path: &Path,
+        method: &str,
+        kind: Pending,
+        params: impl FnOnce(&str) -> Value,
+    ) {
+        let Some(config) = self.config_for(path) else { return };
+        let uri = path_to_uri(path);
+        let Some(server) = self.servers.get_mut(&config.language_id) else { return };
+        if !server.docs.contains_key(&uri) {
+            return;
+        }
+        let id = server.alloc_id();
+        server.pending.insert(id, kind);
+        server.send(message::request(id, method, &params(&uri)));
+    }
+
     /// Notify the server that `path` was saved (full text), to trigger
     /// re-analysis.
     pub fn did_save(&mut self, path: &Path, text: &str) {
@@ -425,6 +468,12 @@ impl Lsp {
                     .collect();
                 if !locs.is_empty() {
                     events.push(LspEvent::References(locs));
+                }
+            }
+            Pending::Formatting => {
+                let edits = message::parse_text_edits(result);
+                if !edits.is_empty() {
+                    events.push(LspEvent::Edits(edits));
                 }
             }
         }
