@@ -2266,10 +2266,11 @@ impl App {
             // not implemented yet (modes, macros, suspend, autocomplete, …)
             "diff_next" => self.diff_goto(true),
             "diff_previous" => self.diff_goto(false),
+            "spawn_multi_cursor_up" => ed!(add_caret_above),
+            "spawn_multi_cursor_down" => ed!(add_caret_below),
             "shell_mode" | "command_mode" | "toggle_overwrite_mode" | "toggle_macro"
             | "play_macro" | "suspend" | "autocomplete" | "cycle_autocomplete_back"
-            | "toggle_key_menu" | "toggle_ruler"
-            | "spawn_multi_cursor_up" | "spawn_multi_cursor_down" => todo_action!(),
+            | "toggle_key_menu" | "toggle_ruler" => todo_action!(),
             _ => return false,
         }
         true
