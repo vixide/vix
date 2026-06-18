@@ -9,8 +9,8 @@ use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier, Style};
 use ropey::RopeSlice;
 
-use crate::code::{grapheme_width_and_bytes_len, grapheme_width_and_chars_len, RopeGraphemes};
-use crate::editor::Editor;
+use crate::editor_core::code::{grapheme_width_and_bytes_len, grapheme_width_and_chars_len, RopeGraphemes};
+use crate::editor_core::editor::Editor;
 
 /// One on-screen row in soft-wrap mode: a `[start, end)` character-offset slice
 /// of a logical line (`line`).

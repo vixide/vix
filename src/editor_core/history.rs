@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use crate::code::{EditBatch};
+use crate::editor_core::code::{EditBatch};
 
 pub struct History {
     index: usize,

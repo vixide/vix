@@ -1,7 +1,7 @@
 //! Bracket matching: find the partner of the bracket at (or just before) the
 //! cursor. Vix-owned code, held to the crate's `clippy::pedantic`.
 
-use crate::editor::Editor;
+use crate::editor_core::editor::Editor;
 
 /// Bracket pairs Vix matches.
 const PAIRS: [(char, char); 3] = [('(', ')'), ('[', ']'), ('{', '}')];
@@ -99,7 +99,7 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::Editor;
+    use crate::editor_core::editor::Editor;
 
     #[test]
     fn matches_in_both_directions() {

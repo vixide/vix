@@ -97,11 +97,10 @@ fn split_words(s: &str) -> Vec<String> {
     let mut prev: Option<char> = None;
     for c in s.chars() {
         if c.is_alphanumeric() {
-            if let Some(p) = prev {
-                if (p.is_lowercase() || p.is_numeric()) && c.is_uppercase() && !cur.is_empty() {
+            if let Some(p) = prev
+                && (p.is_lowercase() || p.is_numeric()) && c.is_uppercase() && !cur.is_empty() {
                     words.push(std::mem::take(&mut cur));
                 }
-            }
             cur.push(c);
         } else if !cur.is_empty() {
             words.push(std::mem::take(&mut cur));

@@ -1,7 +1,7 @@
 //! Line operations: move the current line up or down. Vix-owned code, held to
 //! the crate's `clippy::pedantic`.
 
-use crate::editor::Editor;
+use crate::editor_core::editor::Editor;
 
 impl Editor {
     /// Move the cursor's line up one row, swapping it with the line above. No-op
@@ -266,7 +266,7 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use crate::editor::Editor;
+    use crate::editor_core::editor::Editor;
 
     fn ed(text: &str, cursor: usize) -> Editor {
         let mut e = Editor::new("text", text, Vec::new()).unwrap();

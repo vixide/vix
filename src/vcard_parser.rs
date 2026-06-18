@@ -78,12 +78,11 @@ fn unfold(text: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for raw in text.split('\n') {
         let raw = raw.strip_suffix('\r').unwrap_or(raw);
-        if let Some(rest) = raw.strip_prefix([' ', '\t']) {
-            if let Some(last) = out.last_mut() {
+        if let Some(rest) = raw.strip_prefix([' ', '\t'])
+            && let Some(last) = out.last_mut() {
                 last.push_str(rest);
                 continue;
             }
-        }
         out.push(raw.to_string());
     }
     out
@@ -166,11 +165,10 @@ impl Vcard {
     /// else `"(unnamed)"`.
     #[must_use]
     pub fn display_name(&self) -> String {
-        if let Some(fnv) = self.value("FN") {
-            if !fnv.trim().is_empty() {
+        if let Some(fnv) = self.value("FN")
+            && !fnv.trim().is_empty() {
                 return fnv.trim().to_string();
             }
-        }
         if let Some(n) = self.value("N") {
             // N = Family;Given;Additional;Prefix;Suffix
             let f: Vec<&str> = n.split(';').collect();

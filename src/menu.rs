@@ -732,13 +732,12 @@ impl Menu {
             }
             return;
         }
-        if let Some(it) = self.item {
-            if menus()[i].items[it].submenu.is_some() {
+        if let Some(it) = self.item
+            && menus()[i].items[it].submenu.is_some() {
                 self.sub_open = true;
                 self.sub = None;
                 return;
             }
-        }
         let n = menus().len();
         self.open_index((i + 1) % n);
     }
@@ -911,12 +910,12 @@ mod tests {
     /// menu so the test is independent of ordering.
     fn tools_and_generate() -> (usize, usize) {
         let tools = menus().iter().position(|m| m.name == "menu.tools").expect("tools menu");
-        let gen = menus()[tools]
+        let gen_idx = menus()[tools]
             .items
             .iter()
             .position(|it| it.label == "menu.item.tools.generate")
             .expect("generate item");
-        (tools, gen)
+        (tools, gen_idx)
     }
 
     /// Tools → Generate → UUID offers exactly v1…v8, dispatching the matching
@@ -934,10 +933,10 @@ mod tests {
     /// → "4" and `enter` returns the v4 action; `left` walks back up level by level.
     #[test]
     fn three_level_navigation_reaches_uuid_leaf() {
-        let (tools, gen) = tools_and_generate();
+        let (tools, gen_idx) = tools_and_generate();
         let mut m = Menu::default();
         m.open_index(tools);
-        m.item = Some(gen);
+        m.item = Some(gen_idx);
         m.right(); // open Generate
         assert!(m.sub_open && !m.subsub_open);
         // Highlight the UUID submenu row (index 0) and open it.
@@ -961,10 +960,10 @@ mod tests {
     /// `right` open that item's submenu — a stale `subsub_open` used to block it.
     #[test]
     fn reanchoring_after_three_levels_reopens_submenu() {
-        let (tools, gen) = tools_and_generate();
+        let (tools, gen_idx) = tools_and_generate();
         let mut m = Menu::default();
         m.open_index(tools);
-        m.highlight_item(gen);
+        m.highlight_item(gen_idx);
         m.right(); // Generate submenu
         m.highlight_sub(0); // UUID row
         m.right(); // third level open

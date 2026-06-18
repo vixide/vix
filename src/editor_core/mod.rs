@@ -29,7 +29,7 @@ pub mod click;
 pub mod code;
 #[allow(clippy::all, clippy::pedantic)]
 pub mod editor;
-#[cfg(feature = "crossterm")]
+// Always compiled: the main crate always uses the crossterm backend.
 #[allow(clippy::all, clippy::pedantic)]
 pub mod editor_crossterm;
 pub mod multicursor;
@@ -40,8 +40,6 @@ pub mod history;
 pub mod render;
 #[allow(clippy::all, clippy::pedantic)]
 pub mod selection;
-#[allow(clippy::all, clippy::pedantic)]
-pub mod theme;
 #[allow(clippy::all, clippy::pedantic)]
 pub mod utils;
 

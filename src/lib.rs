@@ -1,7 +1,8 @@
 //! Vix: Simple Terminal Rust IDE.
 //!
-//! A keyboard-friendly TUI text editor built on [`ratatui`] and `vix-editor`,
-//! Vix's fully-custom code-editor widget. The crate is split into focused modules
+//! A keyboard-friendly TUI text editor built on [`ratatui`], with Vix's
+//! fully-custom code-editor widget in the `editor_core` module. The crate is
+//! split into focused modules
 //! so the editing logic can be unit-tested and reused without a live terminal.
 //!
 //! ```
@@ -56,6 +57,10 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 pub mod app;
 pub mod case;
 pub mod editor;
+// The custom code-editor widget engine. Private: it is an internal implementation
+// detail reached only through `editor::CodeEditor` and a few `crate::editor_core`
+// paths, so its rich API is not part of Vix's public surface.
+mod editor_core;
 pub mod explorer;
 pub mod fileops;
 pub mod format_tool;
@@ -75,8 +80,9 @@ pub mod snippet_tool;
 pub mod theme;
 pub mod ui;
 
-// Folded-in modules (formerly separate `vix-*` subcrates; vix-editor remains a
-// crate for its Tree-sitter grammar feature gates).
+// Folded-in modules (formerly separate `vix-*` subcrates). The custom
+// code-editor widget lives in `editor_core` (above); its Tree-sitter grammars
+// are gated behind this crate's `lang-*` features.
 pub mod ascii_character_picker;
 pub mod base64_tool;
 pub mod base_tool;

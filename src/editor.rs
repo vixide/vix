@@ -1,4 +1,4 @@
-//! Tabbed editor: a stack of buffers, each backed by a `vix-editor`
+//! Tabbed editor: a stack of buffers, each backed by an `editor_core`
 //! widget (Tree-sitter syntax highlighting, history, selection, clipboard).
 //!
 //! The code editor addresses the cursor as a flat character offset; this module
@@ -10,10 +10,10 @@ use std::path::{Path, PathBuf};
 
 use ratatui::layout::Rect;
 use ratatui::style::Style;
-use vix_editor::actions::{Delete, Duplicate, InsertText, MoveDown, MoveRight, MoveUp, SelectAll};
-use vix_editor::code::Code;
-pub use vix_editor::editor::Editor as CodeEditor;
-use vix_editor::utils::get_lang;
+use crate::editor_core::actions::{Delete, Duplicate, InsertText, MoveDown, MoveRight, MoveUp, SelectAll};
+use crate::editor_core::code::Code;
+pub use crate::editor_core::editor::Editor as CodeEditor;
+use crate::editor_core::utils::get_lang;
 use ratatui_image::protocol::StatefulProtocol;
 
 use crate::theme;
@@ -450,13 +450,12 @@ impl Editor {
             image: None,
         };
 
-        if preview {
-            if let Some(i) = self.tabs.iter().position(|t| t.preview) {
+        if preview
+            && let Some(i) = self.tabs.iter().position(|t| t.preview) {
                 self.tabs[i] = tab;
                 self.active = i;
                 return Ok(());
             }
-        }
         self.tabs.push(tab);
         self.active = self.tabs.len() - 1;
         Ok(())
@@ -940,12 +939,11 @@ impl Editor {
     /// Jump the cursor to the partner of the bracket at (or just before) it,
     /// scrolling it into `area`. No-op when the cursor is not on a bracket.
     pub fn jump_matching_bracket(&mut self, area: Rect) {
-        if let Some(t) = self.active_tab_mut() {
-            if let Some(off) = t.editor.matching_bracket_offset() {
+        if let Some(t) = self.active_tab_mut()
+            && let Some(off) = t.editor.matching_bracket_offset() {
                 t.editor.set_cursor(off);
                 t.editor.focus(&area);
             }
-        }
     }
 
     /// Forward-delete (the `Delete` key): step right, then delete back.

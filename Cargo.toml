@@ -2,15 +2,13 @@
 # `cargo build`/`cargo test --workspace` cover the internal crates too, and the
 # whole tree shares one lockfile and target directory.
 [workspace]
-members = [
-    "vix-editor",
-]
+members = []
 
 [package]
 name = "vix"
 version = "0.1.0"
-edition = "2021"
-rust-version = "1.86"
+edition = "2024"
+rust-version = "1.95"
 description = "Vix: Simple Terminal Rust IDE — a keyboard-friendly TUI text editor"
 license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
 repository = "https://github.com/sixarm/vix"
@@ -25,22 +23,37 @@ categories = ["text-editors", "command-line-utilities"]
 #   cargo build --release --no-default-features            # no highlighting (smallest)
 #   cargo build --release --no-default-features --features syntax-all
 default = ["syntax-common"]
-syntax-common = [
-    "vix-editor/lang-rust",
-    "vix-editor/lang-markdown",
-    "vix-editor/lang-json",
-    "vix-editor/lang-toml",
+syntax-common = ["lang-rust", "lang-markdown", "lang-json", "lang-toml"]
+syntax-all = [
+    "lang-bash", "lang-c", "lang-c-sharp", "lang-cpp", "lang-css", "lang-go",
+    "lang-html", "lang-java", "lang-javascript", "lang-json", "lang-markdown",
+    "lang-python", "lang-rust", "lang-toml", "lang-typescript", "lang-yaml",
 ]
-syntax-all = ["vix-editor/langs-all"]
+
+# One feature per Tree-sitter grammar — each pulls in only that C parser. The
+# editor (src/editor_core/) links a parser only when its feature is enabled.
+lang-bash = ["dep:tree-sitter-bash"]
+lang-c = ["dep:tree-sitter-c"]
+lang-c-sharp = ["dep:tree-sitter-c-sharp"]
+lang-cpp = ["dep:tree-sitter-cpp"]
+lang-css = ["dep:tree-sitter-css"]
+lang-go = ["dep:tree-sitter-go"]
+lang-html = ["dep:tree-sitter-html"]
+lang-java = ["dep:tree-sitter-java"]
+lang-javascript = ["dep:tree-sitter-javascript"]
+lang-json = ["dep:tree-sitter-json"]
+lang-markdown = ["dep:tree-sitter-md"]
+lang-python = ["dep:tree-sitter-python"]
+lang-rust = ["dep:tree-sitter-rust"]
+lang-toml = ["dep:tree-sitter-toml-ng"]
+lang-typescript = ["dep:tree-sitter-typescript"]
+lang-yaml = ["dep:tree-sitter-yaml"]
 
 [dependencies]
 # Terminal UI core. The whole widget ecosystem must agree on this version.
 ratatui = { version = "0.30", features = ["crossterm"] }
-# Center editing widget: Vix's fully-custom Tree-sitter code editor (syntax
-# highlighting, history, selection, clipboard, mouse, and soft wrap). Lives under
-# vix-editor/ so the Tree-sitter grammars can be gated behind features (see
-# [features]) and the renderer is theme-aware.
-vix-editor = { path = "vix-editor", default-features = false, features = ["crossterm"] }
+# The custom code-editor widget now lives in-tree at src/editor_core/; its
+# Tree-sitter, clipboard, rope, and grammar dependencies are listed below.
 # Calendar box: date/time strings and the navigable month grid. Internal crate so
 # the calendar logic stays unit-testable on its own (it owns the jiff dependency).
 # Clock box: live date/time strings (local, UTC, ISO week, active zone) + rows.
@@ -102,6 +115,35 @@ uuid = { version = "1", features = ["v1", "v3", "v4", "v5", "v6", "v7", "v8"] }
 include_dir = "0.7.4"
 serde_yaml = "0.9.34"
 markdown = "1.0.0"
+
+# Dependencies for the in-tree code-editor widget (src/editor_core/).
+anyhow = "1.0"
+arboard = { version = "3.6", default-features = false }
+ratatui-core = "0.1"
+ropey = "1.6"
+rust-embed = { version = "8.11", features = ["include-exclude"] }
+streaming-iterator = "0.1"
+tree-sitter = "0.26"
+unicode-segmentation = "1.13"
+unicode-width = "0.2"
+
+# Optional Tree-sitter grammars, selected by the lang-* features above.
+tree-sitter-bash = { version = "0.25.1", optional = true }
+tree-sitter-c = { version = "0.24.2", optional = true }
+tree-sitter-c-sharp = { version = "0.23.5", optional = true }
+tree-sitter-cpp = { version = "0.23.4", optional = true }
+tree-sitter-css = { version = "0.25", optional = true }
+tree-sitter-go = { version = "0.25", optional = true }
+tree-sitter-html = { version = "0.23.2", optional = true }
+tree-sitter-java = { version = "0.23.5", optional = true }
+tree-sitter-javascript = { version = "0.25", optional = true }
+tree-sitter-json = { version = "0.24.8", optional = true }
+tree-sitter-md = { version = "0.5.3", optional = true }
+tree-sitter-python = { version = "0.25", optional = true }
+tree-sitter-rust = { version = "0.24", optional = true }
+tree-sitter-toml-ng = { version = "0.7.0", optional = true }
+tree-sitter-typescript = { version = "0.23", optional = true }
+tree-sitter-yaml = { version = "0.7", optional = true }
 
 [profile.release]
 lto = true

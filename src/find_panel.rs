@@ -157,16 +157,14 @@ impl PathFilter {
     /// set) and must not match the exclude regex (when set).
     #[must_use]
     pub fn allows(&self, path: &str) -> bool {
-        if let Some(inc) = &self.include {
-            if !inc.is_match(path) {
+        if let Some(inc) = &self.include
+            && !inc.is_match(path) {
                 return false;
             }
-        }
-        if let Some(exc) = &self.exclude {
-            if exc.is_match(path) {
+        if let Some(exc) = &self.exclude
+            && exc.is_match(path) {
                 return false;
             }
-        }
         true
     }
 }

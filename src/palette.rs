@@ -288,8 +288,8 @@ pub fn symbols(text: &str) -> Vec<Symbol> {
     };
     let mut out = Vec::new();
     for (i, line) in text.lines().enumerate() {
-        if let Some(caps) = re.captures(line) {
-            if let Some(name) = caps.get(2).or_else(|| caps.get(4)) {
+        if let Some(caps) = re.captures(line)
+            && let Some(name) = caps.get(2).or_else(|| caps.get(4)) {
                 let kind = caps
                     .get(1)
                     .or_else(|| caps.get(3))
@@ -301,7 +301,6 @@ pub fn symbols(text: &str) -> Vec<Symbol> {
                     text: line.trim_start().chars().take(120).collect(),
                 });
             }
-        }
     }
     out
 }

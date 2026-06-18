@@ -3532,6 +3532,8 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "vix"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "arboard",
  "base64",
  "clap",
  "confy",
@@ -3548,8 +3550,11 @@ dependencies = [
  "percent-encoding",
  "pulldown-cmark",
  "ratatui",
+ "ratatui-core",
  "ratatui-image",
  "regex",
+ "ropey",
+ "rust-embed",
  "rust-i18n",
  "serde",
  "serde_json",
@@ -3557,23 +3562,9 @@ dependencies = [
  "sha2",
  "similar",
  "spellbook",
+ "streaming-iterator",
  "sysinfo",
  "toml 0.8.23",
- "uuid",
- "vix-editor",
-]
-
-[[package]]
-name = "vix-editor"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arboard",
- "crossterm",
- "ratatui-core",
- "ropey",
- "rust-embed",
- "streaming-iterator",
  "tree-sitter",
  "tree-sitter-bash",
  "tree-sitter-c",
@@ -3593,6 +3584,7 @@ dependencies = [
  "tree-sitter-yaml",
  "unicode-segmentation",
  "unicode-width",
+ "uuid",
 ]
 
 [[package]]

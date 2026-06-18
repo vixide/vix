@@ -475,11 +475,10 @@ pub fn commit_count(dir: &Path) -> Option<u64> {
 pub fn local_branches(dir: &Path) -> Vec<String> {
     let out = git_stdout(dir, &["branch", "--format=%(refname:short)"]).unwrap_or_default();
     let mut names: Vec<String> = out.lines().map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect();
-    if let Some(cur) = branch(dir) {
-        if let Some(pos) = names.iter().position(|n| *n == cur) {
+    if let Some(cur) = branch(dir)
+        && let Some(pos) = names.iter().position(|n| *n == cur) {
             names.swap(0, pos);
         }
-    }
     names
 }
 

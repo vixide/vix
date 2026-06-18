@@ -166,11 +166,10 @@ pub fn human_uptime(secs: u64) -> String {
 
 fn env_or(keys: &[&str], fallback: &str) -> String {
     for key in keys {
-        if let Ok(v) = std::env::var(key) {
-            if !v.is_empty() {
+        if let Ok(v) = std::env::var(key)
+            && !v.is_empty() {
                 return v;
             }
-        }
     }
     fallback.to_string()
 }

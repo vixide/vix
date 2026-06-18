@@ -254,11 +254,10 @@ fn hunspell_search_dirs() -> Vec<PathBuf> {
     let text = String::from_utf8_lossy(&out.stderr);
     let mut lines = text.lines();
     while let Some(line) = lines.next() {
-        if line.trim_start().starts_with("SEARCH PATH:") {
-            if let Some(paths) = lines.next() {
+        if line.trim_start().starts_with("SEARCH PATH:")
+            && let Some(paths) = lines.next() {
                 return paths.split(':').filter(|p| !p.is_empty()).map(PathBuf::from).collect();
             }
-        }
     }
     Vec::new()
 }
