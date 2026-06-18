@@ -1844,7 +1844,10 @@ impl App {
         match action {
             "git.changes" => self.open_git_panel(),
             "git.push" => self.git_remote_command("git push"),
-            "git.pull" => self.git_remote_command("git pull"),
+            "git.pull_ff" => self.git_remote_command("git pull --ff-only"),
+            "git.pull_rebase" => self.git_remote_command("git pull --rebase"),
+            "git.pull_merge" => self.git_remote_command("git pull --no-rebase"),
+            "git.pull_squash" => self.git_remote_command("git pull --squash"),
             "git.fetch" => self.git_remote_command("git fetch"),
             "git.switch_branch" => self.open_branch_chooser(),
             "git.merge_branch" => self.open_branch_chooser_mode(true),
