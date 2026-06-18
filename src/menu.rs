@@ -380,7 +380,10 @@ const TOOLS_LSP: &[Item] = &[
     Item::leaf("menu.item.lsp.references", "lsp.references", ""),
     Item::leaf("menu.item.lsp.format", "lsp.format", ""),
     Item::leaf("menu.item.lsp.hover", "lsp.hover", ""),
+    Item::leaf("menu.item.lsp.signature_help", "lsp.signature_help", ""),
     Item::leaf("menu.item.lsp.complete", "lsp.complete", "Ctrl Space"),
+    Item::leaf("menu.item.lsp.document_symbols", "lsp.document_symbols", ""),
+    Item::leaf("menu.item.lsp.workspace_symbols", "lsp.workspace_symbols", ""),
     Item::leaf("menu.item.lsp.diagnostics", "lsp.diagnostics", ""),
 ];
 

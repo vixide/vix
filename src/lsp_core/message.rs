@@ -234,6 +234,84 @@ pub fn parse_definition(result: &Value) -> Option<Location> {
     }
 }
 
+/// Parse a `textDocument/documentSymbol` result into `(line, character, name)`
+/// in document order. Handles both the hierarchical `DocumentSymbol[]` (with
+/// nested `children`) and the flat `SymbolInformation[]` shapes.
+#[must_use]
+pub fn parse_document_symbols(result: &Value) -> Vec<(u32, u32, String)> {
+    let mut out = Vec::new();
+    if let Value::Array(arr) = result {
+        for item in arr {
+            collect_symbol(item, &mut out);
+        }
+    }
+    out
+}
+
+fn collect_symbol(item: &Value, out: &mut Vec<(u32, u32, String)>) {
+    let Some(name) = item.get("name").and_then(Value::as_str) else { return };
+    // DocumentSymbol uses `selectionRange`/`range`; SymbolInformation nests under
+    // `location.range`.
+    let range = item
+        .get("selectionRange")
+        .or_else(|| item.get("range"))
+        .or_else(|| item.get("location").and_then(|l| l.get("range")))
+        .and_then(parse_range);
+    if let Some(range) = range {
+        out.push((range.start.line, range.start.character, name.to_string()));
+    }
+    if let Some(Value::Array(children)) = item.get("children") {
+        for child in children {
+            collect_symbol(child, out);
+        }
+    }
+}
+
+/// Parse a `workspace/symbol` result (`SymbolInformation[]` / `WorkspaceSymbol[]`)
+/// into `(uri, line, character, name)`.
+#[must_use]
+pub fn parse_workspace_symbols(result: &Value) -> Vec<(String, u32, u32, String)> {
+    let Value::Array(arr) = result else { return Vec::new() };
+    arr.iter()
+        .filter_map(|item| {
+            let name = item.get("name")?.as_str()?.to_string();
+            let location = item.get("location")?;
+            let uri = location.get("uri")?.as_str()?.to_string();
+            let range = location.get("range").and_then(parse_range).unwrap_or_default();
+            Some((uri, range.start.line, range.start.character, name))
+        })
+        .collect()
+}
+
+/// Parse a `textDocument/signatureHelp` result into a one-line summary of the
+/// active signature (with the active parameter, when reported).
+#[must_use]
+pub fn parse_signature_help(result: &Value) -> Option<String> {
+    let sigs = result.get("signatures")?.as_array()?;
+    if sigs.is_empty() {
+        return None;
+    }
+    let active = result
+        .get("activeSignature")
+        .and_then(Value::as_u64)
+        .and_then(|n| usize::try_from(n).ok())
+        .unwrap_or(0);
+    let sig = sigs.get(active).or_else(|| sigs.first())?;
+    let label = sig.get("label")?.as_str()?.to_string();
+    let active_param = sig
+        .get("activeParameter")
+        .or_else(|| result.get("activeParameter"))
+        .and_then(Value::as_u64)
+        .and_then(|n| usize::try_from(n).ok());
+    if let Some(p) = active_param
+        && let Some(param) = sig.get("parameters").and_then(Value::as_array).and_then(|ps| ps.get(p))
+        && let Some(plabel) = param.get("label").and_then(Value::as_str)
+    {
+        return Some(format!("{label}\n→ {plabel}"));
+    }
+    Some(label)
+}
+
 /// Parse a `textDocument/formatting`/`rangeFormatting` result (`TextEdit[]`)
 /// into `(range, new_text)` pairs, in document order.
 #[must_use]
@@ -438,6 +516,41 @@ mod tests {
         assert_eq!(edits[0].1, "let");
         assert_eq!(edits[1].0.start.line, 2);
         assert!(parse_text_edits(&Value::Null).is_empty());
+    }
+
+    #[test]
+    fn document_symbols_flatten_children() {
+        let syms = parse_document_symbols(&json!([
+            {"name": "Foo", "kind": 5,
+             "range": {"start": {"line": 0, "character": 0}, "end": {"line": 9, "character": 0}},
+             "selectionRange": {"start": {"line": 0, "character": 6}, "end": {"line": 0, "character": 9}},
+             "children": [
+                {"name": "bar", "kind": 6,
+                 "selectionRange": {"start": {"line": 1, "character": 4}, "end": {"line": 1, "character": 7}}}
+             ]}
+        ]));
+        assert_eq!(syms.len(), 2);
+        assert_eq!(syms[0], (0, 6, "Foo".to_string()));
+        assert_eq!(syms[1], (1, 4, "bar".to_string()));
+    }
+
+    #[test]
+    fn workspace_symbols_and_signature_help() {
+        let ws = parse_workspace_symbols(&json!([
+            {"name": "main", "kind": 12,
+             "location": {"uri": "file:///m.rs", "range": {"start": {"line": 3, "character": 3}, "end": {"line": 3, "character": 7}}}}
+        ]));
+        assert_eq!(ws.len(), 1);
+        assert_eq!(ws[0].0, "file:///m.rs");
+        assert_eq!(ws[0].3, "main");
+        let help = parse_signature_help(&json!({
+            "signatures": [{"label": "fn f(a: i32, b: i32)", "parameters": [{"label": "a: i32"}, {"label": "b: i32"}]}],
+            "activeSignature": 0, "activeParameter": 1
+        }));
+        let help = help.unwrap();
+        assert!(help.contains("fn f(a: i32, b: i32)"));
+        assert!(help.contains("b: i32"));
+        assert!(parse_signature_help(&json!({"signatures": []})).is_none());
     }
 
     #[test]

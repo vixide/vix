@@ -103,6 +103,8 @@ pub enum PromptKind {
     GitDeleteBranch,
     /// Enter a regex to search the repository with `git grep`.
     GitGrep,
+    /// Enter a query to search symbols across the project (LSP workspace/symbol).
+    WorkspaceSymbol,
     /// Enter the file-explorer "include" path regex filter.
     ExplorerInclude,
     /// Enter the file-explorer "exclude" path regex filter.
@@ -2043,17 +2045,40 @@ impl App {
                 self.editor.cursor_section_end(area);
             }
             "nav.goto_line" => self.open_palette_seeded(":"),
+            "nav.goto_symbol" => self.open_palette_seeded("@"),
+            "nav.goto_workspace_symbol" => self.open_palette_seeded("@@"),
+            "nav.outline" => self.open_outline(),
+            _ => return self.run_lsp_action(action),
+        }
+        true
+    }
+
+    /// Dispatch a language-server action (definition/implementation/references/
+    /// formatting/symbols/hover/completion/diagnostics). Returns `true` if
+    /// `action` was handled. Extracted to keep [`App::run_motion_action`] within
+    /// the line limit.
+    fn run_lsp_action(&mut self, action: &str) -> bool {
+        match action {
             "nav.goto_definition" => self.goto_definition(),
             "nav.goto_implementation" => self.goto_implementation(),
             "nav.goto_type_definition" => self.goto_type_definition(),
             "lsp.references" => self.find_references(),
             "lsp.format" => self.lsp_format(),
+            "lsp.document_symbols" => self.request_document_symbols(),
+            "lsp.signature_help" => self.lsp_signature_help(),
+            "lsp.workspace_symbols" => {
+                if self.active_path().is_some_and(|p| self.lsp.handles(&p)) {
+                    self.prompt = Some(Prompt::new(
+                        PromptKind::WorkspaceSymbol,
+                        t!("prompt.workspace_symbol").to_string(),
+                    ));
+                } else {
+                    self.status = t!("status.lsp_inactive").to_string();
+                }
+            }
             "lsp.hover" => self.lsp_hover(),
             "lsp.complete" => self.lsp_complete(),
             "lsp.diagnostics" => self.open_diagnostics_panel(),
-            "nav.goto_symbol" => self.open_palette_seeded("@"),
-            "nav.goto_workspace_symbol" => self.open_palette_seeded("@@"),
-            "nav.outline" => self.open_outline(),
             _ => return false,
         }
         true
@@ -4121,7 +4146,9 @@ impl App {
         for event in self.lsp.poll() {
             match event {
                 crate::lsp::LspEvent::Diagnostics(_) => {}
-                crate::lsp::LspEvent::Hover(text) => self.hover = Some(HoverPopup { text }),
+                crate::lsp::LspEvent::Hover(text) | crate::lsp::LspEvent::SignatureHelp(text) => {
+                    self.hover = Some(HoverPopup { text });
+                }
                 crate::lsp::LspEvent::Definition { path, line, character } => {
                     self.lsp_jump(&path, line, character);
                 }
@@ -4132,6 +4159,8 @@ impl App {
                 }
                 crate::lsp::LspEvent::References(locs) => self.show_references(&locs),
                 crate::lsp::LspEvent::Edits(edits) => self.apply_lsp_edits(&edits),
+                crate::lsp::LspEvent::DocumentSymbols(syms) => self.show_document_symbols(&syms),
+                crate::lsp::LspEvent::WorkspaceSymbols(syms) => self.show_workspace_symbols(&syms),
             }
         }
         // Rebuild the active editor's diagnostic underlines every tick so they
@@ -8306,6 +8335,87 @@ impl App {
         }
     }
 
+    /// Request the document symbols (outline) for the active file (LSP).
+    fn request_document_symbols(&mut self) {
+        if let Some(path) = self.active_path()
+            && self.lsp.handles(&path)
+        {
+            self.lsp.request_document_symbols(&path);
+        } else {
+            self.status = t!("status.lsp_inactive").to_string();
+        }
+    }
+
+    /// Request signature help at the cursor (LSP).
+    fn lsp_signature_help(&mut self) {
+        if let Some(path) = self.active_path()
+            && self.lsp.handles(&path)
+        {
+            let (line, character) = self.cursor_lsp_position(&path);
+            self.lsp.request_signature_help(&path, line, character);
+        } else {
+            self.status = t!("status.lsp_inactive").to_string();
+        }
+    }
+
+    /// Show document symbols (all in the active file) in the static-results panel.
+    fn show_document_symbols(&mut self, syms: &[(u32, u32, String)]) {
+        let Some(path) = self.active_path() else { return };
+        let mut hits: Vec<Hit> = syms
+            .iter()
+            .map(|(line, character, name)| {
+                let line1 = *line as usize + 1;
+                Hit {
+                    path: path.clone(),
+                    line: line1,
+                    col: *character as usize + 1,
+                    display: format!("{name}  :{line1}"),
+                }
+            })
+            .collect();
+        if hits.is_empty() {
+            self.status = t!("status.no_symbols").to_string();
+            return;
+        }
+        hits.sort_by_key(|h| h.line);
+        let mut ps = WorkspaceSearch::new(false);
+        ps.static_results = true;
+        ps.status = t!("status.symbols_n", n = hits.len()).to_string();
+        ps.hits = hits;
+        self.workspace_search = Some(ps);
+    }
+
+    /// Show workspace symbols in the static-results panel (Enter jumps).
+    fn show_workspace_symbols(&mut self, syms: &[(PathBuf, u32, u32, String)]) {
+        let mut hits: Vec<Hit> = syms
+            .iter()
+            .map(|(path, line, character, name)| {
+                let rel = path
+                    .strip_prefix(&self.root)
+                    .unwrap_or(path)
+                    .to_string_lossy()
+                    .into_owned();
+                let line1 = *line as usize + 1;
+                Hit {
+                    path: path.clone(),
+                    line: line1,
+                    col: *character as usize + 1,
+                    display: format!("{name}  {rel}:{line1}"),
+                }
+            })
+            .collect();
+        if hits.is_empty() {
+            self.status = t!("status.no_symbols").to_string();
+            return;
+        }
+        hits.sort_by(|a, b| a.display.cmp(&b.display));
+        let mut ps = WorkspaceSearch::new(false);
+        ps.static_results = true;
+        ps.status = t!("status.symbols_n", n = hits.len()).to_string();
+        ps.hits = hits;
+        self.workspace_search = Some(ps);
+    }
+
     /// Show LSP reference locations in the static-results panel (Enter jumps).
     fn show_references(&mut self, locs: &[(PathBuf, u32, u32)]) {
         let mut hits: Vec<Hit> = locs
@@ -8942,6 +9052,13 @@ impl App {
             PromptKind::GitEditDescription => self.git_edit_description(&prompt.input),
             PromptKind::GitDeleteBranch => self.git_delete_branch(&prompt.input),
             PromptKind::GitGrep => self.git_grep(&prompt.input),
+            PromptKind::WorkspaceSymbol => {
+                if let Some(path) = self.active_path()
+                    && self.lsp.handles(&path)
+                {
+                    self.lsp.request_workspace_symbols(&path, prompt.input.trim());
+                }
+            }
             PromptKind::ExplorerInclude => {
                 let exclude = self.explorer.exclude_filter.clone();
                 self.explorer.set_filter(prompt.input.trim(), &exclude);

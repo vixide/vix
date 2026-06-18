@@ -413,11 +413,20 @@ fn diagnostics_panel_empty_reports_none() {
 fn lsp_navigation_actions_report_inactive_without_server() {
     // With no language server attached, the LSP nav actions are no-ops that
     // report inactivity rather than panicking.
-    for action in ["nav.goto_implementation", "nav.goto_type_definition", "lsp.references", "lsp.format"] {
+    for action in [
+        "nav.goto_implementation",
+        "nav.goto_type_definition",
+        "lsp.references",
+        "lsp.format",
+        "lsp.document_symbols",
+        "lsp.workspace_symbols",
+        "lsp.signature_help",
+    ] {
         let mut app = app_at(Path::new("."));
         type_str(&mut app, "fn main() {}\n");
         app.run_action(action);
         assert!(app.workspace_search.is_none(), "{action} opened no panel");
+        assert!(app.prompt.is_none(), "{action} opened no prompt without a server");
     }
 }
 
