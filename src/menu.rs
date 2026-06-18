@@ -389,6 +389,7 @@ const GIT: &[Item] = &[
     SEP,
     Item::leaf("menu.item.git.diff_next", "git.diff_next", ""),
     Item::leaf("menu.item.git.diff_prev", "git.diff_prev", ""),
+    Item::leaf("menu.item.git.stage_hunk", "git.stage_hunk", ""),
     Item::leaf("menu.item.git.revert_hunk", "git.revert_hunk", ""),
     SEP,
     Item::sub("menu.item.git.branch", GIT_BRANCH),

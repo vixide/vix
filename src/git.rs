@@ -180,6 +180,9 @@ pub struct Hunk {
     /// One past the last current line the hunk covers. Equal to `current_start`
     /// for a pure deletion (nothing remains in the current buffer there).
     pub current_end: usize,
+    /// First HEAD line (0-based) the hunk's committed text begins at — used to
+    /// locate the region when staging the hunk into the index.
+    pub head_start: usize,
     /// The committed (HEAD) text for this region, with line endings, used to
     /// restore the hunk on revert. Empty for a pure addition.
     pub head_text: String,
@@ -214,7 +217,7 @@ pub fn hunks(head: &str, current: &str) -> Vec<Hunk> {
     let flush = |run: &mut Option<(usize, usize, usize, usize)>, out: &mut Vec<Hunk>| {
         if let Some((nlo, nhi, olo, ohi)) = run.take() {
             let head_text = head_lines.get(olo..ohi).map(<[&str]>::concat).unwrap_or_default();
-            out.push(Hunk { current_start: nlo, current_end: nhi, head_text });
+            out.push(Hunk { current_start: nlo, current_end: nhi, head_start: olo, head_text });
         }
     };
 
@@ -394,6 +397,64 @@ pub fn head_blob(dir: &Path, rel_path: &str) -> Option<String> {
 #[must_use]
 pub fn stage(dir: &Path, rel_path: &str) -> bool {
     git(dir, &["add", "--", rel_path]).is_ok_and(|o| o.status.success())
+}
+
+/// The staged (index) version of `rel_path` (`git show :path`), trailing newline
+/// preserved. `None` when the file is not in the index.
+#[must_use]
+pub fn index_blob(dir: &Path, rel_path: &str) -> Option<String> {
+    let out = git(dir, &["show", &format!(":{rel_path}")]).ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Replace the index entry for `rel_path` with exactly `content` (used to stage
+/// a single hunk): hash the content into a blob and point the index at it,
+/// keeping the working tree untouched.
+///
+/// # Errors
+/// Returns an error when the git plumbing commands fail.
+pub fn stage_content(dir: &Path, rel_path: &str, content: &str) -> Result<(), String> {
+    let hash = git_stdin(dir, &["hash-object", "-w", "--path", rel_path, "--stdin"], content)?;
+    let sha = hash.trim();
+    // Preserve the file's existing index mode when known; default to a regular
+    // non-executable file.
+    let mode = git_stdout(dir, &["ls-files", "-s", "--", rel_path])
+        .and_then(|s| s.split_whitespace().next().map(str::to_string))
+        .unwrap_or_else(|| "100644".to_string());
+    let info = format!("{mode},{sha},{rel_path}");
+    let out = git(dir, &["update-index", "--add", "--cacheinfo", &info])
+        .map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
+/// Run a git command feeding `input` on stdin; return its stdout on success.
+fn git_stdin(dir: &Path, args: &[&str], input: &str) -> Result<String, String> {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = Command::new("git")
+        .current_dir(dir)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| "no stdin".to_string())?
+        .write_all(input.as_bytes())
+        .map_err(|e| e.to_string())?;
+    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
 }
 
 /// Unstage a path (`git restore --staged -- <path>`). Returns success.
