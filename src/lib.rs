@@ -69,6 +69,7 @@ pub mod query;
 pub mod search;
 pub mod session;
 pub mod settings;
+pub mod snippet_tool;
 pub mod theme;
 pub mod ui;
 

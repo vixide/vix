@@ -520,6 +520,8 @@ pub struct Layout {
     pub file_info: Rect,
     /// Text Information panel row list rect (for click-to-select).
     pub text_info: Rect,
+    /// Snippets picker row list rect (for click-to-select).
+    pub snippets: Rect,
     /// Row-list rectangle of the open contact browser, for click hit-testing.
     pub contacts: Rect,
     /// Row-list rectangle of the open vCard view, for click hit-testing.
@@ -640,6 +642,8 @@ pub struct App {
     pub text_info: Option<TextInfoPanel>,
     /// Markdown preview overlay, when open.
     pub markdown_preview: Option<MarkdownPreview>,
+    /// Snippets picker overlay, when open.
+    pub snippets: Option<crate::snippet_tool::Picker>,
     /// Contact-browser overlay, when open.
     pub contacts: Option<ContactPanel>,
     /// Single-vCard view overlay, when open (above the contact browser).
@@ -854,6 +858,7 @@ impl App {
             file_info: None,
             text_info: None,
             markdown_preview: None,
+            snippets: None,
             contacts: None,
             vcard: None,
             lsp,
@@ -1188,6 +1193,10 @@ impl App {
         }
         if self.markdown_preview.is_some() {
             self.markdown_preview_key(key);
+            return;
+        }
+        if self.snippets.is_some() {
+            self.snippets_key(key);
             return;
         }
         if self.vcard.is_some() {
@@ -1907,6 +1916,7 @@ impl App {
             "tools.file_info" => self.open_file_info(),
             "tools.text_info" => self.open_text_info(),
             "tools.markdown_preview" => self.open_markdown_preview(),
+            "tools.snippets" => self.open_snippets(),
             "tools.contacts" => self.open_contacts(),
             "tools.clock" => {
                 self.show_clock = !self.show_clock;
@@ -4673,6 +4683,10 @@ impl App {
             }
             return;
         }
+        if self.snippets.is_some() {
+            self.snippets_mouse(mouse);
+            return;
+        }
         if self.vcard.is_some() {
             self.vcard_mouse(mouse);
             return;
@@ -6740,6 +6754,59 @@ impl App {
             KeyCode::Esc | KeyCode::Char('q') => self.markdown_preview = None,
             _ => {}
         }
+    }
+
+    // ----- Snippets -------------------------------------------------------
+
+    /// Open the Snippets picker.
+    fn open_snippets(&mut self) {
+        self.snippets = Some(crate::snippet_tool::Picker::new());
+    }
+
+    fn snippets_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.snippets.as_mut() {
+                    p.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.snippets.as_mut() {
+                    p.down();
+                }
+            }
+            KeyCode::Enter => self.insert_selected_snippet(),
+            KeyCode::Esc => self.snippets = None,
+            _ => {}
+        }
+    }
+
+    fn snippets_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.snippets;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row = (mouse.row - r.y) as usize;
+        if let Some(p) = self.snippets.as_mut() {
+            if p.select_index(row) {
+                self.insert_selected_snippet();
+            }
+        }
+    }
+
+    /// Insert the highlighted snippet's body at the cursor and close the picker.
+    fn insert_selected_snippet(&mut self) {
+        let Some(body) = self.snippets.as_ref().map(|p| p.selected_body().to_string()) else {
+            return;
+        };
+        let area = self.layout.editor;
+        if self.editor.insert_str(&body, area) {
+            self.status = t!("status.snippet_inserted").to_string();
+        }
+        self.snippets = None;
     }
 
     // ----- System Information panel ---------------------------------------

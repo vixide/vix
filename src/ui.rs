@@ -213,6 +213,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.markdown_preview.is_some() {
         draw_markdown_preview(app, frame, area);
     }
+    if app.snippets.is_some() {
+        draw_snippets(app, frame, area);
+    }
     if app.contacts.is_some() {
         draw_contacts(app, frame, area);
     }
@@ -2551,6 +2554,57 @@ fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
     let hint = Line::from(Span::styled(t!("ui.vcard_hint").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
     app.layout.vcard = Rect { x: chunks[0].x, y: chunks[0].y, width: list_area.width, height: (view_h as u16).min(chunks[0].height) };
+}
+
+fn draw_snippets(app: &mut App, frame: &mut Frame, area: Rect) {
+    use crate::snippet_tool::SNIPPETS;
+    let Some(picker) = app.snippets.as_ref() else { return };
+    let n = SNIPPETS.len();
+    let width = 40u16.min(area.width).max(20);
+    let height = (n as u16 + 3).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} ", t!("ui.snippets")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+    let rows: Vec<Line> = SNIPPETS
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let text = format!("  {}", s.name);
+            if i == picker.selected {
+                Line::from(Span::styled(text, theme::selected()))
+            } else {
+                Line::from(Span::raw(text))
+            }
+        })
+        .collect();
+    frame.render_widget(Paragraph::new(rows), chunks[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(t!("ui.system_info_hint").to_string(), theme::dim()))),
+        chunks[1],
+    );
+    app.layout.snippets = Rect {
+        x: chunks[0].x,
+        y: chunks[0].y,
+        width: chunks[0].width,
+        height: (n as u16).min(chunks[0].height),
+    };
 }
 
 fn draw_markdown_preview(app: &mut App, frame: &mut Frame, area: Rect) {

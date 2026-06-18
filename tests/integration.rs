@@ -216,6 +216,17 @@ fn convert_failure_leaves_buffer_unchanged() {
 }
 
 #[test]
+fn snippets_picker_inserts_selected_body() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.snippets");
+    assert!(app.snippets.is_some(), "picker opened");
+    app.on_key(keycode(KeyCode::Enter)); // insert the first snippet
+    assert!(app.snippets.is_none(), "picker closed after insert");
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.starts_with("#!/usr/bin/env bash"), "got: {text:?}");
+}
+
+#[test]
 fn markdown_preview_renders_active_buffer() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "# Title\n\n- a\n- b\n");
