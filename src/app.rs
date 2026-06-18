@@ -702,6 +702,12 @@ pub struct App {
     /// Show a vertical guide at the [`crate::ui::RULER_COLUMN`] text column.
     /// Session-only; toggled with `toggle_ruler`.
     pub show_ruler: bool,
+    /// Whether a keyboard macro is being recorded (capturing editor keys).
+    pub macro_recording: bool,
+    /// The recorded editor key sequence, replayed by `play_macro`.
+    macro_keys: Vec<KeyEvent>,
+    /// True while replaying, to suppress re-recording and recursion.
+    macro_playing: bool,
     /// Whether the workspace root is a git work tree (checked once at startup).
     pub git_repo: bool,
     /// Cached current git branch (or short hash when detached), when in a repo.
@@ -889,6 +895,9 @@ impl App {
             show_scrollbar: settings.show_scrollbar,
             overwrite: false,
             show_ruler: false,
+            macro_recording: false,
+            macro_keys: Vec::new(),
+            macro_playing: false,
             git_repo: false,
             git_branch: None,
             git_status: Vec::new(),
@@ -2284,9 +2293,18 @@ impl App {
                 self.show_ruler = !self.show_ruler;
                 self.status = t!(if self.show_ruler { "status.ruler_on" } else { "status.ruler_off" }).to_string();
             }
-            "shell_mode" | "command_mode" | "toggle_macro"
-            | "play_macro" | "suspend" | "autocomplete" | "cycle_autocomplete_back"
-            | "toggle_key_menu" => todo_action!(),
+            "toggle_macro" => {
+                self.macro_recording = !self.macro_recording;
+                if self.macro_recording {
+                    self.macro_keys.clear();
+                    self.status = t!("status.macro_recording").to_string();
+                } else {
+                    self.status = t!("status.macro_recorded", count = self.macro_keys.len()).to_string();
+                }
+            }
+            "play_macro" => self.play_macro(),
+            "shell_mode" | "command_mode" | "suspend" | "autocomplete"
+            | "cycle_autocomplete_back" | "toggle_key_menu" => todo_action!(),
             _ => return false,
         }
         true
@@ -3702,6 +3720,11 @@ impl App {
         if self.editor.active_tab().is_some_and(Tab::is_image) {
             return;
         }
+        // Capture editor-bound keys into a macro while recording (modal/menu keys
+        // never reach here, so they are naturally excluded).
+        if self.macro_recording && !self.macro_playing {
+            self.macro_keys.push(key);
+        }
         let area = self.editor_view();
         match key.code {
             KeyCode::Home => return self.editor.cursor_line_home(),
@@ -3755,6 +3778,20 @@ impl App {
                 t.preview = false;
             }
         }
+    }
+
+    /// Replay the recorded macro's editor keys at the current cursor. No-op while
+    /// recording or when nothing has been recorded.
+    fn play_macro(&mut self) {
+        if self.macro_recording || self.macro_keys.is_empty() {
+            return;
+        }
+        self.macro_playing = true;
+        for key in self.macro_keys.clone() {
+            self.editor_key(key);
+        }
+        self.macro_playing = false;
+        self.status = t!("status.macro_played").to_string();
     }
 
     fn is_edit_key(key: &KeyEvent) -> bool {

@@ -357,6 +357,20 @@ fn line_transforms_via_actions() {
 }
 
 #[test]
+fn macro_records_and_replays_editor_keys() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("toggle_macro"); // start recording
+    assert!(app.macro_recording);
+    app.on_key(key('a'));
+    app.on_key(key('b'));
+    app.run_action("toggle_macro"); // stop
+    assert!(!app.macro_recording);
+    assert_eq!(app.editor.active_tab().unwrap().text(), "ab");
+    app.run_action("play_macro"); // replays "ab" at the cursor
+    assert_eq!(app.editor.active_tab().unwrap().text(), "abab");
+}
+
+#[test]
 fn column_ruler_toggles_and_renders() {
     use ratatui::{backend::TestBackend, Terminal};
     let mut app = app_at(Path::new("."));
