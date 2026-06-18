@@ -239,6 +239,33 @@ pub fn parse_definition(result: &Value) -> Option<Location> {
     }
 }
 
+/// A `completionItem/resolve` params body: the item to resolve (`label`, plus
+/// the opaque `data` the server round-trips).
+#[must_use]
+pub fn completion_resolve_params(label: &str, data: Option<&Value>) -> Value {
+    let mut item = json!({ "label": label });
+    if let Some(d) = data {
+        item["data"] = d.clone();
+    }
+    item
+}
+
+/// Parse a `completionItem/resolve` result into a one-block detail string
+/// (`detail`, then `documentation`), or `None` when it adds nothing.
+#[must_use]
+pub fn parse_resolved_detail(result: &Value) -> Option<String> {
+    let detail = result.get("detail").and_then(Value::as_str);
+    let documentation = result.get("documentation").and_then(|d| {
+        d.as_str().or_else(|| d.get("value").and_then(Value::as_str))
+    });
+    match (detail, documentation) {
+        (Some(d), Some(doc)) => Some(format!("{d}\n{doc}")),
+        (Some(d), None) => Some(d.to_string()),
+        (None, Some(doc)) => Some(doc.to_string()),
+        (None, None) => None,
+    }
+}
+
 /// Parse a `textDocument/foldingRange` result (`FoldingRange[]`) into
 /// `(start_line, end_line)` pairs (0-based), keeping only multi-line ranges.
 #[must_use]
@@ -480,7 +507,8 @@ fn parse_completion_item(v: &Value) -> Option<CompletionItem> {
         .unwrap_or(&label)
         .to_string();
     let detail = v.get("detail").and_then(Value::as_str).map(str::to_string);
-    Some(CompletionItem { label, insert_text, detail })
+    let data = v.get("data").cloned();
+    Some(CompletionItem { label, insert_text, detail, data })
 }
 
 fn parse_position(v: &Value) -> Option<Position> {
@@ -655,6 +683,24 @@ mod tests {
         assert!(help.contains("fn f(a: i32, b: i32)"));
         assert!(help.contains("b: i32"));
         assert!(parse_signature_help(&json!({"signatures": []})).is_none());
+    }
+
+    #[test]
+    fn completion_resolve_roundtrip() {
+        let params = completion_resolve_params("push", Some(&json!({"id": 7})));
+        assert_eq!(params["label"], json!("push"));
+        assert_eq!(params["data"], json!({"id": 7}));
+        assert!(completion_resolve_params("x", None).get("data").is_none());
+
+        assert_eq!(
+            parse_resolved_detail(&json!({"detail": "fn push(&mut self, T)", "documentation": "Appends."})),
+            Some("fn push(&mut self, T)\nAppends.".to_string())
+        );
+        assert_eq!(
+            parse_resolved_detail(&json!({"documentation": {"kind": "markdown", "value": "docs"}})),
+            Some("docs".to_string())
+        );
+        assert!(parse_resolved_detail(&json!({})).is_none());
     }
 
     #[test]

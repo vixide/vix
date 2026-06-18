@@ -85,6 +85,9 @@ pub struct CompletionItem {
     pub insert_text: String,
     /// Optional secondary detail (type/signature).
     pub detail: Option<String>,
+    /// Opaque server payload round-tripped to `completionItem/resolve` to fetch
+    /// fuller detail/documentation lazily.
+    pub data: Option<serde_json::Value>,
 }
 
 /// A source location: a document URI and a range within it.
