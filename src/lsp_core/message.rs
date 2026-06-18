@@ -150,6 +150,12 @@ pub fn text_document_params(uri: &str) -> Value {
     json!({ "textDocument": { "uri": uri } })
 }
 
+/// A `workspace/executeCommand` params body.
+#[must_use]
+pub fn execute_command_params(command: &str, arguments: &Value) -> Value {
+    json!({ "command": command, "arguments": arguments })
+}
+
 /// A `WorkspaceSymbolParams` body with the query string.
 #[must_use]
 pub fn workspace_symbol_params(query: &str) -> Value {
@@ -305,6 +311,33 @@ pub fn parse_resolved_detail(result: &Value) -> Option<String> {
         (None, Some(doc)) => Some(doc.to_string()),
         (None, None) => None,
     }
+}
+
+/// One resolved code lens: `(line, title, command, arguments)`.
+pub type CodeLens = (u32, String, String, Value);
+
+/// Parse a `textDocument/codeLens` result (`CodeLens[]`) into the lenses that
+/// carry an invokable command: `(line, title, command, arguments)`.
+#[must_use]
+pub fn parse_code_lenses(result: &Value) -> Vec<CodeLens> {
+    let Value::Array(arr) = result else { return Vec::new() };
+    arr.iter()
+        .filter_map(|lens| {
+            let line = u32::try_from(lens.get("range")?.get("start")?.get("line")?.as_u64()?).ok()?;
+            let cmd = lens.get("command")?;
+            let title = cmd.get("title")?.as_str()?.to_string();
+            let command = cmd.get("command")?.as_str()?.to_string();
+            let arguments = cmd.get("arguments").cloned().unwrap_or(Value::Array(Vec::new()));
+            Some((line, title, command, arguments))
+        })
+        .collect()
+}
+
+/// Parse the `WorkspaceEdit` from a server-initiated `workspace/applyEdit`
+/// request's params (`{ edit: WorkspaceEdit, label? }`).
+#[must_use]
+pub fn parse_apply_edit(params: &Value) -> Vec<UriEdits> {
+    params.get("edit").map(parse_workspace_edit).unwrap_or_default()
 }
 
 /// Parse a `textDocument/foldingRange` result (`FoldingRange[]`) into
@@ -773,6 +806,26 @@ mod tests {
         ]));
         assert_eq!(fr, vec![(0, 4), (9, 12)], "single-line range dropped");
         assert!(parse_folding_ranges(&Value::Null).is_empty());
+    }
+
+    #[test]
+    fn code_lenses_parse_commands() {
+        let lenses = parse_code_lenses(&json!([
+            {"range": {"start": {"line": 3, "character": 0}, "end": {"line": 3, "character": 1}},
+             "command": {"title": "2 references", "command": "rust-analyzer.showReferences", "arguments": [1, 2]}},
+            {"range": {"start": {"line": 9, "character": 0}, "end": {"line": 9, "character": 1}}}
+        ]));
+        assert_eq!(lenses.len(), 1, "only the lens with a command");
+        assert_eq!(lenses[0].0, 3);
+        assert_eq!(lenses[0].1, "2 references");
+        assert_eq!(lenses[0].2, "rust-analyzer.showReferences");
+        // workspace/applyEdit extraction.
+        let edits = parse_apply_edit(&json!({
+            "edit": {"changes": {"file:///x.rs": [
+                {"range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}}, "newText": "// "}
+            ]}}
+        }));
+        assert_eq!(edits.len(), 1);
     }
 
     #[test]

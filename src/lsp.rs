@@ -48,6 +48,7 @@ enum Pending {
     CompletionResolve,
     InlayHint,
     LinkedEditing,
+    CodeLens,
 }
 
 /// A message handed back from a server's stdout reader thread.
@@ -112,6 +113,8 @@ pub enum LspEvent {
     /// A linked-editing response: ranges in the active file that should be edited
     /// together (e.g. an open/close tag pair).
     LinkedRanges(Vec<crate::lsp_core::Range>),
+    /// A code-lens response: invokable lenses `(line, title, command, arguments)`.
+    CodeLenses(Vec<crate::lsp_core::message::CodeLens>),
 }
 
 /// One running language server.
@@ -388,6 +391,22 @@ impl Lsp {
         self.request(path, "textDocument/documentHighlight", line, character, Pending::DocumentHighlight);
     }
 
+    /// Request the code lenses for `path`.
+    pub fn request_code_lens(&mut self, path: &Path) {
+        self.send_request(path, "textDocument/codeLens", Pending::CodeLens, |uri| {
+            message::text_document_params(uri)
+        });
+    }
+
+    /// Execute a server command (`workspace/executeCommand`); the response is
+    /// ignored (edits arrive via a server `workspace/applyEdit` request).
+    pub fn execute_command(&mut self, path: &Path, command: &str, arguments: &Value) {
+        let Some(config) = self.config_for(path) else { return };
+        let Some(server) = self.servers.get_mut(&config.language_id) else { return };
+        let id = server.alloc_id();
+        server.send(message::request(id, "workspace/executeCommand", &message::execute_command_params(command, arguments)));
+    }
+
     /// Request the linked-editing ranges at `(line, character)`.
     pub fn request_linked_editing(&mut self, path: &Path, line: u32, character: u32) {
         self.request(path, "textDocument/linkedEditingRange", line, character, Pending::LinkedEditing);
@@ -529,8 +548,25 @@ impl Lsp {
         let has_method = msg.get("method").and_then(Value::as_str);
         let has_id = msg.get("id").is_some();
 
-        // Server → client request (has both id and method): reply minimally.
+        // Server → client request (has both id and method).
         if let (Some(method), true) = (has_method, has_id) {
+            if method == "workspace/applyEdit" {
+                // Apply the edit on the host and acknowledge optimistically.
+                if let Some(params) = msg.get("params") {
+                    let edits: Vec<FileEdits> = message::parse_apply_edit(params)
+                        .into_iter()
+                        .map(|(uri, e)| (uri_to_path(&uri), e))
+                        .collect();
+                    if !edits.is_empty() {
+                        events.push(LspEvent::WorkspaceEdit(edits));
+                    }
+                }
+                if let Some(server) = self.servers.get_mut(lang) {
+                    let id = msg.get("id").cloned().unwrap_or(Value::Null);
+                    server.write_now(&json!({ "jsonrpc": "2.0", "id": id, "result": { "applied": true } }));
+                }
+                return;
+            }
             self.reply_to_server_request(lang, msg, method);
             return;
         }
@@ -688,6 +724,12 @@ impl Lsp {
                 let ranges = message::parse_linked_editing_ranges(result);
                 if ranges.len() > 1 {
                     events.push(LspEvent::LinkedRanges(ranges));
+                }
+            }
+            Pending::CodeLens => {
+                let lenses = message::parse_code_lenses(result);
+                if !lenses.is_empty() {
+                    events.push(LspEvent::CodeLenses(lenses));
                 }
             }
             _ => {} // handled in response_to_events
