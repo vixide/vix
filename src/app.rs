@@ -431,6 +431,15 @@ struct CompleteSession {
     end: usize,
 }
 
+/// The LSP code-action chooser: offered actions and the highlighted row. Each
+/// action carries its workspace edit (empty when the action is command-only).
+pub struct CodeActionMenu {
+    /// Offered actions: `(title, per-file edits)`.
+    pub actions: Vec<crate::lsp::CodeAction>,
+    /// Index of the highlighted action.
+    pub selected: usize,
+}
+
 /// A point in the position-history jump list: a file and a 1-based line/column.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Location {
@@ -689,6 +698,8 @@ pub struct App {
     pub calculator: Option<crate::calculator_tool::Calculator>,
     /// Regex tester dialog (Tools → Regex Tester…), when open.
     pub regex_tester: Option<crate::regex_tool::Tester>,
+    /// Code-action chooser (LSP quick fixes / refactors), when open.
+    pub code_actions: Option<CodeActionMenu>,
     /// Pomodoro timer state (Tools → Pomodoro…). Stays `Some` and keeps counting
     /// down even after the dialog is closed via Start; see [`Self::pomodoro_open`].
     pub pomodoro: Option<crate::pomodoro_tool::Timer>,
@@ -893,7 +904,7 @@ impl App {
             lsp,
             lsp_synced: std::collections::HashMap::new(),
             hover: None, completion: None, dialog: None, color_converter: None,
-            unit_converter: None, calculator: None, regex_tester: None, pomodoro: None,
+            unit_converter: None, calculator: None, regex_tester: None, code_actions: None, pomodoro: None,
             pomodoro_open: false,
             pomodoro_last_tick: None,
             clip: Vec::new(),
@@ -1069,6 +1080,25 @@ impl App {
     /// Route `key` to the highest-priority open modal layer, if any. Returns
     /// `true` when a layer consumed the key (so [`App::on_key`] should stop).
     /// Extracted from `on_key` to keep that function within the line limit.
+    /// Route a key to an open tool dialog (color/unit converter, calculator,
+    /// regex tester, code-action chooser). Returns `true` if one consumed it.
+    fn try_tool_dialog_key(&mut self, key: KeyEvent) -> bool {
+        if self.color_converter.is_some() {
+            self.color_converter_key(key);
+        } else if self.unit_converter.is_some() {
+            self.unit_converter_key(key);
+        } else if self.calculator.is_some() {
+            self.calculator_key(key);
+        } else if self.regex_tester.is_some() {
+            self.regex_tester_key(key);
+        } else if self.code_actions.is_some() {
+            self.code_action_key(key);
+        } else {
+            return false;
+        }
+        true
+    }
+
     fn try_overlay_key(&mut self, key: KeyEvent) -> bool {
         if self.welcome.is_some() {
             self.welcome_key(key);
@@ -1109,20 +1139,7 @@ impl App {
             }
             return true;
         }
-        if self.color_converter.is_some() {
-            self.color_converter_key(key);
-            return true;
-        }
-        if self.unit_converter.is_some() {
-            self.unit_converter_key(key);
-            return true;
-        }
-        if self.calculator.is_some() {
-            self.calculator_key(key);
-            return true;
-        }
-        if self.regex_tester.is_some() {
-            self.regex_tester_key(key);
+        if self.try_tool_dialog_key(key) {
             return true;
         }
         if self.pomodoro_open {
@@ -2090,6 +2107,7 @@ impl App {
             "lsp.complete" => self.lsp_complete(),
             "lsp.diagnostics" => self.open_diagnostics_panel(),
             "lsp.rename" => self.begin_lsp_rename(),
+            "lsp.code_action" => self.request_code_action(),
             _ => return false,
         }
         true
@@ -2821,6 +2839,90 @@ impl App {
                 }
             }
             _ => {}
+        }
+    }
+
+    // ----- Code actions ---------------------------------------------------
+
+    /// Request code actions for the selection (or cursor line), passing the
+    /// overlapping diagnostics in the request context.
+    fn request_code_action(&mut self) {
+        let Some(path) = self.active_path() else {
+            self.status = t!("status.lsp_inactive").to_string();
+            return;
+        };
+        if !self.lsp.handles(&path) {
+            self.status = t!("status.lsp_inactive").to_string();
+            return;
+        }
+        let enc = self.lsp.encoding_for(&path);
+        // Range: the selection if any, else the whole cursor line.
+        let (start, end) = {
+            let Some(t) = self.editor.active_tab_mut() else { return };
+            let sel = t.editor.get_selection().filter(|s| !s.is_empty());
+            let code = t.editor.code_ref();
+            if let Some(s) = sel {
+                (
+                    char_to_lsp_pos(code, s.start.min(s.end), enc),
+                    char_to_lsp_pos(code, s.start.max(s.end), enc),
+                )
+            } else {
+                let cur = t.editor.get_cursor();
+                let line = code.char_to_line(cur);
+                let line_start = code.line_to_char(line);
+                let line_end = line_start + code.line_len(line);
+                (char_to_lsp_pos(code, line_start, enc), char_to_lsp_pos(code, line_end, enc))
+            }
+        };
+        // Reconstruct minimal LSP diagnostic objects overlapping the range.
+        let diags: Vec<serde_json::Value> = self
+            .lsp
+            .diagnostics_for(&path)
+            .iter()
+            .filter(|d| d.range.start.line <= end.0 && d.range.end.line >= start.0)
+            .map(|d| {
+                serde_json::json!({
+                    "range": {
+                        "start": { "line": d.range.start.line, "character": d.range.start.character },
+                        "end": { "line": d.range.end.line, "character": d.range.end.character }
+                    },
+                    "severity": severity_number(d.severity),
+                    "message": d.message,
+                })
+            })
+            .collect();
+        self.lsp.request_code_action(&path, start, end, &serde_json::Value::Array(diags));
+    }
+
+    /// Handle a key for the code-action chooser: Up/Down move, Enter applies,
+    /// Esc closes.
+    fn code_action_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => self.code_actions = None,
+            KeyCode::Up => {
+                if let Some(m) = self.code_actions.as_mut() {
+                    m.selected = m.selected.saturating_sub(1);
+                }
+            }
+            KeyCode::Down => {
+                if let Some(m) = self.code_actions.as_mut() {
+                    m.selected = (m.selected + 1).min(m.actions.len().saturating_sub(1));
+                }
+            }
+            KeyCode::Enter => self.apply_selected_code_action(),
+            _ => {}
+        }
+    }
+
+    /// Apply the highlighted code action's workspace edit and close the chooser.
+    fn apply_selected_code_action(&mut self) {
+        let Some(menu) = self.code_actions.take() else { return };
+        if let Some((title, edit)) = menu.actions.into_iter().nth(menu.selected) {
+            if edit.is_empty() {
+                self.status = t!("status.code_action_no_edit", title = title).to_string();
+            } else {
+                self.apply_workspace_edit(&edit);
+            }
         }
     }
 
@@ -4173,6 +4275,9 @@ impl App {
                 crate::lsp::LspEvent::DocumentSymbols(syms) => self.show_document_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceSymbols(syms) => self.show_workspace_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceEdit(edits) => self.apply_workspace_edit(&edits),
+                crate::lsp::LspEvent::CodeActions(actions) => {
+                    self.code_actions = Some(CodeActionMenu { actions, selected: 0 });
+                }
             }
         }
         // Rebuild the active editor's diagnostic underlines every tick so they
@@ -8368,7 +8473,7 @@ impl App {
 
     /// Apply a rename `WorkspaceEdit`: edit open buffers in place (marking them
     /// dirty) and rewrite closed files on disk.
-    fn apply_workspace_edit(&mut self, edits: &[(PathBuf, Vec<(crate::lsp_core::Range, String)>)]) {
+    fn apply_workspace_edit(&mut self, edits: &[crate::lsp::FileEdits]) {
         let mut files = 0usize;
         for (path, file_edits) in edits {
             if file_edits.is_empty() {
@@ -9461,6 +9566,17 @@ fn char_to_lsp_pos(
     let line_text = code.slice(line_start, line_start + code.line_len(line));
     let character = crate::lsp_core::position::char_to_col(&line_text, offset - line_start, enc);
     (u32::try_from(line).unwrap_or(u32::MAX), character)
+}
+
+/// The LSP wire number for a diagnostic severity (Error=1 … Hint=4).
+fn severity_number(sev: crate::lsp_core::Severity) -> u8 {
+    use crate::lsp_core::Severity;
+    match sev {
+        Severity::Error => 1,
+        Severity::Warning => 2,
+        Severity::Information => 3,
+        Severity::Hint => 4,
+    }
 }
 
 /// The underline color for a diagnostic severity.

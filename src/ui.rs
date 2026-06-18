@@ -269,6 +269,9 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.regex_tester.is_some() {
         draw_regex_tester(app, frame, area);
     }
+    if app.code_actions.is_some() {
+        draw_code_actions(app, frame, area);
+    }
     if app.pomodoro_open {
         draw_pomodoro(app, frame, area);
     }
@@ -619,6 +622,40 @@ fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect) {
         Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim()))),
         rows[5],
     );
+}
+
+fn draw_code_actions(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(menu) = app.code_actions.as_ref() else { return };
+    let title = t!("menu.item.lsp.code_action");
+    let longest = menu.actions.iter().map(|(t, _)| t.chars().count()).max().unwrap_or(20);
+    let width = u16::try_from(longest).unwrap_or(u16::MAX).saturating_add(4).clamp(24, area.width);
+    let rows_n = u16::try_from(menu.actions.len()).unwrap_or(u16::MAX);
+    let height = rows_n.saturating_add(2).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    };
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {title} "));
+    let inner = block.inner(rect);
+    frame.render_widget(Clear, rect);
+    frame.render_widget(block, rect);
+    let rows: Vec<Line> = menu
+        .actions
+        .iter()
+        .enumerate()
+        .map(|(i, (t, _))| {
+            let style = if i == menu.selected { theme::selected() } else { theme::base() };
+            Line::from(Span::styled(format!(" {t} "), style))
+        })
+        .collect();
+    frame.render_widget(Paragraph::new(rows), inner);
 }
 
 fn draw_regex_tester(app: &mut App, frame: &mut Frame, area: Rect) {
