@@ -239,6 +239,30 @@ pub fn parse_definition(result: &Value) -> Option<Location> {
     }
 }
 
+/// A `SelectionRangeParams` body querying the single position `(line, character)`.
+#[must_use]
+pub fn selection_range_params(uri: &str, line: u32, character: u32) -> Value {
+    json!({
+        "textDocument": { "uri": uri },
+        "positions": [{ "line": line, "character": character }]
+    })
+}
+
+/// Parse a `textDocument/selectionRange` result into the chain of ranges for the
+/// first requested position, innermost first (following `parent` links).
+#[must_use]
+pub fn parse_selection_ranges(result: &Value) -> Vec<Range> {
+    let mut ranges = Vec::new();
+    let mut node = result.as_array().and_then(|a| a.first());
+    while let Some(n) = node {
+        if let Some(r) = n.get("range").and_then(parse_range) {
+            ranges.push(r);
+        }
+        node = n.get("parent");
+    }
+    ranges
+}
+
 /// A `CodeActionParams` body for `[start, end)` with the overlapping
 /// `diagnostics` (raw LSP objects) in the request context.
 #[must_use]
@@ -609,6 +633,19 @@ mod tests {
         assert!(help.contains("fn f(a: i32, b: i32)"));
         assert!(help.contains("b: i32"));
         assert!(parse_signature_help(&json!({"signatures": []})).is_none());
+    }
+
+    #[test]
+    fn selection_ranges_follow_parent_chain() {
+        let ranges = parse_selection_ranges(&json!([
+            {"range": {"start": {"line": 1, "character": 4}, "end": {"line": 1, "character": 7}},
+             "parent": {"range": {"start": {"line": 1, "character": 0}, "end": {"line": 1, "character": 12}},
+                        "parent": {"range": {"start": {"line": 0, "character": 0}, "end": {"line": 5, "character": 0}}}}}
+        ]));
+        assert_eq!(ranges.len(), 3, "innermost, middle, outermost");
+        assert_eq!(ranges[0].start.character, 4);
+        assert_eq!(ranges[2].end.line, 5);
+        assert!(parse_selection_ranges(&Value::Null).is_empty());
     }
 
     #[test]

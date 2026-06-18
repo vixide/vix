@@ -423,6 +423,8 @@ fn lsp_navigation_actions_report_inactive_without_server() {
         "lsp.signature_help",
         "lsp.rename",
         "lsp.code_action",
+        "lsp.expand_selection",
+        "lsp.shrink_selection",
     ] {
         let mut app = app_at(Path::new("."));
         type_str(&mut app, "fn main() {}\n");
