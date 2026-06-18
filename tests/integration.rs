@@ -216,6 +216,18 @@ fn convert_failure_leaves_buffer_unchanged() {
 }
 
 #[test]
+fn markdown_preview_renders_active_buffer() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "# Title\n\n- a\n- b\n");
+    app.run_action("tools.markdown_preview");
+    let p = app.markdown_preview.as_ref().expect("preview open");
+    assert_eq!(p.lines[0], "Title");
+    assert!(p.lines.iter().any(|l| l == "• a"), "{:?}", p.lines);
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(app.markdown_preview.is_none(), "Esc closes the preview");
+}
+
+#[test]
 fn text_information_reports_counts() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "Hello world.\nHow are you?");

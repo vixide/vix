@@ -336,6 +336,7 @@ const TOOLS: &[Item] = &[
     Item::sub("menu.item.tools.format", TOOLS_FORMAT),
     Item::leaf("menu.item.tools.color_converter", "tools.color_converter", ""),
     Item::leaf("menu.item.tools.convert.unit", "tools.convert.unit", ""),
+    Item::leaf("menu.item.tools.markdown_preview", "tools.markdown_preview", ""),
     SEP,
     Item::leaf("menu.item.tools.contacts", "tools.contacts", ""),
     Item::leaf("menu.item.tools.calendar", "tools.calendar", ""),
