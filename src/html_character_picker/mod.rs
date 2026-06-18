@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! The HTML named-character table and the picker's row-selection + scroll state.
 //!
 //! Vix's Tools menu offers an *HTML Characters* panel: a scrollable table of the

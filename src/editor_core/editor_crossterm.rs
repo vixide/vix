@@ -1,4 +1,4 @@
-use crate::editor_core::actions::*;
+use crate::editor_core::actions::{ToggleComment, Redo, Undo, Copy, Paste, Cut, DeleteLine, Duplicate, SelectAll, MoveLeft, MoveRight, MoveUp, MoveDown, Delete, InsertNewline, InsertText, Indent, UnIndent};
 use crate::editor_core::editor::Editor;
 use crate::editor_core::multicursor::CaretMove;
 use crate::editor_core::selection::SelectionSnap;
@@ -57,15 +57,16 @@ impl Editor {
             KeyCode::BackTab   => self.apply(UnIndent { }),
             _ => {}
         }
-        self.focus(&area);
+        self.focus(area);
         Ok(())
     }
     
     /// Bracket/quote auto-pairing for a typed character `c`. Returns `true` when
     /// it consumed the key (so the caller skips the plain insert):
     ///
-    /// - Typing an opener `( [ { " ' \`` inserts the matching closer and leaves
-    ///   the cursor between them; with a non-empty selection it wraps it instead.
+    /// - Typing an opening paren, bracket, brace, or quote inserts the matching
+    ///   closer and leaves the cursor between them; with a non-empty selection it
+    ///   wraps the selection instead.
     /// - Typing a closer when the next character is that same closer just steps
     ///   over it (so you can type through the auto-inserted closer).
     /// - Quotes are not paired right next to a word character (so apostrophes in
@@ -88,13 +89,12 @@ impl Editor {
         };
 
         // Wrap a non-empty selection.
-        if let Some(sel) = self.get_selection() {
-            if !sel.is_empty() {
+        if let Some(sel) = self.get_selection()
+            && !sel.is_empty() {
                 let text = self.get_content_slice(sel.start, sel.end);
                 self.apply(InsertText { text: format!("{c}{text}{closer}") });
                 return true;
             }
-        }
 
         // Don't auto-pair a quote adjacent to a word character.
         if matches!(c, '"' | '\'' | '`') {

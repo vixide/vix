@@ -21,16 +21,14 @@ impl Action for MoveRight {
     fn apply(&mut self, editor: &mut Editor) {
         let cursor = editor.get_cursor();
 
-        if !self.shift {
-            if let Some(sel) = editor.get_selection() {
-                if !sel.is_empty() {
+        if !self.shift
+            && let Some(sel) = editor.get_selection()
+                && !sel.is_empty() {
                     let (_, end) = sel.sorted();
                     editor.set_cursor(end);
                     editor.clear_selection();
                     return;
                 }
-            }
-        }
 
         if cursor < editor.code_mut().len() {
             let new_cursor = cursor.saturating_add(1);
@@ -58,16 +56,14 @@ impl Action for MoveLeft {
     fn apply(&mut self, editor: &mut Editor) {
         let cursor = editor.get_cursor();
 
-        if !self.shift {
-            if let Some(sel) = editor.get_selection() {
-                if !sel.is_empty() {
+        if !self.shift
+            && let Some(sel) = editor.get_selection()
+                && !sel.is_empty() {
                     let (start, _) = sel.sorted();
                     editor.set_cursor(start);
                     editor.clear_selection();
                     return;
                 }
-            }
-        }
 
         if cursor > 0 {
             let new_cursor = cursor.saturating_sub(1);
@@ -167,13 +163,12 @@ impl Action for InsertText {
         code.set_state_before(cursor, selection);
 
         // 3. Remove selection if present
-        if let Some(sel) = &selection {
-            if !sel.is_empty() {
+        if let Some(sel) = &selection
+            && !sel.is_empty() {
                 let (start, end) = sel.sorted();
                 code.remove(start, end);
                 cursor = start;
             }
-        }
         selection = None;
 
         // 4. Insert the text at the cursor
@@ -208,7 +203,7 @@ impl Action for InsertNewline {
         let indent_text = code.indent().repeat(indent_level);
 
         // 3. Prepare the text to insert
-        let text_to_insert = format!("\n{}", indent_text);
+        let text_to_insert = format!("\n{indent_text}");
 
         // 4. Use InsertText action to insert the text
         let mut insert_action = InsertText { text: text_to_insert };
@@ -334,30 +329,28 @@ impl Action for ToggleComment {
             let is_forward = anchor == smin;
 
             if is_forward {
-                if !all_have_comment {
-                    cursor += comment_len * comments_added;
-                    anchor += comment_len;
-                } else {
+                if all_have_comment {
                     cursor = cursor.saturating_sub(comment_len * comments_removed);
                     anchor = anchor.saturating_sub(comment_len);
+                } else {
+                    cursor += comment_len * comments_added;
+                    anchor += comment_len;
                 }
             } else {
-                if !all_have_comment {
-                    cursor += comment_len;
-                    anchor += comment_len * comments_added;
-                } else {
+                if all_have_comment {
                     cursor = cursor.saturating_sub(comment_len);
                     anchor = anchor.saturating_sub(comment_len * comments_removed);
+                } else {
+                    cursor += comment_len;
+                    anchor += comment_len * comments_added;
                 }
             }
 
             selection = Some(Selection::from_anchor_and_cursor(anchor, cursor));
+        } else if all_have_comment {
+            cursor = cursor.saturating_sub(comment_len);
         } else {
-            if !all_have_comment {
-                cursor += comment_len;
-            } else {
-                cursor = cursor.saturating_sub(comment_len);
-            }
+            cursor += comment_len;
         }
 
         // 7. Commit changes
@@ -567,7 +560,7 @@ impl Action for Duplicate {
             let (to_insert, line_base) = if line_text.ends_with('\n') {
                 (line_text.clone(), insert_pos)
             } else {
-                (format!("\n{}", line_text), insert_pos + 1)
+                (format!("\n{line_text}"), insert_pos + 1)
             };
             code.insert(insert_pos, &to_insert);
 
@@ -631,7 +624,7 @@ impl Action for Cut {
         let mut selection = editor.get_selection();
 
         let sel = match &selection {
-            Some(sel) if !sel.is_empty() => sel.clone(),
+            Some(sel) if !sel.is_empty() => *sel,
             _ => return, // nothing to cut
         };
 
@@ -698,14 +691,13 @@ impl Action for Paste {
         code.set_state_before(cursor, selection);
 
         // 4. Remove selection if present
-        if let Some(sel) = &selection {
-            if !sel.is_empty() {
+        if let Some(sel) = &selection
+            && !sel.is_empty() {
                 let (start, end) = sel.sorted();
                 code.remove(start, end);
                 cursor = start;
                 selection = None;
             }
-        }
 
         // 5. Perform paste with smart indentation
         let inserted = code.smart_paste(cursor, &text);

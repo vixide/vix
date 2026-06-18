@@ -17,6 +17,12 @@ use unicode_width::{UnicodeWidthStr};
 #[folder = "langs/"]
 struct LangAssets;
 
+/// A change event reported to a change callback:
+/// `(start_line, start_col, end_line, end_col, text)`.
+pub(crate) type ChangeEvent = (usize, usize, usize, usize, String);
+
+/// Tree-sitter injection parsers and queries, each keyed by language name.
+type Injections = (HashMap<String, Rc<RefCell<Parser>>>, HashMap<String, Query>);
 
 #[derive(Clone)]
 pub enum EditKind {
@@ -65,7 +71,7 @@ pub struct Code {
     current_batch: EditBatch,
     injection_parsers: Option<HashMap<String, Rc<RefCell<Parser>>>>,
     injection_queries: Option<HashMap<String, Query>>,
-    change_callback: Option<Box<dyn Fn(Vec<(usize, usize, usize, usize, String)>)>>,
+    change_callback: Option<Box<dyn Fn(Vec<ChangeEvent>)>>,
     custom_highlights: Option<HashMap<String, String>>,
     /// Overrides the per-language indent string when set (host configuration).
     indent_override: Option<String>,
@@ -156,14 +162,13 @@ impl Code {
     }
 
     fn get_highlights(&self, lang: &str) -> anyhow::Result<String> {
-        if let Some(highlights_map) = &self.custom_highlights {
-            if let Some(highlights) = highlights_map.get(lang) {
+        if let Some(highlights_map) = &self.custom_highlights
+            && let Some(highlights) = highlights_map.get(lang) {
                 return Ok(highlights.clone());
             }
-        }
         let p = format!("{lang}/highlights.scm");
         let highlights_bytes =
-            LangAssets::get(&p).ok_or_else(|| anyhow!("No highlights found for {}", lang))?;
+            LangAssets::get(&p).ok_or_else(|| anyhow!("No highlights found for {lang}"))?;
         let highlights_bytes = highlights_bytes.data.as_ref();
         let highlights = std::str::from_utf8(highlights_bytes)?;
         Ok(highlights.to_string())
@@ -172,10 +177,7 @@ impl Code {
     fn init_injections(
         &self,
         query: &Query,
-    ) -> anyhow::Result<(
-        HashMap<String, Rc<RefCell<Parser>>>,
-        HashMap<String, Query>,
-    )> {
+    ) -> anyhow::Result<Injections> {
         let mut injection_parsers = HashMap::new();
         let mut injection_queries = HashMap::new();
 
@@ -303,7 +305,7 @@ impl Code {
     
     pub fn insert(&mut self, from: usize, text: &str) {
         let byte_idx = self.content.char_to_byte(from);
-        let byte_len: usize = text.chars().map(|ch| ch.len_utf8()).sum();
+        let byte_len: usize = text.chars().map(char::len_utf8).sum();
 
         self.revision = self.revision.wrapping_add(1);
         self.content.insert(from, text);
@@ -388,11 +390,11 @@ impl Code {
     }
     
     /// Highlights the interval between `start` and `end` char indices.
-    /// Returns a list of (start byte, end byte, token_name) for highlighting. 
+    /// Returns a list of (start byte, end byte, `token_name`) for highlighting. 
     pub fn highlight_interval<T: Copy>(
         &self, start: usize, end: usize, theme: &HashMap<String, T>,
     ) -> Vec<(usize, usize, T)> {
-        if start > end { panic!("Invalid range") }
+        assert!(start <= end, "Invalid range");
 
         let Some(query) = &self.query else { return vec![]; };
         let Some(tree) = &self.tree else { return vec![]; };
@@ -458,6 +460,10 @@ impl Code {
         out
     }
 
+    // Tree-sitter highlighting needs the slice, byte range, query, root, theme,
+    // and the two injection maps together; grouping them would only obscure the
+    // single call site.
+    #[allow(clippy::too_many_arguments)]
     fn highlight<T: Copy>(
         text: RopeSlice<'_>,
         start_byte: usize,
@@ -651,12 +657,12 @@ impl Code {
         let indent_unit = self.indent();
     
         if indent_unit.is_empty() {
-            return line.chars().take(c).all(|ch| ch.is_whitespace());
+            return line.chars().take(c).all(char::is_whitespace);
         }
     
         let count_units = count_indent_units(line, &indent_unit, Some(c));
-        let only_indent = count_units * indent_unit.chars().count() >= c;
-        only_indent
+        
+        count_units * indent_unit.chars().count() >= c
     }
 
     pub fn find_indent_at_line_start(&self, line_idx: usize) -> Option<usize> {
@@ -681,10 +687,9 @@ impl Code {
     /// 4. Empty lines are inserted as-is and do not affect subsequent indentation.
     /// 
     /// This ensures that pasted blocks keep their relative structure while aligning to the cursor.
-
-
-    /// Inserts `text` with indentation-awareness at `offset`.
-    /// Returns number of characters inserted.
+    ///
+    /// Inserts `text` with indentation-awareness at `offset`. Returns the number
+    /// of characters inserted.
     pub fn smart_paste(&mut self, offset: usize, text: &str) -> usize {
         let (row, col) = self.point(offset);
         let base_level = self.indentation_level(row, col);
@@ -746,7 +751,7 @@ impl Code {
     }
 
     /// Set the change callback function for handling document changes
-    pub fn set_change_callback(&mut self, callback: Box<dyn Fn(Vec<(usize, usize, usize, usize, String)>)>) {
+    pub fn set_change_callback(&mut self, callback: Box<dyn Fn(Vec<ChangeEvent>)>) {
         self.change_callback = Some(callback);
     }
 
@@ -814,7 +819,7 @@ impl<'a> tree_sitter::TextProvider<&'a [u8]> for RopeProvider<'a> {
     }
 }
 
-/// An implementation of a graphemes iterator, for iterating over the graphemes of a RopeSlice.
+/// An implementation of a graphemes iterator, for iterating over the graphemes of a `RopeSlice`.
 pub struct RopeGraphemes<'a> {
     text: ropey::RopeSlice<'a>,
     chunks: ropey::iter::Chunks<'a>,
@@ -823,13 +828,13 @@ pub struct RopeGraphemes<'a> {
     cursor: GraphemeCursor,
 }
 
-impl<'a> RopeGraphemes<'a> {
+impl RopeGraphemes<'_> {
     pub fn new<'b>(slice: &RopeSlice<'b>) -> RopeGraphemes<'b> {
         let mut chunks = slice.chunks();
         let first_chunk = chunks.next().unwrap_or("");
         RopeGraphemes {
             text: *slice,
-            chunks: chunks,
+            chunks,
             cur_chunk: first_chunk,
             cur_chunk_start: 0,
             cursor: GraphemeCursor::new(0, slice.len_bytes(), true),
@@ -988,16 +993,16 @@ mod tests {
     fn test_is_only_indentation_before() {
         let mut code = Code::new("", "python", None).unwrap();
         code.insert(0, "    print('Hello, World!')");
-        assert_eq!(code.is_only_indentation_before(0, 4), true);
-        assert_eq!(code.is_only_indentation_before(0, 10), false);
+        assert!(code.is_only_indentation_before(0, 4));
+        assert!(!code.is_only_indentation_before(0, 10));
     }
 
     #[test]
     fn test_is_only_indentation_before2() {
         let mut code = Code::new("", "", None).unwrap();
         code.insert(0, "    Hello, World");
-        assert_eq!(code.is_only_indentation_before(0, 4), false);
-        assert_eq!(code.is_only_indentation_before(0, 10), false);
+        assert!(!code.is_only_indentation_before(0, 4));
+        assert!(!code.is_only_indentation_before(0, 10));
     }
 
     #[test]

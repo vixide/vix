@@ -4,7 +4,7 @@ use crate::editor_core::code::Code;
 use crate::editor_core::code::{EditKind, EditBatch};
 use crate::editor_core::code::{RopeGraphemes, grapheme_width_and_chars_len, grapheme_width};
 use crate::editor_core::selection::{Selection, SelectionSnap};
-use crate::editor_core::actions::*;
+use crate::editor_core::actions::Action;
 use crate::editor_core::utils;
 use std::collections::HashMap;
 use std::cell::RefCell;
@@ -203,7 +203,7 @@ impl Editor {
             let total_lines = self.code.len_lines();
             let max_line_number = total_lines.max(1);
             let line_number_digits = max_line_number.to_string().len().max(5);
-            (line_number_digits + self.left_code_padding) as usize
+            line_number_digits + self.left_code_padding 
         } else {
             self.left_code_padding
         }
@@ -402,8 +402,7 @@ impl Editor {
     pub fn selection_anchor(&self) -> usize {
         self.selection
             .as_ref()
-            .map(|s| if self.cursor == s.start { s.end } else { s.start })
-            .unwrap_or(self.cursor)
+            .map_or(self.cursor, |s| if self.cursor == s.start { s.end } else { s.start })
     }
 
     /// Apply an editing action to the buffer.
@@ -495,7 +494,7 @@ impl Editor {
     }
 
     fn build_theme(theme: &Vec<(&str, &str)>) -> Theme {
-        theme.into_iter()
+        theme.iter()
             .map(|(name, hex)| {
                 let (r, g, b) = utils::rgb(hex);
                 (name.to_string(), Style::default().fg(Color::Rgb(r, g, b)))
@@ -672,7 +671,7 @@ impl Editor {
 
     /// Return the current selection, if any.
     pub fn get_selection(&mut self) -> Option<Selection> {
-       return self.selection;
+       self.selection
     }
 
     /// Set (or clear) the current selection.
@@ -758,7 +757,7 @@ impl Editor {
 
     /// Set the change callback function for handling document changes
     pub fn set_change_callback(
-        &mut self, callback: Box<dyn Fn(Vec<(usize, usize, usize, usize, String)>)>
+        &mut self, callback: Box<dyn Fn(Vec<crate::editor_core::code::ChangeEvent>)>
     ) {
         self.code.set_change_callback(callback);
     }
@@ -820,12 +819,12 @@ impl Editor {
             }
         }
         
-        return None;
+        None
     }
 
     /// Show or hide the line-number gutter.
     pub fn show_line_numbers(&mut self, show: bool) {
-        self.show_line_numbers = show
+        self.show_line_numbers = show;
     }
 
     /// Toggle the line-number gutter; returns the new visibility.
@@ -836,7 +835,7 @@ impl Editor {
 
     /// Show or hide visible-whitespace glyphs (space, tab, line ending).
     pub fn show_whitespace(&mut self, show: bool) {
-        self.show_whitespace = show
+        self.show_whitespace = show;
     }
 
     /// Enable or disable soft wrap (long lines wrap instead of scrolling).
@@ -877,6 +876,6 @@ impl Editor {
 
     /// Set the left padding (in characters) between the gutter and the code.
     pub fn set_left_code_padding(&mut self, char_count: usize) {
-        self.left_code_padding = char_count
+        self.left_code_padding = char_count;
     }
 }
