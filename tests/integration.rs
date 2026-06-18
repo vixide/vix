@@ -462,6 +462,7 @@ fn lsp_navigation_actions_report_inactive_without_server() {
         "lsp.expand_selection",
         "lsp.shrink_selection",
         "lsp.highlight",
+        "lsp.linked_edit",
     ] {
         let mut app = app_at(Path::new("."));
         type_str(&mut app, "fn main() {}\n");
