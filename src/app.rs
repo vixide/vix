@@ -2110,6 +2110,10 @@ impl App {
             "git.blame" => self.git_blame_line(),
             "git.revert_hunk" => self.revert_hunk(),
             "git.stage_hunk" => self.stage_hunk(),
+            "git.conflict_ours" => self.resolve_conflict(crate::conflict_tool::Resolution::Ours),
+            "git.conflict_theirs" => self.resolve_conflict(crate::conflict_tool::Resolution::Theirs),
+            "git.conflict_both" => self.resolve_conflict(crate::conflict_tool::Resolution::Both),
+            "git.conflict_next" => self.conflict_next(),
             "git.stash" => self.git_op(crate::git::stash_push, "status.git_stashed"),
             "git.stash_pop" => self.git_op(crate::git::stash_pop, "status.git_stash_popped"),
             "git.amend" => self.git_op(crate::git::commit_amend, "status.git_amended"),
@@ -2942,6 +2946,58 @@ impl App {
         }
         self.refresh_git_gutter();
         self.status = t!("status.hunk_reverted").to_string();
+    }
+
+    // ----- merge conflicts ------------------------------------------------
+
+    /// Resolve the merge conflict at (or after) the cursor by keeping `how`.
+    fn resolve_conflict(&mut self, how: crate::conflict_tool::Resolution) {
+        let Some((content, line)) = self
+            .editor
+            .active_tab()
+            .filter(|t| !t.is_image())
+            .map(|t| (t.text(), t.editor.cursor_line()))
+        else {
+            return;
+        };
+        let Some(conflict) = crate::conflict_tool::find(&content, line) else {
+            self.status = t!("status.no_conflict").to_string();
+            return;
+        };
+        let lines: Vec<&str> = content.split_inclusive('\n').collect();
+        let mut rebuilt = lines[..conflict.start].concat();
+        rebuilt.push_str(&conflict.resolved(how));
+        rebuilt.push_str(&lines[conflict.end.min(lines.len())..].concat());
+        let caret: usize = lines[..conflict.start].iter().map(|l| l.chars().count()).sum();
+        if let Some(t) = self.editor.active_tab_mut() {
+            t.editor.set_content(&rebuilt);
+            t.editor.set_cursor(caret);
+            t.editor.set_selection(None);
+            t.dirty = true;
+            t.preview = false;
+        }
+        self.refresh_git_gutter();
+        self.status = t!("status.conflict_resolved").to_string();
+    }
+
+    /// Move the cursor to the next merge conflict at or after it.
+    fn conflict_next(&mut self) {
+        let Some((content, line)) = self
+            .editor
+            .active_tab()
+            .filter(|t| !t.is_image())
+            .map(|t| (t.text(), t.editor.cursor_line()))
+        else {
+            return;
+        };
+        // Search from the line after the cursor so repeated calls advance.
+        match crate::conflict_tool::find(&content, line + 1).or_else(|| crate::conflict_tool::find(&content, 0)) {
+            Some(c) => {
+                let area = self.editor_view();
+                self.editor.goto(c.start + 1, None, area);
+            }
+            None => self.status = t!("status.no_conflict").to_string(),
+        }
     }
 
     /// Run a workspace-level git op (stash/amend), then refresh state and report

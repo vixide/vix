@@ -82,6 +82,7 @@ pub mod bottom_dock;
 pub mod calculator_tool;
 pub mod calendar_panel;
 pub mod checksum_tool;
+pub mod conflict_tool;
 pub mod clock_panel;
 pub mod color_converter_tool;
 pub mod contact_panel;
