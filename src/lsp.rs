@@ -42,6 +42,7 @@ enum Pending {
     SignatureHelp,
     Rename,
     CodeAction,
+    SelectionRange,
 }
 
 /// A message handed back from a server's stdout reader thread.
@@ -88,6 +89,9 @@ pub enum LspEvent {
     WorkspaceEdit(Vec<FileEdits>),
     /// A code-action response: each offered action with its edit.
     CodeActions(Vec<CodeAction>),
+    /// A selection-range response: the chain of ranges (innermost first) for the
+    /// cursor, used to expand/shrink the selection.
+    SelectionRanges(Vec<crate::lsp_core::Range>),
 }
 
 /// One running language server.
@@ -352,6 +356,13 @@ impl Lsp {
         self.request(path, "textDocument/signatureHelp", line, character, Pending::SignatureHelp);
     }
 
+    /// Request the selection ranges (expand/shrink chain) at `(line, character)`.
+    pub fn request_selection_range(&mut self, path: &Path, line: u32, character: u32) {
+        self.send_request(path, "textDocument/selectionRange", Pending::SelectionRange, |uri| {
+            message::selection_range_params(uri, line, character)
+        });
+    }
+
     /// Request a rename of the symbol at `(line, character)` to `new_name`.
     pub fn request_rename(&mut self, path: &Path, line: u32, character: u32, new_name: &str) {
         self.send_request(path, "textDocument/rename", Pending::Rename, |uri| {
@@ -577,6 +588,12 @@ impl Lsp {
                     .collect();
                 if !actions.is_empty() {
                     events.push(LspEvent::CodeActions(actions));
+                }
+            }
+            Pending::SelectionRange => {
+                let ranges = message::parse_selection_ranges(result);
+                if !ranges.is_empty() {
+                    events.push(LspEvent::SelectionRanges(ranges));
                 }
             }
         }

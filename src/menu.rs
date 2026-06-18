@@ -380,6 +380,8 @@ const TOOLS_LSP: &[Item] = &[
     Item::leaf("menu.item.lsp.references", "lsp.references", ""),
     Item::leaf("menu.item.lsp.rename", "lsp.rename", "F2"),
     Item::leaf("menu.item.lsp.code_action", "lsp.code_action", ""),
+    Item::leaf("menu.item.lsp.expand_selection", "lsp.expand_selection", ""),
+    Item::leaf("menu.item.lsp.shrink_selection", "lsp.shrink_selection", ""),
     Item::leaf("menu.item.lsp.format", "lsp.format", ""),
     Item::leaf("menu.item.lsp.hover", "lsp.hover", ""),
     Item::leaf("menu.item.lsp.signature_help", "lsp.signature_help", ""),

@@ -750,6 +750,9 @@ pub struct App {
     /// Cursor position captured when an LSP rename prompt was opened, used to
     /// send the rename request on submit: `(file, 0-based line, character)`.
     rename_at: Option<(PathBuf, u32, u32)>,
+    /// Direction of a pending `selectionRange` request (`true` = expand, `false`
+    /// = shrink), applied when the response arrives.
+    expand_selection_dir: Option<bool>,
     /// Whether the workspace root is a git work tree (checked once at startup).
     pub git_repo: bool,
     /// Cached current git branch (or short hash when detached), when in a repo.
@@ -924,6 +927,7 @@ impl App {
             macro_playing: false,
             complete_session: None,
             rename_at: None,
+            expand_selection_dir: None,
             git_repo: false,
             git_branch: None,
             git_status: Vec::new(),
@@ -2108,6 +2112,8 @@ impl App {
             "lsp.diagnostics" => self.open_diagnostics_panel(),
             "lsp.rename" => self.begin_lsp_rename(),
             "lsp.code_action" => self.request_code_action(),
+            "lsp.expand_selection" => self.request_selection_range(true),
+            "lsp.shrink_selection" => self.request_selection_range(false),
             _ => return false,
         }
         true
@@ -2839,6 +2845,68 @@ impl App {
                 }
             }
             _ => {}
+        }
+    }
+
+    // ----- Selection range (expand / shrink) ------------------------------
+
+    /// Request selection ranges at the cursor; `expand` chooses the direction the
+    /// response is applied in.
+    fn request_selection_range(&mut self, expand: bool) {
+        let Some(path) = self.active_path() else {
+            self.status = t!("status.lsp_inactive").to_string();
+            return;
+        };
+        if !self.lsp.handles(&path) {
+            self.status = t!("status.lsp_inactive").to_string();
+            return;
+        }
+        let (line, character) = self.cursor_lsp_position(&path);
+        self.expand_selection_dir = Some(expand);
+        self.lsp.request_selection_range(&path, line, character);
+    }
+
+    /// Apply a selection-range chain: expand to the smallest range strictly
+    /// larger than the current selection, or shrink to the largest range strictly
+    /// inside it.
+    fn apply_selection_range(&mut self, ranges: &[crate::lsp_core::Range]) {
+        let expand = self.expand_selection_dir.take().unwrap_or(true);
+        let Some(path) = self.active_path() else { return };
+        let enc = self.lsp.encoding_for(&path);
+        let Some(t) = self.editor.active_tab_mut() else { return };
+        let (cur_s, cur_e) = {
+            let sel = t.editor.get_selection();
+            let cursor = t.editor.get_cursor();
+            sel.map_or((cursor, cursor), |s| (s.start.min(s.end), s.start.max(s.end)))
+        };
+        // Resolve the chain to char offsets.
+        let resolved: Vec<(usize, usize)> = {
+            let code = t.editor.code_ref();
+            ranges
+                .iter()
+                .map(|r| {
+                    let s = lsp_pos_to_char(code, r.start.line, r.start.character, enc);
+                    let e = lsp_pos_to_char(code, r.end.line, r.end.character, enc);
+                    (s.min(e), s.max(e))
+                })
+                .collect()
+        };
+        let target = if expand {
+            // Smallest range that strictly contains the current selection.
+            resolved
+                .iter()
+                .filter(|(s, e)| *s <= cur_s && *e >= cur_e && (*s < cur_s || *e > cur_e))
+                .min_by_key(|(s, e)| e - s)
+        } else {
+            // Largest range strictly inside the current selection.
+            resolved
+                .iter()
+                .filter(|(s, e)| *s >= cur_s && *e <= cur_e && (*s > cur_s || *e < cur_e))
+                .max_by_key(|(s, e)| e - s)
+        };
+        if let Some(&(s, e)) = target {
+            t.editor.set_selection(Some(crate::editor_core::selection::Selection { start: s, end: e }));
+            t.editor.set_cursor(e);
         }
     }
 
@@ -4278,6 +4346,7 @@ impl App {
                 crate::lsp::LspEvent::CodeActions(actions) => {
                     self.code_actions = Some(CodeActionMenu { actions, selected: 0 });
                 }
+                crate::lsp::LspEvent::SelectionRanges(ranges) => self.apply_selection_range(&ranges),
             }
         }
         // Rebuild the active editor's diagnostic underlines every tick so they
