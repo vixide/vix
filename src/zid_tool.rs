@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Generate a secure random **ZID**: a lowercase hexadecimal string carrying a
 //! chosen number of bits of cryptographic randomness.
 //!
@@ -18,7 +17,7 @@
 pub fn generate(byte_len: usize) -> String {
     let mut bytes = vec![0u8; byte_len];
     if getrandom::getrandom(&mut bytes).is_err() {
-        bytes.iter_mut().for_each(|b| *b = 0);
+        bytes.fill(0);
     }
     to_hex(&bytes)
 }

@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // small marker parser
 //! Parse Git merge-conflict markers and resolve the conflict under the cursor.
 //!
 //! A conflict block looks like:

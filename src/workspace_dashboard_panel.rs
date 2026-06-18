@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Live workspace metrics for the dashboard overlay (Tools → Workspace Dashboard).
 //!
 //! Pure state. The host fills these fields from background computations — disk

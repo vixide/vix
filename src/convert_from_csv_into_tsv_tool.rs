@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Convert CSV text into TSV (Tools → Convert → CSV → TSV).
 //!
 //! CSV quoting is honored on the way in; the tab-separated output has no quoting.

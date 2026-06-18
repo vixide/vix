@@ -1,11 +1,10 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! The available keyboard navigation styles ("keymaps").
 //!
 //! A *keymap* is a whole-keyboard philosophy for driving the editor, menus, and
 //! file explorer. Exactly one is active at a time:
 //!
 //! - **Apple** — modifier keys trigger system-style actions (e.g. `control-o`).
-//! - **macOS VSCode** — VS Code's signature shortcuts (e.g. `control-p` Quick
+//! - **macOS `VSCode`** — VS Code's signature shortcuts (e.g. `control-p` Quick
 //!   Open, `control-shift-p` Command Palette).
 //! - **Emacs** — layered "chord" sequences run functions (e.g. `control-x-f`).
 //! - **Vim** — modal editing, where keys mean different things per mode.

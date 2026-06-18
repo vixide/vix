@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Convert TOML into JSON (Tools → Convert → TOML → JSON).
 //!
 //! The TOML document is parsed into a generic value and re-serialized as

@@ -1,7 +1,6 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Convert Markdown into HTML (Tools → Convert → Markdown → HTML).
 //!
-//! Parses CommonMark with `pulldown-cmark` and renders the HTML fragment.
+//! Parses `CommonMark` with `pulldown-cmark` and renders the HTML fragment.
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]

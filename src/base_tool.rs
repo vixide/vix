@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // small numeric-base helpers
 //! Convert an integer between decimal, hexadecimal, binary, and octal.
 //!
 //! The input number is parsed with auto-detected radix — `0x`/`0X` hex,

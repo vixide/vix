@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // small curated data + selection state
 //! A small library of reusable text snippets, plus the picker's selection state.
 //!
 //! Vix's Tools → Snippets… picker lists each snippet by name; choosing one

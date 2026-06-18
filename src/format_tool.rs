@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // small data-format helpers, kept lint-light like the convert modules
 //! Reformat the selection (or buffer) within one data format: pretty-print or
 //! minify JSON, and canonicalize YAML and TOML.
 //!

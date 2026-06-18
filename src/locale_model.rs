@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Available UI languages for Vix.
 //!
 //! Pure data: each [`Locale`] pairs a code (used with `rust-i18n`) with its

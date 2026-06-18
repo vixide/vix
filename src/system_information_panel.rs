@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! A read-only snapshot of host system information and the panel's row-selection
 //! + scroll state.
 //!
@@ -235,9 +234,7 @@ pub fn gather() -> Vec<Row> {
     rows.push(Row::heading("Environment"));
     rows.push(Row::pair("User", env_or(&["USER", "USERNAME"], unknown)));
     rows.push(Row::pair("Home", env_or(&["HOME", "USERPROFILE"], unknown)));
-    let cwd = std::env::current_dir()
-        .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| unknown.into());
+    let cwd = std::env::current_dir().map_or_else(|_| unknown.into(), |p| p.display().to_string());
     rows.push(Row::pair("Working dir", cwd));
     rows.push(Row::pair("Shell", env_or(&["SHELL", "COMSPEC"], unknown)));
 
@@ -268,7 +265,7 @@ mod tests {
     fn snapshot_has_headings_and_values() {
         let p = Panel::open();
         assert!(!p.is_empty(), "a snapshot produces rows");
-        assert!(p.rows.iter().any(|r| r.is_heading()), "has section headings");
+        assert!(p.rows.iter().any(super::Row::is_heading), "has section headings");
         assert!(
             p.rows.iter().any(|r| r.label == "Logical cores" && !r.value.is_empty()),
             "reports a logical core count"

@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Vix Calendar: the navigable month grid shown in Vix's calendar box. See
 //! `spec/index.md`.
 //!
@@ -11,6 +10,7 @@ use jiff::civil::Date;
 use jiff::{ToSpan, Zoned};
 
 /// Current time in the system's local time zone.
+#[must_use] 
 pub fn now_local() -> Zoned {
     Zoned::now()
 }
@@ -34,6 +34,7 @@ pub struct MonthGrid {
 
 /// Build the day grid for the month containing `month` (any day within it).
 /// Highlights today only when that month is the current local month.
+#[must_use] 
 pub fn month_grid(month: Date) -> MonthGrid {
     let first = first_of_month(month);
     // 0 = Monday .. 6 = Sunday — the column the 1st lands in.
@@ -81,6 +82,7 @@ impl Default for Calendar {
 
 impl Calendar {
     /// A calendar showing the current local month, with today selected.
+    #[must_use] 
     pub fn new() -> Self {
         let today = now_local().date();
         Calendar { shown: first_of_month(today), selected: today }
@@ -122,18 +124,21 @@ impl Calendar {
     }
 
     /// The selected date.
+    #[must_use] 
     pub fn selected(&self) -> Date {
         self.selected
     }
 
     /// The selected day-of-month, only when the selection is in the displayed
     /// month (so the host can highlight that cell).
+    #[must_use] 
     pub fn selected_day_in_shown(&self) -> Option<u8> {
         (self.selected.year() == self.shown.year() && self.selected.month() == self.shown.month())
             .then_some(self.selected.day() as u8)
     }
 
     /// The selected date formatted with a `strftime` `pattern`.
+    #[must_use] 
     pub fn selected_formatted(&self, pattern: &str) -> String {
         self.selected.strftime(pattern).to_string()
     }
@@ -156,17 +161,20 @@ impl Calendar {
     }
 
     /// First day of the displayed month.
+    #[must_use] 
     pub fn shown_month(&self) -> Date {
         self.shown
     }
 
     /// Month-and-year heading for the displayed month, e.g. `June 2026`.
+    #[must_use] 
     pub fn title(&self) -> String {
         self.shown.strftime("%B %Y").to_string()
     }
 
     /// Day grid for the displayed month (today highlighted only if it is the
     /// current local month).
+    #[must_use] 
     pub fn grid(&self) -> MonthGrid {
         month_grid(self.shown)
     }
@@ -174,6 +182,7 @@ impl Calendar {
     /// Format day-of-month `day` in the displayed month with a `strftime`
     /// `pattern` (e.g. `"%Y-%m-%d"`). Returns `None` if `day` is not a valid day
     /// of the displayed month. The host chooses the pattern (e.g. per locale).
+    #[must_use] 
     pub fn format_day(&self, day: u8, pattern: &str) -> Option<String> {
         let date = Date::new(self.shown.year(), self.shown.month(), day as i8).ok()?;
         Some(date.strftime(pattern).to_string())

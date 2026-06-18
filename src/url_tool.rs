@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! URL percent-encode and decode for Vix's Tools → Convert → URL menu.
 //!
 //! [`encode`] percent-encodes every byte that is not an unreserved URL character
@@ -60,7 +59,7 @@ pub fn encode(input: &str) -> Result<String, String> {
 pub fn decode(input: &str) -> Result<String, String> {
     percent_decode_str(input)
         .decode_utf8()
-        .map(|cow| cow.into_owned())
+        .map(std::borrow::Cow::into_owned)
         .map_err(|e| e.to_string())
 }
 

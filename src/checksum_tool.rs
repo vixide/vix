@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Compute SHA-256 and SHA-512 checksums of text, returned as lowercase hex.
 //!
 //! Vix's Tools → Checksum submenu hashes the selection (or, with no selection,

@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! State for the right dock: a message drawer of advice and notifications, each
 //! individually dismissable, plus the current selection.
 //!

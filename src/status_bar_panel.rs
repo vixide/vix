@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Formatting for the bottom status bar's two segments.
 //!
 //! Pure string logic — the host (the `vix` app) gathers the live data (cursor,

@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Convert a number between physical units, plus the Unit Converter dialog's
 //! editing state.
 //!
@@ -242,7 +241,7 @@ mod tests {
         assert_eq!(convert(1.0, idx("km"), idx("m")), Some(1000.0));
         assert_eq!(convert(100.0, idx("cm"), idx("m")), Some(1.0));
         let mi = convert(1.0, idx("mi"), idx("km")).unwrap();
-        assert!((mi - 1.609344).abs() < 1e-9);
+        assert!((mi - 1.609_344).abs() < 1e-9);
     }
 
     #[test]

@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Display one parsed vCard as a table of labelled fields, plus the panel's
 //! row-selection + scroll state.
 //!

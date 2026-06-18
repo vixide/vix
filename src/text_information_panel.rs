@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Statistics about a span of text, plus the panel's row-selection state.
 //!
 //! Vix's Tools → About → Text… panel reports counts for the selection (or the

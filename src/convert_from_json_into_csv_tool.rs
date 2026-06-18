@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Convert a JSON array of objects into CSV (Tools → Convert → JSON → CSV).
 //!
 //! The CSV header is the union of all object keys (first-seen order); each

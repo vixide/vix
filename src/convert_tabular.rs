@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Shared CSV/TSV/JSON conversion helpers for Vix's Tools → Convert tools.
 //!
 //! Tabular text comes in two delimited flavors — CSV (comma-separated, with

@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! State for the bottom dock: a scrollable line buffer for log messages,
 //! terminal/command output, data views, and similar.
 //!

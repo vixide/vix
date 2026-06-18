@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Find / find-and-replace for the editor.
 //!
 //! This crate owns both the box's *state* — the query and replacement text,

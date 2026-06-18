@@ -1,4 +1,3 @@
-#![allow(clippy::pedantic)] // folded subcrate: kept at its original (non-pedantic) lint level
 //! Convert TSV text into a JSON array of objects (Tools → Convert → TSV → JSON).
 //!
 //! The first TSV row supplies the object keys; each later row becomes one object
