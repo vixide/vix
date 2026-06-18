@@ -2526,9 +2526,10 @@ fn alt_letters_open_specific_menus() {
         vix::menu::menus().iter().position(|m| m.name == name).unwrap()
     };
     for (letter, name) in [
+        ('v', "menu.vix"),
         ('f', "menu.file"),
         ('e', "menu.edit"),
-        ('v', "menu.view"),
+        ('i', "menu.view"),
         ('g', "menu.git"),
         ('h', "menu.help"),
     ] {

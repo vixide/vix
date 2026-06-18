@@ -1467,11 +1467,13 @@ impl App {
     fn global_shared_key(&mut self, key: KeyEvent) -> bool {
         if Self::alt(&key)
             && let KeyCode::Char(c) = key.code {
-                // The Vix menu is index 0; the rest follow (File=1, …, Help=7).
+                // Vix=0, File=1, …, Help=7. "Vix" and "View" both start with V,
+                // so Vix takes Alt+V and View uses Alt+I (the "i" in vIew).
                 let idx = match c.to_ascii_lowercase() {
+                    'v' => Some(0),
                     'f' => Some(1),
                     'e' => Some(2),
-                    'v' => Some(3),
+                    'i' => Some(3),
                     't' => Some(4),
                     'a' => Some(5),
                     'g' => Some(6),
