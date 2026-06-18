@@ -463,12 +463,14 @@ fn lsp_navigation_actions_report_inactive_without_server() {
         "lsp.shrink_selection",
         "lsp.highlight",
         "lsp.linked_edit",
+        "lsp.code_lens",
     ] {
         let mut app = app_at(Path::new("."));
         type_str(&mut app, "fn main() {}\n");
         app.run_action(action);
         assert!(app.workspace_search.is_none(), "{action} opened no panel");
         assert!(app.code_actions.is_none(), "{action} opened no code-action menu");
+        assert!(app.code_lens.is_none(), "{action} opened no code-lens menu");
         assert!(app.prompt.is_none(), "{action} opened no prompt without a server");
     }
 }

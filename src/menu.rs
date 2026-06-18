@@ -386,6 +386,7 @@ const TOOLS_LSP: &[Item] = &[
     Item::leaf("menu.item.lsp.rename", "lsp.rename", "F2"),
     Item::leaf("menu.item.lsp.linked_edit", "lsp.linked_edit", ""),
     Item::leaf("menu.item.lsp.code_action", "lsp.code_action", ""),
+    Item::leaf("menu.item.lsp.code_lens", "lsp.code_lens", ""),
     Item::leaf("menu.item.lsp.highlight", "lsp.highlight", ""),
     Item::leaf("menu.item.lsp.expand_selection", "lsp.expand_selection", ""),
     Item::leaf("menu.item.lsp.shrink_selection", "lsp.shrink_selection", ""),

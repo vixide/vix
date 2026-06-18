@@ -272,6 +272,9 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.code_actions.is_some() {
         draw_code_actions(app, frame, area);
     }
+    if app.code_lens.is_some() {
+        draw_code_lens(app, frame, area);
+    }
     if app.pomodoro_open {
         draw_pomodoro(app, frame, area);
     }
@@ -626,10 +629,22 @@ fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect) {
 
 fn draw_code_actions(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(menu) = app.code_actions.as_ref() else { return };
-    let title = t!("menu.item.lsp.code_action");
-    let longest = menu.actions.iter().map(|(t, _)| t.chars().count()).max().unwrap_or(20);
+    let titles: Vec<&str> = menu.actions.iter().map(|(t, _)| t.as_str()).collect();
+    draw_chooser(frame, area, &t!("menu.item.lsp.code_action"), &titles, menu.selected);
+}
+
+fn draw_code_lens(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(menu) = app.code_lens.as_ref() else { return };
+    let titles: Vec<&str> = menu.lenses.iter().map(|(_, t, _, _)| t.as_str()).collect();
+    draw_chooser(frame, area, &t!("menu.item.lsp.code_lens"), &titles, menu.selected);
+}
+
+/// A centered single-column chooser: a bordered list of `titles` with `selected`
+/// highlighted. Shared by the code-action and code-lens menus.
+fn draw_chooser(frame: &mut Frame, area: Rect, title: &str, titles: &[&str], selected: usize) {
+    let longest = titles.iter().map(|t| t.chars().count()).max().unwrap_or(20);
     let width = u16::try_from(longest).unwrap_or(u16::MAX).saturating_add(4).clamp(24, area.width);
-    let rows_n = u16::try_from(menu.actions.len()).unwrap_or(u16::MAX);
+    let rows_n = u16::try_from(titles.len()).unwrap_or(u16::MAX);
     let height = rows_n.saturating_add(2).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
@@ -646,12 +661,11 @@ fn draw_code_actions(app: &mut App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(rect);
     frame.render_widget(Clear, rect);
     frame.render_widget(block, rect);
-    let rows: Vec<Line> = menu
-        .actions
+    let rows: Vec<Line> = titles
         .iter()
         .enumerate()
-        .map(|(i, (t, _))| {
-            let style = if i == menu.selected { theme::selected() } else { theme::base() };
+        .map(|(i, t)| {
+            let style = if i == selected { theme::selected() } else { theme::base() };
             Line::from(Span::styled(format!(" {t} "), style))
         })
         .collect();

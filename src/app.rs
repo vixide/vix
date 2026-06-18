@@ -442,6 +442,15 @@ pub struct CodeActionMenu {
     pub selected: usize,
 }
 
+/// The LSP code-lens chooser: invokable lenses and the highlighted row. Each
+/// lens carries its `(line, title, command, arguments)`.
+pub struct CodeLensMenu {
+    /// Offered lenses.
+    pub lenses: Vec<crate::lsp_core::message::CodeLens>,
+    /// Index of the highlighted lens.
+    pub selected: usize,
+}
+
 /// A point in the position-history jump list: a file and a 1-based line/column.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Location {
@@ -702,6 +711,8 @@ pub struct App {
     pub regex_tester: Option<crate::regex_tool::Tester>,
     /// Code-action chooser (LSP quick fixes / refactors), when open.
     pub code_actions: Option<CodeActionMenu>,
+    /// Code-lens chooser (LSP), when open.
+    pub code_lens: Option<CodeLensMenu>,
     /// Pomodoro timer state (Tools → Pomodoro…). Stays `Some` and keeps counting
     /// down even after the dialog is closed via Start; see [`Self::pomodoro_open`].
     pub pomodoro: Option<crate::pomodoro_tool::Timer>,
@@ -914,7 +925,8 @@ impl App {
             lsp,
             lsp_synced: std::collections::HashMap::new(),
             hover: None, completion: None, dialog: None, color_converter: None,
-            unit_converter: None, calculator: None, regex_tester: None, code_actions: None, pomodoro: None,
+            unit_converter: None, calculator: None, regex_tester: None, code_actions: None,
+            code_lens: None, pomodoro: None,
             pomodoro_open: false,
             pomodoro_last_tick: None,
             clip: Vec::new(),
@@ -1106,6 +1118,8 @@ impl App {
             self.regex_tester_key(key);
         } else if self.code_actions.is_some() {
             self.code_action_key(key);
+        } else if self.code_lens.is_some() {
+            self.code_lens_key(key);
         } else {
             return false;
         }
@@ -2125,6 +2139,7 @@ impl App {
             "lsp.shrink_selection" => self.request_selection_range(false),
             "lsp.highlight" => self.request_document_highlight(),
             "lsp.linked_edit" => self.request_linked_editing(),
+            "lsp.code_lens" => self.request_code_lens(),
             "view.inlay_hints" => self.toggle_inlay_hints(),
             "editor.fold_toggle" => self.toggle_fold_at_cursor(),
             "editor.fold_all" => {
@@ -2977,6 +2992,49 @@ impl App {
         };
         t.editor.set_marks(marks);
         self.status = t!("status.highlights_n", n = ranges.len()).to_string();
+    }
+
+    // ----- Code lens ------------------------------------------------------
+
+    /// Request the code lenses for the active file (LSP).
+    fn request_code_lens(&mut self) {
+        if let Some(path) = self.active_path()
+            && self.lsp.handles(&path)
+        {
+            self.lsp.request_code_lens(&path);
+        } else {
+            self.status = t!("status.lsp_inactive").to_string();
+        }
+    }
+
+    /// Handle a key for the code-lens chooser: Up/Down move, Enter runs, Esc
+    /// closes.
+    fn code_lens_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => self.code_lens = None,
+            KeyCode::Up => {
+                if let Some(m) = self.code_lens.as_mut() {
+                    m.selected = m.selected.saturating_sub(1);
+                }
+            }
+            KeyCode::Down => {
+                if let Some(m) = self.code_lens.as_mut() {
+                    m.selected = (m.selected + 1).min(m.lenses.len().saturating_sub(1));
+                }
+            }
+            KeyCode::Enter => self.run_selected_lens(),
+            _ => {}
+        }
+    }
+
+    /// Execute the highlighted code lens's command (`workspace/executeCommand`).
+    fn run_selected_lens(&mut self) {
+        let Some(menu) = self.code_lens.take() else { return };
+        let Some((_, title, command, args)) = menu.lenses.into_iter().nth(menu.selected) else { return };
+        if let Some(path) = self.active_path() {
+            self.lsp.execute_command(&path, &command, &args);
+            self.status = t!("status.lens_run", title = title).to_string();
+        }
     }
 
     // ----- Selection range (expand / shrink) ------------------------------
@@ -4486,6 +4544,9 @@ impl App {
                 crate::lsp::LspEvent::WorkspaceEdit(edits) => self.apply_workspace_edit(&edits),
                 crate::lsp::LspEvent::CodeActions(actions) => {
                     self.code_actions = Some(CodeActionMenu { actions, selected: 0 });
+                }
+                crate::lsp::LspEvent::CodeLenses(lenses) => {
+                    self.code_lens = Some(CodeLensMenu { lenses, selected: 0 });
                 }
                 crate::lsp::LspEvent::SelectionRanges(ranges) => self.apply_selection_range(&ranges),
                 crate::lsp::LspEvent::Highlights(ranges) => self.apply_document_highlights(&ranges),
