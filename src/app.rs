@@ -2102,6 +2102,9 @@ impl App {
             "git.blame" => self.git_blame_line(),
             "git.revert_hunk" => self.revert_hunk(),
             "git.stage_hunk" => self.stage_hunk(),
+            "git.stash" => self.git_op(crate::git::stash_push, "status.git_stashed"),
+            "git.stash_pop" => self.git_op(crate::git::stash_pop, "status.git_stash_popped"),
+            "git.amend" => self.git_op(crate::git::commit_amend, "status.git_amended"),
             "git.diff_next" => self.diff_goto(true),
             "git.diff_prev" => self.diff_goto(false),
             "view.bottom_dock" => self.toggle_bottom_dock(),
@@ -2931,6 +2934,23 @@ impl App {
         }
         self.refresh_git_gutter();
         self.status = t!("status.hunk_reverted").to_string();
+    }
+
+    /// Run a workspace-level git op (stash/amend), then refresh state and report
+    /// success with `ok_key` or the error in the status line.
+    fn git_op(&mut self, op: fn(&Path) -> Result<(), String>, ok_key: &str) {
+        if !self.git_repo {
+            self.status = t!("status.git_not_repo").to_string();
+            return;
+        }
+        match op(&self.root) {
+            Ok(()) => {
+                self.refresh_git();
+                self.refresh_git_gutter();
+                self.status = t!(ok_key).to_string();
+            }
+            Err(e) => self.status = t!("msg.git_failed", error = e).to_string(),
+        }
     }
 
     /// Stage just the hunk under the cursor into the git index, leaving the rest

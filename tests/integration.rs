@@ -2842,6 +2842,36 @@ fn revert_hunk_restores_committed_text() {
 
 #[test]
 #[ignore = "needs git; creates a throwaway repo and commits in it"]
+fn git_stash_and_pop_round_trip() {
+    let dir = unique_dir("gitstash");
+    fs::create_dir_all(&dir).unwrap();
+    let dir = dir.canonicalize().unwrap();
+    let run = |args: &[&str]| {
+        std::process::Command::new("git").current_dir(&dir).args(args).output().unwrap();
+    };
+    run(&["init", "-q"]);
+    run(&["config", "user.email", "t@example.com"]);
+    run(&["config", "user.name", "Test"]);
+    let file = dir.join("a.txt");
+    fs::write(&file, "one\n").unwrap();
+    run(&["add", "."]);
+    run(&["commit", "-q", "-m", "init"]);
+    fs::write(&file, "one\ntwo\n").unwrap(); // uncommitted change
+
+    let mut app = app_at(&dir);
+    app.refresh_git();
+    assert!(app.git_dirty(), "working tree dirty before stash");
+    app.run_action("git.stash");
+    app.refresh_git();
+    assert!(!app.git_dirty(), "clean after stash");
+    app.run_action("git.stash_pop");
+    app.refresh_git();
+    assert!(app.git_dirty(), "change restored after pop");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+#[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn stage_hunk_stages_only_the_cursor_hunk() {
     let dir = unique_dir("stagehunk");
     fs::create_dir_all(&dir).unwrap();

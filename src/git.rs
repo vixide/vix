@@ -516,7 +516,37 @@ pub fn create_branch(dir: &Path, name: &str) -> Result<(), String> {
 /// # Errors
 /// Returns the trimmed stderr text when `git commit` exits non-zero or cannot run.
 pub fn commit(dir: &Path, message: &str) -> Result<(), String> {
-    match git(dir, &["commit", "-m", message]) {
+    run_ok(dir, &["commit", "-m", message])
+}
+
+/// Amend the previous commit, folding in currently-staged changes and keeping
+/// its message (`git commit --amend --no-edit`).
+///
+/// # Errors
+/// Returns git's stderr on failure (e.g. no commit to amend).
+pub fn commit_amend(dir: &Path) -> Result<(), String> {
+    run_ok(dir, &["commit", "--amend", "--no-edit"])
+}
+
+/// Stash the working tree and index (`git stash push`).
+///
+/// # Errors
+/// Returns git's stderr on failure.
+pub fn stash_push(dir: &Path) -> Result<(), String> {
+    run_ok(dir, &["stash", "push"])
+}
+
+/// Restore the most recent stash (`git stash pop`).
+///
+/// # Errors
+/// Returns git's stderr on failure (e.g. no stash, or a conflict).
+pub fn stash_pop(dir: &Path) -> Result<(), String> {
+    run_ok(dir, &["stash", "pop"])
+}
+
+/// Run a git command, mapping a non-zero exit to its trimmed stderr.
+fn run_ok(dir: &Path, args: &[&str]) -> Result<(), String> {
+    match git(dir, args) {
         Ok(o) if o.status.success() => Ok(()),
         Ok(o) => Err(String::from_utf8_lossy(&o.stderr).trim().to_string()),
         Err(e) => Err(e.to_string()),
