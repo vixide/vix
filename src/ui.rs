@@ -1289,7 +1289,7 @@ fn draw_query_replace(app: &App, frame: &mut Frame, area: Rect) {
 
 fn menu_offsets() -> Vec<u16> {
     let mut offsets = Vec::new();
-    let mut pos: u16 = 1;
+    let mut pos: u16 = 0;
     for m in menus() {
         offsets.push(pos);
         pos += u16::try_from(m.title().chars().count()).unwrap_or(u16::MAX) + 2;
@@ -1298,7 +1298,7 @@ fn menu_offsets() -> Vec<u16> {
 }
 
 fn draw_menu_bar(app: &App, frame: &mut Frame, area: Rect) {
-    let mut spans = vec![Span::raw(" ")];
+    let mut spans = Vec::new();
     for (i, m) in menus().iter().enumerate() {
         let open = app.menu.open == Some(i);
         let style = if open {

@@ -6165,7 +6165,7 @@ impl App {
 
     /// Index of the top-level menu whose title spans column `col`, if any.
     fn top_menu_index_at(&self, col: u16) -> Option<usize> {
-        let mut x = self.layout.menu.x + 1;
+        let mut x = self.layout.menu.x;
         for (i, m) in menus().iter().enumerate() {
             let w = u16::try_from(m.title().chars().count()).unwrap_or(u16::MAX) + 2;
             if col >= x && col < x + w {
