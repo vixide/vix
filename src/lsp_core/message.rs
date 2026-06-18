@@ -239,6 +239,14 @@ pub fn parse_definition(result: &Value) -> Option<Location> {
     }
 }
 
+/// Parse a `textDocument/documentHighlight` result (`DocumentHighlight[]`) into
+/// the ranges to highlight.
+#[must_use]
+pub fn parse_document_highlights(result: &Value) -> Vec<Range> {
+    let Value::Array(arr) = result else { return Vec::new() };
+    arr.iter().filter_map(|h| h.get("range").and_then(parse_range)).collect()
+}
+
 /// A `SelectionRangeParams` body querying the single position `(line, character)`.
 #[must_use]
 pub fn selection_range_params(uri: &str, line: u32, character: u32) -> Value {
@@ -633,6 +641,17 @@ mod tests {
         assert!(help.contains("fn f(a: i32, b: i32)"));
         assert!(help.contains("b: i32"));
         assert!(parse_signature_help(&json!({"signatures": []})).is_none());
+    }
+
+    #[test]
+    fn document_highlights_parse_ranges() {
+        let hs = parse_document_highlights(&json!([
+            {"range": {"start": {"line": 0, "character": 4}, "end": {"line": 0, "character": 7}}, "kind": 1},
+            {"range": {"start": {"line": 3, "character": 0}, "end": {"line": 3, "character": 3}}}
+        ]));
+        assert_eq!(hs.len(), 2);
+        assert_eq!(hs[1].start.line, 3);
+        assert!(parse_document_highlights(&Value::Null).is_empty());
     }
 
     #[test]
