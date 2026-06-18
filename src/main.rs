@@ -117,5 +117,28 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
                 _ => {}
             }
         }
+        if app.suspend_requested {
+            app.suspend_requested = false;
+            suspend(terminal);
+        }
     }
+}
+
+/// Suspend the process to the shell (`Ctrl+Z` style): tear down the terminal,
+/// raise `SIGTSTP`, then re-initialize when resumed with `fg`. A no-op off Unix.
+fn suspend(terminal: &mut ratatui::DefaultTerminal) {
+    #[cfg(unix)]
+    {
+        let _ = write!(io::stdout(), "\x1b[?1003l");
+        let _ = execute!(io::stdout(), DisableMouseCapture);
+        let _ = io::stdout().flush();
+        ratatui::restore();
+        let _ = nix::sys::signal::raise(nix::sys::signal::Signal::SIGTSTP);
+        *terminal = ratatui::init();
+        let _ = execute!(io::stdout(), EnableMouseCapture);
+        let _ = write!(io::stdout(), "\x1b[?1003h");
+        let _ = io::stdout().flush();
+    }
+    #[cfg(not(unix))]
+    let _ = terminal;
 }

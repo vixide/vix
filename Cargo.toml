@@ -115,6 +115,7 @@ uuid = { version = "1", features = ["v1", "v3", "v4", "v5", "v6", "v7", "v8"] }
 include_dir = "0.7.4"
 serde_yaml = "0.9.34"
 markdown = "1.0.0"
+nix = { version = "0.29", features = ["signal"] }
 
 # Dependencies for the in-tree code-editor widget (src/editor_core/).
 anyhow = "1.0"

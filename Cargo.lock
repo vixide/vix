@@ -3547,6 +3547,7 @@ dependencies = [
  "jiff",
  "markdown",
  "md-5",
+ "nix",
  "percent-encoding",
  "pulldown-cmark",
  "ratatui",
