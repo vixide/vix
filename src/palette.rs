@@ -224,6 +224,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.toggle_ruler", "toggle_ruler"),
     ("cmd.record_macro", "toggle_macro"),
     ("cmd.play_macro", "play_macro"),
+    ("cmd.autocomplete", "autocomplete"),
     ("cmd.toggle_soft_wrap", "view.soft_wrap"),
     ("cmd.toggle_scrollbar", "view.scrollbar"),
     ("cmd.toggle_spellcheck", "view.spellcheck"),

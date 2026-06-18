@@ -415,6 +415,16 @@ impl Keymap {
     }
 }
 
+/// An active buffer-word autocomplete cycle: the word start, the candidate list,
+/// the current index, and the cursor position right after the inserted candidate
+/// (used to detect that the cycle is still active on the next keystroke).
+struct CompleteSession {
+    anchor: usize,
+    candidates: Vec<String>,
+    index: usize,
+    end: usize,
+}
+
 /// A point in the position-history jump list: a file and a 1-based line/column.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Location {
@@ -708,6 +718,8 @@ pub struct App {
     macro_keys: Vec<KeyEvent>,
     /// True while replaying, to suppress re-recording and recursion.
     macro_playing: bool,
+    /// In-progress word-completion cycle (buffer-word autocomplete).
+    complete_session: Option<CompleteSession>,
     /// Whether the workspace root is a git work tree (checked once at startup).
     pub git_repo: bool,
     /// Cached current git branch (or short hash when detached), when in a repo.
@@ -898,6 +910,7 @@ impl App {
             macro_recording: false,
             macro_keys: Vec::new(),
             macro_playing: false,
+            complete_session: None,
             git_repo: false,
             git_branch: None,
             git_status: Vec::new(),
@@ -2303,8 +2316,9 @@ impl App {
                 }
             }
             "play_macro" => self.play_macro(),
-            "shell_mode" | "command_mode" | "suspend" | "autocomplete"
-            | "cycle_autocomplete_back" | "toggle_key_menu" => todo_action!(),
+            "autocomplete" => self.autocomplete(true),
+            "cycle_autocomplete_back" => self.autocomplete(false),
+            "shell_mode" | "command_mode" | "suspend" | "toggle_key_menu" => todo_action!(),
             _ => return false,
         }
         true
@@ -3792,6 +3806,77 @@ impl App {
         }
         self.macro_playing = false;
         self.status = t!("status.macro_played").to_string();
+    }
+
+    /// Buffer-word autocomplete: complete the word before the cursor from other
+    /// words in the buffer, cycling on repeated calls (`forward` chooses the
+    /// direction). Like classic "dynamic abbreviation" expansion.
+    fn autocomplete(&mut self, forward: bool) {
+        let Some(cur) = self.editor.active_tab().filter(|t| !t.is_image()).map(|t| t.editor.get_cursor()) else {
+            return;
+        };
+        // Continue an active cycle when the cursor still sits at the last insert.
+        let cycling = self.complete_session.as_ref().is_some_and(|s| s.end == cur);
+        if cycling {
+            let s = self.complete_session.as_mut().unwrap();
+            let n = s.candidates.len();
+            s.index = if forward { (s.index + 1) % n } else { (s.index + n - 1) % n };
+            let (anchor, end, word) = (s.anchor, s.end, s.candidates[s.index].clone());
+            self.replace_range_chars(anchor, end, &word);
+            if let Some(s) = self.complete_session.as_mut() {
+                s.end = anchor + word.chars().count();
+            }
+            return;
+        }
+        // Start a new cycle: collect distinct buffer words sharing the prefix.
+        let content = self.editor.active_tab().map(Tab::text).unwrap_or_default();
+        let chars: Vec<char> = content.chars().collect();
+        let is_word = |c: char| c.is_alphanumeric() || c == '_';
+        let mut start = cur.min(chars.len());
+        while start > 0 && is_word(chars[start - 1]) {
+            start -= 1;
+        }
+        let prefix: String = chars[start..cur.min(chars.len())].iter().collect();
+        if prefix.is_empty() {
+            self.status = t!("status.no_completions").to_string();
+            return;
+        }
+        let mut seen = std::collections::HashSet::new();
+        let mut candidates: Vec<String> = Vec::new();
+        for word in content.split(|c: char| !is_word(c)) {
+            if word.len() > prefix.len() && word.starts_with(&prefix) && seen.insert(word) {
+                candidates.push(word.to_string());
+            }
+        }
+        if candidates.is_empty() {
+            self.status = t!("status.no_completions").to_string();
+            return;
+        }
+        let word = candidates[0].clone();
+        self.replace_range_chars(start, cur, &word);
+        self.complete_session = Some(CompleteSession {
+            anchor: start,
+            candidates,
+            index: 0,
+            end: start + word.chars().count(),
+        });
+    }
+
+    /// Replace the character range `[start, end)` of the active buffer with `text`
+    /// and put the cursor after it (one undoable edit).
+    fn replace_range_chars(&mut self, start: usize, end: usize, text: &str) {
+        if let Some(t) = self.editor.active_tab_mut() {
+            let chars: Vec<char> = t.editor.get_content().chars().collect();
+            let n = chars.len();
+            let (a, b) = (start.min(n), end.min(n).max(start.min(n)));
+            let mut out: String = chars[..a].iter().collect();
+            out.push_str(text);
+            out.extend(&chars[b..]);
+            t.editor.set_content(&out);
+            t.editor.set_cursor(a + text.chars().count());
+            t.dirty = true;
+            t.preview = false;
+        }
     }
 
     fn is_edit_key(key: &KeyEvent) -> bool {

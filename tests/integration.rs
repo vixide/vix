@@ -357,6 +357,15 @@ fn line_transforms_via_actions() {
 }
 
 #[test]
+fn autocomplete_completes_a_buffer_word() {
+    let mut app = app_at(Path::new("."));
+    // A long word exists earlier; typing its prefix then autocompleting expands it.
+    type_str(&mut app, "function\nfun");
+    app.run_action("autocomplete");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "function\nfunction");
+}
+
+#[test]
 fn macro_records_and_replays_editor_keys() {
     let mut app = app_at(Path::new("."));
     app.run_action("toggle_macro"); // start recording
