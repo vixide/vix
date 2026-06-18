@@ -421,6 +421,7 @@ fn lsp_navigation_actions_report_inactive_without_server() {
         "lsp.document_symbols",
         "lsp.workspace_symbols",
         "lsp.signature_help",
+        "lsp.rename",
     ] {
         let mut app = app_at(Path::new("."));
         type_str(&mut app, "fn main() {}\n");

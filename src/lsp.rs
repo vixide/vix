@@ -40,6 +40,7 @@ enum Pending {
     DocumentSymbols,
     WorkspaceSymbols,
     SignatureHelp,
+    Rename,
 }
 
 /// A message handed back from a server's stdout reader thread.
@@ -77,6 +78,8 @@ pub enum LspEvent {
     WorkspaceSymbols(Vec<(PathBuf, u32, u32, String)>),
     /// A signature-help response: the text to show in a popup.
     SignatureHelp(String),
+    /// A rename response: per-file edits `(file, [(range, new_text)])` to apply.
+    WorkspaceEdit(Vec<(PathBuf, Vec<(crate::lsp_core::Range, String)>)>),
 }
 
 /// One running language server.
@@ -341,6 +344,13 @@ impl Lsp {
         self.request(path, "textDocument/signatureHelp", line, character, Pending::SignatureHelp);
     }
 
+    /// Request a rename of the symbol at `(line, character)` to `new_name`.
+    pub fn request_rename(&mut self, path: &Path, line: u32, character: u32, new_name: &str) {
+        self.send_request(path, "textDocument/rename", Pending::Rename, |uri| {
+            message::rename_params(uri, line, character, new_name)
+        });
+    }
+
     /// Request formatting of the whole document `path` (`tab_size`-wide indent).
     pub fn request_formatting(&mut self, path: &Path, tab_size: u32) {
         self.send_request(path, "textDocument/formatting", Pending::Formatting, |uri| {
@@ -523,6 +533,16 @@ impl Lsp {
             Pending::SignatureHelp => {
                 if let Some(text) = message::parse_signature_help(result) {
                     events.push(LspEvent::SignatureHelp(text));
+                }
+            }
+            Pending::Rename => {
+                let edits: Vec<(PathBuf, Vec<(crate::lsp_core::Range, String)>)> =
+                    message::parse_workspace_edit(result)
+                        .into_iter()
+                        .map(|(uri, e)| (uri_to_path(&uri), e))
+                        .collect();
+                if !edits.is_empty() {
+                    events.push(LspEvent::WorkspaceEdit(edits));
                 }
             }
         }

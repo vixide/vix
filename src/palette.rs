@@ -215,6 +215,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.lsp_type_definition", "nav.goto_type_definition"),
     ("cmd.lsp_references", "lsp.references"),
     ("cmd.lsp_format", "lsp.format"),
+    ("cmd.lsp_rename", "lsp.rename"),
     ("cmd.lsp_document_symbols", "lsp.document_symbols"),
     ("cmd.lsp_workspace_symbols", "lsp.workspace_symbols"),
     ("cmd.lsp_signature_help", "lsp.signature_help"),

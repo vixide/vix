@@ -234,6 +234,30 @@ pub fn parse_definition(result: &Value) -> Option<Location> {
     }
 }
 
+/// Parse a `textDocument/rename` `WorkspaceEdit` result into per-file edits:
+/// `(uri, [(range, new_text)])`. Handles both the `changes` map and the
+/// `documentChanges` array shapes.
+#[must_use]
+pub fn parse_workspace_edit(result: &Value) -> Vec<(String, Vec<(crate::lsp_core::Range, String)>)> {
+    let mut out = Vec::new();
+    if let Some(Value::Object(changes)) = result.get("changes") {
+        for (uri, edits) in changes {
+            out.push((uri.clone(), parse_text_edits(edits)));
+        }
+    }
+    if let Some(Value::Array(doc_changes)) = result.get("documentChanges") {
+        for dc in doc_changes {
+            if let Some(uri) = dc.get("textDocument").and_then(|td| td.get("uri")).and_then(Value::as_str)
+                && let Some(edits) = dc.get("edits")
+            {
+                out.push((uri.to_string(), parse_text_edits(edits)));
+            }
+        }
+    }
+    out.retain(|(_, edits)| !edits.is_empty());
+    out
+}
+
 /// Parse a `textDocument/documentSymbol` result into `(line, character, name)`
 /// in document order. Handles both the hierarchical `DocumentSymbol[]` (with
 /// nested `children`) and the flat `SymbolInformation[]` shapes.
@@ -551,6 +575,27 @@ mod tests {
         assert!(help.contains("fn f(a: i32, b: i32)"));
         assert!(help.contains("b: i32"));
         assert!(parse_signature_help(&json!({"signatures": []})).is_none());
+    }
+
+    #[test]
+    fn workspace_edit_parses_both_shapes() {
+        let by_changes = parse_workspace_edit(&json!({
+            "changes": {
+                "file:///a.rs": [{"range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 3}}, "newText": "baz"}]
+            }
+        }));
+        assert_eq!(by_changes.len(), 1);
+        assert_eq!(by_changes[0].0, "file:///a.rs");
+        assert_eq!(by_changes[0].1[0].1, "baz");
+        let by_doc = parse_workspace_edit(&json!({
+            "documentChanges": [
+                {"textDocument": {"uri": "file:///b.rs", "version": 2},
+                 "edits": [{"range": {"start": {"line": 1, "character": 0}, "end": {"line": 1, "character": 2}}, "newText": "x"}]}
+            ]
+        }));
+        assert_eq!(by_doc.len(), 1);
+        assert_eq!(by_doc[0].0, "file:///b.rs");
+        assert!(parse_workspace_edit(&json!({})).is_empty());
     }
 
     #[test]
