@@ -410,6 +410,19 @@ fn diagnostics_panel_empty_reports_none() {
 }
 
 #[test]
+fn mode_and_suspend_actions() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("command_mode");
+    assert!(app.palette.is_some(), "command_mode opens the command palette");
+    let mut app = app_at(Path::new("."));
+    app.run_action("shell_mode");
+    assert!(app.prompt.is_some(), "shell_mode opens the run-command prompt");
+    let mut app = app_at(Path::new("."));
+    app.run_action("suspend");
+    assert!(app.suspend_requested, "suspend flags the main loop");
+}
+
+#[test]
 fn inlay_hints_render_inline() {
     use ratatui::{backend::TestBackend, Terminal};
     let mut app = app_at(Path::new("."));

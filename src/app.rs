@@ -768,6 +768,9 @@ pub struct App {
     expand_selection_dir: Option<bool>,
     /// Whether LSP inlay hints are displayed (toggled via `view.inlay_hints`).
     show_inlay_hints: bool,
+    /// Set by the `suspend` action; the main loop suspends the process
+    /// (`SIGTSTP`) on Unix and clears it on resume.
+    pub suspend_requested: bool,
     /// Linked-editing ranges (char offsets in the active buffer) captured when
     /// the linked-edit prompt was opened, replaced together on submit.
     linked_ranges: Option<Vec<(usize, usize)>>,
@@ -948,6 +951,7 @@ impl App {
             rename_at: None,
             expand_selection_dir: None,
             show_inlay_hints: true,
+            suspend_requested: false,
             linked_ranges: None,
             git_repo: false,
             git_branch: None,
@@ -2417,12 +2421,6 @@ impl App {
                 self.mark_active_dirty();
             }};
         }
-        // A catalog action that is not implemented yet.
-        macro_rules! todo_action {
-            () => {{
-                self.status = t!("status.action_todo", action = id).to_string();
-            }};
-        }
         match id {
             _ if self.run_cursor_action(id, view_h) => {}
             "delete_word_right" => edm!(delete_word_right),
@@ -2476,7 +2474,12 @@ impl App {
             "play_macro" => self.play_macro(),
             "autocomplete" => self.autocomplete(true),
             "cycle_autocomplete_back" => self.autocomplete(false),
-            "shell_mode" | "command_mode" | "suspend" => todo_action!(),
+            "command_mode" => self.open_palette(),
+            "shell_mode" => {
+                self.prompt =
+                    Some(Prompt::new(PromptKind::RunCommand, t!("prompt.run_command").to_string()));
+            }
+            "suspend" => self.suspend_requested = true,
             _ => return false,
         }
         true
