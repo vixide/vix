@@ -410,6 +410,21 @@ fn diagnostics_panel_empty_reports_none() {
 }
 
 #[test]
+fn inlay_hints_render_inline() {
+    use ratatui::{backend::TestBackend, Terminal};
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "let x = 1;\n");
+    // A ": i32" hint just after `x` (char column 5).
+    app.editor.active_tab_mut().unwrap().editor.set_inlay_hints(vec![(0, 5, ": i32".to_string())]);
+    let mut term = Terminal::new(TestBackend::new(80, 6)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let screen: String =
+        term.backend().buffer().content().iter().map(ratatui::buffer::Cell::symbol).collect();
+    assert!(screen.contains(": i32"), "inlay hint text is rendered");
+    assert!(screen.contains("let x"), "real text still present");
+}
+
+#[test]
 fn folding_hides_lines_and_renders() {
     use ratatui::{backend::TestBackend, Terminal};
     let mut app = app_at(Path::new("."));
@@ -2666,7 +2681,14 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
         editor.iter().map(|it| it.action).filter(|a| a.starts_with("view.")).collect();
     assert_eq!(
         actions,
-        vec!["view.line_numbers", "view.whitespace", "view.scrollbar", "view.soft_wrap", "view.spellcheck"]
+        vec![
+            "view.line_numbers",
+            "view.whitespace",
+            "view.scrollbar",
+            "view.soft_wrap",
+            "view.inlay_hints",
+            "view.spellcheck"
+        ]
     );
 }
 

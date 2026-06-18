@@ -213,6 +213,7 @@ const VIEW_EDITOR: &[Item] = &[
     Item::leaf("menu.item.view.fold_all", "editor.fold_all", ""),
     Item::leaf("menu.item.view.unfold_all", "editor.unfold_all", ""),
     SEP,
+    Item::leaf("menu.item.view.inlay_hints", "view.inlay_hints", ""),
     Item::leaf("menu.item.view.spellcheck", "view.spellcheck", ""),
     SEP,
     Item::leaf("menu.item.view.next_tab", "tab.next", "Ctrl Tab"),

@@ -162,7 +162,48 @@ pub fn did_save_params(uri: &str, text: &str) -> Value {
     json!({ "textDocument": { "uri": uri }, "text": text })
 }
 
+/// An `InlayHintParams` body covering `[start, end)` of the document.
+#[must_use]
+pub fn inlay_hint_params(uri: &str, start: (u32, u32), end: (u32, u32)) -> Value {
+    json!({
+        "textDocument": { "uri": uri },
+        "range": {
+            "start": { "line": start.0, "character": start.1 },
+            "end": { "line": end.0, "character": end.1 }
+        }
+    })
+}
+
 // ----- parsers ------------------------------------------------------------
+
+/// Parse a `textDocument/inlayHint` result (`InlayHint[]`) into
+/// `(line, character, label)`. The label may be a string or label parts;
+/// `paddingLeft`/`paddingRight` become surrounding spaces.
+#[must_use]
+pub fn parse_inlay_hints(result: &Value) -> Vec<(u32, u32, String)> {
+    let Value::Array(arr) = result else { return Vec::new() };
+    arr.iter()
+        .filter_map(|h| {
+            let pos = h.get("position")?;
+            let line = u32::try_from(pos.get("line")?.as_u64()?).ok()?;
+            let character = u32::try_from(pos.get("character")?.as_u64()?).ok()?;
+            let mut label = match h.get("label")? {
+                Value::String(s) => s.clone(),
+                Value::Array(parts) => {
+                    parts.iter().filter_map(|p| p.get("value").and_then(Value::as_str)).collect()
+                }
+                _ => return None,
+            };
+            if h.get("paddingLeft").and_then(Value::as_bool) == Some(true) {
+                label.insert(0, ' ');
+            }
+            if h.get("paddingRight").and_then(Value::as_bool) == Some(true) {
+                label.push(' ');
+            }
+            (!label.is_empty()).then_some((line, character, label))
+        })
+        .collect()
+}
 
 /// The position encoding the server chose, read from an `initialize` result
 /// (`capabilities.positionEncoding`). Defaults to UTF-16.
@@ -701,6 +742,18 @@ mod tests {
             Some("docs".to_string())
         );
         assert!(parse_resolved_detail(&json!({})).is_none());
+    }
+
+    #[test]
+    fn inlay_hints_parse_string_and_parts() {
+        let hints = parse_inlay_hints(&json!([
+            {"position": {"line": 0, "character": 5}, "label": ": i32", "paddingLeft": true},
+            {"position": {"line": 2, "character": 1}, "label": [{"value": "name"}, {"value": ":"}]}
+        ]));
+        assert_eq!(hints.len(), 2);
+        assert_eq!(hints[0], (0, 5, " : i32".to_string()), "paddingLeft adds a space");
+        assert_eq!(hints[1], (2, 1, "name:".to_string()), "label parts joined");
+        assert!(parse_inlay_hints(&Value::Null).is_empty());
     }
 
     #[test]
