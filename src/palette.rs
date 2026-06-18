@@ -220,6 +220,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.toggle_status_bar", "view.status_bar"),
     ("cmd.toggle_line_numbers", "view.line_numbers"),
     ("cmd.toggle_whitespace", "view.whitespace"),
+    ("cmd.toggle_overwrite", "toggle_overwrite_mode"),
     ("cmd.toggle_soft_wrap", "view.soft_wrap"),
     ("cmd.toggle_scrollbar", "view.scrollbar"),
     ("cmd.toggle_spellcheck", "view.spellcheck"),
