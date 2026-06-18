@@ -78,6 +78,7 @@ pub mod ui;
 // crate for its Tree-sitter grammar feature gates).
 pub mod ascii_character_picker;
 pub mod base64_tool;
+pub mod base_tool;
 pub mod bottom_dock;
 pub mod calculator_tool;
 pub mod calendar_panel;

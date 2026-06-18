@@ -296,6 +296,12 @@ const TOOLS_CONVERT_JSON: &[Item] = &[
 ];
 const TOOLS_CONVERT_TOML: &[Item] = &[Item::leaf("JSON", "tools.convert.toml.json", "")];
 const TOOLS_CONVERT_YAML: &[Item] = &[Item::leaf("JSON", "tools.convert.yaml.json", "")];
+const TOOLS_CONVERT_NUMBER: &[Item] = &[
+    Item::leaf("Dec", "tools.convert.number.dec", ""),
+    Item::leaf("Hex", "tools.convert.number.hex", ""),
+    Item::leaf("Bin", "tools.convert.number.bin", ""),
+    Item::leaf("Oct", "tools.convert.number.oct", ""),
+];
 const TOOLS_CONVERT_HTML: &[Item] = &[Item::leaf("Markdown", "tools.convert.html.markdown", "")];
 const TOOLS_CONVERT_MARKDOWN: &[Item] = &[Item::leaf("HTML", "tools.convert.markdown.html", "")];
 
@@ -318,6 +324,7 @@ const TOOLS_CONVERT: &[Item] = &[
     Item::sub("TSV", TOOLS_CONVERT_TSV),
     Item::sub("URL", TOOLS_CONVERT_URL),
     Item::sub("YAML", TOOLS_CONVERT_YAML),
+    Item::sub("menu.item.tools.convert.number", TOOLS_CONVERT_NUMBER),
     SEP,
     Item::leaf("menu.item.tools.convert.jwt", "tools.convert.jwt", ""),
 ];
