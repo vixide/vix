@@ -47,6 +47,7 @@ enum Pending {
     FoldingRange,
     CompletionResolve,
     InlayHint,
+    LinkedEditing,
 }
 
 /// A message handed back from a server's stdout reader thread.
@@ -108,6 +109,9 @@ pub enum LspEvent {
     /// An inlay-hint response: `(line, character, label)` hints for the active
     /// file (0-based; `character` in the server's encoding units).
     InlayHints(Vec<(u32, u32, String)>),
+    /// A linked-editing response: ranges in the active file that should be edited
+    /// together (e.g. an open/close tag pair).
+    LinkedRanges(Vec<crate::lsp_core::Range>),
 }
 
 /// One running language server.
@@ -382,6 +386,11 @@ impl Lsp {
     /// Request the occurrences of the symbol at `(line, character)` to highlight.
     pub fn request_document_highlight(&mut self, path: &Path, line: u32, character: u32) {
         self.request(path, "textDocument/documentHighlight", line, character, Pending::DocumentHighlight);
+    }
+
+    /// Request the linked-editing ranges at `(line, character)`.
+    pub fn request_linked_editing(&mut self, path: &Path, line: u32, character: u32) {
+        self.request(path, "textDocument/linkedEditingRange", line, character, Pending::LinkedEditing);
     }
 
     /// Request inlay hints covering `[start, end)` of `path`.
@@ -673,6 +682,12 @@ impl Lsp {
                 let hints = message::parse_inlay_hints(result);
                 if !hints.is_empty() {
                     events.push(LspEvent::InlayHints(hints));
+                }
+            }
+            Pending::LinkedEditing => {
+                let ranges = message::parse_linked_editing_ranges(result);
+                if ranges.len() > 1 {
+                    events.push(LspEvent::LinkedRanges(ranges));
                 }
             }
             _ => {} // handled in response_to_events

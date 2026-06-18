@@ -107,6 +107,8 @@ pub enum PromptKind {
     WorkspaceSymbol,
     /// Enter the new name for the symbol under the cursor (LSP rename).
     LspRename,
+    /// Enter replacement text for the cursor's linked-editing ranges (LSP).
+    LinkedEdit,
     /// Enter the file-explorer "include" path regex filter.
     ExplorerInclude,
     /// Enter the file-explorer "exclude" path regex filter.
@@ -755,6 +757,9 @@ pub struct App {
     expand_selection_dir: Option<bool>,
     /// Whether LSP inlay hints are displayed (toggled via `view.inlay_hints`).
     show_inlay_hints: bool,
+    /// Linked-editing ranges (char offsets in the active buffer) captured when
+    /// the linked-edit prompt was opened, replaced together on submit.
+    linked_ranges: Option<Vec<(usize, usize)>>,
     /// Whether the workspace root is a git work tree (checked once at startup).
     pub git_repo: bool,
     /// Cached current git branch (or short hash when detached), when in a repo.
@@ -931,6 +936,7 @@ impl App {
             rename_at: None,
             expand_selection_dir: None,
             show_inlay_hints: true,
+            linked_ranges: None,
             git_repo: false,
             git_branch: None,
             git_status: Vec::new(),
@@ -2118,6 +2124,7 @@ impl App {
             "lsp.expand_selection" => self.request_selection_range(true),
             "lsp.shrink_selection" => self.request_selection_range(false),
             "lsp.highlight" => self.request_document_highlight(),
+            "lsp.linked_edit" => self.request_linked_editing(),
             "view.inlay_hints" => self.toggle_inlay_hints(),
             "editor.fold_toggle" => self.toggle_fold_at_cursor(),
             "editor.fold_all" => {
@@ -4483,6 +4490,7 @@ impl App {
                 crate::lsp::LspEvent::SelectionRanges(ranges) => self.apply_selection_range(&ranges),
                 crate::lsp::LspEvent::Highlights(ranges) => self.apply_document_highlights(&ranges),
                 crate::lsp::LspEvent::InlayHints(hints) => self.apply_inlay_hints(&hints),
+                crate::lsp::LspEvent::LinkedRanges(ranges) => self.begin_linked_edit(&ranges),
                 crate::lsp::LspEvent::FoldingRanges(ranges) => {
                     let ranges: Vec<(usize, usize)> =
                         ranges.iter().map(|&(s, e)| (s as usize, e as usize)).collect();
@@ -8709,6 +8717,64 @@ impl App {
         );
     }
 
+    /// Request the linked-editing ranges at the cursor (LSP).
+    fn request_linked_editing(&mut self) {
+        if let Some(path) = self.active_path()
+            && self.lsp.handles(&path)
+        {
+            let (line, character) = self.cursor_lsp_position(&path);
+            self.lsp.request_linked_editing(&path, line, character);
+        } else {
+            self.status = t!("status.lsp_inactive").to_string();
+        }
+    }
+
+    /// On a linked-editing response: store the ranges (as char offsets) and
+    /// prompt for the shared replacement text, seeded with the current text.
+    fn begin_linked_edit(&mut self, ranges: &[crate::lsp_core::Range]) {
+        let Some(path) = self.active_path() else { return };
+        let enc = self.lsp.encoding_for(&path);
+        let Some(t) = self.editor.active_tab() else { return };
+        let (offsets, seed) = {
+            let code = t.editor.code_ref();
+            let offsets: Vec<(usize, usize)> = ranges
+                .iter()
+                .map(|r| {
+                    let s = lsp_pos_to_char(code, r.start.line, r.start.character, enc);
+                    let e = lsp_pos_to_char(code, r.end.line, r.end.character, enc);
+                    (s.min(e), s.max(e))
+                })
+                .collect();
+            let seed = offsets.first().map(|&(s, e)| code.slice(s, e)).unwrap_or_default();
+            (offsets, seed)
+        };
+        self.linked_ranges = Some(offsets);
+        self.prompt =
+            Some(Prompt::new(PromptKind::LinkedEdit, t!("prompt.linked_edit").to_string()).with_input(seed));
+    }
+
+    /// Replace every captured linked-editing range with `text` (highest offset
+    /// first so earlier offsets stay valid).
+    fn apply_linked_edit(&mut self, text: &str) {
+        let Some(mut ranges) = self.linked_ranges.take() else { return };
+        ranges.sort_by_key(|&(s, _)| std::cmp::Reverse(s));
+        let Some(t) = self.editor.active_tab_mut() else { return };
+        let mut chars: Vec<char> = t.editor.get_content().chars().collect();
+        for (s, e) in ranges {
+            let (a, b) = (s.min(chars.len()), e.min(chars.len()));
+            if a <= b {
+                chars.splice(a..b, text.chars());
+            }
+        }
+        let new: String = chars.into_iter().collect();
+        let caret = t.editor.get_cursor().min(new.chars().count());
+        t.editor.set_content(&new);
+        t.editor.set_cursor(caret);
+        t.dirty = true;
+        t.preview = false;
+        self.status = t!("status.linked_edited").to_string();
+    }
+
     /// Apply a rename `WorkspaceEdit`: edit open buffers in place (marking them
     /// dirty) and rewrite closed files on disk.
     fn apply_workspace_edit(&mut self, edits: &[crate::lsp::FileEdits]) {
@@ -9477,6 +9543,7 @@ impl App {
                     self.lsp.request_rename(&path, line, character, &new_name);
                 }
             }
+            PromptKind::LinkedEdit => self.apply_linked_edit(&prompt.input),
             PromptKind::ExplorerInclude => {
                 let exclude = self.explorer.exclude_filter.clone();
                 self.explorer.set_filter(prompt.input.trim(), &exclude);

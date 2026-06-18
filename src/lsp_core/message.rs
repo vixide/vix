@@ -321,6 +321,14 @@ pub fn parse_folding_ranges(result: &Value) -> Vec<(u32, u32)> {
         .collect()
 }
 
+/// Parse a `textDocument/linkedEditingRange` result into the ranges that should
+/// be edited together (from the `ranges` array).
+#[must_use]
+pub fn parse_linked_editing_ranges(result: &Value) -> Vec<Range> {
+    let Some(arr) = result.get("ranges").and_then(Value::as_array) else { return Vec::new() };
+    arr.iter().filter_map(parse_range).collect()
+}
+
 /// Parse a `textDocument/documentHighlight` result (`DocumentHighlight[]`) into
 /// the ranges to highlight.
 #[must_use]
@@ -765,6 +773,20 @@ mod tests {
         ]));
         assert_eq!(fr, vec![(0, 4), (9, 12)], "single-line range dropped");
         assert!(parse_folding_ranges(&Value::Null).is_empty());
+    }
+
+    #[test]
+    fn linked_editing_ranges_parse() {
+        let ranges = parse_linked_editing_ranges(&json!({
+            "ranges": [
+                {"start": {"line": 1, "character": 1}, "end": {"line": 1, "character": 4}},
+                {"start": {"line": 5, "character": 2}, "end": {"line": 5, "character": 5}}
+            ],
+            "wordPattern": "[a-z]+"
+        }));
+        assert_eq!(ranges.len(), 2);
+        assert_eq!(ranges[1].start.line, 5);
+        assert!(parse_linked_editing_ranges(&json!({})).is_empty());
     }
 
     #[test]
