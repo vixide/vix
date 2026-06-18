@@ -1918,6 +1918,7 @@ impl App {
             "nav.goto_definition" => self.goto_definition(),
             "lsp.hover" => self.lsp_hover(),
             "lsp.complete" => self.lsp_complete(),
+            "lsp.diagnostics" => self.open_diagnostics_panel(),
             "nav.goto_symbol" => self.open_palette_seeded("@"),
             "nav.goto_workspace_symbol" => self.open_palette_seeded("@@"),
             "nav.outline" => self.open_outline(),
@@ -8128,6 +8129,46 @@ impl App {
                 self.workspace_search = Some(ps);
             }
         }
+    }
+
+    /// Open a panel listing every current LSP diagnostic across the workspace;
+    /// Enter on a row jumps to it. Reuses the static-results search overlay.
+    fn open_diagnostics_panel(&mut self) {
+        use crate::lsp_core::Severity;
+        let mut hits: Vec<Hit> = Vec::new();
+        for (path, diags) in self.lsp.all_diagnostics() {
+            let rel = path
+                .strip_prefix(&self.root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .into_owned();
+            for d in diags {
+                let sev = match d.severity {
+                    Severity::Error => "error",
+                    Severity::Warning => "warning",
+                    Severity::Information => "info",
+                    Severity::Hint => "hint",
+                };
+                let line = d.range.start.line as usize + 1;
+                let msg: String = d.message.lines().next().unwrap_or("").chars().take(100).collect();
+                hits.push(Hit {
+                    path: path.clone(),
+                    line,
+                    col: d.range.start.character as usize + 1,
+                    display: format!("{rel}:{line}: [{sev}] {msg}"),
+                });
+            }
+        }
+        if hits.is_empty() {
+            self.status = t!("status.no_diagnostics").to_string();
+            return;
+        }
+        hits.sort_by(|a, b| a.display.cmp(&b.display));
+        let mut ps = WorkspaceSearch::new(false);
+        ps.static_results = true;
+        ps.status = t!("status.diagnostics_n", n = hits.len()).to_string();
+        ps.hits = hits;
+        self.workspace_search = Some(ps);
     }
 
     /// The identifier (alphanumeric/underscore word) under the cursor.

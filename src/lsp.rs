@@ -165,6 +165,12 @@ impl Lsp {
         self.diagnostics.get(&key).map_or(&[], Vec::as_slice)
     }
 
+    /// Every file's diagnostics (path, list), for the diagnostics panel. Files
+    /// with no current diagnostics are skipped.
+    pub fn all_diagnostics(&self) -> impl Iterator<Item = (&PathBuf, &Vec<Diagnostic>)> {
+        self.diagnostics.iter().filter(|(_, d)| !d.is_empty())
+    }
+
     /// Total diagnostic count across all files (for the status bar).
     #[must_use]
     pub fn diagnostic_count(&self) -> usize {

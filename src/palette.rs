@@ -208,6 +208,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.goto_definition", "nav.goto_definition"),
     ("cmd.lsp_hover", "lsp.hover"),
     ("cmd.lsp_complete", "lsp.complete"),
+    ("cmd.lsp_diagnostics", "lsp.diagnostics"),
     ("cmd.goto_symbol", "nav.goto_symbol"),
     ("cmd.goto_workspace_symbol", "nav.goto_workspace_symbol"),
     ("cmd.recent_locations", "nav.recent_locations"),
