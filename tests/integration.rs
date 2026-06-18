@@ -367,6 +367,24 @@ fn line_transforms_via_actions() {
 }
 
 #[test]
+fn bookmarks_toggle_and_list() {
+    let dir = unique_dir("bookmarks");
+    fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.txt");
+    fs::write(&file, "one\ntwo\nthree\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(file);
+    app.run_action("bookmark.toggle");
+    assert_eq!(app.bookmarks.len(), 1, "bookmark added");
+    app.run_action("bookmark.list");
+    assert!(app.location_chooser.is_some(), "bookmark list opened");
+    app.on_key(esc());
+    app.run_action("bookmark.toggle"); // same line → removes
+    assert!(app.bookmarks.is_empty(), "bookmark removed");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn toggle_key_menu_shows_the_shortcuts_overlay() {
     let mut app = app_at(Path::new("."));
     assert!(!app.show_help);
