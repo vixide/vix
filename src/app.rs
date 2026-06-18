@@ -2029,6 +2029,7 @@ impl App {
                 self.transform_selection_or_buffer_try(crate::convert_from_html_into_markdown_tool::convert);
             }
             "tools.convert.unit" => self.open_unit_converter(),
+            "tools.convert.jwt" => self.transform_selection_or_buffer_try(crate::jwt_tool::decode),
             "tools.format.json_pretty" => {
                 self.transform_selection_or_buffer_try(crate::format_tool::json_pretty);
             }

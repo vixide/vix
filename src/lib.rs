@@ -59,6 +59,7 @@ pub mod editor;
 pub mod explorer;
 pub mod fileops;
 pub mod format_tool;
+pub mod jwt_tool;
 pub mod lsp;
 pub mod markdown_preview;
 pub mod menu;

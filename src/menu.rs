@@ -313,6 +313,8 @@ const TOOLS_CONVERT: &[Item] = &[
     Item::sub("TSV", TOOLS_CONVERT_TSV),
     Item::sub("URL", TOOLS_CONVERT_URL),
     Item::sub("YAML", TOOLS_CONVERT_YAML),
+    SEP,
+    Item::leaf("menu.item.tools.convert.jwt", "tools.convert.jwt", ""),
 ];
 
 /// Character pickers, grouped under Tools → Characters.
