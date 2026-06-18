@@ -217,6 +217,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.lsp_format", "lsp.format"),
     ("cmd.lsp_rename", "lsp.rename"),
     ("cmd.lsp_code_action", "lsp.code_action"),
+    ("cmd.lsp_highlight", "lsp.highlight"),
     ("cmd.lsp_expand_selection", "lsp.expand_selection"),
     ("cmd.lsp_shrink_selection", "lsp.shrink_selection"),
     ("cmd.lsp_document_symbols", "lsp.document_symbols"),

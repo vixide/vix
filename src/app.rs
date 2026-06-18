@@ -2114,6 +2114,7 @@ impl App {
             "lsp.code_action" => self.request_code_action(),
             "lsp.expand_selection" => self.request_selection_range(true),
             "lsp.shrink_selection" => self.request_selection_range(false),
+            "lsp.highlight" => self.request_document_highlight(),
             _ => return false,
         }
         true
@@ -2846,6 +2847,41 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    // ----- Document highlight ---------------------------------------------
+
+    /// Request the occurrences of the symbol under the cursor to highlight (LSP).
+    fn request_document_highlight(&mut self) {
+        if let Some(path) = self.active_path()
+            && self.lsp.handles(&path)
+        {
+            let (line, character) = self.cursor_lsp_position(&path);
+            self.lsp.request_document_highlight(&path, line, character);
+        } else {
+            self.status = t!("status.lsp_inactive").to_string();
+        }
+    }
+
+    /// Highlight the document-highlight occurrences in the active buffer (reuses
+    /// the search-mark layer).
+    fn apply_document_highlights(&mut self, ranges: &[crate::lsp_core::Range]) {
+        let Some(path) = self.active_path() else { return };
+        let enc = self.lsp.encoding_for(&path);
+        let Some(t) = self.editor.active_tab_mut() else { return };
+        let marks: Vec<(usize, usize, &str)> = {
+            let code = t.editor.code_ref();
+            ranges
+                .iter()
+                .map(|r| {
+                    let s = lsp_pos_to_char(code, r.start.line, r.start.character, enc);
+                    let e = lsp_pos_to_char(code, r.end.line, r.end.character, enc);
+                    (s.min(e), s.max(e), SEARCH_MARK)
+                })
+                .collect()
+        };
+        t.editor.set_marks(marks);
+        self.status = t!("status.highlights_n", n = ranges.len()).to_string();
     }
 
     // ----- Selection range (expand / shrink) ------------------------------
@@ -4347,6 +4383,7 @@ impl App {
                     self.code_actions = Some(CodeActionMenu { actions, selected: 0 });
                 }
                 crate::lsp::LspEvent::SelectionRanges(ranges) => self.apply_selection_range(&ranges),
+                crate::lsp::LspEvent::Highlights(ranges) => self.apply_document_highlights(&ranges),
             }
         }
         // Rebuild the active editor's diagnostic underlines every tick so they

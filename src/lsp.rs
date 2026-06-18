@@ -43,6 +43,7 @@ enum Pending {
     Rename,
     CodeAction,
     SelectionRange,
+    DocumentHighlight,
 }
 
 /// A message handed back from a server's stdout reader thread.
@@ -92,6 +93,9 @@ pub enum LspEvent {
     /// A selection-range response: the chain of ranges (innermost first) for the
     /// cursor, used to expand/shrink the selection.
     SelectionRanges(Vec<crate::lsp_core::Range>),
+    /// A document-highlight response: ranges of the symbol's occurrences in the
+    /// active file.
+    Highlights(Vec<crate::lsp_core::Range>),
 }
 
 /// One running language server.
@@ -363,6 +367,11 @@ impl Lsp {
         });
     }
 
+    /// Request the occurrences of the symbol at `(line, character)` to highlight.
+    pub fn request_document_highlight(&mut self, path: &Path, line: u32, character: u32) {
+        self.request(path, "textDocument/documentHighlight", line, character, Pending::DocumentHighlight);
+    }
+
     /// Request a rename of the symbol at `(line, character)` to `new_name`.
     pub fn request_rename(&mut self, path: &Path, line: u32, character: u32, new_name: &str) {
         self.send_request(path, "textDocument/rename", Pending::Rename, |uri| {
@@ -512,6 +521,12 @@ impl Lsp {
         if result.is_null() {
             return;
         }
+        Self::response_to_events(kind, result, events);
+    }
+
+    /// Parse a (non-null) response `result` for the request `kind` into events.
+    /// Split out of [`Lsp::handle_response`] to keep that within the line limit.
+    fn response_to_events(kind: Pending, result: &Value, events: &mut Vec<LspEvent>) {
         match kind {
             Pending::Hover => {
                 if let Some(text) = message::parse_hover(result) {
@@ -594,6 +609,12 @@ impl Lsp {
                 let ranges = message::parse_selection_ranges(result);
                 if !ranges.is_empty() {
                     events.push(LspEvent::SelectionRanges(ranges));
+                }
+            }
+            Pending::DocumentHighlight => {
+                let ranges = message::parse_document_highlights(result);
+                if !ranges.is_empty() {
+                    events.push(LspEvent::Highlights(ranges));
                 }
             }
         }
