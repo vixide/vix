@@ -2,7 +2,7 @@
 
 Vix's colors and font attributes come from a **theme**: a JSON file describing
 per-region colors. There is always exactly one active theme. The model and the
-ratatui styles derived from it live in the `vix-theme-model` crate; the host
+ratatui styles derived from it live in the `theme_model` crate; the host
 loads themes, applies one, and persists the choice.
 
 ## Choosing a theme
@@ -48,11 +48,11 @@ add a `cursor` color. Any omitted value falls back to the primary editor color.
 
 ## As implemented in Vix
 
-`vix-theme-model` owns the model (`CustomTheme`, `Region`), the style helpers
+`theme_model` owns the model (`CustomTheme`, `Region`), the style helpers
 (`fg`, `bg`, `base`, `title`, `region_base`, …) that the renderer calls, theme
 loading (`parse_theme`, `load_custom_themes`), the active-theme state
 (`set_custom`, `apply`, `custom_name`), and `theme_names` (the de-duplicated,
 sorted list for the View → Theme submenu). The host gathers bundled + user themes
 (`available_custom_themes`), feeds the names to the menu
 (`menu::set_theme_names`), and applies a chosen theme by name. See
-`vix-theme-model/spec/index.md`.
+`theme_model/spec/index.md`.

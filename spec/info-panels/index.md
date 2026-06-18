@@ -14,11 +14,11 @@ and mouse clicks.
 
 | Panel              | Opens from                                            | Crate                              |
 | ------------------ | ----------------------------------------------------- | ---------------------------------- |
-| Workspace Dashboard | Tools → Workspace Dashboard                           | `vix-workspace-dashboard-panel`    |
-| System Information | Tools → System Information                            | `vix-system-information-panel`     |
-| File Information   | Tools → File Information                              | `vix-file-information-panel`       |
-| Outline            | `Ctrl+Shift+B`, or the command palette ("Outline")    | `vix-outline-panel`                |
-| Welcome            | First run, or Help → Welcome…                         | `vix-welcome-panel`                |
+| Workspace Dashboard | Tools → Workspace Dashboard                           | `workspace_dashboard_panel`    |
+| System Information | Tools → System Information                            | `system_information_panel`     |
+| File Information   | Tools → File Information                              | `file_information_panel`       |
+| Outline            | `Ctrl+Shift+B`, or the command palette ("Outline")    | `outline_panel`                |
+| Welcome            | First run, or Help → Welcome…                         | `welcome_panel`                |
 
 ## Workspace Dashboard
 
@@ -36,13 +36,13 @@ results appear promptly.
 | Folder      | The top-level workspace folder name (shown immediately)                  |
 | Disk usage  | Human-readable size (e.g. `12M`) from a `du -sh` subprocess on the root  |
 | File count  | A recursive walk of the workspace, skipping `.git` and `target`          |
-| Commit count | Commits reachable from `HEAD` via `vix-git`; `0` (None) when not a repo  |
+| Commit count | Commits reachable from `HEAD` via `git`; `0` (None) when not a repo  |
 
 The dashboard is read-only; `Esc` (or `Enter`) closes it. The crate
 (`Dashboard`) holds the four fields and exposes `is_complete()`; the host's
 `open_dashboard` spawns the three threads and wires up an `mpsc` channel, and
 `poll_dashboard` drains finished results into the open panel each frame. See
-[`vix-workspace-dashboard-panel`](../../vix-workspace-dashboard-panel/spec/index.md).
+[`workspace_dashboard_panel`](../../workspace_dashboard_panel/spec/index.md).
 
 ## System Information
 
@@ -70,7 +70,7 @@ highlight; `Enter` or a left click inserts the highlighted row's **value** into
 the active editor (heading rows have no value and insert nothing); `Esc` closes.
 The crate (`Panel`) gathers the rows and tracks the highlighted row and scroll
 offset. See
-[`vix-system-information-panel`](../../vix-system-information-panel/spec/index.md).
+[`system_information_panel`](../../system_information_panel/spec/index.md).
 
 ## File Information
 
@@ -100,7 +100,7 @@ Arrow keys (plus `PageUp`/`PageDown`/`Home`/`End`, and the mouse) move the
 highlight; `Enter` or a left click inserts the highlighted row's value into the
 editor; `Esc` closes. The crate (`Panel`) formats the rows from a `FileInfo` and
 tracks the selection. See
-[`vix-file-information-panel`](../../vix-file-information-panel/spec/index.md).
+[`file_information_panel`](../../file_information_panel/spec/index.md).
 
 ## Outline
 
@@ -119,7 +119,7 @@ Arrow keys (plus `PageUp`/`PageDown`/`Home`/`End`, and the mouse) move the
 highlight; `Enter` or a click **jumps the cursor to that symbol's line** and
 closes the panel; `Esc` closes without jumping. The crate (`Outline`) holds the
 entries and the selection/scroll state and reports the selected line. See
-[`vix-outline-panel`](../../vix-outline-panel/spec/index.md).
+[`outline_panel`](../../outline_panel/spec/index.md).
 
 ## Welcome
 
@@ -146,32 +146,32 @@ the scroll offset.
 | mouse wheel             | Scroll                   |
 | `Esc` / `Enter` / `q`   | Close the panel          |
 
-See [`vix-welcome-panel`](../../vix-welcome-panel/spec/index.md).
+See [`welcome_panel`](../../welcome_panel/spec/index.md).
 
 ## As implemented in Vix
 
 All five panels are **shipped**. Each is a small pure-state crate paired with
 host glue in `src/app.rs` and `src/ui.rs`:
 
-- **Workspace Dashboard** — `vix-workspace-dashboard-panel` (`Dashboard`).
+- **Workspace Dashboard** — `workspace_dashboard_panel` (`Dashboard`).
   `open_dashboard` (action `tools.dashboard`) names the folder, spawns three
   background threads (`du -sh`, a recursive `count_files` skipping `.git` and
   `target`, and `vix_git::commit_count`), and feeds an `mpsc` channel that
   `poll_dashboard` drains each frame; `dashboard_loading` keeps the run loop
   ticking while metrics compute. Read-only; `Esc`/`Enter` closes.
-- **System Information** — `vix-system-information-panel` (`Panel`, `gather`).
+- **System Information** — `system_information_panel` (`Panel`, `gather`).
   `open_system_info` (action `tools.system_info`) takes a one-time `sysinfo`
   snapshot. Arrow keys move the highlight; `Enter`/click inserts the value; `Esc`
   closes.
-- **File Information** — `vix-file-information-panel` (`Panel`, `FileInfo`,
+- **File Information** — `file_information_panel` (`Panel`, `FileInfo`,
   `rows`). `open_file_info` (action `tools.file_info`) calls `gather_file_info`,
   which reads buffer counts and a filesystem stat (size / Unix permissions /
   mtime) for saved files. Arrow keys move; `Enter`/click inserts; `Esc` closes.
-- **Outline** — `vix-outline-panel` (`Outline`, `Entry`). `open_outline` (action
+- **Outline** — `outline_panel` (`Outline`, `Entry`). `open_outline` (action
   `nav.outline`, bound to `Ctrl+Shift+B` and offered in the command palette)
   builds entries from `palette::symbols` and calls `select_nearest`. `Enter`/click
   jumps to the symbol; `Esc` closes.
-- **Welcome** — `vix-welcome-panel` (`Panel`). `maybe_show_welcome` shows it once
+- **Welcome** — `welcome_panel` (`Panel`). `maybe_show_welcome` shows it once
   on first run (gated by the `welcomed` setting); `open_welcome` (action
   `help.welcome`, Help → Welcome…) reopens it from `welcome.body`. Scroll keys
   and the mouse wheel scroll; `Esc`/`Enter`/`q` closes.

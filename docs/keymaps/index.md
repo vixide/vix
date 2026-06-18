@@ -28,7 +28,7 @@ and the function keys (`F1`, `F3`, `F10`, `F12`) work in **every** keymap.
 ### Apple (default)
 
 Modifier shortcuts in the style of macOS and Windows — for example, `Ctrl-C` for
-Copy. Apple is not modal. See `../docs/keybindings.md` for the full list.
+Copy. Apple is not modal. See `../../keybindings/index.md` for the full list.
 
 ### macOS VSCode
 

@@ -6,7 +6,7 @@ server for.
 
 ## As implemented in Vix
 
-**Status:** Shipped. The protocol core lives in the internal `vix-lsp` crate
+**Status:** Shipped. The protocol core lives in the internal `lsp_core` crate
 (JSON-RPC framing, message builders, response/diagnostic parsers, and char↔UTF-16
 position maths — all pure and unit-tested). The host (`src/lsp.rs`) owns the IO:
 it launches a server per language, reads its framed stdout on a background thread

@@ -1,3 +1,3 @@
-# vix-notification-panel
+# notification_panel
 
 Notification panel - TODO

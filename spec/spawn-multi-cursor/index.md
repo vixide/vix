@@ -10,5 +10,5 @@ Editor action `spawn-multi-cursor`.
 
 Run it from the command palette or a key binding via the action id `spawn_multi_cursor`.
 It is dispatched by `App::run_action("spawn_multi_cursor")` and, for editing actions, backed
-by `Editor::spawn_multi_cursor` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::spawn_multi_cursor` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

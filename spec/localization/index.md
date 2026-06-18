@@ -64,7 +64,7 @@ in English until someone adds them.
 ## Available languages
 
 The set of selectable UI languages is defined as pure data in the
-`vix-locale-model` crate (`LOCALES`). Each entry pairs a **locale code** (the
+`locale_model` crate (`LOCALES`). Each entry pairs a **locale code** (the
 value passed to `rust-i18n`) with its **endonym** — the language's name written
 in itself, which is the convention for language pickers. English is first because
 it is the fallback; the constructed languages are listed last.
@@ -158,10 +158,10 @@ follow later thanks to the English fallback.
 
 ## As implemented in Vix
 
-- **`vix-locale-model`** is the pure-data home of the language list: the `Locale`
+- **`locale_model`** is the pure-data home of the language list: the `Locale`
   struct (`code` + `name` endonym), the `LOCALES` array in chooser order (English
   first as the fallback, constructed languages last), and the `by_code` lookup.
-  It has no UI dependencies. See `vix-locale-model/src/lib.rs`.
+  It has no UI dependencies. See `locale_model/src/lib.rs`.
 - The **host** (`src/app.rs`) builds the View → Locale submenu from `LOCALES` and
   applies a chosen language by code (`set_locale_by_code`): it calls
   `rust_i18n::set_locale`, persists to `settings.locale`, and confirms via

@@ -6,8 +6,8 @@ three spellings of one name:
 
 - **kebab-case** — the canonical id used in `spec/<kebab>/index.md` and in
   documentation.
-- **snake_case** — the Rust method on [`vix_editor::Editor`] (see
-  `vix-editor/src/named.rs`) and the id accepted by `App::run_named_action`.
+- **snake_case** — the Rust method on [`editor_core::Editor`] (see
+  `editor_core/src/named.rs`) and the id accepted by `App::run_named_action`.
 - **PascalCase** — the conceptual `Action` name.
 
 The source of truth is [`actions.tsv`](actions.tsv): one row per action, three

@@ -65,7 +65,7 @@ running command and appends `[cancelled]`. Only one command runs at a time.
 The dock keeps a capped line buffer. The cap is the `scrollback` setting
 (default 1,000 lines; minimum 1). When the buffer exceeds the cap, the oldest
 lines are trimmed. Lowering the cap trims the existing buffer to fit. See
-`docs/configuration.md`.
+`../configuration/index.md`.
 
 ## Example
 

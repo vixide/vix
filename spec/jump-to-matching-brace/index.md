@@ -10,5 +10,5 @@ Editor action `jump-to-matching-brace`.
 
 Run it from the command palette or a key binding via the action id `jump_to_matching_brace`.
 It is dispatched by `App::run_action("jump_to_matching_brace")` and, for editing actions, backed
-by `Editor::jump_to_matching_brace` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::jump_to_matching_brace` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

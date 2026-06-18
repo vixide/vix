@@ -160,7 +160,7 @@ their possibly-unsaved state), and pushes one line per match into the dock in
 `[N matches in M files]` summary. Matches are capped at 5,000.
 
 Each result line in the dock is **click-to-jump**: clicking it opens the file and
-moves the cursor to that line and column. See `vix-bottom-dock/spec/index.md` for
+moves the cursor to that line and column. See `bottom_dock/spec/index.md` for
 the dock itself.
 
 ## Workspace-wide search & replace
@@ -180,11 +180,11 @@ path: **Include path** (only matching paths are searched) and **Exclude path**
 Exclude path. Empty filters impose no constraint, and an invalid (half-typed) regex
 is treated as empty rather than hiding every file — for example Include `\.rs$`
 limits to Rust files and Exclude `(^|/)target/` skips the build directory. See
-`vix-find-panel/spec/index.md`.
+`find_panel/spec/index.md`.
 
 ## As implemented in Vix
 
-The internal **`vix-find-panel`** crate owns both the box's **state** and the
+The internal **`find_panel`** crate owns both the box's **state** and the
 **search/replace engine**, all pure functions over `&str` with **character**
 offsets; the app renders the box, owns the buffer, and applies the returned text.
 
@@ -209,4 +209,4 @@ offsets; the app renders the box, owns the buffer, and applies the returned text
   `search.next_selection` / `search.prev_selection` (`Alt+N` / `Alt+P`), and
   `search.workspace_dock`. The Edit → Find submenu is defined by `EDIT_FIND` in
   `src/menu.rs`. The `search` field and `crate::search` re-export (`Field`,
-  `SearchBar`) connect the app to `vix-find-panel`.
+  `SearchBar`) connect the app to `find_panel`.

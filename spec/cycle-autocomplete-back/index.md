@@ -10,5 +10,5 @@ Editor action `cycle-autocomplete-back`.
 
 Run it from the command palette or a key binding via the action id `cycle_autocomplete_back`.
 It is dispatched by `App::run_action("cycle_autocomplete_back")` and, for editing actions, backed
-by `Editor::cycle_autocomplete_back` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::cycle_autocomplete_back` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

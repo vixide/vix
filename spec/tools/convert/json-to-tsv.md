@@ -1,6 +1,6 @@
 # Convert from JSON into TSV tool
 
-Subcrate vix-convert-from-json-into-tsv-tool
+Module convert_from_json_into_tsv_tool
 
 - menu "Tools"
   - submenu "Convert"

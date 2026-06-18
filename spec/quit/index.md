@@ -10,5 +10,5 @@ Editor action `quit`.
 
 Run it from the command palette or a key binding via the action id `quit`.
 It is dispatched by `App::run_action("quit")` and, for editing actions, backed
-by `Editor::quit` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::quit` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

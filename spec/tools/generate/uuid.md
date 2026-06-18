@@ -1,6 +1,6 @@
 # Tools: Generate: UUID
 
-Subscrate vix-uuid-tool.
+Subscrate uuid_tool.
 
 - menu "Tools"
   - submenu "Generate"

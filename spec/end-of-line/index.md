@@ -10,5 +10,5 @@ Editor action `end-of-line`.
 
 Run it from the command palette or a key binding via the action id `end_of_line`.
 It is dispatched by `App::run_action("end_of_line")` and, for editing actions, backed
-by `Editor::end_of_line` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::end_of_line` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

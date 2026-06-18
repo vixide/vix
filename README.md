@@ -26,7 +26,7 @@ both work.
 
 - **Menu bar** — File / Edit / View / Tools / Help, navigable entirely by
   keyboard (`F10` or `Alt+F/E/V/T/H`), and by mouse.
-- **Tabbed editor** (`vix-editor`, Vix's fully-custom widget) — each file is a
+- **Tabbed editor** (`editor_core`, Vix's fully-custom widget) — each file is a
   tab; a full multiline editor with optional Tree-sitter syntax highlighting,
   undo/redo, selection, system clipboard, a block cursor, a right-side scrollbar,
   **soft wrap**, **bracket matching**, toggleable line numbers and visible
@@ -63,17 +63,17 @@ both work.
   Font glyphs and click (or arrow + Enter) to insert one into the editor.
 - **Themes** — JSON themes with per-region colors; Dark, Light, and more ship
   bundled, plus your own loaded from JSON, chosen live in **View → Theme…**. See
-  [`docs/themes.md`](docs/themes.md).
+  [`docs/themes/index.md`](docs/themes/index.md).
 - **Internationalization** — the whole UI is translatable; 27 languages are
   selectable, from English/Spanish/French/German/Welsh (fullest coverage)
   through Italian, Korean, Turkish, Dutch, Vietnamese, Greek, and more — even
   Klingon and Sindarin. Any untranslated key falls back to English. Choose one in
   **View → Locale…**, via the `locale` setting, or with `--locale`. See
-  [`docs/i18n.md`](docs/i18n.md).
+  [`docs/internationalization/index.md`](docs/internationalization/index.md).
 - **Keymaps** — switch the keyboard navigation style in **View → Keymap…**:
   **Apple** (default; modifier shortcuts), **Emacs** (`Ctrl` chords with a
   `Ctrl+X` prefix), or **Vim** (modal Normal/Insert + `:` command line). See
-  [`docs/keybindings.md`](docs/keybindings.md).
+  [`docs/keybindings/index.md`](docs/keybindings/index.md).
 - **Keyboard help** — press `F1` for an overlay of every shortcut.
 
 ## Install & run
@@ -104,20 +104,20 @@ cargo build --release --no-default-features --features syntax-all  # all grammar
 ```
 
 Files whose grammar isn't compiled in still open — just as plain (unhighlighted)
-text. The grammar set lives in the internal `vix-editor` crate. Token colors
+text. The grammar set lives in the `editor_core` module (queries in `langs/`). Token colors
 appear only when the active theme defines a `syntax` block (see
-[`docs/themes.md`](docs/themes.md)).
+[`docs/themes/index.md`](docs/themes/index.md)).
 
 ## Configuration
 
 Settings are stored with [`confy`] as TOML in the platform configuration
 directory (e.g. `~/.config/vix/config.toml` on Linux). Custom themes live
 alongside in `~/.config/vix/themes/*.json`. See
-[`docs/configuration.md`](docs/configuration.md) for every key.
+[`docs/configuration/index.md`](docs/configuration/index.md) for every key.
 
 ## Keyboard shortcuts
 
-A few of the most common; see [`docs/keybindings.md`](docs/keybindings.md) for
+A few of the most common; see [`docs/keybindings/index.md`](docs/keybindings/index.md) for
 the full reference, or press `F1` in the app.
 
 | Shortcut | Action                | Shortcut   | Action            |
@@ -130,52 +130,41 @@ the full reference, or press `F1` in the app.
 | `Ctrl+Z` | Undo                  | `F10`      | Open menu bar     |
 | `F12`    | Go to definition      | `F1`       | Keyboard help     |
 
-## Workspace layout
+## Source layout
 
-Vix is a Cargo workspace: a main `vix` crate (the application) plus several small
-internal crates, each owning one self-contained, separately-testable concern.
+Vix is a **single Cargo crate** (edition 2024, no workspace members): the
+application plus ~70 focused modules under `src/`, each owning one
+self-contained, separately-testable concern.
 
 ```
-src/                            the vix application crate
-  main.rs        binary entry point: CLI (clap), terminal setup, event loop
-  lib.rs         library crate root; loads i18n translations (rust-i18n)
-  app.rs         central state, event routing, action dispatch
-  editor.rs      tabs/buffers over the code-editor widget
-  explorer.rs    re-export of the file-tree state (vix-left-dock)
-  menu.rs        menu-bar definitions + dropdown state
-  palette.rs     command palette + fuzzy matching
-  search.rs      re-export of the find/replace box state (vix-find-panel)
-  workspace_search.rs  workspace-wide search/replace panel
-  query.rs       interactive query-replace session
-  messages.rs    re-export of the message-drawer state (vix-right-dock)
-  fileops.rs     explorer copy/cut/paste/delete helpers
-  settings.rs    confy-backed settings + themes directory
-  theme.rs       Nerd Font icons + re-export of the theme model
-  ui.rs          all rendering
-locales/         rust-i18n translation files (en/es/fr/de/cy)
-
-vix-editor/                     Vix's fully-custom editor widget (Tree-sitter, soft wrap, themeable)
-vix-calendar-panel/   calendar date/time logic + navigable month grid
-vix-theme-chooser/              theme model, styles, custom JSON themes, chooser
-vix-locale-chooser/             available UI languages + chooser
-vix-keymap-chooser/             keyboard navigation styles (Apple/Emacs/Vim) + chooser
-vix-keyboard-shortcut-panel/    keyboard-help rows
-vix-nerd-font-picker/          curated Nerd Font glyph set + character-picker grid state
-vix-find-panel/                 find / find-and-replace box state + pattern builder
-vix-left-dock/                  left-dock file-explorer tree state
-vix-right-dock/                 right-dock message-drawer state
-vix-bottom-dock/                bottom-dock scrollable line buffer (logs/output/data)
-vix-status-bar-panel/           status-bar left/right segment formatting
-
-spec/            design specification (the source of truth)
-docs/            architecture, keybindings, themes, i18n, configuration
-examples/        runnable examples that drive the library API
-tests/           integration tests (no terminal required)
+src/
+  main.rs         binary entry point: CLI (clap), terminal setup, event loop
+  lib.rs          library crate root; loads i18n translations (rust-i18n)
+  app.rs          central state, event routing, action dispatch
+  editor.rs       tabs/buffers over the editor_core widget
+  editor_core/    Vix's fully-custom editor widget (Tree-sitter, soft wrap,
+                  folds, inlay hints, themeable)
+  explorer.rs / left_dock.rs    file-tree state
+  menu.rs         menu-bar definitions + 3-level dropdown state
+  palette.rs      command palette + fuzzy matching
+  find_panel.rs   find/replace box state + search/replace engine
+  workspace_search.rs  workspace-wide search/replace
+  lsp.rs / lsp_core/   Language Server Protocol (host IO + protocol core)
+  git.rs          git status/diff/staging (git CLI)
+  settings.rs     confy-backed settings + themes directory
+  ui.rs           all rendering
+  …               tools, panels, pickers, docks, models (see crate-map)
+langs/            Tree-sitter highlight queries (feature-gated grammars)
+locales/          rust-i18n translation files (English fallback)
+spec/             design specification (the source of truth)
+docs/             architecture, keybindings, themes, i18n, LSP, configuration
+examples/         runnable examples that drive the library API
+tests/            integration tests (no terminal required)
 ```
 
-See [`docs/architecture.md`](docs/architecture.md) for the design, the workspace
-shape, and why the dependency versions are pinned the way they are. The full
-documentation map is in [`index.md`](index.md).
+See [`docs/architecture/`](docs/architecture/) for the design and
+[`AGENTS/share/crate-map.md`](AGENTS/share/crate-map.md) for the full module map.
+The documentation map is in [`index.md`](index.md).
 
 ## Examples
 
@@ -187,17 +176,16 @@ cargo run --example list_commands   # print every command-palette command
 ## Testing
 
 ```sh
-cargo test                 # the vix crate's integration + doc tests (no terminal)
-cargo test --workspace     # also runs each internal crate's unit tests
-cargo clippy --workspace   # lints (the tree is warning-clean)
+cargo test                 # integration + module unit + doc tests (no terminal)
+cargo clippy --workspace --all-targets -- -D warnings   # lints (kept clean)
 ```
 
-The editing logic lives in the library crate and is exercised by
+The editing logic lives in the library and is exercised by
 `tests/integration.rs` without needing a live terminal — typing, open/save round
 trips, go-to-line, fuzzy matching, the search-pattern builder, regex replace with
-capture groups, theme/locale/keymap switching, the Emacs and Vim keymaps, and the
-ISO/date formatting are all covered. Each internal crate carries its own focused
-unit tests.
+capture groups, theme/locale/keymap switching, the Emacs and Vim keymaps, LSP
+message parsing, and ISO/date formatting are all covered. Each module also
+carries its own focused unit tests.
 
 ## License
 

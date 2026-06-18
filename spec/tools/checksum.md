@@ -1,6 +1,6 @@
 # Checksum tool
 
-Subcrate vix-checksum-tool.
+Module checksum_tool.
 
 - menu "Tools"
   - submenu "Checksum"

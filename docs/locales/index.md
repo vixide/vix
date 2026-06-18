@@ -35,7 +35,7 @@ Welsh are the fullest. Any key that is not translated for the active language
 ## Adding a Language
 
 Adding a language is a matter of filling in its column in `locales/app.yml` and
-listing it in `vix-locale-chooser`. See also `docs/i18n.md`.
+listing it in `vix-locale-chooser`. See also `../internationalization/index.md`.
 
 ## Available Languages
 

@@ -8,16 +8,36 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Language Server Protocol (LSP)** support: diagnostics (colored underlines),
-  hover, go-to-definition, and completion. Servers are configured per language
-  via the `lsp_enabled` and `lsp_servers` settings (no built-in server). New
-  pure-protocol `vix-lsp` crate (JSON-RPC framing, message builders, parsers,
-  position maths) with the process IO in `src/lsp.rs`. See `spec/lsp.md`.
+- **Single-crate architecture (edition 2024).** Every former `vix-*` subcrate is
+  now a module under `src/`; the editor widget is the `editor_core` module
+  (Tree-sitter highlight queries in `langs/`, gated behind `lang-*` features).
+  The workspace has no members. See `AGENTS/share/crate-map.md`.
+- **`#![warn(clippy::pedantic)]` in every module**, with no blanket
+  `#![allow(clippy::pedantic)]`/`#![allow(missing_docs)]` — findings fixed in
+  code; only four targeted `struct_excessive_bools` allows remain.
+- **Full Language Server Protocol support — all 25 methods** in
+  `spec/lsp/language-server-protocol.tsv`: lifecycle + document sync,
+  `publishDiagnostics` (colored underlines + diagnostics panel), `hover`,
+  `completion` + `completionItem/resolve`, `definition`/`implementation`/
+  `typeDefinition`, `references`, `documentHighlight`, `documentSymbol`,
+  `workspace/symbol`, `signatureHelp`, `formatting`/`rangeFormatting`, `rename`,
+  `codeAction`, `codeLens`, `selectionRange`, `foldingRange`, `inlayHint`,
+  `linkedEditingRange`. Configured per language via `lsp_enabled`/`lsp_servers`
+  (no built-in server); protocol core in `src/lsp_core/`, process IO in
+  `src/lsp.rs`. See `spec/lsp`.
+- **Editor features:** code folding (▾/▸ gutter), inline inlay hints, bookmarks
+  (toggle/next/prev/list), keyboard macros, buffer-word autocomplete, overwrite
+  mode, column ruler, multi-cursor up/down, line transforms (join/sort/sort-
+  unique/reverse/dedupe/trim), and a shortcuts/key-menu overlay.
+- **Tools:** MD5/CRC32 checksums, JWT decode, base conversion (dec/hex/bin/oct),
+  a live regex tester, markdown preview, snippets, and a text-information panel.
+- **Git:** stash / stash pop / commit amend, a merge-conflict resolver
+  (keep ours/theirs/both, next conflict), and per-hunk stage/revert.
 - **X11 Colors picker** (Tools → X11 Colors) — swatch + hex + name; inserts the
-  hex. New `vix-x11-color-picker` crate.
+  hex. New `x11_color_picker` module.
 - **HTML Characters picker** (Tools → HTML Characters) — glyph / entity / code
-  point; clicking a cell inserts that cell's text. New `vix-html-character-picker`
-  crate.
+  point; clicking a cell inserts that cell's text. New `html_character_picker`
+  module.
 - **macOS VSCode keymap** — Quick Open (`Ctrl+P`), Command Palette
   (`Ctrl+Shift+P`), Go to Symbol, Go to Line, and the familiar VS Code chords.
 - **Edit → Go submenu** — File Start/End, Line Number, and Line / Paragraph /
@@ -27,13 +47,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **Renamed "keyway" → "keymap"** throughout (setting, chooser crate, menus, docs).
+- **Renamed "keyway" → "keymap"** throughout (setting, chooser module, menus, docs).
 - **Renamed "project" → "workspace"** throughout — **Find In Workspace…**,
-  **Workspace Dashboard**, workspace-wide search/replace, the `vix-workspace-dashboard-panel`
-  crate, and the `workspace_search` module.
+  **Workspace Dashboard**, workspace-wide search/replace, the `workspace_dashboard_panel`
+  module, and the `workspace_search` module.
 - **Renamed the picker crates** from `-palette`/`-panel` to `-picker`:
-  `vix-ascii-character-picker`, `vix-html-character-picker`, `vix-nerd-font-picker`,
-  `vix-x11-color-picker` (the ASCII one was `vix-ascii-panel`).
+  `ascii_character_picker`, `html_character_picker`, `nerd_font_picker`,
+  `x11_color_picker` (the ASCII one was `ascii_panel`).
 - **Menu dropdowns open with nothing highlighted** — the user arrows, hovers, or
   types to pick an item (no auto-selected first row).
 - **Removed the standalone Find & Replace menu item** — replace now lives inside
@@ -67,11 +87,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Outline panel** (`Ctrl+Shift+B`, or the palette "Outline"): a list of the
   active buffer's symbols (kind prefix + name); Enter or a click jumps to the
   symbol, and the cursor's enclosing symbol is selected on open. New internal
-  `vix-outline-panel` crate.
+  `outline_panel` module.
 - **Workspace Dashboard** (Tools → Workspace Dashboard): a live overlay showing the
   workspace folder name, disk usage (`du`), file count, and git commit count, each
   computed asynchronously and filled in as it completes. New internal
-  `vix-workspace-dashboard-panel` crate.
+  `workspace_dashboard_panel` module.
 - **Select More / Select Less** (Edit menu; `Ctrl+Shift+→` / `Ctrl+Shift+←`):
   grow or shrink the selection by a word. **Move Up / Move Down** (Edit menu;
   `Alt+↑` / `Alt+↓`) are now also surfaced in the menu.
@@ -81,7 +101,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Workspace search path filters**: the workspace-wide search/replace panel gains
   **Include path** and **Exclude path** regex fields that narrow the searched
   files by their workspace-relative path (`Tab` cycles to them).
-- **Git integration** via the new `vix-git` crate, shelling out to the `git`
+- **Git integration** via the new `git` module, shelling out to the `git`
   CLI. The status bar shows the current branch and a dirty dot; the file explorer
   shows colored M/A/?/D/R/U badges on changed files; the editor draws a colored
   diff gutter (added/modified/deleted) against HEAD. The **Git** menu offers a
@@ -90,7 +110,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Spell checking** (View → Editor → Toggle Spellcheck): underlines misspelled
   words in comments and string literals in red, using Hunspell dictionaries from
   the `dictionaries/<locale>/` directory (`dictionaries_dir` setting) via the new
-  pure-Rust `vix-spellcheck` crate. The language follows the UI locale; code-like
+  pure-Rust `spellcheck` module. The language follows the UI locale; code-like
   tokens (acronyms, camelCase identifiers) are skipped. Off by default. With the
   cursor on a misspelled word, **`Ctrl+;`** opens a suggestions popup with
   replace, add-to-dictionary, and ignore actions.
@@ -98,7 +118,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   read-only snapshot of the host — OS, CPU, memory, swap, disks, uptime, and
   environment (via the `sysinfo` crate). Enter or a click inserts the highlighted
   value into the editor; Esc closes. Lives in the new internal
-  `vix-system-information-panel` crate.
+  `system_information_panel` module.
 - **Unsaved-changes prompt.** Closing a tab or quitting with unsaved changes now
   raises a modal asking to **(s)ave**, **(d)on't save**, or **(c)ancel**. Quit
   walks every dirty tab in turn before exiting. Vim `:q!` still force-quits
@@ -107,7 +127,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   showing each code's decimal, hexadecimal, and character representation. Arrow
   keys / PageUp / PageDown / Home / End move the highlight; Enter or a click
   inserts the highlighted character into the active editor; Esc closes. Lives in
-  the new internal `vix-ascii-character-picker` crate.
+  the new internal `ascii_character_picker` module.
 - **View → Layout submenu.** The dock and status-bar toggles (Show/Hide Left
   Dock, Right Dock, Bottom Dock, Bottom Status) now live under a **Layout**
   submenu, alongside the existing **Editor** submenu.
@@ -135,7 +155,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Bottom dock** (View → Show/Hide Bottom Dock, or the palette;
   `show_bottom_dock` setting, default off): a full-width scrollable line buffer at
   the bottom of the body for log messages, command/terminal output, data views,
-  etc. State lives in the new `vix-bottom-dock` crate (line buffer + scroll).
+  etc. State lives in the new `bottom_dock` module (line buffer + scroll).
 - **Calendar month-nav arrows.** The calendar box's month header shows
   `◀ Month Year ▶`; the arrows are clickable (and mirror the `←`/`→` keys), and a
   bottom help line shows `◀ ▶ month   Esc close`.
@@ -174,7 +194,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the palette). Auto-indent on Enter (carry the previous line's leading
   whitespace) was already present and is now covered by tests.
 - **Nerd Font Palette** (Tools → Nerd Font Palette…, crate
-  `vix-nerd-font-picker`): a character picker showing a grid of curated Nerd
+  `nerd_font_picker`): a character picker showing a grid of curated Nerd
   Font glyphs. Browse with the arrow keys or the mouse; Enter or a click inserts
   the highlighted glyph into the active editor and leaves the palette open so
   several can be picked in a row; Esc closes it.
@@ -187,8 +207,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Richer status bar.** The status bar now shows the language, line ending
   (LF/CRLF), encoding (UTF-8), and — when text is selected — the selected
   character and line count, alongside the existing line:column.
-- **Fully-custom editor widget (`vix-editor`) with soft wrap.** The editor was
-  migrated from the vendored `vix-code-editor-panel` fork to an in-house widget:
+- **Fully-custom editor widget (`editor_core`) with soft wrap.** The editor was
+  migrated from the vendored `editor_core` fork to an in-house widget:
   the Tree-sitter highlighting + buffer + undo/redo engine is reused, while the
   editor state, input, mouse, and renderer are owned by Vix. The renderer now
   supports **soft wrap** — toggle with **View → Toggle Soft Wrap** (or the
@@ -215,7 +235,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   **Website**, and **Email** — each opens a modal dialog with an **Ok** button.
   The Website/Email dialogs show the text in a selectable text field (drag or
   arrow-select, `Ctrl+C` to copy).
-- **Keymaps** (**View → Keymap…**, crate `vix-keymap-chooser`): choose the
+- **Keymaps** (**View → Keymap…**, module `keymap_model`): choose the
   keyboard navigation style, which changes how keys are dispatched. The choice
   persists (`keymap` setting); Apple is the default.
   - **Apple** — modifier shortcuts (e.g. `Ctrl+O` open, `Ctrl+Q` quit).
@@ -272,27 +292,27 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Monokai, One Dark, Tokyo Night) that appear in **View → Theme…** with no
   installation. A same-named theme in `~/.config/vix/themes/` overrides a
   bundled one.
-- New internal crates: `vix-theme-chooser`, `vix-locale-chooser`,
-  `vix-keymap-chooser`, `vix-keyboard-shortcut-panel`,
-  `vix-calendar-panel`, `vix-nerd-font-picker`, and `vix-find-panel`
+- New modules: `theme_model`, `locale_model`,
+  `keymap_model`, `keyboard_shortcut_panel`,
+  `calendar_panel`, `nerd_font_picker`, and `find_panel`
   (the find / find-and-replace box state).
 - New docs: `docs/themes.md`, `docs/i18n.md`, `docs/configuration.md`,
   `index.md`, `AGENTS.md` (+ `AGENTS/`), and this changelog.
 
 ### Changed
 
-- **Docks and status bar extracted to internal crates.** The left dock (file
-  explorer) moved to `vix-left-dock`, the right dock (message drawer) to
-  `vix-right-dock`, and the status-bar segment formatting to
-  `vix-status-bar-panel`. The app re-exports them; behavior is unchanged.
+- **Docks and status bar extracted to modules.** The left dock (file
+  explorer) moved to `left_dock`, the right dock (message drawer) to
+  `right_dock`, and the status-bar segment formatting to
+  `status_bar_panel`. The app re-exports them; behavior is unchanged.
 - The main panes use a lighter border frame: the left and right docks keep only
   their inner (top + side-facing-the-editor) borders, the center editor keeps
   only its top border, and the bottom status bar gains a full-width top border
   that separates it from the body.
-- The editor widget crate was renamed `ratatui-code-editor` →
-  `vix-editor` and made **theme-aware** (configurable text,
+- The editor widget module was renamed `ratatui-code-editor` →
+  `editor_core` and made **theme-aware** (configurable text,
   line-number, selection, and cursor styles, and a settable syntax palette).
-- The calendar logic moved into `vix-calendar-panel` and gained
+- The calendar logic moved into `calendar_panel` and gained
   month navigation (Left/Right while the calendar is open).
 - **Every theme is now a JSON theme.** The hardcoded monochrome Dark/Light
   *modes* were removed; **Dark** and **Light** are now ordinary bundled themes
@@ -301,7 +321,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (including Dark and Light) sorted by name, and the persisted `theme` setting is
   the theme's name.
 - Settings moved from hand-rolled JSON to `confy` TOML.
-- All public items are documented (`#![deny(missing_docs)]`); the crate forbids
+- All public items are documented (`#![deny(missing_docs)]`); the module forbids
   `unsafe`.
 
 ### Fixed

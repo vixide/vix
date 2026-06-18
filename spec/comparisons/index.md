@@ -17,7 +17,7 @@ Easier for novices than vim because:
 - The default keymap (Apple) is not modal — keyboard shortcuts are typical of
   macOS and Windows, for example Ctrl-C for Copy.
 - Power users who prefer modal editing can opt into the **Vim keymap**
-  (**View → Keymap…**); see `vix-keymap-chooser/spec/index.md`.
+  (**View → Keymap…**); see `keymap_model/spec/index.md`.
 
 Easier for novices than emacs because:
 - The default keymap (Apple) uses macOS/Windows shortcuts, for example Ctrl-C for

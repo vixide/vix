@@ -35,7 +35,7 @@ case-insensitively by name; dotfiles are hidden.
 - Clicking a directory expands or collapses it.
 
 Preview tabs are enabled by default. Turn them off with the `preview_tabs`
-setting (see `docs/configuration.md`) if you prefer every click to open a
+setting (see `../configuration/index.md`) if you prefer every click to open a
 permanent tab.
 
 ## Cut / Copy / Paste

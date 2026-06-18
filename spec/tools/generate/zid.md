@@ -1,6 +1,6 @@
 # Tools: Generate: ZID
 
-Subcrate vix-zid-tool.
+Module zid_tool.
 
 - menu "Tools"
   - submenu "Generate"

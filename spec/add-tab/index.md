@@ -10,5 +10,5 @@ Editor action `add-tab`.
 
 Run it from the command palette or a key binding via the action id `add_tab`.
 It is dispatched by `App::run_action("add_tab")` and, for editing actions, backed
-by `Editor::add_tab` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::add_tab` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

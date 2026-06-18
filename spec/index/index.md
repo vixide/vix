@@ -37,7 +37,7 @@ widget pins that.
 | csv           | Comma Separated Values                                | https://crates.io/crate/csv            | librust-csv-dev                                                                                |
 | toml          | Tom's Obvious Minimal Language                        | https://crates.io/crate/toml           | librust-toml-dev                                                                               |
 
-The center editing area uses **`vix-editor`** — Vix's fully-custom code-editor
+The center editing area uses **`editor_core`** — Vix's fully-custom code-editor
 widget (Tree-sitter syntax highlighting, undo/redo history, selection, system
 clipboard, mouse handling, theme-aware styles, and soft wrap), which tracks
 `ratatui` 0.30. The file explorer, scrollbar, command
@@ -58,7 +58,7 @@ cargo build --release --no-default-features --features syntax-all  # ~18M, all g
 ```
 
 Tree-sitter grammars are gated behind Cargo features (see the `[features]` table
-in `Cargo.toml` and the internal `vix-editor` crate), so the binary
+in `Cargo.toml` and the internal `editor_core` crate), so the binary
 only links the parsers selected at build time. The default set is Rust, Markdown,
 JSON, and TOML.
 
@@ -67,13 +67,13 @@ command-palette file finder operate within it.
 
 - Top menu (see `menus.md`)
 - Left drawer file browser (in-house tree; `Ctrl+B` toggle, `Ctrl+E` focus)
-- Center editing area using `vix-editor` (Tree-sitter syntax
+- Center editing area using `editor_core` (Tree-sitter syntax
   highlighting, undo/redo, selection, system clipboard, block cursor)
   - Top tab bar: each tab is one text file; preview tabs render dimmed
   - Show/hide line numbers, whitespace, scroll bar, soft wrap (`View ▸ Editor`)
   - Editing comforts: select all (`Ctrl+A`), duplicate line (`Ctrl+D`), delete
     line (`Ctrl+K`), move line up/down (`Alt+↑`/`Alt+↓`), jump to the matching
-    bracket (`Ctrl+]`), and auto-indent on Enter (see `vix-editor/spec/index.md`)
+    bracket (`Ctrl+]`), and auto-indent on Enter (see `editor_core/spec/index.md`)
   - Right-side scroll bar (`ratatui::widgets::Scrollbar`)
   - Opening an image file (png/jpg/gif/bmp/webp/…) shows it in a read-only
     image tab via `ratatui-image` (needs a graphics-capable terminal)
@@ -81,7 +81,7 @@ command-palette file finder operate within it.
   - List of advice and notifications; each item shows a close `x`
     (dismiss with `x`, `Delete`, or `Enter` while the drawer is focused)
 - Bottom dock (toggle with `View ▸ Show/Hide Bottom Dock`; see
-  `vix-bottom-dock/spec/index.md`) — a full-width, resizable, scrollable line panel pinned
+  `bottom_dock/spec/index.md`) — a full-width, resizable, scrollable line panel pinned
   above the status bar for logs/output/data
   - **Run Command** (`Tools ▸ Run Command…`) streams a shell command's output
     here; **Cancel Command** kills it
@@ -109,7 +109,7 @@ testable.
 | Module             | Responsibility                                                 |
 | ------------------ | -------------------------------------------------------------- |
 | `app`              | Central state, event routing, action dispatch, keymap dispatch |
-| `editor`           | Tabs/buffers wrapping `vix-editor`; open/save/goto             |
+| `editor`           | Tabs/buffers wrapping `editor_core`; open/save/goto             |
 | `explorer`         | Left-drawer directory tree                                     |
 | `menu`             | Menu-bar definitions (i18n-keyed) and dropdown state           |
 | `palette`          | Command palette (file/`>`/`#`/`:`/`@` modes) + fuzzy matching  |
@@ -119,16 +119,16 @@ testable.
 | `messages`         | Right-drawer notifications                                     |
 | `fileops`          | Explorer copy/cut/paste/delete filesystem helpers              |
 | `settings`         | confy-backed settings (TOML) at `~/.config/vix/config.toml`    |
-| `theme`            | Nerd Font icons + re-export of `vix-theme-chooser`             |
+| `theme`            | Nerd Font icons + re-export of `theme_model`             |
 | `ui`               | All rendering; lays out the frame and draws each pane          |
 
 The calendar date/time logic, theme model, locale list, keymap (keyboard
 navigation style) list, keyboard-help rows, Nerd Font glyph set, and find /
-replace box state live in the internal crates `vix-calendar-panel`,
-`vix-theme-chooser`, `vix-locale-chooser`, `vix-keymap-chooser`,
-`vix-keyboard-shortcut-panel`, `vix-nerd-font-picker`, `vix-find-panel`,
-`vix-left-dock` (explorer), `vix-right-dock` (messages), `vix-bottom-dock`, and
-`vix-status-bar-panel`. Bundled themes are embedded in the binary with
+replace box state live in the internal crates `calendar_panel`,
+`theme_model`, `locale_model`, `keymap_model`,
+`keyboard_shortcut_panel`, `nerd_font_picker`, `find_panel`,
+`left_dock` (explorer), `right_dock` (messages), `bottom_dock`, and
+`status_bar_panel`. Bundled themes are embedded in the binary with
 `include_dir`. See `docs/architecture.md`.
 
 Event flow: `main` runs the loop, calling `ui::draw(&mut app)` (which records
@@ -138,7 +138,7 @@ order — help, dialog, calendar, theme/locale/keymap/recent choosers, Nerd Font
 palette, query-replace, workspace search, confirm, paste-conflict, prompt, palette,
 search, menu — before
 the active **keymap** dispatch (Apple shortcuts / Emacs chords / Vim modal; see
-`vix-keymap-chooser/spec/index.md`) and, finally, the focused pane (editor / explorer /
+`keymap_model/spec/index.md`) and, finally, the focused pane (editor / explorer /
 messages / bottom dock). Each loop iteration also drains any streamed
 command output into the bottom dock. Menu items and palette commands share one
 set of action identifiers dispatched by `App::run_action`.
@@ -165,16 +165,16 @@ Also shipped: **internationalization** (`rust-i18n`; 27 selectable languages
 including Klingon and Sindarin, English fallback, `--locale` flag + `locale`
 setting + live **View → Locale…**), **themes** (every theme is a JSON theme;
 Dark, Light, and more ship bundled, plus user-installed; live **View → Theme…**;
-see `vix-theme-chooser/spec/index.md`), **keymaps** (Apple / Emacs / Vim keyboard
-navigation styles, live **View → Keymap…**; see `vix-keymap-chooser/spec/index.md`),
+see `theme_model/spec/index.md`), **keymaps** (Apple / Emacs / Vim keyboard
+navigation styles, live **View → Keymap…**; see `keymap_model/spec/index.md`),
 **configuration** (`confy` TOML), a **CLI** (`clap`), the **Vix menu**
 (About / Website / Email modal dialogs), **resizable docks** (drag a dock's inner
 edge), **dock toggle icons** in the menu bar, **Open Recent**, **go-to-symbol**
 (palette `@`), **comment toggle** (`Ctrl+/`), and **on-save normalization**
 (`trim_trailing_whitespace` / `ensure_final_newline` settings).
 
-Also shipped (editor widget): the center editor is now **`vix-editor`**, Vix's
-fully-custom widget (replacing the vendored fork; see `vix-editor/spec/index.md`), with
+Also shipped (editor widget): the center editor is now **`editor_core`**, Vix's
+fully-custom widget (replacing the vendored fork; see `editor_core/spec/index.md`), with
 **soft wrap** (**View → Editor → Show/Hide Soft Wrap**, the `soft_wrap` setting),
 **bracket matching** (highlight the partner of the bracket at the cursor; no
 auto-insert), **indentation settings** (`indent_style` / `tab_width` drive what
@@ -185,18 +185,18 @@ Tab inserts), **Smart Home** (`Home` → first non-blank, then column 0),
 (language, line ending, encoding, selection char/line count).
 
 Also shipped: **menu separators** grouping dropdown items (File/Edit/View);
-**Nerd Font Palette** (Tools → a glyph picker, `vix-nerd-font-picker`);
+**Nerd Font Palette** (Tools → a glyph picker, `nerd_font_picker`);
 **Show/Hide Bottom Status** (`View → Show/Hide Bottom Status`, `show_status_bar`
 setting); more **editing comforts** — Select All (`Ctrl+A`), Duplicate Line
 (`Ctrl+D`), Move Line Up/Down (`Alt+↑`/`Alt+↓`), Jump to Matching Bracket
 (`Ctrl+]`), and auto-indent on Enter; the find / replace box state extracted to
-`vix-find-panel` with **click-to-focus** fields; and **borderless screen edges**
+`find_panel` with **click-to-focus** fields; and **borderless screen edges**
 (the left/right docks drop their outer border and the editor its left/right
 borders).
 
 Also shipped: the left/right docks and the status bar were extracted to internal
-crates (`vix-left-dock`, `vix-right-dock`, `vix-status-bar-panel`); a new
-**bottom dock** (`vix-bottom-dock`, `View → Show/Hide Bottom Dock`) — resizable
+crates (`left_dock`, `right_dock`, `status_bar_panel`); a new
+**bottom dock** (`bottom_dock`, `View → Show/Hide Bottom Dock`) — resizable
 (drag its top edge), scrollable (sticky-bottom), with **click-to-jump** on
 `path:line` lines — fed by **Run Command** / **Cancel Command** (Tools) and
 **Search in Workspace → Dock** (Edit → Find; `Alt+C` case / `Alt+R` regex). Also:
@@ -207,19 +207,19 @@ the last search), and the **calendar** gained click-to-insert and clickable
 month-nav arrows.
 
 Also shipped: an **unsaved-changes prompt** on tab close / quit (Save / Don't
-Save / Cancel); the **ASCII panel** (Tools → ASCII; `vix-ascii-character-picker`); the
-**System Information panel** (Tools → System Information; `vix-system-information-panel`,
+Save / Cancel); the **ASCII panel** (Tools → ASCII; `ascii_character_picker`); the
+**System Information panel** (Tools → System Information; `system_information_panel`,
 via `sysinfo`); **case transforms** (Edit → Case: upper/lower/title/kebab/snake/
 camel/pascal; `src/case.rs`); a configurable bottom-dock **scrollback** setting;
 and **workspace-search path filters** (Include/Exclude path regex).
 
-Also shipped: **spell checking** (`vix-spellcheck`, via `spellbook`) — red
+Also shipped: **spell checking** (`spellcheck`, via `spellbook`) — red
 underline of misspellings in comments/strings (View → Editor → Toggle
 Spellcheck), `Ctrl+;` suggestions popup (replace / add to dictionary / ignore),
 Hunspell dictionaries autodetected from standard locations (`dictionary_path`
-setting); see `vix-spellcheck.md` and `dictionaries.md`.
+setting); see `spellcheck.md` and `dictionaries.md`.
 
-Also shipped: **git integration** (`vix-git`, shelling out to the `git` CLI) —
+Also shipped: **git integration** (`git`, shelling out to the `git` CLI) —
 branch + dirty indicator in the status bar, M/A/?/D/R/U badges in the explorer, a
 colored diff gutter against HEAD, and a **Git** menu with a Changes panel
 (stage/unstage/commit), Switch Branch, and Pull/Push/Fetch; see

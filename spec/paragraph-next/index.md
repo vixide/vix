@@ -10,5 +10,5 @@ Editor action `paragraph-next`.
 
 Run it from the command palette or a key binding via the action id `paragraph_next`.
 It is dispatched by `App::run_action("paragraph_next")` and, for editing actions, backed
-by `Editor::paragraph_next` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::paragraph_next` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

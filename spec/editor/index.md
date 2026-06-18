@@ -15,8 +15,8 @@ cross-referenced rather than duplicated here.
 
 ## The editor widget
 
-The editor is backed by the bundled `vix-editor` crate. Each buffer is one
-`vix-editor` editor instance with its own undo/redo history, selection, scroll
+The editor is backed by the bundled `editor_core` crate. Each buffer is one
+`editor_core` editor instance with its own undo/redo history, selection, scroll
 offset, and highlight cache. The host (`src/editor.rs`) addresses the cursor as a
 flat character offset internally and converts to/from 1-based line/column for the
 status bar and go-to-line.
@@ -224,13 +224,13 @@ Line-number, whitespace, and soft-wrap settings are persisted in
 `src/editor.rs` is the host wrapper. It owns the tab strip (`Editor`, a `Vec<Tab>`
 plus the active index) and the global display settings (`line_numbers`,
 `show_whitespace`, `soft_wrap`, `indent`). Each `Tab` wraps one
-`vix_editor::editor::Editor` (re-exported as `CodeEditor`), its file path, dirty
+`editor_core::editor::Editor` (re-exported as `CodeEditor`), its file path, dirty
 flag, ephemeral-preview flag, and optional image protocol. The wrapper implements
 the cursor-jump and selection commands (`cursor_line_home`, `cursor_line_end`,
 `cursor_paragraph_start/end`, `cursor_section_start/end`, `cursor_document_start/end`,
 `select_line`, `select_paragraph`, `select_section`, `select_word`,
 `jump_matching_bracket`, `move_line`, `duplicate_line`, `delete_forward`,
-`page_up`, `page_down`) on top of the `vix-editor` primitives, and converts the
+`page_up`, `page_down`) on top of the `editor_core` primitives, and converts the
 flat character offset to 1-based line/column via `cursor_1based`.
 
 `src/menu.rs` defines the **Edit** menu and its `Select`, `Move`, `Go`, `Find`,
@@ -238,10 +238,10 @@ and `Case` submenus, plus the **View → Editor** submenu, as static action tabl
 Each item carries an `action` string that `App::run_action` in `src/app.rs`
 dispatches; the command palette reuses the same action names.
 
-The `vix-editor` crate (`vix-editor/src/editor.rs`) provides the underlying
+The `editor_core` crate (`editor_core/src/editor.rs`) provides the underlying
 buffer, Tree-sitter highlighting and highlight cache, undo/redo, selection
 anchor/extend, the OS clipboard with in-process fallback, mouse hit-testing
 (`cursor_from_mouse`, `handle_mouse_down/drag`), soft wrap, and the separate mark
 channels (`marks`, `spell_marks`, `diagnostic_marks`, `gutter_marks`). Cut, copy,
 paste, undo, redo, comment toggle, select-all, and duplicate are applied as
-`vix-editor` actions from `App::run_action`.
+`editor_core` actions from `App::run_action`.

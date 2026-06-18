@@ -1,3 +1,3 @@
-# vix-agent-panel
+# agent_panel
 
 Agent panel - TODO

@@ -1,7 +1,7 @@
 # File Explorer
 
 The file explorer is the **left dock**; its tree state lives in the internal
-`vix-left-dock` crate (see `vix-left-dock/spec/index.md`), and the host renders it and runs
+`left_dock` crate (see `left_dock/spec/index.md`), and the host renders it and runs
 the file operations.
 
 When the tree is taller than the dock, a vertical **scrollbar** appears in a

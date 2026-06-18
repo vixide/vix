@@ -10,5 +10,5 @@ Editor action `last-split`.
 
 Run it from the command palette or a key binding via the action id `last_split`.
 It is dispatched by `App::run_action("last_split")` and, for editing actions, backed
-by `Editor::last_split` in `vix-editor`. See `spec/actions/index.md` for the full
+by `Editor::last_split` in `editor_core`. See `spec/actions/index.md` for the full
 catalog.

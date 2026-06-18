@@ -12,7 +12,7 @@ A map of the documentation in this repository. Start with the
 
 Each guide is `docs/<topic>/index.md`. Highlights:
 
-- [Architecture](docs/architecture/index.md) — workspace shape, modules, event
+- [Architecture](docs/architecture/index.md) — single-crate module layout, event
   flow, rendering, theming, i18n, configuration, testing.
 - [Keybindings](docs/keybindings/index.md) — every keyboard shortcut and mouse
   gesture, including keymaps.
@@ -33,22 +33,23 @@ Each guide is `docs/<topic>/index.md`. Highlights:
 
 ## Specification (`spec/`) — source of truth
 
-App-level specs live in `spec/`; each crate's own behavior is specified in
-`vix-<crate>/spec/index.md`.
+All specs live under `spec/`, one directory per topic or action
+(`spec/<name>/index.md`).
 
-- App: [index.md](spec/index.md) · [menus.md](spec/menus.md) ·
-  [keyboard.md](spec/keyboard.md) · [navigation.md](spec/navigation.md) ·
-  [command-palette.md](spec/command-palette.md) ·
-  [file-explorer.md](spec/file-explorer.md) · [hover.md](spec/hover.md) ·
-  [lsp.md](spec/lsp.md) · [git-integration.md](spec/git-integration.md) ·
-  [spellcheck.md](spec/spellcheck.md) · [case-change.md](spec/case-change.md) ·
-  [comparisons.md](spec/comparisons.md)
-- Per-crate: each `vix-*/spec/index.md` (e.g.
-  [vix-editor](vix-editor/spec/index.md),
-  [vix-find-panel](vix-find-panel/spec/index.md),
-  [vix-keymap-chooser](vix-keymap-chooser/spec/index.md),
-  [vix-x11-color-picker](vix-x11-color-picker/spec/index.md),
-  [vix-workspace-dashboard-panel](vix-workspace-dashboard-panel/spec/index.md)).
+- Overview: [spec/index.md](spec/index.md). Each spec lives at
+  `spec/<name>/index.md`.
+- Core: [menus](spec/menus/index.md) · [keyboard](spec/keyboard/index.md) ·
+  [keymaps](spec/keymaps/index.md) · [navigation](spec/navigation/index.md) ·
+  [command-palette](spec/command-palette/index.md) ·
+  [file-explorer](spec/file-explorer/index.md) · [editor](spec/editor/index.md) ·
+  [find-and-replace](spec/find-and-replace/index.md) · [hover](spec/hover/index.md)
+- Features: [lsp](spec/lsp/index.md) ·
+  [git-integration](spec/git-integration/index.md) ·
+  [spellcheck](spec/spellcheck/index.md) · [case-change](spec/case-change/index.md) ·
+  [themes](spec/themes/index.md) · [localization](spec/localization/index.md) ·
+  tools under [spec/tools/](spec/tools/) · [comparisons](spec/comparisons/index.md)
+- Per-action: one `spec/<action>/index.md` for each editor action in the catalog
+  (`spec/actions/index.md`).
 
 ## Contributor & agent guidance (`AGENTS/`)
 
@@ -56,7 +57,7 @@ App-level specs live in `spec/`; each crate's own behavior is specified in
 - [AGENTS/conventions.md](AGENTS/conventions.md) — coding style and patterns.
 - [AGENTS/workflow.md](AGENTS/workflow.md) — the spec-driven workflow and drift
   audits.
-- [AGENTS/share/crate-map.md](AGENTS/share/crate-map.md) — every crate and file.
+- [AGENTS/share/crate-map.md](AGENTS/share/crate-map.md) — every module and file.
 - [AGENTS/share/glossary.md](AGENTS/share/glossary.md) — shared terminology.
 
 ## Code documentation
