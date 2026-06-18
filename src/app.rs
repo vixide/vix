@@ -2318,7 +2318,8 @@ impl App {
             "play_macro" => self.play_macro(),
             "autocomplete" => self.autocomplete(true),
             "cycle_autocomplete_back" => self.autocomplete(false),
-            "shell_mode" | "command_mode" | "suspend" | "toggle_key_menu" => todo_action!(),
+            "toggle_key_menu" => self.show_help = !self.show_help,
+            "shell_mode" | "command_mode" | "suspend" => todo_action!(),
             _ => return false,
         }
         true

@@ -357,6 +357,16 @@ fn line_transforms_via_actions() {
 }
 
 #[test]
+fn toggle_key_menu_shows_the_shortcuts_overlay() {
+    let mut app = app_at(Path::new("."));
+    assert!(!app.show_help);
+    app.run_action("toggle_key_menu");
+    assert!(app.show_help, "key menu opens the shortcuts overlay");
+    app.run_action("toggle_key_menu");
+    assert!(!app.show_help);
+}
+
+#[test]
 fn autocomplete_completes_a_buffer_word() {
     let mut app = app_at(Path::new("."));
     // A long word exists earlier; typing its prefix then autocompleting expands it.
