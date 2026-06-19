@@ -4,6 +4,29 @@
 [workspace]
 members = []
 
+# Config for 'dist'
+[workspace.metadata.dist]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.31.0"
+# CI backends to support
+ci = "github"
+# The installers to generate for each app
+installers = ["shell", "powershell", "npm", "homebrew"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-musl", "x86_64-pc-windows-msvc"]
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"
+# Where to host releases
+hosting = "github"
+# Whether to install an updater program
+install-updater = false
+# Homebrew tap repo to publish the formula to.
+tap = "vixide/homebrew-tap"
+# Run the Homebrew publish job (pushes the formula to the tap above).
+publish-jobs = ["homebrew"]
+# npm scope for the published package (=> @vixide/vix).
+npm-scope = "@vixide"
+
 [package]
 name = "vix"
 version = "0.2.0"
@@ -11,7 +34,8 @@ edition = "2024"
 rust-version = "1.95"
 description = "Vix IDE: a visual integrated development environment that is TUI, friendly, featureful, high-speed, and high-security."
 license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
-repository = "https://github.com/sixarm/vix"
+repository = "https://github.com/vixide/vix"
+homepage = "https://github.com/vixide/vix"
 readme = "README.md"
 keywords = ["tui", "editor", "ide", "terminal", "ratatui"]
 categories = ["text-editors", "command-line-utilities"]
@@ -159,3 +183,8 @@ mimalloc = "0.1"
 lto = true
 strip = true
 opt-level = "z"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
