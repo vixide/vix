@@ -102,6 +102,7 @@ pub mod keyboard_shortcut_panel;
 pub mod keymap_model;
 pub mod left_dock;
 pub mod locale_model;
+pub mod lorem;
 pub mod lsp_core;
 pub mod nerd_font_picker;
 pub mod outline_panel;

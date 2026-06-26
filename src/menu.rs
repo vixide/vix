@@ -286,12 +286,29 @@ const TOOLS_INSERT_MARKDOWN: &[Item] = &[
     Item::leaf("menu.item.tools.insert.markdown.todos", "tools.insert.markdown.todos", ""),
 ];
 
+/// Lorem ipsum placeholder snippets, grouped under Tools → Insert → Lorem ipsum.
+const TOOLS_INSERT_LOREM: &[Item] = &[
+    Item::leaf("menu.item.tools.insert.lorem.words", "tools.insert.lorem.words", ""),
+    Item::leaf("menu.item.tools.insert.lorem.sentence", "tools.insert.lorem.sentence", ""),
+    Item::leaf("menu.item.tools.insert.lorem.paragraph", "tools.insert.lorem.paragraph", ""),
+];
+
+/// Date/time presets, grouped under Tools → Insert → Date/Time. Each inserts the
+/// current local time formatted to the named standard.
+const TOOLS_INSERT_DATETIME: &[Item] = &[
+    Item::leaf("menu.name.iso8601", "tools.insert.datetime.iso8601", ""),
+    Item::leaf("menu.name.rfc3339", "tools.insert.datetime.rfc3339", ""),
+    Item::leaf("menu.item.tools.insert.datetime.epoch", "tools.insert.datetime.epoch", ""),
+];
+
 /// Insert helpers, grouped under Tools → Insert.
 const TOOLS_INSERT: &[Item] = &[
     Item::sub("menu.item.tools.insert.uuid", TOOLS_INSERT_UUID),
     Item::sub("menu.item.tools.insert.zid", TOOLS_INSERT_ZID),
     Item::sub("menu.name.html", TOOLS_INSERT_HTML),
     Item::sub("menu.item.tools.insert.markdown", TOOLS_INSERT_MARKDOWN),
+    Item::sub("menu.name.lorem", TOOLS_INSERT_LOREM),
+    Item::sub("menu.item.tools.insert.datetime", TOOLS_INSERT_DATETIME),
 ];
 
 /// Checksum digests, grouped under Tools → Checksum. Each replaces the selection

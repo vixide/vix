@@ -2211,6 +2211,7 @@ impl App {
             "tools.insert.zid.512" => self.insert_content(&crate::zid_tool::generate(64)),
             a if self.insert_markdown(a) => {}
             a if self.insert_html(a) => {}
+            a if self.insert_dynamic(a) => {}
             "tools.checksum.sha256" => {
                 self.transform_selection_or_buffer(crate::checksum_tool::sha256_hex);
             }
@@ -2742,6 +2743,22 @@ impl App {
             _ => return false,
         };
         self.insert_content(snippet);
+        true
+    }
+
+    /// Insert dynamically-generated content (Lorem ipsum, date/time presets) for
+    /// a `tools.insert.*` action. Returns `true` if `action` was handled.
+    fn insert_dynamic(&mut self, action: &str) -> bool {
+        let text = match action {
+            "tools.insert.lorem.words" => crate::lorem::words(8),
+            "tools.insert.lorem.sentence" => crate::lorem::sentence(),
+            "tools.insert.lorem.paragraph" => format!("{}\n\n", crate::lorem::paragraph()),
+            "tools.insert.datetime.iso8601" => crate::clock::iso8601(&crate::clock::now_local()),
+            "tools.insert.datetime.rfc3339" => crate::clock::rfc3339(&crate::clock::now_local()),
+            "tools.insert.datetime.epoch" => crate::clock::epoch_seconds(&crate::clock::now_local()),
+            _ => return false,
+        };
+        self.insert_content(&text);
         true
     }
 
