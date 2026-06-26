@@ -2197,6 +2197,7 @@ impl App {
             "tools.insert.zid.256" => self.insert_content(&crate::zid_tool::generate(32)),
             "tools.insert.zid.512" => self.insert_content(&crate::zid_tool::generate(64)),
             a if self.insert_markdown(a) => {}
+            a if self.insert_html(a) => {}
             "tools.checksum.sha256" => {
                 self.transform_selection_or_buffer(crate::checksum_tool::sha256_hex);
             }
@@ -2694,6 +2695,37 @@ impl App {
                 "| x | x | x |\n|---|---|---|\n| x | x | x |\n| x | x | x |\n\n"
             }
             "tools.insert.markdown.todos" => "- [ ] Todo\n- [ ] Todo\n- [ ] Todo\n\n",
+            _ => return false,
+        };
+        self.insert_content(snippet);
+        true
+    }
+
+    /// Insert an HTML snippet for a `tools.insert.html.*` action at the cursor.
+    /// Returns `true` if `action` was a known HTML snippet.
+    fn insert_html(&mut self, action: &str) -> bool {
+        let snippet = match action {
+            "tools.insert.html.headline1" => "<h1>Headline</h1>\n\n",
+            "tools.insert.html.headline2" => "<h2>Headline</h2>\n\n",
+            "tools.insert.html.headline3" => "<h3>Headline</h3>\n\n",
+            "tools.insert.html.link" => "<a href=\"https://www.example.com\">Example</a>",
+            "tools.insert.html.list" => {
+                "<ul>\n  <li>Item</li>\n  <li>Item</li>\n  <li>Item</li>\n</ul>\n\n"
+            }
+            "tools.insert.html.table" => concat!(
+                "<table>\n",
+                "  <thead>\n",
+                "    <tr><th>x</th><th>x</th><th>x</th></tr>\n",
+                "  </thead>\n",
+                "  <tbody>\n",
+                "    <tr><td>x</td><td>x</td><td>x</td></tr>\n",
+                "    <tr><td>x</td><td>x</td><td>x</td></tr>\n",
+                "  </tbody>\n",
+                "  <tfoot>\n",
+                "    <tr><th>x</th><th>x</th><th>x</th></tr>\n",
+                "  </tfoot>\n",
+                "</table>\n\n",
+            ),
             _ => return false,
         };
         self.insert_content(snippet);

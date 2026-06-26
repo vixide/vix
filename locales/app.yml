@@ -2955,6 +2955,53 @@ menu.item.tools.insert.markdown.todos:
   bn: "কাজ"
   zh: "待办事项"
   ja: "To-Do"
+menu.item.tools.insert.zid.128:
+  en: "128 bit = 32 hex"
+menu.item.tools.insert.zid.256:
+  en: "256 bit = 64 hex"
+menu.item.tools.insert.zid.512:
+  en: "512 bit = 128 hex"
+# Locale-neutral menu labels: format names, acronyms, keymap product names, and
+# number-base abbreviations. The English value is shown in every locale (via the
+# `en` fallback); add per-locale overrides here if a name ever needs translating.
+menu.name.apple:
+  en: "Apple"
+menu.name.vscode:
+  en: "macOS VSCode"
+menu.name.emacs:
+  en: "Emacs"
+menu.name.vim:
+  en: "Vim"
+menu.name.md5:
+  en: "MD5"
+menu.name.crc32:
+  en: "CRC32"
+menu.name.base64:
+  en: "Base64"
+menu.name.csv:
+  en: "CSV"
+menu.name.tsv:
+  en: "TSV"
+menu.name.json:
+  en: "JSON"
+menu.name.yaml:
+  en: "YAML"
+menu.name.toml:
+  en: "TOML"
+menu.name.html:
+  en: "HTML"
+menu.name.markdown:
+  en: "Markdown"
+menu.name.url:
+  en: "URL"
+menu.name.dec:
+  en: "Dec"
+menu.name.hex:
+  en: "Hex"
+menu.name.bin:
+  en: "Bin"
+menu.name.oct:
+  en: "Oct"
 menu.item.tools.checksum:
   en: "Checksum"
   es: "Suma de verificación"
