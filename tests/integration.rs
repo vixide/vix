@@ -893,6 +893,19 @@ fn insert_lorem_and_datetime_presets() {
 }
 
 #[test]
+fn qrcode_overlay_generates_and_closes() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "https://example.com");
+    app.run_action("tools.qrcode");
+    assert!(
+        app.qrcode.as_ref().is_some_and(|art| !art.is_empty()),
+        "QR overlay rendered from the current line"
+    );
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(app.qrcode.is_none(), "Esc closes the QR overlay");
+}
+
+#[test]
 fn smart_home_toggles_first_nonblank_and_column0() {
     let dir = unique_dir("smarthome");
     let file = dir.join("h.txt");

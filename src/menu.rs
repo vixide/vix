@@ -414,6 +414,7 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.edit_json", "tools.edit_json", ""),
     Item::leaf("menu.item.tools.edit_yaml", "tools.edit_yaml", ""),
     Item::leaf("menu.item.tools.edit_bytes", "tools.edit_bytes", ""),
+    Item::leaf("menu.item.tools.qrcode", "tools.qrcode", ""),
     Item::leaf("menu.item.tools.snippets", "tools.snippets", ""),
     SEP,
     Item::leaf("menu.item.tools.contacts", "tools.contacts", ""),

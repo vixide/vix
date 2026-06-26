@@ -275,6 +275,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.edit_json", "tools.edit_json"),
     ("cmd.edit_yaml", "tools.edit_yaml"),
     ("cmd.edit_bytes", "tools.edit_bytes"),
+    ("cmd.qrcode", "tools.qrcode"),
     ("cmd.run_command", "tools.run_command"),
     ("cmd.cancel_command", "tools.cancel_command"),
     ("cmd.insert_uuid_v4", "tools.insert.uuid.v4"),
