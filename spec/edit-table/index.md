@@ -1,8 +1,8 @@
-# Table Editor
+# Edit Table
 
-The **table editor** is a spreadsheet-like grid for viewing and editing
+The **Edit Table** command opens a spreadsheet-like grid for viewing and editing
 delimited data — **CSV** and **TSV** — as rows and columns. Open it with
-**Tools → Table Editor…** or the command palette (*Open Table Editor*); it parses
+**Tools → Edit Table…** or the command palette (*Edit Table*); it parses
 the active buffer (CSV by default, TSV when the file extension is `.tsv`). Its
 logic lives in the `edit_table` module; the host (`app`/`ui`) renders the grid,
 syncs the scroll window, and persists saves.
@@ -23,7 +23,7 @@ It is inspired by the most-common capabilities of grid data viewers such as
 
 ## Layout
 
-- A bordered, near-full-screen overlay titled `Table Editor` (with a `*` when
+- A bordered, near-full-screen overlay titled `Edit Table` (with a `*` when
   there are unsaved edits).
 - A pinned **header row**, a scrolling **body** of data rows with the selected
   cell reverse-highlighted, and a bottom **status/hint** line showing the cursor

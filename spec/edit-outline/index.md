@@ -1,9 +1,9 @@
-# Outline Editor
+# Edit Outline
 
-The **outline editor** is a hierarchical hide/show and restructuring surface for
-prose text — code folding, but for prose, and a file-explorer-style tree of the
-buffer's lines. Open it with **Tools → Outline Editor…** or the command palette
-(*Open Outline Editor*); it reads the active buffer as an indented outline. Its
+The **Edit Outline** command opens a hierarchical hide/show and restructuring
+surface for prose text — code folding, but for prose, and a file-explorer-style
+tree of the buffer's lines. Open it with **Tools → Edit Outline…** or the command
+palette (*Edit Outline*); it reads the active buffer as an indented outline. Its
 logic lives in the `edit_outline` module; the host (`app`/`ui`) renders the
 visible items, syncs the scroll window, and persists saves.
 
@@ -24,7 +24,7 @@ outliner that edits structure.
 
 ## Layout
 
-- A bordered, near-full-screen overlay titled `Outline Editor` (with a `*` when
+- A bordered, near-full-screen overlay titled `Edit Outline` (with a `*` when
   there are unsaved edits).
 - A scrolling list of visible items: each shows its indentation, a fold marker
   (`▾` expanded, `▸` collapsed, `·` leaf), and its text. The selected item is

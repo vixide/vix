@@ -1,7 +1,7 @@
 //! The table editor: a spreadsheet-like grid for viewing and editing delimited
 //! data (CSV/TSV) as rows and columns.
 //!
-//! Vix's Tools menu offers a *Table Editor* that parses the active buffer as
+//! Vix's Tools menu offers an *Edit Table* command that parses the active buffer as
 //! CSV or TSV (per the file extension) into a rectangular grid. The first row is
 //! treated as the header. The user navigates a cell cursor with the arrow keys
 //! (or `h`/`j`/`k`/`l`), edits a cell in place, inserts and deletes rows and
