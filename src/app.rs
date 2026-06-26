@@ -546,6 +546,9 @@ pub struct Layout {
     /// Body (data-rows) rectangle of the open table editor, used to size paging
     /// and the scroll window.
     pub edit_table: Rect,
+    /// Body rectangle of the open outline editor, used to size paging and the
+    /// scroll window.
+    pub edit_outline: Rect,
     /// Row-list rectangle of the open X11 color palette, so a click can hit-test
     /// which row was picked.
     pub x11_panel: Rect,
@@ -669,6 +672,8 @@ pub struct App {
     pub ascii_panel: Option<AsciiPanel>,
     /// Table editor (CSV/TSV spreadsheet) overlay, when open.
     pub edit_table: Option<crate::edit_table::Grid>,
+    /// Outline editor (prose hierarchy) overlay, when open.
+    pub edit_outline: Option<crate::edit_outline::Tree>,
     /// X11 color palette overlay, when open.
     pub x11_panel: Option<X11Panel>,
     /// HTML character palette overlay, when open.
@@ -927,6 +932,7 @@ impl App {
             prompt: None, paste: None, confirm: None, unsaved: None, spell_suggest: None,
             context_menu: None, git_panel: None, branch_chooser: None, recent_chooser: None,
             location_chooser: None, nerd_palette: None, ascii_panel: None, edit_table: None,
+            edit_outline: None,
             x11_panel: None,
             html_panel: None, system_info: None, dashboard: None, dashboard_rx: None,
             outline: None, welcome: None, file_info: None, text_info: None,
@@ -1249,6 +1255,7 @@ impl App {
             };
         }
         panel!(edit_table, edit_table_key);
+        panel!(edit_outline, edit_outline_key);
         panel!(recent_chooser, recent_key);
         panel!(location_chooser, location_key);
         panel!(nerd_palette, nerd_key);
@@ -1820,6 +1827,7 @@ impl App {
             "tools.nerd_palette" => self.open_nerd_palette(),
             "tools.ascii" => self.open_ascii_panel(),
             "tools.edit_table" => self.open_edit_table(),
+            "tools.edit_outline" => self.open_edit_outline(),
             "tools.x11_colors" => self.open_x11_panel(),
             "tools.html_chars" => self.open_html_panel(),
             "tools.system_info" => self.open_system_info(),
@@ -6708,6 +6716,51 @@ impl App {
         }
         if let Some(grid) = self.edit_table.as_mut() {
             grid.mark_saved();
+        }
+        self.run_action("file.save");
+    }
+
+    /// Open the outline editor on the active buffer (parsed as an indented
+    /// outline). Warns when there is no editable buffer.
+    fn open_edit_outline(&mut self) {
+        let Some(tab) = self.editor.active_tab() else {
+            self.messages.warn(t!("msg.edit_outline_no_buffer").to_string());
+            return;
+        };
+        if tab.is_image() {
+            self.messages.warn(t!("msg.edit_outline_no_buffer").to_string());
+            return;
+        }
+        let text = tab.text();
+        self.edit_outline = Some(crate::edit_outline::Tree::from_text(&text));
+    }
+
+    /// Route a key to the open outline editor and act on its outcome.
+    fn edit_outline_key(&mut self, key: KeyEvent) {
+        let page = usize::from(self.layout.edit_outline.height).saturating_sub(1).max(1);
+        let outcome = match self.edit_outline.as_mut() {
+            Some(tree) => tree.handle_key(key, page),
+            None => return,
+        };
+        match outcome {
+            crate::edit_outline::Outcome::Close => self.edit_outline = None,
+            crate::edit_outline::Outcome::Save => self.save_edit_outline(),
+            crate::edit_outline::Outcome::Consumed => {}
+        }
+    }
+
+    /// Serialize the outline editor back into the active buffer and save it,
+    /// reusing the normal file-save flow (which handles Save As when untitled).
+    fn save_edit_outline(&mut self) {
+        let Some(text) = self.edit_outline.as_ref().map(crate::edit_outline::Tree::to_text) else {
+            return;
+        };
+        if let Some(tab) = self.editor.active_tab_mut() {
+            tab.editor.set_content(&text);
+            tab.dirty = true;
+        }
+        if let Some(tree) = self.edit_outline.as_mut() {
+            tree.mark_saved();
         }
         self.run_action("file.save");
     }

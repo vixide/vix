@@ -366,6 +366,7 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.convert.unit", "tools.convert.unit", ""),
     Item::leaf("menu.item.tools.markdown_preview", "tools.markdown_preview", ""),
     Item::leaf("menu.item.tools.edit_table", "tools.edit_table", ""),
+    Item::leaf("menu.item.tools.edit_outline", "tools.edit_outline", ""),
     Item::leaf("menu.item.tools.snippets", "tools.snippets", ""),
     SEP,
     Item::leaf("menu.item.tools.contacts", "tools.contacts", ""),
