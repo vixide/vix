@@ -203,6 +203,9 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.ascii_panel.is_some() {
         draw_ascii_panel(app, frame, area);
     }
+    if app.table_editor.is_some() {
+        draw_table_editor(app, frame, area);
+    }
     if app.x11_panel.is_some() {
         draw_x11_panel(app, frame, area);
     }
@@ -2365,6 +2368,149 @@ fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         width: chunks[1].width,
         height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[1].height),
     };
+}
+
+// Pad or truncate `s` to exactly `w` display columns (by character count).
+fn fit(s: &str, w: usize) -> String {
+    let mut out: String = s.chars().take(w).collect();
+    let len = out.chars().count();
+    if len < w {
+        out.push_str(&" ".repeat(w - len));
+    }
+    out
+}
+
+// Per-column display width: the widest cell (incl. header), clamped to [3, 24].
+fn column_widths(grid: &crate::table_editor::Grid) -> Vec<usize> {
+    (0..grid.col_count())
+        .map(|c| {
+            let mut w = 3;
+            for r in 0..grid.row_count() {
+                w = w.max(grid.cell(r, c).chars().count());
+            }
+            w.min(24)
+        })
+        .collect()
+}
+
+// First column to show so the selected column is visible within `avail` columns.
+fn first_visible_col(grid: &crate::table_editor::Grid, widths: &[usize], avail: usize) -> usize {
+    let sel = grid.col();
+    let mut first = grid.col_scroll().min(sel);
+    loop {
+        let used: usize = (first..=sel).map(|c| widths.get(c).copied().unwrap_or(3) + 1).sum();
+        if used <= avail || first >= sel {
+            break;
+        }
+        first += 1;
+    }
+    first
+}
+
+// The column indices that fit in `avail` columns starting from the scroll offset.
+fn visible_cols(grid: &crate::table_editor::Grid, widths: &[usize], avail: usize) -> Vec<usize> {
+    let mut out = Vec::new();
+    let mut used = 0usize;
+    for c in grid.col_scroll()..grid.col_count() {
+        let need = widths.get(c).copied().unwrap_or(3) + 1;
+        if used + need > avail && !out.is_empty() {
+            break;
+        }
+        used += need;
+        out.push(c);
+    }
+    out
+}
+
+// Build one rendered grid line for row `r` over the visible `cols`.
+fn table_row_line(grid: &crate::table_editor::Grid, r: usize, cols: &[usize], widths: &[usize]) -> Line<'static> {
+    let mut spans = Vec::with_capacity(cols.len() * 2);
+    let editing = grid.is_editing() && r == grid.row();
+    for &c in cols {
+        let w = widths.get(c).copied().unwrap_or(3);
+        let selected = r == grid.row() && c == grid.col();
+        let raw = if editing && selected { grid.edit_buffer() } else { grid.cell(r, c) };
+        let style = if selected {
+            theme::selected()
+        } else if r == 0 {
+            theme::title(true)
+        } else {
+            theme::base()
+        };
+        spans.push(Span::styled(fit(raw, w), style));
+        spans.push(Span::raw(" "));
+    }
+    Line::from(spans)
+}
+
+// The bottom status/hint line: position, plus the find query, edit notice, or hint.
+fn table_status_line(grid: &crate::table_editor::Grid) -> Line<'static> {
+    let info = if grid.is_finding() {
+        format!("/{}", grid.find_buffer())
+    } else if grid.is_editing() {
+        t!("ui.table_editor_editing").to_string()
+    } else {
+        t!("ui.table_editor_hint").to_string()
+    };
+    let pos = format!(
+        " r{}/{} c{}/{}  ",
+        grid.row() + 1,
+        grid.row_count(),
+        grid.col() + 1,
+        grid.col_count(),
+    );
+    Line::from(vec![Span::styled(pos, theme::dim()), Span::styled(info, theme::dim())])
+}
+
+// Render the table editor overlay: pinned header, scrolling body with the
+// selected cell highlighted, and a status/hint line.
+fn draw_table_editor(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.table_editor.is_none() {
+        return;
+    }
+    frame.render_widget(Clear, area);
+    let dirty = if app.table_editor.as_ref().is_some_and(crate::table_editor::Grid::is_dirty) {
+        " *"
+    } else {
+        ""
+    };
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {}{} ", icon::TABLE, t!("ui.table_editor"), dirty));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let grid = app.table_editor.as_ref().unwrap();
+    let widths = column_widths(grid);
+    let avail = usize::from(chunks[1].width);
+    let first = first_visible_col(grid, &widths, avail);
+    let body_h = usize::from(chunks[1].height);
+    if let Some(g) = app.table_editor.as_mut() {
+        g.set_col_scroll(first);
+        g.ensure_row_visible(body_h);
+    }
+
+    let grid = app.table_editor.as_ref().unwrap();
+    let cols = visible_cols(grid, &widths, avail);
+    frame.render_widget(Paragraph::new(table_row_line(grid, 0, &cols, &widths)), chunks[0]);
+
+    let start = grid.row_scroll();
+    let mut lines = Vec::with_capacity(body_h);
+    for r in start..(start + body_h).min(grid.row_count()) {
+        lines.push(table_row_line(grid, r, &cols, &widths));
+    }
+    frame.render_widget(Paragraph::new(lines), chunks[1]);
+    frame.render_widget(Paragraph::new(table_status_line(grid)), chunks[2]);
+
+    app.layout.table_editor = chunks[1];
 }
 
 fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
