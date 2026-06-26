@@ -57,26 +57,14 @@ CARGO ?= cargo
 # ----------------------------------------------------------------------------
 # The Rust target triple built for each platform. Override on the command line
 # for a different arch, e.g.  make MACOS_TARGET=x86_64-apple-darwin
-# NOTE: the foreign-target env vars in build-windows / build-linux below encode
-# these specific triples in their names (cargo derives them from the triple).
-# If you change WINDOWS_TARGET / LINUX_TARGET, update those env var names too.
+#
+# The foreign targets cross-compile with plain cargo: the linkers and the
+# CC_/CXX_/AR_ overrides for the `cc` crate live in .cargo/config.toml, so the
+# build-* recipes below are just `cargo build --target <triple>`. If you change
+# WINDOWS_TARGET / LINUX_TARGET, update the toolchain entries there too.
 MACOS_TARGET   ?= aarch64-apple-darwin
 WINDOWS_TARGET ?= x86_64-pc-windows-gnu
 LINUX_TARGET   ?= x86_64-unknown-linux-musl
-
-# ----------------------------------------------------------------------------
-# Cross-toolchains for the foreign targets
-# ----------------------------------------------------------------------------
-# CC  = the C compiler / linker driver. cargo uses it to link the final binary,
-#       and the `cc` crate uses it to compile C dependencies (tree-sitter
-#       grammars, mimalloc, image codecs) for the target.
-# AR  = the matching archiver, used by the `cc` crate to build static archives.
-# These default to the standard Homebrew toolchain names; override if yours
-# differ.
-WINDOWS_CC ?= x86_64-w64-mingw32-gcc
-WINDOWS_AR ?= x86_64-w64-mingw32-ar
-LINUX_CC   ?= x86_64-linux-musl-gcc
-LINUX_AR   ?= x86_64-linux-musl-ar
 
 # Build `all` when make is invoked with no explicit target.
 .DEFAULT_GOAL := all
@@ -102,28 +90,17 @@ build-macos:
 	rustup target add $(MACOS_TARGET)
 	$(CARGO) build --release --target $(MACOS_TARGET)
 
-# Windows (GNU ABI): cross-compiled with the mingw-w64 toolchain.
-# The env vars tell cargo and the `cc` crate which tools to use for this target:
-#   CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER -> linker cargo invokes
-#   CC_x86_64_pc_windows_gnu                  -> C compiler for the `cc` crate
-#   AR_x86_64_pc_windows_gnu                  -> archiver for the `cc` crate
-# (cargo's env-var spelling: target triple uppercased with '-' -> '_' for the
-# LINKER var; the `cc` crate uses the lowercased triple for CC_/AR_.)
+# Windows (GNU ABI): cross-compiled with the mingw-w64 toolchain. The linker and
+# the cc-rs CC/AR overrides come from .cargo/config.toml.
 build-windows:
 	rustup target add $(WINDOWS_TARGET)
-	CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=$(WINDOWS_CC) \
-	CC_x86_64_pc_windows_gnu=$(WINDOWS_CC) \
-	AR_x86_64_pc_windows_gnu=$(WINDOWS_AR) \
 	$(CARGO) build --release --target $(WINDOWS_TARGET)
 
-# Linux (MUSL): cross-compiled with the musl toolchain, producing a fully
-# static binary that runs on any x86-64 Linux without a libc dependency.
-# Same env-var scheme as build-windows, for the musl triple.
+# Linux (MUSL): cross-compiled with the musl toolchain, producing a fully static
+# binary that runs on any x86-64 Linux without a libc dependency. The linker and
+# the cc-rs CC/AR overrides come from .cargo/config.toml.
 build-linux:
 	rustup target add $(LINUX_TARGET)
-	CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=$(LINUX_CC) \
-	CC_x86_64_unknown_linux_musl=$(LINUX_CC) \
-	AR_x86_64_unknown_linux_musl=$(LINUX_AR) \
 	$(CARGO) build --release --target $(LINUX_TARGET)
 
 # Remove all build artifacts (the target/ directory).
