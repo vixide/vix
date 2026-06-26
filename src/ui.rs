@@ -215,6 +215,9 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.edit_bytes.is_some() {
         draw_edit_bytes(app, frame, area);
     }
+    if app.qrcode.is_some() {
+        draw_qrcode(app, frame, area);
+    }
     if app.x11_panel.is_some() {
         draw_x11_panel(app, frame, area);
     }
@@ -2718,6 +2721,47 @@ fn draw_edit_bytes(app: &mut App, frame: &mut Frame, area: Rect) {
         chunks[1],
     );
     app.layout.edit_bytes = chunks[0];
+}
+
+// Render the QR code overlay: the Unicode QR art, forced to black-on-white so it
+// scans regardless of the active theme, centered with a hint line.
+fn draw_qrcode(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(art) = app.qrcode.as_ref() else { return };
+    let lines: Vec<&str> = art.lines().collect();
+    let art_w = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0);
+    let width = (u16::try_from(art_w).unwrap_or(u16::MAX) + 2).min(area.width);
+    let height = (u16::try_from(lines.len()).unwrap_or(u16::MAX) + 3).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::INFO, t!("ui.qrcode")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let qr_style = Style::default().fg(Color::Black).bg(Color::White);
+    let body: Vec<Line> = lines
+        .iter()
+        .map(|l| Line::from(Span::styled((*l).to_string(), qr_style)))
+        .collect();
+    frame.render_widget(Paragraph::new(body), chunks[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(t!("ui.qrcode_hint").to_string(), theme::dim()))),
+        chunks[1],
+    );
 }
 
 fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {

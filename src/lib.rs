@@ -58,6 +58,7 @@ pub mod menu;
 pub mod messages;
 pub mod palette;
 pub mod workspace_search;
+pub mod qr_tool;
 pub mod query;
 pub mod regex_tool;
 pub mod search;

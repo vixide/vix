@@ -690,6 +690,8 @@ pub struct App {
     pub system_info: Option<SystemInfoPanel>,
     /// Workspace Dashboard overlay, when open.
     pub dashboard: Option<Dashboard>,
+    /// QR code overlay (rendered Unicode art), when open.
+    pub qrcode: Option<String>,
     /// Receiver for the dashboard's background metric computations.
     dashboard_rx: Option<std::sync::mpsc::Receiver<DashMsg>>,
     /// Code outline overlay, when open.
@@ -940,7 +942,7 @@ impl App {
             prompt: None, paste: None, confirm: None, unsaved: None, spell_suggest: None,
             context_menu: None, git_panel: None, branch_chooser: None, recent_chooser: None,
             location_chooser: None, nerd_palette: None, ascii_panel: None, edit_table: None,
-            edit_outline: None, edit_value: None, edit_bytes: None,
+            edit_outline: None, edit_value: None, edit_bytes: None, qrcode: None,
             x11_panel: None,
             html_panel: None, system_info: None, dashboard: None, dashboard_rx: None,
             outline: None, welcome: None, file_info: None, text_info: None,
@@ -1282,6 +1284,12 @@ impl App {
         if self.dashboard.is_some() {
             if matches!(key.code, KeyCode::Esc | KeyCode::Enter) {
                 self.close_dashboard();
+            }
+            return true;
+        }
+        if self.qrcode.is_some() {
+            if matches!(key.code, KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q')) {
+                self.qrcode = None;
             }
             return true;
         }
@@ -1841,6 +1849,7 @@ impl App {
             "tools.edit_json" => self.open_edit_value(crate::edit_value::Format::Json),
             "tools.edit_yaml" => self.open_edit_value(crate::edit_value::Format::Yaml),
             "tools.edit_bytes" => self.open_edit_bytes(),
+            "tools.qrcode" => self.open_qrcode(),
             "tools.x11_colors" => self.open_x11_panel(),
             "tools.html_chars" => self.open_html_panel(),
             "tools.system_info" => self.open_system_info(),
@@ -6936,6 +6945,24 @@ impl App {
             hex.mark_saved();
         }
         self.run_action("file.save");
+    }
+
+    /// Generate a QR code from the current selection (or the cursor's line) and
+    /// show it in a read-only overlay. Warns when there is nothing to encode.
+    fn open_qrcode(&mut self) {
+        let text = self.editor.active_tab_mut().map(|tab| {
+            tab.editor
+                .get_selection_text()
+                .filter(|s| !s.trim().is_empty())
+                .or_else(|| tab.lines().get(tab.editor.cursor_line()).cloned())
+                .unwrap_or_default()
+                .trim()
+                .to_string()
+        });
+        match text.as_deref().and_then(crate::qr_tool::render) {
+            Some(art) => self.qrcode = Some(art),
+            None => self.messages.warn(t!("msg.qrcode_empty").to_string()),
+        }
     }
 
     fn ascii_key(&mut self, key: KeyEvent) {
