@@ -2791,7 +2791,7 @@ menu.item.tools.calculator:
   bn: "ক্যালকুলেটর…"
   zh: "计算器…"
   ja: "電卓…"
-menu.item.tools.table_editor:
+menu.item.tools.edit_table:
   en: "Table Editor…"
   es: "Editor de tablas…"
   fr: "Éditeur de tableau…"
@@ -5388,7 +5388,7 @@ cmd.conflict_both:
   bn: "দ্বন্দ্ব: উভয়ই রাখুন"
   zh: "冲突：两者都保留"
   ja: "競合: 両方を残す"
-cmd.table_editor:
+cmd.edit_table:
   en: "Open Table Editor"
   es: "Abrir editor de tablas"
   fr: "Ouvrir l'éditeur de tableau"
@@ -6068,7 +6068,7 @@ ui.nerd_palette:
   bn: "নার্ড ফন্ট অক্ষর"
   zh: "Nerd 字体字符"
   ja: "Nerd フォント文字"
-ui.table_editor:
+ui.edit_table:
   en: "Table Editor"
   es: "Editor de tablas"
   fr: "Éditeur de tableau"
@@ -6084,7 +6084,7 @@ ui.table_editor:
   bn: "টেবিল সম্পাদক"
   zh: "表格编辑器"
   ja: "テーブルエディター"
-ui.table_editor_hint:
+ui.edit_table_hint:
   en: "↑↓←→ move   Enter edit   Alt+↑↓ row   Alt+←→ col   s sort   / find   ^S save   q close"
   es: "↑↓←→ mover   Enter editar   Alt+↑↓ fila   Alt+←→ col   s ordenar   / buscar   ^S guardar   q cerrar"
   fr: "↑↓←→ déplacer   Entrée éditer   Alt+↑↓ ligne   Alt+←→ col   s trier   / chercher   ^S enregistrer   q fermer"
@@ -6100,7 +6100,7 @@ ui.table_editor_hint:
   bn: "↑↓←→ সরান   Enter সম্পাদনা   Alt+↑↓ সারি   Alt+←→ কলাম   s সাজান   / খুঁজুন   ^S সংরক্ষণ   q বন্ধ"
   zh: "↑↓←→ 移动   Enter 编辑   Alt+↑↓ 行   Alt+←→ 列   s 排序   / 查找   ^S 保存   q 关闭"
   ja: "↑↓←→ 移動   Enter 編集   Alt+↑↓ 行   Alt+←→ 列   s 並べ替え   / 検索   ^S 保存   q 閉じる"
-ui.table_editor_editing:
+ui.edit_table_editing:
   en: "Editing — Enter save cell · Esc cancel"
   es: "Editando — Enter guardar celda · Esc cancelar"
   fr: "Édition — Entrée enregistrer la cellule · Échap annuler"
@@ -10526,7 +10526,7 @@ msg.delete_failed:
   bn: "মোছা ব্যর্থ: %{error}"
   zh: "删除失败：%{error}"
   ja: "削除に失敗しました: %{error}"
-msg.table_editor_no_buffer:
+msg.edit_table_no_buffer:
   en: "Open a CSV or TSV file to use the table editor"
   es: "Abre un archivo CSV o TSV para usar el editor de tablas"
   fr: "Ouvrez un fichier CSV ou TSV pour utiliser l'éditeur de tableau"

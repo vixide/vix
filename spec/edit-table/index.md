@@ -4,7 +4,7 @@ The **table editor** is a spreadsheet-like grid for viewing and editing
 delimited data — **CSV** and **TSV** — as rows and columns. Open it with
 **Tools → Table Editor…** or the command palette (*Open Table Editor*); it parses
 the active buffer (CSV by default, TSV when the file extension is `.tsv`). Its
-logic lives in the `table_editor` module; the host (`app`/`ui`) renders the grid,
+logic lives in the `edit_table` module; the host (`app`/`ui`) renders the grid,
 syncs the scroll window, and persists saves.
 
 It is inspired by the most-common capabilities of grid data viewers such as
@@ -59,7 +59,7 @@ It is inspired by the most-common capabilities of grid data viewers such as
 
 ## As implemented in Vix
 
-`table_editor::Grid` owns the cells, cursor, scroll offsets, edit/find buffers,
+`edit_table::Grid` owns the cells, cursor, scroll offsets, edit/find buffers,
 and undo/redo history. `Grid::handle_key` interprets key events itself and
 returns an `Outcome` (`Consumed` / `Close` / `Save`) so the host stays thin:
 `app` routes keys to the open grid, maps the outcome, and on save copies the
