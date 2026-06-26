@@ -209,6 +209,12 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.edit_outline.is_some() {
         draw_edit_outline(app, frame, area);
     }
+    if app.edit_value.is_some() {
+        draw_edit_value(app, frame, area);
+    }
+    if app.edit_bytes.is_some() {
+        draw_edit_bytes(app, frame, area);
+    }
     if app.x11_panel.is_some() {
         draw_x11_panel(app, frame, area);
     }
@@ -2572,6 +2578,146 @@ fn draw_edit_outline(app: &mut App, frame: &mut Frame, area: Rect) {
     );
 
     app.layout.edit_outline = chunks[0];
+}
+
+// One rendered row of the structured-value (JSON/YAML) tree.
+fn value_line(tree: &crate::edit_value::Tree, i: usize, editing: bool) -> Line<'static> {
+    let selected = i == tree.sel();
+    let marker = if tree.is_container(i) {
+        if tree.is_collapsed(i) { "▸ " } else { "▾ " }
+    } else {
+        "  "
+    };
+    let label = tree.label(i);
+    let value = if editing && selected { tree.edit_buffer() } else { tree.value(i) };
+    let head = if label.is_empty() {
+        String::new()
+    } else if tree.is_container(i) {
+        format!("{label} ")
+    } else {
+        format!("{label}: ")
+    };
+    let text = format!("{}{marker}{head}{value}", "  ".repeat(tree.depth(i)));
+    let style = if selected { theme::selected() } else { theme::base() };
+    Line::from(Span::styled(text, style))
+}
+
+// Render the structured-value editor overlay (Edit JSON / Edit YAML).
+fn draw_edit_value(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(format) = app.edit_value.as_ref().map(crate::edit_value::Tree::format) else {
+        return;
+    };
+    frame.render_widget(Clear, area);
+    let dirty = if app.edit_value.as_ref().is_some_and(crate::edit_value::Tree::is_dirty) {
+        " *"
+    } else {
+        ""
+    };
+    let title_key = match format {
+        crate::edit_value::Format::Json => "ui.edit_json",
+        crate::edit_value::Format::Yaml => "ui.edit_yaml",
+    };
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {}{} ", icon::CODE, t!(title_key), dirty));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let body_h = usize::from(chunks[0].height);
+    if let Some(t) = app.edit_value.as_mut() {
+        t.ensure_visible(body_h);
+    }
+    let tree = app.edit_value.as_ref().unwrap();
+    let editing = tree.is_editing();
+    let start = tree.scroll();
+    let mut lines = Vec::with_capacity(body_h);
+    for i in start..(start + body_h).min(tree.row_count()) {
+        lines.push(value_line(tree, i, editing));
+    }
+    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(t!("ui.edit_value_hint").to_string(), theme::dim()))),
+        chunks[1],
+    );
+    app.layout.edit_value = chunks[0];
+}
+
+// One rendered hex-dump row: offset, hex byte pairs, and the ASCII gutter.
+fn bytes_line(hex: &crate::edit_bytes::Hex, row: usize) -> Line<'static> {
+    use crate::edit_bytes::COLS;
+    let off = row * COLS;
+    let mut spans = vec![Span::styled(format!("{off:08x}  "), theme::dim())];
+    for col in 0..COLS {
+        let idx = off + col;
+        if idx < hex.len() {
+            let style = if idx == hex.cursor() { theme::selected() } else { theme::base() };
+            spans.push(Span::styled(format!("{:02x} ", hex.byte(idx)), style));
+        } else {
+            spans.push(Span::raw("   "));
+        }
+    }
+    spans.push(Span::raw(" "));
+    for col in 0..COLS {
+        let idx = off + col;
+        if idx < hex.len() {
+            let b = hex.byte(idx);
+            let ch = if (0x20..0x7f).contains(&b) { char::from(b) } else { '.' };
+            let style = if idx == hex.cursor() { theme::selected() } else { theme::dim() };
+            spans.push(Span::styled(ch.to_string(), style));
+        }
+    }
+    Line::from(spans)
+}
+
+// Render the byte (hex) editor overlay.
+fn draw_edit_bytes(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.edit_bytes.is_none() {
+        return;
+    }
+    frame.render_widget(Clear, area);
+    let dirty = if app.edit_bytes.as_ref().is_some_and(crate::edit_bytes::Hex::is_dirty) {
+        " *"
+    } else {
+        ""
+    };
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {}{} ", icon::TABLE, t!("ui.edit_bytes"), dirty));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let body_h = usize::from(chunks[0].height);
+    if let Some(h) = app.edit_bytes.as_mut() {
+        h.ensure_visible(body_h);
+    }
+    let hex = app.edit_bytes.as_ref().unwrap();
+    let start = hex.scroll();
+    let mut lines = Vec::with_capacity(body_h);
+    for row in start..(start + body_h).min(hex.rows()) {
+        lines.push(bytes_line(hex, row));
+    }
+    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(t!("ui.edit_bytes_hint").to_string(), theme::dim()))),
+        chunks[1],
+    );
+    app.layout.edit_bytes = chunks[0];
 }
 
 fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {

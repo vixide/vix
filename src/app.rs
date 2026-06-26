@@ -549,6 +549,10 @@ pub struct Layout {
     /// Body rectangle of the open outline editor, used to size paging and the
     /// scroll window.
     pub edit_outline: Rect,
+    /// Body rectangle of the open structured-value (JSON/YAML) editor.
+    pub edit_value: Rect,
+    /// Body rectangle of the open byte (hex) editor.
+    pub edit_bytes: Rect,
     /// Row-list rectangle of the open X11 color palette, so a click can hit-test
     /// which row was picked.
     pub x11_panel: Rect,
@@ -674,6 +678,10 @@ pub struct App {
     pub edit_table: Option<crate::edit_table::Grid>,
     /// Outline editor (prose hierarchy) overlay, when open.
     pub edit_outline: Option<crate::edit_outline::Tree>,
+    /// Structured-value editor (JSON/YAML tree) overlay, when open.
+    pub edit_value: Option<crate::edit_value::Tree>,
+    /// Byte editor (hex view) overlay, when open.
+    pub edit_bytes: Option<crate::edit_bytes::Hex>,
     /// X11 color palette overlay, when open.
     pub x11_panel: Option<X11Panel>,
     /// HTML character palette overlay, when open.
@@ -932,7 +940,7 @@ impl App {
             prompt: None, paste: None, confirm: None, unsaved: None, spell_suggest: None,
             context_menu: None, git_panel: None, branch_chooser: None, recent_chooser: None,
             location_chooser: None, nerd_palette: None, ascii_panel: None, edit_table: None,
-            edit_outline: None,
+            edit_outline: None, edit_value: None, edit_bytes: None,
             x11_panel: None,
             html_panel: None, system_info: None, dashboard: None, dashboard_rx: None,
             outline: None, welcome: None, file_info: None, text_info: None,
@@ -1256,6 +1264,8 @@ impl App {
         }
         panel!(edit_table, edit_table_key);
         panel!(edit_outline, edit_outline_key);
+        panel!(edit_value, edit_value_key);
+        panel!(edit_bytes, edit_bytes_key);
         panel!(recent_chooser, recent_key);
         panel!(location_chooser, location_key);
         panel!(nerd_palette, nerd_key);
@@ -1828,6 +1838,9 @@ impl App {
             "tools.ascii" => self.open_ascii_panel(),
             "tools.edit_table" => self.open_edit_table(),
             "tools.edit_outline" => self.open_edit_outline(),
+            "tools.edit_json" => self.open_edit_value(crate::edit_value::Format::Json),
+            "tools.edit_yaml" => self.open_edit_value(crate::edit_value::Format::Yaml),
+            "tools.edit_bytes" => self.open_edit_bytes(),
             "tools.x11_colors" => self.open_x11_panel(),
             "tools.html_chars" => self.open_html_panel(),
             "tools.system_info" => self.open_system_info(),
@@ -6813,6 +6826,97 @@ impl App {
         }
         if let Some(tree) = self.edit_outline.as_mut() {
             tree.mark_saved();
+        }
+        self.run_action("file.save");
+    }
+
+    /// Open the structured-value editor (JSON or YAML) on the active buffer.
+    /// Warns when there is no buffer or it does not parse in `format`.
+    fn open_edit_value(&mut self, format: crate::edit_value::Format) {
+        let Some(tab) = self.editor.active_tab() else {
+            self.messages.warn(t!("msg.edit_value_no_buffer").to_string());
+            return;
+        };
+        if tab.is_image() {
+            self.messages.warn(t!("msg.edit_value_no_buffer").to_string());
+            return;
+        }
+        match crate::edit_value::Tree::from_text(&tab.text(), format) {
+            Some(tree) => self.edit_value = Some(tree),
+            None => self.messages.warn(t!("msg.edit_value_parse").to_string()),
+        }
+    }
+
+    /// Route a key to the open structured-value editor and act on its outcome.
+    fn edit_value_key(&mut self, key: KeyEvent) {
+        let page = usize::from(self.layout.edit_value.height).saturating_sub(1).max(1);
+        let outcome = match self.edit_value.as_mut() {
+            Some(tree) => tree.handle_key(key, page),
+            None => return,
+        };
+        match outcome {
+            crate::edit_value::Outcome::Close => self.edit_value = None,
+            crate::edit_value::Outcome::Save => self.save_edit_value(),
+            crate::edit_value::Outcome::Consumed => {}
+        }
+    }
+
+    /// Serialize the structured-value editor back into the active buffer and save.
+    fn save_edit_value(&mut self) {
+        let Some(text) = self.edit_value.as_ref().map(crate::edit_value::Tree::to_text) else {
+            return;
+        };
+        if let Some(tab) = self.editor.active_tab_mut() {
+            tab.editor.set_content(&text);
+            tab.dirty = true;
+        }
+        if let Some(tree) = self.edit_value.as_mut() {
+            tree.mark_saved();
+        }
+        self.run_action("file.save");
+    }
+
+    /// Open the byte (hex) editor on the active buffer's bytes. Warns when there
+    /// is no editable buffer.
+    fn open_edit_bytes(&mut self) {
+        let Some(tab) = self.editor.active_tab() else {
+            self.messages.warn(t!("msg.edit_bytes_no_buffer").to_string());
+            return;
+        };
+        if tab.is_image() {
+            self.messages.warn(t!("msg.edit_bytes_no_buffer").to_string());
+            return;
+        }
+        self.edit_bytes = Some(crate::edit_bytes::Hex::from_bytes(tab.text().into_bytes()));
+    }
+
+    /// Route a key to the open byte editor and act on its outcome.
+    fn edit_bytes_key(&mut self, key: KeyEvent) {
+        let page = usize::from(self.layout.edit_bytes.height).saturating_sub(1).max(1);
+        let outcome = match self.edit_bytes.as_mut() {
+            Some(hex) => hex.handle_key(key, page),
+            None => return,
+        };
+        match outcome {
+            crate::edit_bytes::Outcome::Close => self.edit_bytes = None,
+            crate::edit_bytes::Outcome::Save => self.save_edit_bytes(),
+            crate::edit_bytes::Outcome::Consumed => {}
+        }
+    }
+
+    /// Write the byte editor's bytes back into the active buffer and save. Bytes
+    /// are decoded lossily to UTF-8 for the text buffer.
+    fn save_edit_bytes(&mut self) {
+        let Some(bytes) = self.edit_bytes.as_ref().map(|h| h.to_bytes().to_vec()) else {
+            return;
+        };
+        let text = String::from_utf8_lossy(&bytes).into_owned();
+        if let Some(tab) = self.editor.active_tab_mut() {
+            tab.editor.set_content(&text);
+            tab.dirty = true;
+        }
+        if let Some(hex) = self.edit_bytes.as_mut() {
+            hex.mark_saved();
         }
         self.run_action("file.save");
     }

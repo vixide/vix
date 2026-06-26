@@ -820,6 +820,56 @@ fn edit_outline_opens_indents_and_saves() {
 }
 
 #[test]
+fn edit_json_opens_edits_and_saves() {
+    let dir = unique_dir("ejson");
+    let file = dir.join("data.json");
+    fs::write(&file, "{\n  \"a\": 1\n}\n").unwrap();
+
+    let mut app = app_at(&dir);
+    app.open_initial(&file.clone());
+    app.run_action("tools.edit_json");
+    assert!(app.edit_value.is_some(), "JSON editor opened");
+
+    app.on_key(keycode(KeyCode::Down)); // select "a"
+    app.on_key(keycode(KeyCode::Enter)); // edit value
+    app.on_key(keycode(KeyCode::Backspace));
+    app.on_key(key('2'));
+    app.on_key(keycode(KeyCode::Enter)); // commit
+    app.on_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+
+    let saved = fs::read_to_string(&file).unwrap();
+    assert!(saved.contains("\"a\": 2"), "value edit persisted; got: {saved:?}");
+
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(app.edit_value.is_none(), "Esc closes the JSON editor");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn edit_bytes_opens_overwrites_and_saves() {
+    let dir = unique_dir("ebytes");
+    let file = dir.join("b.txt");
+    fs::write(&file, "hello").unwrap();
+
+    let mut app = app_at(&dir);
+    app.open_initial(&file.clone());
+    app.run_action("tools.edit_bytes");
+    assert!(app.edit_bytes.is_some(), "byte editor opened");
+
+    // Overwrite the first byte 'h' (0x68) with 0x41 = 'A' by typing "41".
+    app.on_key(key('4'));
+    app.on_key(key('1'));
+    app.on_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+
+    let saved = fs::read_to_string(&file).unwrap();
+    assert!(saved.starts_with("Aello"), "byte overwrite persisted; got: {saved:?}");
+
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(app.edit_bytes.is_none(), "Esc closes the byte editor");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn smart_home_toggles_first_nonblank_and_column0() {
     let dir = unique_dir("smarthome");
     let file = dir.join("h.txt");
