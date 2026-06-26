@@ -48,6 +48,8 @@ pub mod icon {
     pub const CODE: &str = "\u{f121}";
     /// Symbolic link (Octicons `nf-oct-link`).
     pub const LINK: &str = "\u{f44c}";
+    /// Bulleted list / outline (Font Awesome `nf-fa-list`).
+    pub const LIST: &str = "\u{f03a}";
 }
 
 /// Pick a file icon from a path's extension.

@@ -206,6 +206,9 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.edit_table.is_some() {
         draw_edit_table(app, frame, area);
     }
+    if app.edit_outline.is_some() {
+        draw_edit_outline(app, frame, area);
+    }
     if app.x11_panel.is_some() {
         draw_x11_panel(app, frame, area);
     }
@@ -2511,6 +2514,64 @@ fn draw_edit_table(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(table_status_line(grid)), chunks[2]);
 
     app.layout.edit_table = chunks[1];
+}
+
+// One rendered outline line: indentation, a fold marker (▾/▸/·), and the text.
+fn outline_line(tree: &crate::edit_outline::Tree, i: usize, selected: bool) -> Line<'static> {
+    let marker = if tree.has_children(i) {
+        if tree.is_collapsed(i) { "▸ " } else { "▾ " }
+    } else {
+        "· "
+    };
+    let text = format!("{}{marker}{}", "  ".repeat(tree.level(i)), tree.text(i));
+    let style = if selected { theme::selected() } else { theme::base() };
+    Line::from(Span::styled(text, style))
+}
+
+// Render the outline editor overlay: a scrolling tree of items with the selected
+// item highlighted, and a status/hint line.
+fn draw_edit_outline(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.edit_outline.is_none() {
+        return;
+    }
+    frame.render_widget(Clear, area);
+    let dirty = if app.edit_outline.as_ref().is_some_and(crate::edit_outline::Tree::is_dirty) {
+        " *"
+    } else {
+        ""
+    };
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {}{} ", icon::LIST, t!("ui.edit_outline"), dirty));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let body_h = usize::from(chunks[0].height);
+    if let Some(t) = app.edit_outline.as_mut() {
+        t.ensure_visible(body_h);
+    }
+    let tree = app.edit_outline.as_ref().unwrap();
+    let vis = tree.visible();
+    let start = tree.scroll();
+    let mut lines = Vec::with_capacity(body_h);
+    for &i in vis.iter().skip(start).take(body_h) {
+        lines.push(outline_line(tree, i, i == tree.sel()));
+    }
+    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(t!("ui.edit_outline_hint").to_string(), theme::dim()))),
+        chunks[1],
+    );
+
+    app.layout.edit_outline = chunks[0];
 }
 
 fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {

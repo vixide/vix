@@ -752,6 +752,34 @@ fn edit_table_opens_edits_and_saves_csv() {
 }
 
 #[test]
+fn edit_outline_opens_indents_and_saves() {
+    let dir = unique_dir("outline");
+    let file = dir.join("notes.txt");
+    fs::write(&file, "A\nB\n  B1\nC\n").unwrap();
+
+    let mut app = app_at(&dir);
+    app.open_initial(&file.clone());
+
+    app.run_action("tools.edit_outline");
+    assert!(app.edit_outline.is_some(), "outline editor opened on the buffer");
+
+    // Move to B and indent it (with its child B1) under A via Tab.
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Tab));
+
+    // Ctrl+S writes the restructured outline back; indentation is regenerated.
+    app.on_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+    let saved = fs::read_to_string(&file).unwrap();
+    assert_eq!(saved, "A\n  B\n    B1\nC\n", "B indented under A; got: {saved:?}");
+
+    // Esc closes the editor.
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(app.edit_outline.is_none(), "Esc closes the outline editor");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn smart_home_toggles_first_nonblank_and_column0() {
     let dir = unique_dir("smarthome");
     let file = dir.join("h.txt");
