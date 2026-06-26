@@ -340,6 +340,25 @@ fn insert_markdown_snippets_insert_templates() {
 }
 
 #[test]
+fn insert_html_snippets_insert_templates() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.insert.html.headline1");
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "<h1>Headline</h1>");
+
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.insert.html.link");
+    assert!(
+        app.editor.active_tab().unwrap().text().contains("<a href=\"https://www.example.com\">Example</a>"),
+        "link snippet inserted"
+    );
+
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.insert.html.table");
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains("<table>") && text.contains("<th>x</th>"), "table snippet inserted");
+}
+
+#[test]
 fn select_all_action_selects_whole_buffer() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "hello");

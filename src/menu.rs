@@ -225,10 +225,10 @@ const VIEW_EDITOR: &[Item] = &[
 /// after `view.keymap:`. Kept in sync with `crate::keymap_model::KEYMAPS` (a unit
 /// test guards the ids).
 const VIEW_KEYMAP: &[Item] = &[
-    Item::leaf("Apple", "view.keymap:apple", ""),
-    Item::leaf("macOS VSCode", "view.keymap:vscode", ""),
-    Item::leaf("Emacs", "view.keymap:emacs", ""),
-    Item::leaf("Vim", "view.keymap:vim", ""),
+    Item::leaf("menu.name.apple", "view.keymap:apple", ""),
+    Item::leaf("menu.name.vscode", "view.keymap:vscode", ""),
+    Item::leaf("menu.name.emacs", "view.keymap:emacs", ""),
+    Item::leaf("menu.name.vim", "view.keymap:vim", ""),
 ];
 
 const VIX: &[Item] = &[
@@ -257,9 +257,21 @@ const TOOLS_INSERT_UUID: &[Item] = &[
 /// ZID sizes, grouped under Tools → Insert → ZID. Labels show the bit width
 /// and the resulting hex length.
 const TOOLS_INSERT_ZID: &[Item] = &[
-    Item::leaf("128 bit = 32 hex", "tools.insert.zid.128", ""),
-    Item::leaf("256 bit = 64 hex", "tools.insert.zid.256", ""),
-    Item::leaf("512 bit = 128 hex", "tools.insert.zid.512", ""),
+    Item::leaf("menu.item.tools.insert.zid.128", "tools.insert.zid.128", ""),
+    Item::leaf("menu.item.tools.insert.zid.256", "tools.insert.zid.256", ""),
+    Item::leaf("menu.item.tools.insert.zid.512", "tools.insert.zid.512", ""),
+];
+
+/// HTML snippets, grouped under Tools → Insert → HTML. Each inserts a small HTML
+/// template at the cursor. The item labels are shared with the Markdown submenu
+/// (same display text), so they reuse the `…insert.markdown.*` label keys.
+const TOOLS_INSERT_HTML: &[Item] = &[
+    Item::leaf("menu.item.tools.insert.markdown.headline1", "tools.insert.html.headline1", ""),
+    Item::leaf("menu.item.tools.insert.markdown.headline2", "tools.insert.html.headline2", ""),
+    Item::leaf("menu.item.tools.insert.markdown.headline3", "tools.insert.html.headline3", ""),
+    Item::leaf("menu.item.tools.insert.markdown.link", "tools.insert.html.link", ""),
+    Item::leaf("menu.item.tools.insert.markdown.list", "tools.insert.html.list", ""),
+    Item::leaf("menu.item.tools.insert.markdown.table", "tools.insert.html.table", ""),
 ];
 
 /// Markdown snippets, grouped under Tools → Insert → Markdown. Each inserts a
@@ -278,6 +290,7 @@ const TOOLS_INSERT_MARKDOWN: &[Item] = &[
 const TOOLS_INSERT: &[Item] = &[
     Item::sub("menu.item.tools.insert.uuid", TOOLS_INSERT_UUID),
     Item::sub("menu.item.tools.insert.zid", TOOLS_INSERT_ZID),
+    Item::sub("menu.name.html", TOOLS_INSERT_HTML),
     Item::sub("menu.item.tools.insert.markdown", TOOLS_INSERT_MARKDOWN),
 ];
 
@@ -286,12 +299,13 @@ const TOOLS_INSERT: &[Item] = &[
 const TOOLS_CHECKSUM: &[Item] = &[
     Item::leaf("menu.item.tools.checksum.sha256", "tools.checksum.sha256", ""),
     Item::leaf("menu.item.tools.checksum.sha512", "tools.checksum.sha512", ""),
-    Item::leaf("MD5", "tools.checksum.md5", ""),
-    Item::leaf("CRC32", "tools.checksum.crc32", ""),
+    Item::leaf("menu.name.md5", "tools.checksum.md5", ""),
+    Item::leaf("menu.name.crc32", "tools.checksum.crc32", ""),
 ];
 
 // Tools → Convert: each entry converts the selection (or whole buffer). Format
-// names (CSV/TSV/JSON/…) are shown literally; only Encode/Decode are translated.
+// names (CSV/TSV/JSON/…) route through shared `menu.name.*` keys that hold the
+// (locale-neutral) name; only Encode/Decode carry descriptive translations.
 const TOOLS_CONVERT_BASE64: &[Item] = &[
     Item::leaf("menu.item.tools.convert.encode", "tools.convert.base64.encode", ""),
     Item::leaf("menu.item.tools.convert.decode", "tools.convert.base64.decode", ""),
@@ -301,49 +315,49 @@ const TOOLS_CONVERT_URL: &[Item] = &[
     Item::leaf("menu.item.tools.convert.decode", "tools.convert.url.decode", ""),
 ];
 const TOOLS_CONVERT_CSV: &[Item] = &[
-    Item::leaf("JSON", "tools.convert.csv.json", ""),
-    Item::leaf("TSV", "tools.convert.csv.tsv", ""),
+    Item::leaf("menu.name.json", "tools.convert.csv.json", ""),
+    Item::leaf("menu.name.tsv", "tools.convert.csv.tsv", ""),
 ];
 const TOOLS_CONVERT_TSV: &[Item] = &[
-    Item::leaf("CSV", "tools.convert.tsv.csv", ""),
-    Item::leaf("JSON", "tools.convert.tsv.json", ""),
+    Item::leaf("menu.name.csv", "tools.convert.tsv.csv", ""),
+    Item::leaf("menu.name.json", "tools.convert.tsv.json", ""),
 ];
 const TOOLS_CONVERT_JSON: &[Item] = &[
-    Item::leaf("CSV", "tools.convert.json.csv", ""),
-    Item::leaf("TSV", "tools.convert.json.tsv", ""),
-    Item::leaf("YAML", "tools.convert.json.yaml", ""),
-    Item::leaf("TOML", "tools.convert.json.toml", ""),
+    Item::leaf("menu.name.csv", "tools.convert.json.csv", ""),
+    Item::leaf("menu.name.tsv", "tools.convert.json.tsv", ""),
+    Item::leaf("menu.name.yaml", "tools.convert.json.yaml", ""),
+    Item::leaf("menu.name.toml", "tools.convert.json.toml", ""),
 ];
-const TOOLS_CONVERT_TOML: &[Item] = &[Item::leaf("JSON", "tools.convert.toml.json", "")];
-const TOOLS_CONVERT_YAML: &[Item] = &[Item::leaf("JSON", "tools.convert.yaml.json", "")];
+const TOOLS_CONVERT_TOML: &[Item] = &[Item::leaf("menu.name.json", "tools.convert.toml.json", "")];
+const TOOLS_CONVERT_YAML: &[Item] = &[Item::leaf("menu.name.json", "tools.convert.yaml.json", "")];
 const TOOLS_CONVERT_NUMBER: &[Item] = &[
-    Item::leaf("Dec", "tools.convert.number.dec", ""),
-    Item::leaf("Hex", "tools.convert.number.hex", ""),
-    Item::leaf("Bin", "tools.convert.number.bin", ""),
-    Item::leaf("Oct", "tools.convert.number.oct", ""),
+    Item::leaf("menu.name.dec", "tools.convert.number.dec", ""),
+    Item::leaf("menu.name.hex", "tools.convert.number.hex", ""),
+    Item::leaf("menu.name.bin", "tools.convert.number.bin", ""),
+    Item::leaf("menu.name.oct", "tools.convert.number.oct", ""),
 ];
-const TOOLS_CONVERT_HTML: &[Item] = &[Item::leaf("Markdown", "tools.convert.html.markdown", "")];
-const TOOLS_CONVERT_MARKDOWN: &[Item] = &[Item::leaf("HTML", "tools.convert.markdown.html", "")];
+const TOOLS_CONVERT_HTML: &[Item] = &[Item::leaf("menu.name.markdown", "tools.convert.html.markdown", "")];
+const TOOLS_CONVERT_MARKDOWN: &[Item] = &[Item::leaf("menu.name.html", "tools.convert.markdown.html", "")];
 
 /// In-place reformatters, grouped under Tools → Format.
 const TOOLS_FORMAT: &[Item] = &[
     Item::leaf("menu.item.tools.format.json_pretty", "tools.format.json_pretty", ""),
     Item::leaf("menu.item.tools.format.json_minify", "tools.format.json_minify", ""),
-    Item::leaf("YAML", "tools.format.yaml", ""),
-    Item::leaf("TOML", "tools.format.toml", ""),
+    Item::leaf("menu.name.yaml", "tools.format.yaml", ""),
+    Item::leaf("menu.name.toml", "tools.format.toml", ""),
 ];
 
 /// Converters, grouped under Tools → Convert.
 const TOOLS_CONVERT: &[Item] = &[
-    Item::sub("Base64", TOOLS_CONVERT_BASE64),
-    Item::sub("CSV", TOOLS_CONVERT_CSV),
-    Item::sub("HTML", TOOLS_CONVERT_HTML),
-    Item::sub("JSON", TOOLS_CONVERT_JSON),
-    Item::sub("Markdown", TOOLS_CONVERT_MARKDOWN),
-    Item::sub("TOML", TOOLS_CONVERT_TOML),
-    Item::sub("TSV", TOOLS_CONVERT_TSV),
-    Item::sub("URL", TOOLS_CONVERT_URL),
-    Item::sub("YAML", TOOLS_CONVERT_YAML),
+    Item::sub("menu.name.base64", TOOLS_CONVERT_BASE64),
+    Item::sub("menu.name.csv", TOOLS_CONVERT_CSV),
+    Item::sub("menu.name.html", TOOLS_CONVERT_HTML),
+    Item::sub("menu.name.json", TOOLS_CONVERT_JSON),
+    Item::sub("menu.name.markdown", TOOLS_CONVERT_MARKDOWN),
+    Item::sub("menu.name.toml", TOOLS_CONVERT_TOML),
+    Item::sub("menu.name.tsv", TOOLS_CONVERT_TSV),
+    Item::sub("menu.name.url", TOOLS_CONVERT_URL),
+    Item::sub("menu.name.yaml", TOOLS_CONVERT_YAML),
     Item::sub("menu.item.tools.convert.number", TOOLS_CONVERT_NUMBER),
     SEP,
     Item::leaf("menu.item.tools.convert.jwt", "tools.convert.jwt", ""),
