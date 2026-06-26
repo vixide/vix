@@ -1,6 +1,33 @@
-# The MUSL static target links with `musl-gcc`. This linker setting must live in
-# cargo's config (here), not in `Cargo.toml`: a `[target.<triple>].linker` key in
-# the manifest is ignored with an "unused manifest key" warning, because the
-# manifest's `[target.*]` tables are only for platform-specific dependencies.
+# Cross-compilation toolchains for the foreign release targets.
+#
+# These settings must live here, not in `Cargo.toml`: a `[target.<triple>].linker`
+# key is ignored in the manifest (it only accepts platform-specific *dependency*
+# tables), and `CC_`/`CXX_`/`AR_` overrides belong to cargo's config. Keeping them
+# here means a plain `cargo build --target <triple>` cross-compiles correctly —
+# the Makefile's `build-windows`/`build-linux` rely on exactly this.
+#
+# On macOS the plain `musl-gcc` wrapper targets the host and cannot produce Linux
+# objects, so vendored C dependencies (libmimalloc-sys, tree-sitter grammars,
+# image codecs) fail to compile without a real cross-toolchain. Install via
+# Homebrew:
+#   brew install mingw-w64                            # Windows (GNU)
+#   brew install FiloSottile/musl-cross/musl-cross    # Linux (MUSL)
+
+# Linux MUSL static target.
 [target.x86_64-unknown-linux-musl]
-linker = "musl-gcc"
+linker = "x86_64-linux-musl-gcc"
+
+# Windows GNU target.
+[target.x86_64-pc-windows-gnu]
+linker = "x86_64-w64-mingw32-gcc"
+
+# Point cc-rs at the matching cross C/C++ compilers and archivers so vendored C
+# code is built for the target rather than the host. (cc-rs accepts the triple
+# with hyphens.)
+[env]
+CC_x86_64-unknown-linux-musl = "x86_64-linux-musl-gcc"
+CXX_x86_64-unknown-linux-musl = "x86_64-linux-musl-g++"
+AR_x86_64-unknown-linux-musl = "x86_64-linux-musl-ar"
+CC_x86_64-pc-windows-gnu = "x86_64-w64-mingw32-gcc"
+CXX_x86_64-pc-windows-gnu = "x86_64-w64-mingw32-g++"
+AR_x86_64-pc-windows-gnu = "x86_64-w64-mingw32-ar"
