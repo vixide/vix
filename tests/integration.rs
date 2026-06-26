@@ -299,7 +299,7 @@ fn checksum_on_long_buffer_keeps_caret_in_range() {
 #[test]
 fn generate_uuid_v4_inserts_a_canonical_uuid() {
     let mut app = app_at(Path::new("."));
-    app.run_action("tools.generate.uuid.v4");
+    app.run_action("tools.insert.uuid.v4");
     let text = app.editor.active_tab().unwrap().text();
     assert_eq!(text.len(), 36, "v4 UUID is 36 chars: {text:?}");
     assert_eq!(text.chars().nth(14), Some('4'), "version digit is 4");
@@ -308,14 +308,35 @@ fn generate_uuid_v4_inserts_a_canonical_uuid() {
 #[test]
 fn generate_zid_sizes_insert_hex_of_the_right_length() {
     let mut app = app_at(Path::new("."));
-    app.run_action("tools.generate.zid.128");
+    app.run_action("tools.insert.zid.128");
     let text = app.editor.active_tab().unwrap().text();
     assert_eq!(text.len(), 32, "128-bit ZID is 32 hex chars: {text:?}");
     assert!(text.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)));
 
     let mut app = app_at(Path::new("."));
-    app.run_action("tools.generate.zid.512");
+    app.run_action("tools.insert.zid.512");
     assert_eq!(app.editor.active_tab().unwrap().text().len(), 128, "512-bit ZID is 128 hex chars");
+}
+
+#[test]
+fn insert_markdown_snippets_insert_templates() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.insert.markdown.headline1");
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "# Headline 1");
+
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.insert.markdown.link");
+    assert!(
+        app.editor.active_tab().unwrap().text().contains("[Example](https://www.example.com)"),
+        "link snippet inserted"
+    );
+
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.insert.markdown.table");
+    assert!(
+        app.editor.active_tab().unwrap().text().contains("|---|---|---|"),
+        "table snippet inserted"
+    );
 }
 
 #[test]

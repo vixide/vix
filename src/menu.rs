@@ -241,31 +241,45 @@ const VIX: &[Item] = &[
     Item::leaf("menu.item.file.quit", "file.quit", "Ctrl Q"),
 ];
 
-/// UUID versions, grouped under Tools → Generate → UUID. Labels are the bare
+/// UUID versions, grouped under Tools → Insert → UUID. Labels are the bare
 /// version digit (RFC 4122 / RFC 9562 v1–v8).
-const TOOLS_GENERATE_UUID: &[Item] = &[
-    Item::leaf("1 = Unsortable Time Count MAC", "tools.generate.uuid.v1", ""),
-    Item::leaf("2 = DCE Security", "tools.generate.uuid.v2", ""),
-    Item::leaf("3 = MD5 Name", "tools.generate.uuid.v3", ""),
-    Item::leaf("4 = Random", "tools.generate.uuid.v4", ""),
-    Item::leaf("5 = SHA-1 Name", "tools.generate.uuid.v5", ""),
-    Item::leaf("6 = Sortable Time Count MAC", "tools.generate.uuid.v6", ""),
-    Item::leaf("7 = Time + Random", "tools.generate.uuid.v7", ""),
-    Item::leaf("8 = Custom Placeholder", "tools.generate.uuid.v8", ""),
+const TOOLS_INSERT_UUID: &[Item] = &[
+    Item::leaf("1 = Unsortable Time Count MAC", "tools.insert.uuid.v1", ""),
+    Item::leaf("2 = DCE Security", "tools.insert.uuid.v2", ""),
+    Item::leaf("3 = MD5 Name", "tools.insert.uuid.v3", ""),
+    Item::leaf("4 = Random", "tools.insert.uuid.v4", ""),
+    Item::leaf("5 = SHA-1 Name", "tools.insert.uuid.v5", ""),
+    Item::leaf("6 = Sortable Time Count MAC", "tools.insert.uuid.v6", ""),
+    Item::leaf("7 = Time + Random", "tools.insert.uuid.v7", ""),
+    Item::leaf("8 = Custom Placeholder", "tools.insert.uuid.v8", ""),
 ];
 
-/// ZID sizes, grouped under Tools → Generate → ZID. Labels show the bit width
+/// ZID sizes, grouped under Tools → Insert → ZID. Labels show the bit width
 /// and the resulting hex length.
-const TOOLS_GENERATE_ZID: &[Item] = &[
-    Item::leaf("128 bit = 32 hex", "tools.generate.zid.128", ""),
-    Item::leaf("256 bit = 64 hex", "tools.generate.zid.256", ""),
-    Item::leaf("512 bit = 128 hex", "tools.generate.zid.512", ""),
+const TOOLS_INSERT_ZID: &[Item] = &[
+    Item::leaf("128 bit = 32 hex", "tools.insert.zid.128", ""),
+    Item::leaf("256 bit = 64 hex", "tools.insert.zid.256", ""),
+    Item::leaf("512 bit = 128 hex", "tools.insert.zid.512", ""),
 ];
 
-/// Generators, grouped under Tools → Generate.
-const TOOLS_GENERATE: &[Item] = &[
-    Item::sub("menu.item.tools.generate.uuid", TOOLS_GENERATE_UUID),
-    Item::sub("menu.item.tools.generate.zid", TOOLS_GENERATE_ZID),
+/// Markdown snippets, grouped under Tools → Insert → Markdown. Each inserts a
+/// small Markdown template at the cursor.
+const TOOLS_INSERT_MARKDOWN: &[Item] = &[
+    Item::leaf("Headline 1", "tools.insert.markdown.headline1", ""),
+    Item::leaf("Headline 2", "tools.insert.markdown.headline2", ""),
+    Item::leaf("Headline 3", "tools.insert.markdown.headline3", ""),
+    Item::leaf("Link", "tools.insert.markdown.link", ""),
+    Item::leaf("List", "tools.insert.markdown.list", ""),
+    Item::leaf("Table", "tools.insert.markdown.table", ""),
+    Item::leaf("Todos", "tools.insert.markdown.todos", ""),
+];
+
+/// Insert helpers, grouped under Tools → Insert (key still `…generate` for the
+/// existing UUID/ZID action namespace).
+const TOOLS_INSERT: &[Item] = &[
+    Item::sub("menu.item.tools.insert.uuid", TOOLS_INSERT_UUID),
+    Item::sub("menu.item.tools.insert.zid", TOOLS_INSERT_ZID),
+    Item::sub("Markdown", TOOLS_INSERT_MARKDOWN),
 ];
 
 /// Checksum digests, grouped under Tools → Checksum. Each replaces the selection
@@ -358,7 +372,7 @@ const TOOLS: &[Item] = &[
     SEP,
     Item::sub("menu.item.tools.about", TOOLS_ABOUT),
     Item::sub("menu.item.tools.lsp", TOOLS_LSP),
-    Item::sub("menu.item.tools.generate", TOOLS_GENERATE),
+    Item::sub("menu.item.tools.insert", TOOLS_INSERT),
     Item::sub("menu.item.tools.checksum", TOOLS_CHECKSUM),
     Item::sub("menu.item.tools.convert", TOOLS_CONVERT),
     Item::sub("menu.item.tools.format", TOOLS_FORMAT),
@@ -949,23 +963,23 @@ mod tests {
         let gen_idx = menus()[tools]
             .items
             .iter()
-            .position(|it| it.label == "menu.item.tools.generate")
+            .position(|it| it.label == "menu.item.tools.insert")
             .expect("generate item");
         (tools, gen_idx)
     }
 
-    /// Tools → Generate → UUID offers exactly v1…v8, dispatching the matching
-    /// `tools.generate.uuid.vN` actions.
+    /// Tools → Insert → UUID offers exactly v1…v8, dispatching the matching
+    /// `tools.insert.uuid.vN` actions.
     #[test]
     fn generate_uuid_submenu_lists_all_versions() {
-        let actions: Vec<&str> = TOOLS_GENERATE_UUID.iter().map(|it| it.action).collect();
+        let actions: Vec<&str> = TOOLS_INSERT_UUID.iter().map(|it| it.action).collect();
         assert_eq!(
             actions,
-            (1..=8).map(|n| format!("tools.generate.uuid.v{n}")).collect::<Vec<_>>()
+            (1..=8).map(|n| format!("tools.insert.uuid.v{n}")).collect::<Vec<_>>()
         );
     }
 
-    /// Keyboard navigation can descend all three levels: Tools → Generate → UUID
+    /// Keyboard navigation can descend all three levels: Tools → Insert → UUID
     /// → "4" and `enter` returns the v4 action; `left` walks back up level by level.
     #[test]
     fn three_level_navigation_reaches_uuid_leaf() {
@@ -983,7 +997,7 @@ mod tests {
         for _ in 0..4 {
             m.down();
         }
-        assert_eq!(m.enter(), Some("tools.generate.uuid.v4"));
+        assert_eq!(m.enter(), Some("tools.insert.uuid.v4"));
         // Walking left collapses one level at a time.
         m.left();
         assert!(!m.subsub_open && m.sub_open);
@@ -1008,7 +1022,7 @@ mod tests {
         let other = menus()[tools]
             .items
             .iter()
-            .position(|it| it.has_submenu() && it.label != "menu.item.tools.generate")
+            .position(|it| it.has_submenu() && it.label != "menu.item.tools.insert")
             .expect("another submenu item");
         m.highlight_item(other);
         m.right();

@@ -274,9 +274,9 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.edit_outline", "tools.edit_outline"),
     ("cmd.run_command", "tools.run_command"),
     ("cmd.cancel_command", "tools.cancel_command"),
-    ("cmd.generate_uuid_v4", "tools.generate.uuid.v4"),
-    ("cmd.generate_uuid_v7", "tools.generate.uuid.v7"),
-    ("cmd.generate_zid", "tools.generate.zid.256"),
+    ("cmd.generate_uuid_v4", "tools.insert.uuid.v4"),
+    ("cmd.generate_uuid_v7", "tools.insert.uuid.v7"),
+    ("cmd.generate_zid", "tools.insert.zid.256"),
     ("cmd.next_tab", "tab.next"),
     ("cmd.prev_tab", "tab.prev"),
 ];

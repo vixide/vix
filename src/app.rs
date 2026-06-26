@@ -2179,23 +2179,24 @@ impl App {
         true
     }
 
-    /// Dispatch a text-transforming tool action (`tools.generate.*`,
+    /// Dispatch a text-transforming tool action (`tools.insert.*`,
     /// `tools.checksum.*`, `tools.convert.*`, `tools.format.*`). Returns `true`
     /// if `action` was handled. Extracted from [`App::run_action`] to keep that
     /// function within the line limit.
     fn run_text_tool_action(&mut self, action: &str) -> bool {
         match action {
-            "tools.generate.uuid.v1" => self.insert_generated(&crate::uuid_tool::v1()),
-            "tools.generate.uuid.v2" => self.insert_generated(&crate::uuid_tool::v2()),
-            "tools.generate.uuid.v3" => self.insert_generated(&crate::uuid_tool::v3()),
-            "tools.generate.uuid.v4" => self.insert_generated(&crate::uuid_tool::v4()),
-            "tools.generate.uuid.v5" => self.insert_generated(&crate::uuid_tool::v5()),
-            "tools.generate.uuid.v6" => self.insert_generated(&crate::uuid_tool::v6()),
-            "tools.generate.uuid.v7" => self.insert_generated(&crate::uuid_tool::v7()),
-            "tools.generate.uuid.v8" => self.insert_generated(&crate::uuid_tool::v8()),
-            "tools.generate.zid.128" => self.insert_generated(&crate::zid_tool::generate(16)),
-            "tools.generate.zid.256" => self.insert_generated(&crate::zid_tool::generate(32)),
-            "tools.generate.zid.512" => self.insert_generated(&crate::zid_tool::generate(64)),
+            "tools.insert.uuid.v1" => self.insert_content(&crate::uuid_tool::v1()),
+            "tools.insert.uuid.v2" => self.insert_content(&crate::uuid_tool::v2()),
+            "tools.insert.uuid.v3" => self.insert_content(&crate::uuid_tool::v3()),
+            "tools.insert.uuid.v4" => self.insert_content(&crate::uuid_tool::v4()),
+            "tools.insert.uuid.v5" => self.insert_content(&crate::uuid_tool::v5()),
+            "tools.insert.uuid.v6" => self.insert_content(&crate::uuid_tool::v6()),
+            "tools.insert.uuid.v7" => self.insert_content(&crate::uuid_tool::v7()),
+            "tools.insert.uuid.v8" => self.insert_content(&crate::uuid_tool::v8()),
+            "tools.insert.zid.128" => self.insert_content(&crate::zid_tool::generate(16)),
+            "tools.insert.zid.256" => self.insert_content(&crate::zid_tool::generate(32)),
+            "tools.insert.zid.512" => self.insert_content(&crate::zid_tool::generate(64)),
+            a if self.insert_markdown(a) => {}
             "tools.checksum.sha256" => {
                 self.transform_selection_or_buffer(crate::checksum_tool::sha256_hex);
             }
@@ -2673,11 +2674,30 @@ impl App {
 
     /// Insert generator output (a UUID, ZID, …) at the cursor in the active
     /// editor, reporting it in the status line. No-op when no buffer is editable.
-    fn insert_generated(&mut self, text: &str) {
+    fn insert_content(&mut self, text: &str) {
         let area = self.layout.editor;
         if self.editor.insert_str(text, area) {
             self.status = t!("status.generated", text = text).to_string();
         }
+    }
+
+    /// Insert a Markdown snippet for a `tools.insert.markdown.*` action at the
+    /// cursor. Returns `true` if `action` was a known Markdown snippet.
+    fn insert_markdown(&mut self, action: &str) -> bool {
+        let snippet = match action {
+            "tools.insert.markdown.headline1" => "# Headline 1\n\n",
+            "tools.insert.markdown.headline2" => "## Headline 2\n\n",
+            "tools.insert.markdown.headline3" => "### Headline 3\n\n",
+            "tools.insert.markdown.link" => "[Example](https://www.example.com)",
+            "tools.insert.markdown.list" => "- Item\n- Item\n- Item\n\n",
+            "tools.insert.markdown.table" => {
+                "| x | x | x |\n|---|---|---|\n| x | x | x |\n| x | x | x |\n\n"
+            }
+            "tools.insert.markdown.todos" => "- [ ] Todo\n- [ ] Todo\n- [ ] Todo\n\n",
+            _ => return false,
+        };
+        self.insert_content(snippet);
+        true
     }
 
     // ----- Color Converter ------------------------------------------------
