@@ -545,7 +545,7 @@ pub struct Layout {
     pub ascii_panel: Rect,
     /// Body (data-rows) rectangle of the open table editor, used to size paging
     /// and the scroll window.
-    pub table_editor: Rect,
+    pub edit_table: Rect,
     /// Row-list rectangle of the open X11 color palette, so a click can hit-test
     /// which row was picked.
     pub x11_panel: Rect,
@@ -668,7 +668,7 @@ pub struct App {
     /// ASCII panel (reference table) overlay, when open.
     pub ascii_panel: Option<AsciiPanel>,
     /// Table editor (CSV/TSV spreadsheet) overlay, when open.
-    pub table_editor: Option<crate::table_editor::Grid>,
+    pub edit_table: Option<crate::edit_table::Grid>,
     /// X11 color palette overlay, when open.
     pub x11_panel: Option<X11Panel>,
     /// HTML character palette overlay, when open.
@@ -926,7 +926,7 @@ impl App {
             palette: None, search: None, query_replace: None, workspace_search: None,
             prompt: None, paste: None, confirm: None, unsaved: None, spell_suggest: None,
             context_menu: None, git_panel: None, branch_chooser: None, recent_chooser: None,
-            location_chooser: None, nerd_palette: None, ascii_panel: None, table_editor: None,
+            location_chooser: None, nerd_palette: None, ascii_panel: None, edit_table: None,
             x11_panel: None,
             html_panel: None, system_info: None, dashboard: None, dashboard_rx: None,
             outline: None, welcome: None, file_info: None, text_info: None,
@@ -1248,7 +1248,7 @@ impl App {
                 }
             };
         }
-        panel!(table_editor, table_editor_key);
+        panel!(edit_table, edit_table_key);
         panel!(recent_chooser, recent_key);
         panel!(location_chooser, location_key);
         panel!(nerd_palette, nerd_key);
@@ -1819,7 +1819,7 @@ impl App {
             }
             "tools.nerd_palette" => self.open_nerd_palette(),
             "tools.ascii" => self.open_ascii_panel(),
-            "tools.table_editor" => self.open_table_editor(),
+            "tools.edit_table" => self.open_edit_table(),
             "tools.x11_colors" => self.open_x11_panel(),
             "tools.html_chars" => self.open_html_panel(),
             "tools.system_info" => self.open_system_info(),
@@ -6663,13 +6663,13 @@ impl App {
 
     /// Open the table editor on the active buffer, parsed as CSV or TSV (per the
     /// file extension; CSV by default). Warns when there is no editable buffer.
-    fn open_table_editor(&mut self) {
+    fn open_edit_table(&mut self) {
         let Some(tab) = self.editor.active_tab() else {
-            self.messages.warn(t!("msg.table_editor_no_buffer").to_string());
+            self.messages.warn(t!("msg.edit_table_no_buffer").to_string());
             return;
         };
         if tab.is_image() {
-            self.messages.warn(t!("msg.table_editor_no_buffer").to_string());
+            self.messages.warn(t!("msg.edit_table_no_buffer").to_string());
             return;
         }
         let tsv = tab
@@ -6679,34 +6679,34 @@ impl App {
             .and_then(|e| e.to_str())
             .is_some_and(|e| e.eq_ignore_ascii_case("tsv"));
         let text = tab.text();
-        self.table_editor = Some(crate::table_editor::Grid::from_text(&text, tsv));
+        self.edit_table = Some(crate::edit_table::Grid::from_text(&text, tsv));
     }
 
     /// Route a key to the open table editor and act on its outcome.
-    fn table_editor_key(&mut self, key: KeyEvent) {
-        let page = usize::from(self.layout.table_editor.height).saturating_sub(1).max(1);
-        let outcome = match self.table_editor.as_mut() {
+    fn edit_table_key(&mut self, key: KeyEvent) {
+        let page = usize::from(self.layout.edit_table.height).saturating_sub(1).max(1);
+        let outcome = match self.edit_table.as_mut() {
             Some(grid) => grid.handle_key(key, page),
             None => return,
         };
         match outcome {
-            crate::table_editor::Outcome::Close => self.table_editor = None,
-            crate::table_editor::Outcome::Save => self.save_table_editor(),
-            crate::table_editor::Outcome::Consumed => {}
+            crate::edit_table::Outcome::Close => self.edit_table = None,
+            crate::edit_table::Outcome::Save => self.save_edit_table(),
+            crate::edit_table::Outcome::Consumed => {}
         }
     }
 
     /// Serialize the table editor back into the active buffer and save it,
     /// reusing the normal file-save flow (which handles Save As when untitled).
-    fn save_table_editor(&mut self) {
-        let Some(text) = self.table_editor.as_ref().map(crate::table_editor::Grid::to_text) else {
+    fn save_edit_table(&mut self) {
+        let Some(text) = self.edit_table.as_ref().map(crate::edit_table::Grid::to_text) else {
             return;
         };
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_content(&text);
             tab.dirty = true;
         }
-        if let Some(grid) = self.table_editor.as_mut() {
+        if let Some(grid) = self.edit_table.as_mut() {
             grid.mark_saved();
         }
         self.run_action("file.save");

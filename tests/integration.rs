@@ -716,7 +716,7 @@ fn open_edit_save_round_trip() {
 }
 
 #[test]
-fn table_editor_opens_edits_and_saves_csv() {
+fn edit_table_opens_edits_and_saves_csv() {
     let dir = unique_dir("table");
     let file = dir.join("data.csv");
     fs::write(&file, "name,age\nalice,30\nbob,25\n").unwrap();
@@ -724,8 +724,8 @@ fn table_editor_opens_edits_and_saves_csv() {
     let mut app = app_at(&dir);
     app.open_initial(&file.clone());
 
-    app.run_action("tools.table_editor");
-    assert!(app.table_editor.is_some(), "table editor opened on the CSV buffer");
+    app.run_action("tools.edit_table");
+    assert!(app.edit_table.is_some(), "table editor opened on the CSV buffer");
 
     // Move to alice's age cell (row 1, col 1) and change 30 -> 31.
     app.on_key(keycode(KeyCode::Down));
@@ -746,7 +746,7 @@ fn table_editor_opens_edits_and_saves_csv() {
 
     // Esc closes the editor.
     app.on_key(keycode(KeyCode::Esc));
-    assert!(app.table_editor.is_none(), "Esc closes the table editor");
+    assert!(app.edit_table.is_none(), "Esc closes the table editor");
 
     fs::remove_dir_all(&dir).ok();
 }
