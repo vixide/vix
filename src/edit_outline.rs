@@ -1,6 +1,6 @@
 //! The outline editor: hierarchical hide/show and restructuring for prose text.
 //!
-//! Vix's Tools menu offers an *Outline Editor* that reads the active buffer as an
+//! Vix's Tools menu offers an *Edit Outline* command that reads the active buffer as an
 //! indented outline — each line is an item whose **level** is its indentation
 //! depth (tabs, or two spaces per level). It behaves like code folding, but for
 //! prose, and like a file explorer's tree: collapse an item to hide its
