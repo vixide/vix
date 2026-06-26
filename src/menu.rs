@@ -244,14 +244,14 @@ const VIX: &[Item] = &[
 /// UUID versions, grouped under Tools → Insert → UUID. Labels are the bare
 /// version digit (RFC 4122 / RFC 9562 v1–v8).
 const TOOLS_INSERT_UUID: &[Item] = &[
-    Item::leaf("1 = Unsortable Time Count MAC", "tools.insert.uuid.v1", ""),
-    Item::leaf("2 = DCE Security", "tools.insert.uuid.v2", ""),
-    Item::leaf("3 = MD5 Name", "tools.insert.uuid.v3", ""),
-    Item::leaf("4 = Random", "tools.insert.uuid.v4", ""),
-    Item::leaf("5 = SHA-1 Name", "tools.insert.uuid.v5", ""),
-    Item::leaf("6 = Sortable Time Count MAC", "tools.insert.uuid.v6", ""),
-    Item::leaf("7 = Time + Random", "tools.insert.uuid.v7", ""),
-    Item::leaf("8 = Custom Placeholder", "tools.insert.uuid.v8", ""),
+    Item::leaf("menu.item.tools.insert.uuid.v1", "tools.insert.uuid.v1", ""),
+    Item::leaf("menu.item.tools.insert.uuid.v2", "tools.insert.uuid.v2", ""),
+    Item::leaf("menu.item.tools.insert.uuid.v3", "tools.insert.uuid.v3", ""),
+    Item::leaf("menu.item.tools.insert.uuid.v4", "tools.insert.uuid.v4", ""),
+    Item::leaf("menu.item.tools.insert.uuid.v5", "tools.insert.uuid.v5", ""),
+    Item::leaf("menu.item.tools.insert.uuid.v6", "tools.insert.uuid.v6", ""),
+    Item::leaf("menu.item.tools.insert.uuid.v7", "tools.insert.uuid.v7", ""),
+    Item::leaf("menu.item.tools.insert.uuid.v8", "tools.insert.uuid.v8", ""),
 ];
 
 /// ZID sizes, grouped under Tools → Insert → ZID. Labels show the bit width
@@ -265,21 +265,20 @@ const TOOLS_INSERT_ZID: &[Item] = &[
 /// Markdown snippets, grouped under Tools → Insert → Markdown. Each inserts a
 /// small Markdown template at the cursor.
 const TOOLS_INSERT_MARKDOWN: &[Item] = &[
-    Item::leaf("Headline 1", "tools.insert.markdown.headline1", ""),
-    Item::leaf("Headline 2", "tools.insert.markdown.headline2", ""),
-    Item::leaf("Headline 3", "tools.insert.markdown.headline3", ""),
-    Item::leaf("Link", "tools.insert.markdown.link", ""),
-    Item::leaf("List", "tools.insert.markdown.list", ""),
-    Item::leaf("Table", "tools.insert.markdown.table", ""),
-    Item::leaf("Todos", "tools.insert.markdown.todos", ""),
+    Item::leaf("menu.item.tools.insert.markdown.headline1", "tools.insert.markdown.headline1", ""),
+    Item::leaf("menu.item.tools.insert.markdown.headline2", "tools.insert.markdown.headline2", ""),
+    Item::leaf("menu.item.tools.insert.markdown.headline3", "tools.insert.markdown.headline3", ""),
+    Item::leaf("menu.item.tools.insert.markdown.link", "tools.insert.markdown.link", ""),
+    Item::leaf("menu.item.tools.insert.markdown.list", "tools.insert.markdown.list", ""),
+    Item::leaf("menu.item.tools.insert.markdown.table", "tools.insert.markdown.table", ""),
+    Item::leaf("menu.item.tools.insert.markdown.todos", "tools.insert.markdown.todos", ""),
 ];
 
-/// Insert helpers, grouped under Tools → Insert (key still `…generate` for the
-/// existing UUID/ZID action namespace).
+/// Insert helpers, grouped under Tools → Insert.
 const TOOLS_INSERT: &[Item] = &[
     Item::sub("menu.item.tools.insert.uuid", TOOLS_INSERT_UUID),
     Item::sub("menu.item.tools.insert.zid", TOOLS_INSERT_ZID),
-    Item::sub("Markdown", TOOLS_INSERT_MARKDOWN),
+    Item::sub("menu.item.tools.insert.markdown", TOOLS_INSERT_MARKDOWN),
 ];
 
 /// Checksum digests, grouped under Tools → Checksum. Each replaces the selection
