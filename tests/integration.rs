@@ -870,6 +870,29 @@ fn edit_bytes_opens_overwrites_and_saves() {
 }
 
 #[test]
+fn insert_lorem_and_datetime_presets() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.insert.lorem.words");
+    assert!(
+        app.editor.active_tab().unwrap().text().starts_with("Lorem ipsum"),
+        "lorem words inserted"
+    );
+
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.insert.datetime.epoch");
+    let epoch = app.editor.active_tab().unwrap().text();
+    assert!(
+        !epoch.is_empty() && epoch.chars().all(|c| c.is_ascii_digit()),
+        "epoch is all digits: {epoch:?}"
+    );
+
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.insert.datetime.rfc3339");
+    let rfc = app.editor.active_tab().unwrap().text();
+    assert!(rfc.contains('T') && rfc.contains(':'), "rfc3339 date-time shape: {rfc:?}");
+}
+
+#[test]
 fn smart_home_toggles_first_nonblank_and_column0() {
     let dir = unique_dir("smarthome");
     let file = dir.join("h.txt");

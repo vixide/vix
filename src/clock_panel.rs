@@ -41,6 +41,24 @@ pub fn utc_iso(now: &Zoned) -> String {
     now.timestamp().strftime("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
+/// Local ISO 8601 date-time without offset: `YYYY-MM-DDTHH:MM:SS`.
+#[must_use]
+pub fn iso8601(now: &Zoned) -> String {
+    now.strftime("%Y-%m-%dT%H:%M:%S").to_string()
+}
+
+/// RFC 3339 date-time with the local UTC offset: `YYYY-MM-DDTHH:MM:SS±HH:MM`.
+#[must_use]
+pub fn rfc3339(now: &Zoned) -> String {
+    now.strftime("%Y-%m-%dT%H:%M:%S%:z").to_string()
+}
+
+/// Unix epoch in whole seconds.
+#[must_use]
+pub fn epoch_seconds(now: &Zoned) -> String {
+    now.strftime("%s").to_string()
+}
+
 /// ISO 8601 commercial date: `YYYY-Www-D` (week-numbering year, week 01..53,
 /// day 1=Monday..7=Sunday).
 #[must_use]
