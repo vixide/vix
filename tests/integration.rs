@@ -716,6 +716,42 @@ fn open_edit_save_round_trip() {
 }
 
 #[test]
+fn table_editor_opens_edits_and_saves_csv() {
+    let dir = unique_dir("table");
+    let file = dir.join("data.csv");
+    fs::write(&file, "name,age\nalice,30\nbob,25\n").unwrap();
+
+    let mut app = app_at(&dir);
+    app.open_initial(&file.clone());
+
+    app.run_action("tools.table_editor");
+    assert!(app.table_editor.is_some(), "table editor opened on the CSV buffer");
+
+    // Move to alice's age cell (row 1, col 1) and change 30 -> 31.
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Right));
+    app.on_key(keycode(KeyCode::Enter)); // begin edit, seeded with "30"
+    app.on_key(keycode(KeyCode::Backspace));
+    app.on_key(keycode(KeyCode::Backspace));
+    for c in "31".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter)); // commit
+
+    // Ctrl+S writes the grid back through the normal save flow.
+    app.on_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+    let saved = fs::read_to_string(&file).unwrap();
+    assert!(saved.contains("alice,31"), "edit persisted; got: {saved:?}");
+    assert!(saved.contains("bob,25"), "other rows intact; got: {saved:?}");
+
+    // Esc closes the editor.
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(app.table_editor.is_none(), "Esc closes the table editor");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn smart_home_toggles_first_nonblank_and_column0() {
     let dir = unique_dir("smarthome");
     let file = dir.join("h.txt");

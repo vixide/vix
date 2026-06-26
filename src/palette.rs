@@ -270,6 +270,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.conflict_theirs", "git.conflict_theirs"),
     ("cmd.conflict_both", "git.conflict_both"),
     ("cmd.toggle_calendar", "tools.calendar"),
+    ("cmd.table_editor", "tools.table_editor"),
     ("cmd.run_command", "tools.run_command"),
     ("cmd.cancel_command", "tools.cancel_command"),
     ("cmd.generate_uuid_v4", "tools.generate.uuid.v4"),
