@@ -2566,7 +2566,10 @@ fn workspace_replace_rewrites_files() {
     for c in "ZZ".chars() {
         app.on_key(key(c));
     }
-    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // replace all in workspace
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // preview replace
+    // Nothing is written until the preview is confirmed.
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "beta and beta\n");
+    app.on_key(key('y')); // confirm: apply across the workspace
 
     let a = fs::read_to_string(dir.join("a.txt")).unwrap();
     let b = fs::read_to_string(dir.join("b.txt")).unwrap();

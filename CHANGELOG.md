@@ -51,6 +51,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Compare With File.** **Tools → Compare With File…** (action `tools.diff`)
   shows a read-only unified diff between the active buffer and another file. See
   `spec/diff-view/index.md`.
+- **Project-wide replace preview.** Workspace-wide replace now shows a
+  preview/confirm overlay listing each affected file and its match count; nothing
+  is written to disk until you confirm (`y`/`Enter`), with `n`/`Esc` to cancel.
 
 ### Changed
 

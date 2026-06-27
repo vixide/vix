@@ -321,6 +321,19 @@ pub struct Confirm {
     pub paths: Vec<PathBuf>,
 }
 
+/// A previewed project-wide replace awaiting confirmation. Holds the computed
+/// per-file results so applying writes exactly what was previewed.
+pub struct ReplaceConfirm {
+    /// Per-file `(path, new contents)` to write on confirm.
+    pub plan: Vec<(PathBuf, String)>,
+    /// Total matches that will be replaced.
+    pub replaced: usize,
+    /// Preview rows (`relpath (count)`) for the affected files.
+    pub lines: Vec<String>,
+    /// First visible preview row.
+    pub scroll: usize,
+}
+
 /// What an [`UnsavedPrompt`] is guarding: closing the active tab, or quitting the
 /// whole program (which walks every dirty tab in turn).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -767,6 +780,8 @@ pub struct App {
     pub paste: Option<PasteOp>,
     /// Pending confirmation, when active.
     pub confirm: Option<Confirm>,
+    /// Project-wide replace preview awaiting confirmation, when open.
+    pub replace_confirm: Option<ReplaceConfirm>,
     /// Pending unsaved-changes prompt (close tab / quit), when active.
     pub unsaved: Option<UnsavedPrompt>,
     /// Spell-suggestion popup (Ctrl+;), when open.
@@ -1065,7 +1080,7 @@ impl App {
             messages,
             menu: Menu::default(),
             palette: None, search: None, query_replace: None, workspace_search: None,
-            prompt: None, paste: None, confirm: None, unsaved: None, spell_suggest: None,
+            prompt: None, paste: None, confirm: None, replace_confirm: None, unsaved: None, spell_suggest: None,
             context_menu: None, git_panel: None, branch_chooser: None, task_chooser: None, diff_view: None, recent_chooser: None,
             location_chooser: None, nerd_palette: None, ascii_panel: None, edit_table: None,
             edit_outline: None, edit_value: None, edit_bytes: None, qrcode: None,
@@ -1483,6 +1498,7 @@ impl App {
         panel!(ai_panel, ai_panel_key);
         panel!(outline, outline_key);
         panel!(query_replace, qr_key);
+        panel!(replace_confirm, replace_confirm_key);
         panel!(workspace_search, ps_key);
         panel!(confirm, confirm_key);
         panel!(unsaved, unsaved_key);
@@ -10329,38 +10345,78 @@ impl App {
         paths.sort();
         paths.dedup();
 
+        // Compute (but do not yet write) the replacement for each file, so the
+        // user can preview and confirm before anything touches disk.
+        let mut plan: Vec<(PathBuf, String)> = Vec::new();
+        let mut lines: Vec<String> = Vec::new();
         let mut replaced = 0usize;
-        let mut files = 0usize;
         for path in &paths {
             let Some(content) = self.current_text(path) else {
                 continue;
             };
             let (new, count) = crate::find_panel::replace_all(&content, &re, use_regex, &replacement);
-            if count == 0 {
+            if count == 0 || new == content {
                 continue;
             }
-            if new == content {
-                continue;
+            let rel = path.strip_prefix(&self.root).unwrap_or(path);
+            lines.push(format!("{} ({count})", rel.display()));
+            plan.push((path.clone(), new));
+            replaced += count;
+        }
+        if plan.is_empty() {
+            if let Some(p) = self.workspace_search.as_mut() {
+                p.status = t!("status.replaced_in_files", replaced = 0, files = 0).to_string();
             }
-            if let Err(e) = std::fs::write(path, &new) {
+            return;
+        }
+        self.replace_confirm = Some(ReplaceConfirm { plan, replaced, lines, scroll: 0 });
+    }
+
+    /// Apply a confirmed project-wide replace: write every planned file and keep
+    /// open buffers in sync, then refresh the search and report the totals.
+    fn apply_replace_confirm(&mut self) {
+        let Some(rc) = self.replace_confirm.take() else { return };
+        let replaced = rc.replaced;
+        let mut files = 0usize;
+        for (path, new) in &rc.plan {
+            if let Err(e) = std::fs::write(path, new) {
                 self.messages.error(t!("msg.write_failed", path = path.display(), error = e).to_string());
                 continue;
             }
-            // Keep any open buffer in sync (and clean, since we just saved).
             let canon = path.canonicalize().unwrap_or_else(|_| path.clone());
             for tab in &mut self.editor.tabs {
                 if tab.path.as_deref() == Some(canon.as_path()) {
-                    tab.editor.set_content(&new);
+                    tab.editor.set_content(new);
                     tab.dirty = false;
                 }
             }
-            replaced += count;
             files += 1;
         }
-
         self.run_workspace_search();
+        let note = t!("status.replaced_in_files", replaced = replaced, files = files).to_string();
         if let Some(p) = self.workspace_search.as_mut() {
-            p.status = t!("status.replaced_in_files", replaced = replaced, files = files).to_string();
+            p.status.clone_from(&note);
+        }
+        self.messages.info(note);
+    }
+
+    /// Handle a key in the project-wide replace preview: `y`/Enter applies,
+    /// `n`/Esc cancels, arrows scroll the file list.
+    fn replace_confirm_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('y' | 'Y') | KeyCode::Enter => self.apply_replace_confirm(),
+            KeyCode::Char('n' | 'N') | KeyCode::Esc => self.replace_confirm = None,
+            KeyCode::Up => {
+                if let Some(rc) = self.replace_confirm.as_mut() {
+                    rc.scroll = rc.scroll.saturating_sub(1);
+                }
+            }
+            KeyCode::Down => {
+                if let Some(rc) = self.replace_confirm.as_mut() {
+                    rc.scroll = (rc.scroll + 1).min(rc.lines.len().saturating_sub(1));
+                }
+            }
+            _ => {}
         }
     }
 

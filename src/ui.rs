@@ -176,6 +176,9 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.confirm.is_some() {
         draw_confirm(app, frame, area);
     }
+    if app.replace_confirm.is_some() {
+        draw_replace_confirm(app, frame, area);
+    }
     if app.unsaved.is_some() {
         draw_unsaved(app, frame, area);
     }
@@ -938,6 +941,49 @@ fn draw_confirm(app: &App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
     frame.render_widget(Paragraph::new(Line::from(c.message.clone())), inner);
+}
+
+fn draw_replace_confirm(app: &App, frame: &mut Frame, area: Rect) {
+    let Some(rc) = app.replace_confirm.as_ref() else { return };
+    let width = (area.width * 7 / 10).clamp(30, area.width);
+    let height = (area.height * 6 / 10).clamp(8, area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let title = format!(
+        " {} {} ",
+        icon::SEARCH,
+        t!("ui.replace_confirm_title", replaced = rc.replaced, files = rc.plan.len())
+    );
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(title);
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+    let view_h = chunks[0].height as usize;
+    let start = rc.scroll.min(rc.lines.len().saturating_sub(1));
+    let lines: Vec<Line> = rc
+        .lines
+        .iter()
+        .skip(start)
+        .take(view_h)
+        .map(|l| Line::from(Span::raw(l.clone())))
+        .collect();
+    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    let hint = Line::from(Span::styled(t!("ui.replace_confirm_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
 }
 
 fn draw_unsaved(app: &App, frame: &mut Frame, area: Rect) {
