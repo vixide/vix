@@ -380,6 +380,15 @@ pub struct BranchChooser {
     pub merge: bool,
 }
 
+/// The task chooser (Tools → Tasks…): the workspace's `tasks.toml` entries and
+/// the highlighted row. Choosing one runs its command via the Run pipeline.
+pub struct TaskChooser {
+    /// Loaded tasks, in file order.
+    pub tasks: Vec<crate::tasks::Task>,
+    /// Index of the highlighted task.
+    pub selected: usize,
+}
+
 /// The spell-suggestion popup (Ctrl+;): corrections for the misspelled word at
 /// the cursor, plus Add-to-dictionary / Ignore actions.
 pub struct SpellSuggest {
@@ -755,6 +764,8 @@ pub struct App {
     pub git_panel: Option<GitPanel>,
     /// Git branch switcher, when open.
     pub branch_chooser: Option<BranchChooser>,
+    /// Task chooser overlay (Tools → Tasks…), when open.
+    pub task_chooser: Option<TaskChooser>,
     /// Recent-files chooser overlay, when open.
     pub recent_chooser: Option<RecentChooser>,
     /// Recent-locations (jump list) chooser overlay, when open.
@@ -1040,7 +1051,7 @@ impl App {
             menu: Menu::default(),
             palette: None, search: None, query_replace: None, workspace_search: None,
             prompt: None, paste: None, confirm: None, unsaved: None, spell_suggest: None,
-            context_menu: None, git_panel: None, branch_chooser: None, recent_chooser: None,
+            context_menu: None, git_panel: None, branch_chooser: None, task_chooser: None, recent_chooser: None,
             location_chooser: None, nerd_palette: None, ascii_panel: None, edit_table: None,
             edit_outline: None, edit_value: None, edit_bytes: None, qrcode: None,
             x11_panel: None,
@@ -1464,6 +1475,7 @@ impl App {
         panel!(context_menu, context_menu_key);
         panel!(git_panel, git_panel_key);
         panel!(branch_chooser, branch_key);
+        panel!(task_chooser, tasks_key);
         if self.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
             self.paste_key(key);
             return true;
@@ -2054,6 +2066,7 @@ impl App {
                     Some(Prompt::new(PromptKind::RunCommand, t!("prompt.run_command").to_string()));
             }
             "tools.cancel_command" => self.cancel_command(),
+            "tools.tasks" => self.open_tasks(),
             "tools.palette" => self.open_palette(),
             // The left/right docks are the explorer and message drawers. Both the
             // old action ids and the new dock-named ones route to one method.
@@ -4678,6 +4691,57 @@ impl App {
                 }
     }
 
+    // ----- Tasks (tasks.toml runner) --------------------------------------
+
+    /// Open the task chooser from the workspace's `tasks.toml`, or report when no
+    /// tasks are defined.
+    fn open_tasks(&mut self) {
+        let tasks = crate::tasks::load(&self.root);
+        if tasks.is_empty() {
+            self.status = t!("status.no_tasks").to_string();
+            return;
+        }
+        self.task_chooser = Some(TaskChooser { tasks, selected: 0 });
+    }
+
+    fn tasks_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => {
+                if let Some(c) = self.task_chooser.as_mut() {
+                    let n = c.tasks.len();
+                    c.selected = (c.selected + n - 1) % n;
+                }
+            }
+            KeyCode::Down => {
+                if let Some(c) = self.task_chooser.as_mut() {
+                    c.selected = (c.selected + 1) % c.tasks.len();
+                }
+            }
+            KeyCode::Enter => self.run_selected_task(),
+            KeyCode::Esc => self.task_chooser = None,
+            _ => {}
+        }
+    }
+
+    fn tasks_mouse(&mut self, mouse: MouseEvent) {
+        if let Some(idx) = self.chooser_row(mouse)
+            && let Some(c) = self.task_chooser.as_mut()
+            && idx < c.tasks.len()
+        {
+            c.selected = idx;
+            self.run_selected_task();
+        }
+    }
+
+    /// Run the highlighted task's command through the async Run pipeline.
+    fn run_selected_task(&mut self) {
+        let Some(c) = self.task_chooser.take() else { return };
+        if let Some(task) = c.tasks.get(c.selected) {
+            let command = task.command.clone();
+            self.run_command(&command);
+        }
+    }
+
     /// Apply the highlighted branch and close the chooser: merge it into the
     /// current branch (merge mode) or check it out.
     fn checkout_selected_branch(&mut self) {
@@ -6036,6 +6100,7 @@ impl App {
         panel!(spell_suggest, spell_suggest_mouse);
         panel!(git_panel, git_panel_mouse);
         panel!(branch_chooser, branch_mouse);
+        panel!(task_chooser, tasks_mouse);
         panel!(outline, outline_mouse);
         // The find / replace box: a left click focuses the Find or Replace field.
         panel!(search, search_mouse);
