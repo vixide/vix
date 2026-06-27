@@ -929,6 +929,25 @@ fn zen_mode_hides_then_restores_chrome() {
 }
 
 #[test]
+fn column_select_block_edits_multiple_lines() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "aa\nbb\ncc");
+    app.run_action("edit.go_first"); // cursor to buffer start (line 0, col 0)
+    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT | KeyModifiers::SHIFT));
+    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT | KeyModifiers::SHIFT));
+    assert!(
+        app.editor.active_tab().unwrap().editor.has_multi_carets(),
+        "Alt+Shift+Down builds a vertical block of carets"
+    );
+    app.on_key(key('X')); // type at every caret
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "Xaa\nXbb\nXcc",
+        "block insert lands on each line"
+    );
+}
+
+#[test]
 fn select_all_occurrences_creates_multi_carets() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "foo bar foo baz foo");

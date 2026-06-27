@@ -1555,11 +1555,13 @@ impl App {
                 true
             }
             KeyCode::Up if Self::alt(&key) && self.focus == Focus::Editor => {
-                self.run_action("edit.move_line_up");
+                let a = if Self::shift(&key) { "edit.column_select_up" } else { "edit.move_line_up" };
+                self.run_action(a);
                 true
             }
             KeyCode::Down if Self::alt(&key) && self.focus == Focus::Editor => {
-                self.run_action("edit.move_line_down");
+                let a = if Self::shift(&key) { "edit.column_select_down" } else { "edit.move_line_down" };
+                self.run_action(a);
                 true
             }
             KeyCode::F(1) => {
@@ -2108,6 +2110,16 @@ impl App {
             "edit.select_all_occurrences" => {
                 if let Some(t) = self.editor.active_tab_mut() {
                     t.editor.add_all_occurrences();
+                }
+            }
+            "edit.column_select_down" => {
+                if let Some(t) = self.editor.active_tab_mut() {
+                    t.editor.column_select(true);
+                }
+            }
+            "edit.column_select_up" => {
+                if let Some(t) = self.editor.active_tab_mut() {
+                    t.editor.column_select(false);
                 }
             }
             "edit.select_line" => {
