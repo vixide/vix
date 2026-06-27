@@ -25,6 +25,15 @@ bullet List, a Table, and a Todos checklist.
 **Insert → HTML** drops in the HTML equivalents: `<h1>`–`<h3>` headlines, an `<a>`
 link, a `<ul>` list, and a full `<table>` (thead / tbody / tfoot).
 
+## SQL
+
+**Insert → SQL** drops in ready-to-edit PostgreSQL statements: **Alter Role**,
+**Create Extension** (a commented list of common extensions), **Create Function**
+(an `updated_at()` trigger function), **Create User**, **Grant Create**, **Grant
+Usage**, and **Create Table** (with an identity key, timestamps, an `updated_at`
+trigger, and a trigram GIN index). The snippets use placeholders (`alice`,
+`items`) meant to be edited after insertion.
+
 ## Lorem ipsum
 
 **Insert → Lorem ipsum** inserts placeholder text — Words, a Sentence, or a

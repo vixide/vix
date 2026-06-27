@@ -310,11 +310,24 @@ const TOOLS_INSERT_DATETIME: &[Item] = &[
 ];
 
 /// Insert helpers, grouped under Tools → Insert.
+/// SQL (`PostgreSQL`) snippets, grouped under Tools → Insert → SQL. Each inserts a
+/// ready-to-edit statement at the cursor.
+const TOOLS_INSERT_SQL: &[Item] = &[
+    Item::leaf("menu.item.tools.insert.sql.alter_role", "tools.insert.sql.alter_role", ""),
+    Item::leaf("menu.item.tools.insert.sql.create_extension", "tools.insert.sql.create_extension", ""),
+    Item::leaf("menu.item.tools.insert.sql.create_function", "tools.insert.sql.create_function", ""),
+    Item::leaf("menu.item.tools.insert.sql.create_user", "tools.insert.sql.create_user", ""),
+    Item::leaf("menu.item.tools.insert.sql.grant_create", "tools.insert.sql.grant_create", ""),
+    Item::leaf("menu.item.tools.insert.sql.grant_usage", "tools.insert.sql.grant_usage", ""),
+    Item::leaf("menu.item.tools.insert.sql.create_table", "tools.insert.sql.create_table", ""),
+];
+
 const TOOLS_INSERT: &[Item] = &[
     Item::sub("menu.item.tools.insert.uuid", TOOLS_INSERT_UUID),
     Item::sub("menu.item.tools.insert.zid", TOOLS_INSERT_ZID),
     Item::sub("menu.name.html", TOOLS_INSERT_HTML),
     Item::sub("menu.item.tools.insert.markdown", TOOLS_INSERT_MARKDOWN),
+    Item::sub("menu.name.sql", TOOLS_INSERT_SQL),
     Item::sub("menu.name.lorem", TOOLS_INSERT_LOREM),
     Item::sub("menu.item.tools.insert.datetime", TOOLS_INSERT_DATETIME),
 ];
