@@ -3881,7 +3881,36 @@ impl App {
             return;
         }
         self.speller = crate::spellcheck::load_for(&self.settings.dictionary_path, &locale).ok();
+        if let Some(sc) = self.speller.as_mut() {
+            for word in Self::load_user_words() {
+                sc.add_word(&word);
+            }
+        }
         self.speller_locale = Some(locale);
+    }
+
+    /// Read the persisted personal word list (one word per line). Empty when the
+    /// file is missing or unreadable.
+    fn load_user_words() -> Vec<String> {
+        let Some(path) = Settings::user_dictionary_path() else { return Vec::new() };
+        let Ok(text) = std::fs::read_to_string(path) else { return Vec::new() };
+        text.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect()
+    }
+
+    /// Append `word` to the persisted personal word list, creating it if needed
+    /// and skipping duplicates.
+    fn persist_user_word(word: &str) {
+        use std::io::Write;
+        let Some(path) = Settings::user_dictionary_path() else { return };
+        if Self::load_user_words().iter().any(|w| w == word) {
+            return;
+        }
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+            let _ = writeln!(f, "{word}");
+        }
     }
 
     /// Recompute the misspelled-word underlines on the active buffer. Scans only
@@ -4014,7 +4043,8 @@ impl App {
         self.refresh_spellcheck();
     }
 
-    /// Add the misspelled word to the session user dictionary.
+    /// Add the misspelled word to the user dictionary, persisting it across
+    /// sessions in `user_dictionary.txt`.
     fn spell_add_word(&mut self) {
         let Some(p) = self.spell_suggest.take() else {
             return;
@@ -4022,6 +4052,7 @@ impl App {
         if let Some(sc) = self.speller.as_mut() {
             sc.add_word(&p.word);
         }
+        Self::persist_user_word(&p.word);
         self.status = t!("status.spell_added", word = p.word).to_string();
         self.refresh_spellcheck();
     }
