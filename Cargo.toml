@@ -150,6 +150,10 @@ nix = { version = "0.29", features = ["signal"] }
 # QR code generation (Tools → QR Code). default-features = false drops the
 # optional image/svg renderers; we only use the built-in Unicode renderer.
 qrcode = { version = "0.14", default-features = false }
+# Integrated terminal (Tools → Terminal): a real PTY (ConPTY/openpty) hosting a
+# shell, with `vt100` parsing the escape sequences into a renderable screen grid.
+portable-pty = "0.8"
+vt100 = "0.15"
 
 # Dependencies for the in-tree code-editor widget (src/editor_core/).
 anyhow = "1.0"

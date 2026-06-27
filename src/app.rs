@@ -824,6 +824,8 @@ pub struct App {
     pub qrcode: Option<String>,
     /// AI chat panel overlay (conversation with the configured assistant), when open.
     pub ai_panel: Option<crate::ai_panel::Panel>,
+    /// Integrated terminal overlay (a PTY shell), when open.
+    pub terminal: Option<crate::terminal::Terminal>,
     /// AI diff-review overlay (accept/reject an Annotate/Improve transform), when open.
     ai_diff: Option<AiDiffState>,
     /// Receiver for the dashboard's background metric computations.
@@ -1149,6 +1151,7 @@ impl App {
             running_command: None,
             ai_replace: None,
             ai_panel: None,
+            terminal: None,
             ai_diff: None,
             theme_preview: None,
             scrollbar_active: false,
@@ -1465,6 +1468,9 @@ impl App {
                 }
             };
         }
+        // The integrated terminal captures all keys (forwarded to the shell)
+        // except its close chord, handled inside the key handler.
+        panel!(terminal, terminal_key);
         panel!(edit_table, edit_table_key);
         panel!(edit_outline, edit_outline_key);
         panel!(edit_value, edit_value_key);
@@ -2099,6 +2105,7 @@ impl App {
             }
             "tools.cancel_command" => self.cancel_command(),
             "tools.tasks" => self.open_tasks(),
+            "tools.terminal" => self.toggle_terminal(),
             "tools.diff" => self.open_compare_prompt(),
             "tools.palette" => self.open_palette(),
             // The left/right docks are the explorer and message drawers. Both the
@@ -8215,6 +8222,56 @@ impl App {
             let _ = tab.editor.set_clipboard(&text);
             self.status = t!("status.ai_copied").to_string();
         }
+    }
+
+    // ----- Integrated terminal --------------------------------------------
+
+    /// Toggle the integrated terminal: open a shell on a PTY, or close it if open.
+    fn toggle_terminal(&mut self) {
+        if self.terminal.is_some() {
+            self.terminal = None;
+            return;
+        }
+        let area = self.layout.editor;
+        let rows = area.height.max(1);
+        let cols = area.width.max(1);
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| {
+            if cfg!(windows) { "cmd.exe".to_string() } else { "/bin/sh".to_string() }
+        });
+        match crate::terminal::Terminal::open(&shell, &self.root, rows, cols) {
+            Ok(term) => self.terminal = Some(term),
+            Err(e) => self.messages.error(t!("msg.command_failed", error = e).to_string()),
+        }
+    }
+
+    /// Handle a key while the terminal is focused. `Ctrl+]` closes it; every other
+    /// key is forwarded to the shell. A dead shell closes on the next key.
+    fn terminal_key(&mut self, key: KeyEvent) {
+        let close = Self::ctrl(&key) && matches!(key.code, KeyCode::Char(']'));
+        if close {
+            self.terminal = None;
+            return;
+        }
+        let Some(term) = self.terminal.as_mut() else { return };
+        if !term.alive() {
+            self.terminal = None;
+            return;
+        }
+        term.send_key(key);
+    }
+
+    /// Drain the terminal: close it once the shell has exited. Called each loop.
+    pub fn poll_terminal(&mut self) {
+        if self.terminal.as_ref().is_some_and(|t| !t.alive()) {
+            self.terminal = None;
+            self.status = t!("status.terminal_closed").to_string();
+        }
+    }
+
+    /// Whether the integrated terminal is open (drives the fast poll cadence).
+    #[must_use]
+    pub fn terminal_running(&self) -> bool {
+        self.terminal.is_some()
     }
 
     // ----- AI diff review (Annotate / Improve) ----------------------------

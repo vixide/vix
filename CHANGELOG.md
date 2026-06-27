@@ -54,6 +54,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Project-wide replace preview.** Workspace-wide replace now shows a
   preview/confirm overlay listing each affected file and its match count; nothing
   is written to disk until you confirm (`y`/`Enter`), with `n`/`Esc` to cancel.
+- **Integrated terminal.** **Tools → Terminal** (action `tools.terminal`) opens a
+  real interactive shell on a PTY (`portable-pty` + `vt100`) inside Vix —
+  full-screen programs, colors, and the cursor all work. `Ctrl+]` closes it. See
+  `spec/terminal/index.md`.
 
 ### Changed
 
