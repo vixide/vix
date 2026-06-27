@@ -48,6 +48,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Task runner.** A workspace `tasks.toml` (or `.vix/tasks.toml`) defines named
   shell commands; **Tools → Tasks…** (action `tools.tasks`) lists and runs them
   through the async pipeline. See `spec/tasks/index.md`.
+- **Compare With File.** **Tools → Compare With File…** (action `tools.diff`)
+  shows a read-only unified diff between the active buffer and another file. See
+  `spec/diff-view/index.md`.
 
 ### Changed
 

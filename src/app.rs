@@ -113,6 +113,8 @@ pub enum PromptKind {
     ExplorerInclude,
     /// Enter the file-explorer "exclude" path regex filter.
     ExplorerExclude,
+    /// Enter a file path to compare the active buffer against (diff overlay).
+    CompareFile,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -387,6 +389,17 @@ pub struct TaskChooser {
     pub tasks: Vec<crate::tasks::Task>,
     /// Index of the highlighted task.
     pub selected: usize,
+}
+
+/// A read-only diff overlay (Tools → Compare With File…): the active buffer
+/// compared against another file, with scroll state.
+pub struct DiffViewState {
+    /// Overlay title (the compared file names).
+    pub title: String,
+    /// Rendered unified-diff lines.
+    pub lines: Vec<crate::diff_view::Line>,
+    /// First visible line.
+    pub scroll: usize,
 }
 
 /// The spell-suggestion popup (Ctrl+;): corrections for the misspelled word at
@@ -766,6 +779,8 @@ pub struct App {
     pub branch_chooser: Option<BranchChooser>,
     /// Task chooser overlay (Tools → Tasks…), when open.
     pub task_chooser: Option<TaskChooser>,
+    /// Read-only diff overlay (Tools → Compare With File…), when open.
+    pub diff_view: Option<DiffViewState>,
     /// Recent-files chooser overlay, when open.
     pub recent_chooser: Option<RecentChooser>,
     /// Recent-locations (jump list) chooser overlay, when open.
@@ -1051,7 +1066,7 @@ impl App {
             menu: Menu::default(),
             palette: None, search: None, query_replace: None, workspace_search: None,
             prompt: None, paste: None, confirm: None, unsaved: None, spell_suggest: None,
-            context_menu: None, git_panel: None, branch_chooser: None, task_chooser: None, recent_chooser: None,
+            context_menu: None, git_panel: None, branch_chooser: None, task_chooser: None, diff_view: None, recent_chooser: None,
             location_chooser: None, nerd_palette: None, ascii_panel: None, edit_table: None,
             edit_outline: None, edit_value: None, edit_bytes: None, qrcode: None,
             x11_panel: None,
@@ -1476,6 +1491,7 @@ impl App {
         panel!(git_panel, git_panel_key);
         panel!(branch_chooser, branch_key);
         panel!(task_chooser, tasks_key);
+        panel!(diff_view, diff_view_key);
         if self.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
             self.paste_key(key);
             return true;
@@ -2067,6 +2083,7 @@ impl App {
             }
             "tools.cancel_command" => self.cancel_command(),
             "tools.tasks" => self.open_tasks(),
+            "tools.diff" => self.open_compare_prompt(),
             "tools.palette" => self.open_palette(),
             // The left/right docks are the explorer and message drawers. Both the
             // old action ids and the new dock-named ones route to one method.
@@ -4739,6 +4756,70 @@ impl App {
         if let Some(task) = c.tasks.get(c.selected) {
             let command = task.command.clone();
             self.run_command(&command);
+        }
+    }
+
+    // ----- Compare With File (diff view) ----------------------------------
+
+    /// Prompt for a file path to compare the active buffer against.
+    fn open_compare_prompt(&mut self) {
+        if self.editor.active_tab().is_none() {
+            return;
+        }
+        self.prompt = Some(Prompt::new(PromptKind::CompareFile, t!("prompt.compare_file").to_string()));
+    }
+
+    /// Open a read-only unified-diff overlay comparing the active buffer with the
+    /// file at `input` (resolved relative to the workspace root).
+    fn open_diff_with(&mut self, input: &str) {
+        if input.is_empty() {
+            return;
+        }
+        let other = self.resolve(input);
+        let Ok(other_text) = std::fs::read_to_string(&other) else {
+            self.messages.error(t!("msg.open_failed", error = other.display()).to_string());
+            return;
+        };
+        let Some(tab) = self.editor.active_tab() else { return };
+        let current = tab.editor.get_content();
+        let here = tab.path.as_ref().and_then(|p| p.file_name()).map_or_else(
+            || t!("ui.untitled").to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
+        let there = other.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let lines = crate::diff_view::build(&other_text, &current);
+        if lines.is_empty() {
+            self.status = t!("status.diff_identical").to_string();
+            return;
+        }
+        self.diff_view = Some(DiffViewState { title: format!("{there} ↔ {here}"), lines, scroll: 0 });
+    }
+
+    fn diff_view_key(&mut self, key: KeyEvent) {
+        let page = self.layout.editor.height.max(1) as usize;
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => self.diff_view = None,
+            KeyCode::Up => {
+                if let Some(d) = self.diff_view.as_mut() {
+                    d.scroll = d.scroll.saturating_sub(1);
+                }
+            }
+            KeyCode::Down => {
+                if let Some(d) = self.diff_view.as_mut() {
+                    d.scroll = (d.scroll + 1).min(d.lines.len().saturating_sub(1));
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(d) = self.diff_view.as_mut() {
+                    d.scroll = d.scroll.saturating_sub(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(d) = self.diff_view.as_mut() {
+                    d.scroll = (d.scroll + page).min(d.lines.len().saturating_sub(1));
+                }
+            }
+            _ => {}
         }
     }
 
@@ -10616,6 +10697,7 @@ impl App {
                 let include = self.explorer.include_filter.clone();
                 self.explorer.set_filter(&include, prompt.input.trim());
             }
+            PromptKind::CompareFile => self.open_diff_with(prompt.input.trim()),
         }
     }
 
