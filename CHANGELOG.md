@@ -18,6 +18,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   between hunks, `Space` toggles one, `a`/`r` accept/reject all, `Enter` applies,
   `Esc` discards. New `ai_diff_review` setting (on by default) controls it. See
   `spec/ai/index.md`.
+- **Background results in the notification panel.** Run Command (and Git
+  Pull/Push/Fetch) completions and AI menu outcomes now post to the right-dock
+  notification feed (Info on success, Error on failure), giving a durable record
+  beyond the transient status bar. See `spec/vix-notification-panel/index.md`.
 
 ### Changed
 

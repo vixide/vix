@@ -21,6 +21,18 @@ Each notification has a level, which selects its row icon:
 
 Notifications are listed oldest first, with one row selected.
 
+## What lands here
+
+As well as inline editor advice, the panel collects the **results of background
+work**, so you have a durable record after the status-bar message fades:
+
+- **Run Command** (and Git Pull / Push / Fetch, which use the same pipeline)
+  post a completion notification — **Info** on success, **Error** on a non-zero
+  exit — alongside their streamed output in the bottom dock.
+- **AI menu** transforms (Summarize, Explain, Define, Annotate, Improve) post
+  their done/failed outcome. The interactive AI chat panel keeps its own
+  transcript and does not duplicate into the feed.
+
 ## Reading and Dismissing
 
 - `↑` / `↓` move the selection between notifications.
