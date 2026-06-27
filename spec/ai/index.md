@@ -1,7 +1,31 @@
 # AI
 
-The **AI** menu runs the `claude` command-line tool on text from the editor. It
-requires the `claude` CLI to be installed and on `PATH`.
+The **AI** menu runs a configurable command-line assistant on text from the
+editor. It defaults to the `claude` CLI, which must then be installed and on
+`PATH`, but the command is **not hardcoded**: the `ai_command` setting lets you
+point the menu at any assistant CLI (Claude Code, Codex, Mistral, a local
+`ollama` model, …).
+
+## Configuration
+
+The `ai_command` setting (see `spec/localization`/configuration) is a command
+template, default `claude -p "{prompt}"`:
+
+- `{prompt}` is replaced with the action's instruction (e.g.
+  `Summarize this text.`).
+- The input text is supplied on **stdin**. If the template instead contains
+  `{file}`, that placeholder is replaced with the path of a temp file holding the
+  input text; otherwise the temp file is redirected to stdin.
+- An empty template falls back to the default `claude` invocation.
+
+Examples:
+
+| Assistant | `ai_command`                    |
+| --------- | ------------------------------- |
+| Claude    | `claude -p "{prompt}"` (default)|
+| Codex     | `codex exec "{prompt}"`         |
+| Mistral   | `mistral chat -m "{prompt}"`    |
+| Ollama    | `ollama run llama3 "{prompt}"`  |
 
 ## Commands
 
@@ -25,9 +49,9 @@ replace commands (Annotate / Improve).
 
 ## Output modes
 
-All five commands run `claude` in the **background** and capture its full output;
-only one AI task runs at a time (a second is declined until the first finishes,
-and empty output is treated as a failure).
+All five commands run the configured assistant in the **background** and capture
+its full output; only one AI task runs at a time (a second is declined until the
+first finishes, and empty output is treated as a failure).
 
 - **New-tab commands** open the captured output in a new untitled editor tab
   (marked dirty so you are reminded to save it).
@@ -36,8 +60,9 @@ and empty output is treated as a failure).
 
 ## As implemented in Vix
 
-The host pipes the input text to `claude -p "<prompt>"` (via a temp file) with the
-shared `spawn_ai` helper, tracked as an async `AiReplace` task drained by
+The host expands the `ai_command` template via `Settings::ai_command_line` and
+pipes the input text to it (via a temp file) with the shared `spawn_ai` helper,
+tracked as an async `AiReplace` task drained by
 `poll_ai_replace`. Its `AiDest` decides the result: `NewTab` calls
 `new_tab_with_content`; `Replace` calls `apply_ai_replace`. Status keys
 (`status.ai_running`/`ai_done`/`ai_failed`/`ai_busy`/`ai_no_input`) report

@@ -122,6 +122,13 @@ pub struct Settings {
     /// highlights), until they are explicitly toggled off. When false, closing
     /// Find clears the highlights.
     pub sticky_search_highlight: bool,
+    /// Command template the **AI** menu runs over editor text. The placeholder
+    /// `{prompt}` is replaced with the action's instruction; if the template also
+    /// contains `{file}` it is replaced with the path of a temp file holding the
+    /// input text, otherwise that file is redirected to the command's stdin. This
+    /// lets you point the AI menu at any CLI assistant — `claude` (default),
+    /// `codex`, `mistral`, `ollama run …`, etc. See [`Settings::ai_command_line`].
+    pub ai_command: String,
 }
 
 /// One configured language server (a `lsp_servers` entry).
@@ -174,6 +181,7 @@ impl Default for Settings {
             time_zone: "UTC".to_string(),
             restore_session: true,
             sticky_search_highlight: true,
+            ai_command: "claude -p \"{prompt}\"".to_string(),
         }
     }
 }
@@ -194,6 +202,28 @@ impl Settings {
             "\t".to_string()
         } else {
             " ".repeat(self.tab_width.max(1))
+        }
+    }
+
+    /// Build the shell command the AI menu runs for `prompt` over the input text
+    /// stored at `file`, expanding the [`ai_command`](Self::ai_command) template.
+    ///
+    /// `{prompt}` is replaced with the instruction. If the template contains
+    /// `{file}` it is replaced with `file`; otherwise ` < "<file>"` is appended so
+    /// the text is fed on stdin (the conventional shape for `claude -p`). An empty
+    /// template falls back to the default `claude` invocation.
+    #[must_use]
+    pub fn ai_command_line(&self, prompt: &str, file: &str) -> String {
+        let template = if self.ai_command.trim().is_empty() {
+            "claude -p \"{prompt}\""
+        } else {
+            self.ai_command.as_str()
+        };
+        let with_prompt = template.replace("{prompt}", prompt);
+        if with_prompt.contains("{file}") {
+            with_prompt.replace("{file}", file)
+        } else {
+            format!("{with_prompt} < \"{file}\"")
         }
     }
 
@@ -221,5 +251,46 @@ impl Settings {
         confy::get_configuration_file_path(APP_NAME, Some(CONFIG_NAME))
             .ok()
             .and_then(|p| p.parent().map(|d| d.join("themes")))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Settings;
+
+    #[test]
+    fn default_ai_command_pipes_text_to_claude_on_stdin() {
+        let s = Settings::default();
+        assert_eq!(
+            s.ai_command_line("Summarize this text.", "/tmp/in.txt"),
+            "claude -p \"Summarize this text.\" < \"/tmp/in.txt\""
+        );
+    }
+
+    #[test]
+    fn custom_ai_command_with_file_placeholder_substitutes_path() {
+        let s = Settings { ai_command: "codex exec \"{prompt}\" {file}".to_string(), ..Settings::default() };
+        assert_eq!(
+            s.ai_command_line("Explain this text.", "/tmp/in.txt"),
+            "codex exec \"Explain this text.\" /tmp/in.txt"
+        );
+    }
+
+    #[test]
+    fn custom_ai_command_without_file_placeholder_redirects_stdin() {
+        let s = Settings { ai_command: "mistral chat -m \"{prompt}\"".to_string(), ..Settings::default() };
+        assert_eq!(
+            s.ai_command_line("Improve this text.", "/tmp/in.txt"),
+            "mistral chat -m \"Improve this text.\" < \"/tmp/in.txt\""
+        );
+    }
+
+    #[test]
+    fn empty_ai_command_falls_back_to_default() {
+        let s = Settings { ai_command: "   ".to_string(), ..Settings::default() };
+        assert_eq!(
+            s.ai_command_line("Define this text.", "/tmp/in.txt"),
+            "claude -p \"Define this text.\" < \"/tmp/in.txt\""
+        );
     }
 }

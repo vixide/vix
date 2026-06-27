@@ -148,17 +148,20 @@ and strings).
 
 ## AI menu
 
-Each item runs the `claude` CLI on the selection, or the whole file when nothing
-is selected. Summarize and Explain stream into the bottom dock; Annotate and
-Improve run in the background and **replace** the text with the result (undoable).
+Each item runs a configurable assistant CLI on the selection, or the whole file
+when nothing is selected. The command comes from the `ai_command` setting
+(default `claude -p "{prompt}"`), so you can point it at Claude, Codex, Mistral,
+a local `ollama` model, or any other CLI. Summarize, Explain, and Define open the
+result in a new tab; Annotate and Improve run in the background and **replace** the
+text with the result (undoable).
 
 | Item      | Action                                                                 |
 | --------- | --------------------------------------------------------------------- |
-| Summarize | Run `claude` to summarize the selection (or the whole file); to a new tab |
-| Explain   | Run `claude` to explain the selection (or the whole file); to a new tab |
-| Define    | Run `claude` to define the selection (or the word at/after the cursor); to a new tab |
-| Annotate  | Run `claude` to annotate the selection (or the whole file); replaces it |
-| Improve   | Run `claude` to improve the selection (or the whole file); replaces it |
+| Summarize | Summarize the selection (or the whole file); to a new tab |
+| Explain   | Explain the selection (or the whole file); to a new tab |
+| Define    | Define the selection (or the word at/after the cursor); to a new tab |
+| Annotate  | Annotate the selection (or the whole file); replaces it |
+| Improve   | Improve the selection (or the whole file); replaces it |
 
 ## Git menu
 

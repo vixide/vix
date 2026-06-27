@@ -7536,9 +7536,11 @@ impl App {
         }
     }
 
-    /// Spawn `claude -p <prompt>` reading `text` on stdin, returning a receiver
-    /// for its captured stdout (or `None` after reporting an empty input or a
-    /// spawn failure). The reader thread sends one [`AiMsg`] when the CLI exits.
+    /// Spawn the configured AI command (see [`Settings::ai_command`]) over `text`,
+    /// returning a receiver for its captured stdout (or `None` after reporting an
+    /// empty input or a spawn failure). The reader thread sends one [`AiMsg`] when
+    /// the CLI exits. The command is built from the `ai_command` template so the
+    /// AI menu can drive any assistant CLI, not just `claude`.
     fn spawn_ai(&mut self, prompt: &str, text: &str) -> Option<std::sync::mpsc::Receiver<AiMsg>> {
         if text.trim().is_empty() {
             self.status = t!("status.ai_no_input").to_string();
@@ -7549,8 +7551,8 @@ impl App {
             self.status = t!("status.ai_no_input").to_string();
             return None;
         }
-        let path = tmp.display();
-        let cmd = format!("claude -p \"{prompt}\" < \"{path}\"");
+        let path = tmp.display().to_string();
+        let cmd = self.settings.ai_command_line(prompt, &path);
         let mut child = match std::process::Command::new("sh")
             .arg("-c")
             .arg(cmd)
