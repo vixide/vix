@@ -200,7 +200,8 @@ The **Language Server** submenu:
 
 ## AI menu
 
-Each item runs the `claude` CLI in the background. **Summarize**, **Explain**,
+Each item runs the configurable assistant CLI (`ai_command` setting, default
+`claude -p "{prompt}"`) in the background. **Summarize**, **Explain**,
 and **Define** open the result in a new editor tab; **Annotate** and **Improve**
 **replace** the text with the result (an undoable edit). Only one AI task runs at
 a time.

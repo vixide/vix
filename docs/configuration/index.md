@@ -43,6 +43,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `lsp_enabled`   | bool   | `true`   | Master switch for Language Server Protocol features (diagnostics, hover, go-to-definition, completion). When off, no servers launch. See `spec/lsp.md`. |
 | `lsp_servers`   | list   | `[]`     | Language servers, matched to files by extension. Each entry has `language_id`, `extensions`, and `command`. Empty by default — Vix ships no built-in server. |
 | `contacts_dir`  | string | `""`     | Directory of vCard (`.vcf`) files for **Tools → Contacts…**. Empty = the workspace root. |
+| `ai_command`    | string | `claude -p "{prompt}"` | Command template the **AI** menu runs. `{prompt}` is replaced with the action's instruction; the input text is fed on stdin (or substituted for `{file}` if the template contains it). Point this at any assistant CLI — `claude`, `codex`, `mistral`, `ollama run …`. |
 
 Example `config.toml`:
 
@@ -66,6 +67,10 @@ keymap = "apple"
 explorer_width = 30
 messages_width = 32
 lsp_enabled = true
+
+# The AI menu shells out to this command (text is piped on stdin). Swap in any
+# assistant CLI, e.g. ai_command = "codex exec \"{prompt}\""
+ai_command = "claude -p \"{prompt}\""
 
 # One [[lsp_servers]] block per language server you have installed:
 [[lsp_servers]]

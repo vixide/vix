@@ -4,6 +4,17 @@ All notable changes to Vix are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this workspace aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **AI menu is now CLI-agnostic.** The AI commands (Summarize, Explain, Define,
+  Annotate, Improve) no longer hardcode `claude`; they run the new `ai_command`
+  setting (default `claude -p "{prompt}"`). The template's `{prompt}` placeholder
+  receives the instruction and the input text is piped on stdin (or substituted
+  for `{file}`), so the menu can drive Codex, Mistral, a local `ollama` model, or
+  any other assistant CLI. See `spec/ai/index.md` and the configuration docs.
+
 ## [0.2.0] - 2026-06-27
 
 ### Added
