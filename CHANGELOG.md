@@ -13,6 +13,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   closer steps over an auto-inserted one, and Backspace inside an empty pair
   deletes both. New `auto_pair` setting (on by default) and a **View → Editor →
   Auto-Pair Brackets** toggle.
+- **Snippet tabstops.** Snippets (Tools → Snippets…) now support `$1`/`$2`/`$0`
+  and `${1:placeholder}` fields: inserting one selects the first field and **Tab**
+  walks the rest (Esc exits). Several bundled snippets gained fields. See
+  `spec/snippets/index.md`.
 
 ## [0.4.0] - 2026-06-27
 

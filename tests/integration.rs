@@ -2603,6 +2603,37 @@ fn auto_pairs_brackets_and_deletes_empty_pair() {
 }
 
 #[test]
+fn snippet_expands_with_navigable_tabstops() {
+    let dir = unique_dir("snippet-tabstops");
+    fs::create_dir_all(&dir).unwrap();
+    let mut app = app_at(&dir);
+
+    // Open the Snippets picker and choose "Rust function" (index 7).
+    app.run_action("tools.snippets");
+    for _ in 0..7 {
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    {
+        let t = app.editor.active_tab().unwrap();
+        assert_eq!(t.editor.get_content(), "fn name() -> () {\n    \n}\n");
+        // The first tabstop's placeholder ("name") is selected.
+        assert_eq!(t.editor.selection_span(), Some((3, 7)));
+    }
+    // Typing replaces the selected placeholder.
+    for c in "foo".chars() {
+        app.on_key(key(c));
+    }
+    assert_eq!(app.editor.active_tab().unwrap().editor.get_content(), "fn foo() -> () {\n    \n}\n");
+    // Tab jumps to the (empty) parameter tabstop, between the parens.
+    app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    assert_eq!(app.editor.active_tab().unwrap().editor.get_cursor(), 7);
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn detects_image_extensions() {
     use vix::editor::is_image_path;
     assert!(is_image_path(Path::new("photos/a.PNG")));

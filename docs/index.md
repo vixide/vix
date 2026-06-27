@@ -28,7 +28,8 @@ Highlights:
   [Edit Outline](edit-outline/index.md) · [Edit JSON](edit-json/index.md) ·
   [Edit YAML](edit-yaml/index.md) · [Edit Bytes](edit-bytes/index.md).
 - Generators & editing: [Insert](insert/index.md) (UUID, ZID, Markdown, HTML,
-  Lorem ipsum, Date/Time) · [QR Code](qr-code/index.md) ·
+  Lorem ipsum, Date/Time) · [Snippets](snippets/index.md) (with tabstops) ·
+  [QR Code](qr-code/index.md) ·
   [Multiple Cursors](multiple-cursors/index.md) (select-all-occurrences, column
   selection).
 - View: [Zen Mode](zen-mode/index.md) · [Breadcrumb Bar](breadcrumb/index.md).

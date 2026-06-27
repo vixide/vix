@@ -415,6 +415,15 @@ pub struct DiffViewState {
     pub scroll: usize,
 }
 
+/// An active snippet expansion: the tabstop ranges still to visit (in
+/// navigation order) and the index of the current one. Tab advances through them.
+pub struct SnippetSession {
+    /// Absolute `(start, end)` char ranges of the tabstops, in nav order.
+    pub stops: Vec<(usize, usize)>,
+    /// Index of the current tabstop within `stops`.
+    pub index: usize,
+}
+
 /// The spell-suggestion popup (Ctrl+;): corrections for the misspelled word at
 /// the cursor, plus Add-to-dictionary / Ignore actions.
 pub struct SpellSuggest {
@@ -842,6 +851,8 @@ pub struct App {
     pub markdown_preview: Option<MarkdownPreview>,
     /// Snippets picker overlay, when open.
     pub snippets: Option<crate::snippet_tool::Picker>,
+    /// Active snippet tabstop session (Tab navigates the fields), when expanding.
+    snippet_session: Option<SnippetSession>,
     /// Contact-browser overlay, when open.
     pub contacts: Option<ContactPanel>,
     /// Single-vCard view overlay, when open (above the contact browser).
@@ -1092,7 +1103,7 @@ impl App {
             x11_panel: None,
             html_panel: None, system_info: None, dashboard: None, dashboard_rx: None,
             outline: None, welcome: None, file_info: None, text_info: None,
-            markdown_preview: None, snippets: None, contacts: None, vcard: None,
+            markdown_preview: None, snippets: None, snippet_session: None, contacts: None, vcard: None,
             lsp,
             lsp_synced: std::collections::HashMap::new(),
             hover: None, completion: None, dialog: None, color_converter: None,
@@ -4961,6 +4972,20 @@ impl App {
         if self.macro_recording && !self.macro_playing {
             self.macro_keys.push(key);
         }
+        // While a snippet is expanding, Tab walks its fields and Esc ends it.
+        if self.snippet_active() {
+            match key.code {
+                KeyCode::Tab if !Self::ctrl(&key) && !Self::alt(&key) => {
+                    self.snippet_tab();
+                    return;
+                }
+                KeyCode::Esc => {
+                    self.snippet_session = None;
+                    return;
+                }
+                _ => {}
+            }
+        }
         let area = self.editor_view();
         match key.code {
             KeyCode::Home => return self.editor.cursor_line_home(),
@@ -8779,16 +8804,93 @@ impl App {
             }
     }
 
-    /// Insert the highlighted snippet's body at the cursor and close the picker.
+    /// Insert the highlighted snippet's body at the cursor and close the picker,
+    /// starting a tabstop session if the snippet has fields.
     fn insert_selected_snippet(&mut self) {
         let Some(body) = self.snippets.as_ref().map(|p| p.selected_body().to_string()) else {
             return;
         };
-        let area = self.layout.editor;
-        if self.editor.insert_str(&body, area) {
-            self.status = t!("status.snippet_inserted").to_string();
-        }
         self.snippets = None;
+        self.insert_snippet_body(&body);
+    }
+
+    /// Insert a snippet `body` (with `$1`/`${1:…}`/`$0` tabstops) at the cursor.
+    /// Places the cursor at the first tabstop and arms a [`SnippetSession`] so Tab
+    /// walks the rest; with no tabstops it is a plain insert.
+    fn insert_snippet_body(&mut self, body: &str) {
+        let parsed = crate::snippet_tool::parse(body);
+        let area = self.layout.editor;
+        let base = self.editor.active_tab().map_or(0, |t| t.editor.get_cursor());
+        if !self.editor.insert_str(&parsed.text, area) {
+            return;
+        }
+        self.status = t!("status.snippet_inserted").to_string();
+        if parsed.stops.is_empty() {
+            return;
+        }
+        let stops: Vec<(usize, usize)> =
+            parsed.stops.iter().map(|s| (base + s.start, base + s.end)).collect();
+        let single = stops.len() == 1;
+        self.snippet_session = Some(SnippetSession { stops, index: 0 });
+        self.snippet_goto(0);
+        // A lone `$0` is just a caret placement — no session to navigate.
+        if single {
+            self.snippet_session = None;
+        }
+    }
+
+    /// Move to tabstop `index`: select its placeholder (or place a bare caret).
+    fn snippet_goto(&mut self, index: usize) {
+        let Some((start, end)) = self.snippet_session.as_ref().and_then(|s| s.stops.get(index).copied())
+        else {
+            return;
+        };
+        let area = self.editor_view();
+        if let Some(t) = self.editor.active_tab_mut() {
+            t.editor.set_selection_range(start, end);
+            t.editor.focus(&area);
+        }
+    }
+
+    /// Advance to the next snippet tabstop, shifting later stops by the net length
+    /// change the user made at the current one. Ends the session after the last.
+    fn snippet_tab(&mut self) {
+        let cursor = self.editor.active_tab().map_or(0, |t| t.editor.get_cursor());
+        let next = {
+            let Some(sess) = self.snippet_session.as_mut() else { return };
+            let cur_end = sess.stops[sess.index].1;
+            // Shift every later stop by the net length change the user made at the
+            // current field (cursor vs. the field's original end).
+            for (s, e) in &mut sess.stops {
+                if *s >= cur_end {
+                    if cursor >= cur_end {
+                        let add = cursor - cur_end;
+                        *s += add;
+                        *e += add;
+                    } else {
+                        let sub = cur_end - cursor;
+                        *s = s.saturating_sub(sub);
+                        *e = e.saturating_sub(sub);
+                    }
+                }
+            }
+            let next = sess.index + 1;
+            if next >= sess.stops.len() {
+                None
+            } else {
+                sess.index = next;
+                Some(next)
+            }
+        };
+        match next {
+            Some(i) => self.snippet_goto(i),
+            None => self.snippet_session = None,
+        }
+    }
+
+    /// Whether a snippet tabstop session is active (so Tab navigates fields).
+    fn snippet_active(&self) -> bool {
+        self.snippet_session.is_some()
     }
 
     // ----- System Information panel ---------------------------------------
