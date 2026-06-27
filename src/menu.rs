@@ -170,6 +170,8 @@ const EDIT_SELECT: &[Item] = &[
     Item::leaf("menu.item.edit.select_paragraph", "edit.select_paragraph", ""),
     Item::leaf("menu.item.edit.select_section", "edit.select_section", ""),
     Item::leaf("menu.item.edit.select_all_occurrences", "edit.select_all_occurrences", ""),
+    Item::leaf("menu.item.edit.column_select_down", "edit.column_select_down", "Alt Shift ↓"),
+    Item::leaf("menu.item.edit.column_select_up", "edit.column_select_up", "Alt Shift ↑"),
     Item::leaf("menu.item.edit.select_all", "edit.select_all", "Ctrl A"),
 ];
 

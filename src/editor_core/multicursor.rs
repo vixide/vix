@@ -301,6 +301,45 @@ impl Editor {
         self.add_caret_vertical(true);
     }
 
+    /// Extend a column (rectangular) selection by one line: add a caret on the
+    /// line past the current block frontier, spanning the same columns as the
+    /// primary caret's selection (or a bare caret when there is no selection).
+    /// Columns clamp to each line's length. No-op at the buffer's top/bottom.
+    /// The resulting carets edit together via [`Editor::multi_insert`] etc.
+    pub fn column_select(&mut self, down: bool) {
+        let code = self.code_ref();
+        let cur_line = code.char_to_line(self.cursor);
+        let cur_col = self.cursor - code.line_to_char(cur_line);
+        // The anchor column comes from the primary selection's far end (same line
+        // for a clean rectangle); a bare cursor has anchor_col == cur_col.
+        let anchor_col = match self.selection {
+            Some(s) if !s.is_empty() => {
+                let a = if s.end == self.cursor { s.start } else { s.end };
+                a - code.line_to_char(code.char_to_line(a))
+            }
+            _ => cur_col,
+        };
+        // Frontier = furthest caret line in the direction of travel.
+        let mut lines: Vec<usize> = self.carets.iter().map(|c| code.char_to_line(c.pos)).collect();
+        lines.push(cur_line);
+        let frontier = if down {
+            lines.into_iter().max().unwrap_or(cur_line)
+        } else {
+            lines.into_iter().min().unwrap_or(cur_line)
+        };
+        if (down && frontier + 1 >= code.len_lines()) || (!down && frontier == 0) {
+            return;
+        }
+        let target = if down { frontier + 1 } else { frontier - 1 };
+        let base = code.line_to_char(target);
+        let llen = code.line_len(target);
+        let pos = base + cur_col.min(llen);
+        let anchor = (anchor_col != cur_col).then_some(base + anchor_col.min(llen));
+        if pos != self.cursor && !self.carets.iter().any(|c| c.pos == pos) {
+            self.carets.push(Caret { pos, anchor });
+        }
+    }
+
     fn add_caret_vertical(&mut self, down: bool) {
         let pos = {
             let code = self.code_ref();
@@ -351,6 +390,30 @@ mod caret_tests {
         let mut e = ed("alpha beta gamma", 0);
         e.add_all_occurrences();
         assert!(!e.has_multi_carets(), "single match adds no extra carets");
+    }
+
+    #[test]
+    fn column_select_builds_a_vertical_block_of_carets() {
+        let mut e = ed("abc\ndef\nghi", 1); // line 0, col 1
+        e.column_select(true);
+        e.column_select(true);
+        let mut pos = e.caret_positions();
+        pos.sort_unstable();
+        // line starts 0/4/8, column 1 -> 1/5/9
+        assert_eq!(pos, vec![1, 5, 9]);
+    }
+
+    #[test]
+    fn column_select_clamps_to_short_lines_and_stops_at_edges() {
+        let mut e = ed("longline\nx\nlongline", 6); // col 6 on line 0
+        e.column_select(true); // line 1 "x" len 1 -> clamps to col 1
+        e.column_select(true); // line 2 -> col 6
+        let mut pos = e.caret_positions();
+        pos.sort_unstable();
+        // 6 ; line1 start 9 + min(6,1)=1 ->10 ; line2 start 11 + 6 ->17
+        assert_eq!(pos, vec![6, 10, 17]);
+        e.column_select(true); // already at last line -> no-op
+        assert_eq!(e.caret_positions().len(), 3);
     }
 
     #[test]
