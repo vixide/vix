@@ -92,12 +92,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     ci += 1;
     let messages_rect = if app.show_messages { Some(cols[ci]) } else { None };
 
-    // Center: tab bar over editor+scrollbar.
-    let center = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(1)])
-        .split(center_rect);
-    app.layout.tabs = center[0];
+    // Center: tab bar, optional breadcrumb bar, then editor+scrollbar.
+    let (tabs_rect, breadcrumb_rect, editor_cell) = center_split(center_rect, app.show_breadcrumbs);
+    app.layout.tabs = tabs_rect;
 
     let editor_block = Block::default()
         .style(theme::region_base(theme::Region::Editor))
@@ -105,7 +102,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         .borders(Borders::TOP)
         .border_type(BorderType::Rounded)
         .border_style(theme::region_title(theme::Region::Editor, app.focus == Focus::Editor));
-    let editor_inner = editor_block.inner(center[1]);
+    let editor_inner = editor_block.inner(editor_cell);
 
     if let Some(r) = explorer_rect {
         app.layout.explorer = r;
@@ -125,8 +122,11 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if let Some(r) = explorer_rect {
         draw_explorer(app, frame, r);
     }
-    draw_tabs(app, frame, center[0]);
-    frame.render_widget(editor_block, center[1]);
+    draw_tabs(app, frame, tabs_rect);
+    if let Some(r) = breadcrumb_rect {
+        draw_breadcrumb(app, frame, r);
+    }
+    frame.render_widget(editor_block, editor_cell);
     draw_editor_region(app, frame, editor_inner);
     if let Some(r) = messages_rect {
         draw_messages(app, frame, r);
@@ -1611,6 +1611,31 @@ fn draw_explorer(app: &mut App, frame: &mut Frame, area: Rect) {
     } else {
         Rect::default()
     };
+}
+
+// Split the center column into the tab bar, an optional breadcrumb bar, and the
+// editor cell. Returns (tabs, breadcrumb, editor).
+fn center_split(area: Rect, breadcrumbs: bool) -> (Rect, Option<Rect>, Rect) {
+    let dir = Direction::Vertical;
+    if breadcrumbs {
+        let c = Layout::default()
+            .direction(dir)
+            .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Min(1)])
+            .split(area);
+        (c[0], Some(c[1]), c[2])
+    } else {
+        let c = Layout::default()
+            .direction(dir)
+            .constraints([Constraint::Length(1), Constraint::Min(1)])
+            .split(area);
+        (c[0], None, c[1])
+    }
+}
+
+// Render the breadcrumb bar: the active file name and the enclosing symbol.
+fn draw_breadcrumb(app: &App, frame: &mut Frame, area: Rect) {
+    let line = Line::from(Span::styled(format!(" {}", app.breadcrumb()), theme::dim()));
+    frame.render_widget(Paragraph::new(line).style(theme::base()), area);
 }
 
 fn draw_tabs(app: &App, frame: &mut Frame, area: Rect) {

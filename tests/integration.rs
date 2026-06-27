@@ -941,6 +941,25 @@ fn select_all_occurrences_creates_multi_carets() {
 }
 
 #[test]
+fn breadcrumb_shows_file_and_enclosing_symbol() {
+    let dir = unique_dir("crumb");
+    let file = dir.join("m.rs");
+    fs::write(&file, "fn alpha() {}\nfn beta() {\n    let x = 1;\n}\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&file);
+    app.on_key(keycode(KeyCode::Down));
+    app.on_key(keycode(KeyCode::Down)); // cursor on line 3, inside beta
+
+    app.run_action("view.breadcrumbs");
+    assert!(app.show_breadcrumbs, "breadcrumb bar toggled on");
+    let crumb = app.breadcrumb();
+    assert!(crumb.starts_with("m.rs"), "shows the file name: {crumb:?}");
+    assert!(crumb.contains("beta"), "shows the enclosing symbol: {crumb:?}");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn on_save_toggles_flip_settings() {
     let mut app = app_at(Path::new("."));
     let trim = app.settings.trim_trailing_whitespace;
@@ -2987,7 +3006,14 @@ fn view_layout_submenu_rolls_up_the_dock_toggles() {
     let actions: Vec<&str> = layout.iter().map(|it| it.action).collect();
     assert_eq!(
         actions,
-        vec!["view.left_dock", "view.right_dock", "view.bottom_dock", "view.status_bar", "view.zen"]
+        vec![
+            "view.left_dock",
+            "view.right_dock",
+            "view.bottom_dock",
+            "view.status_bar",
+            "view.breadcrumbs",
+            "view.zen"
+        ]
     );
 }
 
