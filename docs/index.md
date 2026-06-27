@@ -11,7 +11,7 @@ Highlights:
 - [Keybindings](keybindings/index.md) — every keyboard shortcut and mouse
   gesture, including keymaps.
 - [Configuration](configuration/index.md) — settings file, every key, CLI
-  flags.
+  flags. · [EditorConfig](editorconfig/index.md) — per-project `.editorconfig`.
 - [Themes](themes/index.md) · [Internationalization](internationalization/index.md)
   · [Keymaps](keymaps/index.md) · [Menus](menus/index.md)
 - [Language Server Protocol](language-server-protocol/index.md) — diagnostics,
