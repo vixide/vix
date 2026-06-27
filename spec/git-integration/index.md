@@ -19,8 +19,9 @@ future phase.
 - **Editor diff gutter** draws a colored bar in the line-number gutter for each
   line that differs from its committed (HEAD) version — green added, yellow
   modified, red deleted. Computed by diffing the buffer against its cached HEAD
-  blob (`vix_git::diff_marks`, via the `similar` crate). Shown in the non-wrapped
-  view; the soft-wrap gutter is a follow-up.
+  blob (`vix_git::diff_marks`, via the `similar` crate). Drawn in both the
+  non-wrapped and soft-wrap views (in soft-wrap, the bar appears on a changed
+  line's first visual row).
 
 The cached git state (repo?, branch, changed files, HEAD blobs) refreshes at
 startup, after each save, and after git actions.
@@ -66,5 +67,4 @@ author's own time zone via a dependency-free epoch→civil-date conversion.
 ## Roadmap
 
 - Merge-conflict resolution UI.
-- Diff gutter in the soft-wrap renderer.
 - Persistent inline (end-of-line) blame annotations, not just the status bar.

@@ -108,6 +108,23 @@ impl Editor {
             buf.set_string(area.left(), draw_y, &s, self.line_number_style);
         }
 
+        // git diff gutter: a colored bar on the first visual row of a changed
+        // logical line (mirrors the non-wrapped renderer; continuation rows have
+        // no bar so a wrapped change is marked once, at its start).
+        if is_first
+            && let Some(ref gmarks) = self.gutter_marks
+            && let Some(&(_, color)) = gmarks.iter().find(|&&(l, _)| l == vr.line)
+        {
+            let sign_x = if self.show_line_numbers {
+                area.left() + u16::try_from(line_number_digits).unwrap_or(u16::MAX)
+            } else {
+                area.left()
+            };
+            if sign_x < right {
+                buf[(sign_x, draw_y)].set_symbol("\u{258e}").set_style(Style::default().fg(color));
+            }
+        }
+
         // Base text for the segment (with whitespace glyphs if enabled).
         let seg = code.char_slice(vr.start, vr.end);
         let displayed: String = if self.show_whitespace {

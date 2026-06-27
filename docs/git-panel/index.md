@@ -44,8 +44,8 @@ differs from its committed (HEAD) version:
 - **red** — deleted line
 
 The gutter is computed by diffing the current buffer against its cached HEAD
-contents. It is shown in the normal (non-wrapped) view; the soft-wrap renderer
-does not yet draw it.
+contents, and is drawn in both the normal and the **soft-wrap** view (in soft-wrap,
+a changed logical line shows its bar on its first visual row).
 
 ## The Git menu
 
@@ -141,6 +141,7 @@ for the hunk's region. See `spec/stage-hunk/index.md` and
 
 ## Roadmap
 
-The following are planned but not yet available:
+The core Git features are in place. Remaining ideas:
 
-- Diff gutter in the soft-wrap renderer.
+- Persistent inline (end-of-line) blame annotations, beyond the status bar.
+- Interactive rebase / cherry-pick helpers.
