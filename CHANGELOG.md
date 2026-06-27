@@ -28,6 +28,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Persistent spellcheck user dictionary.** Words added from the spell-suggest
   popup now persist across sessions in `user_dictionary.txt` (config directory)
   and are reloaded on launch, instead of being session-only.
+- **Multi-line commit messages.** The Git commit prompt now accepts a multi-line
+  message: `Alt+Enter` inserts a newline, `Enter` commits — so subject + body
+  messages work.
 
 ### Changed
 

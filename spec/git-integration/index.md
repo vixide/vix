@@ -32,8 +32,9 @@ letter:
 
 - `↑`/`↓` — move the selection.
 - `Space` — toggle the selected file staged/unstaged; `s` stage, `u` unstage.
-- `c` — commit: prompts for a one-line message and runs `git commit` (only when
-  something is staged).
+- `c` — commit: prompts for a message and runs `git commit` (only when something
+  is staged). The prompt is **multi-line**: `Alt+Enter` inserts a newline, plain
+  `Enter` submits, so subject + body messages are supported.
 - `r` — refresh the status.
 - `Esc` — close.
 
@@ -66,5 +67,4 @@ author's own time zone via a dependency-free epoch→civil-date conversion.
 
 - Merge-conflict resolution UI.
 - Diff gutter in the soft-wrap renderer.
-- Multi-line commit messages.
 - Persistent inline (end-of-line) blame annotations, not just the status bar.

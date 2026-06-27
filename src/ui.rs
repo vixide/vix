@@ -3880,12 +3880,21 @@ fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
     let Some(p) = app.prompt.as_ref() else { return };
     // The workspace→dock search prompt shows case/regex toggles on a second line.
     let toggles = matches!(p.kind, crate::app::PromptKind::SearchToDock);
+    // The git-commit prompt accepts a multi-line message (Alt+Enter = newline).
+    let multiline = matches!(p.kind, crate::app::PromptKind::GitCommit);
     let width = area.width * 6 / 10;
+    let body_rows: u16 = if multiline {
+        u16::try_from(p.input.split('\n').count()).unwrap_or(1).clamp(1, 12) + 1
+    } else if toggles {
+        2
+    } else {
+        1
+    };
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
         y: area.y + area.height / 3,
         width,
-        height: if toggles { 4 } else { 3 },
+        height: body_rows + 2,
     };
     frame.render_widget(Clear, rect);
     let block = Block::default()
@@ -3896,6 +3905,28 @@ fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
         .title(format!(" {} ", p.title));
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
+
+    if multiline {
+        let rows = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(1)])
+            .split(inner);
+        let parts: Vec<&str> = p.input.split('\n').collect();
+        let last = parts.len().saturating_sub(1);
+        let mut lines: Vec<Line> = Vec::with_capacity(parts.len());
+        for (i, part) in parts.iter().enumerate() {
+            let prefix = if i == 0 { "\u{276f} " } else { "  " };
+            let mut spans = vec![Span::styled(prefix, theme::title(true)), Span::raw((*part).to_string())];
+            if i == last {
+                spans.push(Span::styled("\u{2588}", theme::dim()));
+            }
+            lines.push(Line::from(spans));
+        }
+        frame.render_widget(Paragraph::new(lines), rows[0]);
+        let hint = Line::from(Span::styled(t!("ui.commit_hint").to_string(), theme::dim()));
+        frame.render_widget(Paragraph::new(hint), rows[1]);
+        return;
+    }
 
     let input = Line::from(vec![
         Span::styled("\u{276f} ", theme::title(true)),
