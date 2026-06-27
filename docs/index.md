@@ -35,7 +35,8 @@ Highlights:
 - AI: [AI Chat Panel](agent-panel/index.md) (conversation with the configurable
   `ai_command` assistant).
 - Workflow: [Tasks](tasks/index.md) (named `tasks.toml` commands) ·
-  [Compare With File](diff-view/index.md) (diff against another file).
+  [Compare With File](diff-view/index.md) (diff against another file) ·
+  [Integrated Terminal](terminal/index.md) (a shell in a panel).
 
 ## Specification (`spec/`) — source of truth
 
