@@ -120,12 +120,26 @@ Switch to another branch:
 1. Open **Git → Switch Branch…**.
 2. Highlight the branch and press `Enter`.
 
+## Per-hunk staging
+
+Beyond whole-file staging in the panel, you can stage, unstage, and revert
+individual diff hunks straight from the editor — put the cursor inside the hunk,
+then:
+
+- **Git → Stage Hunk** (`git.stage_hunk`) stages just that hunk into the index.
+- **Git → Unstage Hunk** (`git.unstage_hunk`) removes just that hunk from the
+  index.
+- **Git → Revert Hunk** (`git.revert_hunk`) restores the committed text for it.
+- **Git → Diff Next / Previous** jump between changed hunks.
+
+Hunk staging is safe: it only acts when the index still matches the expected text
+for the hunk's region. See `spec/stage-hunk/index.md` and
+`spec/unstage-hunk/index.md`.
+
 ## Roadmap
 
 The following are planned but not yet available:
 
-- Branch creation and deletion.
-- Merge-conflict resolution UI.
 - Diff gutter in the soft-wrap renderer.
 - Multi-line commit messages.
 - Reloading open buffers after a branch switch changes files on disk.

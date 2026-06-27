@@ -24,10 +24,14 @@ Highlights:
   [ASCII Picker](ascii-code-picker/index.md),
   [System Information](system-information-panel/index.md), and more under
   `docs/`.
-- Edit surfaces & generators (Tools menu): Edit Table / Edit Outline / Edit JSON /
-  Edit YAML / Edit Bytes, the **Insert** submenu (UUID, ZID, Markdown, HTML, Lorem
-  ipsum, Date/Time), and the QR Code generator — specs at
-  [spec/tools/](spec/tools/), `spec/edit-*`, and [spec/qr-code](spec/qr-code/index.md).
+- Edit surfaces (Tools menu): [Edit Table](edit-table/index.md) ·
+  [Edit Outline](edit-outline/index.md) · [Edit JSON](edit-json/index.md) ·
+  [Edit YAML](edit-yaml/index.md) · [Edit Bytes](edit-bytes/index.md).
+- Generators & editing: [Insert](insert/index.md) (UUID, ZID, Markdown, HTML,
+  Lorem ipsum, Date/Time) · [QR Code](qr-code/index.md) ·
+  [Multiple Cursors](multiple-cursors/index.md) (select-all-occurrences, column
+  selection).
+- View: [Zen Mode](zen-mode/index.md) · [Breadcrumb Bar](breadcrumb/index.md).
 
 ## Specification (`spec/`) — source of truth
 
