@@ -98,8 +98,10 @@ refresh on demand.
 to check out the highlighted branch (Vix runs `git switch`), then Vix refreshes
 its cached state and the file explorer.
 
-Note: open buffers are not yet reloaded automatically after a branch switch
-changes files on disk.
+Open buffers are reloaded automatically: after the switch, every **clean**
+(unmodified) open file is re-read from disk so it reflects the new branch.
+Buffers with unsaved edits are left untouched, and a notification reports how many
+files were reloaded.
 
 ## Pull, Push, and Fetch
 
@@ -142,4 +144,3 @@ The following are planned but not yet available:
 
 - Diff gutter in the soft-wrap renderer.
 - Multi-line commit messages.
-- Reloading open buffers after a branch switch changes files on disk.

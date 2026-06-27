@@ -56,7 +56,8 @@ author's own time zone via a dependency-free epoch→civil-date conversion.
 
 - **Switch Branch…** lists local branches in a chooser; `Enter` checks out the
   highlighted branch (`git switch`), then refreshes the cached state and the
-  explorer.
+  explorer, and reloads every **clean** open buffer from disk (dirty buffers are
+  left untouched) via `Editor::reload_clean_from_disk`, reporting the count.
 - **Pull / Push / Fetch** run `git pull` / `git push` / `git fetch` through the
   async Run Command pipeline, streaming output to the bottom dock; the cached git
   state refreshes when the command finishes.
@@ -66,5 +67,4 @@ author's own time zone via a dependency-free epoch→civil-date conversion.
 - Merge-conflict resolution UI.
 - Diff gutter in the soft-wrap renderer.
 - Multi-line commit messages.
-- Reloading open buffers after a branch switch changes files on disk.
 - Persistent inline (end-of-line) blame annotations, not just the status bar.

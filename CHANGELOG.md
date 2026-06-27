@@ -22,6 +22,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Pull/Push/Fetch) completions and AI menu outcomes now post to the right-dock
   notification feed (Info on success, Error on failure), giving a durable record
   beyond the transient status bar. See `spec/vix-notification-panel/index.md`.
+- **Open buffers reload after a branch switch.** Switching branches now re-reads
+  every clean open file from disk so it reflects the new branch; dirty buffers are
+  left untouched and a notification reports the count.
 
 ### Changed
 

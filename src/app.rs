@@ -4489,8 +4489,13 @@ impl App {
             Ok(()) => {
                 self.status = t!("status.git_switched", branch = branch).to_string();
                 self.refresh_git();
-                // Files on disk may now differ; refresh the explorer tree.
+                // Files on disk may now differ; refresh the explorer tree and
+                // reload any open clean buffers so they reflect the new branch.
                 self.explorer.rebuild();
+                let n = self.editor.reload_clean_from_disk();
+                if n > 0 {
+                    self.messages.info(t!("status.git_reloaded", count = n).to_string());
+                }
             }
             Err(e) => self.messages.error(t!("msg.git_checkout_failed", error = e).to_string()),
         }
