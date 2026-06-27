@@ -17,6 +17,7 @@
 //!     files: vec!["/tmp/proj/a.rs".into()],
 //!     active: 0,
 //!     cursors: vec![12],
+//!     ..Default::default()
 //! });
 //! assert_eq!(s.workspace("/tmp/proj").unwrap().files.len(), 1);
 //! ```
@@ -56,6 +57,26 @@ pub struct WorkspaceSession {
     pub active: usize,
     /// Cursor character offset per file, parallel to `files`.
     pub cursors: Vec<usize>,
+    /// First visible line (vertical scroll) per file, parallel to `files`.
+    /// `#[serde(default)]` lets older sessions (without it) still load.
+    pub scrolls: Vec<usize>,
+    /// Split-pane layout to restore, or `None` for a single pane.
+    pub split: Option<SplitSession>,
+}
+
+/// A restorable editor split (two panes). Mirrors `editor::Split` but with a
+/// portable string direction so the session file is stable.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SplitSession {
+    /// `"vertical"` (side by side) or `"horizontal"` (stacked).
+    pub dir: String,
+    /// Tab index shown in the non-focused pane.
+    pub other: usize,
+    /// Which side is focused: 0 = left/top, 1 = right/bottom.
+    pub focused_side: usize,
+    /// Percentage width/height of the left/top pane.
+    pub ratio: u16,
 }
 
 impl Session {

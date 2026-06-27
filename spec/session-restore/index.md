@@ -33,7 +33,19 @@ root = "/home/you/project"
 files = ["/home/you/project/src/main.rs", "/home/you/project/README.md"]
 active = 0
 cursors = [128, 0]
+scrolls = [40, 0]
+
+[workspaces.split]
+dir = "vertical"
+other = 1
+focused_side = 0
+ratio = 50
 ```
+
+`scrolls` (the first visible line per file) and `split` (the two-pane layout) are
+optional — older session files without them still load (`#[serde(default)]`). The
+split is restored only when every file reopened cleanly, so the recorded pane
+index still lines up with the tab order.
 
 ## Setting
 
@@ -43,6 +55,4 @@ on the command line.
 
 ## Roadmap
 
-- Restore split-pane layout, not just the tab list.
-- Restore scroll offset in addition to the cursor position.
 - Per-workspace "reopen last session" command for the disabled-by-default case.
