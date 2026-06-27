@@ -31,6 +31,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Multi-line commit messages.** The Git commit prompt now accepts a multi-line
   message: `Alt+Enter` inserts a newline, `Enter` commits — so subject + body
   messages work.
+- **Searchable keyboard-shortcut browser.** The Help → Shortcuts overlay (`F1`)
+  now has a search field — type to filter shortcuts by key or description.
 
 ### Changed
 

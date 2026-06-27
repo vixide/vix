@@ -273,7 +273,7 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
         draw_paste_conflict(app, frame, area);
     }
     if app.show_help {
-        draw_help(frame, area);
+        draw_help(app, frame, area);
     }
     if app.dialog.is_some() {
         draw_dialog(app, frame, area);
@@ -3950,7 +3950,7 @@ fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
     }
 }
 
-fn draw_help(frame: &mut Frame, area: Rect) {
+fn draw_help(app: &App, frame: &mut Frame, area: Rect) {
     let rect = centered(area, 60, 70);
     frame.render_widget(Clear, rect);
     let block = Block::default()
@@ -3962,10 +3962,29 @@ fn draw_help(frame: &mut Frame, area: Rect) {
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
 
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1)])
+        .split(inner);
+    // Filter line: a search glyph then the live query and a caret.
+    let filter = app.help_filter.as_str();
+    let search = Line::from(vec![
+        Span::styled(format!("{} ", icon::SEARCH), theme::title(true)),
+        Span::raw(filter.to_string()),
+        Span::styled("\u{2588}", theme::dim()),
+    ]);
+    frame.render_widget(Paragraph::new(search), chunks[0]);
+
+    let needle = filter.to_lowercase();
     let rows = crate::keyboard_shortcut_panel::ROWS;
     let key_w = rows.iter().map(|r| r.keys.len()).max().unwrap_or(0);
     let lines: Vec<Line> = rows
         .iter()
+        .filter(|r| {
+            needle.is_empty()
+                || r.keys.to_lowercase().contains(&needle)
+                || t!(r.desc).to_lowercase().contains(&needle)
+        })
         .map(|r| {
             Line::from(vec![
                 Span::styled(format!(" {:<key_w$} ", r.keys), theme::title(true)),
@@ -3973,5 +3992,10 @@ fn draw_help(frame: &mut Frame, area: Rect) {
             ])
         })
         .collect();
-    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+    let body = if lines.is_empty() {
+        vec![Line::from(Span::styled(t!("ui.no_matches").to_string(), theme::dim()))]
+    } else {
+        lines
+    };
+    frame.render_widget(Paragraph::new(body).wrap(Wrap { trim: false }), chunks[1]);
 }

@@ -1,27 +1,23 @@
 # Keyboard Navigation
 
-**Status:** Roadmap. This describes a dedicated keybindings *browser* (searchable
-list of bindings with key-recording lookup) that is not yet built. For the
-shortcuts Vix supports today, see `docs/keybindings.md`.
+**Status:** Partly shipped. The keyboard-shortcut overlay (**Help → Shortcuts**,
+`F1`) is now a **searchable browser**: just type to filter the list. For the full
+set of shortcuts Vix supports, see `docs/keybindings/index.md`.
 
+## Searchable shortcut browser (shipped)
 
-| Shortcut | Action                |
-| -------- | --------------------- |
-| ↑        | Move up               |
-| ↓        | Move down             |
-| PgUp     | Page up               |
-| PgDn     | Page down             |
-| Home     | Jump to first binding |
-| End      | Jump to last binding  |
+Open with **Help → Shortcuts** or `F1`. A search field sits at the top:
 
-Searching
+- **Type** to filter the rows live by key combo or (translated) description;
+  matching is case-insensitive and substring-based.
+- **Backspace** edits the query; an empty query shows every shortcut.
+- **Esc** / **F1** close the overlay (and clear the filter).
 
-Two search modes are available:
+Rendering filters `keyboard_shortcut_panel::ROWS` against `App::help_filter`.
 
-Text Search
+## Roadmap
 
-Press / to start a text search. Type to filter bindings by action name, description, key display, or context. Plugin-registered command names are included in search results. Press Esc to cancel.
-
-Key Recording Search
-
-Press r to start a key recording search. Press any key combination to find all bindings that match that exact key. Press Tab to switch between text and key recording modes.
+- **Key-recording lookup**: press a key combination and see which binding(s) it
+  triggers (reverse lookup), with a Tab toggle between text and key-record modes.
+- Scrolling/Home/End navigation when the filtered list overflows the overlay.
+- Including plugin-registered command names once a plugin system exists.

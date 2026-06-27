@@ -859,6 +859,8 @@ pub struct App {
     pub clock: crate::clock::Clock,
     /// Whether the keyboard-help overlay is shown.
     pub show_help: bool,
+    /// Live filter text for the keyboard-help browser (matches keys + description).
+    pub help_filter: String,
     /// Status-bar text.
     pub status: String,
     /// Set to request application exit.
@@ -1022,6 +1024,7 @@ impl App {
             show_clock: false,
             clock: crate::clock::Clock::new(),
             show_help: false,
+            help_filter: String::new(),
             focus: Focus::Editor,
             status: t!("status.ready").to_string(),
             should_quit: false,
@@ -1191,7 +1194,16 @@ impl App {
         }
         if self.show_help {
             match key.code {
-                KeyCode::Esc | KeyCode::F(1) | KeyCode::Char('q') => self.show_help = false,
+                KeyCode::Esc | KeyCode::F(1) => {
+                    self.show_help = false;
+                    self.help_filter.clear();
+                }
+                KeyCode::Backspace => {
+                    self.help_filter.pop();
+                }
+                KeyCode::Char(c) if !Self::ctrl(&key) && !Self::alt(&key) => {
+                    self.help_filter.push(c);
+                }
                 _ => {}
             }
             return true;

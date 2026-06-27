@@ -31,7 +31,7 @@ Switch via **View → Keymap…**; the choice persists. See [Keymaps](#keymaps).
 | `F12`            | Go to definition of the symbol under the cursor      |
 | `F10`            | Open / close the menu bar                            |
 | `Alt+F/E/V/T/H`  | Open the File / Edit / View / Tools / Help menu      |
-| `F1`             | Show the keyboard-shortcut help overlay              |
+| `F1`             | Open the searchable keyboard-shortcut browser (type to filter) |
 
 ## Editor (when the editor is focused)
 
