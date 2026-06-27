@@ -72,8 +72,10 @@ Open with **Ctrl+Shift+F**, or **Search in Workspace** / **Search and Replace in
 Workspace** from the command palette. Type to search incrementally across every
 file under the workspace root; results list as `path:line: text`. Use ↑/↓ to
 navigate and Enter to open a match. In the replace variant, **Tab** switches to
-the replacement field and **Alt+Enter** (or Enter from the replace field)
-rewrites every match across the workspace.
+the replacement field and **Alt+Enter** (or Enter from the replace field) opens a
+**preview**: a list of every affected file with its match count. Nothing is
+written until you confirm with **y** / **Enter** (**n** / **Esc** cancels), so you
+can review the scope before a project-wide rewrite.
 
 Open buffers are searched and replaced in their current (possibly unsaved)
 state. Files larger than 2 MB and binary files are skipped, and results are

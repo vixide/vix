@@ -169,10 +169,12 @@ A panel-based variant (`Ctrl+Shift+F`, or palette **Search in Workspace** /
 **Search and Replace in Workspace**) searches incrementally across every file under
 the workspace root, listing results as `path:line: text`; `↑` / `↓` navigate and
 `Enter` opens a match. In the replace variant, `Tab` reaches the replacement field
-and `Alt+Enter` (or `Enter` from the replace field) rewrites every match across the
-workspace via the same `replace_all` engine. Open buffers are matched and rewritten
-in their current state; files over 2 MB and binary files are skipped, and results
-are capped.
+and `Alt+Enter` (or `Enter` from the replace field) computes the replacement across
+the workspace via the same `replace_all` engine and opens a **preview/confirm
+overlay** listing each affected file with its match count (`relpath (n)`). Nothing
+is written until the user confirms with `y`/`Enter`; `n`/`Esc` cancels (`↑`/`↓`
+scroll the file list). On confirm the planned text is written and open buffers are
+synced. Files over 2 MB and binary files are skipped, and results are capped.
 
 **Path filters** narrow the file set by regex against each file's workspace-relative
 path: **Include path** (only matching paths are searched) and **Exclude path**
