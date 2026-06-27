@@ -50,3 +50,18 @@ Shared terms used across the code, specs, and docs.
   chosen in **View → Keymap…** and persisted in the `keymap` setting.
 - **Mode (Vim)** — within the Vim keymap, **Normal** (motions/commands) vs
   **Insert** (typing); the `:` command line is a third input state.
+- **Edit surface** — a full-screen overlay editor for a non-plain-text view of the
+  active buffer, each a module owning its state and a `handle_key` returning an
+  `Outcome`: **Edit Table** (`edit_table`, CSV/TSV grid), **Edit Outline**
+  (`edit_outline`, indented prose hierarchy with folding), **Edit JSON / Edit
+  YAML** (`edit_value`, a foldable structured-value tree), **Edit Bytes**
+  (`edit_bytes`, a hex/ASCII byte editor). All under the **Tools** menu.
+- **Insert (Tools menu)** — the submenu (formerly "Generate") whose items insert
+  generated content at the cursor: UUID, ZID, Markdown/HTML snippets, Lorem ipsum,
+  and Date/Time presets. Actions are `tools.insert.*`.
+- **Column selection** — a rectangular multi-caret selection spanning the same
+  columns across consecutive lines (Alt+Shift+↑/↓, `Editor::column_select`); the
+  block edits together via the multi-caret path.
+- **Zen mode** — a focus mode that hides the docks and status bar
+  (`view.zen`); **breadcrumbs** — an optional `file ▸ symbol` bar above the editor
+  (`view.breadcrumbs`).

@@ -1,9 +1,9 @@
-# Tools: Generate: UUID
+# Tools: Insert: UUID
 
-Subscrate uuid_tool.
+Module uuid_tool.
 
 - menu "Tools"
-  - submenu "Generate"
+  - submenu "Insert"
     - submenu "UUID"
       - menuitem "1 = Unsortable Time Count MAC" -> Generate UUID v1 using a timestamp, a monotonic counter, and a MAC address.
       - menuitem "2 = DCE Security" -> Generate UUID v2 for DCE Security.

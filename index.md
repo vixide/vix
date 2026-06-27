@@ -53,6 +53,18 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
   and a navigable month grid with today highlighted (all computed with [`jiff`]).
 - **Nerd Font palette** (Tools menu) — a character picker: browse a grid of Nerd
   Font glyphs and click (or arrow + Enter) to insert one into the editor.
+- **Edit surfaces** (Tools menu) — view and edit the active buffer as a CSV/TSV
+  table, a folding prose outline, a JSON/YAML tree, or a hex byte dump.
+- **Insert** (Tools menu) — UUID/ZID, Markdown & HTML snippets, Lorem ipsum, and
+  Date/Time presets (ISO 8601 / RFC 3339 / epoch); plus a **QR Code** generator.
+- **Multi-cursor & column editing** — a caret on every match of the selection
+  (select-all-occurrences), or a rectangular block (`Alt+Shift+↑/↓`).
+- **Git** — status / diff / blame, **stage / unstage / revert per hunk**, diff
+  navigation, branch switch & merge, stash, amend, and a merge-conflict resolver.
+- **Language Server Protocol** — diagnostics, hover, completion, go-to,
+  references, rename, code actions/lens, and inlay hints, configured per language.
+- **Focus & navigation** — **Zen mode** hides the docks and status bar; an
+  optional **breadcrumb bar** shows `file ▸ symbol`.
 - **Themes** — Dark, Light, and more ship bundled, plus your can add your own.
 - **Internationalization** — the whole UI is translatable into many languages.
 - **Keymaps** — switch the keyboard bindings among vim, emacs, macOS.

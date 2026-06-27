@@ -67,7 +67,7 @@ No code changes are needed — edit YAML only.
    ```
 
 3. To make a new language selectable in **View → Locale…**, add it to
-   `LOCALES` in the `vix-locale-chooser` crate (`code` + endonym `name`).
+   `LOCALES` in the `locale_model` module (`code` + endonym `name`).
 
 Because English is the fallback, you can translate incrementally: add the keys
 you have, and the rest stay in English until you fill them in.
@@ -88,4 +88,4 @@ you have, and the rest stay in English until you fill them in.
 
 ## See also
 
-- `vix-locale-chooser/spec/index.md` — the localization specification (source of truth).
+- `spec/localization/index.md` — the localization specification (source of truth).
