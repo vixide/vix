@@ -45,6 +45,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   indent style/size and trim/final-newline rules per opened file, overriding the
   global settings. New `editorconfig` setting (on by default). See
   `spec/editorconfig/index.md`.
+- **Task runner.** A workspace `tasks.toml` (or `.vix/tasks.toml`) defines named
+  shell commands; **Tools → Tasks…** (action `tools.tasks`) lists and runs them
+  through the async pipeline. See `spec/tasks/index.md`.
 
 ### Changed
 

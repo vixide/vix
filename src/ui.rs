@@ -191,6 +191,9 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.branch_chooser.is_some() {
         draw_branch_chooser(app, frame, area);
     }
+    if app.task_chooser.is_some() {
+        draw_task_chooser(app, frame, area);
+    }
     if app.location_chooser.is_some() {
         draw_location_chooser(app, frame, area);
     }
@@ -966,6 +969,14 @@ fn draw_branch_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let hint = t!("ui.branch_hint");
     app.layout.chooser =
         draw_list_chooser(frame, area, &t!("ui.branch"), &hint, &c.branches, c.selected);
+}
+
+fn draw_task_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(c) = app.task_chooser.as_ref() else { return };
+    // Show "name — command" so the action is clear before running it.
+    let labels: Vec<String> = c.tasks.iter().map(|t| format!("{} — {}", t.name, t.command)).collect();
+    let hint = t!("ui.tasks_hint");
+    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.tasks"), &hint, &labels, c.selected);
 }
 
 fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {

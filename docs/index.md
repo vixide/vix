@@ -34,6 +34,7 @@ Highlights:
 - View: [Zen Mode](zen-mode/index.md) · [Breadcrumb Bar](breadcrumb/index.md).
 - AI: [AI Chat Panel](agent-panel/index.md) (conversation with the configurable
   `ai_command` assistant).
+- Workflow: [Tasks](tasks/index.md) (named `tasks.toml` commands).
 
 ## Specification (`spec/`) — source of truth
 
