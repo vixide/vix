@@ -221,6 +221,9 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.ai_panel.is_some() {
         draw_ai_panel(app, frame, area);
     }
+    if app.ai_diff_review().is_some() {
+        draw_ai_diff(app, frame, area);
+    }
     if app.x11_panel.is_some() {
         draw_x11_panel(app, frame, area);
     }
@@ -3052,6 +3055,96 @@ fn draw_dashboard(app: &App, frame: &mut Frame, area: Rect) {
 
     let hint = Line::from(Span::styled(t!("ui.dashboard_hint").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
+}
+
+#[allow(clippy::too_many_lines)]
+fn draw_ai_diff(app: &mut App, frame: &mut Frame, area: Rect) {
+    use crate::ai_diff::Seg;
+    let Some(review) = app.ai_diff_review() else { return };
+    let width = (area.width * 8 / 10).clamp(30, area.width);
+    let height = (area.height * 8 / 10).clamp(8, area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let title = format!(
+        " {} {} ({}/{}) ",
+        icon::INFO,
+        t!("ui.ai_diff"),
+        review.accepted_count(),
+        review.change_count()
+    );
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(title);
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+    let body = chunks[0];
+    let positions = review.change_positions();
+    let selected_seg = positions.get(review.selected).copied();
+
+    let mut lines: Vec<Line> = Vec::new();
+    for (i, seg) in review.segs.iter().enumerate() {
+        match seg {
+            Seg::Equal(ls) => {
+                for l in ls {
+                    lines.push(Line::from(Span::styled(format!("  {}", l.trim_end_matches('\n')), theme::dim())));
+                }
+            }
+            Seg::Change { old, new, accepted } => {
+                let here = Some(i) == selected_seg;
+                let marker = if here { "▸" } else { " " };
+                for l in old {
+                    let style = Style::default().fg(Color::Red).add_modifier(Modifier::DIM);
+                    lines.push(Line::from(Span::styled(
+                        format!("{marker} - {}", l.trim_end_matches('\n')),
+                        style,
+                    )));
+                }
+                for l in new {
+                    let mut style = Style::default().fg(Color::Green);
+                    if !accepted {
+                        style = style.add_modifier(Modifier::DIM | Modifier::CROSSED_OUT);
+                    } else if here {
+                        style = style.add_modifier(Modifier::BOLD);
+                    }
+                    lines.push(Line::from(Span::styled(
+                        format!("{marker} + {}", l.trim_end_matches('\n')),
+                        style,
+                    )));
+                }
+            }
+        }
+    }
+    // Scroll so the selected hunk stays visible: anchor the view near it.
+    let view_h = body.height as usize;
+    let anchor = selected_seg
+        .map_or(0, |sid| review.segs[..sid].iter().map(seg_line_count).sum::<usize>());
+    let start = anchor.saturating_sub(view_h / 3).min(lines.len().saturating_sub(view_h));
+    let window: Vec<Line> = lines.into_iter().skip(start).take(view_h).collect();
+    frame.render_widget(Paragraph::new(window), body);
+
+    let hint = Line::from(Span::styled(t!("ui.ai_diff_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
+}
+
+/// Number of rendered lines a diff segment occupies (old + new for a change).
+fn seg_line_count(seg: &crate::ai_diff::Seg) -> usize {
+    match seg {
+        crate::ai_diff::Seg::Equal(ls) => ls.len(),
+        crate::ai_diff::Seg::Change { old, new, .. } => old.len() + new.len(),
+    }
 }
 
 fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {

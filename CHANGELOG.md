@@ -13,6 +13,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and fed back as context, so follow-up questions work; an editor selection seeds
   the input. `Alt+T` opens the last reply in a tab, `Alt+C` copies it. See
   `spec/vix-agent-panel/index.md` and `docs/agent-panel/index.md`.
+- **AI edit review.** Annotate and Improve now open an accept/reject **diff
+  review** (hunk by hunk) instead of overwriting the buffer immediately: `↑↓` move
+  between hunks, `Space` toggles one, `a`/`r` accept/reject all, `Enter` applies,
+  `Esc` discards. New `ai_diff_review` setting (on by default) controls it. See
+  `spec/ai/index.md`.
 
 ### Changed
 
