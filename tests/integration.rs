@@ -929,6 +929,18 @@ fn zen_mode_hides_then_restores_chrome() {
 }
 
 #[test]
+fn select_all_occurrences_creates_multi_carets() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "foo bar foo baz foo");
+    app.on_key(keycode(KeyCode::Home)); // cursor onto the first "foo"
+    app.run_action("edit.select_all_occurrences");
+    assert!(
+        app.editor.active_tab().unwrap().editor.has_multi_carets(),
+        "every occurrence becomes a caret"
+    );
+}
+
+#[test]
 fn on_save_toggles_flip_settings() {
     let mut app = app_at(Path::new("."));
     let trim = app.settings.trim_trailing_whitespace;

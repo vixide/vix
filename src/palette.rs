@@ -176,6 +176,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.undo", "edit.undo"),
     ("cmd.redo", "edit.redo"),
     ("cmd.select_all", "edit.select_all"),
+    ("cmd.select_all_occurrences", "edit.select_all_occurrences"),
     ("cmd.duplicate_line", "edit.duplicate_line"),
     ("cmd.join_lines", "edit.join_lines"),
     ("cmd.sort_lines", "edit.sort_lines"),
