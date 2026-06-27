@@ -71,6 +71,8 @@ Tree-sitter highlight queries live in repo-root `langs/`, embedded with
 | Git         | `git` (status/diff/staging via the git CLI), `conflict_tool` (merge-marker parser). |
 | Spellcheck  | `spellcheck` (Hunspell via `spellbook`).                                      |
 | Text tools  | `format_tool`, `jwt_tool`, `base_tool`, `base64_tool`, `url_tool`, `uuid_tool`, `zid_tool`, `checksum_tool`, `regex_tool`, `snippet_tool`, `markdown_preview`, `convert_tabular`, `convert_from_*_into_*_tool` (12). |
+| Edit surfaces | `edit_table` (CSV/TSV spreadsheet, `Grid`), `edit_outline` (prose hierarchy, `Tree`), `edit_value` (JSON/YAML tree, `Tree` + `Format`), `edit_bytes` (hex/ASCII byte editor, `Hex`). Overlay editors with their own `handle_key`/`Outcome`. |
+| Generators  | `qr_tool` (QR code via the `qrcode` crate, Unicode renderer), `lorem` (deterministic lorem-ipsum text). |
 | Tool dialogs| `calculator_tool`, `color_converter_tool`, `unit_converter_tool`, `pomodoro_tool`. |
 | Info panels | `text_information_panel`, `file_information_panel`, `system_information_panel`, `workspace_dashboard_panel`, `outline_panel`, `welcome_panel`. |
 | Pickers     | `ascii_character_picker`, `html_character_picker`, `nerd_font_picker`, `x11_color_picker`. |

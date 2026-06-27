@@ -4,10 +4,30 @@ All notable changes to Vix are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this workspace aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-06-27
 
 ### Added
 
+- **Edit surfaces (Tools menu)** — full-screen overlay editors for non-plain-text
+  views of the active buffer: **Edit Table** (CSV/TSV spreadsheet, `edit_table`),
+  **Edit Outline** (indented prose hierarchy with folding, `edit_outline`),
+  **Edit JSON** / **Edit YAML** (foldable structured-value tree, `edit_value`),
+  and **Edit Bytes** (hex/ASCII byte editor, `edit_bytes`).
+- **Tools → Insert submenu** (renamed from "Generate") — inserts generated content
+  at the cursor: UUID, ZID, **Markdown** and **HTML** snippets, **Lorem ipsum**
+  (`lorem`), and **Date/Time** presets (ISO 8601, RFC 3339, Unix epoch).
+- **QR Code generator** (Tools → QR Code) — encodes the selection or line into a
+  scannable Unicode QR overlay (`qr_tool`, via the `qrcode` crate).
+- **Git per-hunk unstage** (`git.unstage_hunk`) — completes interactive per-hunk
+  staging alongside stage/revert; plus diff next/prev hunk navigation.
+- **Select all occurrences** (`edit.select_all_occurrences`) — multi-cursor on
+  every match of the selection — and **column / rectangular selection**
+  (Alt+Shift+↑/↓, `edit.column_select_*`) with block editing.
+- **Zen (focus) mode** (`view.zen`), an optional **breadcrumb bar**
+  (`view.breadcrumbs`, `file ▸ symbol`), and **trim / final-newline on-save**
+  toggles.
+- **Release packaging** — `cargo-dist` (macOS arm64/x64, Windows, Linux MUSL) and
+  a `Makefile` that tests then cross-builds the three targets.
 - **Single-crate architecture (edition 2024).** Every former `vix-*` subcrate is
   now a module under `src/`; the editor widget is the `editor_core` module
   (Tree-sitter highlight queries in `langs/`, gated behind `lang-*` features).
@@ -47,6 +67,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Renamed the Tools "Generate" submenu to "Insert"** (actions `tools.generate.*`
+  → `tools.insert.*`); format/acronym menu labels route through `menu.name.*`
+  locale keys.
+- **`Alt+V` now opens the Vix menu** (the first menu); **View** moved to `Alt+I`.
 - **Renamed "keyway" → "keymap"** throughout (setting, chooser module, menus, docs).
 - **Renamed "project" → "workspace"** throughout — **Find In Workspace…**,
   **Workspace Dashboard**, workspace-wide search/replace, the `workspace_dashboard_panel`
