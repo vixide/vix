@@ -3269,6 +3269,40 @@ fn stage_hunk_stages_only_the_cursor_hunk() {
 }
 
 #[test]
+#[ignore = "needs git; creates a throwaway repo and commits in it"]
+fn unstage_hunk_removes_the_cursor_hunk_from_index() {
+    let dir = unique_dir("unstagehunk");
+    fs::create_dir_all(&dir).unwrap();
+    let dir = dir.canonicalize().unwrap();
+    let run = |args: &[&str]| {
+        std::process::Command::new("git").current_dir(&dir).args(args).output().unwrap();
+    };
+    run(&["init", "-q"]);
+    run(&["config", "user.email", "t@example.com"]);
+    run(&["config", "user.name", "Test"]);
+    let file = dir.join("a.txt");
+    fs::write(&file, "one\ntwo\nthree\n").unwrap();
+    run(&["add", "."]);
+    run(&["commit", "-q", "-m", "init"]);
+
+    // Change the first line and stage the whole file, then unstage just the hunk.
+    fs::write(&file, "ONE\ntwo\nthree\n").unwrap();
+    run(&["add", "a.txt"]);
+    let mut app = app_at(&dir);
+    app.refresh_git();
+    app.open_initial(&file);
+    app.run_action("git.unstage_hunk"); // cursor on line 0
+
+    // The index now matches HEAD again ("one"); the working tree keeps "ONE".
+    let staged = String::from_utf8(
+        std::process::Command::new("git").current_dir(&dir).args(["show", ":a.txt"]).output().unwrap().stdout,
+    )
+    .unwrap();
+    assert_eq!(staged, "one\ntwo\nthree\n", "the hunk is removed from the index");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn session_snapshot_and_restore_round_trip() {
     let dir = unique_dir("session");
     let a = dir.join("a.txt");
