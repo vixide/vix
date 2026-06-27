@@ -193,6 +193,8 @@ enum AiDest {
     Replace { tab: usize, target: AiTarget },
     /// Open the result in a new editor tab.
     NewTab,
+    /// Append the result to the AI chat panel transcript as an assistant turn.
+    Panel,
 }
 
 /// A background AI task whose captured output is applied when it finishes —
@@ -570,6 +572,8 @@ pub struct Layout {
     pub text_info: Rect,
     /// Snippets picker row list rect (for click-to-select).
     pub snippets: Rect,
+    /// Transcript rectangle of the open AI chat panel, for mouse-wheel scrolling.
+    pub ai_panel: Rect,
     /// Row-list rectangle of the open contact browser, for click hit-testing.
     pub contacts: Rect,
     /// Row-list rectangle of the open vCard view, for click hit-testing.
@@ -692,6 +696,8 @@ pub struct App {
     pub dashboard: Option<Dashboard>,
     /// QR code overlay (rendered Unicode art), when open.
     pub qrcode: Option<String>,
+    /// AI chat panel overlay (conversation with the configured assistant), when open.
+    pub ai_panel: Option<crate::ai_panel::Panel>,
     /// Receiver for the dashboard's background metric computations.
     dashboard_rx: Option<std::sync::mpsc::Receiver<DashMsg>>,
     /// Code outline overlay, when open.
@@ -1011,6 +1017,7 @@ impl App {
             closed_tabs: Vec::new(),
             running_command: None,
             ai_replace: None,
+            ai_panel: None,
             theme_preview: None,
             scrollbar_active: false,
             hbar_active: None,
@@ -1300,6 +1307,7 @@ impl App {
             }
             return true;
         }
+        panel!(ai_panel, ai_panel_key);
         panel!(outline, outline_key);
         panel!(query_replace, qr_key);
         panel!(workspace_search, ps_key);
@@ -1926,6 +1934,7 @@ impl App {
             "view.scrollbar" => self.toggle_scrollbar(),
             "view.spellcheck" => self.toggle_spellcheck(),
             "spell.suggest" => self.open_spell_suggest(),
+            "ai.chat" => self.open_ai_panel(),
             "ai.summarize" => self.ai_summarize(),
             "ai.explain" => self.ai_explain(),
             "ai.define" => self.ai_define(),
@@ -7546,6 +7555,14 @@ impl App {
             self.status = t!("status.ai_no_input").to_string();
             return None;
         }
+        self.spawn_ai_cmd(prompt, text)
+    }
+
+    /// The spawn core shared by [`Self::spawn_ai`] and the chat panel: write `text`
+    /// to a temp file, expand the `ai_command` template, and run it in the
+    /// background. Unlike `spawn_ai` it does **not** reject empty input — a chat
+    /// turn may carry no editor context — so callers must guard that themselves.
+    fn spawn_ai_cmd(&mut self, prompt: &str, text: &str) -> Option<std::sync::mpsc::Receiver<AiMsg>> {
         let tmp = std::env::temp_dir().join(format!("vix-ai-{}.txt", std::process::id()));
         if std::fs::write(&tmp, text).is_err() {
             self.status = t!("status.ai_no_input").to_string();
@@ -7602,6 +7619,10 @@ impl App {
             AiMsg::Done(out) => {
                 let text = out.trim_end_matches('\n');
                 if text.is_empty() {
+                    if let (AiDest::Panel, Some(panel)) = (ar.dest, self.ai_panel.as_mut()) {
+                        panel.busy = false;
+                        panel.push(crate::ai_panel::Role::Error, t!("status.ai_failed", action = &ar.label));
+                    }
                     self.status = t!("status.ai_failed", action = ar.label).to_string();
                     return;
                 }
@@ -7611,10 +7632,20 @@ impl App {
                         self.editor.new_tab_with_content(text);
                         self.focus = Focus::Editor;
                     }
+                    AiDest::Panel => {
+                        if let Some(panel) = self.ai_panel.as_mut() {
+                            panel.busy = false;
+                            panel.push(crate::ai_panel::Role::Assistant, text);
+                        }
+                    }
                 }
                 self.status = t!("status.ai_done", action = ar.label).to_string();
             }
             AiMsg::Failed => {
+                if let (AiDest::Panel, Some(panel)) = (ar.dest, self.ai_panel.as_mut()) {
+                    panel.busy = false;
+                    panel.push(crate::ai_panel::Role::Error, t!("status.ai_failed", action = &ar.label));
+                }
                 self.status = t!("status.ai_failed", action = ar.label).to_string();
             }
         }
@@ -7652,6 +7683,116 @@ impl App {
     #[must_use]
     pub fn ai_replace_running(&self) -> bool {
         self.ai_replace.is_some()
+    }
+
+    // ----- AI chat panel --------------------------------------------------
+
+    /// Open the AI chat panel (a persistent conversation with the configured
+    /// assistant), or focus it if already open. Seeds the input with the current
+    /// selection so "ask about this" is one keystroke away.
+    fn open_ai_panel(&mut self) {
+        if self.ai_panel.is_none() {
+            let mut panel = crate::ai_panel::Panel::open();
+            if let Some(sel) = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text())
+                && !sel.trim().is_empty()
+            {
+                panel.input = sel;
+            }
+            self.ai_panel = Some(panel);
+        }
+    }
+
+    /// Handle a key while the AI chat panel is open. Enter sends the current line;
+    /// Esc closes; arrows / `PageUp` / `PageDown` scroll the transcript; Alt+T opens
+    /// the last reply in a new tab; Alt+C copies it to the clipboard.
+    fn ai_panel_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => self.ai_panel = None,
+            KeyCode::Enter => self.ai_panel_send(),
+            KeyCode::Up => {
+                if let Some(p) = self.ai_panel.as_mut() {
+                    p.scroll_up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.ai_panel.as_mut() {
+                    p.scroll_down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(p) = self.ai_panel.as_mut() {
+                    for _ in 0..10 {
+                        p.scroll_up();
+                    }
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(p) = self.ai_panel.as_mut() {
+                    for _ in 0..10 {
+                        p.scroll_down();
+                    }
+                }
+            }
+            KeyCode::Char('t') if Self::alt(&key) => self.ai_panel_last_to_tab(),
+            KeyCode::Char('c') if Self::alt(&key) => self.ai_panel_copy_last(),
+            KeyCode::Backspace => {
+                if let Some(p) = self.ai_panel.as_mut() {
+                    p.input.pop();
+                }
+            }
+            KeyCode::Char(c) => {
+                if let Some(p) = self.ai_panel.as_mut() {
+                    p.input.push(c);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Send the panel's current input line to the assistant, with the prior
+    /// conversation supplied as stdin context, and mark the panel busy until the
+    /// reply lands in [`Self::poll_ai_replace`].
+    fn ai_panel_send(&mut self) {
+        if self.ai_replace.is_some() {
+            self.status = t!("status.ai_busy").to_string();
+            return;
+        }
+        let Some(panel) = self.ai_panel.as_mut() else { return };
+        let prompt = panel.input.trim().to_string();
+        if prompt.is_empty() {
+            return;
+        }
+        let context = panel.context();
+        panel.input.clear();
+        panel.push(crate::ai_panel::Role::User, prompt.clone());
+        panel.busy = true;
+        if let Some(rx) = self.spawn_ai_cmd(&prompt, &context) {
+            let label = t!("menu.ai").to_string();
+            self.ai_replace = Some(AiReplace { rx, dest: AiDest::Panel, label });
+        } else if let Some(panel) = self.ai_panel.as_mut() {
+            panel.busy = false;
+            panel.push(crate::ai_panel::Role::Error, t!("msg.command_failed", error = "spawn").to_string());
+        }
+    }
+
+    /// Open the panel's most recent assistant reply in a new editor tab.
+    fn ai_panel_last_to_tab(&mut self) {
+        if let Some(text) = self.ai_panel.as_ref().and_then(|p| p.last_assistant()).map(str::to_string) {
+            self.editor.new_tab_with_content(&text);
+            self.ai_panel = None;
+            self.focus = Focus::Editor;
+        }
+    }
+
+    /// Copy the panel's most recent assistant reply to the system clipboard.
+    fn ai_panel_copy_last(&mut self) {
+        let Some(text) = self.ai_panel.as_ref().and_then(|p| p.last_assistant()).map(str::to_string) else {
+            return;
+        };
+        if let Some(tab) = self.editor.active_tab_mut() {
+            let _ = tab.editor.set_clipboard(&text);
+            self.status = t!("status.ai_copied").to_string();
+        }
     }
 
     // ----- Contacts (vCard browser) ---------------------------------------

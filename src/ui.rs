@@ -218,6 +218,9 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.qrcode.is_some() {
         draw_qrcode(app, frame, area);
     }
+    if app.ai_panel.is_some() {
+        draw_ai_panel(app, frame, area);
+    }
     if app.x11_panel.is_some() {
         draw_x11_panel(app, frame, area);
     }
@@ -3049,6 +3052,73 @@ fn draw_dashboard(app: &App, frame: &mut Frame, area: Rect) {
 
     let hint = Line::from(Span::styled(t!("ui.dashboard_hint").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
+}
+
+fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
+    use crate::ai_panel::Role;
+    if app.ai_panel.is_none() {
+        return;
+    }
+    let width = (area.width * 7 / 10).clamp(30, area.width);
+    let height = (area.height * 7 / 10).clamp(8, area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let busy = app.ai_panel.as_ref().is_some_and(|p| p.busy);
+    let title = if busy {
+        format!(" {} {} ", icon::INFO, t!("ui.ai_thinking"))
+    } else {
+        format!(" {} {} ", icon::INFO, t!("menu.ai"))
+    };
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(title);
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1), Constraint::Length(1)])
+        .split(inner);
+    let body = chunks[0];
+    let view_h = body.height as usize;
+    let view_w = body.width as usize;
+    let lines: Vec<Line> = {
+        let p = app.ai_panel.as_mut().unwrap();
+        let visible = p.visible(view_w, view_h);
+        visible
+            .into_iter()
+            .map(|(role, text)| {
+                let style = match role {
+                    Role::User => theme::base().add_modifier(Modifier::BOLD),
+                    Role::Assistant => theme::base(),
+                    Role::Error => theme::dim().add_modifier(Modifier::ITALIC),
+                };
+                Line::from(Span::styled(text, style))
+            })
+            .collect()
+    };
+    frame.render_widget(Paragraph::new(lines), body);
+    app.layout.ai_panel = body;
+
+    // Input line: a leading prompt glyph then the in-progress text plus a caret.
+    let input = app.ai_panel.as_ref().map(|p| p.input.clone()).unwrap_or_default();
+    let input_line = Line::from(vec![
+        Span::styled("› ", theme::title(true).add_modifier(Modifier::BOLD)),
+        Span::raw(input),
+        Span::styled("▏", theme::dim()),
+    ]);
+    frame.render_widget(Paragraph::new(input_line), chunks[1]);
+
+    let hint = Line::from(Span::styled(t!("ui.ai_panel_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[2]);
 }
 
 fn draw_contacts(app: &mut App, frame: &mut Frame, area: Rect) {
