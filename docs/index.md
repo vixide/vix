@@ -32,6 +32,8 @@ Highlights:
   [Multiple Cursors](multiple-cursors/index.md) (select-all-occurrences, column
   selection).
 - View: [Zen Mode](zen-mode/index.md) · [Breadcrumb Bar](breadcrumb/index.md).
+- AI: [AI Chat Panel](agent-panel/index.md) (conversation with the configurable
+  `ai_command` assistant).
 
 ## Specification (`spec/`) — source of truth
 

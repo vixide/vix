@@ -31,6 +31,7 @@ Examples:
 
 | Item      | Prompt                | Input                                  | Output                  |
 | --------- | --------------------- | -------------------------------------- | ----------------------- |
+| Chat…     | (typed by the user)   | a running conversation + selection seed | **chat panel**         |
 | Summarize | `Summarize this text.`| selection, else the whole file         | **new editor tab**      |
 | Explain   | `Explain this text.`  | selection, else the whole file         | **new editor tab**      |
 | Define    | `Define this text.`   | selection, else the word at/after cursor | **new editor tab**    |
@@ -38,7 +39,9 @@ Examples:
 | Improve   | `Improve this text.`  | selection, else the whole file         | **replaces** the text   |
 
 A separator groups the new-tab commands (Summarize / Explain / Define) from the
-replace commands (Annotate / Improve).
+replace commands (Annotate / Improve). **Chat…** sits above them and opens the
+interactive [AI chat panel](../vix-agent-panel/index.md) instead of running a
+single canned prompt.
 
 ## Input selection
 

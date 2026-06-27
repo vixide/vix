@@ -6,6 +6,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **AI chat panel** (**AI → Chat…**, action `ai.chat`) — a persistent
+  conversation surface for the configured assistant CLI. Each reply is remembered
+  and fed back as context, so follow-up questions work; an editor selection seeds
+  the input. `Alt+T` opens the last reply in a tab, `Alt+C` copies it. See
+  `spec/vix-agent-panel/index.md` and `docs/agent-panel/index.md`.
+
 ### Changed
 
 - **AI menu is now CLI-agnostic.** The AI commands (Summarize, Explain, Define,
