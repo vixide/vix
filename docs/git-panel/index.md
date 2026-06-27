@@ -79,8 +79,9 @@ appears in the panel title (and in the status bar).
 | `r`       | Refresh the status                                         |
 | `Esc`     | Close the panel                                            |
 
-Commit is available only when something is staged. The commit message is a
-single line.
+Commit is available only when something is staged. The commit prompt accepts a
+**multi-line** message: press `Enter` to commit, or `Alt+Enter` to start a new
+line (e.g. a subject line, a blank line, then a body).
 
 ### Mouse
 
@@ -143,4 +144,3 @@ for the hunk's region. See `spec/stage-hunk/index.md` and
 The following are planned but not yet available:
 
 - Diff gutter in the soft-wrap renderer.
-- Multi-line commit messages.

@@ -10255,6 +10255,15 @@ impl App {
     fn prompt_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc => self.prompt = None,
+            // Alt+Enter inserts a newline in the multi-line git-commit prompt;
+            // plain Enter still submits.
+            KeyCode::Enter if Self::alt(&key) => {
+                if let Some(p) = self.prompt.as_mut()
+                    && matches!(p.kind, PromptKind::GitCommit)
+                {
+                    p.input.push('\n');
+                }
+            }
             KeyCode::Enter => self.accept_prompt(),
             KeyCode::Backspace => {
                 if let Some(p) = self.prompt.as_mut() {
