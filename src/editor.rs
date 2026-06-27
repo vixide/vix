@@ -463,6 +463,30 @@ impl Editor {
         Ok(())
     }
 
+    /// Reload every clean (non-dirty) file-backed buffer from disk, preserving the
+    /// cursor where it still fits. Used after an external change to the working
+    /// tree (e.g. a git branch switch). Dirty buffers are left untouched so unsaved
+    /// edits are never discarded. Returns the number of buffers reloaded.
+    pub fn reload_clean_from_disk(&mut self) -> usize {
+        let mut reloaded = 0;
+        for tab in &mut self.tabs {
+            if tab.dirty || tab.image.is_some() {
+                continue;
+            }
+            let Some(path) = tab.path.clone() else { continue };
+            let Ok(content) = fs::read_to_string(&path) else { continue };
+            if content == tab.editor.get_content() {
+                continue;
+            }
+            let cursor = tab.editor.get_cursor();
+            tab.editor.set_content(&content);
+            tab.editor.set_cursor(cursor.min(content.chars().count()));
+            tab.dirty = false;
+            reloaded += 1;
+        }
+        reloaded
+    }
+
     /// Promote the active preview tab to a permanent tab.
     pub fn promote_active(&mut self) {
         if let Some(t) = self.active_tab_mut() {
