@@ -132,6 +132,9 @@ pub struct Settings {
     /// Review AI replace transforms (Annotate / Improve) as an accept/reject diff
     /// before applying, instead of overwriting the text immediately. On by default.
     pub ai_diff_review: bool,
+    /// Apply `.editorconfig` rules (indent style/size, trim/final-newline on save)
+    /// for opened files, overriding the global settings per file. On by default.
+    pub editorconfig: bool,
 }
 
 /// One configured language server (a `lsp_servers` entry).
@@ -186,6 +189,7 @@ impl Default for Settings {
             sticky_search_highlight: true,
             ai_command: "claude -p \"{prompt}\"".to_string(),
             ai_diff_review: true,
+            editorconfig: true,
         }
     }
 }

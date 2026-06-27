@@ -2746,10 +2746,23 @@ impl App {
 
     /// On-save normalization options derived from the current settings.
     fn save_options(&self) -> crate::editor::SaveOptions {
-        crate::editor::SaveOptions {
+        let mut opts = crate::editor::SaveOptions {
             trim_trailing_whitespace: self.settings.trim_trailing_whitespace,
             ensure_final_newline: self.settings.ensure_final_newline,
+        };
+        // Let the active file's .editorconfig override the global on-save rules.
+        if self.settings.editorconfig
+            && let Some(path) = self.editor.active_tab().and_then(|t| t.path.as_deref())
+        {
+            let ec = crate::editorconfig::resolve(path);
+            if let Some(v) = ec.trim_trailing_whitespace {
+                opts.trim_trailing_whitespace = v;
+            }
+            if let Some(v) = ec.insert_final_newline {
+                opts.ensure_final_newline = v;
+            }
         }
+        opts
     }
 
     // ----- view toggles ---------------------------------------------------
@@ -5674,9 +5687,23 @@ impl App {
                     self.editor.promote_active();
                     self.record_recent(path);
                 }
+                self.apply_editorconfig_indent(path);
                 self.status = t!("status.opened", path = path.display()).to_string();
             }
             Err(e) => self.messages.error(t!("msg.open_failed", error = e).to_string()),
+        }
+    }
+
+    /// Apply the `.editorconfig` indent (style/size) for `path` to the active tab,
+    /// when `EditorConfig` support is enabled and the file's config specifies one.
+    fn apply_editorconfig_indent(&mut self, path: &Path) {
+        if !self.settings.editorconfig {
+            return;
+        }
+        if let Some(indent) = crate::editorconfig::resolve(path).indent_string()
+            && let Some(tab) = self.editor.active_tab_mut()
+        {
+            tab.editor.set_indent(Some(indent));
         }
     }
 
