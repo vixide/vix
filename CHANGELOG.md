@@ -36,6 +36,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Tools → Insert → SQL** submenu — inserts ready-to-edit PostgreSQL snippets:
   Alter Role, Create Extension, Create Function, Create User, Grant Create, Grant
   Usage, and Create Table (with trigger + trigram index).
+- **Diff gutter in soft-wrap mode.** The Git change bar in the line-number gutter
+  now also renders when soft wrap is on (on a changed line's first visual row).
 
 ### Changed
 
