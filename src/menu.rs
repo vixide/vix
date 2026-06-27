@@ -198,6 +198,7 @@ const VIEW_LAYOUT: &[Item] = &[
     Item::leaf("menu.item.view.right_dock", "view.right_dock", ""),
     Item::leaf("menu.item.view.bottom_dock", "view.bottom_dock", ""),
     Item::leaf("menu.item.view.status_bar", "view.status_bar", ""),
+    Item::leaf("menu.item.view.zen", "view.zen", ""),
 ];
 
 /// Editor display toggles, grouped under View → Editor.
@@ -215,6 +216,9 @@ const VIEW_EDITOR: &[Item] = &[
     SEP,
     Item::leaf("menu.item.view.inlay_hints", "view.inlay_hints", ""),
     Item::leaf("menu.item.view.spellcheck", "view.spellcheck", ""),
+    SEP,
+    Item::leaf("menu.item.view.trim_on_save", "view.trim_on_save", ""),
+    Item::leaf("menu.item.view.final_newline_on_save", "view.final_newline_on_save", ""),
     SEP,
     Item::leaf("menu.item.view.next_tab", "tab.next", "Ctrl Tab"),
     Item::leaf("menu.item.view.prev_tab", "tab.prev", "Ctrl Shift Tab"),
