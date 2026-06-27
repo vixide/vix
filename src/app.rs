@@ -1046,12 +1046,15 @@ impl App {
         crate::menu::set_theme_names(theme_names);
         // Apply the saved time zone so the clock panel and status bar use it.
         crate::time_zone_model::set_active(&settings.time_zone);
-        let editor = Editor::new(
+        let mut editor = Editor::new(
             settings.line_numbers,
             settings.show_whitespace,
             settings.soft_wrap,
             settings.indent_string(),
         );
+        for tab in &mut editor.tabs {
+            tab.editor.set_auto_pair(settings.auto_pair);
+        }
         let mut messages = Messages::default();
         messages.advice(t!("msg.welcome").to_string());
         messages.info(t!("msg.welcome_hint").to_string());
@@ -2133,6 +2136,7 @@ impl App {
             }
             "view.scrollbar" => self.toggle_scrollbar(),
             "view.spellcheck" => self.toggle_spellcheck(),
+            "view.auto_pair" => self.toggle_auto_pair(),
             "spell.suggest" => self.open_spell_suggest(),
             "ai.chat" => self.open_ai_panel(),
             "ai.summarize" => self.ai_summarize(),
@@ -5865,6 +5869,10 @@ impl App {
     /// Apply the `.editorconfig` indent (style/size) for `path` to the active tab,
     /// when `EditorConfig` support is enabled and the file's config specifies one.
     fn apply_editorconfig_indent(&mut self, path: &Path) {
+        let auto_pair = self.settings.auto_pair;
+        if let Some(tab) = self.editor.active_tab_mut() {
+            tab.editor.set_auto_pair(auto_pair);
+        }
         if !self.settings.editorconfig {
             return;
         }
@@ -5873,6 +5881,16 @@ impl App {
         {
             tab.editor.set_indent(Some(indent));
         }
+    }
+
+    /// Toggle bracket/quote auto-pairing for every open buffer and persist it.
+    fn toggle_auto_pair(&mut self) {
+        self.settings.auto_pair = !self.settings.auto_pair;
+        let on = self.settings.auto_pair;
+        for tab in &mut self.editor.tabs {
+            tab.editor.set_auto_pair(on);
+        }
+        self.status = t!(if on { "status.auto_pair_on" } else { "status.auto_pair_off" }).to_string();
     }
 
     /// Push a just-closed file path onto the reopen stack (most-recent last),

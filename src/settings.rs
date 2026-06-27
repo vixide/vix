@@ -135,6 +135,9 @@ pub struct Settings {
     /// Apply `.editorconfig` rules (indent style/size, trim/final-newline on save)
     /// for opened files, overriding the global settings per file. On by default.
     pub editorconfig: bool,
+    /// Auto-insert the matching closer when an opening bracket/quote is typed (and
+    /// delete both with Backspace inside an empty pair). On by default.
+    pub auto_pair: bool,
 }
 
 /// One configured language server (a `lsp_servers` entry).
@@ -190,6 +193,7 @@ impl Default for Settings {
             ai_command: "claude -p \"{prompt}\"".to_string(),
             ai_diff_review: true,
             editorconfig: true,
+            auto_pair: true,
         }
     }
 }

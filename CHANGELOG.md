@@ -6,6 +6,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Bracket / quote auto-pairing.** Typing `(`, `[`, `{`, `"`, `'`, `` ` ``
+  inserts the matching closer (wrapping a selection when one exists), typing a
+  closer steps over an auto-inserted one, and Backspace inside an empty pair
+  deletes both. New `auto_pair` setting (on by default) and a **View → Editor →
+  Auto-Pair Brackets** toggle.
+
 ## [0.4.0] - 2026-06-27
 
 ### Added

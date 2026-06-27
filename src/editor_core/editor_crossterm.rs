@@ -50,6 +50,7 @@ impl Editor {
             KeyCode::Right     => self.apply(MoveRight { shift }),
             KeyCode::Up        => self.apply(MoveUp { shift }),
             KeyCode::Down      => self.apply(MoveDown { shift }),
+            KeyCode::Backspace if self.auto_pair_backspace() => {}
             KeyCode::Backspace => self.apply(Delete { }),
             KeyCode::Enter     => self.apply(InsertNewline { }),
             KeyCode::Char(c) if self.auto_pair(c) => {}
@@ -75,6 +76,9 @@ impl Editor {
     fn auto_pair(&mut self, c: char) -> bool {
         const PAIRS: &[(char, char)] =
             &[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"'), ('\'', '\''), ('`', '`')];
+        if !self.auto_pair {
+            return false;
+        }
 
         let cursor = self.get_cursor();
         let next = self.char_at(cursor);
@@ -107,6 +111,39 @@ impl Editor {
 
         self.apply(InsertText { text: format!("{c}{closer}") });
         self.apply(MoveLeft { shift: false });
+        true
+    }
+
+    /// Backspace inside an empty auto-pair (`()`, `[]`, `{}`, `""`, …) deletes
+    /// both characters as one edit. Returns `true` when it consumed the key.
+    /// Only fires with a single caret and no selection.
+    fn auto_pair_backspace(&mut self) -> bool {
+        const PAIRS: &[(char, char)] =
+            &[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"'), ('\'', '\''), ('`', '`')];
+        if !self.auto_pair {
+            return false;
+        }
+        if self.get_selection().is_some_and(|s| !s.is_empty()) {
+            return false;
+        }
+        let cursor = self.get_cursor();
+        let Some(prev) = cursor.checked_sub(1).and_then(|p| self.char_at(p)) else {
+            return false;
+        };
+        let next = self.char_at(cursor);
+        if !PAIRS.iter().any(|&(op, cl)| op == prev && next == Some(cl)) {
+            return false;
+        }
+        let code = self.code_mut();
+        code.tx();
+        code.set_state_before(cursor, None);
+        code.remove(cursor - 1, cursor + 1);
+        let newc = cursor - 1;
+        code.set_state_after(newc, None);
+        code.commit();
+        self.set_cursor(newc);
+        self.set_selection(None);
+        self.reset_highlight_cache();
         true
     }
 

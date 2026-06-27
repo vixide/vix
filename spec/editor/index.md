@@ -45,6 +45,14 @@ Capabilities:
   them.
 - **Bracket matching** — the partner of the bracket under the cursor is
   highlighted, and a command jumps to it (see below).
+- **Auto-pairing** — typing an opening `(` `[` `{` `"` `'` `` ` `` inserts the
+  matching closer and leaves the cursor between them; with a selection it wraps
+  the selection; typing a closer that already sits next to the cursor steps over
+  it; Backspace inside an empty pair deletes both. Quotes are left alone next to a
+  word character. Controlled by the host `auto_pair` flag
+  (`Editor::set_auto_pair`); the implementation is `auto_pair` / `auto_pair_backspace`
+  in `editor_core/editor_crossterm.rs`. Off-by setting via **View → Editor →
+  Auto-Pair Brackets** (`view.auto_pair`).
 - **Bracket / quote auto-pairing** — typing an opener `( [ { " ' ``` inserts the
   matching closer and leaves the cursor between them; with a non-empty selection
   it wraps the selection instead; typing a closer when it already sits at the
