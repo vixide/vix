@@ -241,6 +241,46 @@ impl Editor {
         }
     }
 
+    /// Select every occurrence of the current selection (or the word at the
+    /// cursor) in the buffer: replace any existing extra carets with one selected
+    /// caret per match, the last of which becomes primary. No-op when there is
+    /// only a single match.
+    pub fn add_all_occurrences(&mut self) {
+        if self.selection.is_none_or(|s| s.is_empty()) {
+            if let Some((s, e, _)) = self.word_at(self.cursor) {
+                self.selection = Some(Selection::new(s, e));
+                self.cursor = e;
+            } else {
+                return;
+            }
+        }
+        let Some(sel) = self.selection else {
+            return;
+        };
+        let needle: Vec<char> = self.get_content_slice(sel.start, sel.end).chars().collect();
+        if needle.is_empty() {
+            return;
+        }
+        let hay: Vec<char> = self.get_content().chars().collect();
+        let mut matches: Vec<(usize, usize)> = Vec::new();
+        let mut from = 0;
+        while let Some(start) = find_from(&hay, &needle, from) {
+            let end = start + needle.len();
+            matches.push((start, end));
+            from = end;
+        }
+        if matches.len() <= 1 {
+            return;
+        }
+        self.carets.clear();
+        let (last_start, last_end) = matches[matches.len() - 1];
+        for &(start, end) in &matches[..matches.len() - 1] {
+            self.carets.push(Caret { pos: end, anchor: Some(start) });
+        }
+        self.cursor = last_end;
+        self.selection = Some(Selection::new(last_start, last_end));
+    }
+
     /// Alt+click: add an extra caret at character offset `pos`.
     pub fn add_caret_at(&mut self, pos: usize) {
         let pos = pos.min(self.code_ref().len_chars());
@@ -296,6 +336,21 @@ mod caret_tests {
         let mut e = Editor::new("text", text, Vec::new()).unwrap();
         e.set_cursor(cursor);
         e
+    }
+
+    #[test]
+    fn add_all_occurrences_selects_every_match_of_the_word() {
+        let mut e = ed("foo bar foo baz foo", 1); // cursor inside the first "foo"
+        e.add_all_occurrences();
+        assert_eq!(e.caret_selections().len(), 3, "all three 'foo' matches selected");
+        assert!(e.has_multi_carets());
+    }
+
+    #[test]
+    fn add_all_occurrences_is_noop_for_a_unique_word() {
+        let mut e = ed("alpha beta gamma", 0);
+        e.add_all_occurrences();
+        assert!(!e.has_multi_carets(), "single match adds no extra carets");
     }
 
     #[test]

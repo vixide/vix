@@ -2098,6 +2098,11 @@ impl App {
                 let area = self.editor_view();
                 self.editor.select_word(false, area);
             }
+            "edit.select_all_occurrences" => {
+                if let Some(t) = self.editor.active_tab_mut() {
+                    t.editor.add_all_occurrences();
+                }
+            }
             "edit.select_line" => {
                 let area = self.editor_view();
                 self.editor.select_line(area);
