@@ -501,6 +501,7 @@ const GIT: &[Item] = &[
     Item::leaf("menu.item.git.diff_next", "git.diff_next", ""),
     Item::leaf("menu.item.git.diff_prev", "git.diff_prev", ""),
     Item::leaf("menu.item.git.stage_hunk", "git.stage_hunk", ""),
+    Item::leaf("menu.item.git.unstage_hunk", "git.unstage_hunk", ""),
     Item::leaf("menu.item.git.revert_hunk", "git.revert_hunk", ""),
     SEP,
     Item::leaf("menu.item.git.conflict_next", "git.conflict_next", ""),

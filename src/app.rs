@@ -1979,6 +1979,7 @@ impl App {
             "git.blame" => self.git_blame_line(),
             "git.revert_hunk" => self.revert_hunk(),
             "git.stage_hunk" => self.stage_hunk(),
+            "git.unstage_hunk" => self.unstage_hunk(),
             "git.conflict_ours" => self.resolve_conflict(crate::conflict_tool::Resolution::Ours),
             "git.conflict_theirs" => self.resolve_conflict(crate::conflict_tool::Resolution::Theirs),
             "git.conflict_both" => self.resolve_conflict(crate::conflict_tool::Resolution::Both),
@@ -3658,6 +3659,63 @@ impl App {
                 self.status = t!("status.hunk_staged").to_string();
             }
             Err(e) => self.status = t!("status.stage_hunk_failed", error = e).to_string(),
+        }
+    }
+
+    /// Unstage just the hunk under the cursor from the git index, leaving the
+    /// rest of the file's staged changes and the working tree untouched. The
+    /// mirror of [`App::stage_hunk`]: safe — it only unstages when the hunk's
+    /// working-tree lines are present in the index at the expected position.
+    fn unstage_hunk(&mut self) {
+        let hunks = self.active_hunks();
+        if hunks.is_empty() {
+            self.status = t!("status.no_changes").to_string();
+            return;
+        }
+        let line = self.editor.active_tab().map_or(0, |t| t.editor.cursor_line());
+        let Some(hunk) = hunks.into_iter().find(|h| h.contains(line)) else {
+            self.status = t!("status.no_hunk").to_string();
+            return;
+        };
+        let Some((path, current)) = self
+            .editor
+            .active_tab()
+            .and_then(|t| t.path.clone().map(|p| (p, t.text())))
+        else {
+            return;
+        };
+        let Ok(rel) = path.strip_prefix(&self.root) else {
+            self.status = t!("status.unstage_hunk_failed", error = "outside workspace").to_string();
+            return;
+        };
+        let rel = rel.to_string_lossy().replace('\\', "/");
+        // The index must currently carry this hunk's working-tree lines (i.e. it
+        // is staged); replacing them with the committed text removes it.
+        let Some(base) = crate::git::index_blob(&self.root, &rel) else {
+            self.status = t!("status.unstage_hunk_failed", error = "nothing staged").to_string();
+            return;
+        };
+        let base_lines: Vec<&str> = base.split_inclusive('\n').collect();
+        let cur_lines: Vec<&str> = current.split_inclusive('\n').collect();
+        let added = cur_lines
+            .get(hunk.current_start..hunk.current_end)
+            .map(<[&str]>::concat)
+            .unwrap_or_default();
+        let added_count = hunk.current_end - hunk.current_start;
+        let region = base_lines.get(hunk.head_start..hunk.head_start + added_count);
+        if region.map(<[&str]>::concat).as_deref() != Some(added.as_str()) {
+            self.status = t!("status.unstage_hunk_failed", error = "hunk not staged").to_string();
+            return;
+        }
+        let mut new_index = base_lines[..hunk.head_start].concat();
+        new_index.push_str(&hunk.head_text);
+        new_index.push_str(&base_lines[hunk.head_start + added_count..].concat());
+        match crate::git::stage_content(&self.root, &rel, &new_index) {
+            Ok(()) => {
+                self.refresh_git();
+                self.status = t!("status.hunk_unstaged").to_string();
+            }
+            Err(e) => self.status = t!("status.unstage_hunk_failed", error = e).to_string(),
         }
     }
 
