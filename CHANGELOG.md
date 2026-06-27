@@ -38,6 +38,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Usage, and Create Table (with trigger + trigram index).
 - **Diff gutter in soft-wrap mode.** The Git change bar in the line-number gutter
   now also renders when soft wrap is on (on a changed line's first visual row).
+- **Richer session restore.** Reopening a workspace now also restores each file's
+  **scroll position** and the **split-pane layout** (direction, ratio, focused
+  side), not just open files, focus, and cursor. Older session files still load.
 
 ### Changed
 

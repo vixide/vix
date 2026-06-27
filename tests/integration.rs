@@ -3429,6 +3429,29 @@ fn session_snapshot_and_restore_round_trip() {
 }
 
 #[test]
+fn session_restores_scroll_offset() {
+    let dir = unique_dir("session-scroll");
+    let a = dir.join("long.txt");
+    let body: String = (0..200).map(|i| format!("line {i}\n")).collect();
+    fs::write(&a, &body).unwrap();
+
+    let mut app = app_at(&dir);
+    app.open_initial(&a.clone());
+    if let Some(t) = app.editor.active_tab_mut() {
+        t.editor.set_offset_y(120);
+    }
+    let snap = app.workspace_session();
+    assert_eq!(snap.scrolls.first().copied(), Some(120), "scroll offset captured");
+
+    let mut restored = app_at(&dir);
+    assert_eq!(restored.apply_session(&snap), 1);
+    let tab = restored.editor.active_tab().unwrap();
+    assert_eq!(tab.editor.get_offset_y(), 120, "scroll offset restored");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn session_apply_skips_missing_files() {
     let dir = unique_dir("session-missing");
     fs::create_dir_all(&dir).unwrap();
@@ -3437,6 +3460,7 @@ fn session_apply_skips_missing_files() {
         files: vec![dir.join("gone.txt").to_string_lossy().into_owned()],
         active: 0,
         cursors: vec![0],
+        ..Default::default()
     };
     let mut app = app_at(&dir);
     let opened = app.apply_session(&ws);

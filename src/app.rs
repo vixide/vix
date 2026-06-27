@@ -1189,6 +1189,7 @@ impl App {
                 let max = t.editor.code_ref().len_chars();
                 let pos = ws.cursors.get(i).copied().unwrap_or(0).min(max);
                 t.editor.set_cursor(pos);
+                t.editor.set_offset_y(ws.scrolls.get(i).copied().unwrap_or(0));
             }
             opened += 1;
         }
@@ -1198,8 +1199,34 @@ impl App {
                 self.editor.tabs.remove(0);
             }
             self.editor.active = ws.active.min(self.editor.tabs.len().saturating_sub(1));
+            // Restore the split only when every file reopened cleanly, so the
+            // recorded pane index still lines up with the tab order.
+            if had_blank && opened == ws.files.len() {
+                self.restore_split(ws);
+            }
         }
         opened
+    }
+
+    /// Rebuild the editor split recorded in `ws`, if any, clamping its pane index
+    /// to the open tabs.
+    fn restore_split(&mut self, ws: &crate::session::WorkspaceSession) {
+        let Some(s) = ws.split.as_ref() else { return };
+        let count = self.editor.tabs.len();
+        if s.other >= count || count < 2 {
+            return;
+        }
+        let dir = if s.dir == "horizontal" {
+            crate::editor::SplitDir::Horizontal
+        } else {
+            crate::editor::SplitDir::Vertical
+        };
+        self.editor.split = Some(crate::editor::Split {
+            dir,
+            other: s.other,
+            focused_side: s.focused_side.min(1),
+            ratio: s.ratio.clamp(10, 90),
+        });
     }
 
     /// Capture the current open files, focused tab, and cursor positions as a
@@ -1209,18 +1236,37 @@ impl App {
     pub fn workspace_session(&self) -> crate::session::WorkspaceSession {
         let mut files = Vec::new();
         let mut cursors = Vec::new();
+        let mut scrolls = Vec::new();
         let mut active = 0;
+        // Map each editor tab index to its position in `files` (None for skipped
+        // untitled/image tabs), so the split's pane index can be translated.
+        let mut tab_to_file: Vec<Option<usize>> = Vec::with_capacity(self.editor.tabs.len());
         for (i, tab) in self.editor.tabs.iter().enumerate() {
             let Some(path) = tab.path.as_ref().filter(|_| !tab.is_image()) else {
+                tab_to_file.push(None);
                 continue;
             };
             if i == self.editor.active {
                 active = files.len();
             }
+            tab_to_file.push(Some(files.len()));
             files.push(path.to_string_lossy().into_owned());
             cursors.push(tab.editor.get_cursor());
+            scrolls.push(tab.editor.get_offset_y());
         }
-        crate::session::WorkspaceSession { root: self.session_key(), files, active, cursors }
+        let split = self.editor.split.as_ref().and_then(|s| {
+            let other = (*tab_to_file.get(s.other)?)?;
+            Some(crate::session::SplitSession {
+                dir: match s.dir {
+                    crate::editor::SplitDir::Horizontal => "horizontal".to_string(),
+                    crate::editor::SplitDir::Vertical => "vertical".to_string(),
+                },
+                other,
+                focused_side: s.focused_side,
+                ratio: s.ratio,
+            })
+        });
+        crate::session::WorkspaceSession { root: self.session_key(), files, active, cursors, scrolls, split }
     }
 
     /// Capture the current session and persist it to the per-workspace store.
