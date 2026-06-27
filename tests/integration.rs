@@ -906,6 +906,41 @@ fn qrcode_overlay_generates_and_closes() {
 }
 
 #[test]
+fn zen_mode_hides_then_restores_chrome() {
+    let mut app = app_at(Path::new("."));
+    app.show_explorer = true;
+    app.show_messages = true;
+    app.show_status_bar = true;
+    app.show_bottom_dock = true;
+
+    app.run_action("view.zen");
+    assert!(app.is_zen(), "zen mode on");
+    assert!(
+        !app.show_explorer && !app.show_messages && !app.show_status_bar && !app.show_bottom_dock,
+        "zen hides the chrome"
+    );
+
+    app.run_action("view.zen");
+    assert!(!app.is_zen(), "zen mode off");
+    assert!(
+        app.show_explorer && app.show_messages && app.show_status_bar && app.show_bottom_dock,
+        "zen restores prior visibility"
+    );
+}
+
+#[test]
+fn on_save_toggles_flip_settings() {
+    let mut app = app_at(Path::new("."));
+    let trim = app.settings.trim_trailing_whitespace;
+    app.run_action("view.trim_on_save");
+    assert_eq!(app.settings.trim_trailing_whitespace, !trim, "trim-on-save toggled");
+
+    let nl = app.settings.ensure_final_newline;
+    app.run_action("view.final_newline_on_save");
+    assert_eq!(app.settings.ensure_final_newline, !nl, "final-newline-on-save toggled");
+}
+
+#[test]
 fn smart_home_toggles_first_nonblank_and_column0() {
     let dir = unique_dir("smarthome");
     let file = dir.join("h.txt");
@@ -2921,7 +2956,9 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
             "view.scrollbar",
             "view.soft_wrap",
             "view.inlay_hints",
-            "view.spellcheck"
+            "view.spellcheck",
+            "view.trim_on_save",
+            "view.final_newline_on_save"
         ]
     );
 }
@@ -2938,7 +2975,7 @@ fn view_layout_submenu_rolls_up_the_dock_toggles() {
     let actions: Vec<&str> = layout.iter().map(|it| it.action).collect();
     assert_eq!(
         actions,
-        vec!["view.left_dock", "view.right_dock", "view.bottom_dock", "view.status_bar"]
+        vec!["view.left_dock", "view.right_dock", "view.bottom_dock", "view.status_bar", "view.zen"]
     );
 }
 

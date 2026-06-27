@@ -813,6 +813,9 @@ pub struct App {
     speller_locale: Option<String>,
     /// Whether the bottom dock (log/output/data panel) is shown.
     pub show_bottom_dock: bool,
+    /// Saved dock/status visibility while zen (focus) mode is active, restored on
+    /// exit. `Some` iff zen mode is on. Holds (explorer, messages, bottom, status).
+    pub zen_saved: Option<(bool, bool, bool, bool)>,
     /// Bottom-dock line buffer.
     pub bottom_dock: crate::bottom_dock::BottomDock,
     /// Horizontal scroll offset (chars) of the bottom dock.
@@ -963,6 +966,7 @@ impl App {
             show_explorer: settings.show_explorer,
             show_messages: settings.show_messages,
             show_status_bar: settings.show_status_bar,
+            zen_saved: None,
             show_scrollbar: settings.show_scrollbar,
             overwrite: false,
             show_ruler: false,
@@ -1903,6 +1907,13 @@ impl App {
             "view.left_dock" | "view.explorer" => self.toggle_left_dock(),
             "view.right_dock" | "view.messages" => self.toggle_right_dock(),
             "view.status_bar" => self.toggle_status_bar(),
+            "view.zen" => self.toggle_zen(),
+            "view.trim_on_save" => {
+                self.settings.trim_trailing_whitespace = !self.settings.trim_trailing_whitespace;
+            }
+            "view.final_newline_on_save" => {
+                self.settings.ensure_final_newline = !self.settings.ensure_final_newline;
+            }
             "view.scrollbar" => self.toggle_scrollbar(),
             "view.spellcheck" => self.toggle_spellcheck(),
             "spell.suggest" => self.open_spell_suggest(),
@@ -2583,6 +2594,31 @@ impl App {
     fn toggle_status_bar(&mut self) {
         self.show_status_bar = !self.show_status_bar;
         self.settings.show_status_bar = self.show_status_bar;
+    }
+
+    /// Toggle zen (focus) mode: hide the explorer, messages, bottom dock, and
+    /// status bar for distraction-free editing, restoring them on the next toggle.
+    /// The change is runtime-only — it does not overwrite the saved settings.
+    fn toggle_zen(&mut self) {
+        if let Some((explorer, messages, bottom, status)) = self.zen_saved.take() {
+            self.show_explorer = explorer;
+            self.show_messages = messages;
+            self.show_bottom_dock = bottom;
+            self.show_status_bar = status;
+        } else {
+            self.zen_saved =
+                Some((self.show_explorer, self.show_messages, self.show_bottom_dock, self.show_status_bar));
+            self.show_explorer = false;
+            self.show_messages = false;
+            self.show_bottom_dock = false;
+            self.show_status_bar = false;
+        }
+    }
+
+    /// Whether zen (focus) mode is active.
+    #[must_use]
+    pub fn is_zen(&self) -> bool {
+        self.zen_saved.is_some()
     }
 
     /// Toggle the bottom dock (log/output/data panel), persisting the choice.
