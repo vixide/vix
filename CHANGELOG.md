@@ -25,6 +25,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Open buffers reload after a branch switch.** Switching branches now re-reads
   every clean open file from disk so it reflects the new branch; dirty buffers are
   left untouched and a notification reports the count.
+- **Persistent spellcheck user dictionary.** Words added from the spell-suggest
+  popup now persist across sessions in `user_dictionary.txt` (config directory)
+  and are reloaded on launch, instead of being session-only.
 
 ### Changed
 

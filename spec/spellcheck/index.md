@@ -30,12 +30,15 @@ session dictionary, `i` ignores it for the session, `Esc` closes.
   draws a red underline on a dedicated editor mark channel (separate from the
   search-hit underline). Code-like tokens are skipped: all-caps acronyms
   (`HTTP`), camel/Pascal-case identifiers (`fooBar`), and very short words.
-- A session **user dictionary** (added words) and an **ignore** set are supported
-  by the crate.
+- A **user dictionary** (added words) and an **ignore** set are supported by the
+  crate. Added words **persist across sessions**: the spell-suggest popup's "add
+  word" appends to `user_dictionary.txt` (one word per line, in the config
+  directory; `Settings::user_dictionary_path`), and the host loads it into every
+  new checker in `ensure_speller`. The ignore set remains per-session.
 
 ## Roadmap
 
-- Persisting the user dictionary across sessions (it is currently per-session).
+- A UI to review/remove persisted user-dictionary words (currently edit the file).
 
 [`spellbook`]: https://crates.io/crates/spellbook
 [wooorm/dictionaries]: https://github.com/wooorm/dictionaries
