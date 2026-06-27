@@ -160,6 +160,76 @@ enum DashMsg {
     Commits(u64),
 }
 
+/// `PostgreSQL` `CREATE EXTENSION` snippet (Tools → Insert → SQL → Create Extension).
+const SQL_CREATE_EXTENSION: &str = r#"-- Cryptographic functions: hashing, encryption, random bytes, UUIDs, password salts.
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Tracks execution statistics for all queries to find slow/expensive ones.
+CREATE EXTENSION IF NOT EXISTS "pg_stat_statements";
+
+-- Large Object type plus a trigger to auto-clean orphaned large objects.
+CREATE EXTENSION IF NOT EXISTS "lo";
+
+-- Hierarchical "label tree" type for fast ancestor/descendant path queries.
+CREATE EXTENSION IF NOT EXISTS "ltree";
+
+-- Multidimensional cube type for N-dimensional points and boxes.
+CREATE EXTENSION IF NOT EXISTS "cube";
+
+-- Great-circle distance between lat/long points (depends on cube).
+CREATE EXTENSION IF NOT EXISTS "earthdistance";
+
+-- Strips accents from text for accent-insensitive search (Café -> Cafe).
+CREATE EXTENSION IF NOT EXISTS "unaccent";
+
+-- Trigram similarity and matching to speed up LIKE/ILIKE and fuzzy search.
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+
+-- Fuzzy string matching by sound and edit distance (soundex, levenshtein).
+CREATE EXTENSION IF NOT EXISTS "fuzzystrmatch";
+
+-- Table-returning functions, notably crosstab() for pivot tables.
+CREATE EXTENSION IF NOT EXISTS "tablefunc";
+
+-- Trigger helper that auto-increments an integer field from a sequence.
+CREATE EXTENSION IF NOT EXISTS "autoinc";
+
+-- Trigger helper that stamps a column with the current DB username on write.
+CREATE EXTENSION IF NOT EXISTS "insert_username";
+
+-- Trigger helper that sets a timestamp column to now() on every UPDATE.
+CREATE EXTENSION IF NOT EXISTS "moddatetime";
+
+-- UUID generators (v1/v4/v5); v4 random UUIDs for primary keys.
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Triggered Change Notification: emits LISTEN/NOTIFY events on row changes.
+CREATE EXTENSION IF NOT EXISTS "tcn";
+"#;
+
+/// `PostgreSQL` `CREATE TABLE` snippet (Tools → Insert → SQL → Create Table).
+const SQL_CREATE_TABLE: &str = r"CREATE TABLE items (
+    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    title VARCHAR(50) NOT NULL,
+    subtitle VARCHAR(50) NOT NULL
+);
+
+CREATE TRIGGER updated_at
+BEFORE UPDATE ON items
+FOR EACH ROW
+EXECUTE FUNCTION updated_at();
+
+CREATE INDEX items_trigram
+ON items
+USING GIN ((
+    title
+    || ' ' ||
+    subtitle
+) gin_trgm_ops );
+";
+
 /// A command running in a background thread, streaming into the bottom dock.
 struct RunningCommand {
     /// Receiver for the reader thread's output.
@@ -2296,6 +2366,7 @@ impl App {
             "tools.insert.zid.512" => self.insert_content(&crate::zid_tool::generate(64)),
             a if self.insert_markdown(a) => {}
             a if self.insert_html(a) => {}
+            a if self.insert_sql(a) => {}
             a if self.insert_dynamic(a) => {}
             "tools.checksum.sha256" => {
                 self.transform_selection_or_buffer(crate::checksum_tool::sha256_hex);
@@ -2873,6 +2944,41 @@ impl App {
                 "  </tfoot>\n",
                 "</table>\n\n",
             ),
+            _ => return false,
+        };
+        self.insert_content(snippet);
+        true
+    }
+
+    /// Insert a SQL (`PostgreSQL`) snippet for a `tools.insert.sql.*` action at the
+    /// cursor. Returns `true` if `action` was a known SQL snippet.
+    fn insert_sql(&mut self, action: &str) -> bool {
+        let snippet = match action {
+            "tools.insert.sql.alter_role" => {
+                "-- Enable a user to create a database.\nALTER ROLE alice WITH CREATEDB;\n"
+            }
+            "tools.insert.sql.create_extension" => SQL_CREATE_EXTENSION,
+            "tools.insert.sql.create_function" => concat!(
+                "CREATE FUNCTION updated_at()\n",
+                "RETURNS TRIGGER AS $$\n",
+                "BEGIN\n",
+                "    NEW.updated_at = NOW();\n",
+                "    RETURN NEW;\n",
+                "END;\n",
+                "$$ LANGUAGE plpgsql;\n",
+            ),
+            "tools.insert.sql.create_user" => {
+                "CREATE USER alice\nWITH LOGIN\nENCRYPTED PASSWORD 'secret';\n"
+            }
+            "tools.insert.sql.grant_create" => concat!(
+                "-- Enable a user to create new tables, views, etc. inside the public schema.\n",
+                "GRANT CREATE ON SCHEMA public TO alice;\n",
+            ),
+            "tools.insert.sql.grant_usage" => concat!(
+                "-- Enable a user to see and use objects in the public schema.\n",
+                "GRANT USAGE ON SCHEMA public TO alice;\n",
+            ),
+            "tools.insert.sql.create_table" => SQL_CREATE_TABLE,
             _ => return false,
         };
         self.insert_content(snippet);
