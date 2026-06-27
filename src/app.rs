@@ -167,6 +167,8 @@ struct RunningCommand {
     /// The child process, shared so it can be reaped by the reader and killed by
     /// the app.
     child: std::sync::Arc<std::sync::Mutex<std::process::Child>>,
+    /// The command line, for the completion notification.
+    label: String,
 }
 
 /// Result of a background AI text transform whose output replaces editor text.
@@ -7644,7 +7646,10 @@ impl App {
                         panel.busy = false;
                         panel.push(crate::ai_panel::Role::Error, t!("status.ai_failed", action = &ar.label));
                     }
-                    self.status = t!("status.ai_failed", action = ar.label).to_string();
+                    self.status = t!("status.ai_failed", action = &ar.label).to_string();
+                    if !matches!(ar.dest, AiDest::Panel) {
+                        self.messages.error(t!("status.ai_failed", action = ar.label));
+                    }
                     return;
                 }
                 match ar.dest {
@@ -7661,14 +7666,20 @@ impl App {
                     }
                     AiDest::Diff { tab, target } => self.open_ai_diff(tab, target, text),
                 }
-                self.status = t!("status.ai_done", action = ar.label).to_string();
+                self.status = t!("status.ai_done", action = &ar.label).to_string();
+                if !matches!(ar.dest, AiDest::Panel) {
+                    self.messages.info(t!("status.ai_done", action = ar.label));
+                }
             }
             AiMsg::Failed => {
                 if let (AiDest::Panel, Some(panel)) = (ar.dest, self.ai_panel.as_mut()) {
                     panel.busy = false;
                     panel.push(crate::ai_panel::Role::Error, t!("status.ai_failed", action = &ar.label));
                 }
-                self.status = t!("status.ai_failed", action = ar.label).to_string();
+                self.status = t!("status.ai_failed", action = &ar.label).to_string();
+                if !matches!(ar.dest, AiDest::Panel) {
+                    self.messages.error(t!("status.ai_failed", action = ar.label));
+                }
             }
         }
     }
@@ -10474,7 +10485,7 @@ impl App {
                 .and_then(|s| s.code());
             let _ = tx.send(CmdMsg::Done(code));
         });
-        self.running_command = Some(RunningCommand { rx, child });
+        self.running_command = Some(RunningCommand { rx, child, label: cmd.to_string() });
     }
 
     /// Drain any streamed command output into the bottom dock. Called once per
@@ -10498,6 +10509,13 @@ impl App {
                     let code = code.unwrap_or(-1);
                     self.bottom_dock.push(format!("[exit {code}]"));
                     self.status = t!("status.command_done", code = code).to_string();
+                    let label = self.running_command.as_ref().map(|rc| rc.label.clone()).unwrap_or_default();
+                    let note = t!("msg.command_finished", command = label, code = code).to_string();
+                    if code == 0 {
+                        self.messages.info(note);
+                    } else {
+                        self.messages.error(note);
+                    }
                     done = true;
                 }
             }
