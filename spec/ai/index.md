@@ -61,6 +61,32 @@ first finishes, and empty output is treated as a failure).
 - **Replace commands** replace the selected range (or the whole buffer) with the
   output as a single undoable edit.
 
+## Reviewing AI edits
+
+By default the replace commands (Annotate / Improve) do **not** overwrite the
+text immediately. Instead they open a **diff review** of the proposed change and
+let you accept or reject it hunk by hunk:
+
+| Key       | Action                                  |
+| --------- | --------------------------------------- |
+| `↑` / `↓` | Move between change hunks                |
+| `Space`   | Toggle the highlighted hunk             |
+| `a` / `r` | Accept all / reject all hunks           |
+| `Enter`   | Apply the accepted hunks (one undo)     |
+| `Esc`     | Discard the whole proposal              |
+
+The diff is computed line-by-line with `similar`; accepted hunks use the new
+text, rejected hunks keep the old. Set `ai_diff_review = false` to skip the
+review and apply directly (the prior behavior). The review is also skipped, with a
+status note, when the assistant proposes no change.
+
+## As implemented in Vix
+
+Pure diff state lives in the `ai_diff` module (`Review`/`Seg`, with unit-tested
+hunk toggling and exact reconstruction). The host routes Annotate/Improve through
+`AiDest::Diff`, opens the review in `open_ai_diff`, handles keys in `ai_diff_key`,
+applies via `ai_diff_apply`, and draws it with `ui::draw_ai_diff`.
+
 ## As implemented in Vix
 
 The host expands the `ai_command` template via `Settings::ai_command_line` and

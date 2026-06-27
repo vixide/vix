@@ -129,6 +129,9 @@ pub struct Settings {
     /// lets you point the AI menu at any CLI assistant — `claude` (default),
     /// `codex`, `mistral`, `ollama run …`, etc. See [`Settings::ai_command_line`].
     pub ai_command: String,
+    /// Review AI replace transforms (Annotate / Improve) as an accept/reject diff
+    /// before applying, instead of overwriting the text immediately. On by default.
+    pub ai_diff_review: bool,
 }
 
 /// One configured language server (a `lsp_servers` entry).
@@ -182,6 +185,7 @@ impl Default for Settings {
             restore_session: true,
             sticky_search_highlight: true,
             ai_command: "claude -p \"{prompt}\"".to_string(),
+            ai_diff_review: true,
         }
     }
 }

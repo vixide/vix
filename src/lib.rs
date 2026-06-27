@@ -71,6 +71,7 @@ pub mod ui;
 // Folded-in modules (formerly separate `vix-*` subcrates). The custom
 // code-editor widget lives in `editor_core` (above); its Tree-sitter grammars
 // are gated behind this crate's `lang-*` features.
+pub mod ai_diff;
 pub mod ai_panel;
 pub mod ascii_character_picker;
 pub mod base64_tool;

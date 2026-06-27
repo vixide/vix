@@ -195,6 +195,19 @@ enum AiDest {
     NewTab,
     /// Append the result to the AI chat panel transcript as an assistant turn.
     Panel,
+    /// Open a reviewable accept/reject diff for tab `tab` over `target`, instead
+    /// of replacing the text immediately (see [`crate::ai_diff`]).
+    Diff { tab: usize, target: AiTarget },
+}
+
+/// An open AI diff review: the proposed change plus where it applies.
+struct AiDiffState {
+    /// The reviewable, hunk-toggleable diff.
+    review: crate::ai_diff::Review,
+    /// Tab the change applies to.
+    tab: usize,
+    /// Region of that tab the change replaces.
+    target: AiTarget,
 }
 
 /// A background AI task whose captured output is applied when it finishes —
@@ -698,6 +711,8 @@ pub struct App {
     pub qrcode: Option<String>,
     /// AI chat panel overlay (conversation with the configured assistant), when open.
     pub ai_panel: Option<crate::ai_panel::Panel>,
+    /// AI diff-review overlay (accept/reject an Annotate/Improve transform), when open.
+    ai_diff: Option<AiDiffState>,
     /// Receiver for the dashboard's background metric computations.
     dashboard_rx: Option<std::sync::mpsc::Receiver<DashMsg>>,
     /// Code outline overlay, when open.
@@ -1018,6 +1033,7 @@ impl App {
             running_command: None,
             ai_replace: None,
             ai_panel: None,
+            ai_diff: None,
             theme_preview: None,
             scrollbar_active: false,
             hbar_active: None,
@@ -1307,6 +1323,7 @@ impl App {
             }
             return true;
         }
+        panel!(ai_diff, ai_diff_key);
         panel!(ai_panel, ai_panel_key);
         panel!(outline, outline_key);
         panel!(query_replace, qr_key);
@@ -7525,9 +7542,13 @@ impl App {
                 _ => (tab.editor.get_content(), AiTarget::Whole),
             }
         };
+        let dest = if self.settings.ai_diff_review {
+            AiDest::Diff { tab: tab_idx, target }
+        } else {
+            AiDest::Replace { tab: tab_idx, target }
+        };
         if let Some(rx) = self.spawn_ai(prompt, &text) {
-            self.ai_replace =
-                Some(AiReplace { rx, dest: AiDest::Replace { tab: tab_idx, target }, label: label.to_string() });
+            self.ai_replace = Some(AiReplace { rx, dest, label: label.to_string() });
             self.status = t!("status.ai_running", action = label).to_string();
         }
     }
@@ -7638,6 +7659,7 @@ impl App {
                             panel.push(crate::ai_panel::Role::Assistant, text);
                         }
                     }
+                    AiDest::Diff { tab, target } => self.open_ai_diff(tab, target, text),
                 }
                 self.status = t!("status.ai_done", action = ar.label).to_string();
             }
@@ -7793,6 +7815,74 @@ impl App {
             let _ = tab.editor.set_clipboard(&text);
             self.status = t!("status.ai_copied").to_string();
         }
+    }
+
+    // ----- AI diff review (Annotate / Improve) ----------------------------
+
+    /// The open AI diff review, if any (for rendering).
+    #[must_use]
+    pub fn ai_diff_review(&self) -> Option<&crate::ai_diff::Review> {
+        self.ai_diff.as_ref().map(|s| &s.review)
+    }
+
+    /// Open an accept/reject diff review for an AI transform whose `new_text`
+    /// would replace `target` in tab `tab_idx`. No-ops (with a status note) when
+    /// the assistant proposed no change.
+    fn open_ai_diff(&mut self, tab_idx: usize, target: AiTarget, new_text: &str) {
+        let Some(tab) = self.editor.tabs.get(tab_idx) else { return };
+        let old = match target {
+            AiTarget::Whole => tab.editor.get_content(),
+            AiTarget::Range(start, end) => tab.editor.get_content_slice(start, end),
+        };
+        match crate::ai_diff::Review::from_texts(&old, new_text) {
+            Some(review) => self.ai_diff = Some(AiDiffState { review, tab: tab_idx, target }),
+            None => self.status = t!("status.ai_no_change").to_string(),
+        }
+    }
+
+    /// Handle a key while the AI diff review is open. Enter applies the accepted
+    /// hunks; Esc discards the whole proposal; ↑/↓ move between hunks; Space
+    /// toggles the highlighted hunk; `a`/`r` accept/reject all.
+    fn ai_diff_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => self.ai_diff = None,
+            KeyCode::Enter => self.ai_diff_apply(),
+            KeyCode::Up => {
+                if let Some(s) = self.ai_diff.as_mut() {
+                    s.review.prev();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(s) = self.ai_diff.as_mut() {
+                    s.review.next();
+                }
+            }
+            KeyCode::Char(' ') => {
+                if let Some(s) = self.ai_diff.as_mut() {
+                    s.review.toggle();
+                }
+            }
+            KeyCode::Char('a') => {
+                if let Some(s) = self.ai_diff.as_mut() {
+                    s.review.set_all(true);
+                }
+            }
+            KeyCode::Char('r') => {
+                if let Some(s) = self.ai_diff.as_mut() {
+                    s.review.set_all(false);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Apply the reviewed result (accepted hunks applied, rejected ones reverted)
+    /// to its target as a single undoable edit, then close the review.
+    fn ai_diff_apply(&mut self) {
+        let Some(state) = self.ai_diff.take() else { return };
+        let text = state.review.result();
+        self.apply_ai_replace(state.tab, state.target, &text);
+        self.status = t!("status.ai_done", action = t!("menu.ai")).to_string();
     }
 
     // ----- Contacts (vCard browser) ---------------------------------------
