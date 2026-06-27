@@ -46,6 +46,8 @@ pub struct Settings {
     pub show_messages: bool,
     /// Show the bottom status bar.
     pub show_status_bar: bool,
+    /// Show the breadcrumb bar (file ▸ enclosing symbol) above the editor.
+    pub show_breadcrumbs: bool,
     /// Show the editor's right-side scroll bar.
     pub show_scrollbar: bool,
     /// Show the bottom dock (log/output/data panel).
@@ -145,6 +147,7 @@ impl Default for Settings {
             show_explorer: true,
             show_messages: true,
             show_status_bar: true,
+            show_breadcrumbs: false,
             show_scrollbar: true,
             show_bottom_dock: false,
             bottom_dock_height: 9,

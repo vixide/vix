@@ -245,6 +245,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.toggle_bottom_dock", "view.bottom_dock"),
     ("cmd.toggle_status_bar", "view.status_bar"),
     ("cmd.zen", "view.zen"),
+    ("cmd.breadcrumbs", "view.breadcrumbs"),
     ("cmd.trim_on_save", "view.trim_on_save"),
     ("cmd.final_newline_on_save", "view.final_newline_on_save"),
     ("cmd.toggle_line_numbers", "view.line_numbers"),

@@ -813,6 +813,8 @@ pub struct App {
     speller_locale: Option<String>,
     /// Whether the bottom dock (log/output/data panel) is shown.
     pub show_bottom_dock: bool,
+    /// Whether the breadcrumb bar (file ▸ symbol) is shown above the editor.
+    pub show_breadcrumbs: bool,
     /// Saved dock/status visibility while zen (focus) mode is active, restored on
     /// exit. `Some` iff zen mode is on. Holds (explorer, messages, bottom, status).
     pub zen_saved: Option<(bool, bool, bool, bool)>,
@@ -966,6 +968,7 @@ impl App {
             show_explorer: settings.show_explorer,
             show_messages: settings.show_messages,
             show_status_bar: settings.show_status_bar,
+            show_breadcrumbs: settings.show_breadcrumbs,
             zen_saved: None,
             show_scrollbar: settings.show_scrollbar,
             overwrite: false,
@@ -1908,6 +1911,10 @@ impl App {
             "view.right_dock" | "view.messages" => self.toggle_right_dock(),
             "view.status_bar" => self.toggle_status_bar(),
             "view.zen" => self.toggle_zen(),
+            "view.breadcrumbs" => {
+                self.show_breadcrumbs = !self.show_breadcrumbs;
+                self.settings.show_breadcrumbs = self.show_breadcrumbs;
+            }
             "view.trim_on_save" => {
                 self.settings.trim_trailing_whitespace = !self.settings.trim_trailing_whitespace;
             }
@@ -2624,6 +2631,29 @@ impl App {
     #[must_use]
     pub fn is_zen(&self) -> bool {
         self.zen_saved.is_some()
+    }
+
+    /// The breadcrumb for the active buffer: its file name, then the enclosing
+    /// symbol at the cursor (`file ▸ symbol`). Empty when there is no buffer.
+    #[must_use]
+    pub fn breadcrumb(&self) -> String {
+        let Some(tab) = self.editor.active_tab() else {
+            return String::new();
+        };
+        let name = tab
+            .path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map_or_else(|| t!("ui.untitled").to_string(), |n| n.to_string_lossy().into_owned());
+        if tab.is_image() {
+            return name;
+        }
+        let line = self.editor.cursor_1based().0;
+        let symbols = crate::palette::symbols(&tab.text());
+        match symbols.iter().rev().find(|s| s.line <= line) {
+            Some(sym) => format!("{name}  \u{25b8}  {}", sym.name),
+            None => name,
+        }
     }
 
     /// Toggle the bottom dock (log/output/data panel), persisting the choice.
