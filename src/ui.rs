@@ -194,6 +194,9 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.task_chooser.is_some() {
         draw_task_chooser(app, frame, area);
     }
+    if app.diff_view.is_some() {
+        draw_diff_view(app, frame, area);
+    }
     if app.location_chooser.is_some() {
         draw_location_chooser(app, frame, area);
     }
@@ -969,6 +972,53 @@ fn draw_branch_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let hint = t!("ui.branch_hint");
     app.layout.chooser =
         draw_list_chooser(frame, area, &t!("ui.branch"), &hint, &c.branches, c.selected);
+}
+
+fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
+    use crate::diff_view::Kind;
+    let Some(d) = app.diff_view.as_ref() else { return };
+    let width = (area.width * 8 / 10).clamp(30, area.width);
+    let height = (area.height * 8 / 10).clamp(8, area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::INFO, d.title));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+    let view_h = chunks[0].height as usize;
+    let start = d.scroll.min(d.lines.len().saturating_sub(1));
+    let lines: Vec<Line> = d
+        .lines
+        .iter()
+        .skip(start)
+        .take(view_h)
+        .map(|l| {
+            let (prefix, style) = match l.kind {
+                Kind::Add => ("+ ", Style::default().fg(Color::Green)),
+                Kind::Del => ("- ", Style::default().fg(Color::Red)),
+                Kind::Context => ("  ", theme::dim()),
+                Kind::Sep => ("  ", theme::dim().add_modifier(Modifier::DIM)),
+            };
+            Line::from(Span::styled(format!("{prefix}{}", l.text), style))
+        })
+        .collect();
+    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    let hint = Line::from(Span::styled(t!("ui.diff_view_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
 }
 
 fn draw_task_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
