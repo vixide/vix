@@ -2580,6 +2580,29 @@ fn workspace_replace_rewrites_files() {
 }
 
 #[test]
+fn auto_pairs_brackets_and_deletes_empty_pair() {
+    let dir = unique_dir("autopair");
+    fs::create_dir_all(&dir).unwrap();
+    let mut app = app_at(&dir);
+
+    app.on_key(key('('));
+    {
+        let t = app.editor.active_tab().unwrap();
+        assert_eq!(t.editor.get_content(), "()", "closer auto-inserted");
+        assert_eq!(t.editor.get_cursor(), 1, "cursor sits between the pair");
+    }
+    // Typing the closer steps over the auto-inserted one rather than doubling it.
+    app.on_key(key(')'));
+    assert_eq!(app.editor.active_tab().unwrap().editor.get_content(), "()");
+    // Backspace at the caret-between position deletes both halves.
+    app.on_key(key('('));
+    app.on_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+    assert_eq!(app.editor.active_tab().unwrap().editor.get_content(), "()");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn detects_image_extensions() {
     use vix::editor::is_image_path;
     assert!(is_image_path(Path::new("photos/a.PNG")));
@@ -3010,6 +3033,7 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
             "view.soft_wrap",
             "view.inlay_hints",
             "view.spellcheck",
+            "view.auto_pair",
             "view.trim_on_save",
             "view.final_newline_on_save"
         ]

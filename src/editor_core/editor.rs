@@ -30,6 +30,9 @@ type HightlightCache = HashMap<(usize, usize), Vec<Hightlight>>;
 
 /// Represents the text editor, which holds the code buffer, cursor, selection,
 /// theme, scroll offsets, highlight cache, clipboard, and user mark intervals.
+// Independent display/behavior flags (line numbers, whitespace, soft wrap,
+// auto-pair); each is a distinct toggle, so grouping them would not help.
+#[allow(clippy::struct_excessive_bools)]
 pub struct Editor {
     /// Code buffer and editing/highlighting logic for the current language
     pub(crate) code: Code,
@@ -97,6 +100,10 @@ pub struct Editor {
     /// When true, long logical lines wrap across several screen rows instead of
     /// scrolling horizontally.
     pub(crate) soft_wrap: bool,
+
+    /// When true, typing an opening bracket/quote auto-inserts its closer (and
+    /// Backspace between an empty pair deletes both). Host-configurable.
+    pub(crate) auto_pair: bool,
 
     /// Style for the visible-whitespace glyphs (typically dimmed).
     pub(crate) whitespace_style: Style,
@@ -176,6 +183,7 @@ impl Editor {
             show_line_numbers: true,
             show_whitespace: false,
             soft_wrap: false,
+            auto_pair: true,
             whitespace_style: Style::default().fg(Color::DarkGray),
             bracket_style: Style::default().add_modifier(Modifier::REVERSED),
             left_code_padding: 2,
@@ -935,6 +943,11 @@ impl Editor {
     /// Show or hide visible-whitespace glyphs (space, tab, line ending).
     pub fn show_whitespace(&mut self, show: bool) {
         self.show_whitespace = show;
+    }
+
+    /// Enable or disable bracket/quote auto-pairing.
+    pub fn set_auto_pair(&mut self, on: bool) {
+        self.auto_pair = on;
     }
 
     /// Enable or disable soft wrap (long lines wrap instead of scrolling).
