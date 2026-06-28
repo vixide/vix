@@ -1,0 +1,70 @@
+{
+  "TODO": {
+    "prefix": "todo",
+    "body": ["TODO: ${0}"],
+    "description": "TODO marker"
+  },
+  "FIXME": {
+    "prefix": "fixme",
+    "body": ["FIXME: ${0}"],
+    "description": "FIXME marker"
+  },
+  "NOTE": {
+    "prefix": "note",
+    "body": ["NOTE: ${0}"],
+    "description": "NOTE marker"
+  },
+  "Horizontal rule": {
+    "prefix": "hr",
+    "body": ["----------------------------------------$0"],
+    "description": "A horizontal rule of dashes"
+  },
+  "Checklist": {
+    "prefix": "checklist",
+    "body": ["[ ] ${1:first}", "[ ] ${2:second}", "[ ] ${3:third}", "$0"],
+    "description": "A simple checklist"
+  },
+  "Meeting notes": {
+    "prefix": "meeting",
+    "body": [
+      "Meeting: ${1:title}",
+      "Date: ${2:YYYY-MM-DD}",
+      "Attendees: ${3:names}",
+      "",
+      "Agenda:",
+      "- ${4:item}",
+      "",
+      "Notes:",
+      "- $0",
+      "",
+      "Action items:",
+      "- [ ] ${5:task}"
+    ],
+    "description": "Meeting notes template"
+  },
+  "Signature": {
+    "prefix": "sig",
+    "body": ["--", "${1:Your Name}", "${2:email@example.com}$0"],
+    "description": "Email-style signature"
+  },
+  "Box heading": {
+    "prefix": "box",
+    "body": [
+      "########################################",
+      "# ${1:Heading}",
+      "########################################",
+      "$0"
+    ],
+    "description": "A boxed heading"
+  },
+  "Address": {
+    "prefix": "address",
+    "body": ["${1:Name}", "${2:Street}", "${3:City}, ${4:State} ${5:ZIP}", "${6:Country}$0"],
+    "description": "Postal address block"
+  },
+  "Q and A": {
+    "prefix": "qa",
+    "body": ["Q: ${1:question}", "A: ${0:answer}"],
+    "description": "Question and answer"
+  }
+}

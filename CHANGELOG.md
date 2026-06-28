@@ -8,6 +8,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Media types use clean `text/<lang>` forms (no `x-` prefix)** for source code —
+  `text/rust`, `text/python`, `text/typescript`, `text/java`, `text/cpp`,
+  `text/csharp`, `text/c`, `text/ruby`, `text/go`, …, `application/sql`. `.ts` now
+  maps to `text/typescript` and `.cs` to `text/csharp` (C# added).
+- **Snippet directories load every `*.json` file** (not just `snippets.json`), and
+  media-type snippets also load from the project at
+  `config/media-types/<type>/snippets/`.
 - **Edit → Lines → "Sort Lines" renamed to "Sort".**
 - **Keymap renamed "Vim" → "Vi"** — display label, id (`vim` → `vi`), and action
   (`view.keymap:vim` → `view.keymap:vi`). Older configs using `vim` still load.
@@ -27,6 +34,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Bundled example snippet libraries** under `config/media-types/<type>/snippets/examples.json`
+  for 13 media types (Python, Plain text, TypeScript, Rust, Java, C++, C#,
+  JavaScript, C, Ruby, JSON, YAML, SQL) — many common snippets each, modeled on
+  TextMate/VS Code.
 - **JSON snippet files (global / media-type / project).** Snippets can now be
   defined in JSON files (the VS Code shape: `name → {prefix, body, description}`)
   loaded from `~/.config/vix/global/snippets/snippets.json`, per-media-type

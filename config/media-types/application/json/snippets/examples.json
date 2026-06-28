@@ -1,0 +1,68 @@
+{
+  "Object": {
+    "prefix": "obj",
+    "body": ["{", "\t\"${1:key}\": ${2:value}$0", "}"],
+    "description": "JSON object"
+  },
+  "Array": {
+    "prefix": "arr",
+    "body": ["[", "\t${0}", "]"],
+    "description": "JSON array"
+  },
+  "Key/value": {
+    "prefix": "kv",
+    "body": ["\"${1:key}\": \"${2:value}\"$0"],
+    "description": "Key/value pair"
+  },
+  "Array of objects": {
+    "prefix": "aoo",
+    "body": ["[", "\t{", "\t\t\"${1:key}\": ${2:value}", "\t}$0", "]"],
+    "description": "Array of objects"
+  },
+  "npm package.json": {
+    "prefix": "package",
+    "body": [
+      "{",
+      "\t\"name\": \"${1:my-package}\",",
+      "\t\"version\": \"${2:1.0.0}\",",
+      "\t\"description\": \"${3}\",",
+      "\t\"main\": \"${4:index.js}\",",
+      "\t\"scripts\": {",
+      "\t\t\"test\": \"${5:echo \\\"no tests\\\"}\"",
+      "\t},",
+      "\t\"license\": \"${6:MIT}\"",
+      "}$0"
+    ],
+    "description": "npm package.json skeleton"
+  },
+  "JSON Schema": {
+    "prefix": "schema",
+    "body": [
+      "{",
+      "\t\"$schema\": \"https://json-schema.org/draft/2020-12/schema\",",
+      "\t\"title\": \"${1:Title}\",",
+      "\t\"type\": \"object\",",
+      "\t\"properties\": {",
+      "\t\t\"${2:name}\": { \"type\": \"${3:string}\" }",
+      "\t},",
+      "\t\"required\": [\"${2:name}\"]",
+      "}$0"
+    ],
+    "description": "JSON Schema skeleton"
+  },
+  "tsconfig.json": {
+    "prefix": "tsconfig",
+    "body": [
+      "{",
+      "\t\"compilerOptions\": {",
+      "\t\t\"target\": \"${1:ES2022}\",",
+      "\t\t\"module\": \"${2:ESNext}\",",
+      "\t\t\"strict\": true,",
+      "\t\t\"outDir\": \"${3:dist}\"",
+      "\t},",
+      "\t\"include\": [\"${4:src}\"]",
+      "}$0"
+    ],
+    "description": "tsconfig.json skeleton"
+  }
+}

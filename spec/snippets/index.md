@@ -61,27 +61,29 @@ Interpolated shell code and `\u` escapes are **not** supported.
 
 ## Scopes and file locations
 
-Snippets are gathered from four sources and merged (later sources add to, and may
-shadow by name, earlier ones):
+Snippets are gathered from these sources and merged (later sources add to, and may
+shadow by name, earlier ones). **Every `*.json` file** in a snippets directory is
+loaded (so `snippets.json`, `examples.json`, etc. all count), sorted by filename:
 
 | Scope | Location | Applies to |
 | ----- | -------- | ---------- |
 | Bundled | built into Vix | always |
-| Global | `<config>/global/snippets/snippets.json` | always |
-| Media-type | `<config>/media-types/<type>/<subtype>/snippets/snippets.json` | buffers of that media type |
+| Global | `<config>/global/snippets/*.json` | always |
+| Media-type (config) | `<config>/media-types/<type>/<subtype>/snippets/*.json` | buffers of that media type |
+| Media-type (project) | `<project root>/config/media-types/<type>/<subtype>/snippets/*.json` | buffers of that media type, in this project |
 | Project | `<project root>/<project_snippets>` (default `config/snippets/snippets.json`) | the open project |
 
 `<config>` is Vix's config directory (e.g. `~/.config/vix/`). The media-type
-segment is the buffer's media type (see [media-types](../media-types/index.md));
-for example a Rust source file resolves to
-`media-types/text/rust/snippets/snippets.json`. Vix also accepts the
-`x-`-prefixed form (`text/x-rust`), so either spelling works.
+segment is the buffer's media type (see [media-types](../media-types/index.md)),
+written **without an `x-` subtype prefix** — for example a Rust source file
+(`text/rust`) resolves to `media-types/text/rust/snippets/`.
 
 Examples:
 
 - `~/.config/vix/global/snippets/snippets.json`
 - `~/.config/vix/media-types/text/plain/snippets/snippets.json`
 - `~/.config/vix/media-types/text/rust/snippets/snippets.json`
+- `<project>/config/media-types/text/rust/snippets/examples.json`
 - `<project>/config/snippets/snippets.json`
 
 The project file is configurable with the **`project_snippets`** setting (a path

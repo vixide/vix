@@ -1,0 +1,65 @@
+{
+  "Mapping": {
+    "prefix": "map",
+    "body": ["${1:key}: ${0:value}"],
+    "description": "Key/value mapping"
+  },
+  "List": {
+    "prefix": "list",
+    "body": ["${1:items}:", "\t- ${2:first}", "\t- ${0:second}"],
+    "description": "A YAML list"
+  },
+  "GitHub Actions workflow": {
+    "prefix": "ghaction",
+    "body": [
+      "name: ${1:CI}",
+      "on:",
+      "\tpush:",
+      "\t\tbranches: [${2:main}]",
+      "jobs:",
+      "\t${3:build}:",
+      "\t\truns-on: ${4:ubuntu-latest}",
+      "\t\tsteps:",
+      "\t\t\t- uses: actions/checkout@v4",
+      "\t\t\t- name: ${5:Run}",
+      "\t\t\t\trun: ${0:make}"
+    ],
+    "description": "GitHub Actions workflow"
+  },
+  "docker-compose service": {
+    "prefix": "service",
+    "body": [
+      "services:",
+      "\t${1:web}:",
+      "\t\timage: ${2:nginx:latest}",
+      "\t\tports:",
+      "\t\t\t- \"${3:80}:${4:80}\"",
+      "\t\tenvironment:",
+      "\t\t\t- ${0:KEY=value}"
+    ],
+    "description": "docker-compose service"
+  },
+  "Kubernetes Deployment": {
+    "prefix": "deployment",
+    "body": [
+      "apiVersion: apps/v1",
+      "kind: Deployment",
+      "metadata:",
+      "\tname: ${1:app}",
+      "spec:",
+      "\treplicas: ${2:1}",
+      "\tselector:",
+      "\t\tmatchLabels:",
+      "\t\t\tapp: ${1:app}",
+      "\ttemplate:",
+      "\t\tmetadata:",
+      "\t\t\tlabels:",
+      "\t\t\t\tapp: ${1:app}",
+      "\t\tspec:",
+      "\t\t\tcontainers:",
+      "\t\t\t\t- name: ${1:app}",
+      "\t\t\t\t\timage: ${0:image:tag}"
+    ],
+    "description": "Kubernetes Deployment manifest"
+  }
+}

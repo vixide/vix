@@ -1,0 +1,97 @@
+{
+  "Function": {
+    "prefix": "fn",
+    "body": ["fn ${1:name}(${2}) ${3:-> ()} {", "\t$0", "}"],
+    "description": "Function"
+  },
+  "Public function": {
+    "prefix": "pfn",
+    "body": ["pub fn ${1:name}(${2}) ${3:-> ()} {", "\t$0", "}"],
+    "description": "Public function"
+  },
+  "Main": {
+    "prefix": "main",
+    "body": ["fn main() {", "\t$0", "}"],
+    "description": "main function"
+  },
+  "Struct": {
+    "prefix": "struct",
+    "body": ["struct ${1:Name} {", "\t${2:field}: ${3:Type},", "}$0"],
+    "description": "Struct definition"
+  },
+  "Enum": {
+    "prefix": "enum",
+    "body": ["enum ${1:Name} {", "\t${2:Variant},", "}$0"],
+    "description": "Enum definition"
+  },
+  "Impl": {
+    "prefix": "impl",
+    "body": ["impl ${1:Type} {", "\t$0", "}"],
+    "description": "impl block"
+  },
+  "Trait": {
+    "prefix": "trait",
+    "body": ["trait ${1:Name} {", "\t$0", "}"],
+    "description": "Trait definition"
+  },
+  "Derive": {
+    "prefix": "derive",
+    "body": ["#[derive(${1:Debug, Clone})]$0"],
+    "description": "derive attribute"
+  },
+  "Match": {
+    "prefix": "match",
+    "body": ["match ${1:expr} {", "\t${2:pattern} => ${3:value},", "\t_ => ${4:default},", "}$0"],
+    "description": "match expression"
+  },
+  "If let": {
+    "prefix": "iflet",
+    "body": ["if let ${1:Some(x)} = ${2:expr} {", "\t$0", "}"],
+    "description": "if let"
+  },
+  "For loop": {
+    "prefix": "for",
+    "body": ["for ${1:item} in ${2:iter} {", "\t$0", "}"],
+    "description": "for loop"
+  },
+  "While let": {
+    "prefix": "whilelet",
+    "body": ["while let ${1:Some(x)} = ${2:expr} {", "\t$0", "}"],
+    "description": "while let"
+  },
+  "Println": {
+    "prefix": "pln",
+    "body": ["println!(\"${1}\"${2});$0"],
+    "description": "println! macro"
+  },
+  "Result function": {
+    "prefix": "fnres",
+    "body": ["fn ${1:name}(${2}) -> Result<${3:()}, ${4:Error}> {", "\t${0:Ok(())}", "}"],
+    "description": "Function returning Result"
+  },
+  "Test module": {
+    "prefix": "testmod",
+    "body": [
+      "#[cfg(test)]",
+      "mod tests {",
+      "\tuse super::*;",
+      "",
+      "\t#[test]",
+      "\tfn ${1:it_works}() {",
+      "\t\t$0",
+      "\t}",
+      "}"
+    ],
+    "description": "Test module"
+  },
+  "Test": {
+    "prefix": "test",
+    "body": ["#[test]", "fn ${1:name}() {", "\t$0", "}"],
+    "description": "Single test function"
+  },
+  "Use": {
+    "prefix": "use",
+    "body": ["use ${0:path};"],
+    "description": "use statement"
+  }
+}

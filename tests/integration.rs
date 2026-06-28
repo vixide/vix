@@ -83,6 +83,26 @@ fn type_str(app: &mut App, s: &str) {
 }
 
 #[test]
+fn project_media_type_example_snippets_load() {
+    // The bundled example files live under config/media-types/<type>/snippets/.
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let proj = "config/snippets/snippets.json";
+
+    // Rust source maps to text/rust (no x- prefix) and loads its examples.
+    assert_eq!(vix::media_type::for_extension("rs").unwrap().media_type, "text/rust");
+    let rust = vix::snippets::load_scoped(Some("text/rust"), root, proj);
+    assert!(rust.iter().any(|s| s.prefixes.iter().any(|p| p == "fn")), "rust examples loaded");
+
+    // A few other languages resolve to the clean text/* or application/* types.
+    assert_eq!(vix::media_type::for_extension("py").unwrap().media_type, "text/python");
+    assert_eq!(vix::media_type::for_extension("ts").unwrap().media_type, "text/typescript");
+    assert_eq!(vix::media_type::for_extension("cs").unwrap().media_type, "text/csharp");
+    assert_eq!(vix::media_type::for_extension("sql").unwrap().media_type, "application/sql");
+    let sql = vix::snippets::load_scoped(Some("application/sql"), root, proj);
+    assert!(sql.iter().any(|s| s.prefixes.iter().any(|p| p == "select")), "sql examples loaded");
+}
+
+#[test]
 fn snippet_picker_filters_and_inserts_bundled() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.snippets");
