@@ -2016,7 +2016,7 @@ impl App {
             'r' if shift => self.run_action("file.open"),     // Open Resource
             'r' => self.run_action("edit.replace"),
             't' if shift => self.run_action("nav.goto_workspace_symbol"), // Open Type
-            'b' if shift => self.run_action("debug.toggle_breakpoint"),
+            'b' if shift => self.run_action("run.toggle_breakpoint"),
             'b' => self.run_action("tools.test"),             // Build All
             '3' => self.run_action("tools.palette"),          // Quick Access
             '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
@@ -2648,19 +2648,19 @@ impl App {
             }
             "git.blame" => self.git_blame_line(),
             "git.blame_inline" => self.toggle_inline_blame(),
-            "debug.start" => self.start_debugger(),
-            "debug.stop" => self.stop_debugger(),
-            "debug.toggle_breakpoint" => self.toggle_breakpoint(),
-            "debug.continue" => self.dap.continue_(),
-            "debug.step_over" => self.dap.step_over(),
-            "debug.step_into" => self.dap.step_into(),
-            "debug.step_out" => self.dap.step_out(),
-            "debug.pause" => self.dap.pause(),
-            "debug.panel" => self.show_debug_panel = !self.show_debug_panel,
-            "debug.repl" => {
+            "run.start" => self.start_debugger(),
+            "run.stop" => self.stop_debugger(),
+            "run.toggle_breakpoint" => self.toggle_breakpoint(),
+            "run.continue" => self.dap.continue_(),
+            "run.step_over" => self.dap.step_over(),
+            "run.step_into" => self.dap.step_into(),
+            "run.step_out" => self.dap.step_out(),
+            "run.pause" => self.dap.pause(),
+            "run.panel" => self.show_debug_panel = !self.show_debug_panel,
+            "run.repl" => {
                 self.prompt = Some(Prompt::new(PromptKind::DebugRepl, t!("prompt.debug_repl").to_string()));
             }
-            "debug.watch" => {
+            "run.watch" => {
                 self.prompt = Some(Prompt::new(PromptKind::DebugWatch, t!("prompt.debug_watch").to_string()));
             }
             "git.revert_hunk" => self.revert_hunk(),
@@ -13358,8 +13358,8 @@ fn rect_contains(r: Rect, col: u16, row: u16) -> bool {
 
 /// The top-level menu index for an `Alt+letter` mnemonic: Vix=0, File=1, Edit=2,
 /// View=3 (Alt+I, since "Vix"/"View" both start with V), Go=4 (Alt+N, since Git
-/// keeps Alt+G and Alt+J is the recent-locations jump), Tools=5, AI=6, Git=7,
-/// Org=8, Debug=9, Help=10. `None` for any other letter.
+/// keeps Alt+G and Alt+J is the recent-locations jump), Run=5 (Alt+R), Tools=6,
+/// AI=7, Git=8, Org=9, Help=10. `None` for any other letter.
 fn menu_index_for_alt(c: char) -> Option<usize> {
     match c.to_ascii_lowercase() {
         'v' => Some(0),
@@ -13367,11 +13367,11 @@ fn menu_index_for_alt(c: char) -> Option<usize> {
         'e' => Some(2),
         'i' => Some(3),
         'n' => Some(4),
-        't' => Some(5),
-        'a' => Some(6),
-        'g' => Some(7),
-        'o' => Some(8),
-        'd' => Some(9),
+        'r' => Some(5),
+        't' => Some(6),
+        'a' => Some(7),
+        'g' => Some(8),
+        'o' => Some(9),
         'h' => Some(10),
         _ => None,
     }

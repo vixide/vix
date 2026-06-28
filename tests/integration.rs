@@ -3225,7 +3225,7 @@ fn alt_letters_open_specific_menus() {
         ('n', "menu.go"),
         ('g', "menu.git"),
         ('o', "menu.org"),
-        ('d', "menu.debug"),
+        ('r', "menu.run"),
         ('h', "menu.help"),
     ] {
         let mut app = app_at(Path::new("."));
@@ -4136,15 +4136,15 @@ fn debug_breakpoints_toggle_on_the_cursor_line() {
     app.open_initial(&file);
 
     app.run_action("cursor_down"); // line 2
-    app.run_action("debug.toggle_breakpoint");
+    app.run_action("run.toggle_breakpoint");
     assert_eq!(app.active_breakpoints(), vec![2], "breakpoint set on line 2");
 
     app.run_action("cursor_down"); // line 3
-    app.run_action("debug.toggle_breakpoint");
+    app.run_action("run.toggle_breakpoint");
     assert_eq!(app.active_breakpoints(), vec![2, 3]);
 
     // Toggling again clears it.
-    app.run_action("debug.toggle_breakpoint");
+    app.run_action("run.toggle_breakpoint");
     assert_eq!(app.active_breakpoints(), vec![2]);
 
     fs::remove_dir_all(&dir).ok();

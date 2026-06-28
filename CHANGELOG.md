@@ -41,6 +41,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Renamed the Debug menu to Run** (action ids `debug.*` → `run.*`) and moved it
+  to just after the new Go menu (Alt+R).
 - **Top-level Go menu** (promoted from Edit → Go, placed after View, Alt+N). Adds
   Go to Symbol / Declaration / Implementations / References, Next/Previous Issue
   (diagnostics) and Next/Previous Change (git hunks), and granularity submenus —

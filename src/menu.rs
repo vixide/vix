@@ -909,22 +909,22 @@ fn time_zone_submenu() -> &'static [Item] {
     Box::leak(items.into_boxed_slice())
 }
 
-/// Debugger commands (DAP), grouped under the top-level Debug menu.
-const DEBUG: &[Item] = &[
-    Item::leaf("menu.item.debug.start", "debug.start", ""),
-    Item::leaf("menu.item.debug.stop", "debug.stop", ""),
+/// Debugger commands (DAP), grouped under the top-level Run menu.
+const RUN: &[Item] = &[
+    Item::leaf("menu.item.run.start", "run.start", ""),
+    Item::leaf("menu.item.run.stop", "run.stop", ""),
     SEP,
-    Item::leaf("menu.item.debug.toggle_breakpoint", "debug.toggle_breakpoint", ""),
+    Item::leaf("menu.item.run.toggle_breakpoint", "run.toggle_breakpoint", ""),
     SEP,
-    Item::leaf("menu.item.debug.continue", "debug.continue", ""),
-    Item::leaf("menu.item.debug.step_over", "debug.step_over", ""),
-    Item::leaf("menu.item.debug.step_into", "debug.step_into", ""),
-    Item::leaf("menu.item.debug.step_out", "debug.step_out", ""),
-    Item::leaf("menu.item.debug.pause", "debug.pause", ""),
+    Item::leaf("menu.item.run.continue", "run.continue", ""),
+    Item::leaf("menu.item.run.step_over", "run.step_over", ""),
+    Item::leaf("menu.item.run.step_into", "run.step_into", ""),
+    Item::leaf("menu.item.run.step_out", "run.step_out", ""),
+    Item::leaf("menu.item.run.pause", "run.pause", ""),
     SEP,
-    Item::leaf("menu.item.debug.watch", "debug.watch", ""),
-    Item::leaf("menu.item.debug.repl", "debug.repl", ""),
-    Item::leaf("menu.item.debug.panel", "debug.panel", ""),
+    Item::leaf("menu.item.run.watch", "run.watch", ""),
+    Item::leaf("menu.item.run.repl", "run.repl", ""),
+    Item::leaf("menu.item.run.panel", "run.panel", ""),
 ];
 
 fn build_menus() -> Vec<MenuDef> {
@@ -948,11 +948,11 @@ fn build_menus() -> Vec<MenuDef> {
         MenuDef { name: "menu.edit", items: EDIT },
         MenuDef { name: "menu.view", items: view_items },
         MenuDef { name: "menu.go", items: GO },
+        MenuDef { name: "menu.run", items: RUN },
         MenuDef { name: "menu.tools", items: TOOLS },
         MenuDef { name: "menu.ai", items: AI },
         MenuDef { name: "menu.git", items: GIT },
         MenuDef { name: "menu.org", items: ORG },
-        MenuDef { name: "menu.debug", items: DEBUG },
         MenuDef { name: "menu.help", items: HELP },
     ]
 }
