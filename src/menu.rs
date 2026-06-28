@@ -124,8 +124,8 @@ const EDIT: &[Item] = &[
 
 /// Keyboard-macro commands, grouped under Edit → Macro.
 const EDIT_MACRO: &[Item] = &[
-    Item::leaf("menu.item.edit.record_macro", "toggle_macro", ""),
-    Item::leaf("menu.item.edit.play_macro", "play_macro", ""),
+    Item::leaf("menu.item.edit.record_macro", "macro.record", ""),
+    Item::leaf("menu.item.edit.play_macro", "macro.play", ""),
     Item::leaf("menu.item.edit.save_macro", "macro.save", ""),
     Item::leaf("menu.item.edit.play_saved_macro", "macro.play_saved", ""),
 ];
@@ -1231,9 +1231,9 @@ mod tests {
             .and_then(|it| it.submenu)
             .expect("Edit has a Macro submenu");
         let actions: Vec<&str> = mac.iter().map(|it| it.action).collect();
-        assert_eq!(actions, vec!["toggle_macro", "play_macro", "macro.save", "macro.play_saved"]);
+        assert_eq!(actions, vec!["macro.record", "macro.play", "macro.save", "macro.play_saved"]);
         // The macro items no longer sit directly in the Edit menu.
-        assert!(!edit.items.iter().any(|it| it.action == "toggle_macro"));
+        assert!(!edit.items.iter().any(|it| it.action == "macro.record"));
     }
 
     #[test]

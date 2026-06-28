@@ -756,14 +756,14 @@ fn autocomplete_completes_a_buffer_word() {
 #[test]
 fn macro_records_and_replays_editor_keys() {
     let mut app = app_at(Path::new("."));
-    app.run_action("toggle_macro"); // start recording
+    app.run_action("macro.record"); // start recording
     assert!(app.macro_recording);
     app.on_key(key('a'));
     app.on_key(key('b'));
-    app.run_action("toggle_macro"); // stop
+    app.run_action("macro.record"); // stop
     assert!(!app.macro_recording);
     assert_eq!(app.editor.active_tab().unwrap().text(), "ab");
-    app.run_action("play_macro"); // replays "ab" at the cursor
+    app.run_action("macro.play"); // replays "ab" at the cursor
     assert_eq!(app.editor.active_tab().unwrap().text(), "abab");
 }
 
@@ -5390,22 +5390,6 @@ fn catalog_hsplit() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "alpha beta gamma\ndelta epsilon\n");
     app.run_action("hsplit");
-    assert!(app.editor.active_tab().is_some());
-}
-
-#[test]
-fn catalog_toggle_macro() {
-    let mut app = app_at(Path::new("."));
-    type_str(&mut app, "alpha beta gamma\ndelta epsilon\n");
-    app.run_action("toggle_macro");
-    assert!(app.editor.active_tab().is_some());
-}
-
-#[test]
-fn catalog_play_macro() {
-    let mut app = app_at(Path::new("."));
-    type_str(&mut app, "alpha beta gamma\ndelta epsilon\n");
-    app.run_action("play_macro");
     assert!(app.editor.active_tab().is_some());
 }
 

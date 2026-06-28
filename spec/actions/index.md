@@ -151,8 +151,6 @@ Every action has a smoke test in `tests/integration.rs`
 | `unsplit` | `unsplit` | `Unsplit` |
 | `vsplit` | `vsplit` | `VSplit` |
 | `hsplit` | `hsplit` | `HSplit` |
-| `toggle-macro` | `toggle_macro` | `ToggleMacro` |
-| `play-macro` | `play_macro` | `PlayMacro` |
 | `suspend` | `suspend` | `Suspend` |
 | `scroll-up` | `scroll_up` | `ScrollUp` |
 | `scroll-down` | `scroll_down` | `ScrollDown` |

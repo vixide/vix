@@ -1053,7 +1053,7 @@ pub struct App {
     pub show_ruler: bool,
     /// Whether a keyboard macro is being recorded (capturing editor keys).
     pub macro_recording: bool,
-    /// The recorded editor key sequence, replayed by `play_macro`.
+    /// The recorded editor key sequence, replayed by `macro.play`.
     macro_keys: Vec<KeyEvent>,
     /// True while replaying, to suppress re-recording and recursion.
     macro_playing: bool,
@@ -3169,7 +3169,7 @@ impl App {
                 self.show_ruler = !self.show_ruler;
                 self.status = t!(if self.show_ruler { "status.ruler_on" } else { "status.ruler_off" }).to_string();
             }
-            "toggle_macro" => {
+            "macro.record" => {
                 self.macro_recording = !self.macro_recording;
                 if self.macro_recording {
                     self.macro_keys.clear();
@@ -3178,7 +3178,7 @@ impl App {
                     self.status = t!("status.macro_recorded", count = self.macro_keys.len()).to_string();
                 }
             }
-            "play_macro" => self.play_macro(),
+            "macro.play" => self.play_macro(),
             "macro.save" => self.begin_save_macro(),
             "macro.play_saved" => self.open_macro_chooser(),
             "autocomplete" => self.autocomplete(true),

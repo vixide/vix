@@ -15,9 +15,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Snippet directories load every `*.json` file** (not just `snippets.json`), and
   media-type snippets also load from the project at
   `config/media-types/<type>/snippets/`.
-- **Macro commands moved to Edit → Macro.** Record/Play/Save…/Play Saved… now
-  live in a new **Edit → Macro** submenu (relabeled Record, Play, Save…, Play
-  Saved…); action ids unchanged.
+- **Macro commands moved to Edit → Macro** and namespaced consistently under
+  `macro.*`: `toggle_macro` → `macro.record`, `play_macro` → `macro.play` (joining
+  `macro.save` / `macro.play_saved`). Menu items relabeled Record / Play / Save… /
+  Play Saved….
 - **Edit → Lines → "Sort Lines" renamed to "Sort".**
 - **Docs/spec/AGENTS harmonized** with the current feature set (keymaps list,
   Org/Debug menus, edit surfaces, snippets, media types, module map, Rust 1.95
