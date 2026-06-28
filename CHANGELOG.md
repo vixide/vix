@@ -48,7 +48,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `spec/tools/draw/index.md`.
 - **PlantUML media type** (`text/plantuml`, `.plantuml`/`.puml`) plus a bundled
   snippet library (diagram skeleton, sequence/class/use-case/activity/state/
-  component constructs, notes, skinparam).
+  component constructs, notes, skinparam) **and a 41-diagram example gallery**
+  imported from `joelparkerhenderson/plantuml-examples` (activity, archimate,
+  C4, class, deployment, ERD, gantt, mind-map, sequence, state, timing, …).
 - **Graphviz media type** (`text/graphviz`, `.graphviz`/`.gv`/`.dot`) plus a DOT
   snippet library (directed/undirected graphs, nodes, edges, clusters, ranks,
   attribute defaults, record nodes).

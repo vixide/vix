@@ -118,6 +118,11 @@ fn project_media_type_example_snippets_load() {
         assert!(!snips.is_empty(), "{mt} examples loaded");
     }
 
+    // PlantUML loads both the building blocks and the example gallery.
+    let pl = vix::snippets::load_scoped(Some("text/plantuml"), root, proj);
+    assert!(pl.iter().any(|s| s.name == "Sequence Diagram"), "plantuml gallery loaded");
+    assert!(pl.len() >= 50, "building blocks + gallery merged");
+
     // The Base column marks text vs binary content.
     assert!(vix::media_type::for_extension("rs").unwrap().is_text());
     assert!(!vix::media_type::for_extension("png").unwrap().is_text());
