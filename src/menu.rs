@@ -667,11 +667,16 @@ const ORG_EXPORT: &[Item] = &[
 /// Org-mode editing commands, grouped under the top-level Org menu. Insertion of
 /// Org snippets/markers/blocks lives under Tools → Insert.
 const ORG: &[Item] = &[
+    Item::leaf("menu.item.org.capture", "org.capture", ""),
+    SEP,
     Item::leaf("menu.item.org.cycle_visibility", "org.cycle_visibility", ""),
     SEP,
     Item::sub("menu.item.org.headline", ORG_HEADLINE),
     Item::leaf("menu.item.org.cycle_todo", "org.cycle_todo", ""),
     Item::leaf("menu.item.org.toggle_checkbox", "org.toggle_checkbox", ""),
+    SEP,
+    Item::leaf("menu.item.org.agenda", "org.agenda", ""),
+    Item::leaf("menu.item.org.time_report", "org.time_report", ""),
     SEP,
     Item::sub("menu.item.org.export", ORG_EXPORT),
 ];

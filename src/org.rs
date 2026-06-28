@@ -12,6 +12,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+use std::fmt::Write as _;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -171,6 +172,109 @@ pub fn move_subtree_up(text: &str, line: usize) -> Option<(String, usize)> {
     out.extend_from_slice(&lines[prev..start]); // then the previous sibling
     out.extend_from_slice(&lines[end..]);
     Some((out.join("\n"), prev))
+}
+
+// ----- Agenda & time tracking -----------------------------------------------
+
+/// Extract the `YYYY-MM-DD` date from the first `<…>`/`[…]` timestamp in `s`.
+fn first_date(s: &str) -> Option<String> {
+    let start = s.find(['<', '['])?;
+    let date: String = s[start + 1..].chars().take(10).collect();
+    let b = date.as_bytes();
+    if date.len() == 10 && b[4] == b'-' && b[7] == b'-' && b[..4].iter().all(u8::is_ascii_digit) {
+        Some(date)
+    } else {
+        None
+    }
+}
+
+/// Compile an **agenda** from `(filename, content)` Org documents: `DEADLINE:` and
+/// `SCHEDULED:` planning lines grouped by date, plus `TODO` headlines that have no
+/// date. Returns an Org document (open it in a buffer). Pure and testable.
+#[must_use]
+pub fn agenda(files: &[(String, String)]) -> String {
+    let mut dated: Vec<(String, String, String, String)> = Vec::new(); // date, kind, headline, file
+    let mut undated: Vec<(String, String)> = Vec::new(); // headline, file
+    for (name, content) in files {
+        let mut current = String::new();
+        for line in content.lines() {
+            if let Some(level) = headline_level(line) {
+                current = line[level..].trim().to_string();
+                if current.split_whitespace().next() == Some("TODO") {
+                    undated.push((current.clone(), name.clone()));
+                }
+                continue;
+            }
+            let trimmed = line.trim();
+            for kind in ["DEADLINE", "SCHEDULED"] {
+                if let Some(rest) = trimmed.strip_prefix(&format!("{kind}:"))
+                    && let Some(date) = first_date(rest)
+                {
+                    dated.push((date, kind.to_string(), current.clone(), name.clone()));
+                }
+            }
+        }
+    }
+    dated.sort();
+    let mut out = String::from("#+title: Agenda\n");
+    let mut last = String::new();
+    for (date, kind, headline, file) in &dated {
+        if *date != last {
+            let _ = writeln!(out, "\n* {date}");
+            last.clone_from(date);
+        }
+        let _ = writeln!(out, "- {kind}: {headline} ({file})");
+    }
+    if !undated.is_empty() {
+        out.push_str("\n* Unscheduled tasks\n");
+        for (headline, file) in &undated {
+            let _ = writeln!(out, "- {headline} ({file})");
+        }
+    }
+    out
+}
+
+/// Minutes in a `CLOCK:` line's explicit `=> H:MM` total, if present.
+fn clock_minutes(line: &str) -> Option<u32> {
+    let rest = line.trim().strip_prefix("CLOCK:")?;
+    let after = &rest[rest.find("=>")? + 2..];
+    let (h, m) = after.trim().split_once(':')?;
+    Some(h.trim().parse::<u32>().ok()? * 60 + m.trim().parse::<u32>().ok()?)
+}
+
+/// Render `minutes` as `H:MM`.
+fn hhmm(minutes: u32) -> String {
+    format!("{}:{:02}", minutes / 60, minutes % 60)
+}
+
+/// Build a **time-tracking report** from `content`: sum each headline's `CLOCK:`
+/// durations (the `=> H:MM` totals Org writes) into a table with a grand total.
+/// Pure and testable.
+#[must_use]
+pub fn time_report(content: &str) -> String {
+    let mut current = String::from("(top level)");
+    let mut totals: Vec<(String, u32)> = Vec::new();
+    for line in content.lines() {
+        if let Some(level) = headline_level(line) {
+            current = line[level..].trim().to_string();
+            continue;
+        }
+        if let Some(min) = clock_minutes(line) {
+            if let Some(entry) = totals.iter_mut().find(|(h, _)| *h == current) {
+                entry.1 += min;
+            } else {
+                totals.push((current.clone(), min));
+            }
+        }
+    }
+    let mut out = String::from("| Headline | Time |\n|----------|------|\n");
+    let mut grand = 0;
+    for (headline, min) in &totals {
+        let _ = writeln!(out, "| {headline} | {} |", hhmm(*min));
+        grand += min;
+    }
+    let _ = writeln!(out, "| *Total* | {} |", hhmm(grand));
+    out
 }
 
 // ----- Export ---------------------------------------------------------------
@@ -356,6 +460,35 @@ mod tests {
         assert!(md.contains("*italic*"));
         assert!(md.contains("**bold**"));
         assert!(md.contains("[d](u)"));
+    }
+
+    #[test]
+    fn agenda_groups_by_date_and_lists_undated_todos() {
+        let files = vec![
+            (
+                "work.org".to_string(),
+                "* TODO Ship it\nDEADLINE: <2024-08-23 Fri>\n* TODO Loose end\n".to_string(),
+            ),
+            ("home.org".to_string(), "* Meeting\nSCHEDULED: <2024-08-20 Tue>\n".to_string()),
+        ];
+        let a = agenda(&files);
+        assert!(a.contains("* 2024-08-20"));
+        assert!(a.contains("- SCHEDULED: Meeting (home.org)"));
+        assert!(a.contains("* 2024-08-23"));
+        assert!(a.contains("- DEADLINE: TODO Ship it (work.org)"));
+        assert!(a.contains("* Unscheduled tasks"));
+        assert!(a.contains("- TODO Loose end (work.org)"));
+        // Dates are sorted ascending: 08-20 before 08-23.
+        assert!(a.find("2024-08-20").unwrap() < a.find("2024-08-23").unwrap());
+    }
+
+    #[test]
+    fn time_report_sums_clock_durations_per_headline() {
+        let org = "* Task A\nCLOCK: [..]--[..] =>  1:30\nCLOCK: [..]--[..] =>  0:45\n* Task B\nCLOCK: [..]--[..] => 2:00\n";
+        let r = time_report(org);
+        assert!(r.contains("| Task A | 2:15 |"));
+        assert!(r.contains("| Task B | 2:00 |"));
+        assert!(r.contains("| *Total* | 4:15 |"));
     }
 
     #[test]

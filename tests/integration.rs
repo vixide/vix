@@ -200,6 +200,31 @@ fn media_type_picker_filters_and_inserts() {
 }
 
 #[test]
+fn org_capture_inserts_todo_and_time_report_tabulates() {
+    // Capture opens a prompt; submitting inserts a TODO headline at the cursor.
+    let mut app = app_at(Path::new("."));
+    app.run_action("org.capture");
+    assert!(app.prompt.is_some(), "Org → Capture opens a prompt");
+    for c in "Buy milk".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(app.editor.active_tab().unwrap().text().contains("* TODO Buy milk"));
+
+    // Time Tracker builds a clock report in a new tab.
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "* Task\nCLOCK: [a]--[b] =>  1:00\n");
+    let before = app.editor.tabs.len();
+    app.run_action("org.time_report");
+    assert_eq!(app.editor.tabs.len(), before + 1);
+    assert!(app.editor.active_tab().unwrap().text().contains("| Task | 1:00 |"));
+
+    // Agenda Tracker runs and opens a buffer (no .org files → just the header).
+    app.run_action("org.agenda");
+    assert!(app.editor.active_tab().unwrap().text().contains("Agenda"));
+}
+
+#[test]
 fn org_menu_edits_headlines_and_exports() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "* Task\nbody");

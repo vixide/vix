@@ -72,6 +72,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   cursor. Opens pre-selected to the current file's type. Backed by the curated
   `spec/media-types/media-types.tsv` and the `media_type` module (with
   `for_extension` lookup). See `spec/media-types/index.md`.
+- **Org capture, agenda & time tracking.** **Org → Capture…** logs an idea/task
+  as a `* TODO` headline via a quick prompt; **Agenda Tracker** compiles
+  deadlines/scheduled items/TODOs from the project's `.org` files into a dated
+  agenda; **Time Tracker** totals `CLOCK:` durations per headline into a report.
 - **Org mode (basics).** A new top-level **Org** menu (`Alt+O`) brings headline
   structure editing (promote/demote and move subtree across siblings), fold
   cycling, TODO cycling (none → `TODO` → `DONE`), checkbox toggling, and export to

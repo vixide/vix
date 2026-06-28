@@ -29,6 +29,16 @@ Org outlines are built from headlines: lines starting with one or more `*`.
   back to plain.
 - **Toggle Checkbox** flips a list item between `- [ ]` and `- [x]`.
 
+## Capture, agenda & time tracking
+
+- **Capture…** pops a quick prompt; whatever you type is dropped in as a
+  `* TODO …` headline at the cursor — a fast way to jot an idea or task.
+- **Agenda Tracker** scans every `.org` file in the project and compiles their
+  `DEADLINE:`/`SCHEDULED:` items and `TODO` headlines into one dated agenda
+  buffer.
+- **Time Tracker** reads the `CLOCK:` lines in the current buffer and totals the
+  time per headline into a report table.
+
 ## Export
 
 - **Export → Markdown** and **Export → HTML** convert the current buffer and open

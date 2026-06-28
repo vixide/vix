@@ -20,6 +20,7 @@ The **Org** menu (`Alt+O`):
 
 | Item | Action | Effect |
 | ---- | ------ | ------ |
+| Capture… | `org.capture` | Open a single-line prompt; the text is inserted as a `* TODO` headline at the cursor. |
 | Cycle Visibility (Fold) | `org.cycle_visibility` | Fold/unfold at the cursor (reuses the editor fold toggle). |
 | Headline → Promote | `org.promote` | Remove one `*` from every headline in the subtree (refused at level 1). |
 | Headline → Demote | `org.demote` | Add one `*` to every headline in the subtree. |
@@ -27,8 +28,14 @@ The **Org** menu (`Alt+O`):
 | Headline → Move Subtree Down | `org.move_down` | Swap the subtree with the next sibling. |
 | Cycle TODO | `org.cycle_todo` | Cycle the headline keyword: none → `TODO` → `DONE` → none. |
 | Toggle Checkbox | `org.toggle_checkbox` | Toggle a list item's `[ ]` ⇄ `[x]`. |
+| Agenda Tracker | `org.agenda` | Compile `DEADLINE:`/`SCHEDULED:` items and `TODO` headlines from every `.org` file in the project into a single dated agenda buffer. |
+| Time Tracker | `org.time_report` | Sum each headline's `CLOCK:` durations in the active buffer into a time-report table. |
 | Export → Markdown | `org.export_markdown` | Convert the buffer to Markdown in a new tab. |
 | Export → HTML | `org.export_html` | Convert the buffer to a standalone HTML document in a new tab. |
+
+Agenda and Time Tracker output open in a new buffer. The pure builders
+(`org::agenda`, `org::time_report`) are unit tested; `CLOCK:` durations are read
+from the `=> H:MM` totals Org writes.
 
 Structure commands operate on the headline/line under the cursor; the cursor
 follows a moved subtree. When a command does not apply (e.g. the cursor is not on

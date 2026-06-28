@@ -121,6 +121,8 @@ pub enum PromptKind {
     DebugRepl,
     /// Enter an expression to add as a debugger watch.
     DebugWatch,
+    /// Enter an Org capture — a quick idea/task inserted as a `* TODO` headline.
+    OrgCapture,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -3436,6 +3438,9 @@ impl App {
             "org.move_down" => self.org_move_subtree(crate::org::move_subtree_down),
             "org.export_markdown" => self.org_export(crate::org::to_markdown, "md"),
             "org.export_html" => self.org_export(crate::org::to_html, "html"),
+            "org.capture" => self.org_capture(),
+            "org.agenda" => self.org_agenda(),
+            "org.time_report" => self.org_time_report(),
             _ => return false,
         }
         true
@@ -3476,6 +3481,36 @@ impl App {
         let converted = f(&text);
         self.editor.new_tab_with_content(&converted);
         self.status = t!("status.org_exported", ext = ext).to_string();
+    }
+
+    /// Open the Org capture dialog: a single-line prompt whose text is inserted as
+    /// a `* TODO` headline at the cursor.
+    fn org_capture(&mut self) {
+        self.prompt = Some(Prompt::new(PromptKind::OrgCapture, t!("prompt.org_capture").to_string()));
+    }
+
+    /// Compile an agenda from every `.org` file in the project into a new tab.
+    fn org_agenda(&mut self) {
+        let mut files: Vec<(String, String)> = Vec::new();
+        for path in &self.file_index {
+            if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("org"))
+                && let Ok(content) = std::fs::read_to_string(path)
+            {
+                let name = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().into_owned();
+                files.push((name, content));
+            }
+        }
+        let agenda = crate::org::agenda(&files);
+        self.editor.new_tab_with_content(&agenda);
+        self.status = t!("status.org_agenda", count = files.len()).to_string();
+    }
+
+    /// Build a clock-time report from the active buffer into a new tab.
+    fn org_time_report(&mut self) {
+        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else { return };
+        let report = crate::org::time_report(&text);
+        self.editor.new_tab_with_content(&report);
+        self.status = t!("status.org_time_report").to_string();
     }
 
     /// Insert generator output (a UUID, ZID, …) at the cursor in the active
@@ -12234,6 +12269,12 @@ impl App {
             }
             PromptKind::CompareFile => self.open_diff_with(prompt.input.trim()),
             PromptKind::SaveMacro => self.save_macro(prompt.input.trim()),
+            PromptKind::OrgCapture => {
+                let text = prompt.input.trim();
+                if !text.is_empty() {
+                    self.insert_content(&format!("* TODO {text}\n"));
+                }
+            }
             PromptKind::DebugRepl => {
                 let expr = prompt.input.trim();
                 if !expr.is_empty() {
