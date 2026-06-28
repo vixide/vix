@@ -343,6 +343,12 @@ impl Lsp {
         self.request(path, "textDocument/typeDefinition", line, character, Pending::Definition);
     }
 
+    /// Request the declaration location at `(line, character)` (jumps like
+    /// definition).
+    pub fn request_declaration(&mut self, path: &Path, line: u32, character: u32) {
+        self.request(path, "textDocument/declaration", line, character, Pending::Definition);
+    }
+
     /// Request all references to the symbol at `(line, character)`.
     pub fn request_references(&mut self, path: &Path, line: u32, character: u32) {
         let Some(config) = self.config_for(path) else { return };

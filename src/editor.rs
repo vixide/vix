@@ -39,6 +39,58 @@ fn is_section_break(code: &Code, row: usize, n: usize) -> bool {
             || (row + 1 < n && line_is_blank(code, row + 1)))
 }
 
+/// Char offsets where each word begins: a word char whose predecessor is not a
+/// word char. Used by the Go → Word navigation.
+fn word_starts(text: &str) -> Vec<usize> {
+    let mut starts = Vec::new();
+    let mut prev_word = false;
+    for (i, c) in text.chars().enumerate() {
+        let word = is_word_char(c);
+        if word && !prev_word {
+            starts.push(i);
+        }
+        prev_word = word;
+    }
+    starts
+}
+
+/// Char offsets where each sentence begins: the first non-space char, then the
+/// first non-space char after any `.`/`!`/`?` (plus trailing quotes/brackets)
+/// followed by whitespace. Used by the Go → Sentence navigation.
+fn sentence_starts(text: &str) -> Vec<usize> {
+    let chars: Vec<char> = text.chars().collect();
+    let n = chars.len();
+    let mut starts = Vec::new();
+    let mut i = 0;
+    while i < n && chars[i].is_whitespace() {
+        i += 1;
+    }
+    if i < n {
+        starts.push(i);
+    }
+    while i < n {
+        if matches!(chars[i], '.' | '!' | '?') {
+            let mut j = i + 1;
+            while j < n && matches!(chars[j], '.' | '!' | '?' | '"' | '\'' | ')' | ']' | '}') {
+                j += 1;
+            }
+            if j < n && chars[j].is_whitespace() {
+                while j < n && chars[j].is_whitespace() {
+                    j += 1;
+                }
+                if j < n {
+                    starts.push(j);
+                }
+                i = j;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    starts.dedup();
+    starts
+}
+
 /// On-save text-normalization options (from [`crate::settings::Settings`]).
 #[derive(Clone, Copy)]
 pub struct SaveOptions {
@@ -827,6 +879,223 @@ impl Editor {
         }
     }
 
+    /// Move the active cursor down one line (Go → Line → Next).
+    pub fn cursor_line_down(&mut self, area: Rect) {
+        if let Some(t) = self.active_tab_mut() {
+            t.editor.cursor_down();
+            t.editor.focus(&area);
+        }
+    }
+
+    /// Move the active cursor up one line (Go → Line → Previous).
+    pub fn cursor_line_up(&mut self, area: Rect) {
+        if let Some(t) = self.active_tab_mut() {
+            t.editor.cursor_up();
+            t.editor.focus(&area);
+        }
+    }
+
+    /// 0-based row of the active cursor (0 when there is no buffer).
+    fn cursor_row(&self) -> usize {
+        self.active_tab().map_or(0, |t| {
+            let code = t.editor.code_ref();
+            code.char_to_line(t.editor.get_cursor())
+        })
+    }
+
+    /// 0-based line of the active cursor (0 when there is no buffer).
+    #[must_use]
+    pub fn cursor_line(&self) -> usize {
+        self.cursor_row()
+    }
+
+    /// The 0-based start rows of every paragraph (`section == false`) or section
+    /// (`section == true`) in the active buffer. A paragraph is a run of non-blank
+    /// lines; a section is a run separated by a section break (2+ blank lines).
+    fn block_starts(&self, section: bool) -> Vec<usize> {
+        let Some(t) = self.active_tab() else { return Vec::new() };
+        let code = t.editor.code_ref();
+        let n = code.len_lines().max(1);
+        (0..n)
+            .filter(|&r| {
+                if section {
+                    !is_section_break(code, r, n) && (r == 0 || is_section_break(code, r - 1, n))
+                } else {
+                    !line_is_blank(code, r) && (r == 0 || line_is_blank(code, r - 1))
+                }
+            })
+            .collect()
+    }
+
+    /// Move the active cursor to the start of line `row` and scroll it into view.
+    fn goto_row(&mut self, row: usize, area: Rect) {
+        if let Some(t) = self.active_tab_mut() {
+            let off = t.editor.code_ref().line_to_char(row);
+            t.editor.set_cursor(off);
+            t.editor.focus(&area);
+        }
+    }
+
+    /// Move to the start of the next paragraph (Go → Paragraph → Next).
+    pub fn cursor_paragraph_next(&mut self, area: Rect) {
+        let row = self.cursor_row();
+        if let Some(&next) = self.block_starts(false).iter().find(|&&r| r > row) {
+            self.goto_row(next, area);
+        }
+    }
+
+    /// Move to the start of the previous paragraph (Go → Paragraph → Previous).
+    pub fn cursor_paragraph_prev(&mut self, area: Rect) {
+        let row = self.cursor_row();
+        if let Some(&prev) = self.block_starts(false).iter().rev().find(|&&r| r < row) {
+            self.goto_row(prev, area);
+        }
+    }
+
+    /// Jump to the 1-based `n`th paragraph (Go → Paragraph → Number).
+    pub fn goto_paragraph(&mut self, n: usize, area: Rect) {
+        if let Some(&row) = self.block_starts(false).get(n.saturating_sub(1)) {
+            self.goto_row(row, area);
+        }
+    }
+
+    /// Move to the start of the next section (Go → Section → Next).
+    pub fn cursor_section_next(&mut self, area: Rect) {
+        let row = self.cursor_row();
+        if let Some(&next) = self.block_starts(true).iter().find(|&&r| r > row) {
+            self.goto_row(next, area);
+        }
+    }
+
+    /// Move to the start of the previous section (Go → Section → Previous).
+    pub fn cursor_section_prev(&mut self, area: Rect) {
+        let row = self.cursor_row();
+        if let Some(&prev) = self.block_starts(true).iter().rev().find(|&&r| r < row) {
+            self.goto_row(prev, area);
+        }
+    }
+
+    /// Jump to the 1-based `n`th section (Go → Section → Number).
+    pub fn goto_section(&mut self, n: usize, area: Rect) {
+        if let Some(&row) = self.block_starts(true).get(n.saturating_sub(1)) {
+            self.goto_row(row, area);
+        }
+    }
+
+    /// Move the active cursor to char offset `off` and scroll it into view.
+    fn goto_offset(&mut self, off: usize, area: Rect) {
+        if let Some(t) = self.active_tab_mut() {
+            t.editor.set_cursor(off);
+            t.editor.focus(&area);
+        }
+    }
+
+    /// Move to the start of the current sentence (Go → Sentence → Start).
+    pub fn cursor_sentence_start(&mut self, area: Rect) {
+        let Some(t) = self.active_tab() else { return };
+        let cur = t.editor.get_cursor();
+        let off = sentence_starts(&t.editor.get_content()).into_iter().rev().find(|&s| s <= cur).unwrap_or(0);
+        self.goto_offset(off, area);
+    }
+
+    /// Move to the end of the current sentence — its last non-blank char (Go →
+    /// Sentence → End).
+    pub fn cursor_sentence_end(&mut self, area: Rect) {
+        let Some(t) = self.active_tab() else { return };
+        let cur = t.editor.get_cursor();
+        let text = t.editor.get_content();
+        let chars: Vec<char> = text.chars().collect();
+        let off = match sentence_starts(&text).into_iter().find(|&s| s > cur) {
+            Some(mut e) => {
+                while e > 0 && chars.get(e - 1).is_some_and(|c| c.is_whitespace()) {
+                    e -= 1;
+                }
+                e
+            }
+            None => chars.len(),
+        };
+        self.goto_offset(off, area);
+    }
+
+    /// Move to the start of the next sentence (Go → Sentence → Next).
+    pub fn cursor_sentence_next(&mut self, area: Rect) {
+        let Some(t) = self.active_tab() else { return };
+        let cur = t.editor.get_cursor();
+        if let Some(next) = sentence_starts(&t.editor.get_content()).into_iter().find(|&s| s > cur) {
+            self.goto_offset(next, area);
+        }
+    }
+
+    /// Move to the start of the previous sentence (Go → Sentence → Previous).
+    pub fn cursor_sentence_prev(&mut self, area: Rect) {
+        let Some(t) = self.active_tab() else { return };
+        let cur = t.editor.get_cursor();
+        if let Some(prev) = sentence_starts(&t.editor.get_content()).into_iter().rev().find(|&s| s < cur) {
+            self.goto_offset(prev, area);
+        }
+    }
+
+    /// Jump to the 1-based `n`th sentence (Go → Sentence → Number).
+    pub fn goto_sentence(&mut self, n: usize, area: Rect) {
+        let Some(t) = self.active_tab() else { return };
+        let starts = sentence_starts(&t.editor.get_content());
+        if let Some(&off) = starts.get(n.saturating_sub(1)) {
+            self.goto_offset(off, area);
+        }
+    }
+
+    /// Move to the start of the current word — or the previous word's start if the
+    /// cursor is not on a word (Go → Word → Start).
+    pub fn cursor_word_start(&mut self, area: Rect) {
+        let Some(t) = self.active_tab() else { return };
+        let cur = t.editor.get_cursor();
+        let off = word_starts(&t.editor.get_content()).into_iter().rev().find(|&s| s <= cur).unwrap_or(0);
+        self.goto_offset(off, area);
+    }
+
+    /// Move to the end of the current word (Go → Word → End).
+    pub fn cursor_word_end(&mut self, area: Rect) {
+        let Some(t) = self.active_tab() else { return };
+        let cur = t.editor.get_cursor();
+        let chars: Vec<char> = t.editor.get_content().chars().collect();
+        // Skip any non-word chars under the cursor, then run to the word's end.
+        let mut e = cur;
+        while e < chars.len() && !is_word_char(chars[e]) {
+            e += 1;
+        }
+        while e < chars.len() && is_word_char(chars[e]) {
+            e += 1;
+        }
+        self.goto_offset(e, area);
+    }
+
+    /// Move to the start of the next word (Go → Word → Next).
+    pub fn cursor_word_next(&mut self, area: Rect) {
+        let Some(t) = self.active_tab() else { return };
+        let cur = t.editor.get_cursor();
+        if let Some(next) = word_starts(&t.editor.get_content()).into_iter().find(|&s| s > cur) {
+            self.goto_offset(next, area);
+        }
+    }
+
+    /// Move to the start of the previous word (Go → Word → Previous).
+    pub fn cursor_word_prev(&mut self, area: Rect) {
+        let Some(t) = self.active_tab() else { return };
+        let cur = t.editor.get_cursor();
+        if let Some(prev) = word_starts(&t.editor.get_content()).into_iter().rev().find(|&s| s < cur) {
+            self.goto_offset(prev, area);
+        }
+    }
+
+    /// Jump to the 1-based `n`th word (Go → Word → Number).
+    pub fn goto_word(&mut self, n: usize, area: Rect) {
+        let Some(t) = self.active_tab() else { return };
+        let starts = word_starts(&t.editor.get_content());
+        if let Some(&off) = starts.get(n.saturating_sub(1)) {
+            self.goto_offset(off, area);
+        }
+    }
+
     /// Select the current line, including its trailing newline (so it can be cut
     /// as a whole line), and scroll it into `area`.
     pub fn select_line(&mut self, area: Rect) {
@@ -1104,4 +1373,26 @@ fn prev_word(text: &[char], pos: usize) -> usize {
         i -= 1;
     }
     i
+}
+
+#[cfg(test)]
+mod nav_tests {
+    use super::{sentence_starts, word_starts};
+
+    #[test]
+    fn word_starts_finds_each_word() {
+        // "foo  bar_baz qux" — words at 0, 5, 13 (underscore stays in one word).
+        assert_eq!(word_starts("foo  bar_baz qux"), vec![0, 5, 13]);
+        assert_eq!(word_starts("   leading"), vec![3]);
+        assert!(word_starts("...").is_empty());
+    }
+
+    #[test]
+    fn sentence_starts_splits_on_terminators() {
+        let text = "One. Two! Three?  Four.";
+        // Starts at "One"(0), "Two"(5), "Three"(10), "Four"(18).
+        assert_eq!(sentence_starts(text), vec![0, 5, 10, 18]);
+        // A period not followed by whitespace (e.g. a decimal) is not a boundary.
+        assert_eq!(sentence_starts("pi is 3.14 today"), vec![0]);
+    }
 }
