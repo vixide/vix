@@ -1,0 +1,78 @@
+{
+  "Directed graph": {
+    "prefix": "digraph",
+    "body": ["digraph ${1:G} {", "\t${2:a} -> ${3:b};", "\t$0", "}"],
+    "description": "Directed graph skeleton"
+  },
+  "Undirected graph": {
+    "prefix": "graph",
+    "body": ["graph ${1:G} {", "\t${2:a} -- ${3:b};", "\t$0", "}"],
+    "description": "Undirected graph skeleton"
+  },
+  "Node": {
+    "prefix": "node",
+    "body": ["${1:name} [label=\"${2:Label}\"];$0"],
+    "description": "Node with a label"
+  },
+  "Node (shaped)": {
+    "prefix": "shape",
+    "body": ["${1:name} [shape=${2:box}, label=\"${3:Label}\"];$0"],
+    "description": "Node with a shape"
+  },
+  "Directed edge": {
+    "prefix": "edge",
+    "body": ["${1:a} -> ${2:b};$0"],
+    "description": "Directed edge"
+  },
+  "Edge with label": {
+    "prefix": "edgel",
+    "body": ["${1:a} -> ${2:b} [label=\"${3:label}\"];$0"],
+    "description": "Edge with a label"
+  },
+  "Undirected edge": {
+    "prefix": "uedge",
+    "body": ["${1:a} -- ${2:b};$0"],
+    "description": "Undirected edge"
+  },
+  "Subgraph cluster": {
+    "prefix": "cluster",
+    "body": [
+      "subgraph cluster_${1:name} {",
+      "\tlabel=\"${2:Cluster}\";",
+      "\t${3:a};",
+      "\t$0",
+      "}"
+    ],
+    "description": "Subgraph cluster"
+  },
+  "Rank direction": {
+    "prefix": "rankdir",
+    "body": ["rankdir=${1:LR};$0"],
+    "description": "Layout direction (LR/TB/RL/BT)"
+  },
+  "Same rank": {
+    "prefix": "ranksame",
+    "body": ["{ rank=same; ${1:a}; ${2:b}; }$0"],
+    "description": "Force nodes onto the same rank"
+  },
+  "Node defaults": {
+    "prefix": "nodedefault",
+    "body": ["node [shape=${1:box}, style=${2:rounded}];$0"],
+    "description": "Default node attributes"
+  },
+  "Edge defaults": {
+    "prefix": "edgedefault",
+    "body": ["edge [color=${1:gray}, arrowhead=${2:vee}];$0"],
+    "description": "Default edge attributes"
+  },
+  "Graph label": {
+    "prefix": "glabel",
+    "body": ["label=\"${1:Title}\";", "labelloc=${2:t};$0"],
+    "description": "Graph title"
+  },
+  "Record node": {
+    "prefix": "record",
+    "body": ["${1:name} [shape=record, label=\"${2:a}|${3:b}|${4:c}\"];$0"],
+    "description": "Record-shaped node"
+  }
+}
