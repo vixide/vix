@@ -8,8 +8,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **Keymap renamed "Vim" → "Vi"** (display label only; the `vim` id and
-  `view.keymap:vim` action are unchanged).
+- **Keymap renamed "Vim" → "Vi"** — display label, id (`vim` → `vi`), and action
+  (`view.keymap:vim` → `view.keymap:vi`). Older configs using `vim` still load.
 
 ### Fixed
 

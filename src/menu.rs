@@ -250,7 +250,7 @@ const VIEW_KEYMAP: &[Item] = &[
     Item::leaf("menu.name.apple", "view.keymap:apple", ""),
     Item::leaf("menu.name.vscode", "view.keymap:vscode", ""),
     Item::leaf("menu.name.emacs", "view.keymap:emacs", ""),
-    Item::leaf("menu.name.vim", "view.keymap:vim", ""),
+    Item::leaf("menu.name.vim", "view.keymap:vi", ""),
     Item::leaf("menu.name.spacemacs", "view.keymap:spacemacs", ""),
 ];
 

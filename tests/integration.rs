@@ -4102,12 +4102,12 @@ fn view_keymap_submenu_actions_set_the_keymap() {
     app.run_action("view.keymap:vscode");
     assert_eq!(app.settings.keymap, "vscode");
 
-    app.run_action("view.keymap:vim");
-    assert_eq!(app.settings.keymap, "vim");
+    app.run_action("view.keymap:vi");
+    assert_eq!(app.settings.keymap, "vi");
 
     // An unknown id is ignored.
     app.run_action("view.keymap:nope");
-    assert_eq!(app.settings.keymap, "vim");
+    assert_eq!(app.settings.keymap, "vi");
 }
 
 #[test]
@@ -4176,7 +4176,7 @@ fn vscode_keymap_quick_open_command_palette_and_goto_line() {
 #[test]
 fn vim_keymap_normal_mode_is_modal() {
     let mut app = app_at(Path::new("."));
-    app.settings.keymap = "vim".to_string();
+    app.settings.keymap = "vi".to_string();
     assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"));
 
     // Normal-mode letters are commands, not text.
@@ -4207,7 +4207,7 @@ fn vim_keymap_normal_mode_is_modal() {
 #[test]
 fn vim_keymap_command_line_quits() {
     let mut app = app_at(Path::new("."));
-    app.settings.keymap = "vim".to_string();
+    app.settings.keymap = "vi".to_string();
     // `:` opens the command line (shown in the mode indicator).
     app.on_key(key(':'));
     assert_eq!(app.mode_indicator().as_deref(), Some(":"));
@@ -4221,12 +4221,12 @@ fn vim_keymap_command_line_quits() {
 #[test]
 fn switching_keymap_resets_vim_to_normal() {
     let mut app = app_at(Path::new("."));
-    app.settings.keymap = "vim".to_string();
+    app.settings.keymap = "vi".to_string();
     app.on_key(key('i')); // enter Insert
     assert_eq!(app.mode_indicator().as_deref(), Some("-- INSERT --"));
     // Choose the Vim keymap again via the submenu action; modes reset to Normal.
-    app.run_action("view.keymap:vim");
-    assert_eq!(app.settings.keymap, "vim");
+    app.run_action("view.keymap:vi");
+    assert_eq!(app.settings.keymap, "vi");
     assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"), "reset to Normal");
 }
 

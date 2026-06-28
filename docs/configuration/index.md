@@ -34,7 +34,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `ensure_final_newline`     | bool | `true` | On save, append a final newline if the file lacks one. |
 | `theme`         | string | `"dark"` | `"dark"`, `"light"`, or the `name` of a custom theme.                |
 | `locale`        | string | `"en"`   | UI language code (`en`, `es`, `fr`, `de`, `cy`, …).                  |
-| `keymap`        | string | `"apple"`| Keyboard navigation style: `"apple"`, `"emacs"`, or `"vim"`.         |
+| `keymap`        | string | `"apple"`| Keyboard navigation style: `"apple"`, `"emacs"`, or `"vi"`.         |
 | `explorer_width`| int    | `30`     | Width (columns) of the left dock; drag its right edge to resize.    |
 | `messages_width`| int    | `32`     | Width (columns) of the right dock; drag its left edge to resize.    |
 | `recent_files`  | list   | `[]`     | Recently opened files (absolute paths), most-recent first, capped at 15. Updated automatically; surfaced by **File → Open Recent…**. |
