@@ -6,6 +6,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Keymap renamed "Vim" → "Vi"** (display label only; the `vim` id and
+  `view.keymap:vim` action are unchanged).
+
 ### Fixed
 
 - **Menu navigation.** In a dropdown, pressing `Right` on a submenu now opens it

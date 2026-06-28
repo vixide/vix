@@ -16,11 +16,11 @@ Vix ships four keymaps. **Apple** is the default and matches Vix's own bindings.
 | Apple | `apple` | Modifier-key shortcuts (the default), e.g. `Ctrl+O` to open, `Ctrl+S` to save. |
 | macOS VSCode | `vscode` | VS Code's signature shortcuts, with `Ctrl` standing in for `Cmd` — `Ctrl+P` Quick Open, `Ctrl+Shift+P` Command Palette, `Ctrl+G` Go to Line. |
 | Emacs | `emacs` | Layered `Ctrl` chords and a `Ctrl+X` prefix, e.g. `Ctrl+X Ctrl+F` to open. |
-| Vim | `vim` | Modal editing: a Normal mode for motions and commands, plus an Insert mode and a `:` command line. |
-| Spacemacs | `spacemacs` | Vim modal editing plus a `Space` leader for menu-like command sequences (e.g. `SPC f f` find file). |
+| Vi | `vim` | Modal editing: a Normal mode for motions and commands, plus an Insert mode and a `:` command line. |
+| Spacemacs | `spacemacs` | Vi modal editing plus a `Space` leader for menu-like command sequences (e.g. `SPC f f` find file). |
 
 Each keymap gets first chance to consume a key. Apple and VS Code dispatch their
-shortcuts directly; Emacs, Vim, and Spacemacs try their own handling and then fall
+shortcuts directly; Emacs, Vi, and Spacemacs try their own handling and then fall
 back to a **shared** layer (menu-bar mnemonics like `Alt+F` and function keys like
 `F10`) before the focused pane handles the key.
 
@@ -35,7 +35,7 @@ model order, and is kept in sync with the keymap model by a test.
 | Apple | `view.keymap:apple` |
 | macOS VSCode | `view.keymap:vscode` |
 | Emacs | `view.keymap:emacs` |
-| Vim | `view.keymap:vim` |
+| Vi | `view.keymap:vim` |
 | Spacemacs | `view.keymap:spacemacs` |
 
 Choosing an item dispatches `view.keymap:<id>`. The host:
@@ -52,7 +52,7 @@ Because the choice lives in settings, it survives across sessions.
 Switching keymaps clears any in-progress modal state so a freshly chosen keymap
 never inherits a stale mode:
 
-- Vim begins in **Normal** mode (Insert mode off, no open `:` command line).
+- Vi begins in **Normal** mode (Insert mode off, no open `:` command line).
 - Spacemacs begins in **Normal** mode with no pending `Space` leader.
 - The Emacs `Ctrl+X` chord prefix is cleared.
 
@@ -80,9 +80,9 @@ A `Ctrl+X` prefix followed by an unrecognized key reports "no chord" and clears
 the prefix. The motion chords (`Ctrl+F`, `Ctrl+N`, …) act only when the editor
 pane is focused.
 
-## Vim modes
+## Vi modes
 
-The Vim keymap is modal. The active mode is shown in the status-bar mode
+The Vi keymap is modal. The active mode is shown in the status-bar mode
 indicator: **Normal**, **Insert**, or the live `:` command line (e.g. `:wq`).
 
 **Normal mode** swallows ordinary keys so they never type into the buffer.
@@ -120,7 +120,7 @@ An unrecognized command reports "no command" in the status bar.
 
 ## Spacemacs modes and leader
 
-The Spacemacs keymap reuses the Vim modal model (Normal / Insert, the same
+The Spacemacs keymap reuses the Vi modal model (Normal / Insert, the same
 `hjkl`/`0`/`$`/`x`/`i`/`a`/`o`/`O` Normal-mode keys, and the shared `:` command
 line) and adds a **`Space` leader**. In Normal mode, pressing `Space` over the
 editor begins a leader sequence shown in the mode indicator as `SPC …`. Each
@@ -150,7 +150,7 @@ the modal handler is `App::spacemacs_key` / `spacemacs_leader_key`.
 
 The list of keymaps is pure data in the `keymap_model` crate
 (`keymap_model/src/lib.rs`): the `Keymap { id, name, tooltip }` struct, the
-`KEYMAPS` slice (Apple, macOS VSCode, Emacs, Vim — in menu order), and the
+`KEYMAPS` slice (Apple, macOS VSCode, Emacs, Vi — in menu order), and the
 `by_id` lookup.
 
 The View → Keymap submenu is `VIEW_KEYMAP` in `src/menu.rs`, one leaf per keymap
@@ -164,15 +164,15 @@ The host wiring lives in `src/app.rs`:
   derives it.
 - `App::on_key` — keymap-specific dispatch: `global_key` (Apple), `vscode_key`,
   `emacs_key`, and `vim_key`, with `global_shared_key` as the fallback for Emacs
-  and Vim.
+  and Vi.
 - `set_keymap` — handles `view.keymap:<id>`: validates against the model,
   persists `settings.keymap`, calls `reset_keymap_modes`, and sets the status.
 - `reset_keymap_modes` — clears `emacs_prefix`, `vim_insert`, and `vim_cmd` so a
-  newly chosen keymap starts clean (Vim in Normal mode).
+  newly chosen keymap starts clean (Vi in Normal mode).
 - `emacs_key` (with the `emacs_prefix` flag) and `vim_key` / `vim_cmd_key` /
   `run_vim_command` (with the `vim_insert` and `vim_cmd` fields) implement the
   chords and modes above.
-- `mode_indicator` — the status-bar string: Vim's `:`-line / Insert / Normal, or
+- `mode_indicator` — the status-bar string: Vi's `:`-line / Insert / Normal, or
   Emacs's pending `C-x-` prefix; `None` for keymaps with nothing to show.
 
 The default keymap is set in `src/settings.rs` (`keymap: "apple"`).

@@ -3659,7 +3659,7 @@ menu.name.vscode:
 menu.name.emacs:
   en: "Emacs"
 menu.name.vim:
-  en: "Vim"
+  en: "Vi"
 menu.name.spacemacs:
   en: "Spacemacs"
 menu.name.md5:

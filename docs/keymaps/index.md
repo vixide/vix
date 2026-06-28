@@ -2,7 +2,7 @@
 
 A **keymap** is a keyboard navigation style for moving through the editor, menus,
 file explorer, and more. Vix ships five keymaps — **Apple**, **macOS VSCode**,
-**Emacs**, **Vim**, and **Spacemacs** — and exactly one is active at a time.
+**Emacs**, **Vi**, and **Spacemacs** — and exactly one is active at a time.
 
 **Status:** Shipped. The choice persists in the `keymap` setting (default
 `apple`).
@@ -16,14 +16,14 @@ Open **View → Keymap…** to pick the active keymap. The options are:
 | Apple       | Apple controls           | `Control-O`                | `Control-Q`   |
 | macOS VSCode | VS Code (macOS) bindings | `Control-P` (Quick Open)   | `Control-Q`   |
 | Emacs       | Emacs chords             | `Control-X Control-F`      | `Control-X Control-C` |
-| Vim         | Vim modes                | `:Ex`                      | `:q!`         |
-| Spacemacs   | Vim modes + Space leader | `SPC f f`                  | `SPC q q`     |
+| Vi         | Vi modes                | `:Ex`                      | `:q!`         |
+| Spacemacs   | Vi modes + Space leader | `SPC f f`                  | `SPC q q`     |
 
 Your selection is saved to the `keymap` setting, so it persists across sessions.
 
 ## Spacemacs
 
-The **Spacemacs** keymap is the Vim modal model (Normal / Insert, `hjkl` motions,
+The **Spacemacs** keymap is the Vi modal model (Normal / Insert, `hjkl` motions,
 `i`/`a`/`o` to insert, `:` command line) plus a **`Space` leader** in Normal mode
 that opens menu-like command sequences. Press `Space`, then the keys for the
 command; the status bar shows the pending sequence (`SPC …`).
@@ -77,7 +77,7 @@ Chorded commands with a `Ctrl+X` prefix:
   `Ctrl+A` / `Ctrl+E` (line ends), `Ctrl+V` (page down).
 - `Ctrl+D` delete, `Ctrl+S` find, `Ctrl+G` cancel.
 
-### Vim
+### Vi
 
 Modal editing:
 
@@ -93,17 +93,17 @@ The status bar shows `-- NORMAL --`, `-- INSERT --`, or the `:` command line.
 The following are described in the broader keymap philosophy but are **not**
 implemented:
 
-- Vim counts and operators (`3w`, `dd`, `gg` / `G`).
+- Vi counts and operators (`3w`, `dd`, `gg` / `G`).
 - Emacs `Meta` / `M-x` — `Alt` is reserved for menu mnemonics.
 - Registers and visual mode.
 
 ## Background
 
 The keymaps treat the keyboard differently: as a way to trigger system actions
-(Apple, and the VS Code variant), as a language for text manipulation (Vim), or
+(Apple, and the VS Code variant), as a language for text manipulation (Vi), or
 as a layered set of chords for executing functions (Emacs).
 
-| Feature      | Apple (macOS)              | Vim                            | Emacs                      |
+| Feature      | Apple (macOS)              | Vi                            | Emacs                      |
 | ------------ | -------------------------- | ------------------------------ | -------------------------- |
 | Logic        | System commands & UI focus | Modal "language" (verb + noun) | Layered modifiers & chords |
 | Primary keys | Command (⌘) + Tab          | Home row (`h`, `j`, `k`, `l`)  | Control (⌃) + Meta (⌥)     |
