@@ -3942,6 +3942,10 @@ menu.item.org.toggle_checkbox:
   en: "Toggle Checkbox"
 menu.item.org.capture:
   en: "Capture…"
+menu.item.org.clock_in:
+  en: "Clock In"
+menu.item.org.clock_out:
+  en: "Clock Out"
 menu.item.org.agenda:
   en: "Agenda Tracker"
 menu.item.org.time_report:
@@ -11769,6 +11773,38 @@ status.org_agenda:
   bn: "%{count}টি .org ফাইল থেকে এজেন্ডা সংকলিত"
   zh: "已从 %{count} 个 .org 文件编译议程"
   ja: "%{count} 個の .org ファイルから予定表を作成"
+status.org_clocked_out:
+  en: "Clocked out"
+  es: "Salida de reloj registrada"
+  fr: "Pointage de sortie enregistré"
+  de: "Ausgestempelt"
+  cy: "Wedi clocio allan"
+  ga: "Clogáilte amach"
+  gd: "Air a chlogadh a-mach"
+  pl: "Wyrejestrowano czas"
+  pt: "Saída registada"
+  ru: "Время остановлено"
+  ar: "تم تسجيل الخروج"
+  hi: "क्लॉक आउट किया गया"
+  bn: "ক্লক আউট হয়েছে"
+  zh: "已打卡下班"
+  ja: "クロックアウトしました"
+status.org_no_clock:
+  en: "No open clock entry to close"
+  es: "No hay reloj abierto que cerrar"
+  fr: "Aucun pointage ouvert à clôturer"
+  de: "Kein offener Zeiteintrag zum Schließen"
+  cy: "Dim cofnod cloc agored i'w gau"
+  ga: "Níl aon iontráil chloig oscailte le dúnadh"
+  gd: "Chan eil clàr cleoc fosgailte ri dhùnadh"
+  pl: "Brak otwartego wpisu czasu do zamknięcia"
+  pt: "Nenhum registo de relógio aberto para fechar"
+  ru: "Нет открытой записи времени для закрытия"
+  ar: "لا يوجد إدخال ساعة مفتوح لإغلاقه"
+  hi: "बंद करने के लिए कोई खुली क्लॉक प्रविष्टि नहीं"
+  bn: "বন্ধ করার জন্য কোনো খোলা ক্লক এন্ট্রি নেই"
+  zh: "没有可关闭的打卡记录"
+  ja: "閉じる開いたクロックがありません"
 status.org_time_report:
   en: "Built a time-tracking report"
   es: "Informe de tiempo generado"

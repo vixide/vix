@@ -28,6 +28,8 @@ The **Org** menu (`Alt+O`):
 | Headline → Move Subtree Down | `org.move_down` | Swap the subtree with the next sibling. |
 | Cycle TODO | `org.cycle_todo` | Cycle the headline keyword: none → `TODO` → `DONE` → none. |
 | Toggle Checkbox | `org.toggle_checkbox` | Toggle a list item's `[ ]` ⇄ `[x]`. |
+| Clock In | `org.clock_in` | Insert an open `CLOCK: [now]` entry at the cursor (local time). |
+| Clock Out | `org.clock_out` | Close the most recent open `CLOCK:` entry with the end time and `=> H:MM` duration. |
 | Agenda Tracker | `org.agenda` | Compile `DEADLINE:`/`SCHEDULED:` items and `TODO` headlines from every `.org` file in the project into a single dated agenda buffer. |
 | Time Tracker | `org.time_report` | Sum each headline's `CLOCK:` durations in the active buffer into a time-report table. |
 | Export → Markdown | `org.export_markdown` | Convert the buffer to Markdown in a new tab. |

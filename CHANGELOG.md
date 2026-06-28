@@ -75,6 +75,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   cursor. Opens pre-selected to the current file's type. Backed by the curated
   `spec/media-types/media-types.tsv` and the `media_type` module (with
   `for_extension` lookup). See `spec/media-types/index.md`.
+- **Org → Clock In / Clock Out.** Clock In inserts an open `CLOCK: [now]` entry;
+  Clock Out closes the most recent one with the end time and `=> H:MM` duration
+  (local time via `jiff`). Feeds the Time Tracker report.
 - **Org capture, agenda & time tracking.** **Org → Capture…** logs an idea/task
   as a `* TODO` headline via a quick prompt; **Agenda Tracker** compiles
   deadlines/scheduled items/TODOs from the project's `.org` files into a dated

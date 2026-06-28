@@ -36,6 +36,9 @@ Org outlines are built from headlines: lines starting with one or more `*`.
 - **Agenda Tracker** scans every `.org` file in the project and compiles their
   `DEADLINE:`/`SCHEDULED:` items and `TODO` headlines into one dated agenda
   buffer.
+- **Clock In** drops an open `CLOCK: [timestamp]` entry at the cursor; **Clock
+  Out** closes the most recent open entry with the end time and the elapsed
+  `=> H:MM` duration.
 - **Time Tracker** reads the `CLOCK:` lines in the current buffer and totals the
   time per headline into a report table.
 

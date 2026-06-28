@@ -223,6 +223,17 @@ fn org_capture_inserts_todo_and_time_report_tabulates() {
     // Agenda Tracker runs and opens a buffer (no .org files → just the header).
     app.run_action("org.agenda");
     assert!(app.editor.active_tab().unwrap().text().contains("Agenda"));
+
+    // Clock In inserts an open CLOCK entry; Clock Out completes it.
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "* Task\n");
+    app.run_action("org.clock_in");
+    let t = app.editor.active_tab().unwrap().text();
+    assert!(t.contains("CLOCK: ["), "clock-in line: {t:?}");
+    assert!(!t.contains("--"), "still open");
+    app.run_action("org.clock_out");
+    let t = app.editor.active_tab().unwrap().text();
+    assert!(t.contains("--[") && t.contains("=>"), "clocked out: {t:?}");
 }
 
 #[test]

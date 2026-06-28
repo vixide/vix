@@ -277,6 +277,66 @@ pub fn time_report(content: &str) -> String {
     out
 }
 
+// ----- Clocking -------------------------------------------------------------
+
+/// An Org clock-in line for the timestamp `now` (e.g. `2024-08-23 Fri 10:00`).
+#[must_use]
+pub fn clock_in(now: &str) -> String {
+    format!("CLOCK: [{now}]")
+}
+
+/// Whether `line` is an *open* clock entry (`CLOCK: [..]` with no end yet).
+fn is_open_clock(line: &str) -> bool {
+    let t = line.trim();
+    t.starts_with("CLOCK:") && t.contains('[') && t.ends_with(']') && !t.contains("--")
+}
+
+/// The start timestamp inside a `CLOCK: [start]` line.
+fn clock_start(line: &str) -> Option<String> {
+    let inner = line.trim().strip_prefix("CLOCK:")?.trim().strip_prefix('[')?;
+    Some(inner[..inner.find(']')?].to_string())
+}
+
+/// Days since 1970-01-01 for a civil date (Howard Hinnant's algorithm).
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = (if y >= 0 { y } else { y - 399 }) / 400;
+    let yoe = y - era * 400;
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+/// Total minutes for an Org timestamp `YYYY-MM-DD … HH:MM` (date + trailing time).
+fn timestamp_minutes(ts: &str) -> Option<i64> {
+    let date = ts.get(0..10)?;
+    let mut dp = date.split('-');
+    let y: i64 = dp.next()?.parse().ok()?;
+    let m: i64 = dp.next()?.parse().ok()?;
+    let d: i64 = dp.next()?.parse().ok()?;
+    let (h, mi) = ts.rsplit(' ').next()?.split_once(':')?;
+    let h: i64 = h.trim().parse().ok()?;
+    let mi: i64 = mi.trim().parse().ok()?;
+    Some(days_from_civil(y, m, d) * 1440 + h * 60 + mi)
+}
+
+/// Close the most recent open `CLOCK:` entry in `text` with end timestamp `now`,
+/// appending the `=> H:MM` duration. Returns the rewritten text, or `None` if
+/// there is no open clock entry.
+#[must_use]
+pub fn clock_out(text: &str, now: &str) -> Option<String> {
+    let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
+    let idx = lines.iter().rposition(|l| is_open_clock(l))?;
+    let start = clock_start(&lines[idx])?;
+    let minutes = match (timestamp_minutes(now), timestamp_minutes(&start)) {
+        (Some(n), Some(s)) => u32::try_from((n - s).max(0)).unwrap_or(0),
+        _ => 0,
+    };
+    let lead: String = lines[idx].chars().take_while(|c| c.is_whitespace()).collect();
+    lines[idx] = format!("{lead}CLOCK: [{start}]--[{now}] =>  {}", hhmm(minutes));
+    Some(lines.join("\n"))
+}
+
 // ----- Export ---------------------------------------------------------------
 
 static LINK: LazyLock<Regex> =
@@ -480,6 +540,26 @@ mod tests {
         assert!(a.contains("- TODO Loose end (work.org)"));
         // Dates are sorted ascending: 08-20 before 08-23.
         assert!(a.find("2024-08-20").unwrap() < a.find("2024-08-23").unwrap());
+    }
+
+    #[test]
+    fn clock_in_and_out_record_a_duration() {
+        let now_in = "2024-08-23 Fri 10:00";
+        assert_eq!(clock_in(now_in), "CLOCK: [2024-08-23 Fri 10:00]");
+        let text = format!("* Task\n  {}\n", clock_in(now_in));
+        let out = clock_out(&text, "2024-08-23 Fri 11:30").unwrap();
+        assert!(out.contains("CLOCK: [2024-08-23 Fri 10:00]--[2024-08-23 Fri 11:30] =>  1:30"));
+        // Indentation of the original clock line is preserved.
+        assert!(out.contains("\n  CLOCK:"));
+        // No open clock → None.
+        assert!(clock_out(&out, "2024-08-23 Fri 12:00").is_none());
+    }
+
+    #[test]
+    fn clock_out_spans_midnight() {
+        let text = "CLOCK: [2024-08-23 Fri 23:30]";
+        let out = clock_out(text, "2024-08-24 Sat 00:15").unwrap();
+        assert!(out.ends_with("=>  0:45"), "{out}");
     }
 
     #[test]

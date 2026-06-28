@@ -675,6 +675,8 @@ const ORG: &[Item] = &[
     Item::leaf("menu.item.org.cycle_todo", "org.cycle_todo", ""),
     Item::leaf("menu.item.org.toggle_checkbox", "org.toggle_checkbox", ""),
     SEP,
+    Item::leaf("menu.item.org.clock_in", "org.clock_in", ""),
+    Item::leaf("menu.item.org.clock_out", "org.clock_out", ""),
     Item::leaf("menu.item.org.agenda", "org.agenda", ""),
     Item::leaf("menu.item.org.time_report", "org.time_report", ""),
     SEP,

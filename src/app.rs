@@ -3439,6 +3439,8 @@ impl App {
             "org.export_markdown" => self.org_export(crate::org::to_markdown, "md"),
             "org.export_html" => self.org_export(crate::org::to_html, "html"),
             "org.capture" => self.org_capture(),
+            "org.clock_in" => self.org_clock_in(),
+            "org.clock_out" => self.org_clock_out(),
             "org.agenda" => self.org_agenda(),
             "org.time_report" => self.org_time_report(),
             _ => return false,
@@ -3487,6 +3489,33 @@ impl App {
     /// a `* TODO` headline at the cursor.
     fn org_capture(&mut self) {
         self.prompt = Some(Prompt::new(PromptKind::OrgCapture, t!("prompt.org_capture").to_string()));
+    }
+
+    /// The current local time as an Org timestamp (`YYYY-MM-DD Day HH:MM`).
+    fn org_timestamp() -> String {
+        jiff::Zoned::now().strftime("%Y-%m-%d %a %H:%M").to_string()
+    }
+
+    /// Org clock-in: insert a `CLOCK: [now]` entry at the cursor.
+    fn org_clock_in(&mut self) {
+        let line = crate::org::clock_in(&Self::org_timestamp());
+        self.insert_content(&format!("{line}\n"));
+    }
+
+    /// Org clock-out: close the most recent open `CLOCK:` entry in the buffer.
+    fn org_clock_out(&mut self) {
+        let now = Self::org_timestamp();
+        let Some(tab) = self.editor.active_tab_mut() else { return };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        if let Some(new) = crate::org::clock_out(&text, &now) {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(line);
+            tab.dirty = true;
+            self.status = t!("status.org_clocked_out").to_string();
+        } else {
+            self.status = t!("status.org_no_clock").to_string();
+        }
     }
 
     /// Compile an agenda from every `.org` file in the project into a new tab.
