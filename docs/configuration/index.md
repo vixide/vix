@@ -47,6 +47,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `ai_diff_review`| bool   | `true`   | Review AI replace transforms (Annotate / Improve) as an accept/reject diff before applying, instead of overwriting immediately. |
 | `editorconfig`  | bool   | `true`   | Apply `.editorconfig` rules (indent style/size, trim trailing whitespace, final newline) per opened file, overriding the global settings. |
 | `auto_pair`     | bool   | `true`   | Auto-insert the matching closer when typing `(` `[` `{` `"` `'` `` ` `` (wrap a selection; step over a closer; Backspace deletes an empty pair). Toggle via **View → Editor → Auto-Pair Brackets**. |
+| `inline_blame`  | bool   | `false`  | Show the cursor line's git blame (`author, date · summary`) dimmed at the end of the line. Toggle via **Git → Toggle Inline Blame**. |
 
 Example `config.toml`:
 

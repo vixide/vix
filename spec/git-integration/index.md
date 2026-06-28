@@ -47,6 +47,15 @@ Annotates the **cursor's current line** with its `git blame` attribution in the
 status bar: `L<line>: <short-hash> <author>, <YYYY-MM-DD> · <commit summary>`.
 Lines not yet committed report `L<line>: not committed yet`.
 
+### Inline blame (Git → Toggle Inline Blame, action `git.blame_inline`)
+
+When enabled (the `inline_blame` setting, off by default), the cursor's line shows
+its blame as a dimmed end-of-line annotation (`<author>, <date> · <summary>`),
+updated as the cursor moves between lines. Implemented as an end-of-line note
+channel on the editor (`Editor::set_eol_note`, non-wrapped view) refreshed by
+`App::refresh_inline_blame`, which re-blames only when the cursor changes line
+(cached in `blame_cache`). Uncommitted lines show "Not committed yet".
+
 Blame runs `git blame --line-porcelain -L <n>,<n>` for the single line, invoked
 from the file's own directory so git resolves the repository itself (robust to
 symlinked workspace roots such as macOS `/var` → `/private/var`). The porcelain
@@ -67,4 +76,4 @@ author's own time zone via a dependency-free epoch→civil-date conversion.
 ## Roadmap
 
 - Merge-conflict resolution UI.
-- Persistent inline (end-of-line) blame annotations, not just the status bar.
+- Inline blame in the soft-wrap renderer (currently the non-wrapped view only).

@@ -105,6 +105,11 @@ pub struct Editor {
     /// Backspace between an empty pair deletes both). Host-configurable.
     pub(crate) auto_pair: bool,
 
+    /// Optional end-of-line virtual note `(line, text)` drawn dimmed after that
+    /// line's content (e.g. inline git blame for the cursor line). Non-wrapped
+    /// view only.
+    pub(crate) eol_note: Option<(usize, String)>,
+
     /// Style for the visible-whitespace glyphs (typically dimmed).
     pub(crate) whitespace_style: Style,
 
@@ -184,6 +189,7 @@ impl Editor {
             show_whitespace: false,
             soft_wrap: false,
             auto_pair: true,
+            eol_note: None,
             whitespace_style: Style::default().fg(Color::DarkGray),
             bracket_style: Style::default().add_modifier(Modifier::REVERSED),
             left_code_padding: 2,
@@ -948,6 +954,12 @@ impl Editor {
     /// Enable or disable bracket/quote auto-pairing.
     pub fn set_auto_pair(&mut self, on: bool) {
         self.auto_pair = on;
+    }
+
+    /// Set (or clear with `None`) the end-of-line virtual note: `(line, text)`
+    /// drawn dimmed after that line's content. Used for inline git blame.
+    pub fn set_eol_note(&mut self, note: Option<(usize, String)>) {
+        self.eol_note = note;
     }
 
     /// Enable or disable soft wrap (long lines wrap instead of scrolling).

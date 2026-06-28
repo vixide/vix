@@ -900,6 +900,9 @@ pub struct App {
     /// Last document revision pushed to a language server, keyed by file path, so
     /// edits sync once per change rather than once per frame.
     lsp_synced: std::collections::HashMap<PathBuf, u64>,
+    /// Inline-blame cache: the `(path, 1-based line)` last blamed, so the blame is
+    /// recomputed only when the cursor moves to a different line.
+    blame_cache: Option<(PathBuf, usize)>,
     /// LSP hover tooltip overlay, when shown.
     pub hover: Option<HoverPopup>,
     /// LSP completion overlay, when shown.
@@ -1150,6 +1153,7 @@ impl App {
             markdown_preview: None, snippets: None, snippet_session: None, contacts: None, vcard: None,
             lsp,
             lsp_synced: std::collections::HashMap::new(),
+            blame_cache: None,
             hover: None, completion: None, dialog: None, color_converter: None,
             unit_converter: None, calculator: None, regex_tester: None, code_actions: None,
             code_lens: None, pomodoro: None,
@@ -2409,6 +2413,7 @@ impl App {
                     Some(Prompt::new(PromptKind::GitGrep, t!("prompt.git_grep").to_string()));
             }
             "git.blame" => self.git_blame_line(),
+            "git.blame_inline" => self.toggle_inline_blame(),
             "git.revert_hunk" => self.revert_hunk(),
             "git.stage_hunk" => self.stage_hunk(),
             "git.unstage_hunk" => self.unstage_hunk(),
@@ -4873,6 +4878,61 @@ impl App {
                 .to_string();
             }
             None => self.status = t!("status.blame_none").into(),
+        }
+    }
+
+    /// Toggle the inline (end-of-line) git blame for the cursor's line, persisting
+    /// the preference. Clears the annotation immediately when turned off.
+    fn toggle_inline_blame(&mut self) {
+        self.settings.inline_blame = !self.settings.inline_blame;
+        let on = self.settings.inline_blame;
+        if !on {
+            self.blame_cache = None;
+            if let Some(t) = self.editor.active_tab_mut() {
+                t.editor.set_eol_note(None);
+            }
+        }
+        self.status = t!(if on { "status.inline_blame_on" } else { "status.inline_blame_off" }).to_string();
+    }
+
+    /// Refresh the inline blame for the cursor's line when enabled. Cheap: blames
+    /// only when the cursor moves to a different line (cached in `blame_cache`).
+    /// Called once per event-loop iteration.
+    pub fn refresh_inline_blame(&mut self) {
+        if !self.settings.inline_blame {
+            if self.blame_cache.take().is_some()
+                && let Some(t) = self.editor.active_tab_mut()
+            {
+                t.editor.set_eol_note(None);
+            }
+            return;
+        }
+        let here = self
+            .editor
+            .active_tab()
+            .filter(|t| !t.is_image())
+            .and_then(|t| t.path.clone().map(|p| (p, t.editor.cursor_line())));
+        let Some((path, line0)) = here else {
+            if let Some(t) = self.editor.active_tab_mut() {
+                t.editor.set_eol_note(None);
+            }
+            return;
+        };
+        let line = line0 + 1;
+        if self.blame_cache.as_ref() == Some(&(path.clone(), line)) {
+            return;
+        }
+        self.blame_cache = Some((path.clone(), line));
+        let note = match (path.parent(), path.file_name()) {
+            (Some(dir), Some(name)) => match crate::git::blame_line(dir, &name.to_string_lossy(), line) {
+                Some(b) if b.is_uncommitted() => t!("blame.uncommitted").to_string(),
+                Some(b) => t!("blame.inline", author = b.author, date = b.date, summary = b.summary).to_string(),
+                None => String::new(),
+            },
+            _ => String::new(),
+        };
+        if let Some(t) = self.editor.active_tab_mut() {
+            t.editor.set_eol_note(if note.is_empty() { None } else { Some((line0, note)) });
         }
     }
 
