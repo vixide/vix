@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **PlantUML media type** (`text/plantuml`, `.plantuml`/`.puml`) plus a bundled
+  snippet library (diagram skeleton, sequence/class/use-case/activity/state/
+  component constructs, notes, skinparam).
 - **Bundled example snippet libraries** under `config/media-types/<type>/snippets/examples.json`
   for ~38 media types — the originals (Python, Plain, TypeScript, Rust, Java, C++,
   C#, JavaScript, C, Ruby, JSON, YAML, SQL) plus HTML, CSS, Markdown, Go, TOML,

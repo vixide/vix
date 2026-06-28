@@ -1,0 +1,97 @@
+{
+  "Diagram": {
+    "prefix": "uml",
+    "body": ["@startuml", "$0", "@enduml"],
+    "description": "@startuml / @enduml skeleton"
+  },
+  "Title": {
+    "prefix": "title",
+    "body": ["title ${1:Diagram title}$0"],
+    "description": "Diagram title"
+  },
+  "Sequence message": {
+    "prefix": "seq",
+    "body": ["${1:Alice} -> ${2:Bob} : ${0:message}"],
+    "description": "Sequence diagram message"
+  },
+  "Return message": {
+    "prefix": "return",
+    "body": ["${1:Bob} --> ${2:Alice} : ${0:reply}"],
+    "description": "Dashed return message"
+  },
+  "Participant": {
+    "prefix": "participant",
+    "body": ["participant ${1:Name}$0"],
+    "description": "Sequence participant"
+  },
+  "Actor": {
+    "prefix": "actor",
+    "body": ["actor ${1:User}$0"],
+    "description": "Actor"
+  },
+  "Class": {
+    "prefix": "class",
+    "body": ["class ${1:Name} {", "\t${2:+field}", "\t${0:+method()}", "}"],
+    "description": "Class with members"
+  },
+  "Interface": {
+    "prefix": "interface",
+    "body": ["interface ${1:Name} {", "\t$0", "}"],
+    "description": "Interface"
+  },
+  "Inheritance": {
+    "prefix": "extends",
+    "body": ["${1:Parent} <|-- ${2:Child}$0"],
+    "description": "Inheritance relation"
+  },
+  "Association": {
+    "prefix": "assoc",
+    "body": ["${1:A} --> ${2:B} : ${0:label}"],
+    "description": "Association relation"
+  },
+  "Use case": {
+    "prefix": "usecase",
+    "body": ["usecase ${1:UC1} as \"${0:Do something}\""],
+    "description": "Use case"
+  },
+  "Activity": {
+    "prefix": "activity",
+    "body": ["start", ":${1:action};", "$0", "stop"],
+    "description": "Activity start/stop"
+  },
+  "Activity if": {
+    "prefix": "if",
+    "body": ["if (${1:condition?}) then (${2:yes})", "\t:${3:action};", "else (${4:no})", "\t:${5:action};", "endif$0"],
+    "description": "Activity if/else"
+  },
+  "State": {
+    "prefix": "state",
+    "body": ["state ${1:Name} {", "\t$0", "}"],
+    "description": "Composite state"
+  },
+  "Transition": {
+    "prefix": "trans",
+    "body": ["${1:State1} --> ${2:State2} : ${0:event}"],
+    "description": "State transition"
+  },
+  "Component": {
+    "prefix": "component",
+    "body": ["component ${1:Name}$0"],
+    "description": "Component"
+  },
+  "Package": {
+    "prefix": "package",
+    "body": ["package \"${1:Name}\" {", "\t$0", "}"],
+    "description": "Package / grouping"
+  },
+  "Note": {
+    "prefix": "note",
+    "body": ["note ${1:right} : ${0:text}"],
+    "description": "Note"
+  },
+  "Skinparam": {
+    "prefix": "skin",
+    "body": ["skinparam ${1:monochrome} ${0:true}"],
+    "description": "skinparam setting"
+  }
+}

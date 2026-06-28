@@ -109,6 +109,7 @@ fn project_media_type_example_snippets_load() {
         ("ex", "text/elixir"),
         ("sh", "text/sh"),
         ("ps1", "text/powershell"),
+        ("puml", "text/plantuml"),
     ] {
         assert_eq!(vix::media_type::for_extension(ext).unwrap().media_type, mt, "{ext} → {mt}");
         let snips = vix::snippets::load_scoped(Some(mt), root, proj);
