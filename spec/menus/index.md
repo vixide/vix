@@ -2,16 +2,20 @@
 
 Top menu bar.
 
-- Open with `F10`, or `Alt+F/E/V/T/A/G/H` for File/Edit/View/Tools/AI/Git/Help.
-- Arrows navigate, `Enter` runs, `Esc` closes.
+- Open with `F10`, or `Alt+F/E/V/T/A/G/D/H` for
+  File/Edit/View/Tools/AI/Git/Debug/Help.
+- Arrows navigate, `Enter` runs, `Esc` closes. In a dropdown, `Up` from the first
+  item moves to the **menu title** (nothing highlighted); `Down` from there
+  re-enters the first item.
 - A mouse click on a menu name opens it; a click on a dropdown item runs it.
 - While a menu is open, moving the pointer follows the selection: hovering a
   dropdown row highlights it, and hovering another top-level name switches menus.
 - Dropdowns may contain **separators** — non-selectable divider lines that group
   related items. Arrow navigation, hover, and clicks all skip them.
-- An item marked `▸` opens a **submenu** (one level deep). `Right` or a click
-  opens it; `Left` or `Esc` backs out to the parent. Like a top-level dropdown, a
-  submenu opens with **nothing highlighted** — arrow, hover, or type to pick.
+- An item marked `▸` opens a **submenu** (up to three levels deep). `Right` opens
+  it **and highlights its first item**; `Left` or `Esc` backs out to the parent.
+  (Opening a submenu by `Enter`, hover, or click highlights nothing until you
+  arrow/hover/type.)
 - Hovering (or arrowing to) a **View → Theme** item previews that theme live;
   moving off it, or closing the menu without choosing, reverts to the current
   theme.

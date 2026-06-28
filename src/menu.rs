@@ -872,17 +872,18 @@ impl Menu {
             return;
         }
         if self.sub_open {
-            // Open the third level if the highlighted submenu row has one.
-            if self.subsubmenu_items().is_some() {
+            // Open the third level (highlighting its first item) if the highlighted
+            // submenu row has one.
+            if let Some(ss) = self.subsubmenu_items() {
                 self.subsub_open = true;
-                self.subsub = None;
+                self.subsub = Some(first_selectable(ss));
             }
             return;
         }
         if let Some(it) = self.item
-            && menus()[i].items[it].submenu.is_some() {
+            && let Some(sub) = menus()[i].items[it].submenu {
                 self.sub_open = true;
-                self.sub = None;
+                self.sub = Some(first_selectable(sub));
                 return;
             }
         let n = menus().len();
@@ -906,7 +907,10 @@ impl Menu {
             }
             return;
         }
+        // From the first item, Up moves to the menu title (nothing highlighted);
+        // from the title (None), Up wraps to the last item.
         match self.item {
+            Some(it) if it == first_selectable(items) => self.item = None,
             Some(it) => self.item = Some(prev_selectable(items, it)),
             None => self.item = Some(prev_selectable(items, 0)),
         }
@@ -1090,8 +1094,9 @@ mod tests {
         m.sub = Some(0);
         m.right();
         assert!(m.subsub_open, "third level should be open");
-        // Step down to the 4th version and activate it.
-        for _ in 0..4 {
+        // Opening highlights the first version (v1); step down to the 4th.
+        assert_eq!(m.subsub, Some(0), "third level highlights its first item");
+        for _ in 0..3 {
             m.down();
         }
         assert_eq!(m.enter(), Some("tools.insert.uuid.v4"));
@@ -1100,6 +1105,30 @@ mod tests {
         assert!(!m.subsub_open && m.sub_open);
         m.left();
         assert!(!m.sub_open);
+    }
+
+    #[test]
+    fn right_highlights_first_submenu_item() {
+        let (tools, gen_idx) = tools_and_generate();
+        let mut m = Menu::default();
+        m.open_index(tools);
+        m.item = Some(gen_idx);
+        m.right();
+        assert!(m.sub_open, "submenu opens");
+        assert_eq!(m.sub, Some(first_selectable(menus()[tools].items[gen_idx].submenu.unwrap())));
+    }
+
+    #[test]
+    fn up_from_first_item_highlights_the_title() {
+        let mut m = Menu::default();
+        m.open_index(0);
+        m.down(); // first item highlighted
+        let first = first_selectable(menus()[0].items);
+        assert_eq!(m.item, Some(first));
+        m.up(); // moves up to the title (nothing highlighted)
+        assert_eq!(m.item, None, "Up from the first item highlights the menu title");
+        m.up(); // from the title, Up wraps to the last item
+        assert_eq!(m.item, Some(prev_selectable(menus()[0].items, 0)));
     }
 
     /// Regression: after descending into a third-level submenu, moving the

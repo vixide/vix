@@ -6,6 +6,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Menu navigation.** In a dropdown, pressing `Right` on a submenu now opens it
+  **and highlights its first item** (was: nothing highlighted). Pressing `Up` on
+  the first dropdown item now moves to the **menu title** (nothing highlighted)
+  instead of wrapping to the last item.
+
 ### Added
 
 - **Bracket / quote auto-pairing.** Typing `(`, `[`, `{`, `"`, `'`, `` ` ``
