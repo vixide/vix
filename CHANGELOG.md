@@ -41,6 +41,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Org checkbox & statistics cookies.** Parent checkboxes now reflect their
+  children (all → `[X]`, none → `[ ]`, some → `[-]`), and `[/]`/`[%]` statistics
+  cookies in headlines and list items are recomputed automatically after Toggle
+  Checkbox / Cycle TODO (or on demand via **Org → Update Statistics**). Headline
+  cookies count child checkboxes or child TODO headlines, honoring the
+  `:COOKIE_DATA:` property (`checkbox`/`todo`, plus `recursive`). Pure logic in
+  `org::update_statistics`.
 - **Org → Roam ([Org-roam](https://www.orgroam.com/) note-taking).** A new submenu
   for networked, Zettelkasten-style notes over a directory of `.org` files: find /
   capture / random node, insert `[[id:…]]` node links, a backlinks buffer (linked
