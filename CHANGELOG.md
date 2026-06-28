@@ -17,6 +17,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and `${1:placeholder}` fields: inserting one selects the first field and **Tab**
   walks the rest (Esc exits). Several bundled snippets gained fields. See
   `spec/snippets/index.md`.
+- **Persistent macros.** Recorded keyboard macros can be saved by name
+  (**Edit → Save Macro…**) to `macros.toml` and replayed in later sessions
+  (**Edit → Play Saved Macro…**). See `spec/macros/index.md`.
 
 ## [0.4.0] - 2026-06-27
 

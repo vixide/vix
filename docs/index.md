@@ -31,7 +31,7 @@ Highlights:
   Lorem ipsum, Date/Time) · [Snippets](snippets/index.md) (with tabstops) ·
   [QR Code](qr-code/index.md) ·
   [Multiple Cursors](multiple-cursors/index.md) (select-all-occurrences, column
-  selection).
+  selection) · [Macros](macros/index.md) (record, save, replay).
 - View: [Zen Mode](zen-mode/index.md) · [Breadcrumb Bar](breadcrumb/index.md).
 - AI: [AI Chat Panel](agent-panel/index.md) (conversation with the configurable
   `ai_command` assistant).
