@@ -578,6 +578,40 @@ impl Keymap {
     }
 }
 
+/// Convert a saved [`crate::session::PaneNode`] into a live pane tree, clamping
+/// leaf tabs to `tab_count`.
+fn node_to_pane(node: &crate::session::PaneNode, tab_count: usize) -> crate::pane_tree::Pane {
+    match node {
+        crate::session::PaneNode::Leaf(i) => crate::pane_tree::Pane::Leaf((*i).min(tab_count.saturating_sub(1))),
+        crate::session::PaneNode::Split { dir, ratio, first, second } => crate::pane_tree::Pane::Split {
+            dir: if dir == "horizontal" { crate::editor::SplitDir::Horizontal } else { crate::editor::SplitDir::Vertical },
+            ratio: (*ratio).clamp(10, 90),
+            first: Box::new(node_to_pane(first, tab_count)),
+            second: Box::new(node_to_pane(second, tab_count)),
+        },
+    }
+}
+
+/// Convert a live pane tree into a saved node, mapping each leaf's tab index to a
+/// file index via `tab_to_file`. `None` if any leaf is an untitled/image tab.
+fn pane_to_node(
+    pane: &crate::pane_tree::Pane,
+    tab_to_file: &[Option<usize>],
+) -> Option<crate::session::PaneNode> {
+    match pane {
+        crate::pane_tree::Pane::Leaf(tab) => Some(crate::session::PaneNode::Leaf((*tab_to_file.get(*tab)?)?)),
+        crate::pane_tree::Pane::Split { dir, ratio, first, second } => Some(crate::session::PaneNode::Split {
+            dir: match dir {
+                crate::editor::SplitDir::Horizontal => "horizontal".to_string(),
+                crate::editor::SplitDir::Vertical => "vertical".to_string(),
+            },
+            ratio: *ratio,
+            first: Box::new(pane_to_node(first, tab_to_file)?),
+            second: Box::new(pane_to_node(second, tab_to_file)?),
+        }),
+    }
+}
+
 /// Result of resolving a Spacemacs `SPC` leader sequence.
 enum LeaderHit {
     /// The sequence maps to this action id; run it.
@@ -679,13 +713,8 @@ pub struct Layout {
     /// Editor horizontal-scrollbar rectangle (the row below the editor text),
     /// shown when not soft-wrapping and a line overflows.
     pub editor_hscrollbar: Rect,
-    /// Text rectangles of the two split panes (valid while the editor is split),
-    /// for mouse focus/cursor hit-testing.
-    pub split_panes: [Rect; 2],
-    /// The split divider rectangle (draggable to resize the panes).
-    pub split_divider: Rect,
-    /// The whole editor region (inner of the editor block), used to map a divider
-    /// drag to a split ratio.
+    /// The whole editor region (inner of the editor block), used to lay out and
+    /// hit-test the split panes and their dividers.
     pub editor_region: Rect,
     /// Explorer pane rectangle.
     pub explorer: Rect,
@@ -1325,25 +1354,20 @@ impl App {
         opened
     }
 
-    /// Rebuild the editor split recorded in `ws`, if any, clamping its pane index
-    /// to the open tabs.
+    /// Rebuild the editor split recorded in `ws`, if any. Leaves index into the
+    /// reopened files, which (after a clean restore) match the tab order.
     fn restore_split(&mut self, ws: &crate::session::WorkspaceSession) {
         let Some(s) = ws.split.as_ref() else { return };
         let count = self.editor.tabs.len();
-        if s.other >= count || count < 2 {
+        let tree = node_to_pane(&s.tree, count);
+        if tree.leaf_count() < 2 {
             return;
         }
-        let dir = if s.dir == "horizontal" {
-            crate::editor::SplitDir::Horizontal
-        } else {
-            crate::editor::SplitDir::Vertical
-        };
-        self.editor.split = Some(crate::editor::Split {
-            dir,
-            other: s.other,
-            focused_side: s.focused_side.min(1),
-            ratio: s.ratio.clamp(10, 90),
-        });
+        self.editor.focused_leaf = s.focused.min(tree.leaf_count() - 1);
+        if let Some(tab) = tree.leaf_tab(self.editor.focused_leaf) {
+            self.editor.active = tab.min(count.saturating_sub(1));
+        }
+        self.editor.split_root = Some(tree);
     }
 
     /// Capture the current open files, focused tab, and cursor positions as a
@@ -1371,17 +1395,9 @@ impl App {
             cursors.push(tab.editor.get_cursor());
             scrolls.push(tab.editor.get_offset_y());
         }
-        let split = self.editor.split.as_ref().and_then(|s| {
-            let other = (*tab_to_file.get(s.other)?)?;
-            Some(crate::session::SplitSession {
-                dir: match s.dir {
-                    crate::editor::SplitDir::Horizontal => "horizontal".to_string(),
-                    crate::editor::SplitDir::Vertical => "vertical".to_string(),
-                },
-                other,
-                focused_side: s.focused_side,
-                ratio: s.ratio,
-            })
+        let split = self.editor.split_root.as_ref().and_then(|root| {
+            let tree = pane_to_node(root, &tab_to_file)?;
+            Some(crate::session::SplitSession { tree, focused: self.editor.focused_leaf })
         });
         crate::session::WorkspaceSession { root: self.session_key(), files, active, cursors, scrolls, split }
     }
@@ -2891,7 +2907,7 @@ impl App {
             "unsplit" => self.run_action("view.unsplit"),
             "next_split" | "previous_split" => self.run_action("view.focus_other_pane"),
             "first_split" => self.focus_split_pane(0),
-            "last_split" => self.focus_split_pane(1),
+            "last_split" => self.focus_split_pane(usize::MAX),
             // toggles / app
             "toggle_help" | "toggle_key_menu" => self.show_help = !self.show_help,
             "toggle_diff_gutter" => self.run_action("view.scrollbar"),
@@ -6829,14 +6845,14 @@ impl App {
             _ => {}
         }
 
-        // Split divider: press and drag to change the pane ratio.
+        // Split divider: press and drag to change the pane ratio. The press hits a
+        // divider when `resize_split_at` reports it resized one.
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left)
                 if self.editor.is_split()
-                    && rect_contains(self.layout.split_divider, col, row) =>
+                    && self.editor.resize_split_at(self.layout.editor_region, col, row) =>
             {
                 self.split_resize = true;
-                self.resize_split(col, row);
                 return true;
             }
             MouseEventKind::Drag(MouseButton::Left) if self.split_resize => {
@@ -6917,14 +6933,12 @@ impl App {
         }
         // Split panes: a click focuses the pane under the pointer, then maps the
         // click within it.
-        if self.editor.is_split() {
-            for side in 0..2 {
-                if rect_contains(self.layout.split_panes[side], col, row) {
-                    self.focus_split_pane(side);
-                    self.editor_mouse(mouse);
-                    return;
-                }
-            }
+        if self.editor.is_split()
+            && self.editor.focus_pane_at(self.layout.editor_region, col, row)
+        {
+            self.focus = Focus::Editor;
+            self.editor_mouse(mouse);
+            return;
         }
         if rect_contains(self.layout.editor, col, row) {
             self.editor_mouse(mouse);
@@ -7089,31 +7103,18 @@ impl App {
         self.settings.bottom_dock_height = h;
     }
 
-    /// Resize the split so the divider follows the pointer, as a percentage of
-    /// the editor region (clamped to 10..=90).
+    /// Resize the split whose divider is under the pointer, as a percentage of
+    /// that split's area (clamped to 10..=90).
     fn resize_split(&mut self, col: u16, row: u16) {
         let r = self.layout.editor_region;
-        if let Some(s) = self.editor.split.as_mut() {
-            let pct = match s.dir {
-                crate::editor::SplitDir::Vertical if r.width > 1 => {
-                    u32::from(col.saturating_sub(r.x)) * 100 / u32::from(r.width)
-                }
-                crate::editor::SplitDir::Horizontal if r.height > 1 => {
-                    u32::from(row.saturating_sub(r.y)) * 100 / u32::from(r.height)
-                }
-                _ => 50,
-            };
-            s.ratio = u16::try_from(pct).unwrap_or(u16::MAX).clamp(10, 90);
-        }
+        self.editor.resize_split_at(r, col, row);
     }
 
-    /// Focus split pane `side` (0 = left/top, 1 = right/bottom): swap the active
-    /// tab to that pane and point cursor/mouse mapping at its rect.
-    fn focus_split_pane(&mut self, side: usize) {
-        if self.editor.split.as_ref().is_some_and(|s| s.focused_side != side) {
-            self.editor.focus_other_pane();
-        }
-        self.layout.editor = self.layout.split_panes[side];
+    /// Focus the split pane at in-order leaf index `idx` (clamped), making its tab
+    /// active and directing cursor/mouse mapping at its rect.
+    fn focus_split_pane(&mut self, idx: usize) {
+        let last = self.editor.split_layout(self.layout.editor_region).len().saturating_sub(1);
+        self.editor.focus_leaf(idx.min(last));
         self.focus = Focus::Editor;
     }
 

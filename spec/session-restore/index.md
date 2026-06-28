@@ -36,16 +36,19 @@ cursors = [128, 0]
 scrolls = [40, 0]
 
 [workspaces.split]
+focused = 0
+# A binary tree of panes; leaves index into `files`.
+[workspaces.split.tree.Split]
 dir = "vertical"
-other = 1
-focused_side = 0
 ratio = 50
+first.Leaf = 0
+second.Leaf = 1
 ```
 
-`scrolls` (the first visible line per file) and `split` (the two-pane layout) are
+`scrolls` (the first visible line per file) and `split` (the pane-tree layout) are
 optional — older session files without them still load (`#[serde(default)]`). The
-split is restored only when every file reopened cleanly, so the recorded pane
-index still lines up with the tab order.
+split is restored only when every file reopened cleanly, so the recorded leaf
+indices still line up with the tab order.
 
 ## Setting
 

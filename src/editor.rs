@@ -232,20 +232,6 @@ pub enum SplitDir {
     Horizontal,
 }
 
-/// Editor split state: a second pane showing another tab beside/below the
-/// focused one. The focused pane always shows the active tab, so all the
-/// single-pane code keeps working; this records only the *other* pane.
-pub struct Split {
-    /// Side-by-side or stacked.
-    pub dir: SplitDir,
-    /// Tab index shown in the non-focused pane.
-    pub other: usize,
-    /// Which side is focused: 0 = left/top, 1 = right/bottom.
-    pub focused_side: usize,
-    /// Percentage width/height of the left/top pane (clamped to 10..=90).
-    pub ratio: u16,
-}
-
 /// The tab strip: a stack of open buffers and the active index.
 pub struct Editor {
     /// Open buffers, left to right.
@@ -260,8 +246,11 @@ pub struct Editor {
     pub soft_wrap: bool,
     /// String Tab inserts in every buffer (spaces or a tab).
     pub indent: String,
-    /// The split, when the editor area is divided into two panes.
-    pub split: Option<Split>,
+    /// Split layout (a binary tree of panes), when the editor area is divided.
+    /// `None` is the normal single-pane case.
+    pub split_root: Option<crate::pane_tree::Pane>,
+    /// In-order index of the focused leaf within `split_root` (0 when unsplit).
+    pub focused_leaf: usize,
 }
 
 impl Default for Editor {
@@ -282,7 +271,8 @@ impl Editor {
             show_whitespace,
             soft_wrap,
             indent,
-            split: None,
+            split_root: None,
+            focused_leaf: 0,
         };
         e.new_tab();
         e
@@ -299,48 +289,128 @@ impl Editor {
         self.tabs.get_mut(self.active)
     }
 
-    /// Split the editor area in `dir`, showing another tab in the second pane
-    /// (the next tab if there is one, else the same buffer). The focused pane
-    /// keeps the active tab. Re-splitting just changes the direction.
-    pub fn set_split(&mut self, dir: SplitDir) {
-        if let Some(s) = self.split.as_mut() {
-            s.dir = dir;
-            return;
-        }
-        let other = (0..self.tabs.len()).find(|&i| i != self.active).unwrap_or(self.active);
-        self.split = Some(Split { dir, other, focused_side: 0, ratio: 50 });
-    }
-
-    /// Remove the split, leaving a single pane.
-    pub fn unsplit(&mut self) {
-        self.split = None;
-    }
-
-    /// Whether the editor area is split into two panes.
+    /// Whether the editor area is split into more than one pane.
     #[must_use]
     pub fn is_split(&self) -> bool {
-        self.split.is_some()
+        self.split_root.is_some()
     }
 
-    /// Move focus to the other pane, swapping which tab is active.
-    pub fn focus_other_pane(&mut self) {
-        if let Some(s) = self.split.as_mut() {
-            let old_active = self.active;
-            self.active = s.other.min(self.tabs.len().saturating_sub(1));
-            s.other = old_active;
-            s.focused_side ^= 1;
+    /// Split the focused pane in `dir`, showing another tab (the next one, else
+    /// the active tab) in the new pane. Creates the split on the first call; later
+    /// calls split the currently focused pane. Capped at `MAX_LEAVES` panes.
+    pub fn set_split(&mut self, dir: SplitDir) {
+        let other = (0..self.tabs.len()).find(|&i| i != self.active).unwrap_or(self.active);
+        match self.split_root.as_mut() {
+            None => {
+                self.split_root = Some(crate::pane_tree::Pane::Split {
+                    dir,
+                    ratio: 50,
+                    first: Box::new(crate::pane_tree::Pane::Leaf(self.active)),
+                    second: Box::new(crate::pane_tree::Pane::Leaf(other)),
+                });
+                self.focused_leaf = 0;
+            }
+            Some(root) => {
+                root.set_leaf_tab(self.focused_leaf, self.active);
+                root.split_leaf(self.focused_leaf, dir, other);
+            }
         }
     }
 
-    /// The (left/top, right/bottom) tab indices for the two panes, clamped to the
-    /// open tabs. `None` when not split.
+    /// Remove the focused pane, collapsing the split; a single remaining pane
+    /// returns to the unsplit state.
+    pub fn unsplit(&mut self) {
+        let Some(root) = self.split_root.take() else { return };
+        match root.remove_leaf(self.focused_leaf) {
+            Some(tree) if tree.leaf_count() > 1 => {
+                self.focused_leaf = self.focused_leaf.min(tree.leaf_count() - 1);
+                if let Some(tab) = tree.leaf_tab(self.focused_leaf) {
+                    self.active = tab.min(self.tabs.len().saturating_sub(1));
+                }
+                self.split_root = Some(tree);
+            }
+            Some(tree) => {
+                if let Some(tab) = tree.leaf_tab(0) {
+                    self.active = tab.min(self.tabs.len().saturating_sub(1));
+                }
+                self.split_root = None;
+                self.focused_leaf = 0;
+            }
+            None => {
+                self.split_root = None;
+                self.focused_leaf = 0;
+            }
+        }
+    }
+
+    /// Sync the focused leaf to the active tab and clamp every leaf to the open
+    /// tabs. Call before reading the layout so the focused pane follows `active`.
+    fn sync_split(&mut self) {
+        let count = self.tabs.len();
+        if let Some(root) = self.split_root.as_mut() {
+            root.set_leaf_tab(self.focused_leaf, self.active);
+            root.clamp_tabs(count);
+            self.focused_leaf = self.focused_leaf.min(root.leaf_count().saturating_sub(1));
+        }
+    }
+
+    /// Focus the leaf at in-order index `i`, making its tab active.
+    pub fn focus_leaf(&mut self, i: usize) {
+        self.sync_split();
+        let Some(root) = self.split_root.as_ref() else { return };
+        if let Some(tab) = root.leaf_tab(i) {
+            self.focused_leaf = i;
+            self.active = tab.min(self.tabs.len().saturating_sub(1));
+        }
+    }
+
+    /// Move focus to the next pane (wrapping), making its tab active.
+    pub fn focus_other_pane(&mut self) {
+        self.sync_split();
+        let Some(root) = self.split_root.as_ref() else { return };
+        let n = root.leaf_count();
+        if n > 0 {
+            self.focus_leaf((self.focused_leaf + 1) % n);
+        }
+    }
+
+    /// The in-order index of the focused pane.
     #[must_use]
-    pub fn split_pane_tabs(&self) -> Option<(usize, usize)> {
-        let s = self.split.as_ref()?;
-        let last = self.tabs.len().saturating_sub(1);
-        let focused = self.active.min(last);
-        let other = s.other.min(last);
-        Some(if s.focused_side == 0 { (focused, other) } else { (other, focused) })
+    pub fn focused_leaf(&self) -> usize {
+        self.focused_leaf
+    }
+
+    /// Lay out the split panes into `area` (focused leaf synced to `active`).
+    /// Empty when unsplit.
+    pub fn split_layout(&mut self, area: Rect) -> Vec<crate::pane_tree::LeafBox> {
+        self.sync_split();
+        self.split_root.as_ref().map(|r| r.layout(area)).unwrap_or_default()
+    }
+
+    /// The split divider rectangles for drawing, given the editor `area`.
+    #[must_use]
+    pub fn split_dividers(
+        &self,
+        area: Rect,
+    ) -> Vec<(SplitDir, Rect)> {
+        self.split_root.as_ref().map(|r| r.dividers(area)).unwrap_or_default()
+    }
+
+    /// Focus the pane under `(col, row)` within `area`; returns whether a pane was
+    /// hit.
+    pub fn focus_pane_at(&mut self, area: Rect, col: u16, row: u16) -> bool {
+        self.sync_split();
+        let Some(leaf) = self.split_root.as_ref().and_then(|r| r.leaf_at(area, col, row)) else {
+            return false;
+        };
+        self.focus_leaf(leaf);
+        true
+    }
+
+    /// Drag a split divider under `(col, row)` within `area`; returns whether one
+    /// was resized.
+    pub fn resize_split_at(&mut self, area: Rect, col: u16, row: u16) -> bool {
+        self.split_root.as_mut().is_some_and(|r| r.resize_at(area, col, row))
     }
 
     /// Create an empty untitled buffer and focus it.

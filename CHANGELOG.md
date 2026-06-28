@@ -38,6 +38,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a persistent symbol list beside the editor that follows the cursor; click a row
   to jump. See `spec/outline-sidebar/index.md`.
 
+### Changed
+
+- **Nested split panes (up to a 2x2 grid).** The editor split is now a binary
+  tree: **View → Split → Vertical/Horizontal** split the *focused* pane, so
+  repeated splits nest into a grid (up to four panes). Drag any divider to resize
+  that split; Other Pane (`F6`) cycles focus; Unsplit collapses the focused pane.
+  The layout persists in the session. See `spec/split-panes/index.md`.
+
 ## [0.4.0] - 2026-06-27
 
 ### Added

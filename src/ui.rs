@@ -1831,9 +1831,8 @@ fn draw_tabs(app: &App, frame: &mut Frame, area: Rect) {
 fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) {
     use crate::editor::SplitDir;
     app.layout.editor_region = inner;
-    let Some((left_tab, right_tab)) = app.editor.split_pane_tabs() else {
-        app.layout.split_panes = [Rect::default(); 2];
-        app.layout.split_divider = Rect::default();
+    let panes = app.editor.split_layout(inner);
+    if panes.is_empty() {
         let (editor_area, scrollbar_area) = if app.show_scrollbar {
             let s = Layout::default()
                 .direction(Direction::Horizontal)
@@ -1847,61 +1846,30 @@ fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) {
         app.layout.scrollbar = scrollbar_area;
         draw_center(app, frame, editor_area, scrollbar_area);
         return;
-    };
-
-    let (dir, ratio, focused_side) = {
-        let s = app.editor.split.as_ref().unwrap();
-        (s.dir, s.ratio.clamp(10, 90), s.focused_side)
-    };
-    let (pane0, divider, pane1) = match dir {
-        SplitDir::Vertical => {
-            let total = inner.width;
-            let w0 = u16::try_from(u32::from(total) * u32::from(ratio) / 100).unwrap_or(u16::MAX);
-            let w0 = w0.clamp(1, total.saturating_sub(2).max(1));
-            (
-                Rect { width: w0, ..inner },
-                Rect { x: inner.x + w0, y: inner.y, width: 1, height: inner.height },
-                Rect {
-                    x: inner.x + w0 + 1,
-                    y: inner.y,
-                    width: total.saturating_sub(w0 + 1),
-                    height: inner.height,
-                },
-            )
-        }
-        SplitDir::Horizontal => {
-            let total = inner.height;
-            let h0 = u16::try_from(u32::from(total) * u32::from(ratio) / 100).unwrap_or(u16::MAX);
-            let h0 = h0.clamp(1, total.saturating_sub(2).max(1));
-            (
-                Rect { height: h0, ..inner },
-                Rect { x: inner.x, y: inner.y + h0, width: inner.width, height: 1 },
-                Rect {
-                    x: inner.x,
-                    y: inner.y + h0 + 1,
-                    width: inner.width,
-                    height: total.saturating_sub(h0 + 1),
-                },
-            )
-        }
-    };
-
-    // Divider line.
-    let dstyle = theme::region_title(theme::Region::Editor, true);
-    if dir == SplitDir::Vertical {
-        let col: Vec<Line> = (0..divider.height).map(|_| Line::from(Span::styled("│", dstyle))).collect();
-        frame.render_widget(Paragraph::new(col), divider);
-    } else {
-        let row = "─".repeat(divider.width as usize);
-        frame.render_widget(Paragraph::new(Line::from(Span::styled(row, dstyle))), divider);
     }
-    app.layout.split_divider = divider;
 
-    let t0 = draw_pane(app, frame, pane0, left_tab);
-    let t1 = draw_pane(app, frame, pane1, right_tab);
-    app.layout.split_panes = [t0, t1];
-    // The focused pane drives cursor/mouse mapping; no shared single-pane bars.
-    app.layout.editor = if focused_side == 0 { t0 } else { t1 };
+    // Draw split dividers (one per internal tree node).
+    let dstyle = theme::region_title(theme::Region::Editor, true);
+    for (dir, divider) in app.editor.split_dividers(inner) {
+        if dir == SplitDir::Vertical {
+            let col: Vec<Line> = (0..divider.height).map(|_| Line::from(Span::styled("│", dstyle))).collect();
+            frame.render_widget(Paragraph::new(col), divider);
+        } else {
+            let row = "─".repeat(divider.width as usize);
+            frame.render_widget(Paragraph::new(Line::from(Span::styled(row, dstyle))), divider);
+        }
+    }
+
+    // Draw each pane; the focused leaf drives cursor/mouse mapping.
+    let focused = app.editor.focused_leaf();
+    let mut focused_rect = inner;
+    for pane in panes {
+        let text = draw_pane(app, frame, pane.rect, pane.tab);
+        if pane.leaf == focused {
+            focused_rect = text;
+        }
+    }
+    app.layout.editor = focused_rect;
     app.layout.scrollbar = Rect::default();
     app.layout.editor_hscrollbar = Rect::default();
 }
