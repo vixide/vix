@@ -1281,6 +1281,12 @@ menu.item.file.switch_project:
   bn: "প্রকল্প পরিবর্তন…"
   zh: "切换项目…"
   ja: "プロジェクトを切り替え…"
+menu.item.file.workspace_open:
+  en: "Open Workspace from File…"
+menu.item.file.workspace_save:
+  en: "Save Workspace into File…"
+menu.item.file.workspace_add_folder:
+  en: "Add Folder to Workspace…"
 menu.item.file.save:
   en: "Save"
   es: "Guardar"
@@ -10267,6 +10273,12 @@ help.mouse:
 # ---------------------------------------------------------------------------
 # Prompts
 # ---------------------------------------------------------------------------
+prompt.workspace_open:
+  en: "Open workspace file (path)"
+prompt.workspace_save:
+  en: "Save workspace into file (path)"
+prompt.workspace_add_folder:
+  en: "Add folder to workspace (path)"
 prompt.open:
   en: "Open file (path[:line[:col]])"
   es: "Abrir archivo (ruta[:línea[:col]])"
@@ -12049,6 +12061,14 @@ status.project_missing:
   bn: "প্রকল্প ফোল্ডার নেই: %{path}"
   zh: "项目文件夹已不存在：%{path}"
   ja: "プロジェクトフォルダがありません: %{path}"
+status.workspace_saved:
+  en: "Saved workspace to %{path}"
+status.workspace_opened:
+  en: "Opened workspace %{path}"
+status.workspace_folder_added:
+  en: "Added folder to workspace: %{path}"
+status.workspace_not_a_folder:
+  en: "Not a folder"
 status.project_switched:
   en: "Switched to %{path}"
   es: "Cambiado a %{path}"
