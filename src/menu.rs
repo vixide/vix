@@ -186,6 +186,7 @@ const EDIT_MODE: &[Item] = &[
     Item::leaf("menu.item.edit.mode.json", "tools.edit_json", ""),
     Item::leaf("menu.item.edit.mode.yaml", "tools.edit_yaml", ""),
     Item::leaf("menu.item.edit.mode.bytes", "tools.edit_bytes", ""),
+    Item::leaf("menu.item.edit.mode.sql", "tools.edit_sql", ""),
 ];
 
 /// Case transforms applied to the selection, grouped under Edit → Case.
@@ -1226,7 +1227,14 @@ mod tests {
         let actions: Vec<&str> = mode.iter().map(|it| it.action).collect();
         assert_eq!(
             actions,
-            vec!["tools.edit_table", "tools.edit_outline", "tools.edit_json", "tools.edit_yaml", "tools.edit_bytes"]
+            vec![
+                "tools.edit_table",
+                "tools.edit_outline",
+                "tools.edit_json",
+                "tools.edit_yaml",
+                "tools.edit_bytes",
+                "tools.edit_sql",
+            ]
         );
         // The edit surfaces no longer live in the Tools menu.
         let tools = menus().iter().find(|m| m.name == "menu.tools").unwrap();

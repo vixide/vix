@@ -83,6 +83,25 @@ fn type_str(app: &mut App, s: &str) {
 }
 
 #[test]
+fn edit_sql_lists_formats_and_saves_statements() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "select 1;\ninsert into t values (1)");
+    app.run_action("tools.edit_sql");
+    assert!(app.edit_sql.is_some(), "Edit → Mode → SQL opens the SQL editor");
+
+    // Format all (Shift+F) uppercases keywords; Ctrl+S writes back to the buffer.
+    app.on_key(KeyEvent::new(KeyCode::Char('F'), KeyModifiers::SHIFT));
+    app.on_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains("SELECT 1;"), "keywords uppercased and saved: {text:?}");
+    assert!(text.contains("INSERT INTO t VALUES (1);"));
+
+    // q closes the editor.
+    app.on_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+    assert!(app.edit_sql.is_none());
+}
+
+#[test]
 fn media_type_picker_filters_and_inserts() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.media_types");

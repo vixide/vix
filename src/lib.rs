@@ -127,6 +127,7 @@ pub mod status_bar_panel;
 pub mod system_information_panel;
 pub mod edit_bytes;
 pub mod edit_outline;
+pub mod edit_sql;
 pub mod edit_table;
 pub mod edit_value;
 pub mod text_information_panel;
