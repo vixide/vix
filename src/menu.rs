@@ -695,6 +695,36 @@ const ORG_EXPORT: &[Item] = &[
     Item::leaf("menu.name.html", "org.export_html", ""),
 ];
 
+/// Org-roam daily-note commands, grouped under Org → Roam → Dailies.
+const ORG_ROAM_DAILIES: &[Item] = &[
+    Item::leaf("menu.item.org.roam.dailies_today", "roam.dailies_today", ""),
+    Item::leaf("menu.item.org.roam.dailies_capture", "roam.dailies_capture", ""),
+    Item::leaf("menu.item.org.roam.dailies_date", "roam.dailies_date", ""),
+];
+
+/// Org-roam node-metadata commands, grouped under Org → Roam → Metadata.
+const ORG_ROAM_METADATA: &[Item] = &[
+    Item::leaf("menu.item.org.roam.tag_add", "roam.tag_add", ""),
+    Item::leaf("menu.item.org.roam.alias_add", "roam.alias_add", ""),
+    Item::leaf("menu.item.org.roam.ref_add", "roam.ref_add", ""),
+];
+
+/// Org-roam commands (networked note-taking), grouped under Org → Roam.
+const ORG_ROAM: &[Item] = &[
+    Item::leaf("menu.item.org.roam.node_find", "roam.node_find", ""),
+    Item::leaf("menu.item.org.roam.node_insert", "roam.node_insert", ""),
+    Item::leaf("menu.item.org.roam.node_random", "roam.node_random", ""),
+    SEP,
+    Item::leaf("menu.item.org.roam.capture", "roam.capture", ""),
+    Item::leaf("menu.item.org.roam.backlinks", "roam.backlinks", ""),
+    SEP,
+    Item::sub("menu.item.org.roam.dailies", ORG_ROAM_DAILIES),
+    Item::sub("menu.item.org.roam.metadata", ORG_ROAM_METADATA),
+    SEP,
+    Item::leaf("menu.item.org.roam.graph", "roam.graph", ""),
+    Item::leaf("menu.item.org.roam.db_sync", "roam.db_sync", ""),
+];
+
 /// Org-mode editing commands, grouped under the top-level Org menu. Insertion of
 /// Org snippets/markers/blocks lives under Tools → Insert.
 const ORG: &[Item] = &[
@@ -711,6 +741,7 @@ const ORG: &[Item] = &[
     Item::leaf("menu.item.org.agenda", "org.agenda", ""),
     Item::leaf("menu.item.org.time_report", "org.time_report", ""),
     SEP,
+    Item::sub("menu.item.org.roam", ORG_ROAM),
     Item::sub("menu.item.org.export", ORG_EXPORT),
 ];
 

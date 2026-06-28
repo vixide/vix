@@ -123,6 +123,22 @@ pub enum PromptKind {
     DebugWatch,
     /// Enter an Org capture — a quick idea/task inserted as a `* TODO` headline.
     OrgCapture,
+    /// Org-roam: find or create a node by title.
+    RoamFind,
+    /// Org-roam: insert a link to a node (found or created) by title.
+    RoamInsert,
+    /// Org-roam: capture a new node by title.
+    RoamCapture,
+    /// Org-roam: capture an entry into today's daily note.
+    RoamDailyCapture,
+    /// Org-roam: open the daily note for an entered `YYYY-MM-DD` date.
+    RoamDailyDate,
+    /// Org-roam: add a `#+filetags:` tag to the current node.
+    RoamTag,
+    /// Org-roam: add a `:ROAM_ALIASES:` alias to the current node.
+    RoamAlias,
+    /// Org-roam: add a `:ROAM_REFS:` ref (URL / cite key) to the current node.
+    RoamRef,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -3444,6 +3460,39 @@ impl App {
             "org.clock_out" => self.org_clock_out(),
             "org.agenda" => self.org_agenda(),
             "org.time_report" => self.org_time_report(),
+            "roam.node_find" => {
+                self.prompt = Some(Prompt::new(PromptKind::RoamFind, t!("prompt.roam_find").to_string()));
+            }
+            "roam.node_insert" => {
+                self.prompt = Some(Prompt::new(PromptKind::RoamInsert, t!("prompt.roam_insert").to_string()));
+            }
+            "roam.node_random" => self.roam_node_random(),
+            "roam.capture" => {
+                self.prompt = Some(Prompt::new(PromptKind::RoamCapture, t!("prompt.roam_capture").to_string()));
+            }
+            "roam.backlinks" => self.roam_backlinks(),
+            "roam.dailies_today" => self.roam_open_daily(&Self::roam_today()),
+            "roam.dailies_capture" => {
+                self.prompt =
+                    Some(Prompt::new(PromptKind::RoamDailyCapture, t!("prompt.roam_daily_capture").to_string()));
+            }
+            "roam.dailies_date" => {
+                self.prompt = Some(
+                    Prompt::new(PromptKind::RoamDailyDate, t!("prompt.roam_daily_date").to_string())
+                        .with_input(Self::roam_today()),
+                );
+            }
+            "roam.tag_add" => {
+                self.prompt = Some(Prompt::new(PromptKind::RoamTag, t!("prompt.roam_tag").to_string()));
+            }
+            "roam.alias_add" => {
+                self.prompt = Some(Prompt::new(PromptKind::RoamAlias, t!("prompt.roam_alias").to_string()));
+            }
+            "roam.ref_add" => {
+                self.prompt = Some(Prompt::new(PromptKind::RoamRef, t!("prompt.roam_ref").to_string()));
+            }
+            "roam.graph" => self.roam_graph(),
+            "roam.db_sync" => self.roam_db_sync(),
             _ => return false,
         }
         true
@@ -3541,6 +3590,244 @@ impl App {
         let report = crate::org::time_report(&text);
         self.editor.new_tab_with_content(&report);
         self.status = t!("status.org_time_report").to_string();
+    }
+
+    // ----- Org-roam --------------------------------------------------------
+
+    /// Dispatch a submitted Org-roam prompt to the matching action.
+    fn accept_roam_prompt(&mut self, kind: PromptKind, input: &str) {
+        match kind {
+            PromptKind::RoamFind | PromptKind::RoamCapture => {
+                self.roam_visit_or_create(input);
+            }
+            PromptKind::RoamInsert => self.roam_insert_link(input),
+            PromptKind::RoamDailyCapture => self.roam_daily_capture(input),
+            PromptKind::RoamDailyDate if !input.is_empty() => self.roam_open_daily(input),
+            PromptKind::RoamTag if !input.is_empty() => {
+                let tag = input.to_string();
+                self.roam_rewrite_active(|t| crate::roam::add_filetag(t, &tag));
+            }
+            PromptKind::RoamAlias if !input.is_empty() => {
+                let alias = input.to_string();
+                self.roam_rewrite_active(|t| crate::roam::append_property(t, "ROAM_ALIASES", &format!("\"{alias}\"")));
+            }
+            PromptKind::RoamRef if !input.is_empty() => {
+                let r = input.to_string();
+                self.roam_rewrite_active(|t| crate::roam::append_property(t, "ROAM_REFS", &r));
+            }
+            _ => {}
+        }
+    }
+
+    /// Today's date as `YYYY-MM-DD` in the local zone.
+    fn roam_today() -> String {
+        jiff::Zoned::now().strftime("%Y-%m-%d").to_string()
+    }
+
+    /// Every `.org` file in the project as `(relative-name, content)` pairs.
+    fn roam_node_files(&self) -> Vec<(String, String)> {
+        let mut files = Vec::new();
+        for path in &self.file_index {
+            if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("org"))
+                && let Ok(content) = std::fs::read_to_string(path)
+            {
+                let name = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().into_owned();
+                files.push((name, content));
+            }
+        }
+        files
+    }
+
+    /// Find a node by title (case-insensitive) among the project's `.org` files.
+    fn roam_find_by_title(&self, title: &str) -> Option<PathBuf> {
+        let want = title.trim().to_ascii_lowercase();
+        for path in &self.file_index {
+            if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("org"))
+                && let Ok(content) = std::fs::read_to_string(path)
+                && crate::roam::node_title(&content).is_some_and(|t| t.to_ascii_lowercase() == want)
+            {
+                return Some(path.clone());
+            }
+        }
+        None
+    }
+
+    /// Write `content` to `path`, then open it and refresh the file index. Reports
+    /// failures on the message line. Returns whether the write succeeded.
+    fn roam_write_and_open(&mut self, path: &Path, content: &str) -> bool {
+        if let Some(parent) = path.parent()
+            && let Err(e) = std::fs::create_dir_all(parent)
+        {
+            self.messages.error(t!("msg.save_failed", error = e).to_string());
+            return false;
+        }
+        if let Err(e) = std::fs::write(path, content) {
+            self.messages.error(t!("msg.save_failed", error = e).to_string());
+            return false;
+        }
+        self.build_file_index();
+        self.explorer.rebuild();
+        self.open_path(path, false);
+        true
+    }
+
+    /// Find a node by title and open it, or create a new node file for it.
+    /// Returns the node's `:ID:` (existing or freshly minted) when available.
+    fn roam_visit_or_create(&mut self, title: &str) -> Option<String> {
+        let title = title.trim();
+        if title.is_empty() {
+            return None;
+        }
+        if let Some(path) = self.roam_find_by_title(title) {
+            let id = std::fs::read_to_string(&path).ok().and_then(|c| crate::roam::node_id(&c));
+            self.open_path(&path, false);
+            return id;
+        }
+        let id = crate::uuid_tool::v4();
+        let path = self.root.join(format!("{}.org", crate::roam::slugify(title)));
+        let body = crate::roam::new_node(title, &id);
+        if self.roam_write_and_open(&path, &body) {
+            self.status = t!("status.roam_created", title = title).to_string();
+            Some(id)
+        } else {
+            None
+        }
+    }
+
+    /// Org-roam: insert a link to a node (found or created) at the cursor. Unlike
+    /// find/capture this never leaves the buffer the user is editing — a freshly
+    /// created node file is written to disk but not opened.
+    fn roam_insert_link(&mut self, title: &str) {
+        let title = title.trim().to_string();
+        if title.is_empty() {
+            return;
+        }
+        let id = if let Some(path) = self.roam_find_by_title(&title) {
+            std::fs::read_to_string(&path).ok().and_then(|c| crate::roam::node_id(&c))
+        } else {
+            let id = crate::uuid_tool::v4();
+            let path = self.root.join(format!("{}.org", crate::roam::slugify(&title)));
+            let body = crate::roam::new_node(&title, &id);
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            match std::fs::write(&path, &body) {
+                Ok(()) => {
+                    self.build_file_index();
+                    self.explorer.rebuild();
+                    Some(id)
+                }
+                Err(e) => {
+                    self.messages.error(t!("msg.save_failed", error = e).to_string());
+                    None
+                }
+            }
+        };
+        let link = id.map_or_else(
+            || format!("[[file:{}.org][{title}]]", crate::roam::slugify(&title)),
+            |id| crate::roam::node_link(&id, &title),
+        );
+        self.insert_content(&link);
+    }
+
+    /// Org-roam: jump to a randomly chosen node.
+    fn roam_node_random(&mut self) {
+        let paths: Vec<PathBuf> = self
+            .file_index
+            .iter()
+            .filter(|p| {
+                p.extension().is_some_and(|e| e.eq_ignore_ascii_case("org"))
+                    && std::fs::read_to_string(p).ok().and_then(|c| crate::roam::node_title(&c)).is_some()
+            })
+            .cloned()
+            .collect();
+        if paths.is_empty() {
+            self.status = t!("status.roam_no_nodes").to_string();
+            return;
+        }
+        let seed = usize::try_from(jiff::Zoned::now().timestamp().subsec_nanosecond().unsigned_abs()).unwrap_or(0);
+        let path = paths[seed % paths.len()].clone();
+        self.open_path(&path, false);
+    }
+
+    /// Org-roam: compile a backlinks buffer for the active node into a new tab.
+    fn roam_backlinks(&mut self) {
+        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else { return };
+        let id = crate::roam::node_id(&text).unwrap_or_default();
+        let title = crate::roam::node_title(&text).unwrap_or_default();
+        if id.is_empty() && title.is_empty() {
+            self.status = t!("status.roam_not_node").to_string();
+            return;
+        }
+        let files = self.roam_node_files();
+        let buffer = crate::roam::backlinks(&id, &title, &files);
+        self.editor.new_tab_with_content(&buffer);
+        self.status = t!("status.roam_backlinks", title = title).to_string();
+    }
+
+    /// Org-roam: open (creating if needed) the daily note for `date`.
+    fn roam_open_daily(&mut self, date: &str) {
+        let path = self.root.join(crate::roam::DAILIES_DIR).join(crate::roam::daily_filename(date));
+        if path.exists() {
+            self.open_path(&path, false);
+            return;
+        }
+        let body = crate::roam::daily_template(date, &crate::uuid_tool::v4());
+        if self.roam_write_and_open(&path, &body) {
+            self.status = t!("status.roam_created", title = date).to_string();
+        }
+    }
+
+    /// Org-roam: append a timestamped entry to today's daily note, opening it.
+    fn roam_daily_capture(&mut self, text: &str) {
+        let text = text.trim();
+        if text.is_empty() {
+            return;
+        }
+        let date = Self::roam_today();
+        let path = self.root.join(crate::roam::DAILIES_DIR).join(crate::roam::daily_filename(&date));
+        let time = jiff::Zoned::now().strftime("%H:%M").to_string();
+        let entry = crate::roam::daily_entry(&time, text);
+        let mut content = std::fs::read_to_string(&path)
+            .unwrap_or_else(|_| crate::roam::daily_template(&date, &crate::uuid_tool::v4()));
+        if !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push_str(&entry);
+        if self.roam_write_and_open(&path, &content) {
+            self.status = t!("status.roam_daily_captured").to_string();
+        }
+    }
+
+    /// Rewrite the active buffer's content through `f` (an org-roam metadata edit).
+    fn roam_rewrite_active(&mut self, f: impl FnOnce(&str) -> String) {
+        let Some(tab) = self.editor.active_tab_mut() else { return };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        let new = f(&text);
+        if new != text {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(line);
+            tab.dirty = true;
+        }
+    }
+
+    /// Org-roam: build a Mermaid graph of all nodes and links into a new tab.
+    fn roam_graph(&mut self) {
+        let files = self.roam_node_files();
+        let graph = crate::roam::graph(&files);
+        self.editor.new_tab_with_content(&graph);
+        self.status = t!("status.roam_graph").to_string();
+    }
+
+    /// Org-roam: refresh the file index and open a node-index buffer.
+    fn roam_db_sync(&mut self) {
+        self.build_file_index();
+        let files = self.roam_node_files();
+        let index = crate::roam::index(&files);
+        let count = files.iter().filter(|(_, c)| crate::roam::node_title(c).is_some()).count();
+        self.editor.new_tab_with_content(&index);
+        self.status = t!("status.roam_synced", count = count).to_string();
     }
 
     /// Insert generator output (a UUID, ZID, …) at the cursor in the active
@@ -12349,6 +12636,14 @@ impl App {
                     self.insert_content(&format!("* TODO {text}\n"));
                 }
             }
+            PromptKind::RoamFind
+            | PromptKind::RoamInsert
+            | PromptKind::RoamCapture
+            | PromptKind::RoamDailyCapture
+            | PromptKind::RoamDailyDate
+            | PromptKind::RoamTag
+            | PromptKind::RoamAlias
+            | PromptKind::RoamRef => self.accept_roam_prompt(prompt.kind, prompt.input.trim()),
             PromptKind::DebugRepl => {
                 let expr = prompt.input.trim();
                 if !expr.is_empty() {

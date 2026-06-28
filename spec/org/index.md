@@ -43,6 +43,34 @@ Structure commands operate on the headline/line under the cursor; the cursor
 follows a moved subtree. When a command does not apply (e.g. the cursor is not on
 a headline, or there is no sibling to swap with), the status bar says so.
 
+## Roam
+
+The **Org → Roam** submenu brings [Org-roam](https://www.orgroam.com/)-style
+networked, Zettelkasten note-taking to a directory of `.org` files. A **node** is
+an `.org` file with an `:ID:` property and a `#+title:`; nodes link to one another
+with `[[id:<id>][Title]]` links, forming a graph. The pure logic lives in the
+unit-tested `crate::roam` module; the host wires it to prompts and the filesystem.
+
+| Item | Action | Effect |
+| ---- | ------ | ------ |
+| Find Node… | `roam.node_find` | Prompt for a title; open the matching node, or create `<slug>.org` (with a fresh `:ID:`) and open it. |
+| Insert Node Link… | `roam.node_insert` | Prompt for a title; insert an `[[id:…][Title]]` link at the cursor, creating the node file (without leaving the current buffer) if new. |
+| Random Node | `roam.node_random` | Jump to a randomly chosen node. |
+| Capture Node… | `roam.capture` | Prompt for a title and create/open a new node. |
+| Backlinks | `roam.backlinks` | Compile a buffer of *linked* references (files linking to the active node's `:ID:`) and *unlinked* references (files mentioning its title). |
+| Dailies → Today | `roam.dailies_today` | Open (creating if needed) today's daily note `daily/YYYY-MM-DD.org`. |
+| Dailies → Capture Today… | `roam.dailies_capture` | Append a `* HH:MM …` entry to today's daily note. |
+| Dailies → Go to Date… | `roam.dailies_date` | Prompt for a `YYYY-MM-DD` date and open that daily note. |
+| Metadata → Add Tag… | `roam.tag_add` | Add a tag to the node's `#+filetags:` line. |
+| Metadata → Add Alias… | `roam.alias_add` | Append a quoted alias to the `:ROAM_ALIASES:` property. |
+| Metadata → Add Ref… | `roam.ref_add` | Append a URL / cite key to the `:ROAM_REFS:` property. |
+| Graph | `roam.graph` | Build a Mermaid `flowchart` of all nodes and `[[id:…]]` links into a new buffer. |
+| Sync Database | `roam.db_sync` | Re-index the project and open a sortable table of every node (title, file, tags). |
+
+Nodes live in the project root; daily notes live in `daily/`. There is no
+persistent database — *Sync Database* simply re-scans the project's `.org` files,
+matching org-roam's `org-roam-db-sync` semantics in a stateless way.
+
 ## Insertion
 
 Org *content* insertion (snippets, inline markers, blocks) lives under

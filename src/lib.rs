@@ -123,6 +123,7 @@ pub mod org;
 pub mod outline_panel;
 pub mod pomodoro_tool;
 pub mod right_dock;
+pub mod roam;
 pub mod spellcheck;
 pub mod status_bar_panel;
 pub mod system_information_panel;

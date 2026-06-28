@@ -3952,6 +3952,38 @@ menu.item.org.time_report:
   en: "Time Tracker"
 menu.item.org.export:
   en: "Export"
+menu.item.org.roam:
+  en: "Roam"
+menu.item.org.roam.node_find:
+  en: "Find Node…"
+menu.item.org.roam.node_insert:
+  en: "Insert Node Link…"
+menu.item.org.roam.node_random:
+  en: "Random Node"
+menu.item.org.roam.capture:
+  en: "Capture Node…"
+menu.item.org.roam.backlinks:
+  en: "Backlinks"
+menu.item.org.roam.dailies:
+  en: "Dailies"
+menu.item.org.roam.dailies_today:
+  en: "Today"
+menu.item.org.roam.dailies_capture:
+  en: "Capture Today…"
+menu.item.org.roam.dailies_date:
+  en: "Go to Date…"
+menu.item.org.roam.metadata:
+  en: "Metadata"
+menu.item.org.roam.tag_add:
+  en: "Add Tag…"
+menu.item.org.roam.alias_add:
+  en: "Add Alias…"
+menu.item.org.roam.ref_add:
+  en: "Add Ref…"
+menu.item.org.roam.graph:
+  en: "Graph"
+menu.item.org.roam.db_sync:
+  en: "Sync Database"
 menu.name.url:
   en: "URL"
 menu.name.dec:
@@ -10327,6 +10359,22 @@ prompt.org_capture:
   bn: "ক্যাপচার (Org TODO)"
   zh: "捕获 (Org TODO)"
   ja: "キャプチャ (Org TODO)"
+prompt.roam_find:
+  en: "Find or create node (title)"
+prompt.roam_insert:
+  en: "Insert link to node (title)"
+prompt.roam_capture:
+  en: "New node title"
+prompt.roam_daily_capture:
+  en: "Capture into today's daily note"
+prompt.roam_daily_date:
+  en: "Daily note date (YYYY-MM-DD)"
+prompt.roam_tag:
+  en: "Add tag"
+prompt.roam_alias:
+  en: "Add alias"
+prompt.roam_ref:
+  en: "Add ref (URL or cite key)"
 prompt.save_macro:
   en: "Save macro as"
   es: "Guardar macro como"
@@ -11883,6 +11931,20 @@ status.org_exported:
   bn: "নতুন %{ext} বাফারে রপ্তানি করা হয়েছে"
   zh: "已导出到新的 %{ext} 缓冲区"
   ja: "新しい %{ext} バッファにエクスポートしました"
+status.roam_created:
+  en: "Created node: %{title}"
+status.roam_no_nodes:
+  en: "No Org-roam nodes found in the project"
+status.roam_not_node:
+  en: "Active buffer is not a node (no #+title:)"
+status.roam_backlinks:
+  en: "Backlinks for: %{title}"
+status.roam_daily_captured:
+  en: "Captured into today's daily note"
+status.roam_graph:
+  en: "Built a Roam graph (Mermaid)"
+status.roam_synced:
+  en: "Synced %{count} Org-roam nodes"
 status.macro_empty:
   en: "No macro recorded yet"
   es: "Aún no se ha grabado ninguna macro"
