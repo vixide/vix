@@ -650,6 +650,10 @@ const GIT_PULL: &[Item] = &[
 ];
 
 const GIT: &[Item] = &[
+    Item::leaf("menu.item.git.init", "git.init", ""),
+    Item::leaf("menu.item.git.clone", "git.clone", ""),
+    Item::sub("menu.item.git.branch", GIT_BRANCH),
+    SEP,
     Item::leaf("menu.item.git.status", "git.status", ""),
     Item::leaf("menu.item.git.changes", "git.changes", ""),
     Item::sub("menu.item.git.log", GIT_LOG),
@@ -666,8 +670,6 @@ const GIT: &[Item] = &[
     Item::leaf("menu.item.git.conflict_next", "git.conflict_next", ""),
     Item::sub("menu.item.git.resolve", GIT_RESOLVE),
     SEP,
-    Item::sub("menu.item.git.branch", GIT_BRANCH),
-    SEP,
     Item::leaf("menu.item.git.amend", "git.amend", ""),
     Item::leaf("menu.item.git.stash", "git.stash", ""),
     Item::leaf("menu.item.git.stash_pop", "git.stash_pop", ""),
@@ -675,9 +677,6 @@ const GIT: &[Item] = &[
     Item::sub("menu.item.git.pull", GIT_PULL),
     Item::leaf("menu.item.git.push", "git.push", ""),
     Item::leaf("menu.item.git.fetch", "git.fetch", ""),
-    SEP,
-    Item::leaf("menu.item.git.init", "git.init", ""),
-    Item::leaf("menu.item.git.clone", "git.clone", ""),
 ];
 
 /// Headline structure commands, grouped under Org → Headline.
