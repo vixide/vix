@@ -79,6 +79,7 @@ const FILE: &[Item] = &[
     SEP,
     Item::leaf("menu.item.file.open", "file.open", "Ctrl O"),
     Item::leaf("menu.item.file.open_recent", "file.open_recent", "Ctrl Shift O"),
+    Item::leaf("menu.item.file.switch_project", "file.switch_project", ""),
     SEP,
     Item::leaf("menu.item.file.save", "file.save", "Ctrl S"),
     Item::leaf("menu.item.file.save_as", "file.save_as", "Ctrl Shift S"),

@@ -197,9 +197,6 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.task_chooser.is_some() {
         draw_task_chooser(app, frame, area);
     }
-    if app.macro_chooser.is_some() {
-        draw_macro_chooser(app, frame, area);
-    }
     if app.diff_view.is_some() {
         draw_diff_view(app, frame, area);
     }
@@ -251,6 +248,12 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
 /// Second half of the overlay dispatch (split from `draw_overlays` to satisfy the
 /// per-function line limit). Behavior is identical to inlining this dispatch.
 fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.macro_chooser.is_some() {
+        draw_macro_chooser(app, frame, area);
+    }
+    if app.workspace_chooser.is_some() {
+        draw_workspace_chooser(app, frame, area);
+    }
     if app.system_info.is_some() {
         draw_system_info(app, frame, area);
     }
@@ -1071,6 +1074,12 @@ fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), chunks[0]);
     let hint = Line::from(Span::styled(t!("ui.diff_view_hint").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
+}
+
+fn draw_workspace_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(c) = app.workspace_chooser.as_ref() else { return };
+    let hint = t!("ui.projects_hint");
+    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.projects"), &hint, &c.roots, c.selected);
 }
 
 fn draw_macro_chooser(app: &mut App, frame: &mut Frame, area: Rect) {

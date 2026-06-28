@@ -3761,13 +3761,15 @@ fn menu_type_ahead_selects_by_first_letter() {
     for _ in 0..file_idx {
         app.on_key(keycode(KeyCode::Right));
     }
-    // Open File, type S → Save, S → Save As, S again wraps back to Save.
+    // Open File, type S → Switch Project, S → Save, S → Save As, S wraps around.
+    app.on_key(key('s'));
+    assert_eq!(app.menu.selected_action(), Some("file.switch_project"));
     app.on_key(key('s'));
     assert_eq!(app.menu.selected_action(), Some("file.save"));
     app.on_key(key('s'));
     assert_eq!(app.menu.selected_action(), Some("file.save_as"));
     app.on_key(key('s'));
-    assert_eq!(app.menu.selected_action(), Some("file.save"), "wraps around");
+    assert_eq!(app.menu.selected_action(), Some("file.switch_project"), "wraps around");
 
     // A different letter jumps elsewhere (C → Close).
     app.on_key(key('c'));
