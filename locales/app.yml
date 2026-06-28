@@ -3936,6 +3936,8 @@ menu.item.org.move_up:
   en: "Move Subtree Up"
 menu.item.org.move_down:
   en: "Move Subtree Down"
+menu.item.org.update_statistics:
+  en: "Update Statistics"
 menu.item.org.cycle_todo:
   en: "Cycle TODO"
 menu.item.org.toggle_checkbox:

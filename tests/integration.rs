@@ -311,6 +311,36 @@ fn roam_capture_insert_dailies_and_views() {
 }
 
 #[test]
+fn org_checkbox_toggle_updates_parents_and_cookies() {
+    // Move the cursor to a 0-based line by going to the top, then down.
+    fn goto(app: &mut App, line: usize) {
+        for _ in 0..40 {
+            app.on_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        }
+        for _ in 0..line {
+            app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        }
+    }
+
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "* Tasks [/]\n- [ ] call people\n  - [ ] Peter\n  - [ ] Sarah\n");
+
+    // Toggle the "Peter" child (line 2): parent becomes partial, child checked.
+    goto(&mut app, 2);
+    app.run_action("org.toggle_checkbox");
+    let t = app.editor.active_tab().unwrap().text();
+    assert!(t.contains("- [-] call people"), "parent partial: {t:?}");
+    assert!(t.contains("  - [x] Peter"), "child checked: {t:?}");
+
+    // Toggle "Sarah" (line 3): parent and the top-level item become fully checked.
+    goto(&mut app, 3);
+    app.run_action("org.toggle_checkbox");
+    let t = app.editor.active_tab().unwrap().text();
+    assert!(t.contains("- [X] call people"), "parent checked: {t:?}");
+    assert!(t.contains("* Tasks [1/1]"), "headline cookie counts the top-level checkbox: {t:?}");
+}
+
+#[test]
 fn org_menu_edits_headlines_and_exports() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "* Task\nbody");

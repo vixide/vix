@@ -735,6 +735,7 @@ const ORG: &[Item] = &[
     Item::sub("menu.item.org.headline", ORG_HEADLINE),
     Item::leaf("menu.item.org.cycle_todo", "org.cycle_todo", ""),
     Item::leaf("menu.item.org.toggle_checkbox", "org.toggle_checkbox", ""),
+    Item::leaf("menu.item.org.update_statistics", "org.update_statistics", ""),
     SEP,
     Item::leaf("menu.item.org.clock_in", "org.clock_in", ""),
     Item::leaf("menu.item.org.clock_out", "org.clock_out", ""),

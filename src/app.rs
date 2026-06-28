@@ -3449,8 +3449,15 @@ impl App {
             "org.cycle_visibility" => self.run_action("editor.fold_toggle"),
             "org.promote" => self.org_rewrite_line(crate::org::promote),
             "org.demote" => self.org_rewrite_line(crate::org::demote),
-            "org.cycle_todo" => self.org_rewrite_line(crate::org::cycle_todo),
-            "org.toggle_checkbox" => self.org_rewrite_line(crate::org::toggle_checkbox),
+            "org.cycle_todo" => {
+                self.org_rewrite_line(crate::org::cycle_todo);
+                self.org_refresh_statistics();
+            }
+            "org.toggle_checkbox" => {
+                self.org_rewrite_line(crate::org::toggle_checkbox);
+                self.org_refresh_statistics();
+            }
+            "org.update_statistics" => self.org_refresh_statistics(),
             "org.move_up" => self.org_move_subtree(crate::org::move_subtree_up),
             "org.move_down" => self.org_move_subtree(crate::org::move_subtree_down),
             "org.export_markdown" => self.org_export(crate::org::to_markdown, "md"),
@@ -3510,6 +3517,22 @@ impl App {
             tab.dirty = true;
         } else {
             self.status = t!("status.org_not_headline").to_string();
+        }
+    }
+
+    /// Recompute every checkbox parent state and statistics cookie in the active
+    /// buffer, keeping the cursor line. Runs after a checkbox toggle or TODO cycle
+    /// (so children update their parents and cookies) and from Org → Update
+    /// Statistics. No-op when nothing changes.
+    fn org_refresh_statistics(&mut self) {
+        let Some(tab) = self.editor.active_tab_mut() else { return };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        let new = crate::org::update_statistics(&text);
+        if new != text {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(line);
+            tab.dirty = true;
         }
     }
 

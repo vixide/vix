@@ -28,6 +28,7 @@ The **Org** menu (`Alt+O`):
 | Headline → Move Subtree Down | `org.move_down` | Swap the subtree with the next sibling. |
 | Cycle TODO | `org.cycle_todo` | Cycle the headline keyword: none → `TODO` → `DONE` → none. |
 | Toggle Checkbox | `org.toggle_checkbox` | Toggle a list item's `[ ]` ⇄ `[x]`. |
+| Update Statistics | `org.update_statistics` | Recompute every checkbox parent state and `[/]`/`[%]` cookie in the buffer. |
 | Clock In | `org.clock_in` | Insert an open `CLOCK: [now]` entry at the cursor (local time). |
 | Clock Out | `org.clock_out` | Close the most recent open `CLOCK:` entry with the end time and `=> H:MM` duration. |
 | Agenda Tracker | `org.agenda` | Compile `DEADLINE:`/`SCHEDULED:` items and `TODO` headlines from every `.org` file in the project into a single dated agenda buffer. |
@@ -42,6 +43,29 @@ from the `=> H:MM` totals Org writes.
 Structure commands operate on the headline/line under the cursor; the cursor
 follows a moved subtree. When a command does not apply (e.g. the cursor is not on
 a headline, or there is no sibling to swap with), the status bar says so.
+
+### Checkbox & statistics cookies
+
+A checkbox list item with sub-items reflects their state: all children checked →
+`[X]`, none → `[ ]`, otherwise → `[-]` (partial). A *statistics cookie* —
+`[/]`/`[n/m]` (fraction) or `[%]`/`[n%]` (percent) — written anywhere in a
+headline or parent list item counts its children:
+
+```
+* Organize Party [33%]
+** TODO Call people [1/2]
+*** TODO Peter
+*** DONE Sarah
+** TODO Buy food
+** DONE Talk to neighbor
+```
+
+A headline cookie counts child checkboxes if its body has top-level checkboxes,
+otherwise direct child TODO headlines. The `:COOKIE_DATA:` property resolves the
+ambiguity (`checkbox` or `todo`); adding `recursive` counts TODO entries in the
+whole subtree, not just direct children. Cookies and parent checkboxes are
+recomputed automatically after **Toggle Checkbox** / **Cycle TODO**, and on
+demand via **Update Statistics**. The pure builder is `org::update_statistics`.
 
 ## Roam
 
