@@ -120,6 +120,8 @@ const EDIT: &[Item] = &[
     SEP,
     Item::leaf("menu.item.edit.record_macro", "toggle_macro", ""),
     Item::leaf("menu.item.edit.play_macro", "play_macro", ""),
+    Item::leaf("menu.item.edit.save_macro", "macro.save", ""),
+    Item::leaf("menu.item.edit.play_saved_macro", "macro.play_saved", ""),
 ];
 
 /// Cursor jump commands, grouped under Edit → Go.

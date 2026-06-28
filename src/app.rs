@@ -115,6 +115,8 @@ pub enum PromptKind {
     ExplorerExclude,
     /// Enter a file path to compare the active buffer against (diff overlay).
     CompareFile,
+    /// Enter a name to save the just-recorded keyboard macro under.
+    SaveMacro,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -422,6 +424,15 @@ pub struct SnippetSession {
     pub stops: Vec<(usize, usize)>,
     /// Index of the current tabstop within `stops`.
     pub index: usize,
+}
+
+/// The saved-macro chooser (Edit → Play Saved Macro…): the persisted macros and
+/// the highlighted row. Choosing one loads its keys and replays them.
+pub struct MacroChooser {
+    /// Saved macros, in file order.
+    pub macros: Vec<crate::macros::Macro>,
+    /// Index of the highlighted macro.
+    pub selected: usize,
 }
 
 /// The spell-suggestion popup (Ctrl+;): corrections for the misspelled word at
@@ -803,6 +814,8 @@ pub struct App {
     pub branch_chooser: Option<BranchChooser>,
     /// Task chooser overlay (Tools → Tasks…), when open.
     pub task_chooser: Option<TaskChooser>,
+    /// Saved-macro chooser overlay (Edit → Play Saved Macro…), when open.
+    pub macro_chooser: Option<MacroChooser>,
     /// Read-only diff overlay (Tools → Compare With File…), when open.
     pub diff_view: Option<DiffViewState>,
     /// Recent-files chooser overlay, when open.
@@ -1097,7 +1110,7 @@ impl App {
             menu: Menu::default(),
             palette: None, search: None, query_replace: None, workspace_search: None,
             prompt: None, paste: None, confirm: None, replace_confirm: None, unsaved: None, spell_suggest: None,
-            context_menu: None, git_panel: None, branch_chooser: None, task_chooser: None, diff_view: None, recent_chooser: None,
+            context_menu: None, git_panel: None, branch_chooser: None, task_chooser: None, macro_chooser: None, diff_view: None, recent_chooser: None,
             location_chooser: None, nerd_palette: None, ascii_panel: None, edit_table: None,
             edit_outline: None, edit_value: None, edit_bytes: None, qrcode: None,
             x11_panel: None,
@@ -1527,6 +1540,7 @@ impl App {
         panel!(git_panel, git_panel_key);
         panel!(branch_chooser, branch_key);
         panel!(task_chooser, tasks_key);
+        panel!(macro_chooser, macro_key);
         panel!(diff_view, diff_view_key);
         if self.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
             self.paste_key(key);
@@ -2776,6 +2790,8 @@ impl App {
                 }
             }
             "play_macro" => self.play_macro(),
+            "macro.save" => self.begin_save_macro(),
+            "macro.play_saved" => self.open_macro_chooser(),
             "autocomplete" => self.autocomplete(true),
             "cycle_autocomplete_back" => self.autocomplete(false),
             "command_mode" => self.open_palette(),
@@ -5055,6 +5071,79 @@ impl App {
         self.status = t!("status.macro_played").to_string();
     }
 
+    /// Prompt for a name to save the just-recorded macro under (persisted to
+    /// `macros.toml`). No-ops with a status note when nothing was recorded.
+    fn begin_save_macro(&mut self) {
+        if self.macro_keys.is_empty() {
+            self.status = t!("status.macro_empty").to_string();
+            return;
+        }
+        self.prompt = Some(Prompt::new(PromptKind::SaveMacro, t!("prompt.save_macro").to_string()));
+    }
+
+    /// Persist the recorded macro under `name` to `macros.toml`.
+    fn save_macro(&mut self, name: &str) {
+        let name = name.trim();
+        if name.is_empty() || self.macro_keys.is_empty() {
+            return;
+        }
+        let Some(path) = Settings::macros_path() else { return };
+        let mac = crate::macros::Macro { name: name.to_string(), keys: crate::macros::encode(&self.macro_keys) };
+        match crate::macros::upsert(&path, mac) {
+            Ok(()) => self.status = t!("status.macro_saved", name = name).to_string(),
+            Err(e) => self.messages.error(t!("msg.save_failed", error = e).to_string()),
+        }
+    }
+
+    /// Open the saved-macro chooser, or report when none are saved.
+    fn open_macro_chooser(&mut self) {
+        let macros = Settings::macros_path().map(|p| crate::macros::load(&p)).unwrap_or_default();
+        if macros.is_empty() {
+            self.status = t!("status.no_macros").to_string();
+            return;
+        }
+        self.macro_chooser = Some(MacroChooser { macros, selected: 0 });
+    }
+
+    fn macro_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => {
+                if let Some(c) = self.macro_chooser.as_mut() {
+                    let n = c.macros.len();
+                    c.selected = (c.selected + n - 1) % n;
+                }
+            }
+            KeyCode::Down => {
+                if let Some(c) = self.macro_chooser.as_mut() {
+                    c.selected = (c.selected + 1) % c.macros.len();
+                }
+            }
+            KeyCode::Enter => self.run_selected_macro(),
+            KeyCode::Esc => self.macro_chooser = None,
+            _ => {}
+        }
+    }
+
+    fn macro_mouse(&mut self, mouse: MouseEvent) {
+        if let Some(idx) = self.chooser_row(mouse)
+            && let Some(c) = self.macro_chooser.as_mut()
+            && idx < c.macros.len()
+        {
+            c.selected = idx;
+            self.run_selected_macro();
+        }
+    }
+
+    /// Load the highlighted saved macro into the active macro buffer and play it.
+    fn run_selected_macro(&mut self) {
+        let Some(c) = self.macro_chooser.take() else { return };
+        if let Some(mac) = c.macros.get(c.selected) {
+            self.macro_keys = crate::macros::decode(&mac.keys);
+            self.focus = Focus::Editor;
+            self.play_macro();
+        }
+    }
+
     /// Buffer-word autocomplete: complete the word before the cursor from other
     /// words in the buffer, cycling on repeated calls (`forward` chooses the
     /// direction). Like classic "dynamic abbreviation" expansion.
@@ -6248,6 +6337,7 @@ impl App {
         panel!(git_panel, git_panel_mouse);
         panel!(branch_chooser, branch_mouse);
         panel!(task_chooser, tasks_mouse);
+        panel!(macro_chooser, macro_mouse);
         panel!(outline, outline_mouse);
         // The find / replace box: a left click focuses the Find or Replace field.
         panel!(search, search_mouse);
@@ -10931,6 +11021,7 @@ impl App {
                 self.explorer.set_filter(&include, prompt.input.trim());
             }
             PromptKind::CompareFile => self.open_diff_with(prompt.input.trim()),
+            PromptKind::SaveMacro => self.save_macro(prompt.input.trim()),
         }
     }
 

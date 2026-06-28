@@ -274,6 +274,15 @@ impl Settings {
             .ok()
             .and_then(|p| p.parent().map(|d| d.join("user_dictionary.txt")))
     }
+
+    /// File holding saved keyboard macros (`<config dir>/macros.toml`), or `None`
+    /// if the config location cannot be determined.
+    #[must_use]
+    pub fn macros_path() -> Option<std::path::PathBuf> {
+        confy::get_configuration_file_path(APP_NAME, Some(CONFIG_NAME))
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join("macros.toml")))
+    }
 }
 
 #[cfg(test)]

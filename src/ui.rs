@@ -197,6 +197,9 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.task_chooser.is_some() {
         draw_task_chooser(app, frame, area);
     }
+    if app.macro_chooser.is_some() {
+        draw_macro_chooser(app, frame, area);
+    }
     if app.diff_view.is_some() {
         draw_diff_view(app, frame, area);
     }
@@ -1068,6 +1071,13 @@ fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), chunks[0]);
     let hint = Line::from(Span::styled(t!("ui.diff_view_hint").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
+}
+
+fn draw_macro_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(c) = app.macro_chooser.as_ref() else { return };
+    let labels: Vec<String> = c.macros.iter().map(|m| format!("{} ({} keys)", m.name, m.keys.len())).collect();
+    let hint = t!("ui.macros_hint");
+    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.macros"), &hint, &labels, c.selected);
 }
 
 fn draw_task_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
