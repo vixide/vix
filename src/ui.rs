@@ -285,6 +285,9 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.x11_panel.is_some() {
         draw_x11_panel(app, frame, area);
     }
+    if app.media_type_panel.is_some() {
+        draw_media_type_panel(app, frame, area);
+    }
     if app.html_panel.is_some() {
         draw_html_panel(app, frame, area);
     }
@@ -3134,6 +3137,90 @@ fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         width: row_area.width,
         height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[1].height),
     };
+}
+
+fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.media_type_panel.is_none() {
+        return;
+    }
+    let table = crate::media_type::all();
+    let width = 64u16.min(area.width);
+    let height = (area.height.saturating_sub(4)).max(6).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 4,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let p = app.media_type_panel.as_ref().unwrap();
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::CODE, t!("ui.media_types")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    // Filter line: a typed query, or a dim prompt when empty.
+    let filter = if p.query.is_empty() {
+        Line::from(Span::styled(t!("ui.media_types_filter").to_string(), theme::dim()))
+    } else {
+        Line::from(vec![Span::styled("/ ", theme::dim()), Span::raw(p.query.clone())])
+    };
+    frame.render_widget(Paragraph::new(filter), chunks[0]);
+
+    let view_h = chunks[1].height as usize;
+    if let Some(p) = app.media_type_panel.as_mut() {
+        p.ensure_visible(view_h);
+    }
+    let p = app.media_type_panel.as_ref().unwrap();
+    let filtered = p.matches();
+    let total = filtered.len();
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for (row, &idx) in filtered.iter().enumerate().skip(p.scroll).take(view_h) {
+        let m = &table[idx];
+        let text = format!(" {:34} {:8} {}", trunc(m.media_type, 34), trunc(m.extension, 8), m.description);
+        let line = if row == p.selected {
+            Line::from(Span::styled(text, theme::selected()))
+        } else {
+            Line::from(Span::raw(text))
+        };
+        lines.push(line);
+    }
+    let show_bar = total > view_h && chunks[1].width > 1;
+    let row_area = if show_bar { Rect { width: chunks[1].width - 1, ..chunks[1] } } else { chunks[1] };
+    frame.render_widget(Paragraph::new(lines), row_area);
+    if show_bar {
+        let sb_area = Rect { x: chunks[1].x + chunks[1].width - 1, ..chunks[1] };
+        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
+    }
+
+    let hint = Line::from(Span::styled(t!("ui.media_types_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[2]);
+
+    app.layout.media_type_panel = Rect {
+        x: chunks[1].x,
+        y: chunks[1].y,
+        width: row_area.width,
+        height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[1].height),
+    };
+}
+
+/// Truncate `s` to `max` columns, adding an ellipsis when clipped.
+fn trunc(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        let keep = max.saturating_sub(1);
+        format!("{}…", s.chars().take(keep).collect::<String>())
+    }
 }
 
 fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {

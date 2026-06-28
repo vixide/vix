@@ -24,6 +24,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Media types.** A new **Tools → Media Types** picker lists common media types
+  (MIME) with descriptions and extensions; type to filter, Enter to insert at the
+  cursor. Opens pre-selected to the current file's type. Backed by the curated
+  `spec/media-types/media-types.tsv` and the `media_type` module (with
+  `for_extension` lookup). See `spec/media-types/index.md`.
 - **Org mode (basics).** A new top-level **Org** menu (`Alt+O`) brings headline
   structure editing (promote/demote and move subtree across siblings), fold
   cycling, TODO cycling (none → `TODO` → `DONE`), checkbox toggling, and export to

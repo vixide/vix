@@ -116,6 +116,7 @@ pub mod left_dock;
 pub mod locale_model;
 pub mod lorem;
 pub mod lsp_core;
+pub mod media_type;
 pub mod nerd_font_picker;
 pub mod org;
 pub mod outline_panel;
