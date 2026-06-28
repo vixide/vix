@@ -2,7 +2,7 @@
 
 The **Edit Outline** command opens a hierarchical hide/show and restructuring
 surface for prose text — code folding, but for prose, and a file-explorer-style
-tree of the buffer's lines. Open it with **Tools → Edit Outline…** or the command
+tree of the buffer's lines. Open it with **Edit → Mode → Outline…** or the command
 palette (*Edit Outline*); it reads the active buffer as an indented outline. Its
 logic lives in the `edit_outline` module; the host (`app`/`ui`) renders the
 visible items, syncs the scroll window, and persists saves.

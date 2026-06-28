@@ -7,7 +7,7 @@ parser and serializer differ.
 
 ## Opening
 
-Open it from **Tools → Edit JSON…** or the command palette (*Edit JSON*). The
+Open it from **Edit → Mode → JSON…** or the command palette (*Edit JSON*). The
 buffer is parsed into a tree; object key order is preserved, and numbers keep
 their original textual form so they round-trip unchanged. If the buffer is not
 valid JSON (or YAML), Vix says so instead of opening.

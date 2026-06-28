@@ -6,7 +6,7 @@ editor, navigation, and editing keys — only the file format differs.
 
 ## Opening
 
-Open it from **Tools → Edit YAML…** or the command palette (*Edit YAML*). The
+Open it from **Edit → Mode → YAML…** or the command palette (*Edit YAML*). The
 buffer is parsed into a tree (mapping key order preserved). If it is not valid
 YAML, Vix says so instead of opening.
 

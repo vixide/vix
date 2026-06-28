@@ -3,7 +3,7 @@
 The **Edit Bytes** command shows the active buffer's bytes as a classic hex dump
 — an offset column, sixteen hex byte pairs, and an ASCII gutter — and lets the
 user move a byte cursor and overwrite bytes by typing hex digits. Open it with
-**Tools → Edit Bytes…** or the command palette. The logic lives in the
+**Edit → Mode → Bytes…** or the command palette. The logic lives in the
 `edit_bytes` module; the host (`app`/`ui`) renders the dump, syncs the scroll
 window, and persists saves.
 

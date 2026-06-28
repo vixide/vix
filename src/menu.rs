@@ -116,6 +116,7 @@ const EDIT: &[Item] = &[
     Item::sub("menu.item.edit.go_menu", EDIT_GO),
     Item::sub("menu.item.edit.find_menu", EDIT_FIND),
     Item::sub("menu.item.edit.case", EDIT_CASE),
+    Item::sub("menu.item.edit.mode", EDIT_MODE),
     SEP,
     Item::leaf("menu.item.edit.toggle_comment", "edit.toggle_comment", "Ctrl /"),
     SEP,
@@ -176,6 +177,16 @@ const EDIT_SELECT: &[Item] = &[
     Item::leaf("menu.item.edit.column_select_down", "edit.column_select_down", "Alt Shift ↓"),
     Item::leaf("menu.item.edit.column_select_up", "edit.column_select_up", "Alt Shift ↑"),
     Item::leaf("menu.item.edit.select_all", "edit.select_all", "Ctrl A"),
+];
+
+/// Type-specific edit surfaces, grouped under Edit → Mode. Each opens the active
+/// buffer in a structured editor overlay.
+const EDIT_MODE: &[Item] = &[
+    Item::leaf("menu.item.edit.mode.table", "tools.edit_table", ""),
+    Item::leaf("menu.item.edit.mode.outline", "tools.edit_outline", ""),
+    Item::leaf("menu.item.edit.mode.json", "tools.edit_json", ""),
+    Item::leaf("menu.item.edit.mode.yaml", "tools.edit_yaml", ""),
+    Item::leaf("menu.item.edit.mode.bytes", "tools.edit_bytes", ""),
 ];
 
 /// Case transforms applied to the selection, grouped under Edit → Case.
@@ -475,11 +486,6 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.color_converter", "tools.color_converter", ""),
     Item::leaf("menu.item.tools.convert.unit", "tools.convert.unit", ""),
     Item::leaf("menu.item.tools.markdown_preview", "tools.markdown_preview", ""),
-    Item::leaf("menu.item.tools.edit_table", "tools.edit_table", ""),
-    Item::leaf("menu.item.tools.edit_outline", "tools.edit_outline", ""),
-    Item::leaf("menu.item.tools.edit_json", "tools.edit_json", ""),
-    Item::leaf("menu.item.tools.edit_yaml", "tools.edit_yaml", ""),
-    Item::leaf("menu.item.tools.edit_bytes", "tools.edit_bytes", ""),
     Item::leaf("menu.item.tools.qrcode", "tools.qrcode", ""),
     Item::leaf("menu.item.tools.snippets", "tools.snippets", ""),
     SEP,
@@ -1132,6 +1138,25 @@ mod tests {
         assert!(!m.subsub_open && m.sub_open);
         m.left();
         assert!(!m.sub_open);
+    }
+
+    #[test]
+    fn edit_mode_submenu_hosts_the_edit_surfaces() {
+        let edit = menus().iter().find(|m| m.name == "menu.edit").unwrap();
+        let mode = edit
+            .items
+            .iter()
+            .find(|it| it.label == "menu.item.edit.mode")
+            .and_then(|it| it.submenu)
+            .expect("Edit has a Mode submenu");
+        let actions: Vec<&str> = mode.iter().map(|it| it.action).collect();
+        assert_eq!(
+            actions,
+            vec!["tools.edit_table", "tools.edit_outline", "tools.edit_json", "tools.edit_yaml", "tools.edit_bytes"]
+        );
+        // The edit surfaces no longer live in the Tools menu.
+        let tools = menus().iter().find(|m| m.name == "menu.tools").unwrap();
+        assert!(!tools.items.iter().any(|it| it.action == "tools.edit_table"));
     }
 
     #[test]

@@ -2,7 +2,7 @@
 
 The **Edit Table** command opens a spreadsheet-like grid for viewing and editing
 delimited data — **CSV** and **TSV** — as rows and columns. Open it with
-**Tools → Edit Table…** or the command palette (*Edit Table*); it parses
+**Edit → Mode → Table…** or the command palette (*Edit Table*); it parses
 the active buffer (CSV by default, TSV when the file extension is `.tsv`). Its
 logic lives in the `edit_table` module; the host (`app`/`ui`) renders the grid,
 syncs the scroll window, and persists saves.

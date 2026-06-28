@@ -26,7 +26,7 @@ Highlights:
   [ASCII Picker](ascii-code-picker/index.md),
   [System Information](system-information-panel/index.md), and more under
   `docs/`.
-- Edit surfaces (Tools menu): [Edit Table](edit-table/index.md) ·
+- Edit surfaces (Edit → Mode): [Edit Table](edit-table/index.md) ·
   [Edit Outline](edit-outline/index.md) · [Edit JSON](edit-json/index.md) ·
   [Edit YAML](edit-yaml/index.md) · [Edit Bytes](edit-bytes/index.md).
 - Generators & editing: [Insert](insert/index.md) (UUID, ZID, Markdown, HTML,

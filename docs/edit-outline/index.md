@@ -7,7 +7,7 @@ keys and saves back to the buffer.
 
 ## Opening
 
-Open it from **Tools → Edit Outline…** or the command palette (*Edit Outline*).
+Open it from **Edit → Mode → Outline…** or the command palette (*Edit Outline*).
 Each line becomes an outline item whose **level** is its indentation depth —
 leading tabs, or two spaces per level, auto-detected from the buffer.
 

@@ -3,7 +3,7 @@
 The **Edit JSON** and **Edit YAML** commands open a foldable tree over the active
 buffer's structured data — objects, arrays, and scalars — and let the user
 collapse/expand containers, navigate, and edit scalar values. It is code folding,
-but for structured data. Open them with **Tools → Edit JSON…** / **Edit YAML…**
+but for structured data. Open them with **Edit → Mode → JSON…** / **Edit → Mode → YAML…**
 or the command palette. The logic lives in the `edit_value` module; the host
 (`app`/`ui`) renders the rows, syncs the scroll window, and persists saves.
 
