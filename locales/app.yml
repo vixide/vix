@@ -3563,6 +3563,38 @@ menu.item.tools.insert.sql.create_table:
   bn: "টেবিল তৈরি"
   zh: "创建表"
   ja: "テーブルを作成"
+menu.item.tools.insert.latex.headline:
+  en: "Headline"
+menu.item.tools.insert.latex.subheadline:
+  en: "Subheadline"
+menu.item.tools.insert.latex.link:
+  en: "Link"
+menu.item.tools.insert.latex.bold:
+  en: "Bold"
+menu.item.tools.insert.latex.italic:
+  en: "Italic"
+menu.item.tools.insert.latex.underline:
+  en: "Underline"
+menu.item.tools.insert.latex.table:
+  en: "Table"
+menu.item.tools.insert.latex.deadline:
+  en: "Deadline"
+menu.item.tools.insert.latex.scheduled:
+  en: "Scheduled"
+menu.item.tools.insert.latex.time_range:
+  en: "Time Range"
+menu.item.tools.insert.latex.timestamp:
+  en: "Timestamp"
+menu.item.tools.insert.latex.timestamp_repeater:
+  en: "Timestamp Repeater"
+menu.item.tools.insert.latex.quote:
+  en: "Quote"
+menu.item.tools.insert.latex.verse:
+  en: "Verse"
+menu.item.tools.insert.latex.center:
+  en: "Center"
+menu.item.tools.insert.latex.drawer:
+  en: "Drawer"
 menu.item.tools.insert.lorem.words:
   en: "Words"
   es: "Palabras"
@@ -3690,6 +3722,8 @@ menu.name.markdown:
   en: "Markdown"
 menu.name.sql:
   en: "SQL"
+menu.name.latex:
+  en: "LaTeX"
 menu.name.url:
   en: "URL"
 menu.name.dec:

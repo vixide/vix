@@ -34,6 +34,13 @@ Usage**, and **Create Table** (with an identity key, timestamps, an `updated_at`
 trigger, and a trigram GIN index). The snippets use placeholders (`alice`,
 `items`) meant to be edited after insertion.
 
+## LaTeX
+
+**Insert → LaTeX** drops in Org/LaTeX-style markup: headlines (`* `, `** `), a
+link, **bold**/*italic*/_underline_, a table, Org planning lines (Deadline,
+Scheduled), timestamps (plain, range, repeater), block constructs (Quote, Verse,
+Center), and a Drawer. The placeholder text is meant to be edited after insertion.
+
 ## Lorem ipsum
 
 **Insert → Lorem ipsum** inserts placeholder text — Words, a Sentence, or a

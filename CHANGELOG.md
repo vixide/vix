@@ -100,6 +100,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   messages work.
 - **Searchable keyboard-shortcut browser.** The Help → Shortcuts overlay (`F1`)
   now has a search field — type to filter shortcuts by key or description.
+- **Tools → Insert → LaTeX** submenu — inserts Org/LaTeX markup snippets
+  (headlines, link, bold/italic/underline, table, deadline/scheduled, timestamps,
+  quote/verse/center blocks, drawer).
 - **Tools → Insert → SQL** submenu — inserts ready-to-edit PostgreSQL snippets:
   Alter Role, Create Extension, Create Function, Create User, Grant Create, Grant
   Usage, and Create Table (with trigger + trigram index).
