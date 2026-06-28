@@ -27,6 +27,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`affix` helpers** — `add` / `drop` / `toggle` a `prefix`/`suffix` pair around
+  text (`add("alfa","bravo","charlie") == "alfabravocharlie"`), for wrapping and
+  unwrapping selections.
 - **Bracket / quote auto-pairing.** Typing `(`, `[`, `{`, `"`, `'`, `` ` ``
   inserts the matching closer (wrapping a selection when one exists), typing a
   closer steps over an auto-inserted one, and Backspace inside an empty pair
