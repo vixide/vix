@@ -41,6 +41,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`scripts/check` (and `make check`)**: a one-command local CI-parity gate —
+  build + Clippy (pedantic, `-D warnings`) + full test suite. Plus Unicode/emoji
+  stress fixtures in `test-data/` with a grapheme-width regression test. (Ideas
+  from the zee editor.)
 - **`.gitignore`-aware file finder.** The project file index now walks with the
   `ignore` crate (the engine ripgrep uses), so the fuzzy file finder honors
   `.gitignore`, `.ignore`, and git's global/excludes (even outside a git repo) and
