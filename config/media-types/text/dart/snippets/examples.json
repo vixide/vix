@@ -1,0 +1,25 @@
+{
+  "Main": { "prefix": "main", "body": ["void main() {", "\t$0", "}"], "description": "main function" },
+  "Function": { "prefix": "fn", "body": ["${1:void} ${2:name}(${3:args}) {", "\t$0", "}"], "description": "Function" },
+  "Class": { "prefix": "class", "body": ["class ${1:Name} {", "\t${1:Name}(${2:args});", "\t$0", "}"], "description": "Class" },
+  "Print": { "prefix": "print", "body": ["print(${0});"], "description": "print" },
+  "If": { "prefix": "if", "body": ["if (${1:condition}) {", "\t$0", "}"], "description": "if statement" },
+  "For": { "prefix": "for", "body": ["for (var ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++) {", "\t$0", "}"], "description": "for loop" },
+  "For in": { "prefix": "forin", "body": ["for (final ${1:item} in ${2:items}) {", "\t$0", "}"], "description": "for-in loop" },
+  "Async function": { "prefix": "afn", "body": ["Future<${1:void}> ${2:name}(${3:args}) async {", "\t$0", "}"], "description": "Async function" },
+  "Try/catch": { "prefix": "try", "body": ["try {", "\t${1}", "} catch (${2:e}) {", "\t$0", "}"], "description": "try/catch" },
+  "Widget (Stateless)": {
+    "prefix": "stless",
+    "body": [
+      "class ${1:Name} extends StatelessWidget {",
+      "\tconst ${1:Name}({super.key});",
+      "",
+      "\t@override",
+      "\tWidget build(BuildContext context) {",
+      "\t\treturn ${0:Container()};",
+      "\t}",
+      "}"
+    ],
+    "description": "Flutter StatelessWidget"
+  }
+}

@@ -6,11 +6,15 @@ media type into the active buffer.
 
 ## Data
 
-The table is the TSV [`media-types.tsv`](media-types.tsv) — three tab-separated
-columns: **Media Type**, **Description**, **Extension** (the header row is
-skipped; a row may list several comma-separated extensions, e.g. `.yaml, .yml`).
-It is the single source of truth: the `crate::media_type` module embeds it with
-`include_str!` and parses it once.
+The table is the TSV [`media-types.tsv`](media-types.tsv) — four tab-separated
+columns: **Media Type**, **Description**, **Extension**, **Base** (the header row
+is skipped; a row may list several comma-separated extensions, e.g. `.yaml, .yml`).
+**Base** is `text` or `binary` — JSON/YAML/XML/source code are `text`; JPG/GIF/PNG
+and other media/archives are `binary`. It is the single source of truth: the
+`crate::media_type` module embeds it with `include_str!` and parses it once.
+
+Source-code media types use the clean `text/<lang>` form **without an `x-`
+prefix** (e.g. `text/rust`, `text/python`, `application/sql`).
 
 The list is curated from the common web media types (per MDN) plus popular
 developer and modern formats (source code, config, archives, fonts, images,
@@ -18,7 +22,8 @@ audio/video). It is deliberately *common*, not the exhaustive IANA registry.
 
 ## Module (`crate::media_type`)
 
-- `all() -> &[MediaType]` — the parsed table (`{ media_type, description, extension }`).
+- `all() -> &[MediaType]` — the parsed table (`{ media_type, description,
+  extension, base }`); `MediaType::is_text()` reports whether `base == "text"`.
 - `for_extension(ext) -> Option<&MediaType>` — first row whose extension list
   contains `ext` (with or without a leading dot, case-insensitive).
 - `Panel` — the picker's state: a case-insensitive `query` filtering by media

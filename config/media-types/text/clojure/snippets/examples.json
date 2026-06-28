@@ -1,0 +1,12 @@
+{
+  "Defn": { "prefix": "defn", "body": ["(defn ${1:name} [${2:args}]", "\t$0)"], "description": "Function definition" },
+  "Def": { "prefix": "def", "body": ["(def ${1:name} ${0:value})"], "description": "Define a var" },
+  "Let": { "prefix": "let", "body": ["(let [${1:x} ${2:val}]", "\t$0)"], "description": "let binding" },
+  "If": { "prefix": "if", "body": ["(if ${1:test}", "\t${2:then}", "\t${0:else})"], "description": "if expression" },
+  "When": { "prefix": "when", "body": ["(when ${1:test}", "\t$0)"], "description": "when expression" },
+  "Cond": { "prefix": "cond", "body": ["(cond", "\t${1:test} ${2:expr}", "\t:else ${0})"], "description": "cond expression" },
+  "Defrecord": { "prefix": "defrecord", "body": ["(defrecord ${1:Name} [${2:fields}])$0"], "description": "Record" },
+  "Ns": { "prefix": "ns", "body": ["(ns ${1:name}", "\t(:require [${0:dep}]))"], "description": "Namespace" },
+  "Map over": { "prefix": "map", "body": ["(map (fn [${1:x}] ${2}) ${0:coll})"], "description": "map" },
+  "Println": { "prefix": "pln", "body": ["(println ${0})"], "description": "println" }
+}

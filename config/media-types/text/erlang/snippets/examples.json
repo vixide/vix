@@ -1,0 +1,9 @@
+{
+  "Module": { "prefix": "module", "body": ["-module(${1:name}).", "-export([${0}])."], "description": "Module + export" },
+  "Function": { "prefix": "fn", "body": ["${1:name}(${2:Args}) ->", "\t$0."], "description": "Function clause" },
+  "Case": { "prefix": "case", "body": ["case ${1:Expr} of", "\t${2:Pattern} -> ${3};", "\t_ -> ${0}", "end"], "description": "case expression" },
+  "If": { "prefix": "if", "body": ["if", "\t${1:Guard} -> ${2};", "\ttrue -> ${0}", "end"], "description": "if expression" },
+  "Receive": { "prefix": "receive", "body": ["receive", "\t${1:Pattern} -> ${0}", "end"], "description": "receive block" },
+  "Record": { "prefix": "record", "body": ["-record(${1:name}, {${2:field}})."], "description": "Record definition" },
+  "io:format": { "prefix": "io", "body": ["io:format(\"${1:~p~n}\", [${0:Arg}])."], "description": "io:format" }
+}

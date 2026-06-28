@@ -1,0 +1,12 @@
+{
+  "Function": { "prefix": "fn", "body": ["function ${1:name}(${2:args})", "\t$0", "end"], "description": "Function" },
+  "Short function": { "prefix": "sfn", "body": ["${1:name}(${2:args}) = ${0}"], "description": "One-line function" },
+  "Struct": { "prefix": "struct", "body": ["struct ${1:Name}", "\t${2:field}::${3:Int}", "end$0"], "description": "Struct" },
+  "Mutable struct": { "prefix": "mstruct", "body": ["mutable struct ${1:Name}", "\t${2:field}::${3:Int}", "end$0"], "description": "Mutable struct" },
+  "If": { "prefix": "if", "body": ["if ${1:condition}", "\t$0", "end"], "description": "if statement" },
+  "For": { "prefix": "for", "body": ["for ${1:i} in ${2:iter}", "\t$0", "end"], "description": "for loop" },
+  "While": { "prefix": "while", "body": ["while ${1:condition}", "\t$0", "end"], "description": "while loop" },
+  "Module": { "prefix": "module", "body": ["module ${1:Name}", "", "$0", "", "end"], "description": "Module" },
+  "Using": { "prefix": "using", "body": ["using ${0:Package}"], "description": "using" },
+  "Println": { "prefix": "pln", "body": ["println(${0})"], "description": "println" }
+}

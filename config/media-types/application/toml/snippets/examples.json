@@ -1,0 +1,22 @@
+{
+  "Table": { "prefix": "table", "body": ["[${1:name}]", "${2:key} = ${0:value}"], "description": "TOML table" },
+  "Array of tables": {
+    "prefix": "aot",
+    "body": ["[[${1:name}]]", "${2:key} = ${0:value}"],
+    "description": "Array of tables"
+  },
+  "Key/value": { "prefix": "kv", "body": ["${1:key} = ${0:value}"], "description": "Key/value" },
+  "String": { "prefix": "str", "body": ["${1:key} = \"${0:value}\""], "description": "String value" },
+  "Array": { "prefix": "arr", "body": ["${1:key} = [${0}]"], "description": "Array value" },
+  "Boolean": { "prefix": "bool", "body": ["${1:key} = ${0:true}"], "description": "Boolean value" },
+  "Inline table": {
+    "prefix": "inline",
+    "body": ["${1:key} = { ${2:a} = ${3:1}, ${4:b} = ${5:2} }$0"],
+    "description": "Inline table"
+  },
+  "Cargo dependency": {
+    "prefix": "dep",
+    "body": ["${1:crate} = \"${0:1.0}\""],
+    "description": "Cargo-style dependency"
+  }
+}

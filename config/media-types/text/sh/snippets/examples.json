@@ -1,0 +1,62 @@
+{
+  "Shebang": {
+    "prefix": "shebang",
+    "body": ["#!/usr/bin/env bash", "set -euo pipefail", "", "$0"],
+    "description": "Bash shebang with strict mode"
+  },
+  "Function": {
+    "prefix": "fn",
+    "body": ["${1:name}() {", "\t$0", "}"],
+    "description": "Function"
+  },
+  "If": {
+    "prefix": "if",
+    "body": ["if [[ ${1:condition} ]]; then", "\t$0", "fi"],
+    "description": "if statement"
+  },
+  "If/else": {
+    "prefix": "ife",
+    "body": ["if [[ ${1:condition} ]]; then", "\t${2}", "else", "\t$0", "fi"],
+    "description": "if/else statement"
+  },
+  "For loop": {
+    "prefix": "for",
+    "body": ["for ${1:item} in ${2:list}; do", "\t$0", "done"],
+    "description": "for loop"
+  },
+  "While loop": {
+    "prefix": "while",
+    "body": ["while ${1:condition}; do", "\t$0", "done"],
+    "description": "while loop"
+  },
+  "Case": {
+    "prefix": "case",
+    "body": ["case \"${1:value}\" in", "\t${2:pattern})", "\t\t$0", "\t\t;;", "\t*)", "\t\t;;", "esac"],
+    "description": "case statement"
+  },
+  "Read input": {
+    "prefix": "read",
+    "body": ["read -r -p \"${1:Prompt: }\" ${2:var}$0"],
+    "description": "Read user input"
+  },
+  "Here-doc": {
+    "prefix": "heredoc",
+    "body": ["cat <<'EOF'", "${1:text}", "EOF", "$0"],
+    "description": "Here-document"
+  },
+  "Variable": {
+    "prefix": "var",
+    "body": ["${1:name}=\"${0:value}\""],
+    "description": "Variable assignment"
+  },
+  "Command substitution": {
+    "prefix": "sub",
+    "body": ["${1:var}=\"$(${0:command})\""],
+    "description": "Command substitution"
+  },
+  "Check command exists": {
+    "prefix": "hascmd",
+    "body": ["if ! command -v ${1:cmd} >/dev/null 2>&1; then", "\techo \"${1:cmd} not found\" >&2", "\texit 1", "fi$0"],
+    "description": "Guard that a command exists"
+  }
+}

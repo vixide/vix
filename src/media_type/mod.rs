@@ -15,8 +15,9 @@
 
 use std::sync::OnceLock;
 
-/// One media type: its name, a human description, and the associated file
-/// extension(s) (a comma-separated list such as `.yaml, .yml`).
+/// One media type: its name, a human description, the associated file
+/// extension(s) (a comma-separated list such as `.yaml, .yml`), and whether its
+/// content is fundamentally `text` or `binary`.
 pub struct MediaType {
     /// The media type, e.g. `"image/png"`.
     pub media_type: &'static str,
@@ -24,6 +25,16 @@ pub struct MediaType {
     pub description: &'static str,
     /// Associated extension(s), e.g. `".png"` or `".yaml, .yml"`.
     pub extension: &'static str,
+    /// Base content kind: `"text"` or `"binary"`.
+    pub base: &'static str,
+}
+
+impl MediaType {
+    /// Whether the content is text (as opposed to binary).
+    #[must_use]
+    pub fn is_text(&self) -> bool {
+        self.base.eq_ignore_ascii_case("text")
+    }
 }
 
 /// The media-type table, parsed once from the bundled TSV (the header row is
@@ -37,17 +48,18 @@ pub fn all() -> &'static [MediaType] {
     })
 }
 
-/// Parse one `MediaType<TAB>Description<TAB>Extension` row; `None` for malformed
-/// or blank lines.
+/// Parse one `MediaType<TAB>Description<TAB>Extension<TAB>Base` row; `None` for a
+/// malformed or blank line. A missing `Base` column defaults to `"binary"`.
 fn parse_line(line: &'static str) -> Option<MediaType> {
     let mut f = line.split('\t');
     let media_type = f.next()?.trim();
     let description = f.next()?.trim();
     let extension = f.next()?.trim();
+    let base = f.next().map_or("binary", str::trim);
     if media_type.is_empty() {
         return None;
     }
-    Some(MediaType { media_type, description, extension })
+    Some(MediaType { media_type, description, extension, base })
 }
 
 /// Normalize a file extension for comparison: lowercase, no leading dot.
@@ -211,6 +223,13 @@ mod tests {
         assert!(t.len() > 100, "the media-type table has well over 100 rows");
         assert!(t.iter().any(|m| m.media_type == "image/png" && m.extension == ".png"));
         assert!(t.iter().any(|m| m.media_type == "application/json"));
+        // The Base column classifies content as text or binary.
+        let png = t.iter().find(|m| m.media_type == "image/png").unwrap();
+        assert_eq!(png.base, "binary");
+        assert!(!png.is_text());
+        let json = t.iter().find(|m| m.media_type == "application/json").unwrap();
+        assert_eq!(json.base, "text");
+        assert!(json.is_text());
     }
 
     #[test]

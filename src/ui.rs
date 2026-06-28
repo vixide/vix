@@ -3240,7 +3240,9 @@ fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for (row, &idx) in filtered.iter().enumerate().skip(p.scroll).take(view_h) {
         let m = &table[idx];
-        let text = format!(" {:34} {:8} {}", trunc(m.media_type, 34), trunc(m.extension, 8), m.description);
+        let tag = if m.is_text() { "txt" } else { "bin" };
+        let text =
+            format!(" {:30} {:8} {tag}  {}", trunc(m.media_type, 30), trunc(m.extension, 8), m.description);
         let line = if row == p.selected {
             Line::from(Span::styled(text, theme::selected()))
         } else {

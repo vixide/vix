@@ -1,0 +1,12 @@
+{
+  "Method": { "prefix": "def", "body": ["def ${1:name}(${2:args}) {", "\t$0", "}"], "description": "Method" },
+  "Class": { "prefix": "class", "body": ["class ${1:Name} {", "\t$0", "}"], "description": "Class" },
+  "If": { "prefix": "if", "body": ["if (${1:condition}) {", "\t$0", "}"], "description": "if statement" },
+  "Each": { "prefix": "each", "body": ["${1:collection}.each { ${2:it} ->", "\t$0", "}"], "description": "each closure" },
+  "For": { "prefix": "for", "body": ["for (${1:item} in ${2:items}) {", "\t$0", "}"], "description": "for loop" },
+  "Println": { "prefix": "pln", "body": ["println ${0}"], "description": "println" },
+  "Closure": { "prefix": "closure", "body": ["{ ${1:args} ->", "\t$0", "}"], "description": "Closure" },
+  "Gradle task": { "prefix": "task", "body": ["task ${1:name} {", "\t$0", "}"], "description": "Gradle task" },
+  "Gradle plugin": { "prefix": "plugins", "body": ["plugins {", "\tid '${0:java}'", "}"], "description": "Gradle plugins block" },
+  "Gradle dependency": { "prefix": "dep", "body": ["implementation '${0:group:artifact:version}'"], "description": "Gradle dependency" }
+}

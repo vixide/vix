@@ -1,0 +1,16 @@
+{
+  "Function": {
+    "prefix": "fn",
+    "body": ["function ${1:Verb-Noun} {", "\tparam(", "\t\t[${2:string}]\\$${3:Name}", "\t)", "\t$0", "}"],
+    "description": "Function with param block"
+  },
+  "If": { "prefix": "if", "body": ["if (${1:condition}) {", "\t$0", "}"], "description": "if statement" },
+  "ForEach": { "prefix": "foreach", "body": ["foreach (\\$${1:item} in \\$${2:items}) {", "\t$0", "}"], "description": "foreach loop" },
+  "For": { "prefix": "for", "body": ["for (\\$${1:i} = 0; \\$${1:i} -lt ${2:n}; \\$${1:i}++) {", "\t$0", "}"], "description": "for loop" },
+  "While": { "prefix": "while", "body": ["while (${1:condition}) {", "\t$0", "}"], "description": "while loop" },
+  "Switch": { "prefix": "switch", "body": ["switch (\\$${1:value}) {", "\t${2:a} { $0 }", "\tdefault { }", "}"], "description": "switch statement" },
+  "Try/catch": { "prefix": "try", "body": ["try {", "\t${1}", "} catch {", "\t$0", "}"], "description": "try/catch" },
+  "Write-Host": { "prefix": "wh", "body": ["Write-Host ${0}"], "description": "Write-Host" },
+  "Write-Output": { "prefix": "wo", "body": ["Write-Output ${0}"], "description": "Write-Output" },
+  "Param": { "prefix": "param", "body": ["param(", "\t[${1:string}]\\$${2:Name}", ")$0"], "description": "param block" }
+}

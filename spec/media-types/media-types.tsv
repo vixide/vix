@@ -1,129 +1,142 @@
-Media Type	Description	Extension
-audio/aac	AAC audio	.aac
-application/x-abiword	AbiWord document	.abw
-image/apng	Animated Portable Network Graphics (APNG)	.apng
-application/x-freearc	Archive document (multiple files embedded)	.arc
-image/avif	AVIF image	.avif
-video/x-msvideo	AVI: Audio Video Interleave	.avi
-application/vnd.amazon.ebook	Amazon Kindle eBook format	.azw
-application/octet-stream	Any kind of binary data	.bin
-image/bmp	Windows OS/2 Bitmap Graphics	.bmp
-application/x-bzip	BZip archive	.bz
-application/x-bzip2	BZip2 archive	.bz2
-application/x-cdf	CD audio	.cda
-application/x-csh	C-Shell script	.csh
-text/css	Cascading Style Sheets (CSS)	.css
-text/csv	Comma-separated values (CSV)	.csv
-text/tab-separated-values	Tab-separated values (TSV)	.tsv
-application/msword	Microsoft Word	.doc
-application/vnd.openxmlformats-officedocument.wordprocessingml.document	Microsoft Word (OpenXML)	.docx
-application/vnd.ms-fontobject	MS Embedded OpenType fonts	.eot
-application/epub+zip	Electronic publication (EPUB)	.epub
-application/gzip	GZip compressed archive	.gz
-application/yaml	YAML Ain't Markup Language	.yaml, .yml
-image/gif	Graphics Interchange Format (GIF)	.gif
-text/html	HyperText Markup Language (HTML)	.htm, .html
-image/vnd.microsoft.icon	Icon format	.ico
-text/calendar	iCalendar format	.ics
-application/java-archive	Java Archive (JAR)	.jar
-image/jpeg	JPEG image	.jpg, .jpeg
-text/javascript	JavaScript	.js
-application/json	JavaScript Object Notation (JSON)	.json
-application/ld+json	JSON for Linked Data (JSON-LD)	.jsonld
-text/markdown	Markdown	.md, .markdown
-audio/midi	Musical Instrument Digital Interface (MIDI)	.mid, .midi
-text/javascript	JavaScript module	.mjs
-audio/mpeg	MP3 audio	.mp3
-video/mp4	MP4 video	.mp4
-video/mpeg	MPEG video	.mpeg
-application/vnd.apple.installer+xml	Apple Installer Package	.mpkg
-application/vnd.oasis.opendocument.presentation	OpenDocument presentation	.odp
-application/vnd.oasis.opendocument.spreadsheet	OpenDocument spreadsheet	.ods
-application/vnd.oasis.opendocument.text	OpenDocument text	.odt
-audio/ogg	Ogg audio	.oga
-video/ogg	Ogg video	.ogv
-application/ogg	Ogg	.ogx
-audio/opus	Opus audio	.opus
-font/otf	OpenType font	.otf
-image/png	Portable Network Graphics (PNG)	.png
-application/pdf	Adobe Portable Document Format (PDF)	.pdf
-application/x-httpd-php	Hypertext Preprocessor (PHP)	.php
-application/vnd.ms-powerpoint	Microsoft PowerPoint	.ppt
-application/vnd.openxmlformats-officedocument.presentationml.presentation	Microsoft PowerPoint (OpenXML)	.pptx
-application/vnd.rar	RAR archive	.rar
-application/rtf	Rich Text Format (RTF)	.rtf
-application/x-sh	Bourne shell script	.sh
-image/svg+xml	Scalable Vector Graphics (SVG)	.svg
-application/x-tar	Tape Archive (TAR)	.tar
-image/tiff	Tagged Image File Format (TIFF)	.tif, .tiff
-video/mp2t	MPEG transport stream	.m2ts
-font/ttf	TrueType Font	.ttf
-text/plain	Plain text	.txt
-application/vnd.visio	Microsoft Visio	.vsd
-audio/wav	Waveform Audio Format	.wav
-audio/webm	WEBM audio	.weba
-video/webm	WEBM video	.webm
-application/manifest+json	Web application manifest	.webmanifest
-image/webp	WEBP image	.webp
-font/woff	Web Open Font Format (WOFF)	.woff
-font/woff2	Web Open Font Format 2 (WOFF2)	.woff2
-application/xhtml+xml	XHTML	.xhtml
-application/vnd.ms-excel	Microsoft Excel	.xls
-application/vnd.openxmlformats-officedocument.spreadsheetml.sheet	Microsoft Excel (OpenXML)	.xlsx
-application/xml	XML	.xml
-application/vnd.mozilla.xul+xml	XUL	.xul
-application/zip	ZIP archive	.zip
-video/3gpp	3GPP audio/video container	.3gp
-video/3gpp2	3GPP2 audio/video container	.3g2
-application/x-7z-compressed	7-zip archive	.7z
-text/rust	Rust source	.rs
-text/python	Python source	.py
-text/go	Go source	.go
-text/typescript	TypeScript source	.ts, .mts, .cts
-text/jsx	JavaScript JSX	.jsx
-text/tsx	TypeScript JSX	.tsx
-text/c	C source	.c, .h
-text/cpp	C++ source	.cpp, .cc, .cxx, .hpp
-text/java	Java source	.java
-text/csharp	C# source	.cs
-text/kotlin	Kotlin source	.kt, .kts
-text/swift	Swift source	.swift
-text/ruby	Ruby source	.rb
-text/perl	Perl script	.pl
-text/lua	Lua source	.lua
-application/sql	SQL	.sql
-application/toml	Tom's Obvious Minimal Language (TOML)	.toml
-text/ini	INI configuration	.ini
-text/properties	Java properties	.properties
-application/wasm	WebAssembly binary	.wasm
-text/diff	Diff / patch	.diff, .patch
-text/tex	TeX / LaTeX	.tex
-text/bibtex	BibTeX	.bib
-text/org	Org mode	.org
-text/rst	reStructuredText	.rst
-application/x-ndjson	Newline-delimited JSON	.ndjson
-application/cbor	Concise Binary Object Representation (CBOR)	.cbor
-application/x-protobuf	Protocol Buffers	.proto
-application/graphql	GraphQL	.graphql, .gql
-application/rss+xml	RSS feed	.rss
-application/atom+xml	Atom feed	.atom
-text/vcard	vCard contact	.vcf
-application/zstd	Zstandard archive	.zst
-application/x-xz	XZ archive	.xz
-application/vnd.sqlite3	SQLite database	.sqlite, .db
-image/heic	HEIC image	.heic
-image/heif	HEIF image	.heif
-image/jxl	JPEG XL image	.jxl
-audio/flac	FLAC audio	.flac
-audio/x-m4a	M4A audio	.m4a
-video/quicktime	QuickTime video	.mov
-video/x-matroska	Matroska video	.mkv
-application/vnd.android.package-archive	Android package	.apk
-application/x-debian-package	Debian package	.deb
-application/x-rpm	RPM package	.rpm
-application/x-msdownload	Windows executable	.exe, .dll
-application/x-iso9660-image	ISO disk image	.iso
-application/postscript	PostScript	.ps
-application/vnd.google-earth.kml+xml	Keyhole Markup Language (KML)	.kml
-application/geo+json	GeoJSON	.geojson
-font/collection	Font collection	.ttc
+Media Type	Description	Extension	Base
+audio/aac	AAC audio	.aac	binary
+application/x-abiword	AbiWord document	.abw	text
+image/apng	Animated Portable Network Graphics (APNG)	.apng	binary
+application/x-freearc	Archive document (multiple files embedded)	.arc	binary
+image/avif	AVIF image	.avif	binary
+video/x-msvideo	AVI: Audio Video Interleave	.avi	binary
+application/vnd.amazon.ebook	Amazon Kindle eBook format	.azw	binary
+application/octet-stream	Any kind of binary data	.bin	binary
+image/bmp	Windows OS/2 Bitmap Graphics	.bmp	binary
+application/x-bzip	BZip archive	.bz	binary
+application/x-bzip2	BZip2 archive	.bz2	binary
+application/x-cdf	CD audio	.cda	binary
+application/x-csh	C-Shell script	.csh	text
+text/css	Cascading Style Sheets (CSS)	.css	text
+text/csv	Comma-separated values (CSV)	.csv	text
+text/tab-separated-values	Tab-separated values (TSV)	.tsv	text
+application/msword	Microsoft Word	.doc	binary
+application/vnd.openxmlformats-officedocument.wordprocessingml.document	Microsoft Word (OpenXML)	.docx	binary
+application/vnd.ms-fontobject	MS Embedded OpenType fonts	.eot	binary
+application/epub+zip	Electronic publication (EPUB)	.epub	binary
+application/gzip	GZip compressed archive	.gz	binary
+application/yaml	YAML Ain't Markup Language	.yaml, .yml	text
+image/gif	Graphics Interchange Format (GIF)	.gif	binary
+text/html	HyperText Markup Language (HTML)	.htm, .html	text
+image/vnd.microsoft.icon	Icon format	.ico	binary
+text/calendar	iCalendar format	.ics	text
+application/java-archive	Java Archive (JAR)	.jar	binary
+image/jpeg	JPEG image	.jpg, .jpeg	binary
+text/javascript	JavaScript	.js	text
+application/json	JavaScript Object Notation (JSON)	.json	text
+application/ld+json	JSON for Linked Data (JSON-LD)	.jsonld	text
+text/markdown	Markdown	.md, .markdown	text
+audio/midi	Musical Instrument Digital Interface (MIDI)	.mid, .midi	binary
+text/javascript	JavaScript module	.mjs	text
+audio/mpeg	MP3 audio	.mp3	binary
+video/mp4	MP4 video	.mp4	binary
+video/mpeg	MPEG video	.mpeg	binary
+application/vnd.apple.installer+xml	Apple Installer Package	.mpkg	text
+application/vnd.oasis.opendocument.presentation	OpenDocument presentation	.odp	binary
+application/vnd.oasis.opendocument.spreadsheet	OpenDocument spreadsheet	.ods	binary
+application/vnd.oasis.opendocument.text	OpenDocument text	.odt	binary
+audio/ogg	Ogg audio	.oga	binary
+video/ogg	Ogg video	.ogv	binary
+application/ogg	Ogg	.ogx	binary
+audio/opus	Opus audio	.opus	binary
+font/otf	OpenType font	.otf	binary
+image/png	Portable Network Graphics (PNG)	.png	binary
+application/pdf	Adobe Portable Document Format (PDF)	.pdf	binary
+text/php	Hypertext Preprocessor (PHP)	.php	text
+application/vnd.ms-powerpoint	Microsoft PowerPoint	.ppt	binary
+application/vnd.openxmlformats-officedocument.presentationml.presentation	Microsoft PowerPoint (OpenXML)	.pptx	binary
+application/vnd.rar	RAR archive	.rar	binary
+application/rtf	Rich Text Format (RTF)	.rtf	text
+text/sh	Shell script	.sh, .bash	text
+image/svg+xml	Scalable Vector Graphics (SVG)	.svg	text
+application/x-tar	Tape Archive (TAR)	.tar	binary
+image/tiff	Tagged Image File Format (TIFF)	.tif, .tiff	binary
+video/mp2t	MPEG transport stream	.m2ts	binary
+font/ttf	TrueType Font	.ttf	binary
+text/plain	Plain text	.txt	text
+application/vnd.visio	Microsoft Visio	.vsd	binary
+audio/wav	Waveform Audio Format	.wav	binary
+audio/webm	WEBM audio	.weba	binary
+video/webm	WEBM video	.webm	binary
+application/manifest+json	Web application manifest	.webmanifest	text
+image/webp	WEBP image	.webp	binary
+font/woff	Web Open Font Format (WOFF)	.woff	binary
+font/woff2	Web Open Font Format 2 (WOFF2)	.woff2	binary
+application/xhtml+xml	XHTML	.xhtml	text
+application/vnd.ms-excel	Microsoft Excel	.xls	binary
+application/vnd.openxmlformats-officedocument.spreadsheetml.sheet	Microsoft Excel (OpenXML)	.xlsx	binary
+application/xml	XML	.xml	text
+application/vnd.mozilla.xul+xml	XUL	.xul	text
+application/zip	ZIP archive	.zip	binary
+video/3gpp	3GPP audio/video container	.3gp	binary
+video/3gpp2	3GPP2 audio/video container	.3g2	binary
+application/x-7z-compressed	7-zip archive	.7z	binary
+text/rust	Rust source	.rs	text
+text/python	Python source	.py	text
+text/go	Go source	.go	text
+text/typescript	TypeScript source	.ts, .mts, .cts	text
+text/jsx	JavaScript JSX	.jsx	text
+text/tsx	TypeScript JSX	.tsx	text
+text/c	C source	.c, .h	text
+text/cpp	C++ source	.cpp, .cc, .cxx, .hpp	text
+text/java	Java source	.java	text
+text/csharp	C# source	.cs	text
+text/kotlin	Kotlin source	.kt, .kts	text
+text/swift	Swift source	.swift	text
+text/ruby	Ruby source	.rb	text
+text/perl	Perl script	.pl	text
+text/lua	Lua source	.lua	text
+text/scala	Scala source	.scala, .sc	text
+text/haskell	Haskell source	.hs	text
+text/elixir	Elixir source	.ex, .exs	text
+text/erlang	Erlang source	.erl	text
+text/clojure	Clojure source	.clj, .cljs, .edn	text
+text/dart	Dart source	.dart	text
+text/r	R source	.r	text
+text/julia	Julia source	.jl	text
+text/groovy	Groovy source	.groovy, .gradle	text
+text/powershell	PowerShell script	.ps1, .psm1	text
+text/objective-c	Objective-C source	.m, .mm	text
+text/fsharp	F# source	.fs, .fsx	text
+text/ocaml	OCaml source	.ml, .mli	text
+application/sql	SQL	.sql	text
+application/toml	Tom's Obvious Minimal Language (TOML)	.toml	text
+text/ini	INI configuration	.ini	text
+text/properties	Java properties	.properties	text
+application/wasm	WebAssembly binary	.wasm	binary
+text/diff	Diff / patch	.diff, .patch	text
+text/tex	TeX / LaTeX	.tex	text
+text/bibtex	BibTeX	.bib	text
+text/org	Org mode	.org	text
+text/rst	reStructuredText	.rst	text
+application/x-ndjson	Newline-delimited JSON	.ndjson	text
+application/cbor	Concise Binary Object Representation (CBOR)	.cbor	binary
+application/x-protobuf	Protocol Buffers	.proto	text
+application/graphql	GraphQL	.graphql, .gql	text
+application/rss+xml	RSS feed	.rss	text
+application/atom+xml	Atom feed	.atom	text
+text/vcard	vCard contact	.vcf	text
+application/zstd	Zstandard archive	.zst	binary
+application/x-xz	XZ archive	.xz	binary
+application/vnd.sqlite3	SQLite database	.sqlite, .db	binary
+image/heic	HEIC image	.heic	binary
+image/heif	HEIF image	.heif	binary
+image/jxl	JPEG XL image	.jxl	binary
+audio/flac	FLAC audio	.flac	binary
+audio/x-m4a	M4A audio	.m4a	binary
+video/quicktime	QuickTime video	.mov	binary
+video/x-matroska	Matroska video	.mkv	binary
+application/vnd.android.package-archive	Android package	.apk	binary
+application/x-debian-package	Debian package	.deb	binary
+application/x-rpm	RPM package	.rpm	binary
+application/x-msdownload	Windows executable	.exe, .dll	binary
+application/x-iso9660-image	ISO disk image	.iso	binary
+application/postscript	PostScript	.ps	text
+application/vnd.google-earth.kml+xml	Keyhole Markup Language (KML)	.kml	text
+application/geo+json	GeoJSON	.geojson	text
+font/collection	Font collection	.ttc	binary

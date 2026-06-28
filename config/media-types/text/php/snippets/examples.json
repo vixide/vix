@@ -1,0 +1,58 @@
+{
+  "PHP tag": { "prefix": "php", "body": ["<?php", "", "$0"], "description": "Opening PHP tag" },
+  "Function": {
+    "prefix": "fn",
+    "body": ["function ${1:name}(${2:args}) {", "\t$0", "}"],
+    "description": "Function"
+  },
+  "Class": {
+    "prefix": "class",
+    "body": ["class ${1:Name} {", "\tpublic function __construct(${2}) {", "\t\t$0", "\t}", "}"],
+    "description": "Class with constructor"
+  },
+  "Public method": {
+    "prefix": "pubf",
+    "body": ["public function ${1:name}(${2:args}) {", "\t$0", "}"],
+    "description": "Public method"
+  },
+  "If": {
+    "prefix": "if",
+    "body": ["if (${1:condition}) {", "\t$0", "}"],
+    "description": "if statement"
+  },
+  "Foreach": {
+    "prefix": "foreach",
+    "body": ["foreach (${1:\\$items} as ${2:\\$item}) {", "\t$0", "}"],
+    "description": "foreach loop"
+  },
+  "For": {
+    "prefix": "for",
+    "body": ["for (${1:\\$i} = 0; ${1:\\$i} < ${2:\\$n}; ${1:\\$i}++) {", "\t$0", "}"],
+    "description": "for loop"
+  },
+  "Echo": {
+    "prefix": "echo",
+    "body": ["echo ${0};"],
+    "description": "echo"
+  },
+  "Array": {
+    "prefix": "arr",
+    "body": ["\\$${1:arr} = [${0}];"],
+    "description": "Array literal"
+  },
+  "Try/catch": {
+    "prefix": "try",
+    "body": ["try {", "\t${1}", "} catch (${2:\\Exception} \\$${3:e}) {", "\t$0", "}"],
+    "description": "try/catch block"
+  },
+  "Namespace": {
+    "prefix": "namespace",
+    "body": ["namespace ${1:App};", "$0"],
+    "description": "Namespace declaration"
+  },
+  "Var dump": {
+    "prefix": "vd",
+    "body": ["var_dump(${0});"],
+    "description": "var_dump"
+  }
+}

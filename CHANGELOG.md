@@ -35,9 +35,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - **Bundled example snippet libraries** under `config/media-types/<type>/snippets/examples.json`
-  for 13 media types (Python, Plain text, TypeScript, Rust, Java, C++, C#,
-  JavaScript, C, Ruby, JSON, YAML, SQL) — many common snippets each, modeled on
-  TextMate/VS Code.
+  for ~38 media types — the originals (Python, Plain, TypeScript, Rust, Java, C++,
+  C#, JavaScript, C, Ruby, JSON, YAML, SQL) plus HTML, CSS, Markdown, Go, TOML,
+  Shell, PHP, Kotlin, Swift, Lua, Scala, Haskell, Elixir, Erlang, Clojure, Dart,
+  R, Julia, Groovy, PowerShell, Objective-C, F#, OCaml, Perl, and XML — many
+  common snippets each, modeled on TextMate/VS Code.
+- **More programming-language media types** added to the table (Scala, Haskell,
+  Elixir, Erlang, Clojure, Dart, R, Julia, Groovy, PowerShell, Objective-C, F#,
+  OCaml), all using the clean `text/<lang>` form.
+- **`Base` column in the media-type table** — each media type is classified
+  `text` or `binary` (`MediaType::is_text()`); shown in the Media Types picker.
 - **JSON snippet files (global / media-type / project).** Snippets can now be
   defined in JSON files (the VS Code shape: `name → {prefix, body, description}`)
   loaded from `~/.config/vix/global/snippets/snippets.json`, per-media-type

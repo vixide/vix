@@ -1,0 +1,10 @@
+{
+  "Let": { "prefix": "let", "body": ["let ${1:name} = ${0}"], "description": "let binding" },
+  "Function": { "prefix": "fn", "body": ["let ${1:name} ${2:args} =", "\t$0"], "description": "Function" },
+  "Module": { "prefix": "module", "body": ["module ${1:Name}", "", "$0"], "description": "Module" },
+  "Type record": { "prefix": "record", "body": ["type ${1:Name} = {", "\t${2:Field}: ${3:int}", "}$0"], "description": "Record type" },
+  "Discriminated union": { "prefix": "union", "body": ["type ${1:Name} =", "\t| ${2:Case1}", "\t| ${0:Case2}"], "description": "Discriminated union" },
+  "Match": { "prefix": "match", "body": ["match ${1:expr} with", "| ${2:pattern} -> ${3}", "| _ -> ${0}"], "description": "Pattern match" },
+  "For": { "prefix": "for", "body": ["for ${1:i} in ${2:seq} do", "\t$0"], "description": "for loop" },
+  "Printfn": { "prefix": "printfn", "body": ["printfn \"${1:%A}\" ${0}"], "description": "printfn" }
+}
