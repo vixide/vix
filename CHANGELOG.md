@@ -20,6 +20,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Persistent macros.** Recorded keyboard macros can be saved by name
   (**Edit → Save Macro…**) to `macros.toml` and replayed in later sessions
   (**Edit → Play Saved Macro…**). See `spec/macros/index.md`.
+- **View → Zoom** (In / Out / Reset) — best-effort terminal font zoom. A TUI
+  can't portably resize the font, so Vix emits the font-resize escape for
+  terminals that support one (xterm/urxvt) and tells you to use the terminal's
+  own zoom otherwise.
 
 ## [0.4.0] - 2026-06-27
 

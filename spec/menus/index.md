@@ -264,6 +264,12 @@ The **Branch** submenu:
 
 These appear in the design but are not implemented yet:
 
-- View ▸ **Zoom In / Out / Zero** (terminal font zoom).
 - Separate Edit menu entries for workspace-wide find/replace (today these live on
   shortcuts and the palette, not the menu).
+
+**View ▸ Zoom** (In / Out / Reset, `view.zoom_in` / `view.zoom_out` /
+`view.zoom_reset`) is implemented as a **best-effort** terminal font zoom: a TUI
+cannot portably resize the font, so Vix emits the font-resize escape for
+terminals that support one (xterm `OSC 50`, urxvt `OSC 720/721`, chosen by
+`$TERM`) and otherwise reports that font size is controlled by the terminal
+itself.

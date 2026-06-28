@@ -2162,6 +2162,9 @@ impl App {
             "view.scrollbar" => self.toggle_scrollbar(),
             "view.spellcheck" => self.toggle_spellcheck(),
             "view.auto_pair" => self.toggle_auto_pair(),
+            "view.zoom_in" => self.terminal_zoom(1),
+            "view.zoom_out" => self.terminal_zoom(-1),
+            "view.zoom_reset" => self.terminal_zoom(0),
             "spell.suggest" => self.open_spell_suggest(),
             "ai.chat" => self.open_ai_panel(),
             "ai.summarize" => self.ai_summarize(),
@@ -5994,6 +5997,39 @@ impl App {
             && let Some(tab) = self.editor.active_tab_mut()
         {
             tab.editor.set_indent(Some(indent));
+        }
+    }
+
+    /// Best-effort terminal font zoom. A TUI cannot portably resize the font, so
+    /// this emits the escape sequence for terminals that support one (xterm
+    /// `OSC 50`, urxvt `OSC 720/721`) based on `$TERM`; on other terminals it
+    /// reports that font size is controlled by the terminal itself. `delta`: +1
+    /// larger, -1 smaller, 0 reset.
+    fn terminal_zoom(&mut self, delta: i32) {
+        use std::io::Write;
+        let term = std::env::var("TERM").unwrap_or_default();
+        let seq: Option<&[u8]> = if term.contains("rxvt") {
+            match delta {
+                d if d > 0 => Some(b"\x1b]720;1\x07"),
+                d if d < 0 => Some(b"\x1b]721;1\x07"),
+                _ => None, // urxvt has no reset sequence
+            }
+        } else if term.contains("xterm") {
+            match delta {
+                d if d > 0 => Some(b"\x1b]50;#+1\x07"),
+                d if d < 0 => Some(b"\x1b]50;#-1\x07"),
+                _ => Some(b"\x1b]50;#0\x07"),
+            }
+        } else {
+            None
+        };
+        if let Some(bytes) = seq {
+            let mut out = std::io::stdout();
+            let _ = out.write_all(bytes);
+            let _ = out.flush();
+            self.status = t!("status.zoom_sent").to_string();
+        } else {
+            self.status = t!("status.zoom_unsupported").to_string();
         }
     }
 
