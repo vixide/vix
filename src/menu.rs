@@ -398,11 +398,12 @@ const TOOLS_INSERT_ORG: &[Item] = &[
     Item::leaf("menu.item.tools.insert.org.timestamp", "tools.insert.org.timestamp", ""),
     Item::leaf("menu.item.tools.insert.org.timestamp_repeater", "tools.insert.org.timestamp_repeater", ""),
     Item::leaf("menu.item.tools.insert.org.drawer", "tools.insert.org.drawer", ""),
-];
-
-/// Org inline emphasis markers, grouped under Tools → Insert → Markers. Each
-/// toggles the marker character around the selection.
-const TOOLS_INSERT_MARKERS: &[Item] = &[
+    Item::leaf("menu.item.tools.insert.org.properties", "tools.insert.org.properties", ""),
+    SEP,
+    // Inline emphasis markers (formerly the "Markers" submenu). Each toggles the
+    // marker character(s) around the selection. Menus are three levels deep, so
+    // these live directly inside Org rather than as a fourth-level submenu.
+    Item::leaf("menu.item.tools.insert.marker.tag", "tools.insert.marker.tag", ""),
     Item::leaf("menu.item.tools.insert.marker.bold", "tools.insert.marker.bold", ""),
     Item::leaf("menu.item.tools.insert.marker.italic", "tools.insert.marker.italic", ""),
     Item::leaf("menu.item.tools.insert.marker.underline", "tools.insert.marker.underline", ""),
@@ -428,7 +429,6 @@ const TOOLS_INSERT: &[Item] = &[
     Item::sub("menu.name.sql", TOOLS_INSERT_SQL),
     Item::sub("menu.name.latex", TOOLS_INSERT_LATEX),
     Item::sub("menu.name.org", TOOLS_INSERT_ORG),
-    Item::sub("menu.item.tools.insert.markers", TOOLS_INSERT_MARKERS),
     Item::sub("menu.item.tools.insert.block", TOOLS_INSERT_BLOCK),
     Item::sub("menu.name.lorem", TOOLS_INSERT_LOREM),
     Item::sub("menu.item.tools.insert.datetime", TOOLS_INSERT_DATETIME),

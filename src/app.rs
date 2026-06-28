@@ -3692,6 +3692,14 @@ impl App {
             "tools.insert.org.timestamp" => "<2006-11-02 Thu 10:00-12:00>",
             "tools.insert.org.timestamp_repeater" => "<2006-11-02 Thu 10:00-12:00 +1w>",
             "tools.insert.org.drawer" => ":DRAWERNAME:\nThis is inside the drawer.\n:END:\n",
+            "tools.insert.org.properties" => concat!(
+                ":PROPERTIES:\n",
+                ":Title:     Goldberg Variations\n",
+                ":Composer:  J.S. Bach\n",
+                ":Publisher: Deutsche Grammophon\n",
+                ":NDisks:    1\n",
+                ":END:\n",
+            ),
             _ => return false,
         };
         self.insert_content(snippet);
@@ -3702,6 +3710,7 @@ impl App {
     /// Returns `true` if `action` was a known marker.
     fn insert_marker(&mut self, action: &str) -> bool {
         let ch = match action {
+            "tools.insert.marker.tag" => ":",
             "tools.insert.marker.bold" => "*",
             "tools.insert.marker.italic" => "/",
             "tools.insert.marker.underline" => "_",

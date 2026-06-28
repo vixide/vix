@@ -84,6 +84,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`affix` helpers** — `add` / `drop` / `toggle` a `prefix`/`suffix` pair around
   text (a conventional wrap: `add("alfa","bravo","charlie") == "bravoalfacharlie"`),
   for wrapping and unwrapping selections.
+- **Tools → Insert → Org** now also hosts the inline **markers** (folded in from
+  the former Markers submenu), with a new **Tag `:`** marker and a **Properties**
+  (`:PROPERTIES: … :END:`) snippet.
 - **Tools → Insert → Org / Markers / Begin-End** submenus — Org inserts Org-mode
   snippets (title/author, headlines, links/images, lists, table, TODO/DONE,
   planning lines, timestamps, drawer); Markers toggle inline emphasis (`*`/`/`/`_`

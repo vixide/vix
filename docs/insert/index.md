@@ -46,10 +46,9 @@ Center), and a Drawer. The placeholder text is meant to be edited after insertio
 **Insert → Org** drops in Org-mode building blocks: Title/Author keywords,
 headlines, links and images, plain/ordered/check lists, a table, TODO/DONE
 items, planning lines (Deadline, Scheduled), timestamps (plain, range, repeater),
-and a Drawer.
-
-**Insert → Markers** toggles an inline emphasis marker around the selection —
-Bold `*`, Italic `/`, Underline `_`, Strikethrough `+`, Code `~`, Verbatim `=`
+a Drawer, and a Properties drawer. The Org submenu also holds the inline
+**markers** — Tag `:`, Bold `*`, Italic `/`, Underline `_`, Strikethrough `+`,
+Code `~`, Verbatim `=` — each of which toggles the marker around the selection
 (e.g. selecting `text` and choosing Bold gives `*text*`; choosing it again
 removes the markers).
 

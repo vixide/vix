@@ -3900,6 +3900,10 @@ menu.item.tools.insert.org.timestamp_repeater:
   en: "Timestamp Repeater"
 menu.item.tools.insert.org.drawer:
   en: "Drawer"
+menu.item.tools.insert.org.properties:
+  en: "Properties"
+menu.item.tools.insert.marker.tag:
+  en: "Tag :"
 menu.item.tools.insert.marker.bold:
   en: "Bold *"
 menu.item.tools.insert.marker.italic:

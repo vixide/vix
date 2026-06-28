@@ -266,6 +266,21 @@ fn org_insert_and_marker_block_toggles() {
     app.on_key(ctrl('a'));
     app.run_action("tools.insert.block.quote");
     assert_eq!(app.editor.active_tab().unwrap().text(), "#+BEGIN_QUOTE\nhi\n#+END_QUOTE");
+
+    // The Tag marker wraps the selection with ':'.
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "work");
+    app.on_key(ctrl('a'));
+    app.run_action("tools.insert.marker.tag");
+    assert_eq!(app.editor.active_tab().unwrap().text(), ":work:");
+
+    // The Properties snippet inserts a property drawer.
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.insert.org.properties");
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.starts_with(":PROPERTIES:"));
+    assert!(text.contains(":Composer:  J.S. Bach"));
+    assert!(text.trim_end().ends_with(":END:"));
 }
 
 #[test]

@@ -24,13 +24,17 @@ Inserts a snippet at the cursor:
 - "Timestamp" -> `<2006-11-02 Thu 10:00-12:00>`
 - "Timestamp Repeater" -> `<… +1w>`
 - "Drawer" -> `:DRAWERNAME: … :END:`
+- "Properties" -> a `:PROPERTIES: … :END:` property drawer (sample metadata)
 
 ## Markers (`App::insert_marker` → `App::toggle_wrap`)
 
-Toggles a single inline marker character around the selection (via
-[`crate::affix::toggle`]). With no selection, inserts the empty pair and places
+The marker items live **inside the Org submenu** (menus are three levels deep, so
+they are leaf items under Tools → Insert → Org rather than a fourth-level
+submenu). Each toggles a marker around the selection (via
+[`crate::affix::toggle`]); with no selection, inserts the empty pair and places
 the cursor between the halves.
 
+- "Tag :" -> `:…:`
 - "Bold *" -> `*…*`
 - "Italic /" -> `/…/`
 - "Underline _" -> `_…_`
