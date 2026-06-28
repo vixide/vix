@@ -96,6 +96,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
         app.poll_dashboard();
         app.poll_pomodoro();
         app.poll_terminal();
+        app.refresh_inline_blame();
         // Drain language-server messages (diagnostics, hover/definition/completion
         // responses) and sync the active document.
         app.poll_lsp();

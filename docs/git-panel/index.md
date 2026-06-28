@@ -139,9 +139,17 @@ Hunk staging is safe: it only acts when the index still matches the expected tex
 for the hunk's region. See `spec/stage-hunk/index.md` and
 `spec/unstage-hunk/index.md`.
 
+## Blame
+
+**Git → Blame Line** shows the cursor line's commit (hash, author, date, summary)
+in the status bar. **Git → Toggle Inline Blame** turns on a dimmed end-of-line
+annotation for the cursor's line (`author, date · summary`) that follows the
+cursor as it moves between lines; it persists in the `inline_blame` setting (off
+by default) and is shown in the normal, non-wrapped view.
+
 ## Roadmap
 
 The core Git features are in place. Remaining ideas:
 
-- Persistent inline (end-of-line) blame annotations, beyond the status bar.
+- Inline blame in the soft-wrap view (currently the non-wrapped view only).
 - Interactive rebase / cherry-pick helpers.

@@ -31,6 +31,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Spacemacs keymap** (**View → Keymap → Spacemacs**) — Vim-style modal editing
   plus a `Space` leader for menu-like command sequences (`SPC f f` open, `SPC g s`
   git, `SPC w /` split, `SPC q q` quit, …). See `spec/keymaps/index.md`.
+- **Inline git blame** (**Git → Toggle Inline Blame**, `inline_blame` setting) —
+  shows the cursor line's blame (`author, date · summary`) dimmed at the end of
+  the line, following the cursor. See `spec/git-integration/index.md`.
 
 ## [0.4.0] - 2026-06-27
 

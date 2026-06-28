@@ -138,6 +138,9 @@ pub struct Settings {
     /// Auto-insert the matching closer when an opening bracket/quote is typed (and
     /// delete both with Backspace inside an empty pair). On by default.
     pub auto_pair: bool,
+    /// Show the git blame for the cursor's line inline (dimmed, end of line). Off
+    /// by default; toggle via **Git → Toggle Inline Blame**.
+    pub inline_blame: bool,
 }
 
 /// One configured language server (a `lsp_servers` entry).
@@ -194,6 +197,7 @@ impl Default for Settings {
             ai_diff_review: true,
             editorconfig: true,
             auto_pair: true,
+            inline_blame: false,
         }
     }
 }

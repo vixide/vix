@@ -316,6 +316,40 @@ impl Editor {
                     );
                 }
             }
+
+            self.draw_eol_note(buf, line_idx, line_start_char, line_len, text_x, right_edge, draw_y);
+        }
+    }
+
+    /// Draw the optional end-of-line virtual note (e.g. inline git blame) for
+    /// `line_idx`, dimmed after the line content. Only when not horizontally
+    /// scrolled and the note is for this line.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_eol_note(
+        &self,
+        buf: &mut Buffer,
+        line_idx: usize,
+        line_start_char: usize,
+        line_len: usize,
+        text_x: u16,
+        right_edge: u16,
+        draw_y: u16,
+    ) {
+        if self.offset_x != 0 {
+            return;
+        }
+        let Some((nl, note)) = self.eol_note.as_ref() else { return };
+        if *nl != line_idx || note.is_empty() {
+            return;
+        }
+        let full = self.code_ref().char_slice(line_start_char, line_start_char + line_len);
+        let lw: usize = RopeGraphemes::new(&full).map(|g| grapheme_width_and_chars_len(g).0).sum();
+        let nx = text_x + u16::try_from(lw + 2).unwrap_or(u16::MAX);
+        if nx < right_edge {
+            let avail = (right_edge - nx) as usize;
+            let shown: String = note.chars().take(avail).collect();
+            let style = self.whitespace_style.add_modifier(Modifier::ITALIC);
+            buf.set_string(nx, draw_y, &shown, style);
         }
     }
 
