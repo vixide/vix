@@ -115,7 +115,6 @@ const EDIT: &[Item] = &[
     Item::sub("menu.item.edit.lines_menu", EDIT_MOVE),
     Item::sub("menu.item.edit.go_menu", EDIT_GO),
     Item::sub("menu.item.edit.find_menu", EDIT_FIND),
-    Item::sub("menu.item.edit.case", EDIT_CASE),
     Item::sub("menu.item.edit.mode", EDIT_MODE),
     SEP,
     Item::leaf("menu.item.edit.toggle_comment", "edit.toggle_comment", "Ctrl /"),
@@ -493,6 +492,7 @@ const TOOLS_CONVERT: &[Item] = &[
     Item::sub("menu.name.url", TOOLS_CONVERT_URL),
     Item::sub("menu.name.yaml", TOOLS_CONVERT_YAML),
     Item::sub("menu.item.tools.convert.number", TOOLS_CONVERT_NUMBER),
+    Item::sub("menu.item.edit.case", EDIT_CASE),
     SEP,
     Item::leaf("menu.item.tools.convert.jwt", "tools.convert.jwt", ""),
 ];

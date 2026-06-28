@@ -73,7 +73,7 @@ The menus, left to right, are
 | Go ▸    | | Submenu of cursor-jump commands (below) |
 | *— separator —* | | |
 | Find ▸  | | Submenu of find-related items (below) |
-| Case ▸  | | Submenu of case transforms for the selection (below) |
+| Mode ▸  | | Submenu of type-specific edit surfaces (Table/Outline/JSON/YAML/Bytes) |
 | *— separator —* | | |
 | Comment | `Ctrl+/` | Comment/uncomment the line or selection |
 
@@ -122,7 +122,8 @@ Replace lives inside the Find panel itself: `Ctrl+R` (or `Tab` to the Replace
 field in the find box) reveals it, so there is no separate menu item. See
 `find_panel/spec/index.md`.
 
-The **Case** submenu (applies to the current selection):
+The **Case** submenu — now under **Tools → Convert** — (applies to the current
+selection):
 
 | Item               | Result    |
 | ------------------ | --------- |
