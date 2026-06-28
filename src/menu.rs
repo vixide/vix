@@ -252,6 +252,9 @@ const VIEW_KEYMAP: &[Item] = &[
     Item::leaf("menu.name.emacs", "view.keymap:emacs", ""),
     Item::leaf("menu.name.vim", "view.keymap:vi", ""),
     Item::leaf("menu.name.spacemacs", "view.keymap:spacemacs", ""),
+    Item::leaf("menu.name.jetbrains_mac", "view.keymap:jetbrains-mac", ""),
+    Item::leaf("menu.name.jetbrains_win", "view.keymap:jetbrains-win", ""),
+    Item::leaf("menu.name.eclipse", "view.keymap:eclipse", ""),
 ];
 
 const VIX: &[Item] = &[

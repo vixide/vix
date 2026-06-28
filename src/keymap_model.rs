@@ -38,6 +38,9 @@ pub const KEYMAPS: &[Keymap] = &[
     Keymap { id: "emacs", name: "Emacs", tooltip: "Emacs chords" },
     Keymap { id: "vi", name: "Vi", tooltip: "Vi modes" },
     Keymap { id: "spacemacs", name: "Spacemacs", tooltip: "Vi modes + Space leader" },
+    Keymap { id: "jetbrains-mac", name: "JetBrains IDEA macOS", tooltip: "IntelliJ IDEA (macOS) bindings" },
+    Keymap { id: "jetbrains-win", name: "JetBrains IDEA Windows", tooltip: "IntelliJ IDEA (Windows) bindings" },
+    Keymap { id: "eclipse", name: "Eclipse", tooltip: "Eclipse (Windows) bindings" },
 ];
 
 /// The keymap with the given `id`, if known.

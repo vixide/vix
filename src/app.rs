@@ -567,6 +567,12 @@ enum Keymap {
     /// Vim-style modal editing plus a `Space` leader for menu-like command
     /// sequences (e.g. `SPC f f` find file).
     Spacemacs,
+    /// `IntelliJ` IDEA (macOS) shortcuts, with `Ctrl` standing in for `Cmd`.
+    JetBrainsMac,
+    /// `IntelliJ` IDEA (Windows/Linux) shortcuts.
+    JetBrainsWin,
+    /// Eclipse (Windows) shortcuts.
+    Eclipse,
 }
 
 impl Keymap {
@@ -578,6 +584,9 @@ impl Keymap {
             // `vi` is the current id; `vim` is accepted for older configs.
             "vi" | "vim" => Keymap::Vim,
             "spacemacs" => Keymap::Spacemacs,
+            "jetbrains-mac" => Keymap::JetBrainsMac,
+            "jetbrains-win" => Keymap::JetBrainsWin,
+            "eclipse" => Keymap::Eclipse,
             _ => Keymap::Apple,
         }
     }
@@ -1700,6 +1709,21 @@ impl App {
                     return;
                 }
             }
+            Keymap::JetBrainsMac => {
+                if self.jetbrains_key(key, false) || self.global_shared_key(key) {
+                    return;
+                }
+            }
+            Keymap::JetBrainsWin => {
+                if self.jetbrains_key(key, true) || self.global_shared_key(key) {
+                    return;
+                }
+            }
+            Keymap::Eclipse => {
+                if self.eclipse_key(key) || self.global_shared_key(key) {
+                    return;
+                }
+            }
         }
         match self.focus {
             Focus::Editor => self.editor_key(key),
@@ -1838,6 +1862,108 @@ impl App {
                 return true;
             }
         false
+    }
+
+    // ----- keymap: JetBrains IDEA (macOS / Windows) -----------------------
+
+    /// `JetBrains` IDEA keymap dispatch (`Ctrl` stands in for `Cmd` on macOS).
+    /// `win` selects the Windows/Linux go-to bindings (Ctrl+N / Ctrl+Shift+N /
+    /// Ctrl+G) vs the macOS ones (Ctrl+O / Ctrl+Shift+O / Ctrl+L). Editing chords
+    /// (undo/cut/copy/paste/select-all) fall through to the editor widget. Returns
+    /// true if consumed.
+    #[allow(clippy::too_many_lines)]
+    fn jetbrains_key(&mut self, key: KeyEvent, win: bool) -> bool {
+        // `Ctrl+Alt+L`: reformat (Reformat Code).
+        if Self::ctrl(&key) && Self::alt(&key) {
+            if let KeyCode::Char(c) = key.code {
+                match c.to_ascii_lowercase() {
+                    'l' => self.run_action("lsp.format"),
+                    'o' => self.run_action("nav.goto_workspace_symbol"),
+                    _ => return false,
+                }
+                return true;
+            }
+            return false;
+        }
+        if !Self::ctrl(&key) {
+            return false;
+        }
+        let KeyCode::Char(c) = key.code else { return false };
+        let shift = Self::shift(&key);
+        match c.to_ascii_lowercase() {
+            'a' if shift => self.run_action("tools.palette"), // Find Action
+            's' if shift => self.run_action("file.save_as"),
+            's' => self.run_action("file.save"),
+            'w' if shift => self.run_action("file.close_all"),
+            'w' => self.run_action("file.close"),
+            'f' if shift => self.run_action("search.workspace"),
+            'f' => self.run_action("edit.find"),
+            'r' if shift => self.run_action("search.workspace_replace"),
+            'r' => self.run_action("edit.replace"),
+            'b' => self.run_action("nav.goto_definition"),    // Go to Declaration
+            'd' => self.run_action("edit.duplicate_line"),    // Duplicate
+            'y' if win => self.run_action("edit.delete_line"), // Win: delete line
+            '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
+            ',' if !win => self.run_action("vix.settings"),   // macOS: Cmd+,
+            // Go to file / class, and Go to Line differ by platform.
+            'n' if win && shift => self.run_action("file.open"),         // Go to File
+            'n' if win => self.run_action("nav.goto_symbol"),            // Go to Class
+            'n' if !win => self.run_action("file.new"),
+            'o' if !win && shift => self.run_action("file.open"),        // Go to File
+            'o' if !win => self.run_action("nav.goto_symbol"),           // Go to Class
+            'l' if !win => self.run_action("nav.goto_line"),             // macOS: Cmd+L
+            'g' if win => self.run_action("nav.goto_line"),              // Win: Ctrl+G
+            'g' if shift => self.run_action("edit.find_prev"),
+            'g' => self.run_action("edit.find_next"),                    // macOS: Cmd+G
+            _ => return false,
+        }
+        true
+    }
+
+    // ----- keymap: Eclipse ------------------------------------------------
+
+    /// Eclipse (Windows) keymap dispatch. Editing chords fall through to the
+    /// editor widget. Returns true if consumed.
+    #[allow(clippy::too_many_lines)]
+    fn eclipse_key(&mut self, key: KeyEvent) -> bool {
+        // `Alt+/`: word completion.
+        if Self::alt(&key) && !Self::ctrl(&key) {
+            if matches!(key.code, KeyCode::Char('/')) {
+                self.run_action("autocomplete");
+                return true;
+            }
+            return false;
+        }
+        if !Self::ctrl(&key) {
+            return false;
+        }
+        let KeyCode::Char(c) = key.code else { return false };
+        let shift = Self::shift(&key);
+        match c.to_ascii_lowercase() {
+            'n' => self.run_action("file.new"),
+            'w' if shift => self.run_action("file.close_all"),
+            'w' => self.run_action("file.close"),
+            's' if shift => self.run_action("file.save_as"),
+            's' => self.run_action("file.save"),
+            'y' => self.run_action("edit.redo"),              // Win redo
+            'f' if shift => self.run_action("lsp.format"),    // Format
+            'f' => self.run_action("edit.find"),
+            'k' if shift => self.run_action("edit.find_prev"),
+            'k' => self.run_action("edit.find_next"),
+            'h' => self.run_action("search.workspace"),       // Search
+            'l' => self.run_action("nav.goto_line"),
+            'd' => self.run_action("edit.delete_line"),
+            'o' => self.run_action("nav.goto_symbol"),        // Quick Outline
+            'r' if shift => self.run_action("file.open"),     // Open Resource
+            'r' => self.run_action("edit.replace"),
+            't' if shift => self.run_action("nav.goto_workspace_symbol"), // Open Type
+            'b' if shift => self.run_action("debug.toggle_breakpoint"),
+            'b' => self.run_action("tools.test"),             // Build All
+            '3' => self.run_action("tools.palette"),          // Quick Access
+            '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
+            _ => return false,
+        }
+        true
     }
 
     /// Keys shared by every keymap: menu-bar mnemonics and function keys. Returns
