@@ -762,6 +762,8 @@ pub struct Layout {
     pub edit_value: Rect,
     /// Body rectangle of the open byte (hex) editor.
     pub edit_bytes: Rect,
+    /// Body rectangle of the open SQL statement editor.
+    pub edit_sql: Rect,
     /// Row-list rectangle of the open X11 color palette, so a click can hit-test
     /// which row was picked.
     pub x11_panel: Rect,
@@ -909,6 +911,8 @@ pub struct App {
     pub edit_value: Option<crate::edit_value::Tree>,
     /// Byte editor (hex view) overlay, when open.
     pub edit_bytes: Option<crate::edit_bytes::Hex>,
+    /// SQL statement editor overlay, when open.
+    pub edit_sql: Option<crate::edit_sql::Editor>,
     /// X11 color palette overlay, when open.
     pub x11_panel: Option<X11Panel>,
     /// Media-type (MIME) picker overlay, when open.
@@ -1228,7 +1232,7 @@ impl App {
             prompt: None, paste: None, confirm: None, replace_confirm: None, unsaved: None, spell_suggest: None,
             context_menu: None, git_panel: None, branch_chooser: None, task_chooser: None, macro_chooser: None, workspace_chooser: None, diff_view: None, recent_chooser: None,
             location_chooser: None, nerd_palette: None, ascii_panel: None, edit_table: None,
-            edit_outline: None, edit_value: None, edit_bytes: None, qrcode: None,
+            edit_outline: None, edit_value: None, edit_bytes: None, edit_sql: None, qrcode: None,
             x11_panel: None,
             media_type_panel: None,
             html_panel: None, system_info: None, dashboard: None, dashboard_rx: None,
@@ -1610,6 +1614,7 @@ impl App {
         panel!(edit_outline, edit_outline_key);
         panel!(edit_value, edit_value_key);
         panel!(edit_bytes, edit_bytes_key);
+        panel!(edit_sql, edit_sql_key);
         panel!(recent_chooser, recent_key);
         panel!(location_chooser, location_key);
         panel!(nerd_palette, nerd_key);
@@ -2438,11 +2443,7 @@ impl App {
             }
             "tools.nerd_palette" => self.open_nerd_palette(),
             "tools.ascii" => self.open_ascii_panel(),
-            "tools.edit_table" => self.open_edit_table(),
-            "tools.edit_outline" => self.open_edit_outline(),
-            "tools.edit_json" => self.open_edit_value(crate::edit_value::Format::Json),
-            "tools.edit_yaml" => self.open_edit_value(crate::edit_value::Format::Yaml),
-            "tools.edit_bytes" => self.open_edit_bytes(),
+            a if self.open_edit_surface(a) => {}
             "tools.qrcode" => self.open_qrcode(),
             "tools.x11_colors" => self.open_x11_panel(),
             "tools.media_types" => self.open_media_type_panel(),
@@ -8462,6 +8463,63 @@ impl App {
         }
         if let Some(tree) = self.edit_outline.as_mut() {
             tree.mark_saved();
+        }
+        self.run_action("file.save");
+    }
+
+    /// Dispatch a `tools.edit_*` edit-surface action. Returns `true` if handled.
+    fn open_edit_surface(&mut self, action: &str) -> bool {
+        match action {
+            "tools.edit_table" => self.open_edit_table(),
+            "tools.edit_outline" => self.open_edit_outline(),
+            "tools.edit_sql" => self.open_edit_sql(),
+            "tools.edit_json" => self.open_edit_value(crate::edit_value::Format::Json),
+            "tools.edit_yaml" => self.open_edit_value(crate::edit_value::Format::Yaml),
+            "tools.edit_bytes" => self.open_edit_bytes(),
+            _ => return false,
+        }
+        true
+    }
+
+    /// Open the SQL statement editor on the active buffer.
+    fn open_edit_sql(&mut self) {
+        let Some(tab) = self.editor.active_tab() else {
+            self.messages.warn(t!("msg.edit_sql_no_buffer").to_string());
+            return;
+        };
+        if tab.is_image() {
+            self.messages.warn(t!("msg.edit_sql_no_buffer").to_string());
+            return;
+        }
+        let text = tab.text();
+        self.edit_sql = Some(crate::edit_sql::Editor::from_text(&text));
+    }
+
+    /// Route a key to the open SQL editor and act on its outcome.
+    fn edit_sql_key(&mut self, key: KeyEvent) {
+        let page = usize::from(self.layout.edit_sql.height).saturating_sub(1).max(1);
+        let outcome = match self.edit_sql.as_mut() {
+            Some(editor) => editor.handle_key(key, page),
+            None => return,
+        };
+        match outcome {
+            crate::edit_sql::Outcome::Close => self.edit_sql = None,
+            crate::edit_sql::Outcome::Save => self.save_edit_sql(),
+            crate::edit_sql::Outcome::Consumed => {}
+        }
+    }
+
+    /// Serialize the SQL editor back into the active buffer and save it.
+    fn save_edit_sql(&mut self) {
+        let Some(text) = self.edit_sql.as_ref().map(crate::edit_sql::Editor::to_text) else {
+            return;
+        };
+        if let Some(tab) = self.editor.active_tab_mut() {
+            tab.editor.set_content(&text);
+            tab.dirty = true;
+        }
+        if let Some(editor) = self.edit_sql.as_mut() {
+            editor.mark_saved();
         }
         self.run_action("file.save");
     }

@@ -285,9 +285,6 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.x11_panel.is_some() {
         draw_x11_panel(app, frame, area);
     }
-    if app.media_type_panel.is_some() {
-        draw_media_type_panel(app, frame, area);
-    }
     if app.html_panel.is_some() {
         draw_html_panel(app, frame, area);
     }
@@ -297,6 +294,12 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
 /// Second half of the overlay dispatch (split from `draw_overlays` to satisfy the
 /// per-function line limit). Behavior is identical to inlining this dispatch.
 fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.edit_sql.is_some() {
+        draw_edit_sql(app, frame, area);
+    }
+    if app.media_type_panel.is_some() {
+        draw_media_type_panel(app, frame, area);
+    }
     if app.macro_chooser.is_some() {
         draw_macro_chooser(app, frame, area);
     }
@@ -2839,6 +2842,57 @@ fn outline_line(tree: &crate::edit_outline::Tree, i: usize, selected: bool) -> L
 
 // Render the outline editor overlay: a scrolling tree of items with the selected
 // item highlighted, and a status/hint line.
+fn draw_edit_sql(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.edit_sql.is_none() {
+        return;
+    }
+    frame.render_widget(Clear, area);
+    let dirty = if app.edit_sql.as_ref().is_some_and(crate::edit_sql::Editor::is_dirty) { " *" } else { "" };
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {}{} ", icon::CODE, t!("ui.edit_sql"), dirty));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let body_h = usize::from(chunks[0].height);
+    if let Some(e) = app.edit_sql.as_mut() {
+        e.ensure_visible(body_h);
+    }
+    let editor = app.edit_sql.as_ref().unwrap();
+    let total = editor.len();
+    let width = chunks[0].width as usize;
+    let mut lines: Vec<Line> = Vec::with_capacity(body_h);
+    for i in editor.scroll()..(editor.scroll() + body_h).min(total) {
+        let kind = editor.kind(i);
+        let preview = editor.preview(i);
+        let text = format!(" {kind:8} {}", trunc(&preview, width.saturating_sub(11)));
+        let line = if i == editor.sel() {
+            Line::from(Span::styled(text, theme::selected()))
+        } else {
+            Line::from(vec![Span::styled(format!(" {kind:8} "), theme::dim()), Span::raw(trunc(&preview, width.saturating_sub(11)))])
+        };
+        lines.push(line);
+    }
+    if total == 0 {
+        lines.push(Line::from(Span::styled(t!("ui.edit_sql_empty").to_string(), theme::dim())));
+    }
+    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(t!("ui.edit_sql_hint").to_string(), theme::dim()))),
+        chunks[1],
+    );
+
+    app.layout.edit_sql = chunks[0];
+}
+
 fn draw_edit_outline(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.edit_outline.is_none() {
         return;

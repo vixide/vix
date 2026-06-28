@@ -26,6 +26,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Edit SQL mode.** A new **Edit → Mode → SQL** surface parses a `.sql` buffer
+  into its statements (ignoring semicolons in strings/comments) and lists them by
+  kind; reorder, delete, uppercase-format keywords, undo/redo, and save back.
+  Backed by the unit-tested `edit_sql` module. See `spec/edit-sql/index.md`.
 - **Media types.** A new **Tools → Media Types** picker lists common media types
   (MIME) with descriptions and extensions; type to filter, Enter to insert at the
   cursor. Opens pre-selected to the current file's type. Backed by the curated
