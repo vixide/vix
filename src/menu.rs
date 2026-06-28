@@ -340,12 +340,34 @@ const TOOLS_INSERT_SQL: &[Item] = &[
     Item::leaf("menu.item.tools.insert.sql.create_table", "tools.insert.sql.create_table", ""),
 ];
 
+/// Org/LaTeX markup snippets, grouped under Tools → Insert → LaTeX. Each inserts
+/// a ready-to-edit construct at the cursor.
+const TOOLS_INSERT_LATEX: &[Item] = &[
+    Item::leaf("menu.item.tools.insert.latex.headline", "tools.insert.latex.headline", ""),
+    Item::leaf("menu.item.tools.insert.latex.subheadline", "tools.insert.latex.subheadline", ""),
+    Item::leaf("menu.item.tools.insert.latex.link", "tools.insert.latex.link", ""),
+    Item::leaf("menu.item.tools.insert.latex.bold", "tools.insert.latex.bold", ""),
+    Item::leaf("menu.item.tools.insert.latex.italic", "tools.insert.latex.italic", ""),
+    Item::leaf("menu.item.tools.insert.latex.underline", "tools.insert.latex.underline", ""),
+    Item::leaf("menu.item.tools.insert.latex.table", "tools.insert.latex.table", ""),
+    Item::leaf("menu.item.tools.insert.latex.deadline", "tools.insert.latex.deadline", ""),
+    Item::leaf("menu.item.tools.insert.latex.scheduled", "tools.insert.latex.scheduled", ""),
+    Item::leaf("menu.item.tools.insert.latex.time_range", "tools.insert.latex.time_range", ""),
+    Item::leaf("menu.item.tools.insert.latex.timestamp", "tools.insert.latex.timestamp", ""),
+    Item::leaf("menu.item.tools.insert.latex.timestamp_repeater", "tools.insert.latex.timestamp_repeater", ""),
+    Item::leaf("menu.item.tools.insert.latex.quote", "tools.insert.latex.quote", ""),
+    Item::leaf("menu.item.tools.insert.latex.verse", "tools.insert.latex.verse", ""),
+    Item::leaf("menu.item.tools.insert.latex.center", "tools.insert.latex.center", ""),
+    Item::leaf("menu.item.tools.insert.latex.drawer", "tools.insert.latex.drawer", ""),
+];
+
 const TOOLS_INSERT: &[Item] = &[
     Item::sub("menu.item.tools.insert.uuid", TOOLS_INSERT_UUID),
     Item::sub("menu.item.tools.insert.zid", TOOLS_INSERT_ZID),
     Item::sub("menu.name.html", TOOLS_INSERT_HTML),
     Item::sub("menu.item.tools.insert.markdown", TOOLS_INSERT_MARKDOWN),
     Item::sub("menu.name.sql", TOOLS_INSERT_SQL),
+    Item::sub("menu.name.latex", TOOLS_INSERT_LATEX),
     Item::sub("menu.name.lorem", TOOLS_INSERT_LOREM),
     Item::sub("menu.item.tools.insert.datetime", TOOLS_INSERT_DATETIME),
 ];

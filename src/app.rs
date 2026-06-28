@@ -2875,6 +2875,7 @@ impl App {
             a if self.insert_markdown(a) => {}
             a if self.insert_html(a) => {}
             a if self.insert_sql(a) => {}
+            a if self.insert_latex(a) => {}
             a if self.insert_dynamic(a) => {}
             "tools.checksum.sha256" => {
                 self.transform_selection_or_buffer(crate::checksum_tool::sha256_hex);
@@ -3502,6 +3503,61 @@ impl App {
                 "GRANT USAGE ON SCHEMA public TO alice;\n",
             ),
             "tools.insert.sql.create_table" => SQL_CREATE_TABLE,
+            _ => return false,
+        };
+        self.insert_content(snippet);
+        true
+    }
+
+    /// Insert an Org/LaTeX markup snippet for a `tools.insert.latex.*` action at
+    /// the cursor. Returns `true` if `action` was a known snippet.
+    fn insert_latex(&mut self, action: &str) -> bool {
+        let snippet = match action {
+            "tools.insert.latex.headline" => "* Headline\n",
+            "tools.insert.latex.subheadline" => "** Subheadline\n",
+            "tools.insert.latex.link" => "[[https://org.mode][Org]]",
+            "tools.insert.latex.bold" => "*hello*",
+            "tools.insert.latex.italic" => "/hello/",
+            "tools.insert.latex.underline" => "_hello_",
+            "tools.insert.latex.table" => {
+                "| x | x | x |\n|---|---|---|\n| x | x | x |\n| x | x | x |\n"
+            }
+            "tools.insert.latex.deadline" => "DEADLINE: <YYYY-MM-DD Day>\n",
+            "tools.insert.latex.scheduled" => "SCHEDULED: <YYYY-MM-DD Day>\n",
+            "tools.insert.latex.time_range" => {
+                "<2004-08-23 Mon 10:00-11:00>--<2004-08-26 Thu 10:00-11:00>"
+            }
+            "tools.insert.latex.timestamp" => "<2006-11-02 Thu 10:00-12:00>",
+            "tools.insert.latex.timestamp_repeater" => "<2006-11-02 Thu 10:00-12:00 +1w>",
+            "tools.insert.latex.quote" => concat!(
+                "#+BEGIN_QUOTE\n",
+                "Everything should be made\n",
+                "as simple as possible,\n",
+                "but not any simpler.\n",
+                "---Albert Einstein\n",
+                "#+END_QUOTE\n",
+            ),
+            "tools.insert.latex.verse" => concat!(
+                "#+BEGIN_VERSE\n",
+                "I write, erase, rewrite\n",
+                "Erase again, and then\n",
+                "A poppy blooms.\n",
+                "---Katsushika Hokusai\n",
+                "#+END_VERSE\n",
+            ),
+            "tools.insert.latex.center" => concat!(
+                "#+BEGIN_CENTER\n",
+                "Nature is an infinite sphere\n",
+                "of which the center is everywhere\n",
+                "and the circumference nowhere.\n",
+                "--- Blaise Pascal\n",
+                "#+END_CENTER\n",
+            ),
+            "tools.insert.latex.drawer" => concat!(
+                ":DRAWERNAME:\n",
+                "This is inside the drawer.\n",
+                ":END:\n",
+            ),
             _ => return false,
         };
         self.insert_content(snippet);
