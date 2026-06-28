@@ -1,0 +1,10 @@
+{
+  "Let": { "prefix": "let", "body": ["let ${1:name} = ${0}"], "description": "let binding" },
+  "Function": { "prefix": "fn", "body": ["let ${1:name} ${2:args} =", "\t$0"], "description": "Function" },
+  "Recursive function": { "prefix": "rec", "body": ["let rec ${1:name} ${2:args} =", "\t$0"], "description": "Recursive function" },
+  "Match": { "prefix": "match", "body": ["match ${1:expr} with", "| ${2:pattern} -> ${3}", "| _ -> ${0}"], "description": "Pattern match" },
+  "Type": { "prefix": "type", "body": ["type ${1:name} = ${0}"], "description": "Type definition" },
+  "Record": { "prefix": "record", "body": ["type ${1:name} = {", "\t${2:field} : ${3:int};", "}$0"], "description": "Record type" },
+  "Module": { "prefix": "module", "body": ["module ${1:Name} = struct", "\t$0", "end"], "description": "Module" },
+  "Print": { "prefix": "print", "body": ["Printf.printf \"${1:%d\\n}\" ${0}"], "description": "Printf.printf" }
+}

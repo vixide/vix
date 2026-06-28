@@ -100,6 +100,24 @@ fn project_media_type_example_snippets_load() {
     assert_eq!(vix::media_type::for_extension("sql").unwrap().media_type, "application/sql");
     let sql = vix::snippets::load_scoped(Some("application/sql"), root, proj);
     assert!(sql.iter().any(|s| s.prefixes.iter().any(|p| p == "select")), "sql examples loaded");
+
+    // Newly added languages resolve and load their example libraries.
+    for (ext, mt) in [
+        ("go", "text/go"),
+        ("kt", "text/kotlin"),
+        ("hs", "text/haskell"),
+        ("ex", "text/elixir"),
+        ("sh", "text/sh"),
+        ("ps1", "text/powershell"),
+    ] {
+        assert_eq!(vix::media_type::for_extension(ext).unwrap().media_type, mt, "{ext} → {mt}");
+        let snips = vix::snippets::load_scoped(Some(mt), root, proj);
+        assert!(!snips.is_empty(), "{mt} examples loaded");
+    }
+
+    // The Base column marks text vs binary content.
+    assert!(vix::media_type::for_extension("rs").unwrap().is_text());
+    assert!(!vix::media_type::for_extension("png").unwrap().is_text());
 }
 
 #[test]

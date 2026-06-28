@@ -1,0 +1,37 @@
+{
+  "XML declaration": {
+    "prefix": "xml",
+    "body": ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>", "$0"],
+    "description": "XML declaration"
+  },
+  "Element": {
+    "prefix": "el",
+    "body": ["<${1:tag}>${2}</${1:tag}>$0"],
+    "description": "Element with text"
+  },
+  "Element block": {
+    "prefix": "elb",
+    "body": ["<${1:tag}>", "\t$0", "</${1:tag}>"],
+    "description": "Element with children"
+  },
+  "Self-closing": {
+    "prefix": "self",
+    "body": ["<${1:tag} ${2:attr}=\"${3:value}\" />$0"],
+    "description": "Self-closing element"
+  },
+  "Attribute": {
+    "prefix": "attr",
+    "body": ["${1:name}=\"${2:value}\"$0"],
+    "description": "Attribute"
+  },
+  "Comment": {
+    "prefix": "comment",
+    "body": ["<!-- ${1:comment} -->$0"],
+    "description": "XML comment"
+  },
+  "CDATA": {
+    "prefix": "cdata",
+    "body": ["<![CDATA[${1:content}]]>$0"],
+    "description": "CDATA section"
+  }
+}

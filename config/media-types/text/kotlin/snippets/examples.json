@@ -1,0 +1,50 @@
+{
+  "Function": {
+    "prefix": "fun",
+    "body": ["fun ${1:name}(${2:args}): ${3:Unit} {", "\t$0", "}"],
+    "description": "Function"
+  },
+  "Main": {
+    "prefix": "main",
+    "body": ["fun main() {", "\t$0", "}"],
+    "description": "main function"
+  },
+  "Class": {
+    "prefix": "class",
+    "body": ["class ${1:Name}(${2:val arg: String}) {", "\t$0", "}"],
+    "description": "Class with primary constructor"
+  },
+  "Data class": {
+    "prefix": "data",
+    "body": ["data class ${1:Name}(val ${2:field}: ${3:String})$0"],
+    "description": "Data class"
+  },
+  "Val": { "prefix": "val", "body": ["val ${1:name} = ${0}"], "description": "Immutable value" },
+  "Var": { "prefix": "var", "body": ["var ${1:name} = ${0}"], "description": "Mutable variable" },
+  "When": {
+    "prefix": "when",
+    "body": ["when (${1:value}) {", "\t${2:a} -> ${3}", "\telse -> ${0}", "}"],
+    "description": "when expression"
+  },
+  "For": {
+    "prefix": "for",
+    "body": ["for (${1:item} in ${2:items}) {", "\t$0", "}"],
+    "description": "for loop"
+  },
+  "If": {
+    "prefix": "if",
+    "body": ["if (${1:condition}) {", "\t$0", "}"],
+    "description": "if statement"
+  },
+  "Companion object": {
+    "prefix": "companion",
+    "body": ["companion object {", "\t$0", "}"],
+    "description": "Companion object"
+  },
+  "Println": { "prefix": "pln", "body": ["println(${0})"], "description": "println" },
+  "Extension function": {
+    "prefix": "ext",
+    "body": ["fun ${1:Type}.${2:name}(${3:args}): ${4:Unit} {", "\t$0", "}"],
+    "description": "Extension function"
+  }
+}

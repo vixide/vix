@@ -1,0 +1,12 @@
+{
+  "Object": { "prefix": "object", "body": ["object ${1:Name} {", "\t$0", "}"], "description": "Singleton object" },
+  "Class": { "prefix": "class", "body": ["class ${1:Name}(${2:args}) {", "\t$0", "}"], "description": "Class" },
+  "Case class": { "prefix": "case", "body": ["case class ${1:Name}(${2:field}: ${3:String})$0"], "description": "Case class" },
+  "Trait": { "prefix": "trait", "body": ["trait ${1:Name} {", "\t$0", "}"], "description": "Trait" },
+  "Def": { "prefix": "def", "body": ["def ${1:name}(${2:args}): ${3:Unit} = {", "\t$0", "}"], "description": "Method" },
+  "Main": { "prefix": "main", "body": ["@main def ${1:run}(): Unit =", "\t$0"], "description": "Main method" },
+  "Val": { "prefix": "val", "body": ["val ${1:name} = ${0}"], "description": "Immutable value" },
+  "Match": { "prefix": "match", "body": ["${1:value} match {", "\tcase ${2:pattern} => ${3}", "\tcase _ => ${0}", "}"], "description": "Pattern match" },
+  "For": { "prefix": "for", "body": ["for (${1:x} <- ${2:xs}) {", "\t$0", "}"], "description": "for loop" },
+  "Println": { "prefix": "pln", "body": ["println(${0})"], "description": "println" }
+}

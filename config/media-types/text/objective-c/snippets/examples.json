@@ -1,0 +1,25 @@
+{
+  "Interface": {
+    "prefix": "interface",
+    "body": ["@interface ${1:Name} : ${2:NSObject}", "", "$0", "", "@end"],
+    "description": "Class interface"
+  },
+  "Implementation": {
+    "prefix": "implementation",
+    "body": ["@implementation ${1:Name}", "", "$0", "", "@end"],
+    "description": "Class implementation"
+  },
+  "Method": {
+    "prefix": "method",
+    "body": ["- (${1:void})${2:name} {", "\t$0", "}"],
+    "description": "Instance method"
+  },
+  "Property": {
+    "prefix": "property",
+    "body": ["@property (${1:nonatomic, strong}) ${2:NSString *}${3:name};$0"],
+    "description": "Property declaration"
+  },
+  "If": { "prefix": "if", "body": ["if (${1:condition}) {", "\t$0", "}"], "description": "if statement" },
+  "For in": { "prefix": "forin", "body": ["for (${1:id} ${2:obj} in ${3:collection}) {", "\t$0", "}"], "description": "Fast enumeration" },
+  "NSLog": { "prefix": "log", "body": ["NSLog(@\"${1:%@}\", ${0});"], "description": "NSLog" }
+}

@@ -1,0 +1,62 @@
+{
+  "Rule": {
+    "prefix": "rule",
+    "body": ["${1:selector} {", "\t${0}", "}"],
+    "description": "CSS rule"
+  },
+  "Class": {
+    "prefix": "class",
+    "body": [".${1:name} {", "\t${0}", "}"],
+    "description": "Class selector"
+  },
+  "ID": {
+    "prefix": "id",
+    "body": ["#${1:name} {", "\t${0}", "}"],
+    "description": "ID selector"
+  },
+  "Flex container": {
+    "prefix": "flex",
+    "body": ["display: flex;", "align-items: ${1:center};", "justify-content: ${2:center};$0"],
+    "description": "Flexbox container"
+  },
+  "Grid container": {
+    "prefix": "grid",
+    "body": ["display: grid;", "grid-template-columns: ${1:repeat(3, 1fr)};", "gap: ${2:1rem};$0"],
+    "description": "Grid container"
+  },
+  "Media query": {
+    "prefix": "media",
+    "body": ["@media (${1:max-width: 600px}) {", "\t$0", "}"],
+    "description": "Media query"
+  },
+  "Variable": {
+    "prefix": "var",
+    "body": ["--${1:name}: ${2:value};$0"],
+    "description": "Custom property"
+  },
+  "Use variable": {
+    "prefix": "varuse",
+    "body": ["var(--${1:name})$0"],
+    "description": "Use custom property"
+  },
+  "Keyframes": {
+    "prefix": "keyframes",
+    "body": ["@keyframes ${1:name} {", "\tfrom { ${2:opacity: 0;} }", "\tto { ${3:opacity: 1;} }", "}$0"],
+    "description": "Keyframes animation"
+  },
+  "Transition": {
+    "prefix": "transition",
+    "body": ["transition: ${1:all} ${2:0.2s} ${3:ease};$0"],
+    "description": "Transition"
+  },
+  "Font face": {
+    "prefix": "fontface",
+    "body": ["@font-face {", "\tfont-family: \"${1:Name}\";", "\tsrc: url(\"${2:font.woff2}\") format(\"woff2\");", "}$0"],
+    "description": "@font-face"
+  },
+  "Import": {
+    "prefix": "import",
+    "body": ["@import url(\"${1:file.css}\");$0"],
+    "description": "@import"
+  }
+}

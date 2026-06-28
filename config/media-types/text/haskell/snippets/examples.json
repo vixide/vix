@@ -1,0 +1,12 @@
+{
+  "Module": { "prefix": "module", "body": ["module ${1:Name} (${2}) where", "", "$0"], "description": "Module declaration" },
+  "Main": { "prefix": "main", "body": ["main :: IO ()", "main = ${0:return ()}"], "description": "main function" },
+  "Function": { "prefix": "fn", "body": ["${1:name} :: ${2:a -> b}", "${1:name} ${3:x} = ${0}"], "description": "Function with signature" },
+  "Data type": { "prefix": "data", "body": ["data ${1:Name} = ${2:Constructor}${0}"], "description": "Data type" },
+  "Type alias": { "prefix": "type", "body": ["type ${1:Name} = ${0:Type}"], "description": "Type synonym" },
+  "Newtype": { "prefix": "newtype", "body": ["newtype ${1:Name} = ${1:Name} { ${2:un}${1:Name} :: ${3:Type} }$0"], "description": "Newtype" },
+  "Case": { "prefix": "case", "body": ["case ${1:expr} of", "\t${2:pattern} -> ${3}", "\t_ -> ${0}"], "description": "case expression" },
+  "Let": { "prefix": "let", "body": ["let ${1:x} = ${2}", "in ${0}"], "description": "let binding" },
+  "Do block": { "prefix": "do", "body": ["do", "\t${1}", "\t$0"], "description": "do notation" },
+  "Import": { "prefix": "import", "body": ["import ${0:Data.List}"], "description": "Import" }
+}

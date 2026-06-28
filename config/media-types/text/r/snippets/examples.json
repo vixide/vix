@@ -1,0 +1,12 @@
+{
+  "Function": { "prefix": "fn", "body": ["${1:name} <- function(${2:args}) {", "\t$0", "}"], "description": "Function" },
+  "If": { "prefix": "if", "body": ["if (${1:condition}) {", "\t$0", "}"], "description": "if statement" },
+  "If/else": { "prefix": "ife", "body": ["if (${1:condition}) {", "\t${2}", "} else {", "\t$0", "}"], "description": "if/else" },
+  "For": { "prefix": "for", "body": ["for (${1:i} in ${2:seq}) {", "\t$0", "}"], "description": "for loop" },
+  "While": { "prefix": "while", "body": ["while (${1:condition}) {", "\t$0", "}"], "description": "while loop" },
+  "Library": { "prefix": "lib", "body": ["library(${0:package})"], "description": "Load a package" },
+  "Data frame": { "prefix": "df", "body": ["${1:df} <- data.frame(${2:col} = ${0})"], "description": "data.frame" },
+  "Apply (sapply)": { "prefix": "sapply", "body": ["sapply(${1:x}, function(${2:e}) ${0})"], "description": "sapply" },
+  "Print": { "prefix": "print", "body": ["print(${0})"], "description": "print" },
+  "Assign": { "prefix": "assign", "body": ["${1:name} <- ${0:value}"], "description": "Assignment" }
+}

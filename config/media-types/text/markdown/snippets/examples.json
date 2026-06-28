@@ -1,0 +1,37 @@
+{
+  "Heading 1": { "prefix": "h1", "body": ["# ${1:Heading}$0"], "description": "H1 heading" },
+  "Heading 2": { "prefix": "h2", "body": ["## ${1:Heading}$0"], "description": "H2 heading" },
+  "Heading 3": { "prefix": "h3", "body": ["### ${1:Heading}$0"], "description": "H3 heading" },
+  "Bold": { "prefix": "bold", "body": ["**${1:text}**$0"], "description": "Bold text" },
+  "Italic": { "prefix": "italic", "body": ["*${1:text}*$0"], "description": "Italic text" },
+  "Inline code": { "prefix": "code", "body": ["`${1:code}`$0"], "description": "Inline code" },
+  "Code block": {
+    "prefix": "codeblock",
+    "body": ["```${1:lang}", "${2:code}", "```", "$0"],
+    "description": "Fenced code block"
+  },
+  "Link": { "prefix": "link", "body": ["[${1:text}](${2:https://example.com})$0"], "description": "Link" },
+  "Image": { "prefix": "img", "body": ["![${1:alt}](${2:path})$0"], "description": "Image" },
+  "Bullet list": {
+    "prefix": "ul",
+    "body": ["- ${1:item}", "- ${2:item}", "- ${3:item}", "$0"],
+    "description": "Bullet list"
+  },
+  "Numbered list": {
+    "prefix": "ol",
+    "body": ["1. ${1:item}", "2. ${2:item}", "3. ${3:item}", "$0"],
+    "description": "Numbered list"
+  },
+  "Task list": {
+    "prefix": "task",
+    "body": ["- [ ] ${1:todo}", "- [x] ${2:done}", "$0"],
+    "description": "Task list"
+  },
+  "Blockquote": { "prefix": "quote", "body": ["> ${1:quote}$0"], "description": "Blockquote" },
+  "Table": {
+    "prefix": "table",
+    "body": ["| ${1:A} | ${2:B} |", "| --- | --- |", "| ${3:1} | ${4:2} |", "$0"],
+    "description": "Table"
+  },
+  "Horizontal rule": { "prefix": "hr", "body": ["---", "$0"], "description": "Horizontal rule" }
+}

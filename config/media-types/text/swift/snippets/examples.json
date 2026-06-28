@@ -1,0 +1,58 @@
+{
+  "Function": {
+    "prefix": "func",
+    "body": ["func ${1:name}(${2:args}) -> ${3:Void} {", "\t$0", "}"],
+    "description": "Function"
+  },
+  "Struct": {
+    "prefix": "struct",
+    "body": ["struct ${1:Name} {", "\t${2:var field: String}", "\t$0", "}"],
+    "description": "Struct"
+  },
+  "Class": {
+    "prefix": "class",
+    "body": ["class ${1:Name} {", "\tinit(${2:args}) {", "\t\t$0", "\t}", "}"],
+    "description": "Class with initializer"
+  },
+  "Enum": {
+    "prefix": "enum",
+    "body": ["enum ${1:Name} {", "\tcase ${2:a}", "\tcase ${3:b}", "}$0"],
+    "description": "Enum"
+  },
+  "If let": {
+    "prefix": "iflet",
+    "body": ["if let ${1:value} = ${2:optional} {", "\t$0", "}"],
+    "description": "Optional binding"
+  },
+  "Guard let": {
+    "prefix": "guard",
+    "body": ["guard let ${1:value} = ${2:optional} else {", "\t${3:return}", "}", "$0"],
+    "description": "guard let"
+  },
+  "For": {
+    "prefix": "for",
+    "body": ["for ${1:item} in ${2:items} {", "\t$0", "}"],
+    "description": "for-in loop"
+  },
+  "Switch": {
+    "prefix": "switch",
+    "body": ["switch ${1:value} {", "case ${2:a}:", "\t$0", "default:", "\tbreak", "}"],
+    "description": "switch statement"
+  },
+  "Protocol": {
+    "prefix": "protocol",
+    "body": ["protocol ${1:Name} {", "\t$0", "}"],
+    "description": "Protocol"
+  },
+  "Extension": {
+    "prefix": "extension",
+    "body": ["extension ${1:Type} {", "\t$0", "}"],
+    "description": "Extension"
+  },
+  "Print": { "prefix": "print", "body": ["print(${0})"], "description": "print" },
+  "Closure": {
+    "prefix": "closure",
+    "body": ["{ (${1:args}) -> ${2:Void} in", "\t$0", "}"],
+    "description": "Closure"
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "HTML5 boilerplate": {
+    "prefix": "html5",
+    "body": [
+      "<!DOCTYPE html>",
+      "<html lang=\"${1:en}\">",
+      "<head>",
+      "\t<meta charset=\"utf-8\">",
+      "\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+      "\t<title>${2:Title}</title>",
+      "</head>",
+      "<body>",
+      "\t$0",
+      "</body>",
+      "</html>"
+    ],
+    "description": "HTML5 document skeleton"
+  },
+  "Div": {
+    "prefix": "div",
+    "body": ["<div class=\"${1:name}\">", "\t$0", "</div>"],
+    "description": "div element"
+  },
+  "Anchor": {
+    "prefix": "a",
+    "body": ["<a href=\"${1:#}\">${2:text}</a>$0"],
+    "description": "Anchor link"
+  },
+  "Image": {
+    "prefix": "img",
+    "body": ["<img src=\"${1:src}\" alt=\"${2:alt}\">$0"],
+    "description": "Image element"
+  },
+  "Unordered list": {
+    "prefix": "ul",
+    "body": ["<ul>", "\t<li>${1:item}</li>", "\t<li>${2:item}</li>", "</ul>$0"],
+    "description": "Unordered list"
+  },
+  "Ordered list": {
+    "prefix": "ol",
+    "body": ["<ol>", "\t<li>${1:item}</li>", "\t<li>${2:item}</li>", "</ol>$0"],
+    "description": "Ordered list"
+  },
+  "Table": {
+    "prefix": "table",
+    "body": [
+      "<table>",
+      "\t<thead>",
+      "\t\t<tr><th>${1:A}</th><th>${2:B}</th></tr>",
+      "\t</thead>",
+      "\t<tbody>",
+      "\t\t<tr><td>${3:1}</td><td>${4:2}</td></tr>",
+      "\t</tbody>",
+      "</table>$0"
+    ],
+    "description": "Table with head and body"
+  },
+  "Form": {
+    "prefix": "form",
+    "body": ["<form action=\"${1:/}\" method=\"${2:post}\">", "\t$0", "</form>"],
+    "description": "Form element"
+  },
+  "Input": {
+    "prefix": "input",
+    "body": ["<input type=\"${1:text}\" name=\"${2:name}\" placeholder=\"${3:}\">$0"],
+    "description": "Input element"
+  },
+  "Button": {
+    "prefix": "button",
+    "body": ["<button type=\"${1:button}\">${2:Label}</button>$0"],
+    "description": "Button element"
+  },
+  "Script": {
+    "prefix": "script",
+    "body": ["<script src=\"${1:script.js}\"></script>$0"],
+    "description": "External script"
+  },
+  "Stylesheet link": {
+    "prefix": "css",
+    "body": ["<link rel=\"stylesheet\" href=\"${1:styles.css}\">$0"],
+    "description": "Stylesheet link"
+  }
+}

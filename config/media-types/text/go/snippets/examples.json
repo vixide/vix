@@ -1,0 +1,72 @@
+{
+  "Package main": {
+    "prefix": "pkgmain",
+    "body": ["package main", "", "import \"fmt\"", "", "func main() {", "\t$0", "}"],
+    "description": "package main with main()"
+  },
+  "Function": {
+    "prefix": "func",
+    "body": ["func ${1:name}(${2:args}) ${3:error} {", "\t$0", "}"],
+    "description": "Function"
+  },
+  "Method": {
+    "prefix": "meth",
+    "body": ["func (${1:r} ${2:Type}) ${3:name}(${4:args}) ${5:error} {", "\t$0", "}"],
+    "description": "Method with receiver"
+  },
+  "Struct": {
+    "prefix": "struct",
+    "body": ["type ${1:Name} struct {", "\t${2:Field} ${3:string}", "}$0"],
+    "description": "Struct type"
+  },
+  "Interface": {
+    "prefix": "interface",
+    "body": ["type ${1:Name} interface {", "\t${2:Method}(${3}) ${4:error}", "}$0"],
+    "description": "Interface type"
+  },
+  "If err": {
+    "prefix": "iferr",
+    "body": ["if err != nil {", "\treturn ${1:err}", "}$0"],
+    "description": "Error check"
+  },
+  "For loop": {
+    "prefix": "for",
+    "body": ["for ${1:i} := 0; ${1:i} < ${2:n}; ${1:i}++ {", "\t$0", "}"],
+    "description": "for loop"
+  },
+  "For range": {
+    "prefix": "forr",
+    "body": ["for ${1:i}, ${2:v} := range ${3:items} {", "\t$0", "}"],
+    "description": "for range loop"
+  },
+  "Goroutine": {
+    "prefix": "go",
+    "body": ["go func() {", "\t$0", "}()"],
+    "description": "Anonymous goroutine"
+  },
+  "Defer": {
+    "prefix": "defer",
+    "body": ["defer ${1:f}()$0"],
+    "description": "defer call"
+  },
+  "Println": {
+    "prefix": "pln",
+    "body": ["fmt.Println(${0})"],
+    "description": "fmt.Println"
+  },
+  "Printf": {
+    "prefix": "pf",
+    "body": ["fmt.Printf(\"${1:%v}\\n\"${2})$0"],
+    "description": "fmt.Printf"
+  },
+  "Map": {
+    "prefix": "map",
+    "body": ["${1:m} := map[${2:string}]${3:int}{}$0"],
+    "description": "Map literal"
+  },
+  "Test": {
+    "prefix": "test",
+    "body": ["func Test${1:Name}(t *testing.T) {", "\t$0", "}"],
+    "description": "Test function"
+  }
+}

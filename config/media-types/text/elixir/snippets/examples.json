@@ -1,0 +1,13 @@
+{
+  "Module": { "prefix": "defmodule", "body": ["defmodule ${1:Name} do", "\t$0", "end"], "description": "Module" },
+  "Function": { "prefix": "def", "body": ["def ${1:name}(${2:args}) do", "\t$0", "end"], "description": "Public function" },
+  "Private function": { "prefix": "defp", "body": ["defp ${1:name}(${2:args}) do", "\t$0", "end"], "description": "Private function" },
+  "Case": { "prefix": "case", "body": ["case ${1:value} do", "\t${2:pattern} -> ${3}", "\t_ -> ${0}", "end"], "description": "case expression" },
+  "Cond": { "prefix": "cond", "body": ["cond do", "\t${1:condition} -> ${2}", "\ttrue -> ${0}", "end"], "description": "cond expression" },
+  "If": { "prefix": "if", "body": ["if ${1:condition} do", "\t$0", "end"], "description": "if expression" },
+  "Pipe": { "prefix": "pipe", "body": ["${1:value}", "|> ${0:fun}"], "description": "Pipe operator" },
+  "Enum.map": { "prefix": "map", "body": ["Enum.map(${1:list}, fn ${2:x} -> ${0} end)"], "description": "Enum.map" },
+  "Struct": { "prefix": "struct", "body": ["defstruct ${0:[:field]}"], "description": "defstruct" },
+  "GenServer init": { "prefix": "genserver", "body": ["use GenServer", "", "def init(${1:state}) do", "\t{:ok, ${1:state}}", "end$0"], "description": "GenServer skeleton" },
+  "IO.inspect": { "prefix": "inspect", "body": ["IO.inspect(${0})"], "description": "IO.inspect" }
+}
