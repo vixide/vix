@@ -11,6 +11,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Keymap renamed "Vim" → "Vi"** — display label, id (`vim` → `vi`), and action
   (`view.keymap:vim` → `view.keymap:vi`). Older configs using `vim` still load.
 
+### Changed
+
+- **Edit surfaces moved to Edit → Mode.** The Edit Table/Outline/JSON/YAML/Bytes
+  items moved from the Tools menu into a new **Edit → Mode** submenu (labeled
+  Table/Outline/JSON/YAML/Bytes). The action ids and command-palette entries are
+  unchanged.
+
 ### Fixed
 
 - **Menu navigation.** In a dropdown, pressing `Right` on a submenu now opens it

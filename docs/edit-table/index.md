@@ -7,7 +7,7 @@ that owns its own keys and saves back to the buffer.
 
 ## Opening
 
-Open it from **Tools → Edit Table…** or the command palette (*Edit Table*). The
+Open it from **Edit → Mode → Table…** or the command palette (*Edit Table*). The
 delimiter is chosen from the file extension — `.tsv` is tab-separated, everything
 else is parsed as CSV (RFC 4180 quoting). The first row is treated as the header
 and is pinned while you scroll.

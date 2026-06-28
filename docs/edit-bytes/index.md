@@ -6,7 +6,7 @@ cursor and overwrite bytes by typing hex digits.
 
 ## Opening
 
-Open it from **Tools → Edit Bytes…** or the command palette (*Edit Bytes*). The
+Open it from **Edit → Mode → Bytes…** or the command palette (*Edit Bytes*). The
 view loads the buffer's bytes; sixteen are shown per row, with the cursor byte
 highlighted in both the hex and ASCII columns.
 
