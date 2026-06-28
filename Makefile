@@ -72,7 +72,7 @@ LINUX_TARGET   ?= x86_64-unknown-linux-musl
 # These targets are commands, not files, so declare them PHONY: make will run
 # their recipes unconditionally and never skip one because a same-named file
 # happens to exist or look "up to date".
-.PHONY: all test release build-macos build-windows build-linux clean
+.PHONY: all test check release build-macos build-windows build-linux clean
 
 # Tests first, then the release builds. make evaluates prerequisites left to
 # right and aborts on the first failure, so `test` failing means no build runs.
@@ -81,6 +81,11 @@ all: test release
 # Run the whole workspace's tests (unit + integration + doctests).
 test:
 	$(CARGO) test --workspace
+
+# Local CI-parity gate: build + clippy (pedantic, -D warnings) + tests.
+# Same as scripts/check; run before pushing.
+check:
+	./scripts/check
 
 # Build every platform. Each build-* recipe is independent and self-contained.
 release: build-macos build-windows build-linux

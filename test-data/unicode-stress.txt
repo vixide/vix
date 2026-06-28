@@ -1,0 +1,7 @@
+ASCII baseline: the quick brown fox.
+CJK wide: 日本語のテキストです
+Emoji ZWJ family: 👨‍👨‍👧‍👧 and flags 🇯🇵🇺🇸
+Combining marks: é à ñ (café résumé)
+Tabs	and	wide	gaps
+RTL: مرحبا بالعالم shalom שלום
+Math/symbols: ∑ ∫ √ ≈ ≠ ⊕ ∞

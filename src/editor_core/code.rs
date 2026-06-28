@@ -1057,6 +1057,27 @@ mod tests {
     }
 
     #[test]
+    fn grapheme_iteration_handles_unicode_stress_fixture() {
+        // The fixture (test-data/unicode-stress.txt) bundles ZWJ emoji, CJK,
+        // combining marks, tabs, RTL, and symbols — the cases TUI text rendering
+        // most often gets wrong. Iterating it must never panic, and widths must be
+        // grapheme-aware (a ZWJ family is one grapheme; CJK glyphs are 2 cells).
+        let fixture = include_str!("../../test-data/unicode-stress.txt");
+        let rope = Rope::from_str(fixture);
+        for line_idx in 0..rope.len_lines() {
+            let line = rope.line(line_idx);
+            // Width sum must not panic and must be finite for every line.
+            let _w: usize = RopeGraphemes::new(&line).map(grapheme_width).sum();
+        }
+        // The ZWJ family is a single grapheme cluster, not its 7 codepoints.
+        let family = Rope::from_str("👨‍👨‍👧‍👧");
+        assert_eq!(RopeGraphemes::new(&family.slice(..)).count(), 1);
+        // A CJK ideograph occupies two terminal cells.
+        let cjk = Rope::from_str("日");
+        assert_eq!(grapheme_width(cjk.slice(..)), 2);
+    }
+
+    #[test]
     fn test_remove() {
         let mut code = Code::new("Hello World", "", None).unwrap();
         code.remove(5, 11);
