@@ -41,6 +41,21 @@ link, **bold**/*italic*/_underline_, a table, Org planning lines (Deadline,
 Scheduled), timestamps (plain, range, repeater), block constructs (Quote, Verse,
 Center), and a Drawer. The placeholder text is meant to be edited after insertion.
 
+## Org
+
+**Insert → Org** drops in Org-mode building blocks: Title/Author keywords,
+headlines, links and images, plain/ordered/check lists, a table, TODO/DONE
+items, planning lines (Deadline, Scheduled), timestamps (plain, range, repeater),
+and a Drawer.
+
+**Insert → Markers** toggles an inline emphasis marker around the selection —
+Bold `*`, Italic `/`, Underline `_`, Strikethrough `+`, Code `~`, Verbatim `=`
+(e.g. selecting `text` and choosing Bold gives `*text*`; choosing it again
+removes the markers).
+
+**Insert → Begin-End** toggles an Org block around the selection — Comment,
+Center, Quote, Verse (`#+BEGIN_QUOTE … #+END_QUOTE`).
+
 ## Lorem ipsum
 
 **Insert → Lorem ipsum** inserts placeholder text — Words, a Sentence, or a

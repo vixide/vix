@@ -372,6 +372,48 @@ const TOOLS_INSERT_LATEX: &[Item] = &[
     Item::leaf("menu.item.tools.insert.latex.drawer", "tools.insert.latex.drawer", ""),
 ];
 
+/// Org-mode snippets, grouped under Tools → Insert → Org.
+const TOOLS_INSERT_ORG: &[Item] = &[
+    Item::leaf("menu.item.tools.insert.org.title", "tools.insert.org.title", ""),
+    Item::leaf("menu.item.tools.insert.org.author", "tools.insert.org.author", ""),
+    Item::leaf("menu.item.tools.insert.org.headline", "tools.insert.org.headline", ""),
+    Item::leaf("menu.item.tools.insert.org.subheadline", "tools.insert.org.subheadline", ""),
+    Item::leaf("menu.item.tools.insert.org.link", "tools.insert.org.link", ""),
+    Item::leaf("menu.item.tools.insert.org.image", "tools.insert.org.image", ""),
+    Item::leaf("menu.item.tools.insert.org.list", "tools.insert.org.list", ""),
+    Item::leaf("menu.item.tools.insert.org.ordered_list", "tools.insert.org.ordered_list", ""),
+    Item::leaf("menu.item.tools.insert.org.check_list", "tools.insert.org.check_list", ""),
+    Item::leaf("menu.item.tools.insert.org.table", "tools.insert.org.table", ""),
+    Item::leaf("menu.item.tools.insert.org.todo", "tools.insert.org.todo", ""),
+    Item::leaf("menu.item.tools.insert.org.done", "tools.insert.org.done", ""),
+    Item::leaf("menu.item.tools.insert.org.deadline", "tools.insert.org.deadline", ""),
+    Item::leaf("menu.item.tools.insert.org.scheduled", "tools.insert.org.scheduled", ""),
+    Item::leaf("menu.item.tools.insert.org.time_range", "tools.insert.org.time_range", ""),
+    Item::leaf("menu.item.tools.insert.org.timestamp", "tools.insert.org.timestamp", ""),
+    Item::leaf("menu.item.tools.insert.org.timestamp_repeater", "tools.insert.org.timestamp_repeater", ""),
+    Item::leaf("menu.item.tools.insert.org.drawer", "tools.insert.org.drawer", ""),
+];
+
+/// Org inline emphasis markers, grouped under Tools → Insert → Markers. Each
+/// toggles the marker character around the selection.
+const TOOLS_INSERT_MARKERS: &[Item] = &[
+    Item::leaf("menu.item.tools.insert.marker.bold", "tools.insert.marker.bold", ""),
+    Item::leaf("menu.item.tools.insert.marker.italic", "tools.insert.marker.italic", ""),
+    Item::leaf("menu.item.tools.insert.marker.underline", "tools.insert.marker.underline", ""),
+    Item::leaf("menu.item.tools.insert.marker.strikethrough", "tools.insert.marker.strikethrough", ""),
+    Item::leaf("menu.item.tools.insert.marker.code", "tools.insert.marker.code", ""),
+    Item::leaf("menu.item.tools.insert.marker.verbatim", "tools.insert.marker.verbatim", ""),
+];
+
+/// Org block constructs, grouped under Tools → Insert → Begin-End. Each toggles a
+/// `#+BEGIN_…`/`#+END_…` block around the selection.
+const TOOLS_INSERT_BLOCK: &[Item] = &[
+    Item::leaf("menu.item.tools.insert.block.comment", "tools.insert.block.comment", ""),
+    Item::leaf("menu.item.tools.insert.block.center", "tools.insert.block.center", ""),
+    Item::leaf("menu.item.tools.insert.block.quote", "tools.insert.block.quote", ""),
+    Item::leaf("menu.item.tools.insert.block.verse", "tools.insert.block.verse", ""),
+];
+
 const TOOLS_INSERT: &[Item] = &[
     Item::sub("menu.item.tools.insert.uuid", TOOLS_INSERT_UUID),
     Item::sub("menu.item.tools.insert.zid", TOOLS_INSERT_ZID),
@@ -379,6 +421,9 @@ const TOOLS_INSERT: &[Item] = &[
     Item::sub("menu.item.tools.insert.markdown", TOOLS_INSERT_MARKDOWN),
     Item::sub("menu.name.sql", TOOLS_INSERT_SQL),
     Item::sub("menu.name.latex", TOOLS_INSERT_LATEX),
+    Item::sub("menu.name.org", TOOLS_INSERT_ORG),
+    Item::sub("menu.item.tools.insert.markers", TOOLS_INSERT_MARKERS),
+    Item::sub("menu.item.tools.insert.block", TOOLS_INSERT_BLOCK),
     Item::sub("menu.name.lorem", TOOLS_INSERT_LOREM),
     Item::sub("menu.item.tools.insert.datetime", TOOLS_INSERT_DATETIME),
 ];

@@ -83,6 +83,31 @@ fn type_str(app: &mut App, s: &str) {
 }
 
 #[test]
+fn org_insert_and_marker_block_toggles() {
+    let mut app = app_at(Path::new("."));
+    // Org snippet insertion.
+    app.run_action("tools.insert.org.title");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "#+title: Hello World\n");
+
+    // Marker toggle wraps, then unwraps, the selection.
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "bold");
+    app.on_key(ctrl('a'));
+    app.run_action("tools.insert.marker.bold");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "*bold*");
+    app.on_key(ctrl('a'));
+    app.run_action("tools.insert.marker.bold");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "bold");
+
+    // Begin-End block toggle wraps the selection.
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "hi");
+    app.on_key(ctrl('a'));
+    app.run_action("tools.insert.block.quote");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "#+BEGIN_QUOTE\nhi\n#+END_QUOTE");
+}
+
+#[test]
 fn select_all_then_typing_replaces_buffer() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "hello");

@@ -3792,6 +3792,68 @@ menu.name.sql:
   en: "SQL"
 menu.name.latex:
   en: "LaTeX"
+menu.name.org:
+  en: "Org"
+menu.item.tools.insert.markers:
+  en: "Markers"
+menu.item.tools.insert.block:
+  en: "Begin-End"
+menu.item.tools.insert.org.title:
+  en: "Title"
+menu.item.tools.insert.org.author:
+  en: "Author"
+menu.item.tools.insert.org.headline:
+  en: "Headline"
+menu.item.tools.insert.org.subheadline:
+  en: "Subheadline"
+menu.item.tools.insert.org.link:
+  en: "Link"
+menu.item.tools.insert.org.image:
+  en: "Image"
+menu.item.tools.insert.org.list:
+  en: "List"
+menu.item.tools.insert.org.ordered_list:
+  en: "Ordered List"
+menu.item.tools.insert.org.check_list:
+  en: "Check List"
+menu.item.tools.insert.org.table:
+  en: "Table"
+menu.item.tools.insert.org.todo:
+  en: "TODO"
+menu.item.tools.insert.org.done:
+  en: "DONE"
+menu.item.tools.insert.org.deadline:
+  en: "Deadline"
+menu.item.tools.insert.org.scheduled:
+  en: "Scheduled"
+menu.item.tools.insert.org.time_range:
+  en: "Time Range"
+menu.item.tools.insert.org.timestamp:
+  en: "Timestamp"
+menu.item.tools.insert.org.timestamp_repeater:
+  en: "Timestamp Repeater"
+menu.item.tools.insert.org.drawer:
+  en: "Drawer"
+menu.item.tools.insert.marker.bold:
+  en: "Bold *"
+menu.item.tools.insert.marker.italic:
+  en: "Italic /"
+menu.item.tools.insert.marker.underline:
+  en: "Underline _"
+menu.item.tools.insert.marker.strikethrough:
+  en: "Strikethrough +"
+menu.item.tools.insert.marker.code:
+  en: "Code ~"
+menu.item.tools.insert.marker.verbatim:
+  en: "Verbatim ="
+menu.item.tools.insert.block.comment:
+  en: "Comment"
+menu.item.tools.insert.block.center:
+  en: "Center"
+menu.item.tools.insert.block.quote:
+  en: "Quote"
+menu.item.tools.insert.block.verse:
+  en: "Verse"
 menu.name.url:
   en: "URL"
 menu.name.dec:
