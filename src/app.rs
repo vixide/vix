@@ -143,6 +143,12 @@ pub enum PromptKind {
     RoamRef,
     /// Org-node: insert a `#+transclude:` directive for a node (found or created).
     NodeTransclusion,
+    /// Open a workspace from a `.vix-workspace` file path.
+    WorkspaceOpen,
+    /// Save the current workspace into a `.vix-workspace` file path.
+    WorkspaceSave,
+    /// Add a folder (by path) to the current workspace.
+    WorkspaceAddFolder,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -875,6 +881,10 @@ pub struct CompletionPopup {
 pub struct App {
     /// Workspace root directory.
     pub root: PathBuf,
+    /// All folders in the current workspace (the first is `root`). The fuzzy file
+    /// finder and project search span every folder; folders are added via
+    /// File → Add Folder to Workspace and persisted in a `.vix-workspace` file.
+    pub workspace_folders: Vec<PathBuf>,
     /// Tabbed text editor.
     pub editor: Editor,
     /// File explorer pane.
@@ -1251,6 +1261,7 @@ impl App {
 
         App {
             explorer: Explorer::new(root.clone()),
+            workspace_folders: vec![root.clone()],
             root,
             editor,
             messages,
@@ -2416,6 +2427,9 @@ impl App {
             }
             "file.open_recent" => self.open_recent_chooser(),
             "file.switch_project" => self.open_workspace_chooser(),
+            "workspace.open" => self.prompt_workspace(PromptKind::WorkspaceOpen),
+            "workspace.save" => self.prompt_workspace(PromptKind::WorkspaceSave),
+            "workspace.add_folder" => self.prompt_workspace(PromptKind::WorkspaceAddFolder),
             "nav.recent_locations" => self.open_location_chooser(),
             "bookmark.toggle" => self.toggle_bookmark(),
             "bookmark.next" => self.bookmark_goto(true),
@@ -3641,6 +3655,9 @@ impl App {
             }
             PromptKind::RoamInsert => self.roam_insert_link(input),
             PromptKind::NodeTransclusion => self.node_insert_transclusion(input),
+            PromptKind::WorkspaceOpen => self.workspace_open(input),
+            PromptKind::WorkspaceSave => self.workspace_save(input),
+            PromptKind::WorkspaceAddFolder => self.workspace_add_folder(input),
             PromptKind::RoamDailyCapture => self.roam_daily_capture(input),
             PromptKind::RoamDailyDate if !input.is_empty() => self.roam_open_daily(input),
             PromptKind::RoamTag if !input.is_empty() => {
@@ -6593,6 +6610,7 @@ impl App {
         self.lsp.shutdown();
         self.lsp_synced.clear();
         self.root = new_root.to_path_buf();
+        self.workspace_folders = vec![new_root.to_path_buf()];
         self.explorer = Explorer::new(new_root.to_path_buf());
         self.lsp = crate::lsp::Lsp::new(
             self.settings.lsp_enabled,
@@ -6607,6 +6625,86 @@ impl App {
         }
         self.focus = Focus::Editor;
         self.status = t!("status.project_switched", path = new_root.display()).to_string();
+    }
+
+    // ----- Workspaces (multi-folder, saved to a file) ----------------------
+
+    /// Open the prompt for a workspace action (Save seeds a default path).
+    fn prompt_workspace(&mut self, kind: PromptKind) {
+        let (msg, seed) = match kind {
+            PromptKind::WorkspaceOpen => (t!("prompt.workspace_open").to_string(), None),
+            PromptKind::WorkspaceSave => {
+                let p = self.root.join(format!("workspace.{}", crate::workspace::EXTENSION));
+                (t!("prompt.workspace_save").to_string(), Some(p.to_string_lossy().into_owned()))
+            }
+            _ => (t!("prompt.workspace_add_folder").to_string(), None),
+        };
+        let mut prompt = Prompt::new(kind, msg);
+        if let Some(seed) = seed {
+            prompt = prompt.with_input(seed);
+        }
+        self.prompt = Some(prompt);
+    }
+
+    /// Save the current workspace (all folders + open files) into `path`.
+    fn workspace_save(&mut self, path: &str) {
+        let path = self.resolve(path.trim());
+        let ws = crate::workspace::Workspace {
+            folders: self.workspace_folders.iter().map(|p| p.to_string_lossy().into_owned()).collect(),
+            files: self
+                .editor
+                .tabs
+                .iter()
+                .filter_map(|t| t.path.as_ref())
+                .map(|p| p.to_string_lossy().into_owned())
+                .collect(),
+        };
+        match ws.save(&path) {
+            Ok(()) => self.status = t!("status.workspace_saved", path = path.display()).to_string(),
+            Err(e) => self.messages.error(t!("msg.save_failed", error = e).to_string()),
+        }
+    }
+
+    /// Open a workspace file: re-root at its first folder, register the rest, and
+    /// reopen its files.
+    fn workspace_open(&mut self, path: &str) {
+        let path = self.resolve(path.trim());
+        let ws = match crate::workspace::Workspace::load(&path) {
+            Ok(ws) => ws,
+            Err(e) => {
+                self.messages.error(t!("msg.open_failed", error = e).to_string());
+                return;
+            }
+        };
+        let folders: Vec<PathBuf> = ws.folders.iter().map(PathBuf::from).collect();
+        if let Some(primary) = folders.first() {
+            self.switch_workspace(&primary.clone());
+        }
+        // switch_workspace reset workspace_folders to just the primary; register
+        // the full set so the finder/search span them all.
+        self.workspace_folders = if folders.is_empty() { vec![self.root.clone()] } else { folders };
+        self.build_file_index();
+        for f in &ws.files {
+            let p = PathBuf::from(f);
+            if p.exists() {
+                self.open_path(&p, false);
+            }
+        }
+        self.status = t!("status.workspace_opened", path = path.display()).to_string();
+    }
+
+    /// Add a folder to the current workspace so the finder/search span it too.
+    fn workspace_add_folder(&mut self, path: &str) {
+        let folder = self.resolve(path.trim());
+        if !folder.is_dir() {
+            self.status = t!("status.workspace_not_a_folder").to_string();
+            return;
+        }
+        if !self.workspace_folders.contains(&folder) {
+            self.workspace_folders.push(folder.clone());
+            self.build_file_index();
+        }
+        self.status = t!("status.workspace_folder_added", path = folder.display()).to_string();
     }
 
     /// Buffer-word autocomplete: complete the word before the cursor from other
@@ -11084,27 +11182,32 @@ impl App {
     /// always pruned (some projects don't ignore them), depth is bounded, and the
     /// index is capped to keep startup and matching responsive.
     fn build_file_index(&mut self) {
-        let walker = ignore::WalkBuilder::new(&self.root)
-            .max_depth(Some(12))
-            .hidden(true) // skip dotfiles (matches the previous behavior)
-            .git_ignore(true)
-            .git_global(true)
-            .git_exclude(true)
-            .require_git(false) // apply .gitignore/.ignore even outside a git repo
-            .parents(true)
-            .filter_entry(|e| {
-                // Prune heavy build/vendor dirs, but never the walk root itself.
-                e.depth() == 0
-                    || !matches!(e.file_name().to_str(), Some("target" | "node_modules"))
-            })
-            .build();
         let mut out = Vec::new();
-        for entry in walker.flatten() {
+        for folder in &self.workspace_folders {
             if out.len() >= 5000 {
                 break;
             }
-            if entry.file_type().is_some_and(|t| t.is_file()) {
-                out.push(entry.into_path());
+            let walker = ignore::WalkBuilder::new(folder)
+                .max_depth(Some(12))
+                .hidden(true) // skip dotfiles (matches the previous behavior)
+                .git_ignore(true)
+                .git_global(true)
+                .git_exclude(true)
+                .require_git(false) // apply .gitignore/.ignore even outside a git repo
+                .parents(true)
+                .filter_entry(|e| {
+                    // Prune heavy build/vendor dirs, but never the walk root itself.
+                    e.depth() == 0
+                        || !matches!(e.file_name().to_str(), Some("target" | "node_modules"))
+                })
+                .build();
+            for entry in walker.flatten() {
+                if out.len() >= 5000 {
+                    break;
+                }
+                if entry.file_type().is_some_and(|t| t.is_file()) {
+                    out.push(entry.into_path());
+                }
             }
         }
         self.file_index = out;
@@ -12829,7 +12932,10 @@ impl App {
             | PromptKind::RoamTag
             | PromptKind::RoamAlias
             | PromptKind::RoamRef
-            | PromptKind::NodeTransclusion => self.accept_roam_prompt(prompt.kind, prompt.input.trim()),
+            | PromptKind::NodeTransclusion
+            | PromptKind::WorkspaceOpen
+            | PromptKind::WorkspaceSave
+            | PromptKind::WorkspaceAddFolder => self.accept_roam_prompt(prompt.kind, prompt.input.trim()),
             PromptKind::DebugRepl => {
                 let expr = prompt.input.trim();
                 if !expr.is_empty() {
@@ -13375,6 +13481,44 @@ mod tests {
     use super::*;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+
+    #[test]
+    fn workspace_save_open_and_add_folder_round_trip() {
+        let base = std::env::temp_dir().join(format!("vix-ws-{}", std::process::id()));
+        let proj = base.join("proj");
+        let lib = base.join("lib");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::create_dir_all(&lib).unwrap();
+        std::fs::write(proj.join("main.rs"), "fn main() {}\n").unwrap();
+        std::fs::write(lib.join("util.rs"), "pub fn u() {}\n").unwrap();
+
+        // Add the lib folder; the file index should now span both folders.
+        let mut app = App::new(proj.clone(), Settings::default());
+        app.workspace_add_folder(&lib.to_string_lossy());
+        assert!(app.workspace_folders.contains(&lib), "folder added");
+        let names: Vec<String> =
+            app.file_index.iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect();
+        assert!(names.iter().any(|n| n == "util.rs"), "index spans added folder: {names:?}");
+
+        // Open a file, save the workspace, then reopen it in a fresh app.
+        app.open_path(&proj.join("main.rs"), false);
+        let ws_file = base.join("test.vix-workspace");
+        app.workspace_save(&ws_file.to_string_lossy());
+        assert!(ws_file.exists(), "workspace file written");
+
+        let mut app2 = App::new(base.clone(), Settings::default());
+        app2.workspace_open(&ws_file.to_string_lossy());
+        assert!(app2.workspace_folders.contains(&proj) && app2.workspace_folders.contains(&lib));
+        assert!(
+            app2.editor
+                .tabs
+                .iter()
+                .any(|t| t.path.as_ref().and_then(|p| p.file_name()).is_some_and(|n| n == "main.rs")),
+            "saved file reopened"
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
 
     #[test]
     fn file_index_honors_gitignore_and_prunes_vendor_dirs() {

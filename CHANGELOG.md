@@ -41,6 +41,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Workspaces (multi-folder, saved to a file).** File → Open Workspace from
+  File… / Save Workspace into File… / Add Folder to Workspace…. A workspace is a
+  portable `.vix-workspace` (TOML) file listing project folders plus the files to
+  reopen; the fuzzy finder and project index span every workspace folder.
 - **base16 themes.** Ten well-known [base16](https://github.com/chriskempson/base16)
   color schemes (Tomorrow Night, Solarized Dark/Light, Gruvbox, Nord, Ocean,
   Monokai, Material, Dracula, …) generated from a compact palette table and
