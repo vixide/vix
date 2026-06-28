@@ -83,6 +83,25 @@ fn type_str(app: &mut App, s: &str) {
 }
 
 #[test]
+fn org_menu_edits_headlines_and_exports() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "* Task\nbody");
+    // Cursor is on the body line; move to the headline (line 0).
+    app.on_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+    app.on_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+    app.run_action("org.cycle_todo");
+    assert!(app.editor.active_tab().unwrap().text().starts_with("* TODO Task"));
+    app.run_action("org.demote");
+    assert!(app.editor.active_tab().unwrap().text().starts_with("** TODO Task"));
+
+    // Export opens a new buffer containing Markdown.
+    let before = app.editor.tabs.len();
+    app.run_action("org.export_markdown");
+    assert_eq!(app.editor.tabs.len(), before + 1);
+    assert!(app.editor.active_tab().unwrap().text().contains("## TODO Task"));
+}
+
+#[test]
 fn org_insert_and_marker_block_toggles() {
     let mut app = app_at(Path::new("."));
     // Org snippet insertion.
@@ -2888,6 +2907,7 @@ fn alt_letters_open_specific_menus() {
         ('e', "menu.edit"),
         ('i', "menu.view"),
         ('g', "menu.git"),
+        ('o', "menu.org"),
         ('d', "menu.debug"),
         ('h', "menu.help"),
     ] {

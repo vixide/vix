@@ -1,12 +1,13 @@
 # Menus
 
 The top menu bar groups every command into dropdown menus. From left to right
-the menus are **Vix · File · Edit · View · Tools · AI · Git · Help**.
+the menus are **Vix · File · Edit · View · Tools · AI · Git · Org · Debug · Help**.
 
 ## Navigating the menus
 
 - Open the bar with **F10**, or jump straight to a menu with its Alt mnemonic:
-  **Alt+F/E/V/T/A/G/H** for File / Edit / View / Tools / AI / Git / Help.
+  **Alt+F/E/V/T/A/G/O/D/H** for
+  File / Edit / View / Tools / AI / Git / Org / Debug / Help.
 - **Arrows** navigate, **Enter** runs the highlighted item, **Esc** closes.
 - A mouse click on a menu name opens it; a click on a dropdown item runs it.
 - While a menu is open, moving the pointer follows the selection: hovering a

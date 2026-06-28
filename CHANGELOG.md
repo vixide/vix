@@ -24,6 +24,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Org mode (basics).** A new top-level **Org** menu (`Alt+O`) brings headline
+  structure editing (promote/demote and move subtree across siblings), fold
+  cycling, TODO cycling (none → `TODO` → `DONE`), checkbox toggling, and export to
+  Markdown / standalone HTML. Backed by the pure, unit-tested `org` module. See
+  `spec/org/index.md`.
 - **`affix` helpers** — `add` / `drop` / `toggle` a `prefix`/`suffix` pair around
   text (a conventional wrap: `add("alfa","bravo","charlie") == "bravoalfacharlie"`),
   for wrapping and unwrapping selections.

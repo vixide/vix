@@ -42,6 +42,7 @@ Highlights:
   [Integrated Terminal](terminal/index.md) (a shell in a panel) ·
   [Switch Project](switch-project/index.md) (re-root at a recent workspace) ·
   [Test Runner](test-runner/index.md) (pass/fail panel).
+- Markup: [Org](org/index.md) (Org-mode basics — headlines, TODO, export).
 
 ## Specification (`spec/`) — source of truth
 

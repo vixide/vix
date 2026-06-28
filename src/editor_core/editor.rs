@@ -568,6 +568,14 @@ impl Editor {
         self.code.char_to_line(self.cursor)
     }
 
+    /// Move the cursor to the start of 0-based `line` (clamped to the buffer) and
+    /// clear any selection.
+    pub fn set_cursor_line(&mut self, line: usize) {
+        let last = self.code.len_lines().saturating_sub(1);
+        self.cursor = self.code.line_to_char(line.min(last));
+        self.selection = None;
+    }
+
     /// Set the clipboard text, falling back to an in-memory clipboard when the
     /// system clipboard is unavailable.
     ///
