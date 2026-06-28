@@ -112,6 +112,8 @@ ratatui = { version = "0.30", features = ["crossterm"] }
 # or buffer (Base64, URL, CSV/TSV/JSON, YAML/JSON).
 # Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
 crossterm = "0.29"
+# Recursive, .gitignore-aware directory walking for the file index / fuzzy finder.
+ignore = "0.4"
 # Regular expressions for find/replace.
 regex = "1"
 # Settings serialization (confy handles the TOML; serde derives the schema).
