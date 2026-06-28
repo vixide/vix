@@ -215,23 +215,9 @@ menu.org:
   bn: "Org"
   zh: "Org"
   ja: "Org"
-menu.debug:
-  en: "Debug"
-  es: "Depurar"
-  fr: "Déboguer"
-  de: "Debuggen"
-  cy: "Dadfygio"
-  ga: "Dífhabhtaigh"
-  gd: "Dì-bhugaich"
-  pl: "Debuguj"
-  pt: "Depurar"
-  ru: "Отладка"
-  ar: "تصحيح"
-  hi: "डिबग"
-  bn: "ডিবাগ"
-  zh: "调试"
-  ja: "デバッグ"
-menu.item.debug.start:
+menu.run:
+  en: "Run"
+menu.item.run.start:
   en: "Start"
   es: "Iniciar"
   fr: "Démarrer"
@@ -247,7 +233,7 @@ menu.item.debug.start:
   bn: "শুরু"
   zh: "开始"
   ja: "開始"
-menu.item.debug.stop:
+menu.item.run.stop:
   en: "Stop"
   es: "Detener"
   fr: "Arrêter"
@@ -263,7 +249,7 @@ menu.item.debug.stop:
   bn: "থামুন"
   zh: "停止"
   ja: "停止"
-menu.item.debug.toggle_breakpoint:
+menu.item.run.toggle_breakpoint:
   en: "Toggle Breakpoint"
   es: "Alternar punto de interrupción"
   fr: "Basculer le point d'arrêt"
@@ -279,7 +265,7 @@ menu.item.debug.toggle_breakpoint:
   bn: "ব্রেকপয়েন্ট টগল"
   zh: "切换断点"
   ja: "ブレークポイント切替"
-menu.item.debug.continue:
+menu.item.run.continue:
   en: "Continue"
   es: "Continuar"
   fr: "Continuer"
@@ -295,7 +281,7 @@ menu.item.debug.continue:
   bn: "চালিয়ে যান"
   zh: "继续"
   ja: "続行"
-menu.item.debug.step_over:
+menu.item.run.step_over:
   en: "Step Over"
   es: "Saltar"
   fr: "Pas à pas principal"
@@ -311,7 +297,7 @@ menu.item.debug.step_over:
   bn: "স্টেপ ওভার"
   zh: "单步跳过"
   ja: "ステップオーバー"
-menu.item.debug.step_into:
+menu.item.run.step_into:
   en: "Step Into"
   es: "Entrar"
   fr: "Pas à pas détaillé"
@@ -327,7 +313,7 @@ menu.item.debug.step_into:
   bn: "স্টেপ ইনটু"
   zh: "单步进入"
   ja: "ステップイン"
-menu.item.debug.step_out:
+menu.item.run.step_out:
   en: "Step Out"
   es: "Salir"
   fr: "Pas à pas sortant"
@@ -343,7 +329,7 @@ menu.item.debug.step_out:
   bn: "স্টেপ আউট"
   zh: "单步跳出"
   ja: "ステップアウト"
-menu.item.debug.pause:
+menu.item.run.pause:
   en: "Pause"
   es: "Pausar"
   fr: "Pause"
@@ -359,7 +345,7 @@ menu.item.debug.pause:
   bn: "বিরতি"
   zh: "暂停"
   ja: "一時停止"
-menu.item.debug.watch:
+menu.item.run.watch:
   en: "Add Watch…"
   es: "Añadir inspección…"
   fr: "Ajouter une surveillance…"
@@ -375,7 +361,7 @@ menu.item.debug.watch:
   bn: "ওয়াচ যোগ করুন…"
   zh: "添加监视…"
   ja: "ウォッチを追加…"
-menu.item.debug.repl:
+menu.item.run.repl:
   en: "Evaluate…"
   es: "Evaluar…"
   fr: "Évaluer…"
@@ -391,7 +377,7 @@ menu.item.debug.repl:
   bn: "মূল্যায়ন…"
   zh: "求值…"
   ja: "評価…"
-menu.item.debug.panel:
+menu.item.run.panel:
   en: "Toggle Debug Panel"
   es: "Alternar panel de depuración"
   fr: "Basculer le panneau de débogage"
