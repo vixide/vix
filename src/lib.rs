@@ -84,6 +84,7 @@ pub mod diff_view;
 pub mod editorconfig;
 pub mod macros;
 pub mod pane_tree;
+pub mod base16;
 pub mod base64_tool;
 pub mod base_tool;
 pub mod bottom_dock;

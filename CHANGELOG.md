@@ -41,6 +41,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **base16 themes.** Ten well-known [base16](https://github.com/chriskempson/base16)
+  color schemes (Tomorrow Night, Solarized Dark/Light, Gruvbox, Nord, Ocean,
+  Monokai, Material, Dracula, …) generated from a compact palette table and
+  merged into View → Theme. (Idea from the zee editor's base16 theme generation.)
 - **`scripts/check` (and `make check`)**: a one-command local CI-parity gate —
   build + Clippy (pedantic, `-D warnings`) + full test suite. Plus Unicode/emoji
   stress fixtures in `test-data/` with a grapheme-width regression test. (Ideas
