@@ -3436,6 +3436,8 @@ menu.name.emacs:
   en: "Emacs"
 menu.name.vim:
   en: "Vim"
+menu.name.spacemacs:
+  en: "Spacemacs"
 menu.name.md5:
   en: "MD5"
 menu.name.crc32:
@@ -11711,6 +11713,22 @@ status.vim_no_command:
   pt: "Não é um comando: %{cmd}"
   ru: "Не команда: %{cmd}"
   zh: "不是命令: %{cmd}"
+status.spacemacs_no_leader:
+  en: "No leader binding: SPC %{seq}"
+  es: "Sin atajo de líder: SPC %{seq}"
+  fr: "Aucun raccourci leader : SPC %{seq}"
+  de: "Keine Leader-Belegung: SPC %{seq}"
+  cy: "Dim rhwymiad arweinydd: SPC %{seq}"
+  ga: "Gan ceangal ceannaire: SPC %{seq}"
+  gd: "Gun cheangal stiùiriche: SPC %{seq}"
+  pl: "Brak przypisania lidera: SPC %{seq}"
+  pt: "Sem atalho de líder: SPC %{seq}"
+  ru: "Нет привязки лидера: SPC %{seq}"
+  ar: "لا ارتباط قائد: SPC %{seq}"
+  hi: "कोई लीडर बाइंडिंग नहीं: SPC %{seq}"
+  bn: "কোনো লিডার বাইন্ডিং নেই: SPC %{seq}"
+  zh: "无 leader 绑定：SPC %{seq}"
+  ja: "リーダー割り当てなし: SPC %{seq}"
 status.emacs_no_chord:
   en: "Unknown chord"
   es: "Combinación desconocida"
