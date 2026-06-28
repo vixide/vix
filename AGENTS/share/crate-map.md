@@ -9,10 +9,12 @@ the private-API-rich `editor_core` module. Shared reference for where things liv
 The crate root (`src/lib.rs`) sets `#![forbid(unsafe_code)]`, `#![deny(missing_docs)]`,
 and `#![warn(clippy::pedantic)]`, and **every module file** repeats
 `#![warn(clippy::pedantic)]`. There is **no** blanket `#![allow(clippy::pedantic)]`
-or `#![allow(missing_docs)]` anywhere — findings are fixed in code. The only
-sanctioned allows are four targeted `#[allow(clippy::struct_excessive_bools)]` on
-genuine state structs (`App`, `Settings`, `SearchBar`, `WorkspaceSearch`).
-`cargo clippy --workspace --all-targets -- -D warnings` is clean. See
+or `#![allow(missing_docs)]` anywhere — findings are fixed in code. Sanctioned
+allows are only a few **targeted** ones: `#[allow(clippy::struct_excessive_bools)]`
+on genuine state structs (`App`, `Settings`, `SearchBar`, `WorkspaceSearch`, and
+`editor_core`'s `Editor`) and a handful of `#[allow(clippy::too_many_lines)]` /
+`too_many_arguments` on specific functions that resist further extraction.
+`cargo clippy --all-targets -- -D warnings` is clean. See
 [[rust-clippy-pedantic]] / `spec/rust-clippy-pedantic`.
 
 ## `editor_core` — the code-editor widget (`src/editor_core/`)
@@ -67,11 +69,17 @@ Tree-sitter highlight queries live in repo-root `langs/`, embedded with
 
 | Area        | Modules                                                                       |
 | ----------- | ----------------------------------------------------------------------------- |
-| LSP         | `lsp` (process IO + host wiring), `lsp_core` (JSON-RPC framing, builders, parsers, positions). |
+| LSP / DAP   | `lsp` (process IO + host wiring), `lsp_core` (JSON-RPC framing, builders, parsers, positions); `dap` (Debug Adapter Protocol client, reuses `lsp_core::frame`). |
 | Git         | `git` (status/diff/staging via the git CLI), `conflict_tool` (merge-marker parser). |
 | Spellcheck  | `spellcheck` (Hunspell via `spellbook`).                                      |
+| Snippets    | `snippets` (JSON snippet files: scopes, parse, merge, picker), `snippet_tool` (tabstop engine + bundled snippets). |
+| Media types | `media_type` (the MIME catalog parsed from `spec/media-types/media-types.tsv`; text/binary base, extension lookup, picker). |
+| Org mode    | `org` (headline structure, TODO/checkbox, Markdown/HTML export), `affix` (prefix/suffix add/drop/toggle helpers). |
+| Run / test  | `tasks` (named `tasks.toml` runner), `test_runner` (parse test output into a pass/fail tree), `terminal` (integrated shell), `diff_view` (compare-with-file). |
+| Config      | `editorconfig` (`.editorconfig` parsing), `macros` (persisted keyboard macros), `pane_tree` (nested split layout). |
+| AI          | `ai_panel` (chat panel), `ai_diff` (AI diff review).                          |
 | Text tools  | `format_tool`, `jwt_tool`, `base_tool`, `base64_tool`, `url_tool`, `uuid_tool`, `zid_tool`, `checksum_tool`, `regex_tool`, `snippet_tool`, `markdown_preview`, `convert_tabular`, `convert_from_*_into_*_tool` (12). |
-| Edit surfaces | `edit_table` (CSV/TSV spreadsheet, `Grid`), `edit_outline` (prose hierarchy, `Tree`), `edit_value` (JSON/YAML tree, `Tree` + `Format`), `edit_bytes` (hex/ASCII byte editor, `Hex`). Overlay editors with their own `handle_key`/`Outcome`. |
+| Edit surfaces | `edit_table` (CSV/TSV spreadsheet, `Grid`), `edit_outline` (prose hierarchy, `Tree`), `edit_value` (JSON/YAML tree, `Tree` + `Format`), `edit_bytes` (hex/ASCII byte editor, `Hex`), `edit_sql` (SQL statement list, `Editor`). Overlay editors with their own `handle_key`/`Outcome`, under **Edit → Mode**. |
 | Generators  | `qr_tool` (QR code via the `qrcode` crate, Unicode renderer), `lorem` (deterministic lorem-ipsum text). |
 | Tool dialogs| `calculator_tool`, `color_converter_tool`, `unit_converter_tool`, `pomodoro_tool`. |
 | Info panels | `text_information_panel`, `file_information_panel`, `system_information_panel`, `workspace_dashboard_panel`, `outline_panel`, `welcome_panel`. |

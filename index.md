@@ -5,7 +5,7 @@ Vix IDE is a high-speed high-security text editor featuring an integrated develo
 Vix looks like this:
 
 ```txt
-Vix  File  Edit  View  Tools  AI  Git  Help
+Vix  File  Edit  View  Tools  AI  Git  Org  Debug  Help
 ╭─Explorer-──╮╭ main.rs ──────────────────╮╭Messages────────╮
 │ README.md  ││ 1  fn main() {            ││ Welcome to Vix │ 
 │ src        ││ 2      println!("hello"); ││ Ctrl+B toggles │
@@ -19,7 +19,7 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
 
 ## Features
 
-- **Menus** — File Edit View Tools AI Git Help.
+- **Menus** — File Edit View Tools AI Git Org Debug Help.
 - **Editor** - Tabs, Undo/Redo, tree-sitters, syntax highlighting, etc.
  **soft wrap**, **bracket matching**, toggleable line numbers and visible
   whitespace, and configurable indentation (`indent_style` / `tab_width`).
@@ -53,10 +53,24 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
   and a navigable month grid with today highlighted (all computed with [`jiff`]).
 - **Nerd Font palette** (Tools menu) — a character picker: browse a grid of Nerd
   Font glyphs and click (or arrow + Enter) to insert one into the editor.
-- **Edit surfaces** (Tools menu) — view and edit the active buffer as a CSV/TSV
-  table, a folding prose outline, a JSON/YAML tree, or a hex byte dump.
-- **Insert** (Tools menu) — UUID/ZID, Markdown & HTML snippets, Lorem ipsum, and
-  Date/Time presets (ISO 8601 / RFC 3339 / epoch); plus a **QR Code** generator.
+- **Edit surfaces** (Edit → Mode) — view and edit the active buffer as a CSV/TSV
+  table, a folding prose outline, a JSON/YAML tree, a hex byte dump, or a SQL
+  statement list.
+- **Insert** (Tools menu) — UUID/ZID, Markdown/HTML/SQL/LaTeX/Org snippets,
+  inline Org markers and `#+BEGIN/END` blocks, Lorem ipsum, and Date/Time presets
+  (ISO 8601 / RFC 3339 / epoch); plus a **QR Code** generator.
+- **Snippets** — a searchable picker plus prefix-and-Tab expansion, loaded from
+  JSON files (bundled, global, per-media-type, and project scopes).
+- **Org mode** (Org menu) — headline promote/demote, subtree move, TODO cycling,
+  checkbox toggle, fold cycling, and export to Markdown/HTML.
+- **Media types** (Tools → Media Types) — a searchable MIME catalog (text/binary)
+  with insert and extension lookup.
+- **Test runner** (Tools → Run Tests) — parses `cargo test`/pytest-style output
+  into a pass/fail panel with jump-to-failure.
+- **Debugger** (Debug menu) — a DAP client: breakpoints, stepping, call stack,
+  variables, watches, and an evaluate REPL.
+- **Integrated terminal & tasks** — a shell in a panel, plus named `tasks.toml`
+  commands and a compare-with-file diff.
 - **Multi-cursor & column editing** — a caret on every match of the selection
   (select-all-occurrences), or a rectangular block (`Alt+Shift+↑/↓`).
 - **Git** — status / diff / blame, **stage / unstage / revert per hunk**, diff
@@ -67,12 +81,14 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
   optional **breadcrumb bar** shows `file ▸ symbol`.
 - **Themes** — Dark, Light, and more ship bundled, plus your can add your own.
 - **Internationalization** — the whole UI is translatable into many languages.
-- **Keymaps** — switch the keyboard bindings among vim, emacs, macOS.
+- **Keymaps** — switch the keyboard bindings among Apple, macOS VSCode, Emacs,
+  Vi, Spacemacs, IntelliJ (macOS/Windows), and Eclipse.
+- **Split panes** — nested horizontal/vertical splits up to a 2×2 grid.
 - **Keyboard help** — press `F1` for an overlay of every shortcut.
 
 ## Install & run
 
-Requires a Rust toolchain (1.86+).
+Requires a Rust toolchain (1.95+).
 
 ```sh
 cargo run                  # open the editor rooted at the current directory

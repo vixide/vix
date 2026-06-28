@@ -14,15 +14,17 @@ on top.
 
 - `#![forbid(unsafe_code)]` and `#![warn(clippy::pedantic)]` at the crate root,
   and `#![warn(clippy::pedantic)]` is repeated in **every module file** (lints are
-  per-module). Keep `cargo clippy --workspace --all-targets -- -D warnings` clean.
+  per-module). Keep `cargo clippy --all-targets -- -D warnings` clean.
 - **No blanket allows.** There is no `#![allow(clippy::pedantic)]` and no
   `#![allow(missing_docs)]`; fix findings in code (saturating `try_from` casts,
   extract helpers for `too_many_lines`, context structs for `too_many_arguments`,
   add `# Errors`/`# Panics`, etc.). The reused `editor_core` engine modules keep
   `#[allow(clippy::all, clippy::pedantic)]` for upstream style; new editor code
   goes in a Vix-owned module (`wrap`, `brackets`, `lines`), held to pedantic.
-- The only sanctioned exceptions are four targeted
-  `#[allow(clippy::struct_excessive_bools)]` on `App`/`Settings`/`SearchBar`/`WorkspaceSearch`.
+- Sanctioned exceptions are only a few **targeted** allows:
+  `#[allow(clippy::struct_excessive_bools)]` on `App`/`Settings`/`SearchBar`/
+  `WorkspaceSearch`/`editor_core::Editor`, and a handful of `too_many_lines` /
+  `too_many_arguments` on specific functions that resist further extraction.
 
 ## Internationalization
 

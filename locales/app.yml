@@ -1576,7 +1576,7 @@ menu.item.edit.toggle_comment:
   zh: "注释"
   ja: "コメント"
 menu.item.edit.record_macro:
-  en: "Record Macro"
+  en: "Record"
   es: "Grabar macro"
   fr: "Enregistrer la macro"
   de: "Makro aufzeichnen"
@@ -1592,7 +1592,7 @@ menu.item.edit.record_macro:
   zh: "录制宏"
   ja: "マクロを記録"
 menu.item.edit.play_macro:
-  en: "Play Macro"
+  en: "Play"
   es: "Reproducir macro"
   fr: "Exécuter la macro"
   de: "Makro abspielen"
@@ -1608,7 +1608,7 @@ menu.item.edit.play_macro:
   zh: "播放宏"
   ja: "マクロを再生"
 menu.item.edit.save_macro:
-  en: "Save Macro…"
+  en: "Save…"
   es: "Guardar macro…"
   fr: "Enregistrer la macro…"
   de: "Makro speichern…"
@@ -1624,7 +1624,7 @@ menu.item.edit.save_macro:
   zh: "保存宏…"
   ja: "マクロを保存…"
 menu.item.edit.play_saved_macro:
-  en: "Play Saved Macro…"
+  en: "Play Saved…"
   es: "Reproducir macro guardada…"
   fr: "Exécuter une macro enregistrée…"
   de: "Gespeichertes Makro abspielen…"
@@ -2167,6 +2167,22 @@ menu.item.edit.case:
   bn: "কেস"
   zh: "大小写"
   ja: "大文字小文字"
+menu.item.edit.macro:
+  en: "Macro"
+  es: "Macro"
+  fr: "Macro"
+  de: "Makro"
+  cy: "Macro"
+  ga: "Macra"
+  gd: "Macro"
+  pl: "Makro"
+  pt: "Macro"
+  ru: "Макрос"
+  ar: "ماكرو"
+  hi: "मैक्रो"
+  bn: "ম্যাক্রো"
+  zh: "宏"
+  ja: "マクロ"
 menu.item.edit.mode:
   en: "Mode"
   es: "Modo"

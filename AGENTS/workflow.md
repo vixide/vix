@@ -14,7 +14,7 @@ behavior and are the source of truth; the code implements them.
    back to English) and render with `t!`.
 4. **Document** every new public item (the build denies missing docs).
 5. **Test**: extend `tests/integration.rs` or a module's unit tests.
-6. **Verify**: `cargo test` and `cargo clippy --workspace --all-targets -- -D warnings` clean.
+6. **Verify**: `cargo test` and `cargo clippy --all-targets -- -D warnings` clean.
 7. **Record** user-visible changes in `CHANGELOG.md`.
 
 ## Auditing for drift
@@ -37,15 +37,17 @@ Each spec lives at `spec/<name>/index.md`. Notable ones:
 | --------------------------------- | -------------------------------------------- |
 | `spec/index.md`                   | Overview, build/run, status                  |
 | `spec/menus`                      | Menu bar structure and items                 |
-| `spec/keyboard`, `spec/keymaps`   | Shortcuts; Apple/Emacs/Vim navigation styles |
+| `spec/keymaps`                    | Keymaps: Apple/VSCode/Emacs/Vi/Spacemacs/IntelliJ/Eclipse |
 | `spec/navigation`                 | Position history, go-to-definition/symbol    |
 | `spec/command-palette`            | Palette modes and behavior                   |
 | `spec/file-explorer`              | Explorer tree and file ops                   |
 | `spec/find-and-replace`           | Find/replace, workspace search, query-replace |
 | `spec/editor`                     | The editor widget (soft wrap, brackets, folds, …) |
-| `spec/lsp`                        | Language Server Protocol (`*.tsv` method list) |
+| `spec/lsp`, `spec/debugger`       | Language Server Protocol; DAP debugger        |
 | `spec/git-integration`            | Git status/diff/staging/conflicts            |
 | `spec/tools`                      | Tools menu (convert/generate/checksum/…)      |
+| `spec/snippets`, `spec/media-types` | JSON snippet scopes; the media-type catalog |
+| `spec/org`, `spec/edit-sql`       | Org-mode editing; the SQL edit surface        |
 | `spec/themes`                     | Theme model + custom JSON format             |
 | `spec/localization`               | Internationalization / languages             |
 | `spec/rust-clippy-pedantic`       | `clippy::pedantic` on all targets            |
