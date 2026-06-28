@@ -19,6 +19,49 @@ use crate::messages::Level;
 use crate::search::Field;
 use crate::theme::{self, icon};
 
+/// The body's column rectangles: file explorer, center editor, message drawer,
+/// and outline sidebar. `None` for any dock that is hidden.
+struct BodyColumns {
+    explorer: Option<Rect>,
+    center: Rect,
+    messages: Option<Rect>,
+    outline: Option<Rect>,
+}
+
+/// Split the body area into explorer | center | messages | outline columns based
+/// on which docks are shown. Dock widths come from settings, clamped so the
+/// editor keeps room.
+fn body_columns(app: &App, body: Rect) -> BodyColumns {
+    let dock_max = body.width.saturating_sub(20).max(12);
+    let mut constraints = Vec::new();
+    if app.show_explorer {
+        constraints.push(Constraint::Length(app.settings.explorer_width.clamp(12, dock_max)));
+    }
+    constraints.push(Constraint::Min(20));
+    if app.show_messages {
+        constraints.push(Constraint::Length(app.settings.messages_width.clamp(12, dock_max)));
+    }
+    if app.settings.show_outline_dock {
+        constraints.push(Constraint::Length(app.settings.outline_width.clamp(12, dock_max)));
+    }
+    let cols = Layout::default().direction(Direction::Horizontal).constraints(constraints).split(body);
+    let mut ci = 0;
+    let explorer_rect = app.show_explorer.then(|| {
+        let r = cols[ci];
+        ci += 1;
+        r
+    });
+    let center_rect = cols[ci];
+    ci += 1;
+    let messages_rect = app.show_messages.then(|| {
+        let r = cols[ci];
+        ci += 1;
+        r
+    });
+    let outline_rect = app.settings.show_outline_dock.then(|| cols[ci]);
+    BodyColumns { explorer: explorer_rect, center: center_rect, messages: messages_rect, outline: outline_rect }
+}
+
 /// Render the whole frame: lay out panes, record their rectangles for mouse
 /// hit-testing, draw each pane, then draw any active overlay on top.
 pub fn draw(app: &mut App, frame: &mut Frame) {
@@ -64,33 +107,12 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         (rows[1], None)
     };
 
-    // Body columns: explorer | center | messages. The dock widths are
-    // user-adjustable (drag the inner edges); clamp them so the editor keeps room.
-    let dock_max = body.width.saturating_sub(20).max(12);
-    let mut constraints = Vec::new();
-    if app.show_explorer {
-        constraints.push(Constraint::Length(app.settings.explorer_width.clamp(12, dock_max)));
-    }
-    constraints.push(Constraint::Min(20));
-    if app.show_messages {
-        constraints.push(Constraint::Length(app.settings.messages_width.clamp(12, dock_max)));
-    }
-    let cols = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(constraints)
-        .split(body);
-
-    let mut ci = 0;
-    let explorer_rect = if app.show_explorer {
-        let r = cols[ci];
-        ci += 1;
-        Some(r)
-    } else {
-        None
-    };
-    let center_rect = cols[ci];
-    ci += 1;
-    let messages_rect = if app.show_messages { Some(cols[ci]) } else { None };
+    let BodyColumns {
+        explorer: explorer_rect,
+        center: center_rect,
+        messages: messages_rect,
+        outline: outline_rect,
+    } = body_columns(app, body);
 
     // Center: tab bar, optional breadcrumb bar, then editor+scrollbar.
     let (tabs_rect, breadcrumb_rect, editor_cell) = center_split(center_rect, app.show_breadcrumbs);
@@ -130,6 +152,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     draw_editor_region(app, frame, editor_inner);
     if let Some(r) = messages_rect {
         draw_messages(app, frame, r);
+    }
+    if let Some(r) = outline_rect {
+        draw_outline_dock(app, frame, r);
     }
     if let Some(r) = bottom_dock_rect {
         app.layout.bottom_dock = r;
@@ -1992,6 +2017,41 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         app.editor_hmax = 0;
     }
     app.layout.editor_hscrollbar = hbar_rect.unwrap_or_default();
+}
+
+fn draw_outline_dock(app: &mut App, frame: &mut Frame, area: Rect) {
+    let block = Block::default()
+        .style(theme::region_base(theme::Region::RightDock))
+        .borders(Borders::TOP | Borders::LEFT)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::region_title(theme::Region::RightDock, false))
+        .title(format!(" {} {} ", icon::CODE, t!("ui.outline")));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    app.layout.outline_dock = inner;
+
+    let Some(o) = app.outline_dock.as_mut() else {
+        let hint = Paragraph::new(t!("status.outline_empty").to_string()).style(theme::dim()).wrap(Wrap { trim: true });
+        frame.render_widget(hint, inner);
+        return;
+    };
+    let view_h = inner.height as usize;
+    o.ensure_visible(view_h);
+    let total = o.len();
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for idx in o.scroll..(o.scroll + view_h).min(total) {
+        let e = &o.entries[idx];
+        let kind = if e.kind.is_empty() { String::new() } else { format!("{:<6} ", e.kind) };
+        if idx == o.selected {
+            lines.push(Line::from(Span::styled(format!("{kind}{}", e.name), theme::selected())));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled(kind, theme::dim()),
+                Span::raw(e.name.clone()),
+            ]));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {

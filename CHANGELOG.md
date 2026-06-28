@@ -34,6 +34,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Inline git blame** (**Git → Toggle Inline Blame**, `inline_blame` setting) —
   shows the cursor line's blame (`author, date · summary`) dimmed at the end of
   the line, following the cursor. See `spec/git-integration/index.md`.
+- **Outline sidebar** (**View → Layout → Outline Sidebar**, `show_outline_dock`) —
+  a persistent symbol list beside the editor that follows the cursor; click a row
+  to jump. See `spec/outline-sidebar/index.md`.
 
 ## [0.4.0] - 2026-06-27
 
