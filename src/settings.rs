@@ -145,6 +145,9 @@ pub struct Settings {
     /// Show the git blame for the cursor's line inline (dimmed, end of line). Off
     /// by default; toggle via **Git → Toggle Inline Blame**.
     pub inline_blame: bool,
+    /// Configured debug adapters (DAP), matched to files by extension. Empty by
+    /// default — add the adapters you have installed.
+    pub debug_adapters: Vec<crate::dap::DebugAdapter>,
 }
 
 /// One configured language server (a `lsp_servers` entry).
@@ -204,6 +207,7 @@ impl Default for Settings {
             editorconfig: true,
             auto_pair: true,
             inline_blame: false,
+            debug_adapters: Vec::new(),
         }
     }
 }
