@@ -98,6 +98,48 @@ menu.view:
   fa: "نمایش"
   uk: "Вигляд"
   el: "Προβολή"
+menu.go:
+  en: "Go"
+menu.go.symbol:
+  en: "Go to Symbol"
+menu.go.declaration:
+  en: "Go to Declaration"
+menu.go.implementations:
+  en: "Go to Implementations"
+menu.go.references:
+  en: "Go to References"
+menu.go.next_issue:
+  en: "Next Issue"
+menu.go.prev_issue:
+  en: "Previous Issue"
+menu.go.next_change:
+  en: "Next Change"
+menu.go.prev_change:
+  en: "Previous Change"
+menu.go.bookmarks:
+  en: "Bookmarks"
+menu.go.word:
+  en: "Word"
+menu.go.sentence:
+  en: "Sentence"
+menu.go.line:
+  en: "Line"
+menu.go.paragraph:
+  en: "Paragraph"
+menu.go.section:
+  en: "Section"
+menu.go.file:
+  en: "File"
+menu.go.start:
+  en: "Start"
+menu.go.end:
+  en: "End"
+menu.go.next:
+  en: "Next"
+menu.go.previous:
+  en: "Previous"
+menu.go.number:
+  en: "Number"
 menu.tools:
   en: "Tools"
   es: "Herramientas"
@@ -10273,6 +10315,14 @@ help.mouse:
 # ---------------------------------------------------------------------------
 # Prompts
 # ---------------------------------------------------------------------------
+prompt.goto_word:
+  en: "Go to word number"
+prompt.goto_sentence:
+  en: "Go to sentence number"
+prompt.goto_paragraph:
+  en: "Go to paragraph number"
+prompt.goto_section:
+  en: "Go to section number"
 prompt.workspace_open:
   en: "Open workspace file (path)"
 prompt.workspace_save:

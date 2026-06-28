@@ -41,6 +41,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Top-level Go menu** (promoted from Edit → Go, placed after View, Alt+N). Adds
+  Go to Symbol / Declaration / Implementations / References, Next/Previous Issue
+  (diagnostics) and Next/Previous Change (git hunks), and granularity submenus —
+  Word, Sentence, Line, Paragraph, Section (each with Start/End/Next/Previous and
+  go-to-Nth by number), plus File (Start/End). New LSP `textDocument/declaration`
+  request and in-file diagnostic navigation.
 - **Workspaces (multi-folder, saved to a file).** File → Open Workspace from
   File… / Save Workspace into File… / Add Folder to Workspace…. A workspace is a
   portable `.vix-workspace` (TOML) file listing project folders plus the files to

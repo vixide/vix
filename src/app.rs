@@ -149,6 +149,14 @@ pub enum PromptKind {
     WorkspaceSave,
     /// Add a folder (by path) to the current workspace.
     WorkspaceAddFolder,
+    /// Jump to the Nth paragraph (Go → Paragraph → Number).
+    GotoParagraph,
+    /// Jump to the Nth section (Go → Section → Number).
+    GotoSection,
+    /// Jump to the Nth sentence (Go → Sentence → Number).
+    GotoSentence,
+    /// Jump to the Nth word (Go → Word → Number).
+    GotoWord,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -2416,6 +2424,8 @@ impl App {
     /// Dispatch a named action (shared by the menu bar, command palette, and
     /// keyboard shortcuts).
     pub fn run_action(&mut self, action: &str) {
+        // Go-menu navigation lives in its own dispatcher (keeps this fn small).
+        if self.go_action(action) { return; }
         match action {
             "file.new" => {
                 self.editor.new_tab();
@@ -3658,6 +3668,10 @@ impl App {
             PromptKind::WorkspaceOpen => self.workspace_open(input),
             PromptKind::WorkspaceSave => self.workspace_save(input),
             PromptKind::WorkspaceAddFolder => self.workspace_add_folder(input),
+            PromptKind::GotoParagraph
+            | PromptKind::GotoSection
+            | PromptKind::GotoSentence
+            | PromptKind::GotoWord => self.accept_goto_number(kind, input),
             PromptKind::RoamDailyCapture => self.roam_daily_capture(input),
             PromptKind::RoamDailyDate if !input.is_empty() => self.roam_open_daily(input),
             PromptKind::RoamTag if !input.is_empty() => {
@@ -11994,6 +12008,94 @@ impl App {
         }
     }
 
+    /// Go-menu navigation dispatcher. Returns `true` if it handled `action`.
+    fn go_action(&mut self, action: &str) -> bool {
+        let area = self.editor_view();
+        match action {
+            "nav.goto_declaration" => self.goto_declaration(),
+            "nav.next_issue" => self.goto_diagnostic(true),
+            "nav.prev_issue" => self.goto_diagnostic(false),
+            "nav.line_next" => self.editor.cursor_line_down(area),
+            "nav.line_prev" => self.editor.cursor_line_up(area),
+            "nav.goto_paragraph" => {
+                self.prompt = Some(Prompt::new(PromptKind::GotoParagraph, t!("prompt.goto_paragraph").to_string()));
+            }
+            "nav.para_next" => self.editor.cursor_paragraph_next(area),
+            "nav.para_prev" => self.editor.cursor_paragraph_prev(area),
+            "nav.goto_section" => {
+                self.prompt = Some(Prompt::new(PromptKind::GotoSection, t!("prompt.goto_section").to_string()));
+            }
+            "nav.section_next" => self.editor.cursor_section_next(area),
+            "nav.section_prev" => self.editor.cursor_section_prev(area),
+            "nav.sentence_start" => self.editor.cursor_sentence_start(area),
+            "nav.sentence_end" => self.editor.cursor_sentence_end(area),
+            "nav.sentence_next" => self.editor.cursor_sentence_next(area),
+            "nav.sentence_prev" => self.editor.cursor_sentence_prev(area),
+            "nav.goto_sentence" => {
+                self.prompt = Some(Prompt::new(PromptKind::GotoSentence, t!("prompt.goto_sentence").to_string()));
+            }
+            "nav.word_start" => self.editor.cursor_word_start(area),
+            "nav.word_end" => self.editor.cursor_word_end(area),
+            "nav.word_next" => self.editor.cursor_word_next(area),
+            "nav.word_prev" => self.editor.cursor_word_prev(area),
+            "nav.goto_word" => {
+                self.prompt = Some(Prompt::new(PromptKind::GotoWord, t!("prompt.goto_word").to_string()));
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    /// Jump to the Nth word/sentence/paragraph/section from a submitted number.
+    fn accept_goto_number(&mut self, kind: PromptKind, input: &str) {
+        let Ok(n) = input.parse::<usize>() else { return };
+        let area = self.editor_view();
+        match kind {
+            PromptKind::GotoParagraph => self.editor.goto_paragraph(n, area),
+            PromptKind::GotoSentence => self.editor.goto_sentence(n, area),
+            PromptKind::GotoWord => self.editor.goto_word(n, area),
+            _ => self.editor.goto_section(n, area),
+        }
+    }
+
+    /// Go to the declaration of the symbol under the cursor (LSP).
+    fn goto_declaration(&mut self) {
+        if let Some(path) = self.active_path()
+            && self.lsp.handles(&path)
+        {
+            let (line, character) = self.cursor_lsp_position(&path);
+            self.lsp.request_declaration(&path, line, character);
+        } else {
+            self.status = t!("status.lsp_inactive").to_string();
+        }
+    }
+
+    /// Jump to the next (`forward`) or previous diagnostic ("issue") in the active
+    /// file, wrapping around. Reports when the file has no diagnostics.
+    fn goto_diagnostic(&mut self, forward: bool) {
+        let Some(path) = self.active_path() else { return };
+        let mut lines: Vec<u32> = self
+            .lsp
+            .all_diagnostics()
+            .filter(|(p, _)| **p == path)
+            .flat_map(|(_, d)| d.iter().map(|x| x.range.start.line))
+            .collect();
+        if lines.is_empty() {
+            self.status = t!("status.no_diagnostics").to_string();
+            return;
+        }
+        lines.sort_unstable();
+        lines.dedup();
+        let cur = u32::try_from(self.editor.cursor_line()).unwrap_or(0);
+        let target = if forward {
+            lines.iter().find(|&&l| l > cur).copied().unwrap_or(lines[0])
+        } else {
+            lines.iter().rev().find(|&&l| l < cur).copied().unwrap_or(*lines.last().unwrap())
+        };
+        let area = self.editor_view();
+        self.editor.goto(target as usize, None, area);
+    }
+
     /// Request the type definition of the symbol under the cursor (LSP).
     fn goto_type_definition(&mut self) {
         if let Some(path) = self.active_path()
@@ -12924,18 +13026,15 @@ impl App {
             PromptKind::CompareFile => self.open_diff_with(prompt.input.trim()),
             PromptKind::SaveMacro => self.save_macro(prompt.input.trim()),
             PromptKind::OrgCapture
-            | PromptKind::RoamFind
-            | PromptKind::RoamInsert
-            | PromptKind::RoamCapture
-            | PromptKind::RoamDailyCapture
-            | PromptKind::RoamDailyDate
-            | PromptKind::RoamTag
-            | PromptKind::RoamAlias
-            | PromptKind::RoamRef
+            | PromptKind::RoamFind | PromptKind::RoamInsert | PromptKind::RoamCapture
+            | PromptKind::RoamDailyCapture | PromptKind::RoamDailyDate
+            | PromptKind::RoamTag | PromptKind::RoamAlias | PromptKind::RoamRef
             | PromptKind::NodeTransclusion
-            | PromptKind::WorkspaceOpen
-            | PromptKind::WorkspaceSave
-            | PromptKind::WorkspaceAddFolder => self.accept_roam_prompt(prompt.kind, prompt.input.trim()),
+            | PromptKind::WorkspaceOpen | PromptKind::WorkspaceSave | PromptKind::WorkspaceAddFolder
+            | PromptKind::GotoParagraph | PromptKind::GotoSection
+            | PromptKind::GotoSentence | PromptKind::GotoWord => {
+                self.accept_roam_prompt(prompt.kind, prompt.input.trim());
+            }
             PromptKind::DebugRepl => {
                 let expr = prompt.input.trim();
                 if !expr.is_empty() {
@@ -13258,20 +13357,22 @@ fn rect_contains(r: Rect, col: u16, row: u16) -> bool {
 }
 
 /// The top-level menu index for an `Alt+letter` mnemonic: Vix=0, File=1, Edit=2,
-/// View=3 (Alt+I, since "Vix"/"View" both start with V), Tools=4, AI=5, Git=6,
-/// Org=7, Debug=8, Help=9. `None` for any other letter.
+/// View=3 (Alt+I, since "Vix"/"View" both start with V), Go=4 (Alt+N, since Git
+/// keeps Alt+G and Alt+J is the recent-locations jump), Tools=5, AI=6, Git=7,
+/// Org=8, Debug=9, Help=10. `None` for any other letter.
 fn menu_index_for_alt(c: char) -> Option<usize> {
     match c.to_ascii_lowercase() {
         'v' => Some(0),
         'f' => Some(1),
         'e' => Some(2),
         'i' => Some(3),
-        't' => Some(4),
-        'a' => Some(5),
-        'g' => Some(6),
-        'o' => Some(7),
-        'd' => Some(8),
-        'h' => Some(9),
+        'n' => Some(4),
+        't' => Some(5),
+        'a' => Some(6),
+        'g' => Some(7),
+        'o' => Some(8),
+        'd' => Some(9),
+        'h' => Some(10),
         _ => None,
     }
 }

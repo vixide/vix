@@ -3222,6 +3222,7 @@ fn alt_letters_open_specific_menus() {
         ('f', "menu.file"),
         ('e', "menu.edit"),
         ('i', "menu.view"),
+        ('n', "menu.go"),
         ('g', "menu.git"),
         ('o', "menu.org"),
         ('d', "menu.debug"),

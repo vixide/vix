@@ -117,7 +117,6 @@ const EDIT: &[Item] = &[
     SEP,
     Item::sub("menu.item.edit.select_menu", EDIT_SELECT),
     Item::sub("menu.item.edit.lines_menu", EDIT_MOVE),
-    Item::sub("menu.item.edit.go_menu", EDIT_GO),
     Item::sub("menu.item.edit.find_menu", EDIT_FIND),
     Item::sub("menu.item.edit.mode", EDIT_MODE),
     SEP,
@@ -134,27 +133,87 @@ const EDIT_MACRO: &[Item] = &[
     Item::leaf("menu.item.edit.play_saved_macro", "macro.play_saved", ""),
 ];
 
-/// Cursor jump commands, grouped under Edit → Go.
-const EDIT_GO: &[Item] = &[
-    Item::leaf("menu.item.edit.recent_locations", "nav.recent_locations", ""),
-    Item::leaf("menu.item.edit.go_line", "nav.goto_line", ""),
-    SEP,
+/// Bookmark commands, grouped under Go → Bookmarks.
+const GO_BOOKMARKS: &[Item] = &[
     Item::leaf("menu.item.edit.bookmark_toggle", "bookmark.toggle", ""),
     Item::leaf("menu.item.edit.bookmark_next", "bookmark.next", ""),
     Item::leaf("menu.item.edit.bookmark_prev", "bookmark.prev", ""),
     Item::leaf("menu.item.edit.bookmark_list", "bookmark.list", ""),
+];
+
+/// Go → Word: start/end/next/previous/Nth word.
+const GO_WORD: &[Item] = &[
+    Item::leaf("menu.go.start", "nav.word_start", ""),
+    Item::leaf("menu.go.end", "nav.word_end", ""),
+    Item::leaf("menu.go.next", "nav.word_next", ""),
+    Item::leaf("menu.go.previous", "nav.word_prev", ""),
+    Item::leaf("menu.go.number", "nav.goto_word", ""),
+];
+
+/// Go → Sentence: start/end/next/previous/Nth sentence.
+const GO_SENTENCE: &[Item] = &[
+    Item::leaf("menu.go.start", "nav.sentence_start", ""),
+    Item::leaf("menu.go.end", "nav.sentence_end", ""),
+    Item::leaf("menu.go.next", "nav.sentence_next", ""),
+    Item::leaf("menu.go.previous", "nav.sentence_prev", ""),
+    Item::leaf("menu.go.number", "nav.goto_sentence", ""),
+];
+
+/// Go → Line: start/end/next/previous/Nth line.
+const GO_LINE: &[Item] = &[
+    Item::leaf("menu.go.start", "edit.line_start", ""),
+    Item::leaf("menu.go.end", "edit.line_end", ""),
+    Item::leaf("menu.go.next", "nav.line_next", ""),
+    Item::leaf("menu.go.previous", "nav.line_prev", ""),
+    Item::leaf("menu.go.number", "nav.goto_line", ""),
+];
+
+/// Go → Paragraph: start/end/next/previous/Nth paragraph.
+const GO_PARAGRAPH: &[Item] = &[
+    Item::leaf("menu.go.start", "edit.para_start", ""),
+    Item::leaf("menu.go.end", "edit.para_end", ""),
+    Item::leaf("menu.go.next", "nav.para_next", ""),
+    Item::leaf("menu.go.previous", "nav.para_prev", ""),
+    Item::leaf("menu.go.number", "nav.goto_paragraph", ""),
+];
+
+/// Go → Section: start/end/next/previous/Nth section.
+const GO_SECTION: &[Item] = &[
+    Item::leaf("menu.go.start", "edit.section_start", ""),
+    Item::leaf("menu.go.end", "edit.section_end", ""),
+    Item::leaf("menu.go.next", "nav.section_next", ""),
+    Item::leaf("menu.go.previous", "nav.section_prev", ""),
+    Item::leaf("menu.go.number", "nav.goto_section", ""),
+];
+
+/// Go → File: start/end of the buffer.
+const GO_FILE: &[Item] = &[
+    Item::leaf("menu.go.start", "edit.go_first", ""),
+    Item::leaf("menu.go.end", "edit.go_last", ""),
+];
+
+/// The top-level Go menu (promoted from Edit → Go), placed after View.
+const GO: &[Item] = &[
+    Item::leaf("menu.go.symbol", "nav.goto_symbol", ""),
+    Item::leaf("menu.go.declaration", "nav.goto_declaration", ""),
+    Item::leaf("menu.go.implementations", "nav.goto_implementation", ""),
+    Item::leaf("menu.go.references", "lsp.references", ""),
     SEP,
-    Item::leaf("menu.item.edit.line_start", "edit.line_start", ""),
-    Item::leaf("menu.item.edit.line_end", "edit.line_end", ""),
+    Item::leaf("menu.go.next_issue", "nav.next_issue", ""),
+    Item::leaf("menu.go.prev_issue", "nav.prev_issue", ""),
     SEP,
-    Item::leaf("menu.item.edit.para_start", "edit.para_start", ""),
-    Item::leaf("menu.item.edit.para_end", "edit.para_end", ""),
+    Item::leaf("menu.go.next_change", "git.diff_next", ""),
+    Item::leaf("menu.go.prev_change", "git.diff_prev", ""),
     SEP,
-    Item::leaf("menu.item.edit.section_start", "edit.section_start", ""),
-    Item::leaf("menu.item.edit.section_end", "edit.section_end", ""),
+    Item::leaf("menu.item.edit.recent_locations", "nav.recent_locations", ""),
+    Item::sub("menu.go.bookmarks", GO_BOOKMARKS),
     SEP,
-    Item::leaf("menu.item.edit.go_first", "edit.go_first", ""),
-    Item::leaf("menu.item.edit.go_last", "edit.go_last", ""),
+    Item::sub("menu.go.line", GO_LINE),
+    Item::sub("menu.go.word", GO_WORD),
+    Item::sub("menu.go.sentence", GO_SENTENCE),
+    Item::sub("menu.go.paragraph", GO_PARAGRAPH),
+    Item::sub("menu.go.section", GO_SECTION),
+    Item::sub("menu.go.file", GO_FILE),
 ];
 
 /// Line-move commands, grouped under Edit → Move.
@@ -888,6 +947,7 @@ fn build_menus() -> Vec<MenuDef> {
         MenuDef { name: "menu.file", items: FILE },
         MenuDef { name: "menu.edit", items: EDIT },
         MenuDef { name: "menu.view", items: view_items },
+        MenuDef { name: "menu.go", items: GO },
         MenuDef { name: "menu.tools", items: TOOLS },
         MenuDef { name: "menu.ai", items: AI },
         MenuDef { name: "menu.git", items: GIT },
