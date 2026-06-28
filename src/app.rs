@@ -139,6 +139,8 @@ pub enum PromptKind {
     RoamAlias,
     /// Org-roam: add a `:ROAM_REFS:` ref (URL / cite key) to the current node.
     RoamRef,
+    /// Org-node: insert a `#+transclude:` directive for a node (found or created).
+    NodeTransclusion,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -3500,6 +3502,15 @@ impl App {
             }
             "roam.graph" => self.roam_graph(),
             "roam.db_sync" => self.roam_db_sync(),
+            "node.nodeify" => self.node_nodeify(),
+            "node.extract_subtree" => self.node_extract_subtree(),
+            "node.insert_transclusion" => {
+                self.prompt =
+                    Some(Prompt::new(PromptKind::NodeTransclusion, t!("prompt.node_transclusion").to_string()));
+            }
+            "node.rename_by_title" => self.node_rename_by_title(),
+            "node.dead_links" => self.node_dead_links(),
+            "node.reset" => self.node_reset(),
             _ => return false,
         }
         true
@@ -3617,13 +3628,17 @@ impl App {
 
     // ----- Org-roam --------------------------------------------------------
 
-    /// Dispatch a submitted Org-roam prompt to the matching action.
+    /// Dispatch a submitted Org-roam / Org-node prompt to the matching action.
     fn accept_roam_prompt(&mut self, kind: PromptKind, input: &str) {
         match kind {
+            PromptKind::OrgCapture if !input.is_empty() => {
+                self.insert_content(&format!("* TODO {input}\n"));
+            }
             PromptKind::RoamFind | PromptKind::RoamCapture => {
                 self.roam_visit_or_create(input);
             }
             PromptKind::RoamInsert => self.roam_insert_link(input),
+            PromptKind::NodeTransclusion => self.node_insert_transclusion(input),
             PromptKind::RoamDailyCapture => self.roam_daily_capture(input),
             PromptKind::RoamDailyDate if !input.is_empty() => self.roam_open_daily(input),
             PromptKind::RoamTag if !input.is_empty() => {
@@ -3851,6 +3866,149 @@ impl App {
         let count = files.iter().filter(|(_, c)| crate::roam::node_title(c).is_some()).count();
         self.editor.new_tab_with_content(&index);
         self.status = t!("status.roam_synced", count = count).to_string();
+    }
+
+    // ----- Org-node --------------------------------------------------------
+
+    /// Org-node: give the headline at the cursor an `:ID:`, making it a node.
+    fn node_nodeify(&mut self) {
+        let id = crate::uuid_tool::v4();
+        let Some(tab) = self.editor.active_tab_mut() else { return };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        if let Some(new) = crate::roam::nodeify(&text, line, &id) {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(line);
+            tab.dirty = true;
+            self.status = t!("status.node_nodeified").to_string();
+        } else {
+            self.status = t!("status.node_not_headline").to_string();
+        }
+    }
+
+    /// Org-node: cut the subtree at the cursor into its own node file, leaving an
+    /// `[[id:…]]` link in its place.
+    fn node_extract_subtree(&mut self) {
+        let Some(tab) = self.editor.active_tab() else { return };
+        let text = tab.text();
+        let line = self.editor.active_tab().map_or(0, |t| t.editor.cursor_line());
+        let lines: Vec<&str> = text.split('\n').collect();
+        let Some((start, end)) = crate::org::subtree_range(&lines, line) else {
+            self.status = t!("status.org_not_headline").to_string();
+            return;
+        };
+        let depth = crate::org::headline_level(lines[start]).unwrap_or(1);
+        // The heading text becomes the new node's title (drop stars + TODO keyword).
+        let mut heading = lines[start][depth..].trim().to_string();
+        for kw in ["TODO ", "DONE "] {
+            if let Some(rest) = heading.strip_prefix(kw) {
+                heading = rest.to_string();
+            }
+        }
+        // Body = the subtree's lines after the heading, each promoted by `depth-1`
+        // leading stars so nested headlines stay relative to a top-level file.
+        let body: String = lines[start + 1..end]
+            .iter()
+            .map(|l| {
+                crate::org::headline_level(l)
+                    .map_or_else(|| (*l).to_string(), |lvl| format!("{} {}", "*".repeat(lvl.saturating_sub(depth - 1).max(1)), l[lvl..].trim_start()))
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let id = crate::uuid_tool::v4();
+        let path = self.root.join(format!("{}.org", crate::roam::slugify(&heading)));
+        let mut file_body = crate::roam::new_node(&heading, &id);
+        if !body.trim().is_empty() {
+            file_body.push_str(&body);
+            if !file_body.ends_with('\n') {
+                file_body.push('\n');
+            }
+        }
+        // Replace the subtree in the current buffer with a link to the new node.
+        let mut kept: Vec<&str> = Vec::with_capacity(lines.len());
+        kept.extend_from_slice(&lines[..start]);
+        let placeholder = format!("{} {}", "*".repeat(depth), crate::roam::node_link(&id, &heading));
+        kept.push(&placeholder);
+        kept.extend_from_slice(&lines[end..]);
+        let remaining = kept.join("\n");
+        if let Some(tab) = self.editor.active_tab_mut() {
+            tab.editor.set_content(&remaining);
+            tab.editor.set_cursor_line(start);
+            tab.dirty = true;
+        }
+        if self.roam_write_and_open(&path, &file_body) {
+            self.status = t!("status.node_extracted", title = heading).to_string();
+        }
+    }
+
+    /// Org-node: insert a `#+transclude:` directive for a node (found or created),
+    /// without leaving the current buffer.
+    fn node_insert_transclusion(&mut self, title: &str) {
+        let title = title.trim().to_string();
+        if title.is_empty() {
+            return;
+        }
+        let id = if let Some(path) = self.roam_find_by_title(&title) {
+            std::fs::read_to_string(&path).ok().and_then(|c| crate::roam::node_id(&c))
+        } else {
+            let id = crate::uuid_tool::v4();
+            let path = self.root.join(format!("{}.org", crate::roam::slugify(&title)));
+            let body = crate::roam::new_node(&title, &id);
+            match std::fs::write(&path, &body) {
+                Ok(()) => {
+                    self.build_file_index();
+                    self.explorer.rebuild();
+                    Some(id)
+                }
+                Err(e) => {
+                    self.messages.error(t!("msg.save_failed", error = e).to_string());
+                    None
+                }
+            }
+        };
+        if let Some(id) = id {
+            self.insert_content(&format!("{}\n", crate::roam::transclusion(&id, &title)));
+        }
+    }
+
+    /// Org-node: rename the active file to the slug of its `#+title:`.
+    fn node_rename_by_title(&mut self) {
+        let Some(path) = self.active_path() else { return };
+        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else { return };
+        let Some(title) = crate::roam::node_title(&text) else {
+            self.status = t!("status.node_no_title").to_string();
+            return;
+        };
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("org");
+        let target = path.with_file_name(format!("{}.{ext}", crate::roam::slugify(&title)));
+        if target == path {
+            return;
+        }
+        match std::fs::rename(&path, &target) {
+            Ok(()) => {
+                self.editor.close_active();
+                self.build_file_index();
+                self.explorer.rebuild();
+                self.open_path(&target, false);
+                self.status = t!("status.node_renamed", path = target.display()).to_string();
+            }
+            Err(e) => self.messages.error(t!("msg.save_failed", error = e).to_string()),
+        }
+    }
+
+    /// Org-node: report `id:` links whose target node no longer exists.
+    fn node_dead_links(&mut self) {
+        let files = self.roam_node_files();
+        let report = crate::roam::dead_links(&files);
+        self.editor.new_tab_with_content(&report);
+        self.status = t!("status.node_dead_links").to_string();
+    }
+
+    /// Org-node: rebuild the in-memory node index (org-mem-reset equivalent).
+    fn node_reset(&mut self) {
+        self.build_file_index();
+        let count = self.roam_node_files().iter().filter(|(_, c)| crate::roam::node_id(c).is_some()).count();
+        self.status = t!("status.node_reset", count = count).to_string();
     }
 
     /// Insert generator output (a UUID, ZID, …) at the cursor in the active
@@ -12653,20 +12811,16 @@ impl App {
             }
             PromptKind::CompareFile => self.open_diff_with(prompt.input.trim()),
             PromptKind::SaveMacro => self.save_macro(prompt.input.trim()),
-            PromptKind::OrgCapture => {
-                let text = prompt.input.trim();
-                if !text.is_empty() {
-                    self.insert_content(&format!("* TODO {text}\n"));
-                }
-            }
-            PromptKind::RoamFind
+            PromptKind::OrgCapture
+            | PromptKind::RoamFind
             | PromptKind::RoamInsert
             | PromptKind::RoamCapture
             | PromptKind::RoamDailyCapture
             | PromptKind::RoamDailyDate
             | PromptKind::RoamTag
             | PromptKind::RoamAlias
-            | PromptKind::RoamRef => self.accept_roam_prompt(prompt.kind, prompt.input.trim()),
+            | PromptKind::RoamRef
+            | PromptKind::NodeTransclusion => self.accept_roam_prompt(prompt.kind, prompt.input.trim()),
             PromptKind::DebugRepl => {
                 let expr = prompt.input.trim();
                 if !expr.is_empty() {

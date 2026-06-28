@@ -48,6 +48,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   cookies count child checkboxes or child TODO headlines, honoring the
   `:COOKIE_DATA:` property (`checkbox`/`todo`, plus `recursive`). Pure logic in
   `org::update_statistics`.
+- **Org → Node ([org-node](https://github.com/meedstrom/org-node) functionality).**
+  A new submenu for fast, ID-based nodes where a node is a file *or* a subtree:
+  nodeify the entry at the cursor (give it an `:ID:`), extract a subtree into its
+  own file node (leaving an `[[id:…]]` link), insert a `#+transclude:` directive,
+  list dead ID links, rename a file by its `#+title:`, and rebuild the node cache —
+  alongside shared find / insert-link / random / backlinks. Pure helpers in
+  `crate::roam`; see `spec/org/index.md`.
 - **Org → Roam ([Org-roam](https://www.orgroam.com/) note-taking).** A new submenu
   for networked, Zettelkasten-style notes over a directory of `.org` files: find /
   capture / random node, insert `[[id:…]]` node links, a backlinks buffer (linked

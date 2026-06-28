@@ -725,6 +725,25 @@ const ORG_ROAM: &[Item] = &[
     Item::leaf("menu.item.org.roam.db_sync", "roam.db_sync", ""),
 ];
 
+/// Org-node commands (fast, ID-based nodes — files *or* subtrees), grouped under
+/// Org → Node. Find / Insert Link / Random reuse the shared node infrastructure;
+/// the rest are org-node's distinctive operations.
+const ORG_NODE: &[Item] = &[
+    Item::leaf("menu.item.org.node.find", "roam.node_find", ""),
+    Item::leaf("menu.item.org.node.insert_link", "roam.node_insert", ""),
+    Item::leaf("menu.item.org.node.insert_transclusion", "node.insert_transclusion", ""),
+    Item::leaf("menu.item.org.node.random", "roam.node_random", ""),
+    SEP,
+    Item::leaf("menu.item.org.node.nodeify", "node.nodeify", ""),
+    Item::leaf("menu.item.org.node.extract_subtree", "node.extract_subtree", ""),
+    SEP,
+    Item::leaf("menu.item.org.node.backlinks", "roam.backlinks", ""),
+    Item::leaf("menu.item.org.node.dead_links", "node.dead_links", ""),
+    SEP,
+    Item::leaf("menu.item.org.node.rename_by_title", "node.rename_by_title", ""),
+    Item::leaf("menu.item.org.node.reset", "node.reset", ""),
+];
+
 /// Org-mode editing commands, grouped under the top-level Org menu. Insertion of
 /// Org snippets/markers/blocks lives under Tools → Insert.
 const ORG: &[Item] = &[
@@ -743,6 +762,7 @@ const ORG: &[Item] = &[
     Item::leaf("menu.item.org.time_report", "org.time_report", ""),
     SEP,
     Item::sub("menu.item.org.roam", ORG_ROAM),
+    Item::sub("menu.item.org.node", ORG_NODE),
     Item::sub("menu.item.org.export", ORG_EXPORT),
 ];
 

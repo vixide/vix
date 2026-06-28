@@ -96,6 +96,59 @@ pub fn node_link(id: &str, title: &str) -> String {
     format!("[[id:{id}][{title}]]")
 }
 
+/// An org-transclusion directive for a node: `#+transclude: [[id:…][title]]`.
+#[must_use]
+pub fn transclusion(id: &str, title: &str) -> String {
+    format!("#+transclude: {}", node_link(id, title))
+}
+
+/// The number of leading `*` on a headline line (followed by a space), else
+/// `None`. Mirrors `org::headline_level` so this module stays self-contained.
+fn headline_stars(line: &str) -> Option<usize> {
+    let stars = line.len() - line.trim_start_matches('*').len();
+    (stars > 0 && line[stars..].starts_with(' ')).then_some(stars)
+}
+
+/// Make the headline at `line` a node by giving it an `:ID:`. If the headline
+/// already has a property drawer, the `:ID:` is inserted into it; otherwise a new
+/// drawer is created directly beneath the headline. Returns `None` if `line` is
+/// not a headline or already carries an `:ID:`.
+#[must_use]
+pub fn nodeify(text: &str, line: usize, id: &str) -> Option<String> {
+    let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
+    headline_stars(lines.get(line)?)?;
+    // An existing drawer must start on the very next line.
+    if lines.get(line + 1).is_some_and(|l| l.trim().eq_ignore_ascii_case(":PROPERTIES:")) {
+        let mut i = line + 2;
+        while i < lines.len() && !lines[i].trim().eq_ignore_ascii_case(":END:") {
+            if lines[i].trim().to_ascii_uppercase().starts_with(":ID:") {
+                return None; // already a node
+            }
+            i += 1;
+        }
+        lines.insert(line + 2, format!(":ID:       {id}"));
+    } else {
+        lines.insert(line + 1, ":END:".to_string());
+        lines.insert(line + 1, format!(":ID:       {id}"));
+        lines.insert(line + 1, ":PROPERTIES:".to_string());
+    }
+    Some(lines.join("\n"))
+}
+
+/// Every `:ID:` value declared anywhere in `content` (file-level or per-subtree
+/// property drawers).
+#[must_use]
+pub fn all_ids(content: &str) -> Vec<String> {
+    content
+        .lines()
+        .filter_map(|l| {
+            let t = l.trim();
+            t.get(..4).filter(|p| p.eq_ignore_ascii_case(":ID:")).map(|_| t[4..].trim().to_string())
+        })
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
 /// The filename for the daily note of `date` (a `YYYY-MM-DD` string).
 #[must_use]
 pub fn daily_filename(date: &str) -> String {
@@ -292,6 +345,36 @@ pub fn index(files: &[(String, String)]) -> String {
     out
 }
 
+/// Report **dead `id:` links**: `[[id:…]]` links whose target ID is not declared
+/// by any node in `files`. Lists each broken link with its file and the line it
+/// appears on, into an Org buffer.
+#[must_use]
+pub fn dead_links(files: &[(String, String)]) -> String {
+    let mut defined: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for (_, content) in files {
+        defined.extend(all_ids(content));
+    }
+    let mut dead: Vec<(String, String, String)> = Vec::new(); // file, id, line
+    for (name, content) in files {
+        for line in content.lines() {
+            for cap in ID_LINK.captures_iter(line) {
+                let id = cap[1].trim().to_string();
+                if !defined.contains(&id) {
+                    dead.push((name.clone(), id, line.trim().to_string()));
+                }
+            }
+        }
+    }
+    let mut out = format!("#+title: Dead Links ({})\n\n", dead.len());
+    for (name, id, line) in &dead {
+        let _ = writeln!(out, "- [[file:{name}][{name}]] :: id:{id} :: {line}");
+    }
+    if dead.is_empty() {
+        out.push_str("No dead links.\n");
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -302,6 +385,42 @@ mod tests {
         assert_eq!(slugify("  Spaced   Out  "), "spaced-out");
         assert_eq!(slugify("café_2024"), "caf-2024");
         assert_eq!(slugify("!!!"), "node");
+    }
+
+    #[test]
+    fn nodeify_adds_id_drawer() {
+        // No drawer → a fresh one is created beneath the headline.
+        let out = nodeify("* Heading\nbody\n", 0, "NID").unwrap();
+        assert_eq!(out, "* Heading\n:PROPERTIES:\n:ID:       NID\n:END:\nbody\n");
+        // Existing drawer → the ID is inserted into it.
+        let with_drawer = "* H\n:PROPERTIES:\n:FOO: bar\n:END:\n";
+        let out = nodeify(with_drawer, 0, "NID").unwrap();
+        assert!(out.contains(":ID:       NID"));
+        assert!(out.contains(":FOO: bar"));
+        // Already a node, or not a headline → None.
+        assert!(nodeify(&out, 0, "X").is_none());
+        assert!(nodeify("plain line\n", 0, "X").is_none());
+    }
+
+    #[test]
+    fn all_ids_and_dead_links() {
+        let files = vec![
+            (
+                "a.org".to_string(),
+                ":PROPERTIES:\n:ID:       G1\n:END:\n#+title: A\nsee [[id:G2][B]] and [[id:GONE][x]]\n".to_string(),
+            ),
+            (":b".to_string(), ":PROPERTIES:\n:ID:       G2\n:END:\n#+title: B\n".to_string()),
+        ];
+        assert_eq!(all_ids(&files[0].1), vec!["G1".to_string()]);
+        let report = dead_links(&files);
+        assert!(report.contains("Dead Links (1)"));
+        assert!(report.contains(":: id:GONE ::"));
+        assert!(!report.contains(":: id:G2 ::"), "G2 is defined, not dead");
+    }
+
+    #[test]
+    fn transclusion_directive() {
+        assert_eq!(transclusion("I1", "T"), "#+transclude: [[id:I1][T]]");
     }
 
     #[test]
