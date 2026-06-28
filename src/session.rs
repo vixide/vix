@@ -64,19 +64,39 @@ pub struct WorkspaceSession {
     pub split: Option<SplitSession>,
 }
 
-/// A restorable editor split (two panes). Mirrors `editor::Split` but with a
-/// portable string direction so the session file is stable.
+/// A restorable split layout: the pane tree plus the focused leaf (in-order).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SplitSession {
-    /// `"vertical"` (side by side) or `"horizontal"` (stacked).
-    pub dir: String,
-    /// Tab index shown in the non-focused pane.
-    pub other: usize,
-    /// Which side is focused: 0 = left/top, 1 = right/bottom.
-    pub focused_side: usize,
-    /// Percentage width/height of the left/top pane.
-    pub ratio: u16,
+    /// The pane tree (leaves index into `files`).
+    pub tree: PaneNode,
+    /// In-order index of the focused leaf.
+    pub focused: usize,
+}
+
+/// A serializable mirror of the editor's pane tree. Leaves carry a **file index**
+/// (position in [`WorkspaceSession::files`]) so the layout survives across runs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PaneNode {
+    /// A pane showing the file at this index in `files`.
+    Leaf(usize),
+    /// A split of two child panes.
+    Split {
+        /// `"vertical"` or `"horizontal"`.
+        dir: String,
+        /// Percent for the first child.
+        ratio: u16,
+        /// First child (left / top).
+        first: Box<PaneNode>,
+        /// Second child (right / bottom).
+        second: Box<PaneNode>,
+    },
+}
+
+impl Default for PaneNode {
+    fn default() -> Self {
+        PaneNode::Leaf(0)
+    }
 }
 
 impl Session {

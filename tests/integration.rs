@@ -3793,12 +3793,12 @@ fn spacemacs_keymap_is_modal_with_space_leader() {
     app.on_key(keycode(KeyCode::Esc));
     assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"));
     // The Space leader: SPC w / splits the editor vertically.
-    assert!(app.editor.split.is_none());
+    assert!(!app.editor.is_split());
     app.on_key(key(' '));
     assert_eq!(app.mode_indicator().as_deref(), Some("SPC "), "leader pending");
     app.on_key(key('w'));
     app.on_key(key('/'));
-    assert!(app.editor.split.is_some(), "SPC w / split the editor");
+    assert!(app.editor.is_split(), "SPC w / split the editor");
     assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"), "leader cleared");
 }
 
@@ -4239,15 +4239,21 @@ fn split_panes_open_focus_and_close() {
 
     app.run_action("view.split_vertical");
     assert!(app.editor.is_split(), "Split Vertical splits the editor");
-    let (left, right) = app.editor.split_pane_tabs().unwrap();
-    assert_ne!(left, right, "the two panes show different tabs");
+    let tabs = app.editor.split_layout(Rect::new(0, 0, 80, 24));
+    assert_eq!(tabs.len(), 2, "two panes");
+    assert_ne!(tabs[0].tab, tabs[1].tab, "the two panes show different tabs");
 
     let before = app.editor.active;
     app.run_action("view.focus_other_pane");
     assert_ne!(app.editor.active, before, "focusing the other pane swaps the active tab");
 
+    // A second split makes a 2x2-style grid (three panes here).
+    app.run_action("view.split_horizontal");
+    assert_eq!(app.editor.split_layout(Rect::new(0, 0, 80, 24)).len(), 3, "nested split adds a pane");
+
     app.run_action("view.unsplit");
-    assert!(!app.editor.is_split(), "Unsplit returns to one pane");
+    app.run_action("view.unsplit");
+    assert!(!app.editor.is_split(), "unsplitting back to one pane");
 }
 
 // ---- Generated smoke tests for the action catalog (spec/actions/actions.tsv).
