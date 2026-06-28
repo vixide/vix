@@ -84,6 +84,8 @@ pub struct Settings {
     pub messages_width: u16,
     /// Width (columns) of the code-outline sidebar.
     pub outline_width: u16,
+    /// Width (columns) of the debugger panel (call stack / variables / watch).
+    pub debug_width: u16,
     /// Recently opened files, most-recent first (absolute paths). Capped to
     /// [`recent_files_max`](Self::recent_files_max); surfaced by **File → Open
     /// Recent…**.
@@ -145,6 +147,9 @@ pub struct Settings {
     /// Show the git blame for the cursor's line inline (dimmed, end of line). Off
     /// by default; toggle via **Git → Toggle Inline Blame**.
     pub inline_blame: bool,
+    /// Configured debug adapters (DAP), matched to files by extension. Empty by
+    /// default — add the adapters you have installed.
+    pub debug_adapters: Vec<crate::dap::DebugAdapter>,
 }
 
 /// One configured language server (a `lsp_servers` entry).
@@ -187,6 +192,7 @@ impl Default for Settings {
             explorer_width: 30,
             messages_width: 32,
             outline_width: 28,
+            debug_width: 36,
             recent_files: Vec::new(),
             recent_files_max: MAX_RECENT_FILES,
             command_recents: Vec::new(),
@@ -204,6 +210,7 @@ impl Default for Settings {
             editorconfig: true,
             auto_pair: true,
             inline_blame: false,
+            debug_adapters: Vec::new(),
         }
     }
 }

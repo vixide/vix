@@ -76,6 +76,7 @@ pub mod ui;
 pub mod ai_diff;
 pub mod ai_panel;
 pub mod ascii_character_picker;
+pub mod dap;
 pub mod diff_view;
 pub mod editorconfig;
 pub mod macros;

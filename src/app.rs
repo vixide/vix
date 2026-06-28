@@ -117,6 +117,10 @@ pub enum PromptKind {
     CompareFile,
     /// Enter a name to save the just-recorded keyboard macro under.
     SaveMacro,
+    /// Enter an expression to evaluate in the debugger (REPL).
+    DebugRepl,
+    /// Enter an expression to add as a debugger watch.
+    DebugWatch,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -940,6 +944,20 @@ pub struct App {
     /// Inline-blame cache: the `(path, 1-based line)` last blamed, so the blame is
     /// recomputed only when the cursor moves to a different line.
     blame_cache: Option<(PathBuf, usize)>,
+    /// Debug Adapter Protocol client (one active session).
+    pub dap: crate::dap::Dap,
+    /// Breakpoints per file: absolute path → set of 1-based lines.
+    breakpoints: std::collections::HashMap<PathBuf, std::collections::BTreeSet<usize>>,
+    /// Where the debugger is currently stopped: `(path, 1-based line)`.
+    dap_stopped: Option<(PathBuf, usize)>,
+    /// Latest call stack from the debugger.
+    pub dap_stack: Vec<crate::dap::Frame>,
+    /// Latest variables (top frame, first scope) from the debugger.
+    pub dap_variables: Vec<crate::dap::Variable>,
+    /// Watch expressions and their last results: `(expr, result)`.
+    pub dap_watches: Vec<(String, String)>,
+    /// Whether the Debug panel (stack / variables / watch) is shown.
+    pub show_debug_panel: bool,
     /// LSP hover tooltip overlay, when shown.
     pub hover: Option<HoverPopup>,
     /// LSP completion overlay, when shown.
@@ -1192,6 +1210,9 @@ impl App {
             lsp,
             lsp_synced: std::collections::HashMap::new(),
             blame_cache: None,
+            dap: crate::dap::Dap::new(), breakpoints: std::collections::HashMap::new(),
+            dap_stopped: None, dap_stack: Vec::new(), dap_variables: Vec::new(),
+            dap_watches: Vec::new(), show_debug_panel: false,
             hover: None, completion: None, dialog: None, color_converter: None,
             unit_converter: None, calculator: None, regex_tester: None, code_actions: None,
             code_lens: None, pomodoro: None,
@@ -1814,8 +1835,8 @@ impl App {
     fn global_shared_key(&mut self, key: KeyEvent) -> bool {
         if Self::alt(&key)
             && let KeyCode::Char(c) = key.code {
-                // Vix=0, File=1, …, Help=7. "Vix" and "View" both start with V,
-                // so Vix takes Alt+V and View uses Alt+I (the "i" in vIew).
+                // Vix=0, File=1, …, Debug=7, Help=8. "Vix" and "View" both start
+                // with V, so Vix takes Alt+V and View uses Alt+I (the "i" in vIew).
                 let idx = match c.to_ascii_lowercase() {
                     'v' => Some(0),
                     'f' => Some(1),
@@ -1824,7 +1845,8 @@ impl App {
                     't' => Some(4),
                     'a' => Some(5),
                     'g' => Some(6),
-                    'h' => Some(7),
+                    'd' => Some(7),
+                    'h' => Some(8),
                     _ => None,
                 };
                 if let Some(i) = idx {
@@ -2440,6 +2462,21 @@ impl App {
             }
             "git.blame" => self.git_blame_line(),
             "git.blame_inline" => self.toggle_inline_blame(),
+            "debug.start" => self.start_debugger(),
+            "debug.stop" => self.stop_debugger(),
+            "debug.toggle_breakpoint" => self.toggle_breakpoint(),
+            "debug.continue" => self.dap.continue_(),
+            "debug.step_over" => self.dap.step_over(),
+            "debug.step_into" => self.dap.step_into(),
+            "debug.step_out" => self.dap.step_out(),
+            "debug.pause" => self.dap.pause(),
+            "debug.panel" => self.show_debug_panel = !self.show_debug_panel,
+            "debug.repl" => {
+                self.prompt = Some(Prompt::new(PromptKind::DebugRepl, t!("prompt.debug_repl").to_string()));
+            }
+            "debug.watch" => {
+                self.prompt = Some(Prompt::new(PromptKind::DebugWatch, t!("prompt.debug_watch").to_string()));
+            }
             "git.revert_hunk" => self.revert_hunk(),
             "git.stage_hunk" => self.stage_hunk(),
             "git.unstage_hunk" => self.unstage_hunk(),
@@ -4959,6 +4996,161 @@ impl App {
         };
         if let Some(t) = self.editor.active_tab_mut() {
             t.editor.set_eol_note(if note.is_empty() { None } else { Some((line0, note)) });
+        }
+    }
+
+    // ----- Debugger (DAP) -------------------------------------------------
+
+    /// The debug adapter configured for `path`'s file extension, if any.
+    fn adapter_for(&self, path: &Path) -> Option<crate::dap::DebugAdapter> {
+        let ext = path.extension().and_then(|e| e.to_str())?.to_ascii_lowercase();
+        self.settings.debug_adapters.iter().find(|a| a.extensions.iter().any(|e| e == &ext)).cloned()
+    }
+
+    /// Toggle a breakpoint on the cursor's line in the active file.
+    fn toggle_breakpoint(&mut self) {
+        let Some((path, line)) = self
+            .editor
+            .active_tab()
+            .and_then(|t| t.path.clone().map(|p| (p, t.editor.cursor_line() + 1)))
+        else {
+            self.status = t!("status.blame_no_file").to_string();
+            return;
+        };
+        let set = self.breakpoints.entry(path.clone()).or_default();
+        if !set.remove(&line) {
+            set.insert(line);
+        }
+        let lines: Vec<usize> = set.iter().copied().collect();
+        if self.dap.is_active() {
+            self.dap.set_breakpoints(&path.to_string_lossy(), &lines);
+        }
+        self.refresh_debug_markers();
+    }
+
+    /// Start debugging the active file with its configured adapter.
+    fn start_debugger(&mut self) {
+        let Some(path) = self.editor.active_tab().and_then(|t| t.path.clone()) else {
+            self.status = t!("status.debug_no_file").to_string();
+            return;
+        };
+        let Some(adapter) = self.adapter_for(&path) else {
+            self.status = t!("status.debug_no_adapter").to_string();
+            return;
+        };
+        let bps: std::collections::HashMap<String, Vec<usize>> = self
+            .breakpoints
+            .iter()
+            .map(|(p, l)| (p.to_string_lossy().into_owned(), l.iter().copied().collect()))
+            .collect();
+        if self.dap.start(&adapter, &path.to_string_lossy(), bps) {
+            self.show_debug_panel = true;
+            self.status = t!("status.debug_started").to_string();
+        } else {
+            self.status = t!("status.debug_failed").to_string();
+        }
+    }
+
+    /// Stop the active debug session and clear its state.
+    fn stop_debugger(&mut self) {
+        self.dap.stop();
+        self.dap_stopped = None;
+        self.dap_stack.clear();
+        self.dap_variables.clear();
+        self.refresh_debug_markers();
+        self.status = t!("status.debug_stopped").to_string();
+    }
+
+    /// Push the current breakpoints and stopped line into the active tab's editor
+    /// so the gutter shows them.
+    fn refresh_debug_markers(&mut self) {
+        let stopped = self.dap_stopped.clone();
+        let Some(path) = self.editor.active_tab().and_then(|t| t.path.clone()) else { return };
+        let lines: Vec<usize> =
+            self.breakpoints.get(&path).map(|s| s.iter().map(|l| l.saturating_sub(1)).collect()).unwrap_or_default();
+        let debug_line = stopped.filter(|(p, _)| *p == path).map(|(_, l)| l.saturating_sub(1));
+        if let Some(t) = self.editor.active_tab_mut() {
+            t.editor.set_breakpoints(lines);
+            t.editor.set_debug_line(debug_line);
+        }
+    }
+
+    /// Whether a debug session is active (drives the fast poll cadence).
+    #[must_use]
+    pub fn dap_busy(&self) -> bool {
+        self.dap.busy()
+    }
+
+    /// The breakpoint lines (1-based) set on the active file. For tests/tools.
+    #[must_use]
+    pub fn active_breakpoints(&self) -> Vec<usize> {
+        self.editor
+            .active_tab()
+            .and_then(|t| t.path.as_ref())
+            .and_then(|p| self.breakpoints.get(p))
+            .map(|s| s.iter().copied().collect())
+            .unwrap_or_default()
+    }
+
+    /// Drain debug-adapter events and apply them. Called each event-loop iteration.
+    pub fn poll_dap(&mut self) {
+        if !self.dap.is_active() {
+            return;
+        }
+        for event in self.dap.poll() {
+            match event {
+                crate::dap::DapEvent::Running => self.status = t!("status.debug_running").to_string(),
+                crate::dap::DapEvent::Stopped { reason, .. } => {
+                    self.status = t!("status.debug_stopped_at", reason = reason).to_string();
+                }
+                crate::dap::DapEvent::Output(text) => self.bottom_dock.push(text),
+                crate::dap::DapEvent::Stack(frames) => {
+                    if let Some(top) = frames.first()
+                        && let Some(p) = top.path.clone()
+                    {
+                        self.dap_stopped = Some((PathBuf::from(&p), top.line));
+                        self.jump_to_debug_location(&p, top.line);
+                    }
+                    self.dap_stack = frames;
+                    self.refresh_debug_markers();
+                }
+                crate::dap::DapEvent::Variables(vars) => self.dap_variables = vars,
+                crate::dap::DapEvent::Evaluated { expr, result } => {
+                    // Update a matching watch, else echo to the debug console.
+                    if let Some(w) = self.dap_watches.iter_mut().find(|(e, _)| *e == expr) {
+                        w.1 = result;
+                    } else {
+                        self.bottom_dock.push(format!("{expr} = {result}"));
+                    }
+                }
+                crate::dap::DapEvent::Terminated => {
+                    self.dap_stopped = None;
+                    self.dap_stack.clear();
+                    self.dap_variables.clear();
+                    self.refresh_debug_markers();
+                    self.status = t!("status.debug_terminated").to_string();
+                }
+            }
+        }
+        // Re-evaluate watches whenever we are stopped.
+        if self.dap.is_stopped() {
+            let exprs: Vec<String> = self.dap_watches.iter().map(|(e, _)| e.clone()).collect();
+            for e in exprs {
+                self.dap.evaluate(&e);
+            }
+        }
+    }
+
+    /// Open `path` and move the cursor to `line` (1-based) for a debug stop.
+    fn jump_to_debug_location(&mut self, path: &str, line: usize) {
+        let p = PathBuf::from(path);
+        if p.is_file() {
+            self.with_jump(|s| {
+                s.open_path(&p, false);
+                let area = s.editor_view();
+                s.editor.goto(line, None, area);
+                s.focus = Focus::Editor;
+            });
         }
     }
 
@@ -11452,6 +11644,20 @@ impl App {
             }
             PromptKind::CompareFile => self.open_diff_with(prompt.input.trim()),
             PromptKind::SaveMacro => self.save_macro(prompt.input.trim()),
+            PromptKind::DebugRepl => {
+                let expr = prompt.input.trim();
+                if !expr.is_empty() {
+                    self.dap.evaluate(expr);
+                }
+            }
+            PromptKind::DebugWatch => {
+                let expr = prompt.input.trim();
+                if !expr.is_empty() {
+                    self.dap_watches.push((expr.to_string(), String::new()));
+                    self.dap.evaluate(expr);
+                    self.show_debug_panel = true;
+                }
+            }
         }
     }
 

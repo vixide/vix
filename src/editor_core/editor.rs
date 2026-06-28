@@ -110,6 +110,12 @@ pub struct Editor {
     /// view only.
     pub(crate) eol_note: Option<(usize, String)>,
 
+    /// Debugger breakpoint lines (0-based), drawn as a marker in the gutter.
+    pub(crate) breakpoints: Vec<usize>,
+
+    /// The debugger's currently-stopped line (0-based), drawn as a gutter arrow.
+    pub(crate) debug_line: Option<usize>,
+
     /// Style for the visible-whitespace glyphs (typically dimmed).
     pub(crate) whitespace_style: Style,
 
@@ -190,6 +196,8 @@ impl Editor {
             soft_wrap: false,
             auto_pair: true,
             eol_note: None,
+            breakpoints: Vec::new(),
+            debug_line: None,
             whitespace_style: Style::default().fg(Color::DarkGray),
             bracket_style: Style::default().add_modifier(Modifier::REVERSED),
             left_code_padding: 2,
@@ -960,6 +968,16 @@ impl Editor {
     /// drawn dimmed after that line's content. Used for inline git blame.
     pub fn set_eol_note(&mut self, note: Option<(usize, String)>) {
         self.eol_note = note;
+    }
+
+    /// Set the debugger breakpoint lines (0-based) drawn in the gutter.
+    pub fn set_breakpoints(&mut self, lines: Vec<usize>) {
+        self.breakpoints = lines;
+    }
+
+    /// Set (or clear) the debugger's currently-stopped line (0-based).
+    pub fn set_debug_line(&mut self, line: Option<usize>) {
+        self.debug_line = line;
     }
 
     /// Enable or disable soft wrap (long lines wrap instead of scrolling).

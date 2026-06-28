@@ -227,21 +227,25 @@ impl Editor {
                 let line_number = format!("{:>width$}", line_idx + 1, width = line_number_digits);
                 buf.set_string(area.left(), draw_y, &line_number, line_number_style);
             }
-            // git diff gutter: a colored bar in the gutter gap (just before the
-            // text), or column 0 when line numbers are hidden.
-            if let Some(ref gmarks) = self.gutter_marks
-                && let Some(&(_, color)) = gmarks.iter().find(|&&(l, _)| l == line_idx) {
-                    let sign_x = if self.show_line_numbers {
-                        area.left() + u16::try_from(line_number_digits).unwrap_or(u16::MAX)
-                    } else {
-                        area.left()
-                    };
-                    if sign_x < area.right() {
-                        buf[(sign_x, draw_y)]
-                            .set_symbol("\u{258e}")
-                            .set_style(Style::default().fg(color));
-                    }
+            // Gutter sign column (just before the text, or column 0 when line
+            // numbers are hidden). Debugger markers take precedence over the git
+            // diff bar: ▶ for the stopped line, ● for a breakpoint, else ▎ diff.
+            let sign_x = if self.show_line_numbers {
+                area.left() + u16::try_from(line_number_digits).unwrap_or(u16::MAX)
+            } else {
+                area.left()
+            };
+            if sign_x < area.right() {
+                if self.debug_line == Some(line_idx) {
+                    buf[(sign_x, draw_y)].set_symbol("\u{25b6}").set_style(Style::default().fg(Color::Yellow));
+                } else if self.breakpoints.contains(&line_idx) {
+                    buf[(sign_x, draw_y)].set_symbol("\u{25cf}").set_style(Style::default().fg(Color::Red));
+                } else if let Some(ref gmarks) = self.gutter_marks
+                    && let Some(&(_, color)) = gmarks.iter().find(|&&(l, _)| l == line_idx)
+                {
+                    buf[(sign_x, draw_y)].set_symbol("\u{258e}").set_style(Style::default().fg(color));
                 }
+            }
             let line_len = code.line_len(line_idx);
             let max_x = (area.width as usize).saturating_sub(line_number_width);
 

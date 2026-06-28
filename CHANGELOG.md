@@ -38,6 +38,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a persistent symbol list beside the editor that follows the cursor; click a row
   to jump. See `spec/outline-sidebar/index.md`.
 
+- **Integrated debugger (DAP).** A new **Debug** menu drives an external debug
+  adapter (configured via `debug_adapters`): breakpoints (gutter `●`), start/stop,
+  continue, step over/into/out, pause, a call-stack + variables + watch panel, an
+  evaluate REPL, and program output in the bottom dock. Built on a DAP client that
+  reuses the LSP framing. See `spec/debugger/index.md`.
+
 ### Changed
 
 - **Nested split panes (up to a 2x2 grid).** The editor split is now a binary

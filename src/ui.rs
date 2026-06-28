@@ -26,11 +26,12 @@ struct BodyColumns {
     center: Rect,
     messages: Option<Rect>,
     outline: Option<Rect>,
+    debug: Option<Rect>,
 }
 
-/// Split the body area into explorer | center | messages | outline columns based
-/// on which docks are shown. Dock widths come from settings, clamped so the
-/// editor keeps room.
+/// Split the body area into explorer | center | messages | outline | debug
+/// columns based on which docks are shown. Dock widths come from settings,
+/// clamped so the editor keeps room.
 fn body_columns(app: &App, body: Rect) -> BodyColumns {
     let dock_max = body.width.saturating_sub(20).max(12);
     let mut constraints = Vec::new();
@@ -44,22 +45,28 @@ fn body_columns(app: &App, body: Rect) -> BodyColumns {
     if app.settings.show_outline_dock {
         constraints.push(Constraint::Length(app.settings.outline_width.clamp(12, dock_max)));
     }
+    if app.show_debug_panel {
+        constraints.push(Constraint::Length(app.settings.debug_width.clamp(12, dock_max)));
+    }
     let cols = Layout::default().direction(Direction::Horizontal).constraints(constraints).split(body);
     let mut ci = 0;
-    let explorer_rect = app.show_explorer.then(|| {
-        let r = cols[ci];
-        ci += 1;
+    let take = |ci: &mut usize| {
+        let r = cols[*ci];
+        *ci += 1;
         r
-    });
-    let center_rect = cols[ci];
-    ci += 1;
-    let messages_rect = app.show_messages.then(|| {
-        let r = cols[ci];
-        ci += 1;
-        r
-    });
-    let outline_rect = app.settings.show_outline_dock.then(|| cols[ci]);
-    BodyColumns { explorer: explorer_rect, center: center_rect, messages: messages_rect, outline: outline_rect }
+    };
+    let explorer_rect = app.show_explorer.then(|| take(&mut ci));
+    let center_rect = take(&mut ci);
+    let messages_rect = app.show_messages.then(|| take(&mut ci));
+    let outline_rect = app.settings.show_outline_dock.then(|| take(&mut ci));
+    let debug_rect = app.show_debug_panel.then(|| take(&mut ci));
+    BodyColumns {
+        explorer: explorer_rect,
+        center: center_rect,
+        messages: messages_rect,
+        outline: outline_rect,
+        debug: debug_rect,
+    }
 }
 
 /// Render the whole frame: lay out panes, record their rectangles for mouse
@@ -112,6 +119,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         center: center_rect,
         messages: messages_rect,
         outline: outline_rect,
+        debug: debug_rect,
     } = body_columns(app, body);
 
     // Center: tab bar, optional breadcrumb bar, then editor+scrollbar.
@@ -155,6 +163,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     }
     if let Some(r) = outline_rect {
         draw_outline_dock(app, frame, r);
+    }
+    if let Some(r) = debug_rect {
+        draw_debug_panel(app, frame, r);
     }
     if let Some(r) = bottom_dock_rect {
         app.layout.bottom_dock = r;
@@ -1985,6 +1996,57 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         app.editor_hmax = 0;
     }
     app.layout.editor_hscrollbar = hbar_rect.unwrap_or_default();
+}
+
+fn draw_debug_panel(app: &mut App, frame: &mut Frame, area: Rect) {
+    let block = Block::default()
+        .style(theme::region_base(theme::Region::RightDock))
+        .borders(Borders::TOP | Borders::LEFT)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::region_title(theme::Region::RightDock, false))
+        .title(format!(" {} {} ", icon::CODE, t!("ui.debug")));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let mut lines: Vec<Line> = Vec::new();
+    let header = |lines: &mut Vec<Line>, text: String| {
+        lines.push(Line::from(Span::styled(text, theme::title(true).add_modifier(Modifier::BOLD))));
+    };
+    if !app.dap.is_active() {
+        let hint = Paragraph::new(t!("ui.debug_idle").to_string()).style(theme::dim()).wrap(Wrap { trim: true });
+        frame.render_widget(hint, inner);
+        return;
+    }
+    header(&mut lines, t!("ui.debug_call_stack").to_string());
+    if app.dap_stack.is_empty() {
+        lines.push(Line::from(Span::styled("  —", theme::dim())));
+    }
+    for f in &app.dap_stack {
+        let loc = f.path.as_deref().and_then(|p| p.rsplit('/').next()).map_or(String::new(), |n| format!("  {n}:{}", f.line));
+        lines.push(Line::from(vec![Span::raw(format!("  {}", f.name)), Span::styled(loc, theme::dim())]));
+    }
+    lines.push(Line::from(""));
+    header(&mut lines, t!("ui.debug_variables").to_string());
+    if app.dap_variables.is_empty() {
+        lines.push(Line::from(Span::styled("  —", theme::dim())));
+    }
+    for v in &app.dap_variables {
+        lines.push(Line::from(vec![
+            Span::raw(format!("  {} = ", v.name)),
+            Span::styled(v.value.clone(), theme::dim()),
+        ]));
+    }
+    if !app.dap_watches.is_empty() {
+        lines.push(Line::from(""));
+        header(&mut lines, t!("ui.debug_watch").to_string());
+        for (expr, result) in &app.dap_watches {
+            lines.push(Line::from(vec![
+                Span::raw(format!("  {expr} = ")),
+                Span::styled(result.clone(), theme::dim()),
+            ]));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
 
 fn draw_outline_dock(app: &mut App, frame: &mut Frame, area: Rect) {

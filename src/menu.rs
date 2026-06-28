@@ -644,6 +644,24 @@ fn time_zone_submenu() -> &'static [Item] {
     Box::leak(items.into_boxed_slice())
 }
 
+/// Debugger commands (DAP), grouped under the top-level Debug menu.
+const DEBUG: &[Item] = &[
+    Item::leaf("menu.item.debug.start", "debug.start", ""),
+    Item::leaf("menu.item.debug.stop", "debug.stop", ""),
+    SEP,
+    Item::leaf("menu.item.debug.toggle_breakpoint", "debug.toggle_breakpoint", ""),
+    SEP,
+    Item::leaf("menu.item.debug.continue", "debug.continue", ""),
+    Item::leaf("menu.item.debug.step_over", "debug.step_over", ""),
+    Item::leaf("menu.item.debug.step_into", "debug.step_into", ""),
+    Item::leaf("menu.item.debug.step_out", "debug.step_out", ""),
+    Item::leaf("menu.item.debug.pause", "debug.pause", ""),
+    SEP,
+    Item::leaf("menu.item.debug.watch", "debug.watch", ""),
+    Item::leaf("menu.item.debug.repl", "debug.repl", ""),
+    Item::leaf("menu.item.debug.panel", "debug.panel", ""),
+];
+
 fn build_menus() -> Vec<MenuDef> {
     let view_items: &'static [Item] = Box::leak(
         vec![
@@ -667,6 +685,7 @@ fn build_menus() -> Vec<MenuDef> {
         MenuDef { name: "menu.tools", items: TOOLS },
         MenuDef { name: "menu.ai", items: AI },
         MenuDef { name: "menu.git", items: GIT },
+        MenuDef { name: "menu.debug", items: DEBUG },
         MenuDef { name: "menu.help", items: HELP },
     ]
 }
