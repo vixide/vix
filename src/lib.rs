@@ -66,6 +66,7 @@ pub mod session;
 pub mod settings;
 pub mod snippet_tool;
 pub mod tasks;
+pub mod test_runner;
 pub mod terminal;
 pub mod theme;
 pub mod ui;

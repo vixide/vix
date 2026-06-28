@@ -150,6 +150,11 @@ pub struct Settings {
     /// Configured debug adapters (DAP), matched to files by extension. Empty by
     /// default — add the adapters you have installed.
     pub debug_adapters: Vec<crate::dap::DebugAdapter>,
+    /// Command run by **Tools → Run Tests**, whose output is parsed into a
+    /// pass/fail tree (e.g. `cargo test`, `pytest -v`, `npm test`).
+    pub test_command: String,
+    /// Width (columns) of the test-results panel.
+    pub test_width: u16,
 }
 
 /// One configured language server (a `lsp_servers` entry).
@@ -211,6 +216,8 @@ impl Default for Settings {
             auto_pair: true,
             inline_blame: false,
             debug_adapters: Vec::new(),
+            test_command: "cargo test".to_string(),
+            test_width: 40,
         }
     }
 }

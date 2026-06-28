@@ -770,6 +770,8 @@ pub struct Layout {
     pub snippets: Rect,
     /// Transcript rectangle of the open AI chat panel, for mouse-wheel scrolling.
     pub ai_panel: Rect,
+    /// Row-list rectangle of the test-results panel, for click-to-jump.
+    pub test_panel: Rect,
     /// Row-list rectangle of the open contact browser, for click hit-testing.
     pub contacts: Rect,
     /// Row-list rectangle of the open vCard view, for click hit-testing.
@@ -958,6 +960,16 @@ pub struct App {
     pub dap_watches: Vec<(String, String)>,
     /// Whether the Debug panel (stack / variables / watch) is shown.
     pub show_debug_panel: bool,
+    /// While true, command output lines are also captured for test parsing.
+    test_capture: bool,
+    /// Buffered output of the running test command, parsed on completion.
+    test_buffer: Vec<String>,
+    /// Parsed results of the last test run.
+    pub test_results: Vec<crate::test_runner::TestResult>,
+    /// Highlighted row in the test panel.
+    pub test_selected: usize,
+    /// Whether the test-results panel is shown.
+    pub show_test_panel: bool,
     /// LSP hover tooltip overlay, when shown.
     pub hover: Option<HoverPopup>,
     /// LSP completion overlay, when shown.
@@ -1212,17 +1224,14 @@ impl App {
             blame_cache: None,
             dap: crate::dap::Dap::new(), breakpoints: std::collections::HashMap::new(),
             dap_stopped: None, dap_stack: Vec::new(), dap_variables: Vec::new(),
-            dap_watches: Vec::new(), show_debug_panel: false,
+            dap_watches: Vec::new(), show_debug_panel: false, test_capture: false,
+            test_buffer: Vec::new(), test_results: Vec::new(), test_selected: 0, show_test_panel: false,
             hover: None, completion: None, dialog: None, color_converter: None,
             unit_converter: None, calculator: None, regex_tester: None, code_actions: None,
             code_lens: None, pomodoro: None,
-            pomodoro_open: false,
-            pomodoro_last_tick: None,
-            clip: Vec::new(),
-            clip_cut: false,
-            nav_history: Vec::new(),
-            bookmarks: Vec::new(),
-            nav_idx: 0,
+            pomodoro_open: false, pomodoro_last_tick: None,
+            clip: Vec::new(), clip_cut: false,
+            nav_history: Vec::new(), bookmarks: Vec::new(), nav_idx: 0,
             picker: None,
             show_explorer: settings.show_explorer,
             show_messages: settings.show_messages,
@@ -2355,6 +2364,8 @@ impl App {
             }
             "tools.cancel_command" => self.cancel_command(),
             "tools.tasks" => self.open_tasks(),
+            "tools.test" => self.run_tests(),
+            "tools.test_panel" => self.show_test_panel = !self.show_test_panel,
             "tools.terminal" => self.toggle_terminal(),
             "tools.diff" => self.open_compare_prompt(),
             "tools.palette" => self.open_palette(),
@@ -7148,6 +7159,17 @@ impl App {
             self.outline_dock_click((row - r.y) as usize);
             return;
         }
+        if self.show_test_panel
+            && rect_contains(self.layout.test_panel, col, row)
+            && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
+        {
+            let r = self.layout.test_panel;
+            let idx = (row - r.y) as usize;
+            if idx < self.test_results.len() {
+                self.jump_to_test(idx);
+            }
+            return;
+        }
         if self.show_bottom_dock && rect_contains(self.layout.bottom_dock, col, row) {
             self.bottomdock_mouse(mouse);
         }
@@ -11847,7 +11869,12 @@ impl App {
         let mut done = false;
         for msg in msgs {
             match msg {
-                CmdMsg::Line(l) => self.bottom_dock.push(l),
+                CmdMsg::Line(l) => {
+                    if self.test_capture {
+                        self.test_buffer.push(l.clone());
+                    }
+                    self.bottom_dock.push(l);
+                }
                 CmdMsg::Done(code) => {
                     let code = code.unwrap_or(-1);
                     self.bottom_dock.push(format!("[exit {code}]"));
@@ -11865,9 +11892,59 @@ impl App {
         }
         if done {
             self.running_command = None;
+            if self.test_capture {
+                self.finish_test_run();
+            }
             // A finished command may have changed the working tree or HEAD (e.g.
             // git push/pull/checkout); refresh the cached git state.
             self.refresh_git();
+        }
+    }
+
+    /// Run the configured test command, capturing its output to parse into a
+    /// pass/fail tree when it finishes.
+    fn run_tests(&mut self) {
+        if self.running_command.is_some() {
+            self.status = t!("status.command_busy").to_string();
+            return;
+        }
+        self.test_capture = true;
+        self.test_buffer.clear();
+        self.show_test_panel = true;
+        let cmd = self.settings.test_command.clone();
+        self.run_command(&cmd);
+    }
+
+    /// Parse the captured test output, populate the panel, and report a summary.
+    fn finish_test_run(&mut self) {
+        self.test_capture = false;
+        self.test_results = crate::test_runner::parse(&self.test_buffer.join("\n"));
+        self.test_buffer.clear();
+        self.test_selected = 0;
+        let (pass, fail, ignore) = crate::test_runner::tally(&self.test_results);
+        let note = t!("status.tests_done", pass = pass, fail = fail, ignore = ignore).to_string();
+        if fail > 0 {
+            self.messages.error(note.clone());
+        } else {
+            self.messages.info(note.clone());
+        }
+        self.status = note;
+    }
+
+    /// Jump to the highlighted failing test's source location, if known.
+    fn jump_to_test(&mut self, idx: usize) {
+        self.test_selected = idx;
+        let Some((file, line)) = self.test_results.get(idx).and_then(|r| r.location.clone()) else {
+            return;
+        };
+        let path = self.resolve(&file);
+        if path.is_file() {
+            self.with_jump(|s| {
+                s.open_path(&path, false);
+                let area = s.editor_view();
+                s.editor.goto(line, None, area);
+                s.focus = Focus::Editor;
+            });
         }
     }
 
