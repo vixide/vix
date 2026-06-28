@@ -3662,6 +3662,12 @@ menu.name.vim:
   en: "Vi"
 menu.name.spacemacs:
   en: "Spacemacs"
+menu.name.jetbrains_mac:
+  en: "JetBrains IDEA macOS"
+menu.name.jetbrains_win:
+  en: "JetBrains IDEA Windows"
+menu.name.eclipse:
+  en: "Eclipse"
 menu.name.md5:
   en: "MD5"
 menu.name.crc32:

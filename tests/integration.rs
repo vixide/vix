@@ -4105,9 +4105,25 @@ fn view_keymap_submenu_actions_set_the_keymap() {
     app.run_action("view.keymap:vi");
     assert_eq!(app.settings.keymap, "vi");
 
+    for id in ["jetbrains-mac", "jetbrains-win", "eclipse"] {
+        app.run_action(&format!("view.keymap:{id}"));
+        assert_eq!(app.settings.keymap, id);
+    }
+
     // An unknown id is ignored.
     app.run_action("view.keymap:nope");
-    assert_eq!(app.settings.keymap, "vi");
+    assert_eq!(app.settings.keymap, "eclipse");
+}
+
+#[test]
+fn jetbrains_and_eclipse_keymaps_bind_find() {
+    // A representative binding works under each new keymap: Ctrl+F opens Find.
+    for id in ["jetbrains-mac", "jetbrains-win", "eclipse"] {
+        let mut app = app_at(Path::new("."));
+        app.settings.keymap = id.to_string();
+        app.on_key(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::CONTROL));
+        assert!(app.search.is_some(), "Ctrl+F opens Find under {id}");
+    }
 }
 
 #[test]
