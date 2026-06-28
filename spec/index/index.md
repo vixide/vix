@@ -227,6 +227,5 @@ colored diff gutter against HEAD, and a **Git** menu with a Changes panel
 
 Roadmap (designed in the sibling spec files, not yet built): a real LSP client
 (semantic go-to-definition, completions, diagnostics), display tab width
-(literal tabs as `tab_width` columns), git conflict resolution, and the unbuilt
-menu items (Zoom, the keyboard _browser_ in `keyboard.md`). Each sibling spec
-marks its own status.
+(literal tabs as `tab_width` columns), and git conflict resolution. Each sibling
+spec marks its own status.

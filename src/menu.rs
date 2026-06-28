@@ -208,6 +208,15 @@ const VIEW_LAYOUT: &[Item] = &[
 ];
 
 /// Editor display toggles, grouped under View → Editor.
+/// Terminal font-zoom commands, grouped under View → Zoom. Best-effort: works on
+/// terminals that honor a font-resize escape (xterm/urxvt); others zoom via their
+/// own keybindings.
+const VIEW_ZOOM: &[Item] = &[
+    Item::leaf("menu.item.view.zoom_in", "view.zoom_in", ""),
+    Item::leaf("menu.item.view.zoom_out", "view.zoom_out", ""),
+    Item::leaf("menu.item.view.zoom_reset", "view.zoom_reset", ""),
+];
+
 const VIEW_EDITOR: &[Item] = &[
     Item::leaf("menu.item.view.line_numbers", "view.line_numbers", ""),
     Item::leaf("menu.item.view.whitespace", "view.whitespace", ""),
@@ -642,6 +651,7 @@ fn build_menus() -> Vec<MenuDef> {
             Item::sub("menu.item.view.split", VIEW_SPLIT),
             Item::sub("menu.item.view.layout", VIEW_LAYOUT),
             Item::sub("menu.item.view.editor", VIEW_EDITOR),
+            Item::sub("menu.item.view.zoom", VIEW_ZOOM),
         ]
         .into_boxed_slice(),
     );
