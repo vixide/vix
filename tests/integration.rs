@@ -264,6 +264,53 @@ fn org_capture_inserts_todo_and_time_report_tabulates() {
 }
 
 #[test]
+fn roam_capture_insert_dailies_and_views() {
+    let dir = unique_dir("roam");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let mut app = app_at(&dir);
+
+    // Capture a node: the prompt creates an .org file and opens it.
+    app.run_action("roam.capture");
+    assert!(app.prompt.is_some(), "Roam → Capture opens a prompt");
+    type_str(&mut app, "My First Note");
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    let node = app.editor.active_tab().unwrap().text();
+    assert!(node.contains("#+title: My First Note"), "node has title: {node:?}");
+    assert!(node.contains(":ID:"), "node has an ID drawer");
+    assert!(dir.join("my-first-note.org").exists(), "node file written to disk");
+
+    // Insert a link to a (new) node into the current buffer without leaving it.
+    let mut app = app_at(&dir);
+    app.run_action("roam.node_insert");
+    type_str(&mut app, "Another Note");
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    let buf = app.editor.active_tab().unwrap().text();
+    assert!(buf.contains("[[id:") && buf.contains("][Another Note]]"), "link inserted: {buf:?}");
+
+    // Dailies → Today creates and opens today's daily note under daily/.
+    app.run_action("roam.dailies_today");
+    let daily = app.editor.active_tab().unwrap().text();
+    assert!(daily.starts_with(":PROPERTIES:") && daily.contains("#+title: 20"), "daily note: {daily:?}");
+
+    // Graph and Sync compile cross-node buffers.
+    app.run_action("roam.graph");
+    assert!(app.editor.active_tab().unwrap().text().contains("flowchart LR"));
+    app.run_action("roam.db_sync");
+    assert!(app.editor.active_tab().unwrap().text().contains("Roam Nodes"));
+
+    // Add a tag to the active node buffer.
+    let mut app = app_at(&dir);
+    type_str(&mut app, "#+title: Tagged\n");
+    app.run_action("roam.tag_add");
+    type_str(&mut app, "work");
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(app.editor.active_tab().unwrap().text().contains("#+filetags: :work:"));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn org_menu_edits_headlines_and_exports() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "* Task\nbody");

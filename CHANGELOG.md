@@ -41,6 +41,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Org → Roam ([Org-roam](https://www.orgroam.com/) note-taking).** A new submenu
+  for networked, Zettelkasten-style notes over a directory of `.org` files: find /
+  capture / random node, insert `[[id:…]]` node links, a backlinks buffer (linked
+  + unlinked references), dailies (today / capture / go-to-date), node metadata
+  (tags / aliases / refs), a Mermaid node graph, and a stateless database sync that
+  lists every node. Pure logic in `crate::roam`; see `spec/org/index.md`.
 - **Tools → Draw (ditaa ASCII art).** A new submenu inserts ASCII-art shapes for
   [ditaa](https://ditaa.sourceforge.net/) diagrams: rectangles, rounded
   rectangles, document/storage shapes, horizontal/vertical (and dashed) lines,
