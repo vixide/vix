@@ -3986,6 +3986,28 @@ menu.item.org.roam.graph:
   en: "Graph"
 menu.item.org.roam.db_sync:
   en: "Sync Database"
+menu.item.org.node:
+  en: "Node"
+menu.item.org.node.find:
+  en: "Find Node…"
+menu.item.org.node.insert_link:
+  en: "Insert Link…"
+menu.item.org.node.insert_transclusion:
+  en: "Insert Transclusion…"
+menu.item.org.node.random:
+  en: "Random Node"
+menu.item.org.node.nodeify:
+  en: "Nodeify Entry"
+menu.item.org.node.extract_subtree:
+  en: "Extract Subtree to Node"
+menu.item.org.node.backlinks:
+  en: "Backlinks"
+menu.item.org.node.dead_links:
+  en: "List Dead Links"
+menu.item.org.node.rename_by_title:
+  en: "Rename File by Title"
+menu.item.org.node.reset:
+  en: "Rebuild Cache"
 menu.name.url:
   en: "URL"
 menu.name.dec:
@@ -10377,6 +10399,8 @@ prompt.roam_alias:
   en: "Add alias"
 prompt.roam_ref:
   en: "Add ref (URL or cite key)"
+prompt.node_transclusion:
+  en: "Transclude node (title)"
 prompt.save_macro:
   en: "Save macro as"
   es: "Guardar macro como"
@@ -11947,6 +11971,20 @@ status.roam_graph:
   en: "Built a Roam graph (Mermaid)"
 status.roam_synced:
   en: "Synced %{count} Org-roam nodes"
+status.node_nodeified:
+  en: "Gave this entry an ID (now a node)"
+status.node_not_headline:
+  en: "Place the cursor on a headline to nodeify it"
+status.node_extracted:
+  en: "Extracted subtree to node: %{title}"
+status.node_no_title:
+  en: "Buffer has no #+title: to rename by"
+status.node_renamed:
+  en: "Renamed to %{path}"
+status.node_dead_links:
+  en: "Listed dead ID links"
+status.node_reset:
+  en: "Rebuilt cache: %{count} nodes"
 status.macro_empty:
   en: "No macro recorded yet"
   es: "Aún no se ha grabado ninguna macro"

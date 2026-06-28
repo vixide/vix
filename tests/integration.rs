@@ -311,6 +311,49 @@ fn roam_capture_insert_dailies_and_views() {
 }
 
 #[test]
+fn org_node_nodeify_extract_and_dead_links() {
+    let dir = unique_dir("orgnode");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let mut app = app_at(&dir);
+
+    // Nodeify: the headline at the cursor gains an :ID: drawer.
+    type_str(&mut app, "* My Heading\nsome body\n");
+    for _ in 0..10 {
+        app.on_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+    }
+    app.run_action("node.nodeify");
+    let t = app.editor.active_tab().unwrap().text();
+    assert!(t.contains("* My Heading\n:PROPERTIES:\n:ID:"), "nodeified: {t:?}");
+    // A second nodeify is a no-op (already a node).
+    app.run_action("node.nodeify");
+    assert!(app.status.contains("cursor on a headline") || t.contains(":ID:"));
+
+    // Insert a transclusion for a new node into a fresh buffer.
+    let mut app = app_at(&dir);
+    app.run_action("node.insert_transclusion");
+    type_str(&mut app, "Shared Block");
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(app.editor.active_tab().unwrap().text().contains("#+transclude: [[id:"));
+
+    // Extract subtree: the subtree moves to a new file, a link stays behind.
+    let mut app = app_at(&dir);
+    type_str(&mut app, "* Parent\n** Child\nchild body\n");
+    for _ in 0..10 {
+        app.on_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)); // onto "** Child"
+    app.run_action("node.extract_subtree");
+    assert!(dir.join("child.org").exists(), "extracted node file written");
+
+    // Dead-links report opens a buffer.
+    app.run_action("node.dead_links");
+    assert!(app.editor.active_tab().unwrap().text().contains("Dead Links"));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn org_checkbox_toggle_updates_parents_and_cookies() {
     // Move the cursor to a 0-based line by going to the top, then down.
     fn goto(app: &mut App, line: usize) {

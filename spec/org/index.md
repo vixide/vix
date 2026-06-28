@@ -95,6 +95,33 @@ Nodes live in the project root; daily notes live in `daily/`. There is no
 persistent database — *Sync Database* simply re-scans the project's `.org` files,
 matching org-roam's `org-roam-db-sync` semantics in a stateless way.
 
+## Node
+
+The **Org → Node** submenu brings [org-node](https://github.com/meedstrom/org-node)
+functionality — a fast, ID-based take on networked notes where a **node** is
+either a whole file *or* any subtree carrying an `:ID:`. It shares the on-disk
+format with Roam (`:ID:`, `:ROAM_ALIASES:`, `:ROAM_REFS:`, `[[id:…]]` links), so
+the two coexist. Find / Insert Link / Random / Backlinks reuse the shared node
+machinery; the rest are org-node's distinctive operations.
+
+| Item | Action | Effect |
+| ---- | ------ | ------ |
+| Find Node… | `roam.node_find` | Open or create a node by title. |
+| Insert Link… | `roam.node_insert` | Insert an `[[id:…]]` link to a node. |
+| Insert Transclusion… | `node.insert_transclusion` | Insert a `#+transclude: [[id:…]]` directive for a node (created if new). |
+| Random Node | `roam.node_random` | Jump to a random node. |
+| Nodeify Entry | `node.nodeify` | Give the headline at the cursor an `:ID:`, making it a (subtree) node. |
+| Extract Subtree to Node | `node.extract_subtree` | Cut the subtree at the cursor into its own file node, leaving an `[[id:…]]` link behind. |
+| Backlinks | `roam.backlinks` | Show linked + unlinked references to the active node. |
+| List Dead Links | `node.dead_links` | Report `[[id:…]]` links whose target ID is not declared by any node. |
+| Rename File by Title | `node.rename_by_title` | Rename the active file to the slug of its `#+title:`. |
+| Rebuild Cache | `node.reset` | Re-scan the project's nodes (the stateless `org-mem-reset` equivalent). |
+
+*Nodeify* and *Extract Subtree* embody org-node's headline-as-node model;
+extraction promotes the subtree's nested headlines so they sit at the top level
+of the new file. Pure helpers (`roam::nodeify`, `roam::dead_links`,
+`roam::transclusion`, `roam::all_ids`) are unit-tested.
+
 ## Insertion
 
 Org *content* insertion (snippets, inline markers, blocks) lives under
