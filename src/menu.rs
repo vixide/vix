@@ -159,6 +159,7 @@ const EDIT_MOVE: &[Item] = &[
     SEP,
     Item::leaf("menu.item.edit.sort", "edit.sort_lines", ""),
     Item::leaf("menu.item.edit.sort_unique", "edit.sort_unique", ""),
+    Item::leaf("menu.item.edit.shuffle", "edit.shuffle", ""),
     Item::leaf("menu.item.edit.reverse", "edit.reverse_lines", ""),
     Item::leaf("menu.item.edit.dedupe", "edit.remove_duplicate_lines", ""),
     Item::leaf("menu.item.edit.trim", "edit.trim_trailing_whitespace", ""),

@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Edit → Lines → "Sort Lines" renamed to "Sort".**
 - **Keymap renamed "Vim" → "Vi"** — display label, id (`vim` → `vi`), and action
   (`view.keymap:vim` → `view.keymap:vi`). Older configs using `vim` still load.
 - **Edit surfaces moved to Edit → Mode.** The Edit Table/Outline/JSON/YAML/Bytes
@@ -26,6 +27,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Edit → Lines → Shuffle.** Randomly reorder the selected lines (or the whole
+  buffer) with a Fisher–Yates shuffle (`edit.shuffle`).
 - **Edit SQL mode.** A new **Edit → Mode → SQL** surface parses a `.sql` buffer
   into its statements (ignoring semicolons in strings/comments) and lists them by
   kind; reorder, delete, uppercase-format keywords, undo/redo, and save back.

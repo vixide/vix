@@ -2690,6 +2690,7 @@ impl App {
             "edit.remove_duplicate_lines" => self.editor.remove_duplicate_lines(),
             "edit.reverse_lines" => self.editor.reverse_lines(),
             "edit.sort_unique" => self.editor.sort_unique(),
+            "edit.shuffle" => self.editor.shuffle_lines(),
             _ => return false,
         }
         true
@@ -3054,6 +3055,7 @@ impl App {
             "remove_duplicate_lines" => self.run_action("edit.remove_duplicate_lines"),
             "reverse_lines" => self.run_action("edit.reverse_lines"),
             "sort_unique" => self.run_action("edit.sort_unique"),
+            "shuffle" => self.run_action("edit.shuffle"),
             // navigation
             "jump_to_matching_brace" => self.run_action("edit.match_bracket"),
             "jump_line" => self.run_action("nav.goto_line"),
