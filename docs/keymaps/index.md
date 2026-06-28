@@ -2,8 +2,8 @@
 
 A **keymap** is a keyboard navigation style for moving through the editor, menus,
 file explorer, and more. Vix ships eight keymaps — **Apple**, **macOS VSCode**,
-**Emacs**, **Vi**, **Spacemacs**, **JetBrains IDEA macOS**, **JetBrains IDEA
-Windows**, and **Eclipse** — and exactly one is active at a time.
+**Emacs**, **Vi**, **Spacemacs**, **IntelliJ + macOS**, **IntelliJ + Windows**,
+and **Eclipse** — and exactly one is active at a time.
 
 **Status:** Shipped. The choice persists in the `keymap` setting (default
 `apple`).
@@ -19,15 +19,15 @@ Open **View → Keymap…** to pick the active keymap. The options are:
 | Emacs       | Emacs chords             | `Control-X Control-F`      | `Control-X Control-C` |
 | Vi         | Vi modes                | `:Ex`                      | `:q!`         |
 | Spacemacs   | Vi modes + Space leader | `SPC f f`                  | `SPC q q`     |
-| JetBrains IDEA macOS | IntelliJ IDEA (macOS) | `Control-Shift-O` (Go to File) | `Control-Q` |
-| JetBrains IDEA Windows | IntelliJ IDEA (Windows) | `Control-Shift-N` (Go to File) | `Control-Q` |
+| IntelliJ + macOS | IntelliJ (macOS) | `Control-Shift-O` (Go to File) | `Control-Q` |
+| IntelliJ + Windows | IntelliJ (Windows) | `Control-Shift-N` (Go to File) | `Control-Q` |
 | Eclipse     | Eclipse (Windows)        | `Control-Shift-R` (Open Resource) | `Control-Q` |
 
 Your selection is saved to the `keymap` setting, so it persists across sessions.
 
-## JetBrains IDEA
+## IntelliJ
 
-Two keymaps mirror IntelliJ IDEA's defaults (macOS uses `Control` in place of
+Two keymaps mirror IntelliJ's defaults (macOS uses `Control` in place of
 `Cmd`). Common bindings: `Ctrl+F`/`Ctrl+R` find/replace, `Ctrl+Shift+F`/`R`
 in-project, `Ctrl+Shift+A` find action, `Ctrl+B` go to declaration, `Ctrl+D`
 duplicate line, `Ctrl+/` comment, `Ctrl+Alt+L` reformat, `Ctrl+Alt+O` go to
