@@ -3807,18 +3807,19 @@ fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_snippets(app: &mut App, frame: &mut Frame, area: Rect) {
-    use crate::snippet_tool::SNIPPETS;
-    let Some(picker) = app.snippets.as_ref() else { return };
-    let n = SNIPPETS.len();
-    let width = 40u16.min(area.width).max(20);
-    let height = (u16::try_from(n).unwrap_or(u16::MAX) + 3).min(area.height);
+    if app.snippets.is_none() {
+        return;
+    }
+    let width = 60u16.min(area.width).max(24);
+    let height = area.height.saturating_sub(4).max(6).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
+        y: area.y + area.height.saturating_sub(height) / 4,
         width,
         height,
     };
     frame.render_widget(Clear, rect);
+    let picker = app.snippets.as_ref().unwrap();
     let block = Block::default()
         .style(theme::base())
         .borders(Borders::ALL)
@@ -3830,31 +3831,54 @@ fn draw_snippets(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let rows: Vec<Line> = SNIPPETS
-        .iter()
-        .enumerate()
-        .map(|(i, s)| {
-            let text = format!("  {}", s.name);
-            if i == picker.selected {
-                Line::from(Span::styled(text, theme::selected()))
-            } else {
-                Line::from(Span::raw(text))
-            }
-        })
-        .collect();
-    frame.render_widget(Paragraph::new(rows), chunks[0]);
-    frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(t!("ui.system_info_hint").to_string(), theme::dim()))),
-        chunks[1],
-    );
-    app.layout.snippets = Rect {
-        x: chunks[0].x,
-        y: chunks[0].y,
-        width: chunks[0].width,
-        height: u16::try_from(n).unwrap_or(u16::MAX).min(chunks[0].height),
+
+    let filter = if picker.query.is_empty() {
+        Line::from(Span::styled(t!("ui.snippets_filter").to_string(), theme::dim()))
+    } else {
+        Line::from(vec![Span::styled("/ ", theme::dim()), Span::raw(picker.query.clone())])
     };
+    frame.render_widget(Paragraph::new(filter), chunks[0]);
+
+    let view_h = chunks[1].height as usize;
+    let lib = &app.snippet_library;
+    if let Some(p) = app.snippets.as_mut() {
+        p.ensure_visible(view_h, lib);
+    }
+    let picker = app.snippets.as_ref().unwrap();
+    let filtered = picker.matches(lib);
+    let total = filtered.len();
+    let colw = chunks[1].width as usize;
+    let mut rows: Vec<Line> = Vec::with_capacity(view_h);
+    for (row, &i) in filtered.iter().enumerate().skip(picker.scroll).take(view_h) {
+        let s = &lib[i];
+        let prefix = s.prefixes.first().map_or_else(String::new, |p| format!("[{p}] "));
+        let text = format!(" {}{}  ", prefix, s.name);
+        let scope = s.scope.label();
+        let pad = colw.saturating_sub(text.chars().count() + scope.chars().count() + 1);
+        let body_line = format!("{text}{}{scope} ", " ".repeat(pad));
+        if row == picker.selected {
+            rows.push(Line::from(Span::styled(body_line, theme::selected())));
+        } else {
+            rows.push(Line::from(vec![
+                Span::raw(text),
+                Span::styled(format!("{}{scope} ", " ".repeat(pad)), theme::dim()),
+            ]));
+        }
+    }
+    let show_bar = total > view_h && chunks[1].width > 1;
+    let row_area = if show_bar { Rect { width: chunks[1].width - 1, ..chunks[1] } } else { chunks[1] };
+    frame.render_widget(Paragraph::new(rows), row_area);
+    if show_bar {
+        let sb = Rect { x: chunks[1].x + chunks[1].width - 1, ..chunks[1] };
+        draw_scrollbar(frame, sb, picker.selected, total.saturating_sub(1));
+    }
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(t!("ui.snippets_hint").to_string(), theme::dim()))),
+        chunks[2],
+    );
+    app.layout.snippets = row_area;
 }
 
 fn draw_markdown_preview(app: &mut App, frame: &mut Frame, area: Rect) {

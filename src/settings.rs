@@ -153,6 +153,9 @@ pub struct Settings {
     /// Command run by **Tools → Run Tests**, whose output is parsed into a
     /// pass/fail tree (e.g. `cargo test`, `pytest -v`, `npm test`).
     pub test_command: String,
+    /// Project snippet file, relative to the project root. Loaded alongside the
+    /// global and media-type snippet files. See `spec/snippets/index.md`.
+    pub project_snippets: String,
     /// Width (columns) of the test-results panel.
     pub test_width: u16,
 }
@@ -218,6 +221,7 @@ impl Default for Settings {
             debug_adapters: Vec::new(),
             test_command: "cargo test".to_string(),
             test_width: 40,
+            project_snippets: "config/snippets/snippets.json".to_string(),
         }
     }
 }

@@ -27,6 +27,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **JSON snippet files (global / media-type / project).** Snippets can now be
+  defined in JSON files (the VS Code shape: `name → {prefix, body, description}`)
+  loaded from `~/.config/vix/global/snippets/snippets.json`, per-media-type
+  (`…/media-types/<type>/snippets/snippets.json`), and a project file
+  (`project_snippets`, default `config/snippets/snippets.json`). The Snippets
+  picker (Tools → Snippets…) is now **searchable** and shows every in-scope
+  snippet; typing a snippet **prefix** then **Tab** expands it. Bodies use the
+  TextMate/VS Code tabstop syntax; interpolated shell code and `\u` are omitted.
+  See `spec/snippets/index.md`.
 - **Edit → Lines → Shuffle.** Randomly reorder the selected lines (or the whole
   buffer) with a Fisher–Yates shuffle (`edit.shuffle`).
 - **Edit SQL mode.** A new **Edit → Mode → SQL** surface parses a `.sql` buffer
