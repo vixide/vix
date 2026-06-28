@@ -41,6 +41,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`.gitignore`-aware file finder.** The project file index now walks with the
+  `ignore` crate (the engine ripgrep uses), so the fuzzy file finder honors
+  `.gitignore`, `.ignore`, and git's global/excludes (even outside a git repo) and
+  no longer surfaces build artifacts; `target`/`node_modules` are always pruned.
+  (Idea from the zee editor.)
 - **Sticky vertical "goal column."** Moving the caret up/down now remembers the
   column you started from, so passing through a short line no longer snaps the
   cursor inward (it returns to the original column on the next long line). Any

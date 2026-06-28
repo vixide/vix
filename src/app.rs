@@ -11074,31 +11074,38 @@ impl App {
         }
     }
 
+    /// Rebuild the project file index used by the fuzzy file finder.
+    ///
+    /// Walks the project with the `ignore` crate so the index honors `.gitignore`,
+    /// `.ignore`, git's global excludes, and hidden-file rules — the same engine
+    /// ripgrep uses — instead of a hand-rolled walk. `target`/`node_modules` are
+    /// always pruned (some projects don't ignore them), depth is bounded, and the
+    /// index is capped to keep startup and matching responsive.
     fn build_file_index(&mut self) {
+        let walker = ignore::WalkBuilder::new(&self.root)
+            .max_depth(Some(12))
+            .hidden(true) // skip dotfiles (matches the previous behavior)
+            .git_ignore(true)
+            .git_global(true)
+            .git_exclude(true)
+            .require_git(false) // apply .gitignore/.ignore even outside a git repo
+            .parents(true)
+            .filter_entry(|e| {
+                // Prune heavy build/vendor dirs, but never the walk root itself.
+                e.depth() == 0
+                    || !matches!(e.file_name().to_str(), Some("target" | "node_modules"))
+            })
+            .build();
         let mut out = Vec::new();
-        Self::walk_files(&self.root, &mut out, 0);
+        for entry in walker.flatten() {
+            if out.len() >= 5000 {
+                break;
+            }
+            if entry.file_type().is_some_and(|t| t.is_file()) {
+                out.push(entry.into_path());
+            }
+        }
         self.file_index = out;
-    }
-
-    fn walk_files(dir: &std::path::Path, out: &mut Vec<PathBuf>, depth: usize) {
-        if depth > 12 || out.len() > 5000 {
-            return;
-        }
-        let Ok(rd) = std::fs::read_dir(dir) else {
-            return;
-        };
-        for entry in rd.flatten() {
-            let path = entry.path();
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') || name == "target" || name == "node_modules" {
-                continue;
-            }
-            if path.is_dir() {
-                Self::walk_files(&path, out, depth + 1);
-            } else {
-                out.push(path);
-            }
-        }
     }
 
     fn recompute_palette(&mut self) {
@@ -13366,6 +13373,30 @@ mod tests {
     use super::*;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+
+    #[test]
+    fn file_index_honors_gitignore_and_prunes_vendor_dirs() {
+        let dir = std::env::temp_dir().join(format!("vix-idx-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::create_dir_all(dir.join("target")).unwrap();
+        std::fs::write(dir.join(".gitignore"), "ignored.txt\n").unwrap();
+        std::fs::write(dir.join("src/keep.rs"), "fn main() {}\n").unwrap();
+        std::fs::write(dir.join("ignored.txt"), "secret\n").unwrap();
+        std::fs::write(dir.join("target/build.out"), "artifact\n").unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.build_file_index();
+        let names: Vec<String> = app
+            .file_index
+            .iter()
+            .map(|p| p.strip_prefix(&dir).unwrap_or(p).to_string_lossy().replace('\\', "/"))
+            .collect();
+        assert!(names.iter().any(|n| n == "src/keep.rs"), "tracked file indexed: {names:?}");
+        assert!(!names.iter().any(|n| n == "ignored.txt"), ".gitignore respected: {names:?}");
+        assert!(!names.iter().any(|n| n.starts_with("target/")), "target pruned: {names:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn apply_edits_to_text_renames_across_lines() {
