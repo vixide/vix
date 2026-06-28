@@ -7,8 +7,8 @@
 //! - **macOS `VSCode`** — VS Code's signature shortcuts (e.g. `control-p` Quick
 //!   Open, `control-shift-p` Command Palette).
 //! - **Emacs** — layered "chord" sequences run functions (e.g. `control-x-f`).
-//! - **Vim** — modal editing, where keys mean different things per mode.
-//! - **Spacemacs** — Vim-style modal editing plus a `Space` leader for menus
+//! - **Vi** — modal editing, where keys mean different things per mode.
+//! - **Spacemacs** — Vi-style modal editing plus a `Space` leader for menus
 //!   (e.g. `SPC f f` find file, `SPC g s` git status).
 //!
 //! This crate is pure data: it lists the keymaps. The host persists the choice
@@ -36,8 +36,8 @@ pub const KEYMAPS: &[Keymap] = &[
     Keymap { id: "apple", name: "Apple", tooltip: "Apple controls" },
     Keymap { id: "vscode", name: "macOS VSCode", tooltip: "VS Code (macOS) bindings" },
     Keymap { id: "emacs", name: "Emacs", tooltip: "Emacs chords" },
-    Keymap { id: "vim", name: "Vim", tooltip: "Vim modes" },
-    Keymap { id: "spacemacs", name: "Spacemacs", tooltip: "Vim modes + Space leader" },
+    Keymap { id: "vim", name: "Vi", tooltip: "Vi modes" },
+    Keymap { id: "spacemacs", name: "Spacemacs", tooltip: "Vi modes + Space leader" },
 ];
 
 /// The keymap with the given `id`, if known.
