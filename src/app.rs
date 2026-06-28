@@ -426,6 +426,15 @@ pub struct SnippetSession {
     pub index: usize,
 }
 
+/// The recent-projects chooser (File → Switch Project…): saved workspace roots
+/// (most recent first, current excluded) and the highlighted row.
+pub struct WorkspaceChooser {
+    /// Absolute workspace root paths, most-recently-used first.
+    pub roots: Vec<String>,
+    /// Index of the highlighted root.
+    pub selected: usize,
+}
+
 /// The saved-macro chooser (Edit → Play Saved Macro…): the persisted macros and
 /// the highlighted row. Choosing one loads its keys and replays them.
 pub struct MacroChooser {
@@ -816,6 +825,8 @@ pub struct App {
     pub task_chooser: Option<TaskChooser>,
     /// Saved-macro chooser overlay (Edit → Play Saved Macro…), when open.
     pub macro_chooser: Option<MacroChooser>,
+    /// Recent-projects chooser overlay (File → Switch Project…), when open.
+    pub workspace_chooser: Option<WorkspaceChooser>,
     /// Read-only diff overlay (Tools → Compare With File…), when open.
     pub diff_view: Option<DiffViewState>,
     /// Recent-files chooser overlay, when open.
@@ -1110,7 +1121,7 @@ impl App {
             menu: Menu::default(),
             palette: None, search: None, query_replace: None, workspace_search: None,
             prompt: None, paste: None, confirm: None, replace_confirm: None, unsaved: None, spell_suggest: None,
-            context_menu: None, git_panel: None, branch_chooser: None, task_chooser: None, macro_chooser: None, diff_view: None, recent_chooser: None,
+            context_menu: None, git_panel: None, branch_chooser: None, task_chooser: None, macro_chooser: None, workspace_chooser: None, diff_view: None, recent_chooser: None,
             location_chooser: None, nerd_palette: None, ascii_panel: None, edit_table: None,
             edit_outline: None, edit_value: None, edit_bytes: None, qrcode: None,
             x11_panel: None,
@@ -1541,6 +1552,7 @@ impl App {
         panel!(branch_chooser, branch_key);
         panel!(task_chooser, tasks_key);
         panel!(macro_chooser, macro_key);
+        panel!(workspace_chooser, workspace_chooser_key);
         panel!(diff_view, diff_view_key);
         if self.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
             self.paste_key(key);
@@ -2031,6 +2043,7 @@ impl App {
                 self.prompt = Some(Prompt::new(PromptKind::Open, t!("prompt.open").to_string()));
             }
             "file.open_recent" => self.open_recent_chooser(),
+            "file.switch_project" => self.open_workspace_chooser(),
             "nav.recent_locations" => self.open_location_chooser(),
             "bookmark.toggle" => self.toggle_bookmark(),
             "bookmark.next" => self.bookmark_goto(true),
@@ -5147,6 +5160,90 @@ impl App {
         }
     }
 
+    // ----- Recent-projects switcher ---------------------------------------
+
+    /// Open the recent-projects chooser from the saved session, excluding the
+    /// current workspace. Reports when there is nowhere else to switch to.
+    fn open_workspace_chooser(&mut self) {
+        let current = self.session_key();
+        let roots: Vec<String> = crate::session::Session::load()
+            .workspaces
+            .into_iter()
+            .map(|w| w.root)
+            .filter(|r| *r != current)
+            .collect();
+        if roots.is_empty() {
+            self.status = t!("status.no_recent_projects").to_string();
+            return;
+        }
+        self.workspace_chooser = Some(WorkspaceChooser { roots, selected: 0 });
+    }
+
+    fn workspace_chooser_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => {
+                if let Some(c) = self.workspace_chooser.as_mut() {
+                    let n = c.roots.len();
+                    c.selected = (c.selected + n - 1) % n;
+                }
+            }
+            KeyCode::Down => {
+                if let Some(c) = self.workspace_chooser.as_mut() {
+                    c.selected = (c.selected + 1) % c.roots.len();
+                }
+            }
+            KeyCode::Enter => self.switch_to_selected_workspace(),
+            KeyCode::Esc => self.workspace_chooser = None,
+            _ => {}
+        }
+    }
+
+    fn workspace_chooser_mouse(&mut self, mouse: MouseEvent) {
+        if let Some(idx) = self.chooser_row(mouse)
+            && let Some(c) = self.workspace_chooser.as_mut()
+            && idx < c.roots.len()
+        {
+            c.selected = idx;
+            self.switch_to_selected_workspace();
+        }
+    }
+
+    /// Switch to the highlighted recent project.
+    fn switch_to_selected_workspace(&mut self) {
+        let Some(c) = self.workspace_chooser.take() else { return };
+        let Some(root) = c.roots.get(c.selected).cloned() else { return };
+        let path = PathBuf::from(&root);
+        if !path.is_dir() {
+            self.status = t!("status.project_missing", path = root).to_string();
+            return;
+        }
+        self.switch_workspace(&path);
+    }
+
+    /// Re-root the app at `new_root`: persist the current session, restart the
+    /// LSP, rebuild the explorer, reset the tabs, refresh git, and restore the new
+    /// workspace's saved session.
+    fn switch_workspace(&mut self, new_root: &Path) {
+        self.save_session();
+        self.lsp.shutdown();
+        self.lsp_synced.clear();
+        self.root = new_root.to_path_buf();
+        self.explorer = Explorer::new(new_root.to_path_buf());
+        self.lsp = crate::lsp::Lsp::new(
+            self.settings.lsp_enabled,
+            self.settings.lsp_servers.clone(),
+            new_root,
+        );
+        self.editor.close_all();
+        self.refresh_git();
+        let key = self.session_key();
+        if let Some(ws) = crate::session::Session::load().workspace(&key).cloned() {
+            self.apply_session(&ws);
+        }
+        self.focus = Focus::Editor;
+        self.status = t!("status.project_switched", path = new_root.display()).to_string();
+    }
+
     /// Buffer-word autocomplete: complete the word before the cursor from other
     /// words in the buffer, cycling on repeated calls (`forward` chooses the
     /// direction). Like classic "dynamic abbreviation" expansion.
@@ -6374,6 +6471,7 @@ impl App {
         panel!(branch_chooser, branch_mouse);
         panel!(task_chooser, tasks_mouse);
         panel!(macro_chooser, macro_mouse);
+        panel!(workspace_chooser, workspace_chooser_mouse);
         panel!(outline, outline_mouse);
         // The find / replace box: a left click focuses the Find or Replace field.
         panel!(search, search_mouse);

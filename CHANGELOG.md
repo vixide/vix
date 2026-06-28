@@ -24,6 +24,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   can't portably resize the font, so Vix emits the font-resize escape for
   terminals that support one (xterm/urxvt) and tells you to use the terminal's
   own zoom otherwise.
+- **Switch Project** (**File → Switch Project…**, `file.switch_project`) —
+  re-root the editor at a recent workspace without relaunching: saves the current
+  session, rebuilds explorer/Git/LSP, and restores the chosen project's session.
+  See `spec/switch-project/index.md`.
 
 ## [0.4.0] - 2026-06-27
 

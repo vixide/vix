@@ -37,7 +37,8 @@ Highlights:
   `ai_command` assistant).
 - Workflow: [Tasks](tasks/index.md) (named `tasks.toml` commands) ·
   [Compare With File](diff-view/index.md) (diff against another file) ·
-  [Integrated Terminal](terminal/index.md) (a shell in a panel).
+  [Integrated Terminal](terminal/index.md) (a shell in a panel) ·
+  [Switch Project](switch-project/index.md) (re-root at a recent workspace).
 
 ## Specification (`spec/`) — source of truth
 
