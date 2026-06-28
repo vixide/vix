@@ -14,6 +14,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   items moved from the Tools menu into a new **Edit → Mode** submenu (labeled
   Table/Outline/JSON/YAML/Bytes). The action ids and command-palette entries are
   unchanged.
+- **Case submenu moved to Tools → Convert.** The Edit → Case transforms
+  (Upper/Lower/Title/Kebab/Snake/Camel/Pascal) now live under Tools → Convert.
 
 ### Fixed
 

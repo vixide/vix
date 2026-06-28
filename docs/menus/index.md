@@ -59,8 +59,10 @@ the menus are **Vix · File · Edit · View · Tools · AI · Git · Org · Debu
 | Move ▸      |                | Submenu of line-move commands (below)   |
 | Go ▸        |                | Submenu of cursor-jump commands (below) |
 | Find ▸      |                | Submenu of find-related items (below)   |
-| Case ▸      |                | Submenu of case transforms for the selection |
+| Mode ▸      |                | Submenu of type-specific edit surfaces  |
 | Comment     | `Ctrl+/`       | Comment/uncomment the line or selection |
+
+(The **Case** submenu of case transforms now lives under **Tools → Convert**.)
 
 The **Select** submenu:
 
@@ -104,8 +106,8 @@ The **Find** submenu:
 Replace is part of the Find panel itself — press `Ctrl+R`, or `Tab` to the
 Replace field in the find box, to reveal it.
 
-The **Case** submenu applies a case transform to the current selection:
-Upper, Lower, Title, Kebab, Snake, Camel, and Pascal.
+The **Case** submenu (under **Tools → Convert**) applies a case transform to the
+current selection: Upper, Lower, Title, Kebab, Snake, Camel, and Pascal.
 
 ## View menu
 
