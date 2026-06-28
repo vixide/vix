@@ -8,7 +8,7 @@ This file is the entry point; see [`AGENTS/`](AGENTS/) for topic guides and
 
 Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust IDE"),
 built on `ratatui`. It is a **single Cargo crate** (edition 2024, no workspace
-members): the application plus ~70 focused modules under `src/`, including the
+members): the application plus ~95 focused modules under `src/`, including the
 custom editor widget `editor_core`. See [`docs/architecture/index.md`](docs/architecture/index.md).
 
 ## Source of truth
@@ -42,9 +42,11 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 - **No `unsafe`.**
 - **`#![warn(clippy::pedantic)]`** is on at the crate root **and repeated in
   every module file**. There is no blanket `#![allow(clippy::pedantic)]` and no
-  `#![allow(missing_docs)]`; fix findings in code. The only sanctioned allows are
-  four targeted `#[allow(clippy::struct_excessive_bools)]` on `App`, `Settings`,
-  `SearchBar`, `WorkspaceSearch`.
+  `#![allow(missing_docs)]`; fix findings in code. Sanctioned allows are only a
+  few **targeted** ones: `#[allow(clippy::struct_excessive_bools)]` on genuine
+  state structs (`App`, `Settings`, `SearchBar`, `WorkspaceSearch`, `editor_core`
+  `Editor`) and a handful of `#[allow(clippy::too_many_lines)]` /
+  `too_many_arguments` on specific functions that resist further extraction.
 - Keep the tree clean: `cargo clippy --workspace --all-targets -- -D warnings`.
 
 ## Non-negotiable conventions
@@ -62,7 +64,8 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 - **Keep the logic terminal-independent.** Editing/state logic lives in the
   library and is tested without a TTY. Rendering lives only in `src/ui.rs`.
 - **Input dispatch is keymap-aware.** Raw keys route through the active _keymap_
-  (Apple / Emacs / Vim) in `App::on_key`; keymaps translate keys into the same
+  (Apple / macOS VSCode / Emacs / Vi / Spacemacs / IntelliJ macOS / IntelliJ
+  Windows / Eclipse) in `App::on_key`; keymaps translate keys into the same
   `run_action` calls and editor motions rather than duplicating behavior. See
   `spec/keymaps`.
 - **One `ratatui` version.** The whole widget stack must agree on `ratatui` 0.30

@@ -73,9 +73,10 @@ The menus, left to right, are
 | Go ▸    | | Submenu of cursor-jump commands (below) |
 | *— separator —* | | |
 | Find ▸  | | Submenu of find-related items (below) |
-| Mode ▸  | | Submenu of type-specific edit surfaces (Table/Outline/JSON/YAML/Bytes) |
+| Mode ▸  | | Submenu of type-specific edit surfaces (Table/Outline/JSON/YAML/Bytes/SQL) |
 | *— separator —* | | |
 | Comment | `Ctrl+/` | Comment/uncomment the line or selection |
+| Macro ▸ | | Submenu: Record / Play / Save… / Play Saved… |
 
 The **Select** submenu:
 

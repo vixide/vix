@@ -59,8 +59,9 @@ the menus are **Vix · File · Edit · View · Tools · AI · Git · Org · Debu
 | Move ▸      |                | Submenu of line-move commands (below)   |
 | Go ▸        |                | Submenu of cursor-jump commands (below) |
 | Find ▸      |                | Submenu of find-related items (below)   |
-| Mode ▸      |                | Submenu of type-specific edit surfaces  |
+| Mode ▸      |                | Submenu of type-specific edit surfaces (Table/Outline/JSON/YAML/Bytes/SQL) |
 | Comment     | `Ctrl+/`       | Comment/uncomment the line or selection |
+| Macro ▸     |                | Submenu: Record / Play / Save… / Play Saved… |
 
 (The **Case** submenu of case transforms now lives under **Tools → Convert**.)
 

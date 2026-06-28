@@ -5,17 +5,17 @@ Vix records and replays keyboard macros. Recordings can be **saved by name** to
 
 ## Recording & playback
 
-- **Edit → Record Macro** (`toggle_macro`) starts/stops recording editor keys.
-- **Edit → Play Macro** (`play_macro`) replays the just-recorded keys at the
+- **Edit → Macro → Record** (`toggle_macro`) starts/stops recording editor keys.
+- **Edit → Macro → Play** (`play_macro`) replays the just-recorded keys at the
   cursor.
 
 ## Persistence
 
-- **Edit → Save Macro…** (`macro.save`) prompts for a name and writes the recorded
+- **Edit → Macro → Save…** (`macro.save`) prompts for a name and writes the recorded
   key sequence to `macros.toml` in the config directory (`Settings::macros_path`).
   No-ops with a status note when nothing has been recorded; re-using a name
   replaces that macro.
-- **Edit → Play Saved Macro…** (`macro.play_saved`) opens a chooser of saved
+- **Edit → Macro → Play Saved…** (`macro.play_saved`) opens a chooser of saved
   macros; choosing one loads its keys into the active macro buffer and plays it.
 
 ## Storage format

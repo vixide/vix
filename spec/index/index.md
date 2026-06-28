@@ -137,7 +137,8 @@ to `App::on_key` or `App::on_mouse`. `on_key` resolves modal layers in priority
 order — help, dialog, calendar, theme/locale/keymap/recent choosers, Nerd Font
 palette, query-replace, workspace search, confirm, paste-conflict, prompt, palette,
 search, menu — before
-the active **keymap** dispatch (Apple shortcuts / Emacs chords / Vim modal; see
+the active **keymap** dispatch (Apple / VSCode / Emacs / Vi / Spacemacs /
+IntelliJ / Eclipse; see
 `keymap_model/spec/index.md`) and, finally, the focused pane (editor / explorer /
 messages / bottom dock). Each loop iteration also drains any streamed
 command output into the bottom dock. Menu items and palette commands share one
@@ -165,8 +166,9 @@ Also shipped: **internationalization** (`rust-i18n`; 27 selectable languages
 including Klingon and Sindarin, English fallback, `--locale` flag + `locale`
 setting + live **View → Locale…**), **themes** (every theme is a JSON theme;
 Dark, Light, and more ship bundled, plus user-installed; live **View → Theme…**;
-see `theme_model/spec/index.md`), **keymaps** (Apple / Emacs / Vim keyboard
-navigation styles, live **View → Keymap…**; see `keymap_model/spec/index.md`),
+see `theme_model/spec/index.md`), **keymaps** (Apple / macOS VSCode / Emacs / Vi /
+Spacemacs / IntelliJ macOS / IntelliJ Windows / Eclipse keyboard navigation
+styles, live **View → Keymap…**; see `keymap_model/spec/index.md`),
 **configuration** (`confy` TOML), a **CLI** (`clap`), the **Vix menu**
 (About / Website / Email modal dialogs), **resizable docks** (drag a dock's inner
 edge), **dock toggle icons** in the menu bar, **Open Recent**, **go-to-symbol**

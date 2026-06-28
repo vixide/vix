@@ -15,7 +15,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Snippet directories load every `*.json` file** (not just `snippets.json`), and
   media-type snippets also load from the project at
   `config/media-types/<type>/snippets/`.
+- **Macro commands moved to Edit → Macro.** Record/Play/Save…/Play Saved… now
+  live in a new **Edit → Macro** submenu (relabeled Record, Play, Save…, Play
+  Saved…); action ids unchanged.
 - **Edit → Lines → "Sort Lines" renamed to "Sort".**
+- **Docs/spec/AGENTS harmonized** with the current feature set (keymaps list,
+  Org/Debug menus, edit surfaces, snippets, media types, module map, Rust 1.95
+  toolchain floor).
 - **Keymap renamed "Vim" → "Vi"** — display label, id (`vim` → `vi`), and action
   (`view.keymap:vim` → `view.keymap:vi`). Older configs using `vim` still load.
 - **Edit surfaces moved to Edit → Mode.** The Edit Table/Outline/JSON/YAML/Bytes

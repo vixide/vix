@@ -20,7 +20,7 @@ Self-contained concerns live in their own modules under `src/` (formerly separat
 | `git` / `conflict_tool`      | Git status/diff/staging via the git CLI; merge-conflict marker parsing. |
 | `calendar_panel`             | Calendar date/time strings and the navigable Monday-first month grid (owns `jiff`). |
 | `theme_model`                | Monochrome Dark/Light modes, the ratatui styles derived from them, **custom JSON themes** (per-region RGB), and chooser state. |
-| `locale_model` / `keymap_model` | Available UI languages; keyboard navigation styles (Apple/Emacs/Vim). |
+| `locale_model` / `keymap_model` | Available UI languages; keyboard navigation styles (Apple/VSCode/Emacs/Vi/Spacemacs/IntelliJ/Eclipse). |
 | `keyboard_shortcut_panel`    | The keyboard-help rows (key combo + i18n description key).            |
 
 The pattern for the panel/model modules is **data and logic in the module, host
@@ -75,7 +75,8 @@ main()                         ui::draw(&app, frame)         App::on_key(event)
 `App::on_key` resolves input in strict priority order: each modal overlay
 consumes input while open (the theme, locale, and keymap choosers are overlays in
 this chain). With no modal active, the active **keymap** dispatches the key —
-Apple modifier shortcuts, Emacs `Ctrl` chords, or Vim modal motions, all routing
+Apple modifier shortcuts, VS Code bindings, Emacs `Ctrl` chords, Vi/Spacemacs
+modal motions, or the IntelliJ / Eclipse bindings, all routing
 through `run_action` and the editor's own handling — and anything it does not
 consume routes to the focused pane.
 
@@ -103,8 +104,8 @@ visible. The editor band is itself split into a tab bar and the text area plus a
 itself — including syntax highlighting, the block cursor, visible-whitespace
 glyphs, **bracket matching**, and **soft wrap** (a shared visual-row layout drives
 its renderer, cursor scroll, and mouse hit-testing). The status bar shows the
-keymap mode indicator (Vim's `-- NORMAL --` / `-- INSERT --` / `:` line, or
-Emacs's pending `Ctrl+X-` prefix) plus the buffer's language, line ending
+keymap mode indicator (Vi/Spacemacs's `-- NORMAL --` / `-- INSERT --` / `:` line,
+or Emacs's pending `Ctrl+X-` prefix) plus the buffer's language, line ending
 (LF/CRLF), encoding, selection char/line count, and line:column.
 Overlays (calendar, menu dropdown, search, palette, prompt, dialogs, and the
 theme / locale / keymap / recent choosers, …) are drawn last, each clearing its
