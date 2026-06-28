@@ -205,6 +205,7 @@ const VIEW_LAYOUT: &[Item] = &[
     Item::leaf("menu.item.view.bottom_dock", "view.bottom_dock", ""),
     Item::leaf("menu.item.view.status_bar", "view.status_bar", ""),
     Item::leaf("menu.item.view.breadcrumbs", "view.breadcrumbs", ""),
+    Item::leaf("menu.item.view.outline_dock", "view.outline_dock", ""),
     Item::leaf("menu.item.view.zen", "view.zen", ""),
 ];
 

@@ -753,6 +753,8 @@ pub struct Layout {
     pub git_status_bar: Rect,
     /// Row-list rectangle of the open outline panel, so a click can hit-test a row.
     pub outline: Rect,
+    /// Row-list rectangle of the outline sidebar dock, for click-to-jump.
+    pub outline_dock: Rect,
     /// Inner content rectangle of the open find / replace box, so a click can
     /// focus the Find or Replace field.
     pub search: Rect,
@@ -879,6 +881,12 @@ pub struct App {
     dashboard_rx: Option<std::sync::mpsc::Receiver<DashMsg>>,
     /// Code outline overlay, when open.
     pub outline: Option<Outline>,
+    /// Persistent code-outline sidebar (symbol list following the cursor), when
+    /// the dock is shown. Rebuilt by `refresh_outline_dock`.
+    pub outline_dock: Option<Outline>,
+    /// Cache key for the outline sidebar: `(active tab index, buffer revision)`,
+    /// so symbols are rescanned only when the buffer changes.
+    outline_dock_key: Option<(usize, u64)>,
     /// First-run welcome overlay, when shown.
     pub welcome: Option<WelcomePanel>,
     /// File Information overlay, when open.
@@ -1149,7 +1157,8 @@ impl App {
             edit_outline: None, edit_value: None, edit_bytes: None, qrcode: None,
             x11_panel: None,
             html_panel: None, system_info: None, dashboard: None, dashboard_rx: None,
-            outline: None, welcome: None, file_info: None, text_info: None,
+            outline: None, outline_dock: None, outline_dock_key: None,
+            welcome: None, file_info: None, text_info: None,
             markdown_preview: None, snippets: None, snippet_session: None, contacts: None, vcard: None,
             lsp,
             lsp_synced: std::collections::HashMap::new(),
@@ -2328,6 +2337,7 @@ impl App {
                 self.show_breadcrumbs = !self.show_breadcrumbs;
                 self.settings.show_breadcrumbs = self.show_breadcrumbs;
             }
+            "view.outline_dock" => self.toggle_outline_dock(),
             "view.trim_on_save" => {
                 self.settings.trim_trailing_whitespace = !self.settings.trim_trailing_whitespace;
             }
@@ -6924,6 +6934,14 @@ impl App {
             self.messages_mouse(mouse);
             return;
         }
+        if self.settings.show_outline_dock
+            && rect_contains(self.layout.outline_dock, col, row)
+            && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
+        {
+            let r = self.layout.outline_dock;
+            self.outline_dock_click((row - r.y) as usize);
+            return;
+        }
         if self.show_bottom_dock && rect_contains(self.layout.bottom_dock, col, row) {
             self.bottomdock_mouse(mouse);
         }
@@ -9582,6 +9600,63 @@ impl App {
             return;
         };
         self.outline = None;
+        self.with_jump(|s| {
+            let area = s.editor_view();
+            s.editor.goto(line, None, area);
+            s.focus = Focus::Editor;
+        });
+    }
+
+    /// Toggle the persistent outline sidebar and persist the preference.
+    fn toggle_outline_dock(&mut self) {
+        self.settings.show_outline_dock = !self.settings.show_outline_dock;
+        self.refresh_outline_dock();
+    }
+
+    /// Rebuild the outline sidebar's symbol list when the active buffer changes,
+    /// and keep its highlight on the symbol nearest the cursor. Cheap between
+    /// changes (cached by tab + revision). Called once per event-loop iteration.
+    pub fn refresh_outline_dock(&mut self) {
+        if !self.settings.show_outline_dock {
+            self.outline_dock = None;
+            self.outline_dock_key = None;
+            return;
+        }
+        let key = self.editor.active_tab().filter(|t| !t.is_image()).map(|t| (self.editor.active, t.editor.revision()));
+        let Some(key) = key else {
+            self.outline_dock = None;
+            self.outline_dock_key = None;
+            return;
+        };
+        if self.outline_dock_key != Some(key) {
+            self.outline_dock_key = Some(key);
+            let entries: Vec<crate::outline_panel::Entry> = self
+                .editor
+                .active_tab()
+                .map(|t| {
+                    crate::palette::symbols(&t.text())
+                        .into_iter()
+                        .map(|s| crate::outline_panel::Entry { kind: s.kind, name: s.name, line: s.line })
+                        .collect()
+                })
+                .unwrap_or_default();
+            self.outline_dock = if entries.is_empty() { None } else { Some(Outline::new(entries)) };
+        }
+        if let Some(o) = self.outline_dock.as_mut() {
+            let cur = self.editor.active_tab().map_or(1, |t| t.editor.cursor_line() + 1);
+            o.select_nearest(cur);
+        }
+    }
+
+    /// Jump the editor to the outline-sidebar row at viewport index `row`.
+    fn outline_dock_click(&mut self, row: usize) {
+        let Some(o) = self.outline_dock.as_mut() else { return };
+        let idx = o.scroll + row;
+        if idx >= o.entries.len() {
+            return;
+        }
+        o.selected = idx;
+        let Some(line) = o.selected_line() else { return };
         self.with_jump(|s| {
             let area = s.editor_view();
             s.editor.goto(line, None, area);

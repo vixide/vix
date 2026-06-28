@@ -42,7 +42,19 @@ While editing a Rust file, press `Ctrl+Shift+B`. The panel lists entries such as
 `struct App`, `impl App`, and `fn on_key`. Move to the symbol you want and press
 `Enter` to jump straight to it.
 
+## Outline sidebar (persistent)
+
+Beyond the modal panel, a persistent **outline sidebar** can stay open while you
+edit. Toggle it from **View → Layout → Outline Sidebar** (action
+`view.outline_dock`); the preference persists in `show_outline_dock` (width
+`outline_width`).
+
+The sidebar shows the same symbol list and **follows the cursor**: its highlight
+tracks the symbol you're currently inside, and the list rescans automatically as
+you edit. **Click** any row to jump straight to that symbol. It docks on the right,
+beside the editor.
+
 ## Roadmap
 
-A persistent (non-modal) side panel that stays open and auto-scrolls to follow
-the cursor while editing, plus a status-bar Outline button, are planned.
+- A status-bar Outline button to toggle the sidebar.
+- Collapsible nesting (group methods under their `impl`/`class`).

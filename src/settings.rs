@@ -48,6 +48,8 @@ pub struct Settings {
     pub show_status_bar: bool,
     /// Show the breadcrumb bar (file ▸ enclosing symbol) above the editor.
     pub show_breadcrumbs: bool,
+    /// Show the code-outline sidebar (symbol list that follows the cursor).
+    pub show_outline_dock: bool,
     /// Show the editor's right-side scroll bar.
     pub show_scrollbar: bool,
     /// Show the bottom dock (log/output/data panel).
@@ -80,6 +82,8 @@ pub struct Settings {
     /// Width (columns) of the right dock (message drawer); drag its left edge to
     /// resize.
     pub messages_width: u16,
+    /// Width (columns) of the code-outline sidebar.
+    pub outline_width: u16,
     /// Recently opened files, most-recent first (absolute paths). Capped to
     /// [`recent_files_max`](Self::recent_files_max); surfaced by **File → Open
     /// Recent…**.
@@ -167,6 +171,7 @@ impl Default for Settings {
             show_messages: true,
             show_status_bar: true,
             show_breadcrumbs: false,
+            show_outline_dock: false,
             show_scrollbar: true,
             show_bottom_dock: false,
             bottom_dock_height: 9,
@@ -181,6 +186,7 @@ impl Default for Settings {
             keymap: "apple".to_string(),
             explorer_width: 30,
             messages_width: 32,
+            outline_width: 28,
             recent_files: Vec::new(),
             recent_files_max: MAX_RECENT_FILES,
             command_recents: Vec::new(),

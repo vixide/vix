@@ -3089,6 +3089,7 @@ fn view_layout_submenu_rolls_up_the_dock_toggles() {
             "view.bottom_dock",
             "view.status_bar",
             "view.breadcrumbs",
+            "view.outline_dock",
             "view.zen"
         ]
     );
@@ -3751,6 +3752,33 @@ fn system_info_panel_opens_inserts_and_closes() {
 
     app.on_key(keycode(KeyCode::Esc));
     assert!(app.system_info.is_none(), "Esc closes the panel");
+}
+
+#[test]
+fn outline_sidebar_lists_symbols_and_follows_toggle() {
+    let dir = unique_dir("outline-dock");
+    fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("lib.rs");
+    fs::write(&file, "fn alpha() {}\nfn beta() {}\nstruct Gamma;\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&file);
+
+    // Off by default.
+    app.refresh_outline_dock();
+    assert!(app.outline_dock.is_none());
+
+    // Toggling on builds the symbol list for the active buffer.
+    app.run_action("view.outline_dock");
+    app.refresh_outline_dock();
+    let o = app.outline_dock.as_ref().expect("outline dock populated");
+    assert!(o.entries.iter().any(|e| e.name == "alpha"));
+    assert!(o.entries.iter().any(|e| e.name == "Gamma"));
+
+    // Toggling off clears it.
+    app.run_action("view.outline_dock");
+    assert!(app.outline_dock.is_none());
+
+    fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
