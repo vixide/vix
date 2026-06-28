@@ -16,6 +16,8 @@ Highlights:
   · [Keymaps](keymaps/index.md) · [Menus](menus/index.md)
 - [Language Server Protocol](language-server-protocol/index.md) — diagnostics,
   hover, go-to-definition, completion.
+- [Debugger](debugger/index.md) — Debug Adapter Protocol: breakpoints, stepping,
+  call stack, variables, watches.
 - Panels & tools: [Command Palette](command-palette/index.md),
   [File Explorer](file-explorer/index.md), [Find Panel](find-panel/index.md),
   [Outline](outline-panel/index.md), [Git Panel](git-panel/index.md),

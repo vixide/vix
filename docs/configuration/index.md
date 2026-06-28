@@ -50,6 +50,8 @@ their defaults, so it is safe to delete or hand-edit.
 | `inline_blame`  | bool   | `false`  | Show the cursor line's git blame (`author, date · summary`) dimmed at the end of the line. Toggle via **Git → Toggle Inline Blame**. |
 | `show_outline_dock` | bool | `false` | Show the code-outline sidebar (symbol list that follows the cursor). Toggle via **View → Layout → Outline Sidebar**. |
 | `outline_width` | int    | `28`     | Width (columns) of the outline sidebar. |
+| `debug_width`   | int    | `36`     | Width (columns) of the debugger panel. |
+| `debug_adapters`| list   | `[]`     | Debug adapters (DAP), matched to files by extension. Each entry has `adapter_id`, `extensions`, `command`, and an optional `launch` table. See `spec/debugger/index.md`. |
 
 Example `config.toml`:
 

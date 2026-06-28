@@ -2863,6 +2863,7 @@ fn alt_letters_open_specific_menus() {
         ('e', "menu.edit"),
         ('i', "menu.view"),
         ('g', "menu.git"),
+        ('d', "menu.debug"),
         ('h', "menu.help"),
     ] {
         let mut app = app_at(Path::new("."));
@@ -3752,6 +3753,30 @@ fn system_info_panel_opens_inserts_and_closes() {
 
     app.on_key(keycode(KeyCode::Esc));
     assert!(app.system_info.is_none(), "Esc closes the panel");
+}
+
+#[test]
+fn debug_breakpoints_toggle_on_the_cursor_line() {
+    let dir = unique_dir("breakpoints");
+    fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("main.rs");
+    fs::write(&file, "fn main() {\n    let x = 1;\n    println!(\"{x}\");\n}\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&file);
+
+    app.run_action("cursor_down"); // line 2
+    app.run_action("debug.toggle_breakpoint");
+    assert_eq!(app.active_breakpoints(), vec![2], "breakpoint set on line 2");
+
+    app.run_action("cursor_down"); // line 3
+    app.run_action("debug.toggle_breakpoint");
+    assert_eq!(app.active_breakpoints(), vec![2, 3]);
+
+    // Toggling again clears it.
+    app.run_action("debug.toggle_breakpoint");
+    assert_eq!(app.active_breakpoints(), vec![2]);
+
+    fs::remove_dir_all(&dir).ok();
 }
 
 #[test]

@@ -84,6 +84,8 @@ pub struct Settings {
     pub messages_width: u16,
     /// Width (columns) of the code-outline sidebar.
     pub outline_width: u16,
+    /// Width (columns) of the debugger panel (call stack / variables / watch).
+    pub debug_width: u16,
     /// Recently opened files, most-recent first (absolute paths). Capped to
     /// [`recent_files_max`](Self::recent_files_max); surfaced by **File → Open
     /// Recent…**.
@@ -190,6 +192,7 @@ impl Default for Settings {
             explorer_width: 30,
             messages_width: 32,
             outline_width: 28,
+            debug_width: 36,
             recent_files: Vec::new(),
             recent_files_max: MAX_RECENT_FILES,
             command_recents: Vec::new(),
