@@ -10,9 +10,6 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Keymap renamed "Vim" → "Vi"** — display label, id (`vim` → `vi`), and action
   (`view.keymap:vim` → `view.keymap:vi`). Older configs using `vim` still load.
-
-### Changed
-
 - **Edit surfaces moved to Edit → Mode.** The Edit Table/Outline/JSON/YAML/Bytes
   items moved from the Tools menu into a new **Edit → Mode** submenu (labeled
   Table/Outline/JSON/YAML/Bytes). The action ids and command-palette entries are
@@ -30,6 +27,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`affix` helpers** — `add` / `drop` / `toggle` a `prefix`/`suffix` pair around
   text (a conventional wrap: `add("alfa","bravo","charlie") == "bravoalfacharlie"`),
   for wrapping and unwrapping selections.
+- **Tools → Insert → Org / Markers / Begin-End** submenus — Org inserts Org-mode
+  snippets (title/author, headlines, links/images, lists, table, TODO/DONE,
+  planning lines, timestamps, drawer); Markers toggle inline emphasis (`*`/`/`/`_`
+  /`+`/`~`/`=`) around the selection; Begin-End toggle `#+BEGIN_…/#+END_…` blocks.
 - **Bracket / quote auto-pairing.** Typing `(`, `[`, `{`, `"`, `'`, `` ` ``
   inserts the matching closer (wrapping a selection when one exists), typing a
   closer steps over an auto-inserted one, and Backspace inside an empty pair

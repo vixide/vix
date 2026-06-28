@@ -2876,6 +2876,9 @@ impl App {
             a if self.insert_html(a) => {}
             a if self.insert_sql(a) => {}
             a if self.insert_latex(a) => {}
+            a if self.insert_org(a) => {}
+            a if self.insert_marker(a) => {}
+            a if self.insert_block(a) => {}
             a if self.insert_dynamic(a) => {}
             "tools.checksum.sha256" => {
                 self.transform_selection_or_buffer(crate::checksum_tool::sha256_hex);
@@ -3562,6 +3565,93 @@ impl App {
         };
         self.insert_content(snippet);
         true
+    }
+
+    /// Insert an Org-mode snippet for a `tools.insert.org.*` action at the cursor.
+    /// Returns `true` if `action` was a known Org snippet.
+    fn insert_org(&mut self, action: &str) -> bool {
+        let snippet = match action {
+            "tools.insert.org.title" => "#+title: Hello World\n",
+            "tools.insert.org.author" => "#+author: Alice Adams\n",
+            "tools.insert.org.headline" => "* Headline\n",
+            "tools.insert.org.subheadline" => "** Subheadline\n",
+            "tools.insert.org.link" => "[[https://org.mode][Org]]",
+            "tools.insert.org.image" => "[[https://example.com]]",
+            "tools.insert.org.list" => "- Alfa\n- Bravo\n- Charlie\n",
+            "tools.insert.org.ordered_list" => "1. Alfa\n2. Bravo\n3. Charlie\n",
+            "tools.insert.org.check_list" => concat!(
+                "- [ ] Alfa work ready to do\n",
+                "- [-] Bravo work in progress\n",
+                "- [x] Charlie work complete\n",
+            ),
+            "tools.insert.org.table" => {
+                "| x | x | x |\n|---|---|---|\n| x | x | x |\n| x | x | x |\n"
+            }
+            "tools.insert.org.todo" => "**** TODO A todo item.\n",
+            "tools.insert.org.done" => "**** DONE A todo item that has been done.\n",
+            "tools.insert.org.deadline" => "DEADLINE: <YYYY-MM-DD Day>\n",
+            "tools.insert.org.scheduled" => "SCHEDULED: <YYYY-MM-DD Day>\n",
+            "tools.insert.org.time_range" => {
+                "<2004-08-23 Mon 10:00-11:00>--<2004-08-26 Thu 10:00-11:00>"
+            }
+            "tools.insert.org.timestamp" => "<2006-11-02 Thu 10:00-12:00>",
+            "tools.insert.org.timestamp_repeater" => "<2006-11-02 Thu 10:00-12:00 +1w>",
+            "tools.insert.org.drawer" => ":DRAWERNAME:\nThis is inside the drawer.\n:END:\n",
+            _ => return false,
+        };
+        self.insert_content(snippet);
+        true
+    }
+
+    /// Toggle an Org inline emphasis marker for a `tools.insert.marker.*` action.
+    /// Returns `true` if `action` was a known marker.
+    fn insert_marker(&mut self, action: &str) -> bool {
+        let ch = match action {
+            "tools.insert.marker.bold" => "*",
+            "tools.insert.marker.italic" => "/",
+            "tools.insert.marker.underline" => "_",
+            "tools.insert.marker.strikethrough" => "+",
+            "tools.insert.marker.code" => "~",
+            "tools.insert.marker.verbatim" => "=",
+            _ => return false,
+        };
+        self.toggle_wrap(ch, ch);
+        true
+    }
+
+    /// Toggle an Org `#+BEGIN_…`/`#+END_…` block for a `tools.insert.block.*`
+    /// action. Returns `true` if `action` was a known block.
+    fn insert_block(&mut self, action: &str) -> bool {
+        let name = match action {
+            "tools.insert.block.comment" => "COMMENT",
+            "tools.insert.block.center" => "CENTER",
+            "tools.insert.block.quote" => "QUOTE",
+            "tools.insert.block.verse" => "VERSE",
+            _ => return false,
+        };
+        self.toggle_wrap(&format!("#+BEGIN_{name}\n"), &format!("\n#+END_{name}"));
+        true
+    }
+
+    /// Toggle `prefix`/`suffix` around the active selection (a conventional wrap;
+    /// see [`crate::affix::toggle`]). With no selection, insert the empty pair and
+    /// leave the cursor between the two halves.
+    fn toggle_wrap(&mut self, prefix: &str, suffix: &str) {
+        let area = self.layout.editor;
+        let selection = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text());
+        match selection {
+            Some(sel) if !sel.is_empty() => {
+                let wrapped = crate::affix::toggle(&sel, prefix, suffix);
+                self.editor.insert_str(&wrapped, area);
+            }
+            _ => {
+                self.editor.insert_str(&format!("{prefix}{suffix}"), area);
+                if let Some(t) = self.editor.active_tab_mut() {
+                    let cursor = t.editor.get_cursor();
+                    t.editor.set_cursor(cursor.saturating_sub(suffix.chars().count()));
+                }
+            }
+        }
     }
 
     /// Insert dynamically-generated content (Lorem ipsum, date/time presets) for
