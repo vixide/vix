@@ -38,6 +38,8 @@ fn bundled_themes() -> Vec<crate::theme::CustomTheme> {
         .files()
         .filter(|f| f.path().extension().and_then(|e| e.to_str()) == Some("json"))
         .filter_map(|f| f.contents_utf8().and_then(crate::theme_model::parse_theme))
+        // Plus the themes generated from base16 palettes (see `crate::base16`).
+        .chain(crate::base16::themes())
         .collect()
 }
 
