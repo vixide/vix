@@ -35,7 +35,7 @@ model order, and is kept in sync with the keymap model by a test.
 | Apple | `view.keymap:apple` |
 | macOS VSCode | `view.keymap:vscode` |
 | Emacs | `view.keymap:emacs` |
-| Vi | `view.keymap:vim` |
+| Vi | `view.keymap:vi` |
 | Spacemacs | `view.keymap:spacemacs` |
 
 Choosing an item dispatches `view.keymap:<id>`. The host:

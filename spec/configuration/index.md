@@ -59,7 +59,7 @@ field is absent.
 | `tab_width` | integer | `4` | Number of spaces per indent when `indent_style` is `"spaces"`. |
 | `theme` | string | `"dark"` | Color theme: `"dark"` or `"light"` (or a custom theme, see below). |
 | `locale` | string | `"en"` | UI language as a locale code (e.g. `"en"`, `"es"`, `"fr"`, `"de"`, `"cy"`). Used as the default; a `--locale` CLI flag overrides it for one run. |
-| `keymap` | string | `"apple"` | Keyboard navigation style id: `"apple"`, `"vscode"`, `"emacs"`, or `"vim"`. |
+| `keymap` | string | `"apple"` | Keyboard navigation style id: `"apple"`, `"vscode"`, `"emacs"`, or `"vi"`. |
 | `explorer_width` | integer | `30` | Width in columns of the left dock (file explorer); drag its right edge to resize. |
 | `messages_width` | integer | `32` | Width in columns of the right dock (message drawer); drag its left edge to resize. |
 | `recent_files` | array of strings | `[]` | Recently opened files, most-recent first (absolute paths). Surfaced by **File → Open Recent…**. |

@@ -36,7 +36,7 @@ pub const KEYMAPS: &[Keymap] = &[
     Keymap { id: "apple", name: "Apple", tooltip: "Apple controls" },
     Keymap { id: "vscode", name: "macOS VSCode", tooltip: "VS Code (macOS) bindings" },
     Keymap { id: "emacs", name: "Emacs", tooltip: "Emacs chords" },
-    Keymap { id: "vim", name: "Vi", tooltip: "Vi modes" },
+    Keymap { id: "vi", name: "Vi", tooltip: "Vi modes" },
     Keymap { id: "spacemacs", name: "Spacemacs", tooltip: "Vi modes + Space leader" },
 ];
 

@@ -74,7 +74,7 @@ pub struct Settings {
     /// Used as the default; a `--locale` CLI flag overrides it for one run.
     pub locale: String,
     /// Keyboard navigation style id: `"apple"` (default), `"vscode"`, `"emacs"`,
-    /// or `"vim"`.
+    /// or `"vi"`.
     pub keymap: String,
     /// Width (columns) of the left dock (file explorer); drag its right edge to
     /// resize.

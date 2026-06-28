@@ -575,7 +575,8 @@ impl Keymap {
         match id {
             "vscode" => Keymap::Vscode,
             "emacs" => Keymap::Emacs,
-            "vim" => Keymap::Vim,
+            // `vi` is the current id; `vim` is accepted for older configs.
+            "vi" | "vim" => Keymap::Vim,
             "spacemacs" => Keymap::Spacemacs,
             _ => Keymap::Apple,
         }
