@@ -54,6 +54,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `debug_adapters`| list   | `[]`     | Debug adapters (DAP), matched to files by extension. Each entry has `adapter_id`, `extensions`, `command`, and an optional `launch` table. See `spec/debugger/index.md`. |
 | `test_command`  | string | `cargo test` | Command run by **Tools → Run Tests**; its output is parsed into the test panel. |
 | `test_width`    | int    | `40`     | Width (columns) of the test-results panel. |
+| `project_snippets` | string | `config/snippets/snippets.json` | Project snippet file, relative to the project root. See `spec/snippets/index.md`. |
 
 Example `config.toml`:
 

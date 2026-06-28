@@ -950,7 +950,12 @@ pub struct App {
     /// Markdown preview overlay, when open.
     pub markdown_preview: Option<MarkdownPreview>,
     /// Snippets picker overlay, when open.
-    pub snippets: Option<crate::snippet_tool::Picker>,
+    pub snippets: Option<crate::snippets::Picker>,
+    /// The in-scope snippet library (bundled + global + media-type + project),
+    /// rebuilt for the active buffer's media type.
+    pub snippet_library: Vec<crate::snippets::Snippet>,
+    /// The media-type key the `snippet_library` was last built for (cache guard).
+    snippet_library_key: Option<String>,
     /// Active snippet tabstop session (Tab navigates the fields), when expanding.
     snippet_session: Option<SnippetSession>,
     /// Contact-browser overlay, when open.
@@ -1238,7 +1243,8 @@ impl App {
             html_panel: None, system_info: None, dashboard: None, dashboard_rx: None,
             outline: None, outline_dock: None, outline_dock_key: None,
             welcome: None, file_info: None, text_info: None,
-            markdown_preview: None, snippets: None, snippet_session: None, contacts: None, vcard: None,
+            markdown_preview: None, snippets: None, snippet_library: Vec::new(),
+            snippet_library_key: None, snippet_session: None, contacts: None, vcard: None,
             lsp,
             lsp_synced: std::collections::HashMap::new(),
             blame_cache: None,
@@ -5792,6 +5798,12 @@ impl App {
                 _ => {}
             }
         }
+        // A plain Tab after a snippet prefix word expands that snippet.
+        if matches!(key.code, KeyCode::Tab) && !Self::ctrl(&key) && !Self::alt(&key) && !Self::shift(&key)
+            && self.expand_snippet_prefix()
+        {
+            return;
+        }
         let area = self.editor_view();
         match key.code {
             KeyCode::Home => return self.editor.cursor_line_home(),
@@ -9914,21 +9926,63 @@ impl App {
 
     // ----- Snippets -------------------------------------------------------
 
-    /// Open the Snippets picker.
+    /// The active buffer's media type (from its file extension), if recognized.
+    fn active_media_type(&self) -> Option<String> {
+        let ext = self.editor.active_tab()?.path.as_ref()?.extension()?.to_string_lossy().into_owned();
+        crate::media_type::for_extension(&ext).map(|m| m.media_type.to_string())
+    }
+
+    /// Rebuild the in-scope snippet library (bundled + file scopes) for the active
+    /// buffer's media type. Cached by media type; `force` rebuilds regardless.
+    fn refresh_snippet_library(&mut self, force: bool) {
+        let media = self.active_media_type();
+        let key = media.clone().unwrap_or_default();
+        if !force && self.snippet_library_key.as_deref() == Some(key.as_str()) {
+            return;
+        }
+        let files = crate::snippets::load_scoped(media.as_deref(), &self.root, &self.settings.project_snippets);
+        self.snippet_library = crate::snippets::merge(crate::snippets::bundled(), files);
+        self.snippet_library_key = Some(key);
+    }
+
+    /// Open the Snippets picker (rebuilding the library for the active buffer).
     fn open_snippets(&mut self) {
-        self.snippets = Some(crate::snippet_tool::Picker::new());
+        self.refresh_snippet_library(true);
+        self.snippets = Some(crate::snippets::Picker::new());
     }
 
     fn snippets_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.snippets.height as usize).max(1);
+        let lib = &self.snippet_library;
         match key.code {
             KeyCode::Up => {
                 if let Some(p) = self.snippets.as_mut() {
-                    p.up();
+                    p.up(1);
                 }
             }
             KeyCode::Down => {
                 if let Some(p) = self.snippets.as_mut() {
-                    p.down();
+                    p.down(1, lib);
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(p) = self.snippets.as_mut() {
+                    p.up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(p) = self.snippets.as_mut() {
+                    p.down(page, lib);
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(p) = self.snippets.as_mut() {
+                    p.backspace();
+                }
+            }
+            KeyCode::Char(c) => {
+                if let Some(p) = self.snippets.as_mut() {
+                    p.push(c);
                 }
             }
             KeyCode::Enter => self.insert_selected_snippet(),
@@ -9946,20 +10000,58 @@ impl App {
             return;
         }
         let row = (mouse.row - r.y) as usize;
-        if let Some(p) = self.snippets.as_mut()
-            && p.select_index(row) {
-                self.insert_selected_snippet();
-            }
+        let idx = self.snippets.as_ref().map_or(0, |p| p.scroll) + row;
+        let hit = self.snippets.as_mut().is_some_and(|p| p.select_index(idx, &self.snippet_library));
+        if hit {
+            self.insert_selected_snippet();
+        }
     }
 
     /// Insert the highlighted snippet's body at the cursor and close the picker,
     /// starting a tabstop session if the snippet has fields.
     fn insert_selected_snippet(&mut self) {
-        let Some(body) = self.snippets.as_ref().map(|p| p.selected_body().to_string()) else {
-            return;
-        };
+        let body = self
+            .snippets
+            .as_ref()
+            .and_then(|p| p.selected_library_index(&self.snippet_library))
+            .and_then(|i| self.snippet_library.get(i))
+            .map(|s| s.body.clone());
+        let Some(body) = body else { return };
         self.snippets = None;
         self.insert_snippet_body(&body);
+    }
+
+    /// If the word just before the cursor is a snippet prefix, replace it with the
+    /// snippet body and arm a tabstop session. Returns `true` if it expanded.
+    fn expand_snippet_prefix(&mut self) -> bool {
+        self.refresh_snippet_library(false);
+        let Some(tab) = self.editor.active_tab() else { return false };
+        if tab.is_image() {
+            return false;
+        }
+        let cursor = tab.editor.get_cursor();
+        let chars: Vec<char> = tab.editor.get_content().chars().collect();
+        let is_word = |c: char| c.is_alphanumeric() || c == '_';
+        let mut start = cursor;
+        while start > 0 && chars.get(start - 1).copied().is_some_and(is_word) {
+            start -= 1;
+        }
+        if start == cursor {
+            return false;
+        }
+        let word: String = chars[start..cursor].iter().collect();
+        let Some(snippet) = crate::snippets::find_by_prefix(&self.snippet_library, &word) else {
+            return false;
+        };
+        let body = snippet.body.clone();
+        // Select the prefix word so the snippet insertion replaces it.
+        let area = self.editor_view();
+        if let Some(t) = self.editor.active_tab_mut() {
+            t.editor.set_selection_range(start, cursor);
+            t.editor.focus(&area);
+        }
+        self.insert_snippet_body(&body);
+        true
     }
 
     /// Insert a snippet `body` (with `$1`/`${1:…}`/`$0` tabstops) at the cursor.
@@ -9968,7 +10060,12 @@ impl App {
     fn insert_snippet_body(&mut self, body: &str) {
         let parsed = crate::snippet_tool::parse(body);
         let area = self.layout.editor;
-        let base = self.editor.active_tab().map_or(0, |t| t.editor.get_cursor());
+        // Insertion replaces any active selection, so the body begins at the
+        // selection start (used by prefix expansion); otherwise at the cursor.
+        let base = self.editor.active_tab_mut().map_or(0, |t| match t.editor.get_selection() {
+            Some(sel) if !sel.is_empty() => sel.sorted().0,
+            _ => t.editor.get_cursor(),
+        });
         if !self.editor.insert_str(&parsed.text, area) {
             return;
         }

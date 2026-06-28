@@ -83,6 +83,45 @@ fn type_str(app: &mut App, s: &str) {
 }
 
 #[test]
+fn snippet_picker_filters_and_inserts_bundled() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.snippets");
+    assert!(app.snippets.is_some(), "Tools → Snippets opens the picker");
+    // The library includes the bundled snippets.
+    assert!(app.snippet_library.iter().any(|s| s.name == "TODO comment"));
+
+    // Filter to the TODO snippet and insert it.
+    for c in "todo".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(app.snippets.is_none(), "Enter inserts and closes");
+    assert!(app.editor.active_tab().unwrap().text().starts_with("TODO: "));
+}
+
+#[test]
+fn project_snippet_expands_from_prefix_on_tab() {
+    let dir = unique_dir("snippets-proj");
+    fs::create_dir_all(dir.join("config/snippets")).unwrap();
+    fs::write(
+        dir.join("config/snippets/snippets.json"),
+        r#"{ "Greet": { "prefix": "hi", "body": "Hello, ${1:world}!$0" } }"#,
+    )
+    .unwrap();
+    let mut app = app_at(&dir);
+
+    // Type the prefix, then Tab expands it (project-scoped snippet).
+    for c in "hi".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "Hello, world!");
+    // The first tabstop ("world") is selected for the snippet session.
+    let sel = app.editor.active_tab_mut().unwrap().editor.get_selection_text();
+    assert_eq!(sel.as_deref(), Some("world"));
+}
+
+#[test]
 fn edit_sql_lists_formats_and_saves_statements() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "select 1;\ninsert into t values (1)");

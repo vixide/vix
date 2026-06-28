@@ -134,94 +134,9 @@ fn read_number(chars: &[char], from: usize) -> (u32, usize) {
     (num, j)
 }
 
-/// Selection state for the Snippets picker.
-#[derive(Default)]
-pub struct Picker {
-    /// Highlighted row.
-    pub selected: usize,
-}
-
-impl Picker {
-    /// A picker with the first snippet highlighted.
-    #[must_use]
-    pub fn new() -> Self {
-        Picker { selected: 0 }
-    }
-
-    /// Number of snippets.
-    #[must_use]
-    pub fn len(&self) -> usize {
-        SNIPPETS.len()
-    }
-
-    /// Whether there are no snippets (there always are, but clippy asks).
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        SNIPPETS.is_empty()
-    }
-
-    /// Move the highlight up one row.
-    pub fn up(&mut self) {
-        self.selected = self.selected.saturating_sub(1);
-    }
-
-    /// Move the highlight down one row.
-    pub fn down(&mut self) {
-        if self.selected + 1 < SNIPPETS.len() {
-            self.selected += 1;
-        }
-    }
-
-    /// Select a row directly (e.g. from a click); returns whether it was real.
-    pub fn select_index(&mut self, idx: usize) -> bool {
-        if idx < SNIPPETS.len() {
-            self.selected = idx;
-            true
-        } else {
-            false
-        }
-    }
-
-    /// The highlighted snippet's body, ready to insert.
-    #[must_use]
-    pub fn selected_body(&self) -> &'static str {
-        SNIPPETS.get(self.selected).map_or("", |s| s.body)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn picker_navigates_and_yields_body() {
-        let mut p = Picker::new();
-        assert_eq!(p.selected, 0);
-        assert_eq!(p.selected_body(), SNIPPETS[0].body);
-        p.down();
-        assert_eq!(p.selected, 1);
-        p.up();
-        p.up();
-        assert_eq!(p.selected, 0, "saturates at the top");
-    }
-
-    #[test]
-    fn down_saturates_at_the_end() {
-        let mut p = Picker::new();
-        for _ in 0..100 {
-            p.down();
-        }
-        assert_eq!(p.selected, SNIPPETS.len() - 1);
-        assert_eq!(p.selected_body(), SNIPPETS[SNIPPETS.len() - 1].body);
-    }
-
-    #[test]
-    fn select_index_bounds() {
-        let mut p = Picker::new();
-        assert!(p.select_index(2));
-        assert_eq!(p.selected, 2);
-        assert!(!p.select_index(9999));
-    }
 
     #[test]
     fn parse_extracts_ordered_tabstops() {

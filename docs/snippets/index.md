@@ -1,8 +1,42 @@
 # Snippets
 
-Insert reusable boilerplate from **Tools → Snippets…** (or the command palette).
-Pick a snippet and it drops in at the cursor. Snippets can carry **tabstops** —
-fields you fill in and jump between with Tab.
+Insert reusable boilerplate two ways:
+
+- **Tools → Snippets…** (or the command palette) opens a searchable picker —
+  type to filter by name, prefix, or description, then Enter to insert.
+- **Prefix expansion** — type a snippet's prefix (e.g. `fn`) and press **Tab**;
+  the word is replaced by the snippet body.
+
+Snippets can carry **tabstops** — fields you fill in and jump between with Tab.
+
+## Your own snippets (JSON files)
+
+Beyond the bundled set, Vix loads snippet files from three places (modeled on VS
+Code's JSON snippets):
+
+- **Global** — `~/.config/vix/global/snippets/snippets.json` (always available).
+- **Media-type** — `~/.config/vix/media-types/<type>/<subtype>/snippets/snippets.json`,
+  e.g. `…/media-types/text/rust/snippets/snippets.json` for Rust files. Applies
+  only to buffers of that media type.
+- **Project** — `config/snippets/snippets.json` under the project root (set the
+  path with the `project_snippets` setting).
+
+Each file is a JSON object of `"Name": { "prefix": …, "body": …, "description": … }`
+entries. `prefix` and `body` may be a string or an array of strings (joined by
+newlines). For example:
+
+```json
+{
+  "Function": {
+    "prefix": "fn",
+    "body": ["fn ${1:name}(${2}) -> ${3:()} {", "\t$0", "}"],
+    "description": "A Rust function"
+  }
+}
+```
+
+(The files are JSON, not XML; TextMate's interpolated shell code and `\u` escapes
+are not supported.) See the full reference at `spec/snippets/index.md`.
 
 ## Tabstops
 
