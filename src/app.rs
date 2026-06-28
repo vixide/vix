@@ -560,6 +560,9 @@ enum Keymap {
     Emacs,
     /// Modal editing: a Normal mode for motions/commands and an Insert mode.
     Vim,
+    /// Vim-style modal editing plus a `Space` leader for menu-like command
+    /// sequences (e.g. `SPC f f` find file).
+    Spacemacs,
 }
 
 impl Keymap {
@@ -569,9 +572,20 @@ impl Keymap {
             "vscode" => Keymap::Vscode,
             "emacs" => Keymap::Emacs,
             "vim" => Keymap::Vim,
+            "spacemacs" => Keymap::Spacemacs,
             _ => Keymap::Apple,
         }
     }
+}
+
+/// Result of resolving a Spacemacs `SPC` leader sequence.
+enum LeaderHit {
+    /// The sequence maps to this action id; run it.
+    Action(&'static str),
+    /// The sequence is a prefix of a known one; keep accumulating keys.
+    Prefix,
+    /// No known sequence starts with this; abort the leader.
+    None,
 }
 
 /// An active buffer-word autocomplete cycle: the word start, the candidate list,
@@ -1064,6 +1078,12 @@ pub struct App {
     /// Vim keymap: the in-progress `:` command-line text, when the command line
     /// is open.
     vim_cmd: Option<String>,
+    /// Spacemacs keymap: true in Insert mode, false in Normal mode. Meaningless in
+    /// other keymaps.
+    spacemacs_insert: bool,
+    /// Spacemacs keymap: the in-progress `Space` leader key sequence (after `SPC`
+    /// in Normal mode), or `None` when no leader is pending.
+    spacemacs_leader: Option<String>,
 }
 
 impl App {
@@ -1203,6 +1223,8 @@ impl App {
             emacs_prefix: false,
             vim_insert: false,
             vim_cmd: None,
+            spacemacs_insert: false,
+            spacemacs_leader: None,
         }
     }
 
@@ -1613,6 +1635,11 @@ impl App {
                     return;
                 }
             }
+            Keymap::Spacemacs => {
+                if self.spacemacs_key(key) || self.global_shared_key(key) {
+                    return;
+                }
+            }
         }
         match self.focus {
             Focus::Editor => self.editor_key(key),
@@ -1641,6 +1668,13 @@ impl App {
                 t!("status.vim_normal").to_string()
             }),
             Keymap::Emacs if self.emacs_prefix => Some("C-x-".to_string()),
+            Keymap::Spacemacs => Some(if let Some(seq) = &self.spacemacs_leader {
+                format!("SPC {seq}")
+            } else if self.spacemacs_insert {
+                t!("status.vim_insert").to_string()
+            } else {
+                t!("status.vim_normal").to_string()
+            }),
             _ => None,
         }
     }
@@ -2025,6 +2059,130 @@ impl App {
             }
             "" => {}
             other => self.status = t!("status.vim_no_command", cmd = other).to_string(),
+        }
+    }
+
+    // ----- Spacemacs keymap ----------------------------------------------
+
+    /// Spacemacs dispatch: Vim-style modal editing in Normal/Insert, plus a
+    /// `Space` leader that opens menu-like command sequences. Returns true if the
+    /// key was consumed.
+    fn spacemacs_key(&mut self, key: KeyEvent) -> bool {
+        // A leader sequence is in progress (after `SPC` in Normal mode).
+        if self.spacemacs_leader.is_some() {
+            self.spacemacs_leader_key(key);
+            return true;
+        }
+        // Shared `:` command line (reuses the Vim command machinery).
+        if self.vim_cmd.is_some() {
+            self.vim_cmd_key(key);
+            return true;
+        }
+        if self.spacemacs_insert {
+            if key.code == KeyCode::Esc {
+                self.spacemacs_insert = false;
+                return true;
+            }
+            return false;
+        }
+        if Self::ctrl(&key) || Self::alt(&key) || matches!(key.code, KeyCode::F(_)) {
+            return false;
+        }
+        // `SPC` opens the leader from the editor; elsewhere it types normally.
+        if key.code == KeyCode::Char(' ') && self.focus == Focus::Editor {
+            self.spacemacs_leader = Some(String::new());
+            return true;
+        }
+        if key.code == KeyCode::Char(':') {
+            self.vim_cmd = Some(String::new());
+            return true;
+        }
+        if self.focus != Focus::Editor {
+            return false;
+        }
+        match key.code {
+            KeyCode::Char('h') | KeyCode::Left => self.editor_motion(KeyCode::Left),
+            KeyCode::Char('j') | KeyCode::Down => self.editor_motion(KeyCode::Down),
+            KeyCode::Char('k') | KeyCode::Up => self.editor_motion(KeyCode::Up),
+            KeyCode::Char('l') | KeyCode::Right => self.editor_motion(KeyCode::Right),
+            KeyCode::Char('0') => self.editor_motion(KeyCode::Home),
+            KeyCode::Char('$') => self.editor_motion(KeyCode::End),
+            KeyCode::Char('x') => self.editor_motion(KeyCode::Delete),
+            KeyCode::Char('i') => self.spacemacs_insert = true,
+            KeyCode::Char('a') => {
+                self.editor_motion(KeyCode::Right);
+                self.spacemacs_insert = true;
+            }
+            KeyCode::Char('o') => {
+                self.editor_motion(KeyCode::End);
+                self.editor_motion(KeyCode::Enter);
+                self.spacemacs_insert = true;
+            }
+            KeyCode::Char('O') => {
+                self.editor_motion(KeyCode::Home);
+                self.editor_motion(KeyCode::Enter);
+                self.editor_motion(KeyCode::Up);
+                self.spacemacs_insert = true;
+            }
+            _ => {}
+        }
+        true
+    }
+
+    /// Handle a key while a Spacemacs `SPC` leader sequence is accumulating. Runs
+    /// the action when the sequence matches, keeps waiting while it is a prefix,
+    /// and aborts (with a status note) otherwise.
+    fn spacemacs_leader_key(&mut self, key: KeyEvent) {
+        if key.code == KeyCode::Esc {
+            self.spacemacs_leader = None;
+            return;
+        }
+        let KeyCode::Char(c) = key.code else { return };
+        let mut seq = self.spacemacs_leader.take().unwrap_or_default();
+        seq.push(c);
+        match Self::spacemacs_leader_lookup(&seq) {
+            LeaderHit::Action(action) => self.run_action(action),
+            LeaderHit::Prefix => self.spacemacs_leader = Some(seq),
+            LeaderHit::None => self.status = t!("status.spacemacs_no_leader", seq = seq).to_string(),
+        }
+    }
+
+    /// Resolve a Spacemacs leader sequence: an exact action, a longer-prefix match
+    /// (keep waiting), or nothing.
+    fn spacemacs_leader_lookup(seq: &str) -> LeaderHit {
+        /// `(sequence, action)` pairs for the `SPC` leader (Spacemacs-style).
+        const LEADER: &[(&str, &str)] = &[
+            (" ", "tools.palette"),   // SPC SPC — M-x / command palette
+            ("ff", "file.open"),      // find file
+            ("fr", "file.open_recent"),
+            ("fs", "file.save"),
+            ("fp", "file.switch_project"),
+            ("bn", "tab.next"),       // buffers
+            ("bp", "tab.prev"),
+            ("bd", "file.close"),
+            ("pf", "tools.palette"),  // project: find/command
+            ("pp", "file.switch_project"),
+            ("pt", "view.explorer"),  // project tree
+            ("gs", "git.changes"),    // git status
+            ("gg", "git.status"),
+            ("gb", "git.blame"),
+            ("w/", "view.split_vertical"),
+            ("w-", "view.split_horizontal"),
+            ("wd", "view.unsplit"),
+            ("ww", "view.focus_other_pane"),
+            ("ss", "edit.find"),      // search
+            ("sp", "search.workspace"),
+            ("tn", "view.line_numbers"), // toggles
+            ("tw", "view.whitespace"),
+            ("qq", "file.quit"),
+            (";", "edit.toggle_comment"),
+        ];
+        if let Some(&(_, action)) = LEADER.iter().find(|&&(s, _)| s == seq) {
+            LeaderHit::Action(action)
+        } else if LEADER.iter().any(|&(s, _)| s.starts_with(seq)) {
+            LeaderHit::Prefix
+        } else {
+            LeaderHit::None
         }
     }
 
@@ -7391,6 +7549,8 @@ impl App {
         self.emacs_prefix = false;
         self.vim_insert = false;
         self.vim_cmd = None;
+        self.spacemacs_insert = false;
+        self.spacemacs_leader = None;
     }
 
     // ----- recent-files chooser -------------------------------------------

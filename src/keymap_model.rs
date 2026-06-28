@@ -8,6 +8,8 @@
 //!   Open, `control-shift-p` Command Palette).
 //! - **Emacs** — layered "chord" sequences run functions (e.g. `control-x-f`).
 //! - **Vim** — modal editing, where keys mean different things per mode.
+//! - **Spacemacs** — Vim-style modal editing plus a `Space` leader for menus
+//!   (e.g. `SPC f f` find file, `SPC g s` git status).
 //!
 //! This crate is pure data: it lists the keymaps. The host persists the choice
 //! (the View → Keymap submenu is built from [`KEYMAPS`]) and maps it onto key
@@ -35,6 +37,7 @@ pub const KEYMAPS: &[Keymap] = &[
     Keymap { id: "vscode", name: "macOS VSCode", tooltip: "VS Code (macOS) bindings" },
     Keymap { id: "emacs", name: "Emacs", tooltip: "Emacs chords" },
     Keymap { id: "vim", name: "Vim", tooltip: "Vim modes" },
+    Keymap { id: "spacemacs", name: "Spacemacs", tooltip: "Vim modes + Space leader" },
 ];
 
 /// The keymap with the given `id`, if known.

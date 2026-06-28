@@ -9,7 +9,7 @@ that trigger them differ.
 
 Vix ships four keymaps. **Apple** is the default and matches Vix's own bindings.
 
-## The four keymaps
+## The five keymaps
 
 | Keymap | Id | Philosophy |
 | ------ | -- | ---------- |
@@ -17,11 +17,12 @@ Vix ships four keymaps. **Apple** is the default and matches Vix's own bindings.
 | macOS VSCode | `vscode` | VS Code's signature shortcuts, with `Ctrl` standing in for `Cmd` — `Ctrl+P` Quick Open, `Ctrl+Shift+P` Command Palette, `Ctrl+G` Go to Line. |
 | Emacs | `emacs` | Layered `Ctrl` chords and a `Ctrl+X` prefix, e.g. `Ctrl+X Ctrl+F` to open. |
 | Vim | `vim` | Modal editing: a Normal mode for motions and commands, plus an Insert mode and a `:` command line. |
+| Spacemacs | `spacemacs` | Vim modal editing plus a `Space` leader for menu-like command sequences (e.g. `SPC f f` find file). |
 
 Each keymap gets first chance to consume a key. Apple and VS Code dispatch their
-shortcuts directly; Emacs and Vim try their own handling and then fall back to a
-**shared** layer (menu-bar mnemonics like `Alt+F` and function keys like `F10`)
-before the focused pane handles the key.
+shortcuts directly; Emacs, Vim, and Spacemacs try their own handling and then fall
+back to a **shared** layer (menu-bar mnemonics like `Alt+F` and function keys like
+`F10`) before the focused pane handles the key.
 
 ## Choosing a keymap
 
@@ -35,6 +36,7 @@ model order, and is kept in sync with the keymap model by a test.
 | macOS VSCode | `view.keymap:vscode` |
 | Emacs | `view.keymap:emacs` |
 | Vim | `view.keymap:vim` |
+| Spacemacs | `view.keymap:spacemacs` |
 
 Choosing an item dispatches `view.keymap:<id>`. The host:
 
@@ -51,6 +53,7 @@ Switching keymaps clears any in-progress modal state so a freshly chosen keymap
 never inherits a stale mode:
 
 - Vim begins in **Normal** mode (Insert mode off, no open `:` command line).
+- Spacemacs begins in **Normal** mode with no pending `Space` leader.
 - The Emacs `Ctrl+X` chord prefix is cleared.
 
 ## Emacs chords
@@ -114,6 +117,34 @@ command, `Esc` cancels, and backspacing past the empty `:` closes it.
 | `:Ex` | Open the file explorer and focus it |
 
 An unrecognized command reports "no command" in the status bar.
+
+## Spacemacs modes and leader
+
+The Spacemacs keymap reuses the Vim modal model (Normal / Insert, the same
+`hjkl`/`0`/`$`/`x`/`i`/`a`/`o`/`O` Normal-mode keys, and the shared `:` command
+line) and adds a **`Space` leader**. In Normal mode, pressing `Space` over the
+editor begins a leader sequence shown in the mode indicator as `SPC …`. Each
+following key extends the sequence:
+
+- An exact match runs its action and clears the leader.
+- A prefix of a longer sequence keeps the leader pending.
+- An unknown sequence aborts with `status.spacemacs_no_leader`; `Esc` cancels.
+
+| Sequence | Action |
+| -------- | ------ |
+| `SPC SPC` | Command palette |
+| `SPC f f` / `f r` / `f s` / `f p` | Open / open recent / save / switch project |
+| `SPC b n` / `b p` / `b d` | Next / previous / close buffer |
+| `SPC p p` / `p f` / `p t` | Switch project / palette / file tree |
+| `SPC g s` / `g g` / `g b` | Git changes / status / blame |
+| `SPC w /` / `w -` / `w d` / `w w` | Split vertical / horizontal / unsplit / focus other |
+| `SPC s s` / `s p` | Find / search workspace |
+| `SPC t n` / `t w` | Toggle line numbers / whitespace |
+| `SPC ;` | Toggle comment |
+| `SPC q q` | Quit |
+
+The leader table lives in `App::spacemacs_leader_lookup` (sequence → action id);
+the modal handler is `App::spacemacs_key` / `spacemacs_leader_key`.
 
 ## As implemented in Vix
 

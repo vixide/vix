@@ -3754,6 +3754,27 @@ fn system_info_panel_opens_inserts_and_closes() {
 }
 
 #[test]
+fn spacemacs_keymap_is_modal_with_space_leader() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "spacemacs".to_string();
+    // Starts in Normal mode.
+    assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"));
+    // `i` enters Insert, Esc returns to Normal.
+    app.on_key(key('i'));
+    assert_eq!(app.mode_indicator().as_deref(), Some("-- INSERT --"));
+    app.on_key(keycode(KeyCode::Esc));
+    assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"));
+    // The Space leader: SPC w / splits the editor vertically.
+    assert!(app.editor.split.is_none());
+    app.on_key(key(' '));
+    assert_eq!(app.mode_indicator().as_deref(), Some("SPC "), "leader pending");
+    app.on_key(key('w'));
+    app.on_key(key('/'));
+    assert!(app.editor.split.is_some(), "SPC w / split the editor");
+    assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"), "leader cleared");
+}
+
+#[test]
 fn menu_type_ahead_selects_by_first_letter() {
     let mut app = app_at(Path::new("."));
     app.on_key(keycode(KeyCode::F(10)));

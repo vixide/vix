@@ -28,6 +28,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   re-root the editor at a recent workspace without relaunching: saves the current
   session, rebuilds explorer/Git/LSP, and restores the chosen project's session.
   See `spec/switch-project/index.md`.
+- **Spacemacs keymap** (**View → Keymap → Spacemacs**) — Vim-style modal editing
+  plus a `Space` leader for menu-like command sequences (`SPC f f` open, `SPC g s`
+  git, `SPC w /` split, `SPC q q` quit, …). See `spec/keymaps/index.md`.
 
 ## [0.4.0] - 2026-06-27
 

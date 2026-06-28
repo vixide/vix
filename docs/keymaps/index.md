@@ -1,8 +1,8 @@
 # Keymaps
 
 A **keymap** is a keyboard navigation style for moving through the editor, menus,
-file explorer, and more. Vix ships four keymaps — **Apple**, **macOS VSCode**,
-**Emacs**, and **Vim** — and exactly one is active at a time.
+file explorer, and more. Vix ships five keymaps — **Apple**, **macOS VSCode**,
+**Emacs**, **Vim**, and **Spacemacs** — and exactly one is active at a time.
 
 **Status:** Shipped. The choice persists in the `keymap` setting (default
 `apple`).
@@ -17,8 +17,35 @@ Open **View → Keymap…** to pick the active keymap. The options are:
 | macOS VSCode | VS Code (macOS) bindings | `Control-P` (Quick Open)   | `Control-Q`   |
 | Emacs       | Emacs chords             | `Control-X Control-F`      | `Control-X Control-C` |
 | Vim         | Vim modes                | `:Ex`                      | `:q!`         |
+| Spacemacs   | Vim modes + Space leader | `SPC f f`                  | `SPC q q`     |
 
 Your selection is saved to the `keymap` setting, so it persists across sessions.
+
+## Spacemacs
+
+The **Spacemacs** keymap is the Vim modal model (Normal / Insert, `hjkl` motions,
+`i`/`a`/`o` to insert, `:` command line) plus a **`Space` leader** in Normal mode
+that opens menu-like command sequences. Press `Space`, then the keys for the
+command; the status bar shows the pending sequence (`SPC …`).
+
+| Sequence | Action                         |
+| -------- | ------------------------------ |
+| `SPC SPC`| Command palette                |
+| `SPC f f`| Open file                      |
+| `SPC f r`| Open recent                    |
+| `SPC f s`| Save                           |
+| `SPC f p`| Switch project                 |
+| `SPC b n` / `b p` / `b d` | Next / previous / close buffer |
+| `SPC p p` / `p f` / `p t` | Switch project / palette / file tree |
+| `SPC g s` / `g g` / `g b` | Git changes / status / blame   |
+| `SPC w /` / `w -` / `w d` / `w w` | Split vertical / horizontal / unsplit / focus other |
+| `SPC s s` / `s p`         | Find / search workspace        |
+| `SPC t n` / `t w`         | Toggle line numbers / whitespace |
+| `SPC ;`  | Toggle comment                 |
+| `SPC q q`| Quit                           |
+
+`Esc` cancels a pending leader sequence; an unknown sequence is reported in the
+status bar.
 
 ## What Each Keymap Does Today
 
