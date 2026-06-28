@@ -52,6 +52,8 @@ their defaults, so it is safe to delete or hand-edit.
 | `outline_width` | int    | `28`     | Width (columns) of the outline sidebar. |
 | `debug_width`   | int    | `36`     | Width (columns) of the debugger panel. |
 | `debug_adapters`| list   | `[]`     | Debug adapters (DAP), matched to files by extension. Each entry has `adapter_id`, `extensions`, `command`, and an optional `launch` table. See `spec/debugger/index.md`. |
+| `test_command`  | string | `cargo test` | Command run by **Tools → Run Tests**; its output is parsed into the test panel. |
+| `test_width`    | int    | `40`     | Width (columns) of the test-results panel. |
 
 Example `config.toml`:
 

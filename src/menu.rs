@@ -436,6 +436,8 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.run_command", "tools.run_command", ""),
     Item::leaf("menu.item.tools.cancel_command", "tools.cancel_command", ""),
     Item::leaf("menu.item.tools.tasks", "tools.tasks", ""),
+    Item::leaf("menu.item.tools.test", "tools.test", ""),
+    Item::leaf("menu.item.tools.test_panel", "tools.test_panel", ""),
     Item::leaf("menu.item.tools.terminal", "tools.terminal", ""),
     Item::leaf("menu.item.tools.diff", "tools.diff", ""),
     SEP,

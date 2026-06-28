@@ -3753,6 +3753,18 @@ fn system_info_panel_opens_inserts_and_closes() {
 }
 
 #[test]
+fn test_panel_toggles_and_parser_builds_results() {
+    let mut app = app_at(Path::new("."));
+    assert!(!app.show_test_panel);
+    app.run_action("tools.test_panel");
+    assert!(app.show_test_panel, "Toggle Test Panel shows it");
+
+    // The parser turns runner output into a pass/fail list (used by the panel).
+    let results = vix::test_runner::parse("test a::ok ... ok\ntest a::bad ... FAILED\n");
+    assert_eq!(vix::test_runner::tally(&results), (1, 1, 0));
+}
+
+#[test]
 fn debug_breakpoints_toggle_on_the_cursor_line() {
     let dir = unique_dir("breakpoints");
     fs::create_dir_all(&dir).unwrap();

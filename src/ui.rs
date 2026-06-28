@@ -27,9 +27,10 @@ struct BodyColumns {
     messages: Option<Rect>,
     outline: Option<Rect>,
     debug: Option<Rect>,
+    test: Option<Rect>,
 }
 
-/// Split the body area into explorer | center | messages | outline | debug
+/// Split the body area into explorer | center | messages | outline | debug | test
 /// columns based on which docks are shown. Dock widths come from settings,
 /// clamped so the editor keeps room.
 fn body_columns(app: &App, body: Rect) -> BodyColumns {
@@ -48,6 +49,9 @@ fn body_columns(app: &App, body: Rect) -> BodyColumns {
     if app.show_debug_panel {
         constraints.push(Constraint::Length(app.settings.debug_width.clamp(12, dock_max)));
     }
+    if app.show_test_panel {
+        constraints.push(Constraint::Length(app.settings.test_width.clamp(12, dock_max)));
+    }
     let cols = Layout::default().direction(Direction::Horizontal).constraints(constraints).split(body);
     let mut ci = 0;
     let take = |ci: &mut usize| {
@@ -60,12 +64,14 @@ fn body_columns(app: &App, body: Rect) -> BodyColumns {
     let messages_rect = app.show_messages.then(|| take(&mut ci));
     let outline_rect = app.settings.show_outline_dock.then(|| take(&mut ci));
     let debug_rect = app.show_debug_panel.then(|| take(&mut ci));
+    let test_rect = app.show_test_panel.then(|| take(&mut ci));
     BodyColumns {
         explorer: explorer_rect,
         center: center_rect,
         messages: messages_rect,
         outline: outline_rect,
         debug: debug_rect,
+        test: test_rect,
     }
 }
 
@@ -120,6 +126,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         messages: messages_rect,
         outline: outline_rect,
         debug: debug_rect,
+        test: test_rect,
     } = body_columns(app, body);
 
     // Center: tab bar, optional breadcrumb bar, then editor+scrollbar.
@@ -166,6 +173,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     }
     if let Some(r) = debug_rect {
         draw_debug_panel(app, frame, r);
+    }
+    if let Some(r) = test_rect {
+        draw_test_panel(app, frame, r);
     }
     if let Some(r) = bottom_dock_rect {
         app.layout.bottom_dock = r;
@@ -1996,6 +2006,43 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         app.editor_hmax = 0;
     }
     app.layout.editor_hscrollbar = hbar_rect.unwrap_or_default();
+}
+
+fn draw_test_panel(app: &mut App, frame: &mut Frame, area: Rect) {
+    use crate::test_runner::Status;
+    let (pass, fail, ignore) = crate::test_runner::tally(&app.test_results);
+    let block = Block::default()
+        .style(theme::region_base(theme::Region::RightDock))
+        .borders(Borders::TOP | Borders::LEFT)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::region_title(theme::Region::RightDock, false))
+        .title(format!(" {} {} {pass}/{fail}/{ignore} ", icon::CODE, t!("ui.tests")));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    app.layout.test_panel = inner;
+
+    if app.test_results.is_empty() {
+        let hint = Paragraph::new(t!("ui.tests_idle").to_string()).style(theme::dim()).wrap(Wrap { trim: true });
+        frame.render_widget(hint, inner);
+        return;
+    }
+    let view_h = inner.height as usize;
+    let lines: Vec<Line> = app
+        .test_results
+        .iter()
+        .enumerate()
+        .take(view_h)
+        .map(|(i, r)| {
+            let (icon, style) = match r.status {
+                Status::Pass => ("\u{2713} ", Style::default().fg(Color::Green)),
+                Status::Fail => ("\u{2717} ", Style::default().fg(Color::Red)),
+                Status::Ignore => ("\u{25cb} ", theme::dim()),
+            };
+            let row = Line::from(vec![Span::styled(icon, style), Span::raw(r.name.clone())]);
+            if i == app.test_selected { row.style(theme::selected()) } else { row }
+        })
+        .collect();
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 fn draw_debug_panel(app: &mut App, frame: &mut Frame, area: Rect) {
