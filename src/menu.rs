@@ -641,6 +641,33 @@ const GIT: &[Item] = &[
     Item::leaf("menu.item.git.clone", "git.clone", ""),
 ];
 
+/// Headline structure commands, grouped under Org → Headline.
+const ORG_HEADLINE: &[Item] = &[
+    Item::leaf("menu.item.org.promote", "org.promote", ""),
+    Item::leaf("menu.item.org.demote", "org.demote", ""),
+    SEP,
+    Item::leaf("menu.item.org.move_up", "org.move_up", ""),
+    Item::leaf("menu.item.org.move_down", "org.move_down", ""),
+];
+
+/// Export targets, grouped under Org → Export.
+const ORG_EXPORT: &[Item] = &[
+    Item::leaf("menu.name.markdown", "org.export_markdown", ""),
+    Item::leaf("menu.name.html", "org.export_html", ""),
+];
+
+/// Org-mode editing commands, grouped under the top-level Org menu. Insertion of
+/// Org snippets/markers/blocks lives under Tools → Insert.
+const ORG: &[Item] = &[
+    Item::leaf("menu.item.org.cycle_visibility", "org.cycle_visibility", ""),
+    SEP,
+    Item::sub("menu.item.org.headline", ORG_HEADLINE),
+    Item::leaf("menu.item.org.cycle_todo", "org.cycle_todo", ""),
+    Item::leaf("menu.item.org.toggle_checkbox", "org.toggle_checkbox", ""),
+    SEP,
+    Item::sub("menu.item.org.export", ORG_EXPORT),
+];
+
 const HELP: &[Item] = &[
     Item::leaf("menu.item.help.welcome", "help.welcome", ""),
     Item::leaf("menu.item.help.shortcuts", "help.shortcuts", "F1"),
@@ -763,6 +790,7 @@ fn build_menus() -> Vec<MenuDef> {
         MenuDef { name: "menu.tools", items: TOOLS },
         MenuDef { name: "menu.ai", items: AI },
         MenuDef { name: "menu.git", items: GIT },
+        MenuDef { name: "menu.org", items: ORG },
         MenuDef { name: "menu.debug", items: DEBUG },
         MenuDef { name: "menu.help", items: HELP },
     ]

@@ -1,0 +1,78 @@
+Media Type	Description	Extension
+audio/aac	AAC audio	.aac
+application/x-abiword	AbiWord document	.abw
+image/apng	Animated Portable Network Graphics (APNG) image	.apng
+application/x-freearc	Archive document (multiple files embedded)	.arc
+image/avif	AVIF image	.avif
+video/x-msvideo	AVI: Audio Video Interleave	.avi
+application/vnd.amazon.ebook	Amazon Kindle eBook format	.azw
+application/octet-stream	Any kind of binary data	.bin
+image/bmp	Windows OS/2 Bitmap Graphics	.bmp
+application/x-bzip	BZip archive	.bz
+application/x-bzip2	BZip2 archive	.bz2
+application/x-cdf	CD audio	.cda
+application/x-csh	C-Shell script	.csh
+text/css	Cascading Style Sheets (CSS)	.css
+text/csv	Comma-separated values (CSV)	.csv
+text/tsv	Tab-separated values (TSV)	.tsv
+application/msword	Microsoft Word	.doc
+application/vnd.openxmlformats-officedocument.wordprocessingml.document	Microsoft Word (OpenXML)	.docx
+application/vnd.ms-fontobject	MS Embedded OpenType fonts	.eot
+application/epub+zip	Electronic publication (EPUB)	.epub
+application/gzip	Note, Windows and macOS upload .gz files with the non-standard MIME type application/x-gzip	GZip Compressed Archive	.gz
+application/yaml	YAML Ain’t Markup Language	.yaml, .yml
+image/gif	Graphics Interchange Format (GIF)	.gif
+text/html	HyperText Markup Language (HTML)	.htm, .html
+image/vnd.microsoft.icon	Icon format	.ico
+text/calendar	iCalendar format	.ics
+application/java-archive	Java Archive (JAR)	.jar
+image/jpeg	JPEG images	.jpeg, .jpg
+text/javascript (Specifications: HTML and RFC 9239)	JavaScript	.js
+application/json	JavaScript Object Notation (JSON)	.json
+application/ld+json	JavaScript Object Notation for Linked Data (JSON-LD)	.jsonld
+text/markdown	Markdown	.md
+audio/midi, audio/x-midi	Musical Instrument Digital Interface (MIDI)	.mid, .midi
+text/javascript	JavaScript module	.mjs
+audio/mpeg	MP3 audio	.mp3
+video/mp4	MP4 video	.mp4
+video/mpeg	MPEG Video	.mpeg
+application/vnd.apple.installer+xml	Apple Installer Package	.mpkg
+application/vnd.oasis.opendocument.presentation	OpenDocument presentation document	.odp
+application/vnd.oasis.opendocument.spreadsheet	OpenDocument spreadsheet document	.ods
+application/vnd.oasis.opendocument.text	OpenDocument text document	.odt
+audio/ogg	Ogg audio	.oga
+video/ogg	Ogg video	.ogv
+application/ogg	Ogg	.ogx
+audio/ogg	Opus audio in Ogg container	.opus
+font/otf	OpenType font	.otf
+image/png	Portable Network Graphics	.png
+application/pdf	Adobe Portable Document Format (PDF)	.pdf
+application/x-httpd-php	Hypertext Preprocessor (Personal Home Page)	.php
+application/vnd.ms-powerpoint	Microsoft PowerPoint	.ppt
+application/vnd.openxmlformats-officedocument.presentationml.presentation	Microsoft PowerPoint (OpenXML)	.pptx
+application/vnd.rar	RAR archive	.rar
+application/rtf	Rich Text Format (RTF)	.rtf
+application/x-sh	Bourne shell script	.sh
+image/svg+xml	Scalable Vector Graphics (SVG)	.svg
+application/x-tar	Tape Archive (TAR)	.tar
+image/tiff	Tagged Image File Format (TIFF)	.tif, .tiff
+video/mp2t	MPEG transport stream	.ts
+font/ttf	TrueType Font	.ttf
+text/plain	Text, (generally ASCII or ISO 8859-n)	.txt
+application/vnd.visio	Microsoft Visio	.vsd
+audio/wav	Waveform Audio Format	.wav
+audio/webm	WEBM audio	.weba
+video/webm	WEBM video	.webm
+application/manifest+json	Web application manifest	.webmanifest
+image/webp	WEBP image	.webp
+font/woff	Web Open Font Format (WOFF)	.woff
+font/woff2	Web Open Font Format (WOFF)	.woff2
+application/xhtml+xml	XHTML	.xhtml
+application/vnd.ms-excel	Microsoft Excel	.xls
+application/vnd.openxmlformats-officedocument.spreadsheetml.sheet	Microsoft Excel (OpenXML)	.xlsx
+application/xml is recommended as of RFC 7303 (section 4.1), but text/xml is still used sometimes. You can assign a specific MIME type to a file with .xml extension depending on how its contents are meant to be interpreted. For instance, an Atom feed is application/atom+xml, but application/xml serves as a valid default.	XML	.xml
+application/vnd.mozilla.xul+xml	XUL	.xul
+application/zip. Note, Windows uploads .zip files with the non-standard MIME type application/x-zip-compressed.	ZIP archive	.zip
+video/3gpp; audio/3gpp if it doesn't contain video	3GPP audio/video container	.3gp
+video/3gpp2; audio/3gpp2 if it doesn't contain video	3GPP2 audio/video container	.3g2
+application/x-7z-compressed	7-zip archive	.7z

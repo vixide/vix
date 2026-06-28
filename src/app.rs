@@ -1967,29 +1967,16 @@ impl App {
     }
 
     /// Keys shared by every keymap: menu-bar mnemonics and function keys. Returns
-    /// true if consumed.
+    /// true if consumed. The menu-bar `Alt+letter` mnemonics live in
+    /// [`menu_index_for_alt`].
     fn global_shared_key(&mut self, key: KeyEvent) -> bool {
         if Self::alt(&key)
-            && let KeyCode::Char(c) = key.code {
-                // Vix=0, File=1, …, Debug=7, Help=8. "Vix" and "View" both start
-                // with V, so Vix takes Alt+V and View uses Alt+I (the "i" in vIew).
-                let idx = match c.to_ascii_lowercase() {
-                    'v' => Some(0),
-                    'f' => Some(1),
-                    'e' => Some(2),
-                    'i' => Some(3),
-                    't' => Some(4),
-                    'a' => Some(5),
-                    'g' => Some(6),
-                    'd' => Some(7),
-                    'h' => Some(8),
-                    _ => None,
-                };
-                if let Some(i) = idx {
-                    self.menu.open_index(i);
-                    return true;
-                }
-            }
+            && let KeyCode::Char(c) = key.code
+            && let Some(i) = menu_index_for_alt(c)
+        {
+            self.menu.open_index(i);
+            return true;
+        }
         match key.code {
             // Ctrl+Space triggers LSP completion (terminal support varies).
             KeyCode::Char(' ') if Self::ctrl(&key) => {
@@ -2879,6 +2866,7 @@ impl App {
             a if self.insert_org(a) => {}
             a if self.insert_marker(a) => {}
             a if self.insert_block(a) => {}
+            a if self.org_action(a) => {}
             a if self.insert_dynamic(a) => {}
             "tools.checksum.sha256" => {
                 self.transform_selection_or_buffer(crate::checksum_tool::sha256_hex);
@@ -3416,6 +3404,61 @@ impl App {
             tab.dirty = true;
             tab.preview = false;
         }
+    }
+
+    /// Dispatch an `org.*` action against the active buffer. Returns `true` if
+    /// `action` was an Org command.
+    fn org_action(&mut self, action: &str) -> bool {
+        match action {
+            "org.cycle_visibility" => self.run_action("editor.fold_toggle"),
+            "org.promote" => self.org_rewrite_line(crate::org::promote),
+            "org.demote" => self.org_rewrite_line(crate::org::demote),
+            "org.cycle_todo" => self.org_rewrite_line(crate::org::cycle_todo),
+            "org.toggle_checkbox" => self.org_rewrite_line(crate::org::toggle_checkbox),
+            "org.move_up" => self.org_move_subtree(crate::org::move_subtree_up),
+            "org.move_down" => self.org_move_subtree(crate::org::move_subtree_down),
+            "org.export_markdown" => self.org_export(crate::org::to_markdown, "md"),
+            "org.export_html" => self.org_export(crate::org::to_html, "html"),
+            _ => return false,
+        }
+        true
+    }
+
+    /// Run an Org transform that rewrites the buffer based on the cursor line
+    /// (promote/demote/cycle-todo/toggle-checkbox), keeping the cursor's line.
+    fn org_rewrite_line(&mut self, f: fn(&str, usize) -> Option<String>) {
+        let Some(tab) = self.editor.active_tab_mut() else { return };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        if let Some(new) = f(&text, line) {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(line);
+            tab.dirty = true;
+        } else {
+            self.status = t!("status.org_not_headline").to_string();
+        }
+    }
+
+    /// Run an Org subtree move, following the cursor to the subtree's new line.
+    fn org_move_subtree(&mut self, f: fn(&str, usize) -> Option<(String, usize)>) {
+        let Some(tab) = self.editor.active_tab_mut() else { return };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        if let Some((new, new_line)) = f(&text, line) {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(new_line);
+            tab.dirty = true;
+        } else {
+            self.status = t!("status.org_no_sibling").to_string();
+        }
+    }
+
+    /// Export the active buffer with `f` into a new untitled tab named with `ext`.
+    fn org_export(&mut self, f: fn(&str) -> String, ext: &str) {
+        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else { return };
+        let converted = f(&text);
+        self.editor.new_tab_with_content(&converted);
+        self.status = t!("status.org_exported", ext = ext).to_string();
     }
 
     /// Insert generator output (a UUID, ZID, …) at the cursor in the active
@@ -12258,6 +12301,25 @@ impl App {
 
 fn rect_contains(r: Rect, col: u16, row: u16) -> bool {
     col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height
+}
+
+/// The top-level menu index for an `Alt+letter` mnemonic: Vix=0, File=1, Edit=2,
+/// View=3 (Alt+I, since "Vix"/"View" both start with V), Tools=4, AI=5, Git=6,
+/// Org=7, Debug=8, Help=9. `None` for any other letter.
+fn menu_index_for_alt(c: char) -> Option<usize> {
+    match c.to_ascii_lowercase() {
+        'v' => Some(0),
+        'f' => Some(1),
+        'e' => Some(2),
+        'i' => Some(3),
+        't' => Some(4),
+        'a' => Some(5),
+        'g' => Some(6),
+        'o' => Some(7),
+        'd' => Some(8),
+        'h' => Some(9),
+        _ => None,
+    }
 }
 
 /// The char offset within `code` of LSP position `(line, character)`, where

@@ -157,6 +157,22 @@ menu.git:
   bn: "Git"
   zh: "Git"
   ja: "Git"
+menu.org:
+  en: "Org"
+  es: "Org"
+  fr: "Org"
+  de: "Org"
+  cy: "Org"
+  ga: "Org"
+  gd: "Org"
+  pl: "Org"
+  pt: "Org"
+  ru: "Org"
+  ar: "Org"
+  hi: "Org"
+  bn: "Org"
+  zh: "Org"
+  ja: "Org"
 menu.debug:
   en: "Debug"
   es: "Depurar"
@@ -3854,6 +3870,24 @@ menu.item.tools.insert.block.quote:
   en: "Quote"
 menu.item.tools.insert.block.verse:
   en: "Verse"
+menu.item.org.cycle_visibility:
+  en: "Cycle Visibility (Fold)"
+menu.item.org.headline:
+  en: "Headline"
+menu.item.org.promote:
+  en: "Promote"
+menu.item.org.demote:
+  en: "Demote"
+menu.item.org.move_up:
+  en: "Move Subtree Up"
+menu.item.org.move_down:
+  en: "Move Subtree Down"
+menu.item.org.cycle_todo:
+  en: "Cycle TODO"
+menu.item.org.toggle_checkbox:
+  en: "Toggle Checkbox"
+menu.item.org.export:
+  en: "Export"
 menu.name.url:
   en: "URL"
 menu.name.dec:
@@ -11483,6 +11517,54 @@ status.tests_done:
   bn: "টেস্ট: %{pass} পাস, %{fail} ব্যর্থ, %{ignore} উপেক্ষিত"
   zh: "测试：%{pass} 通过，%{fail} 失败，%{ignore} 忽略"
   ja: "テスト: %{pass} 成功、%{fail} 失敗、%{ignore} 無視"
+status.org_not_headline:
+  en: "Not on an Org headline"
+  es: "No está en un encabezado de Org"
+  fr: "Pas sur un titre Org"
+  de: "Nicht auf einer Org-Überschrift"
+  cy: "Ddim ar bennawd Org"
+  ga: "Níl ar cheannlíne Org"
+  gd: "Chan eil air ceann-loidhne Org"
+  pl: "Nie na nagłówku Org"
+  pt: "Não está num título Org"
+  ru: "Не на заголовке Org"
+  ar: "ليس على عنوان Org"
+  hi: "Org हेडलाइन पर नहीं"
+  bn: "Org হেডলাইনে নেই"
+  zh: "不在 Org 标题上"
+  ja: "Org 見出し上にありません"
+status.org_no_sibling:
+  en: "No sibling subtree to swap with"
+  es: "No hay subárbol hermano para intercambiar"
+  fr: "Aucun sous-arbre frère à échanger"
+  de: "Kein Geschwister-Teilbaum zum Tauschen"
+  cy: "Dim is-goeden frawd i'w chyfnewid"
+  ga: "Níl aon fho-chrann deartháir le babhtáil"
+  gd: "Chan eil fo-chraobh phiuthar ann ri iomlaid"
+  pl: "Brak siostrzanego poddrzewa do zamiany"
+  pt: "Nenhuma subárvore irmã para trocar"
+  ru: "Нет соседнего поддерева для обмена"
+  ar: "لا يوجد شجرة فرعية شقيقة للتبديل"
+  hi: "अदला-बदली के लिए कोई सहोदर सबट्री नहीं"
+  bn: "অদলবদলের জন্য কোনো সহোদর সাবট্রি নেই"
+  zh: "没有可交换的同级子树"
+  ja: "入れ替える兄弟サブツリーがありません"
+status.org_exported:
+  en: "Exported to a new %{ext} buffer"
+  es: "Exportado a un nuevo búfer %{ext}"
+  fr: "Exporté vers un nouveau tampon %{ext}"
+  de: "In einen neuen %{ext}-Puffer exportiert"
+  cy: "Allforiwyd i fwffer %{ext} newydd"
+  ga: "Easpórtáladh chuig maolán %{ext} nua"
+  gd: "Chaidh às-phortadh gu bufair %{ext} ùr"
+  pl: "Wyeksportowano do nowego bufora %{ext}"
+  pt: "Exportado para um novo buffer %{ext}"
+  ru: "Экспортировано в новый буфер %{ext}"
+  ar: "تم التصدير إلى مخزن %{ext} جديد"
+  hi: "नए %{ext} बफ़र में निर्यात किया गया"
+  bn: "নতুন %{ext} বাফারে রপ্তানি করা হয়েছে"
+  zh: "已导出到新的 %{ext} 缓冲区"
+  ja: "新しい %{ext} バッファにエクスポートしました"
 status.macro_empty:
   en: "No macro recorded yet"
   es: "Aún no se ha grabado ninguna macro"

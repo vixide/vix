@@ -2,8 +2,8 @@
 
 Top menu bar.
 
-- Open with `F10`, or `Alt+F/E/V/T/A/G/D/H` for
-  File/Edit/View/Tools/AI/Git/Debug/Help.
+- Open with `F10`, or `Alt+F/E/V/T/A/G/O/D/H` for
+  File/Edit/View/Tools/AI/Git/Org/Debug/Help.
 - Arrows navigate, `Enter` runs, `Esc` closes. In a dropdown, `Up` from the first
   item moves to the **menu title** (nothing highlighted); `Down` from there
   re-enters the first item.
@@ -28,7 +28,7 @@ Top menu bar.
   Save As. Works inside an open submenu too.
 
 The menus, left to right, are
-**Vix · File · Edit · View · Tools · AI · Git · Help**.
+**Vix · File · Edit · View · Tools · AI · Git · Org · Debug · Help**.
 
 ## Vix menu
 
