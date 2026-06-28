@@ -983,6 +983,11 @@ impl Editor {
         self.edit_active_lines(CodeEditor::sort_unique);
     }
 
+    /// Randomly reorder the selected lines (or the whole buffer).
+    pub fn shuffle_lines(&mut self) {
+        self.edit_active_lines(CodeEditor::shuffle_lines);
+    }
+
     /// Run a line-editing op on the active (non-image) buffer, marking it dirty.
     fn edit_active_lines(&mut self, f: impl FnOnce(&mut CodeEditor)) {
         if let Some(t) = self.active_tab_mut() {

@@ -127,6 +127,12 @@ impl Editor {
         self.edit_line_range(|lines| lines.iter().rev().map(|l| (*l).to_string()).collect());
     }
 
+    /// Randomly reorder the lines in range (Fisher–Yates, seeded from the OS).
+    pub fn shuffle_lines(&mut self) {
+        let seed = random_seed();
+        self.edit_line_range(|lines| shuffle(lines, seed));
+    }
+
     /// Sort the lines in range ascending and drop duplicates.
     pub fn sort_unique(&mut self) {
         self.edit_line_range(|lines| {
@@ -264,6 +270,31 @@ impl Editor {
         self.set_selection(None);
         self.reset_highlight_cache();
     }
+}
+
+/// A 64-bit seed from the OS RNG (falls back to a fixed seed if unavailable).
+fn random_seed() -> u64 {
+    let mut buf = [0u8; 8];
+    if getrandom::getrandom(&mut buf).is_err() {
+        return 0x9E37_79B9_7F4A_7C15; // golden-ratio constant fallback
+    }
+    u64::from_le_bytes(buf)
+}
+
+/// Fisher–Yates shuffle of `lines` using an xorshift64 PRNG seeded by `seed`.
+/// Pure (seed in, permutation out) so it is deterministic and unit-testable.
+fn shuffle(lines: &[&str], seed: u64) -> Vec<String> {
+    let mut v: Vec<String> = lines.iter().map(|l| (*l).to_string()).collect();
+    let mut state = if seed == 0 { 0x9E37_79B9_7F4A_7C15 } else { seed };
+    for i in (1..v.len()).rev() {
+        // xorshift64
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        let j = usize::try_from(state % (i as u64 + 1)).unwrap_or(0);
+        v.swap(i, j);
+    }
+    v
 }
 
 #[cfg(test)]
@@ -406,6 +437,18 @@ mod tests {
         let mut e = ed("banana\napple\nbanana\ncherry\napple", 0);
         e.sort_unique();
         assert_eq!(content(&e), "apple\nbanana\ncherry");
+    }
+
+    #[test]
+    fn shuffle_is_a_permutation_and_seed_deterministic() {
+        let lines = vec!["a", "b", "c", "d", "e"];
+        let out = super::shuffle(&lines, 12345);
+        // Same multiset of lines.
+        let mut sorted = out.clone();
+        sorted.sort();
+        assert_eq!(sorted, vec!["a", "b", "c", "d", "e"]);
+        // Deterministic for a given seed.
+        assert_eq!(super::shuffle(&lines, 12345), out);
     }
 
     #[test]
