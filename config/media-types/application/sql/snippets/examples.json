@@ -1,0 +1,95 @@
+{
+  "Select": {
+    "prefix": "select",
+    "body": ["SELECT ${1:*}", "FROM ${2:table}", "WHERE ${0:condition};"],
+    "description": "SELECT query"
+  },
+  "Select join": {
+    "prefix": "join",
+    "body": [
+      "SELECT ${1:*}",
+      "FROM ${2:a}",
+      "JOIN ${3:b} ON ${2:a}.${4:id} = ${3:b}.${5:a_id}",
+      "WHERE ${0:condition};"
+    ],
+    "description": "SELECT with JOIN"
+  },
+  "Group by": {
+    "prefix": "groupby",
+    "body": [
+      "SELECT ${1:col}, COUNT(*)",
+      "FROM ${2:table}",
+      "GROUP BY ${1:col}",
+      "ORDER BY ${0:2 DESC};"
+    ],
+    "description": "GROUP BY aggregate"
+  },
+  "Insert": {
+    "prefix": "insert",
+    "body": ["INSERT INTO ${1:table} (${2:columns})", "VALUES (${0:values});"],
+    "description": "INSERT statement"
+  },
+  "Update": {
+    "prefix": "update",
+    "body": ["UPDATE ${1:table}", "SET ${2:col} = ${3:value}", "WHERE ${0:condition};"],
+    "description": "UPDATE statement"
+  },
+  "Delete": {
+    "prefix": "delete",
+    "body": ["DELETE FROM ${1:table}", "WHERE ${0:condition};"],
+    "description": "DELETE statement"
+  },
+  "Create table": {
+    "prefix": "createtable",
+    "body": [
+      "CREATE TABLE ${1:name} (",
+      "\tid BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,",
+      "\t${2:column} ${3:TEXT} NOT NULL,",
+      "\tcreated_at TIMESTAMPTZ NOT NULL DEFAULT now()$0",
+      ");"
+    ],
+    "description": "CREATE TABLE"
+  },
+  "Create index": {
+    "prefix": "createindex",
+    "body": ["CREATE INDEX ${1:idx_name} ON ${2:table} (${0:column});"],
+    "description": "CREATE INDEX"
+  },
+  "Create view": {
+    "prefix": "createview",
+    "body": ["CREATE VIEW ${1:name} AS", "SELECT ${2:*}", "FROM ${0:table};"],
+    "description": "CREATE VIEW"
+  },
+  "Alter add column": {
+    "prefix": "altercolumn",
+    "body": ["ALTER TABLE ${1:table}", "ADD COLUMN ${2:name} ${0:TEXT};"],
+    "description": "ALTER TABLE ADD COLUMN"
+  },
+  "CTE (WITH)": {
+    "prefix": "with",
+    "body": [
+      "WITH ${1:cte} AS (",
+      "\tSELECT ${2:*}",
+      "\tFROM ${3:table}",
+      ")",
+      "SELECT ${4:*}",
+      "FROM ${1:cte}$0;"
+    ],
+    "description": "Common table expression"
+  },
+  "Upsert": {
+    "prefix": "upsert",
+    "body": [
+      "INSERT INTO ${1:table} (${2:id}, ${3:value})",
+      "VALUES (${4:1}, ${5:'x'})",
+      "ON CONFLICT (${2:id}) DO UPDATE",
+      "SET ${3:value} = EXCLUDED.${3:value};$0"
+    ],
+    "description": "INSERT ... ON CONFLICT upsert"
+  },
+  "Transaction": {
+    "prefix": "transaction",
+    "body": ["BEGIN;", "$0", "COMMIT;"],
+    "description": "Transaction block"
+  }
+}

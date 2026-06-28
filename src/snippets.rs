@@ -122,35 +122,22 @@ pub fn config_dir() -> Option<PathBuf> {
     crate::settings::Settings::config_path().and_then(|p| p.parent().map(Path::to_path_buf))
 }
 
-/// The global snippet file path, if the config directory is known.
+/// The global snippets directory, if the config directory is known
+/// (`<config>/global/snippets`).
 #[must_use]
-pub fn global_file() -> Option<PathBuf> {
-    config_dir().map(|d| d.join("global").join("snippets").join("snippets.json"))
+pub fn global_dir() -> Option<PathBuf> {
+    config_dir().map(|d| d.join("global").join("snippets"))
 }
 
-/// Candidate media-type snippet files for `media_type` (e.g. `text/x-rust`). The
-/// `x-` subtype prefix is also tried without it (`text/rust`), so either spelling
-/// of the directory works.
+/// The `media-types/<type>/<subtype>/snippets` relative path for `media_type`
+/// (e.g. `text/rust` → `media-types/text/rust/snippets`).
 #[must_use]
-pub fn media_type_files(media_type: &str) -> Vec<PathBuf> {
-    let Some(dir) = config_dir() else { return Vec::new() };
-    let mut types = vec![media_type.to_string()];
-    if let Some((t, sub)) = media_type.split_once('/')
-        && let Some(stripped) = sub.strip_prefix("x-")
-    {
-        types.push(format!("{t}/{stripped}"));
+pub fn media_type_rel(media_type: &str) -> PathBuf {
+    let mut p = PathBuf::from("media-types");
+    for seg in media_type.split('/') {
+        p = p.join(seg);
     }
-    types.dedup();
-    types
-        .iter()
-        .map(|mt| {
-            let mut p = dir.join("media-types");
-            for seg in mt.split('/') {
-                p = p.join(seg);
-            }
-            p.join("snippets").join("snippets.json")
-        })
-        .collect()
+    p.join("snippets")
 }
 
 /// The project snippet file path: `root` joined with the relative `project_rel`.
@@ -159,7 +146,7 @@ pub fn project_file(root: &Path, project_rel: &str) -> PathBuf {
     root.join(project_rel)
 }
 
-/// Read and parse a snippet file, returning `[]` if it is missing or unreadable.
+/// Read and parse a single snippet file, returning `[]` if missing/unreadable.
 #[must_use]
 pub fn load_file(path: &Path, scope: &Scope) -> Vec<Snippet> {
     match std::fs::read_to_string(path) {
@@ -168,19 +155,40 @@ pub fn load_file(path: &Path, scope: &Scope) -> Vec<Snippet> {
     }
 }
 
-/// Load and merge file snippets for the active context: global, then the
-/// buffer's media type (if any), then the project. Bundled snippets are added by
-/// the caller. Later scopes shadow earlier ones by name.
+/// Load every `*.json` file in `dir` (sorted by name), parsing each with `scope`.
+/// A missing directory yields `[]`.
+#[must_use]
+pub fn load_dir(dir: &Path, scope: &Scope) -> Vec<Snippet> {
+    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+    let mut files: Vec<PathBuf> = entries
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")))
+        .collect();
+    files.sort();
+    files.iter().flat_map(|p| load_file(p, scope)).collect()
+}
+
+/// Load and merge file snippets for the active context: the global directory,
+/// then the buffer's media-type directories (config + project), then the
+/// configured project file. Bundled snippets are added by the caller; later
+/// scopes shadow earlier ones by name. All `*.json` files in each snippets
+/// directory are loaded.
 #[must_use]
 pub fn load_scoped(media_type: Option<&str>, project_root: &Path, project_rel: &str) -> Vec<Snippet> {
     let mut snippets: Vec<Snippet> = Vec::new();
-    if let Some(p) = global_file() {
-        snippets.extend(load_file(&p, &Scope::Global));
+    if let Some(d) = global_dir() {
+        snippets.extend(load_dir(&d, &Scope::Global));
     }
     if let Some(mt) = media_type {
-        for p in media_type_files(mt) {
-            snippets.extend(load_file(&p, &Scope::MediaType(mt.to_string())));
+        let rel = media_type_rel(mt);
+        let scope = Scope::MediaType(mt.to_string());
+        // Config dir: <config>/media-types/<type>/snippets.
+        if let Some(cfg) = config_dir() {
+            snippets.extend(load_dir(&cfg.join(&rel), &scope));
         }
+        // Project: <root>/config/media-types/<type>/snippets.
+        snippets.extend(load_dir(&project_root.join("config").join(&rel), &scope));
     }
     snippets.extend(load_file(&project_file(project_root, project_rel), &Scope::Project));
     snippets
@@ -333,13 +341,23 @@ mod tests {
     }
 
     #[test]
-    fn media_type_files_try_x_prefixed_and_plain() {
-        // Without a config dir the list is empty; with one, both spellings appear.
-        if config_dir().is_some() {
-            let paths = media_type_files("text/x-rust");
-            assert!(paths.iter().any(|p| p.to_string_lossy().contains("text/x-rust/snippets")));
-            assert!(paths.iter().any(|p| p.to_string_lossy().contains("text/rust/snippets")));
-        }
+    fn media_type_rel_splits_into_path_segments() {
+        let rel = media_type_rel("text/rust");
+        assert_eq!(rel, std::path::Path::new("media-types/text/rust/snippets"));
+        let rel = media_type_rel("application/sql");
+        assert_eq!(rel, std::path::Path::new("media-types/application/sql/snippets"));
+    }
+
+    #[test]
+    fn load_dir_reads_all_json_files() {
+        let dir = std::env::temp_dir().join(format!("vix-snip-test-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("a.json"), r#"{"A": {"body": "1"}}"#).unwrap();
+        std::fs::write(dir.join("examples.json"), r#"{"B": {"body": "2"}}"#).unwrap();
+        std::fs::write(dir.join("ignore.txt"), "not json").unwrap();
+        let snips = load_dir(&dir, &Scope::Project);
+        assert_eq!(snips.len(), 2, "both JSON files load, the .txt is ignored");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

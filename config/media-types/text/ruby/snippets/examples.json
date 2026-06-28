@@ -1,0 +1,72 @@
+{
+  "Method": {
+    "prefix": "def",
+    "body": ["def ${1:name}(${2:args})", "\t$0", "end"],
+    "description": "Method definition"
+  },
+  "Class": {
+    "prefix": "class",
+    "body": ["class ${1:Name}", "\t$0", "end"],
+    "description": "Class definition"
+  },
+  "Module": {
+    "prefix": "module",
+    "body": ["module ${1:Name}", "\t$0", "end"],
+    "description": "Module definition"
+  },
+  "If": {
+    "prefix": "if",
+    "body": ["if ${1:condition}", "\t$0", "end"],
+    "description": "if statement"
+  },
+  "Unless": {
+    "prefix": "unless",
+    "body": ["unless ${1:condition}", "\t$0", "end"],
+    "description": "unless statement"
+  },
+  "Each": {
+    "prefix": "each",
+    "body": ["${1:collection}.each do |${2:item}|", "\t$0", "end"],
+    "description": "each iterator"
+  },
+  "Map": {
+    "prefix": "map",
+    "body": ["${1:collection}.map do |${2:item}|", "\t$0", "end"],
+    "description": "map iterator"
+  },
+  "Times": {
+    "prefix": "times",
+    "body": ["${1:n}.times do |${2:i}|", "\t$0", "end"],
+    "description": "n.times loop"
+  },
+  "Begin/rescue": {
+    "prefix": "begin",
+    "body": ["begin", "\t${1}", "rescue ${2:StandardError} => ${3:e}", "\t$0", "end"],
+    "description": "begin/rescue block"
+  },
+  "Puts": {
+    "prefix": "puts",
+    "body": ["puts ${0}"],
+    "description": "puts"
+  },
+  "Require": {
+    "prefix": "require",
+    "body": ["require \"${0:name}\""],
+    "description": "require"
+  },
+  "attr_accessor": {
+    "prefix": "attr",
+    "body": ["attr_accessor :${0:name}"],
+    "description": "attr_accessor"
+  },
+  "Lambda": {
+    "prefix": "lambda",
+    "body": ["${1:name} = ->(${2:args}) { ${0} }"],
+    "description": "Lambda"
+  },
+  "Case": {
+    "prefix": "case",
+    "body": ["case ${1:value}", "when ${2:a}", "\t$0", "else", "\t", "end"],
+    "description": "case/when statement"
+  }
+}

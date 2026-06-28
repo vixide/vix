@@ -1,0 +1,92 @@
+{
+  "Function": {
+    "prefix": "fn",
+    "body": ["function ${1:name}(${2:args}) {", "\t$0", "}"],
+    "description": "Function declaration"
+  },
+  "Arrow function": {
+    "prefix": "afn",
+    "body": ["const ${1:name} = (${2:args}) => {", "\t$0", "};"],
+    "description": "Arrow function"
+  },
+  "Async function": {
+    "prefix": "afne",
+    "body": ["async function ${1:name}(${2:args}) {", "\t$0", "}"],
+    "description": "Async function"
+  },
+  "Const": {
+    "prefix": "con",
+    "body": ["const ${1:name} = ${0};"],
+    "description": "const declaration"
+  },
+  "Let": {
+    "prefix": "let",
+    "body": ["let ${1:name} = ${0};"],
+    "description": "let declaration"
+  },
+  "Console log": {
+    "prefix": "clg",
+    "body": ["console.log(${0});"],
+    "description": "console.log"
+  },
+  "For loop": {
+    "prefix": "for",
+    "body": ["for (let ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++) {", "\t$0", "}"],
+    "description": "for loop"
+  },
+  "For of": {
+    "prefix": "forof",
+    "body": ["for (const ${1:item} of ${2:iterable}) {", "\t$0", "}"],
+    "description": "for...of loop"
+  },
+  "forEach": {
+    "prefix": "foreach",
+    "body": ["${1:array}.forEach((${2:item}) => {", "\t$0", "});"],
+    "description": "Array.forEach"
+  },
+  "If": {
+    "prefix": "if",
+    "body": ["if (${1:condition}) {", "\t$0", "}"],
+    "description": "if statement"
+  },
+  "Try/catch": {
+    "prefix": "try",
+    "body": ["try {", "\t${1}", "} catch (${2:err}) {", "\t$0", "}"],
+    "description": "try/catch block"
+  },
+  "Import": {
+    "prefix": "imp",
+    "body": ["import { ${1:name} } from \"${2:module}\";$0"],
+    "description": "Named import"
+  },
+  "Export default": {
+    "prefix": "expd",
+    "body": ["export default ${0};"],
+    "description": "export default"
+  },
+  "Set timeout": {
+    "prefix": "timeout",
+    "body": ["setTimeout(() => {", "\t$0", "}, ${1:1000});"],
+    "description": "setTimeout"
+  },
+  "Fetch": {
+    "prefix": "fetch",
+    "body": [
+      "const ${1:res} = await fetch(${2:url});",
+      "const ${3:data} = await ${1:res}.json();",
+      "$0"
+    ],
+    "description": "fetch + json"
+  },
+  "Class": {
+    "prefix": "class",
+    "body": [
+      "class ${1:Name} {",
+      "\tconstructor(${2:args}) {",
+      "\t\t$0",
+      "\t}",
+      "}"
+    ],
+    "description": "Class with constructor"
+  }
+}

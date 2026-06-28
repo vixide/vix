@@ -1,0 +1,75 @@
+{
+  "Include": {
+    "prefix": "inc",
+    "body": ["#include <${0:stdio.h}>"],
+    "description": "#include <...>"
+  },
+  "Include local": {
+    "prefix": "incl",
+    "body": ["#include \"${0:header.h}\""],
+    "description": "#include \"...\""
+  },
+  "Main": {
+    "prefix": "main",
+    "body": ["int main(int argc, char *argv[]) {", "\t$0", "\treturn 0;", "}"],
+    "description": "main function"
+  },
+  "Function": {
+    "prefix": "fn",
+    "body": ["${1:void} ${2:name}(${3:args}) {", "\t$0", "}"],
+    "description": "Function"
+  },
+  "Printf": {
+    "prefix": "printf",
+    "body": ["printf(\"${1:%d}\\n\"${2});$0"],
+    "description": "printf with newline"
+  },
+  "For loop": {
+    "prefix": "for",
+    "body": ["for (int ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++) {", "\t$0", "}"],
+    "description": "for loop"
+  },
+  "While": {
+    "prefix": "while",
+    "body": ["while (${1:condition}) {", "\t$0", "}"],
+    "description": "while loop"
+  },
+  "If": {
+    "prefix": "if",
+    "body": ["if (${1:condition}) {", "\t$0", "}"],
+    "description": "if statement"
+  },
+  "Struct": {
+    "prefix": "struct",
+    "body": ["struct ${1:Name} {", "\t$0", "};"],
+    "description": "Struct definition"
+  },
+  "Typedef struct": {
+    "prefix": "tdstruct",
+    "body": ["typedef struct {", "\t$0", "} ${1:Name};"],
+    "description": "typedef struct"
+  },
+  "Switch": {
+    "prefix": "switch",
+    "body": [
+      "switch (${1:value}) {",
+      "\tcase ${2:a}:",
+      "\t\t$0",
+      "\t\tbreak;",
+      "\tdefault:",
+      "\t\tbreak;",
+      "}"
+    ],
+    "description": "switch statement"
+  },
+  "Malloc": {
+    "prefix": "malloc",
+    "body": ["${1:Type} *${2:ptr} = malloc(${3:count} * sizeof(${1:Type}));$0"],
+    "description": "malloc allocation"
+  },
+  "Header guard": {
+    "prefix": "guard",
+    "body": ["#ifndef ${1:HEADER_H}", "#define ${1:HEADER_H}", "", "$0", "", "#endif  /* ${1:HEADER_H} */"],
+    "description": "Include guard"
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "Include": {
+    "prefix": "inc",
+    "body": ["#include <${0:iostream}>"],
+    "description": "#include <...>"
+  },
+  "Include local": {
+    "prefix": "incl",
+    "body": ["#include \"${0:header.h}\""],
+    "description": "#include \"...\""
+  },
+  "Main": {
+    "prefix": "main",
+    "body": ["int main(int argc, char* argv[]) {", "\t$0", "\treturn 0;", "}"],
+    "description": "main function"
+  },
+  "Function": {
+    "prefix": "fn",
+    "body": ["${1:void} ${2:name}(${3:args}) {", "\t$0", "}"],
+    "description": "Function"
+  },
+  "Class": {
+    "prefix": "class",
+    "body": [
+      "class ${1:Name} {",
+      "public:",
+      "\t${1:Name}();",
+      "\t~${1:Name}();",
+      "private:",
+      "\t$0",
+      "};"
+    ],
+    "description": "Class definition"
+  },
+  "Struct": {
+    "prefix": "struct",
+    "body": ["struct ${1:Name} {", "\t$0", "};"],
+    "description": "Struct definition"
+  },
+  "Namespace": {
+    "prefix": "namespace",
+    "body": ["namespace ${1:name} {", "\t$0", "}  // namespace ${1:name}"],
+    "description": "Namespace"
+  },
+  "Cout": {
+    "prefix": "cout",
+    "body": ["std::cout << ${1} << std::endl;$0"],
+    "description": "std::cout"
+  },
+  "Vector": {
+    "prefix": "vec",
+    "body": ["std::vector<${1:int}> ${2:v};$0"],
+    "description": "std::vector declaration"
+  },
+  "For loop": {
+    "prefix": "for",
+    "body": ["for (int ${1:i} = 0; ${1:i} < ${2:n}; ++${1:i}) {", "\t$0", "}"],
+    "description": "for loop"
+  },
+  "Range for": {
+    "prefix": "forr",
+    "body": ["for (const auto& ${1:item} : ${2:container}) {", "\t$0", "}"],
+    "description": "Range-based for loop"
+  },
+  "If": {
+    "prefix": "if",
+    "body": ["if (${1:condition}) {", "\t$0", "}"],
+    "description": "if statement"
+  },
+  "While": {
+    "prefix": "while",
+    "body": ["while (${1:condition}) {", "\t$0", "}"],
+    "description": "while loop"
+  },
+  "Template": {
+    "prefix": "template",
+    "body": ["template <typename ${1:T}>", "$0"],
+    "description": "Template declaration"
+  },
+  "Try/catch": {
+    "prefix": "try",
+    "body": ["try {", "\t${1}", "} catch (const ${2:std::exception}& ${3:e}) {", "\t$0", "}"],
+    "description": "try/catch block"
+  }
+}

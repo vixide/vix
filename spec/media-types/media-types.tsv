@@ -56,7 +56,7 @@ application/x-sh	Bourne shell script	.sh
 image/svg+xml	Scalable Vector Graphics (SVG)	.svg
 application/x-tar	Tape Archive (TAR)	.tar
 image/tiff	Tagged Image File Format (TIFF)	.tif, .tiff
-video/mp2t	MPEG transport stream	.ts
+video/mp2t	MPEG transport stream	.m2ts
 font/ttf	TrueType Font	.ttf
 text/plain	Plain text	.txt
 application/vnd.visio	Microsoft Visio	.vsd
@@ -76,31 +76,31 @@ application/zip	ZIP archive	.zip
 video/3gpp	3GPP audio/video container	.3gp
 video/3gpp2	3GPP2 audio/video container	.3g2
 application/x-7z-compressed	7-zip archive	.7z
-text/x-rust	Rust source	.rs
-text/x-python	Python source	.py
-text/x-go	Go source	.go
-text/x-typescript	TypeScript source	.mts, .cts
+text/rust	Rust source	.rs
+text/python	Python source	.py
+text/go	Go source	.go
+text/typescript	TypeScript source	.ts, .mts, .cts
 text/jsx	JavaScript JSX	.jsx
 text/tsx	TypeScript JSX	.tsx
-text/x-c	C source	.c
-text/x-c++src	C++ source	.cpp, .cc, .cxx
-text/x-chdr	C/C++ header	.h, .hpp
-text/x-java-source	Java source	.java
-text/x-kotlin	Kotlin source	.kt, .kts
-text/x-swift	Swift source	.swift
-text/x-ruby	Ruby source	.rb
-application/x-perl	Perl script	.pl
-text/x-lua	Lua source	.lua
-text/x-sql	SQL	.sql
+text/c	C source	.c, .h
+text/cpp	C++ source	.cpp, .cc, .cxx, .hpp
+text/java	Java source	.java
+text/csharp	C# source	.cs
+text/kotlin	Kotlin source	.kt, .kts
+text/swift	Swift source	.swift
+text/ruby	Ruby source	.rb
+text/perl	Perl script	.pl
+text/lua	Lua source	.lua
+application/sql	SQL	.sql
 application/toml	Tom's Obvious Minimal Language (TOML)	.toml
-text/x-ini	INI configuration	.ini
-text/x-properties	Java properties	.properties
+text/ini	INI configuration	.ini
+text/properties	Java properties	.properties
 application/wasm	WebAssembly binary	.wasm
-text/x-diff	Diff / patch	.diff, .patch
-application/x-tex	TeX / LaTeX	.tex
-application/x-bibtex	BibTeX	.bib
-text/x-org	Org mode	.org
-text/x-rst	reStructuredText	.rst
+text/diff	Diff / patch	.diff, .patch
+text/tex	TeX / LaTeX	.tex
+text/bibtex	BibTeX	.bib
+text/org	Org mode	.org
+text/rst	reStructuredText	.rst
 application/x-ndjson	Newline-delimited JSON	.ndjson
 application/cbor	Concise Binary Object Representation (CBOR)	.cbor
 application/x-protobuf	Protocol Buffers	.proto
