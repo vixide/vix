@@ -41,6 +41,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Sticky vertical "goal column."** Moving the caret up/down now remembers the
+  column you started from, so passing through a short line no longer snaps the
+  cursor inward (it returns to the original column on the next long line). Any
+  horizontal move resets it. (Idea from the zee editor.)
 - **Org checkbox & statistics cookies.** Parent checkboxes now reflect their
   children (all → `[X]`, none → `[ ]`, some → `[-]`), and `[/]`/`[%]` statistics
   cookies in headlines and list items are recomputed automatically after Toggle

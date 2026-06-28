@@ -144,6 +144,13 @@ pub struct Editor {
     /// Extra cursors beyond the primary one (multiple-cursor editing). Empty for
     /// the normal single-cursor case. See `multicursor.rs`.
     pub(crate) carets: Vec<crate::editor_core::multicursor::Caret>,
+
+    /// "Goal column" for vertical movement: the char column the caret tries to
+    /// keep as it moves up/down across lines of differing length. `None` until a
+    /// vertical move establishes it; cleared by any other cursor move (every
+    /// non-vertical motion routes through [`Editor::set_cursor`]). This stops the
+    /// classic drift where moving through a short line snaps the column inward.
+    pub(crate) goal_col: Option<usize>,
 }
 
 impl Editor {
@@ -206,6 +213,7 @@ impl Editor {
             selection_style: Style::default().add_modifier(Modifier::REVERSED),
             cursor_style: None,
             carets: Vec::new(),
+            goal_col: None,
         })
     }
 
@@ -491,8 +499,10 @@ impl Editor {
         self.reset_highlight_cache();
     }
 
-    /// Move the cursor to the given char offset, clamped to the buffer.
+    /// Move the cursor to the given char offset, clamped to the buffer. Clears the
+    /// vertical-movement goal column; line up/down re-establish it afterward.
     pub fn set_cursor(&mut self, cursor: usize) {
+        self.goal_col = None;
         self.cursor = cursor;
         self.fit_cursor();
     }
@@ -506,6 +516,7 @@ impl Editor {
             self.selection = Some(Selection::from_anchor_and_cursor(anchor, cursor));
         }
         self.selection_snap = SelectionSnap::None;
+        self.goal_col = None;
         self.cursor = cursor;
         self.fit_cursor();
     }

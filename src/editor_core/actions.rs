@@ -95,15 +95,18 @@ pub struct MoveUp {
 impl Action for MoveUp {
     fn apply(&mut self, editor: &mut Editor) {
         let cursor = editor.get_cursor();
+        let goal = editor.goal_col;
         let code = editor.code_mut();
         let (row, col) = code.point(cursor);
 
         if row == 0 { return }
 
+        // Aim for the remembered goal column, falling back to the current column
+        // when starting a fresh vertical run.
+        let target_col = goal.unwrap_or(col);
         let prev_start = code.line_to_char(row - 1);
         let prev_len = code.line_len(row - 1);
-        let new_col = col.min(prev_len);
-        let new_cursor = prev_start + new_col;
+        let new_cursor = prev_start + target_col.min(prev_len);
 
         // Update selection or clear it
         if self.shift {
@@ -112,8 +115,9 @@ impl Action for MoveUp {
             editor.clear_selection();
         }
 
-        // Set the new cursor position
+        // Set the new cursor position (clears goal_col), then re-establish it.
         editor.set_cursor(new_cursor);
+        editor.goal_col = Some(target_col);
     }
 }
 
@@ -131,15 +135,18 @@ pub struct MoveDown {
 impl Action for MoveDown {
     fn apply(&mut self, editor: &mut Editor) {
         let cursor = editor.get_cursor();
+        let goal = editor.goal_col;
         let code = editor.code_mut();
         let (row, col) = code.point(cursor);
         let is_last_line = row + 1 >= code.len_lines();
         if is_last_line { return }
 
+        // Aim for the remembered goal column, falling back to the current column
+        // when starting a fresh vertical run.
+        let target_col = goal.unwrap_or(col);
         let next_start = code.line_to_char(row + 1);
         let next_len = code.line_len(row + 1);
-        let new_col = col.min(next_len);
-        let new_cursor = next_start + new_col;
+        let new_cursor = next_start + target_col.min(next_len);
 
         // Update selection or clear it
         if self.shift {
@@ -148,8 +155,9 @@ impl Action for MoveDown {
             editor.clear_selection();
         }
 
-        // Set the new cursor position
+        // Set the new cursor position (clears goal_col), then re-establish it.
         editor.set_cursor(new_cursor);
+        editor.goal_col = Some(target_col);
     }
 }
 
@@ -798,5 +806,39 @@ impl Action for Redo {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod goal_column_tests {
+    use crate::editor_core::editor::Editor;
+
+    fn ed(text: &str, cursor: usize) -> Editor {
+        let mut e = Editor::new("text", text, Vec::new()).unwrap();
+        e.set_cursor(cursor);
+        e
+    }
+
+    #[test]
+    fn vertical_moves_keep_the_goal_column_across_short_lines() {
+        // line0 len 5, line1 len 2, line2 len 5.
+        let mut e = ed("aaaaa\nbb\nccccc", 4); // line0, col 4
+        e.cursor_down(); // line1 clamps to col 2
+        assert_eq!(e.code_ref().point(e.get_cursor()), (1, 2));
+        e.cursor_down(); // line2: goal column 4 is restored, not the clamped 2
+        assert_eq!(e.code_ref().point(e.get_cursor()), (2, 4));
+        e.cursor_up(); // back to line1, still clamped to 2 (goal preserved)
+        assert_eq!(e.code_ref().point(e.get_cursor()), (1, 2));
+        e.cursor_up(); // line0: goal column 4 restored
+        assert_eq!(e.code_ref().point(e.get_cursor()), (0, 4));
+    }
+
+    #[test]
+    fn horizontal_move_resets_the_goal_column() {
+        let mut e = ed("aaaaa\nbb\nccccc", 4); // line0, col 4
+        e.cursor_down(); // line1, clamped to col 2, goal = 4
+        e.cursor_left(); // horizontal move clears the goal (now col 1)
+        e.cursor_down(); // line2: column 1 carried forward, NOT the old goal 4
+        assert_eq!(e.code_ref().point(e.get_cursor()), (2, 1));
     }
 }
