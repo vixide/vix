@@ -83,6 +83,27 @@ fn type_str(app: &mut App, s: &str) {
 }
 
 #[test]
+fn media_type_picker_filters_and_inserts() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.media_types");
+    assert!(app.media_type_panel.is_some(), "Media Types opens the picker");
+
+    // Type to filter down to SVG, then Enter inserts the media type.
+    for c in "svg".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "image/svg+xml");
+
+    // Esc closes it.
+    app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert!(app.media_type_panel.is_none());
+
+    // The lookup table is also usable directly by extension.
+    assert_eq!(vix::media_type::for_extension("png").unwrap().media_type, "image/png");
+}
+
+#[test]
 fn org_menu_edits_headlines_and_exports() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "* Task\nbody");

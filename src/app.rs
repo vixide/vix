@@ -764,6 +764,8 @@ pub struct Layout {
     /// Row-list rectangle of the open X11 color palette, so a click can hit-test
     /// which row was picked.
     pub x11_panel: Rect,
+    /// Row-list rectangle of the media-type picker, for click-to-select.
+    pub media_type_panel: Rect,
     /// Row-list rectangle of the open HTML character palette, so a click can
     /// hit-test which row was picked.
     pub html_panel: Rect,
@@ -908,6 +910,8 @@ pub struct App {
     pub edit_bytes: Option<crate::edit_bytes::Hex>,
     /// X11 color palette overlay, when open.
     pub x11_panel: Option<X11Panel>,
+    /// Media-type (MIME) picker overlay, when open.
+    pub media_type_panel: Option<crate::media_type::Panel>,
     /// HTML character palette overlay, when open.
     pub html_panel: Option<HtmlPanel>,
     /// System Information panel overlay, when open.
@@ -1225,6 +1229,7 @@ impl App {
             location_chooser: None, nerd_palette: None, ascii_panel: None, edit_table: None,
             edit_outline: None, edit_value: None, edit_bytes: None, qrcode: None,
             x11_panel: None,
+            media_type_panel: None,
             html_panel: None, system_info: None, dashboard: None, dashboard_rx: None,
             outline: None, outline_dock: None, outline_dock_key: None,
             welcome: None, file_info: None, text_info: None,
@@ -1609,6 +1614,7 @@ impl App {
         panel!(nerd_palette, nerd_key);
         panel!(ascii_panel, ascii_key);
         panel!(x11_panel, x11_key);
+        panel!(media_type_panel, media_type_key);
         panel!(html_panel, html_key);
         panel!(system_info, system_info_key);
         panel!(file_info, file_info_key);
@@ -2438,6 +2444,7 @@ impl App {
             "tools.edit_bytes" => self.open_edit_bytes(),
             "tools.qrcode" => self.open_qrcode(),
             "tools.x11_colors" => self.open_x11_panel(),
+            "tools.media_types" => self.open_media_type_panel(),
             "tools.html_chars" => self.open_html_panel(),
             "tools.system_info" => self.open_system_info(),
             "tools.file_info" => self.open_file_info(),
@@ -7212,6 +7219,7 @@ impl App {
         panel!(nerd_palette, nerd_mouse);
         panel!(ascii_panel, ascii_mouse);
         panel!(x11_panel, x11_mouse);
+        panel!(media_type_panel, media_type_mouse);
         panel!(html_panel, html_mouse);
         panel!(system_info, system_info_mouse);
         panel!(file_info, file_info_mouse);
@@ -8713,6 +8721,92 @@ impl App {
         let area = self.layout.editor;
         if self.editor.insert_str(&hex, area) {
             self.status = t!("status.x11_inserted", name = name).to_string();
+        }
+    }
+
+    // ----- Media-type (MIME) picker ---------------------------------------
+
+    /// Open the media-type picker, pre-selected to the active file's type when
+    /// its extension is recognized.
+    fn open_media_type_panel(&mut self) {
+        let ext = self
+            .editor
+            .active_tab()
+            .and_then(|t| t.path.as_ref())
+            .and_then(|p| p.extension())
+            .map(|e| e.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        self.media_type_panel = Some(crate::media_type::Panel::open_for_extension(&ext));
+    }
+
+    fn media_type_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.media_type_panel.height as usize).max(1);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.media_type_panel.as_mut() {
+                    p.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.media_type_panel.as_mut() {
+                    p.down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(p) = self.media_type_panel.as_mut() {
+                    p.page_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(p) = self.media_type_panel.as_mut() {
+                    p.page_down(page);
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(p) = self.media_type_panel.as_mut() {
+                    p.backspace();
+                }
+            }
+            KeyCode::Char(c) => {
+                if let Some(p) = self.media_type_panel.as_mut() {
+                    p.push(c);
+                }
+            }
+            // Enter inserts and keeps the panel open; Esc closes it.
+            KeyCode::Enter => self.insert_selected_media_type(),
+            KeyCode::Esc => self.media_type_panel = None,
+            _ => {}
+        }
+    }
+
+    fn media_type_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.media_type_panel;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row_in_view = (mouse.row - r.y) as usize;
+        if let Some(p) = self.media_type_panel.as_mut() {
+            let idx = p.scroll + row_in_view;
+            if p.select_index(idx) {
+                self.insert_selected_media_type();
+            }
+        }
+    }
+
+    /// Insert the highlighted media type (e.g. `image/png`) into the active editor
+    /// (leaving the panel open). No-op when there is no editable buffer.
+    fn insert_selected_media_type(&mut self) {
+        let Some(entry) = self.media_type_panel.as_ref().and_then(crate::media_type::Panel::selected_entry)
+        else {
+            return;
+        };
+        let media_type = entry.media_type.to_string();
+        let area = self.layout.editor;
+        if self.editor.insert_str(&media_type, area) {
+            self.status = t!("status.media_type_inserted", media_type = media_type).to_string();
         }
     }
 

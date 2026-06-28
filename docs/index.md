@@ -43,6 +43,7 @@ Highlights:
   [Switch Project](switch-project/index.md) (re-root at a recent workspace) ·
   [Test Runner](test-runner/index.md) (pass/fail panel).
 - Markup: [Org](org/index.md) (Org-mode basics — headlines, TODO, export).
+- Reference: [Media Types](media-types/index.md) (MIME picker by type/extension).
 
 ## Specification (`spec/`) — source of truth
 

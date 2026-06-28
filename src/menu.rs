@@ -542,6 +542,7 @@ const TOOLS: &[Item] = &[
     Item::leaf("menu.item.tools.regex_tester", "tools.regex_tester", ""),
     Item::sub("menu.item.tools.characters", TOOLS_CHARACTERS),
     Item::leaf("menu.item.tools.x11_colors", "tools.x11_colors", ""),
+    Item::leaf("menu.item.tools.media_types", "tools.media_types", ""),
 ];
 
 /// Language-server (LSP) actions, grouped under Tools → Language Server.
