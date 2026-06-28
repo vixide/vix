@@ -2882,6 +2882,7 @@ impl App {
             a if self.insert_sql(a) => {}
             a if self.insert_latex(a) => {}
             a if self.insert_org(a) => {}
+            a if self.draw_insert(a) => {}
             a if self.insert_marker(a) => {}
             a if self.insert_block(a) => {}
             a if self.org_action(a) => {}
@@ -3688,6 +3689,41 @@ impl App {
             _ => return false,
         };
         self.insert_content(snippet);
+        true
+    }
+
+    /// Insert a ditaa ASCII-art shape for a `tools.draw.*` action at the cursor.
+    /// Returns `true` if `action` was a known shape. See <https://ditaa.sourceforge.net/>.
+    #[allow(clippy::too_many_lines)]
+    fn draw_insert(&mut self, action: &str) -> bool {
+        let art = match action {
+            "tools.draw.rectangle" => "+-------+\n|       |\n+-------+\n",
+            "tools.draw.rounded" => "/-------\\\n|       |\n\\-------/\n",
+            "tools.draw.document" => "+-------+\n|{d}    |\n+-------+\n",
+            "tools.draw.storage" => "+-------+\n|{s}    |\n+-------+\n",
+            "tools.draw.line_h" => "--------",
+            "tools.draw.line_v" => "|\n|\n|\n",
+            "tools.draw.dashed_h" => "========",
+            "tools.draw.dashed_v" => ":\n:\n:\n",
+            "tools.draw.arrow_right" => "------->",
+            "tools.draw.arrow_left" => "<-------",
+            "tools.draw.arrow_up" => "^\n|\n|\n",
+            "tools.draw.arrow_down" => "|\n|\nv\n",
+            "tools.draw.point" => "*",
+            "tools.draw.flow" => concat!(
+                "+--------+      +--------+\n",
+                "| Box A  +----->| Box B  |\n",
+                "+--------+      +--------+\n",
+            ),
+            "tools.draw.color_box" => concat!(
+                "/--------\\\n",
+                "|cBLU    |\n",
+                "| Box    |\n",
+                "\\--------/\n",
+            ),
+            _ => return false,
+        };
+        self.insert_content(art);
         true
     }
 

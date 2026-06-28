@@ -41,6 +41,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Tools → Draw (ditaa ASCII art).** A new submenu inserts ASCII-art shapes for
+  [ditaa](https://ditaa.sourceforge.net/) diagrams: rectangles, rounded
+  rectangles, document/storage shapes, horizontal/vertical (and dashed) lines,
+  arrows (right/left/up/down), a point, a two-box flow, and a colored box. See
+  `spec/tools/draw/index.md`.
 - **PlantUML media type** (`text/plantuml`, `.plantuml`/`.puml`) plus a bundled
   snippet library (diagram skeleton, sequence/class/use-case/activity/state/
   component constructs, notes, skinparam).

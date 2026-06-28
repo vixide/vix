@@ -201,6 +201,24 @@ fn media_type_picker_filters_and_inserts() {
 }
 
 #[test]
+fn tools_draw_inserts_ditaa_ascii_art() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.draw.rectangle");
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains("+-------+"), "rectangle: {text:?}");
+    assert!(text.contains("|       |"));
+
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.draw.rounded");
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains("/-------\\") && text.contains("\\-------/"), "rounded: {text:?}");
+
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.draw.arrow_right");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "------->");
+}
+
+#[test]
 fn org_capture_inserts_todo_and_time_report_tabulates() {
     // Capture opens a prompt; submitting inserts a TODO headline at the cursor.
     let mut app = app_at(Path::new("."));

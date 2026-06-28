@@ -479,6 +479,29 @@ const TOOLS_CONVERT_NUMBER: &[Item] = &[
 const TOOLS_CONVERT_HTML: &[Item] = &[Item::leaf("menu.name.markdown", "tools.convert.html.markdown", "")];
 const TOOLS_CONVERT_MARKDOWN: &[Item] = &[Item::leaf("menu.name.html", "tools.convert.markdown.html", "")];
 
+/// ditaa ASCII-art shapes, grouped under Tools → Draw. Each inserts an ASCII
+/// diagram fragment at the cursor (see <https://ditaa.sourceforge.net/>).
+const TOOLS_DRAW: &[Item] = &[
+    Item::leaf("menu.item.tools.draw.rectangle", "tools.draw.rectangle", ""),
+    Item::leaf("menu.item.tools.draw.rounded", "tools.draw.rounded", ""),
+    Item::leaf("menu.item.tools.draw.document", "tools.draw.document", ""),
+    Item::leaf("menu.item.tools.draw.storage", "tools.draw.storage", ""),
+    SEP,
+    Item::leaf("menu.item.tools.draw.line_h", "tools.draw.line_h", ""),
+    Item::leaf("menu.item.tools.draw.line_v", "tools.draw.line_v", ""),
+    Item::leaf("menu.item.tools.draw.dashed_h", "tools.draw.dashed_h", ""),
+    Item::leaf("menu.item.tools.draw.dashed_v", "tools.draw.dashed_v", ""),
+    SEP,
+    Item::leaf("menu.item.tools.draw.arrow_right", "tools.draw.arrow_right", ""),
+    Item::leaf("menu.item.tools.draw.arrow_left", "tools.draw.arrow_left", ""),
+    Item::leaf("menu.item.tools.draw.arrow_up", "tools.draw.arrow_up", ""),
+    Item::leaf("menu.item.tools.draw.arrow_down", "tools.draw.arrow_down", ""),
+    Item::leaf("menu.item.tools.draw.point", "tools.draw.point", ""),
+    SEP,
+    Item::leaf("menu.item.tools.draw.flow", "tools.draw.flow", ""),
+    Item::leaf("menu.item.tools.draw.color_box", "tools.draw.color_box", ""),
+];
+
 /// In-place reformatters, grouped under Tools → Format.
 const TOOLS_FORMAT: &[Item] = &[
     Item::leaf("menu.item.tools.format.json_pretty", "tools.format.json_pretty", ""),
@@ -535,6 +558,7 @@ const TOOLS: &[Item] = &[
     Item::sub("menu.item.tools.checksum", TOOLS_CHECKSUM),
     Item::sub("menu.item.tools.convert", TOOLS_CONVERT),
     Item::sub("menu.item.tools.format", TOOLS_FORMAT),
+    Item::sub("menu.item.tools.draw", TOOLS_DRAW),
     Item::leaf("menu.item.tools.color_converter", "tools.color_converter", ""),
     Item::leaf("menu.item.tools.convert.unit", "tools.convert.unit", ""),
     Item::leaf("menu.item.tools.markdown_preview", "tools.markdown_preview", ""),

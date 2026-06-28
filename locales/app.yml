@@ -4264,6 +4264,52 @@ menu.item.tools.color_converter:
   bn: "রঙ রূপান্তরকারী…"
   zh: "颜色转换器…"
   ja: "カラーコンバーター…"
+menu.item.tools.draw:
+  en: "Draw"
+  es: "Dibujar"
+  fr: "Dessiner"
+  de: "Zeichnen"
+  cy: "Lluniadu"
+  ga: "Tarraing"
+  gd: "Tarraing"
+  pl: "Rysuj"
+  pt: "Desenhar"
+  ru: "Рисование"
+  ar: "رسم"
+  hi: "ड्रॉ"
+  bn: "আঁকা"
+  zh: "绘图"
+  ja: "描画"
+menu.item.tools.draw.rectangle:
+  en: "Rectangle"
+menu.item.tools.draw.rounded:
+  en: "Rounded Rectangle"
+menu.item.tools.draw.document:
+  en: "Document"
+menu.item.tools.draw.storage:
+  en: "Storage"
+menu.item.tools.draw.line_h:
+  en: "Horizontal Line"
+menu.item.tools.draw.line_v:
+  en: "Vertical Line"
+menu.item.tools.draw.dashed_h:
+  en: "Horizontal Dashed Line"
+menu.item.tools.draw.dashed_v:
+  en: "Vertical Dashed Line"
+menu.item.tools.draw.arrow_right:
+  en: "Arrow Right"
+menu.item.tools.draw.arrow_left:
+  en: "Arrow Left"
+menu.item.tools.draw.arrow_up:
+  en: "Arrow Up"
+menu.item.tools.draw.arrow_down:
+  en: "Arrow Down"
+menu.item.tools.draw.point:
+  en: "Point"
+menu.item.tools.draw.flow:
+  en: "Two-Box Flow"
+menu.item.tools.draw.color_box:
+  en: "Colored Box"
 menu.item.tools.format:
   en: "Format"
   es: "Formatear"
