@@ -3794,10 +3794,10 @@ menu.name.vim:
   en: "Vi"
 menu.name.spacemacs:
   en: "Spacemacs"
-menu.name.jetbrains_mac:
-  en: "JetBrains IDEA macOS"
-menu.name.jetbrains_win:
-  en: "JetBrains IDEA Windows"
+menu.name.intellij_mac:
+  en: "IntelliJ + macOS"
+menu.name.intellij_win:
+  en: "IntelliJ + Windows"
 menu.name.eclipse:
   en: "Eclipse"
 menu.name.md5:

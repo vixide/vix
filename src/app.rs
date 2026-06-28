@@ -568,9 +568,9 @@ enum Keymap {
     /// sequences (e.g. `SPC f f` find file).
     Spacemacs,
     /// `IntelliJ` IDEA (macOS) shortcuts, with `Ctrl` standing in for `Cmd`.
-    JetBrainsMac,
+    IntelliJMac,
     /// `IntelliJ` IDEA (Windows/Linux) shortcuts.
-    JetBrainsWin,
+    IntelliJWin,
     /// Eclipse (Windows) shortcuts.
     Eclipse,
 }
@@ -584,8 +584,9 @@ impl Keymap {
             // `vi` is the current id; `vim` is accepted for older configs.
             "vi" | "vim" => Keymap::Vim,
             "spacemacs" => Keymap::Spacemacs,
-            "jetbrains-mac" => Keymap::JetBrainsMac,
-            "jetbrains-win" => Keymap::JetBrainsWin,
+            // `intellij-*` are the current ids; `jetbrains-*` load older configs.
+            "intellij-mac" | "jetbrains-mac" => Keymap::IntelliJMac,
+            "intellij-win" | "jetbrains-win" => Keymap::IntelliJWin,
             "eclipse" => Keymap::Eclipse,
             _ => Keymap::Apple,
         }
@@ -1715,13 +1716,13 @@ impl App {
                     return;
                 }
             }
-            Keymap::JetBrainsMac => {
-                if self.jetbrains_key(key, false) || self.global_shared_key(key) {
+            Keymap::IntelliJMac => {
+                if self.intellij_key(key, false) || self.global_shared_key(key) {
                     return;
                 }
             }
-            Keymap::JetBrainsWin => {
-                if self.jetbrains_key(key, true) || self.global_shared_key(key) {
+            Keymap::IntelliJWin => {
+                if self.intellij_key(key, true) || self.global_shared_key(key) {
                     return;
                 }
             }
@@ -1870,15 +1871,15 @@ impl App {
         false
     }
 
-    // ----- keymap: JetBrains IDEA (macOS / Windows) -----------------------
+    // ----- keymap: IntelliJ (macOS / Windows) -----------------------
 
-    /// `JetBrains` IDEA keymap dispatch (`Ctrl` stands in for `Cmd` on macOS).
+    /// `IntelliJ` IDEA keymap dispatch (`Ctrl` stands in for `Cmd` on macOS).
     /// `win` selects the Windows/Linux go-to bindings (Ctrl+N / Ctrl+Shift+N /
     /// Ctrl+G) vs the macOS ones (Ctrl+O / Ctrl+Shift+O / Ctrl+L). Editing chords
     /// (undo/cut/copy/paste/select-all) fall through to the editor widget. Returns
     /// true if consumed.
     #[allow(clippy::too_many_lines)]
-    fn jetbrains_key(&mut self, key: KeyEvent, win: bool) -> bool {
+    fn intellij_key(&mut self, key: KeyEvent, win: bool) -> bool {
         // `Ctrl+Alt+L`: reformat (Reformat Code).
         if Self::ctrl(&key) && Self::alt(&key) {
             if let KeyCode::Char(c) = key.code {

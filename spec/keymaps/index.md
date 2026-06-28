@@ -18,15 +18,15 @@ Vix ships four keymaps. **Apple** is the default and matches Vix's own bindings.
 | Emacs | `emacs` | Layered `Ctrl` chords and a `Ctrl+X` prefix, e.g. `Ctrl+X Ctrl+F` to open. |
 | Vi | `vi` | Modal editing: a Normal mode for motions and commands, plus an Insert mode and a `:` command line. (Accepts the legacy id `vim`.) |
 | Spacemacs | `spacemacs` | Vi modal editing plus a `Space` leader for menu-like command sequences (e.g. `SPC f f` find file). |
-| JetBrains IDEA macOS | `jetbrains-mac` | IntelliJ IDEA (macOS) defaults, `Ctrl` for `Cmd` — `Ctrl+Shift+O` Go to File, `Ctrl+B` Go to Declaration, `Ctrl+Alt+L` Reformat. |
-| JetBrains IDEA Windows | `jetbrains-win` | IntelliJ IDEA (Windows) defaults — `Ctrl+Shift+N` Go to File, `Ctrl+G` Go to Line, `Ctrl+Y` delete line. |
+| IntelliJ + macOS | `intellij-mac` | IntelliJ (macOS) defaults, `Ctrl` for `Cmd` — `Ctrl+Shift+O` Go to File, `Ctrl+B` Go to Declaration, `Ctrl+Alt+L` Reformat. |
+| IntelliJ + Windows | `intellij-win` | IntelliJ (Windows) defaults — `Ctrl+Shift+N` Go to File, `Ctrl+G` Go to Line, `Ctrl+Y` delete line. |
 | Eclipse | `eclipse` | Eclipse (Windows) defaults — `Ctrl+Shift+R` Open Resource, `Ctrl+Shift+T` Open Type, `Ctrl+3` Quick Access, `F3` Open Declaration. |
 
 Each keymap gets first chance to consume a key. Apple and VS Code dispatch their
-shortcuts directly; the others (Emacs, Vi, Spacemacs, both JetBrains, Eclipse) try
+shortcuts directly; the others (Emacs, Vi, Spacemacs, both IntelliJ, Eclipse) try
 their own handling and then fall back to a **shared** layer (menu-bar mnemonics
 like `Alt+F` and function keys like `F10`) before the focused pane handles the
-key. The JetBrains and Eclipse keymaps let editing chords (`Ctrl+Z/X/C/V/A`) fall
+key. The IntelliJ and Eclipse keymaps let editing chords (`Ctrl+Z/X/C/V/A`) fall
 through to the editor widget.
 
 ## Choosing a keymap
@@ -42,8 +42,8 @@ model order, and is kept in sync with the keymap model by a test.
 | Emacs | `view.keymap:emacs` |
 | Vi | `view.keymap:vi` |
 | Spacemacs | `view.keymap:spacemacs` |
-| JetBrains IDEA macOS | `view.keymap:jetbrains-mac` |
-| JetBrains IDEA Windows | `view.keymap:jetbrains-win` |
+| IntelliJ + macOS | `view.keymap:intellij-mac` |
+| IntelliJ + Windows | `view.keymap:intellij-win` |
 | Eclipse | `view.keymap:eclipse` |
 
 Choosing an item dispatches `view.keymap:<id>`. The host:

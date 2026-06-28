@@ -61,8 +61,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   re-root the editor at a recent workspace without relaunching: saves the current
   session, rebuilds explorer/Git/LSP, and restores the chosen project's session.
   See `spec/switch-project/index.md`.
-- **JetBrains IDEA & Eclipse keymaps** (**View → Keymap**) — three new keymaps
-  mirroring IntelliJ IDEA (macOS and Windows defaults) and Eclipse (Windows). See
+- **IntelliJ & Eclipse keymaps** (**View → Keymap**) — three new keymaps
+  mirroring IntelliJ (macOS and Windows defaults) and Eclipse (Windows). See
   `spec/keymaps/index.md`.
 - **Spacemacs keymap** (**View → Keymap → Spacemacs**) — Vim-style modal editing
   plus a `Space` leader for menu-like command sequences (`SPC f f` open, `SPC g s`
