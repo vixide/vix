@@ -33,6 +33,7 @@ application/ld+json	JSON for Linked Data (JSON-LD)	.jsonld	text
 text/markdown	Markdown	.md, .markdown	text
 text/plantuml	PlantUML	.plantuml, .puml	text
 text/graphviz	Graphviz	.graphviz, .gv, .dot	text
+text/mermaid	Mermaid	.mmd, .mermaid	text
 audio/midi	Musical Instrument Digital Interface (MIDI)	.mid, .midi	binary
 text/javascript	JavaScript module	.mjs	text
 audio/mpeg	MP3 audio	.mp3	binary

@@ -54,6 +54,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Graphviz media type** (`text/graphviz`, `.graphviz`/`.gv`/`.dot`) plus a DOT
   snippet library (directed/undirected graphs, nodes, edges, clusters, ranks,
   attribute defaults, record nodes).
+- **Mermaid media type** (`text/mermaid`, `.mmd`/`.mermaid`) plus a snippet
+  library covering flowcharts, sequence/class/state/ER diagrams, gantt, pie,
+  mindmap, git graph, user journey, timeline, and quadrant charts.
 - **Bundled example snippet libraries** under `config/media-types/<type>/snippets/examples.json`
   for ~38 media types — the originals (Python, Plain, TypeScript, Rust, Java, C++,
   C#, JavaScript, C, Ruby, JSON, YAML, SQL) plus HTML, CSS, Markdown, Go, TOML,

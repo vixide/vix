@@ -112,6 +112,8 @@ fn project_media_type_example_snippets_load() {
         ("puml", "text/plantuml"),
         ("gv", "text/graphviz"),
         ("dot", "text/graphviz"),
+        ("mmd", "text/mermaid"),
+        ("mermaid", "text/mermaid"),
     ] {
         assert_eq!(vix::media_type::for_extension(ext).unwrap().media_type, mt, "{ext} → {mt}");
         let snips = vix::snippets::load_scoped(Some(mt), root, proj);

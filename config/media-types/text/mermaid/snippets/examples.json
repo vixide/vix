@@ -1,0 +1,208 @@
+{
+  "Flowchart": {
+    "prefix": "flowchart",
+    "body": [
+      "flowchart ${1:TD}",
+      "\t${2:A}[${3:Start}] --> ${4:B}[${5:End}]",
+      "\t$0"
+    ],
+    "description": "Flowchart skeleton (TD/LR/BT/RL)"
+  },
+  "Flowchart node": {
+    "prefix": "node",
+    "body": ["${1:id}[${2:Label}]$0"],
+    "description": "Rectangular flowchart node"
+  },
+  "Flowchart node (round)": {
+    "prefix": "round",
+    "body": ["${1:id}(${2:Label})$0"],
+    "description": "Rounded flowchart node"
+  },
+  "Flowchart node (decision)": {
+    "prefix": "decision",
+    "body": ["${1:id}{${2:Question?}}$0"],
+    "description": "Diamond decision node"
+  },
+  "Flowchart edge": {
+    "prefix": "edge",
+    "body": ["${1:A} --> ${2:B}$0"],
+    "description": "Edge between nodes"
+  },
+  "Flowchart edge with label": {
+    "prefix": "edgel",
+    "body": ["${1:A} -->|${2:label}| ${3:B}$0"],
+    "description": "Labeled edge"
+  },
+  "Subgraph": {
+    "prefix": "subgraph",
+    "body": [
+      "subgraph ${1:title}",
+      "\t${2:A} --> ${3:B}",
+      "\t$0",
+      "end"
+    ],
+    "description": "Flowchart subgraph"
+  },
+  "Sequence diagram": {
+    "prefix": "sequence",
+    "body": [
+      "sequenceDiagram",
+      "\tparticipant ${1:Alice}",
+      "\tparticipant ${2:Bob}",
+      "\t${1:Alice}->>${2:Bob}: ${3:Hello}",
+      "\t${2:Bob}-->>${1:Alice}: ${4:Hi}",
+      "\t$0"
+    ],
+    "description": "Sequence diagram skeleton"
+  },
+  "Sequence message": {
+    "prefix": "msg",
+    "body": ["${1:Alice}->>${2:Bob}: ${3:message}$0"],
+    "description": "Solid-arrow message"
+  },
+  "Sequence loop": {
+    "prefix": "loop",
+    "body": [
+      "loop ${1:Every minute}",
+      "\t${2:Alice}->>${3:Bob}: ${4:ping}",
+      "\t$0",
+      "end"
+    ],
+    "description": "Sequence loop block"
+  },
+  "Sequence alt": {
+    "prefix": "alt",
+    "body": [
+      "alt ${1:is sunny}",
+      "\t${2:Alice}->>${3:Bob}: ${4:walk}",
+      "else ${5:is rainy}",
+      "\t${2:Alice}->>${3:Bob}: ${6:stay in}",
+      "end$0"
+    ],
+    "description": "Sequence alt/else block"
+  },
+  "Sequence note": {
+    "prefix": "note",
+    "body": ["Note over ${1:Alice},${2:Bob}: ${3:text}$0"],
+    "description": "Note over participants"
+  },
+  "Class diagram": {
+    "prefix": "class",
+    "body": [
+      "classDiagram",
+      "\tclass ${1:Animal} {",
+      "\t\t+${2:String} ${3:name}",
+      "\t\t+${4:move()}",
+      "\t}",
+      "\t$0"
+    ],
+    "description": "Class diagram skeleton"
+  },
+  "Class relationship": {
+    "prefix": "rel",
+    "body": ["${1:Animal} <|-- ${2:Dog}$0"],
+    "description": "Inheritance relationship"
+  },
+  "State diagram": {
+    "prefix": "state",
+    "body": [
+      "stateDiagram-v2",
+      "\t[*] --> ${1:Idle}",
+      "\t${1:Idle} --> ${2:Running}: ${3:start}",
+      "\t${2:Running} --> [*]: ${4:stop}",
+      "\t$0"
+    ],
+    "description": "State diagram skeleton"
+  },
+  "ER diagram": {
+    "prefix": "erd",
+    "body": [
+      "erDiagram",
+      "\t${1:CUSTOMER} ||--o{ ${2:ORDER} : ${3:places}",
+      "\t${2:ORDER} ||--|{ ${4:LINE_ITEM} : ${5:contains}",
+      "\t$0"
+    ],
+    "description": "Entity-relationship diagram"
+  },
+  "Gantt chart": {
+    "prefix": "gantt",
+    "body": [
+      "gantt",
+      "\ttitle ${1:Project}",
+      "\tdateFormat YYYY-MM-DD",
+      "\tsection ${2:Phase}",
+      "\t${3:Task} :${4:a1}, ${5:2026-01-01}, ${6:7d}",
+      "\t$0"
+    ],
+    "description": "Gantt chart skeleton"
+  },
+  "Pie chart": {
+    "prefix": "pie",
+    "body": [
+      "pie title ${1:Pets}",
+      "\t\"${2:Dogs}\" : ${3:42}",
+      "\t\"${4:Cats}\" : ${5:17}",
+      "\t$0"
+    ],
+    "description": "Pie chart"
+  },
+  "Mindmap": {
+    "prefix": "mindmap",
+    "body": [
+      "mindmap",
+      "\troot((${1:central}))",
+      "\t\t${2:branch}",
+      "\t\t\t${3:leaf}",
+      "\t\t$0"
+    ],
+    "description": "Mindmap skeleton"
+  },
+  "Git graph": {
+    "prefix": "gitgraph",
+    "body": [
+      "gitGraph",
+      "\tcommit",
+      "\tbranch ${1:develop}",
+      "\tcheckout ${1:develop}",
+      "\tcommit",
+      "\tcheckout main",
+      "\tmerge ${1:develop}",
+      "\t$0"
+    ],
+    "description": "Git graph skeleton"
+  },
+  "User journey": {
+    "prefix": "journey",
+    "body": [
+      "journey",
+      "\ttitle ${1:My day}",
+      "\tsection ${2:Morning}",
+      "\t\t${3:Wake up}: ${4:3}: ${5:Me}",
+      "\t\t$0"
+    ],
+    "description": "User journey diagram"
+  },
+  "Timeline": {
+    "prefix": "timeline",
+    "body": [
+      "timeline",
+      "\ttitle ${1:History}",
+      "\t${2:2021} : ${3:event}",
+      "\t${4:2022} : ${5:event}",
+      "\t$0"
+    ],
+    "description": "Timeline diagram"
+  },
+  "Quadrant chart": {
+    "prefix": "quadrant",
+    "body": [
+      "quadrantChart",
+      "\ttitle ${1:Reach and engagement}",
+      "\tx-axis ${2:Low Reach} --> ${3:High Reach}",
+      "\ty-axis ${4:Low Engagement} --> ${5:High Engagement}",
+      "\t${6:Campaign A}: [${7:0.3}, ${8:0.6}]",
+      "\t$0"
+    ],
+    "description": "Quadrant chart"
+  }
+}
