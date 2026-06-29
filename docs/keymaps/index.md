@@ -1,9 +1,9 @@
 # Keymaps
 
 A **keymap** is a keyboard navigation style for moving through the editor, menus,
-file explorer, and more. Vix ships eight keymaps — **Apple**, **macOS VSCode**,
-**Emacs**, **Vi**, **Spacemacs**, **IntelliJ + macOS**, **IntelliJ + Windows**,
-and **Eclipse** — and exactly one is active at a time.
+file explorer, and more. Vix ships nine keymaps — **Apple**, **VSCode macOS**,
+**VSCode Windows**, **Emacs**, **Vi**, **Spacemacs**, **IntelliJ macOS**,
+**IntelliJ Windows**, and **Eclipse** — and exactly one is active at a time.
 
 **Status:** Shipped. The choice persists in the `keymap` setting (default
 `apple`).
@@ -15,12 +15,13 @@ Open **View → Keymap…** to pick the active keymap. The options are:
 | Title       | Tooltip                  | Example: open file chooser | Example: quit |
 | ----------- | ------------------------ | -------------------------- | ------------- |
 | Apple       | Apple controls           | `Control-O`                | `Control-Q`   |
-| macOS VSCode | VS Code (macOS) bindings | `Control-P` (Quick Open)   | `Control-Q`   |
+| VSCode macOS | VS Code (macOS) bindings | `Control-P` (Quick Open)   | `Control-Q`   |
+| VSCode Windows | VS Code (Windows) bindings | `Control-P` (Quick Open) | `Control-Q` |
 | Emacs       | Emacs chords             | `Control-X Control-F`      | `Control-X Control-C` |
 | Vi         | Vi modes                | `:Ex`                      | `:q!`         |
 | Spacemacs   | Vi modes + Space leader | `SPC f f`                  | `SPC q q`     |
-| IntelliJ + macOS | IntelliJ (macOS) | `Control-Shift-O` (Go to File) | `Control-Q` |
-| IntelliJ + Windows | IntelliJ (Windows) | `Control-Shift-N` (Go to File) | `Control-Q` |
+| IntelliJ macOS | IntelliJ (macOS) | `Control-Shift-O` (Go to File) | `Control-Q` |
+| IntelliJ Windows | IntelliJ (Windows) | `Control-Shift-N` (Go to File) | `Control-Q` |
 | Eclipse     | Eclipse (Windows)        | `Control-Shift-R` (Open Resource) | `Control-Q` |
 
 Your selection is saved to the `keymap` setting, so it persists across sessions.
@@ -80,7 +81,7 @@ and the function keys (`F1`, `F3`, `F10`, `F12`) work in **every** keymap.
 Modifier shortcuts in the style of macOS and Windows — for example, `Ctrl-C` for
 Copy. Apple is not modal. See `../../keybindings/index.md` for the full list.
 
-### macOS VSCode
+### VSCode macOS
 
 VS Code's signature shortcuts (with `Ctrl` standing in for `Cmd`):
 

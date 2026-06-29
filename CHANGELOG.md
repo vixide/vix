@@ -41,6 +41,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Keymap renames + a new VSCode Windows keymap.** Display names dropped the `+`
+  ("IntelliJ macOS"/"IntelliJ Windows") and reordered VS Code ("VSCode macOS");
+  added a **VSCode Windows** keymap. Canonical ids are now full platform names
+  (`vscode-macos`, `vscode-windows`, `intellij-macos`, `intellij-windows`); the
+  old `vscode`/`intellij-mac`/`intellij-win` ids still load. Dropped the
+  `jetbrains-*` aliases.
 - **One syntax-highlight query per viewport.** The non-wrapped renderer now runs a
   single Tree-sitter highlight query over the whole visible region instead of one
   per line — cheaper while typing — and the highlight cache memoizes a single

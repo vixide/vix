@@ -4,8 +4,8 @@
 //! file explorer. Exactly one is active at a time:
 //!
 //! - **Apple** — modifier keys trigger system-style actions (e.g. `control-o`).
-//! - **macOS `VSCode`** — VS Code's signature shortcuts (e.g. `control-p` Quick
-//!   Open, `control-shift-p` Command Palette).
+//! - **`VSCode` macOS / Windows** — VS Code's signature shortcuts (e.g.
+//!   `control-p` Quick Open, `control-shift-p` Command Palette).
 //! - **Emacs** — layered "chord" sequences run functions (e.g. `control-x-f`).
 //! - **Vi** — modal editing, where keys mean different things per mode.
 //! - **Spacemacs** — Vi-style modal editing plus a `Space` leader for menus
@@ -34,12 +34,13 @@ pub struct Keymap {
 /// All keymaps, in menu order. Apple is first (Vix's default bindings).
 pub const KEYMAPS: &[Keymap] = &[
     Keymap { id: "apple", name: "Apple", tooltip: "Apple controls" },
-    Keymap { id: "vscode", name: "macOS VSCode", tooltip: "VS Code (macOS) bindings" },
+    Keymap { id: "vscode-macos", name: "VSCode macOS", tooltip: "VS Code (macOS) bindings" },
+    Keymap { id: "vscode-windows", name: "VSCode Windows", tooltip: "VS Code (Windows) bindings" },
     Keymap { id: "emacs", name: "Emacs", tooltip: "Emacs chords" },
     Keymap { id: "vi", name: "Vi", tooltip: "Vi modes" },
     Keymap { id: "spacemacs", name: "Spacemacs", tooltip: "Vi modes + Space leader" },
-    Keymap { id: "intellij-mac", name: "IntelliJ + macOS", tooltip: "IntelliJ (macOS) bindings" },
-    Keymap { id: "intellij-win", name: "IntelliJ + Windows", tooltip: "IntelliJ (Windows) bindings" },
+    Keymap { id: "intellij-macos", name: "IntelliJ macOS", tooltip: "IntelliJ (macOS) bindings" },
+    Keymap { id: "intellij-windows", name: "IntelliJ Windows", tooltip: "IntelliJ (Windows) bindings" },
     Keymap { id: "eclipse", name: "Eclipse", tooltip: "Eclipse (Windows) bindings" },
 ];
 

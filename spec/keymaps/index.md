@@ -7,19 +7,20 @@ it. Switching keymaps changes the meaning of keys, not the available actions: th
 same commands (open, save, find, move the cursor) stay reachable; only the keys
 that trigger them differ.
 
-Vix ships four keymaps. **Apple** is the default and matches Vix's own bindings.
+Vix ships nine keymaps. **Apple** is the default and matches Vix's own bindings.
 
 ## The keymaps
 
 | Keymap | Id | Philosophy |
 | ------ | -- | ---------- |
 | Apple | `apple` | Modifier-key shortcuts (the default), e.g. `Ctrl+O` to open, `Ctrl+S` to save. |
-| macOS VSCode | `vscode` | VS Code's signature shortcuts, with `Ctrl` standing in for `Cmd` — `Ctrl+P` Quick Open, `Ctrl+Shift+P` Command Palette, `Ctrl+G` Go to Line. |
+| VSCode macOS | `vscode-macos` | VS Code's signature shortcuts, with `Ctrl` standing in for `Cmd` — `Ctrl+P` Quick Open, `Ctrl+Shift+P` Command Palette, `Ctrl+G` Go to Line. |
+| VSCode Windows | `vscode-windows` | VS Code (Windows) shortcuts; the same `Ctrl`-based bindings as VSCode macOS in the terminal. |
 | Emacs | `emacs` | Layered `Ctrl` chords and a `Ctrl+X` prefix, e.g. `Ctrl+X Ctrl+F` to open. |
 | Vi | `vi` | Modal editing: a Normal mode for motions and commands, plus an Insert mode and a `:` command line. (Accepts the legacy id `vim`.) |
 | Spacemacs | `spacemacs` | Vi modal editing plus a `Space` leader for menu-like command sequences (e.g. `SPC f f` find file). |
-| IntelliJ + macOS | `intellij-mac` | IntelliJ (macOS) defaults, `Ctrl` for `Cmd` — `Ctrl+Shift+O` Go to File, `Ctrl+B` Go to Declaration, `Ctrl+Alt+L` Reformat. |
-| IntelliJ + Windows | `intellij-win` | IntelliJ (Windows) defaults — `Ctrl+Shift+N` Go to File, `Ctrl+G` Go to Line, `Ctrl+Y` delete line. |
+| IntelliJ macOS | `intellij-macos` | IntelliJ (macOS) defaults, `Ctrl` for `Cmd` — `Ctrl+Shift+O` Go to File, `Ctrl+B` Go to Declaration, `Ctrl+Alt+L` Reformat. |
+| IntelliJ Windows | `intellij-windows` | IntelliJ (Windows) defaults — `Ctrl+Shift+N` Go to File, `Ctrl+G` Go to Line, `Ctrl+Y` delete line. |
 | Eclipse | `eclipse` | Eclipse (Windows) defaults — `Ctrl+Shift+R` Open Resource, `Ctrl+Shift+T` Open Type, `Ctrl+3` Quick Access, `F3` Open Declaration. |
 
 Each keymap gets first chance to consume a key. Apple and VS Code dispatch their
@@ -32,18 +33,19 @@ through to the editor widget.
 ## Choosing a keymap
 
 The keymap is selected from the **View → Keymap** submenu in the top menu bar.
-The submenu lists the four keymaps by their proper names (not translated), in
+The submenu lists the nine keymaps by their proper names (not translated), in
 model order, and is kept in sync with the keymap model by a test.
 
 | Item | Action |
 | ---- | ------ |
 | Apple | `view.keymap:apple` |
-| macOS VSCode | `view.keymap:vscode` |
+| VSCode macOS | `view.keymap:vscode-macos` |
+| VSCode Windows | `view.keymap:vscode-windows` |
 | Emacs | `view.keymap:emacs` |
 | Vi | `view.keymap:vi` |
 | Spacemacs | `view.keymap:spacemacs` |
-| IntelliJ + macOS | `view.keymap:intellij-mac` |
-| IntelliJ + Windows | `view.keymap:intellij-win` |
+| IntelliJ macOS | `view.keymap:intellij-macos` |
+| IntelliJ Windows | `view.keymap:intellij-windows` |
 | Eclipse | `view.keymap:eclipse` |
 
 Choosing an item dispatches `view.keymap:<id>`. The host:
@@ -158,7 +160,7 @@ the modal handler is `App::spacemacs_key` / `spacemacs_leader_key`.
 
 The list of keymaps is pure data in the `keymap_model` crate
 (`keymap_model/src/lib.rs`): the `Keymap { id, name, tooltip }` struct, the
-`KEYMAPS` slice (Apple, macOS VSCode, Emacs, Vi — in menu order), and the
+`KEYMAPS` slice (Apple, VSCode macOS, Emacs, Vi — in menu order), and the
 `by_id` lookup.
 
 The View → Keymap submenu is `VIEW_KEYMAP` in `src/menu.rs`, one leaf per keymap

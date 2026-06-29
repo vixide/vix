@@ -166,7 +166,7 @@ Also shipped: **internationalization** (`rust-i18n`; 27 selectable languages
 including Klingon and Sindarin, English fallback, `--locale` flag + `locale`
 setting + live **View → Locale…**), **themes** (every theme is a JSON theme;
 Dark, Light, and more ship bundled, plus user-installed; live **View → Theme…**;
-see `theme_model/spec/index.md`), **keymaps** (Apple / macOS VSCode / Emacs / Vi /
+see `theme_model/spec/index.md`), **keymaps** (Apple / VSCode macOS / Emacs / Vi /
 Spacemacs / IntelliJ macOS / IntelliJ Windows / Eclipse keyboard navigation
 styles, live **View → Keymap…**; see `keymap_model/spec/index.md`),
 **configuration** (`confy` TOML), a **CLI** (`clap`), the **Vix menu**

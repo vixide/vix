@@ -4484,13 +4484,13 @@ fn view_keymap_submenu_actions_set_the_keymap() {
     assert_eq!(app.settings.keymap, "apple", "default keymap");
 
     // The View → Keymap submenu dispatches `view.keymap:<id>` per item.
-    app.run_action("view.keymap:vscode");
-    assert_eq!(app.settings.keymap, "vscode");
+    app.run_action("view.keymap:vscode-macos");
+    assert_eq!(app.settings.keymap, "vscode-macos");
 
     app.run_action("view.keymap:vi");
     assert_eq!(app.settings.keymap, "vi");
 
-    for id in ["intellij-mac", "intellij-win", "eclipse"] {
+    for id in ["vscode-windows", "intellij-macos", "intellij-windows", "eclipse"] {
         app.run_action(&format!("view.keymap:{id}"));
         assert_eq!(app.settings.keymap, id);
     }
