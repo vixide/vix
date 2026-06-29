@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Help menu additions**: License (crate metadata from `Cargo.toml`), Report an
+  Issue… (links the issue tracker), and Privacy Statement — each shown in a
+  scrollable overlay.
 - **Renamed the Debug menu to Run** (action ids `debug.*` → `run.*`) and moved it
   to just after the new Go menu (Alt+R).
 - **Top-level Go menu** (promoted from Edit → Go, placed after View, Alt+N). Adds

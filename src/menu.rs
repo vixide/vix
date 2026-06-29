@@ -831,6 +831,10 @@ const ORG: &[Item] = &[
 const HELP: &[Item] = &[
     Item::leaf("menu.item.help.welcome", "help.welcome", ""),
     Item::leaf("menu.item.help.shortcuts", "help.shortcuts", "F1"),
+    SEP,
+    Item::leaf("menu.item.help.license", "help.license", ""),
+    Item::leaf("menu.item.help.report_issue", "help.report_issue", ""),
+    Item::leaf("menu.item.help.privacy", "help.privacy", ""),
 ];
 
 /// Available theme names for the View → Theme submenu, set once by the host at
