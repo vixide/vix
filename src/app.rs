@@ -1062,6 +1062,11 @@ pub struct App {
     pub pomodoro_open: bool,
     /// Wall-clock anchor for the running Pomodoro countdown; `None` while idle.
     pomodoro_last_tick: Option<std::time::Instant>,
+    /// Last-seen on-disk modification time per open file path, for detecting
+    /// external changes (auto-reload). Seeded lazily on first poll.
+    disk_mtimes: std::collections::HashMap<PathBuf, std::time::SystemTime>,
+    /// Throttle anchor for the external-change poll; `None` until the first poll.
+    last_disk_poll: Option<std::time::Instant>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
     pub clip: Vec<PathBuf>,
     /// Whether [`App::clip`] holds a cut (move) rather than a copy.
@@ -1298,7 +1303,7 @@ impl App {
             hover: None, completion: None, dialog: None, color_converter: None,
             unit_converter: None, calculator: None, regex_tester: None, code_actions: None,
             code_lens: None, pomodoro: None,
-            pomodoro_open: false, pomodoro_last_tick: None,
+            pomodoro_open: false, pomodoro_last_tick: None, disk_mtimes: std::collections::HashMap::new(), last_disk_poll: None,
             clip: Vec::new(), clip_cut: false,
             nav_history: Vec::new(), bookmarks: Vec::new(), nav_idx: 0,
             picker: None,
@@ -6066,6 +6071,41 @@ impl App {
     /// Install any completed background reparse (large-file async highlighting).
     pub fn poll_parse(&mut self) {
         self.editor.poll_parse();
+    }
+
+    /// Detect files changed on disk by another process (a formatter, `git`, a
+    /// second editor) and react: clean buffers are reloaded; a buffer with unsaved
+    /// edits gets a one-time warning. Throttled to once per second.
+    pub fn poll_file_changes(&mut self) {
+        if self.last_disk_poll.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(1)) {
+            return;
+        }
+        self.last_disk_poll = Some(std::time::Instant::now());
+
+        let mut reload_clean = false;
+        let mut dirty_changed: Vec<PathBuf> = Vec::new();
+        for tab in &self.editor.tabs {
+            let (Some(path), false) = (tab.path.as_ref(), tab.image.is_some()) else { continue };
+            let Ok(mtime) = std::fs::metadata(path).and_then(|m| m.modified()) else { continue };
+            let previous = self.disk_mtimes.insert(path.clone(), mtime);
+            // Only act on a *change* (the first sighting just records the mtime).
+            if previous.is_some_and(|p| p != mtime) {
+                if tab.dirty {
+                    dirty_changed.push(path.clone());
+                } else {
+                    reload_clean = true;
+                }
+            }
+        }
+        if reload_clean {
+            let n = self.editor.reload_clean_from_disk();
+            if n > 0 {
+                self.status = t!("status.reloaded_external", count = n).to_string();
+            }
+        }
+        for path in dirty_changed {
+            self.messages.warn(t!("msg.external_change_unsaved", path = path.display()).to_string());
+        }
     }
 
     /// Whether a background reparse is in flight (keeps the event loop ticking
@@ -13755,6 +13795,31 @@ mod tests {
             "saved file reopened"
         );
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn external_change_reloads_clean_buffer() {
+        let dir = std::env::temp_dir().join(format!("vix-reload-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("note.txt");
+        std::fs::write(&path, "original\n").unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.open_path(&path, false);
+        app.poll_file_changes(); // first sighting records the mtime, no action
+
+        // Change the file on disk, then force the next poll to see a difference
+        // (seed an old stored mtime so the test doesn't depend on clock resolution).
+        std::fs::write(&path, "changed externally\n").unwrap();
+        app.disk_mtimes.insert(path.clone(), std::time::SystemTime::UNIX_EPOCH);
+        app.last_disk_poll = None; // bypass the throttle
+        app.poll_file_changes();
+
+        let text = app.editor.active_tab().unwrap().text();
+        assert!(text.contains("changed externally"), "clean buffer reloaded: {text:?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
