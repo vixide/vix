@@ -102,6 +102,8 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
         // responses) and sync the active document.
         app.poll_lsp();
         app.poll_dap();
+        // Install any completed background reparse (large-file async highlighting).
+        app.poll_parse();
         terminal.draw(|frame| ui::draw(app, frame))?;
         if app.should_quit {
             return Ok(());
@@ -109,7 +111,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
         // Poll with a timeout so the calendar clock refreshes while idle; poll
         // faster while a command is streaming, dashboard metrics are computing,
         // or a language-server request is in flight so output appears promptly.
-        let timeout = if app.command_running() || app.ai_replace_running() || app.dashboard_loading() || app.lsp_busy() || app.pomodoro_running() || app.terminal_running() || app.dap_busy() {
+        let timeout = if app.command_running() || app.ai_replace_running() || app.dashboard_loading() || app.lsp_busy() || app.pomodoro_running() || app.terminal_running() || app.dap_busy() || app.parse_busy() {
             Duration::from_millis(50)
         } else {
             Duration::from_millis(500)

@@ -41,6 +41,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Background (async) syntax parsing for large files.** Buffers ≥ 50 KB now
+  reparse on a background thread after each edit instead of blocking the keystroke,
+  with cancel-on-new-edit and generation-based stale-result rejection (the edited
+  tree keeps rendering until the fresh one lands). Smaller files stay fully
+  synchronous — identical behavior. (Idea from the zee editor's async parser.)
 - **Org → Contacts ([org-contacts](https://github.com/doomelpa/org-contacts)).**
   Manage contacts stored as Org headlines: New Contact (skeleton with a property
   drawer), Find Contacts (name/email/phone table), Insert Field (Email/Phone/

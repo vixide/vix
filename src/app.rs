@@ -6055,6 +6055,18 @@ impl App {
             .unwrap_or_default()
     }
 
+    /// Install any completed background reparse (large-file async highlighting).
+    pub fn poll_parse(&mut self) {
+        self.editor.poll_parse();
+    }
+
+    /// Whether a background reparse is in flight (keeps the event loop ticking
+    /// fast so the new highlights appear promptly).
+    #[must_use]
+    pub fn parse_busy(&self) -> bool {
+        self.editor.parse_pending()
+    }
+
     /// Drain debug-adapter events and apply them. Called each event-loop iteration.
     pub fn poll_dap(&mut self) {
         if !self.dap.is_active() {
