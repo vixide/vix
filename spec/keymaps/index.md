@@ -158,10 +158,10 @@ the modal handler is `App::spacemacs_key` / `spacemacs_leader_key`.
 
 ## As implemented in Vix
 
-The list of keymaps is pure data in the `keymap_model` crate
-(`keymap_model/src/lib.rs`): the `Keymap { id, name, tooltip }` struct, the
-`KEYMAPS` slice (Apple, VSCode macOS, Emacs, Vi — in menu order), and the
-`by_id` lookup.
+The list of keymaps is pure data in the `keymap_model` module
+(`src/keymap_model.rs`): the `Keymap { id, name, tooltip }` struct, the `KEYMAPS`
+slice (Apple, VSCode macOS, VSCode Windows, Emacs, Vi, Spacemacs, IntelliJ macOS,
+IntelliJ Windows, Eclipse — in menu order), and the `by_id` lookup.
 
 The View → Keymap submenu is `VIEW_KEYMAP` in `src/menu.rs`, one leaf per keymap
 with action `view.keymap:<id>`, kept in sync with `KEYMAPS` by the
