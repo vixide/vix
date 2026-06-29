@@ -4072,6 +4072,32 @@ menu.item.org.node.rename_by_title:
   en: "Rename File by Title"
 menu.item.org.node.reset:
   en: "Rebuild Cache"
+menu.item.org.contacts:
+  en: "Contacts"
+menu.item.org.contacts.new:
+  en: "New Contact…"
+menu.item.org.contacts.find:
+  en: "Find Contacts"
+menu.item.org.contacts.insert_field:
+  en: "Insert Field"
+menu.item.org.contacts.email:
+  en: "Email"
+menu.item.org.contacts.phone:
+  en: "Phone"
+menu.item.org.contacts.address:
+  en: "Address"
+menu.item.org.contacts.birthday:
+  en: "Birthday"
+menu.item.org.contacts.nickname:
+  en: "Nickname"
+menu.item.org.contacts.note:
+  en: "Note"
+menu.item.org.contacts.birthdays:
+  en: "Birthdays"
+menu.item.org.contacts.vcard:
+  en: "Export to vCard"
+prompt.contact_new:
+  en: "New contact name"
 menu.name.url:
   en: "URL"
 menu.name.dec:

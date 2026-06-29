@@ -806,6 +806,28 @@ const ORG_NODE: &[Item] = &[
     Item::leaf("menu.item.org.node.reset", "node.reset", ""),
 ];
 
+/// Org-contacts: insert a contact field into the current entry's drawer.
+const ORG_CONTACTS_FIELD: &[Item] = &[
+    Item::leaf("menu.item.org.contacts.email", "org.contacts.field.email", ""),
+    Item::leaf("menu.item.org.contacts.phone", "org.contacts.field.phone", ""),
+    Item::leaf("menu.item.org.contacts.address", "org.contacts.field.address", ""),
+    Item::leaf("menu.item.org.contacts.birthday", "org.contacts.field.birthday", ""),
+    Item::leaf("menu.item.org.contacts.nickname", "org.contacts.field.nickname", ""),
+    Item::leaf("menu.item.org.contacts.note", "org.contacts.field.note", ""),
+];
+
+/// Org-contacts commands (contacts stored as Org headlines), grouped under
+/// Org → Contacts.
+const ORG_CONTACTS: &[Item] = &[
+    Item::leaf("menu.item.org.contacts.new", "org.contacts.new", ""),
+    Item::leaf("menu.item.org.contacts.find", "org.contacts.find", ""),
+    SEP,
+    Item::sub("menu.item.org.contacts.insert_field", ORG_CONTACTS_FIELD),
+    SEP,
+    Item::leaf("menu.item.org.contacts.birthdays", "org.contacts.birthdays", ""),
+    Item::leaf("menu.item.org.contacts.vcard", "org.contacts.vcard", ""),
+];
+
 /// Org-mode editing commands, grouped under the top-level Org menu. Insertion of
 /// Org snippets/markers/blocks lives under Tools → Insert.
 const ORG: &[Item] = &[
@@ -825,6 +847,7 @@ const ORG: &[Item] = &[
     SEP,
     Item::sub("menu.item.org.roam", ORG_ROAM),
     Item::sub("menu.item.org.node", ORG_NODE),
+    Item::sub("menu.item.org.contacts", ORG_CONTACTS),
     Item::sub("menu.item.org.export", ORG_EXPORT),
 ];
 

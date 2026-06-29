@@ -41,6 +41,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Org → Contacts ([org-contacts](https://github.com/doomelpa/org-contacts)).**
+  Manage contacts stored as Org headlines: New Contact (skeleton with a property
+  drawer), Find Contacts (name/email/phone table), Insert Field (Email/Phone/
+  Address/Birthday/Nickname/Note), Birthdays, and Export to vCard 3.0. Pure logic
+  in `crate::org_contacts`.
 - **Help menu additions**: License (crate metadata from `Cargo.toml`), Report an
   Issue… (links the issue tracker), and Privacy Statement — each shown in a
   scrollable overlay.
