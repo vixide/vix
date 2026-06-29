@@ -521,6 +521,36 @@ menu.item.help.shortcuts:
   bn: "কীবোর্ড শর্টকাট"
   zh: "键盘快捷键"
   ja: "キーボードショートカット"
+menu.item.help.license:
+  en: "License"
+menu.item.help.report_issue:
+  en: "Report an Issue…"
+menu.item.help.privacy:
+  en: "Privacy Statement"
+help.license.field_license:
+  en: "License"
+help.license.field_repository:
+  en: "Repository"
+help.license.field_authors:
+  en: "Authors"
+help.report_issue.body:
+  en: |
+    Found a bug or have a feature request?
+
+    Please open an issue on the Vix issue tracker. Include your Vix version
+    (see Help → License), your OS, and clear steps to reproduce the problem.
+help.privacy.body:
+  en: |
+    Privacy Statement
+
+    Vix is a local, offline-first terminal editor. It does not collect,
+    store, or transmit any personal data or telemetry. Your files and
+    keystrokes never leave your machine.
+
+    Optional features that contact the network do so only when you invoke
+    them and only with the endpoints you configure: language servers (LSP),
+    git remotes, and any AI assistant you enable. Disable or omit these to
+    keep Vix fully offline.
 menu.item.ai.chat:
   en: "Chat…"
   es: "Chat…"

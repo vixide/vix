@@ -2586,6 +2586,9 @@ impl App {
             "tab.prev" => self.editor.prev_tab(),
             "help.shortcuts" => self.show_help = true,
             "help.welcome" => self.open_welcome(),
+            "help.license" => self.welcome = Some(WelcomePanel::open(Self::license_lines())),
+            "help.report_issue" => self.welcome = Some(WelcomePanel::open(Self::report_issue_lines())),
+            "help.privacy" => self.welcome = Some(WelcomePanel::open(Self::privacy_lines())),
             "vix.settings" => self.open_settings_file(),
             "vix.about" => {
                 self.dialog = Some(Dialog {
@@ -9670,6 +9673,34 @@ impl App {
         t!("welcome.body").lines().map(str::to_string).collect()
     }
 
+    /// License/about information sourced from the crate metadata (`Cargo.toml`,
+    /// via the `CARGO_PKG_*` build-time environment variables).
+    fn license_lines() -> Vec<String> {
+        let authors = env!("CARGO_PKG_AUTHORS").replace(':', ", ");
+        vec![
+            format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+            String::new(),
+            env!("CARGO_PKG_DESCRIPTION").to_string(),
+            String::new(),
+            format!("{}: {}", t!("help.license.field_license"), env!("CARGO_PKG_LICENSE")),
+            format!("{}: {}", t!("help.license.field_repository"), env!("CARGO_PKG_REPOSITORY")),
+            format!("{}: {}", t!("help.license.field_authors"), authors),
+        ]
+    }
+
+    /// "Report an issue" help text plus the issue-tracker URL.
+    fn report_issue_lines() -> Vec<String> {
+        let mut lines: Vec<String> = t!("help.report_issue.body").lines().map(str::to_string).collect();
+        lines.push(String::new());
+        lines.push(format!("{}/issues", env!("CARGO_PKG_REPOSITORY")));
+        lines
+    }
+
+    /// The privacy statement from the i18n catalog, split into lines.
+    fn privacy_lines() -> Vec<String> {
+        t!("help.privacy.body").lines().map(str::to_string).collect()
+    }
+
     /// Open the user's settings file in the editor. Saves the current settings
     /// first so the file exists (and reflects in-app changes) before opening.
     fn open_settings_file(&mut self) {
@@ -13582,6 +13613,23 @@ mod tests {
     use super::*;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+
+    #[test]
+    fn help_menu_overlays_show_license_issue_and_privacy() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.run_action("help.license");
+        let lic = app.welcome.as_ref().expect("license overlay opens").lines().join("\n");
+        assert!(lic.contains("vix") && lic.contains(env!("CARGO_PKG_VERSION")), "version: {lic}");
+        assert!(lic.contains("Apache-2.0"), "license from Cargo.toml: {lic}");
+
+        app.run_action("help.report_issue");
+        let issue = app.welcome.as_ref().expect("issue overlay opens").lines().join("\n");
+        assert!(issue.contains("github.com/vixide/vix/issues"), "issue URL: {issue}");
+
+        app.run_action("help.privacy");
+        let priv_ = app.welcome.as_ref().expect("privacy overlay opens").lines().join("\n");
+        assert!(priv_.to_lowercase().contains("privacy"), "privacy text: {priv_}");
+    }
 
     #[test]
     fn workspace_save_open_and_add_folder_round_trip() {
