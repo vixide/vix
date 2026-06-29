@@ -13723,6 +13723,10 @@ msg.unknown_action:
   bn: "অজানা কর্ম: %{action}"
   zh: "未知操作：%{action}"
   ja: "不明なアクション: %{action}"
+msg.external_change_unsaved:
+  en: "%{path} changed on disk; your unsaved edits were kept"
+status.reloaded_external:
+  en: "Reloaded %{count} file(s) changed on disk"
 msg.save_failed:
   en: "Save failed: %{error}"
   es: "Error al guardar: %{error}"

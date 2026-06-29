@@ -104,6 +104,8 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
         app.poll_dap();
         // Install any completed background reparse (large-file async highlighting).
         app.poll_parse();
+        // Reload files changed on disk by another process (throttled internally).
+        app.poll_file_changes();
         terminal.draw(|frame| ui::draw(app, frame))?;
         if app.should_quit {
             return Ok(());

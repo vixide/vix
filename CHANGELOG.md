@@ -41,6 +41,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Auto-reload on external change.** Files changed on disk by another process (a
+  formatter, `git checkout`, a second editor) are detected (mtime poll, throttled
+  to 1s): clean buffers reload automatically; a buffer with unsaved edits gets a
+  one-time warning and keeps your edits.
 - **Keymap renames + a new VSCode Windows keymap.** Display names dropped the `+`
   ("IntelliJ macOS"/"IntelliJ Windows") and reordered VS Code ("VSCode macOS");
   added a **VSCode Windows** keymap. Canonical ids are now full platform names
