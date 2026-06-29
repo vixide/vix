@@ -41,6 +41,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **One syntax-highlight query per viewport.** The non-wrapped renderer now runs a
+  single Tree-sitter highlight query over the whole visible region instead of one
+  per line — cheaper while typing — and the highlight cache memoizes a single
+  entry instead of one per visible line. (Idea from the zee editor.)
 - **Undo tree (branch-preserving undo).** Editing after an undo no longer discards
   the redo history — it starts a new branch, so no state is ever lost. Undo/redo
   behave like a linear history by default; **Edit → Switch Undo Branch** cycles
