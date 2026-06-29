@@ -5,7 +5,7 @@ Vix IDE is a high-speed high-security text editor featuring an integrated develo
 Vix looks like this:
 
 ```txt
-Vix  File  Edit  View  Tools  Go  Run  AI  Git  Org  Help
+Vix  File  Edit  View  Go  Run  Tools  AI  Git  Org  Help
 ╭─Explorer-──╮╭ main.rs ──────────────────╮╭Messages────────╮
 │ README.md  ││ 1  fn main() {            ││ Welcome to Vix │ 
 │ src        ││ 2      println!("hello"); ││ Ctrl+B toggles │
