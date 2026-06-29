@@ -4556,7 +4556,7 @@ fn emacs_keymap_chords_open_find_and_quit() {
 #[test]
 fn vscode_keymap_quick_open_command_palette_and_goto_line() {
     let mut app = app_at(Path::new("."));
-    app.settings.keymap = "vscode".to_string();
+    app.settings.keymap = "vscode-macos".to_string();
 
     // Ctrl+P is Quick Open (the file prompt), not the Command Palette.
     app.on_key(ctrl('p'));
