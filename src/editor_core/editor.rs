@@ -886,6 +886,12 @@ impl Editor {
         self.code.parse_pending()
     }
 
+    /// Cycle which undo-tree branch the next `redo` will follow. Returns `true`
+    /// when the current state has more than one branch.
+    pub fn switch_undo_branch(&mut self) -> bool {
+        self.code.switch_undo_branch()
+    }
+
     /// A counter that increases on every content edit, for cheap change detection
     /// (e.g. deciding when to push a `didChange` to a language server).
     #[must_use]

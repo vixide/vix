@@ -110,6 +110,7 @@ const EDIT_FIND: &[Item] = &[
 const EDIT: &[Item] = &[
     Item::leaf("menu.item.edit.undo", "edit.undo", "Ctrl Z"),
     Item::leaf("menu.item.edit.redo", "edit.redo", "Ctrl Shift Z"),
+    Item::leaf("menu.item.edit.undo_branch", "edit.undo_branch", ""),
     SEP,
     Item::leaf("menu.item.edit.cut", "edit.cut", "Ctrl X"),
     Item::leaf("menu.item.edit.copy", "edit.copy", "Ctrl C"),

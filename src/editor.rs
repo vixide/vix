@@ -921,6 +921,12 @@ impl Editor {
         self.active_tab().is_some_and(|t| t.editor.parse_pending())
     }
 
+    /// Cycle which undo-tree branch the next redo follows in the active buffer.
+    /// Returns `true` if the current state has more than one branch.
+    pub fn switch_undo_branch(&mut self) -> bool {
+        self.active_tab_mut().is_some_and(|t| t.editor.switch_undo_branch())
+    }
+
     /// The 0-based start rows of every paragraph (`section == false`) or section
     /// (`section == true`) in the active buffer. A paragraph is a run of non-blank
     /// lines; a section is a run separated by a section break (2+ blank lines).

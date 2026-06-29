@@ -801,6 +801,13 @@ impl Code {
         Some(batch)
     }
     
+    /// Cycle which undo-tree branch `redo` will follow from the current state.
+    /// Returns `true` if the current state has more than one branch. See
+    /// [`crate::editor_core::history::History`].
+    pub fn switch_undo_branch(&mut self) -> bool {
+        self.history.switch_branch()
+    }
+
     /// Redo the next undone batch, reapplying its edits; return the batch if any.
     pub fn redo(&mut self) -> Option<EditBatch> {
         let batch = self.history.redo()?;

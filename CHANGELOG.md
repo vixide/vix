@@ -41,6 +41,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Undo tree (branch-preserving undo).** Editing after an undo no longer discards
+  the redo history — it starts a new branch, so no state is ever lost. Undo/redo
+  behave like a linear history by default; **Edit → Switch Undo Branch** cycles
+  which branch redo follows, making every past state reachable. (Idea from the zee
+  editor's edit-tree.)
 - **Background (async) syntax parsing for large files.** Buffers ≥ 50 KB now
   reparse on a background thread after each edit instead of blocking the keystroke,
   with cancel-on-new-edit and generation-based stale-result rejection (the edited

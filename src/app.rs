@@ -2704,6 +2704,14 @@ impl App {
                     t.dirty = true;
                 }
             }
+            "edit.undo_branch" => {
+                let switched = self.editor.switch_undo_branch();
+                self.status = if switched {
+                    t!("status.undo_branch_switched").to_string()
+                } else {
+                    t!("status.undo_branch_none").to_string()
+                };
+            }
             "edit.cut" => {
                 if let Some(t) = self.editor.active_tab_mut() {
                     t.editor.apply(CutAction {});

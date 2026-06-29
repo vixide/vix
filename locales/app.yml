@@ -1495,6 +1495,12 @@ menu.item.edit.redo:
   bn: "পুনরায় করুন"
   zh: "重做"
   ja: "やり直し"
+menu.item.edit.undo_branch:
+  en: "Switch Undo Branch"
+status.undo_branch_switched:
+  en: "Switched undo branch (redo now follows the other branch)"
+status.undo_branch_none:
+  en: "No alternate undo branch here"
 menu.item.edit.cut:
   en: "Cut"
   es: "Cortar"
