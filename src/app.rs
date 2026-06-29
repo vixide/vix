@@ -157,6 +157,8 @@ pub enum PromptKind {
     GotoSentence,
     /// Jump to the Nth word (Go → Word → Number).
     GotoWord,
+    /// Org-contacts: insert a new-contact skeleton for the entered name.
+    ContactNew,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -2424,8 +2426,9 @@ impl App {
     /// Dispatch a named action (shared by the menu bar, command palette, and
     /// keyboard shortcuts).
     pub fn run_action(&mut self, action: &str) {
-        // Go-menu navigation lives in its own dispatcher (keeps this fn small).
-        if self.go_action(action) { return; }
+        // Go-menu navigation and Org → Contacts live in their own dispatchers
+        // (keeps this function within the line limit).
+        if self.go_action(action) || self.contacts_action(action) { return; }
         match action {
             "file.new" => {
                 self.editor.new_tab();
@@ -3668,6 +3671,9 @@ impl App {
             }
             PromptKind::RoamInsert => self.roam_insert_link(input),
             PromptKind::NodeTransclusion => self.node_insert_transclusion(input),
+            PromptKind::ContactNew if !input.is_empty() => {
+                self.insert_content(&crate::org_contacts::new_contact(input));
+            }
             PromptKind::WorkspaceOpen => self.workspace_open(input),
             PromptKind::WorkspaceSave => self.workspace_save(input),
             PromptKind::WorkspaceAddFolder => self.workspace_add_folder(input),
@@ -12039,6 +12045,32 @@ impl App {
         }
     }
 
+    /// Org → Contacts dispatcher. Returns `true` if it handled `action`.
+    fn contacts_action(&mut self, action: &str) -> bool {
+        if let Some(key) = action.strip_prefix("org.contacts.field.") {
+            self.insert_content(&crate::org_contacts::field_line(key));
+            return true;
+        }
+        match action {
+            "org.contacts.new" => {
+                self.prompt = Some(Prompt::new(PromptKind::ContactNew, t!("prompt.contact_new").to_string()));
+            }
+            "org.contacts.find" => self.contacts_buffer(crate::org_contacts::directory),
+            "org.contacts.birthdays" => self.contacts_buffer(crate::org_contacts::birthdays),
+            "org.contacts.vcard" => self.contacts_buffer(crate::org_contacts::to_vcard),
+            _ => return false,
+        }
+        true
+    }
+
+    /// Compile a cross-file contacts view with `f` (over every project `.org`
+    /// file) into a new buffer.
+    fn contacts_buffer(&mut self, f: fn(&[(String, String)]) -> String) {
+        let files = self.roam_node_files();
+        let buffer = f(&files);
+        self.editor.new_tab_with_content(&buffer);
+    }
+
     /// Go-menu navigation dispatcher. Returns `true` if it handled `action`.
     fn go_action(&mut self, action: &str) -> bool {
         let area = self.editor_view();
@@ -13063,7 +13095,8 @@ impl App {
             | PromptKind::NodeTransclusion
             | PromptKind::WorkspaceOpen | PromptKind::WorkspaceSave | PromptKind::WorkspaceAddFolder
             | PromptKind::GotoParagraph | PromptKind::GotoSection
-            | PromptKind::GotoSentence | PromptKind::GotoWord => {
+            | PromptKind::GotoSentence | PromptKind::GotoWord
+            | PromptKind::ContactNew => {
                 self.accept_roam_prompt(prompt.kind, prompt.input.trim());
             }
             PromptKind::DebugRepl => {
@@ -13613,6 +13646,41 @@ mod tests {
     use super::*;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+
+    #[test]
+    fn org_contacts_new_field_and_views() {
+        let dir = std::env::temp_dir().join(format!("vix-contacts-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("contacts.org"),
+            "* Ada\n  :PROPERTIES:\n  :EMAIL: ada@x.io\n  :BIRTHDAY: 1815-12-10\n  :END:\n",
+        )
+        .unwrap();
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.build_file_index();
+
+        // New Contact inserts a skeleton headline + drawer at the cursor.
+        app.run_action("org.contacts.new");
+        for c in "Grace".chars() {
+            app.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        let buf = app.editor.active_tab().unwrap().text();
+        assert!(buf.contains("* Grace") && buf.contains(":PROPERTIES:") && buf.contains(":EMAIL:"));
+
+        // Insert Field → Phone adds a property line.
+        app.run_action("org.contacts.field.phone");
+        assert!(app.editor.active_tab().unwrap().text().contains(":PHONE:"));
+
+        // Find Contacts and vCard export open buffers built from contacts.org.
+        app.run_action("org.contacts.find");
+        assert!(app.editor.active_tab().unwrap().text().contains("Ada"));
+        app.run_action("org.contacts.vcard");
+        assert!(app.editor.active_tab().unwrap().text().contains("BEGIN:VCARD"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn help_menu_overlays_show_license_issue_and_privacy() {

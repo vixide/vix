@@ -122,6 +122,24 @@ extraction promotes the subtree's nested headlines so they sit at the top level
 of the new file. Pure helpers (`roam::nodeify`, `roam::dead_links`,
 `roam::transclusion`, `roam::all_ids`) are unit-tested.
 
+## Contacts
+
+The **Org → Contacts** submenu brings
+[org-contacts](https://github.com/doomelpa/org-contacts)-style contact management
+to Org files. A contact is a headline (its text is the name) whose `:PROPERTIES:`
+drawer holds `EMAIL` / `PHONE` / `ADDRESS` / `BIRTHDAY` / `NICKNAME` / `NOTE`.
+
+| Item | Action | Effect |
+| ---- | ------ | ------ |
+| New Contact… | `org.contacts.new` | Prompt for a name; insert a contact headline + property-drawer skeleton at the cursor. |
+| Find Contacts | `org.contacts.find` | Compile a name/email/phone table of every contact in the project's `.org` files. |
+| Insert Field → Email/Phone/Address/Birthday/Nickname/Note | `org.contacts.field.*` | Insert a `:KEY:` property line into the current entry's drawer. |
+| Birthdays | `org.contacts.birthdays` | List contacts that have a `BIRTHDAY`, sorted by date. |
+| Export to vCard | `org.contacts.vcard` | Convert all contacts to a vCard 3.0 buffer. |
+
+Pure logic (parse, directory, birthdays, vCard) lives in the unit-tested
+`crate::org_contacts` module.
+
 ## Insertion
 
 Org *content* insertion (snippets, inline markers, blocks) lives under
