@@ -419,6 +419,21 @@ impl Editor {
         total_chars: usize,
     ) {
         let code = self.code_ref();
+        // Highlight the whole visible region in a single Tree-sitter query rather
+        // than one query per line: cheaper while typing, and the (start, end) cache
+        // now memoizes one entry instead of one per visible line.
+        let highlights = {
+            let mut region: Option<(usize, usize)> = None;
+            for screen_y in 0..(area.height as usize) {
+                let Some(line_idx) = self.line_at_row(screen_y) else { break };
+                if line_idx >= total_lines { break }
+                let ls = code.line_to_char(line_idx);
+                let s = code.char_to_byte(ls);
+                let e = code.char_to_byte(ls + code.line_len(line_idx));
+                region = Some(region.map_or((s, e), |(rs, re)| (rs.min(s), re.max(e))));
+            }
+            region.map(|(s, e)| self.highlight_interval(s, e, &self.theme)).unwrap_or_default()
+        };
         for screen_y in 0..(area.height as usize) {
             let Some(line_idx) = self.line_at_row(screen_y) else { break };
             if line_idx >= total_lines { break }
@@ -439,11 +454,6 @@ impl Editor {
             let chars = code.char_slice(start_char, end_char);
 
             let start_byte = code.char_to_byte(start_char);
-            let end_byte = code.char_to_byte(end_char);
-
-            let highlights = self.highlight_interval(
-                start_byte, end_byte, &self.theme
-            );
 
             let mut x = 0;
             let mut byte_idx_in_rope = start_byte;
@@ -597,6 +607,22 @@ mod whitespace_tests {
     /// Collect the glyphs of one rendered row into a String.
     fn row(buf: &Buffer, y: u16, x0: u16, x1: u16) -> String {
         (x0..x1).map(|x| buf[(x, y)].symbol().chars().next().unwrap_or(' ')).collect()
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn viewport_highlight_reaches_lines_beyond_the_first() {
+        use ratatui_core::style::Color;
+        // The whole visible region is highlighted in one query; ensure a token on
+        // the SECOND visible line is still styled (not just the first line).
+        let mut ed = Editor::new("rust", "let a = 1;\nfn main() {}\n", Vec::new()).unwrap();
+        ed.show_line_numbers(false);
+        ed.set_syntax_theme(&[("keyword", "ff0000"), ("keyword.function", "ff0000"), ("function", "ff0000")]);
+        let area = Rect::new(0, 0, 40, 5);
+        let mut buf = Buffer::empty(area);
+        (&ed).render(area, &mut buf);
+        let line1_styled = (0..40).any(|x| buf[(x, 1)].fg == Color::Rgb(255, 0, 0));
+        assert!(line1_styled, "second visible line (fn main) is highlighted via the single viewport query");
     }
 
     #[test]
