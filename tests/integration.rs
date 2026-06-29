@@ -3235,6 +3235,26 @@ fn alt_letters_open_specific_menus() {
 }
 
 #[test]
+fn undo_tree_preserves_a_branch_after_a_new_edit() {
+    let mut app = app_at(Path::new("."));
+    // Type "A", undo it, then type "B" — the case linear undo would lose.
+    type_str(&mut app, "A");
+    app.on_key(ctrl('z')); // undo "A" → empty
+    type_str(&mut app, "B"); // new branch off the empty root
+    assert_eq!(app.editor.active_tab().unwrap().text(), "B");
+    // Redo right after the edit does nothing (B is the active tip).
+    app.on_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "B");
+    // Undo back to the branch point, switch branches, and redo into the OLD "A"
+    // branch — proving it survived the new edit.
+    app.on_key(ctrl('z')); // undo "B" → empty (branch point)
+    assert_eq!(app.editor.active_tab().unwrap().text(), "");
+    app.run_action("edit.undo_branch");
+    app.on_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "A", "the old branch is still reachable");
+}
+
+#[test]
 fn ctrl_z_undoes_and_ctrl_shift_z_redoes() {
     let mut app = app_at(Path::new("."));
     for c in "abc".chars() {
