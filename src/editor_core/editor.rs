@@ -869,6 +869,23 @@ impl Editor {
         &self.code
     }
 
+    /// Install any completed background reparse (large buffers). Returns `true`
+    /// when the syntax tree was updated, so the host can redraw.
+    pub fn poll_parse(&mut self) -> bool {
+        if self.code.poll_parse() {
+            self.reset_highlight_cache();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Whether a background reparse is in flight for this buffer.
+    #[must_use]
+    pub fn parse_pending(&self) -> bool {
+        self.code.parse_pending()
+    }
+
     /// A counter that increases on every content edit, for cheap change detection
     /// (e.g. deciding when to push a `didChange` to a language server).
     #[must_use]

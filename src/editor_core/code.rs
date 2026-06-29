@@ -3,7 +3,11 @@ use anyhow::{Result, anyhow};
 use ropey::{Rope, RopeSlice};
 use streaming_iterator::StreamingIterator;
 use tree_sitter::{InputEdit, Point, QueryCursor};
-use tree_sitter::{Language, Parser, Query, Tree, Node};
+use tree_sitter::{Language, ParseOptions, ParseState, Parser, Query, Tree, Node};
+use std::ops::ControlFlow;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Receiver, Sender};
 use crate::editor_core::history::{History};
 use crate::editor_core::selection::Selection;
 use rust_embed::RustEmbed;
@@ -107,6 +111,70 @@ pub struct EditState {
 }
 
 
+/// Buffers at or above this size (bytes) reparse on a background thread after an
+/// edit instead of synchronously, so typing stays responsive on large files.
+/// Below it, parsing stays synchronous (identical behavior, no thread).
+const ASYNC_PARSE_THRESHOLD: usize = 50_000;
+
+/// A reparse job sent to the background worker.
+struct ParseRequest {
+    /// Edit generation this snapshot corresponds to (for stale-result rejection).
+    generation: u64,
+    /// The buffer snapshot to parse (ropey clones share structure — cheap).
+    rope: Rope,
+    /// The previous tree, for incremental reparsing.
+    old: Option<Tree>,
+    /// Set to abort this parse when a newer edit supersedes it.
+    cancel: Arc<AtomicBool>,
+}
+
+/// A completed reparse returned by the worker.
+struct ParseResult {
+    /// The generation this tree was parsed from.
+    generation: u64,
+    /// The new tree (`None` if the parse was cancelled or failed).
+    tree: Option<Tree>,
+}
+
+/// Handle to the background reparse thread (created lazily for large buffers).
+struct ParseWorker {
+    requests: Sender<ParseRequest>,
+    results: Receiver<ParseResult>,
+    /// Cancel flag for the in-flight request; replaced when a new request is sent.
+    cancel: Arc<AtomicBool>,
+    /// Generation of the most recently *sent* request.
+    requested: u64,
+    /// Generation of the most recently *installed* result.
+    installed: u64,
+}
+
+/// The background reparse loop: owns a `Parser` for `language` and answers parse
+/// requests until the request channel closes (the `Code` was dropped).
+fn parse_worker_loop(language: &Language, requests: &Receiver<ParseRequest>, results: &Sender<ParseResult>) {
+    let mut parser = Parser::new();
+    if parser.set_language(language).is_err() {
+        return;
+    }
+    while let Ok(req) = requests.recv() {
+        let ParseRequest { generation, rope, old, cancel } = req;
+        let mut on_progress =
+            |_: &ParseState| if cancel.load(Ordering::Relaxed) { ControlFlow::Break(()) } else { ControlFlow::Continue(()) };
+        let options = ParseOptions::new().progress_callback(&mut on_progress);
+        let mut input = |byte: usize, _: Point| -> &[u8] {
+            if byte <= rope.len_bytes() {
+                let (chunk, start, _, _) = rope.chunk_at_byte(byte);
+                &chunk.as_bytes()[byte - start..]
+            } else {
+                &[]
+            }
+        };
+        let tree = parser.parse_with_options(&mut input, old.as_ref(), Some(options));
+        if results.send(ParseResult { generation, tree }).is_err() {
+            break;
+        }
+    }
+}
+
 /// The text buffer with Tree-sitter highlighting and undo/redo support.
 pub struct Code {
     content: ropey::Rope,
@@ -126,6 +194,11 @@ pub struct Code {
     /// Monotonic counter bumped on every content insert/remove, so callers (e.g.
     /// the LSP client) can cheaply detect "the text changed since I last looked".
     revision: u64,
+    /// Edit generation, bumped on every `edit_tree`. Async parse results are only
+    /// installed when they match the current generation (stale-result rejection).
+    edit_gen: u64,
+    /// Background reparse worker for large buffers (lazily created on first use).
+    parse_worker: Option<ParseWorker>,
 }
 
 impl Code {
@@ -156,6 +229,8 @@ impl Code {
             custom_highlights,
             indent_override: None,
             revision: 0,
+            edit_gen: 0,
+            parse_worker: None,
         };
 
         if let Some(language) = Self::get_language(lang) {
@@ -465,9 +540,89 @@ impl Code {
 
     fn edit_tree(&mut self, edit: InputEdit) {
         if let Some(tree) = self.tree.as_mut() {
+            // Apply the edit to the current tree so its byte offsets stay aligned
+            // for any consumer reading it before the reparse completes.
             tree.edit(&edit);
-            self.reparse();
+            self.edit_gen = self.edit_gen.wrapping_add(1);
+            // Small/medium buffers reparse synchronously (identical to the original
+            // behavior); large buffers reparse on the background worker so typing
+            // stays responsive.
+            if self.content.len_bytes() < ASYNC_PARSE_THRESHOLD || !self.request_async_parse() {
+                self.reparse();
+            }
         }
+    }
+
+    /// Ensure the background reparse worker exists. Returns `false` (so the caller
+    /// falls back to a synchronous reparse) when the language has no grammar.
+    fn ensure_parse_worker(&mut self) -> bool {
+        if self.parse_worker.is_some() {
+            return true;
+        }
+        let Some(language) = Self::get_language(&self.lang) else { return false };
+        let (req_tx, req_rx) = std::sync::mpsc::channel::<ParseRequest>();
+        let (res_tx, res_rx) = std::sync::mpsc::channel::<ParseResult>();
+        let spawned = std::thread::Builder::new()
+            .name("vix-parse".to_string())
+            .spawn(move || parse_worker_loop(&language, &req_rx, &res_tx))
+            .is_ok();
+        if !spawned {
+            return false;
+        }
+        self.parse_worker = Some(ParseWorker {
+            requests: req_tx,
+            results: res_rx,
+            cancel: Arc::new(AtomicBool::new(false)),
+            requested: 0,
+            installed: 0,
+        });
+        true
+    }
+
+    /// Send the current buffer to the background worker for reparsing, cancelling
+    /// any in-flight parse. Returns `false` if no worker is available.
+    fn request_async_parse(&mut self) -> bool {
+        if !self.ensure_parse_worker() {
+            return false;
+        }
+        let rope = self.content.clone();
+        let old = self.tree.clone();
+        let generation = self.edit_gen;
+        let cancel = Arc::new(AtomicBool::new(false));
+        let worker = self.parse_worker.as_mut().expect("worker ensured above");
+        worker.cancel.store(true, Ordering::Relaxed); // abort the superseded parse
+        worker.cancel = cancel.clone();
+        worker.requested = generation;
+        worker.requests.send(ParseRequest { generation, rope, old, cancel }).is_ok()
+    }
+
+    /// Install any completed background reparse whose generation is still current.
+    /// Returns `true` if the tree was updated (so the host can request a redraw).
+    /// A no-op when no worker exists (small buffers parse synchronously).
+    pub fn poll_parse(&mut self) -> bool {
+        let mut newest: Option<ParseResult> = None;
+        if let Some(worker) = self.parse_worker.as_mut() {
+            while let Ok(res) = worker.results.try_recv() {
+                newest = Some(res);
+            }
+        }
+        let Some(res) = newest else { return false };
+        // Only install a fresh tree that matches the latest edit (a cancelled or
+        // superseded parse has an older generation, or returns no tree).
+        if res.generation == self.edit_gen && res.tree.is_some() {
+            self.tree = res.tree;
+            if let Some(worker) = self.parse_worker.as_mut() {
+                worker.installed = res.generation;
+            }
+            return true;
+        }
+        false
+    }
+
+    /// Whether a background reparse is in flight (the host polls faster while so).
+    #[must_use]
+    pub fn parse_pending(&self) -> bool {
+        self.parse_worker.as_ref().is_some_and(|w| w.requested != w.installed)
     }
 
     fn reparse(&mut self) {
@@ -1054,6 +1209,44 @@ mod tests {
         code.insert(0, "Hello ");
         code.insert(6, "World");
         assert_eq!(code.content.to_string(), "Hello World");
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn large_buffer_reparses_on_background_thread() {
+        use std::time::Duration;
+        // A buffer over the async threshold reparses off-thread after edits.
+        let big = "fn f() { let x = 1; }\n".repeat(3000);
+        assert!(big.len() > ASYNC_PARSE_THRESHOLD, "fixture exceeds the threshold");
+        let mut code = Code::new(&big, "rust", None).unwrap();
+        assert!(code.tree.is_some(), "initial parse is synchronous");
+
+        code.insert(0, "// edit\n");
+        // The edited tree stays available (highlighting isn't lost) while the
+        // background reparse is in flight.
+        assert!(code.tree.is_some(), "edited tree remains during async reparse");
+        assert!(code.parse_pending(), "a background reparse was requested");
+
+        let mut installed = false;
+        for _ in 0..3000 {
+            if code.poll_parse() {
+                installed = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert!(installed, "the background reparse completed and installed");
+        assert!(!code.parse_pending(), "nothing pending once the latest result lands");
+        assert_eq!(code.content.char(0), '/', "edit applied");
+    }
+
+    #[test]
+    fn small_buffer_parses_synchronously_without_a_worker() {
+        let mut code = Code::new("fn f() {}", "rust", None).unwrap();
+        code.insert(0, "// c\n");
+        // Below the threshold there is no background worker and nothing pending.
+        assert!(!code.parse_pending());
+        assert!(!code.poll_parse());
     }
 
     #[test]

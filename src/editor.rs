@@ -909,6 +909,18 @@ impl Editor {
         self.cursor_row()
     }
 
+    /// Install any completed background reparse for the active buffer (large
+    /// files). Returns `true` if the syntax tree changed (request a redraw).
+    pub fn poll_parse(&mut self) -> bool {
+        self.active_tab_mut().is_some_and(|t| t.editor.poll_parse())
+    }
+
+    /// Whether a background reparse is in flight for the active buffer.
+    #[must_use]
+    pub fn parse_pending(&self) -> bool {
+        self.active_tab().is_some_and(|t| t.editor.parse_pending())
+    }
+
     /// The 0-based start rows of every paragraph (`section == false`) or section
     /// (`section == true`) in the active buffer. A paragraph is a run of non-blank
     /// lines; a section is a run separated by a section break (2+ blank lines).
