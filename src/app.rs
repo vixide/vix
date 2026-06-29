@@ -595,8 +595,9 @@ pub use crate::outline_panel::Outline;
 enum Keymap {
     /// Modifier-key shortcuts (the default), e.g. `Ctrl+O` to open.
     Apple,
-    /// VS Code (macOS) shortcuts, e.g. `Ctrl+P` Quick Open, `Ctrl+Shift+P`
-    /// Command Palette, `Ctrl+G` Go to Line.
+    /// VS Code shortcuts, e.g. `Ctrl+P` Quick Open, `Ctrl+Shift+P`
+    /// Command Palette, `Ctrl+G` Go to Line. macOS and Windows share the same
+    /// `Ctrl`-based bindings in the terminal.
     Vscode,
     /// `Ctrl` chords and the `Ctrl+X` prefix, e.g. `Ctrl+X Ctrl+F` to open.
     Emacs,
@@ -606,9 +607,9 @@ enum Keymap {
     /// sequences (e.g. `SPC f f` find file).
     Spacemacs,
     /// `IntelliJ` IDEA (macOS) shortcuts, with `Ctrl` standing in for `Cmd`.
-    IntelliJMac,
+    IntelliJMacOS,
     /// `IntelliJ` IDEA (Windows/Linux) shortcuts.
-    IntelliJWin,
+    IntelliJWindows,
     /// Eclipse (Windows) shortcuts.
     Eclipse,
 }
@@ -617,14 +618,15 @@ impl Keymap {
     /// Parse a persisted keymap id; anything unrecognized is [`Keymap::Apple`].
     fn from_id(id: &str) -> Self {
         match id {
-            "vscode" => Keymap::Vscode,
+            // macOS and Windows VS Code share the same Ctrl-based bindings here.
+            // `vscode` is accepted for older configs.
+            "vscode-macos" | "vscode-windows" | "vscode" => Keymap::Vscode,
             "emacs" => Keymap::Emacs,
             // `vi` is the current id; `vim` is accepted for older configs.
             "vi" | "vim" => Keymap::Vim,
             "spacemacs" => Keymap::Spacemacs,
-            // `intellij-*` are the current ids; `jetbrains-*` load older configs.
-            "intellij-mac" | "jetbrains-mac" => Keymap::IntelliJMac,
-            "intellij-win" | "jetbrains-win" => Keymap::IntelliJWin,
+            "intellij-macos" | "intellij-mac" => Keymap::IntelliJMacOS,
+            "intellij-windows" | "intellij-win" => Keymap::IntelliJWindows,
             "eclipse" => Keymap::Eclipse,
             _ => Keymap::Apple,
         }
@@ -1770,12 +1772,12 @@ impl App {
                     return;
                 }
             }
-            Keymap::IntelliJMac => {
+            Keymap::IntelliJMacOS => {
                 if self.intellij_key(key, false) || self.global_shared_key(key) {
                     return;
                 }
             }
-            Keymap::IntelliJWin => {
+            Keymap::IntelliJWindows => {
                 if self.intellij_key(key, true) || self.global_shared_key(key) {
                     return;
                 }

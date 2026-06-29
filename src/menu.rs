@@ -329,12 +329,13 @@ const VIEW_EDITOR: &[Item] = &[
 /// test guards the ids).
 const VIEW_KEYMAP: &[Item] = &[
     Item::leaf("menu.name.apple", "view.keymap:apple", ""),
-    Item::leaf("menu.name.vscode", "view.keymap:vscode", ""),
+    Item::leaf("menu.name.vscode_macos", "view.keymap:vscode-macos", ""),
+    Item::leaf("menu.name.vscode_win", "view.keymap:vscode-windows", ""),
     Item::leaf("menu.name.emacs", "view.keymap:emacs", ""),
     Item::leaf("menu.name.vim", "view.keymap:vi", ""),
     Item::leaf("menu.name.spacemacs", "view.keymap:spacemacs", ""),
-    Item::leaf("menu.name.intellij_mac", "view.keymap:intellij-mac", ""),
-    Item::leaf("menu.name.intellij_win", "view.keymap:intellij-win", ""),
+    Item::leaf("menu.name.intellij_mac", "view.keymap:intellij-macos", ""),
+    Item::leaf("menu.name.intellij_win", "view.keymap:intellij-windows", ""),
     Item::leaf("menu.name.eclipse", "view.keymap:eclipse", ""),
 ];
 

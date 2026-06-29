@@ -3890,8 +3890,10 @@ menu.item.tools.insert.zid.512:
 # `en` fallback); add per-locale overrides here if a name ever needs translating.
 menu.name.apple:
   en: "Apple"
-menu.name.vscode:
-  en: "macOS VSCode"
+menu.name.vscode_macos:
+  en: "VSCode macOS"
+menu.name.vscode_win:
+  en: "VSCode Windows"
 menu.name.emacs:
   en: "Emacs"
 menu.name.vim:
@@ -3899,9 +3901,9 @@ menu.name.vim:
 menu.name.spacemacs:
   en: "Spacemacs"
 menu.name.intellij_mac:
-  en: "IntelliJ + macOS"
+  en: "IntelliJ macOS"
 menu.name.intellij_win:
-  en: "IntelliJ + Windows"
+  en: "IntelliJ Windows"
 menu.name.eclipse:
   en: "Eclipse"
 menu.name.md5:
