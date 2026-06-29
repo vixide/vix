@@ -625,8 +625,8 @@ impl Keymap {
             // `vi` is the current id; `vim` is accepted for older configs.
             "vi" | "vim" => Keymap::Vim,
             "spacemacs" => Keymap::Spacemacs,
-            "intellij-macos" | "intellij-mac" => Keymap::IntelliJMacOS,
-            "intellij-windows" | "intellij-win" => Keymap::IntelliJWindows,
+            "intellij-macos" => Keymap::IntelliJMacOS,
+            "intellij-windows" => Keymap::IntelliJWindows,
             "eclipse" => Keymap::Eclipse,
             _ => Keymap::Apple,
         }
