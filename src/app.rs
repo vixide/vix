@@ -603,7 +603,7 @@ enum Keymap {
     Emacs,
     /// Modal editing: a Normal mode for motions/commands and an Insert mode.
     Vi,
-    /// Vim-style modal editing plus a `Space` leader for menu-like command
+    /// Vi-style modal editing plus a `Space` leader for menu-like command
     /// sequences (e.g. `SPC f f` find file).
     Spacemacs,
     /// `IntelliJ` IDEA (macOS) shortcuts, with `Ctrl` standing in for `Cmd`.
@@ -2299,7 +2299,7 @@ impl App {
 
     // ----- Spacemacs keymap ----------------------------------------------
 
-    /// Spacemacs dispatch: Vim-style modal editing in Normal/Insert, plus a
+    /// Spacemacs dispatch: Vi-style modal editing in Normal/Insert, plus a
     /// `Space` leader that opens menu-like command sequences. Returns true if the
     /// key was consumed.
     fn spacemacs_key(&mut self, key: KeyEvent) -> bool {
