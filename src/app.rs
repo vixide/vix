@@ -602,7 +602,7 @@ enum Keymap {
     /// `Ctrl` chords and the `Ctrl+X` prefix, e.g. `Ctrl+X Ctrl+F` to open.
     Emacs,
     /// Modal editing: a Normal mode for motions/commands and an Insert mode.
-    Vim,
+    Vi,
     /// Vim-style modal editing plus a `Space` leader for menu-like command
     /// sequences (e.g. `SPC f f` find file).
     Spacemacs,
@@ -619,11 +619,9 @@ impl Keymap {
     fn from_id(id: &str) -> Self {
         match id {
             // macOS and Windows VS Code share the same Ctrl-based bindings here.
-            // `vscode` is accepted for older configs.
-            "vscode-macos" | "vscode-windows" | "vscode" => Keymap::Vscode,
+            "vscode-macos" | "vscode-windows" => Keymap::Vscode,
             "emacs" => Keymap::Emacs,
-            // `vi` is the current id; `vim` is accepted for older configs.
-            "vi" | "vim" => Keymap::Vim,
+            "vi" => Keymap::Vi,
             "spacemacs" => Keymap::Spacemacs,
             "intellij-macos" => Keymap::IntelliJMacOS,
             "intellij-windows" => Keymap::IntelliJWindows,
@@ -1762,7 +1760,7 @@ impl App {
                     return;
                 }
             }
-            Keymap::Vim => {
+            Keymap::Vi => {
                 if self.vim_key(key) || self.global_shared_key(key) {
                     return;
                 }
@@ -1807,7 +1805,7 @@ impl App {
     #[must_use]
     pub fn mode_indicator(&self) -> Option<String> {
         match self.active_keymap() {
-            Keymap::Vim => Some(if let Some(cmd) = &self.vim_cmd {
+            Keymap::Vi => Some(if let Some(cmd) = &self.vim_cmd {
                 format!(":{cmd}")
             } else if self.vim_insert {
                 t!("status.vim_insert").to_string()

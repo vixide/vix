@@ -17,7 +17,7 @@ Vix ships nine keymaps. **Apple** is the default and matches Vix's own bindings.
 | VSCode macOS | `vscode-macos` | VS Code's signature shortcuts, with `Ctrl` standing in for `Cmd` — `Ctrl+P` Quick Open, `Ctrl+Shift+P` Command Palette, `Ctrl+G` Go to Line. |
 | VSCode Windows | `vscode-windows` | VS Code (Windows) shortcuts; the same `Ctrl`-based bindings as VSCode macOS in the terminal. |
 | Emacs | `emacs` | Layered `Ctrl` chords and a `Ctrl+X` prefix, e.g. `Ctrl+X Ctrl+F` to open. |
-| Vi | `vi` | Modal editing: a Normal mode for motions and commands, plus an Insert mode and a `:` command line. (Accepts the legacy id `vim`.) |
+| Vi | `vi` | Modal editing: a Normal mode for motions and commands, plus an Insert mode and a `:` command line. |
 | Spacemacs | `spacemacs` | Vi modal editing plus a `Space` leader for menu-like command sequences (e.g. `SPC f f` find file). |
 | IntelliJ macOS | `intellij-macos` | IntelliJ (macOS) defaults, `Ctrl` for `Cmd` — `Ctrl+Shift+O` Go to File, `Ctrl+B` Go to Declaration, `Ctrl+Alt+L` Reformat. |
 | IntelliJ Windows | `intellij-windows` | IntelliJ (Windows) defaults — `Ctrl+Shift+N` Go to File, `Ctrl+G` Go to Line, `Ctrl+Y` delete line. |
