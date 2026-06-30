@@ -3446,7 +3446,8 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
             "view.spellcheck",
             "view.auto_pair",
             "view.trim_on_save",
-            "view.final_newline_on_save"
+            "view.final_newline_on_save",
+            "view.format_on_save"
         ]
     );
 }

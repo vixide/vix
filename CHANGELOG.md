@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Format on save** (View → Format on Save, off by default). On save it runs the
+  language server's formatter and re-saves once the edits land; the plain save
+  happens first, so nothing is lost if formatting is slow or unsupported.
 - **Auto-reload on external change.** Files changed on disk by another process (a
   formatter, `git checkout`, a second editor) are detected (mtime poll, throttled
   to 1s): clean buffers reload automatically; a buffer with unsaved edits gets a

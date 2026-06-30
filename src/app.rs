@@ -1067,6 +1067,9 @@ pub struct App {
     disk_mtimes: std::collections::HashMap<PathBuf, std::time::SystemTime>,
     /// Throttle anchor for the external-change poll; `None` until the first poll.
     last_disk_poll: Option<std::time::Instant>,
+    /// When format-on-save triggered an async LSP format, the path to re-save once
+    /// the formatting edits land.
+    format_save_pending: Option<PathBuf>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
     pub clip: Vec<PathBuf>,
     /// Whether [`App::clip`] holds a cut (move) rather than a copy.
@@ -1303,7 +1306,7 @@ impl App {
             hover: None, completion: None, dialog: None, color_converter: None,
             unit_converter: None, calculator: None, regex_tester: None, code_actions: None,
             code_lens: None, pomodoro: None,
-            pomodoro_open: false, pomodoro_last_tick: None, disk_mtimes: std::collections::HashMap::new(), last_disk_poll: None,
+            pomodoro_open: false, pomodoro_last_tick: None, disk_mtimes: std::collections::HashMap::new(), last_disk_poll: None, format_save_pending: None,
             clip: Vec::new(), clip_cut: false,
             nav_history: Vec::new(), bookmarks: Vec::new(), nav_idx: 0,
             picker: None,
@@ -2576,6 +2579,10 @@ impl App {
             "view.final_newline_on_save" => {
                 self.settings.ensure_final_newline = !self.settings.ensure_final_newline;
             }
+            "view.format_on_save" => {
+                self.settings.format_on_save = !self.settings.format_on_save;
+                self.status = t!("status.format_on_save", on = self.settings.format_on_save).to_string();
+            }
             "view.scrollbar" => self.toggle_scrollbar(),
             "view.spellcheck" => self.toggle_spellcheck(),
             "view.auto_pair" => self.toggle_auto_pair(),
@@ -3269,6 +3276,27 @@ impl App {
             self.run_action("file.save_as");
             return;
         }
+        if !self.write_active_to_disk() {
+            return;
+        }
+        // Format on save: re-format via the language server, then re-save once the
+        // edits land (see `apply_lsp_edits`). The plain save above already wrote
+        // the file, so it is never lost if formatting is slow or unsupported.
+        if self.settings.format_on_save
+            && let Some(p) = self.active_path()
+            && self.lsp.handles(&p)
+        {
+            self.format_save_pending = Some(p.clone());
+            let tab_size = u32::try_from(self.settings.tab_width).unwrap_or(4);
+            self.lsp.request_formatting(&p, tab_size);
+        }
+    }
+
+    /// Write the active buffer to its file (applying the on-save options) and
+    /// notify the language server. Returns whether the write succeeded. Does *not*
+    /// trigger format-on-save — used both by [`App::save`] and the format-on-save
+    /// re-save so the latter can't recurse.
+    fn write_active_to_disk(&mut self) -> bool {
         let opts = self.save_options();
         match self.editor.save_active(opts) {
             Ok(p) => {
@@ -3278,8 +3306,12 @@ impl App {
                     self.lsp.did_save(&p, &text);
                 }
                 self.refresh_git();
+                true
             }
-            Err(e) => self.messages.error(t!("msg.save_failed", error = e).to_string()),
+            Err(e) => {
+                self.messages.error(t!("msg.save_failed", error = e).to_string());
+                false
+            }
         }
     }
 
@@ -12091,6 +12123,12 @@ impl App {
         t.dirty = true;
         t.preview = false;
         self.status = t!("status.formatted").to_string();
+        // If these edits were a format-on-save, write the formatted buffer back.
+        if let Some(pending) = self.format_save_pending.take()
+            && self.active_path().as_deref() == Some(pending.as_path())
+        {
+            self.write_active_to_disk();
+        }
     }
 
     /// Request the implementation(s) of the symbol under the cursor (LSP).
