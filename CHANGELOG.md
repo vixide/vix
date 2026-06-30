@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Dailies calendar** (Org → Roam → Dailies → Calendar…). Opens the month grid;
+  Enter on a day opens/creates that day's Org-roam daily note instead of inserting
+  the date.
 - **`[[` wiki-link autocomplete** for Org-roam/Node. Typing `[[` in an `.org` file
   opens node-title completion (also Org → Node → Complete Link…); accepting inserts
   the title and closes the link, without double-closing when auto-pair already

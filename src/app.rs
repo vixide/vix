@@ -1159,6 +1159,9 @@ pub struct App {
     pub messages_hscroll: usize,
     /// Whether the calendar box is shown.
     pub show_calendar: bool,
+    /// When true, the calendar opens/creates the selected day's Org-roam daily
+    /// note on Enter instead of inserting the date string.
+    pub calendar_dailies: bool,
     /// Month navigation state for the calendar box.
     pub calendar: crate::calendar::Calendar,
     /// Whether the clock box is shown.
@@ -1342,7 +1345,7 @@ impl App {
             bottom_hscroll: 0,
             explorer_hscroll: 0,
             messages_hscroll: 0,
-            show_calendar: false,
+            show_calendar: false, calendar_dailies: false,
             calendar: crate::calendar::Calendar::new(),
             show_clock: false,
             clock: crate::clock::Clock::new(),
@@ -1620,13 +1623,8 @@ impl App {
                         self.calendar.move_days(sign * step);
                     }
                 }
-                KeyCode::Enter => {
-                    let text = self.calendar.selected_formatted(Self::locale_date_pattern());
-                    let area = self.editor_view();
-                    self.editor.insert_str(&text, area);
-                    self.show_calendar = false;
-                }
-                KeyCode::Esc | KeyCode::Char('q') => self.show_calendar = false,
+                KeyCode::Enter => self.calendar_accept(),
+                KeyCode::Esc | KeyCode::Char('q') => { self.show_calendar = false; self.calendar_dailies = false; }
                 _ => {}
             }
             return true;
@@ -3601,6 +3599,11 @@ impl App {
             }
             "roam.backlinks" => self.roam_backlinks(),
             "roam.dailies_today" => self.roam_open_daily(&Self::roam_today()),
+            "roam.dailies_calendar" => {
+                self.calendar = crate::calendar::Calendar::new();
+                self.calendar_dailies = true;
+                self.show_calendar = true;
+            }
             "roam.dailies_capture" => {
                 self.prompt =
                     Some(Prompt::new(PromptKind::RoamDailyCapture, t!("prompt.roam_daily_capture").to_string()));
@@ -3785,6 +3788,20 @@ impl App {
                 self.roam_rewrite_active(|t| crate::roam::append_property(t, "ROAM_REFS", &r));
             }
             _ => {}
+        }
+    }
+
+    /// Accept the calendar's selected date: open its daily note (dailies mode) or
+    /// insert the formatted date at the cursor. Closes the calendar.
+    fn calendar_accept(&mut self) {
+        self.show_calendar = false;
+        if std::mem::take(&mut self.calendar_dailies) {
+            let date = self.calendar.selected_formatted("%Y-%m-%d");
+            self.roam_open_daily(&date);
+        } else {
+            let text = self.calendar.selected_formatted(Self::locale_date_pattern());
+            let area = self.editor_view();
+            self.editor.insert_str(&text, area);
         }
     }
 
@@ -13963,6 +13980,26 @@ mod tests {
             "saved file reopened"
         );
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn dailies_calendar_opens_a_daily_note() {
+        let dir = std::env::temp_dir().join(format!("vix-cal-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.run_action("roam.dailies_calendar");
+        assert!(app.show_calendar && app.calendar_dailies, "dailies calendar opened");
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(!app.show_calendar && !app.calendar_dailies, "calendar closed on accept");
+        let opened = app
+            .editor
+            .tabs
+            .iter()
+            .any(|t| t.path.as_ref().is_some_and(|p| p.to_string_lossy().contains("daily")));
+        assert!(opened, "today's daily note opened");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
