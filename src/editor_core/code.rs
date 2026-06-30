@@ -51,7 +51,7 @@ impl<T> Clone for HighlightCtx<'_, T> {
 
 impl<T> Copy for HighlightCtx<'_, T> {}
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 /// A single primitive edit: either an insertion or a removal of text.
 pub enum EditKind {
     /// Text inserted at a character `offset`.
@@ -71,14 +71,14 @@ pub enum EditKind {
 }
 
 /// A single edit within an [`EditBatch`].
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Edit {
     /// The insertion or removal this edit represents.
     pub kind: EditKind,
 }
 
 /// A group of edits committed together as one undo/redo step.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct EditBatch {
     /// The edits applied in this batch, in order.
     pub edits: Vec<Edit>,
@@ -102,7 +102,7 @@ impl EditBatch {
 }
 
 /// A snapshot of cursor and selection state captured around an edit.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct EditState {
     /// Cursor character offset.
     pub offset: usize,
@@ -808,6 +808,18 @@ impl Code {
         self.history.switch_branch()
     }
 
+    /// The undo-tree history, for persisting it (see `crate::undo_store`).
+    #[must_use]
+    pub fn history(&self) -> &History {
+        &self.history
+    }
+
+    /// Replace the undo-tree history (restoring a persisted one). The caller must
+    /// ensure the buffer content matches the history's current state.
+    pub fn set_history(&mut self, history: History) {
+        self.history = history;
+    }
+
     /// Redo the next undone batch, reapplying its edits; return the batch if any.
     pub fn redo(&mut self) -> Option<EditBatch> {
         let batch = self.history.redo()?;
@@ -1282,6 +1294,29 @@ mod tests {
         let mut code = Code::new("Hello World", "", None).unwrap();
         code.remove(5, 11);
         assert_eq!(code.content.to_string(), "Hello");
+    }
+
+    #[test]
+    fn history_serde_round_trip_restores_undo() {
+        use crate::editor_core::history::History;
+        // Record one committed edit ("a" -> "ab").
+        let mut code = Code::new("a", "", None).unwrap();
+        code.tx();
+        code.set_state_before(1, None);
+        code.insert(1, "b");
+        code.set_state_after(2, None);
+        code.commit();
+        assert_eq!(code.content.to_string(), "ab");
+
+        // Serialize the undo tree and restore it onto a matching buffer.
+        let json = serde_json::to_string(code.history()).unwrap();
+        let restored: History = serde_json::from_str(&json).unwrap();
+        let mut reopened = Code::new("ab", "", None).unwrap();
+        reopened.set_history(restored);
+
+        // Undo on the reopened buffer reverts the persisted edit.
+        assert!(reopened.undo().is_some(), "restored history has an edit to undo");
+        assert_eq!(reopened.get_content(), "a");
     }
 
     #[test]

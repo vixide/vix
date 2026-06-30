@@ -73,6 +73,9 @@ pub struct Settings {
     pub sticky_scroll: bool,
     /// Color matching brackets by nesting depth (rainbow brackets).
     pub rainbow_brackets: bool,
+    /// Persist each file's undo tree across sessions (restored on reopen when the
+    /// file content still matches).
+    pub persistent_undo: bool,
     /// Indentation inserted by Tab: `"spaces"` (default) or `"tabs"`.
     pub indent_style: String,
     /// Number of spaces per indent when `indent_style` is `"spaces"`.
@@ -205,6 +208,7 @@ impl Default for Settings {
             auto_save: false,
             sticky_scroll: true,
             rainbow_brackets: false,
+            persistent_undo: true,
             indent_style: "spaces".to_string(),
             tab_width: 4,
             theme: "dark".to_string(),
