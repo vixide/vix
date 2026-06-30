@@ -768,6 +768,7 @@ const ORG_ROAM_DAILIES: &[Item] = &[
     Item::leaf("menu.item.org.roam.dailies_today", "roam.dailies_today", ""),
     Item::leaf("menu.item.org.roam.dailies_capture", "roam.dailies_capture", ""),
     Item::leaf("menu.item.org.roam.dailies_date", "roam.dailies_date", ""),
+    Item::leaf("menu.item.org.roam.dailies_calendar", "roam.dailies_calendar", ""),
 ];
 
 /// Org-roam node-metadata commands, grouped under Org → Roam → Metadata.

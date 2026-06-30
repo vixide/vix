@@ -4054,6 +4054,8 @@ menu.item.org.roam.dailies_capture:
   en: "Capture Today…"
 menu.item.org.roam.dailies_date:
   en: "Go to Date…"
+menu.item.org.roam.dailies_calendar:
+  en: "Calendar…"
 menu.item.org.roam.metadata:
   en: "Metadata"
 menu.item.org.roam.tag_add:
