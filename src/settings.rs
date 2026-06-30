@@ -66,6 +66,8 @@ pub struct Settings {
     pub ensure_final_newline: bool,
     /// On save, run the language server's formatter (when the file has one).
     pub format_on_save: bool,
+    /// Periodically save the active dirty file-backed buffer (every few seconds).
+    pub auto_save: bool,
     /// Indentation inserted by Tab: `"spaces"` (default) or `"tabs"`.
     pub indent_style: String,
     /// Number of spaces per indent when `indent_style` is `"spaces"`.
@@ -195,6 +197,7 @@ impl Default for Settings {
             trim_trailing_whitespace: true,
             ensure_final_newline: true,
             format_on_save: false,
+            auto_save: false,
             indent_style: "spaces".to_string(),
             tab_width: 4,
             theme: "dark".to_string(),
