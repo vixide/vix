@@ -1798,7 +1798,13 @@ impl App {
             }
         }
         match self.focus {
-            Focus::Editor => self.editor_key(key),
+            Focus::Editor => {
+                self.editor_key(key);
+                // Auto-complete Org-roam/Node `[[` wiki-links with node titles.
+                if matches!(key.code, KeyCode::Char('[')) {
+                    self.maybe_complete_wiki_link();
+                }
+            }
             Focus::Explorer => self.explorer_key(key),
             Focus::Messages => self.messages_key(key),
             Focus::BottomDock => self.bottomdock_key(key),
@@ -3625,6 +3631,7 @@ impl App {
             "node.rename_by_title" => self.node_rename_by_title(),
             "node.dead_links" => self.node_dead_links(),
             "node.reset" => self.node_reset(),
+            "roam.link_complete" => self.open_node_link_completion(),
             _ => return false,
         }
         true
@@ -7186,6 +7193,61 @@ impl App {
     }
 
     /// Insert the highlighted completion, extending the already-typed prefix.
+    /// When the cursor sits just after a freshly typed `[[` in an `.org` file,
+    /// open the node-title completion popup (Org-roam/Node wiki-link completion).
+    fn maybe_complete_wiki_link(&mut self) {
+        if self.completion.is_some() {
+            return;
+        }
+        let Some(path) = self.active_path() else { return };
+        if path.extension().and_then(|e| e.to_str()) != Some("org") {
+            return;
+        }
+        let Some(tab) = self.editor.active_tab() else { return };
+        let cur = tab.editor.get_cursor();
+        if cur < 2 || tab.editor.code_ref().char_slice(cur - 2, cur) != "[[" {
+            return;
+        }
+        self.open_node_link_completion();
+    }
+
+    /// Populate the completion popup with project node titles (each inserting
+    /// `Title]]`), filtered by any partial title already typed. No-op when there
+    /// are no matching nodes.
+    fn open_node_link_completion(&mut self) {
+        // Append the closing `]]` only when it isn't already there (auto-pair may
+        // have inserted it when the user typed `[[`).
+        let suffix = self.editor.active_tab().map_or("]]", |t| {
+            let cur = t.editor.get_cursor();
+            let code = t.editor.code_ref();
+            if cur + 2 <= code.len_chars() && code.char_slice(cur, cur + 2) == "]]" { "" } else { "]]" }
+        });
+        let prefix = self.word_prefix_before_cursor().to_lowercase();
+        let mut titles: Vec<String> = self
+            .roam_node_files()
+            .iter()
+            .filter_map(|(_, c)| crate::roam::node_title(c))
+            .filter(|t| prefix.is_empty() || t.to_lowercase().starts_with(&prefix))
+            .collect();
+        titles.sort_unstable();
+        titles.dedup();
+        titles.truncate(200);
+        if titles.is_empty() {
+            self.status = t!("status.roam_no_nodes").to_string();
+            return;
+        }
+        let items = titles
+            .into_iter()
+            .map(|t| crate::lsp_core::CompletionItem {
+                insert_text: format!("{t}{suffix}"),
+                label: t,
+                detail: None,
+                data: None,
+            })
+            .collect();
+        self.completion = Some(CompletionPopup { items, selected: 0 });
+    }
+
     fn accept_completion(&mut self) {
         let Some(popup) = self.completion.take() else { return };
         let Some(item) = popup.items.get(popup.selected) else { return };
@@ -13901,6 +13963,28 @@ mod tests {
             "saved file reopened"
         );
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn wiki_link_autocompletes_node_titles_on_double_bracket() {
+        let dir = std::env::temp_dir().join(format!("vix-wiki-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("alpha.org"), "#+title: Alpha Notes\n").unwrap();
+        std::fs::write(dir.join("doc.org"), "\n").unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.build_file_index();
+        app.open_path(&dir.join("doc.org"), false);
+        // Typing "[[" in an .org file opens node-title completion.
+        app.on_key(KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE));
+        app.on_key(KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE));
+        let popup = app.completion.as_ref().expect("wiki-link completion opened");
+        assert!(popup.items.iter().any(|i| i.label == "Alpha Notes"), "node title offered");
+        // Auto-pair already inserted `]]`, so the insertion must not re-close.
+        assert!(popup.items.iter().any(|i| i.insert_text == "Alpha Notes"), "no double close");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

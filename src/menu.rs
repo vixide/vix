@@ -799,6 +799,7 @@ const ORG_ROAM: &[Item] = &[
 const ORG_NODE: &[Item] = &[
     Item::leaf("menu.item.org.node.find", "roam.node_find", ""),
     Item::leaf("menu.item.org.node.insert_link", "roam.node_insert", ""),
+    Item::leaf("menu.item.org.node.link_complete", "roam.link_complete", ""),
     Item::leaf("menu.item.org.node.insert_transclusion", "node.insert_transclusion", ""),
     Item::leaf("menu.item.org.node.random", "roam.node_random", ""),
     SEP,
