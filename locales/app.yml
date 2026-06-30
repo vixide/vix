@@ -3143,6 +3143,8 @@ menu.item.view.prev_tab:
   bn: "পূর্ববর্তী ট্যাব"
   zh: "上一个标签页"
   ja: "前のタブ"
+menu.item.view.sticky_scroll:
+  en: "Sticky Scroll"
 menu.item.view.inlay_hints:
   en: "Inlay Hints"
   es: "Sugerencias en línea"
@@ -11565,6 +11567,8 @@ status.format_on_save:
   en: "Format on save: %{on}"
 status.auto_save:
   en: "Auto save: %{on}"
+status.sticky_scroll:
+  en: "Sticky scroll: %{on}"
 status.auto_saved:
   en: "Auto-saved"
 status.formatted:

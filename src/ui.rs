@@ -1869,9 +1869,26 @@ fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) {
         } else {
             (inner, Rect { width: 0, height: 0, ..inner })
         };
+        // Sticky scroll: reserve the top row for the enclosing scope's header.
+        let header = if editor_area.height > 1 { app.sticky_header() } else { None };
+        let (header_area, editor_area) = match &header {
+            Some(_) => {
+                let r = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Length(1), Constraint::Min(1)])
+                    .split(editor_area);
+                (Some(r[0]), r[1])
+            }
+            None => (None, editor_area),
+        };
         app.layout.editor = editor_area;
         app.layout.scrollbar = scrollbar_area;
         draw_center(app, frame, editor_area, scrollbar_area);
+        if let (Some(hrect), Some(text)) = (header_area, header) {
+            let style = theme::region_title(theme::Region::Editor, true);
+            frame.render_widget(Block::default().style(style), hrect);
+            frame.render_widget(Paragraph::new(Line::from(Span::styled(text, style))), hrect);
+        }
         return;
     }
 
