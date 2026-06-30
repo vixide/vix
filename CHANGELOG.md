@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Indentation guides** — faint vertical bars at each indent level on the
+  (non-wrapped) editor view, for space-indented buffers. (Idea from the zee/VS Code
+  visual.)
 - **Auto-save** (View → Auto Save, off by default). Periodically writes the active
   dirty file-backed buffer (every ~5s; plain save, no format-on-save churn).
 - **Format on save** (View → Format on Save, off by default). On save it runs the

@@ -50,6 +50,9 @@ impl Editor {
             line_number_digits, total_lines,
         );
 
+        // draw indentation guides (faint vertical bars at each indent level)
+        self.draw_indent_guides(area, buf, line_number_width_u16, total_lines);
+
         // draw syntax highlighting
         if code.is_highlight() {
             self.draw_syntax_layer(
@@ -409,6 +412,43 @@ impl Editor {
     /// Overlay Tree-sitter syntax styles on the visible portion of each line.
     /// Highlighting is limited to the visible columns so long off-screen lines are
     /// not processed.
+    /// Draw faint vertical indentation guides at each indent level on every
+    /// visible line. Space-indented buffers only (the common case); tab- or
+    /// mixed-indented buffers are skipped to avoid column-mapping ambiguity.
+    fn draw_indent_guides(&self, area: Rect, buf: &mut Buffer, line_number_width_u16: u16, total_lines: usize) {
+        let code = self.code_ref();
+        let unit = code.indent();
+        if unit.is_empty() || unit.contains('\t') {
+            return;
+        }
+        let step = unit.chars().count();
+        let max_x = (area.width as usize).saturating_sub(line_number_width_u16 as usize);
+        for screen_y in 0..(area.height as usize) {
+            let Some(line_idx) = self.line_at_row(screen_y) else { break };
+            if line_idx >= total_lines {
+                break;
+            }
+            let line_start = code.line_to_char(line_idx);
+            let len = code.line_len(line_idx);
+            let leading = code.char_slice(line_start, line_start + len).chars().take_while(|c| *c == ' ').count();
+            let levels = leading / step;
+            for col in (0..levels).map(|k| k * step) {
+                if col < self.offset_x {
+                    continue;
+                }
+                let x = col - self.offset_x;
+                if x >= max_x {
+                    break;
+                }
+                let draw_x = area.left() + line_number_width_u16 + u16::try_from(x).unwrap_or(u16::MAX);
+                let draw_y = area.top() + u16::try_from(screen_y).unwrap_or(u16::MAX);
+                if draw_x < area.right() && draw_y < area.bottom() {
+                    buf[(draw_x, draw_y)].set_symbol("\u{2502}").set_style(self.whitespace_style);
+                }
+            }
+        }
+    }
+
     fn draw_syntax_layer(
         &self,
         area: Rect,
@@ -623,6 +663,20 @@ mod whitespace_tests {
         (&ed).render(area, &mut buf);
         let line1_styled = (0..40).any(|x| buf[(x, 1)].fg == Color::Rgb(255, 0, 0));
         assert!(line1_styled, "second visible line (fn main) is highlighted via the single viewport query");
+    }
+
+    #[test]
+    fn indent_guides_drawn_on_indented_lines_only() {
+        let mut ed = Editor::new("text", "    code\nflush\n", Vec::new()).unwrap();
+        ed.show_line_numbers(false);
+        ed.set_indent(Some("  ".to_string())); // 2-space indent unit → guide step 2
+        let area = Rect::new(0, 0, 20, 4);
+        let mut buf = Buffer::empty(area);
+        (&ed).render(area, &mut buf);
+        let row0 = row(&buf, 0, 0, 20);
+        let row1 = row(&buf, 1, 0, 20);
+        assert!(row0.contains('\u{2502}'), "indented line shows a guide: {row0:?}");
+        assert!(!row1.contains('\u{2502}'), "flush line shows no guide: {row1:?}");
     }
 
     #[test]
