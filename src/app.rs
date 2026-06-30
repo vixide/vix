@@ -2773,6 +2773,7 @@ impl App {
                         t.preview = false;
                     }
             }
+            "edit.emmet_expand" => self.emmet_expand(),
             "edit.case_upper" => self.change_case(crate::case::upper),
             "edit.case_lower" => self.change_case(crate::case::lower),
             "edit.case_title" => self.change_case(crate::case::title),
@@ -6946,6 +6947,31 @@ impl App {
             self.build_file_index();
         }
         self.status = t!("status.workspace_folder_added", path = folder.display()).to_string();
+    }
+
+    /// Expand the Emmet abbreviation ending at the cursor (the contiguous
+    /// non-whitespace run before it) into HTML, replacing it. No-op when the run
+    /// doesn't parse as Emmet.
+    fn emmet_expand(&mut self) {
+        let Some(tab) = self.editor.active_tab() else { return };
+        let cur = tab.editor.get_cursor();
+        let chars: Vec<char> = tab.editor.get_content().chars().collect();
+        let mut start = cur.min(chars.len());
+        while start > 0 && !chars[start - 1].is_whitespace() {
+            start -= 1;
+        }
+        let abbr: String = chars[start..cur.min(chars.len())].iter().collect();
+        let Some(html) = crate::emmet::expand(&abbr) else {
+            self.status = t!("status.emmet_none").to_string();
+            return;
+        };
+        let html = html.trim_end_matches('\n').to_string();
+        if let Some(t) = self.editor.active_tab_mut() {
+            t.editor.set_selection_range(start, cur);
+        }
+        let area = self.editor_view();
+        self.editor.insert_str(&html, area);
+        self.status = t!("status.emmet_expanded").to_string();
     }
 
     /// Buffer-word autocomplete: complete the word before the cursor from other

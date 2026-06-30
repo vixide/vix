@@ -1629,6 +1629,8 @@ menu.item.edit.column_select_up:
   bn: "কলাম নির্বাচন উপরে"
   zh: "列选择向上"
   ja: "列選択 上"
+menu.item.edit.emmet_expand:
+  en: "Emmet Expand"
 menu.item.edit.toggle_comment:
   en: "Comment"
   es: "Comentario"
@@ -11581,6 +11583,10 @@ status.rainbow_brackets:
   en: "Rainbow brackets: %{on}"
 status.auto_saved:
   en: "Auto-saved"
+status.emmet_expanded:
+  en: "Expanded Emmet abbreviation"
+status.emmet_none:
+  en: "No Emmet abbreviation to expand"
 status.formatted:
   en: "Formatted"
   es: "Formateado"
