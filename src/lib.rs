@@ -83,6 +83,7 @@ pub mod ascii_character_picker;
 pub mod dap;
 pub mod diff_view;
 pub mod editorconfig;
+pub mod emmet;
 pub mod macros;
 pub mod pane_tree;
 pub mod base16;

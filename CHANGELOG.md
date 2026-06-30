@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Emmet expansion** (Edit → Emmet Expand). Expands the abbreviation before the
+  cursor into HTML — child `>`, sibling `+`, multiply `*N`, `#id`, `.class`,
+  `{text}`, and `$` numbering (e.g. `ul>li.item$*3`). Pure logic in `crate::emmet`.
 - **Persistent undo.** The undo tree is saved per file on save and restored on
   reopen (under `<config>/undo/`), guarded by a content hash so it's only replayed
   when the file still matches. Setting `persistent_undo` (on by default).

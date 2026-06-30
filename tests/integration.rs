@@ -384,6 +384,17 @@ fn org_checkbox_toggle_updates_parents_and_cookies() {
 }
 
 #[test]
+fn emmet_expand_replaces_the_abbreviation() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "ul>li*2");
+    app.run_action("edit.emmet_expand");
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains("<ul>"), "expanded: {text:?}");
+    assert_eq!(text.matches("<li>").count(), 2, "two list items: {text:?}");
+    assert!(!text.contains("ul>li*2"), "abbreviation consumed");
+}
+
+#[test]
 fn org_menu_edits_headlines_and_exports() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "* Task\nbody");
