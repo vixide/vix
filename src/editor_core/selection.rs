@@ -17,7 +17,7 @@ pub enum SelectionSnap {
 }
 
 /// A selected text range between two character offsets.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct Selection {
     /// Start character offset (inclusive).
     pub start: usize,

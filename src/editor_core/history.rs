@@ -5,6 +5,7 @@ use crate::editor_core::code::EditBatch;
 
 /// One state in the edit tree: the batch that produced it from its parent, plus
 /// the tree links. The root (index 0) has no batch and no parent.
+#[derive(serde::Serialize, serde::Deserialize)]
 struct Node {
     /// The edit leading from the parent to this node (`None` for the root).
     batch: Option<EditBatch>,
@@ -24,6 +25,7 @@ struct Node {
 /// `undo`/`redo` behave exactly like a linear history in the common case: `redo`
 /// follows the most-recently-active branch, so immediately after a fresh edit
 /// there is nothing to redo (the new edit is the active branch's tip).
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct History {
     /// Arena of nodes; slots are tombstoned (`None`) when pruned. `nodes[0]` is
     /// the root (the buffer's initial state).

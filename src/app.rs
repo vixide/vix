@@ -3325,6 +3325,12 @@ impl App {
                     let text = self.editor.active_tab().map(Tab::text).unwrap_or_default();
                     self.lsp.did_save(&p, &text);
                 }
+                // Persist the undo tree alongside the saved content.
+                if self.settings.persistent_undo
+                    && let Some(tab) = self.editor.active_tab()
+                {
+                    crate::undo_store::save(&p, &tab.text(), tab.editor.code_ref().history());
+                }
                 self.refresh_git();
                 true
             }
@@ -7820,16 +7826,33 @@ impl App {
             }
             return;
         }
+        let before = self.editor.tabs.len();
         match self.editor.open(path, preview) {
             Ok(()) => {
+                let opened_new = self.editor.tabs.len() > before;
                 if !preview {
                     self.editor.promote_active();
                     self.record_recent(path);
+                    // Restore the persisted undo tree for a freshly opened file.
+                    if opened_new && self.settings.persistent_undo {
+                        self.restore_persistent_undo(path);
+                    }
                 }
                 self.apply_editorconfig_indent(path);
                 self.status = t!("status.opened", path = path.display()).to_string();
             }
             Err(e) => self.messages.error(t!("msg.open_failed", error = e).to_string()),
+        }
+    }
+
+    /// Restore the active buffer's persisted undo tree, if one was saved for this
+    /// file and its content still matches.
+    fn restore_persistent_undo(&mut self, path: &Path) {
+        let Some(content) = self.editor.active_tab().map(crate::editor::Tab::text) else { return };
+        if let Some(history) = crate::undo_store::load(path, &content)
+            && let Some(tab) = self.editor.active_tab_mut()
+        {
+            tab.editor.code_mut().set_history(history);
         }
     }
 

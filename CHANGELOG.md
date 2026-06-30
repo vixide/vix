@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Persistent undo.** The undo tree is saved per file on save and restored on
+  reopen (under `<config>/undo/`), guarded by a content hash so it's only replayed
+  when the file still matches. Setting `persistent_undo` (on by default).
 - **Live Backlinks** (Org → Roam → Live Backlinks). A toggle that fills the bottom
   dock with the active node's linked + unlinked references and refreshes as you move
   between nodes.
