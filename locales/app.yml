@@ -4046,6 +4046,8 @@ menu.item.org.roam.capture:
   en: "Capture Node…"
 menu.item.org.roam.backlinks:
   en: "Backlinks"
+menu.item.org.roam.backlinks_follow:
+  en: "Live Backlinks"
 menu.item.org.roam.dailies:
   en: "Dailies"
 menu.item.org.roam.dailies_today:
@@ -12099,6 +12101,8 @@ status.roam_not_node:
   en: "Active buffer is not a node (no #+title:)"
 status.roam_backlinks:
   en: "Backlinks for: %{title}"
+status.backlinks_follow:
+  en: "Live backlinks: %{on}"
 status.roam_daily_captured:
   en: "Captured into today's daily note"
 status.roam_graph:

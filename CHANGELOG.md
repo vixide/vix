@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Live Backlinks** (Org → Roam → Live Backlinks). A toggle that fills the bottom
+  dock with the active node's linked + unlinked references and refreshes as you move
+  between nodes.
 - **Dailies calendar** (Org → Roam → Dailies → Calendar…). Opens the month grid;
   Enter on a day opens/creates that day's Org-roam daily note instead of inserting
   the date.

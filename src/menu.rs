@@ -786,6 +786,7 @@ const ORG_ROAM: &[Item] = &[
     SEP,
     Item::leaf("menu.item.org.roam.capture", "roam.capture", ""),
     Item::leaf("menu.item.org.roam.backlinks", "roam.backlinks", ""),
+    Item::leaf("menu.item.org.roam.backlinks_follow", "roam.backlinks_follow", ""),
     SEP,
     Item::sub("menu.item.org.roam.dailies", ORG_ROAM_DAILIES),
     Item::sub("menu.item.org.roam.metadata", ORG_ROAM_METADATA),
