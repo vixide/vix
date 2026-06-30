@@ -41,6 +41,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`[[` wiki-link autocomplete** for Org-roam/Node. Typing `[[` in an `.org` file
+  opens node-title completion (also Org → Node → Complete Link…); accepting inserts
+  the title and closes the link, without double-closing when auto-pair already
+  added `]]`.
 - **Rainbow brackets** (View → Rainbow Brackets, off by default). Colors `()[]{}`
   by nesting depth (6-color cycle) over the syntax colors; skipped for very large
   files. (Idea from the zee/editor feature.)
