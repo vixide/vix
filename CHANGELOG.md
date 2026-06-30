@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Rainbow brackets** (View → Rainbow Brackets, off by default). Colors `()[]{}`
+  by nesting depth (6-color cycle) over the syntax colors; skipped for very large
+  files. (Idea from the zee/editor feature.)
 - **Sticky scroll** (View → Sticky Scroll, on by default). Pins the enclosing
   scope's header line (e.g. the `fn`/`class`/heading) at the top of the editor
   while you scroll through its body. Single-pane view. (Idea from the zee/VS Code

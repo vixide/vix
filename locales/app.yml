@@ -2915,6 +2915,8 @@ menu.item.view.zoom_reset:
   bn: "জুম রিসেট"
   zh: "重置缩放"
   ja: "ズームをリセット"
+menu.item.view.rainbow_brackets:
+  en: "Rainbow Brackets"
 menu.item.view.auto_pair:
   en: "Auto-Pair Brackets"
   es: "Emparejar corchetes automáticamente"
@@ -11569,6 +11571,8 @@ status.auto_save:
   en: "Auto save: %{on}"
 status.sticky_scroll:
   en: "Sticky scroll: %{on}"
+status.rainbow_brackets:
+  en: "Rainbow brackets: %{on}"
 status.auto_saved:
   en: "Auto-saved"
 status.formatted:

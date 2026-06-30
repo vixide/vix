@@ -3446,6 +3446,7 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
             "view.sticky_scroll",
             "view.spellcheck",
             "view.auto_pair",
+            "view.rainbow_brackets",
             "view.trim_on_save",
             "view.final_newline_on_save",
             "view.format_on_save",

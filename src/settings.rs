@@ -71,6 +71,8 @@ pub struct Settings {
     /// Pin the enclosing scope's header line at the top of the editor while
     /// scrolling (sticky scroll).
     pub sticky_scroll: bool,
+    /// Color matching brackets by nesting depth (rainbow brackets).
+    pub rainbow_brackets: bool,
     /// Indentation inserted by Tab: `"spaces"` (default) or `"tabs"`.
     pub indent_style: String,
     /// Number of spaces per indent when `indent_style` is `"spaces"`.
@@ -202,6 +204,7 @@ impl Default for Settings {
             format_on_save: false,
             auto_save: false,
             sticky_scroll: true,
+            rainbow_brackets: false,
             indent_style: "spaces".to_string(),
             tab_width: 4,
             theme: "dark".to_string(),
