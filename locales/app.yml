@@ -4672,6 +4672,8 @@ menu.item.lsp.type_definition:
   bn: "টাইপ সংজ্ঞায় যান"
   zh: "转到类型定义"
   ja: "型定義へ移動"
+menu.item.lsp.call_hierarchy:
+  en: "Call Hierarchy (Callers)"
 menu.item.lsp.references:
   en: "Find References"
   es: "Buscar referencias"

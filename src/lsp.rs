@@ -49,6 +49,8 @@ enum Pending {
     InlayHint,
     LinkedEditing,
     CodeLens,
+    PrepareCallHierarchy,
+    IncomingCalls,
 }
 
 /// A message handed back from a server's stdout reader thread.
@@ -81,6 +83,8 @@ pub enum LspEvent {
     Completion(Vec<crate::lsp_core::CompletionItem>),
     /// A references response: every (file, 0-based line, character) location.
     References(Vec<(PathBuf, u32, u32)>),
+    /// A `prepareCallHierarchy` result: the symbol item to query calls for.
+    CallHierarchyPrepared(serde_json::Value),
     /// A formatting response: text edits (range + replacement) for the active
     /// file, in document order.
     Edits(Vec<(crate::lsp_core::Range, String)>),
@@ -347,6 +351,24 @@ impl Lsp {
     /// definition).
     pub fn request_declaration(&mut self, path: &Path, line: u32, character: u32) {
         self.request(path, "textDocument/declaration", line, character, Pending::Definition);
+    }
+
+    /// Step 1 of call hierarchy: prepare the symbol at `(line, character)`. The
+    /// response (`LspEvent::CallHierarchyPrepared`) carries the item to query.
+    pub fn request_prepare_call_hierarchy(&mut self, path: &Path, line: u32, character: u32) {
+        self.request(path, "textDocument/prepareCallHierarchy", line, character, Pending::PrepareCallHierarchy);
+    }
+
+    /// Step 2 of call hierarchy: request the incoming calls (callers) for the
+    /// prepared `item`. The response arrives as `LspEvent::References`.
+    pub fn request_incoming_calls(&mut self, path: &Path, item: serde_json::Value) {
+        let Some(config) = self.config_for(path) else { return };
+        let Some(server) = self.servers.get_mut(&config.language_id) else { return };
+        let id = server.alloc_id();
+        server.pending.insert(id, Pending::IncomingCalls);
+        let mut params = serde_json::Map::new();
+        params.insert("item".to_string(), item); // consumes `item`
+        server.send(message::request(id, "callHierarchy/incomingCalls", &serde_json::Value::Object(params)));
     }
 
     /// Request all references to the symbol at `(line, character)`.
@@ -658,6 +680,20 @@ impl Lsp {
     /// keep each within the line limit.
     fn response_to_events_more(kind: Pending, result: &Value, events: &mut Vec<LspEvent>) {
         match kind {
+            Pending::PrepareCallHierarchy => {
+                if let Some(item) = message::first_call_hierarchy_item(result) {
+                    events.push(LspEvent::CallHierarchyPrepared(item));
+                }
+            }
+            Pending::IncomingCalls => {
+                let locs: Vec<(PathBuf, u32, u32)> = message::parse_incoming_calls(result)
+                    .into_iter()
+                    .map(|l| (uri_to_path(&l.uri), l.range.start.line, l.range.start.character))
+                    .collect();
+                if !locs.is_empty() {
+                    events.push(LspEvent::References(locs));
+                }
+            }
             Pending::DocumentSymbols => {
                 let syms = message::parse_document_symbols(result);
                 if !syms.is_empty() {

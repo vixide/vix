@@ -653,6 +653,7 @@ const TOOLS_LSP: &[Item] = &[
     Item::leaf("menu.item.lsp.type_definition", "nav.goto_type_definition", ""),
     SEP,
     Item::leaf("menu.item.lsp.references", "lsp.references", ""),
+    Item::leaf("menu.item.lsp.call_hierarchy", "lsp.call_hierarchy", ""),
     Item::leaf("menu.item.lsp.rename", "lsp.rename", "F2"),
     Item::leaf("menu.item.lsp.linked_edit", "lsp.linked_edit", ""),
     SEP,

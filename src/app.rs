@@ -2911,6 +2911,7 @@ impl App {
             "nav.goto_implementation" => self.goto_implementation(),
             "nav.goto_type_definition" => self.goto_type_definition(),
             "lsp.references" => self.find_references(),
+            "lsp.call_hierarchy" => self.call_hierarchy(),
             "lsp.format" => self.lsp_format(),
             "lsp.document_symbols" => self.request_document_symbols(),
             "lsp.signature_help" => self.lsp_signature_help(),
@@ -7148,6 +7149,13 @@ impl App {
                     }
                 }
                 crate::lsp::LspEvent::References(locs) => self.show_references(&locs),
+                crate::lsp::LspEvent::CallHierarchyPrepared(item) => {
+                    if let Some(path) = self.active_path()
+                        && self.lsp.handles(&path)
+                    {
+                        self.lsp.request_incoming_calls(&path, item);
+                    }
+                }
                 crate::lsp::LspEvent::Edits(edits) => self.apply_lsp_edits(&edits),
                 crate::lsp::LspEvent::DocumentSymbols(syms) => self.show_document_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceSymbols(syms) => self.show_workspace_symbols(&syms),
@@ -12452,6 +12460,19 @@ impl App {
             PromptKind::GotoSentence => self.editor.goto_sentence(n, area),
             PromptKind::GotoWord => self.editor.goto_word(n, area),
             _ => self.editor.goto_section(n, area),
+        }
+    }
+
+    /// Show the call hierarchy (incoming calls / callers) of the symbol under the
+    /// cursor (LSP); results land in the references jump list.
+    fn call_hierarchy(&mut self) {
+        if let Some(path) = self.active_path()
+            && self.lsp.handles(&path)
+        {
+            let (line, character) = self.cursor_lsp_position(&path);
+            self.lsp.request_prepare_call_hierarchy(&path, line, character);
+        } else {
+            self.status = t!("status.lsp_inactive").to_string();
         }
     }
 

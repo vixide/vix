@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Call hierarchy (callers)** (Tools → Language Server → Call Hierarchy). Lists
+  the incoming calls to the symbol under the cursor via LSP
+  (`prepareCallHierarchy` → `incomingCalls`), shown in the references jump list.
 - **Emmet expansion** (Edit → Emmet Expand). Expands the abbreviation before the
   cursor into HTML — child `>`, sibling `+`, multiply `*N`, `#id`, `.class`,
   `{text}`, and `$` numbering (e.g. `ul>li.item$*3`). Pure logic in `crate::emmet`.

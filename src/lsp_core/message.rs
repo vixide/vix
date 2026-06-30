@@ -566,6 +566,35 @@ fn parse_location(v: &Value) -> Option<Location> {
     Some(Location { uri, range })
 }
 
+/// The first item of a `textDocument/prepareCallHierarchy` result (the symbol to
+/// query calls for), cloned for round-tripping to `callHierarchy/incomingCalls`.
+#[must_use]
+pub fn first_call_hierarchy_item(result: &Value) -> Option<Value> {
+    result.as_array()?.first().cloned()
+}
+
+/// Parse a `callHierarchy/incomingCalls` result into the call-site locations:
+/// each caller's `fromRanges` (falling back to its `selectionRange`/`range`).
+#[must_use]
+pub fn parse_incoming_calls(result: &Value) -> Vec<Location> {
+    let Some(arr) = result.as_array() else { return Vec::new() };
+    let mut out = Vec::new();
+    for call in arr {
+        let Some(from) = call.get("from") else { continue };
+        let Some(uri) = from.get("uri").and_then(Value::as_str) else { continue };
+        let range = call
+            .get("fromRanges")
+            .and_then(Value::as_array)
+            .and_then(|r| r.first())
+            .and_then(parse_range)
+            .or_else(|| from.get("selectionRange").and_then(parse_range))
+            .or_else(|| from.get("range").and_then(parse_range))
+            .unwrap_or_default();
+        out.push(Location { uri: uri.to_string(), range });
+    }
+    out
+}
+
 /// Parse a `textDocument/completion` result (`CompletionItem[]` or a
 /// `CompletionList` `{ items: [...] }`) into completion candidates.
 #[must_use]
@@ -610,6 +639,27 @@ fn parse_range(v: &Value) -> Option<Range> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn incoming_calls_parse_to_call_sites() {
+        let prep = json!([{ "name": "f", "uri": "file:///a.rs", "kind": 12,
+            "range": {"start":{"line":1,"character":0},"end":{"line":1,"character":1}},
+            "selectionRange": {"start":{"line":1,"character":3},"end":{"line":1,"character":4}} }]);
+        assert!(first_call_hierarchy_item(&prep).is_some());
+        assert!(first_call_hierarchy_item(&Value::Null).is_none());
+
+        let incoming = json!([{
+            "from": { "name": "caller", "uri": "file:///b.rs", "kind": 12,
+                "range": {"start":{"line":9,"character":0},"end":{"line":9,"character":1}},
+                "selectionRange": {"start":{"line":9,"character":0},"end":{"line":9,"character":6}} },
+            "fromRanges": [ {"start":{"line":5,"character":4},"end":{"line":5,"character":9}} ]
+        }]);
+        let calls = parse_incoming_calls(&incoming);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].uri, "file:///b.rs");
+        assert_eq!(calls[0].range.start.line, 5, "uses the call-site fromRange");
+        assert_eq!(calls[0].range.start.character, 4);
+    }
 
     #[test]
     fn request_and_notification_envelopes() {
