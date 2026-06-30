@@ -318,6 +318,7 @@ const VIEW_EDITOR: &[Item] = &[
     Item::leaf("menu.item.view.auto_pair", "view.auto_pair", ""),
     Item::leaf("menu.item.view.trim_on_save", "view.trim_on_save", ""),
     Item::leaf("menu.item.view.final_newline_on_save", "view.final_newline_on_save", ""),
+    Item::leaf("menu.item.view.format_on_save", "view.format_on_save", ""),
     SEP,
     Item::leaf("menu.item.view.next_tab", "tab.next", "Ctrl Tab"),
     Item::leaf("menu.item.view.prev_tab", "tab.prev", "Ctrl Shift Tab"),
