@@ -1255,6 +1255,7 @@ impl App {
         );
         for tab in &mut editor.tabs {
             tab.editor.set_auto_pair(settings.auto_pair);
+            tab.editor.set_rainbow_brackets(settings.rainbow_brackets);
         }
         let mut messages = Messages::default();
         messages.advice(t!("msg.welcome").to_string());
@@ -2596,6 +2597,7 @@ impl App {
             "view.scrollbar" => self.toggle_scrollbar(),
             "view.spellcheck" => self.toggle_spellcheck(),
             "view.auto_pair" => self.toggle_auto_pair(),
+            "view.rainbow_brackets" => self.toggle_rainbow_brackets(),
             "view.zoom_in" => self.terminal_zoom(1),
             "view.zoom_out" => self.terminal_zoom(-1),
             "view.zoom_reset" => self.terminal_zoom(0),
@@ -7716,8 +7718,10 @@ impl App {
     /// when `EditorConfig` support is enabled and the file's config specifies one.
     fn apply_editorconfig_indent(&mut self, path: &Path) {
         let auto_pair = self.settings.auto_pair;
+        let rainbow = self.settings.rainbow_brackets;
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_auto_pair(auto_pair);
+            tab.editor.set_rainbow_brackets(rainbow);
         }
         if !self.settings.editorconfig {
             return;
@@ -7770,6 +7774,16 @@ impl App {
             tab.editor.set_auto_pair(on);
         }
         self.status = t!(if on { "status.auto_pair_on" } else { "status.auto_pair_off" }).to_string();
+    }
+
+    /// Toggle rainbow (depth-colored) brackets for every open buffer and persist it.
+    fn toggle_rainbow_brackets(&mut self) {
+        self.settings.rainbow_brackets = !self.settings.rainbow_brackets;
+        let on = self.settings.rainbow_brackets;
+        for tab in &mut self.editor.tabs {
+            tab.editor.set_rainbow_brackets(on);
+        }
+        self.status = t!("status.rainbow_brackets", on = on).to_string();
     }
 
     /// Push a just-closed file path onto the reopen stack (most-recent last),
@@ -13891,9 +13905,13 @@ mod tests {
 
     #[test]
     fn sticky_header_shows_enclosing_scope_when_scrolled() {
+        use std::fmt::Write as _;
         let mut app = App::new(std::env::temp_dir(), Settings::default());
         app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 10);
-        let body: String = (0..60).map(|i| format!("    body{i}\n")).collect();
+        let mut body = String::new();
+        for i in 0..60 {
+            let _ = writeln!(body, "    body{i}");
+        }
         app.editor.new_tab_with_content(&format!("fn outer() {{\n{body}}}\n"));
         // At the top, the scope header is visible — nothing to pin.
         assert!(app.sticky_header().is_none(), "no header when the top is visible");

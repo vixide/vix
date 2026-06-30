@@ -105,6 +105,9 @@ pub struct Editor {
     /// Backspace between an empty pair deletes both). Host-configurable.
     pub(crate) auto_pair: bool,
 
+    /// When true, color matching brackets by nesting depth (rainbow brackets).
+    pub(crate) rainbow_brackets: bool,
+
     /// Optional end-of-line virtual note `(line, text)` drawn dimmed after that
     /// line's content (e.g. inline git blame for the cursor line). Non-wrapped
     /// view only.
@@ -202,6 +205,7 @@ impl Editor {
             show_whitespace: false,
             soft_wrap: false,
             auto_pair: true,
+            rainbow_brackets: false,
             eol_note: None,
             breakpoints: Vec::new(),
             debug_line: None,
@@ -1010,6 +1014,11 @@ impl Editor {
     /// Enable or disable bracket/quote auto-pairing.
     pub fn set_auto_pair(&mut self, on: bool) {
         self.auto_pair = on;
+    }
+
+    /// Enable or disable rainbow (depth-colored) brackets.
+    pub fn set_rainbow_brackets(&mut self, on: bool) {
+        self.rainbow_brackets = on;
     }
 
     /// Set (or clear with `None`) the end-of-line virtual note: `(line, text)`

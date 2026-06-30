@@ -61,6 +61,11 @@ impl Editor {
             );
         }
 
+        // recolor brackets by nesting depth (over the syntax colors)
+        if self.rainbow_brackets {
+            self.draw_rainbow_brackets(area, buf, line_number_width_u16, total_lines);
+        }
+
         // draw selection(s) — one range per caret (multiple-cursor aware)
         for (start, end) in self.caret_selections() {
             self.highlight_char_range(
@@ -449,6 +454,75 @@ impl Editor {
         }
     }
 
+    /// Recolor `()[]{}` by nesting depth across the visible lines (rainbow
+    /// brackets). Depth is seeded by counting brackets from the start of the
+    /// document to the first visible line, then carried line to line. Skipped for
+    /// very large documents to keep the per-frame cost bounded.
+    fn draw_rainbow_brackets(&self, area: Rect, buf: &mut Buffer, line_number_width_u16: u16, total_lines: usize) {
+        const COLORS: [Color; 6] = [
+            Color::Rgb(0xff, 0xd7, 0x00), // gold
+            Color::Rgb(0xda, 0x70, 0xd6), // orchid
+            Color::Rgb(0x6a, 0x9e, 0xff), // blue
+            Color::Rgb(0x8b, 0xc3, 0x4a), // green
+            Color::Rgb(0xff, 0x8c, 0x42), // orange
+            Color::Rgb(0x4d, 0xd0, 0xe1), // cyan
+        ];
+        let code = self.code_ref();
+        let Some(first) = self.line_at_row(0) else { return };
+        let base = code.line_to_char(first);
+        if base > 200_000 {
+            return; // bound the from-start scan on very large files
+        }
+        // Seed nesting depth from the document start to the first visible line.
+        let mut depth: usize = code.char_slice(0, base).chars().fold(0usize, |d, c| match c {
+            '(' | '[' | '{' => d + 1,
+            ')' | ']' | '}' => d.saturating_sub(1),
+            _ => d,
+        });
+        let max_x = (area.width as usize).saturating_sub(line_number_width_u16 as usize);
+        for screen_y in 0..(area.height as usize) {
+            let Some(line_idx) = self.line_at_row(screen_y) else { break };
+            if line_idx >= total_lines {
+                break;
+            }
+            let ls = code.line_to_char(line_idx);
+            let len = code.line_len(line_idx);
+            let slice = code.char_slice(ls, ls + len);
+            let mut vcol = 0usize;
+            for g in RopeGraphemes::new(&slice) {
+                let w = grapheme_width_and_bytes_len(g).0;
+                if g.len_chars() == 1 {
+                    let c = g.char(0);
+                    let color = match c {
+                        '(' | '[' | '{' => {
+                            let col = COLORS[depth % COLORS.len()];
+                            depth += 1;
+                            Some(col)
+                        }
+                        ')' | ']' | '}' => {
+                            depth = depth.saturating_sub(1);
+                            Some(COLORS[depth % COLORS.len()])
+                        }
+                        _ => None,
+                    };
+                    if let Some(color) = color
+                        && vcol >= self.offset_x
+                    {
+                        let x = vcol - self.offset_x;
+                        if x < max_x {
+                            let dx = area.left() + line_number_width_u16 + u16::try_from(x).unwrap_or(u16::MAX);
+                            let dy = area.top() + u16::try_from(screen_y).unwrap_or(u16::MAX);
+                            if dx < area.right() && dy < area.bottom() {
+                                buf[(dx, dy)].set_fg(color);
+                            }
+                        }
+                    }
+                }
+                vcol += w;
+            }
+        }
+    }
+
     fn draw_syntax_layer(
         &self,
         area: Rect,
@@ -663,6 +737,20 @@ mod whitespace_tests {
         (&ed).render(area, &mut buf);
         let line1_styled = (0..40).any(|x| buf[(x, 1)].fg == Color::Rgb(255, 0, 0));
         assert!(line1_styled, "second visible line (fn main) is highlighted via the single viewport query");
+    }
+
+    #[test]
+    fn rainbow_brackets_color_by_nesting_depth() {
+        use ratatui_core::style::Color;
+        let mut ed = Editor::new("text", "(a[b])", Vec::new()).unwrap();
+        ed.show_line_numbers(false);
+        ed.set_rainbow_brackets(true);
+        let area = Rect::new(0, 0, 20, 2);
+        let mut buf = Buffer::empty(area);
+        (&ed).render(area, &mut buf);
+        // 2-cell left padding: '(' at x=2 (depth 0), '[' at x=4 (depth 1).
+        assert_eq!(buf[(2, 0)].fg, Color::Rgb(0xff, 0xd7, 0x00), "outer ( is depth-0 gold");
+        assert_eq!(buf[(4, 0)].fg, Color::Rgb(0xda, 0x70, 0xd6), "inner [ is depth-1 orchid");
     }
 
     #[test]
