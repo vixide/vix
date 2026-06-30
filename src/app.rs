@@ -2589,6 +2589,10 @@ impl App {
                 self.settings.auto_save = !self.settings.auto_save;
                 self.status = t!("status.auto_save", on = self.settings.auto_save).to_string();
             }
+            "view.sticky_scroll" => {
+                self.settings.sticky_scroll = !self.settings.sticky_scroll;
+                self.status = t!("status.sticky_scroll", on = self.settings.sticky_scroll).to_string();
+            }
             "view.scrollbar" => self.toggle_scrollbar(),
             "view.spellcheck" => self.toggle_spellcheck(),
             "view.auto_pair" => self.toggle_auto_pair(),
@@ -3390,6 +3394,31 @@ impl App {
     #[must_use]
     pub fn is_zen(&self) -> bool {
         self.zen_saved.is_some()
+    }
+
+    /// The sticky-scroll header line: the source line of the enclosing scope whose
+    /// own header has scrolled off the top of the viewport. `None` when sticky
+    /// scroll is off, the top is visible, or there is no enclosing scope.
+    #[must_use]
+    pub fn sticky_header(&self) -> Option<String> {
+        if !self.settings.sticky_scroll {
+            return None;
+        }
+        let tab = self.editor.active_tab()?;
+        if tab.is_image() {
+            return None;
+        }
+        let top = self.editor.top_visible_line(); // 0-based first visible line
+        if top == 0 {
+            return None;
+        }
+        // The enclosing symbol is the last one declared at or above the first
+        // visible line; show it only when its own header line is scrolled off.
+        crate::palette::symbols(&tab.text())
+            .into_iter()
+            .rev()
+            .find(|s| s.line <= top) // 1-based line <= top means strictly above the first visible (top+1)
+            .map(|s| s.text)
     }
 
     /// The breadcrumb for the active buffer: its file name, then the enclosing
@@ -13858,6 +13887,21 @@ mod tests {
             "saved file reopened"
         );
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn sticky_header_shows_enclosing_scope_when_scrolled() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 10);
+        let body: String = (0..60).map(|i| format!("    body{i}\n")).collect();
+        app.editor.new_tab_with_content(&format!("fn outer() {{\n{body}}}\n"));
+        // At the top, the scope header is visible — nothing to pin.
+        assert!(app.sticky_header().is_none(), "no header when the top is visible");
+        // Scroll deep into the function; its `fn outer()` line is now off-screen.
+        app.editor.goto(40, None, app.layout.editor);
+        assert!(app.editor.top_visible_line() > 1, "scrolled past the header");
+        let header = app.sticky_header().expect("enclosing scope is pinned");
+        assert!(header.contains("fn outer"), "header is the enclosing fn: {header:?}");
     }
 
     #[test]

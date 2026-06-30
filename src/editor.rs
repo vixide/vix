@@ -927,6 +927,13 @@ impl Editor {
         self.active_tab_mut().is_some_and(|t| t.editor.switch_undo_branch())
     }
 
+    /// The 0-based index of the active buffer's first visible line (vertical
+    /// scroll offset), or 0 when there is no buffer.
+    #[must_use]
+    pub fn top_visible_line(&self) -> usize {
+        self.active_tab().map_or(0, |t| t.editor.top_line())
+    }
+
     /// The 0-based start rows of every paragraph (`section == false`) or section
     /// (`section == true`) in the active buffer. A paragraph is a run of non-blank
     /// lines; a section is a run separated by a section break (2+ blank lines).

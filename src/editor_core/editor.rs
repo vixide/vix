@@ -869,6 +869,12 @@ impl Editor {
         &self.code
     }
 
+    /// The 0-based index of the first visible line (the vertical scroll offset).
+    #[must_use]
+    pub fn top_line(&self) -> usize {
+        self.offset_y
+    }
+
     /// Install any completed background reparse (large buffers). Returns `true`
     /// when the syntax tree was updated, so the host can redraw.
     pub fn poll_parse(&mut self) -> bool {

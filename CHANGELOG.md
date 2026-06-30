@@ -41,6 +41,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Sticky scroll** (View → Sticky Scroll, on by default). Pins the enclosing
+  scope's header line (e.g. the `fn`/`class`/heading) at the top of the editor
+  while you scroll through its body. Single-pane view. (Idea from the zee/VS Code
+  feature.)
 - **Indentation guides** — faint vertical bars at each indent level on the
   (non-wrapped) editor view, for space-indented buffers. (Idea from the zee/VS Code
   visual.)
