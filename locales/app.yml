@@ -2949,6 +2949,8 @@ menu.item.view.trim_on_save:
   ja: "保存時に空白を除去"
 menu.item.view.format_on_save:
   en: "Format on Save"
+menu.item.view.auto_save:
+  en: "Auto Save"
 menu.item.view.final_newline_on_save:
   en: "Final Newline on Save"
   es: "Nueva línea final al guardar"
@@ -11561,6 +11563,10 @@ status.conflict_resolved:
   ja: "競合を解決しました"
 status.format_on_save:
   en: "Format on save: %{on}"
+status.auto_save:
+  en: "Auto save: %{on}"
+status.auto_saved:
+  en: "Auto-saved"
 status.formatted:
   en: "Formatted"
   es: "Formateado"

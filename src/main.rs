@@ -106,6 +106,8 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
         app.poll_parse();
         // Reload files changed on disk by another process (throttled internally).
         app.poll_file_changes();
+        // Periodically save the active buffer when auto-save is on.
+        app.poll_auto_save();
         terminal.draw(|frame| ui::draw(app, frame))?;
         if app.should_quit {
             return Ok(());

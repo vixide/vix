@@ -1070,6 +1070,8 @@ pub struct App {
     /// When format-on-save triggered an async LSP format, the path to re-save once
     /// the formatting edits land.
     format_save_pending: Option<PathBuf>,
+    /// Throttle anchor for interval auto-save; `None` until the first tick.
+    last_auto_save: Option<std::time::Instant>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
     pub clip: Vec<PathBuf>,
     /// Whether [`App::clip`] holds a cut (move) rather than a copy.
@@ -1306,7 +1308,7 @@ impl App {
             hover: None, completion: None, dialog: None, color_converter: None,
             unit_converter: None, calculator: None, regex_tester: None, code_actions: None,
             code_lens: None, pomodoro: None,
-            pomodoro_open: false, pomodoro_last_tick: None, disk_mtimes: std::collections::HashMap::new(), last_disk_poll: None, format_save_pending: None,
+            pomodoro_open: false, pomodoro_last_tick: None, disk_mtimes: std::collections::HashMap::new(), last_disk_poll: None, format_save_pending: None, last_auto_save: None,
             clip: Vec::new(), clip_cut: false,
             nav_history: Vec::new(), bookmarks: Vec::new(), nav_idx: 0,
             picker: None,
@@ -2582,6 +2584,10 @@ impl App {
             "view.format_on_save" => {
                 self.settings.format_on_save = !self.settings.format_on_save;
                 self.status = t!("status.format_on_save", on = self.settings.format_on_save).to_string();
+            }
+            "view.auto_save" => {
+                self.settings.auto_save = !self.settings.auto_save;
+                self.status = t!("status.auto_save", on = self.settings.auto_save).to_string();
             }
             "view.scrollbar" => self.toggle_scrollbar(),
             "view.spellcheck" => self.toggle_spellcheck(),
@@ -6103,6 +6109,25 @@ impl App {
     /// Install any completed background reparse (large-file async highlighting).
     pub fn poll_parse(&mut self) {
         self.editor.poll_parse();
+    }
+
+    /// Periodically save the active dirty, file-backed buffer when auto-save is
+    /// enabled (every few seconds). Uses a plain write (no format-on-save churn).
+    pub fn poll_auto_save(&mut self) {
+        if !self.settings.auto_save {
+            return;
+        }
+        if self.last_auto_save.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(5)) {
+            return;
+        }
+        self.last_auto_save = Some(std::time::Instant::now());
+        let savable = self
+            .editor
+            .active_tab()
+            .is_some_and(|t| t.dirty && t.path.is_some() && t.image.is_none());
+        if savable && self.write_active_to_disk() {
+            self.status = t!("status.auto_saved").to_string();
+        }
     }
 
     /// Detect files changed on disk by another process (a formatter, `git`, a

@@ -41,6 +41,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Auto-save** (View → Auto Save, off by default). Periodically writes the active
+  dirty file-backed buffer (every ~5s; plain save, no format-on-save churn).
 - **Format on save** (View → Format on Save, off by default). On save it runs the
   language server's formatter and re-saves once the edits land; the plain save
   happens first, so nothing is lost if formatting is slow or unsupported.
