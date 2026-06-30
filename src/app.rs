@@ -1072,6 +1072,10 @@ pub struct App {
     format_save_pending: Option<PathBuf>,
     /// Throttle anchor for interval auto-save; `None` until the first tick.
     last_auto_save: Option<std::time::Instant>,
+    /// When true, the bottom dock shows live backlinks for the active node.
+    backlinks_follow: bool,
+    /// `(active tab, revision)` the backlinks dock was last built for.
+    backlinks_follow_key: Option<(usize, u64)>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
     pub clip: Vec<PathBuf>,
     /// Whether [`App::clip`] holds a cut (move) rather than a copy.
@@ -1312,7 +1316,7 @@ impl App {
             hover: None, completion: None, dialog: None, color_converter: None,
             unit_converter: None, calculator: None, regex_tester: None, code_actions: None,
             code_lens: None, pomodoro: None,
-            pomodoro_open: false, pomodoro_last_tick: None, disk_mtimes: std::collections::HashMap::new(), last_disk_poll: None, format_save_pending: None, last_auto_save: None,
+            pomodoro_open: false, pomodoro_last_tick: None, disk_mtimes: std::collections::HashMap::new(), last_disk_poll: None, format_save_pending: None, last_auto_save: None, backlinks_follow: false, backlinks_follow_key: None,
             clip: Vec::new(), clip_cut: false,
             nav_history: Vec::new(), bookmarks: Vec::new(), nav_idx: 0,
             picker: None,
@@ -3598,6 +3602,12 @@ impl App {
                 self.prompt = Some(Prompt::new(PromptKind::RoamCapture, t!("prompt.roam_capture").to_string()));
             }
             "roam.backlinks" => self.roam_backlinks(),
+            "roam.backlinks_follow" => {
+                self.backlinks_follow = !self.backlinks_follow;
+                self.backlinks_follow_key = None; // force a rebuild on next refresh
+                self.refresh_backlinks_follow();
+                self.status = t!("status.backlinks_follow", on = self.backlinks_follow).to_string();
+            }
             "roam.dailies_today" => self.roam_open_daily(&Self::roam_today()),
             "roam.dailies_calendar" => {
                 self.calendar = crate::calendar::Calendar::new();
@@ -6183,6 +6193,36 @@ impl App {
         if savable && self.write_active_to_disk() {
             self.status = t!("status.auto_saved").to_string();
         }
+    }
+
+    /// When "Live Backlinks" is on, rebuild the bottom dock with the active node's
+    /// backlinks whenever the active buffer (or its content) changes.
+    pub fn refresh_backlinks_follow(&mut self) {
+        if !self.backlinks_follow {
+            return;
+        }
+        let key = self
+            .editor
+            .active_tab()
+            .filter(|t| !t.is_image())
+            .map(|t| (self.editor.active, t.editor.revision()));
+        if key == self.backlinks_follow_key {
+            return;
+        }
+        self.backlinks_follow_key = key;
+        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else { return };
+        let id = crate::roam::node_id(&text).unwrap_or_default();
+        let title = crate::roam::node_title(&text).unwrap_or_default();
+        self.bottom_dock.clear();
+        if id.is_empty() && title.is_empty() {
+            self.bottom_dock.push(t!("status.roam_not_node").to_string());
+        } else {
+            let files = self.roam_node_files();
+            for line in crate::roam::backlinks(&id, &title, &files).lines() {
+                self.bottom_dock.push(line.to_string());
+            }
+        }
+        self.show_bottom_dock = true;
     }
 
     /// Detect files changed on disk by another process (a formatter, `git`, a
@@ -13980,6 +14020,30 @@ mod tests {
             "saved file reopened"
         );
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn live_backlinks_fill_the_bottom_dock_for_the_active_node() {
+        let dir = std::env::temp_dir().join(format!("vix-livebl-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("target.org"),
+            ":PROPERTIES:\n:ID:       T1\n:END:\n#+title: Target\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("source.org"), "#+title: Source\nsee [[id:T1][Target]]\n").unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.build_file_index();
+        app.open_path(&dir.join("target.org"), false);
+        app.run_action("roam.backlinks_follow");
+        assert!(app.backlinks_follow && app.show_bottom_dock, "live backlinks on, dock shown");
+        let joined = app.bottom_dock.lines.join("\n");
+        assert!(joined.contains("Linked references (1)"), "one linked ref: {joined:?}");
+        assert!(joined.contains("source.org"), "source listed: {joined:?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
