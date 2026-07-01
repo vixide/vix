@@ -2821,6 +2821,8 @@ impl App {
             }
             "edit.emmet_expand" => self.emmet_expand(),
             "edit.toggle_value" => self.smart_toggle(),
+            "edit.transpose_chars" => self.transpose(transpose_chars_at),
+            "edit.transpose_words" => self.transpose(transpose_words_at),
             "edit.increment_number" => self.bump_number(1),
             "edit.decrement_number" => self.bump_number(-1),
             "edit.align.equals" => self.transform_selection_or_buffer(|s| crate::align::on_delimiter(s, '=')),
@@ -3752,6 +3754,22 @@ impl App {
             tab.dirty = true;
         } else {
             self.status = t!("status.no_number").to_string();
+        }
+    }
+
+    /// Transpose text around the cursor with `f` (chars or words), updating the
+    /// buffer and cursor. No-op when `f` finds nothing to swap.
+    fn transpose(&mut self, f: fn(&str, usize) -> Option<(String, usize)>) {
+        let Some(tab) = self.editor.active_tab_mut() else { return };
+        if tab.is_image() {
+            return;
+        }
+        let cursor = tab.editor.get_cursor();
+        let text = tab.editor.get_content();
+        if let Some((new, pos)) = f(&text, cursor) {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor(pos);
+            tab.dirty = true;
         }
     }
 
@@ -14137,6 +14155,77 @@ fn bump_number_at(text: &str, cursor: usize, delta: i64) -> Option<(String, usiz
     Some((out, start))
 }
 
+/// Transpose the two characters around char offset `cursor` (Emacs `C-t`): swap
+/// the char before the cursor with the one at it, advancing the cursor. At the
+/// end of a line/buffer, swaps the last two characters. Never crosses newlines.
+/// Returns the rewritten text and new cursor, or `None` if there is no pair.
+fn transpose_chars_at(text: &str, cursor: usize) -> Option<(String, usize)> {
+    let mut chars: Vec<char> = text.chars().collect();
+    let n = chars.len();
+    // The left index of the pair to swap.
+    let i = if cursor >= 1 && cursor < n && chars[cursor] != '\n' {
+        cursor - 1
+    } else if cursor >= 2 {
+        cursor - 2
+    } else {
+        return None;
+    };
+    if i + 1 >= n || chars[i] == '\n' || chars[i + 1] == '\n' {
+        return None;
+    }
+    chars.swap(i, i + 1);
+    Some((chars.iter().collect(), (i + 2).min(n)))
+}
+
+/// Transpose the word before the cursor with the word at/after it (Emacs `M-t`),
+/// preserving the separator between them and leaving the cursor after the moved
+/// pair. Returns `None` if two words can't be found.
+fn transpose_words_at(text: &str, cursor: usize) -> Option<(String, usize)> {
+    let chars: Vec<char> = text.chars().collect();
+    let n = chars.len();
+    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+    // Start of the second word: the word containing the cursor, else the next one.
+    let mut b = cursor.min(n);
+    if b < n && is_word(chars[b]) {
+        while b > 0 && is_word(chars[b - 1]) {
+            b -= 1;
+        }
+    } else {
+        while b < n && !is_word(chars[b]) {
+            b += 1;
+        }
+    }
+    if b >= n {
+        return None;
+    }
+    let mut b_end = b;
+    while b_end < n && is_word(chars[b_end]) {
+        b_end += 1;
+    }
+    // The first word: the word ending before `b`.
+    let mut a_end = b;
+    while a_end > 0 && !is_word(chars[a_end - 1]) {
+        a_end -= 1;
+    }
+    let mut a = a_end;
+    while a > 0 && is_word(chars[a - 1]) {
+        a -= 1;
+    }
+    if a == a_end {
+        return None; // no preceding word
+    }
+    let word1: String = chars[a..a_end].iter().collect();
+    let sep: String = chars[a_end..b].iter().collect();
+    let word2: String = chars[b..b_end].iter().collect();
+    let mut out: String = chars[..a].iter().collect();
+    out.push_str(&word2);
+    out.push_str(&sep);
+    out.push_str(&word1);
+    out.extend(chars[b_end..].iter());
+    let new_cursor = a + word2.chars().count() + sep.chars().count() + word1.chars().count();
+    Some((out, new_cursor))
+}
+
 /// Opposite-value pairs for [`smart_toggle_at`]. Word pairs are matched
 /// whole-word and case-preserved; symbol pairs are matched literally.
 const TOGGLE_WORDS: &[(&str, &str)] = &[
@@ -14691,6 +14780,27 @@ mod tests {
         let marks = app.editor.active_tab().unwrap().editor.word_marks().cloned().unwrap_or_default();
         assert_eq!(marks.len(), 3, "all three 'foo' occurrences marked: {marks:?}");
         assert_eq!(marks[0], (0, 3));
+    }
+
+    #[test]
+    fn transpose_chars_swaps_around_the_cursor() {
+        // Cursor between 'a' and 'b' (offset 1): swap → "ba", cursor advances to 2.
+        assert_eq!(transpose_chars_at("ab", 1), Some(("ba".to_string(), 2)));
+        // At end of buffer: swap the last two.
+        assert_eq!(transpose_chars_at("abc", 3), Some(("acb".to_string(), 3)));
+        // No pair at the very start.
+        assert!(transpose_chars_at("ab", 0).is_none());
+        // Never across a newline.
+        assert!(transpose_chars_at("a\nb", 1).is_none());
+    }
+
+    #[test]
+    fn transpose_words_swaps_neighboring_words() {
+        assert_eq!(transpose_words_at("foo bar", 5).unwrap().0, "bar foo");
+        // Punctuation separator is preserved.
+        assert_eq!(transpose_words_at("alpha, beta", 8).unwrap().0, "beta, alpha");
+        // Only one word → nothing to do.
+        assert!(transpose_words_at("solo", 0).is_none());
     }
 
     #[test]

@@ -1637,6 +1637,10 @@ menu.item.edit.emmet_expand:
   en: "Emmet Expand"
 menu.item.edit.toggle_value:
   en: "Toggle Value"
+menu.item.edit.transpose_chars:
+  en: "Transpose Characters"
+menu.item.edit.transpose_words:
+  en: "Transpose Words"
 menu.item.edit.increment_number:
   en: "Increment Number"
 menu.item.edit.decrement_number:
