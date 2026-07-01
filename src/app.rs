@@ -2783,6 +2783,8 @@ impl App {
                     }
             }
             "edit.emmet_expand" => self.emmet_expand(),
+            "edit.increment_number" => self.bump_number(1),
+            "edit.decrement_number" => self.bump_number(-1),
             "edit.case_upper" => self.change_case(crate::case::upper),
             "edit.case_lower" => self.change_case(crate::case::lower),
             "edit.case_title" => self.change_case(crate::case::title),
@@ -3681,6 +3683,25 @@ impl App {
             tab.dirty = true;
         } else {
             self.status = t!("status.org_not_headline").to_string();
+        }
+    }
+
+    /// Increment (or decrement) the integer at/after the cursor by `delta`,
+    /// leaving the cursor on the number. No-op (with a status note) when the
+    /// cursor's line has no number at/after it.
+    fn bump_number(&mut self, delta: i64) {
+        let Some(tab) = self.editor.active_tab_mut() else { return };
+        if tab.is_image() {
+            return;
+        }
+        let cursor = tab.editor.get_cursor();
+        let text = tab.editor.get_content();
+        if let Some((new, pos)) = bump_number_at(&text, cursor, delta) {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor(pos);
+            tab.dirty = true;
+        } else {
+            self.status = t!("status.no_number").to_string();
         }
     }
 
@@ -13861,6 +13882,42 @@ fn rect_contains(r: Rect, col: u16, row: u16) -> bool {
     col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height
 }
 
+/// Increment (or decrement, `delta = -1`) the integer at or immediately after the
+/// cursor char offset `cursor` in `text`. Returns the rewritten text and the new
+/// cursor offset (kept at the number's start), or `None` if no digit is found on
+/// the cursor's line at/after the cursor. Handles an optional leading `-`.
+fn bump_number_at(text: &str, cursor: usize, delta: i64) -> Option<(String, usize)> {
+    let chars: Vec<char> = text.chars().collect();
+    let n = chars.len();
+    // Search from the cursor to the end of the current line for a digit.
+    let mut i = cursor.min(n);
+    while i < n && chars[i] != '\n' && !chars[i].is_ascii_digit() {
+        i += 1;
+    }
+    if i >= n || chars[i] == '\n' {
+        return None;
+    }
+    // Expand left over digits, then include a leading '-' if present.
+    let mut start = i;
+    while start > 0 && chars[start - 1].is_ascii_digit() {
+        start -= 1;
+    }
+    if start > 0 && chars[start - 1] == '-' {
+        start -= 1;
+    }
+    let mut end = i;
+    while end < n && chars[end].is_ascii_digit() {
+        end += 1;
+    }
+    let token: String = chars[start..end].iter().collect();
+    let value: i64 = token.parse().ok()?;
+    let bumped = value.saturating_add(delta).to_string();
+    let mut out: String = chars[..start].iter().collect();
+    out.push_str(&bumped);
+    out.extend(chars[end..].iter());
+    Some((out, start))
+}
+
 /// The 0-based char column of `tag` in `line` when it appears as a whole word
 /// (bounded by non-word characters), or `None`. Used by the TODO/FIXME finder.
 fn tag_column(line: &str, tag: &str) -> Option<usize> {
@@ -14288,6 +14345,22 @@ mod tests {
         assert!(app.editor.top_visible_line() > 1, "scrolled past the header");
         let header = app.sticky_header().expect("enclosing scope is pinned");
         assert!(header.contains("fn outer"), "header is the enclosing fn: {header:?}");
+    }
+
+    #[test]
+    fn bump_number_increments_and_decrements() {
+        // Cursor before the digits: increments in place, cursor at the number start.
+        let (out, pos) = bump_number_at("x = 41;", 0, 1).unwrap();
+        assert_eq!(out, "x = 42;");
+        assert_eq!(pos, 4);
+        // Decrement, cursor sitting on a digit.
+        assert_eq!(bump_number_at("v9", 1, -1).unwrap().0, "v8");
+        // Negative numbers: the leading '-' is part of the token.
+        assert_eq!(bump_number_at("-1", 0, -1).unwrap().0, "-2");
+        // No digit on the cursor's line → None.
+        assert!(bump_number_at("no digits here", 0, 1).is_none());
+        // A digit only on a later line is not reached from this line.
+        assert!(bump_number_at("abc\n5", 0, 1).is_none());
     }
 
     #[test]

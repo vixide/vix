@@ -41,6 +41,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Increment / Decrement number** (Edit menu). Bumps the integer at or after the
+  cursor by one (Vim's Ctrl-A/Ctrl-X), handling a leading `-`.
 - **TODO/FIXME finder** (Tools → Find TODOs…). Scans the project's files (honoring
   `.gitignore`) for comment tags — TODO, FIXME, HACK, XXX, BUG, NOTE — as whole
   words, listing them in the results panel; Enter jumps to the match.
