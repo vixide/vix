@@ -4212,6 +4212,8 @@ menu.item.tools.pomodoro:
   bn: "পোমোডোরো…"
   zh: "番茄钟…"
   ja: "ポモドーロ…"
+menu.item.tools.todo_finder:
+  en: "Find TODOs…"
 menu.item.tools.regex_tester:
   en: "Regex Tester…"
   es: "Probador de regex…"
@@ -11819,6 +11821,10 @@ status.references_n:
   bn: "%{n}টি রেফারেন্স"
   zh: "%{n} 个引用"
   ja: "%{n} 件の参照"
+status.no_todos:
+  en: "No TODO/FIXME comments found"
+status.todos_n:
+  en: "%{n} TODO/FIXME comments"
 status.no_diagnostics:
   en: "No diagnostics"
   es: "Sin diagnósticos"

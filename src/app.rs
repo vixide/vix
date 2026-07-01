@@ -2937,6 +2937,7 @@ impl App {
             "lsp.hover" => self.lsp_hover(),
             "lsp.complete" => self.lsp_complete(),
             "lsp.diagnostics" => self.open_diagnostics_panel(),
+            "tools.todo_finder" => self.open_todo_finder(),
             "lsp.rename" => self.begin_lsp_rename(),
             "lsp.code_action" => self.request_code_action(),
             "lsp.expand_selection" => self.request_selection_range(true),
@@ -12853,6 +12854,39 @@ impl App {
         }
     }
 
+    /// Scan the project's files for comment tags (TODO / FIXME / HACK / XXX /
+    /// BUG / NOTE) and list them in the static-results search overlay; Enter jumps
+    /// to the match. Uses the file index (which honors `.gitignore`).
+    fn open_todo_finder(&mut self) {
+        static TAGS: &[&str] = &["TODO", "FIXME", "HACK", "XXX", "BUG", "NOTE"];
+        let mut hits: Vec<Hit> = Vec::new();
+        'files: for path in &self.file_index {
+            let Ok(content) = std::fs::read_to_string(path) else { continue };
+            let rel = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().into_owned();
+            for (i, raw) in content.lines().enumerate() {
+                // Match a tag as a word (a following ':' or space/paren is typical).
+                if let Some(col) = TAGS.iter().find_map(|tag| tag_column(raw, tag)) {
+                    let line = i + 1;
+                    let text: String = raw.trim().chars().take(120).collect();
+                    hits.push(Hit { path: path.clone(), line, col: col + 1, display: format!("{rel}:{line}: {text}") });
+                    if hits.len() >= 2000 {
+                        break 'files;
+                    }
+                }
+            }
+        }
+        if hits.is_empty() {
+            self.status = t!("status.no_todos").to_string();
+            return;
+        }
+        hits.sort_by(|a, b| a.display.cmp(&b.display));
+        let mut ps = WorkspaceSearch::new(false);
+        ps.static_results = true;
+        ps.status = t!("status.todos_n", n = hits.len()).to_string();
+        ps.hits = hits;
+        self.workspace_search = Some(ps);
+    }
+
     /// Open a panel listing every current LSP diagnostic across the workspace;
     /// Enter on a row jumps to it. Reuses the static-results search overlay.
     fn open_diagnostics_panel(&mut self) {
@@ -13827,6 +13861,22 @@ fn rect_contains(r: Rect, col: u16, row: u16) -> bool {
     col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height
 }
 
+/// The 0-based char column of `tag` in `line` when it appears as a whole word
+/// (bounded by non-word characters), or `None`. Used by the TODO/FIXME finder.
+fn tag_column(line: &str, tag: &str) -> Option<usize> {
+    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+    for (col, (byte_idx, _)) in line.char_indices().enumerate() {
+        if line[byte_idx..].starts_with(tag) {
+            let before_ok = line[..byte_idx].chars().next_back().is_none_or(|c| !is_word(c));
+            let after_ok = line[byte_idx + tag.len()..].chars().next().is_none_or(|c| !is_word(c));
+            if before_ok && after_ok {
+                return Some(col);
+            }
+        }
+    }
+    None
+}
+
 /// The top-level menu index for an `Alt+letter` mnemonic: Vix=0, File=1, Edit=2,
 /// View=3 (Alt+I, since "Vix"/"View" both start with V), Go=4 (Alt+N, since Git
 /// keeps Alt+G and Alt+J is the recent-locations jump), Run=5 (Alt+R), Tools=6,
@@ -14238,6 +14288,25 @@ mod tests {
         assert!(app.editor.top_visible_line() > 1, "scrolled past the header");
         let header = app.sticky_header().expect("enclosing scope is pinned");
         assert!(header.contains("fn outer"), "header is the enclosing fn: {header:?}");
+    }
+
+    #[test]
+    fn todo_finder_lists_comment_tags() {
+        let dir = std::env::temp_dir().join(format!("vix-todo-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.rs"), "fn f() {}\n// TODO: wire it up\nlet todos = 1; // not a tag\n").unwrap();
+        std::fs::write(dir.join("b.rs"), "// FIXME broken\n").unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.build_file_index();
+        app.run_action("tools.todo_finder");
+        let ps = app.workspace_search.as_ref().expect("todo panel opens");
+        assert_eq!(ps.hits.len(), 2, "TODO + FIXME, not the `todos` identifier: {:?}",
+            ps.hits.iter().map(|h| &h.display).collect::<Vec<_>>());
+        assert!(ps.hits.iter().any(|h| h.display.contains("TODO: wire it up")));
+        assert!(ps.hits.iter().any(|h| h.display.contains("FIXME broken")));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
