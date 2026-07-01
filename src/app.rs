@@ -1077,6 +1077,8 @@ pub struct App {
     format_save_pending: Option<PathBuf>,
     /// Throttle anchor for interval auto-save; `None` until the first tick.
     last_auto_save: Option<std::time::Instant>,
+    /// `(tab, revision, cursor)` the word-occurrence highlight was last built for.
+    word_highlight_key: Option<(usize, u64, usize)>,
     /// When true, the bottom dock shows live backlinks for the active node.
     backlinks_follow: bool,
     /// `(active tab, revision)` the backlinks dock was last built for.
@@ -1321,7 +1323,7 @@ impl App {
             hover: None, completion: None, dialog: None, color_converter: None,
             unit_converter: None, calculator: None, regex_tester: None, code_actions: None,
             code_lens: None, pomodoro: None,
-            pomodoro_open: false, pomodoro_last_tick: None, disk_mtimes: std::collections::HashMap::new(), last_disk_poll: None, format_save_pending: None, last_auto_save: None, backlinks_follow: false, backlinks_follow_key: None,
+            pomodoro_open: false, pomodoro_last_tick: None, disk_mtimes: std::collections::HashMap::new(), last_disk_poll: None, format_save_pending: None, last_auto_save: None, word_highlight_key: None, backlinks_follow: false, backlinks_follow_key: None,
             clip: Vec::new(), clip_cut: false,
             nav_history: Vec::new(), bookmarks: Vec::new(), nav_idx: 0,
             picker: None,
@@ -2610,6 +2612,14 @@ impl App {
             "view.minimap" => {
                 self.settings.show_minimap = !self.settings.show_minimap;
                 self.status = t!("status.minimap", on = self.settings.show_minimap).to_string();
+            }
+            "view.highlight_word" => {
+                self.settings.highlight_word = !self.settings.highlight_word;
+                if !self.settings.highlight_word {
+                    self.editor.set_word_marks(Vec::new());
+                }
+                self.word_highlight_key = None; // force a rebuild on next refresh
+                self.status = t!("status.highlight_word", on = self.settings.highlight_word).to_string();
             }
             "view.scrollbar" => self.toggle_scrollbar(),
             "view.spellcheck" => self.toggle_spellcheck(),
@@ -6255,6 +6265,52 @@ impl App {
         if savable && self.write_active_to_disk() {
             self.status = t!("status.auto_saved").to_string();
         }
+    }
+
+    /// When "Highlight Word" is on, mark every occurrence of the identifier under
+    /// the cursor in the active buffer (recomputed only when the buffer or cursor
+    /// changes). Clears the marks when the cursor is not on a word.
+    pub fn refresh_word_highlight(&mut self) {
+        if !self.settings.highlight_word {
+            return;
+        }
+        let key = self
+            .editor
+            .active_tab()
+            .filter(|t| !t.is_image())
+            .map(|t| (self.editor.active, t.editor.revision(), t.editor.get_cursor()));
+        if key == self.word_highlight_key {
+            return;
+        }
+        self.word_highlight_key = key;
+        let Some(word) = self.symbol_under_cursor() else {
+            self.editor.set_word_marks(Vec::new());
+            return;
+        };
+        let Some(tab) = self.editor.active_tab() else { return };
+        let content = tab.editor.get_content();
+        let chars: Vec<char> = content.chars().collect();
+        let wlen = word.chars().count();
+        let is_word = |c: char| c.is_alphanumeric() || c == '_';
+        let mut marks = Vec::new();
+        // Whole-word occurrences of `word`, capped to keep the pass cheap.
+        let mut i = 0;
+        while i + wlen <= chars.len() {
+            if chars[i..i + wlen].iter().copied().eq(word.chars())
+                && (i == 0 || !is_word(chars[i - 1]))
+                && (i + wlen == chars.len() || !is_word(chars[i + wlen]))
+            {
+                marks.push((i, i + wlen));
+                i += wlen;
+                if marks.len() >= 500 {
+                    break;
+                }
+            } else {
+                i += 1;
+            }
+        }
+        // A single occurrence (the word itself) isn't worth highlighting.
+        self.editor.set_word_marks(if marks.len() > 1 { marks } else { Vec::new() });
     }
 
     /// When "Live Backlinks" is on, rebuild the bottom dock with the active node's
@@ -14349,6 +14405,22 @@ mod tests {
         assert!(app.editor.top_visible_line() > 1, "scrolled past the header");
         let header = app.sticky_header().expect("enclosing scope is pinned");
         assert!(header.contains("fn outer"), "header is the enclosing fn: {header:?}");
+    }
+
+    #[test]
+    fn highlight_word_marks_all_occurrences_under_the_cursor() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.settings.highlight_word = true;
+        app.editor.new_tab_with_content("foo bar foo baz foo");
+        // Cursor at offset 0 sits on the first "foo".
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_cursor(0);
+        }
+        app.refresh_word_highlight();
+        let marks = app.editor.active_tab().unwrap().editor.word_marks().cloned().unwrap_or_default();
+        assert_eq!(marks.len(), 3, "all three 'foo' occurrences marked: {marks:?}");
+        assert_eq!(marks[0], (0, 3));
     }
 
     #[test]

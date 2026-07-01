@@ -41,6 +41,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Highlight word occurrences** (View → Highlight Word Occurrences, off by
+  default). Passively marks every whole-word occurrence of the identifier under the
+  cursor, on its own render channel so it never clobbers (sticky) search
+  highlights.
 - **Align on delimiter** (Edit → Align). Pads selected lines so their first `=`,
   `:`, `,`, or `|` lands in a common column. Pure logic in `crate::align`.
 - **Increment / Decrement number** (Edit menu). Bumps the integer at or after the

@@ -3479,6 +3479,7 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
             "view.inlay_hints",
             "view.sticky_scroll",
             "view.minimap",
+            "view.highlight_word",
             "view.spellcheck",
             "view.auto_pair",
             "view.rainbow_brackets",
