@@ -114,6 +114,9 @@ ratatui = { version = "0.30", features = ["crossterm"] }
 crossterm = "0.29"
 # Recursive, .gitignore-aware directory walking for the file index / fuzzy finder.
 ignore = "0.4"
+# HTTP client for the REST tool. Pure-Rust TLS (rustls) so it cross-compiles to
+# musl/windows-gnu without a system OpenSSL.
+ureq = "2"
 # Regular expressions for find/replace.
 regex = "1"
 # Settings serialization (confy handles the TOML; serde derives the schema).

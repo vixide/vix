@@ -976,6 +976,8 @@ pub struct App {
     pub x11_panel: Option<X11Panel>,
     /// Media-type (MIME) picker overlay, when open.
     pub media_type_panel: Option<crate::media_type::Panel>,
+    /// Receiver for an in-flight HTTP request's response (background `curl`).
+    http_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
     /// HTML character palette overlay, when open.
     pub html_panel: Option<HtmlPanel>,
     /// System Information panel overlay, when open.
@@ -1319,7 +1321,7 @@ impl App {
             location_chooser: None, nerd_palette: None, ascii_panel: None, edit_table: None,
             edit_outline: None, edit_value: None, edit_bytes: None, edit_sql: None, qrcode: None,
             x11_panel: None,
-            media_type_panel: None,
+            media_type_panel: None, http_rx: None,
             html_panel: None, system_info: None, dashboard: None, dashboard_rx: None,
             outline: None, outline_dock: None, outline_dock_key: None,
             welcome: None, file_info: None, text_info: None,
@@ -2979,6 +2981,7 @@ impl App {
             "lsp.complete" => self.lsp_complete(),
             "lsp.diagnostics" => self.open_diagnostics_panel(),
             "tools.todo_finder" => self.open_todo_finder(),
+            "tools.http_send" => self.http_send(),
             "lsp.rename" => self.begin_lsp_rename(),
             "lsp.code_action" => self.request_code_action(),
             "lsp.expand_selection" => self.request_selection_range(true),
@@ -10504,6 +10507,52 @@ impl App {
             let _ = tx.send(if success { AiMsg::Done(out) } else { AiMsg::Failed });
         });
         Some(rx)
+    }
+
+    // ----- HTTP client ----------------------------------------------------
+
+    /// Send the HTTP request described by the active buffer (a `.http`-style
+    /// document) on a background thread; the response opens in a new tab.
+    fn http_send(&mut self) {
+        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else { return };
+        let Some(req) = crate::http_client::parse_request(&text) else {
+            self.status = t!("status.http_no_request").to_string();
+            return;
+        };
+        self.status = t!("status.http_sending", url = req.url.clone()).to_string();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(crate::http_client::send(&req));
+        });
+        self.http_rx = Some(rx);
+    }
+
+    /// Whether an HTTP request is in flight (keeps the event loop polling fast).
+    #[must_use]
+    pub fn http_running(&self) -> bool {
+        self.http_rx.is_some()
+    }
+
+    /// Drain a finished HTTP response into a new tab. Called each event-loop
+    /// iteration; cheap when none is running.
+    pub fn poll_http(&mut self) {
+        let result = {
+            let Some(rx) = self.http_rx.as_ref() else { return };
+            match rx.try_recv() {
+                Ok(r) => r,
+                Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => Err(t!("status.http_failed").to_string()),
+            }
+        };
+        self.http_rx = None;
+        match result {
+            Ok(body) => {
+                self.editor.new_tab_with_content(&body);
+                self.focus = Focus::Editor;
+                self.status = t!("status.http_done").to_string();
+            }
+            Err(e) => self.messages.error(t!("msg.http_error", error = e).to_string()),
+        }
     }
 
     /// Drain a finished AI task and apply its result. Called once per event-loop

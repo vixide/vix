@@ -41,6 +41,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **HTTP/REST client** (Tools → Send HTTP Request). Write a request in a
+  `.http`-style buffer (`METHOD url`, `Header: value` lines, blank line, body) and
+  send it with the pure-Rust `ureq` client on a background thread; the response
+  (status, headers, body) opens in a new tab. Pure parser in `crate::http_client`.
 - **Jump to line (labels)** (Go → Jump to Line). EasyMotion/leap-style: each
   visible line gets a short label (a, b, c, …); type it to jump the cursor there.
   Esc cancels.

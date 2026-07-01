@@ -115,6 +115,7 @@ pub mod file_information_panel;
 pub mod find_panel;
 pub mod git;
 pub mod html_character_picker;
+pub mod http_client;
 pub mod keyboard_shortcut_panel;
 pub mod keymap_model;
 pub mod left_dock;
