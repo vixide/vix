@@ -2820,6 +2820,7 @@ impl App {
                     }
             }
             "edit.emmet_expand" => self.emmet_expand(),
+            "edit.toggle_value" => self.smart_toggle(),
             "edit.increment_number" => self.bump_number(1),
             "edit.decrement_number" => self.bump_number(-1),
             "edit.align.equals" => self.transform_selection_or_buffer(|s| crate::align::on_delimiter(s, '=')),
@@ -3751,6 +3752,24 @@ impl App {
             tab.dirty = true;
         } else {
             self.status = t!("status.no_number").to_string();
+        }
+    }
+
+    /// Toggle the boolean-ish token under the cursor to its opposite (true/false,
+    /// yes/no, `&&`/`||`, …). No-op (with a status note) when nothing matches.
+    fn smart_toggle(&mut self) {
+        let Some(tab) = self.editor.active_tab_mut() else { return };
+        if tab.is_image() {
+            return;
+        }
+        let cursor = tab.editor.get_cursor();
+        let text = tab.editor.get_content();
+        if let Some((new, pos)) = smart_toggle_at(&text, cursor) {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor(pos);
+            tab.dirty = true;
+        } else {
+            self.status = t!("status.no_toggle").to_string();
         }
     }
 
@@ -14118,6 +14137,84 @@ fn bump_number_at(text: &str, cursor: usize, delta: i64) -> Option<(String, usiz
     Some((out, start))
 }
 
+/// Opposite-value pairs for [`smart_toggle_at`]. Word pairs are matched
+/// whole-word and case-preserved; symbol pairs are matched literally.
+const TOGGLE_WORDS: &[(&str, &str)] = &[
+    ("true", "false"),
+    ("yes", "no"),
+    ("on", "off"),
+    ("enable", "disable"),
+    ("enabled", "disabled"),
+    ("left", "right"),
+    ("up", "down"),
+    ("min", "max"),
+    ("and", "or"),
+];
+const TOGGLE_SYMBOLS: &[(&str, &str)] = &[("&&", "||"), ("==", "!="), ("<=", ">="), ("<", ">"), ("++", "--")];
+
+/// Toggle the boolean-ish token at char offset `cursor` to its opposite: word
+/// pairs (`true`/`false`, `yes`/`no`, …) matched as whole words with case
+/// preserved, or symbol pairs (`&&`/`||`, `==`/`!=`, …) at/around the cursor.
+/// Returns the rewritten text and the cursor's new offset, or `None` if nothing
+/// togglable is under the cursor.
+fn smart_toggle_at(text: &str, cursor: usize) -> Option<(String, usize)> {
+    let chars: Vec<char> = text.chars().collect();
+    let n = chars.len();
+    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+
+    // Word pairs: find the identifier span covering the cursor (or just before it).
+    let mut s = cursor.min(n);
+    while s > 0 && is_word(chars[s - 1]) {
+        s -= 1;
+    }
+    let mut e = s;
+    while e < n && is_word(chars[e]) {
+        e += 1;
+    }
+    if s < e {
+        let word: String = chars[s..e].iter().collect();
+        let lower = word.to_ascii_lowercase();
+        for (a, b) in TOGGLE_WORDS {
+            let to = if lower == *a { Some(*b) } else if lower == *b { Some(*a) } else { None };
+            if let Some(to) = to {
+                let replacement = match_case(&word, to);
+                let mut out: String = chars[..s].iter().collect();
+                out.push_str(&replacement);
+                out.extend(chars[e..].iter());
+                return Some((out, s));
+            }
+        }
+    }
+
+    // Symbol pairs: try each starting at, or one char before, the cursor.
+    for (a, b) in TOGGLE_SYMBOLS {
+        for start in [cursor, cursor.saturating_sub(1)] {
+            for (from, to) in [(*a, *b), (*b, *a)] {
+                let flen = from.chars().count();
+                if start + flen <= n && chars[start..start + flen].iter().collect::<String>() == from {
+                    let mut out: String = chars[..start].iter().collect();
+                    out.push_str(to);
+                    out.extend(chars[start + flen..].iter());
+                    return Some((out, start));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Recase `replacement` to match `sample`: all-upper, Titlecase, else lowercase.
+fn match_case(sample: &str, replacement: &str) -> String {
+    if sample.chars().all(|c| c.is_uppercase() || !c.is_alphabetic()) && sample.chars().any(char::is_uppercase) {
+        replacement.to_ascii_uppercase()
+    } else if sample.chars().next().is_some_and(char::is_uppercase) {
+        let mut c = replacement.chars();
+        c.next().map(|f| f.to_ascii_uppercase().to_string() + c.as_str()).unwrap_or_default()
+    } else {
+        replacement.to_string()
+    }
+}
+
 /// A short jump label for index `i`: `a`..`z`, then `aa`, `ab`, … (base-26 over
 /// lowercase letters), so early lines get single-key labels.
 fn jump_label(i: usize) -> String {
@@ -14594,6 +14691,21 @@ mod tests {
         let marks = app.editor.active_tab().unwrap().editor.word_marks().cloned().unwrap_or_default();
         assert_eq!(marks.len(), 3, "all three 'foo' occurrences marked: {marks:?}");
         assert_eq!(marks[0], (0, 3));
+    }
+
+    #[test]
+    fn smart_toggle_flips_words_and_symbols() {
+        // Word pair, case preserved.
+        assert_eq!(smart_toggle_at("let ok = true;", 9).unwrap().0, "let ok = false;");
+        assert_eq!(smart_toggle_at("v = FALSE", 4).unwrap().0, "v = TRUE");
+        assert_eq!(smart_toggle_at("Yes", 0).unwrap().0, "No");
+        // Symbol pair at the cursor.
+        assert_eq!(smart_toggle_at("a && b", 2).unwrap().0, "a || b");
+        assert_eq!(smart_toggle_at("x == y", 2).unwrap().0, "x != y");
+        // Whole-word only: "online" is not "on".
+        assert!(smart_toggle_at("online", 0).is_none());
+        // Nothing togglable.
+        assert!(smart_toggle_at("hello", 0).is_none());
     }
 
     #[test]
