@@ -4930,13 +4930,33 @@ impl App {
             self.status = t!("status.lsp_inactive").to_string();
             return;
         };
-        if !self.lsp.handles(&path) {
-            self.status = t!("status.lsp_inactive").to_string();
+        // With a language server, use its selection-range chain (expand + shrink).
+        if self.lsp.handles(&path) {
+            let (line, character) = self.cursor_lsp_position(&path);
+            self.expand_selection_dir = Some(expand);
+            self.lsp.request_selection_range(&path, line, character);
             return;
         }
-        let (line, character) = self.cursor_lsp_position(&path);
-        self.expand_selection_dir = Some(expand);
-        self.lsp.request_selection_range(&path, line, character);
+        // Offline fallback: expand to the enclosing Tree-sitter node (expand only).
+        if expand {
+            self.expand_selection_to_node();
+        } else {
+            self.status = t!("status.lsp_inactive").to_string();
+        }
+    }
+
+    /// Grow the active selection to the smallest enclosing Tree-sitter node
+    /// (offline structural selection). No-op without a parse tree.
+    fn expand_selection_to_node(&mut self) {
+        let Some(t) = self.editor.active_tab_mut() else { return };
+        let (s, e) = {
+            let cursor = t.editor.get_cursor();
+            t.editor.get_selection().map_or((cursor, cursor), |sel| (sel.start.min(sel.end), sel.start.max(sel.end)))
+        };
+        match t.editor.code_ref().expand_to_node(s, e) {
+            Some((ns, ne)) => t.editor.set_selection_range(ns, ne),
+            None => self.status = t!("status.no_node_selection").to_string(),
+        }
     }
 
     /// Apply a selection-range chain: expand to the smallest range strictly
@@ -14411,6 +14431,27 @@ mod tests {
         assert!(app.editor.top_visible_line() > 1, "scrolled past the header");
         let header = app.sticky_header().expect("enclosing scope is pinned");
         assert!(header.contains("fn outer"), "header is the enclosing fn: {header:?}");
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn structural_selection_expands_to_enclosing_node() {
+        let dir = std::env::temp_dir().join(format!("vix-struct-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("s.rs"); // .rs → the Rust grammar loads, so a tree exists
+        std::fs::write(&path, "fn main() { let x = 1; }\n").unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.open_path(&path, false); // no LSP configured → offline tree-sitter path
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_cursor(16); // within "let x = 1;"
+        }
+        app.run_action("lsp.expand_selection");
+        let sel = app.editor.active_tab_mut().unwrap().editor.get_selection();
+        assert!(sel.is_some_and(|s| s.end > s.start), "a node range was selected: {sel:?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

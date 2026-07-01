@@ -450,9 +450,25 @@ impl Code {
     }
 
     /// Convert a byte offset to its character index.
-    #[must_use] 
+    #[must_use]
     pub fn byte_to_char(&self, byte_idx: usize) -> usize {
         self.content.byte_to_char(byte_idx)
+    }
+
+    /// Expand the char range `[start, end)` to the smallest enclosing Tree-sitter
+    /// node (structural selection). Returns the node's char range, climbing to the
+    /// parent when the range already matches a node exactly so repeated calls keep
+    /// growing. `None` without a parse tree or when already at the root.
+    #[must_use]
+    pub fn expand_to_node(&self, start: usize, end: usize) -> Option<(usize, usize)> {
+        let tree = self.tree.as_ref()?;
+        let sb = self.content.char_to_byte(start);
+        let eb = self.content.char_to_byte(end);
+        let mut node = tree.root_node().descendant_for_byte_range(sb, eb)?;
+        while node.start_byte() == sb && node.end_byte() == eb {
+            node = node.parent()?;
+        }
+        Some((self.content.byte_to_char(node.start_byte()), self.content.byte_to_char(node.end_byte())))
     }
 
     /// Begin a new edit transaction, discarding any uncommitted batch.
