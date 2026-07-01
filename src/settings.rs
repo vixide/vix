@@ -78,6 +78,8 @@ pub struct Settings {
     pub persistent_undo: bool,
     /// Show a code-overview minimap column at the right of the editor.
     pub show_minimap: bool,
+    /// Passively highlight every occurrence of the word under the cursor.
+    pub highlight_word: bool,
     /// Indentation inserted by Tab: `"spaces"` (default) or `"tabs"`.
     pub indent_style: String,
     /// Number of spaces per indent when `indent_style` is `"spaces"`.
@@ -212,6 +214,7 @@ impl Default for Settings {
             rainbow_brackets: false,
             persistent_undo: true,
             show_minimap: false,
+            highlight_word: false,
             indent_style: "spaces".to_string(),
             tab_width: 4,
             theme: "dark".to_string(),

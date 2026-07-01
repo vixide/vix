@@ -85,6 +85,16 @@ impl Editor {
             }
         }
 
+        // draw passive word-occurrence marks: a subtle reversed/dim background so
+        // every occurrence of the word under the cursor stands out.
+        if let Some(ref words) = self.word_marks {
+            let word_style = Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM);
+            for &(start, end) in words {
+                if start >= end || end > total_chars { continue }
+                self.highlight_char_range(area, buf, line_number_width, start, end, word_style);
+            }
+        }
+
         // draw spell-check marks: a red underline under misspelled words
         if let Some(ref spell) = self.spell_marks {
             let spell_style = Style {

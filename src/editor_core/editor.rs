@@ -72,6 +72,11 @@ pub struct Editor {
     /// underline. A separate channel from `spell_marks` so the two coexist.
     pub(crate) diagnostic_marks: Option<Vec<(usize, usize, Color)>>,
 
+    /// Passive "word under cursor" occurrence marks: char ranges highlighted with
+    /// a subtle background. A separate channel from search `marks` so it never
+    /// clobbers (sticky) search highlights.
+    pub(crate) word_marks: Option<Vec<(usize, usize)>>,
+
     /// Git diff gutter marks: `(line index, color)`, drawn as a colored bar in
     /// the line-number gutter.
     pub(crate) gutter_marks: Option<Vec<(usize, Color)>>,
@@ -196,6 +201,7 @@ impl Editor {
             marks: None,
             spell_marks: None,
             diagnostic_marks: None,
+            word_marks: None,
             gutter_marks: None,
             fold_ranges: Vec::new(),
             folds: Vec::new(),
@@ -724,6 +730,17 @@ impl Editor {
     #[must_use]
     pub fn spell_marks(&self) -> Option<&Vec<(usize, usize)>> {
         self.spell_marks.as_ref()
+    }
+
+    /// Set the passive word-occurrence marks (char ranges); empty clears them.
+    pub fn set_word_marks(&mut self, marks: Vec<(usize, usize)>) {
+        self.word_marks = if marks.is_empty() { None } else { Some(marks) };
+    }
+
+    /// The current word-occurrence marks (char ranges), if any.
+    #[must_use]
+    pub fn word_marks(&self) -> Option<&Vec<(usize, usize)>> {
+        self.word_marks.as_ref()
     }
 
     /// Set the LSP diagnostic underline marks: `(start char, end char, color)`.

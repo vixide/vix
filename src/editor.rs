@@ -934,6 +934,13 @@ impl Editor {
         self.active_tab().map_or(0, |t| t.editor.top_line())
     }
 
+    /// Set the passive word-occurrence marks on the active buffer.
+    pub fn set_word_marks(&mut self, marks: Vec<(usize, usize)>) {
+        if let Some(t) = self.active_tab_mut() {
+            t.editor.set_word_marks(marks);
+        }
+    }
+
     /// The 0-based start rows of every paragraph (`section == false`) or section
     /// (`section == true`) in the active buffer. A paragraph is a run of non-blank
     /// lines; a section is a run separated by a section break (2+ blank lines).

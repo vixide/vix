@@ -3181,6 +3181,8 @@ menu.item.view.sticky_scroll:
   en: "Sticky Scroll"
 menu.item.view.minimap:
   en: "Minimap"
+menu.item.view.highlight_word:
+  en: "Highlight Word Occurrences"
 menu.item.view.inlay_hints:
   en: "Inlay Hints"
   es: "Sugerencias en línea"
@@ -11619,6 +11621,8 @@ status.sticky_scroll:
   en: "Sticky scroll: %{on}"
 status.minimap:
   en: "Minimap: %{on}"
+status.highlight_word:
+  en: "Highlight word occurrences: %{on}"
 status.rainbow_brackets:
   en: "Rainbow brackets: %{on}"
 status.auto_saved:
