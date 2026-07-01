@@ -136,6 +136,8 @@ const EDIT: &[Item] = &[
     SEP,
     Item::leaf("menu.item.edit.toggle_comment", "edit.toggle_comment", "Ctrl /"),
     Item::leaf("menu.item.edit.emmet_expand", "edit.emmet_expand", ""),
+    Item::leaf("menu.item.edit.increment_number", "edit.increment_number", ""),
+    Item::leaf("menu.item.edit.decrement_number", "edit.decrement_number", ""),
     SEP,
     Item::sub("menu.item.edit.macro", EDIT_MACRO),
 ];

@@ -1631,6 +1631,10 @@ menu.item.edit.column_select_up:
   ja: "列選択 上"
 menu.item.edit.emmet_expand:
   en: "Emmet Expand"
+menu.item.edit.increment_number:
+  en: "Increment Number"
+menu.item.edit.decrement_number:
+  en: "Decrement Number"
 menu.item.edit.surround_menu:
   en: "Surround"
 menu.item.edit.surround.paren:
@@ -11821,6 +11825,8 @@ status.references_n:
   bn: "%{n}টি রেফারেন্স"
   zh: "%{n} 个引用"
   ja: "%{n} 件の参照"
+status.no_number:
+  en: "No number at the cursor"
 status.no_todos:
   en: "No TODO/FIXME comments found"
 status.todos_n:
