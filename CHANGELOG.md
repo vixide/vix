@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **TODO/FIXME finder** (Tools → Find TODOs…). Scans the project's files (honoring
+  `.gitignore`) for comment tags — TODO, FIXME, HACK, XXX, BUG, NOTE — as whole
+  words, listing them in the results panel; Enter jumps to the match.
 - **Smart-case search** (find box, on by default; toggle with the Smart button or
   Alt+S). Matches case-insensitively when the query is all-lowercase, but becomes
   case-sensitive as soon as it contains an uppercase letter. The explicit Case
