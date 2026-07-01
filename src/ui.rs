@@ -192,6 +192,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
 /// each function focused; behavior is identical to inlining this dispatch.
 fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     // Overlays.
+    if app.jump.is_some() {
+        draw_jump_labels(app, frame);
+    }
     if app.show_calendar {
         draw_calendar(app, frame, area);
     }
@@ -1857,6 +1860,26 @@ fn draw_tabs(app: &App, frame: &mut Frame, area: Rect) {
 /// Render the editor region: a single pane, or two split panes with a divider.
 /// Width (cells) of the code-overview minimap column.
 const MINIMAP_WIDTH: u16 = 16;
+
+/// Draw the jump-to-line labels at the left edge of each labeled visible row.
+fn draw_jump_labels(app: &App, frame: &mut Frame) {
+    let Some(jm) = app.jump.as_ref() else { return };
+    let ed = app.layout.editor;
+    let top = app.editor.top_visible_line();
+    let style = theme::selected();
+    for (label, line) in &jm.labels {
+        // The label's row within the editor viewport (non-wrapped mapping).
+        let Some(row_off) = line.checked_sub(top) else { continue };
+        let y = ed.y + u16::try_from(row_off).unwrap_or(u16::MAX);
+        if y >= ed.y + ed.height {
+            continue;
+        }
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(label.clone(), style))),
+            Rect { x: ed.x, y, width: u16::try_from(label.len()).unwrap_or(2).min(ed.width), height: 1 },
+        );
+    }
+}
 
 /// Draw the code-overview minimap for the active buffer in `area`. Each row maps
 /// to a band of source lines, drawn as a dim bar whose length tracks the band's

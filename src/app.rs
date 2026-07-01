@@ -477,6 +477,15 @@ pub struct WorkspaceChooser {
     pub selected: usize,
 }
 
+/// Jump-to-line label mode (EasyMotion/leap style): each visible line gets a
+/// short label; typing it moves the cursor to that line's start.
+pub struct JumpMode {
+    /// `(label, 0-based line)` for each visible line.
+    pub labels: Vec<(String, usize)>,
+    /// Label characters typed so far (matched as a prefix).
+    pub typed: String,
+}
+
 /// The saved-macro chooser (Edit → Play Saved Macro…): the persisted macros and
 /// the highlighted row. Choosing one loads its keys and replays them.
 pub struct MacroChooser {
@@ -916,6 +925,9 @@ pub struct App {
     pub query_replace: Option<QueryReplace>,
     /// Workspace-wide search panel, when open.
     pub workspace_search: Option<WorkspaceSearch>,
+    /// Active jump-to-line labels: `(label, 0-based line)` for each visible line,
+    /// with the label prefix typed so far. `None` when jump mode is off.
+    pub jump: Option<JumpMode>,
     /// Single-line prompt, when open.
     pub prompt: Option<Prompt>,
     /// In-progress paste operation, when active.
@@ -1301,7 +1313,7 @@ impl App {
             editor,
             messages,
             menu: Menu::default(),
-            palette: None, search: None, query_replace: None, workspace_search: None,
+            palette: None, search: None, query_replace: None, workspace_search: None, jump: None,
             prompt: None, paste: None, confirm: None, replace_confirm: None, unsaved: None, spell_suggest: None,
             context_menu: None, git_panel: None, branch_chooser: None, task_chooser: None, macro_chooser: None, workspace_chooser: None, diff_view: None, recent_chooser: None,
             location_chooser: None, nerd_palette: None, ascii_panel: None, edit_table: None,
@@ -1752,6 +1764,10 @@ impl App {
     /// Handle a key event, routing it to the active modal layer or focused pane.
     pub fn on_key(&mut self, key: KeyEvent) {
         if key.kind == KeyEventKind::Release {
+            return;
+        }
+        // Jump-to-line mode captures all keys until a label matches or Esc.
+        if self.jump.is_some() && self.jump_key(key) {
             return;
         }
         // LSP completion popup captures navigation/accept/cancel keys; any other
@@ -2478,6 +2494,7 @@ impl App {
             "workspace.save" => self.prompt_workspace(PromptKind::WorkspaceSave),
             "workspace.add_folder" => self.prompt_workspace(PromptKind::WorkspaceAddFolder),
             "nav.recent_locations" => self.open_location_chooser(),
+            "nav.jump" => self.open_jump(),
             "bookmark.toggle" => self.toggle_bookmark(),
             "bookmark.next" => self.bookmark_goto(true),
             "bookmark.prev" => self.bookmark_goto(false),
@@ -8764,6 +8781,45 @@ impl App {
         }
     }
 
+    /// Enter jump-to-line mode: assign a short label to each visible line.
+    fn open_jump(&mut self) {
+        let height = self.layout.editor.height as usize;
+        if height == 0 {
+            return;
+        }
+        let top = self.editor.top_visible_line();
+        let total = self.editor.active_tab().map_or(0, |t| t.text().lines().count().max(1));
+        let labels: Vec<(String, usize)> = (0..height)
+            .map(|r| top + r)
+            .take_while(|&line| line < total)
+            .enumerate()
+            .map(|(i, line)| (jump_label(i), line))
+            .collect();
+        if labels.is_empty() {
+            return;
+        }
+        self.jump = Some(JumpMode { labels, typed: String::new() });
+        self.focus = Focus::Editor;
+    }
+
+    /// Handle a key while jump-to-line mode is active. Returns `true` if consumed.
+    /// Esc or any non-character key cancels; a character extends the typed prefix,
+    /// jumping when it matches a label and staying only while a match is possible.
+    fn jump_key(&mut self, key: KeyEvent) -> bool {
+        let Some(mut jm) = self.jump.take() else { return false };
+        let KeyCode::Char(c) = key.code else { return true }; // Esc/other: cancelled
+        jm.typed.push(c);
+        if let Some((_, line)) = jm.labels.iter().find(|(label, _)| *label == jm.typed) {
+            let line = *line;
+            let area = self.editor_view();
+            self.editor.goto(line + 1, None, area); // goto is 1-based
+            self.focus = Focus::Editor;
+        } else if jm.labels.iter().any(|(label, _)| label.starts_with(&jm.typed)) {
+            self.jump = Some(jm); // keep waiting: the prefix can still match
+        }
+        true
+    }
+
     /// Jump to the source line corresponding to a click at minimap `row`.
     fn minimap_click(&mut self, row: u16) {
         let mm = self.layout.minimap;
@@ -14011,6 +14067,18 @@ fn bump_number_at(text: &str, cursor: usize, delta: i64) -> Option<(String, usiz
     out.push_str(&bumped);
     out.extend(chars[end..].iter());
     Some((out, start))
+}
+
+/// A short jump label for index `i`: `a`..`z`, then `aa`, `ab`, … (base-26 over
+/// lowercase letters), so early lines get single-key labels.
+fn jump_label(i: usize) -> String {
+    if i < 26 {
+        char::from(b'a' + u8::try_from(i).unwrap_or(0)).to_string()
+    } else {
+        let first = char::from(b'a' + u8::try_from(i / 26 - 1).unwrap_or(0));
+        let second = char::from(b'a' + u8::try_from(i % 26).unwrap_or(0));
+        format!("{first}{second}")
+    }
 }
 
 /// The 0-based char column of `tag` in `line` when it appears as a whole word

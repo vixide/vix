@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Jump to line (labels)** (Go → Jump to Line). EasyMotion/leap-style: each
+  visible line gets a short label (a, b, c, …); type it to jump the cursor there.
+  Esc cancels.
 - **Frecency ranking for the project switcher.** Switch Project now orders recent
   projects by frequency × recency (recent, frequently-opened projects first)
   instead of plain most-recently-used. Sessions track a visit count + last-open.

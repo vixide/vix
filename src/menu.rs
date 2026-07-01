@@ -233,6 +233,7 @@ const GO: &[Item] = &[
     Item::leaf("menu.go.prev_change", "git.diff_prev", ""),
     SEP,
     Item::leaf("menu.item.edit.recent_locations", "nav.recent_locations", ""),
+    Item::leaf("menu.go.jump", "nav.jump", ""),
     Item::sub("menu.go.bookmarks", GO_BOOKMARKS),
     SEP,
     Item::sub("menu.go.line", GO_LINE),

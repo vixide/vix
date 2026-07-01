@@ -384,6 +384,19 @@ fn org_checkbox_toggle_updates_parents_and_cookies() {
 }
 
 #[test]
+fn jump_to_line_labels_move_the_cursor() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "line0\nline1\nline2\nline3\n");
+    // Enter jump mode: line N gets label = Nth letter (a, b, c, …).
+    app.run_action("nav.jump");
+    assert!(app.jump.is_some(), "jump mode active");
+    // 'c' is the 3rd label → 0-based line 2.
+    app.on_key(key('c'));
+    assert!(app.jump.is_none(), "jump mode exits on match");
+    assert_eq!(app.editor.cursor_1based().0, 3, "cursor on line 3 (0-based 2)");
+}
+
+#[test]
 fn scratch_buffer_opens_unsaved_with_a_header() {
     let mut app = app_at(Path::new("."));
     let before = app.editor.tabs.len();
