@@ -761,6 +761,9 @@ pub struct Layout {
     pub tabs: Rect,
     /// Editor viewport rectangle.
     pub editor: Rect,
+    /// Code-overview minimap rectangle (a column at the right of the editor),
+    /// when enabled. Zero-sized when off.
+    pub minimap: Rect,
     /// Editor vertical-scrollbar rectangle (the column right of the editor text).
     pub scrollbar: Rect,
     /// Editor horizontal-scrollbar rectangle (the row below the editor text),
@@ -2601,6 +2604,10 @@ impl App {
             "view.sticky_scroll" => {
                 self.settings.sticky_scroll = !self.settings.sticky_scroll;
                 self.status = t!("status.sticky_scroll", on = self.settings.sticky_scroll).to_string();
+            }
+            "view.minimap" => {
+                self.settings.show_minimap = !self.settings.show_minimap;
+                self.status = t!("status.minimap", on = self.settings.show_minimap).to_string();
             }
             "view.scrollbar" => self.toggle_scrollbar(),
             "view.spellcheck" => self.toggle_spellcheck(),
@@ -8345,6 +8352,12 @@ impl App {
         // track (tracked by `scrollbar_active`), and ends on button release.
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left)
+                if rect_contains(self.layout.minimap, col, row) =>
+            {
+                self.minimap_click(row);
+                return true;
+            }
+            MouseEventKind::Down(MouseButton::Left)
                 if rect_contains(self.layout.scrollbar, col, row) =>
             {
                 self.scrollbar_active = true;
@@ -8611,6 +8624,20 @@ impl App {
                 s.focus = Focus::Editor;
             });
         }
+    }
+
+    /// Jump to the source line corresponding to a click at minimap `row`.
+    fn minimap_click(&mut self, row: u16) {
+        let mm = self.layout.minimap;
+        if mm.height == 0 {
+            return;
+        }
+        let rel = row.saturating_sub(mm.y) as usize;
+        let total = self.editor.active_tab().map_or(1, |t| t.text().lines().count().max(1));
+        let line = (rel * total / mm.height as usize).min(total.saturating_sub(1));
+        let area = self.editor_view();
+        self.editor.goto(line + 1, None, area); // goto is 1-based
+        self.focus = Focus::Editor;
     }
 
     /// Scroll the editor to the line corresponding to a scrollbar row `row`.
@@ -14114,6 +14141,17 @@ mod tests {
         assert!(joined.contains("Linked references (1)"), "one linked ref: {joined:?}");
         assert!(joined.contains("source.org"), "source listed: {joined:?}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn minimap_click_jumps_to_proportional_line() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor.new_tab_with_content(&"x\n".repeat(100)); // 100 lines
+        app.layout.minimap = ratatui::layout::Rect::new(64, 0, 16, 20); // 20 rows tall
+        // Row 10 of 20 over 100 lines maps to line 10*100/20 = 50.
+        app.minimap_click(10);
+        assert_eq!(app.editor.cursor_line(), 50, "click maps proportionally to the file");
     }
 
     #[test]

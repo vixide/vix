@@ -315,6 +315,7 @@ const VIEW_EDITOR: &[Item] = &[
     SEP,
     Item::leaf("menu.item.view.inlay_hints", "view.inlay_hints", ""),
     Item::leaf("menu.item.view.sticky_scroll", "view.sticky_scroll", ""),
+    Item::leaf("menu.item.view.minimap", "view.minimap", ""),
     Item::leaf("menu.item.view.spellcheck", "view.spellcheck", ""),
     SEP,
     Item::leaf("menu.item.view.auto_pair", "view.auto_pair", ""),

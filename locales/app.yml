@@ -3149,6 +3149,8 @@ menu.item.view.prev_tab:
   ja: "前のタブ"
 menu.item.view.sticky_scroll:
   en: "Sticky Scroll"
+menu.item.view.minimap:
+  en: "Minimap"
 menu.item.view.inlay_hints:
   en: "Inlay Hints"
   es: "Sugerencias en línea"
@@ -11581,6 +11583,8 @@ status.auto_save:
   en: "Auto save: %{on}"
 status.sticky_scroll:
   en: "Sticky scroll: %{on}"
+status.minimap:
+  en: "Minimap: %{on}"
 status.rainbow_brackets:
   en: "Rainbow brackets: %{on}"
 status.auto_saved:

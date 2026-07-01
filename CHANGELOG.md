@@ -41,6 +41,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Minimap** (View → Minimap, off by default). A code-overview column at the
+  right of the editor: each row is a band of lines drawn as a bar sized to the
+  band's longest line, with the current viewport highlighted; click to jump.
+  Single-pane view.
 - **Call hierarchy (callers)** (Tools → Language Server → Call Hierarchy). Lists
   the incoming calls to the symbol under the cursor via LSP
   (`prepareCallHierarchy` → `incomingCalls`), shown in the references jump list.

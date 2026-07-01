@@ -1855,11 +1855,64 @@ fn draw_tabs(app: &App, frame: &mut Frame, area: Rect) {
 }
 
 /// Render the editor region: a single pane, or two split panes with a divider.
+/// Width (cells) of the code-overview minimap column.
+const MINIMAP_WIDTH: u16 = 16;
+
+/// Draw the code-overview minimap for the active buffer in `area`. Each row maps
+/// to a band of source lines, drawn as a dim bar whose length tracks the band's
+/// longest (trimmed) line — a rough "shape of the code". Rows overlapping the
+/// editor's current viewport (`editor_height` rows from the scroll offset) get a
+/// highlighted background so the visible region stands out.
+fn draw_minimap(app: &mut App, frame: &mut Frame, area: Rect, editor_height: usize) {
+    let Some(tab) = app.editor.active_tab() else { return };
+    if tab.is_image() {
+        return;
+    }
+    let lines: Vec<String> = tab.text().lines().map(str::to_string).collect();
+    let total = lines.len().max(1);
+    let rows = area.height as usize;
+    let top = app.editor.top_visible_line();
+    let view_end = (top + editor_height).min(total);
+    let width = area.width as usize;
+    let dim = theme::dim();
+    let view_bg = theme::region_title(theme::Region::Editor, true);
+    let mut text = Vec::with_capacity(rows);
+    for r in 0..rows {
+        // The band of source lines this minimap row represents.
+        let start = r * total / rows;
+        let end = ((r + 1) * total / rows).max(start + 1).min(total);
+        let longest = lines[start..end].iter().map(|l| l.trim_end().chars().count()).max().unwrap_or(0);
+        // Scale the longest line (~120 cols) to the minimap width.
+        let bar = (longest * width / 120).clamp(usize::from(longest > 0), width);
+        let in_view = start < view_end && end > top;
+        let style = if in_view { view_bg } else { dim };
+        let glyph = if in_view { '\u{2593}' } else { '\u{2592}' }; // ▓ vs ▒
+        let mut s: String = std::iter::repeat_n(glyph, bar).collect();
+        for _ in bar..width {
+            s.push(' ');
+        }
+        text.push(Line::from(Span::styled(s, style)));
+    }
+    frame.render_widget(Paragraph::new(text), area);
+}
+
 fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) {
     use crate::editor::SplitDir;
     app.layout.editor_region = inner;
     let panes = app.editor.split_layout(inner);
     if panes.is_empty() {
+        // Carve a minimap column from the right edge (when enabled and there's
+        // room); the remainder splits into editor text + scrollbar as before.
+        let (inner, minimap_area) = if app.settings.show_minimap && inner.width > 40 {
+            let s = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Min(1), Constraint::Length(MINIMAP_WIDTH)])
+                .split(inner);
+            (s[0], s[1])
+        } else {
+            (inner, Rect { width: 0, height: 0, ..inner })
+        };
+        app.layout.minimap = minimap_area;
         let (editor_area, scrollbar_area) = if app.show_scrollbar {
             let s = Layout::default()
                 .direction(Direction::Horizontal)
@@ -1888,6 +1941,9 @@ fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) {
             let style = theme::region_title(theme::Region::Editor, true);
             frame.render_widget(Block::default().style(style), hrect);
             frame.render_widget(Paragraph::new(Line::from(Span::styled(text, style))), hrect);
+        }
+        if minimap_area.width > 0 {
+            draw_minimap(app, frame, minimap_area, editor_area.height as usize);
         }
         return;
     }
