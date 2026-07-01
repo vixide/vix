@@ -107,6 +107,14 @@ const EDIT_FIND: &[Item] = &[
     Item::leaf("menu.item.edit.search_workspace_dock", "search.workspace_dock", ""),
 ];
 
+/// Align selected lines on a delimiter, grouped under Edit → Align.
+const EDIT_ALIGN: &[Item] = &[
+    Item::leaf("menu.item.edit.align.equals", "edit.align.equals", ""),
+    Item::leaf("menu.item.edit.align.colon", "edit.align.colon", ""),
+    Item::leaf("menu.item.edit.align.comma", "edit.align.comma", ""),
+    Item::leaf("menu.item.edit.align.pipe", "edit.align.pipe", ""),
+];
+
 /// Surround the selection with a bracket/quote pair (add, or remove on repeat),
 /// grouped under Edit → Surround.
 const EDIT_SURROUND: &[Item] = &[
@@ -131,6 +139,7 @@ const EDIT: &[Item] = &[
     Item::sub("menu.item.edit.select_menu", EDIT_SELECT),
     Item::sub("menu.item.edit.lines_menu", EDIT_MOVE),
     Item::sub("menu.item.edit.surround_menu", EDIT_SURROUND),
+    Item::sub("menu.item.edit.align_menu", EDIT_ALIGN),
     Item::sub("menu.item.edit.find_menu", EDIT_FIND),
     Item::sub("menu.item.edit.mode", EDIT_MODE),
     SEP,

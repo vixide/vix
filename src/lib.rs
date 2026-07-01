@@ -78,6 +78,7 @@ pub mod ui;
 // are gated behind this crate's `lang-*` features.
 pub mod affix;
 pub mod ai_diff;
+pub mod align;
 pub mod ai_panel;
 pub mod ascii_character_picker;
 pub mod dap;
