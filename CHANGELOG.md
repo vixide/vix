@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Transpose** (Edit → Transpose Characters / Transpose Words). Swaps the two
+  characters around the cursor (Emacs `C-t`; at line/buffer end swaps the last two)
+  or the two neighboring words (Emacs `M-t`, preserving the separator).
 - **Toggle value** (Edit → Toggle Value). Flips the token under the cursor to its
   opposite: word pairs (`true`/`false`, `yes`/`no`, `on`/`off`, `enable`/`disable`,
   `left`/`right`, `up`/`down`, `min`/`max`, `and`/`or`) whole-word with case
