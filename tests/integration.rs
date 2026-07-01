@@ -384,6 +384,21 @@ fn org_checkbox_toggle_updates_parents_and_cookies() {
 }
 
 #[test]
+fn which_key_lists_candidates_after_a_leader() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "spacemacs".to_string();
+    // No prefix pending → no which-key.
+    assert!(app.which_key().is_none());
+    // Press the Space leader, then 'f' → candidates like "ff", "fr", "fs", "fp".
+    app.on_key(key(' '));
+    app.on_key(key('f'));
+    let (title, rows) = app.which_key().expect("which-key active after SPC f");
+    assert!(title.contains('f'), "title shows the pending sequence: {title:?}");
+    assert!(rows.iter().any(|(k, a)| k == "f" && a == "file.open"), "SPC f f = open: {rows:?}");
+    assert!(rows.iter().any(|(_, a)| a == "file.save"), "includes SPC f s save");
+}
+
+#[test]
 fn clipboard_history_records_copies_and_pastes_from_it() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "alpha beta");

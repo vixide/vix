@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Which-key popup.** While a chorded prefix is pending — Emacs `Ctrl+X` or the
+  Spacemacs `Space` leader — a popup lists the candidate next keys and the action
+  each runs, making the keymaps discoverable.
 - **Clipboard history / kill-ring** (Edit → Paste from History…). Every copy/cut is
   recorded into a ring (most-recent first, de-duplicated, capped at 30); the picker
   pastes any past entry at the cursor.
