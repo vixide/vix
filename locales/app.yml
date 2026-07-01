@@ -4234,6 +4234,8 @@ menu.item.tools.pomodoro:
   ja: "ポモドーロ…"
 menu.item.tools.todo_finder:
   en: "Find TODOs…"
+menu.item.tools.http_send:
+  en: "Send HTTP Request"
 menu.item.tools.regex_tester:
   en: "Regex Tester…"
   es: "Probador de regex…"
@@ -11853,6 +11855,16 @@ status.no_node_selection:
   en: "No enclosing syntax node to select"
 status.no_todos:
   en: "No TODO/FIXME comments found"
+status.http_no_request:
+  en: "No HTTP request in this buffer (expected: METHOD url)"
+status.http_sending:
+  en: "Sending request to %{url}…"
+status.http_done:
+  en: "HTTP response received"
+status.http_failed:
+  en: "HTTP request failed"
+msg.http_error:
+  en: "HTTP request failed: %{error}"
 status.todos_n:
   en: "%{n} TODO/FIXME comments"
 status.no_diagnostics:

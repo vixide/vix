@@ -384,6 +384,16 @@ fn org_checkbox_toggle_updates_parents_and_cookies() {
 }
 
 #[test]
+fn http_send_reports_when_buffer_has_no_request() {
+    // A buffer without a request line is rejected up front (no network attempt).
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "just some prose\n");
+    app.run_action("tools.http_send");
+    assert!(app.status.to_lowercase().contains("http") || app.status.contains("METHOD"));
+    assert!(!app.http_running(), "no request was dispatched");
+}
+
+#[test]
 fn jump_to_line_labels_move_the_cursor() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "line0\nline1\nline2\nline3\n");
