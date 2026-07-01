@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Offline structural selection expand.** Expand Selection now falls back to the
+  Tree-sitter parse tree (smallest enclosing node, growing on repeat) when the
+  file has no language server — previously it required LSP.
 - **Scratch buffer** (File → New Scratch Buffer). Opens a throwaway, unsaved
   buffer with a header line for quick notes/calculations.
 - **Highlight word occurrences** (View → Highlight Word Occurrences, off by
