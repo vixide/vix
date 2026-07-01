@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Frecency ranking for the project switcher.** Switch Project now orders recent
+  projects by frequency × recency (recent, frequently-opened projects first)
+  instead of plain most-recently-used. Sessions track a visit count + last-open.
 - **Offline structural selection expand.** Expand Selection now falls back to the
   Tree-sitter parse tree (smallest enclosing node, growing on repeat) when the
   file has no language server — previously it required LSP.

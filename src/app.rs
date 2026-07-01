@@ -1523,7 +1523,16 @@ impl App {
             let tree = pane_to_node(root, &tab_to_file)?;
             Some(crate::session::SplitSession { tree, focused: self.editor.focused_leaf })
         });
-        crate::session::WorkspaceSession { root: self.session_key(), files, active, cursors, scrolls, split }
+        crate::session::WorkspaceSession {
+            root: self.session_key(),
+            files,
+            active,
+            cursors,
+            scrolls,
+            split,
+            visits: 0, // filled/incremented by Session::set_workspace
+            last_visit: jiff::Zoned::now().timestamp().as_second(),
+        }
     }
 
     /// Capture the current session and persist it to the per-workspace store.
@@ -6927,10 +6936,10 @@ impl App {
     /// current workspace. Reports when there is nowhere else to switch to.
     fn open_workspace_chooser(&mut self) {
         let current = self.session_key();
+        let now = jiff::Zoned::now().timestamp().as_second();
         let roots: Vec<String> = crate::session::Session::load()
-            .workspaces
+            .frecency_ordered(now)
             .into_iter()
-            .map(|w| w.root)
             .filter(|r| *r != current)
             .collect();
         if roots.is_empty() {

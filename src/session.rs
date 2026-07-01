@@ -62,6 +62,13 @@ pub struct WorkspaceSession {
     pub scrolls: Vec<usize>,
     /// Split-pane layout to restore, or `None` for a single pane.
     pub split: Option<SplitSession>,
+    /// How many times this workspace has been opened (for frecency ranking).
+    /// `#[serde(default)]` lets older sessions load with 0.
+    #[serde(default)]
+    pub visits: u32,
+    /// Unix seconds of the last open (for frecency ranking); 0 if unknown.
+    #[serde(default)]
+    pub last_visit: i64,
 }
 
 /// A restorable split layout: the pane tree plus the focused leaf (in-order).
@@ -122,10 +129,40 @@ impl Session {
 
     /// Insert or replace the session for its root, moving it to the front and
     /// capping the total number of retained workspaces.
-    pub fn set_workspace(&mut self, ws: WorkspaceSession) {
+    pub fn set_workspace(&mut self, mut ws: WorkspaceSession) {
+        // Carry the prior visit count forward, incremented — set_workspace is
+        // called once per open/save, so this counts opens for frecency ranking.
+        // `last_visit` is stamped by the caller via `record_visit` before saving.
+        let prior = self.workspaces.iter().find(|w| w.root == ws.root).map_or(0, |w| w.visits);
+        ws.visits = prior.saturating_add(1).max(ws.visits);
         self.workspaces.retain(|w| w.root != ws.root);
         self.workspaces.insert(0, ws);
         self.workspaces.truncate(MAX_WORKSPACES);
+    }
+
+    /// Workspace roots ranked by *frecency* (frequency × recency) relative to
+    /// `now` (unix seconds), most relevant first. Recent opens outweigh old ones:
+    /// a visit within a day counts most, then a week, then older.
+    #[must_use]
+    pub fn frecency_ordered(&self, now: i64) -> Vec<String> {
+        let score = |w: &WorkspaceSession| -> i64 {
+            let age = now.saturating_sub(w.last_visit);
+            let weight = if w.last_visit == 0 {
+                1
+            } else if age < 86_400 {
+                8
+            } else if age < 604_800 {
+                4
+            } else if age < 2_592_000 {
+                2
+            } else {
+                1
+            };
+            i64::from(w.visits) * weight
+        };
+        let mut ranked: Vec<&WorkspaceSession> = self.workspaces.iter().collect();
+        ranked.sort_by_key(|w| std::cmp::Reverse(score(w)));
+        ranked.into_iter().map(|w| w.root.clone()).collect()
     }
 }
 
@@ -151,6 +188,35 @@ mod tests {
         assert_eq!(s.workspaces.len(), 2);
         assert_eq!(s.workspaces[0].root, "/a");
         assert_eq!(s.workspace("/a").unwrap().files, vec!["/a/x.rs".to_string()]);
+    }
+
+    #[test]
+    fn frecency_ranks_frequent_and_recent_first() {
+        let now = 1_000_000_000i64;
+        let mut s = Session::default();
+        // /rare: opened once, long ago. /freq: opened several times, recently.
+        s.workspaces.push(WorkspaceSession {
+            root: "/rare".into(),
+            visits: 1,
+            last_visit: now - 60 * 86_400, // ~2 months old
+            ..Default::default()
+        });
+        s.workspaces.push(WorkspaceSession {
+            root: "/freq".into(),
+            visits: 5,
+            last_visit: now - 3600, // an hour ago
+            ..Default::default()
+        });
+        let ranked = s.frecency_ordered(now);
+        assert_eq!(ranked, vec!["/freq".to_string(), "/rare".to_string()]);
+    }
+
+    #[test]
+    fn set_workspace_increments_visits() {
+        let mut s = Session::default();
+        s.set_workspace(ws("/a"));
+        s.set_workspace(ws("/a"));
+        assert_eq!(s.workspace("/a").unwrap().visits, 2, "re-opening counts a visit");
     }
 
     #[test]
