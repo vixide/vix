@@ -116,6 +116,8 @@ menu.go.next_change:
   en: "Next Change"
 menu.go.prev_change:
   en: "Previous Change"
+menu.go.jump:
+  en: "Jump to Line (labels)"
 menu.go.bookmarks:
   en: "Bookmarks"
 menu.go.word:
