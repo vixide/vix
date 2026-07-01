@@ -41,6 +41,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Align on delimiter** (Edit → Align). Pads selected lines so their first `=`,
+  `:`, `,`, or `|` lands in a common column. Pure logic in `crate::align`.
 - **Increment / Decrement number** (Edit menu). Bumps the integer at or after the
   cursor by one (Vim's Ctrl-A/Ctrl-X), handling a leading `-`.
 - **TODO/FIXME finder** (Tools → Find TODOs…). Scans the project's files (honoring

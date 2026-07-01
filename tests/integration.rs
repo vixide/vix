@@ -384,6 +384,15 @@ fn org_checkbox_toggle_updates_parents_and_cookies() {
 }
 
 #[test]
+fn align_on_equals_pads_the_selection() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "a = 1\nbbb = 2\n");
+    app.on_key(ctrl('a')); // select all
+    app.run_action("edit.align.equals");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "a   = 1\nbbb = 2\n");
+}
+
+#[test]
 fn surround_wraps_and_unwraps_the_selection() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "word");

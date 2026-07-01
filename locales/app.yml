@@ -1635,6 +1635,16 @@ menu.item.edit.increment_number:
   en: "Increment Number"
 menu.item.edit.decrement_number:
   en: "Decrement Number"
+menu.item.edit.align_menu:
+  en: "Align"
+menu.item.edit.align.equals:
+  en: "On = (equals)"
+menu.item.edit.align.colon:
+  en: "On : (colon)"
+menu.item.edit.align.comma:
+  en: "On , (comma)"
+menu.item.edit.align.pipe:
+  en: "On | (pipe)"
 menu.item.edit.surround_menu:
   en: "Surround"
 menu.item.edit.surround.paren:
