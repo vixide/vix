@@ -41,6 +41,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Toggle value** (Edit → Toggle Value). Flips the token under the cursor to its
+  opposite: word pairs (`true`/`false`, `yes`/`no`, `on`/`off`, `enable`/`disable`,
+  `left`/`right`, `up`/`down`, `min`/`max`, `and`/`or`) whole-word with case
+  preserved, and symbol pairs (`&&`/`||`, `==`/`!=`, `<=`/`>=`, `<`/`>`, `++`/`--`).
 - **HTTP/REST client** (Tools → Send HTTP Request). Write a request in a
   `.http`-style buffer (`METHOD url`, `Header: value` lines, blank line, body) and
   send it with the pure-Rust `ureq` client on a background thread; the response

@@ -1635,6 +1635,8 @@ menu.item.edit.column_select_up:
   ja: "列選択 上"
 menu.item.edit.emmet_expand:
   en: "Emmet Expand"
+menu.item.edit.toggle_value:
+  en: "Toggle Value"
 menu.item.edit.increment_number:
   en: "Increment Number"
 menu.item.edit.decrement_number:
@@ -11851,6 +11853,8 @@ status.references_n:
   ja: "%{n} 件の参照"
 status.no_number:
   en: "No number at the cursor"
+status.no_toggle:
+  en: "Nothing to toggle at the cursor"
 status.no_node_selection:
   en: "No enclosing syntax node to select"
 status.no_todos:
