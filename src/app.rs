@@ -1892,6 +1892,30 @@ impl App {
         }
     }
 
+    /// The which-key hint for a pending key prefix: `(title, [(keys, action)])`.
+    /// `None` when no prefix is pending. Drives the which-key popup so chorded
+    /// keymaps are discoverable.
+    #[must_use]
+    pub fn which_key(&self) -> Option<(String, Vec<(String, String)>)> {
+        match self.active_keymap() {
+            Keymap::Emacs if self.emacs_prefix => {
+                let rows = EMACS_CTRL_X.iter().map(|&(k, a)| (k.to_string(), a.to_string())).collect();
+                Some(("C-x".to_string(), rows))
+            }
+            Keymap::Spacemacs => {
+                let seq = self.spacemacs_leader.as_ref()?;
+                // Candidates whose sequence extends what's typed; show the next key.
+                let rows = SPACEMACS_LEADER
+                    .iter()
+                    .filter(|&&(s, _)| s.starts_with(seq.as_str()) && s.len() > seq.len())
+                    .map(|&(s, a)| (display_key(&s[seq.len()..]), a.to_string()))
+                    .collect();
+                Some((format!("SPC {seq}"), rows))
+            }
+            _ => None,
+        }
+    }
+
     fn ctrl(key: &KeyEvent) -> bool {
         key.modifiers.contains(KeyModifiers::CONTROL)
     }
@@ -2453,36 +2477,10 @@ impl App {
     /// Resolve a Spacemacs leader sequence: an exact action, a longer-prefix match
     /// (keep waiting), or nothing.
     fn spacemacs_leader_lookup(seq: &str) -> LeaderHit {
-        /// `(sequence, action)` pairs for the `SPC` leader (Spacemacs-style).
-        const LEADER: &[(&str, &str)] = &[
-            (" ", "tools.palette"),   // SPC SPC — M-x / command palette
-            ("ff", "file.open"),      // find file
-            ("fr", "file.open_recent"),
-            ("fs", "file.save"),
-            ("fp", "file.switch_project"),
-            ("bn", "tab.next"),       // buffers
-            ("bp", "tab.prev"),
-            ("bd", "file.close"),
-            ("pf", "tools.palette"),  // project: find/command
-            ("pp", "file.switch_project"),
-            ("pt", "view.explorer"),  // project tree
-            ("gs", "git.changes"),    // git status
-            ("gg", "git.status"),
-            ("gb", "git.blame"),
-            ("w/", "view.split_vertical"),
-            ("w-", "view.split_horizontal"),
-            ("wd", "view.unsplit"),
-            ("ww", "view.focus_other_pane"),
-            ("ss", "edit.find"),      // search
-            ("sp", "search.workspace"),
-            ("tn", "view.line_numbers"), // toggles
-            ("tw", "view.whitespace"),
-            ("qq", "file.quit"),
-            (";", "edit.toggle_comment"),
-        ];
-        if let Some(&(_, action)) = LEADER.iter().find(|&&(s, _)| s == seq) {
+        let leader = SPACEMACS_LEADER;
+        if let Some(&(_, action)) = leader.iter().find(|&&(s, _)| s == seq) {
             LeaderHit::Action(action)
-        } else if LEADER.iter().any(|&(s, _)| s.starts_with(seq)) {
+        } else if leader.iter().any(|&(s, _)| s.starts_with(seq)) {
             LeaderHit::Prefix
         } else {
             LeaderHit::None
@@ -14306,6 +14304,44 @@ fn transpose_words_at(text: &str, cursor: usize) -> Option<(String, usize)> {
     let new_cursor = a + word2.chars().count() + sep.chars().count() + word1.chars().count();
     Some((out, new_cursor))
 }
+
+/// `(sequence, action)` pairs for the Spacemacs `SPC` leader. Shared by the
+/// leader lookup and the which-key popup.
+const SPACEMACS_LEADER: &[(&str, &str)] = &[
+    (" ", "tools.palette"), // SPC SPC — M-x / command palette
+    ("ff", "file.open"),    // find file
+    ("fr", "file.open_recent"),
+    ("fs", "file.save"),
+    ("fp", "file.switch_project"),
+    ("bn", "tab.next"), // buffers
+    ("bp", "tab.prev"),
+    ("bd", "file.close"),
+    ("pf", "tools.palette"), // project: find/command
+    ("pp", "file.switch_project"),
+    ("pt", "view.explorer"), // project tree
+    ("gs", "git.changes"),   // git status
+    ("gg", "git.status"),
+    ("gb", "git.blame"),
+    ("w/", "view.split_vertical"),
+    ("w-", "view.split_horizontal"),
+    ("wd", "view.unsplit"),
+    ("ww", "view.focus_other_pane"),
+    ("ss", "edit.find"), // search
+    ("sp", "search.workspace"),
+    ("tn", "view.line_numbers"), // toggles
+    ("tw", "view.whitespace"),
+    ("qq", "file.quit"),
+    (";", "edit.toggle_comment"),
+];
+
+/// Render a leader key fragment for display (`" "` → `SPC`).
+fn display_key(k: &str) -> String {
+    if k == " " { "SPC".to_string() } else { k.to_string() }
+}
+
+/// The `Ctrl+X …` chords shown by the Emacs which-key popup: `(key, action-id)`.
+const EMACS_CTRL_X: &[(&str, &str)] =
+    &[("C-f", "file.open"), ("C-s", "file.save"), ("C-c", "file.quit"), ("k", "file.close")];
 
 /// Opposite-value pairs for [`smart_toggle_at`]. Word pairs are matched
 /// whole-word and case-preserved; symbol pairs are matched literally.

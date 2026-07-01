@@ -297,6 +297,8 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
 /// Second half of the overlay dispatch (split from `draw_overlays` to satisfy the
 /// per-function line limit). Behavior is identical to inlining this dispatch.
 fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
+    // Which-key popup for a pending key prefix (drawn under other modals).
+    draw_which_key(app, frame, area);
     if app.edit_sql.is_some() {
         draw_edit_sql(app, frame, area);
     }
@@ -1878,6 +1880,42 @@ fn draw_tabs(app: &App, frame: &mut Frame, area: Rect) {
 /// Render the editor region: a single pane, or two split panes with a divider.
 /// Width (cells) of the code-overview minimap column.
 const MINIMAP_WIDTH: u16 = 16;
+
+/// Draw the which-key popup (candidate keys for a pending prefix) anchored at the
+/// bottom of `area`. No-op when no prefix is pending or there are no candidates.
+fn draw_which_key(app: &App, frame: &mut Frame, area: Rect) {
+    let Some((title, rows)) = app.which_key() else { return };
+    if rows.is_empty() {
+        return;
+    }
+    let lines: Vec<Line> = rows
+        .iter()
+        .map(|(k, a)| {
+            Line::from(vec![Span::styled(format!(" {k:<4}"), theme::selected()), Span::styled(format!(" {a} "), theme::dim())])
+        })
+        .collect();
+    let width = rows
+        .iter()
+        .map(|(k, a)| k.len() + a.len() + 7)
+        .max()
+        .unwrap_or(20)
+        .clamp(20, area.width.max(20) as usize);
+    let width = u16::try_from(width).unwrap_or(20).min(area.width);
+    let height = (u16::try_from(rows.len()).unwrap_or(1) + 2).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width),
+        y: area.y + area.height.saturating_sub(height),
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .title(format!(" {title} "));
+    frame.render_widget(Paragraph::new(lines).block(block), rect);
+}
 
 /// Draw the jump-to-line labels at the left edge of each labeled visible row.
 fn draw_jump_labels(app: &App, frame: &mut Frame) {
