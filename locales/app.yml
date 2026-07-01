@@ -1537,6 +1537,8 @@ menu.item.edit.copy:
   bn: "অনুলিপি"
   zh: "复制"
   ja: "コピー"
+menu.item.edit.paste_from_history:
+  en: "Paste from History…"
 menu.item.edit.paste:
   en: "Paste"
   es: "Pegar"
@@ -9383,6 +9385,10 @@ ui.debug_watch:
   bn: "ওয়াচ"
   zh: "监视"
   ja: "ウォッチ"
+ui.clipboard:
+  en: "Paste from History"
+ui.clipboard_hint:
+  en: "↑↓ select   Enter paste   Esc cancel"
 ui.macros:
   en: "Play Macro"
   es: "Reproducir macro"
@@ -12425,6 +12431,8 @@ status.debug_terminated:
   bn: "ডিবাগ সেশন শেষ"
   zh: "调试会话结束"
   ja: "デバッグセッションが終了しました"
+status.clipboard_empty:
+  en: "Clipboard history is empty"
 status.no_macros:
   en: "No saved macros"
   es: "No hay macros guardadas"

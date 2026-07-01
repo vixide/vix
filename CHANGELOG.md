@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Clipboard history / kill-ring** (Edit → Paste from History…). Every copy/cut is
+  recorded into a ring (most-recent first, de-duplicated, capped at 30); the picker
+  pastes any past entry at the cursor.
 - **Transpose** (Edit → Transpose Characters / Transpose Words). Swaps the two
   characters around the cursor (Emacs `C-t`; at line/buffer end swaps the last two)
   or the two neighboring words (Emacs `M-t`, preserving the separator).

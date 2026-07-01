@@ -495,6 +495,15 @@ pub struct MacroChooser {
     pub selected: usize,
 }
 
+/// The clipboard-history picker (Edit → Paste from History…): recent copies/cuts,
+/// most-recent first. Enter (or a click) pastes the highlighted entry.
+pub struct ClipboardChooser {
+    /// Recent clipboard entries, most-recent first.
+    pub entries: Vec<String>,
+    /// Index of the highlighted entry.
+    pub selected: usize,
+}
+
 /// The spell-suggestion popup (Ctrl+;): corrections for the misspelled word at
 /// the cursor, plus Add-to-dictionary / Ignore actions.
 pub struct SpellSuggest {
@@ -950,6 +959,11 @@ pub struct App {
     pub task_chooser: Option<TaskChooser>,
     /// Saved-macro chooser overlay (Edit → Play Saved Macro…), when open.
     pub macro_chooser: Option<MacroChooser>,
+    /// Recent clipboard entries (copies/cuts), most-recent first, for the
+    /// paste-from-history picker.
+    pub clipboard_ring: Vec<String>,
+    /// Clipboard-history picker overlay (Edit → Paste from History…), when open.
+    pub clipboard_chooser: Option<ClipboardChooser>,
     /// Recent-projects chooser overlay (File → Switch Project…), when open.
     pub workspace_chooser: Option<WorkspaceChooser>,
     /// Read-only diff overlay (Tools → Compare With File…), when open.
@@ -1317,7 +1331,7 @@ impl App {
             menu: Menu::default(),
             palette: None, search: None, query_replace: None, workspace_search: None, jump: None,
             prompt: None, paste: None, confirm: None, replace_confirm: None, unsaved: None, spell_suggest: None,
-            context_menu: None, git_panel: None, branch_chooser: None, task_chooser: None, macro_chooser: None, workspace_chooser: None, diff_view: None, recent_chooser: None,
+            context_menu: None, git_panel: None, branch_chooser: None, task_chooser: None, macro_chooser: None, clipboard_ring: Vec::new(), clipboard_chooser: None, workspace_chooser: None, diff_view: None, recent_chooser: None,
             location_chooser: None, nerd_palette: None, ascii_panel: None, edit_table: None,
             edit_outline: None, edit_value: None, edit_bytes: None, edit_sql: None, qrcode: None,
             x11_panel: None,
@@ -1747,6 +1761,7 @@ impl App {
         panel!(branch_chooser, branch_key);
         panel!(task_chooser, tasks_key);
         panel!(macro_chooser, macro_key);
+        panel!(clipboard_chooser, clipboard_key);
         panel!(workspace_chooser, workspace_chooser_key);
         panel!(diff_view, diff_view_key);
         if self.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
@@ -2791,16 +2806,20 @@ impl App {
                 };
             }
             "edit.cut" => {
+                let killed = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text());
                 if let Some(t) = self.editor.active_tab_mut() {
                     t.editor.apply(CutAction {});
                     t.dirty = true;
                     t.preview = false;
                 }
+                self.record_clipboard(killed);
             }
             "edit.copy" => {
+                let copied = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text());
                 if let Some(t) = self.editor.active_tab_mut() {
                     t.editor.apply(CopyAction {});
                 }
+                self.record_clipboard(copied);
             }
             "edit.paste" => {
                 if let Some(t) = self.editor.active_tab_mut() {
@@ -2809,6 +2828,7 @@ impl App {
                     t.preview = false;
                 }
             }
+            "edit.paste_from_history" => self.open_clipboard_chooser(),
             "edit.toggle_comment" => {
                 if let Some(t) = self.editor.active_tab_mut()
                     && !t.is_image() {
@@ -6939,6 +6959,66 @@ impl App {
     }
 
     /// Open the saved-macro chooser, or report when none are saved.
+    /// Push `text` onto the clipboard history (most-recent first, de-duplicated,
+    /// capped). Empty/`None` entries are ignored.
+    fn record_clipboard(&mut self, text: Option<String>) {
+        let Some(text) = text.filter(|s| !s.is_empty()) else { return };
+        self.clipboard_ring.retain(|e| *e != text);
+        self.clipboard_ring.insert(0, text);
+        self.clipboard_ring.truncate(30);
+    }
+
+    /// Open the clipboard-history picker (Edit → Paste from History…).
+    fn open_clipboard_chooser(&mut self) {
+        if self.clipboard_ring.is_empty() {
+            self.status = t!("status.clipboard_empty").to_string();
+            return;
+        }
+        self.clipboard_chooser = Some(ClipboardChooser { entries: self.clipboard_ring.clone(), selected: 0 });
+    }
+
+    fn clipboard_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => {
+                if let Some(c) = self.clipboard_chooser.as_mut() {
+                    let n = c.entries.len();
+                    c.selected = (c.selected + n - 1) % n;
+                }
+            }
+            KeyCode::Down => {
+                if let Some(c) = self.clipboard_chooser.as_mut() {
+                    c.selected = (c.selected + 1) % c.entries.len();
+                }
+            }
+            KeyCode::Enter => self.paste_selected_clipboard(),
+            KeyCode::Esc => self.clipboard_chooser = None,
+            _ => {}
+        }
+    }
+
+    fn clipboard_mouse(&mut self, mouse: MouseEvent) {
+        if let Some(idx) = self.chooser_row(mouse)
+            && let Some(c) = self.clipboard_chooser.as_mut()
+            && idx < c.entries.len()
+        {
+            c.selected = idx;
+            self.paste_selected_clipboard();
+        }
+    }
+
+    /// Insert the highlighted clipboard-history entry at the cursor and close the
+    /// picker (also promoting it to the front of the ring).
+    fn paste_selected_clipboard(&mut self) {
+        let Some(c) = self.clipboard_chooser.take() else { return };
+        let Some(text) = c.entries.get(c.selected).cloned() else { return };
+        let area = self.layout.editor;
+        if self.editor.insert_str(&text, area) {
+            self.mark_active_dirty();
+        }
+        self.record_clipboard(Some(text));
+        self.focus = Focus::Editor;
+    }
+
     fn open_macro_chooser(&mut self) {
         let macros = Settings::macros_path().map(|p| crate::macros::load(&p)).unwrap_or_default();
         if macros.is_empty() {
@@ -8496,6 +8576,7 @@ impl App {
         panel!(branch_chooser, branch_mouse);
         panel!(task_chooser, tasks_mouse);
         panel!(macro_chooser, macro_mouse);
+        panel!(clipboard_chooser, clipboard_mouse);
         panel!(workspace_chooser, workspace_chooser_mouse);
         panel!(outline, outline_mouse);
         // The find / replace box: a left click focuses the Find or Replace field.

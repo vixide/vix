@@ -306,6 +306,9 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.macro_chooser.is_some() {
         draw_macro_chooser(app, frame, area);
     }
+    if app.clipboard_chooser.is_some() {
+        draw_clipboard_chooser(app, frame, area);
+    }
     if app.workspace_chooser.is_some() {
         draw_workspace_chooser(app, frame, area);
     }
@@ -1142,6 +1145,21 @@ fn draw_macro_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let labels: Vec<String> = c.macros.iter().map(|m| format!("{} ({} keys)", m.name, m.keys.len())).collect();
     let hint = t!("ui.macros_hint");
     app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.macros"), &hint, &labels, c.selected);
+}
+
+fn draw_clipboard_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(c) = app.clipboard_chooser.as_ref() else { return };
+    // Show a one-line preview of each entry (newlines/tabs flattened).
+    let labels: Vec<String> = c
+        .entries
+        .iter()
+        .map(|e| {
+            let flat: String = e.split_whitespace().collect::<Vec<_>>().join(" ");
+            flat.chars().take(80).collect()
+        })
+        .collect();
+    let hint = t!("ui.clipboard_hint");
+    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.clipboard"), &hint, &labels, c.selected);
 }
 
 fn draw_task_chooser(app: &mut App, frame: &mut Frame, area: Rect) {

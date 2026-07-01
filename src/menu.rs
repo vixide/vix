@@ -136,6 +136,7 @@ const EDIT: &[Item] = &[
     Item::leaf("menu.item.edit.cut", "edit.cut", "Ctrl X"),
     Item::leaf("menu.item.edit.copy", "edit.copy", "Ctrl C"),
     Item::leaf("menu.item.edit.paste", "edit.paste", "Ctrl V"),
+    Item::leaf("menu.item.edit.paste_from_history", "edit.paste_from_history", ""),
     SEP,
     Item::sub("menu.item.edit.select_menu", EDIT_SELECT),
     Item::sub("menu.item.edit.lines_menu", EDIT_MOVE),
