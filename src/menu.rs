@@ -76,6 +76,7 @@ impl MenuDef {
 
 const FILE: &[Item] = &[
     Item::leaf("menu.item.file.new", "file.new", "Ctrl N"),
+    Item::leaf("menu.item.file.scratch", "file.scratch", ""),
     SEP,
     Item::leaf("menu.item.file.open", "file.open", "Ctrl O"),
     Item::leaf("menu.item.file.open_recent", "file.open_recent", "Ctrl Shift O"),

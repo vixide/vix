@@ -41,6 +41,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Scratch buffer** (File → New Scratch Buffer). Opens a throwaway, unsaved
+  buffer with a header line for quick notes/calculations.
 - **Highlight word occurrences** (View → Highlight Word Occurrences, off by
   default). Passively marks every whole-word occurrence of the identifier under the
   cursor, on its own render channel so it never clobbers (sticky) search
