@@ -1639,6 +1639,16 @@ menu.item.edit.emmet_expand:
   en: "Emmet Expand"
 menu.item.edit.toggle_value:
   en: "Toggle Value"
+menu.item.edit.squeeze_blank_lines:
+  en: "Squeeze Blank Lines"
+menu.item.edit.eol_menu:
+  en: "Line Endings"
+menu.item.edit.eol_lf:
+  en: "To LF (Unix)"
+menu.item.edit.eol_crlf:
+  en: "To CRLF (Windows)"
+menu.item.tools.convert.rot13:
+  en: "ROT13"
 menu.item.edit.transpose_chars:
   en: "Transpose Characters"
 menu.item.edit.transpose_words:
