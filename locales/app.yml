@@ -9945,6 +9945,8 @@ ui.field_exclude:
   bn: "পাথ বাদ দিন"
   zh: "排除路径"
   ja: "パスを除外"
+ui.toggle_smartcase:
+  en: "Smart (Alt S)"
 ui.toggle_case:
   en: "Case (Alt C)"
   es: "Distinción (Alt C)"

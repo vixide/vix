@@ -41,6 +41,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Smart-case search** (find box, on by default; toggle with the Smart button or
+  Alt+S). Matches case-insensitively when the query is all-lowercase, but becomes
+  case-sensitive as soon as it contains an uppercase letter. The explicit Case
+  toggle still forces sensitivity.
 - **Surround** (Edit → Surround). Wrap the selection in a bracket/quote pair —
   parentheses, brackets, braces, angles, double/single quotes, backticks — and
   remove it by repeating the same action.

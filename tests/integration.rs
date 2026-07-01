@@ -1998,6 +1998,7 @@ fn parses_path_line_col() {
 #[test]
 fn search_pattern_respects_toggles() {
     let mut sb = SearchBar::new(false);
+    sb.smart_case = false; // isolate the case/word/regex toggles from smart-case
     sb.query = "Foo.Bar".to_string();
     assert_eq!(sb.pattern().as_deref(), Some(r"(?i)Foo\.Bar"));
 

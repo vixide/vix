@@ -854,6 +854,8 @@ pub struct Layout {
     /// when not shown.
     pub search_case: Rect,
     /// See [`Self::search_case`].
+    pub search_smartcase: Rect,
+    /// See [`Self::search_case`].
     pub search_word: Rect,
     /// See [`Self::search_case`].
     pub search_regex: Rect,
@@ -12105,6 +12107,7 @@ impl App {
                 if let Some(s) = self.search.as_mut() {
                     match c.to_ascii_lowercase() {
                         'c' => s.case_sensitive = !s.case_sensitive,
+                        's' => s.smart_case = !s.smart_case,
                         'w' => s.whole_word = !s.whole_word,
                         'r' => s.regex = !s.regex,
                         _ => {}
@@ -12140,12 +12143,15 @@ impl App {
 
         // Toggle buttons.
         if hit(self.layout.search_case)
+            || hit(self.layout.search_smartcase)
             || hit(self.layout.search_word)
             || hit(self.layout.search_regex)
         {
             if let Some(s) = self.search.as_mut() {
                 if hit(self.layout.search_case) {
                     s.case_sensitive = !s.case_sensitive;
+                } else if hit(self.layout.search_smartcase) {
+                    s.smart_case = !s.smart_case;
                 } else if hit(self.layout.search_word) {
                     s.whole_word = !s.whole_word;
                 } else {
