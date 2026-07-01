@@ -107,6 +107,18 @@ const EDIT_FIND: &[Item] = &[
     Item::leaf("menu.item.edit.search_workspace_dock", "search.workspace_dock", ""),
 ];
 
+/// Surround the selection with a bracket/quote pair (add, or remove on repeat),
+/// grouped under Edit → Surround.
+const EDIT_SURROUND: &[Item] = &[
+    Item::leaf("menu.item.edit.surround.paren", "edit.surround.paren", ""),
+    Item::leaf("menu.item.edit.surround.bracket", "edit.surround.bracket", ""),
+    Item::leaf("menu.item.edit.surround.brace", "edit.surround.brace", ""),
+    Item::leaf("menu.item.edit.surround.angle", "edit.surround.angle", ""),
+    Item::leaf("menu.item.edit.surround.double_quote", "edit.surround.double_quote", ""),
+    Item::leaf("menu.item.edit.surround.single_quote", "edit.surround.single_quote", ""),
+    Item::leaf("menu.item.edit.surround.backtick", "edit.surround.backtick", ""),
+];
+
 const EDIT: &[Item] = &[
     Item::leaf("menu.item.edit.undo", "edit.undo", "Ctrl Z"),
     Item::leaf("menu.item.edit.redo", "edit.redo", "Ctrl Shift Z"),
@@ -118,6 +130,7 @@ const EDIT: &[Item] = &[
     SEP,
     Item::sub("menu.item.edit.select_menu", EDIT_SELECT),
     Item::sub("menu.item.edit.lines_menu", EDIT_MOVE),
+    Item::sub("menu.item.edit.surround_menu", EDIT_SURROUND),
     Item::sub("menu.item.edit.find_menu", EDIT_FIND),
     Item::sub("menu.item.edit.mode", EDIT_MODE),
     SEP,
