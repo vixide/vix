@@ -4408,13 +4408,15 @@ fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     let toggle_style = |on: bool| if on { theme::selected() } else { theme::dim() };
     let toggles = vec![
         (t!("ui.toggle_case").to_string(), toggle_style(s.case_sensitive)),
+        (t!("ui.toggle_smartcase").to_string(), toggle_style(s.smart_case)),
         (t!("ui.toggle_word").to_string(), toggle_style(s.whole_word)),
         (t!("ui.toggle_regex").to_string(), toggle_style(s.regex)),
     ];
     let trects = button_row(frame, rows[1], &toggles);
     app.layout.search_case = trects[0];
-    app.layout.search_word = trects[1];
-    app.layout.search_regex = trects[2];
+    app.layout.search_smartcase = trects[1];
+    app.layout.search_word = trects[2];
+    app.layout.search_regex = trects[3];
 
     if replacing {
         frame.render_widget(

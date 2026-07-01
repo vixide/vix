@@ -187,6 +187,9 @@ pub struct SearchBar {
     pub field: Field,
     /// Match case exactly.
     pub case_sensitive: bool,
+    /// Smart case: when `case_sensitive` is off, match case-insensitively only if
+    /// the query has no uppercase letter; an uppercase letter makes it sensitive.
+    pub smart_case: bool,
     /// Match whole words only.
     pub whole_word: bool,
     /// Treat the query as a regular expression.
@@ -206,6 +209,7 @@ impl SearchBar {
             interactive: false,
             field: Field::Query,
             case_sensitive: false,
+            smart_case: true,
             whole_word: false,
             regex: false,
             status: String::new(),
@@ -247,7 +251,11 @@ impl SearchBar {
         if self.whole_word {
             core = format!(r"\b{core}\b");
         }
-        if !self.case_sensitive {
+        // Case-insensitive unless the case toggle is on, or smart-case is enabled
+        // and the query contains an uppercase letter.
+        let has_upper = self.query.chars().any(char::is_uppercase);
+        let insensitive = !(self.case_sensitive || self.smart_case && has_upper);
+        if insensitive {
             core = format!("(?i){core}");
         }
         Some(core)
@@ -309,6 +317,18 @@ mod tests {
     fn empty_query_has_no_pattern() {
         let s = SearchBar::new(false);
         assert_eq!(s.pattern(), None);
+    }
+
+    #[test]
+    fn smart_case_is_sensitive_only_with_an_uppercase_letter() {
+        let mut s = SearchBar::new(false); // smart_case on by default
+        s.query = "foo".to_string();
+        assert_eq!(s.pattern().as_deref(), Some("(?i)foo"), "all-lowercase → insensitive");
+        s.query = "Foo".to_string();
+        assert_eq!(s.pattern().as_deref(), Some("Foo"), "uppercase → case-sensitive");
+        // Turning smart-case off reverts to always-insensitive (unless case toggle).
+        s.smart_case = false;
+        assert_eq!(s.pattern().as_deref(), Some("(?i)Foo"));
     }
 
     fn re(p: &str) -> Regex {
