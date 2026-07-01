@@ -384,6 +384,17 @@ fn org_checkbox_toggle_updates_parents_and_cookies() {
 }
 
 #[test]
+fn scratch_buffer_opens_unsaved_with_a_header() {
+    let mut app = app_at(Path::new("."));
+    let before = app.editor.tabs.len();
+    app.run_action("file.scratch");
+    assert_eq!(app.editor.tabs.len(), before + 1);
+    let tab = app.editor.active_tab().unwrap();
+    assert!(tab.path.is_none(), "scratch buffer is not file-backed");
+    assert!(tab.text().contains("Scratch buffer"), "has the header");
+}
+
+#[test]
 fn align_on_equals_pads_the_selection() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "a = 1\nbbb = 2\n");

@@ -1271,6 +1271,8 @@ menu.item.git.fetch:
   bn: "Fetch"
   zh: "获取 (Fetch)"
   ja: "フェッチ (Fetch)"
+menu.item.file.scratch:
+  en: "New Scratch Buffer"
 menu.item.file.new:
   en: "New"
   es: "Nuevo"
@@ -11053,6 +11055,10 @@ status.lsp_inactive:
   bn: "এই ফাইলের জন্য কোনো ভাষা সার্ভার নেই"
   zh: "此文件没有语言服务器"
   ja: "このファイルの言語サーバーがありません"
+status.scratch:
+  en: "Scratch buffer"
+scratch.header:
+  en: "# Scratch buffer — not saved to disk unless you Save As."
 status.new_buffer:
   en: "New buffer"
   es: "Nuevo búfer"

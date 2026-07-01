@@ -2461,9 +2461,8 @@ impl App {
                 self.focus = Focus::Editor;
                 self.status = t!("status.new_buffer").into();
             }
-            "file.open" => {
-                self.prompt = Some(Prompt::new(PromptKind::Open, t!("prompt.open").to_string()));
-            }
+            "file.scratch" => self.new_scratch_buffer(),
+            "file.open" => self.prompt = Some(Prompt::new(PromptKind::Open, t!("prompt.open").to_string())),
             "file.open_recent" => self.open_recent_chooser(),
             "file.switch_project" => self.open_workspace_chooser(),
             "workspace.open" => self.prompt_workspace(PromptKind::WorkspaceOpen),
@@ -3698,6 +3697,13 @@ impl App {
         } else {
             self.status = t!("status.org_not_headline").to_string();
         }
+    }
+
+    /// Open a fresh throwaway scratch buffer (unsaved, with a header line).
+    fn new_scratch_buffer(&mut self) {
+        self.editor.new_tab_with_content(&format!("{}\n\n", t!("scratch.header")));
+        self.focus = Focus::Editor;
+        self.status = t!("status.scratch").into();
     }
 
     /// Increment (or decrement) the integer at/after the cursor by `delta`,
