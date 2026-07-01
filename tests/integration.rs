@@ -384,6 +384,28 @@ fn org_checkbox_toggle_updates_parents_and_cookies() {
 }
 
 #[test]
+fn text_transforms_squeeze_eol_and_rot13() {
+    // Squeeze blank lines over the whole buffer (no selection).
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "a\n\n\n\nb\n");
+    app.run_action("edit.squeeze_blank_lines");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "a\n\nb\n");
+
+    // ROT13 over a selection.
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "Hello");
+    app.on_key(ctrl('a'));
+    app.run_action("tools.convert.rot13");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "Uryyb");
+
+    // Convert to CRLF.
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "x\ny\n");
+    app.run_action("edit.eol_crlf");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "x\r\ny\r\n");
+}
+
+#[test]
 fn which_key_lists_candidates_after_a_leader() {
     let mut app = app_at(Path::new("."));
     app.settings.keymap = "spacemacs".to_string();

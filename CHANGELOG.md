@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Line-ending conversion** (Edit → Lines → Line Endings → To LF / To CRLF),
+  **Squeeze Blank Lines** (Edit → Lines), and **ROT13** (Tools → Convert). Pure
+  transforms in `crate::textops`, applied to the selection or whole buffer.
 - **Which-key popup.** While a chorded prefix is pending — Emacs `Ctrl+X` or the
   Spacemacs `Space` leader — a popup lists the candidate next keys and the action
   each runs, making the keymaps discoverable.

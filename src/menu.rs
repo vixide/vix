@@ -262,7 +262,16 @@ const EDIT_MOVE: &[Item] = &[
     Item::leaf("menu.item.edit.shuffle", "edit.shuffle", ""),
     Item::leaf("menu.item.edit.reverse", "edit.reverse_lines", ""),
     Item::leaf("menu.item.edit.dedupe", "edit.remove_duplicate_lines", ""),
+    Item::leaf("menu.item.edit.squeeze_blank_lines", "edit.squeeze_blank_lines", ""),
     Item::leaf("menu.item.edit.trim", "edit.trim_trailing_whitespace", ""),
+    SEP,
+    Item::sub("menu.item.edit.eol_menu", EDIT_EOL),
+];
+
+/// Line-ending conversion, grouped under Edit → Lines → Line Endings.
+const EDIT_EOL: &[Item] = &[
+    Item::leaf("menu.item.edit.eol_lf", "edit.eol_lf", ""),
+    Item::leaf("menu.item.edit.eol_crlf", "edit.eol_crlf", ""),
 ];
 
 /// Selection commands, grouped under Edit → Select.
@@ -627,6 +636,7 @@ const TOOLS_CONVERT: &[Item] = &[
     Item::sub("menu.item.edit.case", EDIT_CASE),
     SEP,
     Item::leaf("menu.item.tools.convert.jwt", "tools.convert.jwt", ""),
+    Item::leaf("menu.item.tools.convert.rot13", "tools.convert.rot13", ""),
 ];
 
 /// Character pickers, grouped under Tools → Characters.

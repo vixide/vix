@@ -70,6 +70,7 @@ pub mod snippets;
 pub mod tasks;
 pub mod test_runner;
 pub mod terminal;
+pub mod textops;
 pub mod theme;
 pub mod ui;
 
