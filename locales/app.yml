@@ -1631,6 +1631,22 @@ menu.item.edit.column_select_up:
   ja: "列選択 上"
 menu.item.edit.emmet_expand:
   en: "Emmet Expand"
+menu.item.edit.surround_menu:
+  en: "Surround"
+menu.item.edit.surround.paren:
+  en: "( Parentheses )"
+menu.item.edit.surround.bracket:
+  en: "[ Brackets ]"
+menu.item.edit.surround.brace:
+  en: "{ Braces }"
+menu.item.edit.surround.angle:
+  en: "< Angles >"
+menu.item.edit.surround.double_quote:
+  en: "\" Double Quotes \""
+menu.item.edit.surround.single_quote:
+  en: "' Single Quotes '"
+menu.item.edit.surround.backtick:
+  en: "` Backticks `"
 menu.item.edit.toggle_comment:
   en: "Comment"
   es: "Comentario"

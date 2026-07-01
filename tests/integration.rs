@@ -384,6 +384,19 @@ fn org_checkbox_toggle_updates_parents_and_cookies() {
 }
 
 #[test]
+fn surround_wraps_and_unwraps_the_selection() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "word");
+    app.on_key(ctrl('a')); // select all
+    app.run_action("edit.surround.paren");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "(word)");
+    // Repeating the same surround removes it (toggle_wrap behavior).
+    app.on_key(ctrl('a'));
+    app.run_action("edit.surround.paren");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "word");
+}
+
+#[test]
 fn emmet_expand_replaces_the_abbreviation() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "ul>li*2");

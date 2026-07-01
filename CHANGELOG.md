@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Surround** (Edit → Surround). Wrap the selection in a bracket/quote pair —
+  parentheses, brackets, braces, angles, double/single quotes, backticks — and
+  remove it by repeating the same action.
 - **Minimap** (View → Minimap, off by default). A code-overview column at the
   right of the editor: each row is a band of lines drawn as a bar sized to the
   band's longest line, with the current viewport highlighted; click to jump.

@@ -2983,6 +2983,7 @@ impl App {
             a if self.insert_org(a) => {}
             a if self.draw_insert(a) => {}
             a if self.insert_marker(a) => {}
+            a if self.surround(a) => {}
             a if self.insert_block(a) => {}
             a if self.org_action(a) => {}
             a if self.insert_dynamic(a) => {}
@@ -4440,6 +4441,24 @@ impl App {
             _ => return false,
         };
         self.toggle_wrap(&format!("#+BEGIN_{name}\n"), &format!("\n#+END_{name}"));
+        true
+    }
+
+    /// Surround the selection with a bracket/quote pair for an `edit.surround.*`
+    /// action (add on first use, remove on repeat — [`toggle_wrap`] handles both).
+    /// Returns `true` if `action` was a known surround pair.
+    fn surround(&mut self, action: &str) -> bool {
+        let (open, close) = match action {
+            "edit.surround.paren" => ("(", ")"),
+            "edit.surround.bracket" => ("[", "]"),
+            "edit.surround.brace" => ("{", "}"),
+            "edit.surround.angle" => ("<", ">"),
+            "edit.surround.double_quote" => ("\"", "\""),
+            "edit.surround.single_quote" => ("'", "'"),
+            "edit.surround.backtick" => ("`", "`"),
+            _ => return false,
+        };
+        self.toggle_wrap(open, close);
         true
     }
 
