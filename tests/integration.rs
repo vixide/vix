@@ -384,6 +384,26 @@ fn org_checkbox_toggle_updates_parents_and_cookies() {
 }
 
 #[test]
+fn clipboard_history_records_copies_and_pastes_from_it() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "alpha beta");
+    // Select "alpha" (first 5 chars) and copy it.
+    app.on_key(keycode(KeyCode::Home));
+    for _ in 0..5 {
+        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT));
+    }
+    app.run_action("edit.copy");
+    assert!(app.clipboard_ring.iter().any(|e| e == "alpha"), "copy recorded: {:?}", app.clipboard_ring);
+    // Collapse the selection, then move to end of buffer to paste there.
+    app.on_key(keycode(KeyCode::Right));
+    app.on_key(keycode(KeyCode::End));
+    app.run_action("edit.paste_from_history");
+    assert!(app.clipboard_chooser.is_some(), "history picker opens");
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.editor.active_tab().unwrap().text().contains("betaalpha"), "pasted from history");
+}
+
+#[test]
 fn http_send_reports_when_buffer_has_no_request() {
     // A buffer without a request line is rejected up front (no network attempt).
     let mut app = app_at(Path::new("."));
