@@ -36,6 +36,8 @@ const CONFIG_NAME: &str = "config";
 pub struct Settings {
     /// Show the line-number gutter.
     pub line_numbers: bool,
+    /// Show line numbers relative to the cursor line (hybrid: cursor line absolute).
+    pub relative_line_numbers: bool,
     /// Render visible glyphs for whitespace (space, tab, line ending).
     pub show_whitespace: bool,
     /// Wrap long lines across screen rows instead of scrolling horizontally.
@@ -194,6 +196,7 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             line_numbers: true,
+            relative_line_numbers: false,
             show_whitespace: false,
             soft_wrap: false,
             show_explorer: true,

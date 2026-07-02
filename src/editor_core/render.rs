@@ -234,6 +234,8 @@ impl Editor {
         let code = self.code_ref();
         let line_number_style = self.line_number_style;
         let default_text_style = self.text_style;
+        // For relative numbering, the cursor's line is the reference point.
+        let cursor_line = if self.relative_line_numbers { code.char_to_line(self.cursor) } else { 0 };
 
         let mut row: u16 = 0;
         for line_idx in self.offset_y..total_lines {
@@ -242,7 +244,14 @@ impl Editor {
             if draw_y >= area.bottom() { break }
             row = row.saturating_add(1);
             if self.show_line_numbers {
-                let line_number = format!("{:>width$}", line_idx + 1, width = line_number_digits);
+                // Hybrid relative: the cursor line shows its absolute number;
+                // others show their distance from it.
+                let value = if self.relative_line_numbers && line_idx != cursor_line {
+                    line_idx.abs_diff(cursor_line)
+                } else {
+                    line_idx + 1
+                };
+                let line_number = format!("{value:>line_number_digits$}");
                 buf.set_string(area.left(), draw_y, &line_number, line_number_style);
             }
             // Gutter sign column (just before the text, or column 0 when line
@@ -747,6 +756,21 @@ mod whitespace_tests {
         (&ed).render(area, &mut buf);
         let line1_styled = (0..40).any(|x| buf[(x, 1)].fg == Color::Rgb(255, 0, 0));
         assert!(line1_styled, "second visible line (fn main) is highlighted via the single viewport query");
+    }
+
+    #[test]
+    fn relative_line_numbers_show_distance_from_the_cursor() {
+        let mut ed = Editor::new("text", "l0\nl1\nl2\nl3", Vec::new()).unwrap();
+        ed.set_relative_line_numbers(true);
+        ed.set_cursor(6); // char 6 is on line 2 ("l2")
+        let area = Rect::new(0, 0, 20, 5);
+        let mut buf = Buffer::empty(area);
+        (&ed).render(area, &mut buf);
+        // Gutter is 5 wide (min). Line 0 → distance 2, line 2 → absolute 3, line 3 → 1.
+        let gutter = |y: u16| row(&buf, y, 0, 5);
+        assert_eq!(gutter(0).trim(), "2", "distance from cursor line");
+        assert_eq!(gutter(2).trim(), "3", "cursor line shows absolute number");
+        assert_eq!(gutter(3).trim(), "1");
     }
 
     #[test]

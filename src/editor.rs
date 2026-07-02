@@ -285,6 +285,8 @@ pub enum SplitDir {
 }
 
 /// The tab strip: a stack of open buffers and the active index.
+// Several independent display toggles; a flags struct would just relocate the lint.
+#[allow(clippy::struct_excessive_bools)]
 pub struct Editor {
     /// Open buffers, left to right.
     pub tabs: Vec<Tab>,
@@ -292,6 +294,8 @@ pub struct Editor {
     pub active: usize,
     /// Whether the line-number gutter is shown.
     pub line_numbers: bool,
+    /// Whether line numbers are shown relative to the cursor line.
+    pub relative_line_numbers: bool,
     /// Whether visible-whitespace glyphs are shown.
     pub show_whitespace: bool,
     /// Whether long lines soft-wrap.
@@ -320,6 +324,7 @@ impl Editor {
             tabs: Vec::new(),
             active: 0,
             line_numbers,
+            relative_line_numbers: false,
             show_whitespace,
             soft_wrap,
             indent,
@@ -516,10 +521,12 @@ impl Editor {
         self.active = self.tabs.len() - 1;
     }
 
-    /// Apply the current line-number setting to every buffer.
+    /// Apply the current line-number settings (visibility + relative) to every
+    /// buffer.
     pub fn refresh_line_numbers(&mut self) {
         for tab in &mut self.tabs {
             tab.editor.show_line_numbers(self.line_numbers);
+            tab.editor.set_relative_line_numbers(self.relative_line_numbers);
         }
     }
 

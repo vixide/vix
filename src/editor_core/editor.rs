@@ -99,6 +99,10 @@ pub struct Editor {
     /// Controls when to show the line numbers
     pub(crate) show_line_numbers: bool,
 
+    /// When true (and line numbers are shown), non-current lines display their
+    /// distance from the cursor line; the cursor line shows its absolute number.
+    pub(crate) relative_line_numbers: bool,
+
     /// When true, render visible glyphs for whitespace (space, tab, line ending).
     pub(crate) show_whitespace: bool,
 
@@ -208,6 +212,7 @@ impl Editor {
             inlay_hints: Vec::new(),
             highlights_cache,
             show_line_numbers: true,
+            relative_line_numbers: false,
             show_whitespace: false,
             soft_wrap: false,
             auto_pair: true,
@@ -235,6 +240,11 @@ impl Editor {
     /// Set the style for the line-number gutter.
     pub fn set_line_number_style(&mut self, style: Style) {
         self.line_number_style = style;
+    }
+
+    /// Enable or disable relative (hybrid) line numbering.
+    pub fn set_relative_line_numbers(&mut self, on: bool) {
+        self.relative_line_numbers = on;
     }
 
     /// Set the block-cursor style. Pass `Some(style)` to draw a visible cursor

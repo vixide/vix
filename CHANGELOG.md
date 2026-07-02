@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Relative line numbers** (View → Relative Line Numbers, off by default). The
+  gutter shows each line's distance from the cursor line (hybrid: the cursor line
+  shows its absolute number), making count-based motions easy.
 - **Line-ending conversion** (Edit → Lines → Line Endings → To LF / To CRLF),
   **Squeeze Blank Lines** (Edit → Lines), and **ROT13** (Tools → Convert). Pure
   transforms in `crate::textops`, applied to the selection or whole buffer.

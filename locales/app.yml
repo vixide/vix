@@ -3023,6 +3023,8 @@ menu.item.view.final_newline_on_save:
   bn: "সংরক্ষণে চূড়ান্ত নিউলাইন"
   zh: "保存时添加末尾换行"
   ja: "保存時に最終改行を追加"
+menu.item.view.relative_line_numbers:
+  en: "Relative Line Numbers"
 menu.item.view.line_numbers:
   en: "Show/Hide Line Numbers"
   es: "Mostrar/Ocultar números de línea"
@@ -11875,6 +11877,8 @@ status.no_number:
   en: "No number at the cursor"
 status.no_toggle:
   en: "Nothing to toggle at the cursor"
+status.relative_line_numbers:
+  en: "Relative line numbers: %{on}"
 status.no_node_selection:
   en: "No enclosing syntax node to select"
 status.no_todos:

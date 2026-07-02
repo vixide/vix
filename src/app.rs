@@ -1295,9 +1295,11 @@ impl App {
             settings.soft_wrap,
             settings.indent_string(),
         );
+        editor.relative_line_numbers = settings.relative_line_numbers;
         for tab in &mut editor.tabs {
             tab.editor.set_auto_pair(settings.auto_pair);
             tab.editor.set_rainbow_brackets(settings.rainbow_brackets);
+            tab.editor.set_relative_line_numbers(settings.relative_line_numbers);
         }
         let mut messages = Messages::default();
         messages.advice(t!("msg.welcome").to_string());
@@ -2620,6 +2622,7 @@ impl App {
             "view.unsplit" => self.editor.unsplit(),
             "view.focus_other_pane" => self.editor.focus_other_pane(),
             "view.line_numbers" | "tools.line_numbers" => self.toggle_editor_line_numbers(),
+            "view.relative_line_numbers" => self.toggle_relative_line_numbers(),
             "view.whitespace" => self.toggle_editor_whitespace(),
             "view.soft_wrap" => self.toggle_editor_soft_wrap(),
             "view.left_dock" | "view.explorer" => self.toggle_left_dock(),
@@ -6786,6 +6789,16 @@ impl App {
         .to_string();
     }
 
+    /// Toggle relative (hybrid) line numbering, mirrored across every tab and
+    /// persisted.
+    fn toggle_relative_line_numbers(&mut self) {
+        let on = !self.settings.relative_line_numbers;
+        self.settings.relative_line_numbers = on;
+        self.editor.relative_line_numbers = on;
+        self.editor.refresh_line_numbers();
+        self.status = t!("status.relative_line_numbers", on = on).to_string();
+    }
+
     /// Toggle the editor's visible-whitespace glyphs, mirrored across every tab
     /// and persisted.
     fn toggle_editor_whitespace(&mut self) {
@@ -8179,9 +8192,11 @@ impl App {
     fn apply_editorconfig_indent(&mut self, path: &Path) {
         let auto_pair = self.settings.auto_pair;
         let rainbow = self.settings.rainbow_brackets;
+        let relative = self.settings.relative_line_numbers;
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_auto_pair(auto_pair);
             tab.editor.set_rainbow_brackets(rainbow);
+            tab.editor.set_relative_line_numbers(relative);
         }
         if !self.settings.editorconfig {
             return;
