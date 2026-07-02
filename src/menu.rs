@@ -248,6 +248,7 @@ const GO: &[Item] = &[
     Item::sub("menu.go.section", GO_SECTION),
     Item::sub("menu.go.file", GO_FILE),
     SEP,
+    Item::leaf("menu.go.matching_tag", "nav.matching_tag", ""),
     Item::leaf("menu.go.percent", "nav.goto_percent", ""),
     Item::leaf("menu.go.byte", "nav.goto_byte", ""),
 ];

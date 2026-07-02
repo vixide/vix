@@ -118,6 +118,8 @@ menu.go.prev_change:
   en: "Previous Change"
 menu.go.jump:
   en: "Jump to Line (labels)"
+menu.go.matching_tag:
+  en: "Matching Tag"
 menu.go.percent:
   en: "Go to Percent…"
 menu.go.byte:
@@ -11897,6 +11899,8 @@ status.read_only_blocked:
   en: "Buffer is read-only"
 status.no_node_selection:
   en: "No enclosing syntax node to select"
+status.no_matching_tag:
+  en: "No matching tag at the cursor"
 status.no_todos:
   en: "No TODO/FIXME comments found"
 status.http_no_request:

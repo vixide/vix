@@ -1028,7 +1028,8 @@ impl Editor {
     }
 
     /// Move the active cursor to char offset `off` and scroll it into view.
-    fn goto_offset(&mut self, off: usize, area: Rect) {
+    /// Move the active cursor to char offset `off` and scroll it into view.
+    pub fn goto_offset(&mut self, off: usize, area: Rect) {
         if let Some(t) = self.active_tab_mut() {
             t.editor.set_cursor(off);
             t.editor.focus(&area);

@@ -5051,6 +5051,19 @@ impl App {
         }
     }
 
+    /// Jump the cursor to the HTML/XML tag matching the one under the cursor.
+    fn goto_matching_tag(&mut self) {
+        let Some(t) = self.editor.active_tab() else { return };
+        let cursor = t.editor.get_cursor();
+        match crate::tags::matching_tag(&t.editor.get_content(), cursor) {
+            Some(off) => {
+                let area = self.editor_view();
+                self.editor.goto_offset(off, area);
+            }
+            None => self.status = t!("status.no_matching_tag").to_string(),
+        }
+    }
+
     /// Grow the active selection to the smallest enclosing Tree-sitter node
     /// (offline structural selection). No-op without a parse tree.
     fn expand_selection_to_node(&mut self) {
@@ -12921,6 +12934,7 @@ impl App {
             "nav.goto_word" => {
                 self.prompt = Some(Prompt::new(PromptKind::GotoWord, t!("prompt.goto_word").to_string()));
             }
+            "nav.matching_tag" => self.goto_matching_tag(),
             "nav.goto_percent" => {
                 self.prompt = Some(Prompt::new(PromptKind::GotoPercent, t!("prompt.goto_percent").to_string()));
             }
