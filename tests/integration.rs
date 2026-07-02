@@ -4815,6 +4815,107 @@ fn vim_keymap_command_line_quits() {
 }
 
 #[test]
+fn vim_keymap_operators_and_motions() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "vi".to_string();
+    app.on_key(key('i'));
+    for c in "one\ntwo\nthree".chars() {
+        if c == '\n' {
+            app.on_key(keycode(KeyCode::Enter));
+        } else {
+            app.on_key(key(c));
+        }
+    }
+    app.on_key(esc());
+
+    // `gg` jumps to the first line, `G` to the last.
+    app.on_key(key('g'));
+    app.on_key(key('g'));
+    assert_eq!(app.editor.cursor_1based().0, 1, "gg goes to the top");
+    app.on_key(key('G'));
+    assert_eq!(app.editor.cursor_1based().0, 3, "G goes to the bottom");
+
+    // `dd` cuts the current line; `u` undoes it.
+    app.on_key(key('g'));
+    app.on_key(key('g'));
+    app.on_key(key('d'));
+    app.on_key(key('d'));
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "two", "dd cut line one");
+    app.on_key(key('u'));
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "one", "u undoes the cut");
+
+    // `w` moves to the next word start.
+    app.on_key(key('g'));
+    app.on_key(key('g'));
+    app.on_key(key('w'));
+    assert_eq!(app.editor.cursor_1based(), (2, 1), "w jumps to the next word (line 2)");
+}
+
+#[test]
+fn vim_command_line_goes_to_line() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "vi".to_string();
+    app.on_key(key('i'));
+    for _ in 0..4 {
+        app.on_key(keycode(KeyCode::Enter));
+    }
+    app.on_key(esc());
+    // `:3` jumps to line 3.
+    app.on_key(key(':'));
+    app.on_key(key('3'));
+    app.on_key(keycode(KeyCode::Enter));
+    assert_eq!(app.editor.cursor_1based().0, 3, ":3 goes to line 3");
+}
+
+#[test]
+fn emacs_keymap_meta_and_window_chords() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "emacs".to_string();
+    // M-x opens the command palette.
+    app.on_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::ALT));
+    assert!(app.palette.is_some(), "M-x opens the palette");
+    app.on_key(esc());
+    // C-x 2 splits the window; C-x 1 unsplits.
+    app.on_key(ctrl('x'));
+    app.on_key(key('2'));
+    assert!(app.editor.split_root.is_some(), "C-x 2 splits");
+    app.on_key(ctrl('x'));
+    app.on_key(key('1'));
+    assert!(app.editor.split_root.is_none(), "C-x 1 unsplits");
+    // C-k kills the whole line. (The yank round-trip is not asserted here: the
+    // clipboard is process-shared, so parallel tests could race it.)
+    for c in "abc".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(ctrl('k'));
+    assert!(app.editor.active_tab().unwrap().text().is_empty(), "C-k kills the line");
+    // C-x b opens the buffer switcher (palette `#` mode).
+    app.on_key(ctrl('x'));
+    app.on_key(key('b'));
+    assert!(app.palette.is_some(), "C-x b opens the buffer switcher");
+}
+
+#[test]
+fn vscode_keymap_split_panel_and_delete_line() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "vscode-macos".to_string();
+    // Ctrl+\ splits the editor.
+    app.on_key(ctrl('\\'));
+    assert!(app.editor.split_root.is_some(), "Ctrl+\\ splits");
+    // Ctrl+J toggles the bottom panel.
+    let before = app.show_bottom_dock;
+    app.on_key(ctrl('j'));
+    assert_ne!(app.show_bottom_dock, before, "Ctrl+J toggles the panel");
+    // Ctrl+Shift+K deletes the current line.
+    type_str(&mut app, "doomed");
+    app.on_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
+    assert!(
+        app.editor.active_tab().unwrap().text().is_empty(),
+        "Ctrl+Shift+K deletes the line"
+    );
+}
+
+#[test]
 fn switching_keymap_resets_vim_to_normal() {
     let mut app = app_at(Path::new("."));
     app.settings.keymap = "vi".to_string();
