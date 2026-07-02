@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **CSpell config** (`cspell.json`) with an external custom dictionary
+  (`project-words.txt`) of project/domain terms, so `cspell` can spell-check the
+  repo's docs and text with the project vocabulary pre-seeded.
 - **Word-level diff** in the Compare With File overlay. Changed lines now
   highlight the specific words that differ (bold/reversed) instead of coloring the
   whole line, via `similar`'s inline diff.

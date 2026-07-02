@@ -1,0 +1,41 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "$schema": "https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json",
+  "dictionaryDefinitions": [
+    {
+      "name": "project-words",
+      "path": "./project-words.txt",
+      "addWords": true
+    }
+  ],
+  "dictionaries": [
+    "project-words",
+    "rust",
+    "en_US",
+    "softwareTerms",
+    "bash",
+    "html",
+    "css",
+    "fonts",
+    "filetypes"
+  ],
+  "ignorePaths": [
+    "target/",
+    "Cargo.lock",
+    "**/*.lock",
+    ".git/",
+    "**/dictionaries/**",
+    "**/*.hunspell",
+    "**/*.aff",
+    "**/*.dic",
+    "assets/",
+    "**/*.svg",
+    "**/*.png"
+  ],
+  "ignoreRegExpList": [
+    "/#[0-9a-fA-F]{3,8}\\b/",
+    "/\\b0x[0-9a-fA-F]+\\b/",
+    "/\\\\u\\{[0-9a-fA-F]+\\}/"
+  ]
+}
