@@ -51,10 +51,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Ctrl+M` matching bracket, `Ctrl+Shift+D`/`Ctrl+Shift+K` duplicate/delete
   line, `Ctrl+H` replace, `Ctrl+B` build, ``Ctrl+` `` console. Plus a
   `docs/for-sublime-users/` migration guide.
-- **Migration guides** for Vim, Emacs, VS Code, IntelliJ, and Eclipse users
-  (`docs/for-vim-users/`, `docs/for-emacs-users/`,
-  `docs/for-visual-studio-code-users/`, `docs/for-intellij-users/`,
-  `docs/for-eclipse-users/`): an honest pros/cons pitch, a
+- **Migration guides** for Vim, Emacs, VS Code, IntelliJ, Eclipse, Sublime
+  Text, and Spacemacs users (`docs/for-*-users/`): an honest pros/cons pitch, a
   muscle-memory mapping table for each keymap, and a try-it-for-an-afternoon
   experiment.
 - **Keymap improvements.** Vi: `w`/`b` words, `^`, `gg`/`G`, `dd`/`yy`/`p`, `u`,
