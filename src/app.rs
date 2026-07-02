@@ -634,6 +634,8 @@ enum Keymap {
     IntelliJWindows,
     /// Eclipse (Windows) shortcuts.
     Eclipse,
+    /// Sublime Text shortcuts, with `Ctrl` standing in for `Cmd`.
+    Sublime,
 }
 
 impl Keymap {
@@ -648,6 +650,7 @@ impl Keymap {
             "intellij-macos" => Keymap::IntelliJMacOS,
             "intellij-windows" => Keymap::IntelliJWindows,
             "eclipse" => Keymap::Eclipse,
+            "sublime" => Keymap::Sublime,
             _ => Keymap::Apple,
         }
     }
@@ -1856,6 +1859,11 @@ impl App {
                     return;
                 }
             }
+            Keymap::Sublime => {
+                if self.sublime_key(key) || self.global_shared_key(key) {
+                    return;
+                }
+            }
         }
         match self.focus {
             Focus::Editor => {
@@ -2129,6 +2137,48 @@ impl App {
             'b' if shift => self.run_action("run.toggle_breakpoint"),
             'b' => self.run_action("tools.test"),             // Build All
             '3' => self.run_action("tools.palette"),          // Quick Access
+            '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
+            _ => return false,
+        }
+        true
+    }
+
+    // ----- keymap: Sublime Text -------------------------------------------
+
+    /// Sublime Text keymap dispatch (`Ctrl` stands in for `Cmd` on macOS).
+    /// Editing chords (undo/cut/copy/paste/select-all) fall through to the
+    /// editor widget. Returns true if consumed.
+    fn sublime_key(&mut self, key: KeyEvent) -> bool {
+        if !Self::ctrl(&key) {
+            return false;
+        }
+        let KeyCode::Char(c) = key.code else { return false };
+        let shift = Self::shift(&key);
+        match c.to_ascii_lowercase() {
+            'p' if shift => self.run_action("tools.palette"),  // Command Palette
+            'p' => self.run_action("file.open"),               // Goto Anything
+            'r' => self.run_action("nav.goto_symbol"),         // Goto Symbol
+            'g' => self.run_action("nav.goto_line"),           // Goto Line
+            'd' if shift => self.run_action("edit.duplicate_line"),
+            // Nearest to Sublime's add-next-occurrence: a caret on every match.
+            'd' => self.run_action("edit.select_all_occurrences"),
+            'l' => self.run_action("edit.select_line"),        // Expand to Line
+            'j' => self.run_action("edit.join_lines"),
+            'm' => self.run_action("edit.match_bracket"),
+            'k' if shift => self.run_action("cut_line"),       // Delete Line
+            'h' => self.run_action("edit.replace"),
+            'f' if shift => self.run_action("search.workspace"),
+            'f' => self.run_action("edit.find"),
+            'b' => self.run_action("tools.test"),              // Build
+            '`' => self.run_action("tools.terminal"),          // console
+            'n' => self.run_action("file.new"),
+            'w' if shift => self.run_action("file.close_all"),
+            'w' => self.run_action("file.close"),
+            's' if shift => self.run_action("file.save_as"),
+            's' => self.run_action("file.save"),
+            't' if shift => self.run_action("file.reopen_closed"),
+            // Many terminals emit the same control byte (0x1F) for
+            // Ctrl+/, Ctrl+7, and Ctrl+_, so accept all three for Comment.
             '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
             _ => return false,
         }

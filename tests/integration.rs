@@ -4685,14 +4685,36 @@ fn view_keymap_submenu_actions_set_the_keymap() {
     app.run_action("view.keymap:vi");
     assert_eq!(app.settings.keymap, "vi");
 
-    for id in ["vscode-windows", "intellij-macos", "intellij-windows", "eclipse"] {
+    for id in ["vscode-windows", "intellij-macos", "intellij-windows", "eclipse", "sublime"] {
         app.run_action(&format!("view.keymap:{id}"));
         assert_eq!(app.settings.keymap, id);
     }
 
     // An unknown id is ignored.
     app.run_action("view.keymap:nope");
-    assert_eq!(app.settings.keymap, "eclipse");
+    assert_eq!(app.settings.keymap, "sublime");
+}
+
+#[test]
+fn sublime_keymap_signature_bindings() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "sublime".to_string();
+    // Ctrl+Shift+D duplicates the current line.
+    type_str(&mut app, "solo");
+    app.on_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
+    assert_eq!(app.editor.active_tab().unwrap().lines()[..2], ["solo", "solo"], "Ctrl+Shift+D duplicates");
+    // Ctrl+J joins the two lines (from the first line).
+    app.on_key(keycode(KeyCode::Up));
+    app.on_key(keycode(KeyCode::Home));
+    app.on_key(ctrl('j'));
+    assert!(
+        app.editor.active_tab().unwrap().lines()[0].contains("solo solo"),
+        "Ctrl+J joins lines: {:?}",
+        app.editor.active_tab().unwrap().lines()
+    );
+    // Ctrl+Shift+P opens the command palette.
+    app.on_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
+    assert!(app.palette.is_some(), "Ctrl+Shift+P opens the palette");
 }
 
 #[test]

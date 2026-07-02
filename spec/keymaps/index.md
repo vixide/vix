@@ -22,18 +22,19 @@ Vix ships nine keymaps. **Apple** is the default and matches Vix's own bindings.
 | IntelliJ macOS | `intellij-macos` | IntelliJ (macOS) defaults, `Ctrl` for `Cmd` — `Ctrl+Shift+O` Go to File, `Ctrl+B` Go to Declaration, `Ctrl+Alt+L` Reformat. |
 | IntelliJ Windows | `intellij-windows` | IntelliJ (Windows) defaults — `Ctrl+Shift+N` Go to File, `Ctrl+G` Go to Line, `Ctrl+Y` delete line. |
 | Eclipse | `eclipse` | Eclipse (Windows) defaults — `Ctrl+Shift+R` Open Resource, `Ctrl+Shift+T` Open Type, `Ctrl+3` Quick Access, `F3` Open Declaration. |
+| Sublime Text | `sublime` | Sublime Text defaults, `Ctrl` for `Cmd` — `Ctrl+P` Goto Anything, `Ctrl+Shift+P` Command Palette, `Ctrl+R` Goto Symbol, `Ctrl+J` Join Lines, `Ctrl+Shift+D` Duplicate. |
 
 Each keymap gets first chance to consume a key. Apple and VS Code dispatch their
-shortcuts directly; the others (Emacs, Vi, Spacemacs, both IntelliJ, Eclipse) try
+shortcuts directly; the others (Emacs, Vi, Spacemacs, both IntelliJ, Eclipse, Sublime Text) try
 their own handling and then fall back to a **shared** layer (menu-bar mnemonics
 like `Alt+F` and function keys like `F10`) before the focused pane handles the
-key. The IntelliJ and Eclipse keymaps let editing chords (`Ctrl+Z/X/C/V/A`) fall
-through to the editor widget.
+key. The IntelliJ, Eclipse, and Sublime Text keymaps let editing chords
+(`Ctrl+Z/X/C/V/A`) fall through to the editor widget.
 
 ## Choosing a keymap
 
 The keymap is selected from the **View → Keymap** submenu in the top menu bar.
-The submenu lists the nine keymaps by their proper names (not translated), in
+The submenu lists the ten keymaps by their proper names (not translated), in
 model order, and is kept in sync with the keymap model by a test.
 
 | Item | Action |
@@ -47,6 +48,7 @@ model order, and is kept in sync with the keymap model by a test.
 | IntelliJ macOS | `view.keymap:intellij-macos` |
 | IntelliJ Windows | `view.keymap:intellij-windows` |
 | Eclipse | `view.keymap:eclipse` |
+| Sublime Text | `view.keymap:sublime` |
 
 Choosing an item dispatches `view.keymap:<id>`. The host:
 

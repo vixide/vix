@@ -390,6 +390,7 @@ const VIEW_KEYMAP: &[Item] = &[
     Item::leaf("menu.name.intellij_mac", "view.keymap:intellij-macos", ""),
     Item::leaf("menu.name.intellij_win", "view.keymap:intellij-windows", ""),
     Item::leaf("menu.name.eclipse", "view.keymap:eclipse", ""),
+    Item::leaf("menu.name.sublime", "view.keymap:sublime", ""),
 ];
 
 const VIX: &[Item] = &[
