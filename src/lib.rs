@@ -67,6 +67,7 @@ pub mod settings;
 pub mod snippet_tool;
 pub mod undo_store;
 pub mod snippets;
+pub mod tags;
 pub mod tasks;
 pub mod test_runner;
 pub mod terminal;

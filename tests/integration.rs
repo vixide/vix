@@ -384,6 +384,18 @@ fn org_checkbox_toggle_updates_parents_and_cookies() {
 }
 
 #[test]
+fn matching_tag_jumps_between_open_and_close() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "<div><span>x</span></div>");
+    // Move to the start (into the opening <div>) and jump to its </div>.
+    app.on_key(keycode(KeyCode::Home));
+    app.on_key(keycode(KeyCode::Right)); // inside <div>
+    app.run_action("nav.matching_tag");
+    let col = app.editor.cursor_1based().1;
+    assert_eq!(col, 20, "jumped to the </div> at col 20 (1-based)");
+}
+
+#[test]
 fn comment_banner_boxes_the_current_line() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "Section Title");

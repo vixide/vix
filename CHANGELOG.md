@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Matching tag** (Go → Matching Tag). Jump between an HTML/XML tag and its
+  partner (open ↔ close), handling nested same-name tags. Pure logic in
+  `crate::tags`.
 - **Comment banner** (Edit → Comment Banner). Turns the current line into a boxed
   section header — the title bordered above and below by a `=` rule, each line
   prefixed with the language's line comment.
