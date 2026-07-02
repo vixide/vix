@@ -3564,6 +3564,7 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
         actions,
         vec![
             "view.line_numbers",
+            "view.relative_line_numbers",
             "view.whitespace",
             "view.scrollbar",
             "view.soft_wrap",

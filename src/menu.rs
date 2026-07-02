@@ -342,6 +342,7 @@ const VIEW_ZOOM: &[Item] = &[
 
 const VIEW_EDITOR: &[Item] = &[
     Item::leaf("menu.item.view.line_numbers", "view.line_numbers", ""),
+    Item::leaf("menu.item.view.relative_line_numbers", "view.relative_line_numbers", ""),
     Item::leaf("menu.item.view.whitespace", "view.whitespace", ""),
     Item::leaf("menu.item.view.scrollbar", "view.scrollbar", ""),
     Item::leaf("menu.item.view.soft_wrap", "view.soft_wrap", ""),
