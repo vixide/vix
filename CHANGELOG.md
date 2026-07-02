@@ -45,6 +45,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Sublime Text keymap** (View → Keymap → Sublime Text). `Ctrl+P` Goto
+  Anything, `Ctrl+Shift+P` Command Palette, `Ctrl+R` Goto Symbol, `Ctrl+G` Goto
+  Line, `Ctrl+D` select occurrences, `Ctrl+L` select line, `Ctrl+J` join,
+  `Ctrl+M` matching bracket, `Ctrl+Shift+D`/`Ctrl+Shift+K` duplicate/delete
+  line, `Ctrl+H` replace, `Ctrl+B` build, ``Ctrl+` `` console. Plus a
+  `docs/for-sublime-users/` migration guide.
 - **Migration guides** for Vim, Emacs, VS Code, IntelliJ, and Eclipse users
   (`docs/for-vim-users/`, `docs/for-emacs-users/`,
   `docs/for-visual-studio-code-users/`, `docs/for-intellij-users/`,

@@ -3984,6 +3984,8 @@ menu.name.intellij_win:
   en: "IntelliJ Windows"
 menu.name.eclipse:
   en: "Eclipse"
+menu.name.sublime:
+  en: "Sublime Text"
 menu.name.md5:
   en: "MD5"
 menu.name.crc32:

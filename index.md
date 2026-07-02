@@ -108,7 +108,7 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
 - **Themes** — Dark, Light, and more ship bundled, plus your can add your own.
 - **Internationalization** — the whole UI is translatable into many languages.
 - **Keymaps** — switch the keyboard bindings among Apple, VSCode (macOS/Windows),
-  Emacs, Vi, Spacemacs, IntelliJ (macOS/Windows), and Eclipse.
+  Emacs, Vi, Spacemacs, IntelliJ (macOS/Windows), Eclipse, and Sublime Text.
 - **Split panes** — nested horizontal/vertical splits up to a 2×2 grid.
 - **Keyboard help** — press `F1` for an overlay of every shortcut.
 

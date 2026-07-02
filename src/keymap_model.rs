@@ -42,6 +42,7 @@ pub const KEYMAPS: &[Keymap] = &[
     Keymap { id: "intellij-macos", name: "IntelliJ macOS", tooltip: "IntelliJ (macOS) bindings" },
     Keymap { id: "intellij-windows", name: "IntelliJ Windows", tooltip: "IntelliJ (Windows) bindings" },
     Keymap { id: "eclipse", name: "Eclipse", tooltip: "Eclipse (Windows) bindings" },
+    Keymap { id: "sublime", name: "Sublime Text", tooltip: "Sublime Text bindings" },
 ];
 
 /// The keymap with the given `id`, if known.

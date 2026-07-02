@@ -1,9 +1,10 @@
 # Keymaps
 
 A **keymap** is a keyboard navigation style for moving through the editor, menus,
-file explorer, and more. Vix ships nine keymaps — **Apple**, **VSCode macOS**,
+file explorer, and more. Vix ships ten keymaps — **Apple**, **VSCode macOS**,
 **VSCode Windows**, **Emacs**, **Vi**, **Spacemacs**, **IntelliJ macOS**,
-**IntelliJ Windows**, and **Eclipse** — and exactly one is active at a time.
+**IntelliJ Windows**, **Eclipse**, and **Sublime Text** — and exactly one is
+active at a time.
 
 **Status:** Shipped. The choice persists in the `keymap` setting (default
 `apple`).
@@ -123,6 +124,21 @@ Modal editing:
   `:e [path]`, `:Ex`.
 
 The status bar shows `-- NORMAL --`, `-- INSERT --`, or the `:` command line.
+
+### Sublime Text
+
+Sublime's signature shortcuts (with `Ctrl` standing in for `Cmd`):
+
+- `Ctrl+P` Goto Anything (file finder), `Ctrl+Shift+P` Command Palette,
+  `Ctrl+R` Goto Symbol, `Ctrl+G` Goto Line.
+- `Ctrl+D` select all occurrences of the word (Sublime's add-next-occurrence,
+  all at once), `Ctrl+L` expand selection to line, `Ctrl+J` join lines,
+  `Ctrl+M` jump to the matching bracket.
+- `Ctrl+Shift+D` duplicate line, `Ctrl+Shift+K` delete line, `Ctrl+/` comment.
+- `Ctrl+F` find, `Ctrl+H` replace, `Ctrl+Shift+F` find in files.
+- `Ctrl+B` build (runs the test suite), `` Ctrl+` `` the console (terminal).
+- `Ctrl+S` / `Ctrl+Shift+S` / `Ctrl+W` / `Ctrl+Shift+T` save / save as /
+  close / reopen closed.
 
 ## Not Yet Built
 

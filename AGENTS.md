@@ -65,7 +65,7 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
   library and is tested without a TTY. Rendering lives only in `src/ui.rs`.
 - **Input dispatch is keymap-aware.** Raw keys route through the active _keymap_
   (Apple / VSCode macOS / VSCode Windows / Emacs / Vi / Spacemacs / IntelliJ
-  macOS / IntelliJ Windows / Eclipse) in `App::on_key`; keymaps translate keys
+  macOS / IntelliJ Windows / Eclipse / Sublime Text) in `App::on_key`; keymaps translate keys
   into the same `run_action` calls and editor motions rather than duplicating
   behavior. See `spec/keymaps`.
 - **One `ratatui` version.** The whole widget stack must agree on `ratatui` 0.30
