@@ -141,7 +141,8 @@ jiff = "0.2"
 percent-encoding = "2"
 pulldown-cmark = "0.13"
 sha2 = "0.10"
-similar = "2"
+# `inline` enables word-level (intra-line) diffs in the Compare overlay.
+similar = { version = "2", features = ["inline"] }
 spellbook = "0.4"
 sysinfo = "0.33"
 toml = "0.8"

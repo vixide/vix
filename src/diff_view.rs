@@ -29,10 +29,14 @@ pub struct Line {
     pub kind: Kind,
     /// The line text, prefix not included (the renderer adds `+`/`-`/space).
     pub text: String,
+    /// Char ranges within `text` that differ from the paired line (word-level
+    /// emphasis). Empty for context/separator lines.
+    pub emphasis: Vec<(usize, usize)>,
 }
 
 /// Build a unified diff (3 lines of context) from `old` to `new`. Returns a
-/// single context-free note line when the texts are identical.
+/// single context-free note line when the texts are identical. Changed lines
+/// carry char-range `emphasis` marking the words that differ (word-level diff).
 #[must_use]
 pub fn build(old: &str, new: &str) -> Vec<Line> {
     use similar::{ChangeTag, TextDiff};
@@ -44,17 +48,28 @@ pub fn build(old: &str, new: &str) -> Vec<Line> {
     let mut out = Vec::new();
     for (gi, group) in groups.iter().enumerate() {
         if gi > 0 {
-            out.push(Line { kind: Kind::Sep, text: "\u{22ef}".to_string() });
+            out.push(Line { kind: Kind::Sep, text: "\u{22ef}".to_string(), emphasis: Vec::new() });
         }
         for op in group {
-            for change in diff.iter_changes(op) {
+            // Inline (word-level) changes give per-segment `emphasized` flags,
+            // which become char ranges within each rendered line.
+            for change in diff.iter_inline_changes(op) {
                 let kind = match change.tag() {
                     ChangeTag::Delete => Kind::Del,
                     ChangeTag::Insert => Kind::Add,
                     ChangeTag::Equal => Kind::Context,
                 };
-                let text = change.value().trim_end_matches('\n').to_string();
-                out.push(Line { kind, text });
+                let mut text = String::new();
+                let mut emphasis = Vec::new();
+                for (emph, value) in change.iter_strings_lossy() {
+                    let seg = value.trim_end_matches('\n');
+                    let start = text.chars().count();
+                    text.push_str(seg);
+                    if emph && kind != Kind::Context {
+                        emphasis.push((start, text.chars().count()));
+                    }
+                }
+                out.push(Line { kind, text, emphasis });
             }
         }
     }
@@ -76,6 +91,20 @@ mod tests {
         assert!(lines.iter().any(|l| l.kind == Kind::Del && l.text == "two"));
         assert!(lines.iter().any(|l| l.kind == Kind::Add && l.text == "TWO"));
         assert!(lines.iter().any(|l| l.kind == Kind::Context && l.text == "one"));
+    }
+
+    #[test]
+    fn word_level_emphasis_marks_the_changed_span() {
+        // Only "quick" → "slow" differs; emphasis should cover that word, not the
+        // whole line.
+        let lines = build("the quick fox\n", "the slow fox\n");
+        let del = lines.iter().find(|l| l.kind == Kind::Del).expect("a deleted line");
+        assert!(!del.emphasis.is_empty(), "changed line has word emphasis");
+        // The emphasized span decodes to the differing word within the line.
+        let (s, e) = del.emphasis[0];
+        let span: String = del.text.chars().skip(s).take(e - s).collect();
+        assert!(span.contains("quick"), "emphasis covers the changed word: {span:?}");
+        assert!(e - s < del.text.chars().count(), "not the whole line");
     }
 
     #[test]

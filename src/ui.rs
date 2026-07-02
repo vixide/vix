@@ -1128,7 +1128,26 @@ fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
                 Kind::Context => ("  ", theme::dim()),
                 Kind::Sep => ("  ", theme::dim().add_modifier(Modifier::DIM)),
             };
-            Line::from(Span::styled(format!("{prefix}{}", l.text), style))
+            if l.emphasis.is_empty() {
+                return Line::from(Span::styled(format!("{prefix}{}", l.text), style));
+            }
+            // Word-level diff: emphasize the changed spans (bold + reversed) while
+            // the rest of the changed line keeps its add/del color.
+            let emph = style.add_modifier(Modifier::BOLD | Modifier::REVERSED);
+            let chars: Vec<char> = l.text.chars().collect();
+            let mut spans = vec![Span::styled(prefix, style)];
+            let mut i = 0;
+            for &(s, e) in &l.emphasis {
+                if s > i {
+                    spans.push(Span::styled(chars[i..s].iter().collect::<String>(), style));
+                }
+                spans.push(Span::styled(chars[s.min(chars.len())..e.min(chars.len())].iter().collect::<String>(), emph));
+                i = e;
+            }
+            if i < chars.len() {
+                spans.push(Span::styled(chars[i..].iter().collect::<String>(), style));
+            }
+            Line::from(spans)
         })
         .collect();
     frame.render_widget(Paragraph::new(lines), chunks[0]);

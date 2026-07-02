@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Word-level diff** in the Compare With File overlay. Changed lines now
+  highlight the specific words that differ (bold/reversed) instead of coloring the
+  whole line, via `similar`'s inline diff.
 - **Matching tag** (Go → Matching Tag). Jump between an HTML/XML tag and its
   partner (open ↔ close), handling nested same-name tags. Pure logic in
   `crate::tags`.
