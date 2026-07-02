@@ -41,6 +41,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Migration guides** for Vim, Emacs, and VS Code users
+  (`docs/for-vim-users/`, `docs/for-emacs-users/`,
+  `docs/for-visual-studio-code-users/`): an honest pros/cons pitch, a
+  muscle-memory mapping table for each keymap, and a try-it-for-an-afternoon
+  experiment.
 - **Keymap improvements.** Vi: `w`/`b` words, `^`, `gg`/`G`, `dd`/`yy`/`p`, `u`,
   `/` + `n`/`N`, `%`, `I`/`A`, and `:N` / `:e [path]` commands. Emacs: `M-x`
   palette, word/page/buffer-end Meta motions, kill ring (`C-w`/`M-w`/`C-y`/`C-k`),
