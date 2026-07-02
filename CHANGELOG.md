@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Read-only buffer toggle** (View → Read-Only). Locks the active buffer against
+  edits — typing, deletes, and editing commands are blocked (with a status note),
+  while navigation, selection, copy, and search still work.
 - **Relative line numbers** (View → Relative Line Numbers, off by default). The
   gutter shows each line's distance from the cursor line (hybrid: the cursor line
   shows its absolute number), making count-based motions easy.

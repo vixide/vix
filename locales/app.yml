@@ -3025,6 +3025,8 @@ menu.item.view.final_newline_on_save:
   ja: "保存時に最終改行を追加"
 menu.item.view.relative_line_numbers:
   en: "Relative Line Numbers"
+menu.item.view.read_only:
+  en: "Read-Only"
 menu.item.view.line_numbers:
   en: "Show/Hide Line Numbers"
   es: "Mostrar/Ocultar números de línea"
@@ -11879,6 +11881,10 @@ status.no_toggle:
   en: "Nothing to toggle at the cursor"
 status.relative_line_numbers:
   en: "Relative line numbers: %{on}"
+status.read_only:
+  en: "Read-only: %{on}"
+status.read_only_blocked:
+  en: "Buffer is read-only"
 status.no_node_selection:
   en: "No enclosing syntax node to select"
 status.no_todos:

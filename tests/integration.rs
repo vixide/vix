@@ -384,6 +384,23 @@ fn org_checkbox_toggle_updates_parents_and_cookies() {
 }
 
 #[test]
+fn read_only_blocks_edits_but_allows_navigation() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "locked");
+    app.run_action("view.read_only");
+    // Typing is blocked.
+    type_str(&mut app, "XYZ");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "locked", "typing blocked");
+    // A destructive command is blocked.
+    app.run_action("edit.reverse_lines");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "locked", "command blocked");
+    // Toggling it back off restores editing.
+    app.run_action("view.read_only");
+    type_str(&mut app, "!");
+    let txt = app.editor.active_tab().unwrap().text(); assert!(txt.ends_with('!'), "editing restored: {txt:?}");
+}
+
+#[test]
 fn text_transforms_squeeze_eol_and_rot13() {
     // Squeeze blank lines over the whole buffer (no selection).
     let mut app = app_at(Path::new("."));
@@ -3565,6 +3582,7 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
         vec![
             "view.line_numbers",
             "view.relative_line_numbers",
+            "view.read_only",
             "view.whitespace",
             "view.scrollbar",
             "view.soft_wrap",
