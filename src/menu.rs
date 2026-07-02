@@ -146,6 +146,7 @@ const EDIT: &[Item] = &[
     Item::sub("menu.item.edit.mode", EDIT_MODE),
     SEP,
     Item::leaf("menu.item.edit.toggle_comment", "edit.toggle_comment", "Ctrl /"),
+    Item::leaf("menu.item.edit.comment_banner", "edit.comment_banner", ""),
     Item::leaf("menu.item.edit.emmet_expand", "edit.emmet_expand", ""),
     Item::leaf("menu.item.edit.toggle_value", "edit.toggle_value", ""),
     Item::leaf("menu.item.edit.transpose_chars", "edit.transpose_chars", ""),
