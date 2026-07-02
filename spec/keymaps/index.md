@@ -77,18 +77,31 @@ pending, the status bar shows the mode indicator `C-x-`.
 | `Ctrl+F` / `Ctrl+B` | Move cursor right / left |
 | `Ctrl+N` / `Ctrl+P` | Move cursor down / up |
 | `Ctrl+A` / `Ctrl+E` | Line start / line end |
-| `Ctrl+V` | Page down |
+| `Ctrl+V` / `Alt+V` | Page down / page up |
 | `Ctrl+D` | Delete forward |
 | `Ctrl+S` | Find |
 | `Ctrl+G` | Cancel (status message) |
+| `Ctrl+W` / `Alt+W` / `Ctrl+Y` | Kill region (cut) / kill-ring-save (copy) / yank (paste) |
+| `Ctrl+K` | Kill line (cut the whole line) |
+| `Ctrl+T` / `Alt+T` | Transpose characters / words |
+| `Ctrl+/` | Undo |
+| `Alt+X` | Command palette (M-x) |
+| `Alt+F` / `Alt+B` | Word forward / backward |
+| `Alt+<` / `Alt+>` | Buffer start / end |
 | `Ctrl+X Ctrl+F` | Open file |
 | `Ctrl+X Ctrl+S` | Save file |
 | `Ctrl+X Ctrl+C` | Quit |
 | `Ctrl+X K` | Close buffer |
+| `Ctrl+X B` (or `Ctrl+X Ctrl+B`) | Switch buffer (palette `#` mode) |
+| `Ctrl+X O` | Focus the other pane |
+| `Ctrl+X 2` / `Ctrl+X 3` | Split horizontal / vertical |
+| `Ctrl+X 1` / `Ctrl+X 0` | Unsplit |
 
 A `Ctrl+X` prefix followed by an unrecognized key reports "no chord" and clears
-the prefix. The motion chords (`Ctrl+F`, `Ctrl+N`, …) act only when the editor
-pane is focused.
+the prefix; while the prefix is pending, the which-key popup lists the chords.
+The motion chords (`Ctrl+F`, `Ctrl+N`, …) act only when the editor pane is
+focused. Bound `Alt` keys take priority over menu mnemonics in this keymap;
+unbound `Alt` keys still open the menus.
 
 ## Vi modes
 
@@ -104,13 +117,21 @@ opened from any pane.
 | Key | Action |
 | --- | ------ |
 | `h` `j` `k` `l` | Move left / down / up / right |
-| `0` / `$` | Line start / line end |
+| `w` / `b` | Next / previous word start |
+| `0` / `^` / `$` | Line start (`^` rides smart Home: first non-blank) / line end |
+| `gg` / `G` | File start / file end |
 | `x` | Delete character |
-| `i` | Enter Insert mode |
-| `a` | Move right, then enter Insert mode |
-| `o` | Open a new line below and enter Insert mode |
-| `O` | Open a new line above and enter Insert mode |
+| `dd` / `yy` / `p` | Cut line / copy line / paste |
+| `u` | Undo |
+| `/` then `n` / `N` | Find; next / previous match |
+| `%` | Jump to the matching bracket |
+| `i` / `a` | Enter Insert mode (at / after the cursor) |
+| `I` / `A` | Insert at first non-blank / at line end |
+| `o` / `O` | Open a new line below / above and enter Insert mode |
 | `:` | Open the command line |
+
+`g`, `d`, and `y` are pending operators: the next key completes `gg`/`dd`/`yy`,
+and any other key cancels.
 
 **Insert mode** lets typing and shared keys flow through to the editor; `Esc`
 returns to Normal mode.
@@ -124,6 +145,8 @@ command, `Esc` cancels, and backspacing past the empty `:` closes it.
 | `:q` | Close buffer |
 | `:q!` | Force-quit (discard unsaved changes) |
 | `:wq` / `:x` | Save, then close |
+| `:N` (a number) | Go to line N |
+| `:e` / `:e path` | Open-file prompt / open `path` |
 | `:Ex` | Open the file explorer and focus it |
 
 An unrecognized command reports "no command" in the status bar.

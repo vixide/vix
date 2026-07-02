@@ -1270,6 +1270,9 @@ pub struct App {
     /// Vim keymap: the in-progress `:` command-line text, when the command line
     /// is open.
     vim_cmd: Option<String>,
+    /// Vim keymap: the first key of a pending two-key Normal-mode operator
+    /// (`g`, `d`, or `y`), awaiting its second key.
+    vim_pending: Option<char>,
     /// Spacemacs keymap: true in Insert mode, false in Normal mode. Meaningless in
     /// other keymaps.
     spacemacs_insert: bool,
@@ -1422,7 +1425,7 @@ impl App {
             dock_resize: None,
             emacs_prefix: false,
             vim_insert: false,
-            vim_cmd: None,
+            vim_cmd: None, vim_pending: None,
             spacemacs_insert: false,
             spacemacs_leader: None,
         }
@@ -2016,6 +2019,13 @@ impl App {
                     // Ctrl+/, Ctrl+7, and Ctrl+_, so accept all three for Comment.
                     '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
                     ']' => self.run_action("edit.match_bracket"),
+                    'l' if Self::shift(&key) => self.run_action("edit.select_all_occurrences"),
+                    'm' if Self::shift(&key) => self.run_action("lsp.diagnostics"),
+                    'k' if Self::shift(&key) => self.run_action("cut_line"),
+                    '\\' if Self::shift(&key) => self.run_action("edit.match_bracket"),
+                    '\\' => self.run_action("view.split_vertical"),
+                    'j' => self.run_action("view.bottom_dock"),
+                    '`' => self.run_action("tools.terminal"),
                     _ => return false,
                 }
                 return true;
@@ -2240,28 +2250,17 @@ impl App {
         }
     }
 
-    /// Emacs keymap dispatch: the `Ctrl+X` prefix and `Ctrl`-key chords. Returns
-    /// true if the key was consumed (so it should not fall through).
+    /// Emacs keymap dispatch: the `Ctrl+X` prefix, `Ctrl`-key chords, and the
+    /// `Meta` (Alt) bindings. Returns true if the key was consumed (so it should
+    /// not fall through).
     fn emacs_key(&mut self, key: KeyEvent) -> bool {
         // Second key of a `Ctrl+X …` chord.
         if self.emacs_prefix {
             self.emacs_prefix = false;
-            if Self::ctrl(&key)
-                && let KeyCode::Char(c) = key.code {
-                    match c.to_ascii_lowercase() {
-                        'f' => self.run_action("file.open"),
-                        's' => self.run_action("file.save"),
-                        'c' => self.run_action("file.quit"),
-                        _ => self.status = t!("status.emacs_no_chord").to_string(),
-                    }
-                    return true;
-                }
-            if let KeyCode::Char('k') = key.code {
-                self.run_action("file.close");
-                return true;
-            }
-            self.status = t!("status.emacs_no_chord").to_string();
-            return true;
+            return self.emacs_chord_key(key);
+        }
+        if Self::alt(&key) && !Self::ctrl(&key) {
+            return self.emacs_meta_key(key);
         }
         if Self::ctrl(&key)
             && let KeyCode::Char(c) = key.code {
@@ -2277,11 +2276,58 @@ impl App {
                     'e' => self.editor_motion(KeyCode::End),
                     'v' => self.editor_motion(KeyCode::PageDown),
                     'd' => self.editor_motion(KeyCode::Delete),
+                    'w' => self.run_action("edit.cut"),        // kill-region
+                    'y' => self.run_action("edit.paste"),      // yank
+                    'k' => self.run_action("cut_line"),        // kill-line (whole line)
+                    't' => self.run_action("edit.transpose_chars"),
+                    '/' | '7' | '_' => self.run_action("edit.undo"),
                     _ => return false,
                 }
                 return true;
             }
         false
+    }
+
+    /// The second key of an Emacs `Ctrl+X …` chord. Always consumes the key.
+    fn emacs_chord_key(&mut self, key: KeyEvent) -> bool {
+        if Self::ctrl(&key)
+            && let KeyCode::Char(c) = key.code {
+                match c.to_ascii_lowercase() {
+                    'f' => self.run_action("file.open"),
+                    's' => self.run_action("file.save"),
+                    'c' => self.run_action("file.quit"),
+                    'b' => self.open_palette_seeded("#"), // list buffers
+                    _ => self.status = t!("status.emacs_no_chord").to_string(),
+                }
+                return true;
+            }
+        match key.code {
+            KeyCode::Char('k') => self.run_action("file.close"),
+            KeyCode::Char('b') => self.open_palette_seeded("#"), // switch buffer
+            KeyCode::Char('o') => self.run_action("view.focus_other_pane"),
+            KeyCode::Char('2') => self.run_action("view.split_horizontal"),
+            KeyCode::Char('3') => self.run_action("view.split_vertical"),
+            KeyCode::Char('0' | '1') => self.run_action("view.unsplit"),
+            _ => self.status = t!("status.emacs_no_chord").to_string(),
+        }
+        true
+    }
+
+    /// Emacs `Meta` (Alt) bindings. Returns true if consumed; unbound Alt keys
+    /// fall through to the shared handler (menu mnemonics).
+    fn emacs_meta_key(&mut self, key: KeyEvent) -> bool {
+        match key.code {
+            KeyCode::Char('x') => self.run_action("tools.palette"), // M-x
+            KeyCode::Char('f') => self.run_action("nav.word_next"),
+            KeyCode::Char('b') => self.run_action("nav.word_prev"),
+            KeyCode::Char('v') => self.editor_motion(KeyCode::PageUp),
+            KeyCode::Char('w') => self.run_action("edit.copy"), // kill-ring-save
+            KeyCode::Char('t') => self.run_action("edit.transpose_words"),
+            KeyCode::Char('<') => self.run_action("edit.go_first"),
+            KeyCode::Char('>') => self.run_action("edit.go_last"),
+            _ => return false,
+        }
+        true
     }
 
     // ----- keymap: Vim ----------------------------------------------------
@@ -2316,17 +2362,60 @@ impl App {
         if self.focus != Focus::Editor {
             return false;
         }
+        self.vim_normal_key(key);
+        // Swallow every other Normal-mode key so it never types into the buffer.
+        true
+    }
+
+    /// One Normal-mode key for the Vi keymap (the editor is focused). Handles the
+    /// pending two-key operators (`gg`, `dd`, `yy`) first.
+    fn vim_normal_key(&mut self, key: KeyEvent) {
+        // Second key of a pending `g` / `d` / `y` operator.
+        if let Some(op) = self.vim_pending.take() {
+            if let KeyCode::Char(c) = key.code {
+                match (op, c) {
+                    ('g', 'g') => self.run_action("edit.go_first"),
+                    ('d', 'd') => self.run_action("cut_line"),
+                    ('y', 'y') => self.run_action("copy_line"),
+                    _ => {}
+                }
+            }
+            return;
+        }
         match key.code {
             KeyCode::Char('h') | KeyCode::Left => self.editor_motion(KeyCode::Left),
             KeyCode::Char('j') | KeyCode::Down => self.editor_motion(KeyCode::Down),
             KeyCode::Char('k') | KeyCode::Up => self.editor_motion(KeyCode::Up),
             KeyCode::Char('l') | KeyCode::Right => self.editor_motion(KeyCode::Right),
-            KeyCode::Char('0') => self.editor_motion(KeyCode::Home),
+            // `^` rides smart Home (first non-blank, then column 0).
+            KeyCode::Char('0' | '^') => self.editor_motion(KeyCode::Home),
             KeyCode::Char('$') => self.editor_motion(KeyCode::End),
+            KeyCode::Char('w') => self.run_action("nav.word_next"),
+            KeyCode::Char('b') => self.run_action("nav.word_prev"),
+            KeyCode::Char('G') => self.run_action("edit.go_last"),
+            KeyCode::Char('g' | 'd' | 'y') => {
+                if let KeyCode::Char(c) = key.code {
+                    self.vim_pending = Some(c);
+                }
+            }
             KeyCode::Char('x') => self.editor_motion(KeyCode::Delete),
+            KeyCode::Char('p') => self.run_action("edit.paste"),
+            KeyCode::Char('u') => self.run_action("edit.undo"),
+            KeyCode::Char('/') => self.run_action("edit.find"),
+            KeyCode::Char('n') => self.run_action("edit.find_next"),
+            KeyCode::Char('N') => self.run_action("edit.find_prev"),
+            KeyCode::Char('%') => self.run_action("edit.match_bracket"),
             KeyCode::Char('i') => self.vim_enter_insert(),
             KeyCode::Char('a') => {
                 self.editor_motion(KeyCode::Right);
+                self.vim_enter_insert();
+            }
+            KeyCode::Char('A') => {
+                self.editor_motion(KeyCode::End);
+                self.vim_enter_insert();
+            }
+            KeyCode::Char('I') => {
+                self.editor_motion(KeyCode::Home);
                 self.vim_enter_insert();
             }
             KeyCode::Char('o') => {
@@ -2342,8 +2431,6 @@ impl App {
             }
             _ => {}
         }
-        // Swallow every other Normal-mode key so it never types into the buffer.
-        true
     }
 
     fn vim_enter_insert(&mut self) {
@@ -2390,8 +2477,20 @@ impl App {
                 self.show_explorer = true;
                 self.focus = Focus::Explorer;
             }
+            "e" => self.run_action("file.open"),
             "" => {}
-            other => self.status = t!("status.vim_no_command", cmd = other).to_string(),
+            other => {
+                // `:N` — go to line N. `:e path` — open path.
+                if let Ok(line) = other.parse::<usize>() {
+                    let area = self.editor_view();
+                    self.editor.goto(line, None, area);
+                } else if let Some(path) = other.strip_prefix("e ") {
+                    let path = self.resolve(path.trim());
+                    self.open_path(&path, false);
+                } else {
+                    self.status = t!("status.vim_no_command", cmd = other).to_string();
+                }
+            }
         }
     }
 
@@ -14475,8 +14574,17 @@ fn display_key(k: &str) -> String {
 }
 
 /// The `Ctrl+X …` chords shown by the Emacs which-key popup: `(key, action-id)`.
-const EMACS_CTRL_X: &[(&str, &str)] =
-    &[("C-f", "file.open"), ("C-s", "file.save"), ("C-c", "file.quit"), ("k", "file.close")];
+const EMACS_CTRL_X: &[(&str, &str)] = &[
+    ("C-f", "file.open"),
+    ("C-s", "file.save"),
+    ("C-c", "file.quit"),
+    ("k", "file.close"),
+    ("b", "buffers"),
+    ("o", "view.focus_other_pane"),
+    ("2", "view.split_horizontal"),
+    ("3", "view.split_vertical"),
+    ("1", "view.unsplit"),
+];
 
 /// Opposite-value pairs for [`smart_toggle_at`]. Word pairs are matched
 /// whole-word and case-preserved; symbol pairs are matched literally.

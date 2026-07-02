@@ -86,29 +86,41 @@ Copy. Apple is not modal. See `../../keybindings/index.md` for the full list.
 VS Code's signature shortcuts (with `Ctrl` standing in for `Cmd`):
 
 - `Ctrl+P` Quick Open (open file by name), `Ctrl+Shift+P` Command Palette.
-- `Ctrl+Shift+O` Go to Symbol, `Ctrl+G` Go to Line.
-- `Ctrl+B` toggle the sidebar, `Ctrl+Shift+E` focus the explorer.
+- `Ctrl+Shift+O` Go to Symbol, `Ctrl+T` workspace symbol, `Ctrl+G` Go to Line.
+- `Ctrl+B` toggle the sidebar, `Ctrl+Shift+E` focus the explorer, `Ctrl+J`
+  toggle the bottom panel, `` Ctrl+` `` the terminal, `Ctrl+Shift+M` Problems.
+- `Ctrl+\` split the editor; `Ctrl+]` / `Ctrl+Shift+\` jump to the matching
+  bracket.
 - The familiar editing chords: `Ctrl+S` save, `Ctrl+W` close, `Ctrl+F` find,
-  `Ctrl+Shift+F` find in workspace, `Ctrl+/` comment, `Ctrl+R` replace.
+  `Ctrl+Shift+F` find in workspace, `Ctrl+/` comment, `Ctrl+R` replace,
+  `Ctrl+Shift+K` delete line, `Ctrl+Shift+L` select all occurrences.
 
 ### Emacs
 
-Chorded commands with a `Ctrl+X` prefix:
+Chorded commands with a `Ctrl+X` prefix and `Meta` (Alt) bindings:
 
 - `Ctrl+X Ctrl+F` open, `Ctrl+X Ctrl+S` save, `Ctrl+X Ctrl+C` quit,
-  `Ctrl+X k` close.
-- Motion: `Ctrl+F` / `Ctrl+B` (character), `Ctrl+N` / `Ctrl+P` (line),
-  `Ctrl+A` / `Ctrl+E` (line ends), `Ctrl+V` (page down).
-- `Ctrl+D` delete, `Ctrl+S` find, `Ctrl+G` cancel.
+  `Ctrl+X k` close, `Ctrl+X b` switch buffer.
+- Windows: `Ctrl+X 2` / `Ctrl+X 3` split, `Ctrl+X 1` / `Ctrl+X 0` unsplit,
+  `Ctrl+X o` other pane. The which-key popup lists chords while `C-x` pends.
+- Motion: `Ctrl+F` / `Ctrl+B` (character), `Alt+F` / `Alt+B` (word),
+  `Ctrl+N` / `Ctrl+P` (line), `Ctrl+A` / `Ctrl+E` (line ends),
+  `Ctrl+V` / `Alt+V` (page), `Alt+<` / `Alt+>` (buffer ends).
+- Kill ring: `Ctrl+W` kill, `Alt+W` save, `Ctrl+Y` yank, `Ctrl+K` kill line.
+- `Alt+X` command palette (M-x), `Ctrl+T` / `Alt+T` transpose, `Ctrl+/` undo,
+  `Ctrl+D` delete, `Ctrl+S` find, `Ctrl+G` cancel.
 
 ### Vi
 
 Modal editing:
 
-- **Normal mode:** `h` / `j` / `k` / `l`, `0` / `$`, `x`, and `i` / `a` / `o` /
-  `O` (which enter Insert mode).
+- **Normal mode:** `h` / `j` / `k` / `l`, `w` / `b` words, `0` / `^` / `$`,
+  `gg` / `G` file ends, `x`, `dd` / `yy` / `p` cut/copy/paste line, `u` undo,
+  `/` + `n` / `N` search, `%` matching bracket, and `i` / `a` / `I` / `A` /
+  `o` / `O` (which enter Insert mode).
 - **Insert mode:** `Esc` returns to Normal mode.
-- **Command line:** `:w`, `:q`, `:q!`, `:wq` / `:x`, `:Ex`.
+- **Command line:** `:w`, `:q`, `:q!`, `:wq` / `:x`, `:N` (go to line),
+  `:e [path]`, `:Ex`.
 
 The status bar shows `-- NORMAL --`, `-- INSERT --`, or the `:` command line.
 
@@ -117,9 +129,8 @@ The status bar shows `-- NORMAL --`, `-- INSERT --`, or the `:` command line.
 The following are described in the broader keymap philosophy but are **not**
 implemented:
 
-- Vi counts and operators (`3w`, `dd`, `gg` / `G`).
-- Emacs `Meta` / `M-x` — `Alt` is reserved for menu mnemonics.
-- Registers and visual mode.
+- Vi counts (`3w`, `2dd`), text objects (`diw`), registers, and visual mode.
+- Emacs `Ctrl+Space` mark/region commands (use `Shift`+motion to select).
 
 ## Background
 

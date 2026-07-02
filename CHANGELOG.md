@@ -41,6 +41,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Keymap improvements.** Vi: `w`/`b` words, `^`, `gg`/`G`, `dd`/`yy`/`p`, `u`,
+  `/` + `n`/`N`, `%`, `I`/`A`, and `:N` / `:e [path]` commands. Emacs: `M-x`
+  palette, word/page/buffer-end Meta motions, kill ring (`C-w`/`M-w`/`C-y`/`C-k`),
+  transpose, `C-/` undo, and `C-x` window/buffer chords (`2`/`3`/`1`/`0`/`o`/`b`).
+  VS Code: `Ctrl+\` split, `Ctrl+J` panel, ``Ctrl+` `` terminal, `Ctrl+Shift+K`
+  delete line, `Ctrl+Shift+L` select all occurrences, `Ctrl+Shift+M` Problems.
 - **CSpell config** (`cspell.json`) with an external custom dictionary
   (`project-words.txt`) of project/domain terms, so `cspell` can spell-check the
   repo's docs and text with the project vocabulary pre-seeded.
