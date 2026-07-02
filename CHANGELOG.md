@@ -8,6 +8,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Harmonize the modal keymaps.** Spacemacs Normal mode now shares the Vi
+  keymap's Normal-mode handler, gaining the full vocabulary (`w`/`b`, `gg`/`G`,
+  `dd`/`yy`/`p`, `u`, `/` + `n`/`N`, `%`, `I`/`A`); the two keymaps' separate
+  Insert-mode flags were unified into one, and switching keymaps now also clears
+  a pending Vi two-key operator.
 - **Refactor:** the pure cursor-relative text helpers (increment/decrement
   number, smart toggle, transpose chars/words, TODO-tag matching) moved from
   `app` into `crate::textops` with their unit tests, and their three identical

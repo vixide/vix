@@ -48,8 +48,10 @@ word completion, `F3` open declaration.
 
 ## Spacemacs
 
-The **Spacemacs** keymap is the Vi modal model (Normal / Insert, `hjkl` motions,
-`i`/`a`/`o` to insert, `:` command line) plus a **`Space` leader** in Normal mode
+The **Spacemacs** keymap is the Vi modal model — the *same* Normal-mode
+vocabulary as the Vi keymap (`hjkl`, `w`/`b`, `gg`/`G`, `dd`/`yy`/`p`, `u`,
+`/` + `n`/`N`, `%`, `i`/`a`/`o` to insert, `:` command line) — plus a
+**`Space` leader** in Normal mode
 that opens menu-like command sequences. Press `Space`, then the keys for the
 command; the status bar shows the pending sequence (`SPC …`).
 
