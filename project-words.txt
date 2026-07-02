@@ -248,6 +248,8 @@ dired
 mu4e
 esup
 vertico
+jdtls
+affordances
 kilolines
 unjudging
 
