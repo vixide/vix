@@ -246,6 +246,9 @@ const GO: &[Item] = &[
     Item::sub("menu.go.paragraph", GO_PARAGRAPH),
     Item::sub("menu.go.section", GO_SECTION),
     Item::sub("menu.go.file", GO_FILE),
+    SEP,
+    Item::leaf("menu.go.percent", "nav.goto_percent", ""),
+    Item::leaf("menu.go.byte", "nav.goto_byte", ""),
 ];
 
 /// Line-move commands, grouped under Edit → Move.

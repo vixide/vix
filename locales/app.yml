@@ -118,6 +118,10 @@ menu.go.prev_change:
   en: "Previous Change"
 menu.go.jump:
   en: "Jump to Line (labels)"
+menu.go.percent:
+  en: "Go to Percent…"
+menu.go.byte:
+  en: "Go to Byte…"
 menu.go.bookmarks:
   en: "Bookmarks"
 menu.go.word:
@@ -10459,6 +10463,10 @@ prompt.goto_sentence:
   en: "Go to sentence number"
 prompt.goto_paragraph:
   en: "Go to paragraph number"
+prompt.goto_percent:
+  en: "Go to percent (0-100)"
+prompt.goto_byte:
+  en: "Go to byte offset"
 prompt.goto_section:
   en: "Go to section number"
 prompt.workspace_open:

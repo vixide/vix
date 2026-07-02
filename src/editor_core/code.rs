@@ -455,6 +455,12 @@ impl Code {
         self.content.byte_to_char(byte_idx)
     }
 
+    /// The buffer's length in bytes.
+    #[must_use]
+    pub fn len_bytes(&self) -> usize {
+        self.content.len_bytes()
+    }
+
     /// Expand the char range `[start, end)` to the smallest enclosing Tree-sitter
     /// node (structural selection). Returns the node's char range, climbing to the
     /// parent when the range already matches a node exactly so repeated calls keep

@@ -384,6 +384,26 @@ fn org_checkbox_toggle_updates_parents_and_cookies() {
 }
 
 #[test]
+fn goto_percent_and_byte_move_the_cursor() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "l1\nl2\nl3\nl4\nl5\n"); // 6 lines (incl. trailing)
+    // 50% of the way through jumps roughly to the middle.
+    app.run_action("nav.goto_percent");
+    for c in "50".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+    let mid = app.editor.cursor_1based().0;
+    assert!((2..=4).contains(&mid), "50% lands mid-file, got line {mid}");
+
+    // Go to byte 0 returns to the start.
+    app.run_action("nav.goto_byte");
+    app.on_key(key('0'));
+    app.on_key(keycode(KeyCode::Enter));
+    assert_eq!(app.editor.cursor_1based(), (1, 1), "byte 0 is the file start");
+}
+
+#[test]
 fn read_only_blocks_edits_but_allows_navigation() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "locked");

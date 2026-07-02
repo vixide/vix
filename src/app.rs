@@ -157,6 +157,10 @@ pub enum PromptKind {
     GotoSentence,
     /// Jump to the Nth word (Go → Word → Number).
     GotoWord,
+    /// Jump to a percentage through the file (Go → Percent).
+    GotoPercent,
+    /// Jump to a byte offset (Go → Byte).
+    GotoByte,
     /// Org-contacts: insert a new-contact skeleton for the entered name.
     ContactNew,
 }
@@ -3941,7 +3945,9 @@ impl App {
             PromptKind::GotoParagraph
             | PromptKind::GotoSection
             | PromptKind::GotoSentence
-            | PromptKind::GotoWord => self.accept_goto_number(kind, input),
+            | PromptKind::GotoWord
+            | PromptKind::GotoPercent
+            | PromptKind::GotoByte => self.accept_goto_number(kind, input),
             PromptKind::RoamDailyCapture => self.roam_daily_capture(input),
             PromptKind::RoamDailyDate if !input.is_empty() => self.roam_open_daily(input),
             PromptKind::RoamTag if !input.is_empty() => {
@@ -12884,6 +12890,12 @@ impl App {
             "nav.goto_word" => {
                 self.prompt = Some(Prompt::new(PromptKind::GotoWord, t!("prompt.goto_word").to_string()));
             }
+            "nav.goto_percent" => {
+                self.prompt = Some(Prompt::new(PromptKind::GotoPercent, t!("prompt.goto_percent").to_string()));
+            }
+            "nav.goto_byte" => {
+                self.prompt = Some(Prompt::new(PromptKind::GotoByte, t!("prompt.goto_byte").to_string()));
+            }
             _ => return false,
         }
         true
@@ -12891,12 +12903,14 @@ impl App {
 
     /// Jump to the Nth word/sentence/paragraph/section from a submitted number.
     fn accept_goto_number(&mut self, kind: PromptKind, input: &str) {
-        let Ok(n) = input.parse::<usize>() else { return };
+        let Ok(n) = input.trim_end_matches('%').parse::<usize>() else { return };
         let area = self.editor_view();
         match kind {
             PromptKind::GotoParagraph => self.editor.goto_paragraph(n, area),
             PromptKind::GotoSentence => self.editor.goto_sentence(n, area),
             PromptKind::GotoWord => self.editor.goto_word(n, area),
+            PromptKind::GotoPercent => self.editor.goto_percent(n, area),
+            PromptKind::GotoByte => self.editor.goto_byte(n, area),
             _ => self.editor.goto_section(n, area),
         }
     }
@@ -13922,6 +13936,7 @@ impl App {
             | PromptKind::WorkspaceOpen | PromptKind::WorkspaceSave | PromptKind::WorkspaceAddFolder
             | PromptKind::GotoParagraph | PromptKind::GotoSection
             | PromptKind::GotoSentence | PromptKind::GotoWord
+            | PromptKind::GotoPercent | PromptKind::GotoByte
             | PromptKind::ContactNew => {
                 self.accept_roam_prompt(prompt.kind, prompt.input.trim());
             }
