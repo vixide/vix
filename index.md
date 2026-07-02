@@ -19,14 +19,26 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
 
 ## Features
 
-- **Menus** — File Edit View Tools AI Git Org Debug Help.
+- **Menus** — Vix File Edit View Go Run Tools AI Git Org Help.
 - **Editor** - Tabs, Undo/Redo, tree-sitters, syntax highlighting, etc.
- **soft wrap**, **bracket matching**, toggleable line numbers and visible
-  whitespace, and configurable indentation (`indent_style` / `tab_width`).
+ **soft wrap**, **bracket matching**, absolute or **relative line numbers**,
+  visible whitespace, **indent guides**, **rainbow brackets**, **sticky scroll**,
+  a code-overview **minimap**, a **read-only** lock, and configurable indentation
+  (`indent_style` / `tab_width`).
 - **Editing comforts** — Smart Home (`Home` → first non-blank, then col 0),
-  comment toggle (`Ctrl+/`), find next/previous occurrence of the selection
-  (`Alt+N`/`Alt+P`), live go-to-line preview (palette `:`), and on-save
-  trim-trailing-whitespace / ensure-final-newline.
+  comment toggle (`Ctrl+/`) and **comment banners**, **surround** selection with
+  brackets/quotes, **align** lines on a delimiter, **increment/decrement** and
+  **toggle** the value under the cursor, **transpose** chars/words, **Emmet**
+  expansion, find next/previous occurrence of the selection (`Alt+N`/`Alt+P`),
+  live go-to-line preview (palette `:`), and on-save trim-trailing-whitespace /
+  ensure-final-newline / **format-on-save** / **auto-save** / auto-reload.
+- **Line & text transforms** — sort, dedupe, shuffle, reverse, **squeeze blank
+  lines**, **convert line endings** (LF/CRLF), case conversions, and **ROT13**,
+  applied to the selection or whole buffer.
+- **Clipboard history** — a kill-ring of recent copies/cuts with a
+  paste-from-history picker.
+- **Persistent undo** — the branch-preserving undo tree is saved per file and
+  restored on reopen (content-hash guarded).
 - **Rich status bar** — language, line ending (LF/CRLF), encoding, the selected
   character/line count, and line:column.
 - **Mouse support** — click to place the cursor, drag to select, wheel to scroll;
@@ -42,10 +54,17 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
   commands, `#` buffers, `:` go-to-line, `@` go-to-symbol. Space-separated fuzzy
   matching.
 - **Find & Replace** — incremental search, `F3`/`Shift+F3` navigation, Case /
-  Whole-Word / Regex toggles, capture groups (`$1`, `${name}`) and escapes;
-  workspace-wide search/replace and interactive query-replace.
+  **Smart-case** / Whole-Word / Regex toggles, capture groups (`$1`, `${name}`)
+  and escapes; workspace-wide search/replace and interactive query-replace.
 - **Go to definition** (`F12`) — heuristic, language-agnostic jump to a symbol's
   likely definition across the workspace.
+- **Navigation** — **jump to line by label** (leap-style), **matching tag**
+  (HTML/XML), go to **percent**/**byte**, and **structural selection** that
+  expands to the enclosing syntax node (Tree-sitter offline, or LSP).
+- **Highlight word occurrences** — passively mark every occurrence of the word
+  under the cursor.
+- **Which-key** — a popup of candidate keys while a chorded prefix is pending
+  (Emacs `Ctrl+X`, Spacemacs `Space`).
 - **Position history** (`Alt+Left` / `Alt+Right`) — jump back and forward
   through cursor positions, like a browser.
 - **Message drawer** — advice and notifications, each individually dismissable.
@@ -62,7 +81,13 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
 - **Snippets** — a searchable picker plus prefix-and-Tab expansion, loaded from
   JSON files (bundled, global, per-media-type, and project scopes).
 - **Org mode** (Org menu) — headline promote/demote, subtree move, TODO cycling,
-  checkbox toggle, fold cycling, and export to Markdown/HTML.
+  checkbox toggle, fold cycling, export to Markdown/HTML, and **Org-roam**: nodes,
+  `[[`-completion, a **dailies calendar**, and a **live backlinks** panel.
+- **TODO finder** (Tools) — scan the project for TODO/FIXME/HACK/XXX/BUG/NOTE
+  comment tags into a jump-list.
+- **HTTP client** (Tools → Send HTTP Request) — send a request from a `.http`
+  buffer and open the response in a tab.
+- **Scratch buffer** (File) — a throwaway, unsaved buffer for quick notes.
 - **Media types** (Tools → Media Types) — a searchable MIME catalog (text/binary)
   with insert and extension lookup.
 - **Test runner** (Tools → Run Tests) — parses `cargo test`/pytest-style output
@@ -76,13 +101,14 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
 - **Git** — status / diff / blame, **stage / unstage / revert per hunk**, diff
   navigation, branch switch & merge, stash, amend, and a merge-conflict resolver.
 - **Language Server Protocol** — diagnostics, hover, completion, go-to,
-  references, rename, code actions/lens, and inlay hints, configured per language.
+  references, **call hierarchy**, rename, code actions/lens, and inlay hints,
+  configured per language.
 - **Focus & navigation** — **Zen mode** hides the docks and status bar; an
   optional **breadcrumb bar** shows `file ▸ symbol`.
 - **Themes** — Dark, Light, and more ship bundled, plus your can add your own.
 - **Internationalization** — the whole UI is translatable into many languages.
-- **Keymaps** — switch the keyboard bindings among Apple, macOS VSCode, Emacs,
-  Vi, Spacemacs, IntelliJ (macOS/Windows), and Eclipse.
+- **Keymaps** — switch the keyboard bindings among Apple, VSCode (macOS/Windows),
+  Emacs, Vi, Spacemacs, IntelliJ (macOS/Windows), and Eclipse.
 - **Split panes** — nested horizontal/vertical splits up to a 2×2 grid.
 - **Keyboard help** — press `F1` for an overlay of every shortcut.
 

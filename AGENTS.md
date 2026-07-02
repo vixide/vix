@@ -8,7 +8,7 @@ This file is the entry point; see [`AGENTS/`](AGENTS/) for topic guides and
 
 Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust IDE"),
 built on `ratatui`. It is a **single Cargo crate** (edition 2024, no workspace
-members): the application plus ~95 focused modules under `src/`, including the
+members): the application plus ~100 focused modules under `src/`, including the
 custom editor widget `editor_core`. See [`docs/architecture/index.md`](docs/architecture/index.md).
 
 ## Source of truth
@@ -64,10 +64,10 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 - **Keep the logic terminal-independent.** Editing/state logic lives in the
   library and is tested without a TTY. Rendering lives only in `src/ui.rs`.
 - **Input dispatch is keymap-aware.** Raw keys route through the active _keymap_
-  (Apple / macOS VSCode / Emacs / Vi / Spacemacs / IntelliJ macOS / IntelliJ
-  Windows / Eclipse) in `App::on_key`; keymaps translate keys into the same
-  `run_action` calls and editor motions rather than duplicating behavior. See
-  `spec/keymaps`.
+  (Apple / VSCode macOS / VSCode Windows / Emacs / Vi / Spacemacs / IntelliJ
+  macOS / IntelliJ Windows / Eclipse) in `App::on_key`; keymaps translate keys
+  into the same `run_action` calls and editor motions rather than duplicating
+  behavior. See `spec/keymaps`.
 - **One `ratatui` version.** The whole widget stack must agree on `ratatui` 0.30
   / `crossterm` 0.29. Don't add a widget crate on a different version.
 
@@ -99,8 +99,11 @@ See [`AGENTS/share/crate-map.md`](AGENTS/share/crate-map.md) for the full map.
 3. Internationalize any new text (YAML key + `t!`).
 4. Document every new public item (`deny(missing_docs)`).
 5. Add/extend tests (`tests/integration.rs` or a module's unit tests).
-6. `cargo test` and `cargo clippy --workspace --all-targets -- -D warnings` clean.
+6. `cargo test` and `cargo clippy --workspace --all-targets -- -D warnings` clean
+   (or run `scripts/check`, the local CI-parity gate).
 7. Note user-visible changes in [`CHANGELOG.md`](CHANGELOG.md).
+8. Spelling: prose/docs are checked with CSpell (`cspell.json`); add project terms
+   to the external dictionary `project-words.txt`.
 
 ## Topic guides
 

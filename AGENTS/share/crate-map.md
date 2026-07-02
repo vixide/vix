@@ -38,6 +38,10 @@ the Vix-owned modules are held to pedantic. Reached from the host via
 | `lines`            | **Vix**    | Line transforms (move/sort/join/dedupe/trim/reverse).           |
 | `editor_crossterm` | engine     | `KeyEvent` → actions mapping (always compiled).                 |
 
+`code` also exposes `expand_to_node` (offline structural selection), `len_bytes`,
+and serde on its history types (for persistent undo); `editor` adds the passive
+`word_marks` channel, `relative_line_numbers`, and `comment_prefix`.
+
 Tree-sitter highlight queries live in repo-root `langs/`, embedded with
 `rust-embed` (`#[folder = "langs/"]`); grammars are gated behind the crate's
 `lang-*` features (`syntax-common` by default, `syntax-all` for everything).
@@ -74,11 +78,15 @@ Tree-sitter highlight queries live in repo-root `langs/`, embedded with
 | Spellcheck  | `spellcheck` (Hunspell via `spellbook`).                                      |
 | Snippets    | `snippets` (JSON snippet files: scopes, parse, merge, picker), `snippet_tool` (tabstop engine + bundled snippets). |
 | Media types | `media_type` (the MIME catalog parsed from `spec/media-types/media-types.tsv`; text/binary base, extension lookup, picker). |
-| Org mode    | `org` (headline structure, TODO/checkbox, Markdown/HTML export), `affix` (prefix/suffix add/drop/toggle helpers). |
+| Org mode    | `org` (headline structure, TODO/checkbox, Markdown/HTML export), `affix` (prefix/suffix add/drop/toggle helpers), `roam` (Org-roam nodes/backlinks/dailies/transclusion), `org_contacts` (contact parsing + vCard). |
 | Run / test  | `tasks` (named `tasks.toml` runner), `test_runner` (parse test output into a pass/fail tree), `terminal` (integrated shell), `diff_view` (compare-with-file). |
-| Config      | `editorconfig` (`.editorconfig` parsing), `macros` (persisted keyboard macros), `pane_tree` (nested split layout). |
+| Config      | `editorconfig` (`.editorconfig` parsing), `macros` (persisted keyboard macros), `pane_tree` (nested split layout), `workspace` (`.toml` workspace: folders + files). |
 | AI          | `ai_panel` (chat panel), `ai_diff` (AI diff review).                          |
 | Text tools  | `format_tool`, `jwt_tool`, `base_tool`, `base64_tool`, `url_tool`, `uuid_tool`, `zid_tool`, `checksum_tool`, `regex_tool`, `snippet_tool`, `markdown_preview`, `convert_tabular`, `convert_from_*_into_*_tool` (12). |
+| Pure text ops | `align` (align lines on a delimiter), `textops` (line-ending convert / squeeze blanks / ROT13), `emmet` (abbreviation → HTML), `tags` (HTML/XML matching-tag jump). Pure `text → text` / offset helpers with unit tests, driven from Edit/Go/Tools actions. |
+| Networking  | `http_client` (`.http`-buffer parser + blocking `ureq` send; response into a tab). |
+| Undo store  | `undo_store` (persist/restore the undo tree per file under `<config>/undo/`, content-hash guarded). |
+| Themes      | `base16` (bundled base16 color themes). |
 | Edit surfaces | `edit_table` (CSV/TSV spreadsheet, `Grid`), `edit_outline` (prose hierarchy, `Tree`), `edit_value` (JSON/YAML tree, `Tree` + `Format`), `edit_bytes` (hex/ASCII byte editor, `Hex`), `edit_sql` (SQL statement list, `Editor`). Overlay editors with their own `handle_key`/`Outcome`, under **Edit → Mode**. |
 | Generators  | `qr_tool` (QR code via the `qrcode` crate, Unicode renderer), `lorem` (deterministic lorem-ipsum text). |
 | Tool dialogs| `calculator_tool`, `color_converter_tool`, `unit_converter_tool`, `pomodoro_tool`. |

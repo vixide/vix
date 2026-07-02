@@ -2,7 +2,7 @@
 
 Spellcheck uses Hunspell dictionary files.
 
-Spellcheck reads settings dictionary_path (not dictionay_dir)
+Spellcheck reads settings `dictionary_path` (not `dictionary_dir`).
 
 Spellcheck also autodetects hunspell dictionary path.
 

@@ -42,6 +42,16 @@ on top.
 - To add a command: add the `run_action` arm, then reference it from a menu item
   and/or `palette::COMMANDS`, and add its i18n label key.
 
+## Pure-logic modules
+
+- Prefer a small **pure module** (`text -> text` or `(text, cursor) -> …`) with
+  unit tests for any non-trivial transform, and keep the `App` method a thin
+  wrapper that reads the buffer, calls the pure fn, and writes back. Recent
+  examples: `align`, `emmet`, `tags`, `textops`, `http_client::parse_request`,
+  and the free `bump_number_at` / `smart_toggle_at` / `transpose_*_at` in `app`.
+- Buffer-mutating actions funnel through `App::transform_selection_or_buffer`
+  (selection-or-whole-buffer) or `insert_str`; both are read-only-aware.
+
 ## Rendering
 
 - All of the *app's* drawing is in `src/ui.rs`; no editing/state logic there. The
