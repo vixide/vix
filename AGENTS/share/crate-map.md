@@ -83,7 +83,7 @@ Tree-sitter highlight queries live in repo-root `langs/`, embedded with
 | Config      | `editorconfig` (`.editorconfig` parsing), `macros` (persisted keyboard macros), `pane_tree` (nested split layout), `workspace` (`.toml` workspace: folders + files). |
 | AI          | `ai_panel` (chat panel), `ai_diff` (AI diff review).                          |
 | Text tools  | `format_tool`, `jwt_tool`, `base_tool`, `base64_tool`, `url_tool`, `uuid_tool`, `zid_tool`, `checksum_tool`, `regex_tool`, `snippet_tool`, `markdown_preview`, `convert_tabular`, `convert_from_*_into_*_tool` (12). |
-| Pure text ops | `align` (align lines on a delimiter), `textops` (line-ending convert / squeeze blanks / ROT13), `emmet` (abbreviation → HTML), `tags` (HTML/XML matching-tag jump). Pure `text → text` / offset helpers with unit tests, driven from Edit/Go/Tools actions. |
+| Pure text ops | `align` (align lines on a delimiter), `textops` (line-ending convert / squeeze blanks / ROT13, plus the cursor-relative rewrites: increment number, smart toggle, transpose, `tag_column`), `emmet` (abbreviation → HTML), `tags` (HTML/XML matching-tag jump). Pure `text → text` / offset helpers with unit tests, driven from Edit/Go/Tools actions via `transform_selection_or_buffer` / `rewrite_at_cursor`. |
 | Networking  | `http_client` (`.http`-buffer parser + blocking `ureq` send; response into a tab). |
 | Undo store  | `undo_store` (persist/restore the undo tree per file under `<config>/undo/`, content-hash guarded). |
 | Themes      | `base16` (bundled base16 color themes). |

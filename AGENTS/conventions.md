@@ -47,10 +47,12 @@ on top.
 - Prefer a small **pure module** (`text -> text` or `(text, cursor) -> …`) with
   unit tests for any non-trivial transform, and keep the `App` method a thin
   wrapper that reads the buffer, calls the pure fn, and writes back. Recent
-  examples: `align`, `emmet`, `tags`, `textops`, `http_client::parse_request`,
-  and the free `bump_number_at` / `smart_toggle_at` / `transpose_*_at` in `app`.
+  examples: `align`, `emmet`, `tags`, `http_client::parse_request`, and
+  `textops` (whole-text transforms plus the cursor-relative rewrites
+  `bump_number_at` / `smart_toggle_at` / `transpose_*_at`).
 - Buffer-mutating actions funnel through `App::transform_selection_or_buffer`
-  (selection-or-whole-buffer) or `insert_str`; both are read-only-aware.
+  (selection-or-whole-buffer), `App::rewrite_at_cursor` (cursor-relative), or
+  `insert_str`; all are read-only-aware.
 
 ## Rendering
 

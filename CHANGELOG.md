@@ -8,6 +8,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Refactor:** the pure cursor-relative text helpers (increment/decrement
+  number, smart toggle, transpose chars/words, TODO-tag matching) moved from
+  `app` into `crate::textops` with their unit tests, and their three identical
+  host wrappers collapsed into one `App::rewrite_at_cursor`. Behavior unchanged.
 - **Media types use clean `text/<lang>` forms (no `x-` prefix)** for source code —
   `text/rust`, `text/python`, `text/typescript`, `text/java`, `text/cpp`,
   `text/csharp`, `text/c`, `text/ruby`, `text/go`, …, `application/sql`. `.ts` now
