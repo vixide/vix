@@ -1141,6 +1141,22 @@ impl Editor {
         }
     }
 
+    /// Jump to `pct`% through the file (by line), clamped to 0..=100.
+    pub fn goto_percent(&mut self, pct: usize, area: Rect) {
+        let Some(t) = self.active_tab() else { return };
+        let total = t.editor.code_ref().len_lines().max(1);
+        let line = pct.min(100) * total.saturating_sub(1) / 100;
+        self.goto(line + 1, None, area); // goto is 1-based
+    }
+
+    /// Jump to the character at byte offset `byte` (clamped to the buffer end).
+    pub fn goto_byte(&mut self, byte: usize, area: Rect) {
+        let Some(t) = self.active_tab() else { return };
+        let code = t.editor.code_ref();
+        let off = code.byte_to_char(byte.min(code.len_bytes()));
+        self.goto_offset(off, area);
+    }
+
     /// Select the current line, including its trailing newline (so it can be cut
     /// as a whole line), and scroll it into `area`.
     pub fn select_line(&mut self, area: Rect) {

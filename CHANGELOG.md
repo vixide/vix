@@ -41,6 +41,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Go to Percent / Byte** (Go menu). Jump to a percentage through the file (by
+  line) or to a byte offset, complementing Go to Line.
 - **Read-only buffer toggle** (View → Read-Only). Locks the active buffer against
   edits — typing, deletes, and editing commands are blocked (with a status note),
   while navigation, selection, copy, and search still work.
