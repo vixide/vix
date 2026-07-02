@@ -29,7 +29,7 @@ npm-scope = "@vixide"
 
 [package]
 name = "vix"
-version = "0.4.0"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.95"
 description = "Vix IDE: a visual integrated development environment that is TUI, friendly, featureful, high-speed, and high-security."
