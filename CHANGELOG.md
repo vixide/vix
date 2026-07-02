@@ -45,9 +45,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Migration guides** for Vim, Emacs, and VS Code users
+- **Migration guides** for Vim, Emacs, VS Code, IntelliJ, and Eclipse users
   (`docs/for-vim-users/`, `docs/for-emacs-users/`,
-  `docs/for-visual-studio-code-users/`): an honest pros/cons pitch, a
+  `docs/for-visual-studio-code-users/`, `docs/for-intellij-users/`,
+  `docs/for-eclipse-users/`): an honest pros/cons pitch, a
   muscle-memory mapping table for each keymap, and a try-it-for-an-afternoon
   experiment.
 - **Keymap improvements.** Vi: `w`/`b` words, `^`, `gg`/`G`, `dd`/`yy`/`p`, `u`,
