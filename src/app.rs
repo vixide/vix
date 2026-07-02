@@ -2850,6 +2850,7 @@ impl App {
             }
             "edit.emmet_expand" => self.emmet_expand(),
             "edit.toggle_value" => self.smart_toggle(),
+            "edit.comment_banner" => self.comment_banner(),
             "edit.transpose_chars" => self.transpose(transpose_chars_at),
             "edit.transpose_words" => self.transpose(transpose_words_at),
             "edit.increment_number" => self.bump_number(1),
@@ -6801,6 +6802,36 @@ impl App {
             t!("status.line_numbers_off")
         }
         .to_string();
+    }
+
+    /// Turn the current line's text into a comment banner: the title bordered
+    /// above and below by a rule of `=`, each prefixed with the language's line
+    /// comment. An empty line uses a placeholder title.
+    fn comment_banner(&mut self) {
+        if self.active_read_only() {
+            self.status = t!("status.read_only_blocked").to_string();
+            return;
+        }
+        let Some(tab) = self.editor.active_tab_mut() else { return };
+        if tab.is_image() {
+            return;
+        }
+        let prefix = tab.editor.comment_prefix();
+        let prefix = if prefix.is_empty() { "#".to_string() } else { prefix };
+        let line = tab.editor.cursor_line();
+        let mut lines: Vec<String> = tab.editor.get_content().split('\n').map(str::to_string).collect();
+        let Some(cur) = lines.get(line) else { return };
+        let indent: String = cur.chars().take_while(|c| c.is_whitespace()).collect();
+        let title = cur.trim();
+        let title = if title.is_empty() { "Section" } else { title };
+        let rule = "=".repeat(title.chars().count().clamp(8, 60));
+        let banner = format!(
+            "{indent}{prefix} {rule}\n{indent}{prefix} {title}\n{indent}{prefix} {rule}"
+        );
+        lines[line] = banner;
+        tab.editor.set_content(&lines.join("\n"));
+        tab.editor.set_cursor_line(line + 1);
+        tab.dirty = true;
     }
 
     /// Whether the active buffer is locked against edits.

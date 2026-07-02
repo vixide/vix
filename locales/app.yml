@@ -1639,6 +1639,8 @@ menu.item.edit.column_select_up:
   bn: "কলাম নির্বাচন উপরে"
   zh: "列选择向上"
   ja: "列選択 上"
+menu.item.edit.comment_banner:
+  en: "Comment Banner"
 menu.item.edit.emmet_expand:
   en: "Emmet Expand"
 menu.item.edit.toggle_value:

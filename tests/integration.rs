@@ -384,6 +384,19 @@ fn org_checkbox_toggle_updates_parents_and_cookies() {
 }
 
 #[test]
+fn comment_banner_boxes_the_current_line() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "Section Title");
+    app.run_action("edit.comment_banner");
+    let text = app.editor.active_tab().unwrap().text();
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 3, "three banner lines: {text:?}");
+    assert!(lines[0].contains('='), "top rule: {:?}", lines[0]);
+    assert!(lines[1].contains("Section Title"), "title line: {:?}", lines[1]);
+    assert!(lines[2].contains('='), "bottom rule: {:?}", lines[2]);
+}
+
+#[test]
 fn goto_percent_and_byte_move_the_cursor() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "l1\nl2\nl3\nl4\nl5\n"); // 6 lines (incl. trailing)

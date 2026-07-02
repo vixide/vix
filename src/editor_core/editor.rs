@@ -599,6 +599,12 @@ impl Editor {
         self.code.char_to_line(self.cursor)
     }
 
+    /// The line-comment prefix for this buffer's language (e.g. `//` or `#`).
+    #[must_use]
+    pub fn comment_prefix(&self) -> String {
+        self.code.comment()
+    }
+
     /// Move the cursor to the start of 0-based `line` (clamped to the buffer) and
     /// clear any selection.
     pub fn set_cursor_line(&mut self, line: usize) {

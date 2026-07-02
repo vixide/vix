@@ -41,6 +41,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Comment banner** (Edit → Comment Banner). Turns the current line into a boxed
+  section header — the title bordered above and below by a `=` rule, each line
+  prefixed with the language's line comment.
 - **Go to Percent / Byte** (Go menu). Jump to a percentage through the file (by
   line) or to a byte offset, complementing Go to Line.
 - **Read-only buffer toggle** (View → Read-Only). Locks the active buffer against
