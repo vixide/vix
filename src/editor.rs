@@ -220,6 +220,8 @@ pub struct Tab {
     pub preview: bool,
     /// When set, this tab shows an image instead of the text editor.
     pub image: Option<StatefulProtocol>,
+    /// When set, the buffer is locked against edits (view-only).
+    pub read_only: bool,
 }
 
 impl Tab {
@@ -479,6 +481,7 @@ impl Editor {
             dirty: false,
             preview: false,
             image: None,
+            read_only: false,
         });
         self.active = self.tabs.len() - 1;
     }
@@ -494,6 +497,7 @@ impl Editor {
             dirty: true,
             preview: false,
             image: None,
+            read_only: false,
         });
         self.active = self.tabs.len() - 1;
     }
@@ -517,6 +521,7 @@ impl Editor {
             dirty: false,
             preview: false,
             image: Some(proto),
+            read_only: false,
         });
         self.active = self.tabs.len() - 1;
     }
@@ -579,6 +584,7 @@ impl Editor {
             dirty: false,
             preview,
             image: None,
+            read_only: false,
         };
 
         if preview
@@ -1214,7 +1220,7 @@ impl Editor {
     /// buffer, e.g. an image tab). Marks the buffer dirty and promotes a preview.
     pub fn insert_str(&mut self, text: &str, area: Rect) -> bool {
         if let Some(t) = self.active_tab_mut() {
-            if t.is_image() {
+            if t.is_image() || t.read_only {
                 return false;
             }
             t.editor.apply(InsertText { text: text.to_string() });

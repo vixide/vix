@@ -2623,6 +2623,7 @@ impl App {
             "view.focus_other_pane" => self.editor.focus_other_pane(),
             "view.line_numbers" | "tools.line_numbers" => self.toggle_editor_line_numbers(),
             "view.relative_line_numbers" => self.toggle_relative_line_numbers(),
+            "view.read_only" => self.toggle_read_only(),
             "view.whitespace" => self.toggle_editor_whitespace(),
             "view.soft_wrap" => self.toggle_editor_soft_wrap(),
             "view.left_dock" | "view.explorer" => self.toggle_left_dock(),
@@ -2634,12 +2635,8 @@ impl App {
                 self.settings.show_breadcrumbs = self.show_breadcrumbs;
             }
             "view.outline_dock" => self.toggle_outline_dock(),
-            "view.trim_on_save" => {
-                self.settings.trim_trailing_whitespace = !self.settings.trim_trailing_whitespace;
-            }
-            "view.final_newline_on_save" => {
-                self.settings.ensure_final_newline = !self.settings.ensure_final_newline;
-            }
+            "view.trim_on_save" => self.settings.trim_trailing_whitespace = !self.settings.trim_trailing_whitespace,
+            "view.final_newline_on_save" => self.settings.ensure_final_newline = !self.settings.ensure_final_newline,
             "view.format_on_save" => {
                 self.settings.format_on_save = !self.settings.format_on_save;
                 self.status = t!("status.format_on_save", on = self.settings.format_on_save).to_string();
@@ -2785,6 +2782,13 @@ impl App {
     /// whole-line operations). Returns `true` if `action` was handled. Extracted
     /// from [`App::run_action`] to keep that function within the line limit.
     fn run_edit_action(&mut self, action: &str) -> bool {
+        // Read-only buffers block editing commands, but not copy/navigation/search
+        // and pure selection. Scoped to `edit.*` so probing this dispatcher for a
+        // non-edit action (it's tried for every action) never consumes it.
+        if action.starts_with("edit.") && self.active_read_only() && Self::edit_action_mutates(action) {
+            self.status = t!("status.read_only_blocked").to_string();
+            return true;
+        }
         match action {
             "edit.undo" => {
                 if let Some(t) = self.editor.active_tab_mut() {
@@ -3605,6 +3609,10 @@ impl App {
         &mut self,
         f: impl Fn(&str) -> Result<String, String>,
     ) {
+        if self.active_read_only() {
+            self.status = t!("status.read_only_blocked").into();
+            return;
+        }
         let Some(tab) = self.editor.active_tab_mut() else {
             return;
         };
@@ -6789,6 +6797,22 @@ impl App {
         .to_string();
     }
 
+    /// Whether the active buffer is locked against edits.
+    fn active_read_only(&self) -> bool {
+        self.editor.active_tab().is_some_and(|t| t.read_only)
+    }
+
+    /// Toggle the active buffer's read-only lock.
+    fn toggle_read_only(&mut self) {
+        let on = if let Some(t) = self.editor.active_tab_mut() {
+            t.read_only = !t.read_only;
+            t.read_only
+        } else {
+            return;
+        };
+        self.status = t!("status.read_only", on = on).to_string();
+    }
+
     /// Toggle relative (hybrid) line numbering, mirrored across every tab and
     /// persisted.
     fn toggle_relative_line_numbers(&mut self) {
@@ -6853,6 +6877,11 @@ impl App {
     fn editor_key(&mut self, key: KeyEvent) {
         // Image tabs are view-only.
         if self.editor.active_tab().is_some_and(Tab::is_image) {
+            return;
+        }
+        // Read-only buffers accept navigation but not edits.
+        if self.active_read_only() && (Self::is_edit_key(&key) || key.code == KeyCode::Delete) {
+            self.status = t!("status.read_only_blocked").to_string();
             return;
         }
         // Capture editor-bound keys into a macro while recording (modal/menu keys
@@ -14352,6 +14381,33 @@ const SPACEMACS_LEADER: &[(&str, &str)] = &[
     ("qq", "file.quit"),
     (";", "edit.toggle_comment"),
 ];
+
+impl App {
+    /// Whether an `edit.*` action handled by `run_edit_action` changes the buffer.
+    /// Default-deny: only copy/search/navigation/pure-selection are read-only-safe.
+    fn edit_action_mutates(action: &str) -> bool {
+        const READ_ONLY_SAFE: &[&str] = &[
+            "edit.copy",
+            "edit.find",
+            "edit.find_next",
+            "edit.find_prev",
+            "edit.go_first",
+            "edit.go_last",
+            "edit.match_bracket",
+            "edit.select_all",
+            "edit.select_all_occurrences",
+            "edit.select_line",
+            "edit.select_less",
+            "edit.select_more",
+            "edit.select_paragraph",
+            "edit.select_section",
+            "edit.column_select_down",
+            "edit.column_select_up",
+            "edit.undo_branch",
+        ];
+        !READ_ONLY_SAFE.contains(&action)
+    }
+}
 
 /// Render a leader key fragment for display (`" "` → `SPC`).
 fn display_key(k: &str) -> String {
