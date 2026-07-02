@@ -1267,18 +1267,15 @@ pub struct App {
     /// Emacs keymap: a `Ctrl+X` prefix has been pressed and the next key
     /// completes the chord. Always false in other keymaps.
     emacs_prefix: bool,
-    /// Vim keymap: true in Insert mode, false in Normal mode. Meaningless in
-    /// other keymaps.
-    vim_insert: bool,
+    /// Vi / Spacemacs keymaps: true in Insert mode, false in Normal mode.
+    /// Meaningless in the non-modal keymaps.
+    modal_insert: bool,
     /// Vim keymap: the in-progress `:` command-line text, when the command line
     /// is open.
     vim_cmd: Option<String>,
     /// Vim keymap: the first key of a pending two-key Normal-mode operator
     /// (`g`, `d`, or `y`), awaiting its second key.
     vim_pending: Option<char>,
-    /// Spacemacs keymap: true in Insert mode, false in Normal mode. Meaningless in
-    /// other keymaps.
-    spacemacs_insert: bool,
     /// Spacemacs keymap: the in-progress `Space` leader key sequence (after `SPC`
     /// in Normal mode), or `None` when no leader is pending.
     spacemacs_leader: Option<String>,
@@ -1427,9 +1424,8 @@ impl App {
             bottom_hmax: 0,
             dock_resize: None,
             emacs_prefix: false,
-            vim_insert: false,
+            modal_insert: false,
             vim_cmd: None, vim_pending: None,
-            spacemacs_insert: false,
             spacemacs_leader: None,
         }
     }
@@ -1892,7 +1888,7 @@ impl App {
         match self.active_keymap() {
             Keymap::Vi => Some(if let Some(cmd) = &self.vim_cmd {
                 format!(":{cmd}")
-            } else if self.vim_insert {
+            } else if self.modal_insert {
                 t!("status.vim_insert").to_string()
             } else {
                 t!("status.vim_normal").to_string()
@@ -1900,7 +1896,7 @@ impl App {
             Keymap::Emacs if self.emacs_prefix => Some("C-x-".to_string()),
             Keymap::Spacemacs => Some(if let Some(seq) = &self.spacemacs_leader {
                 format!("SPC {seq}")
-            } else if self.spacemacs_insert {
+            } else if self.modal_insert {
                 t!("status.vim_insert").to_string()
             } else {
                 t!("status.vim_normal").to_string()
@@ -2389,9 +2385,9 @@ impl App {
             self.vim_cmd_key(key);
             return true;
         }
-        if self.vim_insert {
+        if self.modal_insert {
             if key.code == KeyCode::Esc {
-                self.vim_insert = false;
+                self.modal_insert = false;
                 return true;
             }
             // Let typing and shared keys flow through to the editor.
@@ -2484,7 +2480,7 @@ impl App {
     }
 
     fn vim_enter_insert(&mut self) {
-        self.vim_insert = true;
+        self.modal_insert = true;
     }
 
     /// Handle a key while the Vim `:` command line is open. The in-progress text
@@ -2560,9 +2556,9 @@ impl App {
             self.vim_cmd_key(key);
             return true;
         }
-        if self.spacemacs_insert {
+        if self.modal_insert {
             if key.code == KeyCode::Esc {
-                self.spacemacs_insert = false;
+                self.modal_insert = false;
                 return true;
             }
             return false;
@@ -2582,32 +2578,8 @@ impl App {
         if self.focus != Focus::Editor {
             return false;
         }
-        match key.code {
-            KeyCode::Char('h') | KeyCode::Left => self.editor_motion(KeyCode::Left),
-            KeyCode::Char('j') | KeyCode::Down => self.editor_motion(KeyCode::Down),
-            KeyCode::Char('k') | KeyCode::Up => self.editor_motion(KeyCode::Up),
-            KeyCode::Char('l') | KeyCode::Right => self.editor_motion(KeyCode::Right),
-            KeyCode::Char('0') => self.editor_motion(KeyCode::Home),
-            KeyCode::Char('$') => self.editor_motion(KeyCode::End),
-            KeyCode::Char('x') => self.editor_motion(KeyCode::Delete),
-            KeyCode::Char('i') => self.spacemacs_insert = true,
-            KeyCode::Char('a') => {
-                self.editor_motion(KeyCode::Right);
-                self.spacemacs_insert = true;
-            }
-            KeyCode::Char('o') => {
-                self.editor_motion(KeyCode::End);
-                self.editor_motion(KeyCode::Enter);
-                self.spacemacs_insert = true;
-            }
-            KeyCode::Char('O') => {
-                self.editor_motion(KeyCode::Home);
-                self.editor_motion(KeyCode::Enter);
-                self.editor_motion(KeyCode::Up);
-                self.spacemacs_insert = true;
-            }
-            _ => {}
-        }
+        // Shared Vi Normal-mode vocabulary (motions, operators, insert entry).
+        self.vim_normal_key(key);
         true
     }
 
@@ -9795,10 +9767,10 @@ impl App {
     /// so a freshly chosen keymap starts clean — Vim begins in Normal mode.
     fn reset_keymap_modes(&mut self) {
         self.emacs_prefix = false;
-        self.vim_insert = false;
+        self.modal_insert = false;
         self.vim_cmd = None;
-        self.spacemacs_insert = false;
         self.spacemacs_leader = None;
+        self.vim_pending = None;
     }
 
     // ----- recent-files chooser -------------------------------------------

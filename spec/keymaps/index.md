@@ -7,7 +7,7 @@ it. Switching keymaps changes the meaning of keys, not the available actions: th
 same commands (open, save, find, move the cursor) stay reachable; only the keys
 that trigger them differ.
 
-Vix ships nine keymaps. **Apple** is the default and matches Vix's own bindings.
+Vix ships ten keymaps. **Apple** is the default and matches Vix's own bindings.
 
 ## The keymaps
 
@@ -155,7 +155,10 @@ An unrecognized command reports "no command" in the status bar.
 
 ## Spacemacs modes and leader
 
-The Spacemacs keymap reuses the Vi modal model (Normal / Insert, the same
+The Spacemacs keymap shares the Vi keymap's Normal-mode handler, so the whole
+Normal-mode vocabulary above (motions, `gg`/`dd`/`yy` operators, search, insert
+entries) and the `:` command line behave identically. It reuses the Vi modal
+model (Normal / Insert, the same
 `hjkl`/`0`/`$`/`x`/`i`/`a`/`o`/`O` Normal-mode keys, and the shared `:` command
 line) and adds a **`Space` leader**. In Normal mode, pressing `Space` over the
 editor begins a leader sequence shown in the mode indicator as `SPC …`. Each

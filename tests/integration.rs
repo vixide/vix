@@ -4393,6 +4393,29 @@ fn outline_sidebar_lists_symbols_and_follows_toggle() {
 }
 
 #[test]
+fn spacemacs_normal_mode_shares_the_vi_vocabulary() {
+    // Spacemacs Normal mode delegates to the same handler as the Vi keymap, so
+    // the operators (gg / G / dd) work identically.
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "spacemacs".to_string();
+    app.on_key(key('i'));
+    for c in "one\ntwo".chars() {
+        if c == '\n' {
+            app.on_key(keycode(KeyCode::Enter));
+        } else {
+            app.on_key(key(c));
+        }
+    }
+    app.on_key(esc());
+    app.on_key(key('g'));
+    app.on_key(key('g'));
+    assert_eq!(app.editor.cursor_1based().0, 1, "gg goes to the top");
+    app.on_key(key('d'));
+    app.on_key(key('d'));
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "two", "dd cuts the line");
+}
+
+#[test]
 fn spacemacs_keymap_is_modal_with_space_leader() {
     let mut app = app_at(Path::new("."));
     app.settings.keymap = "spacemacs".to_string();

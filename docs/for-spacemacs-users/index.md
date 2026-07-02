@@ -43,11 +43,10 @@ the sequence; the which-key popup lists what can follow):
 | `SPC ;` | Comment |
 | `SPC q q` | Quit |
 
-**Modal editing:** Normal mode has `h j k l`, `0` / `$`, `x`, and `i a o O`
-into Insert mode; `Esc` returns. The `:` command line handles `:w`, `:q`,
-`:wq`, `:N` (go to line), `:e path`, and `:Ex`. (For the fuller Vi vocabulary
-— `w`/`b`, `gg`/`G`, `dd`/`yy`/`p`, `/`+`n`, `%` — the plain **Vi** keymap
-currently carries more; the Spacemacs keymap focuses its power on the leader.)
+**Modal editing:** Normal mode is the full Vi-keymap vocabulary — `h j k l`,
+`w`/`b`, `0`/`^`/`$`, `gg`/`G`, `x`, `dd`/`yy`/`p`, `u`, `/` + `n`/`N`, `%`,
+and `i a I A o O` into Insert mode; `Esc` returns. The `:` command line
+handles `:w`, `:q`, `:wq`, `:N` (go to line), `:e path`, and `:Ex`.
 
 ## Where Vix beats Spacemacs
 
