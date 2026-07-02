@@ -1,0 +1,121 @@
+# Vix project custom dictionary for CSpell.
+# One word per line; lines starting with '#' are comments. This is the external
+# dictionary referenced by cspell.json; CSpell appends here when you "add word".
+
+# Project / product
+vixide
+vix
+
+# Rust crates & ecosystem
+ratatui
+ropey
+crossterm
+treesitter
+clippy
+rustls
+ureq
+confy
+hunspell
+spellbook
+mimalloc
+serde
+jiff
+toml
+rustfmt
+musl
+axodotdev
+clippy's
+rustc
+crate
+crates
+subcrates
+proc
+
+# TUI / editor domain
+minimap
+gutter
+keymap
+keymaps
+spacemacs
+vscode
+intellij
+gitignore
+backlink
+backlinks
+dailies
+roam
+emmet
+rot13
+transpose
+frecency
+scrollback
+breadcrumb
+breadcrumbs
+scrollbar
+softwrap
+grapheme
+graphemes
+codepoint
+codepoints
+textops
+toggleable
+dismissable
+
+# Formats / tools
+graphviz
+plantuml
+ditaa
+mermaid
+markdown
+vcard
+vcf
+csv
+tsv
+yaml
+jsonc
+sqlite
+
+# Themes / palettes / proper nouns
+monokai
+nord
+sindarin
+
+# Note-taking / Org / PlantUML diagram vocabulary
+nodeify
+transclude
+transclusion
+zettelkasten
+skinparam
+archimate
+gantt
+mindmap
+qrcode
+
+# Tools / crates / handles referenced in docs
+joelparkerhenderson
+bravoalfacharlie
+urxvt
+libtest
+pytest
+ollama
+subcrate
+wooorm
+sysinfo
+ancel
+undoable
+
+# Common code tokens that appear in prose/comments
+struct
+structs
+enum
+enums
+async
+stdin
+stdout
+stderr
+lsp
+dap
+regex
+regexes
+config
+configs
