@@ -235,6 +235,22 @@ gopls
 codelldb
 gedit
 
+# Vim / Emacs / VS Code ecosystem terms (docs/for-*-users)
+vimrc
+vimscript
+netrw
+undofile
+gitsigns
+lspconfig
+elisp
+magit
+dired
+mu4e
+esup
+vertico
+kilolines
+unjudging
+
 # Common code tokens that appear in prose/comments
 struct
 structs
