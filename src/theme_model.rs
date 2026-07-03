@@ -164,6 +164,8 @@ pub struct SyntaxColors {
     pub string: Option<Rgb>,
     /// Comments.
     pub comment: Option<Rgb>,
+    /// Numeric literals.
+    pub number: Option<Rgb>,
 }
 
 /// A theme loaded from a JSON file (bundled in the binary or installed in
@@ -326,12 +328,33 @@ pub fn syntax_theme() -> Vec<(&'static str, String)> {
         ("keyword", ct.syntax.keyword),
         ("string", ct.syntax.string),
         ("comment", ct.syntax.comment),
+        ("number", ct.syntax.number),
     ] {
         if let Some([r, g, b]) = color {
             out.push((token, format!("#{r:02x}{g:02x}{b:02x}")));
         }
     }
     out
+}
+
+/// The active theme's color for one syntax token (`"keyword"`, `"string"`,
+/// `"comment"`, `"number"`); `None` when no theme is active, the token is
+/// unknown, or the theme leaves it unset.
+///
+/// # Panics
+/// Panics if the active-theme lock is poisoned.
+#[must_use]
+pub fn syntax_color(token: &str) -> Option<Color> {
+    let guard = CUSTOM.read().expect("theme lock");
+    let ct = guard.as_ref()?;
+    let color = match token {
+        "keyword" => ct.syntax.keyword,
+        "string" => ct.syntax.string,
+        "comment" => ct.syntax.comment,
+        "number" => ct.syntax.number,
+        _ => None,
+    }?;
+    Some(rgb(color))
 }
 
 /// Parse a single theme from JSON, returning `None` if it doesn't parse.
@@ -425,5 +448,20 @@ mod tests {
         apply(&theme(r#"{ "name": "Light", "editor": { "foreground": [40, 40, 40] } }"#));
         assert_eq!(custom_name().as_deref(), Some("Light"));
         assert_eq!(fg(), Color::Rgb(40, 40, 40));
+
+        // Syntax colors: set tokens resolve, unset and unknown ones are None.
+        apply(&theme(
+            r#"{
+                "name": "Syn",
+                "syntax": { "keyword": [1, 1, 1], "string": [2, 2, 2], "number": [4, 4, 4] }
+            }"#,
+        ));
+        assert_eq!(syntax_color("keyword"), Some(Color::Rgb(1, 1, 1)));
+        assert_eq!(syntax_color("number"), Some(Color::Rgb(4, 4, 4)));
+        assert_eq!(syntax_color("comment"), None, "unset token");
+        assert_eq!(syntax_color("nonsense"), None, "unknown token");
+        // And the editor-facing pairs include the number token.
+        let pairs = syntax_theme();
+        assert!(pairs.contains(&("number", "#040404".to_string())), "{pairs:?}");
     }
 }

@@ -113,6 +113,7 @@ pub mod convert_from_tsv_into_csv_tool;
 pub mod convert_from_tsv_into_json_tool;
 pub mod convert_from_yaml_into_json_tool;
 pub mod convert_tabular;
+pub mod db;
 pub mod file_information_panel;
 pub mod find_panel;
 pub mod git;

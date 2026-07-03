@@ -30,9 +30,12 @@ the first available theme.
 
 Each theme is a JSON object with a `name` and optional per-region color blocks.
 Regions: `menu-bar`, `status-bar`, `left-dock`, `right-dock`, and `editor`, plus
-an optional `syntax` block. Colors are `[R, G, B]` (0–255). A region may also set
-`font-style` (`"italic"`) and `font-weight` (`"bold"`). The `editor` block may
-add a `cursor` color. Any omitted value falls back to the primary editor color.
+an optional `syntax` block (`keyword`, `string`, `comment`, `number`). Colors are
+`[R, G, B]` (0–255). A region may also set `font-style` (`"italic"`) and
+`font-weight` (`"bold"`). The `editor` block may add a `cursor` color. Any
+omitted value falls back to the primary editor color. The `syntax` colors drive
+both the code editor's Tree-sitter highlighting and the DB workbench's SQL
+query editor (`spec/db`).
 
 ```json
 {
@@ -42,7 +45,7 @@ add a `cursor` color. Any omitted value falls back to the primary editor color.
   "editor":     { "foreground": [215, 215, 215], "background": [40, 40, 40],
                   "cursor": [255, 255, 255] },
   "syntax":     { "keyword": [197, 134, 192], "string": [152, 195, 121],
-                  "comment": [106, 153, 85] }
+                  "comment": [106, 153, 85], "number": [181, 206, 168] }
 }
 ```
 
