@@ -37,6 +37,8 @@ Highlights:
 - View: [Zen Mode](zen-mode/index.md) · [Breadcrumb Bar](breadcrumb/index.md).
 - AI: [AI Chat Panel](agent-panel/index.md) (conversation with the configurable
   `ai_command` assistant).
+- DB: [Database Workbench](db/index.md) (SQLite/Postgres/MySQL — connections,
+  schema tree, query editor, transactions, history, export).
 - Workflow: [Tasks](tasks/index.md) (named `tasks.toml` commands) ·
   [Compare With File](diff-view/index.md) (diff against another file) ·
   [Integrated Terminal](terminal/index.md) (a shell in a panel) ·

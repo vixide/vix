@@ -830,6 +830,12 @@ pub struct Layout {
     pub edit_bytes: Rect,
     /// Body rectangle of the open SQL statement editor.
     pub edit_sql: Rect,
+    /// Schema-tree body of the open DB workbench, for paging/scroll sizing.
+    pub db_tree: Rect,
+    /// Query-editor body of the open DB workbench.
+    pub db_editor: Rect,
+    /// Results-grid body (data rows) of the open DB workbench.
+    pub db_results: Rect,
     /// Row-list rectangle of the open X11 color palette, so a click can hit-test
     /// which row was picked.
     pub x11_panel: Rect,
@@ -993,6 +999,8 @@ pub struct App {
     pub edit_bytes: Option<crate::edit_bytes::Hex>,
     /// SQL statement editor overlay, when open.
     pub edit_sql: Option<crate::edit_sql::Editor>,
+    /// DB workbench overlay (`spec/db`), when open.
+    pub db: Option<crate::db::Browser>,
     /// X11 color palette overlay, when open.
     pub x11_panel: Option<X11Panel>,
     /// Media-type (MIME) picker overlay, when open.
@@ -1342,7 +1350,7 @@ impl App {
             prompt: None, paste: None, confirm: None, replace_confirm: None, unsaved: None, spell_suggest: None,
             context_menu: None, git_panel: None, branch_chooser: None, task_chooser: None, macro_chooser: None, clipboard_ring: Vec::new(), clipboard_chooser: None, workspace_chooser: None, diff_view: None, recent_chooser: None,
             location_chooser: None, nerd_palette: None, ascii_panel: None, edit_table: None,
-            edit_outline: None, edit_value: None, edit_bytes: None, edit_sql: None, qrcode: None,
+            edit_outline: None, edit_value: None, edit_bytes: None, edit_sql: None, db: None, qrcode: None,
             x11_panel: None,
             media_type_panel: None, http_rx: None,
             html_panel: None, system_info: None, dashboard: None, dashboard_rx: None,
@@ -1724,6 +1732,7 @@ impl App {
         // The integrated terminal captures all keys (forwarded to the shell)
         // except its close chord, handled inside the key handler.
         panel!(terminal, terminal_key);
+        panel!(db, db_key);
         panel!(edit_table, edit_table_key);
         panel!(edit_outline, edit_outline_key);
         panel!(edit_value, edit_value_key);
@@ -2800,6 +2809,7 @@ impl App {
             "ai.define" => self.ai_define(),
             "ai.annotate" => self.ai_annotate(),
             "ai.improve" => self.ai_improve(),
+            a if self.db_action(a) => {}
             "view.bottom_dock" => self.toggle_bottom_dock(),
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
@@ -10125,6 +10135,87 @@ impl App {
         self.run_action("file.save");
     }
 
+    /// Dispatch a `db.*` action (the DB menu / palette). Returns `true` if
+    /// handled. Actions that need an open workbench open the overlay first.
+    fn db_action(&mut self, action: &str) -> bool {
+        match action {
+            "db.connections" => {
+                self.open_db();
+                if let Some(b) = self.db.as_mut() {
+                    b.view = crate::db::View::Connections;
+                }
+            }
+            "db.query" => {
+                self.open_db();
+                if let Some(b) = self.db.as_mut()
+                    && b.conn.is_some()
+                {
+                    b.view = crate::db::View::Workbench;
+                }
+            }
+            "db.execute" => self.with_db(crate::db::Browser::execute),
+            "db.execute_all" => self.with_db(crate::db::Browser::execute_all),
+            "db.explain" => self.with_db(|b| b.explain(false)),
+            "db.explain_analyze" => self.with_db(|b| b.explain(true)),
+            "db.format" => self.with_db(crate::db::Browser::format_at_cursor),
+            "db.history" => self.with_db(crate::db::Browser::open_history),
+            "db.saved" => self.with_db(crate::db::Browser::open_saved),
+            "db.save_query" => self.with_db(crate::db::Browser::open_save_name),
+            "db.export" => self.with_db(crate::db::Browser::open_export),
+            "db.refresh" => self.with_db(crate::db::Browser::refresh_catalog),
+            "db.disconnect" => self.with_db(crate::db::Browser::disconnect),
+            _ => return false,
+        }
+        true
+    }
+
+    /// Open the DB overlay (if it is not already), keeping any live session.
+    /// A fresh overlay also loads the persisted query history and saved
+    /// queries.
+    fn open_db(&mut self) {
+        if self.db.is_none() {
+            let mut browser = crate::db::Browser::new(self.settings.db_connections.clone());
+            browser.history = crate::db::store::load_history();
+            browser.saved = crate::db::store::load_saved();
+            self.db = Some(browser);
+        }
+    }
+
+    /// Apply `f` to the open DB workbench, opening the overlay when needed.
+    fn with_db(&mut self, f: impl FnOnce(&mut crate::db::Browser)) {
+        self.open_db();
+        if let Some(b) = self.db.as_mut() {
+            f(b);
+        }
+    }
+
+    /// Route a key to the open DB workbench, persist any connection-list
+    /// change, and act on the outcome.
+    fn db_key(&mut self, key: KeyEvent) {
+        let pages = crate::db::Pages {
+            tree: usize::from(self.layout.db_tree.height).max(1),
+            editor: usize::from(self.layout.db_editor.height).max(1),
+            results: usize::from(self.layout.db_results.height).max(1),
+        };
+        let outcome = match self.db.as_mut() {
+            Some(b) => b.handle_key(key, pages),
+            None => return,
+        };
+        if let Some(conns) = self.db.as_mut().and_then(crate::db::Browser::take_dirty_connections) {
+            self.settings.db_connections = conns;
+            let _ = self.settings.save();
+        }
+        if let Some(history) = self.db.as_mut().and_then(crate::db::Browser::take_dirty_history) {
+            let _ = crate::db::store::save_history(&history);
+        }
+        if let Some(saved) = self.db.as_mut().and_then(crate::db::Browser::take_dirty_saved) {
+            let _ = crate::db::store::save_saved(&saved);
+        }
+        if outcome == crate::db::Outcome::Close {
+            self.db = None;
+        }
+    }
+
     /// Open the structured-value editor (JSON or YAML) on the active buffer.
     /// Warns when there is no buffer or it does not parse in `format`.
     fn open_edit_value(&mut self, format: crate::edit_value::Format) {
@@ -14507,8 +14598,8 @@ fn jump_label(i: usize) -> String {
 
 /// The top-level menu index for an `Alt+letter` mnemonic: Vix=0, File=1, Edit=2,
 /// View=3 (Alt+I, since "Vix"/"View" both start with V), Go=4 (Alt+N, since Git
-/// keeps Alt+G and Alt+J is the recent-locations jump), Run=5 (Alt+R), Tools=6,
-/// AI=7, Git=8, Org=9, Help=10. `None` for any other letter.
+/// keeps Alt+G and Alt+J is the recent-locations jump), Run=5 (Alt+R), AI=6,
+/// DB=7 (Alt+D), Git=8, Org=9, Tools=10, Help=11. `None` for any other letter.
 fn menu_index_for_alt(c: char) -> Option<usize> {
     match c.to_ascii_lowercase() {
         'v' => Some(0),
@@ -14517,11 +14608,12 @@ fn menu_index_for_alt(c: char) -> Option<usize> {
         'i' => Some(3),
         'n' => Some(4),
         'r' => Some(5),
-        't' => Some(6),
-        'a' => Some(7),
+        'a' => Some(6),
+        'd' => Some(7),
         'g' => Some(8),
         'o' => Some(9),
-        'h' => Some(10),
+        't' => Some(10),
+        'h' => Some(11),
         _ => None,
     }
 }

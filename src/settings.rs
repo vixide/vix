@@ -176,6 +176,9 @@ pub struct Settings {
     pub project_snippets: String,
     /// Width (columns) of the test-results panel.
     pub test_width: u16,
+    /// Saved database connections for the **DB** menu (`spec/db`). Passwords
+    /// are never stored here; they are prompted for per session.
+    pub db_connections: Vec<crate::db::connect::Connection>,
 }
 
 /// One configured language server (a `lsp_servers` entry).
@@ -248,6 +251,7 @@ impl Default for Settings {
             test_command: "cargo test".to_string(),
             test_width: 40,
             project_snippets: "config/snippets/snippets.json".to_string(),
+            db_connections: Vec::new(),
         }
     }
 }

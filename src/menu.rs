@@ -739,6 +739,27 @@ const AI: &[Item] = &[
     Item::leaf("menu.item.ai.improve", "ai.improve", ""),
 ];
 
+/// Database workbench (`spec/db`): connection management, schema browsing,
+/// and the SQL query editor.
+const DB: &[Item] = &[
+    Item::leaf("menu.item.db.connections", "db.connections", ""),
+    Item::leaf("menu.item.db.query", "db.query", ""),
+    SEP,
+    Item::leaf("menu.item.db.execute", "db.execute", "F5"),
+    Item::leaf("menu.item.db.execute_all", "db.execute_all", "F9"),
+    Item::leaf("menu.item.db.explain", "db.explain", "F6"),
+    Item::leaf("menu.item.db.explain_analyze", "db.explain_analyze", "F7"),
+    Item::leaf("menu.item.db.format", "db.format", "Alt Shift F"),
+    SEP,
+    Item::leaf("menu.item.db.history", "db.history", "Ctrl R"),
+    Item::leaf("menu.item.db.saved", "db.saved", "Ctrl B"),
+    Item::leaf("menu.item.db.save_query", "db.save_query", "Ctrl S"),
+    Item::leaf("menu.item.db.export", "db.export", ""),
+    SEP,
+    Item::leaf("menu.item.db.refresh", "db.refresh", ""),
+    Item::leaf("menu.item.db.disconnect", "db.disconnect", ""),
+];
+
 /// Log views, grouped under Git → Log.
 const GIT_LOG: &[Item] = &[
     Item::leaf("menu.item.git.log_graph", "git.log_graph", ""),
@@ -1039,10 +1060,11 @@ fn build_menus() -> Vec<MenuDef> {
         MenuDef { name: "menu.view", items: view_items },
         MenuDef { name: "menu.go", items: GO },
         MenuDef { name: "menu.run", items: RUN },
-        MenuDef { name: "menu.tools", items: TOOLS },
         MenuDef { name: "menu.ai", items: AI },
+        MenuDef { name: "menu.db", items: DB },
         MenuDef { name: "menu.git", items: GIT },
         MenuDef { name: "menu.org", items: ORG },
+        MenuDef { name: "menu.tools", items: TOOLS },
         MenuDef { name: "menu.help", items: HELP },
     ]
 }
