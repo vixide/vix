@@ -56,6 +56,8 @@ pub enum Detail {
     Triggers,
     /// Table constraints (`SQLite`: the full `CREATE` statement).
     Constraints,
+    /// Row-count and size statistics.
+    Stats,
 }
 
 /// One schema's objects plus its expand/collapse state.
@@ -298,6 +300,19 @@ fn quote_str(name: &str) -> String {
     name.replace('\'', "''")
 }
 
+/// A `value` as a SQL literal: bare when it is a plain number, otherwise a
+/// single-quoted, escaped string. Used by foreign-key follow to build a
+/// `WHERE col = <value>` clause safely.
+#[must_use]
+pub fn quote_literal(value: &str) -> String {
+    let trimmed = value.trim();
+    if !trimmed.is_empty() && trimmed.parse::<f64>().is_ok() {
+        trimmed.to_string()
+    } else {
+        format!("'{}'", quote_str(value))
+    }
+}
+
 /// Quote `name` as an identifier for `kind`: backticks for `MySQL`, standard
 /// double quotes for `PostgreSQL` and `SQLite` (internal quotes doubled).
 #[must_use]
@@ -400,6 +415,106 @@ pub fn columns_sql(kind: Kind) -> &'static str {
     }
 }
 
+/// The query listing every `(table, column, type)` triple for base tables,
+/// feeding the ERD entity blocks.
+#[must_use]
+pub fn columns_typed_sql(kind: Kind) -> &'static str {
+    match kind {
+        Kind::Sqlite => {
+            "SELECT m.name AS table_name, p.name AS column_name, p.type AS data_type \
+             FROM sqlite_master m JOIN pragma_table_info(m.name) p \
+             WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%' \
+             ORDER BY m.name, p.cid;"
+        }
+        Kind::Postgres => {
+            "SELECT table_name, column_name, data_type FROM information_schema.columns \
+             WHERE table_schema NOT IN ('pg_catalog','information_schema') \
+             ORDER BY table_name, ordinal_position;"
+        }
+        Kind::Mysql => {
+            "SELECT table_name, column_name, data_type FROM information_schema.columns \
+             WHERE table_schema = DATABASE() ORDER BY table_name, ordinal_position;"
+        }
+    }
+}
+
+/// The query listing every foreign-key edge as
+/// `(child_table, child_column, parent_table, parent_column)`, feeding the ERD
+/// relationships.
+#[must_use]
+pub fn relationships_sql(kind: Kind) -> &'static str {
+    match kind {
+        Kind::Sqlite => {
+            "SELECT m.name AS child, f.\"from\" AS child_col, f.\"table\" AS parent, f.\"to\" AS parent_col \
+             FROM sqlite_master m JOIN pragma_foreign_key_list(m.name) f \
+             WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%' \
+             ORDER BY child, parent;"
+        }
+        Kind::Postgres => {
+            "SELECT tc.table_name AS child, kcu.column_name AS child_col, \
+             ccu.table_name AS parent, ccu.column_name AS parent_col \
+             FROM information_schema.table_constraints tc \
+             JOIN information_schema.key_column_usage kcu \
+             ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema \
+             JOIN information_schema.constraint_column_usage ccu \
+             ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema \
+             WHERE tc.constraint_type = 'FOREIGN KEY' \
+             AND tc.table_schema NOT IN ('pg_catalog','information_schema') \
+             ORDER BY child, parent;"
+        }
+        Kind::Mysql => {
+            "SELECT table_name AS child, column_name AS child_col, \
+             referenced_table_name AS parent, referenced_column_name AS parent_col \
+             FROM information_schema.key_column_usage \
+             WHERE table_schema = DATABASE() AND referenced_table_name IS NOT NULL \
+             ORDER BY child, parent;"
+        }
+    }
+}
+
+/// A query returning the primary-key column names of `schema`.`table`, in key
+/// order — the columns that identify a row for staged cell edits (empty result
+/// ⇒ the table is not editable).
+#[must_use]
+pub fn primary_key_sql(kind: Kind, schema: &str, table: &str) -> String {
+    let (s, t) = (quote_str(schema), quote_str(table));
+    match kind {
+        Kind::Sqlite => format!("SELECT name FROM pragma_table_info('{t}') WHERE pk > 0 ORDER BY pk;"),
+        Kind::Postgres => format!(
+            "SELECT a.attname FROM pg_index i \
+             JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) \
+             WHERE i.indrelid = '\"{s}\".\"{t}\"'::regclass AND i.indisprimary \
+             ORDER BY array_position(i.indkey, a.attnum);"
+        ),
+        Kind::Mysql => format!(
+            "SELECT column_name FROM information_schema.key_column_usage \
+             WHERE table_schema = DATABASE() AND table_name = '{t}' \
+             AND constraint_name = 'PRIMARY' ORDER BY ordinal_position;"
+        ),
+    }
+}
+
+/// A query whose first row's **last** column is the `CREATE` statement for
+/// `schema`.`table`. `SQLite` reads it from `sqlite_master`, `MySQL` uses
+/// `SHOW CREATE TABLE`, and `PostgreSQL` reconstructs a basic definition from
+/// `information_schema` (columns and types; constraints are not reproduced).
+#[must_use]
+pub fn ddl_sql(kind: Kind, schema: &str, table: &str) -> String {
+    let (s, t) = (quote_str(schema), quote_str(table));
+    match kind {
+        Kind::Sqlite => {
+            format!("SELECT sql FROM sqlite_master WHERE type='table' AND name='{t}';")
+        }
+        Kind::Mysql => format!("SHOW CREATE TABLE {};", quote_ident(kind, table)),
+        Kind::Postgres => format!(
+            "SELECT 'CREATE TABLE ' || quote_ident('{t}') || ' (' || \
+             string_agg(quote_ident(column_name) || ' ' || data_type, ', ' ORDER BY ordinal_position) \
+             || ');' FROM information_schema.columns \
+             WHERE table_schema='{s}' AND table_name='{t}';"
+        ),
+    }
+}
+
 /// The query for one table-detail report on `schema`.`table`.
 #[must_use]
 pub fn detail_sql(kind: Kind, detail: Detail, schema: &str, table: &str) -> String {
@@ -423,6 +538,11 @@ fn sqlite_detail_sql(detail: Detail, t: &str) -> String {
         Detail::Constraints => {
             format!("SELECT name, sql FROM sqlite_master WHERE name='{t}';")
         }
+        Detail::Stats => format!(
+            "SELECT (SELECT count(*) FROM \"{t}\") AS row_count, \
+             (SELECT count(*) FROM pragma_table_info('{t}')) AS columns, \
+             (SELECT count(*) FROM pragma_index_list('{t}')) AS indexes;"
+        ),
     }
 }
 
@@ -458,6 +578,12 @@ fn postgres_detail_sql(detail: Detail, s: &str, t: &str) -> String {
             "SELECT constraint_name, constraint_type FROM information_schema.table_constraints \
              WHERE table_schema='{s}' AND table_name='{t}' ORDER BY constraint_name;"
         ),
+        Detail::Stats => format!(
+            "SELECT reltuples::bigint AS est_rows, \
+             pg_size_pretty(pg_total_relation_size('\"{s}\".\"{t}\"')) AS total_size, \
+             pg_size_pretty(pg_relation_size('\"{s}\".\"{t}\"')) AS table_size \
+             FROM pg_class WHERE oid = '\"{s}\".\"{t}\"'::regclass;"
+        ),
     }
 }
 
@@ -487,6 +613,11 @@ fn mysql_detail_sql(detail: Detail, t: &str) -> String {
         Detail::Constraints => format!(
             "SELECT constraint_name, constraint_type FROM information_schema.table_constraints \
              WHERE table_schema = DATABASE() AND table_name='{t}' ORDER BY constraint_name;"
+        ),
+        Detail::Stats => format!(
+            "SELECT table_rows AS est_rows, data_length, index_length \
+             FROM information_schema.tables \
+             WHERE table_schema = DATABASE() AND table_name='{t}';"
         ),
     }
 }

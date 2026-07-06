@@ -73,6 +73,27 @@ pub struct Connection {
     pub user: String,
     /// Database name to open (unused for `SQLite`).
     pub database: String,
+    /// Whether the connection may run writes / DDL. Defaults to `false`
+    /// (read-only), so a fresh or legacy connection opens read-only until the
+    /// user opts in — writes are refused client-side and, where the engine
+    /// supports it, blocked at the database level (see [`read_only_sql`]).
+    pub writable: bool,
+    /// A shell command whose stdout is the password (e.g. `pass show db/prod`,
+    /// `op read op://vault/db/password`). Tried first by the credential
+    /// waterfall so the password prompt can be skipped (see [`crate::db::secret`]).
+    pub password_command: String,
+    /// Whether to store a prompted password in the OS keyring on a successful
+    /// connect, so later connects resolve it without prompting.
+    pub store_keyring: bool,
+    /// SSH jump host — when set, the connection is forwarded through an
+    /// `ssh -N -L` tunnel (see [`crate::db::tunnel`]); empty disables it.
+    pub ssh_host: String,
+    /// SSH login user (defaults to the ssh client's default when empty).
+    pub ssh_user: String,
+    /// SSH port (defaults to 22 when empty).
+    pub ssh_port: String,
+    /// Path to an SSH identity file (optional; agent auth is used otherwise).
+    pub ssh_identity: String,
 }
 
 impl Connection {
@@ -80,6 +101,12 @@ impl Connection {
     #[must_use]
     pub fn needs_password(&self) -> bool {
         !matches!(self.kind, Kind::Sqlite)
+    }
+
+    /// The access label shown in the form and connections list.
+    #[must_use]
+    pub fn access_label(&self) -> &'static str {
+        if self.writable { "read-write" } else { "read-only" }
     }
 
     /// One-line summary of the target, for the connections list.
@@ -101,19 +128,55 @@ impl Connection {
 /// the `sqlite3` CLI would.
 #[must_use]
 pub fn url(conn: &Connection, password: &str) -> String {
+    server_url(conn, password, &conn.host, {
+        if conn.port.is_empty() { conn.kind.default_port() } else { &conn.port }
+    })
+}
+
+/// Like [`url`], but pointed at `127.0.0.1:local_port` — the local end of an
+/// SSH tunnel (see [`crate::db::tunnel`]). Server engines only.
+#[must_use]
+pub fn url_via_local(conn: &Connection, password: &str, local_port: u16) -> String {
+    let port = local_port.to_string();
+    server_url(conn, password, "127.0.0.1", &port)
+}
+
+/// Build the server (`postgres` / `mysql`) URL against an explicit `host` and
+/// `port`; `SQLite` ignores both and targets its file.
+fn server_url(conn: &Connection, password: &str, host: &str, port: &str) -> String {
     match conn.kind {
         Kind::Sqlite => format!("sqlite:{}?mode=rwc", conn.file),
         Kind::Postgres | Kind::Mysql => {
             let scheme = if conn.kind == Kind::Postgres { "postgres" } else { "mysql" };
-            let port = if conn.port.is_empty() { conn.kind.default_port() } else { &conn.port };
             let user = utf8_percent_encode(&conn.user, NON_ALPHANUMERIC);
             let auth = if password.is_empty() {
                 user.to_string()
             } else {
                 format!("{user}:{}", utf8_percent_encode(password, NON_ALPHANUMERIC))
             };
-            format!("{scheme}://{auth}@{}:{port}/{}", conn.host, conn.database)
+            format!("{scheme}://{auth}@{host}:{port}/{}", conn.database)
         }
+    }
+}
+
+/// The statement that puts a session into (or out of) read-only mode at the
+/// database level, or `None` for engines without a session-level switch.
+///
+/// `SQLite`'s `query_only` pragma and `PostgreSQL`'s
+/// `default_transaction_read_only` both make the server itself reject writes —
+/// defense in depth behind the client-side
+/// [`crate::db::editor::is_write_statement`] guard. `MySQL` has no equivalent
+/// that survives autocommit, so it relies on the client guard alone.
+#[must_use]
+pub fn read_only_sql(kind: Kind, read_only: bool) -> Option<String> {
+    match kind {
+        Kind::Sqlite => {
+            Some(format!("PRAGMA query_only = {}", if read_only { "ON" } else { "OFF" }))
+        }
+        Kind::Postgres => {
+            Some(format!("SET default_transaction_read_only = {}", if read_only { "on" } else { "off" }))
+        }
+        Kind::Mysql => None,
     }
 }
 
@@ -171,6 +234,26 @@ mod tests {
         c.database = "d".into();
         assert_eq!(c.target(), "u@h:5432/d");
         assert!(c.needs_password());
+    }
+
+    #[test]
+    fn connections_are_read_only_until_opted_in() {
+        let c = Connection::default();
+        assert!(!c.writable, "a fresh connection is read-only by default");
+        assert_eq!(c.access_label(), "read-only");
+        let w = Connection { writable: true, ..Connection::default() };
+        assert_eq!(w.access_label(), "read-write");
+    }
+
+    #[test]
+    fn read_only_sql_is_per_engine() {
+        assert_eq!(read_only_sql(Kind::Sqlite, true).as_deref(), Some("PRAGMA query_only = ON"));
+        assert_eq!(read_only_sql(Kind::Sqlite, false).as_deref(), Some("PRAGMA query_only = OFF"));
+        assert_eq!(
+            read_only_sql(Kind::Postgres, true).as_deref(),
+            Some("SET default_transaction_read_only = on")
+        );
+        assert_eq!(read_only_sql(Kind::Mysql, true), None, "mysql relies on the client guard");
     }
 
     #[test]

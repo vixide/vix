@@ -89,6 +89,7 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 | Change git status/diff/staging       | `src/git.rs` + wiring in `src/app.rs` / `src/ui.rs`         |
 | Change the find/replace engine       | `src/find_panel.rs` (matches/replace_all/unescape/PathFilter) |
 | Change LSP support                   | `src/lsp.rs` (host) + `src/lsp_core/` (protocol)            |
+| Change the database workbench        | `src/db/` (module tree; `spec/db`)                          |
 
 See [`AGENTS/share/crate-map.md`](AGENTS/share/crate-map.md) for the full map.
 

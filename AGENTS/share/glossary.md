@@ -47,10 +47,11 @@ Shared terms used across the code, specs, and docs.
   hue; emphasis via dim and full intensity (no bold/italic); reversed only for
   selections/cursor.
 - **Keymap** — the keyboard navigation style: **Apple** (modifier shortcuts, the
-  default), **macOS VSCode**, **Emacs** (`Ctrl` chords), **Vi** (modal),
-  **Spacemacs** (Vi + `Space` leader), **IntelliJ + macOS**, **IntelliJ +
-  Windows**, or **Eclipse**. Exactly one is active; chosen in **View → Keymap…**
-  and persisted in the `keymap` setting (id `vi`, `intellij-mac`, …).
+  default), **VSCode macOS**, **VSCode Windows**, **Emacs** (`Ctrl` chords),
+  **Vi** (modal), **Spacemacs** (Vi + `Space` leader), **IntelliJ macOS**,
+  **IntelliJ Windows**, **Eclipse**, or **Sublime Text**. Exactly one is active;
+  chosen in **View → Keymap…** and persisted in the `keymap` setting (id `vi`,
+  `intellij-mac`, …).
 - **Mode (Vi)** — within the Vi keymap, **Normal** (motions/commands) vs
   **Insert** (typing); the `:` command line is a third input state.
 - **Edit surface** — a full-screen overlay editor for a non-plain-text view of the
@@ -74,8 +75,19 @@ Shared terms used across the code, specs, and docs.
 - **Org (menu)** — basic Org-mode editing on the active buffer (`crate::org`):
   headline promote/demote, subtree move, TODO cycle, checkbox toggle, fold cycle,
   and export to Markdown/HTML.
-- **DAP / debugger** — the Debug menu's Debug Adapter Protocol client
+- **DAP / debugger** — the Run menu's Debug Adapter Protocol client
   (`crate::dap`): breakpoints, stepping, call stack, variables, watches, REPL.
+- **Database workbench** — the **DB** menu's full-screen overlay (`crate::db`,
+  `spec/db`) over embedded sqlx `Any` drivers (SQLite / PostgreSQL / MySQL): a
+  schema tree, a syntax-highlighted SQL editor with autocomplete, and a
+  filterable results grid, plus history/saved queries, a query log, EXPLAIN, an
+  ER diagram, CSV/TSV import, and export. **Read-only by default** (`writable`
+  flag + `F8`); statements run **async** (streamed, `Ctrl+C` cancels);
+  transactions show a `TX` badge. A **session** is one persistent connection on
+  a worker thread. The **AI assistant** turns a natural-language question into
+  SQL from schema only (never row data). Passwords resolve through a
+  **credential waterfall** (`password_command` → OS keyring → prompt) and can be
+  forwarded over an **SSH tunnel**.
 - **Column selection** — a rectangular multi-caret selection spanning the same
   columns across consecutive lines (Alt+Shift+↑/↓, `Editor::column_select`); the
   block edits together via the multi-caret path.

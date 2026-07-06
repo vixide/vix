@@ -320,6 +320,9 @@ enum AiDest {
     /// Open a reviewable accept/reject diff for tab `tab` over `target`, instead
     /// of replacing the text immediately (see [`crate::ai_diff`]).
     Diff { tab: usize, target: AiTarget },
+    /// Apply the reply to the DB workbench's SQL editor (see
+    /// [`crate::db::Browser::apply_ai_reply`]).
+    Db,
 }
 
 /// An open AI diff review: the proposed change plus where it applies.
@@ -10162,6 +10165,9 @@ impl App {
             "db.saved" => self.with_db(crate::db::Browser::open_saved),
             "db.save_query" => self.with_db(crate::db::Browser::open_save_name),
             "db.export" => self.with_db(crate::db::Browser::open_export),
+            "db.begin" => self.with_db(crate::db::Browser::begin_tx),
+            "db.commit" => self.with_db(crate::db::Browser::commit_tx),
+            "db.rollback" => self.with_db(crate::db::Browser::rollback_tx),
             "db.refresh" => self.with_db(crate::db::Browser::refresh_catalog),
             "db.disconnect" => self.with_db(crate::db::Browser::disconnect),
             _ => return false,
@@ -10210,6 +10216,20 @@ impl App {
         }
         if let Some(saved) = self.db.as_mut().and_then(crate::db::Browser::take_dirty_saved) {
             let _ = crate::db::store::save_saved(&saved);
+        }
+        // A queued natural-language → SQL request: spawn the assistant CLI and
+        // route its reply back into the workbench editor.
+        if let Some(req) = self.db.as_mut().and_then(crate::db::Browser::take_ai_request) {
+            if self.ai_replace.is_some() {
+                if let Some(b) = self.db.as_mut() {
+                    b.ai_failed();
+                }
+            } else if let Some(rx) = self.spawn_ai_cmd(&req.prompt, &req.context) {
+                let label = t!("menu.ai").to_string();
+                self.ai_replace = Some(AiReplace { rx, dest: AiDest::Db, label });
+            } else if let Some(b) = self.db.as_mut() {
+                b.ai_failed();
+            }
         }
         if outcome == crate::db::Outcome::Close {
             self.db = None;
@@ -10997,8 +11017,11 @@ impl App {
                         panel.busy = false;
                         panel.push(crate::ai_panel::Role::Error, t!("status.ai_failed", action = &ar.label));
                     }
+                    if let (AiDest::Db, Some(b)) = (ar.dest, self.db.as_mut()) {
+                        b.ai_failed();
+                    }
                     self.status = t!("status.ai_failed", action = &ar.label).to_string();
-                    if !matches!(ar.dest, AiDest::Panel) {
+                    if !matches!(ar.dest, AiDest::Panel | AiDest::Db) {
                         self.messages.error(t!("status.ai_failed", action = ar.label));
                     }
                     return;
@@ -11016,9 +11039,14 @@ impl App {
                         }
                     }
                     AiDest::Diff { tab, target } => self.open_ai_diff(tab, target, text),
+                    AiDest::Db => {
+                        if let Some(b) = self.db.as_mut() {
+                            b.apply_ai_reply(text);
+                        }
+                    }
                 }
                 self.status = t!("status.ai_done", action = &ar.label).to_string();
-                if !matches!(ar.dest, AiDest::Panel) {
+                if !matches!(ar.dest, AiDest::Panel | AiDest::Db) {
                     self.messages.info(t!("status.ai_done", action = ar.label));
                 }
             }
@@ -11027,8 +11055,11 @@ impl App {
                     panel.busy = false;
                     panel.push(crate::ai_panel::Role::Error, t!("status.ai_failed", action = &ar.label));
                 }
+                if let (AiDest::Db, Some(b)) = (ar.dest, self.db.as_mut()) {
+                    b.ai_failed();
+                }
                 self.status = t!("status.ai_failed", action = &ar.label).to_string();
-                if !matches!(ar.dest, AiDest::Panel) {
+                if !matches!(ar.dest, AiDest::Panel | AiDest::Db) {
                     self.messages.error(t!("status.ai_failed", action = ar.label));
                 }
             }
@@ -11067,6 +11098,20 @@ impl App {
     #[must_use]
     pub fn ai_replace_running(&self) -> bool {
         self.ai_replace.is_some()
+    }
+
+    /// Drain a finished asynchronous DB query into the workbench. Called each
+    /// event-loop tick; cheap when nothing is running.
+    pub fn poll_db_query(&mut self) {
+        if let Some(b) = self.db.as_mut() {
+            b.poll_query();
+        }
+    }
+
+    /// Whether a DB query is running asynchronously (keeps the loop polling).
+    #[must_use]
+    pub fn db_query_running(&self) -> bool {
+        self.db.as_ref().is_some_and(crate::db::Browser::query_running)
     }
 
     // ----- AI chat panel --------------------------------------------------

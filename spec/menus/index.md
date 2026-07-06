@@ -2,8 +2,9 @@
 
 Top menu bar.
 
-- Open with `F10`, or `Alt+F/E/V/T/A/G/O/D/H` for
-  File/Edit/View/Tools/AI/Git/Org/Debug/Help.
+- Open with `F10`, or `Alt+<letter>` for a specific menu: File `Alt+F`, Edit
+  `Alt+E`, View `Alt+I`, Go `Alt+N`, Run `Alt+R`, AI `Alt+A`, DB `Alt+D`, Git
+  `Alt+G`, Org `Alt+O`, Tools `Alt+T`, Help `Alt+H` (Vix `Alt+V`).
 - Arrows navigate, `Enter` runs, `Esc` closes. In a dropdown, `Up` from the first
   item moves to the **menu title** (nothing highlighted); `Down` from there
   re-enters the first item.
@@ -28,7 +29,7 @@ Top menu bar.
   Save As. Works inside an open submenu too.
 
 The menus, left to right, are
-**Vix · File · Edit · View · Tools · AI · Git · Org · Debug · Help**.
+**Vix · File · Edit · View · Go · Run · AI · DB · Git · Org · Tools · Help**.
 
 ## Vix menu
 
@@ -176,6 +177,36 @@ The **Editor** submenu:
 | Next Tab                         | Switch to the next tab (`Ctrl+Tab`)           |
 | Previous Tab                     | Switch to the previous tab (`Ctrl+Shift+Tab`) |
 
+## Go menu
+
+Workspace and symbol navigation (distinct from **Edit → Go**'s in-file cursor
+jumps). Actions are `nav.*` / `lsp.*` / `git.*`.
+
+| Item                    | Action                                                |
+| ----------------------- | ----------------------------------------------------- |
+| Symbol…                 | Go to a symbol (the `@` palette)                      |
+| Declaration / Implementations / References | LSP navigation for the symbol at the cursor |
+| Next / Previous Issue   | Jump between diagnostics                              |
+| Next / Previous Change  | Jump between git hunks                                |
+| Recent Locations        | Position history back / forward                      |
+| Jump                    | Leap-style jump to a line by label                   |
+| Matching Tag            | Jump to the matching HTML/XML tag                    |
+| Go to Percent / Byte    | Jump to a document percentage or byte offset         |
+
+## Run menu
+
+The debugger (Debug Adapter Protocol); see [`debugger/index.md`](../debugger/index.md).
+Actions are `run.*`.
+
+| Item              | Action                                                       |
+| ----------------- | ------------------------------------------------------------ |
+| Start / Stop      | Launch or terminate the session for the active file          |
+| Toggle Breakpoint | Add/remove a breakpoint on the cursor's line                 |
+| Continue / Step Over / Step Into / Step Out / Pause | Execution control       |
+| Add Watch…        | Evaluate an expression each time execution stops             |
+| Evaluate…         | A one-off expression (REPL) into the bottom dock             |
+| Toggle Debug Panel | The call stack / variables / watches side panel             |
+
 ## Tools menu
 
 | Item               | Action                                            |
@@ -226,6 +257,22 @@ whole buffer.
 | Annotate  | Annotate the text → replaces the text                         |
 | Improve   | Improve the text → replaces the text                         |
 
+## DB menu
+
+The database workbench; see [`db/index.md`](../db/index.md) and
+[`db/session.md`](../db/session.md). Actions are `db.*`.
+
+| Item                          | Action                                          |
+| ----------------------------- | ----------------------------------------------- |
+| Connections / New Query       | Open the saved-connections list / the workbench |
+| Execute / Execute All         | Run the statement at the cursor / all (`F5`/`F9`) |
+| Explain / Explain Analyze     | `EXPLAIN` the statement (`F6`/`F7`)             |
+| Format                        | Beautify the statement (`Alt+Shift+F`)          |
+| History / Saved / Save Query… | Recall (`Ctrl+R`/`Ctrl+B`) or save (`Ctrl+S`)   |
+| Export…                       | Export the results grid                         |
+| Begin / Commit / Rollback     | Transaction control                             |
+| Refresh Schema / Disconnect   | Reload the catalog / close the connection       |
+
 ## Git menu
 
 | Item            | Action                                                        |
@@ -253,6 +300,14 @@ The **Branch** submenu:
 | Merge…            | Choose a branch to merge into the current one                |
 | Delete…           | Prompt for a branch name and `git branch --delete` it        |
 | Edit Description… | Prompt for text, set via `git branch --edit-description` (a throwaway `GIT_EDITOR` writes it) |
+
+## Org menu
+
+Org-mode editing on the active buffer; see [`org/index.md`](../org/index.md).
+Actions are `org.*`. Capture, Cycle Visibility, Headline ▸ (promote/demote,
+move subtree), Cycle TODO, Toggle Checkbox, Update Statistics, Clock In / Out,
+Agenda, Time Report, Roam ▸ (nodes / backlinks / dailies), Node ▸, Contacts ▸,
+and Export ▸ (Markdown / HTML).
 
 ## Help menu
 

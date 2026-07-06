@@ -756,6 +756,10 @@ const DB: &[Item] = &[
     Item::leaf("menu.item.db.save_query", "db.save_query", "Ctrl S"),
     Item::leaf("menu.item.db.export", "db.export", ""),
     SEP,
+    Item::leaf("menu.item.db.begin", "db.begin", ""),
+    Item::leaf("menu.item.db.commit", "db.commit", ""),
+    Item::leaf("menu.item.db.rollback", "db.rollback", ""),
+    SEP,
     Item::leaf("menu.item.db.refresh", "db.refresh", ""),
     Item::leaf("menu.item.db.disconnect", "db.disconnect", ""),
 ];

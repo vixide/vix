@@ -50,6 +50,46 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Database workbench** (new top-level **DB** menu, `Alt+D`, after **AI**;
+  `spec/db`). A full-screen overlay that connects to **SQLite / PostgreSQL /
+  MySQL** through embedded sqlx `Any` drivers — no external client tools — and
+  presents a three-pane workbench: a schema tree, a syntax-highlighted SQL
+  editor with autocomplete, and a filterable results grid. Passwords are held
+  only in memory; saved connections persist without a password field. Includes:
+  - **Saved connections & catalog browsing** — add/edit connections, expand
+    schemas/tables/views, and view columns / indexes / foreign keys / triggers /
+    constraints / **statistics** and the table's **`CREATE` statement**; `p`
+    previews a table's rows, `/` filters the tree.
+  - **Query editor** — statement-at-cursor execution (`F5`/`Ctrl+Enter`) and
+    execute-all (`F9`), theme-colored syntax highlighting, autocomplete over
+    keywords / tables / `table.column` / **`JOIN … ON` from the foreign-key
+    graph**, beautify (`Alt+Shift+F`), `EXPLAIN`/`EXPLAIN ANALYZE` (`F6`/`F7`)
+    with a full-scan insight, query **history** (`Ctrl+R`) and **saved queries**
+    (`Ctrl+B`/`Ctrl+S`), and `:name` **bind parameters** that prompt before running.
+  - **Results grid** — column select/sort/filter, cell/row yank, a scrollable
+    cell viewer, **expanded row view** (`x`), **foreign-key follow** (`f`), an
+    ASCII **result chart** (`c`), and **export** to CSV/TSV/JSON/NDJSON/Markdown/
+    SQL. Editable table previews support **staged cell edits** (`i` to stage,
+    `W` to commit as `UPDATE`s in one transaction, with conflict detection).
+  - **Read-only by default** — connections open read-only (two-layer: a
+    database session pragma plus a client-side write guard); `F8` toggles write
+    mode, and the editor title badges the current access.
+  - **Async execution** — statements and `EXPLAIN` run off the event loop with a
+    live elapsed indicator and `Ctrl+C` cancellation; large results **stream** in
+    batches (capped, with a truncation note).
+  - **Transactions** — a client-side `TX` badge; the write-confirmation gate is
+    relaxed inside an explicit transaction; **DB → Begin / Commit / Rollback**.
+  - **AI SQL assistant** — `Ctrl+A` turns a natural-language question into SQL
+    from the **schema only** (never row data), validated with `EXPLAIN`;
+    `Ctrl+O` optimizes a query from its plan, `Ctrl+F` fixes the last error,
+    `Ctrl+K` explains a query, and a leading `?` answers a schema question. Uses
+    the configurable `ai_command` CLI, so it is provider-agnostic.
+  - **Query log** (`Ctrl+L`) with per-statement duration/rows/origin, a Mermaid
+    **ER diagram** (`Ctrl+E`), and **CSV/TSV import** (`Ctrl+U`) into a new table.
+  - **Connectivity** — an optional **SSH tunnel** (`ssh -N -L`, lifetime tied to
+    the connection) and a **credential waterfall** that resolves a password from
+    a `password_command` or the OS keyring (macOS `security`, Linux
+    `secret-tool`) before prompting, with an opt-in save-to-keyring.
 - **Sublime Text keymap** (View → Keymap → Sublime Text). `Ctrl+P` Goto
   Anything, `Ctrl+Shift+P` Command Palette, `Ctrl+R` Goto Symbol, `Ctrl+G` Goto
   Line, `Ctrl+D` select occurrences, `Ctrl+L` select line, `Ctrl+J` join,

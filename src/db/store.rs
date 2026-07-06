@@ -22,6 +22,59 @@ const SAVED_NAME: &str = "db_queries";
 /// Most history entries kept; the oldest fall off.
 pub const HISTORY_CAP: usize = 200;
 
+/// Most query-log entries kept in a session; the oldest fall off.
+pub const LOG_CAP: usize = 200;
+
+/// Where an executed statement originated, for the query log.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Origin {
+    /// The user ran it (F5 / F9 / EXPLAIN).
+    User,
+    /// The workbench ran it in the background (catalog, preview, ERD).
+    App,
+}
+
+impl Origin {
+    /// Short display tag.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Origin::User => "user",
+            Origin::App => "app",
+        }
+    }
+}
+
+/// One executed statement with its timing and outcome (surus-style log line).
+#[derive(Debug, Clone)]
+pub struct LogEntry {
+    /// The statement text.
+    pub sql: String,
+    /// Wall-clock duration in milliseconds.
+    pub ms: u128,
+    /// Rows returned (0 for writes / errors).
+    pub rows: usize,
+    /// Whether the statement succeeded.
+    pub ok: bool,
+    /// Where the statement came from.
+    pub origin: Origin,
+}
+
+/// The session query log, newest first (in-memory only; not persisted).
+#[derive(Debug, Clone, Default)]
+pub struct Log {
+    /// Executed statements, most recent first, capped at [`LOG_CAP`].
+    pub entries: Vec<LogEntry>,
+}
+
+impl Log {
+    /// Record one execution at the front, dropping the oldest past the cap.
+    pub fn push(&mut self, entry: LogEntry) {
+        self.entries.insert(0, entry);
+        self.entries.truncate(LOG_CAP);
+    }
+}
+
 /// Executed-statement history, newest first.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -124,6 +177,23 @@ mod tests {
         }
         assert_eq!(h.entries.len(), HISTORY_CAP, "capped");
         assert_eq!(h.entries[0], format!("select {}", HISTORY_CAP + 49), "newest first");
+    }
+
+    #[test]
+    fn log_keeps_newest_first_and_caps() {
+        let mut log = Log::default();
+        for i in 0..(LOG_CAP + 10) {
+            log.push(LogEntry {
+                sql: format!("select {i}"),
+                ms: u128::from(i as u64),
+                rows: i,
+                ok: true,
+                origin: Origin::User,
+            });
+        }
+        assert_eq!(log.entries.len(), LOG_CAP, "capped");
+        assert_eq!(log.entries[0].sql, format!("select {}", LOG_CAP + 9), "newest first");
+        assert_eq!(Origin::App.label(), "app");
     }
 
     #[test]
