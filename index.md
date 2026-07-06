@@ -5,7 +5,7 @@ Vix IDE is a high-speed high-security text editor featuring an integrated develo
 Vix looks like this:
 
 ```txt
-Vix  File  Edit  View  Go  Run  Tools  AI  Git  Org  Help
+Vix  File  Edit  View  Go  Run  AI  DB  Git  Org  Tools  Help
 ╭─Explorer-──╮╭ main.rs ──────────────────╮╭Messages────────╮
 │ README.md  ││ 1  fn main() {            ││ Welcome to Vix │ 
 │ src        ││ 2      println!("hello"); ││ Ctrl+B toggles │
@@ -19,7 +19,7 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
 
 ## Features
 
-- **Menus** — Vix File Edit View Go Run Tools AI Git Org Help.
+- **Menus** — Vix File Edit View Go Run AI DB Git Org Tools Help.
 - **Editor** - Tabs, Undo/Redo, tree-sitters, syntax highlighting, etc.
  **soft wrap**, **bracket matching**, absolute or **relative line numbers**,
   visible whitespace, **indent guides**, **rainbow brackets**, **sticky scroll**,
@@ -92,7 +92,7 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
   with insert and extension lookup.
 - **Test runner** (Tools → Run Tests) — parses `cargo test`/pytest-style output
   into a pass/fail panel with jump-to-failure.
-- **Debugger** (Debug menu) — a DAP client: breakpoints, stepping, call stack,
+- **Debugger** (Run menu) — a DAP client: breakpoints, stepping, call stack,
   variables, watches, and an evaluate REPL.
 - **Integrated terminal & tasks** — a shell in a panel, plus named `tasks.toml`
   commands and a compare-with-file diff.
@@ -100,6 +100,14 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
   (select-all-occurrences), or a rectangular block (`Alt+Shift+↑/↓`).
 - **Git** — status / diff / blame, **stage / unstage / revert per hunk**, diff
   navigation, branch switch & merge, stash, amend, and a merge-conflict resolver.
+- **Database workbench** (DB menu) — connect to SQLite / PostgreSQL / MySQL over
+  embedded drivers (no client tools needed) and browse a schema tree, run
+  queries in a syntax-highlighted editor with autocomplete, and read results in
+  a filterable grid. **Read-only by default**; async execution with `Ctrl+C`
+  cancel and streamed large results; transactions with a `TX` badge; a natural
+  language → SQL **AI assistant** (schema-only, EXPLAIN-validated); query log,
+  Mermaid **ER diagram**, CSV/TSV import, `:name` parameters, staged cell edits,
+  an ASCII result chart, SSH tunnels, and an OS-keyring credential waterfall.
 - **Language Server Protocol** — diagnostics, hover, completion, go-to,
   references, **call hierarchy**, rename, code actions/lens, and inlay hints,
   configured per language.

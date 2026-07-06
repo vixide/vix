@@ -1,13 +1,8 @@
 # DB sessions — design notes and remaining milestones
 
-Status: **core implemented** — but not as originally sketched. The first
-version of this document proposed keeping the CLI bridge (`sqlite3` / `psql`
-/ `mysql` child processes) and holding one client open per connection with
-sentinel-framed stdout. That approach was superseded: the workbench now uses
-**embedded [sqlx] drivers** (`db::session`), which give the same persistent
-session with none of the framing fragility — typed result sets instead of
-TSV parsing, real driver errors, and no dependency on client tools being
-installed.
+Status: **core implemented.** The workbench uses **embedded [sqlx] drivers**
+(`db::session`) for a persistent per-connection session: typed result sets, real
+driver errors, and no dependency on client tools being installed.
 
 [sqlx]: https://crates.io/crates/sqlx
 
@@ -16,8 +11,8 @@ installed.
 - `db::session::Session` — one sqlx `Any` connection per workbench
   connection, owned by a dedicated worker thread running a current-thread
   tokio runtime. `Session::run(sql)` exchanges one request for one reply over
-  channels (same blocking semantics the CLI bridge had; the TUI stays
-  synchronous). Dropping the `Session` closes the channel and the worker
+  channels, so the TUI stays synchronous. Dropping the `Session` closes the
+  channel and the worker
   closes the connection cleanly.
 - Statements execute via `raw_sql` + `AssertSqlSafe` (the workbench runs
   exactly what the user typed — sqlx's dynamic-SQL opt-in, not an injection
@@ -29,43 +24,72 @@ installed.
 - **Transactions and savepoints work today** by executing `BEGIN` /
   `SAVEPOINT` / `COMMIT` / `ROLLBACK` from the query editor — state persists
   across statements (`tests/db_smoke.rs::transactions_span_statements_in_the_workbench`).
+- **Transaction UI (M2)** — a client-side `TxState { None, Open, Aborted }` is
+  tracked from executed keywords and errors (`note_tx`), badged in the editor
+  pane title (`TX` / `TX!`), and surfaced as **DB → Begin / Commit / Rollback**
+  menu items. Inside an open transaction the write-confirmation gate is relaxed
+  (the change is provisional and `ROLLBACK` can undo it). See
+  `tests/db_smoke.rs::transaction_state_badge_and_relaxed_confirm`.
 
-## Remaining milestones
+## Milestones
 
-**M2 — transaction UI.** The capability exists; the UI does not surface it.
-Track a client-side `TxState { None, Open, Aborted }` from executed keywords
-and error events; show a `TX` badge in the workbench title; add
-DB → Transaction menu items; relax the write-confirmation gate inside an
-explicit transaction (a rollback path exists).
+The M2–M7 roadmap is complete; each milestone is summarized below.
 
-**M3 — async queries + cancellation.** `Session::run` blocks the UI for the
-statement's duration. Split it into `send`/`poll` (the app already pumps
-`poll_http`/`poll_dap`-style receivers every tick), show a spinner + elapsed
-time, and cancel with `Ctrl+C`: capture `pg_backend_pid()` /
-`CONNECTION_ID()` at connect and cancel out-of-band on a second short-lived
-connection; for SQLite, drop and respawn the session.
+**Async queries + cancellation (M3) — done.** `Session` gained non-blocking
+`send`/`poll` (alongside the still-synchronous `run` used for fast internal
+catalog/commit queries) and a `restart` that reconnects on a fresh connection.
+User statements (`F5`) and `EXPLAIN` (`F6`/`F7`) now run asynchronously: the
+Browser holds a `pending_query`, the host drains it each tick via
+`poll_db_query` (like `poll_http`), and the editor title shows an elapsed
+indicator while it runs. The workbench is busy until the reply lands (only
+`Ctrl+C` responds). `Ctrl+C` cancels by abandoning the worker — its result is
+discarded when it finally arrives — and reconnecting so the UI is usable
+again; this is universal across engines (no `pg_backend_pid` juggling) at the
+cost of losing transaction state and not truly interrupting a server-side
+query. See `tests/db_smoke.rs::async_query_runs_off_the_event_loop_and_cancels`.
 
-**M4 — streaming results.** Swap `fetch_all` for `fetch` and forward row
-batches as they arrive; the grid appends per batch (`1,204 rows… loading`).
-Postgres can add true pagination with native cursors
-(`DECLARE vix_cur CURSOR FOR …; FETCH 500` on scroll-to-bottom).
+**Streaming results (M4) — done.** The worker fetches with `fetch` (a row
+stream) instead of `fetch_all` and forwards the result as `Chunk`s over the
+reply channel: a `Head` (column names), then `Rows` batches of up to `BATCH`
+(512), then `Done(truncated)`. `Session::run` drains chunks into a full `Table`
+for internal callers; the async path ([`poll_query`]) appends each batch to the
+grid (`Grid::append_rows`) so rows show up progressively, capped at `MAX_ROWS`
+(20,000) with a "truncated" note (`msg.db_rows_truncated`). Cancellation
+(abandon + reconnect) discards any un-drained chunks. See
+`tests/db_smoke.rs::large_result_streams_in_batches`. A future refinement is
+true server-side pagination (Postgres `DECLARE … CURSOR`; `FETCH n` on
+scroll-to-bottom) rather than a fixed cap.
 
-**M5 — staged cell edits.** Needs M2. `i` edits a grid cell in place; edits
-accumulate in `staged: Map<(pk, col), new>` (primary keys from the existing
-`Detail::Columns` queries; rowid on SQLite). The commit dialog lists the
-generated `UPDATE`s, runs them in one transaction, and re-`SELECT`s each row
-first for conflict detection. No PK ⇒ read-only.
+**Staged cell edits (M5) — done.** On an editable grid (a table preview whose
+primary key `primary_key_sql` resolves; no PK ⇒ read-only), `i` edits the
+selected cell into a staged map `edits: (row, col) → (original, new)`, shown
+bold-yellow in the grid. `W` commits: each edit becomes an `UPDATE … WHERE pk =
+…`, re-checked against the loaded value for optimistic conflict detection
+(`msg.db_edit_conflict`), all wrapped in one `BEGIN`/`COMMIT` (rollback on any
+error), then the preview refreshes. See
+`tests/db_smoke.rs::staged_cell_edits_commit_in_a_transaction`.
 
-**M6 — SSH tunnels.** `Connection` gains optional
-`ssh_host/ssh_user/ssh_port/ssh_identity`. Connect spawns
-`ssh -N -L <local>:<host>:<port>` (agent/identity auth comes free), picks
-`<local>` by binding port 0 and dropping the listener, waits for the tunnel,
-then points the sqlx URL at `127.0.0.1:<local>`. The tunnel child's lifetime
-is tied to the session's.
+**SSH tunnels (M6) — done.** `Connection` gained
+`ssh_host/ssh_user/ssh_port/ssh_identity`. When `ssh_host` is set (server
+engines only), `finish_connect` calls `db::tunnel::open`: it reserves a free
+local port (bind `127.0.0.1:0`, drop the listener), spawns
+`ssh -N -o ExitOnForwardFailure=yes -L <local>:<db_host>:<db_port> [user@]host`
+(adding `-p`/`-i` when set), waits for the local port to accept a connection,
+and the URL is built with `connect::url_via_local` against `127.0.0.1:<local>`.
+The `Tunnel` owns the `ssh` child and kills it on drop, so its lifetime is tied
+to the connection (disconnect tears it down). The `ssh` argument construction
+is pure and unit-tested; only `open` spawns a process. See
+`tests/db_smoke.rs`/`db::tunnel` tests.
 
-**M7 — credential waterfall.** Before prompting: a per-connection
-`password_command` (e.g. `pass show db/prod`); the OS keyring via CLI
-(`security find-generic-password -w`, `secret-tool lookup`); then today's
-prompt, with an offer to store into the keyring on success. (The CLI-era
-`~/.pgpass`/`~/.my.cnf` step no longer applies — sqlx does not read client
-config files.)
+**Credential waterfall (M7) — done.** A server connection resolves its
+password before prompting (`db::secret::resolve`, called from `start_connect`):
+first the per-connection `password_command` (any command that prints the
+secret — `pass show db/prod`, `op read …`), then the OS keyring via its CLI
+(`security find-generic-password` on macOS, `secret-tool lookup` on Linux);
+only on a miss does it fall back to the prompt. The connection form adds a
+**Password cmd** field and a **Save to keyring** toggle — when set, a prompted
+password is stored back (`security add-generic-password` / `secret-tool store`)
+on a successful connect, so later connects skip the prompt. The command
+*construction* (`keyring_lookup` / `keyring_store`) is pure and unit-tested;
+only `run` touches the process table. sqlx does not read `~/.pgpass` /
+`~/.my.cnf`, so those are deliberately not part of the waterfall.

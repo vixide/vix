@@ -2,8 +2,8 @@
 
 Vix debugs via the **Debug Adapter Protocol**: it drives an external debug adapter
 over stdio, the same way the LSP client drives language servers. Configure
-adapters with the `debug_adapters` setting; the **Debug** menu (and `debug.*`
-actions) controls a session.
+adapters with the `debug_adapters` setting; the debugger commands live under the
+top-level **Run** menu (and `run.*` actions) and control a session.
 
 ## Configuration
 
@@ -21,7 +21,7 @@ console = "internalConsole"
 `launch` is merged into the DAP `launch` request (with `{program}` expanded to the
 file path; `program` defaults to the active file).
 
-## Commands (Debug menu / `debug.*`)
+## Commands (Run menu / `run.*`)
 
 - **Start** / **Stop** — launch or terminate the session for the active file.
 - **Toggle Breakpoint** — add/remove a breakpoint on the cursor's line (shown as

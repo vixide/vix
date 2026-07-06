@@ -32,6 +32,8 @@ pub struct Completer {
     tables: Vec<String>,
     /// `(table, column)` pairs.
     columns: Vec<(String, String)>,
+    /// Foreign-key edges `(child, child_col, parent, parent_col)`.
+    rels: Vec<(String, String, String, String)>,
 }
 
 impl Completer {
@@ -39,6 +41,11 @@ impl Completer {
     pub fn set_schema(&mut self, tables: Vec<String>, columns: Vec<(String, String)>) {
         self.tables = tables;
         self.columns = columns;
+    }
+
+    /// Replace the foreign-key edges used for `JOIN … ON` suggestions.
+    pub fn set_relationships(&mut self, rels: Vec<(String, String, String, String)>) {
+        self.rels = rels;
     }
 
     /// Suggest completions for the identifier ending at char column `col` of
@@ -59,6 +66,17 @@ impl Completer {
             let partial_chars = partial.chars().count();
             return Suggestions { start: col - partial_chars, items };
         }
+        // Right after a `JOIN` keyword, offer whole `table ON …` clauses drawn
+        // from the foreign-key graph (no minimum prefix — `JOIN ` alone lists
+        // the joinable tables).
+        let before: String = chars[..start].iter().collect();
+        let prev_word = before.split_whitespace().last().unwrap_or("");
+        if prev_word.eq_ignore_ascii_case("join") {
+            let items = self.join_matches(&token);
+            if !items.is_empty() {
+                return Suggestions { start, items };
+            }
+        }
         if token.chars().count() < MIN_PREFIX {
             return Suggestions::default();
         }
@@ -74,6 +92,24 @@ impl Completer {
         items.dedup();
         items.truncate(MAX_SUGGESTIONS);
         Suggestions { start, items }
+    }
+
+    /// `table ON child.fk = parent.pk` clauses for foreign keys touching a
+    /// table whose name starts with `partial` (either side of each edge).
+    fn join_matches(&self, partial: &str) -> Vec<String> {
+        let mut items = Vec::new();
+        for (child, child_col, parent, parent_col) in &self.rels {
+            let on = format!("{child}.{child_col} = {parent}.{parent_col}");
+            if starts_ci(parent, partial) {
+                items.push(format!("{parent} ON {on}"));
+            }
+            if starts_ci(child, partial) {
+                items.push(format!("{child} ON {on}"));
+            }
+        }
+        items.dedup();
+        items.truncate(MAX_SUGGESTIONS);
+        items
     }
 
     /// Columns of `table` starting with `partial` (both case-insensitive).
@@ -129,6 +165,19 @@ mod tests {
         let s = engine().suggest("SELECT users.na", 15);
         assert_eq!(s.items, vec!["name"]);
         assert_eq!(s.start, 13, "only the partial after the dot is replaced");
+    }
+
+    #[test]
+    fn join_offers_on_clauses_from_foreign_keys() {
+        let mut c = engine();
+        c.set_relationships(vec![("orders".into(), "user_id".into(), "users".into(), "id".into())]);
+        // `JOIN ` with no prefix lists both joinable sides.
+        let s = c.suggest("SELECT * FROM orders JOIN ", 26);
+        assert!(s.items.contains(&"users ON orders.user_id = users.id".to_string()), "{:?}", s.items);
+        // Typing the parent name narrows to it and replaces from the prefix.
+        let s = c.suggest("SELECT * FROM orders JOIN us", 28);
+        assert_eq!(s.items, vec!["users ON orders.user_id = users.id"]);
+        assert_eq!(s.start, 26);
     }
 
     #[test]

@@ -45,6 +45,12 @@ impl Grid {
         self.filtering = false;
     }
 
+    /// Append a streamed batch of rows, keeping the current selection, sort, and
+    /// filter (M4 progressive loading after [`Grid::set`] laid down the header).
+    pub fn append_rows(&mut self, mut rows: Vec<Vec<String>>) {
+        self.rows.append(&mut rows);
+    }
+
     /// Indices of the rows passing the filter, in sort order (arrival order
     /// when no sort is active; all rows when the filter is empty).
     #[must_use]
@@ -78,6 +84,13 @@ impl Grid {
     pub fn selected_row(&self) -> Option<&[String]> {
         let ri = *self.filtered().get(self.sel)?;
         self.rows.get(ri).map(Vec::as_slice)
+    }
+
+    /// The underlying `rows` index of the selected row (stable across filtering
+    /// and sorting), for keying staged cell edits.
+    #[must_use]
+    pub fn selected_index(&self) -> Option<usize> {
+        self.filtered().get(self.sel).copied()
     }
 
     /// Move the column selection left or right, dragging the horizontal

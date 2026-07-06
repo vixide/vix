@@ -1,13 +1,15 @@
 # Menus
 
 The top menu bar groups every command into dropdown menus. From left to right
-the menus are **Vix · File · Edit · View · Tools · AI · Git · Org · Debug · Help**.
+the menus are
+**Vix · File · Edit · View · Go · Run · AI · DB · Git · Org · Tools · Help**.
 
 ## Navigating the menus
 
 - Open the bar with **F10**, or jump straight to a menu with its Alt mnemonic:
-  **Alt+F/E/V/T/A/G/O/D/H** for
-  File / Edit / View / Tools / AI / Git / Org / Debug / Help.
+  File **Alt+F**, Edit **Alt+E**, View **Alt+I**, Go **Alt+N**, Run **Alt+R**,
+  AI **Alt+A**, DB **Alt+D**, Git **Alt+G**, Org **Alt+O**, Tools **Alt+T**,
+  Help **Alt+H**.
 - **Arrows** navigate, **Enter** runs the highlighted item, **Esc** closes.
 - A mouse click on a menu name opens it; a click on a dropdown item runs it.
 - While a menu is open, moving the pointer follows the selection: hovering a
@@ -131,6 +133,21 @@ tab, newline, return), **Scroll Bar**, **Soft Wrap** (wrap long lines vs.
 scroll horizontally), and **Spellcheck** (underline misspellings in comments
 and strings).
 
+## Go menu
+
+Workspace and symbol navigation (distinct from **Edit → Go**'s in-file jumps):
+**Symbol…** (`@` palette), **Declaration / Implementations / References** (LSP),
+**Next / Previous Issue** (diagnostics), **Next / Previous Change** (git hunks),
+**Recent Locations** (position history), **Jump** (leap-style), **Matching Tag**,
+and **Go to Percent / Byte**.
+
+## Run menu
+
+The debugger (Debug Adapter Protocol; see [`../../spec/debugger/index.md`](../../spec/debugger/index.md)):
+**Start / Stop**, **Toggle Breakpoint**, **Continue / Step Over / Step Into /
+Step Out / Pause**, **Add Watch…**, **Evaluate…** (REPL), and **Toggle Debug
+Panel**.
+
 ## Tools menu
 
 | Item                | Action                                       |
@@ -167,6 +184,16 @@ text with the result (undoable).
 | Annotate  | Annotate the selection (or the whole file); replaces it |
 | Improve   | Improve the selection (or the whole file); replaces it |
 
+## DB menu
+
+The database workbench (see [`../../spec/db/index.md`](../../spec/db/index.md)):
+**Connections** / **New Query**, **Execute** / **Execute All** (`F5`/`F9`),
+**Explain** / **Explain Analyze** (`F6`/`F7`), **Format**, **History** /
+**Saved** / **Save Query…**, **Export…**, **Begin** / **Commit** / **Rollback**,
+**Refresh Schema**, and **Disconnect**. The overlay itself adds read-only-by-
+default access, async/streamed execution, an AI SQL assistant, a query log, an
+ER diagram, CSV import, and more.
+
 ## Git menu
 
 | Item           | Action                                                   |
@@ -191,6 +218,14 @@ The **Branch** submenu:
 | Merge…           | Choose a branch to merge into the current one         |
 | Delete…          | Prompt for a branch name and `git branch --delete` it |
 | Edit Description… | Prompt for text and set it via `git branch --edit-description` |
+
+## Org menu
+
+Org-mode editing on the active buffer (see [`../../spec/org/index.md`](../../spec/org/index.md)):
+**Capture**, **Cycle Visibility**, **Headline ▸**, **Cycle TODO**, **Toggle
+Checkbox**, **Update Statistics**, **Clock In / Out**, **Agenda**, **Time
+Report**, **Roam ▸** (nodes / backlinks / dailies), **Node ▸**, **Contacts ▸**,
+and **Export ▸** (Markdown / HTML).
 
 ## Help menu
 

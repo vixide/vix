@@ -230,6 +230,14 @@ pgcrypto
 createdb
 trgm
 
+# Database workbench (spec/db)
+sqlx
+keyring
+NDJSON
+pgsavvy
+surus
+Geometrein
+
 # LSP servers / editors referenced in docs
 gopls
 codelldb
