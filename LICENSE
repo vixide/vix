@@ -1,13 +1,13 @@
 Vix™ (Vix IDE™)
 
-Vix™ and Vix IDE™ are trademarks.
-
 This software is licensed under any one of the following, at your option:
 
-  - Apache License, Version 2.0             (see LICENSE-APACHE)
-  - BSD 3-Clause License                    (see LICENSE-BSD)
-  - MIT License                             (see LICENSE-MIT)
-  - GNU General Public License, version 2   (see LICENSE-GPL-2.0)
-  - GNU General Public License, version 3   (see LICENSE-GPL-3.0)
+  - Apache License, Version 2.0             (see docs/license/apache.txt)
+  - BSD 3-Clause License                    (see docs/license/bsd.txt)
+  - MIT License                             (see docs/license/mit.txt)
+  - GNU General Public License, version 2   (see docs/license/gpl-2.txt)
+  - GNU General Public License, version 3   (see docs/license/gpl-3.txt)
 
-Copyright © 2026 Vix™ (Vix IDE™).
+Vix™ and Vix IDE™ are trademarks.
+
+Copyright © 2026 Vix™ and Vix IDE™.
