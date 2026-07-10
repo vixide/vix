@@ -120,9 +120,6 @@ readme = "README.md"
 keywords = ["tui", "editor", "ide", "terminal", "developer"]
 categories = ["text-editors", "command-line-utilities"]
 
-
-
-
 [features]
 # Which Tree-sitter grammars to compile in. Each grammar is a sizeable C parser,
 # so the default is a lean set; opt into more (or all) at build time:
