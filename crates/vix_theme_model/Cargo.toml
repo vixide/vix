@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "The Vix theme model: the JSON theme model, ratatui styles, and theme loading."
 
 [dependencies]
 ratatui = { workspace = true }

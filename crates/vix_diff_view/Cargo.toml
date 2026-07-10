@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Read-only side-by-side comparison: a unified diff between two texts."
 
 [dependencies]
 similar = { workspace = true }

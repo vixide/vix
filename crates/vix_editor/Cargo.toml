@@ -5,10 +5,11 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Editor host: the `CodeEditor` widget wrapper and the pane tree."
 
 [dependencies]
 ratatui = { workspace = true }
 ratatui-core = { workspace = true }
 ratatui-image = { workspace = true }
-vix_editor_core = { path = "../vix_editor_core", default-features = false }
-vix_theme = { path = "../vix_theme" }
+vix_editor_core = { path = "../vix_editor_core", version = "1.2.0", default-features = false }
+vix_theme = { path = "../vix_theme", version = "1.2.0" }

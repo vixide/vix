@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Convert: TSV text into CSV."
 
 [dependencies]
-vix_convert_tabular = { path = "../vix_convert_tabular" }
+vix_convert_tabular = { path = "../vix_convert_tabular", version = "1.2.0" }

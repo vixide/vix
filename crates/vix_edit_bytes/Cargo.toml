@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "The byte editor: a hex/ASCII view for editing raw file bytes."
 
 [dependencies]
 crossterm = { workspace = true }

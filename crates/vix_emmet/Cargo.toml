@@ -5,5 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "A pragmatic subset of Emmet abbreviation expansion."
 
 [dependencies]

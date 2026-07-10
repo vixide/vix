@@ -5,5 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "A curated set of Nerd Font glyphs and the character-picker grid state."
 
 [dependencies]

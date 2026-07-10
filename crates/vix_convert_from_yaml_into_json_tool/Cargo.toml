@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Convert: YAML into JSON."
 
 [dependencies]
 serde_json = { workspace = true }

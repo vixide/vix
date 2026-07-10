@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Git integration: status/diff/staging via the git CLI."
 
 [dependencies]
 similar = { workspace = true }

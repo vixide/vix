@@ -5,8 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "JSON snippet files: loading, scope resolution, merging, and the picker."
 
 [dependencies]
 serde_json = { workspace = true }
-vix_settings = { path = "../vix_settings" }
-vix_snippet_tool = { path = "../vix_snippet_tool" }
+vix_settings = { path = "../vix_settings", version = "1.2.0" }
+vix_snippet_tool = { path = "../vix_snippet_tool", version = "1.2.0" }

@@ -5,10 +5,11 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Persistent undo: save a buffer's undo tree to disk and restore it on reopen."
 
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
-vix_editor_core = { path = "../vix_editor_core", default-features = false }
-vix_settings = { path = "../vix_settings" }
+vix_editor_core = { path = "../vix_editor_core", version = "1.2.0", default-features = false }
+vix_settings = { path = "../vix_settings", version = "1.2.0" }

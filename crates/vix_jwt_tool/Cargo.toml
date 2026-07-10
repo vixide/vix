@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Decode a JSON Web Token's header and payload into readable JSON."
 
 [dependencies]
 base64 = { workspace = true }

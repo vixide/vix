@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "A pure LSP client core: JSON-RPC framing, message builders, parsers, positions."
 
 [dependencies]
 serde_json = { workspace = true }

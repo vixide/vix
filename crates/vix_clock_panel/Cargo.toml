@@ -5,7 +5,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Clock box: live date/time strings (local, UTC, ISO week, active zone) + rows."
 
 [dependencies]
 jiff = { workspace = true }
-vix_time_zone_model = { path = "../vix_time_zone_model" }
+vix_time_zone_model = { path = "../vix_time_zone_model", version = "1.2.0" }

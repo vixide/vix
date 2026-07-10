@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "The fully-custom terminal code-editor widget (owns the Tree-sitter grammars)."
 
 [features]
 # Which Tree-sitter grammars to compile in. Each grammar is a sizeable C parser,
