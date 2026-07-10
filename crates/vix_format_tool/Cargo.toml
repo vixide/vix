@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Reformat the selection (or buffer) within one data format: pretty-print or minify."
 
 [dependencies]
 serde_json = { workspace = true }

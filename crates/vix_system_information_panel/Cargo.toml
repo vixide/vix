@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "A read-only snapshot of host system information, plus the panel's selection."
 
 [dependencies]
 sysinfo = { workspace = true }

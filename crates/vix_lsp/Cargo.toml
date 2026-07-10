@@ -5,8 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "LSP client: process management and document sync over `vix_lsp_core`."
 
 [dependencies]
 serde_json = { workspace = true }
-vix_lsp_core = { path = "../vix_lsp_core" }
-vix_settings = { path = "../vix_settings" }
+vix_lsp_core = { path = "../vix_lsp_core", version = "1.2.0" }
+vix_settings = { path = "../vix_settings", version = "1.2.0" }

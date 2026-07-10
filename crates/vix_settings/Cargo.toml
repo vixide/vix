@@ -5,9 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "User settings, persisted with `confy`."
 
 [dependencies]
 confy = { workspace = true }
 serde = { workspace = true }
-vix_dap = { path = "../vix_dap" }
-vix_db = { path = "../vix_db" }
+vix_dap = { path = "../vix_dap", version = "1.2.0" }
+vix_db = { path = "../vix_db", version = "1.2.0" }

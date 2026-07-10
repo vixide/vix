@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Evaluate a typed formula, plus the Calculator dialog's editing state."
 
 [dependencies]
 evalexpr = { workspace = true }

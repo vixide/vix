@@ -5,5 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "HTML Characters panel (Tools menu): named-character table + picker state."
 
 [dependencies]

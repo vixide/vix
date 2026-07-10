@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "A workspace: a named set of project folders plus the files to reopen."
 
 [dependencies]
 serde = { workspace = true }

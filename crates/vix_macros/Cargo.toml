@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Persisted keyboard macros: named recordings of editor key events."
 
 [dependencies]
 crossterm = { workspace = true }

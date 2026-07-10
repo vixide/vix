@@ -5,5 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "A Pomodoro work/break countdown as a small state machine."
 
 [dependencies]

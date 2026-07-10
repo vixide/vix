@@ -5,10 +5,11 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Top menu bar with keyboard-navigable dropdowns (one level of submenus)."
 
 [dependencies]
 rust-i18n = { workspace = true }
-vix_i18n = { path = "../vix_i18n" }
-vix_keymap_model = { path = "../vix_keymap_model" }
-vix_locale_model = { path = "../vix_locale_model" }
-vix_time_zone_model = { path = "../vix_time_zone_model" }
+vix_i18n = { path = "../vix_i18n", version = "1.2.0" }
+vix_keymap_model = { path = "../vix_keymap_model", version = "1.2.0" }
+vix_locale_model = { path = "../vix_locale_model", version = "1.2.0" }
+vix_time_zone_model = { path = "../vix_time_zone_model", version = "1.2.0" }

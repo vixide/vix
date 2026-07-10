@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Render Markdown to formatted plain-text lines for a read-only preview pane."
 
 [dependencies]
 pulldown-cmark = { workspace = true }
