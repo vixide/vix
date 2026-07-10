@@ -6,7 +6,7 @@
 //! indentation is preserved.
 //!
 //! ```
-//! let out = vix::align::on_delimiter("a = 1\nbbb = 2\n", '=');
+//! let out = vix_align::on_delimiter("a = 1\nbbb = 2\n", '=');
 //! assert_eq!(out, "a   = 1\nbbb = 2\n");
 //! ```
 

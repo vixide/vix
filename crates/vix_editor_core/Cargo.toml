@@ -1,0 +1,70 @@
+[package]
+name = "vix_editor_core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+# Which Tree-sitter grammars to compile in. Each grammar is a sizeable C parser,
+# so the default is a lean set; the `vix` binary re-exports these features and
+# opts into more (or all) at build time.
+default = ["syntax-common"]
+syntax-common = ["lang-rust", "lang-markdown", "lang-json", "lang-toml"]
+syntax-all = [
+    "lang-bash", "lang-c", "lang-c-sharp", "lang-cpp", "lang-css", "lang-go",
+    "lang-html", "lang-java", "lang-javascript", "lang-json", "lang-markdown",
+    "lang-python", "lang-rust", "lang-toml", "lang-typescript", "lang-yaml",
+]
+
+# One feature per Tree-sitter grammar — each pulls in only that C parser.
+lang-bash = ["dep:tree-sitter-bash"]
+lang-c = ["dep:tree-sitter-c"]
+lang-c-sharp = ["dep:tree-sitter-c-sharp"]
+lang-cpp = ["dep:tree-sitter-cpp"]
+lang-css = ["dep:tree-sitter-css"]
+lang-go = ["dep:tree-sitter-go"]
+lang-html = ["dep:tree-sitter-html"]
+lang-java = ["dep:tree-sitter-java"]
+lang-javascript = ["dep:tree-sitter-javascript"]
+lang-json = ["dep:tree-sitter-json"]
+lang-markdown = ["dep:tree-sitter-md"]
+lang-python = ["dep:tree-sitter-python"]
+lang-rust = ["dep:tree-sitter-rust"]
+lang-toml = ["dep:tree-sitter-toml-ng"]
+lang-typescript = ["dep:tree-sitter-typescript"]
+lang-yaml = ["dep:tree-sitter-yaml"]
+
+[dependencies]
+anyhow = { workspace = true }
+arboard = { workspace = true }
+crossterm = { workspace = true }
+getrandom = { workspace = true }
+ratatui-core = { workspace = true }
+ropey = { workspace = true }
+rust-embed = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+streaming-iterator = { workspace = true }
+tree-sitter = { workspace = true }
+unicode-segmentation = { workspace = true }
+unicode-width = { workspace = true }
+
+# Optional Tree-sitter grammars, selected by the lang-* features above.
+tree-sitter-bash = { workspace = true, optional = true }
+tree-sitter-c = { workspace = true, optional = true }
+tree-sitter-c-sharp = { workspace = true, optional = true }
+tree-sitter-cpp = { workspace = true, optional = true }
+tree-sitter-css = { workspace = true, optional = true }
+tree-sitter-go = { workspace = true, optional = true }
+tree-sitter-html = { workspace = true, optional = true }
+tree-sitter-java = { workspace = true, optional = true }
+tree-sitter-javascript = { workspace = true, optional = true }
+tree-sitter-json = { workspace = true, optional = true }
+tree-sitter-md = { workspace = true, optional = true }
+tree-sitter-python = { workspace = true, optional = true }
+tree-sitter-rust = { workspace = true, optional = true }
+tree-sitter-toml-ng = { workspace = true, optional = true }
+tree-sitter-typescript = { workspace = true, optional = true }
+tree-sitter-yaml = { workspace = true, optional = true }

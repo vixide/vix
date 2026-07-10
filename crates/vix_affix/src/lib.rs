@@ -2,7 +2,7 @@
 //! wrap: the prefix goes before the text, the suffix after).
 //!
 //! ```
-//! use vix::affix::{add, drop, toggle};
+//! use vix_affix::{add, drop, toggle};
 //! assert_eq!(add("alfa", "bravo", "charlie"), "bravoalfacharlie");
 //! assert_eq!(drop("bravoalfacharlie", "bravo", "charlie"), "alfa");
 //! assert_eq!(toggle("alfa", "bravo", "charlie"), "bravoalfacharlie");

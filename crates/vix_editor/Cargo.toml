@@ -1,0 +1,14 @@
+[package]
+name = "vix_editor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ratatui = { workspace = true }
+ratatui-core = { workspace = true }
+ratatui-image = { workspace = true }
+vix_editor_core = { path = "../vix_editor_core", default-features = false }
+vix_theme = { path = "../vix_theme" }

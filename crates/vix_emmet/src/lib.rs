@@ -5,7 +5,7 @@
 //! text within a multiplied element. For example:
 //!
 //! ```
-//! let html = vix::emmet::expand("ul>li.item*2").unwrap();
+//! let html = vix_emmet::expand("ul>li.item*2").unwrap();
 //! assert!(html.contains("<ul>"));
 //! assert!(html.matches("<li class=\"item\">").count() == 2);
 //! ```

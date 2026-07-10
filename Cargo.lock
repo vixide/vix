@@ -4695,6 +4695,7 @@ dependencies = [
  "vix_ai_panel",
  "vix_align",
  "vix_ascii_character_picker",
+ "vix_base16",
  "vix_base64_tool",
  "vix_base_tool",
  "vix_bottom_dock",
@@ -4702,20 +4703,31 @@ dependencies = [
  "vix_calendar_panel",
  "vix_case",
  "vix_checksum_tool",
+ "vix_clock_panel",
  "vix_color_converter_tool",
  "vix_conflict_tool",
  "vix_contact_panel",
+ "vix_convert_from_csv_into_json_tool",
+ "vix_convert_from_csv_into_tsv_tool",
  "vix_convert_from_html_into_markdown_tool",
+ "vix_convert_from_json_into_csv_tool",
  "vix_convert_from_json_into_toml_tool",
+ "vix_convert_from_json_into_tsv_tool",
  "vix_convert_from_json_into_yaml_tool",
  "vix_convert_from_markdown_into_html_tool",
  "vix_convert_from_toml_into_json_tool",
+ "vix_convert_from_tsv_into_csv_tool",
+ "vix_convert_from_tsv_into_json_tool",
  "vix_convert_from_yaml_into_json_tool",
  "vix_convert_tabular",
+ "vix_dap",
+ "vix_db",
  "vix_diff_view",
  "vix_edit_bytes",
  "vix_edit_sql",
  "vix_edit_value",
+ "vix_editor",
+ "vix_editor_core",
  "vix_editorconfig",
  "vix_emmet",
  "vix_file_information_panel",
@@ -4732,10 +4744,12 @@ dependencies = [
  "vix_left_dock",
  "vix_locale_model",
  "vix_lorem",
+ "vix_lsp",
  "vix_lsp_core",
  "vix_macros",
  "vix_markdown_preview",
  "vix_media_type",
+ "vix_menu",
  "vix_nerd_font_picker",
  "vix_org",
  "vix_org_contacts",
@@ -4747,7 +4761,10 @@ dependencies = [
  "vix_regex_tool",
  "vix_right_dock",
  "vix_roam",
+ "vix_session",
+ "vix_settings",
  "vix_snippet_tool",
+ "vix_snippets",
  "vix_spellcheck",
  "vix_status_bar_panel",
  "vix_system_information_panel",
@@ -4757,13 +4774,17 @@ dependencies = [
  "vix_test_runner",
  "vix_text_information_panel",
  "vix_textops",
+ "vix_theme",
  "vix_theme_model",
  "vix_time_zone_model",
+ "vix_undo_store",
  "vix_unit_converter_tool",
  "vix_url_tool",
  "vix_uuid_tool",
+ "vix_vcard_panel",
  "vix_vcard_parser",
  "vix_welcome_panel",
+ "vix_workspace",
  "vix_workspace_dashboard_panel",
  "vix_x11_color_picker",
  "vix_zid_tool",
@@ -4792,6 +4813,13 @@ version = "1.1.0"
 [[package]]
 name = "vix_ascii_character_picker"
 version = "1.1.0"
+
+[[package]]
+name = "vix_base16"
+version = "1.1.0"
+dependencies = [
+ "vix_theme_model",
+]
 
 [[package]]
 name = "vix_base64_tool"
@@ -4836,6 +4864,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix_clock_panel"
+version = "1.1.0"
+dependencies = [
+ "jiff",
+ "vix_time_zone_model",
+]
+
+[[package]]
 name = "vix_color_converter_tool"
 version = "1.1.0"
 
@@ -4848,10 +4884,31 @@ name = "vix_contact_panel"
 version = "1.1.0"
 
 [[package]]
+name = "vix_convert_from_csv_into_json_tool"
+version = "1.1.0"
+dependencies = [
+ "vix_convert_tabular",
+]
+
+[[package]]
+name = "vix_convert_from_csv_into_tsv_tool"
+version = "1.1.0"
+dependencies = [
+ "vix_convert_tabular",
+]
+
+[[package]]
 name = "vix_convert_from_html_into_markdown_tool"
 version = "1.1.0"
 dependencies = [
  "htmd",
+]
+
+[[package]]
+name = "vix_convert_from_json_into_csv_tool"
+version = "1.1.0"
+dependencies = [
+ "vix_convert_tabular",
 ]
 
 [[package]]
@@ -4860,6 +4917,13 @@ version = "1.1.0"
 dependencies = [
  "serde_json",
  "toml 0.8.23",
+]
+
+[[package]]
+name = "vix_convert_from_json_into_tsv_tool"
+version = "1.1.0"
+dependencies = [
+ "vix_convert_tabular",
 ]
 
 [[package]]
@@ -4886,6 +4950,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix_convert_from_tsv_into_csv_tool"
+version = "1.1.0"
+dependencies = [
+ "vix_convert_tabular",
+]
+
+[[package]]
+name = "vix_convert_from_tsv_into_json_tool"
+version = "1.1.0"
+dependencies = [
+ "vix_convert_tabular",
+]
+
+[[package]]
 name = "vix_convert_from_yaml_into_json_tool"
 version = "1.1.0"
 dependencies = [
@@ -4898,6 +4976,34 @@ name = "vix_convert_tabular"
 version = "1.1.0"
 dependencies = [
  "serde_json",
+]
+
+[[package]]
+name = "vix_dap"
+version = "1.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "vix_lsp_core",
+]
+
+[[package]]
+name = "vix_db"
+version = "1.1.0"
+dependencies = [
+ "arboard",
+ "confy",
+ "crossterm",
+ "futures-util",
+ "percent-encoding",
+ "ratatui",
+ "rust-i18n",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "vix_i18n",
+ "vix_theme",
 ]
 
 [[package]]
@@ -4928,6 +5034,52 @@ dependencies = [
  "crossterm",
  "serde_json",
  "serde_yaml",
+]
+
+[[package]]
+name = "vix_editor"
+version = "1.1.0"
+dependencies = [
+ "ratatui",
+ "ratatui-core",
+ "ratatui-image",
+ "vix_editor_core",
+ "vix_theme",
+]
+
+[[package]]
+name = "vix_editor_core"
+version = "1.1.0"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "crossterm",
+ "getrandom 0.2.17",
+ "ratatui-core",
+ "ropey",
+ "rust-embed",
+ "serde",
+ "serde_json",
+ "streaming-iterator",
+ "tree-sitter 0.26.9",
+ "tree-sitter-bash",
+ "tree-sitter-c",
+ "tree-sitter-c-sharp",
+ "tree-sitter-cpp",
+ "tree-sitter-css",
+ "tree-sitter-go",
+ "tree-sitter-html",
+ "tree-sitter-java",
+ "tree-sitter-javascript",
+ "tree-sitter-json",
+ "tree-sitter-md",
+ "tree-sitter-python",
+ "tree-sitter-rust",
+ "tree-sitter-toml-ng",
+ "tree-sitter-typescript",
+ "tree-sitter-yaml",
+ "unicode-segmentation",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]
@@ -5022,6 +5174,15 @@ name = "vix_lorem"
 version = "1.1.0"
 
 [[package]]
+name = "vix_lsp"
+version = "1.1.0"
+dependencies = [
+ "serde_json",
+ "vix_lsp_core",
+ "vix_settings",
+]
+
+[[package]]
 name = "vix_lsp_core"
 version = "1.1.0"
 dependencies = [
@@ -5047,6 +5208,17 @@ dependencies = [
 [[package]]
 name = "vix_media_type"
 version = "1.1.0"
+
+[[package]]
+name = "vix_menu"
+version = "1.1.0"
+dependencies = [
+ "rust-i18n",
+ "vix_i18n",
+ "vix_keymap_model",
+ "vix_locale_model",
+ "vix_time_zone_model",
+]
 
 [[package]]
 name = "vix_nerd_font_picker"
@@ -5113,8 +5285,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix_session"
+version = "1.1.0"
+dependencies = [
+ "confy",
+ "serde",
+]
+
+[[package]]
+name = "vix_settings"
+version = "1.1.0"
+dependencies = [
+ "confy",
+ "serde",
+ "vix_dap",
+ "vix_db",
+]
+
+[[package]]
 name = "vix_snippet_tool"
 version = "1.1.0"
+
+[[package]]
+name = "vix_snippets"
+version = "1.1.0"
+dependencies = [
+ "serde_json",
+ "vix_settings",
+ "vix_snippet_tool",
+]
 
 [[package]]
 name = "vix_spellcheck"
@@ -5169,6 +5368,13 @@ name = "vix_textops"
 version = "1.1.0"
 
 [[package]]
+name = "vix_theme"
+version = "1.1.0"
+dependencies = [
+ "vix_theme_model",
+]
+
+[[package]]
 name = "vix_theme_model"
 version = "1.1.0"
 dependencies = [
@@ -5180,6 +5386,17 @@ dependencies = [
 [[package]]
 name = "vix_time_zone_model"
 version = "1.1.0"
+
+[[package]]
+name = "vix_undo_store"
+version = "1.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "vix_editor_core",
+ "vix_settings",
+]
 
 [[package]]
 name = "vix_unit_converter_tool"
@@ -5200,12 +5417,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix_vcard_panel"
+version = "1.1.0"
+dependencies = [
+ "vix_vcard_parser",
+]
+
+[[package]]
 name = "vix_vcard_parser"
 version = "1.1.0"
 
 [[package]]
 name = "vix_welcome_panel"
 version = "1.1.0"
+
+[[package]]
+name = "vix_workspace"
+version = "1.1.0"
+dependencies = [
+ "serde",
+ "toml 0.8.23",
+]
 
 [[package]]
 name = "vix_workspace_dashboard_panel"

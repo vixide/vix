@@ -130,41 +130,55 @@ categories = ["text-editors", "command-line-utilities"]
 #   cargo build --release                                  # common grammars
 #   cargo build --release --no-default-features            # no highlighting (smallest)
 #   cargo build --release --no-default-features --features syntax-all
+#
+# The grammars actually live in the vix_editor_core crate; these features simply
+# forward to that crate's identically-named features.
 default = ["syntax-common"]
-syntax-common = ["lang-rust", "lang-markdown", "lang-json", "lang-toml"]
-syntax-all = [
-    "lang-bash", "lang-c", "lang-c-sharp", "lang-cpp", "lang-css", "lang-go",
-    "lang-html", "lang-java", "lang-javascript", "lang-json", "lang-markdown",
-    "lang-python", "lang-rust", "lang-toml", "lang-typescript", "lang-yaml",
-]
+syntax-common = ["vix_editor_core/syntax-common"]
+syntax-all = ["vix_editor_core/syntax-all"]
 
-# One feature per Tree-sitter grammar — each pulls in only that C parser. The
-# editor (src/editor_core/) links a parser only when its feature is enabled.
-lang-bash = ["dep:tree-sitter-bash"]
-lang-c = ["dep:tree-sitter-c"]
-lang-c-sharp = ["dep:tree-sitter-c-sharp"]
-lang-cpp = ["dep:tree-sitter-cpp"]
-lang-css = ["dep:tree-sitter-css"]
-lang-go = ["dep:tree-sitter-go"]
-lang-html = ["dep:tree-sitter-html"]
-lang-java = ["dep:tree-sitter-java"]
-lang-javascript = ["dep:tree-sitter-javascript"]
-lang-json = ["dep:tree-sitter-json"]
-lang-kotlin = ["dep:tree-sitter-kotlin"]
-lang-markdown = ["dep:tree-sitter-md"]
-lang-postgres = ["dep:tree-sitter-postgres"]
-lang-python = ["dep:tree-sitter-python"]
-lang-ruby = ["dep:tree-sitter-ruby"]
-lang-rust = ["dep:tree-sitter-rust"]
-lang-toml = ["dep:tree-sitter-toml-ng"]
-lang-typescript = ["dep:tree-sitter-typescript"]
-lang-yaml = ["dep:tree-sitter-yaml"]
-lang-zig = ["dep:tree-sitter-zig"]
+lang-bash = ["vix_editor_core/lang-bash"]
+lang-c = ["vix_editor_core/lang-c"]
+lang-c-sharp = ["vix_editor_core/lang-c-sharp"]
+lang-cpp = ["vix_editor_core/lang-cpp"]
+lang-css = ["vix_editor_core/lang-css"]
+lang-go = ["vix_editor_core/lang-go"]
+lang-html = ["vix_editor_core/lang-html"]
+lang-java = ["vix_editor_core/lang-java"]
+lang-javascript = ["vix_editor_core/lang-javascript"]
+lang-json = ["vix_editor_core/lang-json"]
+lang-markdown = ["vix_editor_core/lang-markdown"]
+lang-python = ["vix_editor_core/lang-python"]
+lang-rust = ["vix_editor_core/lang-rust"]
+lang-toml = ["vix_editor_core/lang-toml"]
+lang-typescript = ["vix_editor_core/lang-typescript"]
+lang-yaml = ["vix_editor_core/lang-yaml"]
 
 [dependencies]
 # Shared single-embed i18n backend for the whole workspace (see crates/vix_i18n).
 vix_i18n = { path = "crates/vix_i18n" }
 # Extracted leaf concept crates (one per major concept).
+vix_base16 = { path = "crates/vix_base16" }
+vix_clock_panel = { path = "crates/vix_clock_panel" }
+vix_convert_from_csv_into_json_tool = { path = "crates/vix_convert_from_csv_into_json_tool" }
+vix_convert_from_csv_into_tsv_tool = { path = "crates/vix_convert_from_csv_into_tsv_tool" }
+vix_convert_from_json_into_csv_tool = { path = "crates/vix_convert_from_json_into_csv_tool" }
+vix_convert_from_json_into_tsv_tool = { path = "crates/vix_convert_from_json_into_tsv_tool" }
+vix_convert_from_tsv_into_csv_tool = { path = "crates/vix_convert_from_tsv_into_csv_tool" }
+vix_convert_from_tsv_into_json_tool = { path = "crates/vix_convert_from_tsv_into_json_tool" }
+vix_dap = { path = "crates/vix_dap" }
+vix_db = { path = "crates/vix_db" }
+vix_editor = { path = "crates/vix_editor" }
+vix_editor_core = { path = "crates/vix_editor_core", default-features = false }
+vix_lsp = { path = "crates/vix_lsp" }
+vix_menu = { path = "crates/vix_menu" }
+vix_session = { path = "crates/vix_session" }
+vix_settings = { path = "crates/vix_settings" }
+vix_snippets = { path = "crates/vix_snippets" }
+vix_theme = { path = "crates/vix_theme" }
+vix_undo_store = { path = "crates/vix_undo_store" }
+vix_vcard_panel = { path = "crates/vix_vcard_panel" }
+vix_workspace = { path = "crates/vix_workspace" }
 vix_affix = { path = "crates/vix_affix" }
 vix_ai_diff = { path = "crates/vix_ai_diff" }
 vix_ai_panel = { path = "crates/vix_ai_panel" }
