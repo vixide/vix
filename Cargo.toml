@@ -95,17 +95,12 @@ tree-sitter-html = { version = "0.23.2" }
 tree-sitter-java = { version = "0.23.5" }
 tree-sitter-javascript = { version = "0.25" }
 tree-sitter-json = { version = "0.24.8" }
-tree-sitter-kotlin = { version = "0.2" }
 tree-sitter-md = { version = "0.5.3" }
 tree-sitter-python = { version = "0.25" }
-tree-sitter-ruby = { version = "0" }
 tree-sitter-rust = { version = "0.24" }
-tree-sitter-postgres = { version = "1.2.4" }
-tree-sitter-swift = { version = "0" }
 tree-sitter-toml-ng = { version = "0.7.0" }
 tree-sitter-typescript = { version = "0.23" }
 tree-sitter-yaml = { version = "0.7" }
-tree-sitter-zig = { version = "1.1.2" }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "any", "sqlite", "postgres", "mysql"] }
 tokio = { version = "1.52.3", features = ["rt", "net", "time"] }
 futures-util = { version = "0.3", default-features = false }
@@ -360,17 +355,12 @@ tree-sitter-html = { workspace = true, optional = true }
 tree-sitter-java = { workspace = true, optional = true }
 tree-sitter-javascript = { workspace = true, optional = true }
 tree-sitter-json = { workspace = true, optional = true }
-tree-sitter-kotlin = { workspace = true, optional = true }
 tree-sitter-md = { workspace = true, optional = true }
 tree-sitter-python = { workspace = true, optional = true }
-tree-sitter-ruby = { workspace = true, optional = true }
 tree-sitter-rust = { workspace = true, optional = true }
-tree-sitter-postgres = { workspace = true, optional = true }
-tree-sitter-swift = { workspace = true, optional = true }
 tree-sitter-toml-ng = { workspace = true, optional = true }
 tree-sitter-typescript = { workspace = true, optional = true }
 tree-sitter-yaml = { workspace = true, optional = true }
-tree-sitter-zig = { workspace = true, optional = true }
 
 # DB workbench (spec/db): embedded database drivers via the `Any` runtime
 # driver — SQLite (bundled C), and pure-Rust PostgreSQL/MySQL over rustls (no
