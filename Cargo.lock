@@ -4690,7 +4690,15 @@ dependencies = [
  "unicode-width 0.2.2",
  "ureq",
  "uuid",
+ "vix_i18n",
  "vt100",
+]
+
+[[package]]
+name = "vix_i18n"
+version = "1.1.0"
+dependencies = [
+ "rust-i18n",
 ]
 
 [[package]]

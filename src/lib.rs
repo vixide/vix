@@ -30,12 +30,15 @@
 #![deny(missing_docs)]
 #![warn(clippy::pedantic)]
 
+// The translation table is embedded once, in the `vix_i18n` crate. Bringing it
+// in with `#[macro_use]` makes the `t!` and `surface!` macros available
+// unqualified throughout the crate, exactly as the former `rust_i18n` import did.
 #[macro_use]
-extern crate rust_i18n;
+extern crate vix_i18n;
 
-// Load the translations in `locales/`, falling back to English for any key that
-// a selected language does not (yet) translate.
-i18n!("locales", fallback = "en");
+// Surface the translation lookup functions at this crate's root so the `t!`
+// expansion (which references `crate::_rust_i18n_try_translate`) resolves here.
+vix_i18n::surface!();
 
 // The MUSL static build uses mimalloc as its global allocator; that lives in the
 // `vix` binary (main.rs) so it applies once to the whole program. Declaring it

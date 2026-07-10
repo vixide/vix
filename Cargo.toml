@@ -2,7 +2,7 @@
 # `cargo build`/`cargo test --workspace` cover the internal crates too, and the
 # whole tree shares one lockfile and target directory.
 [workspace]
-members = []
+members = ["crates/*"]
 
 # Config for 'dist'
 [workspace.metadata.dist]
@@ -26,6 +26,90 @@ tap = "vixide/homebrew-tap"
 publish-jobs = ["homebrew"]
 # npm scope for the published package (=> @vixide/vix).
 npm-scope = "@vixide"
+
+# Metadata shared by the root `vix` package and every `crates/vix_*` member, so
+# version/edition/license/etc. are declared once and inherited with
+# `field.workspace = true`.
+[workspace.package]
+version = "1.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
+repository = "https://github.com/vixide/vix"
+homepage = "https://github.com/vixide/vix"
+
+# All external dependencies are declared here once; every member crate (and the
+# root `vix` package) inherits them with `{ workspace = true }` so versions and
+# feature sets stay in lock-step across the workspace.
+[workspace.dependencies]
+ratatui = { version = "0.30", features = ["crossterm"] }
+crossterm = "0.29"
+ignore = "0.4"
+ureq = "2"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ratatui-image = { version = "11.0.4", default-features = false, features = ["image-defaults", "crossterm"] }
+image = "0.25"
+confy = "2.0.0"
+clap = { version = "4.6.1", features = ["derive"] }
+rust-i18n = "4.1.0"
+base64 = "0.22"
+evalexpr = "13"
+getrandom = "0.2"
+htmd = "0.5"
+jiff = "0.2"
+percent-encoding = "2"
+pulldown-cmark = "0.13"
+sha2 = "0.10"
+similar = { version = "2", features = ["inline"] }
+spellbook = "0.4"
+sysinfo = "0.33"
+toml = "0.8"
+md-5 = "0.10"
+crc32fast = "1"
+uuid = { version = "1", features = ["v1", "v3", "v4", "v5", "v6", "v7", "v8"] }
+include_dir = "0.7.4"
+serde_yaml = "0.9.34"
+markdown = "1.0.0"
+nix = { version = "0.29", features = ["signal"] }
+qrcode = { version = "0.14", default-features = false }
+portable-pty = "0.8"
+vt100 = "0.15"
+anyhow = "1.0"
+arboard = { version = "3.6", default-features = false }
+ratatui-core = "0.1"
+ropey = "1.6"
+rust-embed = { version = "8.11", features = ["include-exclude"] }
+streaming-iterator = "0.1"
+tree-sitter = "0.26"
+unicode-segmentation = "1.13"
+unicode-width = "0.2"
+tree-sitter-bash = { version = "0.25.1" }
+tree-sitter-c = { version = "0.24.2" }
+tree-sitter-c-sharp = { version = "0.23.5" }
+tree-sitter-cpp = { version = "0.23.4" }
+tree-sitter-css = { version = "0.25" }
+tree-sitter-go = { version = "0.25" }
+tree-sitter-html = { version = "0.23.2" }
+tree-sitter-java = { version = "0.23.5" }
+tree-sitter-javascript = { version = "0.25" }
+tree-sitter-json = { version = "0.24.8" }
+tree-sitter-kotlin = { version = "0.2" }
+tree-sitter-md = { version = "0.5.3" }
+tree-sitter-python = { version = "0.25" }
+tree-sitter-ruby = { version = "0" }
+tree-sitter-rust = { version = "0.24" }
+tree-sitter-postgres = { version = "1.2.4" }
+tree-sitter-swift = { version = "0" }
+tree-sitter-toml-ng = { version = "0.7.0" }
+tree-sitter-typescript = { version = "0.23" }
+tree-sitter-yaml = { version = "0.7" }
+tree-sitter-zig = { version = "1.1.2" }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "any", "sqlite", "postgres", "mysql"] }
+tokio = { version = "1.52.3", features = ["rt", "net", "time"] }
+futures-util = { version = "0.3", default-features = false }
+mimalloc = "0.1"
 
 [package]
 name = "vix"
@@ -78,8 +162,10 @@ lang-yaml = ["dep:tree-sitter-yaml"]
 lang-zig = ["dep:tree-sitter-zig"]
 
 [dependencies]
+# Shared single-embed i18n backend for the whole workspace (see crates/vix_i18n).
+vix_i18n = { path = "crates/vix_i18n" }
 # Terminal UI core. The whole widget ecosystem must agree on this version.
-ratatui = { version = "0.30", features = ["crossterm"] }
+ratatui = { workspace = true }
 # The custom code-editor widget now lives in-tree at src/editor_core/; its
 # Tree-sitter, clipboard, rope, and grammar dependencies are listed below.
 # Calendar box: date/time strings and the navigable month grid. Internal crate so
@@ -111,105 +197,105 @@ ratatui = { version = "0.30", features = ["crossterm"] }
 # Bottom dock: scrollable line buffer (logs, output, data views).
 # or buffer (Base64, URL, CSV/TSV/JSON, YAML/JSON).
 # Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
-crossterm = "0.29"
+crossterm = { workspace = true }
 # Recursive, .gitignore-aware directory walking for the file index / fuzzy finder.
-ignore = "0.4"
+ignore = { workspace = true }
 # HTTP client for the REST tool. Pure-Rust TLS (rustls) so it cross-compiles to
 # musl/windows-gnu without a system OpenSSL.
-ureq = "2"
+ureq = { workspace = true }
 # Regular expressions for find/replace.
-regex = "1"
+regex = { workspace = true }
 # Settings serialization (confy handles the TOML; serde derives the schema).
-serde = { version = "1", features = ["derive"] }
+serde = { workspace = true }
 # JSON for the LSP client's JSON-RPC traffic.
-serde_json = "1"
+serde_json = { workspace = true }
 # Image preview. Default features pull `chafa-dyn`, which dynamically links the
 # native libchafa via pkg-config and so blocks portable cross-compilation; drop
 # it and keep the built-in protocols (Sixel/Kitty/iTerm2/Halfblocks).
-ratatui-image = { version = "11.0.4", default-features = false, features = ["image-defaults", "crossterm"] }
-image = "0.25"
-confy = "2.0.0"
-clap = { version = "4.6.1", features = ["derive"] }
-rust-i18n = "4.1.0"
+ratatui-image = { workspace = true }
+image = { workspace = true }
+confy = { workspace = true }
+clap = { workspace = true }
+rust-i18n = { workspace = true }
 
 # Dependencies absorbed from the former subcrates (now modules under src/).
-base64 = "0.22"
-evalexpr = "13"
-getrandom = "0.2"
-htmd = "0.5"
-jiff = "0.2"
-percent-encoding = "2"
-pulldown-cmark = "0.13"
-sha2 = "0.10"
+base64 = { workspace = true }
+evalexpr = { workspace = true }
+getrandom = { workspace = true }
+htmd = { workspace = true }
+jiff = { workspace = true }
+percent-encoding = { workspace = true }
+pulldown-cmark = { workspace = true }
+sha2 = { workspace = true }
 # `inline` enables word-level (intra-line) diffs in the Compare overlay.
-similar = { version = "2", features = ["inline"] }
-spellbook = "0.4"
-sysinfo = "0.33"
-toml = "0.8"
-md-5 = "0.10"
-crc32fast = "1"
-uuid = { version = "1", features = ["v1", "v3", "v4", "v5", "v6", "v7", "v8"] }
-include_dir = "0.7.4"
-serde_yaml = "0.9.34"
-markdown = "1.0.0"
-nix = { version = "0.29", features = ["signal"] }
+similar = { workspace = true }
+spellbook = { workspace = true }
+sysinfo = { workspace = true }
+toml = { workspace = true }
+md-5 = { workspace = true }
+crc32fast = { workspace = true }
+uuid = { workspace = true }
+include_dir = { workspace = true }
+serde_yaml = { workspace = true }
+markdown = { workspace = true }
+nix = { workspace = true }
 # QR code generation (Tools → QR Code). default-features = false drops the
 # optional image/svg renderers; we only use the built-in Unicode renderer.
-qrcode = { version = "0.14", default-features = false }
+qrcode = { workspace = true }
 # Integrated terminal (Tools → Terminal): a real PTY (ConPTY/openpty) hosting a
 # shell, with `vt100` parsing the escape sequences into a renderable screen grid.
-portable-pty = "0.8"
-vt100 = "0.15"
+portable-pty = { workspace = true }
+vt100 = { workspace = true }
 
 # Dependencies for the in-tree code-editor widget (src/editor_core/).
-anyhow = "1.0"
-arboard = { version = "3.6", default-features = false }
-ratatui-core = "0.1"
-ropey = "1.6"
-rust-embed = { version = "8.11", features = ["include-exclude"] }
-streaming-iterator = "0.1"
-tree-sitter = "0.26"
-unicode-segmentation = "1.13"
-unicode-width = "0.2"
+anyhow = { workspace = true }
+arboard = { workspace = true }
+ratatui-core = { workspace = true }
+ropey = { workspace = true }
+rust-embed = { workspace = true }
+streaming-iterator = { workspace = true }
+tree-sitter = { workspace = true }
+unicode-segmentation = { workspace = true }
+unicode-width = { workspace = true }
 
 # Optional Tree-sitter grammars, selected by the lang-* features above.
-tree-sitter-bash = { version = "0.25.1", optional = true }
-tree-sitter-c = { version = "0.24.2", optional = true }
-tree-sitter-c-sharp = { version = "0.23.5", optional = true }
-tree-sitter-cpp = { version = "0.23.4", optional = true }
-tree-sitter-css = { version = "0.25", optional = true }
-tree-sitter-go = { version = "0.25", optional = true }
-tree-sitter-html = { version = "0.23.2", optional = true }
-tree-sitter-java = { version = "0.23.5", optional = true }
-tree-sitter-javascript = { version = "0.25", optional = true }
-tree-sitter-json = { version = "0.24.8", optional = true }
-tree-sitter-kotlin = { version = "0.2", optional = true }
-tree-sitter-md = { version = "0.5.3", optional = true }
-tree-sitter-python = { version = "0.25", optional = true }
-tree-sitter-ruby = { version = "0", optional = true }
-tree-sitter-rust = { version = "0.24", optional = true }
-tree-sitter-postgres = { version = "1.2.4", optional = true }
-tree-sitter-swift = { version = "0", optional = true }
-tree-sitter-toml-ng = { version = "0.7.0", optional = true }
-tree-sitter-typescript = { version = "0.23", optional = true }
-tree-sitter-yaml = { version = "0.7", optional = true }
-tree-sitter-zig = { version = "1.1.2", optional = true }
+tree-sitter-bash = { workspace = true, optional = true }
+tree-sitter-c = { workspace = true, optional = true }
+tree-sitter-c-sharp = { workspace = true, optional = true }
+tree-sitter-cpp = { workspace = true, optional = true }
+tree-sitter-css = { workspace = true, optional = true }
+tree-sitter-go = { workspace = true, optional = true }
+tree-sitter-html = { workspace = true, optional = true }
+tree-sitter-java = { workspace = true, optional = true }
+tree-sitter-javascript = { workspace = true, optional = true }
+tree-sitter-json = { workspace = true, optional = true }
+tree-sitter-kotlin = { workspace = true, optional = true }
+tree-sitter-md = { workspace = true, optional = true }
+tree-sitter-python = { workspace = true, optional = true }
+tree-sitter-ruby = { workspace = true, optional = true }
+tree-sitter-rust = { workspace = true, optional = true }
+tree-sitter-postgres = { workspace = true, optional = true }
+tree-sitter-swift = { workspace = true, optional = true }
+tree-sitter-toml-ng = { workspace = true, optional = true }
+tree-sitter-typescript = { workspace = true, optional = true }
+tree-sitter-yaml = { workspace = true, optional = true }
+tree-sitter-zig = { workspace = true, optional = true }
 
 # DB workbench (spec/db): embedded database drivers via the `Any` runtime
 # driver — SQLite (bundled C), and pure-Rust PostgreSQL/MySQL over rustls (no
 # system OpenSSL, same rationale as ureq). Replaces shelling out to the
 # sqlite3/psql/mysql CLIs and holds one persistent connection per session.
-sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "any", "sqlite", "postgres", "mysql"] }
+sqlx = { workspace = true }
 # Minimal runtime for sqlx's async drivers; each DB session owns a
 # current-thread runtime on its own worker thread (src/db/session.rs).
-tokio = { version = "1.52.3", features = ["rt", "net", "time"] }
-futures-util = { version = "0.3", default-features = false }
+tokio = { workspace = true }
+futures-util = { workspace = true }
 
 # Faster allocator for the MUSL static target (glibc's allocator is fine, but
 # musl's is slow). Used as the global allocator in lib.rs/main.rs under the same
 # cfg, so it is only pulled in — and its C code only compiled — for musl builds.
 [target.'cfg(target_env = "musl")'.dependencies]
-mimalloc = "0.1"
+mimalloc = { workspace = true }
 
 [profile.release]
 lto = true
