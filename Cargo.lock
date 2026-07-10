@@ -4690,8 +4690,297 @@ dependencies = [
  "unicode-width 0.2.2",
  "ureq",
  "uuid",
+ "vix_affix",
+ "vix_ai_diff",
+ "vix_ai_panel",
+ "vix_align",
+ "vix_ascii_character_picker",
+ "vix_base64_tool",
+ "vix_base_tool",
+ "vix_bottom_dock",
+ "vix_calculator_tool",
+ "vix_calendar_panel",
+ "vix_case",
+ "vix_checksum_tool",
+ "vix_color_converter_tool",
+ "vix_conflict_tool",
+ "vix_contact_panel",
+ "vix_convert_from_html_into_markdown_tool",
+ "vix_convert_from_json_into_toml_tool",
+ "vix_convert_from_json_into_yaml_tool",
+ "vix_convert_from_markdown_into_html_tool",
+ "vix_convert_from_toml_into_json_tool",
+ "vix_convert_from_yaml_into_json_tool",
+ "vix_convert_tabular",
+ "vix_diff_view",
+ "vix_edit_bytes",
+ "vix_edit_sql",
+ "vix_edit_value",
+ "vix_editorconfig",
+ "vix_emmet",
+ "vix_file_information_panel",
+ "vix_fileops",
+ "vix_find_panel",
+ "vix_format_tool",
+ "vix_git",
+ "vix_html_character_picker",
+ "vix_http_client",
  "vix_i18n",
+ "vix_jwt_tool",
+ "vix_keyboard_shortcut_panel",
+ "vix_keymap_model",
+ "vix_left_dock",
+ "vix_locale_model",
+ "vix_lorem",
+ "vix_lsp_core",
+ "vix_macros",
+ "vix_markdown_preview",
+ "vix_media_type",
+ "vix_nerd_font_picker",
+ "vix_org",
+ "vix_org_contacts",
+ "vix_outline_panel",
+ "vix_palette",
+ "vix_pomodoro_tool",
+ "vix_qr_tool",
+ "vix_query",
+ "vix_regex_tool",
+ "vix_right_dock",
+ "vix_roam",
+ "vix_snippet_tool",
+ "vix_spellcheck",
+ "vix_status_bar_panel",
+ "vix_system_information_panel",
+ "vix_tags",
+ "vix_tasks",
+ "vix_terminal",
+ "vix_test_runner",
+ "vix_text_information_panel",
+ "vix_textops",
+ "vix_theme_model",
+ "vix_time_zone_model",
+ "vix_unit_converter_tool",
+ "vix_url_tool",
+ "vix_uuid_tool",
+ "vix_vcard_parser",
+ "vix_welcome_panel",
+ "vix_workspace_dashboard_panel",
+ "vix_x11_color_picker",
+ "vix_zid_tool",
  "vt100",
+]
+
+[[package]]
+name = "vix_affix"
+version = "1.1.0"
+
+[[package]]
+name = "vix_ai_diff"
+version = "1.1.0"
+dependencies = [
+ "similar",
+]
+
+[[package]]
+name = "vix_ai_panel"
+version = "1.1.0"
+
+[[package]]
+name = "vix_align"
+version = "1.1.0"
+
+[[package]]
+name = "vix_ascii_character_picker"
+version = "1.1.0"
+
+[[package]]
+name = "vix_base64_tool"
+version = "1.1.0"
+dependencies = [
+ "base64",
+]
+
+[[package]]
+name = "vix_base_tool"
+version = "1.1.0"
+
+[[package]]
+name = "vix_bottom_dock"
+version = "1.1.0"
+
+[[package]]
+name = "vix_calculator_tool"
+version = "1.1.0"
+dependencies = [
+ "evalexpr",
+]
+
+[[package]]
+name = "vix_calendar_panel"
+version = "1.1.0"
+dependencies = [
+ "jiff",
+]
+
+[[package]]
+name = "vix_case"
+version = "1.1.0"
+
+[[package]]
+name = "vix_checksum_tool"
+version = "1.1.0"
+dependencies = [
+ "crc32fast",
+ "md-5 0.10.6",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "vix_color_converter_tool"
+version = "1.1.0"
+
+[[package]]
+name = "vix_conflict_tool"
+version = "1.1.0"
+
+[[package]]
+name = "vix_contact_panel"
+version = "1.1.0"
+
+[[package]]
+name = "vix_convert_from_html_into_markdown_tool"
+version = "1.1.0"
+dependencies = [
+ "htmd",
+]
+
+[[package]]
+name = "vix_convert_from_json_into_toml_tool"
+version = "1.1.0"
+dependencies = [
+ "serde_json",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "vix_convert_from_json_into_yaml_tool"
+version = "1.1.0"
+dependencies = [
+ "serde_json",
+ "serde_yaml",
+]
+
+[[package]]
+name = "vix_convert_from_markdown_into_html_tool"
+version = "1.1.0"
+dependencies = [
+ "pulldown-cmark",
+]
+
+[[package]]
+name = "vix_convert_from_toml_into_json_tool"
+version = "1.1.0"
+dependencies = [
+ "serde_json",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "vix_convert_from_yaml_into_json_tool"
+version = "1.1.0"
+dependencies = [
+ "serde_json",
+ "serde_yaml",
+]
+
+[[package]]
+name = "vix_convert_tabular"
+version = "1.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "vix_diff_view"
+version = "1.1.0"
+dependencies = [
+ "similar",
+]
+
+[[package]]
+name = "vix_edit_bytes"
+version = "1.1.0"
+dependencies = [
+ "crossterm",
+]
+
+[[package]]
+name = "vix_edit_sql"
+version = "1.1.0"
+dependencies = [
+ "crossterm",
+]
+
+[[package]]
+name = "vix_edit_value"
+version = "1.1.0"
+dependencies = [
+ "crossterm",
+ "serde_json",
+ "serde_yaml",
+]
+
+[[package]]
+name = "vix_editorconfig"
+version = "1.1.0"
+dependencies = [
+ "regex",
+]
+
+[[package]]
+name = "vix_emmet"
+version = "1.1.0"
+
+[[package]]
+name = "vix_file_information_panel"
+version = "1.1.0"
+
+[[package]]
+name = "vix_fileops"
+version = "1.1.0"
+
+[[package]]
+name = "vix_find_panel"
+version = "1.1.0"
+dependencies = [
+ "regex",
+]
+
+[[package]]
+name = "vix_format_tool"
+version = "1.1.0"
+dependencies = [
+ "serde_json",
+ "serde_yaml",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "vix_git"
+version = "1.1.0"
+dependencies = [
+ "similar",
+]
+
+[[package]]
+name = "vix_html_character_picker"
+version = "1.1.0"
+
+[[package]]
+name = "vix_http_client"
+version = "1.1.0"
+dependencies = [
+ "ureq",
 ]
 
 [[package]]
@@ -4699,6 +4988,238 @@ name = "vix_i18n"
 version = "1.1.0"
 dependencies = [
  "rust-i18n",
+]
+
+[[package]]
+name = "vix_jwt_tool"
+version = "1.1.0"
+dependencies = [
+ "base64",
+ "serde_json",
+]
+
+[[package]]
+name = "vix_keyboard_shortcut_panel"
+version = "1.1.0"
+
+[[package]]
+name = "vix_keymap_model"
+version = "1.1.0"
+
+[[package]]
+name = "vix_left_dock"
+version = "1.1.0"
+dependencies = [
+ "regex",
+]
+
+[[package]]
+name = "vix_locale_model"
+version = "1.1.0"
+
+[[package]]
+name = "vix_lorem"
+version = "1.1.0"
+
+[[package]]
+name = "vix_lsp_core"
+version = "1.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "vix_macros"
+version = "1.1.0"
+dependencies = [
+ "crossterm",
+ "serde",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "vix_markdown_preview"
+version = "1.1.0"
+dependencies = [
+ "pulldown-cmark",
+]
+
+[[package]]
+name = "vix_media_type"
+version = "1.1.0"
+
+[[package]]
+name = "vix_nerd_font_picker"
+version = "1.1.0"
+
+[[package]]
+name = "vix_org"
+version = "1.1.0"
+dependencies = [
+ "regex",
+]
+
+[[package]]
+name = "vix_org_contacts"
+version = "1.1.0"
+
+[[package]]
+name = "vix_outline_panel"
+version = "1.1.0"
+
+[[package]]
+name = "vix_palette"
+version = "1.1.0"
+dependencies = [
+ "regex",
+ "rust-i18n",
+ "vix_i18n",
+]
+
+[[package]]
+name = "vix_pomodoro_tool"
+version = "1.1.0"
+
+[[package]]
+name = "vix_qr_tool"
+version = "1.1.0"
+dependencies = [
+ "qrcode",
+]
+
+[[package]]
+name = "vix_query"
+version = "1.1.0"
+dependencies = [
+ "regex",
+]
+
+[[package]]
+name = "vix_regex_tool"
+version = "1.1.0"
+dependencies = [
+ "regex",
+]
+
+[[package]]
+name = "vix_right_dock"
+version = "1.1.0"
+
+[[package]]
+name = "vix_roam"
+version = "1.1.0"
+dependencies = [
+ "regex",
+]
+
+[[package]]
+name = "vix_snippet_tool"
+version = "1.1.0"
+
+[[package]]
+name = "vix_spellcheck"
+version = "1.1.0"
+dependencies = [
+ "spellbook",
+]
+
+[[package]]
+name = "vix_status_bar_panel"
+version = "1.1.0"
+
+[[package]]
+name = "vix_system_information_panel"
+version = "1.1.0"
+dependencies = [
+ "sysinfo",
+]
+
+[[package]]
+name = "vix_tags"
+version = "1.1.0"
+
+[[package]]
+name = "vix_tasks"
+version = "1.1.0"
+dependencies = [
+ "serde",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "vix_terminal"
+version = "1.1.0"
+dependencies = [
+ "anyhow",
+ "crossterm",
+ "portable-pty",
+ "vt100",
+]
+
+[[package]]
+name = "vix_test_runner"
+version = "1.1.0"
+
+[[package]]
+name = "vix_text_information_panel"
+version = "1.1.0"
+
+[[package]]
+name = "vix_textops"
+version = "1.1.0"
+
+[[package]]
+name = "vix_theme_model"
+version = "1.1.0"
+dependencies = [
+ "ratatui",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "vix_time_zone_model"
+version = "1.1.0"
+
+[[package]]
+name = "vix_unit_converter_tool"
+version = "1.1.0"
+
+[[package]]
+name = "vix_url_tool"
+version = "1.1.0"
+dependencies = [
+ "percent-encoding",
+]
+
+[[package]]
+name = "vix_uuid_tool"
+version = "1.1.0"
+dependencies = [
+ "uuid",
+]
+
+[[package]]
+name = "vix_vcard_parser"
+version = "1.1.0"
+
+[[package]]
+name = "vix_welcome_panel"
+version = "1.1.0"
+
+[[package]]
+name = "vix_workspace_dashboard_panel"
+version = "1.1.0"
+
+[[package]]
+name = "vix_x11_color_picker"
+version = "1.1.0"
+
+[[package]]
+name = "vix_zid_tool"
+version = "1.1.0"
+dependencies = [
+ "getrandom 0.2.17",
 ]
 
 [[package]]
