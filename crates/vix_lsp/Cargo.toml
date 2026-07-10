@@ -1,0 +1,12 @@
+[package]
+name = "vix_lsp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde_json = { workspace = true }
+vix_lsp_core = { path = "../vix_lsp_core" }
+vix_settings = { path = "../vix_settings" }

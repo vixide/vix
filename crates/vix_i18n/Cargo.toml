@@ -1,0 +1,15 @@
+# vix_i18n owns the single embedded translation table for the whole workspace.
+# Every other crate calls `vix_i18n::t!` (and `vix_i18n::surface!()` at its root)
+# instead of embedding `locales/` itself, so the 588 KB, 15-language table is
+# compiled in exactly once rather than once per crate.
+[package]
+name = "vix_i18n"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared i18n backend for the Vix workspace (single embedded locale table)."
+
+[dependencies]
+rust-i18n = { workspace = true }

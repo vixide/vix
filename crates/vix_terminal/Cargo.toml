@@ -1,0 +1,13 @@
+[package]
+name = "vix_terminal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+crossterm = { workspace = true }
+portable-pty = { workspace = true }
+vt100 = { workspace = true }
