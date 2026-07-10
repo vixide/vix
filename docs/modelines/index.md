@@ -1,7 +1,7 @@
 # Modelines
 
 Modelines are special comments at the beginning or end of a file that configure
-editor settings for that specific file. Vix supports both Vim and Emacs modeline
+editor settings for that specific file. Vix™ supports both Vim and Emacs modeline
 formats, so you can specify settings such as tab size, indentation style, and file
 type directly within your files.
 
@@ -71,3 +71,7 @@ Supported Vim options:
   present.
 - Modelines in the first few lines take precedence over those at the end of the
   file.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

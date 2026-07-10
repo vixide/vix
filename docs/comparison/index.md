@@ -1,6 +1,6 @@
 # Comparison
 
-Vix is a terminal text editor and TUI IDE. This page positions Vix against four
+Vix™ is a terminal text editor and TUI IDE. This page positions Vix against four
 well-known editors so you can decide whether it fits your workflow.
 
 ## Simpler than Fresh Editor
@@ -51,3 +51,7 @@ Vix aims at a middle ground: more capable than a minimal editor like Micro, but
 simpler and more approachable than fully extensible or modal editors. Novices get
 familiar shortcuts and a visible menu bar by default, while power users can switch
 to Vim or Emacs keymaps when they want them.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

@@ -22,3 +22,7 @@ The catalog covers the common web types plus popular developer and modern format
 
 See the specification and data table at
 [`spec/media-types/`](../../spec/media-types/index.md).
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

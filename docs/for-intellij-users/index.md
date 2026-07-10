@@ -1,4 +1,4 @@
-# Vix for IntelliJ / JetBrains users
+# Vix™ for IntelliJ / JetBrains users
 
 You picked IntelliJ because it *understands* code: rename actually renames,
 Find Action finds everything, and the debugger just works. The trade you
@@ -95,3 +95,7 @@ part you needed least.
 - [`docs/language-server-protocol/index.md`](../language-server-protocol/index.md)
   — configuring language servers.
 - [`index.md`](../../index.md) — the full feature tour.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

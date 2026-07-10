@@ -45,3 +45,7 @@ work**, so you have a durable record after the status-bar message fades:
 After a failed action, an **Error** notification appears. Open the panel
 (**View → Show/Hide Right Dock**), highlight the message with `↑` / `↓`, then
 press `Delete` to dismiss it once you have read it.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

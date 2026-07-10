@@ -1,6 +1,6 @@
 # Locales
 
-Vix can show its user interface in many languages. This covers localization
+Vix™ can show its user interface in many languages. This covers localization
 (l10n) and internationalization (i18n) of the UI text.
 
 **Status:** Shipped. 27 languages are selectable today: English, Spanish, French,
@@ -87,3 +87,7 @@ listing it in `locale_model`. See also `../internationalization/index.md`.
 | ur             | اردو             | Urdu               |
 | vi             | Tiếng Việt       | Vietnamese         |
 | zh             | 普通话           | Mandarin           |
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

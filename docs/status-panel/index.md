@@ -47,3 +47,7 @@ changes, the bar reads roughly:
 ```
 
 Clicking the `main •` branch indicator opens the Git Changes panel.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

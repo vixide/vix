@@ -1,6 +1,6 @@
 # File Explorer
 
-The file explorer is Vix's built-in **left dock**: a directory tree for browsing,
+The file explorer is Vix™'s built-in **left dock**: a directory tree for browsing,
 opening, and managing your workspace files without leaving the keyboard.
 
 **Status:** Shipped.
@@ -80,3 +80,7 @@ Open buffers stay in sync with file operations:
 
 Drag-and-drop and a trash option (as an alternative to permanent delete) are
 planned nice-to-haves, not yet built.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

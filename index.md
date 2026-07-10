@@ -1,6 +1,6 @@
-# Vix IDE
+# Vix IDE™
 
-Vix IDE is a high-speed high-security text editor featuring an integrated development environment. Vix provides a file explorer, keymaps, tools, locales, themes, and much more.
+Vix IDE is a high-speed high-security text editor featuring an integrated development environment. Vix™ provides a file explorer, keymaps, tools, locales, themes, and much more.
 
 Vix looks like this:
 
@@ -164,3 +164,7 @@ cargo run --example list_commands   # print every command-palette command
 ## License
 
 Licensed under either of Apache-2.0 or MIT at your option.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

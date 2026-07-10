@@ -2,7 +2,7 @@
 
 The top menu bar groups every command into dropdown menus. From left to right
 the menus are
-**Vix · File · Edit · View · Go · Run · AI · DB · Git · Org · Tools · Help**.
+**Vix™ · File · Edit · View · Go · Run · AI · DB · Git · Org · Tools · Help**.
 
 ## Navigating the menus
 
@@ -237,3 +237,7 @@ and **Export ▸** (Markdown / HTML).
 
 Each menu item left-aligns its title (for example, "Open…"), right-aligns its
 shortcut (for example, "Ctrl+O"), and keeps at least one space between them.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

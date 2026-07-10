@@ -1,4 +1,4 @@
-# Vix for Spacemacs users
+# Vix™ for Spacemacs users
 
 Spacemacs found the synthesis: Vim's modal editing, Emacs's depth, and a
 `Space` leader that turns "what was that binding?" into a guided menu. The
@@ -99,3 +99,7 @@ the weight underneath, Vix is that idea, compiled.
 - [`docs/for-emacs-users/index.md`](../for-emacs-users/index.md) — the Emacs
   keymap and Org story.
 - [`index.md`](../../index.md) — the full feature tour.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

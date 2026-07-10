@@ -30,3 +30,7 @@ Each entry is a key token — the key plus modifier prefixes `C-` (Ctrl), `A-`
 (Alt), `S-` (Shift): e.g. `C-c`, `S-Tab`, `Enter`, `A-Left`, `F5`, `Space`.
 
 See the specification at `spec/macros/index.md`.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

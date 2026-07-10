@@ -1,4 +1,4 @@
-# Vix for Vim users
+# Vix™ for Vim users
 
 You live in a terminal. You think in motions. You have a `.vimrc` you have been
 tending for a decade, and every other editor feels like typing through
@@ -109,3 +109,7 @@ keeps those while deleting the parts you merely tolerate.
 - [`docs/keymaps/index.md`](../keymaps/index.md) — every keymap, every binding.
 - [`spec/keymaps/index.md`](../../spec/keymaps/index.md) — the authoritative spec.
 - [`index.md`](../../index.md) — the full feature tour.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

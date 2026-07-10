@@ -46,3 +46,7 @@ To insert an ESC control character: open **Tools → ASCII**, move the highlight
 to the `27` / `1B` / `ESC` row (or scroll to it and click), and press `Enter`.
 The escape character is inserted at the cursor and the panel stays open for the
 next pick. Press `Esc` when you are done.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

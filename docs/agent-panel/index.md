@@ -36,3 +36,7 @@ stdin as context. The reply is captured in the background and appended to the
 transcript when it arrives (the same async path the AI menu uses). See
 `spec/ai/index.md` and the [configuration](../configuration/index.md) docs for
 `ai_command`.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

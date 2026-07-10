@@ -49,3 +49,7 @@ value is inserted at the cursor.
 Live refresh, per-process CPU/memory and the process tree, hardware sensors
 (battery, temperatures, fan speeds), and network interfaces / traffic rates are
 planned but not yet implemented.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

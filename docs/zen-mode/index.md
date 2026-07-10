@@ -16,3 +16,7 @@ Zen mode is a runtime view state: it remembers and restores your previous dock a
 status-bar visibility, and does not overwrite your saved settings, so it never
 changes what you see after a restart. See the specification at
 `spec/zen-mode/index.md`.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

@@ -1,6 +1,6 @@
 # Org
 
-Vix includes the **basics of [Org mode](https://orgmode.org/)** for working with
+Vix™ includes the **basics of [Org mode](https://orgmode.org/)** for working with
 outline-style notes and task lists. Open the **Org** menu (`Alt+O`) with a buffer
 of Org text.
 
@@ -55,3 +55,7 @@ To drop in Org snippets, emphasis markers, or `#+BEGIN_…` blocks, use
 Markers and blocks **toggle** around the current selection.
 
 See the specification at [`spec/org/index.md`](../../spec/org/index.md).
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

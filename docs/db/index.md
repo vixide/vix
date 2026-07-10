@@ -67,7 +67,7 @@ Type SQL; multiple statements separated by `;` are fine.
 - Autocomplete pops up as you type: SQL keywords, table names from the
   connected database, and `table.` column completion. **↑/↓** choose,
   **Tab** accepts, **Esc** dismisses.
-- Highlighting follows your Vix theme's `syntax` colors (keywords, strings,
+- Highlighting follows your Vix™ theme's `syntax` colors (keywords, strings,
   numbers, comments), the same ones the code editor uses.
 
 ### Results grid (right, bottom)
@@ -97,3 +97,7 @@ Type SQL; multiple statements separated by `;` are fine.
 All of this is also reachable from the **DB** menu and the command palette.
 See the specification at [`spec/db/index.md`](../../spec/db/index.md) and the
 session design notes at [`spec/db/session.md`](../../spec/db/session.md).
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

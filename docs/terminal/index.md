@@ -1,6 +1,6 @@
 # Integrated Terminal
 
-Run a shell without leaving Vix. **Tools → Terminal** (or the command palette)
+Run a shell without leaving Vix™. **Tools → Terminal** (or the command palette)
 opens a real interactive terminal — your usual shell, in the workspace directory —
 right inside the editor.
 
@@ -27,3 +27,7 @@ The terminal resizes with the window so programs lay out correctly.
 See the specification at `spec/terminal/index.md`. For one-off, non-interactive
 commands whose output you want to keep, use **Tools → Run Command** (it streams to
 the bottom dock) or define a [task](../tasks/index.md).
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

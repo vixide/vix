@@ -47,3 +47,7 @@ Select `hello world` and choose:
 - **Snake** → `hello_world`
 - **Camel** → `helloWorld`
 - **Pascal** → `HelloWorld`
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

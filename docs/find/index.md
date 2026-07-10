@@ -103,3 +103,7 @@ Find → Search in Workspace → Dock** (or the palette). It prompts for a term 
 **Alt+C** toggles case-sensitivity, **Alt+R** toggles regex (default:
 case-insensitive literal) — then pushes `relpath:line:col: text` lines into the
 dock, each click-to-jump to the match.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

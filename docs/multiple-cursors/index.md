@@ -1,6 +1,6 @@
 # Multiple Cursors
 
-Vix can place many cursors (carets) at once and edit them together — type, delete,
+Vix™ can place many cursors (carets) at once and edit them together — type, delete,
 or move and every caret follows.
 
 ## Add the next occurrence
@@ -31,3 +31,7 @@ same column, without a column span.
 To drop the extra carets and return to a single cursor, use *Remove Multi Cursor*
 (or *Remove All Multi Cursors*). See `spec/select-all-occurrences/index.md` and
 `spec/column-select/index.md`.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

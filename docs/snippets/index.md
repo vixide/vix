@@ -11,7 +11,7 @@ Snippets can carry **tabstops** — fields you fill in and jump between with Tab
 
 ## Your own snippets (JSON files)
 
-Beyond the bundled set, Vix loads snippet files from three places (modeled on VS
+Beyond the bundled set, Vix™ loads snippet files from three places (modeled on VS
 Code's JSON snippets):
 
 - **Global** — `~/.config/vix/global/snippets/snippets.json` (always available).
@@ -71,3 +71,7 @@ Snippet bodies use a small syntax:
 
 See the specification at `spec/snippets/index.md`. For one-shot generated text
 (UUIDs, dates, language boilerplate) see [Insert](../insert/index.md).
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

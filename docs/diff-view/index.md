@@ -1,7 +1,7 @@
 # Compare With File
 
 Quickly see how the file you're editing differs from another file — a backup, a
-sibling config, the version on another path — without leaving Vix.
+sibling config, the version on another path — without leaving Vix™.
 
 ## Using it
 
@@ -20,3 +20,7 @@ the two are identical, Vix says so in the status bar instead of opening the view
 See the specification at `spec/diff-view/index.md`. For changes against the Git
 HEAD version of a file, use the [diff gutter and per-hunk tools](../git-panel/index.md)
 instead.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

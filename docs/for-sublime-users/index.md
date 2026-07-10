@@ -1,4 +1,4 @@
-# Vix for Sublime Text users
+# Vix™ for Sublime Text users
 
 Sublime Text made a promise the rest of the industry spent a decade catching up
 to: an editor can be *fast*, beautiful, and powerful at the same time. Goto
@@ -96,3 +96,7 @@ that they should also carry their own batteries.
 - [`docs/language-server-protocol/index.md`](../language-server-protocol/index.md)
   — configuring language servers.
 - [`index.md`](../../index.md) — the full feature tour.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

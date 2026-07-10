@@ -3,7 +3,7 @@
 `vix-edit-sql` mode gives a `.sql` file a tidy, statement-at-a-time view. Open it
 from **Edit → Mode → SQL…** or the command palette (*Edit SQL*).
 
-Vix splits the buffer into individual SQL statements (it knows not to split on
+Vix™ splits the buffer into individual SQL statements (it knows not to split on
 semicolons inside strings or comments) and lists them, each tagged with its kind
 (`SELECT`, `INSERT`, `CREATE`, …) and a one-line preview.
 
@@ -18,3 +18,7 @@ From the list you can:
 
 It's a practical way to reorganize and clean up SQL scripts — not a full SQL
 parser. See the specification at [`spec/edit-sql/index.md`](../../spec/edit-sql/index.md).
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

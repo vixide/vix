@@ -2,7 +2,7 @@
 
 Edit Outline turns the active buffer into a foldable, reorderable tree — code
 folding, but for prose, and a file-explorer-style hierarchy of the buffer's
-lines. It is one of Vix's *edit surfaces*: a full-screen overlay that owns its own
+lines. It is one of Vix™'s *edit surfaces*: a full-screen overlay that owns its own
 keys and saves back to the buffer.
 
 ## Opening
@@ -35,3 +35,7 @@ regenerated from each item's level) and saves it. **Esc** or **q** closes.
 
 This is distinct from the read-only **Code Outline** (Ctrl+Shift+O), which lists
 code symbols. See the specification at `spec/edit-outline/index.md`.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

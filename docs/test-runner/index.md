@@ -23,8 +23,12 @@ test_command = "cargo test"   # or "pytest -v", "npm test", "go test ./..."
   jump straight to the line that panicked (for `cargo test`; other runners show
   status without a location).
 
-Vix understands `cargo test` (libtest) and the common `name PASSED/FAILED/SKIPPED`
+Vix™ understands `cargo test` (libtest) and the common `name PASSED/FAILED/SKIPPED`
 format used by `pytest -v` and others.
 
 See the specification at `spec/test-runner/index.md`. For arbitrary project
 commands (not just tests) see [Tasks](../tasks/index.md).
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

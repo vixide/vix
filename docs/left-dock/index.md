@@ -74,3 +74,7 @@ To rename `foo.txt` to `bar.txt`:
 1. Select `foo.txt` in the explorer and press **Ctrl+X**.
 2. Press **Ctrl+V** to paste it back, then rename — any open buffer for the file
    follows along automatically.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

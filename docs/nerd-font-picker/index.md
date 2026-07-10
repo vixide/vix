@@ -44,3 +44,7 @@ To add a folder icon to a status line: open **Tools → Nerd Font Palette…**, 
 the arrow keys to move the highlight to the glyph you want (its name appears
 next to the grid), and press `Enter`. The glyph is inserted at the cursor and
 the picker stays open for the next pick.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

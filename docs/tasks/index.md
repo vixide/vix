@@ -1,7 +1,7 @@
 # Tasks
 
 Define your project's common commands once and run them from a menu instead of
-retyping them. Vix reads a `tasks.toml` from the workspace root (or
+retyping them. Vix™ reads a `tasks.toml` from the workspace root (or
 `.vix/tasks.toml`) and lists the tasks under **Tools → Tasks…** (also in the
 command palette).
 
@@ -33,3 +33,7 @@ streams to the bottom dock and the completion is recorded in the
 non-zero exit). If no `tasks.toml` is found, Vix says so in the status bar.
 
 See the specification at `spec/tasks/index.md`.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

@@ -1,7 +1,7 @@
 # Keymaps
 
 A **keymap** is a keyboard navigation style for moving through the editor, menus,
-file explorer, and more. Vix ships ten keymaps — **Apple**, **VSCode macOS**,
+file explorer, and more. Vix™ ships ten keymaps — **Apple**, **VSCode macOS**,
 **VSCode Windows**, **Emacs**, **Vi**, **Spacemacs**, **IntelliJ macOS**,
 **IntelliJ Windows**, **Eclipse**, and **Sublime Text** — and exactly one is
 active at a time.
@@ -161,3 +161,7 @@ as a layered set of chords for executing functions (Emacs).
 | Logic        | System commands & UI focus | Modal "language" (verb + noun) | Layered modifiers & chords |
 | Primary keys | Command (⌘) + Tab          | Home row (`h`, `j`, `k`, `l`)  | Control (⌃) + Meta (⌥)     |
 | Philosophy   | Universal accessibility    | Speed and home-row efficiency  | Everything is a function   |
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

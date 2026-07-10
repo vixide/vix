@@ -1,6 +1,6 @@
 # Switch Project
 
-Jump between the projects you've recently worked on without quitting Vix. **File →
+Jump between the projects you've recently worked on without quitting Vix™. **File →
 Switch Project…** (or the command palette) lists your recent workspaces; pick one
 and the editor re-roots there.
 
@@ -22,3 +22,7 @@ Recent projects come from the same per-workspace session store described under
 remembered automatically.
 
 See the specification at `spec/switch-project/index.md`.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.
