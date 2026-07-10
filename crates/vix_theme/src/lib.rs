@@ -7,9 +7,9 @@
 #![warn(clippy::pedantic)]
 
 pub use vix_theme_model::{
-    base, bg, custom_name, dim, editor_cursor, fg, region_base, region_bg, region_fg,
-    region_modifiers, region_title, selected, set_custom, syntax_color, syntax_theme, title,
-    CustomTheme, Region,
+    CustomTheme, Region, base, bg, custom_name, dim, editor_cursor, fg, region_base, region_bg,
+    region_fg, region_modifiers, region_title, selected, set_custom, syntax_color, syntax_theme,
+    title,
 };
 
 /// Nerd Font glyphs (monospace). They render best with a patched "Nerd Font"

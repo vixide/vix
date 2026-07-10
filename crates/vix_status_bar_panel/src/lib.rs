@@ -66,8 +66,14 @@ mod tests {
 
     #[test]
     fn git_segment_shows_branch_and_dirty_dot() {
-        assert_eq!(git_segment(Some("main"), "\u{e0a0}", false), "\u{e0a0} main   ");
-        assert_eq!(git_segment(Some("main"), "\u{e0a0}", true), "\u{e0a0} main \u{2022}   ");
+        assert_eq!(
+            git_segment(Some("main"), "\u{e0a0}", false),
+            "\u{e0a0} main   "
+        );
+        assert_eq!(
+            git_segment(Some("main"), "\u{e0a0}", true),
+            "\u{e0a0} main \u{2022}   "
+        );
         assert_eq!(git_segment(None, "\u{e0a0}", true), "");
     }
 
@@ -90,11 +96,17 @@ mod tests {
             info_segment(Some("rust"), "LF", Some((12, 3))),
             "rust  LF  UTF-8   Sel 12 (3L)   "
         );
-        assert_eq!(info_segment(Some("rust"), "CRLF", None), "rust  CRLF  UTF-8   ");
+        assert_eq!(
+            info_segment(Some("rust"), "CRLF", None),
+            "rust  CRLF  UTF-8   "
+        );
     }
 
     #[test]
     fn right_appends_position_and_glyph() {
-        assert_eq!(right_segment("rust  LF  UTF-8   ", 2, 5, "C"), "rust  LF  UTF-8   Ln 2:Col 5   C ");
+        assert_eq!(
+            right_segment("rust  LF  UTF-8   ", 2, 5, "C"),
+            "rust  LF  UTF-8   Ln 2:Col 5   C "
+        );
     }
 }

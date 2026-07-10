@@ -54,19 +54,31 @@ impl Panel {
     /// Open an empty chat panel.
     #[must_use]
     pub fn open() -> Self {
-        Panel { turns: Vec::new(), input: String::new(), scroll: 0, busy: false }
+        Panel {
+            turns: Vec::new(),
+            input: String::new(),
+            scroll: 0,
+            busy: false,
+        }
     }
 
     /// Append a turn and jump the view back to the newest content.
     pub fn push(&mut self, role: Role, text: impl Into<String>) {
-        self.turns.push(Turn { role, text: text.into() });
+        self.turns.push(Turn {
+            role,
+            text: text.into(),
+        });
         self.scroll = 0;
     }
 
     /// The most recent assistant reply, if any (for "open in tab" / "copy").
     #[must_use]
     pub fn last_assistant(&self) -> Option<&str> {
-        self.turns.iter().rev().find(|t| t.role == Role::Assistant).map(|t| t.text.as_str())
+        self.turns
+            .iter()
+            .rev()
+            .find(|t| t.role == Role::Assistant)
+            .map(|t| t.text.as_str())
     }
 
     /// Prior conversation formatted as plain text, fed to the CLI on stdin so the
@@ -195,9 +207,15 @@ mod tests {
         let mut p = Panel::open();
         p.push(Role::User, "a\nb\nc\nd");
         // 4 lines; a 2-row viewport shows the last two by default.
-        assert_eq!(p.visible(10, 2), vec![(Role::User, "c".into()), (Role::User, "d".into())]);
+        assert_eq!(
+            p.visible(10, 2),
+            vec![(Role::User, "c".into()), (Role::User, "d".into())]
+        );
         p.scroll = 100; // over-scroll is clamped to the top
-        assert_eq!(p.visible(10, 2), vec![(Role::User, "a".into()), (Role::User, "b".into())]);
+        assert_eq!(
+            p.visible(10, 2),
+            vec![(Role::User, "a".into()), (Role::User, "b".into())]
+        );
     }
 
     #[test]

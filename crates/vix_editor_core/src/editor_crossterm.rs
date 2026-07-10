@@ -1,13 +1,13 @@
 #![warn(clippy::pedantic)]
-use crate::actions::{ToggleComment, Redo, Undo, Copy, Paste, Cut, DeleteLine, Duplicate, SelectAll, MoveLeft, MoveRight, MoveUp, MoveDown, Delete, InsertNewline, InsertText, Indent, UnIndent};
+use crate::actions::{
+    Copy, Cut, Delete, DeleteLine, Duplicate, Indent, InsertNewline, InsertText, MoveDown,
+    MoveLeft, MoveRight, MoveUp, Paste, Redo, SelectAll, ToggleComment, UnIndent, Undo,
+};
 use crate::editor::Editor;
 use crate::multicursor::CaretMove;
 use crate::selection::SelectionSnap;
 use anyhow::Result;
-use crossterm::event::{
-    KeyEvent, KeyModifiers,
-    MouseButton, MouseEvent, MouseEventKind,
-};
+use crossterm::event::{KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui_core::layout::Rect;
 
 impl Editor {
@@ -15,9 +15,7 @@ impl Editor {
     ///
     /// # Errors
     /// Returns an error when an applied action fails.
-    pub fn input(
-        &mut self, key: KeyEvent, area: &Rect,
-    ) -> Result<()> {
+    pub fn input(&mut self, key: KeyEvent, area: &Rect) -> Result<()> {
         use crossterm::event::KeyCode;
 
         let shift = key.modifiers.contains(KeyModifiers::SHIFT);
@@ -25,44 +23,48 @@ impl Editor {
         let _alt = key.modifiers.contains(KeyModifiers::ALT);
 
         match key.code {
-            KeyCode::Char('÷') => self.apply(ToggleComment { }),
-            KeyCode::Char('z' | 'Z') if ctrl && shift => self.apply(Redo { }),
-            KeyCode::Char('z') if ctrl => self.apply(Undo { }),
-            KeyCode::Char('c') if ctrl => self.apply(Copy { }),
-            KeyCode::Char('v') if ctrl => self.apply(Paste { }),
-            KeyCode::Char('x') if ctrl => self.apply(Cut { }),
-            KeyCode::Char('k') if ctrl => self.apply(DeleteLine { }),
+            KeyCode::Char('÷') => self.apply(ToggleComment {}),
+            KeyCode::Char('z' | 'Z') if ctrl && shift => self.apply(Redo {}),
+            KeyCode::Char('z') if ctrl => self.apply(Undo {}),
+            KeyCode::Char('c') if ctrl => self.apply(Copy {}),
+            KeyCode::Char('v') if ctrl => self.apply(Paste {}),
+            KeyCode::Char('x') if ctrl => self.apply(Cut {}),
+            KeyCode::Char('k') if ctrl => self.apply(DeleteLine {}),
             // Ctrl+Shift+D duplicates the line/selection; Ctrl+D adds the next
             // occurrence of the selection/word as a caret.
-            KeyCode::Char('d' | 'D') if ctrl && shift => self.apply(Duplicate { }),
+            KeyCode::Char('d' | 'D') if ctrl && shift => self.apply(Duplicate {}),
             KeyCode::Char('d') if ctrl => self.add_next_occurrence(),
-            KeyCode::Char('a') if ctrl => self.apply(SelectAll { }),
+            KeyCode::Char('a') if ctrl => self.apply(SelectAll {}),
             // Multiple-caret routing: while extra carets exist, edit/move them all.
-            KeyCode::Esc       if self.has_multi_carets() => self.clear_carets(),
-            KeyCode::Left      if self.has_multi_carets() => self.multi_move(CaretMove::Left, shift),
-            KeyCode::Right     if self.has_multi_carets() => self.multi_move(CaretMove::Right, shift),
-            KeyCode::Up        if self.has_multi_carets() => self.multi_move(CaretMove::Up, shift),
-            KeyCode::Down      if self.has_multi_carets() => self.multi_move(CaretMove::Down, shift),
+            KeyCode::Esc if self.has_multi_carets() => self.clear_carets(),
+            KeyCode::Left if self.has_multi_carets() => self.multi_move(CaretMove::Left, shift),
+            KeyCode::Right if self.has_multi_carets() => self.multi_move(CaretMove::Right, shift),
+            KeyCode::Up if self.has_multi_carets() => self.multi_move(CaretMove::Up, shift),
+            KeyCode::Down if self.has_multi_carets() => self.multi_move(CaretMove::Down, shift),
             KeyCode::Backspace if self.has_multi_carets() => self.multi_delete(false),
-            KeyCode::Enter     if self.has_multi_carets() => self.multi_insert("\n"),
-            KeyCode::Char(c)   if self.has_multi_carets() && !ctrl => self.multi_insert(&c.to_string()),
-            KeyCode::Left      => self.apply(MoveLeft { shift }),
-            KeyCode::Right     => self.apply(MoveRight { shift }),
-            KeyCode::Up        => self.apply(MoveUp { shift }),
-            KeyCode::Down      => self.apply(MoveDown { shift }),
+            KeyCode::Enter if self.has_multi_carets() => self.multi_insert("\n"),
+            KeyCode::Char(c) if self.has_multi_carets() && !ctrl => {
+                self.multi_insert(&c.to_string());
+            }
+            KeyCode::Left => self.apply(MoveLeft { shift }),
+            KeyCode::Right => self.apply(MoveRight { shift }),
+            KeyCode::Up => self.apply(MoveUp { shift }),
+            KeyCode::Down => self.apply(MoveDown { shift }),
             KeyCode::Backspace if self.auto_pair_backspace() => {}
-            KeyCode::Backspace => self.apply(Delete { }),
-            KeyCode::Enter     => self.apply(InsertNewline { }),
+            KeyCode::Backspace => self.apply(Delete {}),
+            KeyCode::Enter => self.apply(InsertNewline {}),
             KeyCode::Char(c) if self.auto_pair(c) => {}
-            KeyCode::Char(c)   => self.apply(InsertText { text: c.to_string() }),
-            KeyCode::Tab       => self.apply(Indent { }),
-            KeyCode::BackTab   => self.apply(UnIndent { }),
+            KeyCode::Char(c) => self.apply(InsertText {
+                text: c.to_string(),
+            }),
+            KeyCode::Tab => self.apply(Indent {}),
+            KeyCode::BackTab => self.apply(UnIndent {}),
             _ => {}
         }
         self.focus(area);
         Ok(())
     }
-    
+
     /// Bracket/quote auto-pairing for a typed character `c`. Returns `true` when
     /// it consumed the key (so the caller skips the plain insert):
     ///
@@ -74,8 +76,14 @@ impl Editor {
     /// - Quotes are not paired right next to a word character (so apostrophes in
     ///   prose/identifiers are left alone).
     fn auto_pair(&mut self, c: char) -> bool {
-        const PAIRS: &[(char, char)] =
-            &[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"'), ('\'', '\''), ('`', '`')];
+        const PAIRS: &[(char, char)] = &[
+            ('(', ')'),
+            ('[', ']'),
+            ('{', '}'),
+            ('"', '"'),
+            ('\'', '\''),
+            ('`', '`'),
+        ];
         if !self.auto_pair {
             return false;
         }
@@ -95,11 +103,14 @@ impl Editor {
 
         // Wrap a non-empty selection.
         if let Some(sel) = self.get_selection()
-            && !sel.is_empty() {
-                let text = self.get_content_slice(sel.start, sel.end);
-                self.apply(InsertText { text: format!("{c}{text}{closer}") });
-                return true;
-            }
+            && !sel.is_empty()
+        {
+            let text = self.get_content_slice(sel.start, sel.end);
+            self.apply(InsertText {
+                text: format!("{c}{text}{closer}"),
+            });
+            return true;
+        }
 
         // Don't auto-pair a quote adjacent to a word character.
         if matches!(c, '"' | '\'' | '`') {
@@ -109,7 +120,9 @@ impl Editor {
             }
         }
 
-        self.apply(InsertText { text: format!("{c}{closer}") });
+        self.apply(InsertText {
+            text: format!("{c}{closer}"),
+        });
         self.apply(MoveLeft { shift: false });
         true
     }
@@ -118,8 +131,14 @@ impl Editor {
     /// both characters as one edit. Returns `true` when it consumed the key.
     /// Only fires with a single caret and no selection.
     fn auto_pair_backspace(&mut self) -> bool {
-        const PAIRS: &[(char, char)] =
-            &[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"'), ('\'', '\''), ('`', '`')];
+        const PAIRS: &[(char, char)] = &[
+            ('(', ')'),
+            ('[', ']'),
+            ('{', '}'),
+            ('"', '"'),
+            ('\'', '\''),
+            ('`', '`'),
+        ];
         if !self.auto_pair {
             return false;
         }
@@ -151,10 +170,7 @@ impl Editor {
     ///
     /// # Errors
     /// Returns an error when an applied action fails.
-    pub fn mouse(
-        &mut self, mouse: MouseEvent, area: &Rect,
-    ) -> Result<()> {
-
+    pub fn mouse(&mut self, mouse: MouseEvent, area: &Rect) -> Result<()> {
         match mouse.kind {
             MouseEventKind::ScrollUp => self.scroll_up(),
             MouseEventKind::ScrollDown => self.scroll_down(area.height as usize),

@@ -8,7 +8,6 @@
 //! offsets; the host owns the buffer and applies the returned text.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -26,7 +25,9 @@ pub fn matches(text: &str, re: &Regex) -> Vec<(usize, usize)> {
     // Byte offset where each character starts; `partition_point` maps byte→char.
     let starts: Vec<usize> = text.char_indices().map(|(b, _)| b).collect();
     let to_char = |byte: usize| starts.partition_point(|&b| b < byte);
-    re.find_iter(text).map(|m| (to_char(m.start()), to_char(m.end()))).collect()
+    re.find_iter(text)
+        .map(|m| (to_char(m.start()), to_char(m.end())))
+        .collect()
 }
 
 /// The first match of `re` at or after character offset `from_char`, as a
@@ -35,7 +36,10 @@ pub fn matches(text: &str, re: &Regex) -> Vec<(usize, usize)> {
 pub fn next_match(text: &str, re: &Regex, from_char: usize) -> Option<(usize, usize)> {
     let from_byte = char_to_byte(text, from_char);
     let m = re.find_iter(text).find(|m| m.start() >= from_byte)?;
-    Some((text[..m.start()].chars().count(), text[..m.end()].chars().count()))
+    Some((
+        text[..m.start()].chars().count(),
+        text[..m.end()].chars().count(),
+    ))
 }
 
 /// Replace every match of `re` in `text`. In `regex_mode` the `replacement` is
@@ -48,7 +52,8 @@ pub fn replace_all(text: &str, re: &Regex, regex_mode: bool, replacement: &str) 
         let rep = unescape(replacement);
         re.replace_all(text, rep.as_str()).into_owned()
     } else {
-        re.replace_all(text, regex::NoExpand(replacement)).into_owned()
+        re.replace_all(text, regex::NoExpand(replacement))
+            .into_owned()
     };
     (new, count)
 }
@@ -151,7 +156,10 @@ impl PathFilter {
     #[must_use]
     pub fn new(include: &str, exclude: &str) -> Self {
         let compile = |p: &str| (!p.is_empty()).then(|| Regex::new(p).ok()).flatten();
-        PathFilter { include: compile(include), exclude: compile(exclude) }
+        PathFilter {
+            include: compile(include),
+            exclude: compile(exclude),
+        }
     }
 
     /// Whether `path` passes the filter: it must match the include regex (when
@@ -159,13 +167,15 @@ impl PathFilter {
     #[must_use]
     pub fn allows(&self, path: &str) -> bool {
         if let Some(inc) = &self.include
-            && !inc.is_match(path) {
-                return false;
-            }
+            && !inc.is_match(path)
+        {
+            return false;
+        }
         if let Some(exc) = &self.exclude
-            && exc.is_match(path) {
-                return false;
-            }
+            && exc.is_match(path)
+        {
+            return false;
+        }
         true
     }
 }
@@ -323,9 +333,17 @@ mod tests {
     fn smart_case_is_sensitive_only_with_an_uppercase_letter() {
         let mut s = SearchBar::new(false); // smart_case on by default
         s.query = "foo".to_string();
-        assert_eq!(s.pattern().as_deref(), Some("(?i)foo"), "all-lowercase → insensitive");
+        assert_eq!(
+            s.pattern().as_deref(),
+            Some("(?i)foo"),
+            "all-lowercase → insensitive"
+        );
         s.query = "Foo".to_string();
-        assert_eq!(s.pattern().as_deref(), Some("Foo"), "uppercase → case-sensitive");
+        assert_eq!(
+            s.pattern().as_deref(),
+            Some("Foo"),
+            "uppercase → case-sensitive"
+        );
         // Turning smart-case off reverts to always-insensitive (unless case toggle).
         s.smart_case = false;
         assert_eq!(s.pattern().as_deref(), Some("(?i)Foo"));

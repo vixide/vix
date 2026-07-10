@@ -133,7 +133,11 @@ impl Session {
         // Carry the prior visit count forward, incremented — set_workspace is
         // called once per open/save, so this counts opens for frecency ranking.
         // `last_visit` is stamped by the caller via `record_visit` before saving.
-        let prior = self.workspaces.iter().find(|w| w.root == ws.root).map_or(0, |w| w.visits);
+        let prior = self
+            .workspaces
+            .iter()
+            .find(|w| w.root == ws.root)
+            .map_or(0, |w| w.visits);
         ws.visits = prior.saturating_add(1).max(ws.visits);
         self.workspaces.retain(|w| w.root != ws.root);
         self.workspaces.insert(0, ws);
@@ -171,7 +175,10 @@ mod tests {
     use super::*;
 
     fn ws(root: &str) -> WorkspaceSession {
-        WorkspaceSession { root: root.into(), ..Default::default() }
+        WorkspaceSession {
+            root: root.into(),
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -187,7 +194,10 @@ mod tests {
         });
         assert_eq!(s.workspaces.len(), 2);
         assert_eq!(s.workspaces[0].root, "/a");
-        assert_eq!(s.workspace("/a").unwrap().files, vec!["/a/x.rs".to_string()]);
+        assert_eq!(
+            s.workspace("/a").unwrap().files,
+            vec!["/a/x.rs".to_string()]
+        );
     }
 
     #[test]
@@ -216,7 +226,11 @@ mod tests {
         let mut s = Session::default();
         s.set_workspace(ws("/a"));
         s.set_workspace(ws("/a"));
-        assert_eq!(s.workspace("/a").unwrap().visits, 2, "re-opening counts a visit");
+        assert_eq!(
+            s.workspace("/a").unwrap().visits,
+            2,
+            "re-opening counts a visit"
+        );
     }
 
     #[test]

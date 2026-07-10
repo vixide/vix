@@ -45,9 +45,7 @@ impl Contact {
 #[must_use]
 pub fn new_contact(name: &str) -> String {
     let name = name.trim();
-    format!(
-        "* {name}\n  :PROPERTIES:\n  :EMAIL:\n  :PHONE:\n  :ADDRESS:\n  :BIRTHDAY:\n  :END:\n"
-    )
+    format!("* {name}\n  :PROPERTIES:\n  :EMAIL:\n  :PHONE:\n  :ADDRESS:\n  :BIRTHDAY:\n  :END:\n")
 }
 
 /// A single indented property line for the Insert-Field commands, e.g.
@@ -115,9 +113,18 @@ pub fn all(files: &[(String, String)]) -> Vec<Contact> {
 pub fn directory(files: &[(String, String)]) -> String {
     let mut rows: Vec<Contact> = all(files);
     rows.sort_by_key(|c| c.name.to_lowercase());
-    let mut out = format!("#+title: Contacts ({})\n\n| Name | Email | Phone |\n|-+-+-|\n", rows.len());
+    let mut out = format!(
+        "#+title: Contacts ({})\n\n| Name | Email | Phone |\n|-+-+-|\n",
+        rows.len()
+    );
     for c in &rows {
-        let _ = writeln!(out, "| {} | {} | {} |", c.name, c.field("EMAIL").unwrap_or(""), c.field("PHONE").unwrap_or(""));
+        let _ = writeln!(
+            out,
+            "| {} | {} | {} |",
+            c.name,
+            c.field("EMAIL").unwrap_or(""),
+            c.field("PHONE").unwrap_or("")
+        );
     }
     out
 }
@@ -210,7 +217,10 @@ mod tests {
         let cs = parse(SAMPLE);
         assert_eq!(cs.len(), 2, "the note-only headline is not a contact");
         assert_eq!(cs[0].name, "Ada Lovelace");
-        assert_eq!(cs[0].field("EMAIL"), Some("ada@example.com ada@analytical.engine"));
+        assert_eq!(
+            cs[0].field("EMAIL"),
+            Some("ada@example.com ada@analytical.engine")
+        );
         assert_eq!(cs[0].field("PHONE"), Some("+44 1234"));
         assert_eq!(cs[1].name, "Alan Turing");
     }

@@ -6,7 +6,6 @@
 //! "computing…" placeholder. The host owns the threads and rendering.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -27,7 +26,12 @@ impl Dashboard {
     /// A dashboard for `folder` with every metric still pending.
     #[must_use]
     pub fn new(folder: impl Into<String>) -> Self {
-        Dashboard { folder: folder.into(), disk_usage: None, file_count: None, commit_count: None }
+        Dashboard {
+            folder: folder.into(),
+            disk_usage: None,
+            file_count: None,
+            commit_count: None,
+        }
     }
 
     /// Whether every metric has finished computing.

@@ -67,7 +67,11 @@ pub fn demote(text: &str, line: usize) -> Option<String> {
 fn reindent_subtree(text: &str, line: usize, deeper: bool) -> Option<String> {
     let lines: Vec<&str> = text.split('\n').collect();
     let (start, end) = subtree_range(&lines, line)?;
-    if !deeper && lines[start..end].iter().any(|l| headline_level(l) == Some(1)) {
+    if !deeper
+        && lines[start..end]
+            .iter()
+            .any(|l| headline_level(l) == Some(1))
+    {
         return None;
     }
     let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
@@ -106,8 +110,9 @@ pub fn cycle_todo(text: &str, line: usize) -> Option<String> {
     Some(lines.join("\n"))
 }
 
-static CHECKBOX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^(\s*(?:[-+*]|\d+[.)])\s+)\[([ xX-])\]").expect("checkbox regex"));
+static CHECKBOX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(\s*(?:[-+*]|\d+[.)])\s+)\[([ xX-])\]").expect("checkbox regex")
+});
 
 /// Toggle a list checkbox on the line at `line`: `[ ]` ⇄ `[x]` (treating `[-]`
 /// and `[X]` as checked). `None` if the line has no checkbox.
@@ -139,7 +144,9 @@ fn indent_of(line: &str) -> usize {
 /// its kind (`[n/m]` vs `[pct%]`). Percent truncates toward zero (Org's form);
 /// `total == 0` yields `0%` or `0/0`. Lines without a cookie are returned as-is.
 fn set_cookie(line: &str, done: usize, total: usize) -> String {
-    let Some(m) = COOKIE.find(line) else { return line.to_string() };
+    let Some(m) = COOKIE.find(line) else {
+        return line.to_string();
+    };
     let replacement = if m.as_str().contains('%') {
         let pct = (done * 100).checked_div(total).unwrap_or(0);
         format!("[{pct}%]")
@@ -151,7 +158,9 @@ fn set_cookie(line: &str, done: usize, total: usize) -> String {
 
 /// Replace a checkbox's mark character on a line that already has one.
 fn set_checkbox_mark(line: &str, mark: char) -> String {
-    let Some(caps) = CHECKBOX.captures(line) else { return line.to_string() };
+    let Some(caps) = CHECKBOX.captures(line) else {
+        return line.to_string();
+    };
     let lead_end = caps.get(1).map_or(0, |g| g.end());
     format!("{}[{mark}]{}", &line[..lead_end], &line[lead_end + 3..])
 }
@@ -231,8 +240,15 @@ fn update_checkboxes(lines: &mut [String]) {
             continue;
         }
         if let Some(c) = CHECKBOX.captures(l) {
-            let mark = c.get(2).and_then(|g| g.as_str().chars().next()).unwrap_or(' ');
-            items.push(Checkbox { line: i, indent: indent_of(l), mark });
+            let mark = c
+                .get(2)
+                .and_then(|g| g.as_str().chars().next())
+                .unwrap_or(' ');
+            items.push(Checkbox {
+                line: i,
+                indent: indent_of(l),
+                mark,
+            });
         }
     }
     // Parent of each item = nearest preceding item with smaller indent, with the
@@ -240,10 +256,15 @@ fn update_checkboxes(lines: &mut [String]) {
     let mut parent: Vec<Option<usize>> = vec![None; items.len()];
     let mut stack: Vec<usize> = Vec::new();
     for k in 0..items.len() {
-        if k > 0 && (items[k - 1].line + 1..items[k].line).any(|li| headline_level(&lines[li]).is_some()) {
+        if k > 0
+            && (items[k - 1].line + 1..items[k].line).any(|li| headline_level(&lines[li]).is_some())
+        {
             stack.clear();
         }
-        while stack.last().is_some_and(|&top| items[top].indent >= items[k].indent) {
+        while stack
+            .last()
+            .is_some_and(|&top| items[top].indent >= items[k].indent)
+        {
             stack.pop();
         }
         parent[k] = stack.last().copied();
@@ -263,7 +284,10 @@ fn update_checkboxes(lines: &mut [String]) {
             continue;
         }
         let total = children[k].len();
-        let done = children[k].iter().filter(|&&c| matches!(items[c].mark, 'x' | 'X')).count();
+        let done = children[k]
+            .iter()
+            .filter(|&&c| matches!(items[c].mark, 'x' | 'X'))
+            .count();
         let any_partial = children[k].iter().any(|&c| items[c].mark == '-');
         let new_mark = if done == total {
             'X'
@@ -301,10 +325,12 @@ fn update_headline_cookies(lines: &mut [String]) {
             let mut t = 0;
             for j in h + 1..end {
                 let direct = levels[j] == Some(level + 1);
-                let counted = if recursive { levels[j].is_some() } else { direct };
-                if counted
-                    && let Some(is_done) = headline_todo(&lines[j])
-                {
+                let counted = if recursive {
+                    levels[j].is_some()
+                } else {
+                    direct
+                };
+                if counted && let Some(is_done) = headline_todo(&lines[j]) {
                     t += 1;
                     if is_done {
                         d += 1;
@@ -319,14 +345,26 @@ fn update_headline_cookies(lines: &mut [String]) {
                     CHECKBOX
                         .captures(&lines[j])
                         .and_then(|c| c.get(2))
-                        .map(|g| (indent_of(&lines[j]), g.as_str().chars().next().unwrap_or(' ')))
+                        .map(|g| {
+                            (
+                                indent_of(&lines[j]),
+                                g.as_str().chars().next().unwrap_or(' '),
+                            )
+                        })
                 })
                 .collect();
-            cbs.iter().map(|(i, _)| *i).min().map_or((0, 0), |min_indent| {
-                let top: Vec<char> = cbs.iter().filter(|(i, _)| *i == min_indent).map(|(_, m)| *m).collect();
-                let d = top.iter().filter(|m| matches!(m, 'x' | 'X')).count();
-                (d, top.len())
-            })
+            cbs.iter()
+                .map(|(i, _)| *i)
+                .min()
+                .map_or((0, 0), |min_indent| {
+                    let top: Vec<char> = cbs
+                        .iter()
+                        .filter(|(i, _)| *i == min_indent)
+                        .map(|(_, m)| *m)
+                        .collect();
+                    let d = top.iter().filter(|m| matches!(m, 'x' | 'X')).count();
+                    (d, top.len())
+                })
         };
         lines[h] = set_cookie(&lines[h], done, total);
     }
@@ -501,7 +539,11 @@ fn is_open_clock(line: &str) -> bool {
 
 /// The start timestamp inside a `CLOCK: [start]` line.
 fn clock_start(line: &str) -> Option<String> {
-    let inner = line.trim().strip_prefix("CLOCK:")?.trim().strip_prefix('[')?;
+    let inner = line
+        .trim()
+        .strip_prefix("CLOCK:")?
+        .trim()
+        .strip_prefix('[')?;
     Some(inner[..inner.find(']')?].to_string())
 }
 
@@ -540,7 +582,10 @@ pub fn clock_out(text: &str, now: &str) -> Option<String> {
         (Some(n), Some(s)) => u32::try_from((n - s).max(0)).unwrap_or(0),
         _ => 0,
     };
-    let lead: String = lines[idx].chars().take_while(|c| c.is_whitespace()).collect();
+    let lead: String = lines[idx]
+        .chars()
+        .take_while(|c| c.is_whitespace())
+        .collect();
     lines[idx] = format!("{lead}CLOCK: [{start}]--[{now}] =>  {}", hhmm(minutes));
     Some(lines.join("\n"))
 }
@@ -557,7 +602,8 @@ static BARE_LINK: LazyLock<Regex> =
 fn emph(input: &str, marker: char, open: &str, close: &str) -> String {
     let m = regex::escape(&marker.to_string());
     let re = Regex::new(&format!(r"{m}([^{m}\s][^{m}]*?){m}")).expect("emph regex");
-    re.replace_all(input, format!("{open}$1{close}")).into_owned()
+    re.replace_all(input, format!("{open}$1{close}"))
+        .into_owned()
 }
 
 /// Convert Org inline markup (links and emphasis) to Markdown.
@@ -577,12 +623,20 @@ pub fn to_markdown(text: &str) -> String {
     let mut out: Vec<String> = Vec::new();
     for raw in text.split('\n') {
         let line = raw.trim_end();
-        if let Some(rest) = line.strip_prefix("#+title:").or_else(|| line.strip_prefix("#+TITLE:")) {
+        if let Some(rest) = line
+            .strip_prefix("#+title:")
+            .or_else(|| line.strip_prefix("#+TITLE:"))
+        {
             out.push(format!("# {}", rest.trim()));
-        } else if let Some(rest) = line.strip_prefix("#+author:").or_else(|| line.strip_prefix("#+AUTHOR:")) {
+        } else if let Some(rest) = line
+            .strip_prefix("#+author:")
+            .or_else(|| line.strip_prefix("#+AUTHOR:"))
+        {
             out.push(format!("*{}*", rest.trim()));
-        } else if line.starts_with("#+BEGIN_") || line.starts_with("#+END_")
-            || line.starts_with("#+begin_") || line.starts_with("#+end_")
+        } else if line.starts_with("#+BEGIN_")
+            || line.starts_with("#+END_")
+            || line.starts_with("#+begin_")
+            || line.starts_with("#+end_")
         {
             // Drop block delimiters; their inner lines pass through as-is.
         } else if let Some(level) = headline_level(line) {
@@ -609,7 +663,9 @@ fn inline_html(s: &str) -> String {
     let s = escape_html(s);
     // Links: the regex ran on escaped text, so brackets are intact.
     let s = LINK.replace_all(&s, "<a href=\"$1\">$2</a>").into_owned();
-    let s = BARE_LINK.replace_all(&s, "<a href=\"$1\">$1</a>").into_owned();
+    let s = BARE_LINK
+        .replace_all(&s, "<a href=\"$1\">$1</a>")
+        .into_owned();
     let s = emph(&s, '*', "<b>", "</b>");
     let s = emph(&s, '/', "<i>", "</i>");
     let s = emph(&s, '_', "<u>", "</u>");
@@ -633,7 +689,10 @@ pub fn to_html(text: &str) -> String {
     };
     for raw in text.split('\n') {
         let line = raw.trim_end();
-        if let Some(rest) = line.strip_prefix("#+title:").or_else(|| line.strip_prefix("#+TITLE:")) {
+        if let Some(rest) = line
+            .strip_prefix("#+title:")
+            .or_else(|| line.strip_prefix("#+TITLE:"))
+        {
             title = rest.trim();
             close_list(&mut body, &mut in_list);
             body.push(format!("<h1>{}</h1>", inline_html(rest.trim())));
@@ -642,8 +701,15 @@ pub fn to_html(text: &str) -> String {
         } else if let Some(level) = headline_level(line) {
             close_list(&mut body, &mut in_list);
             let tag = level.min(6);
-            body.push(format!("<h{tag}>{}</h{tag}>", inline_html(line[level..].trim_start())));
-        } else if let Some(item) = line.trim_start().strip_prefix("- ").or_else(|| line.trim_start().strip_prefix("+ ")) {
+            body.push(format!(
+                "<h{tag}>{}</h{tag}>",
+                inline_html(line[level..].trim_start())
+            ));
+        } else if let Some(item) = line
+            .trim_start()
+            .strip_prefix("- ")
+            .or_else(|| line.trim_start().strip_prefix("+ "))
+        {
             if !in_list {
                 body.push("<ul>".to_string());
                 in_list = true;
@@ -684,7 +750,10 @@ mod tests {
         // Promote refuses when a level-1 headline is in the subtree.
         assert_eq!(promote(text, 0), None);
         // But a level-2 subtree promotes fine.
-        assert_eq!(promote("* A\n** B\nbody\n* C", 1).unwrap(), "* A\n* B\nbody\n* C");
+        assert_eq!(
+            promote("* A\n** B\nbody\n* C", 1).unwrap(),
+            "* A\n* B\nbody\n* C"
+        );
     }
 
     #[test]
@@ -710,13 +779,22 @@ mod tests {
     fn propagates_parent_checkbox_state() {
         // None checked → parent empty.
         let none = "- [ ] call people\n  - [ ] Peter\n  - [ ] Sarah";
-        assert_eq!(update_statistics(none), "- [ ] call people\n  - [ ] Peter\n  - [ ] Sarah");
+        assert_eq!(
+            update_statistics(none),
+            "- [ ] call people\n  - [ ] Peter\n  - [ ] Sarah"
+        );
         // Some checked → parent partial.
         let some = "- [ ] call people\n  - [X] Peter\n  - [ ] Sarah";
-        assert_eq!(update_statistics(some), "- [-] call people\n  - [X] Peter\n  - [ ] Sarah");
+        assert_eq!(
+            update_statistics(some),
+            "- [-] call people\n  - [X] Peter\n  - [ ] Sarah"
+        );
         // All checked → parent checked.
         let all = "- [ ] call people\n  - [X] Peter\n  - [X] Sarah";
-        assert_eq!(update_statistics(all), "- [X] call people\n  - [X] Peter\n  - [X] Sarah");
+        assert_eq!(
+            update_statistics(all),
+            "- [X] call people\n  - [X] Peter\n  - [X] Sarah"
+        );
     }
 
     #[test]
@@ -774,7 +852,10 @@ mod tests {
                 "work.org".to_string(),
                 "* TODO Ship it\nDEADLINE: <2024-08-23 Fri>\n* TODO Loose end\n".to_string(),
             ),
-            ("home.org".to_string(), "* Meeting\nSCHEDULED: <2024-08-20 Tue>\n".to_string()),
+            (
+                "home.org".to_string(),
+                "* Meeting\nSCHEDULED: <2024-08-20 Tue>\n".to_string(),
+            ),
         ];
         let a = agenda(&files);
         assert!(a.contains("* 2024-08-20"));

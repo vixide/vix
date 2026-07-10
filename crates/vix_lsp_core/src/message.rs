@@ -7,7 +7,7 @@
 
 #![warn(clippy::pedantic)]
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::{CompletionItem, Diagnostic, Location, Position, Range, Severity};
 
@@ -187,7 +187,9 @@ pub fn inlay_hint_params(uri: &str, start: (u32, u32), end: (u32, u32)) -> Value
 /// `paddingLeft`/`paddingRight` become surrounding spaces.
 #[must_use]
 pub fn parse_inlay_hints(result: &Value) -> Vec<(u32, u32, String)> {
-    let Value::Array(arr) = result else { return Vec::new() };
+    let Value::Array(arr) = result else {
+        return Vec::new();
+    };
     arr.iter()
         .filter_map(|h| {
             let pos = h.get("position")?;
@@ -195,9 +197,10 @@ pub fn parse_inlay_hints(result: &Value) -> Vec<(u32, u32, String)> {
             let character = u32::try_from(pos.get("character")?.as_u64()?).ok()?;
             let mut label = match h.get("label")? {
                 Value::String(s) => s.clone(),
-                Value::Array(parts) => {
-                    parts.iter().filter_map(|p| p.get("value").and_then(Value::as_str)).collect()
-                }
+                Value::Array(parts) => parts
+                    .iter()
+                    .filter_map(|p| p.get("value").and_then(Value::as_str))
+                    .collect(),
                 _ => return None,
             };
             if h.get("paddingLeft").and_then(Value::as_bool) == Some(true) {
@@ -241,7 +244,11 @@ fn parse_one_diagnostic(v: &Value) -> Option<Diagnostic> {
             .get("severity")
             .and_then(Value::as_i64)
             .map_or(Severity::Error, Severity::from_lsp),
-        message: v.get("message").and_then(Value::as_str).unwrap_or("").to_string(),
+        message: v
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
         source: v.get("source").and_then(Value::as_str).map(str::to_string),
     })
 }
@@ -303,7 +310,8 @@ pub fn completion_resolve_params(label: &str, data: Option<&Value>) -> Value {
 pub fn parse_resolved_detail(result: &Value) -> Option<String> {
     let detail = result.get("detail").and_then(Value::as_str);
     let documentation = result.get("documentation").and_then(|d| {
-        d.as_str().or_else(|| d.get("value").and_then(Value::as_str))
+        d.as_str()
+            .or_else(|| d.get("value").and_then(Value::as_str))
     });
     match (detail, documentation) {
         (Some(d), Some(doc)) => Some(format!("{d}\n{doc}")),
@@ -320,14 +328,20 @@ pub type CodeLens = (u32, String, String, Value);
 /// carry an invokable command: `(line, title, command, arguments)`.
 #[must_use]
 pub fn parse_code_lenses(result: &Value) -> Vec<CodeLens> {
-    let Value::Array(arr) = result else { return Vec::new() };
+    let Value::Array(arr) = result else {
+        return Vec::new();
+    };
     arr.iter()
         .filter_map(|lens| {
-            let line = u32::try_from(lens.get("range")?.get("start")?.get("line")?.as_u64()?).ok()?;
+            let line =
+                u32::try_from(lens.get("range")?.get("start")?.get("line")?.as_u64()?).ok()?;
             let cmd = lens.get("command")?;
             let title = cmd.get("title")?.as_str()?.to_string();
             let command = cmd.get("command")?.as_str()?.to_string();
-            let arguments = cmd.get("arguments").cloned().unwrap_or(Value::Array(Vec::new()));
+            let arguments = cmd
+                .get("arguments")
+                .cloned()
+                .unwrap_or(Value::Array(Vec::new()));
             Some((line, title, command, arguments))
         })
         .collect()
@@ -337,14 +351,19 @@ pub fn parse_code_lenses(result: &Value) -> Vec<CodeLens> {
 /// request's params (`{ edit: WorkspaceEdit, label? }`).
 #[must_use]
 pub fn parse_apply_edit(params: &Value) -> Vec<UriEdits> {
-    params.get("edit").map(parse_workspace_edit).unwrap_or_default()
+    params
+        .get("edit")
+        .map(parse_workspace_edit)
+        .unwrap_or_default()
 }
 
 /// Parse a `textDocument/foldingRange` result (`FoldingRange[]`) into
 /// `(start_line, end_line)` pairs (0-based), keeping only multi-line ranges.
 #[must_use]
 pub fn parse_folding_ranges(result: &Value) -> Vec<(u32, u32)> {
-    let Value::Array(arr) = result else { return Vec::new() };
+    let Value::Array(arr) = result else {
+        return Vec::new();
+    };
     arr.iter()
         .filter_map(|r| {
             let start = u32::try_from(r.get("startLine")?.as_u64()?).ok()?;
@@ -358,7 +377,9 @@ pub fn parse_folding_ranges(result: &Value) -> Vec<(u32, u32)> {
 /// be edited together (from the `ranges` array).
 #[must_use]
 pub fn parse_linked_editing_ranges(result: &Value) -> Vec<Range> {
-    let Some(arr) = result.get("ranges").and_then(Value::as_array) else { return Vec::new() };
+    let Some(arr) = result.get("ranges").and_then(Value::as_array) else {
+        return Vec::new();
+    };
     arr.iter().filter_map(parse_range).collect()
 }
 
@@ -366,8 +387,12 @@ pub fn parse_linked_editing_ranges(result: &Value) -> Vec<Range> {
 /// the ranges to highlight.
 #[must_use]
 pub fn parse_document_highlights(result: &Value) -> Vec<Range> {
-    let Value::Array(arr) = result else { return Vec::new() };
-    arr.iter().filter_map(|h| h.get("range").and_then(parse_range)).collect()
+    let Value::Array(arr) = result else {
+        return Vec::new();
+    };
+    arr.iter()
+        .filter_map(|h| h.get("range").and_then(parse_range))
+        .collect()
 }
 
 /// A `SelectionRangeParams` body querying the single position `(line, character)`.
@@ -397,7 +422,12 @@ pub fn parse_selection_ranges(result: &Value) -> Vec<Range> {
 /// A `CodeActionParams` body for `[start, end)` with the overlapping
 /// `diagnostics` (raw LSP objects) in the request context.
 #[must_use]
-pub fn code_action_params(uri: &str, start: (u32, u32), end: (u32, u32), diagnostics: &Value) -> Value {
+pub fn code_action_params(
+    uri: &str,
+    start: (u32, u32),
+    end: (u32, u32),
+    diagnostics: &Value,
+) -> Value {
     json!({
         "textDocument": { "uri": uri },
         "range": {
@@ -413,11 +443,16 @@ pub fn code_action_params(uri: &str, start: (u32, u32), end: (u32, u32), diagnos
 /// edit) yield an empty edit list.
 #[must_use]
 pub fn parse_code_actions(result: &Value) -> Vec<CodeActionEdit> {
-    let Value::Array(arr) = result else { return Vec::new() };
+    let Value::Array(arr) = result else {
+        return Vec::new();
+    };
     arr.iter()
         .filter_map(|item| {
             let title = item.get("title")?.as_str()?.to_string();
-            let edit = item.get("edit").map(parse_workspace_edit).unwrap_or_default();
+            let edit = item
+                .get("edit")
+                .map(parse_workspace_edit)
+                .unwrap_or_default();
             Some((title, edit))
         })
         .collect()
@@ -436,7 +471,10 @@ pub fn parse_workspace_edit(result: &Value) -> Vec<UriEdits> {
     }
     if let Some(Value::Array(doc_changes)) = result.get("documentChanges") {
         for dc in doc_changes {
-            if let Some(uri) = dc.get("textDocument").and_then(|td| td.get("uri")).and_then(Value::as_str)
+            if let Some(uri) = dc
+                .get("textDocument")
+                .and_then(|td| td.get("uri"))
+                .and_then(Value::as_str)
                 && let Some(edits) = dc.get("edits")
             {
                 out.push((uri.to_string(), parse_text_edits(edits)));
@@ -462,7 +500,9 @@ pub fn parse_document_symbols(result: &Value) -> Vec<(u32, u32, String)> {
 }
 
 fn collect_symbol(item: &Value, out: &mut Vec<(u32, u32, String)>) {
-    let Some(name) = item.get("name").and_then(Value::as_str) else { return };
+    let Some(name) = item.get("name").and_then(Value::as_str) else {
+        return;
+    };
     // DocumentSymbol uses `selectionRange`/`range`; SymbolInformation nests under
     // `location.range`.
     let range = item
@@ -484,13 +524,18 @@ fn collect_symbol(item: &Value, out: &mut Vec<(u32, u32, String)>) {
 /// into `(uri, line, character, name)`.
 #[must_use]
 pub fn parse_workspace_symbols(result: &Value) -> Vec<(String, u32, u32, String)> {
-    let Value::Array(arr) = result else { return Vec::new() };
+    let Value::Array(arr) = result else {
+        return Vec::new();
+    };
     arr.iter()
         .filter_map(|item| {
             let name = item.get("name")?.as_str()?.to_string();
             let location = item.get("location")?;
             let uri = location.get("uri")?.as_str()?.to_string();
-            let range = location.get("range").and_then(parse_range).unwrap_or_default();
+            let range = location
+                .get("range")
+                .and_then(parse_range)
+                .unwrap_or_default();
             Some((uri, range.start.line, range.start.character, name))
         })
         .collect()
@@ -517,7 +562,10 @@ pub fn parse_signature_help(result: &Value) -> Option<String> {
         .and_then(Value::as_u64)
         .and_then(|n| usize::try_from(n).ok());
     if let Some(p) = active_param
-        && let Some(param) = sig.get("parameters").and_then(Value::as_array).and_then(|ps| ps.get(p))
+        && let Some(param) = sig
+            .get("parameters")
+            .and_then(Value::as_array)
+            .and_then(|ps| ps.get(p))
         && let Some(plabel) = param.get("label").and_then(Value::as_str)
     {
         return Some(format!("{label}\n→ {plabel}"));
@@ -529,7 +577,9 @@ pub fn parse_signature_help(result: &Value) -> Option<String> {
 /// into `(range, new_text)` pairs, in document order.
 #[must_use]
 pub fn parse_text_edits(result: &Value) -> Vec<(crate::Range, String)> {
-    let Value::Array(arr) = result else { return Vec::new() };
+    let Value::Array(arr) = result else {
+        return Vec::new();
+    };
     arr.iter()
         .filter_map(|e| {
             let range = parse_range(e.get("range")?)?;
@@ -559,7 +609,10 @@ fn parse_location(v: &Value) -> Option<Location> {
             .or_else(|| v.get("targetRange"))
             .and_then(parse_range)
             .unwrap_or_default();
-        return Some(Location { uri: uri.to_string(), range });
+        return Some(Location {
+            uri: uri.to_string(),
+            range,
+        });
     }
     let uri = v.get("uri")?.as_str()?.to_string();
     let range = v.get("range").and_then(parse_range).unwrap_or_default();
@@ -577,11 +630,17 @@ pub fn first_call_hierarchy_item(result: &Value) -> Option<Value> {
 /// each caller's `fromRanges` (falling back to its `selectionRange`/`range`).
 #[must_use]
 pub fn parse_incoming_calls(result: &Value) -> Vec<Location> {
-    let Some(arr) = result.as_array() else { return Vec::new() };
+    let Some(arr) = result.as_array() else {
+        return Vec::new();
+    };
     let mut out = Vec::new();
     for call in arr {
-        let Some(from) = call.get("from") else { continue };
-        let Some(uri) = from.get("uri").and_then(Value::as_str) else { continue };
+        let Some(from) = call.get("from") else {
+            continue;
+        };
+        let Some(uri) = from.get("uri").and_then(Value::as_str) else {
+            continue;
+        };
         let range = call
             .get("fromRanges")
             .and_then(Value::as_array)
@@ -590,7 +649,10 @@ pub fn parse_incoming_calls(result: &Value) -> Vec<Location> {
             .or_else(|| from.get("selectionRange").and_then(parse_range))
             .or_else(|| from.get("range").and_then(parse_range))
             .unwrap_or_default();
-        out.push(Location { uri: uri.to_string(), range });
+        out.push(Location {
+            uri: uri.to_string(),
+            range,
+        });
     }
     out
 }
@@ -601,7 +663,10 @@ pub fn parse_incoming_calls(result: &Value) -> Vec<Location> {
 pub fn parse_completion(result: &Value) -> Vec<CompletionItem> {
     let items = match result {
         Value::Array(arr) => arr.as_slice(),
-        Value::Object(o) => o.get("items").and_then(Value::as_array).map_or(&[][..], |a| a.as_slice()),
+        Value::Object(o) => o
+            .get("items")
+            .and_then(Value::as_array)
+            .map_or(&[][..], |a| a.as_slice()),
         _ => &[][..],
     };
     items.iter().filter_map(parse_completion_item).collect()
@@ -619,7 +684,12 @@ fn parse_completion_item(v: &Value) -> Option<CompletionItem> {
         .to_string();
     let detail = v.get("detail").and_then(Value::as_str).map(str::to_string);
     let data = v.get("data").cloned();
-    Some(CompletionItem { label, insert_text, detail, data })
+    Some(CompletionItem {
+        label,
+        insert_text,
+        detail,
+        data,
+    })
 }
 
 fn parse_position(v: &Value) -> Option<Position> {
@@ -825,7 +895,9 @@ mod tests {
         assert!(completion_resolve_params("x", None).get("data").is_none());
 
         assert_eq!(
-            parse_resolved_detail(&json!({"detail": "fn push(&mut self, T)", "documentation": "Appends."})),
+            parse_resolved_detail(
+                &json!({"detail": "fn push(&mut self, T)", "documentation": "Appends."})
+            ),
             Some("fn push(&mut self, T)\nAppends.".to_string())
         );
         assert_eq!(
@@ -842,7 +914,11 @@ mod tests {
             {"position": {"line": 2, "character": 1}, "label": [{"value": "name"}, {"value": ":"}]}
         ]));
         assert_eq!(hints.len(), 2);
-        assert_eq!(hints[0], (0, 5, " : i32".to_string()), "paddingLeft adds a space");
+        assert_eq!(
+            hints[0],
+            (0, 5, " : i32".to_string()),
+            "paddingLeft adds a space"
+        );
         assert_eq!(hints[1], (2, 1, "name:".to_string()), "label parts joined");
         assert!(parse_inlay_hints(&Value::Null).is_empty());
     }
@@ -955,7 +1031,10 @@ mod tests {
 
     #[test]
     fn param_builders_shape() {
-        assert_eq!(reference_params("u", 1, 2, true)["context"]["includeDeclaration"], json!(true));
+        assert_eq!(
+            reference_params("u", 1, 2, true)["context"]["includeDeclaration"],
+            json!(true)
+        );
         assert_eq!(rename_params("u", 1, 2, "x")["newName"], json!("x"));
         assert_eq!(workspace_symbol_params("foo")["query"], json!("foo"));
         assert_eq!(did_save_params("u", "hi")["text"], json!("hi"));

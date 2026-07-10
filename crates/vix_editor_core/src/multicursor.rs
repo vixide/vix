@@ -9,7 +9,6 @@
 //! ascending order with a running offset so each edit stays valid.
 
 #![warn(clippy::pedantic)]
-
 // Offset bookkeeping mixes `usize` positions with a signed running shift; the
 // values are small in-buffer offsets, so these casts cannot realistically wrap.
 #![allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
@@ -179,8 +178,7 @@ impl Editor {
         for (pos, anchor) in carets {
             // Drive the single-cursor move logic for this caret.
             self.cursor = pos;
-            self.selection =
-                anchor.map(|a| Selection::from_anchor_and_cursor(a, pos));
+            self.selection = anchor.map(|a| Selection::from_anchor_and_cursor(a, pos));
             match dir {
                 CaretMove::Left => self.apply(MoveLeft { shift }),
                 CaretMove::Right => self.apply(MoveRight { shift }),
@@ -233,9 +231,13 @@ impl Editor {
                 return;
             }
             // Demote the current primary to an extra caret; promote the match.
-            let cur_anchor =
-                self.selection.map(|s| if s.end == self.cursor { s.start } else { s.end });
-            self.carets.push(Caret { pos: self.cursor, anchor: cur_anchor });
+            let cur_anchor = self
+                .selection
+                .map(|s| if s.end == self.cursor { s.start } else { s.end });
+            self.carets.push(Caret {
+                pos: self.cursor,
+                anchor: cur_anchor,
+            });
             self.cursor = end;
             self.selection = Some(Selection::new(start, end));
         }
@@ -275,7 +277,10 @@ impl Editor {
         self.carets.clear();
         let (last_start, last_end) = matches[matches.len() - 1];
         for &(start, end) in &matches[..matches.len() - 1] {
-            self.carets.push(Caret { pos: end, anchor: Some(start) });
+            self.carets.push(Caret {
+                pos: end,
+                anchor: Some(start),
+            });
         }
         self.cursor = last_end;
         self.selection = Some(Selection::new(last_start, last_end));
@@ -320,7 +325,11 @@ impl Editor {
             _ => cur_col,
         };
         // Frontier = furthest caret line in the direction of travel.
-        let mut lines: Vec<usize> = self.carets.iter().map(|c| code.char_to_line(c.pos)).collect();
+        let mut lines: Vec<usize> = self
+            .carets
+            .iter()
+            .map(|c| code.char_to_line(c.pos))
+            .collect();
         lines.push(cur_line);
         let frontier = if down {
             lines.into_iter().max().unwrap_or(cur_line)
@@ -381,7 +390,11 @@ mod caret_tests {
     fn add_all_occurrences_selects_every_match_of_the_word() {
         let mut e = ed("foo bar foo baz foo", 1); // cursor inside the first "foo"
         e.add_all_occurrences();
-        assert_eq!(e.caret_selections().len(), 3, "all three 'foo' matches selected");
+        assert_eq!(
+            e.caret_selections().len(),
+            3,
+            "all three 'foo' matches selected"
+        );
         assert!(e.has_multi_carets());
     }
 

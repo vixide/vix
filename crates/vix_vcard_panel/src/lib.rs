@@ -8,7 +8,6 @@
 //! and inserts the selected value into the editor.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -50,7 +49,10 @@ fn label_for(name: &str) -> &'static str {
 
 /// Properties not worth showing as a row (binary blobs and bookkeeping).
 fn is_hidden(name: &str) -> bool {
-    matches!(name, "PHOTO" | "LOGO" | "SOUND" | "KEY" | "PRODID" | "REV" | "UID")
+    matches!(
+        name,
+        "PHOTO" | "LOGO" | "SOUND" | "KEY" | "PRODID" | "REV" | "UID"
+    )
 }
 
 /// Build display rows for `vcard`.
@@ -62,7 +64,11 @@ pub fn rows(vcard: &Vcard) -> Vec<Row> {
             continue;
         }
         let base = label_for(&p.name);
-        let mut label = if base.is_empty() { p.name.clone() } else { base.to_string() };
+        let mut label = if base.is_empty() {
+            p.name.clone()
+        } else {
+            base.to_string()
+        };
         if let Some(types) = p.types() {
             label = format!("{label} ({types})");
         }
@@ -99,7 +105,12 @@ impl Panel {
     #[must_use]
     pub fn open(vcard: Vcard) -> Self {
         let rows = rows(&vcard);
-        Panel { vcard, rows, selected: 0, scroll: 0 }
+        Panel {
+            vcard,
+            rows,
+            selected: 0,
+            scroll: 0,
+        }
     }
 
     /// The contact's display name (panel title).
@@ -171,7 +182,10 @@ impl Panel {
     /// The highlighted row's value (what insertion uses).
     #[must_use]
     pub fn selected_value(&self) -> String {
-        self.rows.get(self.selected).map(|r| r.value.clone()).unwrap_or_default()
+        self.rows
+            .get(self.selected)
+            .map(|r| r.value.clone())
+            .unwrap_or_default()
     }
 }
 
@@ -186,7 +200,11 @@ mod tests {
         );
         let p = Panel::open(v);
         assert_eq!(p.title(), "Ada Lovelace");
-        assert!(p.rows.iter().any(|r| r.label == "Name" && r.value == "Ada Lovelace"));
+        assert!(
+            p.rows
+                .iter()
+                .any(|r| r.label == "Name" && r.value == "Ada Lovelace")
+        );
         assert!(p.rows.iter().any(|r| r.label == "Email (work)"));
         let adr = p.rows.iter().find(|r| r.label == "Address").unwrap();
         assert_eq!(adr.value, "1 Main St, Town, 12345, UK");

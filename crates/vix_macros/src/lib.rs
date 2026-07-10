@@ -142,7 +142,10 @@ fn decode_code(name: &str) -> Option<KeyCode> {
 /// Tokenize a recorded key sequence (dropping any unencodable events).
 #[must_use]
 pub fn encode(keys: &[KeyEvent]) -> Vec<String> {
-    keys.iter().map(|k| encode_key(*k)).filter(|s| !s.is_empty()).collect()
+    keys.iter()
+        .map(|k| encode_key(*k))
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 /// Decode tokens back to key events (dropping any unrecognized tokens).
@@ -200,7 +203,10 @@ mod tests {
             k(KeyCode::F(5), KeyModifiers::NONE),
         ];
         let tokens = encode(&keys);
-        assert_eq!(tokens, vec!["a", "C-c", "Space", "S-Tab", "Enter", "A-Left", "F5"]);
+        assert_eq!(
+            tokens,
+            vec!["a", "C-c", "Space", "S-Tab", "Enter", "A-Left", "F5"]
+        );
         assert_eq!(decode(&tokens), keys);
     }
 
@@ -208,10 +214,31 @@ mod tests {
     fn upsert_writes_and_replaces_by_name() {
         let path = std::env::temp_dir().join(format!("vix-macros-{}.toml", std::process::id()));
         let _ = std::fs::remove_file(&path);
-        upsert(&path, Macro { name: "m".into(), keys: vec!["a".into()] }).unwrap();
-        upsert(&path, Macro { name: "n".into(), keys: vec!["b".into()] }).unwrap();
+        upsert(
+            &path,
+            Macro {
+                name: "m".into(),
+                keys: vec!["a".into()],
+            },
+        )
+        .unwrap();
+        upsert(
+            &path,
+            Macro {
+                name: "n".into(),
+                keys: vec!["b".into()],
+            },
+        )
+        .unwrap();
         // Re-saving "m" replaces rather than duplicates.
-        upsert(&path, Macro { name: "m".into(), keys: vec!["x".into(), "y".into()] }).unwrap();
+        upsert(
+            &path,
+            Macro {
+                name: "m".into(),
+                keys: vec!["x".into(), "y".into()],
+            },
+        )
+        .unwrap();
         let macros = load(&path);
         assert_eq!(macros.len(), 2);
         let m = macros.iter().find(|m| m.name == "m").unwrap();
@@ -223,6 +250,9 @@ mod tests {
     fn decode_skips_unknown_tokens() {
         assert!(decode_key("").is_none());
         assert!(decode_key("Nonsense").is_none());
-        assert_eq!(decode(&["x".to_string(), "??".to_string()]), vec![k(KeyCode::Char('x'), KeyModifiers::NONE)]);
+        assert_eq!(
+            decode(&["x".to_string(), "??".to_string()]),
+            vec![k(KeyCode::Char('x'), KeyModifiers::NONE)]
+        );
     }
 }

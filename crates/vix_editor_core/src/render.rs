@@ -1,12 +1,10 @@
 #![warn(clippy::pedantic)]
-use ratatui_core::{widgets::Widget};
+use crate::code::{RopeGraphemes, grapheme_width_and_bytes_len, grapheme_width_and_chars_len};
+use crate::editor::Editor;
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier, Style};
-use crate::editor::Editor;
-use crate::code::{
-    RopeGraphemes, grapheme_width_and_chars_len, grapheme_width_and_bytes_len
-};
+use ratatui_core::widgets::Widget;
 
 /// Draws the main editor view in the provided area using the ratatui rendering buffer.
 ///
@@ -21,7 +19,7 @@ use crate::code::{
 /// * `self` - The `Editor` instance (as reference) to render.
 /// * `area` - The rectangular area on the terminal to draw within.
 /// * `buf` - The ratatui `Buffer` that represents the screen cells to draw to.
-/// 
+///
 impl Widget for &Editor {
     fn render(self, area: Rect, buf: &mut Buffer) {
         if self.soft_wrap {
@@ -46,8 +44,12 @@ impl Editor {
 
         // draw line numbers and text
         self.draw_text_lines(
-            area, buf, line_number_width, line_number_width_u16,
-            line_number_digits, total_lines,
+            area,
+            buf,
+            line_number_width,
+            line_number_width_u16,
+            line_number_digits,
+            total_lines,
         );
 
         // draw indentation guides (faint vertical bars at each indent level)
@@ -56,8 +58,12 @@ impl Editor {
         // draw syntax highlighting
         if code.is_highlight() {
             self.draw_syntax_layer(
-                area, buf, line_number_width, line_number_width_u16,
-                total_lines, total_chars,
+                area,
+                buf,
+                line_number_width,
+                line_number_width_u16,
+                total_lines,
+                total_chars,
             );
         }
 
@@ -69,18 +75,28 @@ impl Editor {
         // draw selection(s) — one range per caret (multiple-cursor aware)
         for (start, end) in self.caret_selections() {
             self.highlight_char_range(
-                area, buf, line_number_width,
-                start, end, self.selection_style,
+                area,
+                buf,
+                line_number_width,
+                start,
+                end,
+                self.selection_style,
             );
         }
 
         // draw marks
         if let Some(ref marks) = self.marks {
             for &(start, end, _color) in marks {
-                if start >= end || end > total_chars { continue }
+                if start >= end || end > total_chars {
+                    continue;
+                }
                 self.highlight_char_range(
-                    area, buf, line_number_width,
-                    start, end, Style::default().add_modifier(Modifier::UNDERLINED),
+                    area,
+                    buf,
+                    line_number_width,
+                    start,
+                    end,
+                    Style::default().add_modifier(Modifier::UNDERLINED),
                 );
             }
         }
@@ -90,7 +106,9 @@ impl Editor {
         if let Some(ref words) = self.word_marks {
             let word_style = Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM);
             for &(start, end) in words {
-                if start >= end || end > total_chars { continue }
+                if start >= end || end > total_chars {
+                    continue;
+                }
                 self.highlight_char_range(area, buf, line_number_width, start, end, word_style);
             }
         }
@@ -102,11 +120,10 @@ impl Editor {
                 ..Style::default().add_modifier(Modifier::UNDERLINED)
             };
             for &(start, end) in spell {
-                if start >= end || end > total_chars { continue }
-                self.highlight_char_range(
-                    area, buf, line_number_width,
-                    start, end, spell_style,
-                );
+                if start >= end || end > total_chars {
+                    continue;
+                }
+                self.highlight_char_range(area, buf, line_number_width, start, end, spell_style);
             }
         }
 
@@ -114,15 +131,14 @@ impl Editor {
         // channel separate from spell marks so the two coexist.
         if let Some(ref diags) = self.diagnostic_marks {
             for &(start, end, color) in diags {
-                if start >= end || end > total_chars { continue }
+                if start >= end || end > total_chars {
+                    continue;
+                }
                 let diag_style = Style {
                     fg: Some(color),
                     ..Style::default().add_modifier(Modifier::UNDERLINED)
                 };
-                self.highlight_char_range(
-                    area, buf, line_number_width,
-                    start, end, diag_style,
-                );
+                self.highlight_char_range(area, buf, line_number_width, start, end, diag_style);
             }
         }
 
@@ -131,19 +147,13 @@ impl Editor {
         if let Some(cursor_style) = self.cursor_style {
             for cur in self.caret_positions() {
                 let cur = cur.min(total_chars);
-                self.draw_caret_block(
-                    area, buf, line_number_width,
-                    cur, false, cursor_style,
-                );
+                self.draw_caret_block(area, buf, line_number_width, cur, false, cursor_style);
             }
         }
 
         // highlight the bracket matching the one at the cursor
         if let Some(bpos) = self.matching_bracket() {
-            self.draw_caret_block(
-                area, buf, line_number_width,
-                bpos, true, self.bracket_style,
-            );
+            self.draw_caret_block(area, buf, line_number_width, bpos, true, self.bracket_style);
         }
     }
 
@@ -191,11 +201,15 @@ impl Editor {
             if self.is_line_hidden(line) {
                 return None;
             }
-            (self.offset_y..line).filter(|&l| !self.is_line_hidden(l)).count()
+            (self.offset_y..line)
+                .filter(|&l| !self.is_line_hidden(l))
+                .count()
         } else {
             line - self.offset_y
         };
-        let draw_y = area.top().checked_add(u16::try_from(row).unwrap_or(u16::MAX))?;
+        let draw_y = area
+            .top()
+            .checked_add(u16::try_from(row).unwrap_or(u16::MAX))?;
         (draw_y < area.bottom()).then_some(draw_y)
     }
 
@@ -235,13 +249,21 @@ impl Editor {
         let line_number_style = self.line_number_style;
         let default_text_style = self.text_style;
         // For relative numbering, the cursor's line is the reference point.
-        let cursor_line = if self.relative_line_numbers { code.char_to_line(self.cursor) } else { 0 };
+        let cursor_line = if self.relative_line_numbers {
+            code.char_to_line(self.cursor)
+        } else {
+            0
+        };
 
         let mut row: u16 = 0;
         for line_idx in self.offset_y..total_lines {
-            if self.is_line_hidden(line_idx) { continue }
+            if self.is_line_hidden(line_idx) {
+                continue;
+            }
             let draw_y = area.top() + row;
-            if draw_y >= area.bottom() { break }
+            if draw_y >= area.bottom() {
+                break;
+            }
             row = row.saturating_add(1);
             if self.show_line_numbers {
                 // Hybrid relative: the cursor line shows its absolute number;
@@ -255,24 +277,13 @@ impl Editor {
                 buf.set_string(area.left(), draw_y, &line_number, line_number_style);
             }
             // Gutter sign column (just before the text, or column 0 when line
-            // numbers are hidden). Debugger markers take precedence over the git
-            // diff bar: ▶ for the stopped line, ● for a breakpoint, else ▎ diff.
+            // numbers are hidden).
             let sign_x = if self.show_line_numbers {
                 area.left() + u16::try_from(line_number_digits).unwrap_or(u16::MAX)
             } else {
                 area.left()
             };
-            if sign_x < area.right() {
-                if self.debug_line == Some(line_idx) {
-                    buf[(sign_x, draw_y)].set_symbol("\u{25b6}").set_style(Style::default().fg(Color::Yellow));
-                } else if self.breakpoints.contains(&line_idx) {
-                    buf[(sign_x, draw_y)].set_symbol("\u{25cf}").set_style(Style::default().fg(Color::Red));
-                } else if let Some(ref gmarks) = self.gutter_marks
-                    && let Some(&(_, color)) = gmarks.iter().find(|&&(l, _)| l == line_idx)
-                {
-                    buf[(sign_x, draw_y)].set_symbol("\u{258e}").set_style(Style::default().fg(color));
-                }
-            }
+            self.draw_gutter_sign(buf, sign_x, draw_y, line_idx, area.right());
             let line_len = code.line_len(line_idx);
             let max_x = (area.width as usize).saturating_sub(line_number_width);
 
@@ -293,47 +304,26 @@ impl Editor {
                 let fx = text_x.saturating_sub(1);
                 if fx >= area.left() && fx < right_edge {
                     let sym = if folded { "\u{25b8}" } else { "\u{25be}" }; // ▸ folded, ▾ open
-                    buf[(fx, draw_y)].set_symbol(sym).set_style(line_number_style);
+                    buf[(fx, draw_y)]
+                        .set_symbol(sym)
+                        .set_style(line_number_style);
                 }
             }
 
             if self.show_whitespace {
-                // Substitute a visible glyph for each space / tab / carriage
-                // return. The syntax layer below only restyles cells (it never
-                // rewrites them), so these glyphs survive.
-                let displayed_line: String = visible_chars
-                    .chars()
-                    .map(|c| match c {
-                        '\t' => '\u{2192}', // → tab
-                        ' ' => '\u{00B7}',  // · space
-                        '\r' => '\u{240D}', // ␍ carriage return
-                        other => other,
-                    })
-                    .collect();
-                if text_x < right_edge && draw_y < area.top() + area.height {
-                    buf.set_string(text_x, draw_y, &displayed_line, default_text_style);
-                    // Dim the glyph cells, tracking display columns so wide
-                    // characters elsewhere on the line don't shift the marks.
-                    let mut x = 0usize;
-                    for g in RopeGraphemes::new(&visible_chars) {
-                        let (g_width, _g_chars) = grapheme_width_and_chars_len(g);
-                        if matches!(g.chars().next(), Some('\t' | ' ' | '\r')) {
-                            let gx = text_x + u16::try_from(x).unwrap_or(u16::MAX);
-                            if gx < right_edge {
-                                buf[(gx, draw_y)].set_style(self.whitespace_style);
-                            }
-                        }
-                        x = x.saturating_add(g_width);
-                    }
-                    // A line-ending glyph after the content, when the line's end
-                    // is in view and it is not the final (newline-less) line.
-                    if end_col == line_len && line_idx + 1 < total_lines {
-                        let nl_x = text_x + u16::try_from(x).unwrap_or(u16::MAX);
-                        if nl_x < right_edge {
-                            buf.set_string(nl_x, draw_y, "\u{00B6}", self.whitespace_style); // ¶
-                        }
-                    }
-                }
+                self.draw_whitespace_line(
+                    buf,
+                    &visible_chars,
+                    area,
+                    text_x,
+                    right_edge,
+                    draw_y,
+                    end_col,
+                    line_len,
+                    line_idx,
+                    total_lines,
+                    default_text_style,
+                );
             } else {
                 let hints = self.line_inlays(line_idx);
                 if !(text_x < right_edge && draw_y < area.top() + area.height) {
@@ -343,12 +333,114 @@ impl Editor {
                     buf.set_string(text_x, draw_y, &displayed_line, default_text_style);
                 } else {
                     self.draw_line_with_inlays(
-                        buf, text_x, right_edge, draw_y, &visible_chars, &hints, default_text_style,
+                        buf,
+                        text_x,
+                        right_edge,
+                        draw_y,
+                        &visible_chars,
+                        &hints,
+                        default_text_style,
                     );
                 }
             }
 
-            self.draw_eol_note(buf, line_idx, line_start_char, line_len, text_x, right_edge, draw_y);
+            self.draw_eol_note(
+                buf,
+                line_idx,
+                line_start_char,
+                line_len,
+                text_x,
+                right_edge,
+                draw_y,
+            );
+        }
+    }
+
+    /// Render `visible` with visible whitespace glyphs (→ tab, · space, ␍ CR, and
+    /// a trailing ¶ at a line's end), dimming the glyph cells. Split out of
+    /// [`Editor::draw_text_lines`] to keep it within the line limit.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_whitespace_line(
+        &self,
+        buf: &mut Buffer,
+        visible: &ropey::RopeSlice,
+        area: Rect,
+        text_x: u16,
+        right_edge: u16,
+        draw_y: u16,
+        end_col: usize,
+        line_len: usize,
+        line_idx: usize,
+        total_lines: usize,
+        default_text_style: Style,
+    ) {
+        // Substitute a visible glyph for each space / tab / carriage return. The
+        // syntax layer below only restyles cells (it never rewrites them), so
+        // these glyphs survive.
+        let displayed_line: String = visible
+            .chars()
+            .map(|c| match c {
+                '\t' => '\u{2192}', // → tab
+                ' ' => '\u{00B7}',  // · space
+                '\r' => '\u{240D}', // ␍ carriage return
+                other => other,
+            })
+            .collect();
+        if text_x < right_edge && draw_y < area.top() + area.height {
+            buf.set_string(text_x, draw_y, &displayed_line, default_text_style);
+            // Dim the glyph cells, tracking display columns so wide characters
+            // elsewhere on the line don't shift the marks.
+            let mut x = 0usize;
+            for g in RopeGraphemes::new(visible) {
+                let (g_width, _g_chars) = grapheme_width_and_chars_len(g);
+                if matches!(g.chars().next(), Some('\t' | ' ' | '\r')) {
+                    let gx = text_x + u16::try_from(x).unwrap_or(u16::MAX);
+                    if gx < right_edge {
+                        buf[(gx, draw_y)].set_style(self.whitespace_style);
+                    }
+                }
+                x = x.saturating_add(g_width);
+            }
+            // A line-ending glyph after the content, when the line's end is in
+            // view and it is not the final (newline-less) line.
+            if end_col == line_len && line_idx + 1 < total_lines {
+                let nl_x = text_x + u16::try_from(x).unwrap_or(u16::MAX);
+                if nl_x < right_edge {
+                    buf.set_string(nl_x, draw_y, "\u{00B6}", self.whitespace_style); // ¶
+                }
+            }
+        }
+    }
+
+    /// Draw the gutter sign for `line_idx` at `sign_x`. Debugger markers take
+    /// precedence over the git diff bar: ▶ for the stopped line, ● for a
+    /// breakpoint, else ▎ diff. No-op when `sign_x` is past `area_right`. Split
+    /// out of [`Editor::draw_text_lines`] to keep it within the line limit.
+    fn draw_gutter_sign(
+        &self,
+        buf: &mut Buffer,
+        sign_x: u16,
+        draw_y: u16,
+        line_idx: usize,
+        area_right: u16,
+    ) {
+        if sign_x >= area_right {
+            return;
+        }
+        if self.debug_line == Some(line_idx) {
+            buf[(sign_x, draw_y)]
+                .set_symbol("\u{25b6}")
+                .set_style(Style::default().fg(Color::Yellow));
+        } else if self.breakpoints.contains(&line_idx) {
+            buf[(sign_x, draw_y)]
+                .set_symbol("\u{25cf}")
+                .set_style(Style::default().fg(Color::Red));
+        } else if let Some(ref gmarks) = self.gutter_marks
+            && let Some(&(_, color)) = gmarks.iter().find(|&&(l, _)| l == line_idx)
+        {
+            buf[(sign_x, draw_y)]
+                .set_symbol("\u{258e}")
+                .set_style(Style::default().fg(color));
         }
     }
 
@@ -369,12 +461,18 @@ impl Editor {
         if self.offset_x != 0 {
             return;
         }
-        let Some((nl, note)) = self.eol_note.as_ref() else { return };
+        let Some((nl, note)) = self.eol_note.as_ref() else {
+            return;
+        };
         if *nl != line_idx || note.is_empty() {
             return;
         }
-        let full = self.code_ref().char_slice(line_start_char, line_start_char + line_len);
-        let lw: usize = RopeGraphemes::new(&full).map(|g| grapheme_width_and_chars_len(g).0).sum();
+        let full = self
+            .code_ref()
+            .char_slice(line_start_char, line_start_char + line_len);
+        let lw: usize = RopeGraphemes::new(&full)
+            .map(|g| grapheme_width_and_chars_len(g).0)
+            .sum();
         let nx = text_x + u16::try_from(lw + 2).unwrap_or(u16::MAX);
         if nx < right_edge {
             let avail = (right_edge - nx) as usize;
@@ -439,7 +537,13 @@ impl Editor {
     /// Draw faint vertical indentation guides at each indent level on every
     /// visible line. Space-indented buffers only (the common case); tab- or
     /// mixed-indented buffers are skipped to avoid column-mapping ambiguity.
-    fn draw_indent_guides(&self, area: Rect, buf: &mut Buffer, line_number_width_u16: u16, total_lines: usize) {
+    fn draw_indent_guides(
+        &self,
+        area: Rect,
+        buf: &mut Buffer,
+        line_number_width_u16: u16,
+        total_lines: usize,
+    ) {
         let code = self.code_ref();
         let unit = code.indent();
         if unit.is_empty() || unit.contains('\t') {
@@ -448,13 +552,19 @@ impl Editor {
         let step = unit.chars().count();
         let max_x = (area.width as usize).saturating_sub(line_number_width_u16 as usize);
         for screen_y in 0..(area.height as usize) {
-            let Some(line_idx) = self.line_at_row(screen_y) else { break };
+            let Some(line_idx) = self.line_at_row(screen_y) else {
+                break;
+            };
             if line_idx >= total_lines {
                 break;
             }
             let line_start = code.line_to_char(line_idx);
             let len = code.line_len(line_idx);
-            let leading = code.char_slice(line_start, line_start + len).chars().take_while(|c| *c == ' ').count();
+            let leading = code
+                .char_slice(line_start, line_start + len)
+                .chars()
+                .take_while(|c| *c == ' ')
+                .count();
             let levels = leading / step;
             for col in (0..levels).map(|k| k * step) {
                 if col < self.offset_x {
@@ -464,10 +574,13 @@ impl Editor {
                 if x >= max_x {
                     break;
                 }
-                let draw_x = area.left() + line_number_width_u16 + u16::try_from(x).unwrap_or(u16::MAX);
+                let draw_x =
+                    area.left() + line_number_width_u16 + u16::try_from(x).unwrap_or(u16::MAX);
                 let draw_y = area.top() + u16::try_from(screen_y).unwrap_or(u16::MAX);
                 if draw_x < area.right() && draw_y < area.bottom() {
-                    buf[(draw_x, draw_y)].set_symbol("\u{2502}").set_style(self.whitespace_style);
+                    buf[(draw_x, draw_y)]
+                        .set_symbol("\u{2502}")
+                        .set_style(self.whitespace_style);
                 }
             }
         }
@@ -477,7 +590,13 @@ impl Editor {
     /// brackets). Depth is seeded by counting brackets from the start of the
     /// document to the first visible line, then carried line to line. Skipped for
     /// very large documents to keep the per-frame cost bounded.
-    fn draw_rainbow_brackets(&self, area: Rect, buf: &mut Buffer, line_number_width_u16: u16, total_lines: usize) {
+    fn draw_rainbow_brackets(
+        &self,
+        area: Rect,
+        buf: &mut Buffer,
+        line_number_width_u16: u16,
+        total_lines: usize,
+    ) {
         const COLORS: [Color; 6] = [
             Color::Rgb(0xff, 0xd7, 0x00), // gold
             Color::Rgb(0xda, 0x70, 0xd6), // orchid
@@ -487,20 +606,27 @@ impl Editor {
             Color::Rgb(0x4d, 0xd0, 0xe1), // cyan
         ];
         let code = self.code_ref();
-        let Some(first) = self.line_at_row(0) else { return };
+        let Some(first) = self.line_at_row(0) else {
+            return;
+        };
         let base = code.line_to_char(first);
         if base > 200_000 {
             return; // bound the from-start scan on very large files
         }
         // Seed nesting depth from the document start to the first visible line.
-        let mut depth: usize = code.char_slice(0, base).chars().fold(0usize, |d, c| match c {
-            '(' | '[' | '{' => d + 1,
-            ')' | ']' | '}' => d.saturating_sub(1),
-            _ => d,
-        });
+        let mut depth: usize = code
+            .char_slice(0, base)
+            .chars()
+            .fold(0usize, |d, c| match c {
+                '(' | '[' | '{' => d + 1,
+                ')' | ']' | '}' => d.saturating_sub(1),
+                _ => d,
+            });
         let max_x = (area.width as usize).saturating_sub(line_number_width_u16 as usize);
         for screen_y in 0..(area.height as usize) {
-            let Some(line_idx) = self.line_at_row(screen_y) else { break };
+            let Some(line_idx) = self.line_at_row(screen_y) else {
+                break;
+            };
             if line_idx >= total_lines {
                 break;
             }
@@ -529,7 +655,9 @@ impl Editor {
                     {
                         let x = vcol - self.offset_x;
                         if x < max_x {
-                            let dx = area.left() + line_number_width_u16 + u16::try_from(x).unwrap_or(u16::MAX);
+                            let dx = area.left()
+                                + line_number_width_u16
+                                + u16::try_from(x).unwrap_or(u16::MAX);
                             let dy = area.top() + u16::try_from(screen_y).unwrap_or(u16::MAX);
                             if dx < area.right() && dy < area.bottom() {
                                 buf[(dx, dy)].set_fg(color);
@@ -558,18 +686,28 @@ impl Editor {
         let highlights = {
             let mut region: Option<(usize, usize)> = None;
             for screen_y in 0..(area.height as usize) {
-                let Some(line_idx) = self.line_at_row(screen_y) else { break };
-                if line_idx >= total_lines { break }
+                let Some(line_idx) = self.line_at_row(screen_y) else {
+                    break;
+                };
+                if line_idx >= total_lines {
+                    break;
+                }
                 let ls = code.line_to_char(line_idx);
                 let s = code.char_to_byte(ls);
                 let e = code.char_to_byte(ls + code.line_len(line_idx));
                 region = Some(region.map_or((s, e), |(rs, re)| (rs.min(s), re.max(e))));
             }
-            region.map(|(s, e)| self.highlight_interval(s, e, &self.theme)).unwrap_or_default()
+            region
+                .map(|(s, e)| self.highlight_interval(s, e, &self.theme))
+                .unwrap_or_default()
         };
         for screen_y in 0..(area.height as usize) {
-            let Some(line_idx) = self.line_at_row(screen_y) else { break };
-            if line_idx >= total_lines { break }
+            let Some(line_idx) = self.line_at_row(screen_y) else {
+                break;
+            };
+            if line_idx >= total_lines {
+                break;
+            }
 
             let line_len = code.line_len(line_idx);
             let max_x = (area.width as usize).saturating_sub(line_number_width);
@@ -595,15 +733,22 @@ impl Editor {
             for g in RopeGraphemes::new(&chars) {
                 let (g_width, g_bytes) = grapheme_width_and_bytes_len(g);
 
-                if x >= max_x { break; }
+                if x >= max_x {
+                    break;
+                }
 
                 let shift = self.inlay_shift(line_idx, char_col);
                 char_col += g.chars().count();
-                let start_x = area.left() + line_number_width_u16 + shift + u16::try_from(x).unwrap_or(u16::MAX);
+                let start_x = area.left()
+                    + line_number_width_u16
+                    + shift
+                    + u16::try_from(x).unwrap_or(u16::MAX);
                 let draw_y = area.top() + u16::try_from(screen_y).unwrap_or(u16::MAX);
 
                 for dx in 0..g_width {
-                    if x + dx >= max_x { break; }
+                    if x + dx >= max_x {
+                        break;
+                    }
                     let draw_x = start_x + u16::try_from(dx).unwrap_or(u16::MAX);
                     for &(start, end, s) in &highlights {
                         if start <= byte_idx_in_rope && byte_idx_in_rope < end {
@@ -637,7 +782,9 @@ impl Editor {
         let end_line = code.char_to_line(end);
 
         for line_idx in start_line..=end_line {
-            let Some(draw_y) = self.screen_row(line_idx, area) else { continue };
+            let Some(draw_y) = self.screen_row(line_idx, area) else {
+                continue;
+            };
 
             let line_start_char = code.line_to_char(line_idx);
             let line_len = code.line_len(line_idx);
@@ -696,7 +843,9 @@ impl Editor {
         let line_number_width_u16 = u16::try_from(line_number_width).unwrap_or(u16::MAX);
         let code = self.code_ref();
         let line_idx = code.char_to_line(pos);
-        let Some(draw_y) = self.screen_row(line_idx, area) else { return };
+        let Some(draw_y) = self.screen_row(line_idx, area) else {
+            return;
+        };
         let line_start_char = code.line_to_char(line_idx);
         let line_len = code.line_len(line_idx);
         let rel = pos - line_start_char;
@@ -717,17 +866,19 @@ impl Editor {
         let mut visual_x: u16 = 0;
         let mut char_col = start_col;
         for g in RopeGraphemes::new(&visible) {
-            if char_col >= rel { break; }
+            if char_col >= rel {
+                break;
+            }
             let (g_width, g_chars) = grapheme_width_and_chars_len(g);
             visual_x = visual_x.saturating_add(u16::try_from(g_width).unwrap_or(u16::MAX));
             char_col += g_chars;
         }
-        let draw_x = area.left() + line_number_width_u16 + self.inlay_shift(line_idx, rel) + visual_x;
+        let draw_x =
+            area.left() + line_number_width_u16 + self.inlay_shift(line_idx, rel) + visual_x;
         if draw_x < area.right() && draw_y < area.bottom() {
             buf[(draw_x, draw_y)].set_style(style);
         }
     }
-
 }
 
 #[cfg(test)]
@@ -739,7 +890,9 @@ mod whitespace_tests {
 
     /// Collect the glyphs of one rendered row into a String.
     fn row(buf: &Buffer, y: u16, x0: u16, x1: u16) -> String {
-        (x0..x1).map(|x| buf[(x, y)].symbol().chars().next().unwrap_or(' ')).collect()
+        (x0..x1)
+            .map(|x| buf[(x, y)].symbol().chars().next().unwrap_or(' '))
+            .collect()
     }
 
     #[cfg(feature = "lang-rust")]
@@ -750,12 +903,19 @@ mod whitespace_tests {
         // the SECOND visible line is still styled (not just the first line).
         let mut ed = Editor::new("rust", "let a = 1;\nfn main() {}\n", Vec::new()).unwrap();
         ed.show_line_numbers(false);
-        ed.set_syntax_theme(&[("keyword", "ff0000"), ("keyword.function", "ff0000"), ("function", "ff0000")]);
+        ed.set_syntax_theme(&[
+            ("keyword", "ff0000"),
+            ("keyword.function", "ff0000"),
+            ("function", "ff0000"),
+        ]);
         let area = Rect::new(0, 0, 40, 5);
         let mut buf = Buffer::empty(area);
         (&ed).render(area, &mut buf);
         let line1_styled = (0..40).any(|x| buf[(x, 1)].fg == Color::Rgb(255, 0, 0));
-        assert!(line1_styled, "second visible line (fn main) is highlighted via the single viewport query");
+        assert!(
+            line1_styled,
+            "second visible line (fn main) is highlighted via the single viewport query"
+        );
     }
 
     #[test]
@@ -783,8 +943,16 @@ mod whitespace_tests {
         let mut buf = Buffer::empty(area);
         (&ed).render(area, &mut buf);
         // 2-cell left padding: '(' at x=2 (depth 0), '[' at x=4 (depth 1).
-        assert_eq!(buf[(2, 0)].fg, Color::Rgb(0xff, 0xd7, 0x00), "outer ( is depth-0 gold");
-        assert_eq!(buf[(4, 0)].fg, Color::Rgb(0xda, 0x70, 0xd6), "inner [ is depth-1 orchid");
+        assert_eq!(
+            buf[(2, 0)].fg,
+            Color::Rgb(0xff, 0xd7, 0x00),
+            "outer ( is depth-0 gold"
+        );
+        assert_eq!(
+            buf[(4, 0)].fg,
+            Color::Rgb(0xda, 0x70, 0xd6),
+            "inner [ is depth-1 orchid"
+        );
     }
 
     #[test]
@@ -797,8 +965,14 @@ mod whitespace_tests {
         (&ed).render(area, &mut buf);
         let row0 = row(&buf, 0, 0, 20);
         let row1 = row(&buf, 1, 0, 20);
-        assert!(row0.contains('\u{2502}'), "indented line shows a guide: {row0:?}");
-        assert!(!row1.contains('\u{2502}'), "flush line shows no guide: {row1:?}");
+        assert!(
+            row0.contains('\u{2502}'),
+            "indented line shows a guide: {row0:?}"
+        );
+        assert!(
+            !row1.contains('\u{2502}'),
+            "flush line shows no guide: {row1:?}"
+        );
     }
 
     #[test]
@@ -824,7 +998,10 @@ mod whitespace_tests {
         let area = Rect::new(0, 0, 6, 5);
         // Click the 2nd visual row ("efgh") at text column 2 (x = 2 padding + 2).
         let off = ed.cursor_from_mouse(4, 1, &area).unwrap();
-        assert_eq!(off, 6, "click on wrapped row 1 col 2 maps to char index 6 ('g')");
+        assert_eq!(
+            off, 6,
+            "click on wrapped row 1 col 2 maps to char index 6 ('g')"
+        );
     }
 
     #[test]

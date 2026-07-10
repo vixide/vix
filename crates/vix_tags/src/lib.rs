@@ -45,7 +45,10 @@ fn scan(text: &str) -> Vec<Tag> {
         while j < n && (chars[j].is_alphanumeric() || matches!(chars[j], '-' | '_' | ':' | '.')) {
             j += 1;
         }
-        let name: String = chars[name_start..j].iter().collect::<String>().to_ascii_lowercase();
+        let name: String = chars[name_start..j]
+            .iter()
+            .collect::<String>()
+            .to_ascii_lowercase();
         if name.is_empty() {
             i += 1;
             continue;
@@ -56,7 +59,12 @@ fn scan(text: &str) -> Vec<Tag> {
             k += 1;
         }
         let self_closing = k > 0 && chars.get(k - 1) == Some(&'/');
-        tags.push(Tag { open, name, closing, self_closing });
+        tags.push(Tag {
+            open,
+            name,
+            closing,
+            self_closing,
+        });
         i = k + 1;
     }
     tags
@@ -78,7 +86,9 @@ pub fn matching_tag(text: &str, cursor: usize) -> Option<usize> {
         }
         k
     };
-    let idx = tags.iter().position(|t| cursor >= t.open && cursor <= end_of(t.open))?;
+    let idx = tags
+        .iter()
+        .position(|t| cursor >= t.open && cursor <= end_of(t.open))?;
     let tag = &tags[idx];
     if tag.self_closing {
         return None;

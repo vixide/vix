@@ -8,7 +8,6 @@
 //! is unpredictable and collision-safe for practical purposes.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -48,7 +47,11 @@ mod tests {
     #[test]
     fn is_lowercase_hex() {
         let z = generate(16);
-        assert!(z.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)), "lowercase hex: {z}");
+        assert!(
+            z.chars()
+                .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
+            "lowercase hex: {z}"
+        );
     }
 
     #[test]

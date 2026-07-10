@@ -4,7 +4,6 @@
 //! Markdown text.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

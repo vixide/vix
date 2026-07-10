@@ -122,7 +122,10 @@ impl Saved {
         if let Some(q) = self.queries.iter_mut().find(|q| q.name == name) {
             q.sql = sql.to_string();
         } else {
-            self.queries.push(SavedQuery { name: name.to_string(), sql: sql.to_string() });
+            self.queries.push(SavedQuery {
+                name: name.to_string(),
+                sql: sql.to_string(),
+            });
         }
     }
 }
@@ -176,7 +179,11 @@ mod tests {
             h.push(&format!("select {i}"));
         }
         assert_eq!(h.entries.len(), HISTORY_CAP, "capped");
-        assert_eq!(h.entries[0], format!("select {}", HISTORY_CAP + 49), "newest first");
+        assert_eq!(
+            h.entries[0],
+            format!("select {}", HISTORY_CAP + 49),
+            "newest first"
+        );
     }
 
     #[test]
@@ -192,7 +199,11 @@ mod tests {
             });
         }
         assert_eq!(log.entries.len(), LOG_CAP, "capped");
-        assert_eq!(log.entries[0].sql, format!("select {}", LOG_CAP + 9), "newest first");
+        assert_eq!(
+            log.entries[0].sql,
+            format!("select {}", LOG_CAP + 9),
+            "newest first"
+        );
         assert_eq!(Origin::App.label(), "app");
     }
 

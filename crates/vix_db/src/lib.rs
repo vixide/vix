@@ -31,8 +31,8 @@ pub mod format;
 pub mod highlight;
 pub mod import;
 pub mod params;
-pub mod secret;
 pub mod results;
+pub mod secret;
 pub mod session;
 pub mod store;
 pub mod tunnel;
@@ -501,7 +501,9 @@ impl Browser {
     /// Whole seconds a running query has been in flight (for the indicator).
     #[must_use]
     pub fn query_elapsed_secs(&self) -> Option<u64> {
-        self.pending_query.as_ref().map(|p| p.started.elapsed().as_secs())
+        self.pending_query
+            .as_ref()
+            .map(|p| p.started.elapsed().as_secs())
     }
 
     /// The staged new value for a cell, if any (for the grid overlay).
@@ -533,7 +535,8 @@ impl Browser {
     pub fn take_ai_request(&mut self) -> Option<AiRequest> {
         if let AiState::Pending(req) = &self.ai {
             let reply = req.reply;
-            if let AiState::Pending(req) = std::mem::replace(&mut self.ai, AiState::Running(reply)) {
+            if let AiState::Pending(req) = std::mem::replace(&mut self.ai, AiState::Running(reply))
+            {
                 return Some(req);
             }
         }
@@ -727,8 +730,12 @@ impl Browser {
                 let text = self.cell_text.clone();
                 self.yank(&text);
             }
-            KeyCode::Up | KeyCode::Char('k') => self.view_scroll = self.view_scroll.saturating_sub(1),
-            KeyCode::Down | KeyCode::Char('j') => self.view_scroll = (self.view_scroll + 1).min(last),
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.view_scroll = self.view_scroll.saturating_sub(1)
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.view_scroll = (self.view_scroll + 1).min(last)
+            }
             KeyCode::PageUp => self.view_scroll = self.view_scroll.saturating_sub(10),
             KeyCode::PageDown => self.view_scroll = (self.view_scroll + 10).min(last),
             KeyCode::Esc | KeyCode::Char('q') | KeyCode::Enter => self.view = View::Workbench,
@@ -765,7 +772,9 @@ impl Browser {
     fn key_erd(&mut self, key: KeyEvent) -> Outcome {
         let last = self.cell_text.lines().count().saturating_sub(1);
         match key.code {
-            KeyCode::Up | KeyCode::Char('k') => self.view_scroll = self.view_scroll.saturating_sub(1),
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.view_scroll = self.view_scroll.saturating_sub(1)
+            }
             KeyCode::Down | KeyCode::Char('j') => {
                 self.view_scroll = (self.view_scroll + 1).min(last);
             }
@@ -851,7 +860,9 @@ impl Browser {
             KeyCode::Left | KeyCode::Right | KeyCode::Char(' ') if self.form.sel == FORM_KIND => {
                 self.form.kind = self.form.kind.next();
             }
-            KeyCode::Left | KeyCode::Right | KeyCode::Char(' ') if self.form.sel == FORM_WRITABLE => {
+            KeyCode::Left | KeyCode::Right | KeyCode::Char(' ')
+                if self.form.sel == FORM_WRITABLE =>
+            {
                 self.form.writable = !self.form.writable;
             }
             KeyCode::Left | KeyCode::Right | KeyCode::Char(' ') if self.form.sel == FORM_STORE => {
@@ -992,7 +1003,9 @@ impl Browser {
         let setup: Vec<String> = if conn.writable {
             Vec::new()
         } else {
-            connect::read_only_sql(conn.kind, true).into_iter().collect()
+            connect::read_only_sql(conn.kind, true)
+                .into_iter()
+                .collect()
         };
         match session::Session::connect(&url, &setup) {
             Ok(session) => {
@@ -1176,7 +1189,9 @@ impl Browser {
                 self.focus = self.focus.prev();
                 return Outcome::Consumed;
             }
-            KeyCode::Esc if self.popup.is_none() && !self.grid.filtering && !self.tree.filtering => {
+            KeyCode::Esc
+                if self.popup.is_none() && !self.grid.filtering && !self.tree.filtering =>
+            {
                 self.view = View::Connections;
                 return Outcome::Consumed;
             }
@@ -1303,7 +1318,11 @@ impl Browser {
 
     /// Queue an [`AiRequest`] for the host and mark the workbench busy.
     fn queue_ai(&mut self, prompt: String, context: String, reply: AiReply) {
-        self.ai = AiState::Pending(AiRequest { prompt, context, reply });
+        self.ai = AiState::Pending(AiRequest {
+            prompt,
+            context,
+            reply,
+        });
         self.message = Some(t!("msg.db_ai_thinking").to_string());
     }
 
@@ -1314,9 +1333,10 @@ impl Browser {
             self.message = Some(t!("msg.db_ai_busy").to_string());
             return;
         }
-        let (Some(engine), Some((sql, error))) =
-            (self.conn.as_ref().map(|c| c.kind.label()), self.last_error.clone())
-        else {
+        let (Some(engine), Some((sql, error))) = (
+            self.conn.as_ref().map(|c| c.kind.label()),
+            self.last_error.clone(),
+        ) else {
             self.message = Some(t!("msg.db_ai_no_error").to_string());
             return;
         };
@@ -1362,7 +1382,12 @@ impl Browser {
         };
         let plan = self
             .run_catalog(&catalog::explain_sql(kind, &stmt, false))
-            .map(|(_, rows)| rows.iter().map(|r| r.join(" | ")).collect::<Vec<_>>().join("\n"))
+            .map(|(_, rows)| {
+                rows.iter()
+                    .map(|r| r.join(" | "))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
             .unwrap_or_default();
         let (columns, rels) = self.schema_facts();
         let context = ai::optimize_context(kind.label(), &columns, &rels, &stmt, &plan);
@@ -1488,7 +1513,11 @@ impl Browser {
         let joined = if text.trim().is_empty() {
             sql.to_string()
         } else {
-            let sep = if text.trim_end().ends_with(';') { "\n" } else { ";\n" };
+            let sep = if text.trim_end().ends_with(';') {
+                "\n"
+            } else {
+                ";\n"
+            };
             format!("{}{sep}{sql}", text.trim_end())
         };
         self.query = editor::Query::default();
@@ -1684,9 +1713,11 @@ impl Browser {
     pub fn pending_summary(&self) -> Option<String> {
         match self.pending_run.as_ref()? {
             PendingRun::One(sql) => Some(sql.clone()),
-            PendingRun::All(stmts) => {
-                Some(format!("{} × … {}", stmts.len(), stmts.first().map_or("", String::as_str)))
-            }
+            PendingRun::All(stmts) => Some(format!(
+                "{} × … {}",
+                stmts.len(),
+                stmts.first().map_or("", String::as_str)
+            )),
         }
     }
 
@@ -1726,7 +1757,11 @@ impl Browser {
         if names.is_empty() {
             self.execute_sql(stmt);
         } else {
-            self.params = Some(ParamPrompt { sql: stmt, names, ..ParamPrompt::default() });
+            self.params = Some(ParamPrompt {
+                sql: stmt,
+                names,
+                ..ParamPrompt::default()
+            });
             self.view = View::Params;
         }
     }
@@ -1789,7 +1824,14 @@ impl Browser {
         let text = self.query.text();
         let stmts: Vec<String> = editor::statement_spans(&text)
             .iter()
-            .map(|&(s, e)| text.chars().skip(s).take(e - s).collect::<String>().trim().to_string())
+            .map(|&(s, e)| {
+                text.chars()
+                    .skip(s)
+                    .take(e - s)
+                    .collect::<String>()
+                    .trim()
+                    .to_string()
+            })
             .filter(|s| !s.is_empty())
             .collect();
         if stmts.is_empty() {
@@ -1852,7 +1894,11 @@ impl Browser {
             return;
         }
         self.message = Some(t!("msg.db_running").to_string());
-        self.pending_query = Some(Pending { started: std::time::Instant::now(), sql, kind });
+        self.pending_query = Some(Pending {
+            started: std::time::Instant::now(),
+            sql,
+            kind,
+        });
     }
 
     /// Drain streamed result chunks into the grid, applying batches as they
@@ -1925,7 +1971,12 @@ impl Browser {
                 self.last_error = None;
                 self.note_tx(&pending.sql, true);
                 self.message = Some(if truncated {
-                    t!("msg.db_rows_truncated", count = rows, max = session::MAX_ROWS).to_string()
+                    t!(
+                        "msg.db_rows_truncated",
+                        count = rows,
+                        max = session::MAX_ROWS
+                    )
+                    .to_string()
                 } else {
                     t!("msg.db_rows", count = rows).to_string()
                 });
@@ -1968,7 +2019,11 @@ impl Browser {
             }
             return;
         }
-        let word = sql.split_whitespace().next().unwrap_or("").to_ascii_uppercase();
+        let word = sql
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .to_ascii_uppercase();
         match word.as_str() {
             "BEGIN" | "START" => self.tx = TxState::Open,
             "COMMIT" | "ROLLBACK" => self.tx = TxState::None,
@@ -2076,7 +2131,11 @@ impl Browser {
         self.editing_cell = None;
         let pk = self
             .run_catalog(&catalog::primary_key_sql(kind, schema, table))
-            .map(|(_, rows)| rows.into_iter().filter_map(|r| r.into_iter().next()).collect::<Vec<_>>())
+            .map(|(_, rows)| {
+                rows.into_iter()
+                    .filter_map(|r| r.into_iter().next())
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default();
         if pk.is_empty() {
             self.set_uneditable();
@@ -2102,7 +2161,13 @@ impl Browser {
         let Some(row) = self.grid.selected_row() else {
             return;
         };
-        let width = self.grid.headers.iter().map(|h| h.chars().count()).max().unwrap_or(0);
+        let width = self
+            .grid
+            .headers
+            .iter()
+            .map(|h| h.chars().count())
+            .max()
+            .unwrap_or(0);
         let mut out = String::new();
         for (i, header) in self.grid.headers.iter().enumerate() {
             let value = row.get(i).map(String::as_str).unwrap_or_default();
@@ -2137,7 +2202,11 @@ impl Browser {
             return;
         };
         let (parent, parent_col) = (parent.clone(), parent_col.clone());
-        let col = if parent_col.is_empty() { "rowid".to_string() } else { parent_col };
+        let col = if parent_col.is_empty() {
+            "rowid".to_string()
+        } else {
+            parent_col
+        };
         let sql = format!(
             "SELECT * FROM {} WHERE {} = {} LIMIT {}",
             catalog::quote_ident(kind, &parent),
@@ -2188,8 +2257,13 @@ impl Browser {
             }
             KeyCode::Enter => {
                 if let Some((row, col)) = self.editing_cell.take() {
-                    let original =
-                        self.grid.rows.get(row).and_then(|r| r.get(col)).cloned().unwrap_or_default();
+                    let original = self
+                        .grid
+                        .rows
+                        .get(row)
+                        .and_then(|r| r.get(col))
+                        .cloned()
+                        .unwrap_or_default();
                     let new = std::mem::take(&mut self.edit_input);
                     if new == original {
                         self.edits.remove(&(row, col)); // reverting clears the stage
@@ -2238,7 +2312,11 @@ impl Browser {
         let target = if matches!(kind, connect::Kind::Sqlite) {
             catalog::quote_ident(kind, &table)
         } else {
-            format!("{}.{}", catalog::quote_ident(kind, &schema), catalog::quote_ident(kind, &table))
+            format!(
+                "{}.{}",
+                catalog::quote_ident(kind, &schema),
+                catalog::quote_ident(kind, &table)
+            )
         };
 
         let mut edits: Vec<((usize, usize), (String, String))> =
@@ -2249,7 +2327,9 @@ impl Browser {
         // for optimistic conflict detection.
         let mut updates = Vec::new();
         for ((row, col), (original, new)) in &edits {
-            let Some(cells) = self.grid.rows.get(*row) else { continue };
+            let Some(cells) = self.grid.rows.get(*row) else {
+                continue;
+            };
             let where_clause: Vec<String> = pk_idx
                 .iter()
                 .filter_map(|&pi| {
@@ -2268,13 +2348,20 @@ impl Browser {
             let where_sql = where_clause.join(" AND ");
             let column = self.grid.headers.get(*col).cloned().unwrap_or_default();
             // Conflict check: the cell must still hold the value we loaded.
-            let check =
-                format!("SELECT {} FROM {target} WHERE {where_sql}", catalog::quote_ident(kind, &column));
+            let check = format!(
+                "SELECT {} FROM {target} WHERE {where_sql}",
+                catalog::quote_ident(kind, &column)
+            );
             match self.run_catalog(&check) {
                 Ok((_, rows)) => {
-                    let live = rows.first().and_then(|r| r.first()).cloned().unwrap_or_default();
+                    let live = rows
+                        .first()
+                        .and_then(|r| r.first())
+                        .cloned()
+                        .unwrap_or_default();
                     if &live != original {
-                        self.message = Some(t!("msg.db_edit_conflict", column = column).to_string());
+                        self.message =
+                            Some(t!("msg.db_edit_conflict", column = column).to_string());
                         return;
                     }
                 }
@@ -2357,7 +2444,10 @@ impl Browser {
         let format = export::FORMATS[self.export_format % export::FORMATS.len()];
         let order = self.grid.filtered();
         let rows: Vec<&Vec<String>> = order.iter().map(|&i| &self.grid.rows[i]).collect();
-        let table = self.last_table.clone().unwrap_or_else(|| "vix_export".to_string());
+        let table = self
+            .last_table
+            .clone()
+            .unwrap_or_else(|| "vix_export".to_string());
         let text = export::render(format, &self.grid.headers, &rows, &table);
         if self.export_clipboard {
             self.yank(&text);
@@ -2381,7 +2471,8 @@ impl Browser {
     /// Beautify the statement at the cursor in place.
     pub fn format_at_cursor(&mut self) {
         if let Some(stmt) = self.query.statement_at_cursor() {
-            self.query.replace_statement_at_cursor(&format::beautify(&stmt));
+            self.query
+                .replace_statement_at_cursor(&format::beautify(&stmt));
             self.popup = None;
         }
     }
@@ -2426,7 +2517,11 @@ impl Browser {
             // The DDL is the last column of the first row (MySQL's SHOW CREATE
             // returns Table + Create Table; the others a single column).
             Ok((_, rows)) => {
-                let ddl = rows.first().and_then(|r| r.last()).cloned().unwrap_or_default();
+                let ddl = rows
+                    .first()
+                    .and_then(|r| r.last())
+                    .cloned()
+                    .unwrap_or_default();
                 if ddl.trim().is_empty() {
                     self.message = Some(t!("msg.db_ddl_none").to_string());
                     return;
@@ -2444,8 +2539,11 @@ impl Browser {
     fn refresh_popup(&mut self) {
         let line = self.query.lines()[self.query.row].clone();
         let s = self.completer.suggest(&line, self.query.col);
-        self.popup =
-            (!s.items.is_empty()).then_some(Popup { items: s.items, sel: 0, start: s.start });
+        self.popup = (!s.items.is_empty()).then_some(Popup {
+            items: s.items,
+            sel: 0,
+            start: s.start,
+        });
     }
 }
 
@@ -2494,8 +2592,14 @@ mod tests {
         assert_eq!(b.view, View::Connections);
         assert_eq!(b.connections.len(), 2);
         assert_eq!(b.connections[1].name, "prod");
-        assert!(b.take_dirty_connections().is_some(), "host is told to persist");
-        assert!(b.take_dirty_connections().is_none(), "flag clears after take");
+        assert!(
+            b.take_dirty_connections().is_some(),
+            "host is told to persist"
+        );
+        assert!(
+            b.take_dirty_connections().is_none(),
+            "flag clears after take"
+        );
         b.sel = 1;
         b.handle_key(key(KeyCode::Char('d')), Pages::default());
         assert_eq!(b.connections.len(), 1);
@@ -2530,7 +2634,11 @@ mod tests {
             ..connect::Connection::default()
         }]);
         b.handle_key(key(KeyCode::Enter), Pages::default());
-        assert_eq!(b.view, View::Password, "server engines prompt for a password");
+        assert_eq!(
+            b.view,
+            View::Password,
+            "server engines prompt for a password"
+        );
         for c in "pw".chars() {
             b.handle_key(key(KeyCode::Char(c)), Pages::default());
         }
@@ -2558,7 +2666,8 @@ mod tests {
         let mut b = browser();
         b.view = View::Workbench;
         b.focus = Pane::Editor;
-        b.completer.set_schema(vec!["users".into()], vec![("users".into(), "name".into())]);
+        b.completer
+            .set_schema(vec!["users".into()], vec![("users".into(), "name".into())]);
         for c in "select us".chars() {
             b.handle_key(key(KeyCode::Char(c)), Pages::default());
         }
@@ -2604,7 +2713,10 @@ mod tests {
         assert!(b.pending_summary().unwrap().contains("drop table users"));
         b.handle_key(key(KeyCode::Esc), Pages::default());
         assert_eq!(b.view, View::Workbench);
-        assert!(b.pending_summary().is_none(), "cancel clears the pending run");
+        assert!(
+            b.pending_summary().is_none(),
+            "cancel clears the pending run"
+        );
     }
 
     #[test]
@@ -2633,7 +2745,10 @@ mod tests {
         assert!(!b.form.writable, "new connections are read-only");
         b.handle_key(key(KeyCode::Char(' ')), Pages::default());
         assert!(b.form.writable, "space flips the access row to read-write");
-        assert!(b.form.to_connection().writable, "the toggle carries into the connection");
+        assert!(
+            b.form.to_connection().writable,
+            "the toggle carries into the connection"
+        );
     }
 
     #[test]
@@ -2642,13 +2757,23 @@ mod tests {
         b.view = View::Workbench;
         b.focus = Pane::Editor;
         b.history.push("select 42");
-        b.handle_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL), Pages::default());
+        b.handle_key(
+            KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL),
+            Pages::default(),
+        );
         assert_eq!(b.view, View::History);
         b.handle_key(key(KeyCode::Enter), Pages::default());
         assert_eq!(b.view, View::Workbench);
-        assert_eq!(b.query.text(), "select 42", "history entry lands in the editor");
+        assert_eq!(
+            b.query.text(),
+            "select 42",
+            "history entry lands in the editor"
+        );
         // Save it under a name, then find and delete it in the saved list.
-        b.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL), Pages::default());
+        b.handle_key(
+            KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL),
+            Pages::default(),
+        );
         assert_eq!(b.view, View::SaveName);
         for c in "answer".chars() {
             b.handle_key(key(KeyCode::Char(c)), Pages::default());
@@ -2656,7 +2781,10 @@ mod tests {
         b.handle_key(key(KeyCode::Enter), Pages::default());
         assert_eq!(b.saved.queries.len(), 1);
         assert!(b.take_dirty_saved().is_some());
-        b.handle_key(KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL), Pages::default());
+        b.handle_key(
+            KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL),
+            Pages::default(),
+        );
         assert_eq!(b.view, View::Saved);
         b.handle_key(key(KeyCode::Char('d')), Pages::default());
         assert!(b.saved.queries.is_empty());
@@ -2693,7 +2821,11 @@ mod tests {
         assert!(rows.iter().any(|r| r.text == "orders"));
         assert!(!rows.iter().any(|r| r.text == "users"));
         b.handle_key(key(KeyCode::Esc), Pages::default());
-        assert_eq!(b.view, View::Workbench, "Esc clears the search, not the workbench");
+        assert_eq!(
+            b.view,
+            View::Workbench,
+            "Esc clears the search, not the workbench"
+        );
         assert!(b.tree.filter.is_empty());
     }
 
@@ -2722,10 +2854,14 @@ mod tests {
         let mut b = browser();
         b.view = View::Workbench;
         b.focus = Pane::Results;
-        b.grid.set(vec!["id".into()], vec![vec!["1".into()], vec!["2".into()]]);
+        b.grid
+            .set(vec!["id".into()], vec![vec!["1".into()], vec!["2".into()]]);
         b.handle_key(key(KeyCode::Char('e')), Pages::default());
         assert_eq!(b.view, View::Export);
-        assert_eq!(b.export_path, "vix-export.csv", "default path follows the format");
+        assert_eq!(
+            b.export_path, "vix-export.csv",
+            "default path follows the format"
+        );
         b.handle_key(key(KeyCode::Right), Pages::default());
         assert_eq!(export::FORMATS[b.export_format], export::Format::Tsv);
         b.handle_key(key(KeyCode::Left), Pages::default());
@@ -2750,7 +2886,11 @@ mod tests {
             vec![vec!["2".into(), "b".into()], vec!["1".into(), "a".into()]],
         );
         b.handle_key(key(KeyCode::Char('s')), Pages::default());
-        assert_eq!(b.grid.filtered(), vec![1, 0], "sorted ascending by the id column");
+        assert_eq!(
+            b.grid.filtered(),
+            vec![1, 0],
+            "sorted ascending by the id column"
+        );
         b.handle_key(key(KeyCode::Right), Pages::default());
         assert_eq!(b.grid.cur_col, 1);
     }
@@ -2763,7 +2903,10 @@ mod tests {
         for c in "select a from t where x=1".chars() {
             b.handle_key(key(KeyCode::Char(c)), Pages::default());
         }
-        b.handle_key(KeyEvent::new(KeyCode::Char('F'), KeyModifiers::ALT | KeyModifiers::SHIFT), Pages::default());
+        b.handle_key(
+            KeyEvent::new(KeyCode::Char('F'), KeyModifiers::ALT | KeyModifiers::SHIFT),
+            Pages::default(),
+        );
         assert_eq!(b.query.text(), "SELECT a\nFROM t\nWHERE x = 1");
     }
 }

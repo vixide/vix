@@ -12,7 +12,6 @@
 //! (data) and second (time).
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -59,38 +58,178 @@ impl Unit {
 /// All supported units, grouped by dimension in display order.
 pub static UNITS: &[Unit] = &[
     // Length (base: metre).
-    Unit { label: "mm", dimension: Dimension::Length, factor: 0.001, offset: 0.0 },
-    Unit { label: "cm", dimension: Dimension::Length, factor: 0.01, offset: 0.0 },
-    Unit { label: "m", dimension: Dimension::Length, factor: 1.0, offset: 0.0 },
-    Unit { label: "km", dimension: Dimension::Length, factor: 1000.0, offset: 0.0 },
-    Unit { label: "in", dimension: Dimension::Length, factor: 0.0254, offset: 0.0 },
-    Unit { label: "ft", dimension: Dimension::Length, factor: 0.3048, offset: 0.0 },
-    Unit { label: "yd", dimension: Dimension::Length, factor: 0.9144, offset: 0.0 },
-    Unit { label: "mi", dimension: Dimension::Length, factor: 1609.344, offset: 0.0 },
+    Unit {
+        label: "mm",
+        dimension: Dimension::Length,
+        factor: 0.001,
+        offset: 0.0,
+    },
+    Unit {
+        label: "cm",
+        dimension: Dimension::Length,
+        factor: 0.01,
+        offset: 0.0,
+    },
+    Unit {
+        label: "m",
+        dimension: Dimension::Length,
+        factor: 1.0,
+        offset: 0.0,
+    },
+    Unit {
+        label: "km",
+        dimension: Dimension::Length,
+        factor: 1000.0,
+        offset: 0.0,
+    },
+    Unit {
+        label: "in",
+        dimension: Dimension::Length,
+        factor: 0.0254,
+        offset: 0.0,
+    },
+    Unit {
+        label: "ft",
+        dimension: Dimension::Length,
+        factor: 0.3048,
+        offset: 0.0,
+    },
+    Unit {
+        label: "yd",
+        dimension: Dimension::Length,
+        factor: 0.9144,
+        offset: 0.0,
+    },
+    Unit {
+        label: "mi",
+        dimension: Dimension::Length,
+        factor: 1609.344,
+        offset: 0.0,
+    },
     // Mass (base: gram).
-    Unit { label: "mg", dimension: Dimension::Mass, factor: 0.001, offset: 0.0 },
-    Unit { label: "g", dimension: Dimension::Mass, factor: 1.0, offset: 0.0 },
-    Unit { label: "kg", dimension: Dimension::Mass, factor: 1000.0, offset: 0.0 },
-    Unit { label: "oz", dimension: Dimension::Mass, factor: 28.349_523_125, offset: 0.0 },
-    Unit { label: "lb", dimension: Dimension::Mass, factor: 453.592_37, offset: 0.0 },
+    Unit {
+        label: "mg",
+        dimension: Dimension::Mass,
+        factor: 0.001,
+        offset: 0.0,
+    },
+    Unit {
+        label: "g",
+        dimension: Dimension::Mass,
+        factor: 1.0,
+        offset: 0.0,
+    },
+    Unit {
+        label: "kg",
+        dimension: Dimension::Mass,
+        factor: 1000.0,
+        offset: 0.0,
+    },
+    Unit {
+        label: "oz",
+        dimension: Dimension::Mass,
+        factor: 28.349_523_125,
+        offset: 0.0,
+    },
+    Unit {
+        label: "lb",
+        dimension: Dimension::Mass,
+        factor: 453.592_37,
+        offset: 0.0,
+    },
     // Temperature (base: kelvin).
-    Unit { label: "°C", dimension: Dimension::Temperature, factor: 1.0, offset: 273.15 },
-    Unit { label: "°F", dimension: Dimension::Temperature, factor: 5.0 / 9.0, offset: 459.67 * 5.0 / 9.0 },
-    Unit { label: "K", dimension: Dimension::Temperature, factor: 1.0, offset: 0.0 },
+    Unit {
+        label: "°C",
+        dimension: Dimension::Temperature,
+        factor: 1.0,
+        offset: 273.15,
+    },
+    Unit {
+        label: "°F",
+        dimension: Dimension::Temperature,
+        factor: 5.0 / 9.0,
+        offset: 459.67 * 5.0 / 9.0,
+    },
+    Unit {
+        label: "K",
+        dimension: Dimension::Temperature,
+        factor: 1.0,
+        offset: 0.0,
+    },
     // Data (base: byte).
-    Unit { label: "B", dimension: Dimension::Data, factor: 1.0, offset: 0.0 },
-    Unit { label: "KB", dimension: Dimension::Data, factor: 1_000.0, offset: 0.0 },
-    Unit { label: "MB", dimension: Dimension::Data, factor: 1_000_000.0, offset: 0.0 },
-    Unit { label: "GB", dimension: Dimension::Data, factor: 1_000_000_000.0, offset: 0.0 },
-    Unit { label: "KiB", dimension: Dimension::Data, factor: 1024.0, offset: 0.0 },
-    Unit { label: "MiB", dimension: Dimension::Data, factor: 1_048_576.0, offset: 0.0 },
-    Unit { label: "GiB", dimension: Dimension::Data, factor: 1_073_741_824.0, offset: 0.0 },
+    Unit {
+        label: "B",
+        dimension: Dimension::Data,
+        factor: 1.0,
+        offset: 0.0,
+    },
+    Unit {
+        label: "KB",
+        dimension: Dimension::Data,
+        factor: 1_000.0,
+        offset: 0.0,
+    },
+    Unit {
+        label: "MB",
+        dimension: Dimension::Data,
+        factor: 1_000_000.0,
+        offset: 0.0,
+    },
+    Unit {
+        label: "GB",
+        dimension: Dimension::Data,
+        factor: 1_000_000_000.0,
+        offset: 0.0,
+    },
+    Unit {
+        label: "KiB",
+        dimension: Dimension::Data,
+        factor: 1024.0,
+        offset: 0.0,
+    },
+    Unit {
+        label: "MiB",
+        dimension: Dimension::Data,
+        factor: 1_048_576.0,
+        offset: 0.0,
+    },
+    Unit {
+        label: "GiB",
+        dimension: Dimension::Data,
+        factor: 1_073_741_824.0,
+        offset: 0.0,
+    },
     // Time (base: second).
-    Unit { label: "ms", dimension: Dimension::Time, factor: 0.001, offset: 0.0 },
-    Unit { label: "s", dimension: Dimension::Time, factor: 1.0, offset: 0.0 },
-    Unit { label: "min", dimension: Dimension::Time, factor: 60.0, offset: 0.0 },
-    Unit { label: "h", dimension: Dimension::Time, factor: 3600.0, offset: 0.0 },
-    Unit { label: "day", dimension: Dimension::Time, factor: 86400.0, offset: 0.0 },
+    Unit {
+        label: "ms",
+        dimension: Dimension::Time,
+        factor: 0.001,
+        offset: 0.0,
+    },
+    Unit {
+        label: "s",
+        dimension: Dimension::Time,
+        factor: 1.0,
+        offset: 0.0,
+    },
+    Unit {
+        label: "min",
+        dimension: Dimension::Time,
+        factor: 60.0,
+        offset: 0.0,
+    },
+    Unit {
+        label: "h",
+        dimension: Dimension::Time,
+        factor: 3600.0,
+        offset: 0.0,
+    },
+    Unit {
+        label: "day",
+        dimension: Dimension::Time,
+        factor: 86400.0,
+        offset: 0.0,
+    },
 ];
 
 /// Convert `value` from unit index `from` to unit index `to` (indices into
@@ -144,7 +283,12 @@ impl Converter {
         // Default to the first two length units (m → km look-up by label).
         let m = unit_index("m").unwrap_or(0);
         let km = unit_index("km").unwrap_or(0);
-        Converter { value: "1".to_string(), from: m, to: km, focus: Focus::Value }
+        Converter {
+            value: "1".to_string(),
+            from: m,
+            to: km,
+            focus: Focus::Value,
+        }
     }
 
     /// Move focus to the next element (Value → From → To → Value).

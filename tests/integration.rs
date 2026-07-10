@@ -15,9 +15,9 @@ use vix::app::{App, Focus};
 use vix::calendar;
 use vix::clock;
 use vix::fileops;
-use vix::settings::Settings;
 use vix::palette::{fuzzy_match, parse_path_target};
 use vix::search::SearchBar;
+use vix::settings::Settings;
 
 fn key(c: char) -> KeyEvent {
     KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
@@ -40,7 +40,12 @@ fn func(n: u8) -> KeyEvent {
 }
 
 fn mouse(kind: MouseEventKind, col: u16, row: u16) -> MouseEvent {
-    MouseEvent { kind, column: col, row, modifiers: KeyModifiers::NONE }
+    MouseEvent {
+        kind,
+        column: col,
+        row,
+        modifiers: KeyModifiers::NONE,
+    }
 }
 
 fn click(col: u16, row: u16) -> MouseEvent {
@@ -89,17 +94,38 @@ fn project_media_type_example_snippets_load() {
     let proj = "config/snippets/snippets.json";
 
     // Rust source maps to text/rust (no x- prefix) and loads its examples.
-    assert_eq!(vix::media_type::for_extension("rs").unwrap().media_type, "text/rust");
+    assert_eq!(
+        vix::media_type::for_extension("rs").unwrap().media_type,
+        "text/rust"
+    );
     let rust = vix::snippets::load_scoped(Some("text/rust"), root, proj);
-    assert!(rust.iter().any(|s| s.prefixes.iter().any(|p| p == "fn")), "rust examples loaded");
+    assert!(
+        rust.iter().any(|s| s.prefixes.iter().any(|p| p == "fn")),
+        "rust examples loaded"
+    );
 
     // A few other languages resolve to the clean text/* or application/* types.
-    assert_eq!(vix::media_type::for_extension("py").unwrap().media_type, "text/python");
-    assert_eq!(vix::media_type::for_extension("ts").unwrap().media_type, "text/typescript");
-    assert_eq!(vix::media_type::for_extension("cs").unwrap().media_type, "text/csharp");
-    assert_eq!(vix::media_type::for_extension("sql").unwrap().media_type, "application/sql");
+    assert_eq!(
+        vix::media_type::for_extension("py").unwrap().media_type,
+        "text/python"
+    );
+    assert_eq!(
+        vix::media_type::for_extension("ts").unwrap().media_type,
+        "text/typescript"
+    );
+    assert_eq!(
+        vix::media_type::for_extension("cs").unwrap().media_type,
+        "text/csharp"
+    );
+    assert_eq!(
+        vix::media_type::for_extension("sql").unwrap().media_type,
+        "application/sql"
+    );
     let sql = vix::snippets::load_scoped(Some("application/sql"), root, proj);
-    assert!(sql.iter().any(|s| s.prefixes.iter().any(|p| p == "select")), "sql examples loaded");
+    assert!(
+        sql.iter().any(|s| s.prefixes.iter().any(|p| p == "select")),
+        "sql examples loaded"
+    );
 
     // Newly added languages resolve and load their example libraries.
     for (ext, mt) in [
@@ -115,14 +141,21 @@ fn project_media_type_example_snippets_load() {
         ("mmd", "text/mermaid"),
         ("mermaid", "text/mermaid"),
     ] {
-        assert_eq!(vix::media_type::for_extension(ext).unwrap().media_type, mt, "{ext} → {mt}");
+        assert_eq!(
+            vix::media_type::for_extension(ext).unwrap().media_type,
+            mt,
+            "{ext} → {mt}"
+        );
         let snips = vix::snippets::load_scoped(Some(mt), root, proj);
         assert!(!snips.is_empty(), "{mt} examples loaded");
     }
 
     // PlantUML loads both the building blocks and the example gallery.
     let pl = vix::snippets::load_scoped(Some("text/plantuml"), root, proj);
-    assert!(pl.iter().any(|s| s.name == "Sequence Diagram"), "plantuml gallery loaded");
+    assert!(
+        pl.iter().any(|s| s.name == "Sequence Diagram"),
+        "plantuml gallery loaded"
+    );
     assert!(pl.len() >= 50, "building blocks + gallery merged");
 
     // The Base column marks text vs binary content.
@@ -144,7 +177,13 @@ fn snippet_picker_filters_and_inserts_bundled() {
     }
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert!(app.snippets.is_none(), "Enter inserts and closes");
-    assert!(app.editor.active_tab().unwrap().text().starts_with("TODO: "));
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .starts_with("TODO: ")
+    );
 }
 
 #[test]
@@ -165,7 +204,12 @@ fn project_snippet_expands_from_prefix_on_tab() {
     app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
     assert_eq!(app.editor.active_tab().unwrap().text(), "Hello, world!");
     // The first tabstop ("world") is selected for the snippet session.
-    let sel = app.editor.active_tab_mut().unwrap().editor.get_selection_text();
+    let sel = app
+        .editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .get_selection_text();
     assert_eq!(sel.as_deref(), Some("world"));
 }
 
@@ -174,13 +218,19 @@ fn edit_sql_lists_formats_and_saves_statements() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "select 1;\ninsert into t values (1)");
     app.run_action("tools.edit_sql");
-    assert!(app.edit_sql.is_some(), "Edit → Mode → SQL opens the SQL editor");
+    assert!(
+        app.edit_sql.is_some(),
+        "Edit → Mode → SQL opens the SQL editor"
+    );
 
     // Format all (Shift+F) uppercases keywords; Ctrl+S writes back to the buffer.
     app.on_key(KeyEvent::new(KeyCode::Char('F'), KeyModifiers::SHIFT));
     app.on_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
     let text = app.editor.active_tab().unwrap().text();
-    assert!(text.contains("SELECT 1;"), "keywords uppercased and saved: {text:?}");
+    assert!(
+        text.contains("SELECT 1;"),
+        "keywords uppercased and saved: {text:?}"
+    );
     assert!(text.contains("INSERT INTO t VALUES (1);"));
 
     // q closes the editor.
@@ -192,7 +242,10 @@ fn edit_sql_lists_formats_and_saves_statements() {
 fn media_type_picker_filters_and_inserts() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.media_types");
-    assert!(app.media_type_panel.is_some(), "Media Types opens the picker");
+    assert!(
+        app.media_type_panel.is_some(),
+        "Media Types opens the picker"
+    );
 
     // Type to filter down to SVG, then Enter inserts the media type.
     for c in "svg".chars() {
@@ -206,7 +259,10 @@ fn media_type_picker_filters_and_inserts() {
     assert!(app.media_type_panel.is_none());
 
     // The lookup table is also usable directly by extension.
-    assert_eq!(vix::media_type::for_extension("png").unwrap().media_type, "image/png");
+    assert_eq!(
+        vix::media_type::for_extension("png").unwrap().media_type,
+        "image/png"
+    );
 }
 
 #[test]
@@ -220,7 +276,10 @@ fn tools_draw_inserts_ditaa_ascii_art() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.draw.rounded");
     let text = app.editor.active_tab().unwrap().text();
-    assert!(text.contains("/-------\\") && text.contains("\\-------/"), "rounded: {text:?}");
+    assert!(
+        text.contains("/-------\\") && text.contains("\\-------/"),
+        "rounded: {text:?}"
+    );
 
     let mut app = app_at(Path::new("."));
     app.run_action("tools.draw.arrow_right");
@@ -237,7 +296,13 @@ fn org_capture_inserts_todo_and_time_report_tabulates() {
         app.on_key(key(c));
     }
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(app.editor.active_tab().unwrap().text().contains("* TODO Buy milk"));
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("* TODO Buy milk")
+    );
 
     // Time Tracker builds a clock report in a new tab.
     let mut app = app_at(Path::new("."));
@@ -245,7 +310,13 @@ fn org_capture_inserts_todo_and_time_report_tabulates() {
     let before = app.editor.tabs.len();
     app.run_action("org.time_report");
     assert_eq!(app.editor.tabs.len(), before + 1);
-    assert!(app.editor.active_tab().unwrap().text().contains("| Task | 1:00 |"));
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("| Task | 1:00 |")
+    );
 
     // Agenda Tracker runs and opens a buffer (no .org files → just the header).
     app.run_action("org.agenda");
@@ -276,9 +347,15 @@ fn roam_capture_insert_dailies_and_views() {
     type_str(&mut app, "My First Note");
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     let node = app.editor.active_tab().unwrap().text();
-    assert!(node.contains("#+title: My First Note"), "node has title: {node:?}");
+    assert!(
+        node.contains("#+title: My First Note"),
+        "node has title: {node:?}"
+    );
     assert!(node.contains(":ID:"), "node has an ID drawer");
-    assert!(dir.join("my-first-note.org").exists(), "node file written to disk");
+    assert!(
+        dir.join("my-first-note.org").exists(),
+        "node file written to disk"
+    );
 
     // Insert a link to a (new) node into the current buffer without leaving it.
     let mut app = app_at(&dir);
@@ -286,18 +363,36 @@ fn roam_capture_insert_dailies_and_views() {
     type_str(&mut app, "Another Note");
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     let buf = app.editor.active_tab().unwrap().text();
-    assert!(buf.contains("[[id:") && buf.contains("][Another Note]]"), "link inserted: {buf:?}");
+    assert!(
+        buf.contains("[[id:") && buf.contains("][Another Note]]"),
+        "link inserted: {buf:?}"
+    );
 
     // Dailies → Today creates and opens today's daily note under daily/.
     app.run_action("roam.dailies_today");
     let daily = app.editor.active_tab().unwrap().text();
-    assert!(daily.starts_with(":PROPERTIES:") && daily.contains("#+title: 20"), "daily note: {daily:?}");
+    assert!(
+        daily.starts_with(":PROPERTIES:") && daily.contains("#+title: 20"),
+        "daily note: {daily:?}"
+    );
 
     // Graph and Sync compile cross-node buffers.
     app.run_action("roam.graph");
-    assert!(app.editor.active_tab().unwrap().text().contains("flowchart LR"));
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("flowchart LR")
+    );
     app.run_action("roam.db_sync");
-    assert!(app.editor.active_tab().unwrap().text().contains("Roam Nodes"));
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("Roam Nodes")
+    );
 
     // Add a tag to the active node buffer.
     let mut app = app_at(&dir);
@@ -305,7 +400,13 @@ fn roam_capture_insert_dailies_and_views() {
     app.run_action("roam.tag_add");
     type_str(&mut app, "work");
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(app.editor.active_tab().unwrap().text().contains("#+filetags: :work:"));
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("#+filetags: :work:")
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -324,7 +425,10 @@ fn org_node_nodeify_extract_and_dead_links() {
     }
     app.run_action("node.nodeify");
     let t = app.editor.active_tab().unwrap().text();
-    assert!(t.contains("* My Heading\n:PROPERTIES:\n:ID:"), "nodeified: {t:?}");
+    assert!(
+        t.contains("* My Heading\n:PROPERTIES:\n:ID:"),
+        "nodeified: {t:?}"
+    );
     // A second nodeify is a no-op (already a node).
     app.run_action("node.nodeify");
     assert!(app.status.contains("cursor on a headline") || t.contains(":ID:"));
@@ -334,7 +438,13 @@ fn org_node_nodeify_extract_and_dead_links() {
     app.run_action("node.insert_transclusion");
     type_str(&mut app, "Shared Block");
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(app.editor.active_tab().unwrap().text().contains("#+transclude: [[id:"));
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("#+transclude: [[id:")
+    );
 
     // Extract subtree: the subtree moves to a new file, a link stays behind.
     let mut app = app_at(&dir);
@@ -344,11 +454,20 @@ fn org_node_nodeify_extract_and_dead_links() {
     }
     app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)); // onto "** Child"
     app.run_action("node.extract_subtree");
-    assert!(dir.join("child.org").exists(), "extracted node file written");
+    assert!(
+        dir.join("child.org").exists(),
+        "extracted node file written"
+    );
 
     // Dead-links report opens a buffer.
     app.run_action("node.dead_links");
-    assert!(app.editor.active_tab().unwrap().text().contains("Dead Links"));
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("Dead Links")
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -366,7 +485,10 @@ fn org_checkbox_toggle_updates_parents_and_cookies() {
     }
 
     let mut app = app_at(Path::new("."));
-    type_str(&mut app, "* Tasks [/]\n- [ ] call people\n  - [ ] Peter\n  - [ ] Sarah\n");
+    type_str(
+        &mut app,
+        "* Tasks [/]\n- [ ] call people\n  - [ ] Peter\n  - [ ] Sarah\n",
+    );
 
     // Toggle the "Peter" child (line 2): parent becomes partial, child checked.
     goto(&mut app, 2);
@@ -380,7 +502,10 @@ fn org_checkbox_toggle_updates_parents_and_cookies() {
     app.run_action("org.toggle_checkbox");
     let t = app.editor.active_tab().unwrap().text();
     assert!(t.contains("- [X] call people"), "parent checked: {t:?}");
-    assert!(t.contains("* Tasks [1/1]"), "headline cookie counts the top-level checkbox: {t:?}");
+    assert!(
+        t.contains("* Tasks [1/1]"),
+        "headline cookie counts the top-level checkbox: {t:?}"
+    );
 }
 
 #[test]
@@ -404,7 +529,11 @@ fn comment_banner_boxes_the_current_line() {
     let lines: Vec<&str> = text.lines().collect();
     assert_eq!(lines.len(), 3, "three banner lines: {text:?}");
     assert!(lines[0].contains('='), "top rule: {:?}", lines[0]);
-    assert!(lines[1].contains("Section Title"), "title line: {:?}", lines[1]);
+    assert!(
+        lines[1].contains("Section Title"),
+        "title line: {:?}",
+        lines[1]
+    );
     assert!(lines[2].contains('='), "bottom rule: {:?}", lines[2]);
 }
 
@@ -425,7 +554,11 @@ fn goto_percent_and_byte_move_the_cursor() {
     app.run_action("nav.goto_byte");
     app.on_key(key('0'));
     app.on_key(keycode(KeyCode::Enter));
-    assert_eq!(app.editor.cursor_1based(), (1, 1), "byte 0 is the file start");
+    assert_eq!(
+        app.editor.cursor_1based(),
+        (1, 1),
+        "byte 0 is the file start"
+    );
 }
 
 #[test]
@@ -435,14 +568,23 @@ fn read_only_blocks_edits_but_allows_navigation() {
     app.run_action("view.read_only");
     // Typing is blocked.
     type_str(&mut app, "XYZ");
-    assert_eq!(app.editor.active_tab().unwrap().text(), "locked", "typing blocked");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "locked",
+        "typing blocked"
+    );
     // A destructive command is blocked.
     app.run_action("edit.reverse_lines");
-    assert_eq!(app.editor.active_tab().unwrap().text(), "locked", "command blocked");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "locked",
+        "command blocked"
+    );
     // Toggling it back off restores editing.
     app.run_action("view.read_only");
     type_str(&mut app, "!");
-    let txt = app.editor.active_tab().unwrap().text(); assert!(txt.ends_with('!'), "editing restored: {txt:?}");
+    let txt = app.editor.active_tab().unwrap().text();
+    assert!(txt.ends_with('!'), "editing restored: {txt:?}");
 }
 
 #[test]
@@ -477,9 +619,18 @@ fn which_key_lists_candidates_after_a_leader() {
     app.on_key(key(' '));
     app.on_key(key('f'));
     let (title, rows) = app.which_key().expect("which-key active after SPC f");
-    assert!(title.contains('f'), "title shows the pending sequence: {title:?}");
-    assert!(rows.iter().any(|(k, a)| k == "f" && a == "file.open"), "SPC f f = open: {rows:?}");
-    assert!(rows.iter().any(|(_, a)| a == "file.save"), "includes SPC f s save");
+    assert!(
+        title.contains('f'),
+        "title shows the pending sequence: {title:?}"
+    );
+    assert!(
+        rows.iter().any(|(k, a)| k == "f" && a == "file.open"),
+        "SPC f f = open: {rows:?}"
+    );
+    assert!(
+        rows.iter().any(|(_, a)| a == "file.save"),
+        "includes SPC f s save"
+    );
 }
 
 #[test]
@@ -492,14 +643,25 @@ fn clipboard_history_records_copies_and_pastes_from_it() {
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT));
     }
     app.run_action("edit.copy");
-    assert!(app.clipboard_ring.iter().any(|e| e == "alpha"), "copy recorded: {:?}", app.clipboard_ring);
+    assert!(
+        app.clipboard_ring.iter().any(|e| e == "alpha"),
+        "copy recorded: {:?}",
+        app.clipboard_ring
+    );
     // Collapse the selection, then move to end of buffer to paste there.
     app.on_key(keycode(KeyCode::Right));
     app.on_key(keycode(KeyCode::End));
     app.run_action("edit.paste_from_history");
     assert!(app.clipboard_chooser.is_some(), "history picker opens");
     app.on_key(keycode(KeyCode::Enter));
-    assert!(app.editor.active_tab().unwrap().text().contains("betaalpha"), "pasted from history");
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("betaalpha"),
+        "pasted from history"
+    );
 }
 
 #[test]
@@ -522,7 +684,11 @@ fn jump_to_line_labels_move_the_cursor() {
     // 'c' is the 3rd label → 0-based line 2.
     app.on_key(key('c'));
     assert!(app.jump.is_none(), "jump mode exits on match");
-    assert_eq!(app.editor.cursor_1based().0, 3, "cursor on line 3 (0-based 2)");
+    assert_eq!(
+        app.editor.cursor_1based().0,
+        3,
+        "cursor on line 3 (0-based 2)"
+    );
 }
 
 #[test]
@@ -542,7 +708,10 @@ fn align_on_equals_pads_the_selection() {
     type_str(&mut app, "a = 1\nbbb = 2\n");
     app.on_key(ctrl('a')); // select all
     app.run_action("edit.align.equals");
-    assert_eq!(app.editor.active_tab().unwrap().text(), "a   = 1\nbbb = 2\n");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "a   = 1\nbbb = 2\n"
+    );
 }
 
 #[test]
@@ -577,15 +746,33 @@ fn org_menu_edits_headlines_and_exports() {
     app.on_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
     app.on_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
     app.run_action("org.cycle_todo");
-    assert!(app.editor.active_tab().unwrap().text().starts_with("* TODO Task"));
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .starts_with("* TODO Task")
+    );
     app.run_action("org.demote");
-    assert!(app.editor.active_tab().unwrap().text().starts_with("** TODO Task"));
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .starts_with("** TODO Task")
+    );
 
     // Export opens a new buffer containing Markdown.
     let before = app.editor.tabs.len();
     app.run_action("org.export_markdown");
     assert_eq!(app.editor.tabs.len(), before + 1);
-    assert!(app.editor.active_tab().unwrap().text().contains("## TODO Task"));
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("## TODO Task")
+    );
 }
 
 #[test]
@@ -593,7 +780,10 @@ fn org_insert_and_marker_block_toggles() {
     let mut app = app_at(Path::new("."));
     // Org snippet insertion.
     app.run_action("tools.insert.org.title");
-    assert_eq!(app.editor.active_tab().unwrap().text(), "#+title: Hello World\n");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "#+title: Hello World\n"
+    );
 
     // Marker toggle wraps, then unwraps, the selection.
     let mut app = app_at(Path::new("."));
@@ -610,7 +800,10 @@ fn org_insert_and_marker_block_toggles() {
     type_str(&mut app, "hi");
     app.on_key(ctrl('a'));
     app.run_action("tools.insert.block.quote");
-    assert_eq!(app.editor.active_tab().unwrap().text(), "#+BEGIN_QUOTE\nhi\n#+END_QUOTE");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "#+BEGIN_QUOTE\nhi\n#+END_QUOTE"
+    );
 
     // The Tag marker wraps the selection with ':'.
     let mut app = app_at(Path::new("."));
@@ -657,7 +850,10 @@ fn pomodoro_start_closes_dialog_and_runs_in_background() {
     assert!(!app.pomodoro_running(), "timer stopped");
     assert!(app.pomodoro_open);
     app.on_key(keycode(KeyCode::Esc)); // close
-    assert!(!app.pomodoro_open && app.pomodoro.is_none(), "dialog closed and timer dropped");
+    assert!(
+        !app.pomodoro_open && app.pomodoro.is_none(),
+        "dialog closed and timer dropped"
+    );
 }
 
 #[test]
@@ -721,7 +917,13 @@ fn format_json_pretty_and_minify() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "{\"a\":1,\"b\":2}");
     app.run_action("tools.format.json_pretty");
-    assert!(app.editor.active_tab().unwrap().text().contains("\n  \"a\": 1"));
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("\n  \"a\": 1")
+    );
     app.run_action("tools.format.json_minify");
     assert_eq!(app.editor.active_tab().unwrap().text(), "{\"a\":1,\"b\":2}");
 }
@@ -833,7 +1035,7 @@ fn checksum_sha256_hashes_whole_buffer_when_unselected() {
 fn checksum_on_long_buffer_keeps_caret_in_range() {
     // Regression: a transform that shrinks the buffer (120 chars → 64-char hash)
     // must move the caret back in range, or the next render panics in char_to_line.
-    use ratatui::{backend::TestBackend, Terminal};
+    use ratatui::{Terminal, backend::TestBackend};
     let mut app = app_at(Path::new("."));
     type_str(&mut app, &"x".repeat(120));
     app.run_action("tools.checksum.sha256");
@@ -857,11 +1059,18 @@ fn generate_zid_sizes_insert_hex_of_the_right_length() {
     app.run_action("tools.insert.zid.128");
     let text = app.editor.active_tab().unwrap().text();
     assert_eq!(text.len(), 32, "128-bit ZID is 32 hex chars: {text:?}");
-    assert!(text.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)));
+    assert!(
+        text.chars()
+            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
+    );
 
     let mut app = app_at(Path::new("."));
     app.run_action("tools.insert.zid.512");
-    assert_eq!(app.editor.active_tab().unwrap().text().len(), 128, "512-bit ZID is 128 hex chars");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text().len(),
+        128,
+        "512-bit ZID is 128 hex chars"
+    );
 }
 
 #[test]
@@ -873,14 +1082,22 @@ fn insert_markdown_snippets_insert_templates() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.insert.markdown.link");
     assert!(
-        app.editor.active_tab().unwrap().text().contains("[Example](https://www.example.com)"),
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("[Example](https://www.example.com)"),
         "link snippet inserted"
     );
 
     let mut app = app_at(Path::new("."));
     app.run_action("tools.insert.markdown.table");
     assert!(
-        app.editor.active_tab().unwrap().text().contains("|---|---|---|"),
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("|---|---|---|"),
         "table snippet inserted"
     );
 }
@@ -889,19 +1106,29 @@ fn insert_markdown_snippets_insert_templates() {
 fn insert_html_snippets_insert_templates() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.insert.html.headline1");
-    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "<h1>Headline</h1>");
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines()[0],
+        "<h1>Headline</h1>"
+    );
 
     let mut app = app_at(Path::new("."));
     app.run_action("tools.insert.html.link");
     assert!(
-        app.editor.active_tab().unwrap().text().contains("<a href=\"https://www.example.com\">Example</a>"),
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("<a href=\"https://www.example.com\">Example</a>"),
         "link snippet inserted"
     );
 
     let mut app = app_at(Path::new("."));
     app.run_action("tools.insert.html.table");
     let text = app.editor.active_tab().unwrap().text();
-    assert!(text.contains("<table>") && text.contains("<th>x</th>"), "table snippet inserted");
+    assert!(
+        text.contains("<table>") && text.contains("<th>x</th>"),
+        "table snippet inserted"
+    );
 }
 
 #[test]
@@ -918,7 +1145,10 @@ fn duplicate_line_copies_the_current_line() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "abc");
     // Ctrl+Shift+D duplicates the cursor line (Ctrl+D now adds a caret).
-    app.on_key(KeyEvent::new(KeyCode::Char('D'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('D'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
     assert_eq!(app.editor.active_tab().unwrap().lines(), vec!["abc", "abc"]);
 }
 
@@ -928,7 +1158,10 @@ fn join_lines_merges_current_line_with_next() {
     type_str(&mut app, "foo\nbar\nbaz");
     app.run_action("edit.go_first"); // cursor to the first line
     app.run_action("edit.join_lines");
-    assert_eq!(app.editor.active_tab().unwrap().lines(), vec!["foo bar", "baz"]);
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines(),
+        vec!["foo bar", "baz"]
+    );
 }
 
 #[test]
@@ -936,7 +1169,10 @@ fn sort_lines_orders_whole_buffer() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "banana\napple\ncherry");
     app.run_action("edit.sort_lines");
-    assert_eq!(app.editor.active_tab().unwrap().lines(), vec!["apple", "banana", "cherry"]);
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines(),
+        vec!["apple", "banana", "cherry"]
+    );
 }
 
 #[test]
@@ -949,7 +1185,10 @@ fn line_transforms_via_actions() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "one\ntwo\nthree");
     app.run_action("edit.reverse_lines");
-    assert_eq!(app.editor.active_tab().unwrap().lines(), vec!["three", "two", "one"]);
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines(),
+        vec!["three", "two", "one"]
+    );
 
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "x\ny\nx");
@@ -965,7 +1204,10 @@ fn line_transforms_via_actions() {
 #[test]
 fn conflict_resolve_keeps_chosen_side() {
     let mut app = app_at(Path::new("."));
-    type_str(&mut app, "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> b\nz\n");
+    type_str(
+        &mut app,
+        "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> b\nz\n",
+    );
     app.run_action("edit.go_first"); // cursor to line 0
     app.run_action("git.conflict_ours");
     assert_eq!(app.editor.active_tab().unwrap().text(), "a\nours\nz\n");
@@ -991,8 +1233,15 @@ fn regex_tester_finds_matches_live() {
 fn diagnostics_panel_empty_reports_none() {
     let mut app = app_at(Path::new("."));
     app.run_action("lsp.diagnostics");
-    assert!(app.workspace_search.is_none(), "no panel without diagnostics");
-    assert!(app.status.to_lowercase().contains("diagnostic"), "status: {}", app.status);
+    assert!(
+        app.workspace_search.is_none(),
+        "no panel without diagnostics"
+    );
+    assert!(
+        app.status.to_lowercase().contains("diagnostic"),
+        "status: {}",
+        app.status
+    );
 }
 
 #[test]
@@ -1001,7 +1250,9 @@ fn specs_have_no_stale_subcrate_references() {
     // no spec should mention the old `vix-editor`/`vix_editor` crate or a
     // "Subcrate".
     fn walk(dir: &Path, hits: &mut Vec<String>) {
-        let Ok(entries) = fs::read_dir(dir) else { return };
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
@@ -1019,17 +1270,27 @@ fn specs_have_no_stale_subcrate_references() {
     let spec = Path::new(env!("CARGO_MANIFEST_DIR")).join("spec");
     let mut hits = Vec::new();
     walk(&spec, &mut hits);
-    assert!(hits.is_empty(), "stale subcrate references in spec:\n{}", hits.join("\n"));
+    assert!(
+        hits.is_empty(),
+        "stale subcrate references in spec:\n{}",
+        hits.join("\n")
+    );
 }
 
 #[test]
 fn mode_and_suspend_actions() {
     let mut app = app_at(Path::new("."));
     app.run_action("command_mode");
-    assert!(app.palette.is_some(), "command_mode opens the command palette");
+    assert!(
+        app.palette.is_some(),
+        "command_mode opens the command palette"
+    );
     let mut app = app_at(Path::new("."));
     app.run_action("shell_mode");
-    assert!(app.prompt.is_some(), "shell_mode opens the run-command prompt");
+    assert!(
+        app.prompt.is_some(),
+        "shell_mode opens the run-command prompt"
+    );
     let mut app = app_at(Path::new("."));
     app.run_action("suspend");
     assert!(app.suspend_requested, "suspend flags the main loop");
@@ -1037,31 +1298,78 @@ fn mode_and_suspend_actions() {
 
 #[test]
 fn inlay_hints_render_inline() {
-    use ratatui::{backend::TestBackend, Terminal};
+    use ratatui::{Terminal, backend::TestBackend};
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "let x = 1;\n");
     // A ": i32" hint just after `x` (char column 5).
-    app.editor.active_tab_mut().unwrap().editor.set_inlay_hints(vec![(0, 5, ": i32".to_string())]);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_inlay_hints(vec![(0, 5, ": i32".to_string())]);
     let mut term = Terminal::new(TestBackend::new(80, 6)).unwrap();
     term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
-    let screen: String =
-        term.backend().buffer().content().iter().map(ratatui::buffer::Cell::symbol).collect();
+    let screen: String = term
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(ratatui::buffer::Cell::symbol)
+        .collect();
     assert!(screen.contains(": i32"), "inlay hint text is rendered");
     assert!(screen.contains("let x"), "real text still present");
 }
 
 #[test]
+fn menu_hover_shows_help_tooltip() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut app = app_at(Path::new("."));
+    // Open the File menu and highlight its first item (New).
+    let file = vix::menu::menus()
+        .iter()
+        .position(|m| m.name == "menu.file")
+        .expect("file menu");
+    app.menu.open_index(file);
+    app.menu.highlight_item(0);
+    // The expected tooltip text is the item's own help — content-independent.
+    let expected = vix::menu::menus()[file].items[0]
+        .help()
+        .expect("file.new item has help text");
+    let prefix: String = expected.chars().take(20).collect();
+    let mut term = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let screen: String = term
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(ratatui::buffer::Cell::symbol)
+        .collect();
+    assert!(
+        screen.contains(&prefix),
+        "the highlighted item's help tooltip is rendered (expected prefix {prefix:?})"
+    );
+}
+
+#[test]
 fn folding_hides_lines_and_renders() {
-    use ratatui::{backend::TestBackend, Terminal};
+    use ratatui::{Terminal, backend::TestBackend};
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "fn a() {\n  x;\n  y;\n}\nfn b() {}\n");
     // Mark lines 0..=3 as a foldable range (normally supplied by the server).
-    app.editor.active_tab_mut().unwrap().editor.set_fold_ranges(vec![(0, 3)]);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_fold_ranges(vec![(0, 3)]);
     app.run_action("edit.go_first"); // cursor to line 0
     app.run_action("editor.fold_toggle");
     let ed = &app.editor.active_tab().unwrap().editor;
     assert!(ed.has_folds(), "fold active");
-    assert!(ed.is_line_hidden(1) && ed.is_line_hidden(3), "inner lines hidden");
+    assert!(
+        ed.is_line_hidden(1) && ed.is_line_hidden(3),
+        "inner lines hidden"
+    );
     assert!(!ed.is_line_hidden(0), "fold start stays visible");
     assert!(!ed.is_line_hidden(4), "line after fold visible");
     // Rendering with a fold active must not panic.
@@ -1095,9 +1403,15 @@ fn lsp_navigation_actions_report_inactive_without_server() {
         type_str(&mut app, "fn main() {}\n");
         app.run_action(action);
         assert!(app.workspace_search.is_none(), "{action} opened no panel");
-        assert!(app.code_actions.is_none(), "{action} opened no code-action menu");
+        assert!(
+            app.code_actions.is_none(),
+            "{action} opened no code-action menu"
+        );
         assert!(app.code_lens.is_none(), "{action} opened no code-lens menu");
-        assert!(app.prompt.is_none(), "{action} opened no prompt without a server");
+        assert!(
+            app.prompt.is_none(),
+            "{action} opened no prompt without a server"
+        );
     }
 }
 
@@ -1135,7 +1449,10 @@ fn autocomplete_completes_a_buffer_word() {
     // A long word exists earlier; typing its prefix then autocompleting expands it.
     type_str(&mut app, "function\nfun");
     app.run_action("autocomplete");
-    assert_eq!(app.editor.active_tab().unwrap().text(), "function\nfunction");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "function\nfunction"
+    );
 }
 
 #[test]
@@ -1154,7 +1471,7 @@ fn macro_records_and_replays_editor_keys() {
 
 #[test]
 fn column_ruler_toggles_and_renders() {
-    use ratatui::{backend::TestBackend, Terminal};
+    use ratatui::{Terminal, backend::TestBackend};
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "some code here\n");
     app.run_action("toggle_ruler");
@@ -1187,7 +1504,10 @@ fn spawn_multi_cursor_below_adds_a_caret() {
     type_str(&mut app, "ab\ncd\nef");
     app.run_action("edit.go_first"); // cursor to line 0, col 0
     app.run_action("spawn_multi_cursor_down");
-    assert!(app.editor.active_tab().unwrap().editor.has_multi_carets(), "a caret was added below");
+    assert!(
+        app.editor.active_tab().unwrap().editor.has_multi_carets(),
+        "a caret was added below"
+    );
 }
 
 #[test]
@@ -1201,7 +1521,10 @@ fn ctrl_d_adds_a_caret_and_edits_all_occurrences() {
     app.on_key(ctrl('d'));
     app.on_key(ctrl('d'));
     app.on_key(ctrl('d'));
-    assert!(app.editor.active_tab().unwrap().editor.has_multi_carets(), "carets added");
+    assert!(
+        app.editor.active_tab().unwrap().editor.has_multi_carets(),
+        "carets added"
+    );
     // Typing replaces every selected occurrence at once.
     type_str(&mut app, "bar");
     assert_eq!(app.editor.active_tab().unwrap().text(), "bar bar bar");
@@ -1212,7 +1535,10 @@ fn enter_carries_indentation() {
     let mut app = app_at(Path::new("."));
     app.on_key(keycode(KeyCode::Tab));
     type_str(&mut app, "x\ny"); // Tab, 'x', Enter (auto-indent), 'y'
-    assert_eq!(app.editor.active_tab().unwrap().lines(), vec!["    x", "    y"]);
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines(),
+        vec!["    x", "    y"]
+    );
 }
 
 #[test]
@@ -1237,7 +1563,11 @@ fn ctrl_bracket_jumps_to_matching_bracket() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "(x)"); // cursor just after ')'
     app.on_key(KeyEvent::new(KeyCode::Char(']'), KeyModifiers::CONTROL));
-    assert_eq!(app.editor.active_tab().unwrap().editor.get_cursor(), 0, "jumps to '('");
+    assert_eq!(
+        app.editor.active_tab().unwrap().editor.get_cursor(),
+        0,
+        "jumps to '('"
+    );
 }
 
 #[test]
@@ -1245,15 +1575,26 @@ fn tab_inserts_spaces_by_default() {
     let mut app = app_at(Path::new(".")); // default: spaces, width 4
     app.on_key(keycode(KeyCode::Tab));
     app.on_key(key('x'));
-    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "    x", "Tab inserts 4 spaces");
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines()[0],
+        "    x",
+        "Tab inserts 4 spaces"
+    );
 }
 
 #[test]
 fn tab_width_setting_controls_space_count() {
-    let mut app = app_with(Settings { tab_width: 2, ..Settings::default() });
+    let mut app = app_with(Settings {
+        tab_width: 2,
+        ..Settings::default()
+    });
     app.on_key(keycode(KeyCode::Tab));
     app.on_key(key('y'));
-    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "  y", "tab_width=2 inserts 2 spaces");
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines()[0],
+        "  y",
+        "tab_width=2 inserts 2 spaces"
+    );
 }
 
 #[test]
@@ -1264,7 +1605,11 @@ fn indent_style_tabs_inserts_a_tab() {
     });
     app.on_key(keycode(KeyCode::Tab));
     app.on_key(key('z'));
-    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "\tz", "tabs style inserts a tab");
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines()[0],
+        "\tz",
+        "tabs style inserts a tab"
+    );
 }
 
 #[test]
@@ -1311,7 +1656,10 @@ fn edit_table_opens_edits_and_saves_csv() {
     app.open_initial(&file.clone());
 
     app.run_action("tools.edit_table");
-    assert!(app.edit_table.is_some(), "table editor opened on the CSV buffer");
+    assert!(
+        app.edit_table.is_some(),
+        "table editor opened on the CSV buffer"
+    );
 
     // Move to alice's age cell (row 1, col 1) and change 30 -> 31.
     app.on_key(keycode(KeyCode::Down));
@@ -1328,7 +1676,10 @@ fn edit_table_opens_edits_and_saves_csv() {
     app.on_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
     let saved = fs::read_to_string(&file).unwrap();
     assert!(saved.contains("alice,31"), "edit persisted; got: {saved:?}");
-    assert!(saved.contains("bob,25"), "other rows intact; got: {saved:?}");
+    assert!(
+        saved.contains("bob,25"),
+        "other rows intact; got: {saved:?}"
+    );
 
     // Esc closes the editor.
     app.on_key(keycode(KeyCode::Esc));
@@ -1347,7 +1698,10 @@ fn edit_outline_opens_indents_and_saves() {
     app.open_initial(&file.clone());
 
     app.run_action("tools.edit_outline");
-    assert!(app.edit_outline.is_some(), "outline editor opened on the buffer");
+    assert!(
+        app.edit_outline.is_some(),
+        "outline editor opened on the buffer"
+    );
 
     // Move to B and indent it (with its child B1) under A via Tab.
     app.on_key(keycode(KeyCode::Down));
@@ -1356,7 +1710,10 @@ fn edit_outline_opens_indents_and_saves() {
     // Ctrl+S writes the restructured outline back; indentation is regenerated.
     app.on_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
     let saved = fs::read_to_string(&file).unwrap();
-    assert_eq!(saved, "A\n  B\n    B1\nC\n", "B indented under A; got: {saved:?}");
+    assert_eq!(
+        saved, "A\n  B\n    B1\nC\n",
+        "B indented under A; got: {saved:?}"
+    );
 
     // Esc closes the editor.
     app.on_key(keycode(KeyCode::Esc));
@@ -1384,7 +1741,10 @@ fn edit_json_opens_edits_and_saves() {
     app.on_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
 
     let saved = fs::read_to_string(&file).unwrap();
-    assert!(saved.contains("\"a\": 2"), "value edit persisted; got: {saved:?}");
+    assert!(
+        saved.contains("\"a\": 2"),
+        "value edit persisted; got: {saved:?}"
+    );
 
     app.on_key(keycode(KeyCode::Esc));
     assert!(app.edit_value.is_none(), "Esc closes the JSON editor");
@@ -1408,7 +1768,10 @@ fn edit_bytes_opens_overwrites_and_saves() {
     app.on_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
 
     let saved = fs::read_to_string(&file).unwrap();
-    assert!(saved.starts_with("Aello"), "byte overwrite persisted; got: {saved:?}");
+    assert!(
+        saved.starts_with("Aello"),
+        "byte overwrite persisted; got: {saved:?}"
+    );
 
     app.on_key(keycode(KeyCode::Esc));
     assert!(app.edit_bytes.is_none(), "Esc closes the byte editor");
@@ -1420,7 +1783,11 @@ fn insert_lorem_and_datetime_presets() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.insert.lorem.words");
     assert!(
-        app.editor.active_tab().unwrap().text().starts_with("Lorem ipsum"),
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .starts_with("Lorem ipsum"),
         "lorem words inserted"
     );
 
@@ -1435,7 +1802,10 @@ fn insert_lorem_and_datetime_presets() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.insert.datetime.rfc3339");
     let rfc = app.editor.active_tab().unwrap().text();
-    assert!(rfc.contains('T') && rfc.contains(':'), "rfc3339 date-time shape: {rfc:?}");
+    assert!(
+        rfc.contains('T') && rfc.contains(':'),
+        "rfc3339 date-time shape: {rfc:?}"
+    );
 }
 
 #[test]
@@ -1479,8 +1849,14 @@ fn column_select_block_edits_multiple_lines() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "aa\nbb\ncc");
     app.run_action("edit.go_first"); // cursor to buffer start (line 0, col 0)
-    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT | KeyModifiers::SHIFT));
-    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT | KeyModifiers::SHIFT));
+    app.on_key(KeyEvent::new(
+        KeyCode::Down,
+        KeyModifiers::ALT | KeyModifiers::SHIFT,
+    ));
+    app.on_key(KeyEvent::new(
+        KeyCode::Down,
+        KeyModifiers::ALT | KeyModifiers::SHIFT,
+    ));
     assert!(
         app.editor.active_tab().unwrap().editor.has_multi_carets(),
         "Alt+Shift+Down builds a vertical block of carets"
@@ -1519,7 +1895,10 @@ fn breadcrumb_shows_file_and_enclosing_symbol() {
     assert!(app.show_breadcrumbs, "breadcrumb bar toggled on");
     let crumb = app.breadcrumb();
     assert!(crumb.starts_with("m.rs"), "shows the file name: {crumb:?}");
-    assert!(crumb.contains("beta"), "shows the enclosing symbol: {crumb:?}");
+    assert!(
+        crumb.contains("beta"),
+        "shows the enclosing symbol: {crumb:?}"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
@@ -1529,11 +1908,17 @@ fn on_save_toggles_flip_settings() {
     let mut app = app_at(Path::new("."));
     let trim = app.settings.trim_trailing_whitespace;
     app.run_action("view.trim_on_save");
-    assert_eq!(app.settings.trim_trailing_whitespace, !trim, "trim-on-save toggled");
+    assert_eq!(
+        app.settings.trim_trailing_whitespace, !trim,
+        "trim-on-save toggled"
+    );
 
     let nl = app.settings.ensure_final_newline;
     app.run_action("view.final_newline_on_save");
-    assert_eq!(app.settings.ensure_final_newline, !nl, "final-newline-on-save toggled");
+    assert_eq!(
+        app.settings.ensure_final_newline, !nl,
+        "final-newline-on-save toggled"
+    );
 }
 
 #[test]
@@ -1548,13 +1933,25 @@ fn smart_home_toggles_first_nonblank_and_column0() {
     assert_eq!(app.editor.cursor_1based().1, 10, "end of '    hello'");
     // First Home -> first non-blank (column index 4 -> 1-based 5).
     app.on_key(keycode(KeyCode::Home));
-    assert_eq!(app.editor.cursor_1based().1, 5, "Home jumps to first non-blank");
+    assert_eq!(
+        app.editor.cursor_1based().1,
+        5,
+        "Home jumps to first non-blank"
+    );
     // Second Home -> column 0.
     app.on_key(keycode(KeyCode::Home));
-    assert_eq!(app.editor.cursor_1based().1, 1, "Home again jumps to column 0");
+    assert_eq!(
+        app.editor.cursor_1based().1,
+        1,
+        "Home again jumps to column 0"
+    );
     // Third Home -> back to first non-blank.
     app.on_key(keycode(KeyCode::Home));
-    assert_eq!(app.editor.cursor_1based().1, 5, "toggles back to first non-blank");
+    assert_eq!(
+        app.editor.cursor_1based().1,
+        5,
+        "toggles back to first non-blank"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
@@ -1572,10 +1969,18 @@ fn palette_goto_line_previews_and_reverts_on_esc() {
     app.run_action("tools.palette");
     app.on_key(key(':'));
     app.on_key(key('7'));
-    assert_eq!(app.editor.cursor_1based().0, 7, "live preview moves to line 7 while typing");
+    assert_eq!(
+        app.editor.cursor_1based().0,
+        7,
+        "live preview moves to line 7 while typing"
+    );
     app.on_key(esc());
     assert!(app.palette.is_none());
-    assert_eq!(app.editor.cursor_1based().0, 1, "Esc reverts to the original line");
+    assert_eq!(
+        app.editor.cursor_1based().0,
+        1,
+        "Esc reverts to the original line"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -1598,7 +2003,11 @@ fn palette_goto_line_commit_records_origin_in_history() {
     assert_eq!(app.editor.cursor_1based().0, 12, "commit stays at line 12");
     // Position-history back goes to the pre-jump origin (line 1), not the preview.
     app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::ALT));
-    assert_eq!(app.editor.cursor_1based().0, 1, "Alt+Left returns to origin line 1");
+    assert_eq!(
+        app.editor.cursor_1based().0,
+        1,
+        "Alt+Left returns to origin line 1"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -1626,8 +2035,15 @@ fn recent_locations_chooser_lists_and_jumps() {
 
     // Alt+J opens the recent-locations chooser, most-recent first.
     app.on_key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::ALT));
-    let lc = app.location_chooser.as_ref().expect("location chooser opens");
-    assert!(lc.entries.len() >= 2, "history has multiple locations: {}", lc.entries.len());
+    let lc = app
+        .location_chooser
+        .as_ref()
+        .expect("location chooser opens");
+    assert!(
+        lc.entries.len() >= 2,
+        "history has multiple locations: {}",
+        lc.entries.len()
+    );
     assert_eq!(lc.entries[0].line, 30, "most recent location first");
 
     // Move the cursor away, then jump to the second entry from the chooser.
@@ -1635,7 +2051,11 @@ fn recent_locations_chooser_lists_and_jumps() {
     app.on_key(keycode(KeyCode::Down));
     app.on_key(keycode(KeyCode::Enter));
     assert!(app.location_chooser.is_none(), "Enter closes the chooser");
-    assert_eq!(app.editor.cursor_1based().0, target, "jumped to the chosen location");
+    assert_eq!(
+        app.editor.cursor_1based().0,
+        target,
+        "jumped to the chosen location"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
@@ -1682,7 +2102,11 @@ fn save_trims_trailing_whitespace_by_default() {
         app.on_key(key(' '));
     }
     app.run_action("file.save");
-    assert_eq!(fs::read_to_string(&file).unwrap(), "abc\n", "trailing spaces trimmed");
+    assert_eq!(
+        fs::read_to_string(&file).unwrap(),
+        "abc\n",
+        "trailing spaces trimmed"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -1694,7 +2118,11 @@ fn save_ensures_final_newline_by_default() {
     let mut app = app_at(&dir);
     app.open_initial(&file.clone());
     app.run_action("file.save");
-    assert_eq!(fs::read_to_string(&file).unwrap(), "abc\n", "final newline added");
+    assert_eq!(
+        fs::read_to_string(&file).unwrap(),
+        "abc\n",
+        "final newline added"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -1808,7 +2236,11 @@ fn vix_menu_dialogs_open_and_close() {
     // on the Ok button (Enter).
     app.run_action("vix.about");
     let about = app.dialog.as_ref().expect("About opens a dialog");
-    assert!(about.body.starts_with("Vix "), "About shows the version: {}", about.body);
+    assert!(
+        about.body.starts_with("Vix "),
+        "About shows the version: {}",
+        about.body
+    );
     assert!(about.editor.is_none(), "About is plain text, not a field");
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert!(app.dialog.is_none(), "Enter closes the plain dialog");
@@ -1820,7 +2252,10 @@ fn vix_menu_dialogs_open_and_close() {
     assert!(web.editor.is_some(), "Website is a selectable text field");
     // Enter does NOT close a text-field dialog (it edits the field); Esc does.
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(app.dialog.is_some(), "Enter is handled by the text field, not a close");
+    assert!(
+        app.dialog.is_some(),
+        "Enter is handled by the text field, not a close"
+    );
     app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     assert!(app.dialog.is_none());
 
@@ -1836,7 +2271,10 @@ fn view_locale_submenu_lists_locales() {
     // Structural check only — applying a locale mutates the process-global
     // rust-i18n locale, which would race other parallel tests.
     let _app = app_at(Path::new("."));
-    let view = vix::menu::menus().iter().find(|m| m.name == "menu.view").unwrap();
+    let view = vix::menu::menus()
+        .iter()
+        .find(|m| m.name == "menu.view")
+        .unwrap();
     let sub = view
         .items
         .iter()
@@ -1845,14 +2283,20 @@ fn view_locale_submenu_lists_locales() {
         .expect("Locale is a submenu");
     let actions: Vec<&str> = sub.iter().map(|it| it.action).collect();
     for code in ["view.locale:en", "view.locale:fr", "view.locale:ja"] {
-        assert!(actions.contains(&code), "locale submenu offers {code}; got {actions:?}");
+        assert!(
+            actions.contains(&code),
+            "locale submenu offers {code}; got {actions:?}"
+        );
     }
 }
 
 #[test]
 fn view_time_zone_submenu_lists_zones() {
     let _app = app_at(Path::new("."));
-    let view = vix::menu::menus().iter().find(|m| m.name == "menu.view").unwrap();
+    let view = vix::menu::menus()
+        .iter()
+        .find(|m| m.name == "menu.view")
+        .unwrap();
     let sub = view
         .items
         .iter()
@@ -1880,7 +2324,10 @@ fn view_theme_submenu_lists_bundled_themes() {
     // app_at builds an App, which populates the View → Theme submenu from the
     // available themes.
     let _app = app_at(Path::new("."));
-    let view = vix::menu::menus().iter().find(|m| m.name == "menu.view").unwrap();
+    let view = vix::menu::menus()
+        .iter()
+        .find(|m| m.name == "menu.view")
+        .unwrap();
     let theme_parent = view
         .items
         .iter()
@@ -1932,7 +2379,10 @@ fn status_bar_info_accessors() {
     let tab = app.editor.active_tab().unwrap();
     assert_eq!(tab.editor.language(), "rust", "language from extension");
     assert_eq!(tab.editor.line_ending(), "LF");
-    assert!(tab.editor.selection_span().is_none(), "no selection initially");
+    assert!(
+        tab.editor.selection_span().is_none(),
+        "no selection initially"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -1943,7 +2393,10 @@ fn line_ending_detects_crlf() {
     fs::write(&file, "a\r\nb\r\n").unwrap();
     let mut app = app_at(&dir);
     app.open_initial(&file);
-    assert_eq!(app.editor.active_tab().unwrap().editor.line_ending(), "CRLF");
+    assert_eq!(
+        app.editor.active_tab().unwrap().editor.line_ending(),
+        "CRLF"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -1971,11 +2424,19 @@ fn toggle_comment_round_trips_and_is_undoable() {
     assert!(app.editor.active_tab().unwrap().dirty);
     // Toggling again removes it.
     app.run_action("edit.toggle_comment");
-    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "hello", "second toggle uncomments");
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines()[0],
+        "hello",
+        "second toggle uncomments"
+    );
     // And the whole thing is a single undoable edit.
     app.run_action("edit.toggle_comment");
     app.run_action("edit.undo");
-    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "hello", "undo reverts the comment");
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines()[0],
+        "hello",
+        "undo reverts the comment"
+    );
 }
 
 #[test]
@@ -1994,7 +2455,11 @@ fn toggle_comment_uses_language_token() {
     let mut app = app_at(&dir);
     app.open_initial(&file);
     app.run_action("edit.toggle_comment");
-    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "#key = 1", "TOML uses #");
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines()[0],
+        "#key = 1",
+        "TOML uses #"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -2009,7 +2474,10 @@ fn open_recent_records_dedups_and_reopens() {
     app.open_initial(&dir.join("a.txt"));
     app.open_initial(&dir.join("b.txt"));
     assert_eq!(app.settings.recent_files.len(), 2);
-    assert!(app.settings.recent_files[0].ends_with("b.txt"), "most-recent first");
+    assert!(
+        app.settings.recent_files[0].ends_with("b.txt"),
+        "most-recent first"
+    );
     assert!(app.settings.recent_files[1].ends_with("a.txt"));
 
     // Reopening a recorded file moves it to the front without duplicating.
@@ -2022,9 +2490,15 @@ fn open_recent_records_dedups_and_reopens() {
     assert_eq!(app.recent_chooser.as_ref().unwrap().entries.len(), 2);
     app.on_key(keycode(KeyCode::Down));
     app.on_key(keycode(KeyCode::Enter));
-    assert!(app.recent_chooser.is_none(), "Enter opens and closes the chooser");
+    assert!(
+        app.recent_chooser.is_none(),
+        "Enter opens and closes the chooser"
+    );
     let open = app.editor.active_tab().unwrap().path.clone().unwrap();
-    assert!(open.ends_with("b.txt"), "opened the highlighted recent file");
+    assert!(
+        open.ends_with("b.txt"),
+        "opened the highlighted recent file"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
@@ -2038,7 +2512,10 @@ fn palette_symbols_finds_declarations_not_locals() {
     assert!(names.contains(&"Beta"), "struct: {names:?}");
     assert!(names.contains(&"Gamma"), "class: {names:?}");
     assert!(names.contains(&"MAX"), "#define: {names:?}");
-    assert!(!names.contains(&"skip"), "local `let` is excluded: {names:?}");
+    assert!(
+        !names.contains(&"skip"),
+        "local `let` is excluded: {names:?}"
+    );
     assert_eq!(syms[0].line, 1, "lines are 1-based");
 }
 
@@ -2046,14 +2523,25 @@ fn palette_symbols_finds_declarations_not_locals() {
 fn goto_symbol_mode_lists_and_jumps() {
     let dir = unique_dir("symbols");
     let file = dir.join("s.rs");
-    fs::write(&file, "fn alpha() {}\nlet x = 1;\nstruct Beta {}\nfn gamma() {}\n").unwrap();
+    fs::write(
+        &file,
+        "fn alpha() {}\nlet x = 1;\nstruct Beta {}\nfn gamma() {}\n",
+    )
+    .unwrap();
     let mut app = app_at(&dir);
     app.open_initial(&file);
 
     app.run_action("nav.goto_symbol");
     let p = app.palette.as_ref().expect("palette open");
-    assert!(matches!(p.mode(), vix::palette::Mode::Symbols), "@ enters symbols mode");
-    assert_eq!(p.entries.len(), 3, "three declarations (the `let` is excluded)");
+    assert!(
+        matches!(p.mode(), vix::palette::Mode::Symbols),
+        "@ enters symbols mode"
+    );
+    assert_eq!(
+        p.entries.len(),
+        3,
+        "three declarations (the `let` is excluded)"
+    );
 
     // Filter to a single symbol, then jump to it.
     for c in "gamma".chars() {
@@ -2061,7 +2549,10 @@ fn goto_symbol_mode_lists_and_jumps() {
     }
     assert_eq!(app.palette.as_ref().unwrap().entries.len(), 1);
     app.on_key(keycode(KeyCode::Enter));
-    assert!(app.palette.is_none(), "Enter accepts and closes the palette");
+    assert!(
+        app.palette.is_none(),
+        "Enter accepts and closes the palette"
+    );
     assert_eq!(app.editor.cursor_1based().0, 4, "jumped to gamma's line");
 
     fs::remove_dir_all(&dir).ok();
@@ -2093,8 +2584,17 @@ fn goto_workspace_symbol_finds_symbols_across_files_and_jumps() {
     // Accept the first match and confirm a file opened (the symbol lives in a
     // file that was not open before).
     app.on_key(keycode(KeyCode::Enter));
-    assert!(app.palette.is_none(), "Enter accepts and closes the palette");
-    assert!(app.editor.active_tab().and_then(|t| t.path.as_ref()).is_some(), "a file opened");
+    assert!(
+        app.palette.is_none(),
+        "Enter accepts and closes the palette"
+    );
+    assert!(
+        app.editor
+            .active_tab()
+            .and_then(|t| t.path.as_ref())
+            .is_some(),
+        "a file opened"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
@@ -2104,7 +2604,10 @@ fn open_recent_empty_shows_status_only() {
     let mut app = app_at(Path::new("."));
     assert!(app.settings.recent_files.is_empty());
     app.run_action("file.open_recent");
-    assert!(app.recent_chooser.is_none(), "no chooser when there are no recent files");
+    assert!(
+        app.recent_chooser.is_none(),
+        "no chooser when there are no recent files"
+    );
 }
 
 #[test]
@@ -2117,7 +2620,10 @@ fn click_recent_row_opens_file() {
     // The list rect is normally recorded during render; set it directly.
     app.layout.chooser = Rect::new(10, 5, 34, 1);
     app.on_mouse(click(12, 5));
-    assert!(app.recent_chooser.is_none(), "a click opens and closes the chooser");
+    assert!(
+        app.recent_chooser.is_none(),
+        "a click opens and closes the chooser"
+    );
     let open = app.editor.active_tab().unwrap().path.clone().unwrap();
     assert!(open.ends_with("c.txt"));
     fs::remove_dir_all(&dir).ok();
@@ -2214,7 +2720,10 @@ fn reopen_closed_tab_restores_the_last_closed_file() {
     // Close b.txt, then reopen it.
     app.run_action("file.close");
     assert!(
-        !app.editor.tabs.iter().any(|t| t.path.as_deref() == Some(dir.join("b.txt").as_path())),
+        !app.editor
+            .tabs
+            .iter()
+            .any(|t| t.path.as_deref() == Some(dir.join("b.txt").as_path())),
         "b.txt is closed"
     );
     app.run_action("file.reopen_closed");
@@ -2269,7 +2778,10 @@ fn find_next_repeats_after_the_box_closes() {
     assert_ne!(second, first, "Find Next moved to the other match");
 
     // Ctrl+Shift+G goes back to where we started.
-    app.on_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('g'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
     let back = app.editor.active_tab().unwrap().editor.get_cursor();
     assert_eq!(back, first, "Find Previous returned to the earlier match");
 
@@ -2311,7 +2823,11 @@ fn search_reports_match_index_and_total() {
     app.on_key(esc());
     // Find Next with the box closed reports "Match N of 3".
     app.on_key(ctrl('g'));
-    assert!(app.status.contains("of 3"), "match total shown: {}", app.status);
+    assert!(
+        app.status.contains("of 3"),
+        "match total shown: {}",
+        app.status
+    );
 }
 
 #[test]
@@ -2330,9 +2846,15 @@ fn toggle_highlight_search_clears_and_restores() {
     assert!(app.editor.active_tab().unwrap().editor.has_marks());
 
     app.run_action("toggle_highlight_search");
-    assert!(!app.editor.active_tab().unwrap().editor.has_marks(), "toggled off");
+    assert!(
+        !app.editor.active_tab().unwrap().editor.has_marks(),
+        "toggled off"
+    );
     app.run_action("toggle_highlight_search");
-    assert!(app.editor.active_tab().unwrap().editor.has_marks(), "toggled back on");
+    assert!(
+        app.editor.active_tab().unwrap().editor.has_marks(),
+        "toggled back on"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
@@ -2374,13 +2896,20 @@ fn click_focuses_the_replace_field() {
         app.on_key(key(c));
     }
     let s = app.search.as_ref().unwrap();
-    assert_eq!(s.field, vix::search::Field::Replace, "click focused the Replace field");
+    assert_eq!(
+        s.field,
+        vix::search::Field::Replace,
+        "click focused the Replace field"
+    );
     assert_eq!(s.replace, "xyz");
     assert!(s.query.is_empty(), "the Find field stayed empty");
 
     // Clicking the first row focuses the Find field again.
     app.on_mouse(click(2, 5));
-    assert_eq!(app.search.as_ref().unwrap().field, vix::search::Field::Query);
+    assert_eq!(
+        app.search.as_ref().unwrap().field,
+        vix::search::Field::Query
+    );
 }
 
 #[test]
@@ -2464,13 +2993,24 @@ fn calendar_left_right_pages_months() {
     app.run_action("tools.calendar");
     assert!(app.show_calendar, "Calendar opens on the current month");
     let start = app.calendar.shown_month();
-    assert!(app.calendar.grid().today.is_some(), "today shows in the current month");
+    assert!(
+        app.calendar.grid().today.is_some(),
+        "today shows in the current month"
+    );
 
     // Ctrl pages months; Ctrl+Right forward, Ctrl+Left back to where we started.
     app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL));
-    assert_ne!(app.calendar.shown_month(), start, "Ctrl+Right advances the month");
+    assert_ne!(
+        app.calendar.shown_month(),
+        start,
+        "Ctrl+Right advances the month"
+    );
     app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL));
-    assert_eq!(app.calendar.shown_month(), start, "Ctrl+Left returns to the start month");
+    assert_eq!(
+        app.calendar.shown_month(),
+        start,
+        "Ctrl+Left returns to the start month"
+    );
 
     // Plain arrows move the selected day.
     let sel = app.calendar.selected();
@@ -2514,15 +3054,18 @@ fn toggle_status_bar_action_flips_and_persists() {
     assert!(app.show_status_bar, "the status bar is shown by default");
     app.run_action("view.status_bar");
     assert!(!app.show_status_bar, "the action hides the status bar");
-    assert!(!app.settings.show_status_bar, "the choice persists in settings");
+    assert!(
+        !app.settings.show_status_bar,
+        "the choice persists in settings"
+    );
     app.run_action("view.status_bar");
     assert!(app.show_status_bar, "toggling again shows it");
 }
 
 #[test]
 fn toggle_scrollbar_flips_persists_and_reclaims_the_column() {
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     let mut app = app_at(Path::new("."));
     let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
 
@@ -2536,13 +3079,17 @@ fn toggle_scrollbar_flips_persists_and_reclaims_the_column() {
     assert!(!app.settings.show_scrollbar, "choice persists");
     term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
     assert_eq!(app.layout.scrollbar.width, 0, "scrollbar column collapses");
-    assert_eq!(app.layout.editor.width, with + 1, "the text reclaims the column");
+    assert_eq!(
+        app.layout.editor.width,
+        with + 1,
+        "the text reclaims the column"
+    );
 }
 
 #[test]
 fn calendar_nav_arrows_change_the_month() {
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     let mut app = app_at(Path::new("."));
     app.run_action("tools.calendar");
     let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
@@ -2554,14 +3101,18 @@ fn calendar_nav_arrows_change_the_month() {
     app.on_mouse(click(cal.x + 20, cal.y)); // ▶ next month
     assert_ne!(app.calendar.title(), title, "▶ advanced to the next month");
     app.on_mouse(click(cal.x, cal.y)); // ◀ previous month
-    assert_eq!(app.calendar.title(), title, "◀ returned to the original month");
+    assert_eq!(
+        app.calendar.title(),
+        title,
+        "◀ returned to the original month"
+    );
     assert!(app.show_calendar, "an arrow click keeps the calendar open");
 }
 
 #[test]
 fn calendar_click_inserts_into_editor() {
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     let mut app = app_at(Path::new("."));
     app.run_action("tools.calendar");
     let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
@@ -2591,8 +3142,8 @@ fn calendar_click_inserts_into_editor() {
 
 #[test]
 fn clock_box_inserts_a_time_row() {
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     let mut app = app_at(Path::new("."));
     app.run_action("tools.clock");
     assert!(app.show_clock, "the action opens the clock box");
@@ -2605,7 +3156,10 @@ fn clock_box_inserts_a_time_row() {
     // open so several values can be picked.
     app.on_mouse(click(r.x + 1, r.y));
     let text = app.editor.active_tab().unwrap().text();
-    assert!(text.contains(':') && text.contains('-'), "inserted a date-time: {text:?}");
+    assert!(
+        text.contains(':') && text.contains('-'),
+        "inserted a date-time: {text:?}"
+    );
     assert!(app.show_clock, "a row click keeps the clock box open");
 
     // A click outside the box closes it.
@@ -2636,7 +3190,10 @@ fn run_command_streams_output_to_bottom_dock() {
     app.poll_command();
 
     let out = app.bottom_dock.lines.join("\n");
-    assert!(out.contains("$ echo hello-vix"), "echoes the command: {out:?}");
+    assert!(
+        out.contains("$ echo hello-vix"),
+        "echoes the command: {out:?}"
+    );
     assert!(out.contains("hello-vix"), "shows the output: {out:?}");
     assert!(out.contains("[exit 0]"), "shows the exit code: {out:?}");
 }
@@ -2660,7 +3217,10 @@ fn cancel_command_kills_a_running_command() {
     }
     assert!(!app.command_running(), "cancel ended the command");
     let out = app.bottom_dock.lines.join("\n");
-    assert!(out.contains("[cancelled]"), "shows it was cancelled: {out:?}");
+    assert!(
+        out.contains("[cancelled]"),
+        "shows it was cancelled: {out:?}"
+    );
 }
 
 #[test]
@@ -2690,16 +3250,22 @@ fn workspace_dock_search_regex_and_case_toggles() {
     }
     app.on_key(keycode(KeyCode::Enter));
     let out2 = app.bottom_dock.lines.join("\n");
-    assert!(out2.contains("a.txt:2:1:"), "case-sensitive FOO matched line 2: {out2:?}");
-    assert!(out2.contains("[1 matches in 1 files]"), "only the uppercase hit: {out2:?}");
+    assert!(
+        out2.contains("a.txt:2:1:"),
+        "case-sensitive FOO matched line 2: {out2:?}"
+    );
+    assert!(
+        out2.contains("[1 matches in 1 files]"),
+        "only the uppercase hit: {out2:?}"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
 fn search_in_workspace_to_dock_lists_and_jumps() {
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     let dir = unique_dir("searchdock");
     fs::write(dir.join("a.txt"), "one\nNEEDLE here\nthree\n").unwrap();
     fs::write(dir.join("b.txt"), "nothing\n").unwrap();
@@ -2714,31 +3280,45 @@ fn search_in_workspace_to_dock_lists_and_jumps() {
 
     assert!(app.show_bottom_dock, "shows the dock");
     let out = app.bottom_dock.lines.join("\n");
-    assert!(out.contains("a.txt:2:1:"), "lists the hit as path:line:col: {out:?}");
-    assert!(out.contains("NEEDLE here"), "includes the matched text: {out:?}");
-    assert!(out.contains("[1 matches in 1 files]"), "summary line: {out:?}");
+    assert!(
+        out.contains("a.txt:2:1:"),
+        "lists the hit as path:line:col: {out:?}"
+    );
+    assert!(
+        out.contains("NEEDLE here"),
+        "includes the matched text: {out:?}"
+    );
+    assert!(
+        out.contains("[1 matches in 1 files]"),
+        "summary line: {out:?}"
+    );
 
     // Render to record the dock rect, then click the hit (2nd content row).
     let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
     term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
     let r = app.layout.bottom_dock;
     app.on_mouse(click(r.x + 1, r.y + 2));
-    assert_eq!(app.editor.active_tab().unwrap().cursor_1based().0, 2, "jumps to line 2");
+    assert_eq!(
+        app.editor.active_tab().unwrap().cursor_1based().0,
+        2,
+        "jumps to line 2"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
 fn clicking_a_dock_location_jumps_to_it() {
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     let dir = unique_dir("dockjump");
     let file = dir.join("hit.txt");
     fs::write(&file, "a\nb\nTARGET\nd\n").unwrap();
     let mut app = app_at(&dir);
     app.run_action("view.bottom_dock");
     // A grep-style line: path:line:col:text (pointing at line 3).
-    app.bottom_dock.push(format!("{}:3:1: TARGET", file.display()));
+    app.bottom_dock
+        .push(format!("{}:3:1: TARGET", file.display()));
     let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
     term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
 
@@ -2746,15 +3326,19 @@ fn clicking_a_dock_location_jumps_to_it() {
     app.on_mouse(click(r.x + 1, r.y + 1)); // first content row = the line
 
     let tab = app.editor.active_tab().unwrap();
-    assert_eq!(tab.path.as_deref(), Some(file.canonicalize().unwrap().as_path()), "opened the file");
+    assert_eq!(
+        tab.path.as_deref(),
+        Some(file.canonicalize().unwrap().as_path()),
+        "opened the file"
+    );
     assert_eq!(tab.cursor_1based().0, 3, "jumped to line 3");
     fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
 fn bottom_dock_top_edge_drag_resizes() {
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     let mut app = app_at(Path::new("."));
     app.run_action("view.bottom_dock");
     let mut term = Terminal::new(TestBackend::new(80, 40)).unwrap();
@@ -2764,23 +3348,45 @@ fn bottom_dock_top_edge_drag_resizes() {
     let before = app.settings.bottom_dock_height;
     // Press the top edge and drag up four rows → taller.
     app.on_mouse(mouse(MouseEventKind::Down(MouseButton::Left), r.x + 1, r.y));
-    app.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), r.x + 1, r.y - 4));
-    assert!(app.settings.bottom_dock_height > before, "dragging the top edge up grows the dock");
-    app.on_mouse(mouse(MouseEventKind::Up(MouseButton::Left), r.x + 1, r.y - 4));
+    app.on_mouse(mouse(
+        MouseEventKind::Drag(MouseButton::Left),
+        r.x + 1,
+        r.y - 4,
+    ));
+    assert!(
+        app.settings.bottom_dock_height > before,
+        "dragging the top edge up grows the dock"
+    );
+    app.on_mouse(mouse(
+        MouseEventKind::Up(MouseButton::Left),
+        r.x + 1,
+        r.y - 4,
+    ));
 
     // Re-render so the dock rect reflects the new height, then drag down → shorter.
     term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
     let grown = app.settings.bottom_dock_height;
     let r2 = app.layout.bottom_dock;
-    app.on_mouse(mouse(MouseEventKind::Down(MouseButton::Left), r2.x + 1, r2.y));
-    app.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), r2.x + 1, r2.y + 3));
-    assert!(app.settings.bottom_dock_height < grown, "dragging the top edge down shrinks it");
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        r2.x + 1,
+        r2.y,
+    ));
+    app.on_mouse(mouse(
+        MouseEventKind::Drag(MouseButton::Left),
+        r2.x + 1,
+        r2.y + 3,
+    ));
+    assert!(
+        app.settings.bottom_dock_height < grown,
+        "dragging the top edge down shrinks it"
+    );
 }
 
 #[test]
 fn bottom_dock_focus_and_scroll() {
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     let mut app = app_at(Path::new("."));
     app.run_action("view.bottom_dock");
     for i in 0..50 {
@@ -2812,8 +3418,8 @@ fn bottom_dock_focus_and_scroll() {
 
 #[test]
 fn toggle_bottom_dock_flips_persists_and_renders() {
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     let mut app = app_at(Path::new("."));
     assert!(!app.show_bottom_dock, "hidden by default");
 
@@ -2834,8 +3440,8 @@ fn toggle_bottom_dock_flips_persists_and_renders() {
 fn draw_handles_a_hidden_status_bar() {
     // A full render with the status bar hidden must lay out and paint without
     // panicking (the body row now consumes the freed line).
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     let mut app = app_at(Path::new("."));
     app.run_action("view.status_bar"); // hide it
     let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
@@ -2915,7 +3521,10 @@ fn explorer_cut_moves_file_and_follows_buffer() {
     assert!(!dir.join("a.txt").exists(), "original gone after move");
     // The open buffer now points at the new location.
     let tab_path = app.editor.active_tab().unwrap().path.clone().unwrap();
-    assert!(tab_path.ends_with("sub/a.txt"), "buffer followed the move: {tab_path:?}");
+    assert!(
+        tab_path.ends_with("sub/a.txt"),
+        "buffer followed the move: {tab_path:?}"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -2949,7 +3558,11 @@ fn explorer_multiselect_collects_paths() {
     app.explorer.selected = 0;
     app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::SHIFT));
     app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::SHIFT));
-    assert_eq!(app.explorer.selected_paths().len(), 3, "anchor..cursor inclusive");
+    assert_eq!(
+        app.explorer.selected_paths().len(),
+        3,
+        "anchor..cursor inclusive"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -2963,9 +3576,15 @@ fn goto_definition_single_jumps() {
 
     app.on_key(KeyEvent::new(KeyCode::F(12), KeyModifiers::NONE));
     let tab = app.editor.active_tab().unwrap();
-    assert!(tab.path.as_ref().unwrap().ends_with("lib.rs"), "jumped to the definition file");
+    assert!(
+        tab.path.as_ref().unwrap().ends_with("lib.rs"),
+        "jumped to the definition file"
+    );
     assert_eq!(app.editor.cursor_1based().0, 1);
-    assert!(app.workspace_search.is_none(), "single match jumps directly");
+    assert!(
+        app.workspace_search.is_none(),
+        "single match jumps directly"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -3001,7 +3620,14 @@ fn position_history_back_and_forward() {
     };
     let here = |app: &App| -> (String, usize) {
         let t = app.editor.active_tab().unwrap();
-        let name = t.path.as_ref().unwrap().file_name().unwrap().to_string_lossy().into_owned();
+        let name = t
+            .path
+            .as_ref()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
         (name, app.editor.cursor_1based().0)
     };
 
@@ -3012,7 +3638,11 @@ fn position_history_back_and_forward() {
 
     // Alt+Left goes back to the previous location.
     app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::ALT));
-    assert_eq!(here(&app), ("a.txt".into(), 3), "Alt+Left → previous position");
+    assert_eq!(
+        here(&app),
+        ("a.txt".into(), 3),
+        "Alt+Left → previous position"
+    );
 
     // Alt+Right returns forward.
     app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::ALT));
@@ -3115,7 +3745,10 @@ fn workspace_replace_rewrites_files() {
     }
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // preview replace
     // Nothing is written until the preview is confirmed.
-    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "beta and beta\n");
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "beta and beta\n"
+    );
     app.on_key(key('y')); // confirm: apply across the workspace
 
     let a = fs::read_to_string(dir.join("a.txt")).unwrap();
@@ -3172,7 +3805,10 @@ fn snippet_expands_with_navigable_tabstops() {
     for c in "foo".chars() {
         app.on_key(key(c));
     }
-    assert_eq!(app.editor.active_tab().unwrap().editor.get_content(), "fn foo() -> () {\n    \n}\n");
+    assert_eq!(
+        app.editor.active_tab().unwrap().editor.get_content(),
+        "fn foo() -> () {\n    \n}\n"
+    );
     // Tab jumps to the (empty) parameter tabstop, between the parens.
     app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
     assert_eq!(app.editor.active_tab().unwrap().editor.get_cursor(), 7);
@@ -3236,7 +3872,11 @@ fn scrollbar_drag_scrolls_editor() {
         row: 0,
         modifiers: KeyModifiers::NONE,
     });
-    assert_eq!(app.editor.cursor_1based().0, 1, "dragging to the top scrolls home");
+    assert_eq!(
+        app.editor.cursor_1based().0,
+        1,
+        "dragging to the top scrolls home"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
@@ -3320,14 +3960,23 @@ fn ctrl_f_opens_find_and_esc_closes() {
 fn ctrl_r_opens_replace() {
     let mut app = app_at(Path::new("."));
     app.on_key(ctrl('r'));
-    assert!(app.search.as_ref().is_some_and(|s| s.replacing), "Ctrl+R opens replace");
+    assert!(
+        app.search.as_ref().is_some_and(|s| s.replacing),
+        "Ctrl+R opens replace"
+    );
 }
 
 #[test]
 fn ctrl_shift_f_opens_workspace_search() {
     let mut app = app_at(Path::new("."));
-    app.on_key(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
-    assert!(app.workspace_search.is_some(), "Ctrl+Shift+F opens workspace search");
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('f'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
+    assert!(
+        app.workspace_search.is_some(),
+        "Ctrl+Shift+F opens workspace search"
+    );
 }
 
 #[test]
@@ -3356,13 +4005,18 @@ fn palette_command_fuzzy_ranks_best_match_first() {
 
 #[test]
 fn palette_recents_seed_from_persisted_settings() {
-    let settings = Settings { command_recents: vec!["edit.select_all".to_string()], ..Settings::default() };
+    let settings = Settings {
+        command_recents: vec!["edit.select_all".to_string()],
+        ..Settings::default()
+    };
     let mut app = app_with(settings);
     app.on_key(ctrl('p'));
     app.on_key(key('>')); // empty command query → recents first
     let p = app.palette.as_ref().unwrap();
     match &p.entries[0].action {
-        vix::palette::Action::RunCommand(a) => assert_eq!(a, "edit.select_all", "persisted recent floats up"),
+        vix::palette::Action::RunCommand(a) => {
+            assert_eq!(a, "edit.select_all", "persisted recent floats up");
+        }
         _ => panic!("expected a command entry"),
     }
 }
@@ -3402,7 +4056,10 @@ fn f10_toggles_menu_bar() {
 fn alt_letters_open_specific_menus() {
     let alt = |c: char| KeyEvent::new(KeyCode::Char(c), KeyModifiers::ALT);
     let menu_index = |name: &str| {
-        vix::menu::menus().iter().position(|m| m.name == name).unwrap()
+        vix::menu::menus()
+            .iter()
+            .position(|m| m.name == name)
+            .unwrap()
     };
     for (letter, name) in [
         ('v', "menu.vix"),
@@ -3417,7 +4074,11 @@ fn alt_letters_open_specific_menus() {
     ] {
         let mut app = app_at(Path::new("."));
         app.on_key(alt(letter));
-        assert_eq!(app.menu.open, Some(menu_index(name)), "Alt+{letter} opens {name}");
+        assert_eq!(
+            app.menu.open,
+            Some(menu_index(name)),
+            "Alt+{letter} opens {name}"
+        );
     }
 }
 
@@ -3430,15 +4091,25 @@ fn undo_tree_preserves_a_branch_after_a_new_edit() {
     type_str(&mut app, "B"); // new branch off the empty root
     assert_eq!(app.editor.active_tab().unwrap().text(), "B");
     // Redo right after the edit does nothing (B is the active tip).
-    app.on_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('z'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
     assert_eq!(app.editor.active_tab().unwrap().text(), "B");
     // Undo back to the branch point, switch branches, and redo into the OLD "A"
     // branch — proving it survived the new edit.
     app.on_key(ctrl('z')); // undo "B" → empty (branch point)
     assert_eq!(app.editor.active_tab().unwrap().text(), "");
     app.run_action("edit.undo_branch");
-    app.on_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
-    assert_eq!(app.editor.active_tab().unwrap().text(), "A", "the old branch is still reachable");
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('z'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "A",
+        "the old branch is still reachable"
+    );
 }
 
 #[test]
@@ -3451,7 +4122,10 @@ fn ctrl_z_undoes_and_ctrl_shift_z_redoes() {
     app.on_key(ctrl('z'));
     let undone = app.editor.active_tab().unwrap().lines()[0].len();
     assert!(undone < full, "Ctrl+Z undoes typing ({undone} < {full})");
-    app.on_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('z'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
     let redone = app.editor.active_tab().unwrap().lines()[0].len();
     assert!(redone > undone, "Ctrl+Shift+Z redoes ({redone} > {undone})");
 }
@@ -3486,7 +4160,10 @@ fn f3_after_find_does_not_panic_and_keeps_search() {
     }
     app.on_key(func(3)); // find next
     app.on_key(KeyEvent::new(KeyCode::F(3), KeyModifiers::SHIFT)); // find prev
-    assert!(app.search.is_some(), "search stays open while navigating matches");
+    assert!(
+        app.search.is_some(),
+        "search stays open while navigating matches"
+    );
 }
 
 #[test]
@@ -3497,7 +4174,11 @@ fn delete_key_forward_deletes() {
     }
     app.on_key(keycode(KeyCode::Home));
     app.on_key(keycode(KeyCode::Delete));
-    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "bc", "Delete removes the char ahead");
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines()[0],
+        "bc",
+        "Delete removes the char ahead"
+    );
 }
 
 // ===========================================================================
@@ -3519,7 +4200,12 @@ fn menu_dropdown_keeps_a_gap_before_shortcuts() {
             // Row = " label" + pad + "shortcut " inside borders; pad must be >= 1.
             let content = it.label().chars().count() + it.shortcut.chars().count();
             let pad = (rect.width as usize).saturating_sub(content + 4);
-            assert!(pad >= 1, "{}/{} label and shortcut touch", m.name, it.action);
+            assert!(
+                pad >= 1,
+                "{}/{} label and shortcut touch",
+                m.name,
+                it.action
+            );
         }
     }
 }
@@ -3546,7 +4232,10 @@ fn menus_have_separators_in_the_specified_places() {
                 .iter()
                 .position(|it| it.action == *action)
                 .unwrap_or_else(|| panic!("{menu} has {action}"));
-            assert!(at > 0 && items[at - 1].is_separator(), "{menu}: separator before {action}");
+            assert!(
+                at > 0 && items[at - 1].is_separator(),
+                "{menu}: separator before {action}"
+            );
         }
     }
 }
@@ -3555,7 +4244,10 @@ fn menus_have_separators_in_the_specified_places() {
 fn submenu_opens_and_runs_a_nested_action() {
     let mut app = app_at(Path::new("."));
     app.on_key(keycode(KeyCode::F(10)));
-    let edit_idx = vix::menu::menus().iter().position(|m| m.name == "menu.edit").unwrap();
+    let edit_idx = vix::menu::menus()
+        .iter()
+        .position(|m| m.name == "menu.edit")
+        .unwrap();
     for _ in 0..edit_idx {
         app.on_key(keycode(KeyCode::Right));
     }
@@ -3577,7 +4269,11 @@ fn submenu_opens_and_runs_a_nested_action() {
     // Right opens the submenu and highlights its first item (a find action).
     app.on_key(keycode(KeyCode::Right));
     assert!(app.menu.submenu_open(), "Right opens the submenu");
-    assert_eq!(app.menu.selected_action(), Some("edit.find"), "first submenu item highlighted");
+    assert_eq!(
+        app.menu.selected_action(),
+        Some("edit.find"),
+        "first submenu item highlighted"
+    );
 
     // Enter runs the nested action (opens the find box) and closes the menu.
     app.on_key(keycode(KeyCode::Enter));
@@ -3593,11 +4289,20 @@ fn context_menu_runs_the_selected_action() {
     }
     // Open the menu directly (the right-click path needs a rendered layout) and
     // select "Select All" (index 4 in CONTEXT_ITEMS), then run it with Enter.
-    app.context_menu = Some(vix::app::ContextMenu { selected: 4, x: 0, y: 0 });
+    app.context_menu = Some(vix::app::ContextMenu {
+        selected: 4,
+        x: 0,
+        y: 0,
+    });
     app.on_key(keycode(KeyCode::Enter));
     assert!(app.context_menu.is_none(), "Enter closes the context menu");
     assert!(
-        app.editor.active_tab_mut().unwrap().editor.get_selection_text().is_some(),
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text()
+            .is_some(),
         "the Select All action ran",
     );
 }
@@ -3613,15 +4318,21 @@ fn ctrl_tab_switches_tabs() {
 
 #[test]
 fn view_editor_submenu_rolls_up_the_editor_toggles() {
-    let view = vix::menu::menus().iter().find(|m| m.name == "menu.view").unwrap();
+    let view = vix::menu::menus()
+        .iter()
+        .find(|m| m.name == "menu.view")
+        .unwrap();
     let editor = view
         .items
         .iter()
         .find(|it| it.label == "menu.item.view.editor")
         .and_then(|it| it.submenu)
         .expect("View has an Editor submenu");
-    let actions: Vec<&str> =
-        editor.iter().map(|it| it.action).filter(|a| a.starts_with("view.")).collect();
+    let actions: Vec<&str> = editor
+        .iter()
+        .map(|it| it.action)
+        .filter(|a| a.starts_with("view."))
+        .collect();
     assert_eq!(
         actions,
         vec![
@@ -3648,7 +4359,10 @@ fn view_editor_submenu_rolls_up_the_editor_toggles() {
 
 #[test]
 fn view_layout_submenu_rolls_up_the_dock_toggles() {
-    let view = vix::menu::menus().iter().find(|m| m.name == "menu.view").unwrap();
+    let view = vix::menu::menus()
+        .iter()
+        .find(|m| m.name == "menu.view")
+        .unwrap();
     let layout = view
         .items
         .iter()
@@ -3725,7 +4439,10 @@ fn quitting_with_a_dirty_tab_prompts_then_quits_on_discard() {
     app.on_key(key('x'));
     app.run_action("file.quit");
     assert!(app.unsaved.is_some(), "a dirty quit prompts first");
-    assert!(!app.should_quit, "quit is deferred until the tab is resolved");
+    assert!(
+        !app.should_quit,
+        "quit is deferred until the tab is resolved"
+    );
     app.on_key(key('d')); // discard -> no more dirty tabs -> quit
     assert!(app.should_quit, "discarding the last dirty tab quits");
 }
@@ -3759,11 +4476,19 @@ fn spellcheck_toggle_persists_and_clears_when_off() {
     assert!(!app.spellcheck);
     app.run_action("view.spellcheck");
     assert!(app.spellcheck, "toggle enables spellcheck");
-    assert!(app.settings.spellcheck, "the setting is updated for persistence");
+    assert!(
+        app.settings.spellcheck,
+        "the setting is updated for persistence"
+    );
     app.run_action("view.spellcheck");
     assert!(!app.spellcheck, "toggle disables spellcheck");
     assert!(
-        app.editor.active_tab().unwrap().editor.spell_marks().is_none(),
+        app.editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .spell_marks()
+            .is_none(),
         "disabling clears the underline marks"
     );
 }
@@ -3778,7 +4503,11 @@ fn recent_files_max_caps_the_list() {
         fs::write(&p, "x\n").unwrap();
         app.open_initial(&p);
     }
-    assert_eq!(app.settings.recent_files.len(), 2, "kept only recent_files_max entries");
+    assert_eq!(
+        app.settings.recent_files.len(),
+        2,
+        "kept only recent_files_max entries"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -3792,18 +4521,33 @@ fn select_more_and_less_extend_selection_by_word() {
 
     app.run_action("edit.select_more");
     assert_eq!(
-        app.editor.active_tab_mut().unwrap().editor.get_selection_text().as_deref(),
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text()
+            .as_deref(),
         Some("alpha"),
     );
     app.run_action("edit.select_more");
     assert_eq!(
-        app.editor.active_tab_mut().unwrap().editor.get_selection_text().as_deref(),
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text()
+            .as_deref(),
         Some("alpha beta"),
     );
     // Select Less retracts the active end leftward by a word.
     app.run_action("edit.select_less");
     assert_eq!(
-        app.editor.active_tab_mut().unwrap().editor.get_selection_text().as_deref(),
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text()
+            .as_deref(),
         Some("alpha "),
     );
 }
@@ -3838,7 +4582,8 @@ fn change_case_without_selection_is_a_noop() {
 fn editor_gutter_marks_round_trip() {
     let mut app = app_at(Path::new("."));
     let t = app.editor.active_tab_mut().unwrap();
-    t.editor.set_gutter_marks(vec![(0, "#3fb950"), (2, "#d29922")]);
+    t.editor
+        .set_gutter_marks(vec![(0, "#3fb950"), (2, "#d29922")]);
     assert_eq!(t.editor.gutter_marks().map(std::vec::Vec::len), Some(2));
     t.editor.clear_gutter_marks();
     assert!(t.editor.gutter_marks().is_none());
@@ -3869,7 +4614,11 @@ fn git_panel_stages_and_commits() {
     let dir = unique_dir("gitpanel");
     fs::create_dir_all(&dir).unwrap();
     let run = |args: &[&str]| {
-        std::process::Command::new("git").current_dir(&dir).args(args).output().unwrap();
+        std::process::Command::new("git")
+            .current_dir(&dir)
+            .args(args)
+            .output()
+            .unwrap();
     };
     run(&["init", "-q"]);
     run(&["config", "user.email", "t@example.com"]);
@@ -3908,7 +4657,11 @@ fn revert_hunk_restores_committed_text() {
     // diff gutter and revert key the HEAD cache off that shared prefix.
     let dir = dir.canonicalize().unwrap();
     let run = |args: &[&str]| {
-        std::process::Command::new("git").current_dir(&dir).args(args).output().unwrap();
+        std::process::Command::new("git")
+            .current_dir(&dir)
+            .args(args)
+            .output()
+            .unwrap();
     };
     run(&["init", "-q"]);
     run(&["config", "user.email", "t@example.com"]);
@@ -3940,7 +4693,11 @@ fn git_stash_and_pop_round_trip() {
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
     let run = |args: &[&str]| {
-        std::process::Command::new("git").current_dir(&dir).args(args).output().unwrap();
+        std::process::Command::new("git")
+            .current_dir(&dir)
+            .args(args)
+            .output()
+            .unwrap();
     };
     run(&["init", "-q"]);
     run(&["config", "user.email", "t@example.com"]);
@@ -3970,7 +4727,11 @@ fn stage_hunk_stages_only_the_cursor_hunk() {
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
     let run = |args: &[&str]| {
-        std::process::Command::new("git").current_dir(&dir).args(args).output().unwrap();
+        std::process::Command::new("git")
+            .current_dir(&dir)
+            .args(args)
+            .output()
+            .unwrap();
     };
     run(&["init", "-q"]);
     run(&["config", "user.email", "t@example.com"]);
@@ -3989,10 +4750,18 @@ fn stage_hunk_stages_only_the_cursor_hunk() {
 
     // The staged (index) version now has the change; HEAD still has "one".
     let staged = String::from_utf8(
-        std::process::Command::new("git").current_dir(&dir).args(["show", ":a.txt"]).output().unwrap().stdout,
+        std::process::Command::new("git")
+            .current_dir(&dir)
+            .args(["show", ":a.txt"])
+            .output()
+            .unwrap()
+            .stdout,
     )
     .unwrap();
-    assert_eq!(staged, "ONE\ntwo\nthree\n", "the hunk is staged into the index");
+    assert_eq!(
+        staged, "ONE\ntwo\nthree\n",
+        "the hunk is staged into the index"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -4003,7 +4772,11 @@ fn unstage_hunk_removes_the_cursor_hunk_from_index() {
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
     let run = |args: &[&str]| {
-        std::process::Command::new("git").current_dir(&dir).args(args).output().unwrap();
+        std::process::Command::new("git")
+            .current_dir(&dir)
+            .args(args)
+            .output()
+            .unwrap();
     };
     run(&["init", "-q"]);
     run(&["config", "user.email", "t@example.com"]);
@@ -4023,10 +4796,18 @@ fn unstage_hunk_removes_the_cursor_hunk_from_index() {
 
     // The index now matches HEAD again ("one"); the working tree keeps "ONE".
     let staged = String::from_utf8(
-        std::process::Command::new("git").current_dir(&dir).args(["show", ":a.txt"]).output().unwrap().stdout,
+        std::process::Command::new("git")
+            .current_dir(&dir)
+            .args(["show", ":a.txt"])
+            .output()
+            .unwrap()
+            .stdout,
     )
     .unwrap();
-    assert_eq!(staged, "one\ntwo\nthree\n", "the hunk is removed from the index");
+    assert_eq!(
+        staged, "one\ntwo\nthree\n",
+        "the hunk is removed from the index"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -4075,7 +4856,11 @@ fn session_restores_scroll_offset() {
         t.editor.set_offset_y(120);
     }
     let snap = app.workspace_session();
-    assert_eq!(snap.scrolls.first().copied(), Some(120), "scroll offset captured");
+    assert_eq!(
+        snap.scrolls.first().copied(),
+        Some(120),
+        "scroll offset captured"
+    );
 
     let mut restored = app_at(&dir);
     assert_eq!(restored.apply_session(&snap), 1);
@@ -4110,7 +4895,11 @@ fn git_blame_annotates_the_current_line() {
     let dir = unique_dir("gitblame");
     fs::create_dir_all(&dir).unwrap();
     let run = |args: &[&str]| {
-        std::process::Command::new("git").current_dir(&dir).args(args).output().unwrap();
+        std::process::Command::new("git")
+            .current_dir(&dir)
+            .args(args)
+            .output()
+            .unwrap();
     };
     run(&["init", "-q"]);
     run(&["config", "user.email", "t@example.com"]);
@@ -4124,9 +4913,21 @@ fn git_blame_annotates_the_current_line() {
     app.open_initial(&file);
     // Cursor starts on line 1; blame should attribute it to the seed commit.
     app.run_action("git.blame");
-    assert!(app.status.contains("Ada Lovelace"), "blame names the author: {}", app.status);
-    assert!(app.status.contains("seed the file"), "blame shows the summary: {}", app.status);
-    assert!(app.status.starts_with("L1:"), "blame labels the line: {}", app.status);
+    assert!(
+        app.status.contains("Ada Lovelace"),
+        "blame names the author: {}",
+        app.status
+    );
+    assert!(
+        app.status.contains("seed the file"),
+        "blame shows the summary: {}",
+        app.status
+    );
+    assert!(
+        app.status.starts_with("L1:"),
+        "blame labels the line: {}",
+        app.status
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -4136,7 +4937,11 @@ fn git_blame_flags_an_uncommitted_line() {
     let dir = unique_dir("gitblameunc");
     fs::create_dir_all(&dir).unwrap();
     let run = |args: &[&str]| {
-        std::process::Command::new("git").current_dir(&dir).args(args).output().unwrap();
+        std::process::Command::new("git")
+            .current_dir(&dir)
+            .args(args)
+            .output()
+            .unwrap();
     };
     run(&["init", "-q"]);
     run(&["config", "user.email", "t@example.com"]);
@@ -4166,7 +4971,11 @@ fn branch_chooser_switches_branches() {
     let dir = unique_dir("gitbranch");
     fs::create_dir_all(&dir).unwrap();
     let run = |args: &[&str]| {
-        std::process::Command::new("git").current_dir(&dir).args(args).output().unwrap();
+        std::process::Command::new("git")
+            .current_dir(&dir)
+            .args(args)
+            .output()
+            .unwrap();
     };
     run(&["init", "-q"]);
     run(&["config", "user.email", "t@example.com"]);
@@ -4181,12 +4990,20 @@ fn branch_chooser_switches_branches() {
     let start = app.git_branch.clone();
     app.run_action("git.switch_branch");
     let chooser = app.branch_chooser.as_ref().expect("branch chooser opens");
-    let idx = chooser.branches.iter().position(|b| Some(b) != start.as_ref()).unwrap();
+    let idx = chooser
+        .branches
+        .iter()
+        .position(|b| Some(b) != start.as_ref())
+        .unwrap();
     let target = chooser.branches[idx].clone();
     app.branch_chooser.as_mut().unwrap().selected = idx;
     app.on_key(keycode(KeyCode::Enter));
     app.refresh_git();
-    assert_eq!(app.git_branch.as_deref(), Some(target.as_str()), "checked out the chosen branch");
+    assert_eq!(
+        app.git_branch.as_deref(),
+        Some(target.as_str()),
+        "checked out the chosen branch"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -4224,13 +5041,19 @@ fn spell_suggest_popup_replaces_a_misspelling() {
     // Put the cursor inside "helllo" (chars 3..9) and open the popup.
     app.editor.active_tab_mut().unwrap().editor.set_cursor(5);
     app.run_action("spell.suggest");
-    let sug = app.spell_suggest.as_ref().expect("popup opens on a misspelling");
+    let sug = app
+        .spell_suggest
+        .as_ref()
+        .expect("popup opens on a misspelling");
     assert!(!sug.suggestions.is_empty(), "offers suggestions");
     // Apply the highlighted suggestion; the misspelling is gone.
     app.on_key(keycode(KeyCode::Enter));
     assert!(app.spell_suggest.is_none(), "popup closes after applying");
     let line0 = app.editor.active_tab().unwrap().lines()[0].clone();
-    assert!(!line0.contains("helllo"), "misspelling replaced; got: {line0:?}");
+    assert!(
+        !line0.contains("helllo"),
+        "misspelling replaced; got: {line0:?}"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 #[test]
@@ -4251,7 +5074,10 @@ fn spellcheck_underlines_a_misspelling_in_a_comment() {
         .spell_marks()
         .cloned()
         .unwrap_or_default();
-    assert!(!marks.is_empty(), "misspelled words in the comment are underlined");
+    assert!(
+        !marks.is_empty(),
+        "misspelled words in the comment are underlined"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -4284,7 +5110,10 @@ fn workspace_dashboard_opens_counts_files_and_closes() {
 
     app.run_action("tools.dashboard");
     assert!(app.dashboard.is_some(), "Tools → Workspace Dashboard opens");
-    assert!(!app.dashboard.as_ref().unwrap().folder.is_empty(), "folder is shown immediately");
+    assert!(
+        !app.dashboard.as_ref().unwrap().folder.is_empty(),
+        "folder is shown immediately"
+    );
 
     // Wait (bounded) for the async file-count metric to arrive.
     for _ in 0..200 {
@@ -4294,7 +5123,11 @@ fn workspace_dashboard_opens_counts_files_and_closes() {
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
-    assert_eq!(app.dashboard.as_ref().unwrap().file_count, Some(2), "counted the two files");
+    assert_eq!(
+        app.dashboard.as_ref().unwrap().file_count,
+        Some(2),
+        "counted the two files"
+    );
 
     app.on_key(keycode(KeyCode::Esc));
     assert!(app.dashboard.is_none(), "Esc closes the dashboard");
@@ -4305,7 +5138,10 @@ fn workspace_dashboard_opens_counts_files_and_closes() {
 fn system_info_panel_opens_inserts_and_closes() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.system_info");
-    assert!(app.system_info.is_some(), "Tools → System Information opens the panel");
+    assert!(
+        app.system_info.is_some(),
+        "Tools → System Information opens the panel"
+    );
 
     // Highlight the first row that has an insertable value, then insert it.
     let idx = app
@@ -4346,13 +5182,21 @@ fn debug_breakpoints_toggle_on_the_cursor_line() {
     let dir = unique_dir("breakpoints");
     fs::create_dir_all(&dir).unwrap();
     let file = dir.join("main.rs");
-    fs::write(&file, "fn main() {\n    let x = 1;\n    println!(\"{x}\");\n}\n").unwrap();
+    fs::write(
+        &file,
+        "fn main() {\n    let x = 1;\n    println!(\"{x}\");\n}\n",
+    )
+    .unwrap();
     let mut app = app_at(&dir);
     app.open_initial(&file);
 
     app.run_action("cursor_down"); // line 2
     app.run_action("run.toggle_breakpoint");
-    assert_eq!(app.active_breakpoints(), vec![2], "breakpoint set on line 2");
+    assert_eq!(
+        app.active_breakpoints(),
+        vec![2],
+        "breakpoint set on line 2"
+    );
 
     app.run_action("cursor_down"); // line 3
     app.run_action("run.toggle_breakpoint");
@@ -4412,7 +5256,11 @@ fn spacemacs_normal_mode_shares_the_vi_vocabulary() {
     assert_eq!(app.editor.cursor_1based().0, 1, "gg goes to the top");
     app.on_key(key('d'));
     app.on_key(key('d'));
-    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "two", "dd cuts the line");
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines()[0],
+        "two",
+        "dd cuts the line"
+    );
 }
 
 #[test]
@@ -4429,18 +5277,29 @@ fn spacemacs_keymap_is_modal_with_space_leader() {
     // The Space leader: SPC w / splits the editor vertically.
     assert!(!app.editor.is_split());
     app.on_key(key(' '));
-    assert_eq!(app.mode_indicator().as_deref(), Some("SPC "), "leader pending");
+    assert_eq!(
+        app.mode_indicator().as_deref(),
+        Some("SPC "),
+        "leader pending"
+    );
     app.on_key(key('w'));
     app.on_key(key('/'));
     assert!(app.editor.is_split(), "SPC w / split the editor");
-    assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"), "leader cleared");
+    assert_eq!(
+        app.mode_indicator().as_deref(),
+        Some("-- NORMAL --"),
+        "leader cleared"
+    );
 }
 
 #[test]
 fn menu_type_ahead_selects_by_first_letter() {
     let mut app = app_at(Path::new("."));
     app.on_key(keycode(KeyCode::F(10)));
-    let file_idx = vix::menu::menus().iter().position(|m| m.name == "menu.file").unwrap();
+    let file_idx = vix::menu::menus()
+        .iter()
+        .position(|m| m.name == "menu.file")
+        .unwrap();
     for _ in 0..file_idx {
         app.on_key(keycode(KeyCode::Right));
     }
@@ -4455,7 +5314,11 @@ fn menu_type_ahead_selects_by_first_letter() {
     app.on_key(key('s'));
     assert_eq!(app.menu.selected_action(), Some("file.save_as"));
     app.on_key(key('s'));
-    assert_eq!(app.menu.selected_action(), Some("file.switch_project"), "wraps around");
+    assert_eq!(
+        app.menu.selected_action(),
+        Some("file.switch_project"),
+        "wraps around"
+    );
 
     // A different letter jumps elsewhere (C → Close).
     app.on_key(key('c'));
@@ -4466,7 +5329,10 @@ fn menu_type_ahead_selects_by_first_letter() {
 fn menu_navigation_skips_separators() {
     let mut app = app_at(Path::new("."));
     app.on_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
-    let file_idx = vix::menu::menus().iter().position(|m| m.name == "menu.file").unwrap();
+    let file_idx = vix::menu::menus()
+        .iter()
+        .position(|m| m.name == "menu.file")
+        .unwrap();
     for _ in 0..file_idx {
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     }
@@ -4496,7 +5362,10 @@ fn nerd_palette_inserts_glyph_with_keyboard() {
     // Enter inserts but keeps the palette open for picking more glyphs.
     assert!(app.nerd_palette.is_some(), "Enter keeps the palette open");
     let text = app.editor.active_tab().unwrap().text();
-    assert!(text.contains(expected), "the editor holds the inserted glyph");
+    assert!(
+        text.contains(expected),
+        "the editor holds the inserted glyph"
+    );
 
     app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     assert!(app.nerd_palette.is_none(), "Esc closes the palette");
@@ -4517,7 +5386,10 @@ fn nerd_palette_click_inserts_glyph() {
     assert!(app.nerd_palette.is_some(), "a click keeps the palette open");
     let expected = app.nerd_palette.as_ref().unwrap().selected_glyph();
     let text = app.editor.active_tab().unwrap().text();
-    assert!(text.contains(expected), "clicking a cell inserts that glyph");
+    assert!(
+        text.contains(expected),
+        "clicking a cell inserts that glyph"
+    );
 }
 
 #[test]
@@ -4566,7 +5438,11 @@ fn hover_moves_menu_dropdown_selection() {
     // Hover (no button) over the third item; the highlight follows the pointer
     // without committing or closing.
     app.on_mouse(mouse(MouseEventKind::Moved, dd.x + 2, dd.y + 1 + 2));
-    assert_eq!(app.menu.item, Some(2), "hover highlights the item under the pointer");
+    assert_eq!(
+        app.menu.item,
+        Some(2),
+        "hover highlights the item under the pointer"
+    );
     assert!(app.menu.is_open(), "hover must not commit or close");
     // Move back up to the first item.
     app.on_mouse(mouse(MouseEventKind::Moved, dd.x + 2, dd.y + 1));
@@ -4582,7 +5458,11 @@ fn hover_switches_open_top_menu() {
     // Hover the File menu name (index 1); the open menu follows the pointer.
     let file_col = top_menu_col(&app, 1);
     app.on_mouse(mouse(MouseEventKind::Moved, file_col, 0));
-    assert_eq!(app.menu.open, Some(1), "hovering another name switches menus");
+    assert_eq!(
+        app.menu.open,
+        Some(1),
+        "hovering another name switches menus"
+    );
 }
 
 #[test]
@@ -4592,7 +5472,11 @@ fn hover_over_pane_does_not_steal_focus() {
     app.focus = Focus::Explorer;
     // With no menu open, plain motion must be ignored everywhere.
     app.on_mouse(mouse(MouseEventKind::Moved, 10, 5));
-    assert_eq!(app.focus, Focus::Explorer, "plain hover must not change focus");
+    assert_eq!(
+        app.focus,
+        Focus::Explorer,
+        "plain hover must not change focus"
+    );
 }
 
 #[test]
@@ -4625,7 +5509,11 @@ fn open_calendar_swallows_editor_clicks() {
     assert!(app.show_calendar);
     // A click over the editor must not reach it while the calendar is open.
     app.on_mouse(click(5, 3));
-    assert_eq!(app.focus, Focus::Explorer, "calendar open swallows the editor click");
+    assert_eq!(
+        app.focus,
+        Focus::Explorer,
+        "calendar open swallows the editor click"
+    );
 }
 
 #[test]
@@ -4653,12 +5541,18 @@ fn drag_explorer_right_edge_resizes_left_dock() {
     let before = app.settings.explorer_width;
     app.on_mouse(click(29, 0)); // grab the right edge
     app.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 50, 0));
-    assert!(app.settings.explorer_width > before, "dragging right widens the dock");
+    assert!(
+        app.settings.explorer_width > before,
+        "dragging right widens the dock"
+    );
     app.on_mouse(mouse(MouseEventKind::Up(MouseButton::Left), 50, 0));
     // After releasing, a drag elsewhere no longer resizes.
     let stable = app.settings.explorer_width;
     app.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 20, 0));
-    assert_eq!(app.settings.explorer_width, stable, "release ends the resize");
+    assert_eq!(
+        app.settings.explorer_width, stable,
+        "release ends the resize"
+    );
 }
 
 #[test]
@@ -4670,7 +5564,10 @@ fn drag_messages_left_edge_resizes_right_dock() {
     let before = app.settings.messages_width;
     app.on_mouse(click(68, 0)); // grab the left edge
     app.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 55, 0)); // drag left → wider
-    assert!(app.settings.messages_width > before, "dragging left widens the dock");
+    assert!(
+        app.settings.messages_width > before,
+        "dragging left widens the dock"
+    );
     app.on_mouse(mouse(MouseEventKind::Up(MouseButton::Left), 55, 0));
 }
 
@@ -4690,10 +5587,16 @@ fn click_dock_toggle_icons() {
     let (left, right) = vix::ui::dock_toggle_cols(app.layout.menu);
     let explorer_before = app.show_explorer;
     app.on_mouse(click(left, 0));
-    assert_ne!(app.show_explorer, explorer_before, "left dock icon toggles the explorer");
+    assert_ne!(
+        app.show_explorer, explorer_before,
+        "left dock icon toggles the explorer"
+    );
     let messages_before = app.show_messages;
     app.on_mouse(click(right, 0));
-    assert_ne!(app.show_messages, messages_before, "right dock icon toggles the messages");
+    assert_ne!(
+        app.show_messages, messages_before,
+        "right dock icon toggles the messages"
+    );
 }
 
 #[test]
@@ -4708,7 +5611,13 @@ fn view_keymap_submenu_actions_set_the_keymap() {
     app.run_action("view.keymap:vi");
     assert_eq!(app.settings.keymap, "vi");
 
-    for id in ["vscode-windows", "intellij-macos", "intellij-windows", "eclipse", "sublime"] {
+    for id in [
+        "vscode-windows",
+        "intellij-macos",
+        "intellij-windows",
+        "eclipse",
+        "sublime",
+    ] {
         app.run_action(&format!("view.keymap:{id}"));
         assert_eq!(app.settings.keymap, id);
     }
@@ -4724,8 +5633,15 @@ fn sublime_keymap_signature_bindings() {
     app.settings.keymap = "sublime".to_string();
     // Ctrl+Shift+D duplicates the current line.
     type_str(&mut app, "solo");
-    app.on_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
-    assert_eq!(app.editor.active_tab().unwrap().lines()[..2], ["solo", "solo"], "Ctrl+Shift+D duplicates");
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('d'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines()[..2],
+        ["solo", "solo"],
+        "Ctrl+Shift+D duplicates"
+    );
     // Ctrl+J joins the two lines (from the first line).
     app.on_key(keycode(KeyCode::Up));
     app.on_key(keycode(KeyCode::Home));
@@ -4736,7 +5652,10 @@ fn sublime_keymap_signature_bindings() {
         app.editor.active_tab().unwrap().lines()
     );
     // Ctrl+Shift+P opens the command palette.
-    app.on_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('p'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
     assert!(app.palette.is_some(), "Ctrl+Shift+P opens the palette");
 }
 
@@ -4805,8 +5724,14 @@ fn vscode_keymap_quick_open_command_palette_and_goto_line() {
     app.on_key(esc());
 
     // Ctrl+Shift+P opens the Command Palette.
-    app.on_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
-    assert!(app.palette.is_some(), "Ctrl+Shift+P opens the Command Palette");
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('p'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
+    assert!(
+        app.palette.is_some(),
+        "Ctrl+Shift+P opens the Command Palette"
+    );
     app.on_key(esc());
 
     // Ctrl+G opens Go to Line (the palette).
@@ -4842,7 +5767,11 @@ fn vim_keymap_normal_mode_is_modal() {
     assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"));
     app.on_key(key('0'));
     app.on_key(key('x'));
-    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "ello", "x deletes a char");
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines()[0],
+        "ello",
+        "x deletes a char"
+    );
 }
 
 #[test]
@@ -4885,15 +5814,27 @@ fn vim_keymap_operators_and_motions() {
     app.on_key(key('g'));
     app.on_key(key('d'));
     app.on_key(key('d'));
-    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "two", "dd cut line one");
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines()[0],
+        "two",
+        "dd cut line one"
+    );
     app.on_key(key('u'));
-    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "one", "u undoes the cut");
+    assert_eq!(
+        app.editor.active_tab().unwrap().lines()[0],
+        "one",
+        "u undoes the cut"
+    );
 
     // `w` moves to the next word start.
     app.on_key(key('g'));
     app.on_key(key('g'));
     app.on_key(key('w'));
-    assert_eq!(app.editor.cursor_1based(), (2, 1), "w jumps to the next word (line 2)");
+    assert_eq!(
+        app.editor.cursor_1based(),
+        (2, 1),
+        "w jumps to the next word (line 2)"
+    );
 }
 
 #[test]
@@ -4933,7 +5874,10 @@ fn emacs_keymap_meta_and_window_chords() {
         app.on_key(key(c));
     }
     app.on_key(ctrl('k'));
-    assert!(app.editor.active_tab().unwrap().text().is_empty(), "C-k kills the line");
+    assert!(
+        app.editor.active_tab().unwrap().text().is_empty(),
+        "C-k kills the line"
+    );
     // C-x b opens the buffer switcher (palette `#` mode).
     app.on_key(ctrl('x'));
     app.on_key(key('b'));
@@ -4953,7 +5897,10 @@ fn vscode_keymap_split_panel_and_delete_line() {
     assert_ne!(app.show_bottom_dock, before, "Ctrl+J toggles the panel");
     // Ctrl+Shift+K deletes the current line.
     type_str(&mut app, "doomed");
-    app.on_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL | KeyModifiers::SHIFT));
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('k'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
     assert!(
         app.editor.active_tab().unwrap().text().is_empty(),
         "Ctrl+Shift+K deletes the line"
@@ -4969,13 +5916,12 @@ fn switching_keymap_resets_vim_to_normal() {
     // Choose the Vim keymap again via the submenu action; modes reset to Normal.
     app.run_action("view.keymap:vi");
     assert_eq!(app.settings.keymap, "vi");
-    assert_eq!(app.mode_indicator().as_deref(), Some("-- NORMAL --"), "reset to Normal");
+    assert_eq!(
+        app.mode_indicator().as_deref(),
+        Some("-- NORMAL --"),
+        "reset to Normal"
+    );
 }
-
-
-
-
-
 
 #[test]
 fn typing_brackets_auto_pairs_and_steps_over() {
@@ -5017,15 +5963,25 @@ fn split_panes_open_focus_and_close() {
     assert!(app.editor.is_split(), "Split Vertical splits the editor");
     let tabs = app.editor.split_layout(Rect::new(0, 0, 80, 24));
     assert_eq!(tabs.len(), 2, "two panes");
-    assert_ne!(tabs[0].tab, tabs[1].tab, "the two panes show different tabs");
+    assert_ne!(
+        tabs[0].tab, tabs[1].tab,
+        "the two panes show different tabs"
+    );
 
     let before = app.editor.active;
     app.run_action("view.focus_other_pane");
-    assert_ne!(app.editor.active, before, "focusing the other pane swaps the active tab");
+    assert_ne!(
+        app.editor.active, before,
+        "focusing the other pane swaps the active tab"
+    );
 
     // A second split makes a 2x2-style grid (three panes here).
     app.run_action("view.split_horizontal");
-    assert_eq!(app.editor.split_layout(Rect::new(0, 0, 80, 24)).len(), 3, "nested split adds a pane");
+    assert_eq!(
+        app.editor.split_layout(Rect::new(0, 0, 80, 24)).len(),
+        3,
+        "nested split adds a pane"
+    );
 
     app.run_action("view.unsplit");
     app.run_action("view.unsplit");
@@ -5549,11 +6505,19 @@ fn catalog_join_lines() {
 
 #[test]
 fn catalog_line_transforms() {
-    for action in ["sort_unique", "reverse_lines", "remove_duplicate_lines", "trim_trailing_whitespace"] {
+    for action in [
+        "sort_unique",
+        "reverse_lines",
+        "remove_duplicate_lines",
+        "trim_trailing_whitespace",
+    ] {
         let mut app = app_at(Path::new("."));
         type_str(&mut app, "alpha\nbeta\nalpha  \n");
         app.run_action(action);
-        assert!(app.editor.active_tab().is_some(), "{action} kept the app sane");
+        assert!(
+            app.editor.active_tab().is_some(),
+            "{action} kept the app sane"
+        );
     }
 }
 
@@ -6084,8 +7048,3 @@ fn catalog_none() {
     app.run_action("none");
     assert!(app.editor.active_tab().is_some());
 }
-
-
-
-
-

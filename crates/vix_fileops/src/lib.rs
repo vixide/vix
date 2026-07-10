@@ -55,13 +55,15 @@ pub fn remove_path(path: &Path) -> io::Result<()> {
 
 /// A name in `dir` derived from `original` that doesn't yet exist, appending
 /// " copy", " copy 2", … before the extension. Used for same-directory copies.
-#[must_use] 
+#[must_use]
 pub fn unique_copy_name(dir: &Path, original: &Path) -> PathBuf {
     let stem = original
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let ext = original.extension().map(|e| e.to_string_lossy().into_owned());
+    let ext = original
+        .extension()
+        .map(|e| e.to_string_lossy().into_owned());
 
     for n in 1.. {
         let suffix = if n == 1 {

@@ -12,11 +12,13 @@ use std::path::{Path, PathBuf};
 
 use ratatui::layout::Rect;
 use ratatui::style::Style;
-use vix_editor_core::actions::{Delete, Duplicate, InsertText, MoveDown, MoveRight, MoveUp, SelectAll};
+use ratatui_image::protocol::StatefulProtocol;
+use vix_editor_core::actions::{
+    Delete, Duplicate, InsertText, MoveDown, MoveRight, MoveUp, SelectAll,
+};
 use vix_editor_core::code::Code;
 pub use vix_editor_core::editor::Editor as CodeEditor;
 use vix_editor_core::utils::get_lang;
-use ratatui_image::protocol::StatefulProtocol;
 
 use vix_theme as theme;
 
@@ -28,7 +30,9 @@ fn line_is_blank(code: &Code, row: usize) -> bool {
     }
     let start = code.line_to_char(row);
     let len = code.line_len(row);
-    code.char_slice(start, start + len).chars().all(|c: char| c.is_whitespace())
+    code.char_slice(start, start + len)
+        .chars()
+        .all(|c: char| c.is_whitespace())
 }
 
 /// Whether `row` is part of a section break: a run of two or more consecutive
@@ -116,7 +120,7 @@ fn trim_trailing_whitespace(text: &str) -> String {
 }
 
 /// File extensions opened as images rather than text.
-#[must_use] 
+#[must_use]
 pub fn is_image_path(path: &Path) -> bool {
     matches!(
         path.extension()
@@ -155,7 +159,9 @@ fn apply_theme(ed: &mut CodeEditor) {
     // Block cursor: the custom theme's cursor color (drawn as the cell bg, with
     // the editor background as fg so the glyph stays legible), else reversed.
     let cursor = match theme::editor_cursor() {
-        Some(color) => Style::default().bg(color).fg(theme::region_bg(theme::Region::Editor)),
+        Some(color) => Style::default()
+            .bg(color)
+            .fg(theme::region_bg(theme::Region::Editor)),
         None => theme::selected(),
     };
     ed.set_cursor_style(Some(cursor));
@@ -237,15 +243,18 @@ impl Tab {
 
     /// Buffer split into lines (no trailing empty element).
     pub fn lines(&self) -> Vec<String> {
-        self.text().lines().map(std::string::ToString::to_string).collect()
+        self.text()
+            .lines()
+            .map(std::string::ToString::to_string)
+            .collect()
     }
 
     /// Title shown on the tab and in the buffer switcher.
     pub fn title(&self) -> String {
-        let name = self
-            .path
-            .as_ref()
-            .and_then(|p| p.file_name()).map_or_else(|| "untitled".to_string(), |s| s.to_string_lossy().into_owned());
+        let name = self.path.as_ref().and_then(|p| p.file_name()).map_or_else(
+            || "untitled".to_string(),
+            |s| s.to_string_lossy().into_owned(),
+        );
         let icon = theme::file_icon(&name);
         let flag = if self.dirty {
             format!(" {}", theme::icon::FILE_DIRTY)
@@ -258,7 +267,8 @@ impl Tab {
     /// Full path for display (status bar / buffer switcher), or `"untitled"`.
     pub fn display_path(&self) -> String {
         self.path
-            .as_ref().map_or_else(|| "untitled".to_string(), |p| p.display().to_string())
+            .as_ref()
+            .map_or_else(|| "untitled".to_string(), |p| p.display().to_string())
     }
 
     /// 1-based (line, column) of the cursor.
@@ -358,7 +368,9 @@ impl Editor {
     /// the active tab) in the new pane. Creates the split on the first call; later
     /// calls split the currently focused pane. Capped at `MAX_LEAVES` panes.
     pub fn set_split(&mut self, dir: SplitDir) {
-        let other = (0..self.tabs.len()).find(|&i| i != self.active).unwrap_or(self.active);
+        let other = (0..self.tabs.len())
+            .find(|&i| i != self.active)
+            .unwrap_or(self.active);
         match self.split_root.as_mut() {
             None => {
                 self.split_root = Some(crate::pane_tree::Pane::Split {
@@ -379,7 +391,9 @@ impl Editor {
     /// Remove the focused pane, collapsing the split; a single remaining pane
     /// returns to the unsplit state.
     pub fn unsplit(&mut self) {
-        let Some(root) = self.split_root.take() else { return };
+        let Some(root) = self.split_root.take() else {
+            return;
+        };
         match root.remove_leaf(self.focused_leaf) {
             Some(tree) if tree.leaf_count() > 1 => {
                 self.focused_leaf = self.focused_leaf.min(tree.leaf_count() - 1);
@@ -416,7 +430,9 @@ impl Editor {
     /// Focus the leaf at in-order index `i`, making its tab active.
     pub fn focus_leaf(&mut self, i: usize) {
         self.sync_split();
-        let Some(root) = self.split_root.as_ref() else { return };
+        let Some(root) = self.split_root.as_ref() else {
+            return;
+        };
         if let Some(tab) = root.leaf_tab(i) {
             self.focused_leaf = i;
             self.active = tab.min(self.tabs.len().saturating_sub(1));
@@ -426,7 +442,9 @@ impl Editor {
     /// Move focus to the next pane (wrapping), making its tab active.
     pub fn focus_other_pane(&mut self) {
         self.sync_split();
-        let Some(root) = self.split_root.as_ref() else { return };
+        let Some(root) = self.split_root.as_ref() else {
+            return;
+        };
         let n = root.leaf_count();
         if n > 0 {
             self.focus_leaf((self.focused_leaf + 1) % n);
@@ -443,23 +461,30 @@ impl Editor {
     /// Empty when unsplit.
     pub fn split_layout(&mut self, area: Rect) -> Vec<crate::pane_tree::LeafBox> {
         self.sync_split();
-        self.split_root.as_ref().map(|r| r.layout(area)).unwrap_or_default()
+        self.split_root
+            .as_ref()
+            .map(|r| r.layout(area))
+            .unwrap_or_default()
     }
 
     /// The split divider rectangles for drawing, given the editor `area`.
     #[must_use]
-    pub fn split_dividers(
-        &self,
-        area: Rect,
-    ) -> Vec<(SplitDir, Rect)> {
-        self.split_root.as_ref().map(|r| r.dividers(area)).unwrap_or_default()
+    pub fn split_dividers(&self, area: Rect) -> Vec<(SplitDir, Rect)> {
+        self.split_root
+            .as_ref()
+            .map(|r| r.dividers(area))
+            .unwrap_or_default()
     }
 
     /// Focus the pane under `(col, row)` within `area`; returns whether a pane was
     /// hit.
     pub fn focus_pane_at(&mut self, area: Rect, col: u16, row: u16) -> bool {
         self.sync_split();
-        let Some(leaf) = self.split_root.as_ref().and_then(|r| r.leaf_at(area, col, row)) else {
+        let Some(leaf) = self
+            .split_root
+            .as_ref()
+            .and_then(|r| r.leaf_at(area, col, row))
+        else {
             return false;
         };
         self.focus_leaf(leaf);
@@ -469,12 +494,21 @@ impl Editor {
     /// Drag a split divider under `(col, row)` within `area`; returns whether one
     /// was resized.
     pub fn resize_split_at(&mut self, area: Rect, col: u16, row: u16) -> bool {
-        self.split_root.as_mut().is_some_and(|r| r.resize_at(area, col, row))
+        self.split_root
+            .as_mut()
+            .is_some_and(|r| r.resize_at(area, col, row))
     }
 
     /// Create an empty untitled buffer and focus it.
     pub fn new_tab(&mut self) {
-        let editor = make_editor(None, "", self.line_numbers, self.show_whitespace, self.soft_wrap, &self.indent);
+        let editor = make_editor(
+            None,
+            "",
+            self.line_numbers,
+            self.show_whitespace,
+            self.soft_wrap,
+            &self.indent,
+        );
         self.tabs.push(Tab {
             editor,
             path: None,
@@ -489,8 +523,14 @@ impl Editor {
     /// Open a new untitled tab pre-filled with `content` (e.g. AI output), marked
     /// dirty so the user is reminded to save it. Becomes the active tab.
     pub fn new_tab_with_content(&mut self, content: &str) {
-        let editor =
-            make_editor(None, content, self.line_numbers, self.show_whitespace, self.soft_wrap, &self.indent);
+        let editor = make_editor(
+            None,
+            content,
+            self.line_numbers,
+            self.show_whitespace,
+            self.soft_wrap,
+            &self.indent,
+        );
         self.tabs.push(Tab {
             editor,
             path: None,
@@ -514,7 +554,14 @@ impl Editor {
             self.active = i;
             return;
         }
-        let editor = make_editor(Some(&canon), "", self.line_numbers, self.show_whitespace, self.soft_wrap, &self.indent);
+        let editor = make_editor(
+            Some(&canon),
+            "",
+            self.line_numbers,
+            self.show_whitespace,
+            self.soft_wrap,
+            &self.indent,
+        );
         self.tabs.push(Tab {
             editor,
             path: Some(canon),
@@ -531,7 +578,8 @@ impl Editor {
     pub fn refresh_line_numbers(&mut self) {
         for tab in &mut self.tabs {
             tab.editor.show_line_numbers(self.line_numbers);
-            tab.editor.set_relative_line_numbers(self.relative_line_numbers);
+            tab.editor
+                .set_relative_line_numbers(self.relative_line_numbers);
         }
     }
 
@@ -577,7 +625,14 @@ impl Editor {
         }
 
         let content = fs::read_to_string(&canon)?;
-        let editor = make_editor(Some(&canon), &content, self.line_numbers, self.show_whitespace, self.soft_wrap, &self.indent);
+        let editor = make_editor(
+            Some(&canon),
+            &content,
+            self.line_numbers,
+            self.show_whitespace,
+            self.soft_wrap,
+            &self.indent,
+        );
         let tab = Tab {
             editor,
             path: Some(canon),
@@ -587,12 +642,11 @@ impl Editor {
             read_only: false,
         };
 
-        if preview
-            && let Some(i) = self.tabs.iter().position(|t| t.preview) {
-                self.tabs[i] = tab;
-                self.active = i;
-                return Ok(());
-            }
+        if preview && let Some(i) = self.tabs.iter().position(|t| t.preview) {
+            self.tabs[i] = tab;
+            self.active = i;
+            return Ok(());
+        }
         self.tabs.push(tab);
         self.active = self.tabs.len() - 1;
         Ok(())
@@ -608,8 +662,12 @@ impl Editor {
             if tab.dirty || tab.image.is_some() {
                 continue;
             }
-            let Some(path) = tab.path.clone() else { continue };
-            let Ok(content) = fs::read_to_string(&path) else { continue };
+            let Some(path) = tab.path.clone() else {
+                continue;
+            };
+            let Ok(content) = fs::read_to_string(&path) else {
+                continue;
+            };
             if content == tab.editor.get_content() {
                 continue;
             }
@@ -709,13 +767,13 @@ impl Editor {
     }
 
     /// 1-based (line, column) of the active cursor, for the status bar.
-    #[must_use] 
+    #[must_use]
     pub fn cursor_1based(&self) -> (usize, usize) {
         self.active_tab().map_or((1, 1), Tab::cursor_1based)
     }
 
     /// Total line count of the active buffer (for the scrollbar).
-    #[must_use] 
+    #[must_use]
     pub fn active_line_count(&self) -> usize {
         self.active_tab()
             .map_or(1, |t| t.editor.code_ref().len_lines())
@@ -937,7 +995,8 @@ impl Editor {
     /// Cycle which undo-tree branch the next redo follows in the active buffer.
     /// Returns `true` if the current state has more than one branch.
     pub fn switch_undo_branch(&mut self) -> bool {
-        self.active_tab_mut().is_some_and(|t| t.editor.switch_undo_branch())
+        self.active_tab_mut()
+            .is_some_and(|t| t.editor.switch_undo_branch())
     }
 
     /// The 0-based index of the active buffer's first visible line (vertical
@@ -958,7 +1017,9 @@ impl Editor {
     /// (`section == true`) in the active buffer. A paragraph is a run of non-blank
     /// lines; a section is a run separated by a section break (2+ blank lines).
     fn block_starts(&self, section: bool) -> Vec<usize> {
-        let Some(t) = self.active_tab() else { return Vec::new() };
+        let Some(t) = self.active_tab() else {
+            return Vec::new();
+        };
         let code = t.editor.code_ref();
         let n = code.len_lines().max(1);
         (0..n)
@@ -1040,7 +1101,11 @@ impl Editor {
     pub fn cursor_sentence_start(&mut self, area: Rect) {
         let Some(t) = self.active_tab() else { return };
         let cur = t.editor.get_cursor();
-        let off = sentence_starts(&t.editor.get_content()).into_iter().rev().find(|&s| s <= cur).unwrap_or(0);
+        let off = sentence_starts(&t.editor.get_content())
+            .into_iter()
+            .rev()
+            .find(|&s| s <= cur)
+            .unwrap_or(0);
         self.goto_offset(off, area);
     }
 
@@ -1067,7 +1132,10 @@ impl Editor {
     pub fn cursor_sentence_next(&mut self, area: Rect) {
         let Some(t) = self.active_tab() else { return };
         let cur = t.editor.get_cursor();
-        if let Some(next) = sentence_starts(&t.editor.get_content()).into_iter().find(|&s| s > cur) {
+        if let Some(next) = sentence_starts(&t.editor.get_content())
+            .into_iter()
+            .find(|&s| s > cur)
+        {
             self.goto_offset(next, area);
         }
     }
@@ -1076,7 +1144,11 @@ impl Editor {
     pub fn cursor_sentence_prev(&mut self, area: Rect) {
         let Some(t) = self.active_tab() else { return };
         let cur = t.editor.get_cursor();
-        if let Some(prev) = sentence_starts(&t.editor.get_content()).into_iter().rev().find(|&s| s < cur) {
+        if let Some(prev) = sentence_starts(&t.editor.get_content())
+            .into_iter()
+            .rev()
+            .find(|&s| s < cur)
+        {
             self.goto_offset(prev, area);
         }
     }
@@ -1095,7 +1167,11 @@ impl Editor {
     pub fn cursor_word_start(&mut self, area: Rect) {
         let Some(t) = self.active_tab() else { return };
         let cur = t.editor.get_cursor();
-        let off = word_starts(&t.editor.get_content()).into_iter().rev().find(|&s| s <= cur).unwrap_or(0);
+        let off = word_starts(&t.editor.get_content())
+            .into_iter()
+            .rev()
+            .find(|&s| s <= cur)
+            .unwrap_or(0);
         self.goto_offset(off, area);
     }
 
@@ -1119,7 +1195,10 @@ impl Editor {
     pub fn cursor_word_next(&mut self, area: Rect) {
         let Some(t) = self.active_tab() else { return };
         let cur = t.editor.get_cursor();
-        if let Some(next) = word_starts(&t.editor.get_content()).into_iter().find(|&s| s > cur) {
+        if let Some(next) = word_starts(&t.editor.get_content())
+            .into_iter()
+            .find(|&s| s > cur)
+        {
             self.goto_offset(next, area);
         }
     }
@@ -1128,7 +1207,11 @@ impl Editor {
     pub fn cursor_word_prev(&mut self, area: Rect) {
         let Some(t) = self.active_tab() else { return };
         let cur = t.editor.get_cursor();
-        if let Some(prev) = word_starts(&t.editor.get_content()).into_iter().rev().find(|&s| s < cur) {
+        if let Some(prev) = word_starts(&t.editor.get_content())
+            .into_iter()
+            .rev()
+            .find(|&s| s < cur)
+        {
             self.goto_offset(prev, area);
         }
     }
@@ -1201,7 +1284,10 @@ impl Editor {
                 while e + 1 < n && !is_blank(e + 1) {
                     e += 1;
                 }
-                (code.line_to_char(s), code.line_to_char(e) + code.line_len(e))
+                (
+                    code.line_to_char(s),
+                    code.line_to_char(e) + code.line_len(e),
+                )
             };
             t.editor.set_selection_range(start, end);
             t.editor.focus(&area);
@@ -1225,7 +1311,10 @@ impl Editor {
                 while e + 1 < n && !sep(e + 1) {
                     e += 1;
                 }
-                (code.line_to_char(s), code.line_to_char(e) + code.line_len(e))
+                (
+                    code.line_to_char(s),
+                    code.line_to_char(e) + code.line_len(e),
+                )
             };
             t.editor.set_selection_range(start, end);
             t.editor.focus(&area);
@@ -1240,7 +1329,9 @@ impl Editor {
             if t.is_image() || t.read_only {
                 return false;
             }
-            t.editor.apply(InsertText { text: text.to_string() });
+            t.editor.apply(InsertText {
+                text: text.to_string(),
+            });
             t.editor.focus(&area);
             t.dirty = true;
             t.preview = false;
@@ -1359,7 +1450,11 @@ impl Editor {
             }
             let text: Vec<char> = t.text().chars().collect();
             let cur = t.editor.get_cursor();
-            let target = if forward { next_word(&text, cur) } else { prev_word(&text, cur) };
+            let target = if forward {
+                next_word(&text, cur)
+            } else {
+                prev_word(&text, cur)
+            };
             if target != cur {
                 t.editor.extend_selection(target);
                 t.editor.set_cursor(target);
@@ -1372,10 +1467,11 @@ impl Editor {
     /// scrolling it into `area`. No-op when the cursor is not on a bracket.
     pub fn jump_matching_bracket(&mut self, area: Rect) {
         if let Some(t) = self.active_tab_mut()
-            && let Some(off) = t.editor.matching_bracket_offset() {
-                t.editor.set_cursor(off);
-                t.editor.focus(&area);
-            }
+            && let Some(off) = t.editor.matching_bracket_offset()
+        {
+            t.editor.set_cursor(off);
+            t.editor.focus(&area);
+        }
     }
 
     /// Forward-delete (the `Delete` key): step right, then delete back.

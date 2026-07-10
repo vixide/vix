@@ -5,28 +5,28 @@
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
+use crate::editor_core::actions::{
+    Copy as CopyAction, Cut as CutAction, Paste as PasteAction, Redo as RedoAction, ToggleComment,
+    Undo as UndoAction,
+};
+use crate::editor_core::selection::Selection;
 use crossterm::event::{
     KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
-use include_dir::{include_dir, Dir};
+use include_dir::{Dir, include_dir};
 use ratatui::layout::Rect;
-use crate::editor_core::actions::{
-    Copy as CopyAction, Cut as CutAction, Paste as PasteAction, Redo as RedoAction,
-    ToggleComment, Undo as UndoAction,
-};
-use crate::editor_core::selection::Selection;
 use ratatui_image::picker::Picker;
 use regex::Regex;
 
-use crate::editor::{is_image_path, Editor, SplitDir, Tab, SEARCH_MARK};
+use crate::editor::{Editor, SEARCH_MARK, SplitDir, Tab, is_image_path};
 use crate::explorer::Explorer;
-use crate::menu::{menus, Menu};
+use crate::menu::{Menu, menus};
 use crate::messages::{Level, Messages};
 use crate::palette::{self, Action as PAction, Entry, Mode as PMode, Palette};
-use crate::workspace_search::{Hit, WorkspaceSearch};
 use crate::query::{Decision, QueryReplace};
 use crate::search::{Field, SearchBar};
 use crate::settings::Settings;
+use crate::workspace_search::{Hit, WorkspaceSearch};
 
 /// The repo's `themes/` directory, embedded into the binary so its themes are
 /// available in the chooser without the user installing anything.
@@ -163,6 +163,22 @@ pub enum PromptKind {
     GotoByte,
     /// Org-contacts: insert a new-contact skeleton for the entered name.
     ContactNew,
+    /// Jujutsu: enter a repository URL to clone (`jj git clone`).
+    JjClone,
+    /// Jujutsu: enter a description for the working-copy change (`jj describe`).
+    JjDescribe,
+    /// Jujutsu: enter a description and start a new change (`jj commit`).
+    JjCommit,
+    /// Jujutsu: enter the revision to edit (`jj edit`).
+    JjEdit,
+    /// Jujutsu: enter the destination revision to rebase onto (`jj rebase -d`).
+    JjRebase,
+    /// Jujutsu: enter a name for a new bookmark (`jj bookmark create`).
+    JjBookmarkCreate,
+    /// Jujutsu: enter the bookmark to point at the working copy (`jj bookmark set`).
+    JjBookmarkSet,
+    /// Jujutsu: enter the bookmark to delete (`jj bookmark delete`).
+    JjBookmarkDelete,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -182,7 +198,13 @@ pub struct Prompt {
 impl Prompt {
     /// A prompt of `kind` with the given border `title` and empty input.
     fn new(kind: PromptKind, title: String) -> Self {
-        Prompt { kind, title, input: String::new(), case_sensitive: false, regex: false }
+        Prompt {
+            kind,
+            title,
+            input: String::new(),
+            case_sensitive: false,
+            regex: false,
+        }
     }
 
     /// Set the initial input text.
@@ -663,9 +685,20 @@ impl Keymap {
 /// leaf tabs to `tab_count`.
 fn node_to_pane(node: &crate::session::PaneNode, tab_count: usize) -> crate::pane_tree::Pane {
     match node {
-        crate::session::PaneNode::Leaf(i) => crate::pane_tree::Pane::Leaf((*i).min(tab_count.saturating_sub(1))),
-        crate::session::PaneNode::Split { dir, ratio, first, second } => crate::pane_tree::Pane::Split {
-            dir: if dir == "horizontal" { crate::editor::SplitDir::Horizontal } else { crate::editor::SplitDir::Vertical },
+        crate::session::PaneNode::Leaf(i) => {
+            crate::pane_tree::Pane::Leaf((*i).min(tab_count.saturating_sub(1)))
+        }
+        crate::session::PaneNode::Split {
+            dir,
+            ratio,
+            first,
+            second,
+        } => crate::pane_tree::Pane::Split {
+            dir: if dir == "horizontal" {
+                crate::editor::SplitDir::Horizontal
+            } else {
+                crate::editor::SplitDir::Vertical
+            },
             ratio: (*ratio).clamp(10, 90),
             first: Box::new(node_to_pane(first, tab_count)),
             second: Box::new(node_to_pane(second, tab_count)),
@@ -680,8 +713,15 @@ fn pane_to_node(
     tab_to_file: &[Option<usize>],
 ) -> Option<crate::session::PaneNode> {
     match pane {
-        crate::pane_tree::Pane::Leaf(tab) => Some(crate::session::PaneNode::Leaf((*tab_to_file.get(*tab)?)?)),
-        crate::pane_tree::Pane::Split { dir, ratio, first, second } => Some(crate::session::PaneNode::Split {
+        crate::pane_tree::Pane::Leaf(tab) => {
+            Some(crate::session::PaneNode::Leaf((*tab_to_file.get(*tab)?)?))
+        }
+        crate::pane_tree::Pane::Split {
+            dir,
+            ratio,
+            first,
+            second,
+        } => Some(crate::session::PaneNode::Split {
             dir: match dir {
                 crate::editor::SplitDir::Horizontal => "horizontal".to_string(),
                 crate::editor::SplitDir::Vertical => "vertical".to_string(),
@@ -1317,17 +1357,14 @@ impl App {
         for tab in &mut editor.tabs {
             tab.editor.set_auto_pair(settings.auto_pair);
             tab.editor.set_rainbow_brackets(settings.rainbow_brackets);
-            tab.editor.set_relative_line_numbers(settings.relative_line_numbers);
+            tab.editor
+                .set_relative_line_numbers(settings.relative_line_numbers);
         }
         let mut messages = Messages::default();
         messages.advice(t!("msg.welcome").to_string());
         messages.info(t!("msg.welcome_hint").to_string());
 
-        let lsp = crate::lsp::Lsp::new(
-            settings.lsp_enabled,
-            settings.lsp_servers.clone(),
-            root,
-        );
+        let lsp = crate::lsp::Lsp::new(settings.lsp_enabled, settings.lsp_servers.clone(), root);
         (editor, messages, lsp)
     }
 
@@ -1337,6 +1374,15 @@ impl App {
     /// (see `main`); the theme is (re)applied here so the first buffer is styled
     /// correctly, and the welcome messages are produced in the current locale.
     #[must_use]
+    // The App struct has ~160 fields; this constructor is one irreducible struct
+    // literal that rustfmt lays out one field per line, so it necessarily exceeds
+    // the pedantic 100-line limit. Splitting it would require grouping fields into
+    // sub-structs, rippling `self.field` accesses across the whole crate. A single
+    // targeted expect keeps the rest of the pedantic gate intact.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "irreducible ~160-field struct initializer"
+    )]
     pub fn new(root: PathBuf, settings: Settings) -> Self {
         // Seed the in-memory palette recents from the persisted list.
         let command_recents = settings.command_recents.clone();
@@ -1349,31 +1395,96 @@ impl App {
             editor,
             messages,
             menu: Menu::default(),
-            palette: None, search: None, query_replace: None, workspace_search: None, jump: None,
-            prompt: None, paste: None, confirm: None, replace_confirm: None, unsaved: None, spell_suggest: None,
-            context_menu: None, git_panel: None, branch_chooser: None, task_chooser: None, macro_chooser: None, clipboard_ring: Vec::new(), clipboard_chooser: None, workspace_chooser: None, diff_view: None, recent_chooser: None,
-            location_chooser: None, nerd_palette: None, ascii_panel: None, edit_table: None,
-            edit_outline: None, edit_value: None, edit_bytes: None, edit_sql: None, db: None, qrcode: None,
+            palette: None,
+            search: None,
+            query_replace: None,
+            workspace_search: None,
+            jump: None,
+            prompt: None,
+            paste: None,
+            confirm: None,
+            replace_confirm: None,
+            unsaved: None,
+            spell_suggest: None,
+            context_menu: None,
+            git_panel: None,
+            branch_chooser: None,
+            task_chooser: None,
+            macro_chooser: None,
+            clipboard_ring: Vec::new(),
+            clipboard_chooser: None,
+            workspace_chooser: None,
+            diff_view: None,
+            recent_chooser: None,
+            location_chooser: None,
+            nerd_palette: None,
+            ascii_panel: None,
+            edit_table: None,
+            edit_outline: None,
+            edit_value: None,
+            edit_bytes: None,
+            edit_sql: None,
+            db: None,
+            qrcode: None,
             x11_panel: None,
-            media_type_panel: None, http_rx: None,
-            html_panel: None, system_info: None, dashboard: None, dashboard_rx: None,
-            outline: None, outline_dock: None, outline_dock_key: None,
-            welcome: None, file_info: None, text_info: None,
-            markdown_preview: None, snippets: None, snippet_library: Vec::new(),
-            snippet_library_key: None, snippet_session: None, contacts: None, vcard: None,
+            media_type_panel: None,
+            http_rx: None,
+            html_panel: None,
+            system_info: None,
+            dashboard: None,
+            dashboard_rx: None,
+            outline: None,
+            outline_dock: None,
+            outline_dock_key: None,
+            welcome: None,
+            file_info: None,
+            text_info: None,
+            markdown_preview: None,
+            snippets: None,
+            snippet_library: Vec::new(),
+            snippet_library_key: None,
+            snippet_session: None,
+            contacts: None,
+            vcard: None,
             lsp,
             lsp_synced: std::collections::HashMap::new(),
             blame_cache: None,
-            dap: crate::dap::Dap::new(), breakpoints: std::collections::HashMap::new(),
-            dap_stopped: None, dap_stack: Vec::new(), dap_variables: Vec::new(),
-            dap_watches: Vec::new(), show_debug_panel: false, test_capture: false,
-            test_buffer: Vec::new(), test_results: Vec::new(), test_selected: 0, show_test_panel: false,
-            hover: None, completion: None, dialog: None, color_converter: None,
-            unit_converter: None, calculator: None, regex_tester: None, code_actions: None,
-            code_lens: None, pomodoro: None,
-            pomodoro_open: false, pomodoro_last_tick: None, disk_mtimes: std::collections::HashMap::new(), last_disk_poll: None, format_save_pending: None, last_auto_save: None, word_highlight_key: None, backlinks_follow: false, backlinks_follow_key: None,
-            clip: Vec::new(), clip_cut: false,
-            nav_history: Vec::new(), bookmarks: Vec::new(), nav_idx: 0,
+            dap: crate::dap::Dap::new(),
+            breakpoints: std::collections::HashMap::new(),
+            dap_stopped: None,
+            dap_stack: Vec::new(),
+            dap_variables: Vec::new(),
+            dap_watches: Vec::new(),
+            show_debug_panel: false,
+            test_capture: false,
+            test_buffer: Vec::new(),
+            test_results: Vec::new(),
+            test_selected: 0,
+            show_test_panel: false,
+            hover: None,
+            completion: None,
+            dialog: None,
+            color_converter: None,
+            unit_converter: None,
+            calculator: None,
+            regex_tester: None,
+            code_actions: None,
+            code_lens: None,
+            pomodoro: None,
+            pomodoro_open: false,
+            pomodoro_last_tick: None,
+            disk_mtimes: std::collections::HashMap::new(),
+            last_disk_poll: None,
+            format_save_pending: None,
+            last_auto_save: None,
+            word_highlight_key: None,
+            backlinks_follow: false,
+            backlinks_follow_key: None,
+            clip: Vec::new(),
+            clip_cut: false,
+            nav_history: Vec::new(),
+            bookmarks: Vec::new(),
+            nav_idx: 0,
             picker: None,
             show_explorer: settings.show_explorer,
             show_messages: settings.show_messages,
@@ -1404,7 +1515,8 @@ impl App {
             bottom_hscroll: 0,
             explorer_hscroll: 0,
             messages_hscroll: 0,
-            show_calendar: false, calendar_dailies: false,
+            show_calendar: false,
+            calendar_dailies: false,
             calendar: crate::calendar::Calendar::new(),
             show_clock: false,
             clock: crate::clock::Clock::new(),
@@ -1436,7 +1548,8 @@ impl App {
             dock_resize: None,
             emacs_prefix: false,
             modal_insert: false,
-            vim_cmd: None, vim_pending: None,
+            vim_cmd: None,
+            vim_pending: None,
             spacemacs_leader: None,
         }
     }
@@ -1506,7 +1619,8 @@ impl App {
                 let max = t.editor.code_ref().len_chars();
                 let pos = ws.cursors.get(i).copied().unwrap_or(0).min(max);
                 t.editor.set_cursor(pos);
-                t.editor.set_offset_y(ws.scrolls.get(i).copied().unwrap_or(0));
+                t.editor
+                    .set_offset_y(ws.scrolls.get(i).copied().unwrap_or(0));
             }
             opened += 1;
         }
@@ -1568,7 +1682,10 @@ impl App {
         }
         let split = self.editor.split_root.as_ref().and_then(|root| {
             let tree = pane_to_node(root, &tab_to_file)?;
-            Some(crate::session::SplitSession { tree, focused: self.editor.focused_leaf })
+            Some(crate::session::SplitSession {
+                tree,
+                focused: self.editor.focused_leaf,
+            })
         });
         crate::session::WorkspaceSession {
             root: self.session_key(),
@@ -1674,26 +1791,7 @@ impl App {
         }
         // While the calendar box is open it captures left/right to page months.
         if self.show_calendar {
-            let ctrl = Self::ctrl(&key);
-            let shift = Self::shift(&key);
-            match key.code {
-                KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => {
-                    let sign: i64 = if matches!(key.code, KeyCode::Right | KeyCode::Down) { 1 } else { -1 };
-                    if ctrl && shift {
-                        self.calendar.move_years(sign); // Ctrl+Shift+arrows: year
-                    } else if ctrl {
-                        self.calendar.move_months(sign); // Ctrl+arrows: month
-                    } else {
-                        // Plain arrows move the selected day: Left/Right by a day,
-                        // Up/Down by a week.
-                        let step = if matches!(key.code, KeyCode::Up | KeyCode::Down) { 7 } else { 1 };
-                        self.calendar.move_days(sign * step);
-                    }
-                }
-                KeyCode::Enter => self.calendar_accept(),
-                KeyCode::Esc | KeyCode::Char('q') => { self.show_calendar = false; self.calendar_dailies = false; }
-                _ => {}
-            }
+            self.calendar_key(key);
             return true;
         }
         // While the clock box is open it captures up/down to pick a time row and
@@ -1716,6 +1814,43 @@ impl App {
             return true;
         }
         self.try_panel_key(key)
+    }
+
+    /// Handle a key while the calendar overlay is open: arrows page the day/
+    /// month/year (with Ctrl / Ctrl+Shift), Enter accepts, Esc/`q` closes. Split
+    /// out of [`App::try_overlay_key`] to keep it within the line limit.
+    fn calendar_key(&mut self, key: KeyEvent) {
+        let ctrl = Self::ctrl(&key);
+        let shift = Self::shift(&key);
+        match key.code {
+            KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => {
+                let sign: i64 = if matches!(key.code, KeyCode::Right | KeyCode::Down) {
+                    1
+                } else {
+                    -1
+                };
+                if ctrl && shift {
+                    self.calendar.move_years(sign); // Ctrl+Shift+arrows: year
+                } else if ctrl {
+                    self.calendar.move_months(sign); // Ctrl+arrows: month
+                } else {
+                    // Plain arrows move the selected day: Left/Right by a day,
+                    // Up/Down by a week.
+                    let step = if matches!(key.code, KeyCode::Up | KeyCode::Down) {
+                        7
+                    } else {
+                        1
+                    };
+                    self.calendar.move_days(sign * step);
+                }
+            }
+            KeyCode::Enter => self.calendar_accept(),
+            KeyCode::Esc | KeyCode::Char('q') => {
+                self.show_calendar = false;
+                self.calendar_dailies = false;
+            }
+            _ => {}
+        }
     }
 
     /// Route `key` to the lower-priority list/panel overlays (choosers, tool
@@ -1924,7 +2059,10 @@ impl App {
     pub fn which_key(&self) -> Option<(String, Vec<(String, String)>)> {
         match self.active_keymap() {
             Keymap::Emacs if self.emacs_prefix => {
-                let rows = EMACS_CTRL_X.iter().map(|&(k, a)| (k.to_string(), a.to_string())).collect();
+                let rows = EMACS_CTRL_X
+                    .iter()
+                    .map(|&(k, a)| (k.to_string(), a.to_string()))
+                    .collect();
                 Some(("C-x".to_string(), rows))
             }
             Keymap::Spacemacs => {
@@ -1962,37 +2100,38 @@ impl App {
     /// The Apple keymap's `Ctrl`-letter shortcuts. Returns true if consumed.
     fn apple_ctrl_key(&mut self, key: KeyEvent) -> bool {
         if Self::ctrl(&key)
-            && let KeyCode::Char(c) = key.code {
-                match c.to_ascii_lowercase() {
-                    'q' => self.run_action("file.quit"),
-                    'n' => self.run_action("file.new"),
-                    'o' if Self::shift(&key) => self.run_action("file.open_recent"),
-                    'o' => self.run_action("file.open"),
-                    's' if Self::shift(&key) => self.run_action("file.save_as"),
-                    's' => self.run_action("file.save"),
-                    'w' if Self::shift(&key) => self.run_action("file.close_all"),
-                    'w' => self.run_action("file.close"),
-                    't' if Self::shift(&key) => self.run_action("file.reopen_closed"),
-                    't' => self.run_action("nav.goto_workspace_symbol"),
-                    'p' => self.run_action("tools.palette"),
-                    'b' if Self::shift(&key) => self.run_action("nav.outline"),
-                    'b' => self.run_action("view.explorer"),
-                    'e' => self.toggle_focus_explorer_editor(),
-                    'f' if Self::shift(&key) => self.run_action("search.workspace"),
-                    'f' => self.run_action("edit.find"),
-                    'g' if Self::shift(&key) => self.run_action("edit.find_prev"),
-                    'g' => self.run_action("edit.find_next"),
-                    'r' if Self::alt(&key) => self.run_action("edit.query_replace"),
-                    'r' => self.run_action("edit.replace"),
-                    // Many terminals emit the same control byte (0x1F) for
-                    // Ctrl+/, Ctrl+7, and Ctrl+_, so accept all three for Comment.
-                    '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
-                    ']' => self.run_action("edit.match_bracket"),
-                    ';' => self.run_action("spell.suggest"),
-                    _ => return false,
-                }
-                return true;
+            && let KeyCode::Char(c) = key.code
+        {
+            match c.to_ascii_lowercase() {
+                'q' => self.run_action("file.quit"),
+                'n' => self.run_action("file.new"),
+                'o' if Self::shift(&key) => self.run_action("file.open_recent"),
+                'o' => self.run_action("file.open"),
+                's' if Self::shift(&key) => self.run_action("file.save_as"),
+                's' => self.run_action("file.save"),
+                'w' if Self::shift(&key) => self.run_action("file.close_all"),
+                'w' => self.run_action("file.close"),
+                't' if Self::shift(&key) => self.run_action("file.reopen_closed"),
+                't' => self.run_action("nav.goto_workspace_symbol"),
+                'p' => self.run_action("tools.palette"),
+                'b' if Self::shift(&key) => self.run_action("nav.outline"),
+                'b' => self.run_action("view.explorer"),
+                'e' => self.toggle_focus_explorer_editor(),
+                'f' if Self::shift(&key) => self.run_action("search.workspace"),
+                'f' => self.run_action("edit.find"),
+                'g' if Self::shift(&key) => self.run_action("edit.find_prev"),
+                'g' => self.run_action("edit.find_next"),
+                'r' if Self::alt(&key) => self.run_action("edit.query_replace"),
+                'r' => self.run_action("edit.replace"),
+                // Many terminals emit the same control byte (0x1F) for
+                // Ctrl+/, Ctrl+7, and Ctrl+_, so accept all three for Comment.
+                '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
+                ']' => self.run_action("edit.match_bracket"),
+                ';' => self.run_action("spell.suggest"),
+                _ => return false,
             }
+            return true;
+        }
         false
     }
 
@@ -2011,41 +2150,42 @@ impl App {
     /// `Ctrl` standing in for `Cmd`). Returns true if consumed.
     fn vscode_ctrl_key(&mut self, key: KeyEvent) -> bool {
         if Self::ctrl(&key)
-            && let KeyCode::Char(c) = key.code {
-                match c.to_ascii_lowercase() {
-                    'q' => self.run_action("file.quit"),
-                    'n' => self.run_action("file.new"),
-                    's' if Self::shift(&key) => self.run_action("file.save_as"),
-                    's' => self.run_action("file.save"),
-                    'w' if Self::shift(&key) => self.run_action("file.close_all"),
-                    'w' => self.run_action("file.close"),
-                    't' if Self::shift(&key) => self.run_action("file.reopen_closed"),
-                    't' => self.run_action("nav.goto_workspace_symbol"),
-                    'p' if Self::shift(&key) => self.run_action("tools.palette"),
-                    'p' => self.run_action("file.open"),
-                    'o' if Self::shift(&key) => self.run_action("nav.goto_symbol"),
-                    'g' if Self::shift(&key) => self.run_action("edit.find_prev"),
-                    'g' => self.open_palette_seeded(":"),
-                    'e' if Self::shift(&key) => self.toggle_focus_explorer_editor(),
-                    'b' => self.run_action("view.explorer"),
-                    'f' if Self::shift(&key) => self.run_action("search.workspace"),
-                    'f' => self.run_action("edit.find"),
-                    'r' => self.run_action("edit.replace"),
-                    // Many terminals emit the same control byte (0x1F) for
-                    // Ctrl+/, Ctrl+7, and Ctrl+_, so accept all three for Comment.
-                    '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
-                    ']' => self.run_action("edit.match_bracket"),
-                    'l' if Self::shift(&key) => self.run_action("edit.select_all_occurrences"),
-                    'm' if Self::shift(&key) => self.run_action("lsp.diagnostics"),
-                    'k' if Self::shift(&key) => self.run_action("cut_line"),
-                    '\\' if Self::shift(&key) => self.run_action("edit.match_bracket"),
-                    '\\' => self.run_action("view.split_vertical"),
-                    'j' => self.run_action("view.bottom_dock"),
-                    '`' => self.run_action("tools.terminal"),
-                    _ => return false,
-                }
-                return true;
+            && let KeyCode::Char(c) = key.code
+        {
+            match c.to_ascii_lowercase() {
+                'q' => self.run_action("file.quit"),
+                'n' => self.run_action("file.new"),
+                's' if Self::shift(&key) => self.run_action("file.save_as"),
+                's' => self.run_action("file.save"),
+                'w' if Self::shift(&key) => self.run_action("file.close_all"),
+                'w' => self.run_action("file.close"),
+                't' if Self::shift(&key) => self.run_action("file.reopen_closed"),
+                't' => self.run_action("nav.goto_workspace_symbol"),
+                'p' if Self::shift(&key) => self.run_action("tools.palette"),
+                'p' => self.run_action("file.open"),
+                'o' if Self::shift(&key) => self.run_action("nav.goto_symbol"),
+                'g' if Self::shift(&key) => self.run_action("edit.find_prev"),
+                'g' => self.open_palette_seeded(":"),
+                'e' if Self::shift(&key) => self.toggle_focus_explorer_editor(),
+                'b' => self.run_action("view.explorer"),
+                'f' if Self::shift(&key) => self.run_action("search.workspace"),
+                'f' => self.run_action("edit.find"),
+                'r' => self.run_action("edit.replace"),
+                // Many terminals emit the same control byte (0x1F) for
+                // Ctrl+/, Ctrl+7, and Ctrl+_, so accept all three for Comment.
+                '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
+                ']' => self.run_action("edit.match_bracket"),
+                'l' if Self::shift(&key) => self.run_action("edit.select_all_occurrences"),
+                'm' if Self::shift(&key) => self.run_action("lsp.diagnostics"),
+                'k' if Self::shift(&key) => self.run_action("cut_line"),
+                '\\' if Self::shift(&key) => self.run_action("edit.match_bracket"),
+                '\\' => self.run_action("view.split_vertical"),
+                'j' => self.run_action("view.bottom_dock"),
+                '`' => self.run_action("tools.terminal"),
+                _ => return false,
             }
+            return true;
+        }
         false
     }
 
@@ -2073,7 +2213,9 @@ impl App {
         if !Self::ctrl(&key) {
             return false;
         }
-        let KeyCode::Char(c) = key.code else { return false };
+        let KeyCode::Char(c) = key.code else {
+            return false;
+        };
         let shift = Self::shift(&key);
         match c.to_ascii_lowercase() {
             'a' if shift => self.run_action("tools.palette"), // Find Action
@@ -2085,21 +2227,21 @@ impl App {
             'f' => self.run_action("edit.find"),
             'r' if shift => self.run_action("search.workspace_replace"),
             'r' => self.run_action("edit.replace"),
-            'b' => self.run_action("nav.goto_definition"),    // Go to Declaration
-            'd' => self.run_action("edit.duplicate_line"),    // Duplicate
+            'b' => self.run_action("nav.goto_definition"), // Go to Declaration
+            'd' => self.run_action("edit.duplicate_line"), // Duplicate
             'y' if win => self.run_action("edit.delete_line"), // Win: delete line
             '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
-            ',' if !win => self.run_action("vix.settings"),   // macOS: Cmd+,
+            ',' if !win => self.run_action("vix.settings"), // macOS: Cmd+,
             // Go to file / class, and Go to Line differ by platform.
-            'n' if win && shift => self.run_action("file.open"),         // Go to File
-            'n' if win => self.run_action("nav.goto_symbol"),            // Go to Class
+            'n' if win && shift => self.run_action("file.open"), // Go to File
+            'n' if win => self.run_action("nav.goto_symbol"),    // Go to Class
             'n' if !win => self.run_action("file.new"),
-            'o' if !win && shift => self.run_action("file.open"),        // Go to File
-            'o' if !win => self.run_action("nav.goto_symbol"),           // Go to Class
-            'l' if !win => self.run_action("nav.goto_line"),             // macOS: Cmd+L
-            'g' if win => self.run_action("nav.goto_line"),              // Win: Ctrl+G
+            'o' if !win && shift => self.run_action("file.open"), // Go to File
+            'o' if !win => self.run_action("nav.goto_symbol"),    // Go to Class
+            'l' if !win => self.run_action("nav.goto_line"),      // macOS: Cmd+L
+            'g' if win => self.run_action("nav.goto_line"),       // Win: Ctrl+G
             'g' if shift => self.run_action("edit.find_prev"),
-            'g' => self.run_action("edit.find_next"),                    // macOS: Cmd+G
+            'g' => self.run_action("edit.find_next"), // macOS: Cmd+G
             _ => return false,
         }
         true
@@ -2122,7 +2264,9 @@ impl App {
         if !Self::ctrl(&key) {
             return false;
         }
-        let KeyCode::Char(c) = key.code else { return false };
+        let KeyCode::Char(c) = key.code else {
+            return false;
+        };
         let shift = Self::shift(&key);
         match c.to_ascii_lowercase() {
             'n' => self.run_action("file.new"),
@@ -2130,21 +2274,21 @@ impl App {
             'w' => self.run_action("file.close"),
             's' if shift => self.run_action("file.save_as"),
             's' => self.run_action("file.save"),
-            'y' => self.run_action("edit.redo"),              // Win redo
-            'f' if shift => self.run_action("lsp.format"),    // Format
+            'y' => self.run_action("edit.redo"), // Win redo
+            'f' if shift => self.run_action("lsp.format"), // Format
             'f' => self.run_action("edit.find"),
             'k' if shift => self.run_action("edit.find_prev"),
             'k' => self.run_action("edit.find_next"),
-            'h' => self.run_action("search.workspace"),       // Search
+            'h' => self.run_action("search.workspace"), // Search
             'l' => self.run_action("nav.goto_line"),
             'd' => self.run_action("edit.delete_line"),
-            'o' => self.run_action("nav.goto_symbol"),        // Quick Outline
-            'r' if shift => self.run_action("file.open"),     // Open Resource
+            'o' => self.run_action("nav.goto_symbol"), // Quick Outline
+            'r' if shift => self.run_action("file.open"), // Open Resource
             'r' => self.run_action("edit.replace"),
             't' if shift => self.run_action("nav.goto_workspace_symbol"), // Open Type
             'b' if shift => self.run_action("run.toggle_breakpoint"),
-            'b' => self.run_action("tools.test"),             // Build All
-            '3' => self.run_action("tools.palette"),          // Quick Access
+            'b' => self.run_action("tools.test"), // Build All
+            '3' => self.run_action("tools.palette"), // Quick Access
             '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
             _ => return false,
         }
@@ -2160,25 +2304,27 @@ impl App {
         if !Self::ctrl(&key) {
             return false;
         }
-        let KeyCode::Char(c) = key.code else { return false };
+        let KeyCode::Char(c) = key.code else {
+            return false;
+        };
         let shift = Self::shift(&key);
         match c.to_ascii_lowercase() {
-            'p' if shift => self.run_action("tools.palette"),  // Command Palette
-            'p' => self.run_action("file.open"),               // Goto Anything
-            'r' => self.run_action("nav.goto_symbol"),         // Goto Symbol
-            'g' => self.run_action("nav.goto_line"),           // Goto Line
+            'p' if shift => self.run_action("tools.palette"), // Command Palette
+            'p' => self.run_action("file.open"),              // Goto Anything
+            'r' => self.run_action("nav.goto_symbol"),        // Goto Symbol
+            'g' => self.run_action("nav.goto_line"),          // Goto Line
             'd' if shift => self.run_action("edit.duplicate_line"),
             // Nearest to Sublime's add-next-occurrence: a caret on every match.
             'd' => self.run_action("edit.select_all_occurrences"),
-            'l' => self.run_action("edit.select_line"),        // Expand to Line
+            'l' => self.run_action("edit.select_line"), // Expand to Line
             'j' => self.run_action("edit.join_lines"),
             'm' => self.run_action("edit.match_bracket"),
-            'k' if shift => self.run_action("cut_line"),       // Delete Line
+            'k' if shift => self.run_action("cut_line"), // Delete Line
             'h' => self.run_action("edit.replace"),
             'f' if shift => self.run_action("search.workspace"),
             'f' => self.run_action("edit.find"),
-            'b' => self.run_action("tools.test"),              // Build
-            '`' => self.run_action("tools.terminal"),          // console
+            'b' => self.run_action("tools.test"),     // Build
+            '`' => self.run_action("tools.terminal"), // console
             'n' => self.run_action("file.new"),
             'w' if shift => self.run_action("file.close_all"),
             'w' => self.run_action("file.close"),
@@ -2218,11 +2364,15 @@ impl App {
                 self.run_action("tab.prev");
                 true
             }
-            KeyCode::Right if Self::ctrl(&key) && Self::shift(&key) && self.focus == Focus::Editor => {
+            KeyCode::Right
+                if Self::ctrl(&key) && Self::shift(&key) && self.focus == Focus::Editor =>
+            {
                 self.run_action("edit.select_more");
                 true
             }
-            KeyCode::Left if Self::ctrl(&key) && Self::shift(&key) && self.focus == Focus::Editor => {
+            KeyCode::Left
+                if Self::ctrl(&key) && Self::shift(&key) && self.focus == Focus::Editor =>
+            {
                 self.run_action("edit.select_less");
                 true
             }
@@ -2235,12 +2385,20 @@ impl App {
                 true
             }
             KeyCode::Up if Self::alt(&key) && self.focus == Focus::Editor => {
-                let a = if Self::shift(&key) { "edit.column_select_up" } else { "edit.move_line_up" };
+                let a = if Self::shift(&key) {
+                    "edit.column_select_up"
+                } else {
+                    "edit.move_line_up"
+                };
                 self.run_action(a);
                 true
             }
             KeyCode::Down if Self::alt(&key) && self.focus == Focus::Editor => {
-                let a = if Self::shift(&key) { "edit.column_select_down" } else { "edit.move_line_down" };
+                let a = if Self::shift(&key) {
+                    "edit.column_select_down"
+                } else {
+                    "edit.move_line_down"
+                };
                 self.run_action(a);
                 true
             }
@@ -2289,7 +2447,9 @@ impl App {
     }
 
     fn toggle_focus_explorer_editor(&mut self) {
-        self.focus = if self.focus == Focus::Explorer { Focus::Editor } else {
+        self.focus = if self.focus == Focus::Explorer {
+            Focus::Editor
+        } else {
             if !self.show_explorer {
                 self.show_explorer = true;
             }
@@ -2321,44 +2481,46 @@ impl App {
             return self.emacs_meta_key(key);
         }
         if Self::ctrl(&key)
-            && let KeyCode::Char(c) = key.code {
-                match c.to_ascii_lowercase() {
-                    'x' => self.emacs_prefix = true,
-                    'g' => self.status = t!("status.emacs_quit").to_string(),
-                    's' => self.run_action("edit.find"),
-                    'f' => self.editor_motion(KeyCode::Right),
-                    'b' => self.editor_motion(KeyCode::Left),
-                    'n' => self.editor_motion(KeyCode::Down),
-                    'p' => self.editor_motion(KeyCode::Up),
-                    'a' => self.editor_motion(KeyCode::Home),
-                    'e' => self.editor_motion(KeyCode::End),
-                    'v' => self.editor_motion(KeyCode::PageDown),
-                    'd' => self.editor_motion(KeyCode::Delete),
-                    'w' => self.run_action("edit.cut"),        // kill-region
-                    'y' => self.run_action("edit.paste"),      // yank
-                    'k' => self.run_action("cut_line"),        // kill-line (whole line)
-                    't' => self.run_action("edit.transpose_chars"),
-                    '/' | '7' | '_' => self.run_action("edit.undo"),
-                    _ => return false,
-                }
-                return true;
+            && let KeyCode::Char(c) = key.code
+        {
+            match c.to_ascii_lowercase() {
+                'x' => self.emacs_prefix = true,
+                'g' => self.status = t!("status.emacs_quit").to_string(),
+                's' => self.run_action("edit.find"),
+                'f' => self.editor_motion(KeyCode::Right),
+                'b' => self.editor_motion(KeyCode::Left),
+                'n' => self.editor_motion(KeyCode::Down),
+                'p' => self.editor_motion(KeyCode::Up),
+                'a' => self.editor_motion(KeyCode::Home),
+                'e' => self.editor_motion(KeyCode::End),
+                'v' => self.editor_motion(KeyCode::PageDown),
+                'd' => self.editor_motion(KeyCode::Delete),
+                'w' => self.run_action("edit.cut"), // kill-region
+                'y' => self.run_action("edit.paste"), // yank
+                'k' => self.run_action("cut_line"), // kill-line (whole line)
+                't' => self.run_action("edit.transpose_chars"),
+                '/' | '7' | '_' => self.run_action("edit.undo"),
+                _ => return false,
             }
+            return true;
+        }
         false
     }
 
     /// The second key of an Emacs `Ctrl+X …` chord. Always consumes the key.
     fn emacs_chord_key(&mut self, key: KeyEvent) -> bool {
         if Self::ctrl(&key)
-            && let KeyCode::Char(c) = key.code {
-                match c.to_ascii_lowercase() {
-                    'f' => self.run_action("file.open"),
-                    's' => self.run_action("file.save"),
-                    'c' => self.run_action("file.quit"),
-                    'b' => self.open_palette_seeded("#"), // list buffers
-                    _ => self.status = t!("status.emacs_no_chord").to_string(),
-                }
-                return true;
+            && let KeyCode::Char(c) = key.code
+        {
+            match c.to_ascii_lowercase() {
+                'f' => self.run_action("file.open"),
+                's' => self.run_action("file.save"),
+                'c' => self.run_action("file.quit"),
+                'b' => self.open_palette_seeded("#"), // list buffers
+                _ => self.status = t!("status.emacs_no_chord").to_string(),
             }
+            return true;
+        }
         match key.code {
             KeyCode::Char('k') => self.run_action("file.close"),
             KeyCode::Char('b') => self.open_palette_seeded("#"), // switch buffer
@@ -2507,9 +2669,10 @@ impl App {
             KeyCode::Backspace => {
                 // Backspacing past the empty `:` closes the command line.
                 if let Some(s) = self.vim_cmd.as_mut()
-                    && s.pop().is_none() {
-                        self.vim_cmd = None;
-                    }
+                    && s.pop().is_none()
+                {
+                    self.vim_cmd = None;
+                }
             }
             KeyCode::Char(c) => {
                 if let Some(s) = self.vim_cmd.as_mut() {
@@ -2609,7 +2772,9 @@ impl App {
         match Self::spacemacs_leader_lookup(&seq) {
             LeaderHit::Action(action) => self.run_action(action),
             LeaderHit::Prefix => self.spacemacs_leader = Some(seq),
-            LeaderHit::None => self.status = t!("status.spacemacs_no_leader", seq = seq).to_string(),
+            LeaderHit::None => {
+                self.status = t!("status.spacemacs_no_leader", seq = seq).to_string();
+            }
         }
     }
 
@@ -2628,12 +2793,9 @@ impl App {
 
     // ----- action dispatch (menu + palette + shortcuts) ------------------
 
-    /// Dispatch a named action (shared by the menu bar, command palette, and
-    /// keyboard shortcuts).
-    pub fn run_action(&mut self, action: &str) {
-        // Go-menu navigation and Org → Contacts live in their own dispatchers
-        // (keeps this function within the line limit).
-        if self.go_action(action) || self.contacts_action(action) { return; }
+    /// Dispatch a file / workspace / bookmark action. Returns `true` if `action`
+    /// was handled. Extracted to keep [`App::run_action`] within the line limit.
+    fn run_file_action(&mut self, action: &str) -> bool {
         match action {
             "file.new" => {
                 self.editor.new_tab();
@@ -2641,7 +2803,9 @@ impl App {
                 self.status = t!("status.new_buffer").into();
             }
             "file.scratch" => self.new_scratch_buffer(),
-            "file.open" => self.prompt = Some(Prompt::new(PromptKind::Open, t!("prompt.open").to_string())),
+            "file.open" => {
+                self.prompt = Some(Prompt::new(PromptKind::Open, t!("prompt.open").to_string()));
+            }
             "file.open_recent" => self.open_recent_chooser(),
             "file.switch_project" => self.open_workspace_chooser(),
             "workspace.open" => self.prompt_workspace(PromptKind::WorkspaceOpen),
@@ -2661,8 +2825,10 @@ impl App {
                     .and_then(|t| t.path.clone())
                     .map(|p| p.display().to_string())
                     .unwrap_or_default();
-                self.prompt =
-                    Some(Prompt::new(PromptKind::SaveAs, t!("prompt.save_as").to_string()).with_input(cur));
+                self.prompt = Some(
+                    Prompt::new(PromptKind::SaveAs, t!("prompt.save_as").to_string())
+                        .with_input(cur),
+                );
             }
             "file.rename" => self.open_rename_prompt(),
             "file.close" => self.request_close_active(),
@@ -2675,24 +2841,47 @@ impl App {
             }
             "file.reopen_closed" => self.reopen_closed_tab(),
             "file.quit" => self.request_quit(),
+            _ => return false,
+        }
+        true
+    }
+
+    /// Dispatch a named action (shared by the menu bar, command palette, and
+    /// keyboard shortcuts).
+    pub fn run_action(&mut self, action: &str) {
+        // Go-menu navigation and Org → Contacts live in their own dispatchers
+        // (keeps this function within the line limit).
+        if self.go_action(action) || self.contacts_action(action) {
+            return;
+        }
+        match action {
+            a if self.run_file_action(a) => {}
             a if self.run_edit_action(a) => {}
             a if self.run_motion_action(a) => {}
             "explorer.filter_include" => {
                 let cur = self.explorer.include_filter.clone();
                 self.prompt = Some(
-                    Prompt::new(PromptKind::ExplorerInclude, t!("prompt.explorer_include").to_string())
-                        .with_input(cur),
+                    Prompt::new(
+                        PromptKind::ExplorerInclude,
+                        t!("prompt.explorer_include").to_string(),
+                    )
+                    .with_input(cur),
                 );
             }
             "explorer.filter_exclude" => {
                 let cur = self.explorer.exclude_filter.clone();
                 self.prompt = Some(
-                    Prompt::new(PromptKind::ExplorerExclude, t!("prompt.explorer_exclude").to_string())
-                        .with_input(cur),
+                    Prompt::new(
+                        PromptKind::ExplorerExclude,
+                        t!("prompt.explorer_exclude").to_string(),
+                    )
+                    .with_input(cur),
                 );
             }
             a if a.starts_with("view.theme:") => self.set_theme_by_name(&a["view.theme:".len()..]),
-            a if a.starts_with("view.locale:") => self.set_locale_by_code(&a["view.locale:".len()..]),
+            a if a.starts_with("view.locale:") => {
+                self.set_locale_by_code(&a["view.locale:".len()..]);
+            }
             a if a.starts_with("view.keymap:") => self.set_keymap(&a["view.keymap:".len()..]),
             "tools.calendar" => {
                 self.show_calendar = !self.show_calendar;
@@ -2732,7 +2921,9 @@ impl App {
             other if self.run_view_action(other) => {}
             other if self.run_git_action(other) => {}
             other if self.run_named_action(other) => {}
-            other => self.messages.warn(t!("msg.unknown_action", action = other).to_string()),
+            other => self
+                .messages
+                .warn(t!("msg.unknown_action", action = other).to_string()),
         }
     }
 
@@ -2742,8 +2933,10 @@ impl App {
     fn run_view_action(&mut self, action: &str) -> bool {
         match action {
             "tools.run_command" => {
-                self.prompt =
-                    Some(Prompt::new(PromptKind::RunCommand, t!("prompt.run_command").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::RunCommand,
+                    t!("prompt.run_command").to_string(),
+                ));
             }
             "tools.cancel_command" => self.cancel_command(),
             "tools.tasks" => self.open_tasks(),
@@ -2772,11 +2965,16 @@ impl App {
                 self.settings.show_breadcrumbs = self.show_breadcrumbs;
             }
             "view.outline_dock" => self.toggle_outline_dock(),
-            "view.trim_on_save" => self.settings.trim_trailing_whitespace = !self.settings.trim_trailing_whitespace,
-            "view.final_newline_on_save" => self.settings.ensure_final_newline = !self.settings.ensure_final_newline,
+            "view.trim_on_save" => {
+                self.settings.trim_trailing_whitespace = !self.settings.trim_trailing_whitespace;
+            }
+            "view.final_newline_on_save" => {
+                self.settings.ensure_final_newline = !self.settings.ensure_final_newline;
+            }
             "view.format_on_save" => {
                 self.settings.format_on_save = !self.settings.format_on_save;
-                self.status = t!("status.format_on_save", on = self.settings.format_on_save).to_string();
+                self.status =
+                    t!("status.format_on_save", on = self.settings.format_on_save).to_string();
             }
             "view.auto_save" => {
                 self.settings.auto_save = !self.settings.auto_save;
@@ -2784,7 +2982,8 @@ impl App {
             }
             "view.sticky_scroll" => {
                 self.settings.sticky_scroll = !self.settings.sticky_scroll;
-                self.status = t!("status.sticky_scroll", on = self.settings.sticky_scroll).to_string();
+                self.status =
+                    t!("status.sticky_scroll", on = self.settings.sticky_scroll).to_string();
             }
             "view.minimap" => {
                 self.settings.show_minimap = !self.settings.show_minimap;
@@ -2796,7 +2995,8 @@ impl App {
                     self.editor.set_word_marks(Vec::new());
                 }
                 self.word_highlight_key = None; // force a rebuild on next refresh
-                self.status = t!("status.highlight_word", on = self.settings.highlight_word).to_string();
+                self.status =
+                    t!("status.highlight_word", on = self.settings.highlight_word).to_string();
             }
             "view.scrollbar" => self.toggle_scrollbar(),
             "view.spellcheck" => self.toggle_spellcheck(),
@@ -2816,10 +3016,21 @@ impl App {
             "view.bottom_dock" => self.toggle_bottom_dock(),
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
+            _ => return self.run_help_action(action),
+        }
+        true
+    }
+
+    /// Dispatch a help / about / `vix.*` action. Returns `true` if `action` was
+    /// handled. Extracted to keep [`App::run_view_action`] within the line limit.
+    fn run_help_action(&mut self, action: &str) -> bool {
+        match action {
             "help.shortcuts" => self.show_help = true,
             "help.welcome" => self.open_welcome(),
             "help.license" => self.welcome = Some(WelcomePanel::open(Self::license_lines())),
-            "help.report_issue" => self.welcome = Some(WelcomePanel::open(Self::report_issue_lines())),
+            "help.report_issue" => {
+                self.welcome = Some(WelcomePanel::open(Self::report_issue_lines()));
+            }
             "help.privacy" => self.welcome = Some(WelcomePanel::open(Self::privacy_lines())),
             "vix.settings" => self.open_settings_file(),
             "vix.about" => {
@@ -2878,8 +3089,10 @@ impl App {
                 ));
             }
             "git.grep" => {
-                self.prompt =
-                    Some(Prompt::new(PromptKind::GitGrep, t!("prompt.git_grep").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::GitGrep,
+                    t!("prompt.git_grep").to_string(),
+                ));
             }
             "git.blame" => self.git_blame_line(),
             "git.blame_inline" => self.toggle_inline_blame(),
@@ -2893,16 +3106,24 @@ impl App {
             "run.pause" => self.dap.pause(),
             "run.panel" => self.show_debug_panel = !self.show_debug_panel,
             "run.repl" => {
-                self.prompt = Some(Prompt::new(PromptKind::DebugRepl, t!("prompt.debug_repl").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::DebugRepl,
+                    t!("prompt.debug_repl").to_string(),
+                ));
             }
             "run.watch" => {
-                self.prompt = Some(Prompt::new(PromptKind::DebugWatch, t!("prompt.debug_watch").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::DebugWatch,
+                    t!("prompt.debug_watch").to_string(),
+                ));
             }
             "git.revert_hunk" => self.revert_hunk(),
             "git.stage_hunk" => self.stage_hunk(),
             "git.unstage_hunk" => self.unstage_hunk(),
             "git.conflict_ours" => self.resolve_conflict(crate::conflict_tool::Resolution::Ours),
-            "git.conflict_theirs" => self.resolve_conflict(crate::conflict_tool::Resolution::Theirs),
+            "git.conflict_theirs" => {
+                self.resolve_conflict(crate::conflict_tool::Resolution::Theirs);
+            }
             "git.conflict_both" => self.resolve_conflict(crate::conflict_tool::Resolution::Both),
             "git.conflict_next" => self.conflict_next(),
             "git.stash" => self.git_op(crate::git::stash_push, "status.git_stashed"),
@@ -2910,9 +3131,186 @@ impl App {
             "git.amend" => self.git_op(crate::git::commit_amend, "status.git_amended"),
             "git.diff_next" => self.diff_goto(true),
             "git.diff_prev" => self.diff_goto(false),
+            // Jujutsu (`jj.*`) is a sibling VCS dispatcher; chain to it here so
+            // `run_action` needs only the one Git delegation arm.
+            other => return self.run_jj_action(other),
+        }
+        true
+    }
+
+    /// Dispatch a Jujutsu (`jj.*`) version-control action, streaming command
+    /// output into the bottom dock. Returns `true` if `action` was handled.
+    /// Mirrors [`App::run_git_action`] for the jj VCS.
+    fn run_jj_action(&mut self, action: &str) -> bool {
+        match action {
+            "jj.init" => self.jj_init(),
+            "jj.clone" => self.jj_begin_clone(),
+            "jj.status" => self.jj_command("jj --no-pager status"),
+            "jj.diff" => self.jj_command("jj --no-pager diff"),
+            "jj.show" => self.jj_command("jj --no-pager show"),
+            "jj.log" => self.jj_command("jj --no-pager log"),
+            "jj.log_all" => self.jj_command("jj --no-pager log -r ::"),
+            "jj.op_log" => self.jj_command("jj --no-pager op log"),
+            "jj.new" => self.jj_command("jj new"),
+            "jj.describe" => self.jj_begin_prompt(PromptKind::JjDescribe, "prompt.jj_describe"),
+            "jj.commit" => self.jj_begin_prompt(PromptKind::JjCommit, "prompt.jj_commit"),
+            "jj.edit" => self.jj_begin_prompt(PromptKind::JjEdit, "prompt.jj_edit"),
+            "jj.squash" => self.jj_command("jj squash"),
+            "jj.abandon" => self.jj_command("jj abandon"),
+            "jj.restore" => self.jj_command("jj restore"),
+            "jj.rebase" => self.jj_begin_prompt(PromptKind::JjRebase, "prompt.jj_rebase"),
+            "jj.undo" => self.jj_command("jj undo"),
+            "jj.bookmark_create" => {
+                self.jj_begin_prompt(PromptKind::JjBookmarkCreate, "prompt.jj_bookmark_create");
+            }
+            "jj.bookmark_set" => {
+                self.jj_begin_prompt(PromptKind::JjBookmarkSet, "prompt.jj_bookmark_set");
+            }
+            "jj.bookmark_delete" => {
+                self.jj_begin_prompt(PromptKind::JjBookmarkDelete, "prompt.jj_bookmark_delete");
+            }
+            "jj.bookmark_list" => self.jj_command("jj --no-pager bookmark list"),
+            "jj.git_push" => self.jj_command("jj git push"),
+            "jj.git_fetch" => self.jj_command("jj git fetch"),
             _ => return false,
         }
         true
+    }
+
+    /// Whether the workspace root holds a Jujutsu repo (a `.jj` directory).
+    fn jj_is_repo(&self) -> bool {
+        self.root.join(".jj").exists()
+    }
+
+    /// Run a `jj` command in the workspace, streaming its output into the bottom
+    /// dock, but only when the workspace is a jj repo.
+    fn jj_command(&mut self, cmd: &str) {
+        if !self.jj_is_repo() {
+            self.status = t!("status.jj_not_repo").into();
+            return;
+        }
+        self.run_command(cmd);
+    }
+
+    /// Open a single-line prompt (of `kind`, titled by i18n key `title`) for a jj
+    /// command, but only when the workspace is a jj repo.
+    fn jj_begin_prompt(&mut self, kind: PromptKind, title: &str) {
+        if !self.jj_is_repo() {
+            self.status = t!("status.jj_not_repo").into();
+            return;
+        }
+        self.prompt = Some(Prompt::new(kind, t!(title).to_string()));
+    }
+
+    /// Initialize a Jujutsu repo in the workspace, refusing if one already exists.
+    /// Colocates with an existing Git repo (so both tools share the working copy)
+    /// when a `.git` is present; otherwise creates a plain jj-backed repo.
+    fn jj_init(&mut self) {
+        if self.jj_is_repo() {
+            self.status = t!("status.jj_already_init").into();
+            return;
+        }
+        let colocate = self.root.join(".git").exists() || crate::git::is_repo(&self.root);
+        self.run_command(if colocate {
+            "jj git init --colocate"
+        } else {
+            "jj git init"
+        });
+    }
+
+    /// Begin cloning a repository with jj: prompt for its URL (works outside a
+    /// repo too, so it is not guarded by [`App::jj_is_repo`]).
+    fn jj_begin_clone(&mut self) {
+        self.prompt = Some(Prompt::new(
+            PromptKind::JjClone,
+            t!("prompt.jj_clone").to_string(),
+        ));
+    }
+
+    /// Clone `url` into the workspace with `jj git clone`.
+    fn jj_clone(&mut self, url: &str) {
+        let url = url.trim();
+        if url.is_empty() {
+            self.status = t!("status.jj_empty_url").into();
+            return;
+        }
+        self.run_command(&format!("jj git clone {}", Self::shell_single_quote(url)));
+    }
+
+    /// Set the working-copy change description (`jj describe -m`).
+    fn jj_describe(&mut self, message: &str) {
+        self.jj_message_command("jj describe -m", message);
+    }
+
+    /// Describe the working-copy change and start a new one (`jj commit -m`).
+    fn jj_commit(&mut self, message: &str) {
+        self.jj_message_command("jj commit -m", message);
+    }
+
+    /// Run a `jj` command that takes a required `-m` message, rejecting an empty
+    /// one and shell-quoting it.
+    fn jj_message_command(&mut self, prefix: &str, message: &str) {
+        let message = message.trim();
+        if message.is_empty() {
+            self.status = t!("status.jj_empty_message").into();
+            return;
+        }
+        self.run_command(&format!("{prefix} {}", Self::shell_single_quote(message)));
+    }
+
+    /// Set the working-copy revision to `rev` (`jj edit`).
+    fn jj_edit(&mut self, rev: &str) {
+        let rev = rev.trim();
+        if rev.is_empty() {
+            self.status = t!("status.jj_empty_revision").into();
+            return;
+        }
+        self.run_command(&format!("jj edit {}", Self::shell_single_quote(rev)));
+    }
+
+    /// Rebase the working-copy change onto destination `dest` (`jj rebase -d`).
+    fn jj_rebase(&mut self, dest: &str) {
+        let dest = dest.trim();
+        if dest.is_empty() {
+            self.status = t!("status.jj_empty_revision").into();
+            return;
+        }
+        self.run_command(&format!("jj rebase -d {}", Self::shell_single_quote(dest)));
+    }
+
+    /// Run a `jj bookmark <sub> <name>` command, rejecting an empty name.
+    fn jj_bookmark(&mut self, sub: &str, name: &str) {
+        let name = name.trim();
+        if name.is_empty() {
+            self.status = t!("status.jj_empty_bookmark").into();
+            return;
+        }
+        self.run_command(&format!(
+            "jj bookmark {sub} {}",
+            Self::shell_single_quote(name)
+        ));
+    }
+
+    /// Single-quote `s` for safe use as one `sh -c` word (POSIX escaping).
+    fn shell_single_quote(s: &str) -> String {
+        format!("'{}'", s.replace('\'', "'\\''"))
+    }
+
+    /// Handle a completed Jujutsu prompt: run the jj command for the entered
+    /// `input`. Grouped out of [`App::accept_prompt`] to keep it within the line
+    /// limit, mirroring [`App::accept_roam_prompt`].
+    fn accept_jj_prompt(&mut self, kind: PromptKind, input: &str) {
+        match kind {
+            PromptKind::JjClone => self.jj_clone(input),
+            PromptKind::JjDescribe => self.jj_describe(input),
+            PromptKind::JjCommit => self.jj_commit(input),
+            PromptKind::JjEdit => self.jj_edit(input),
+            PromptKind::JjRebase => self.jj_rebase(input),
+            PromptKind::JjBookmarkCreate => self.jj_bookmark("create", input),
+            PromptKind::JjBookmarkSet => self.jj_bookmark("set", input),
+            PromptKind::JjBookmarkDelete => self.jj_bookmark("delete", input),
+            _ => {}
+        }
     }
 
     /// Dispatch a buffer-editing action (`edit.undo`/`redo`/`cut`/`copy`/
@@ -2923,7 +3321,10 @@ impl App {
         // Read-only buffers block editing commands, but not copy/navigation/search
         // and pure selection. Scoped to `edit.*` so probing this dispatcher for a
         // non-edit action (it's tried for every action) never consumes it.
-        if action.starts_with("edit.") && self.active_read_only() && Self::edit_action_mutates(action) {
+        if action.starts_with("edit.")
+            && self.active_read_only()
+            && Self::edit_action_mutates(action)
+        {
             self.status = t!("status.read_only_blocked").to_string();
             return true;
         }
@@ -2949,7 +3350,10 @@ impl App {
                 };
             }
             "edit.cut" => {
-                let killed = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text());
+                let killed = self
+                    .editor
+                    .active_tab_mut()
+                    .and_then(|t| t.editor.get_selection_text());
                 if let Some(t) = self.editor.active_tab_mut() {
                     t.editor.apply(CutAction {});
                     t.dirty = true;
@@ -2958,7 +3362,10 @@ impl App {
                 self.record_clipboard(killed);
             }
             "edit.copy" => {
-                let copied = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text());
+                let copied = self
+                    .editor
+                    .active_tab_mut()
+                    .and_then(|t| t.editor.get_selection_text());
                 if let Some(t) = self.editor.active_tab_mut() {
                     t.editor.apply(CopyAction {});
                 }
@@ -2974,13 +3381,14 @@ impl App {
             "edit.paste_from_history" => self.open_clipboard_chooser(),
             "edit.toggle_comment" => {
                 if let Some(t) = self.editor.active_tab_mut()
-                    && !t.is_image() {
-                        // Comments the cursor line, or every line touched by the
-                        // selection; the editor picks the language's token.
-                        t.editor.apply(ToggleComment {});
-                        t.dirty = true;
-                        t.preview = false;
-                    }
+                    && !t.is_image()
+                {
+                    // Comments the cursor line, or every line touched by the
+                    // selection; the editor picks the language's token.
+                    t.editor.apply(ToggleComment {});
+                    t.dirty = true;
+                    t.preview = false;
+                }
             }
             "edit.emmet_expand" => self.emmet_expand(),
             "edit.toggle_value" => self.smart_toggle(),
@@ -2989,10 +3397,29 @@ impl App {
             "edit.transpose_words" => self.transpose(crate::textops::transpose_words_at),
             "edit.increment_number" => self.bump_number(1),
             "edit.decrement_number" => self.bump_number(-1),
-            "edit.align.equals" => self.transform_selection_or_buffer(|s| crate::align::on_delimiter(s, '=')),
-            "edit.align.colon" => self.transform_selection_or_buffer(|s| crate::align::on_delimiter(s, ':')),
-            "edit.align.comma" => self.transform_selection_or_buffer(|s| crate::align::on_delimiter(s, ',')),
-            "edit.align.pipe" => self.transform_selection_or_buffer(|s| crate::align::on_delimiter(s, '|')),
+            "edit.align.equals" => {
+                self.transform_selection_or_buffer(|s| crate::align::on_delimiter(s, '='));
+            }
+            "edit.align.colon" => {
+                self.transform_selection_or_buffer(|s| crate::align::on_delimiter(s, ':'));
+            }
+            "edit.align.comma" => {
+                self.transform_selection_or_buffer(|s| crate::align::on_delimiter(s, ','));
+            }
+            "edit.align.pipe" => {
+                self.transform_selection_or_buffer(|s| crate::align::on_delimiter(s, '|'));
+            }
+            _ => return self.run_text_transform_action(action),
+        }
+        true
+    }
+
+    /// Dispatch a case-change / line-operation / EOL text transform. Returns
+    /// `true` if `action` was handled. Extracted to keep [`App::run_edit_action`]
+    /// within the line limit; the read-only guard there runs before this is
+    /// reached, so mutation protection is preserved.
+    fn run_text_transform_action(&mut self, action: &str) -> bool {
+        match action {
             "edit.case_upper" => self.change_case(crate::case::upper),
             "edit.case_lower" => self.change_case(crate::case::lower),
             "edit.case_title" => self.change_case(crate::case::title),
@@ -3007,7 +3434,9 @@ impl App {
             "edit.trim_trailing_whitespace" => self.editor.trim_trailing_whitespace(),
             "edit.remove_duplicate_lines" => self.editor.remove_duplicate_lines(),
             "edit.reverse_lines" => self.editor.reverse_lines(),
-            "edit.squeeze_blank_lines" => self.transform_selection_or_buffer(crate::textops::squeeze_blank_lines),
+            "edit.squeeze_blank_lines" => {
+                self.transform_selection_or_buffer(crate::textops::squeeze_blank_lines);
+            }
             "edit.eol_lf" => self.transform_selection_or_buffer(crate::textops::to_lf),
             "edit.eol_crlf" => self.transform_selection_or_buffer(crate::textops::to_crlf),
             "tools.convert.rot13" => self.transform_selection_or_buffer(crate::textops::rot13),
@@ -3071,24 +3500,6 @@ impl App {
                 let area = self.editor_view();
                 self.editor.select_section(area);
             }
-            "edit.find" => self.start_search(false),
-            "edit.find_next" => self.find_step(true),
-            "edit.find_prev" => self.find_step(false),
-            "edit.replace" => self.start_search(true),
-            "edit.query_replace" => {
-                self.start_search(true);
-                if let Some(s) = self.search.as_mut() {
-                    s.interactive = true;
-                }
-            }
-            "search.workspace" => self.open_workspace_search(false),
-            "search.workspace_replace" => self.open_workspace_search(true),
-            "search.workspace_dock" => {
-                self.prompt =
-                    Some(Prompt::new(PromptKind::SearchToDock, t!("prompt.search_dock").to_string()));
-            }
-            "search.next_selection" => self.find_selection(true),
-            "search.prev_selection" => self.find_selection(false),
             "edit.go_first" => {
                 let area = self.editor_view();
                 self.editor.cursor_document_start(area);
@@ -3119,6 +3530,36 @@ impl App {
             "nav.goto_symbol" => self.open_palette_seeded("@"),
             "nav.goto_workspace_symbol" => self.open_palette_seeded("@@"),
             "nav.outline" => self.open_outline(),
+            _ => return self.run_search_action(action),
+        }
+        true
+    }
+
+    /// Dispatch a find/replace/workspace-search action. Returns `true` if
+    /// `action` was handled. Extracted to keep [`App::run_motion_action`] within
+    /// the line limit; falls through to [`App::run_lsp_action`].
+    fn run_search_action(&mut self, action: &str) -> bool {
+        match action {
+            "edit.find" => self.start_search(false),
+            "edit.find_next" => self.find_step(true),
+            "edit.find_prev" => self.find_step(false),
+            "edit.replace" => self.start_search(true),
+            "edit.query_replace" => {
+                self.start_search(true);
+                if let Some(s) = self.search.as_mut() {
+                    s.interactive = true;
+                }
+            }
+            "search.workspace" => self.open_workspace_search(false),
+            "search.workspace_replace" => self.open_workspace_search(true),
+            "search.workspace_dock" => {
+                self.prompt = Some(Prompt::new(
+                    PromptKind::SearchToDock,
+                    t!("prompt.search_dock").to_string(),
+                ));
+            }
+            "search.next_selection" => self.find_selection(true),
+            "search.prev_selection" => self.find_selection(false),
             _ => return self.run_lsp_action(action),
         }
         true
@@ -3211,8 +3652,22 @@ impl App {
             "tools.checksum.sha512" => {
                 self.transform_selection_or_buffer(crate::checksum_tool::sha512_hex);
             }
-            "tools.checksum.md5" => self.transform_selection_or_buffer(crate::checksum_tool::md5_hex),
-            "tools.checksum.crc32" => self.transform_selection_or_buffer(crate::checksum_tool::crc32_hex),
+            "tools.checksum.md5" => {
+                self.transform_selection_or_buffer(crate::checksum_tool::md5_hex);
+            }
+            "tools.checksum.crc32" => {
+                self.transform_selection_or_buffer(crate::checksum_tool::crc32_hex);
+            }
+            _ => return self.run_convert_action(action),
+        }
+        true
+    }
+
+    /// Dispatch a `tools.convert.*` / `tools.format.*` text conversion. Returns
+    /// `true` if `action` was handled. Extracted to keep
+    /// [`App::run_text_tool_action`] within the line limit.
+    fn run_convert_action(&mut self, action: &str) -> bool {
+        match action {
             "tools.convert.base64.encode" => {
                 self.transform_selection_or_buffer_try(crate::base64_tool::encode);
             }
@@ -3226,47 +3681,89 @@ impl App {
                 self.transform_selection_or_buffer_try(crate::url_tool::decode);
             }
             "tools.convert.csv.json" => {
-                self.transform_selection_or_buffer_try(crate::convert_from_csv_into_json_tool::convert);
+                self.transform_selection_or_buffer_try(
+                    crate::convert_from_csv_into_json_tool::convert,
+                );
             }
             "tools.convert.csv.tsv" => {
-                self.transform_selection_or_buffer_try(crate::convert_from_csv_into_tsv_tool::convert);
+                self.transform_selection_or_buffer_try(
+                    crate::convert_from_csv_into_tsv_tool::convert,
+                );
             }
             "tools.convert.tsv.csv" => {
-                self.transform_selection_or_buffer_try(crate::convert_from_tsv_into_csv_tool::convert);
+                self.transform_selection_or_buffer_try(
+                    crate::convert_from_tsv_into_csv_tool::convert,
+                );
             }
             "tools.convert.tsv.json" => {
-                self.transform_selection_or_buffer_try(crate::convert_from_tsv_into_json_tool::convert);
+                self.transform_selection_or_buffer_try(
+                    crate::convert_from_tsv_into_json_tool::convert,
+                );
             }
             "tools.convert.json.csv" => {
-                self.transform_selection_or_buffer_try(crate::convert_from_json_into_csv_tool::convert);
+                self.transform_selection_or_buffer_try(
+                    crate::convert_from_json_into_csv_tool::convert,
+                );
             }
             "tools.convert.json.tsv" => {
-                self.transform_selection_or_buffer_try(crate::convert_from_json_into_tsv_tool::convert);
+                self.transform_selection_or_buffer_try(
+                    crate::convert_from_json_into_tsv_tool::convert,
+                );
             }
             "tools.convert.json.yaml" => {
-                self.transform_selection_or_buffer_try(crate::convert_from_json_into_yaml_tool::convert);
+                self.transform_selection_or_buffer_try(
+                    crate::convert_from_json_into_yaml_tool::convert,
+                );
             }
             "tools.convert.yaml.json" => {
-                self.transform_selection_or_buffer_try(crate::convert_from_yaml_into_json_tool::convert);
+                self.transform_selection_or_buffer_try(
+                    crate::convert_from_yaml_into_json_tool::convert,
+                );
             }
             "tools.convert.json.toml" => {
-                self.transform_selection_or_buffer_try(crate::convert_from_json_into_toml_tool::convert);
+                self.transform_selection_or_buffer_try(
+                    crate::convert_from_json_into_toml_tool::convert,
+                );
             }
             "tools.convert.toml.json" => {
-                self.transform_selection_or_buffer_try(crate::convert_from_toml_into_json_tool::convert);
+                self.transform_selection_or_buffer_try(
+                    crate::convert_from_toml_into_json_tool::convert,
+                );
             }
             "tools.convert.markdown.html" => {
-                self.transform_selection_or_buffer_try(crate::convert_from_markdown_into_html_tool::convert);
+                self.transform_selection_or_buffer_try(
+                    crate::convert_from_markdown_into_html_tool::convert,
+                );
             }
             "tools.convert.html.markdown" => {
-                self.transform_selection_or_buffer_try(crate::convert_from_html_into_markdown_tool::convert);
+                self.transform_selection_or_buffer_try(
+                    crate::convert_from_html_into_markdown_tool::convert,
+                );
             }
             "tools.convert.unit" => self.open_unit_converter(),
             "tools.convert.jwt" => self.transform_selection_or_buffer_try(crate::jwt_tool::decode),
-            "tools.convert.number.dec" => self.transform_selection_or_buffer_try(crate::base_tool::to_dec),
-            "tools.convert.number.hex" => self.transform_selection_or_buffer_try(crate::base_tool::to_hex),
-            "tools.convert.number.bin" => self.transform_selection_or_buffer_try(crate::base_tool::to_bin),
-            "tools.convert.number.oct" => self.transform_selection_or_buffer_try(crate::base_tool::to_oct),
+            "tools.convert.number.dec" => {
+                self.transform_selection_or_buffer_try(crate::base_tool::to_dec);
+            }
+            "tools.convert.number.hex" => {
+                self.transform_selection_or_buffer_try(crate::base_tool::to_hex);
+            }
+            "tools.convert.number.bin" => {
+                self.transform_selection_or_buffer_try(crate::base_tool::to_bin);
+            }
+            "tools.convert.number.oct" => {
+                self.transform_selection_or_buffer_try(crate::base_tool::to_oct);
+            }
+            _ => return self.run_format_action(action),
+        }
+        true
+    }
+
+    /// Dispatch a `tools.format.*` pretty/minify action. Returns `true` if
+    /// `action` was handled. Extracted to keep [`App::run_convert_action`] within
+    /// the line limit.
+    fn run_format_action(&mut self, action: &str) -> bool {
+        match action {
             "tools.format.json_pretty" => {
                 self.transform_selection_or_buffer_try(crate::format_tool::json_pretty);
             }
@@ -3473,7 +3970,9 @@ impl App {
             "indent_line" | "indent_selection" => edm!(indent_line),
             "outdent_line" | "outdent_selection" => edm!(outdent_line),
             // multiple cursors
-            "spawn_multi_cursor" | "spawn_multi_cursor_select" | "skip_multi_cursor"
+            "spawn_multi_cursor"
+            | "spawn_multi_cursor_select"
+            | "skip_multi_cursor"
             | "skip_multi_cursor_back" => edm!(add_next_occurrence),
             "remove_multi_cursor" | "remove_all_multi_cursors" => ed!(clear_carets),
             _ if self.run_app_action(id) => {}
@@ -3484,11 +3983,21 @@ impl App {
             "spawn_multi_cursor_down" => ed!(add_caret_below),
             "toggle_overwrite_mode" => {
                 self.overwrite = !self.overwrite;
-                self.status = t!(if self.overwrite { "status.overwrite_on" } else { "status.overwrite_off" }).to_string();
+                self.status = t!(if self.overwrite {
+                    "status.overwrite_on"
+                } else {
+                    "status.overwrite_off"
+                })
+                .to_string();
             }
             "toggle_ruler" => {
                 self.show_ruler = !self.show_ruler;
-                self.status = t!(if self.show_ruler { "status.ruler_on" } else { "status.ruler_off" }).to_string();
+                self.status = t!(if self.show_ruler {
+                    "status.ruler_on"
+                } else {
+                    "status.ruler_off"
+                })
+                .to_string();
             }
             "macro.record" => {
                 self.macro_recording = !self.macro_recording;
@@ -3496,7 +4005,8 @@ impl App {
                     self.macro_keys.clear();
                     self.status = t!("status.macro_recording").to_string();
                 } else {
-                    self.status = t!("status.macro_recorded", count = self.macro_keys.len()).to_string();
+                    self.status =
+                        t!("status.macro_recorded", count = self.macro_keys.len()).to_string();
                 }
             }
             "macro.play" => self.play_macro(),
@@ -3506,8 +4016,10 @@ impl App {
             "cycle_autocomplete_back" => self.autocomplete(false),
             "command_mode" => self.open_palette(),
             "shell_mode" => {
-                self.prompt =
-                    Some(Prompt::new(PromptKind::RunCommand, t!("prompt.run_command").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::RunCommand,
+                    t!("prompt.run_command").to_string(),
+                ));
             }
             "suspend" => self.suspend_requested = true,
             _ => return false,
@@ -3520,7 +4032,12 @@ impl App {
             self.status = t!("status.image_readonly").into();
             return;
         }
-        if self.editor.active_tab().and_then(|t| t.path.as_ref()).is_none() {
+        if self
+            .editor
+            .active_tab()
+            .and_then(|t| t.path.as_ref())
+            .is_none()
+        {
             self.run_action("file.save_as");
             return;
         }
@@ -3563,7 +4080,8 @@ impl App {
                 true
             }
             Err(e) => {
-                self.messages.error(t!("msg.save_failed", error = e).to_string());
+                self.messages
+                    .error(t!("msg.save_failed", error = e).to_string());
                 false
             }
         }
@@ -3598,9 +4116,10 @@ impl App {
         self.show_explorer = !self.show_explorer;
         self.settings.show_explorer = self.show_explorer;
         if self.show_explorer
-            && let Some(p) = self.editor.active_tab().and_then(|t| t.path.clone()) {
-                self.explorer.reveal(&p);
-            }
+            && let Some(p) = self.editor.active_tab().and_then(|t| t.path.clone())
+        {
+            self.explorer.reveal(&p);
+        }
     }
 
     /// Toggle the right dock (the message drawer).
@@ -3625,8 +4144,12 @@ impl App {
             self.show_bottom_dock = bottom;
             self.show_status_bar = status;
         } else {
-            self.zen_saved =
-                Some((self.show_explorer, self.show_messages, self.show_bottom_dock, self.show_status_bar));
+            self.zen_saved = Some((
+                self.show_explorer,
+                self.show_messages,
+                self.show_bottom_dock,
+                self.show_status_bar,
+            ));
             self.show_explorer = false;
             self.show_messages = false;
             self.show_bottom_dock = false;
@@ -3672,11 +4195,10 @@ impl App {
         let Some(tab) = self.editor.active_tab() else {
             return String::new();
         };
-        let name = tab
-            .path
-            .as_ref()
-            .and_then(|p| p.file_name())
-            .map_or_else(|| t!("ui.untitled").to_string(), |n| n.to_string_lossy().into_owned());
+        let name = tab.path.as_ref().and_then(|p| p.file_name()).map_or_else(
+            || t!("ui.untitled").to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
         if tab.is_image() {
             return name;
         }
@@ -3744,10 +4266,7 @@ impl App {
     /// (Convert tools that parse their input). On `Err` the buffer is left
     /// untouched and the error is shown in the status line. No-op (with a status)
     /// on an image tab or empty input.
-    fn transform_selection_or_buffer_try(
-        &mut self,
-        f: impl Fn(&str) -> Result<String, String>,
-    ) {
+    fn transform_selection_or_buffer_try(&mut self, f: impl Fn(&str) -> Result<String, String>) {
         if self.active_read_only() {
             self.status = t!("status.read_only_blocked").into();
             return;
@@ -3829,15 +4348,33 @@ impl App {
             "org.clock_out" => self.org_clock_out(),
             "org.agenda" => self.org_agenda(),
             "org.time_report" => self.org_time_report(),
+            _ => return self.roam_action(action),
+        }
+        true
+    }
+
+    /// Dispatch an Org-roam / Org-node action. Returns `true` if `action` was
+    /// handled. Extracted to keep [`App::org_action`] within the line limit.
+    fn roam_action(&mut self, action: &str) -> bool {
+        match action {
             "roam.node_find" => {
-                self.prompt = Some(Prompt::new(PromptKind::RoamFind, t!("prompt.roam_find").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::RoamFind,
+                    t!("prompt.roam_find").to_string(),
+                ));
             }
             "roam.node_insert" => {
-                self.prompt = Some(Prompt::new(PromptKind::RoamInsert, t!("prompt.roam_insert").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::RoamInsert,
+                    t!("prompt.roam_insert").to_string(),
+                ));
             }
             "roam.node_random" => self.roam_node_random(),
             "roam.capture" => {
-                self.prompt = Some(Prompt::new(PromptKind::RoamCapture, t!("prompt.roam_capture").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::RoamCapture,
+                    t!("prompt.roam_capture").to_string(),
+                ));
             }
             "roam.backlinks" => self.roam_backlinks(),
             "roam.backlinks_follow" => {
@@ -3853,31 +4390,47 @@ impl App {
                 self.show_calendar = true;
             }
             "roam.dailies_capture" => {
-                self.prompt =
-                    Some(Prompt::new(PromptKind::RoamDailyCapture, t!("prompt.roam_daily_capture").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::RoamDailyCapture,
+                    t!("prompt.roam_daily_capture").to_string(),
+                ));
             }
             "roam.dailies_date" => {
                 self.prompt = Some(
-                    Prompt::new(PromptKind::RoamDailyDate, t!("prompt.roam_daily_date").to_string())
-                        .with_input(Self::roam_today()),
+                    Prompt::new(
+                        PromptKind::RoamDailyDate,
+                        t!("prompt.roam_daily_date").to_string(),
+                    )
+                    .with_input(Self::roam_today()),
                 );
             }
             "roam.tag_add" => {
-                self.prompt = Some(Prompt::new(PromptKind::RoamTag, t!("prompt.roam_tag").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::RoamTag,
+                    t!("prompt.roam_tag").to_string(),
+                ));
             }
             "roam.alias_add" => {
-                self.prompt = Some(Prompt::new(PromptKind::RoamAlias, t!("prompt.roam_alias").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::RoamAlias,
+                    t!("prompt.roam_alias").to_string(),
+                ));
             }
             "roam.ref_add" => {
-                self.prompt = Some(Prompt::new(PromptKind::RoamRef, t!("prompt.roam_ref").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::RoamRef,
+                    t!("prompt.roam_ref").to_string(),
+                ));
             }
             "roam.graph" => self.roam_graph(),
             "roam.db_sync" => self.roam_db_sync(),
             "node.nodeify" => self.node_nodeify(),
             "node.extract_subtree" => self.node_extract_subtree(),
             "node.insert_transclusion" => {
-                self.prompt =
-                    Some(Prompt::new(PromptKind::NodeTransclusion, t!("prompt.node_transclusion").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::NodeTransclusion,
+                    t!("prompt.node_transclusion").to_string(),
+                ));
             }
             "node.rename_by_title" => self.node_rename_by_title(),
             "node.dead_links" => self.node_dead_links(),
@@ -3891,7 +4444,9 @@ impl App {
     /// Run an Org transform that rewrites the buffer based on the cursor line
     /// (promote/demote/cycle-todo/toggle-checkbox), keeping the cursor's line.
     fn org_rewrite_line(&mut self, f: fn(&str, usize) -> Option<String>) {
-        let Some(tab) = self.editor.active_tab_mut() else { return };
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
         let line = tab.editor.cursor_line();
         let text = tab.editor.get_content();
         if let Some(new) = f(&text, line) {
@@ -3905,7 +4460,8 @@ impl App {
 
     /// Open a fresh throwaway scratch buffer (unsaved, with a header line).
     fn new_scratch_buffer(&mut self) {
-        self.editor.new_tab_with_content(&format!("{}\n\n", t!("scratch.header")));
+        self.editor
+            .new_tab_with_content(&format!("{}\n\n", t!("scratch.header")));
         self.focus = Focus::Editor;
         self.status = t!("status.scratch").into();
     }
@@ -3919,7 +4475,9 @@ impl App {
         f: impl Fn(&str, usize) -> Option<(String, usize)>,
         miss: Option<&str>,
     ) {
-        let Some(tab) = self.editor.active_tab_mut() else { return };
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
         if tab.is_image() {
             return;
         }
@@ -3960,7 +4518,9 @@ impl App {
     /// (so children update their parents and cookies) and from Org → Update
     /// Statistics. No-op when nothing changes.
     fn org_refresh_statistics(&mut self) {
-        let Some(tab) = self.editor.active_tab_mut() else { return };
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
         let line = tab.editor.cursor_line();
         let text = tab.editor.get_content();
         let new = crate::org::update_statistics(&text);
@@ -3973,7 +4533,9 @@ impl App {
 
     /// Run an Org subtree move, following the cursor to the subtree's new line.
     fn org_move_subtree(&mut self, f: fn(&str, usize) -> Option<(String, usize)>) {
-        let Some(tab) = self.editor.active_tab_mut() else { return };
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
         let line = tab.editor.cursor_line();
         let text = tab.editor.get_content();
         if let Some((new, new_line)) = f(&text, line) {
@@ -3987,7 +4549,9 @@ impl App {
 
     /// Export the active buffer with `f` into a new untitled tab named with `ext`.
     fn org_export(&mut self, f: fn(&str) -> String, ext: &str) {
-        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else { return };
+        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else {
+            return;
+        };
         let converted = f(&text);
         self.editor.new_tab_with_content(&converted);
         self.status = t!("status.org_exported", ext = ext).to_string();
@@ -3996,7 +4560,10 @@ impl App {
     /// Open the Org capture dialog: a single-line prompt whose text is inserted as
     /// a `* TODO` headline at the cursor.
     fn org_capture(&mut self) {
-        self.prompt = Some(Prompt::new(PromptKind::OrgCapture, t!("prompt.org_capture").to_string()));
+        self.prompt = Some(Prompt::new(
+            PromptKind::OrgCapture,
+            t!("prompt.org_capture").to_string(),
+        ));
     }
 
     /// The current local time as an Org timestamp (`YYYY-MM-DD Day HH:MM`).
@@ -4013,7 +4580,9 @@ impl App {
     /// Org clock-out: close the most recent open `CLOCK:` entry in the buffer.
     fn org_clock_out(&mut self) {
         let now = Self::org_timestamp();
-        let Some(tab) = self.editor.active_tab_mut() else { return };
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
         let line = tab.editor.cursor_line();
         let text = tab.editor.get_content();
         if let Some(new) = crate::org::clock_out(&text, &now) {
@@ -4030,10 +4599,16 @@ impl App {
     fn org_agenda(&mut self) {
         let mut files: Vec<(String, String)> = Vec::new();
         for path in &self.file_index {
-            if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("org"))
+            if path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("org"))
                 && let Ok(content) = std::fs::read_to_string(path)
             {
-                let name = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().into_owned();
+                let name = path
+                    .strip_prefix(&self.root)
+                    .unwrap_or(path)
+                    .to_string_lossy()
+                    .into_owned();
                 files.push((name, content));
             }
         }
@@ -4044,7 +4619,9 @@ impl App {
 
     /// Build a clock-time report from the active buffer into a new tab.
     fn org_time_report(&mut self) {
-        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else { return };
+        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else {
+            return;
+        };
         let report = crate::org::time_report(&text);
         self.editor.new_tab_with_content(&report);
         self.status = t!("status.org_time_report").to_string();
@@ -4083,7 +4660,9 @@ impl App {
             }
             PromptKind::RoamAlias if !input.is_empty() => {
                 let alias = input.to_string();
-                self.roam_rewrite_active(|t| crate::roam::append_property(t, "ROAM_ALIASES", &format!("\"{alias}\"")));
+                self.roam_rewrite_active(|t| {
+                    crate::roam::append_property(t, "ROAM_ALIASES", &format!("\"{alias}\""))
+                });
             }
             PromptKind::RoamRef if !input.is_empty() => {
                 let r = input.to_string();
@@ -4101,7 +4680,9 @@ impl App {
             let date = self.calendar.selected_formatted("%Y-%m-%d");
             self.roam_open_daily(&date);
         } else {
-            let text = self.calendar.selected_formatted(Self::locale_date_pattern());
+            let text = self
+                .calendar
+                .selected_formatted(Self::locale_date_pattern());
             let area = self.editor_view();
             self.editor.insert_str(&text, area);
         }
@@ -4116,10 +4697,16 @@ impl App {
     fn roam_node_files(&self) -> Vec<(String, String)> {
         let mut files = Vec::new();
         for path in &self.file_index {
-            if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("org"))
+            if path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("org"))
                 && let Ok(content) = std::fs::read_to_string(path)
             {
-                let name = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().into_owned();
+                let name = path
+                    .strip_prefix(&self.root)
+                    .unwrap_or(path)
+                    .to_string_lossy()
+                    .into_owned();
                 files.push((name, content));
             }
         }
@@ -4130,7 +4717,9 @@ impl App {
     fn roam_find_by_title(&self, title: &str) -> Option<PathBuf> {
         let want = title.trim().to_ascii_lowercase();
         for path in &self.file_index {
-            if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("org"))
+            if path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("org"))
                 && let Ok(content) = std::fs::read_to_string(path)
                 && crate::roam::node_title(&content).is_some_and(|t| t.to_ascii_lowercase() == want)
             {
@@ -4146,11 +4735,13 @@ impl App {
         if let Some(parent) = path.parent()
             && let Err(e) = std::fs::create_dir_all(parent)
         {
-            self.messages.error(t!("msg.save_failed", error = e).to_string());
+            self.messages
+                .error(t!("msg.save_failed", error = e).to_string());
             return false;
         }
         if let Err(e) = std::fs::write(path, content) {
-            self.messages.error(t!("msg.save_failed", error = e).to_string());
+            self.messages
+                .error(t!("msg.save_failed", error = e).to_string());
             return false;
         }
         self.build_file_index();
@@ -4167,12 +4758,16 @@ impl App {
             return None;
         }
         if let Some(path) = self.roam_find_by_title(title) {
-            let id = std::fs::read_to_string(&path).ok().and_then(|c| crate::roam::node_id(&c));
+            let id = std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|c| crate::roam::node_id(&c));
             self.open_path(&path, false);
             return id;
         }
         let id = crate::uuid_tool::v4();
-        let path = self.root.join(format!("{}.org", crate::roam::slugify(title)));
+        let path = self
+            .root
+            .join(format!("{}.org", crate::roam::slugify(title)));
         let body = crate::roam::new_node(title, &id);
         if self.roam_write_and_open(&path, &body) {
             self.status = t!("status.roam_created", title = title).to_string();
@@ -4191,10 +4786,14 @@ impl App {
             return;
         }
         let id = if let Some(path) = self.roam_find_by_title(&title) {
-            std::fs::read_to_string(&path).ok().and_then(|c| crate::roam::node_id(&c))
+            std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|c| crate::roam::node_id(&c))
         } else {
             let id = crate::uuid_tool::v4();
-            let path = self.root.join(format!("{}.org", crate::roam::slugify(&title)));
+            let path = self
+                .root
+                .join(format!("{}.org", crate::roam::slugify(&title)));
             let body = crate::roam::new_node(&title, &id);
             if let Some(parent) = path.parent() {
                 let _ = std::fs::create_dir_all(parent);
@@ -4206,7 +4805,8 @@ impl App {
                     Some(id)
                 }
                 Err(e) => {
-                    self.messages.error(t!("msg.save_failed", error = e).to_string());
+                    self.messages
+                        .error(t!("msg.save_failed", error = e).to_string());
                     None
                 }
             }
@@ -4225,7 +4825,10 @@ impl App {
             .iter()
             .filter(|p| {
                 p.extension().is_some_and(|e| e.eq_ignore_ascii_case("org"))
-                    && std::fs::read_to_string(p).ok().and_then(|c| crate::roam::node_title(&c)).is_some()
+                    && std::fs::read_to_string(p)
+                        .ok()
+                        .and_then(|c| crate::roam::node_title(&c))
+                        .is_some()
             })
             .cloned()
             .collect();
@@ -4233,14 +4836,22 @@ impl App {
             self.status = t!("status.roam_no_nodes").to_string();
             return;
         }
-        let seed = usize::try_from(jiff::Zoned::now().timestamp().subsec_nanosecond().unsigned_abs()).unwrap_or(0);
+        let seed = usize::try_from(
+            jiff::Zoned::now()
+                .timestamp()
+                .subsec_nanosecond()
+                .unsigned_abs(),
+        )
+        .unwrap_or(0);
         let path = paths[seed % paths.len()].clone();
         self.open_path(&path, false);
     }
 
     /// Org-roam: compile a backlinks buffer for the active node into a new tab.
     fn roam_backlinks(&mut self) {
-        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else { return };
+        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else {
+            return;
+        };
         let id = crate::roam::node_id(&text).unwrap_or_default();
         let title = crate::roam::node_title(&text).unwrap_or_default();
         if id.is_empty() && title.is_empty() {
@@ -4255,7 +4866,10 @@ impl App {
 
     /// Org-roam: open (creating if needed) the daily note for `date`.
     fn roam_open_daily(&mut self, date: &str) {
-        let path = self.root.join(crate::roam::DAILIES_DIR).join(crate::roam::daily_filename(date));
+        let path = self
+            .root
+            .join(crate::roam::DAILIES_DIR)
+            .join(crate::roam::daily_filename(date));
         if path.exists() {
             self.open_path(&path, false);
             return;
@@ -4273,7 +4887,10 @@ impl App {
             return;
         }
         let date = Self::roam_today();
-        let path = self.root.join(crate::roam::DAILIES_DIR).join(crate::roam::daily_filename(&date));
+        let path = self
+            .root
+            .join(crate::roam::DAILIES_DIR)
+            .join(crate::roam::daily_filename(&date));
         let time = jiff::Zoned::now().strftime("%H:%M").to_string();
         let entry = crate::roam::daily_entry(&time, text);
         let mut content = std::fs::read_to_string(&path)
@@ -4289,7 +4906,9 @@ impl App {
 
     /// Rewrite the active buffer's content through `f` (an org-roam metadata edit).
     fn roam_rewrite_active(&mut self, f: impl FnOnce(&str) -> String) {
-        let Some(tab) = self.editor.active_tab_mut() else { return };
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
         let line = tab.editor.cursor_line();
         let text = tab.editor.get_content();
         let new = f(&text);
@@ -4313,7 +4932,10 @@ impl App {
         self.build_file_index();
         let files = self.roam_node_files();
         let index = crate::roam::index(&files);
-        let count = files.iter().filter(|(_, c)| crate::roam::node_title(c).is_some()).count();
+        let count = files
+            .iter()
+            .filter(|(_, c)| crate::roam::node_title(c).is_some())
+            .count();
         self.editor.new_tab_with_content(&index);
         self.status = t!("status.roam_synced", count = count).to_string();
     }
@@ -4323,7 +4945,9 @@ impl App {
     /// Org-node: give the headline at the cursor an `:ID:`, making it a node.
     fn node_nodeify(&mut self) {
         let id = crate::uuid_tool::v4();
-        let Some(tab) = self.editor.active_tab_mut() else { return };
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
         let line = tab.editor.cursor_line();
         let text = tab.editor.get_content();
         if let Some(new) = crate::roam::nodeify(&text, line, &id) {
@@ -4339,9 +4963,14 @@ impl App {
     /// Org-node: cut the subtree at the cursor into its own node file, leaving an
     /// `[[id:…]]` link in its place.
     fn node_extract_subtree(&mut self) {
-        let Some(tab) = self.editor.active_tab() else { return };
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
         let text = tab.text();
-        let line = self.editor.active_tab().map_or(0, |t| t.editor.cursor_line());
+        let line = self
+            .editor
+            .active_tab()
+            .map_or(0, |t| t.editor.cursor_line());
         let lines: Vec<&str> = text.split('\n').collect();
         let Some((start, end)) = crate::org::subtree_range(&lines, line) else {
             self.status = t!("status.org_not_headline").to_string();
@@ -4360,13 +4989,23 @@ impl App {
         let body: String = lines[start + 1..end]
             .iter()
             .map(|l| {
-                crate::org::headline_level(l)
-                    .map_or_else(|| (*l).to_string(), |lvl| format!("{} {}", "*".repeat(lvl.saturating_sub(depth - 1).max(1)), l[lvl..].trim_start()))
+                crate::org::headline_level(l).map_or_else(
+                    || (*l).to_string(),
+                    |lvl| {
+                        format!(
+                            "{} {}",
+                            "*".repeat(lvl.saturating_sub(depth - 1).max(1)),
+                            l[lvl..].trim_start()
+                        )
+                    },
+                )
             })
             .collect::<Vec<_>>()
             .join("\n");
         let id = crate::uuid_tool::v4();
-        let path = self.root.join(format!("{}.org", crate::roam::slugify(&heading)));
+        let path = self
+            .root
+            .join(format!("{}.org", crate::roam::slugify(&heading)));
         let mut file_body = crate::roam::new_node(&heading, &id);
         if !body.trim().is_empty() {
             file_body.push_str(&body);
@@ -4377,7 +5016,11 @@ impl App {
         // Replace the subtree in the current buffer with a link to the new node.
         let mut kept: Vec<&str> = Vec::with_capacity(lines.len());
         kept.extend_from_slice(&lines[..start]);
-        let placeholder = format!("{} {}", "*".repeat(depth), crate::roam::node_link(&id, &heading));
+        let placeholder = format!(
+            "{} {}",
+            "*".repeat(depth),
+            crate::roam::node_link(&id, &heading)
+        );
         kept.push(&placeholder);
         kept.extend_from_slice(&lines[end..]);
         let remaining = kept.join("\n");
@@ -4399,10 +5042,14 @@ impl App {
             return;
         }
         let id = if let Some(path) = self.roam_find_by_title(&title) {
-            std::fs::read_to_string(&path).ok().and_then(|c| crate::roam::node_id(&c))
+            std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|c| crate::roam::node_id(&c))
         } else {
             let id = crate::uuid_tool::v4();
-            let path = self.root.join(format!("{}.org", crate::roam::slugify(&title)));
+            let path = self
+                .root
+                .join(format!("{}.org", crate::roam::slugify(&title)));
             let body = crate::roam::new_node(&title, &id);
             match std::fs::write(&path, &body) {
                 Ok(()) => {
@@ -4411,7 +5058,8 @@ impl App {
                     Some(id)
                 }
                 Err(e) => {
-                    self.messages.error(t!("msg.save_failed", error = e).to_string());
+                    self.messages
+                        .error(t!("msg.save_failed", error = e).to_string());
                     None
                 }
             }
@@ -4423,8 +5071,12 @@ impl App {
 
     /// Org-node: rename the active file to the slug of its `#+title:`.
     fn node_rename_by_title(&mut self) {
-        let Some(path) = self.active_path() else { return };
-        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else { return };
+        let Some(path) = self.active_path() else {
+            return;
+        };
+        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else {
+            return;
+        };
         let Some(title) = crate::roam::node_title(&text) else {
             self.status = t!("status.node_no_title").to_string();
             return;
@@ -4442,7 +5094,9 @@ impl App {
                 self.open_path(&target, false);
                 self.status = t!("status.node_renamed", path = target.display()).to_string();
             }
-            Err(e) => self.messages.error(t!("msg.save_failed", error = e).to_string()),
+            Err(e) => self
+                .messages
+                .error(t!("msg.save_failed", error = e).to_string()),
         }
     }
 
@@ -4457,7 +5111,11 @@ impl App {
     /// Org-node: rebuild the in-memory node index (org-mem-reset equivalent).
     fn node_reset(&mut self) {
         self.build_file_index();
-        let count = self.roam_node_files().iter().filter(|(_, c)| crate::roam::node_id(c).is_some()).count();
+        let count = self
+            .roam_node_files()
+            .iter()
+            .filter(|(_, c)| crate::roam::node_id(c).is_some())
+            .count();
         self.status = t!("status.node_reset", count = count).to_string();
     }
 
@@ -4599,11 +5257,9 @@ impl App {
                 "--- Blaise Pascal\n",
                 "#+END_CENTER\n",
             ),
-            "tools.insert.latex.drawer" => concat!(
-                ":DRAWERNAME:\n",
-                "This is inside the drawer.\n",
-                ":END:\n",
-            ),
+            "tools.insert.latex.drawer" => {
+                concat!(":DRAWERNAME:\n", "This is inside the drawer.\n", ":END:\n",)
+            }
             _ => return false,
         };
         self.insert_content(snippet);
@@ -4743,7 +5399,10 @@ impl App {
     /// leave the cursor between the two halves.
     fn toggle_wrap(&mut self, prefix: &str, suffix: &str) {
         let area = self.layout.editor;
-        let selection = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text());
+        let selection = self
+            .editor
+            .active_tab_mut()
+            .and_then(|t| t.editor.get_selection_text());
         match selection {
             Some(sel) if !sel.is_empty() => {
                 let wrapped = crate::affix::toggle(&sel, prefix, suffix);
@@ -4753,7 +5412,8 @@ impl App {
                 self.editor.insert_str(&format!("{prefix}{suffix}"), area);
                 if let Some(t) = self.editor.active_tab_mut() {
                     let cursor = t.editor.get_cursor();
-                    t.editor.set_cursor(cursor.saturating_sub(suffix.chars().count()));
+                    t.editor
+                        .set_cursor(cursor.saturating_sub(suffix.chars().count()));
                 }
             }
         }
@@ -4768,7 +5428,9 @@ impl App {
             "tools.insert.lorem.paragraph" => format!("{}\n\n", crate::lorem::paragraph()),
             "tools.insert.datetime.iso8601" => crate::clock::iso8601(&crate::clock::now_local()),
             "tools.insert.datetime.rfc3339" => crate::clock::rfc3339(&crate::clock::now_local()),
-            "tools.insert.datetime.epoch" => crate::clock::epoch_seconds(&crate::clock::now_local()),
+            "tools.insert.datetime.epoch" => {
+                crate::clock::epoch_seconds(&crate::clock::now_local())
+            }
             _ => return false,
         };
         self.insert_content(&text);
@@ -4781,7 +5443,11 @@ impl App {
     /// text parses as a HEX/RGB/HSL color.
     fn open_color_converter(&mut self) {
         let mut conv = crate::color_converter_tool::Converter::new();
-        if let Some(sel) = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text()) {
+        if let Some(sel) = self
+            .editor
+            .active_tab_mut()
+            .and_then(|t| t.editor.get_selection_text())
+        {
             let s = sel.trim();
             let color = crate::color_converter_tool::Color::from_hex(s)
                 .or_else(|| crate::color_converter_tool::Color::from_rgb(s))
@@ -4826,7 +5492,11 @@ impl App {
 
     /// Insert the focused field's value into the editor and close the dialog.
     fn insert_color_value(&mut self) {
-        let Some(value) = self.color_converter.as_ref().map(|c| c.current().to_string()) else {
+        let Some(value) = self
+            .color_converter
+            .as_ref()
+            .map(|c| c.current().to_string())
+        else {
             return;
         };
         if value.is_empty() {
@@ -4889,7 +5559,11 @@ impl App {
 
     /// Insert the converted `<value> <unit>` into the editor and close the dialog.
     fn insert_unit_value(&mut self) {
-        let Some(text) = self.unit_converter.as_ref().map(crate::unit_converter_tool::Converter::insert_text) else {
+        let Some(text) = self
+            .unit_converter
+            .as_ref()
+            .map(crate::unit_converter_tool::Converter::insert_text)
+        else {
             return;
         };
         if !text.is_empty() {
@@ -4905,7 +5579,11 @@ impl App {
     /// Open the Calculator dialog, seeding the formula from the selection.
     fn open_calculator(&mut self) {
         let mut calc = crate::calculator_tool::Calculator::new();
-        if let Some(sel) = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text()) {
+        if let Some(sel) = self
+            .editor
+            .active_tab_mut()
+            .and_then(|t| t.editor.get_selection_text())
+        {
             calc.input = sel.trim().to_string();
         }
         self.calculator = Some(calc);
@@ -4947,9 +5625,10 @@ impl App {
             }
             KeyCode::Char(ch) if !Self::ctrl(&key) && !Self::alt(&key) => {
                 if let Some(c) = self.calculator.as_mut()
-                    && c.focus == Focus::Input {
-                        c.push(ch);
-                    }
+                    && c.focus == Focus::Input
+                {
+                    c.push(ch);
+                }
             }
             _ => {}
         }
@@ -4957,7 +5636,10 @@ impl App {
 
     /// Insert the Calculator's current result into the editor and close it.
     fn insert_calculator_result(&mut self) {
-        let result = self.calculator.as_ref().and_then(|c| c.result().map(str::to_string));
+        let result = self
+            .calculator
+            .as_ref()
+            .and_then(|c| c.result().map(str::to_string));
         if let Some(value) = result {
             let area = self.layout.editor;
             self.editor.insert_str(&value, area);
@@ -5038,9 +5720,13 @@ impl App {
         if !self.show_inlay_hints {
             return;
         }
-        let Some(path) = self.active_path() else { return };
+        let Some(path) = self.active_path() else {
+            return;
+        };
         let enc = self.lsp.encoding_for(&path);
-        let Some(t) = self.editor.active_tab_mut() else { return };
+        let Some(t) = self.editor.active_tab_mut() else {
+            return;
+        };
         let converted: Vec<(usize, usize, String)> = {
             let code = t.editor.code_ref();
             hints
@@ -5092,9 +5778,13 @@ impl App {
     /// Highlight the document-highlight occurrences in the active buffer (reuses
     /// the search-mark layer).
     fn apply_document_highlights(&mut self, ranges: &[crate::lsp_core::Range]) {
-        let Some(path) = self.active_path() else { return };
+        let Some(path) = self.active_path() else {
+            return;
+        };
         let enc = self.lsp.encoding_for(&path);
-        let Some(t) = self.editor.active_tab_mut() else { return };
+        let Some(t) = self.editor.active_tab_mut() else {
+            return;
+        };
         let marks: Vec<(usize, usize, &str)> = {
             let code = t.editor.code_ref();
             ranges
@@ -5145,8 +5835,12 @@ impl App {
 
     /// Execute the highlighted code lens's command (`workspace/executeCommand`).
     fn run_selected_lens(&mut self) {
-        let Some(menu) = self.code_lens.take() else { return };
-        let Some((_, title, command, args)) = menu.lenses.into_iter().nth(menu.selected) else { return };
+        let Some(menu) = self.code_lens.take() else {
+            return;
+        };
+        let Some((_, title, command, args)) = menu.lenses.into_iter().nth(menu.selected) else {
+            return;
+        };
         if let Some(path) = self.active_path() {
             self.lsp.execute_command(&path, &command, &args);
             self.status = t!("status.lens_run", title = title).to_string();
@@ -5179,7 +5873,9 @@ impl App {
 
     /// Jump the cursor to the HTML/XML tag matching the one under the cursor.
     fn goto_matching_tag(&mut self) {
-        let Some(t) = self.editor.active_tab() else { return };
+        let Some(t) = self.editor.active_tab() else {
+            return;
+        };
         let cursor = t.editor.get_cursor();
         match crate::tags::matching_tag(&t.editor.get_content(), cursor) {
             Some(off) => {
@@ -5193,10 +5889,14 @@ impl App {
     /// Grow the active selection to the smallest enclosing Tree-sitter node
     /// (offline structural selection). No-op without a parse tree.
     fn expand_selection_to_node(&mut self) {
-        let Some(t) = self.editor.active_tab_mut() else { return };
+        let Some(t) = self.editor.active_tab_mut() else {
+            return;
+        };
         let (s, e) = {
             let cursor = t.editor.get_cursor();
-            t.editor.get_selection().map_or((cursor, cursor), |sel| (sel.start.min(sel.end), sel.start.max(sel.end)))
+            t.editor.get_selection().map_or((cursor, cursor), |sel| {
+                (sel.start.min(sel.end), sel.start.max(sel.end))
+            })
         };
         match t.editor.code_ref().expand_to_node(s, e) {
             Some((ns, ne)) => t.editor.set_selection_range(ns, ne),
@@ -5209,13 +5909,19 @@ impl App {
     /// inside it.
     fn apply_selection_range(&mut self, ranges: &[crate::lsp_core::Range]) {
         let expand = self.expand_selection_dir.take().unwrap_or(true);
-        let Some(path) = self.active_path() else { return };
+        let Some(path) = self.active_path() else {
+            return;
+        };
         let enc = self.lsp.encoding_for(&path);
-        let Some(t) = self.editor.active_tab_mut() else { return };
+        let Some(t) = self.editor.active_tab_mut() else {
+            return;
+        };
         let (cur_s, cur_e) = {
             let sel = t.editor.get_selection();
             let cursor = t.editor.get_cursor();
-            sel.map_or((cursor, cursor), |s| (s.start.min(s.end), s.start.max(s.end)))
+            sel.map_or((cursor, cursor), |s| {
+                (s.start.min(s.end), s.start.max(s.end))
+            })
         };
         // Resolve the chain to char offsets.
         let resolved: Vec<(usize, usize)> = {
@@ -5243,7 +5949,11 @@ impl App {
                 .max_by_key(|(s, e)| e - s)
         };
         if let Some(&(s, e)) = target {
-            t.editor.set_selection(Some(crate::editor_core::selection::Selection { start: s, end: e }));
+            t.editor
+                .set_selection(Some(crate::editor_core::selection::Selection {
+                    start: s,
+                    end: e,
+                }));
             t.editor.set_cursor(e);
         }
     }
@@ -5264,7 +5974,9 @@ impl App {
         let enc = self.lsp.encoding_for(&path);
         // Range: the selection if any, else the whole cursor line.
         let (start, end) = {
-            let Some(t) = self.editor.active_tab_mut() else { return };
+            let Some(t) = self.editor.active_tab_mut() else {
+                return;
+            };
             let sel = t.editor.get_selection().filter(|s| !s.is_empty());
             let code = t.editor.code_ref();
             if let Some(s) = sel {
@@ -5277,7 +5989,10 @@ impl App {
                 let line = code.char_to_line(cur);
                 let line_start = code.line_to_char(line);
                 let line_end = line_start + code.line_len(line);
-                (char_to_lsp_pos(code, line_start, enc), char_to_lsp_pos(code, line_end, enc))
+                (
+                    char_to_lsp_pos(code, line_start, enc),
+                    char_to_lsp_pos(code, line_end, enc),
+                )
             }
         };
         // Reconstruct minimal LSP diagnostic objects overlapping the range.
@@ -5297,7 +6012,8 @@ impl App {
                 })
             })
             .collect();
-        self.lsp.request_code_action(&path, start, end, &serde_json::Value::Array(diags));
+        self.lsp
+            .request_code_action(&path, start, end, &serde_json::Value::Array(diags));
     }
 
     /// Handle a key for the code-action chooser: Up/Down move, Enter applies,
@@ -5322,7 +6038,9 @@ impl App {
 
     /// Apply the highlighted code action's workspace edit and close the chooser.
     fn apply_selected_code_action(&mut self) {
-        let Some(menu) = self.code_actions.take() else { return };
+        let Some(menu) = self.code_actions.take() else {
+            return;
+        };
         if let Some((title, edit)) = menu.actions.into_iter().nth(menu.selected) {
             if edit.is_empty() {
                 self.status = t!("status.code_action_no_edit", title = title).to_string();
@@ -5370,7 +6088,9 @@ impl App {
     /// ticks faster to keep the display current).
     #[must_use]
     pub fn pomodoro_running(&self) -> bool {
-        self.pomodoro.as_ref().is_some_and(crate::pomodoro_tool::Timer::is_running)
+        self.pomodoro
+            .as_ref()
+            .is_some_and(crate::pomodoro_tool::Timer::is_running)
     }
 
     /// Advance a running Pomodoro countdown by the real time elapsed since the
@@ -5427,7 +6147,10 @@ impl App {
                 if let Some(t) = self.pomodoro.as_mut() {
                     t.stop();
                 }
-                if matches!(self.pomodoro.as_ref().map(|t| t.phase), Some(Phase::Idle) | None) {
+                if matches!(
+                    self.pomodoro.as_ref().map(|t| t.phase),
+                    Some(Phase::Idle) | None
+                ) {
                     self.pomodoro = None;
                 }
                 self.pomodoro_open = false;
@@ -5483,7 +6206,10 @@ impl App {
             self.git_head_cache.insert(path.clone(), head);
         }
         let marks = crate::git::diff_marks(&self.git_head_cache[&path], &current);
-        let styled: Vec<(usize, &str)> = marks.iter().map(|&(line, m)| (line, gutter_hex(m))).collect();
+        let styled: Vec<(usize, &str)> = marks
+            .iter()
+            .map(|&(line, m)| (line, gutter_hex(m)))
+            .collect();
         if let Some(t) = self.editor.active_tab_mut() {
             t.editor.set_gutter_marks(styled);
         }
@@ -5523,15 +6249,26 @@ impl App {
             self.status = t!("status.no_changes").to_string();
             return;
         }
-        let line = self.editor.active_tab().map_or(0, |t| t.editor.cursor_line());
+        let line = self
+            .editor
+            .active_tab()
+            .map_or(0, |t| t.editor.cursor_line());
         let target = if forward {
             hunks.iter().map(|h| h.current_start).find(|&s| s > line)
         } else {
-            hunks.iter().rev().map(|h| h.current_start).find(|&s| s < line)
+            hunks
+                .iter()
+                .rev()
+                .map(|h| h.current_start)
+                .find(|&s| s < line)
         };
         // Wrap to the first/last hunk when there is none beyond the cursor.
         let target = target.unwrap_or_else(|| {
-            if forward { hunks[0].current_start } else { hunks[hunks.len() - 1].current_start }
+            if forward {
+                hunks[0].current_start
+            } else {
+                hunks[hunks.len() - 1].current_start
+            }
         });
         let area = self.editor_view();
         self.editor.goto(target + 1, None, area);
@@ -5545,7 +6282,10 @@ impl App {
             self.status = t!("status.no_changes").to_string();
             return;
         }
-        let line = self.editor.active_tab().map_or(0, |t| t.editor.cursor_line());
+        let line = self
+            .editor
+            .active_tab()
+            .map_or(0, |t| t.editor.cursor_line());
         let Some(hunk) = hunks.into_iter().find(|h| h.contains(line)) else {
             self.status = t!("status.no_hunk").to_string();
             return;
@@ -5592,7 +6332,10 @@ impl App {
         let mut rebuilt = lines[..conflict.start].concat();
         rebuilt.push_str(&conflict.resolved(how));
         rebuilt.push_str(&lines[conflict.end.min(lines.len())..].concat());
-        let caret: usize = lines[..conflict.start].iter().map(|l| l.chars().count()).sum();
+        let caret: usize = lines[..conflict.start]
+            .iter()
+            .map(|l| l.chars().count())
+            .sum();
         if let Some(t) = self.editor.active_tab_mut() {
             t.editor.set_content(&rebuilt);
             t.editor.set_cursor(caret);
@@ -5615,7 +6358,9 @@ impl App {
             return;
         };
         // Search from the line after the cursor so repeated calls advance.
-        match crate::conflict_tool::find(&content, line + 1).or_else(|| crate::conflict_tool::find(&content, 0)) {
+        match crate::conflict_tool::find(&content, line + 1)
+            .or_else(|| crate::conflict_tool::find(&content, 0))
+        {
             Some(c) => {
                 let area = self.editor_view();
                 self.editor.goto(c.start + 1, None, area);
@@ -5650,7 +6395,10 @@ impl App {
             self.status = t!("status.no_changes").to_string();
             return;
         }
-        let line = self.editor.active_tab().map_or(0, |t| t.editor.cursor_line());
+        let line = self
+            .editor
+            .active_tab()
+            .map_or(0, |t| t.editor.cursor_line());
         let Some(hunk) = hunks.into_iter().find(|h| h.contains(line)) else {
             self.status = t!("status.no_hunk").to_string();
             return;
@@ -5708,7 +6456,10 @@ impl App {
             self.status = t!("status.no_changes").to_string();
             return;
         }
-        let line = self.editor.active_tab().map_or(0, |t| t.editor.cursor_line());
+        let line = self
+            .editor
+            .active_tab()
+            .map_or(0, |t| t.editor.cursor_line());
         let Some(hunk) = hunks.into_iter().find(|h| h.contains(line)) else {
             self.status = t!("status.no_hunk").to_string();
             return;
@@ -5769,8 +6520,15 @@ impl App {
         if !self.git_repo {
             return None;
         }
-        let rel = path.strip_prefix(&self.root).ok()?.to_string_lossy().replace('\\', "/");
-        self.git_status.iter().find(|s| s.path == rel).and_then(crate::git::FileStatus::primary)
+        let rel = path
+            .strip_prefix(&self.root)
+            .ok()?
+            .to_string_lossy()
+            .replace('\\', "/");
+        self.git_status
+            .iter()
+            .find(|s| s.path == rel)
+            .and_then(crate::git::FileStatus::primary)
     }
 
     /// Toggle spell-checking (red underline in comments/strings), persisting the
@@ -5817,23 +6575,37 @@ impl App {
     /// Read the persisted personal word list (one word per line). Empty when the
     /// file is missing or unreadable.
     fn load_user_words() -> Vec<String> {
-        let Some(path) = Settings::user_dictionary_path() else { return Vec::new() };
-        let Ok(text) = std::fs::read_to_string(path) else { return Vec::new() };
-        text.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect()
+        let Some(path) = Settings::user_dictionary_path() else {
+            return Vec::new();
+        };
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return Vec::new();
+        };
+        text.lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(str::to_string)
+            .collect()
     }
 
     /// Append `word` to the persisted personal word list, creating it if needed
     /// and skipping duplicates.
     fn persist_user_word(word: &str) {
         use std::io::Write;
-        let Some(path) = Settings::user_dictionary_path() else { return };
+        let Some(path) = Settings::user_dictionary_path() else {
+            return;
+        };
         if Self::load_user_words().iter().any(|w| w == word) {
             return;
         }
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
             let _ = writeln!(f, "{word}");
         }
     }
@@ -5912,7 +6684,12 @@ impl App {
             return;
         }
         let suggestions = sc.suggest(&word);
-        self.spell_suggest = Some(SpellSuggest { word, span: (start, end), suggestions, selected: 0 });
+        self.spell_suggest = Some(SpellSuggest {
+            word,
+            span: (start, end),
+            suggestions,
+            selected: 0,
+        });
     }
 
     fn spell_suggest_key(&mut self, key: KeyEvent) {
@@ -5924,9 +6701,10 @@ impl App {
             }
             KeyCode::Down => {
                 if let Some(p) = self.spell_suggest.as_mut()
-                    && p.selected + 1 < p.suggestions.len() {
-                        p.selected += 1;
-                    }
+                    && p.selected + 1 < p.suggestions.len()
+                {
+                    p.selected += 1;
+                }
             }
             KeyCode::Enter => self.spell_apply_selected(),
             KeyCode::Char('a' | 'A') => self.spell_add_word(),
@@ -5946,10 +6724,11 @@ impl App {
         }
         let row = (mouse.row - r.y) as usize;
         if let Some(p) = self.spell_suggest.as_mut()
-            && row < p.suggestions.len() {
-                p.selected = row;
-                self.spell_apply_selected();
-            }
+            && row < p.suggestions.len()
+        {
+            p.selected = row;
+            self.spell_apply_selected();
+        }
     }
 
     /// Replace the misspelled word with the highlighted suggestion.
@@ -5998,7 +6777,10 @@ impl App {
 
     /// Open the editor context menu at screen position `(x, y)`.
     fn open_context_menu(&mut self, x: u16, y: u16) {
-        let selected = CONTEXT_ITEMS.iter().position(|(_, a)| *a != SEP_ACTION).unwrap_or(0);
+        let selected = CONTEXT_ITEMS
+            .iter()
+            .position(|(_, a)| *a != SEP_ACTION)
+            .unwrap_or(0);
         self.context_menu = Some(ContextMenu { selected, x, y });
     }
 
@@ -6014,7 +6796,9 @@ impl App {
 
     /// Move the context-menu selection to the next/previous non-separator row.
     fn context_move(&mut self, down: bool) {
-        let Some(cm) = self.context_menu.as_mut() else { return };
+        let Some(cm) = self.context_menu.as_mut() else {
+            return;
+        };
         let n = CONTEXT_ITEMS.len();
         let mut i = cm.selected;
         for _ in 0..n {
@@ -6046,12 +6830,16 @@ impl App {
 
     /// Run the highlighted context-menu action and close the menu.
     fn run_context_selected(&mut self) {
-        let action = self.context_menu.as_ref().map(|cm| CONTEXT_ITEMS[cm.selected].1);
+        let action = self
+            .context_menu
+            .as_ref()
+            .map(|cm| CONTEXT_ITEMS[cm.selected].1);
         self.context_menu = None;
         if let Some(action) = action
-            && action != SEP_ACTION {
-                self.run_action(action);
-            }
+            && action != SEP_ACTION
+        {
+            self.run_action(action);
+        }
     }
 
     // ----- git changes panel ----------------------------------------------
@@ -6076,9 +6864,10 @@ impl App {
             }
             KeyCode::Down => {
                 if let Some(p) = self.git_panel.as_mut()
-                    && p.selected + 1 < self.git_status.len() {
-                        p.selected += 1;
-                    }
+                    && p.selected + 1 < self.git_status.len()
+                {
+                    p.selected += 1;
+                }
             }
             // Space / s / u toggle or set the staged state of the selected file.
             KeyCode::Char(' ') => self.git_toggle_stage(),
@@ -6153,13 +6942,19 @@ impl App {
 
     /// Begin a commit: prompt for a message (only when something is staged).
     fn git_begin_commit(&mut self) {
-        let any_staged = self.git_status.iter().any(crate::git::FileStatus::is_staged);
+        let any_staged = self
+            .git_status
+            .iter()
+            .any(crate::git::FileStatus::is_staged);
         if !any_staged {
             self.status = t!("status.git_nothing_staged").into();
             return;
         }
         self.git_panel = None;
-        self.prompt = Some(Prompt::new(PromptKind::GitCommit, t!("prompt.git_commit").to_string()));
+        self.prompt = Some(Prompt::new(
+            PromptKind::GitCommit,
+            t!("prompt.git_commit").to_string(),
+        ));
     }
 
     /// Run `git commit -m <message>` and report the outcome.
@@ -6171,7 +6966,9 @@ impl App {
         }
         match crate::git::commit(&self.root, message) {
             Ok(()) => self.status = t!("status.git_committed").into(),
-            Err(e) => self.messages.error(t!("msg.git_commit_failed", error = e).to_string()),
+            Err(e) => self
+                .messages
+                .error(t!("msg.git_commit_failed", error = e).to_string()),
         }
         self.refresh_git();
     }
@@ -6203,7 +7000,9 @@ impl App {
                 // Files on disk may now differ; refresh the explorer tree.
                 self.explorer.rebuild();
             }
-            Err(e) => self.messages.error(t!("msg.git_branch_failed", error = e).to_string()),
+            Err(e) => self
+                .messages
+                .error(t!("msg.git_branch_failed", error = e).to_string()),
         }
     }
 
@@ -6262,7 +7061,10 @@ impl App {
     /// Begin cloning a repository: prompt for its URL (works outside a repo too).
     fn git_begin_clone(&mut self) {
         self.git_panel = None;
-        self.prompt = Some(Prompt::new(PromptKind::GitClone, t!("prompt.git_clone").to_string()));
+        self.prompt = Some(Prompt::new(
+            PromptKind::GitClone,
+            t!("prompt.git_clone").to_string(),
+        ));
     }
 
     /// Clone `url` into the workspace, streaming `git clone` into the bottom dock.
@@ -6290,7 +7092,9 @@ impl App {
         }
         let path = tmp.display();
         self.git_panel = None;
-        self.run_command(&format!("GIT_EDITOR='cp \"{path}\"' git branch --edit-description"));
+        self.run_command(&format!(
+            "GIT_EDITOR='cp \"{path}\"' git branch --edit-description"
+        ));
     }
 
     /// Delete the named branch (`git branch --delete`), streaming the result to
@@ -6377,7 +7181,12 @@ impl App {
                 t.editor.set_eol_note(None);
             }
         }
-        self.status = t!(if on { "status.inline_blame_on" } else { "status.inline_blame_off" }).to_string();
+        self.status = t!(if on {
+            "status.inline_blame_on"
+        } else {
+            "status.inline_blame_off"
+        })
+        .to_string();
     }
 
     /// Refresh the inline blame for the cursor's line when enabled. Cheap: blames
@@ -6409,15 +7218,27 @@ impl App {
         }
         self.blame_cache = Some((path.clone(), line));
         let note = match (path.parent(), path.file_name()) {
-            (Some(dir), Some(name)) => match crate::git::blame_line(dir, &name.to_string_lossy(), line) {
-                Some(b) if b.is_uncommitted() => t!("blame.uncommitted").to_string(),
-                Some(b) => t!("blame.inline", author = b.author, date = b.date, summary = b.summary).to_string(),
-                None => String::new(),
-            },
+            (Some(dir), Some(name)) => {
+                match crate::git::blame_line(dir, &name.to_string_lossy(), line) {
+                    Some(b) if b.is_uncommitted() => t!("blame.uncommitted").to_string(),
+                    Some(b) => t!(
+                        "blame.inline",
+                        author = b.author,
+                        date = b.date,
+                        summary = b.summary
+                    )
+                    .to_string(),
+                    None => String::new(),
+                }
+            }
             _ => String::new(),
         };
         if let Some(t) = self.editor.active_tab_mut() {
-            t.editor.set_eol_note(if note.is_empty() { None } else { Some((line0, note)) });
+            t.editor.set_eol_note(if note.is_empty() {
+                None
+            } else {
+                Some((line0, note))
+            });
         }
     }
 
@@ -6425,8 +7246,15 @@ impl App {
 
     /// The debug adapter configured for `path`'s file extension, if any.
     fn adapter_for(&self, path: &Path) -> Option<crate::dap::DebugAdapter> {
-        let ext = path.extension().and_then(|e| e.to_str())?.to_ascii_lowercase();
-        self.settings.debug_adapters.iter().find(|a| a.extensions.iter().any(|e| e == &ext)).cloned()
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())?
+            .to_ascii_lowercase();
+        self.settings
+            .debug_adapters
+            .iter()
+            .find(|a| a.extensions.iter().any(|e| e == &ext))
+            .cloned()
     }
 
     /// Toggle a breakpoint on the cursor's line in the active file.
@@ -6463,7 +7291,12 @@ impl App {
         let bps: std::collections::HashMap<String, Vec<usize>> = self
             .breakpoints
             .iter()
-            .map(|(p, l)| (p.to_string_lossy().into_owned(), l.iter().copied().collect()))
+            .map(|(p, l)| {
+                (
+                    p.to_string_lossy().into_owned(),
+                    l.iter().copied().collect(),
+                )
+            })
             .collect();
         if self.dap.start(&adapter, &path.to_string_lossy(), bps) {
             self.show_debug_panel = true;
@@ -6487,10 +7320,17 @@ impl App {
     /// so the gutter shows them.
     fn refresh_debug_markers(&mut self) {
         let stopped = self.dap_stopped.clone();
-        let Some(path) = self.editor.active_tab().and_then(|t| t.path.clone()) else { return };
-        let lines: Vec<usize> =
-            self.breakpoints.get(&path).map(|s| s.iter().map(|l| l.saturating_sub(1)).collect()).unwrap_or_default();
-        let debug_line = stopped.filter(|(p, _)| *p == path).map(|(_, l)| l.saturating_sub(1));
+        let Some(path) = self.editor.active_tab().and_then(|t| t.path.clone()) else {
+            return;
+        };
+        let lines: Vec<usize> = self
+            .breakpoints
+            .get(&path)
+            .map(|s| s.iter().map(|l| l.saturating_sub(1)).collect())
+            .unwrap_or_default();
+        let debug_line = stopped
+            .filter(|(p, _)| *p == path)
+            .map(|(_, l)| l.saturating_sub(1));
         if let Some(t) = self.editor.active_tab_mut() {
             t.editor.set_breakpoints(lines);
             t.editor.set_debug_line(debug_line);
@@ -6525,7 +7365,10 @@ impl App {
         if !self.settings.auto_save {
             return;
         }
-        if self.last_auto_save.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(5)) {
+        if self
+            .last_auto_save
+            .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(5))
+        {
             return;
         }
         self.last_auto_save = Some(std::time::Instant::now());
@@ -6545,11 +7388,13 @@ impl App {
         if !self.settings.highlight_word {
             return;
         }
-        let key = self
-            .editor
-            .active_tab()
-            .filter(|t| !t.is_image())
-            .map(|t| (self.editor.active, t.editor.revision(), t.editor.get_cursor()));
+        let key = self.editor.active_tab().filter(|t| !t.is_image()).map(|t| {
+            (
+                self.editor.active,
+                t.editor.revision(),
+                t.editor.get_cursor(),
+            )
+        });
         if key == self.word_highlight_key {
             return;
         }
@@ -6558,7 +7403,9 @@ impl App {
             self.editor.set_word_marks(Vec::new());
             return;
         };
-        let Some(tab) = self.editor.active_tab() else { return };
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
         let content = tab.editor.get_content();
         let chars: Vec<char> = content.chars().collect();
         let wlen = word.chars().count();
@@ -6581,7 +7428,8 @@ impl App {
             }
         }
         // A single occurrence (the word itself) isn't worth highlighting.
-        self.editor.set_word_marks(if marks.len() > 1 { marks } else { Vec::new() });
+        self.editor
+            .set_word_marks(if marks.len() > 1 { marks } else { Vec::new() });
     }
 
     /// When "Live Backlinks" is on, rebuild the bottom dock with the active node's
@@ -6599,12 +7447,15 @@ impl App {
             return;
         }
         self.backlinks_follow_key = key;
-        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else { return };
+        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else {
+            return;
+        };
         let id = crate::roam::node_id(&text).unwrap_or_default();
         let title = crate::roam::node_title(&text).unwrap_or_default();
         self.bottom_dock.clear();
         if id.is_empty() && title.is_empty() {
-            self.bottom_dock.push(t!("status.roam_not_node").to_string());
+            self.bottom_dock
+                .push(t!("status.roam_not_node").to_string());
         } else {
             let files = self.roam_node_files();
             for line in crate::roam::backlinks(&id, &title, &files).lines() {
@@ -6618,7 +7469,10 @@ impl App {
     /// second editor) and react: clean buffers are reloaded; a buffer with unsaved
     /// edits gets a one-time warning. Throttled to once per second.
     pub fn poll_file_changes(&mut self) {
-        if self.last_disk_poll.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(1)) {
+        if self
+            .last_disk_poll
+            .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(1))
+        {
             return;
         }
         self.last_disk_poll = Some(std::time::Instant::now());
@@ -6626,8 +7480,12 @@ impl App {
         let mut reload_clean = false;
         let mut dirty_changed: Vec<PathBuf> = Vec::new();
         for tab in &self.editor.tabs {
-            let (Some(path), false) = (tab.path.as_ref(), tab.image.is_some()) else { continue };
-            let Ok(mtime) = std::fs::metadata(path).and_then(|m| m.modified()) else { continue };
+            let (Some(path), false) = (tab.path.as_ref(), tab.image.is_some()) else {
+                continue;
+            };
+            let Ok(mtime) = std::fs::metadata(path).and_then(|m| m.modified()) else {
+                continue;
+            };
             let previous = self.disk_mtimes.insert(path.clone(), mtime);
             // Only act on a *change* (the first sighting just records the mtime).
             if previous.is_some_and(|p| p != mtime) {
@@ -6645,7 +7503,8 @@ impl App {
             }
         }
         for path in dirty_changed {
-            self.messages.warn(t!("msg.external_change_unsaved", path = path.display()).to_string());
+            self.messages
+                .warn(t!("msg.external_change_unsaved", path = path.display()).to_string());
         }
     }
 
@@ -6663,7 +7522,9 @@ impl App {
         }
         for event in self.dap.poll() {
             match event {
-                crate::dap::DapEvent::Running => self.status = t!("status.debug_running").to_string(),
+                crate::dap::DapEvent::Running => {
+                    self.status = t!("status.debug_running").to_string();
+                }
                 crate::dap::DapEvent::Stopped { reason, .. } => {
                     self.status = t!("status.debug_stopped_at", reason = reason).to_string();
                 }
@@ -6747,7 +7608,11 @@ impl App {
             self.status = t!("status.git_no_branches").into();
             return;
         }
-        self.branch_chooser = Some(BranchChooser { branches, selected: 0, merge });
+        self.branch_chooser = Some(BranchChooser {
+            branches,
+            selected: 0,
+            merge,
+        });
     }
 
     fn branch_key(&mut self, key: KeyEvent) {
@@ -6772,10 +7637,11 @@ impl App {
     fn branch_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(c) = self.branch_chooser.as_mut()
-                && idx < c.branches.len() {
-                    c.selected = idx;
-                    self.checkout_selected_branch();
-                }
+            && idx < c.branches.len()
+        {
+            c.selected = idx;
+            self.checkout_selected_branch();
+        }
     }
 
     // ----- Tasks (tasks.toml runner) --------------------------------------
@@ -6822,7 +7688,9 @@ impl App {
 
     /// Run the highlighted task's command through the async Run pipeline.
     fn run_selected_task(&mut self) {
-        let Some(c) = self.task_chooser.take() else { return };
+        let Some(c) = self.task_chooser.take() else {
+            return;
+        };
         if let Some(task) = c.tasks.get(c.selected) {
             let command = task.command.clone();
             self.run_command(&command);
@@ -6836,7 +7704,10 @@ impl App {
         if self.editor.active_tab().is_none() {
             return;
         }
-        self.prompt = Some(Prompt::new(PromptKind::CompareFile, t!("prompt.compare_file").to_string()));
+        self.prompt = Some(Prompt::new(
+            PromptKind::CompareFile,
+            t!("prompt.compare_file").to_string(),
+        ));
     }
 
     /// Open a read-only unified-diff overlay comparing the active buffer with the
@@ -6847,22 +7718,32 @@ impl App {
         }
         let other = self.resolve(input);
         let Ok(other_text) = std::fs::read_to_string(&other) else {
-            self.messages.error(t!("msg.open_failed", error = other.display()).to_string());
+            self.messages
+                .error(t!("msg.open_failed", error = other.display()).to_string());
             return;
         };
-        let Some(tab) = self.editor.active_tab() else { return };
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
         let current = tab.editor.get_content();
         let here = tab.path.as_ref().and_then(|p| p.file_name()).map_or_else(
             || t!("ui.untitled").to_string(),
             |n| n.to_string_lossy().into_owned(),
         );
-        let there = other.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let there = other
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let lines = crate::diff_view::build(&other_text, &current);
         if lines.is_empty() {
             self.status = t!("status.diff_identical").to_string();
             return;
         }
-        self.diff_view = Some(DiffViewState { title: format!("{there} ↔ {here}"), lines, scroll: 0 });
+        self.diff_view = Some(DiffViewState {
+            title: format!("{there} ↔ {here}"),
+            lines,
+            scroll: 0,
+        });
     }
 
     fn diff_view_key(&mut self, key: KeyEvent) {
@@ -6917,10 +7798,13 @@ impl App {
                 self.explorer.rebuild();
                 let n = self.editor.reload_clean_from_disk();
                 if n > 0 {
-                    self.messages.info(t!("status.git_reloaded", count = n).to_string());
+                    self.messages
+                        .info(t!("status.git_reloaded", count = n).to_string());
                 }
             }
-            Err(e) => self.messages.error(t!("msg.git_checkout_failed", error = e).to_string()),
+            Err(e) => self
+                .messages
+                .error(t!("msg.git_checkout_failed", error = e).to_string()),
         }
     }
 
@@ -6951,22 +7835,32 @@ impl App {
             self.status = t!("status.read_only_blocked").to_string();
             return;
         }
-        let Some(tab) = self.editor.active_tab_mut() else { return };
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
         if tab.is_image() {
             return;
         }
         let prefix = tab.editor.comment_prefix();
-        let prefix = if prefix.is_empty() { "#".to_string() } else { prefix };
+        let prefix = if prefix.is_empty() {
+            "#".to_string()
+        } else {
+            prefix
+        };
         let line = tab.editor.cursor_line();
-        let mut lines: Vec<String> = tab.editor.get_content().split('\n').map(str::to_string).collect();
+        let mut lines: Vec<String> = tab
+            .editor
+            .get_content()
+            .split('\n')
+            .map(str::to_string)
+            .collect();
         let Some(cur) = lines.get(line) else { return };
         let indent: String = cur.chars().take_while(|c| c.is_whitespace()).collect();
         let title = cur.trim();
         let title = if title.is_empty() { "Section" } else { title };
         let rule = "=".repeat(title.chars().count().clamp(8, 60));
-        let banner = format!(
-            "{indent}{prefix} {rule}\n{indent}{prefix} {title}\n{indent}{prefix} {rule}"
-        );
+        let banner =
+            format!("{indent}{prefix} {rule}\n{indent}{prefix} {title}\n{indent}{prefix} {rule}");
         lines[line] = banner;
         tab.editor.set_content(&lines.join("\n"));
         tab.editor.set_cursor_line(line + 1);
@@ -7080,7 +7974,10 @@ impl App {
             }
         }
         // A plain Tab after a snippet prefix word expands that snippet.
-        if matches!(key.code, KeyCode::Tab) && !Self::ctrl(&key) && !Self::alt(&key) && !Self::shift(&key)
+        if matches!(key.code, KeyCode::Tab)
+            && !Self::ctrl(&key)
+            && !Self::alt(&key)
+            && !Self::shift(&key)
             && self.expand_snippet_prefix()
         {
             return;
@@ -7090,7 +7987,10 @@ impl App {
             KeyCode::Home => return self.editor.cursor_line_home(),
             KeyCode::End => return self.editor.cursor_line_end(),
             KeyCode::Delete => {
-                let multi = self.editor.active_tab().is_some_and(|t| t.editor.has_multi_carets());
+                let multi = self
+                    .editor
+                    .active_tab()
+                    .is_some_and(|t| t.editor.has_multi_carets());
                 if multi {
                     if let Some(t) = self.editor.active_tab_mut() {
                         t.editor.multi_delete(true);
@@ -7102,11 +8002,13 @@ impl App {
                 return;
             }
             KeyCode::PageUp => {
-                self.editor.page_up(area.height.saturating_sub(2).max(1) as usize);
+                self.editor
+                    .page_up(area.height.saturating_sub(2).max(1) as usize);
                 return;
             }
             KeyCode::PageDown => {
-                self.editor.page_down(area.height.saturating_sub(2).max(1) as usize);
+                self.editor
+                    .page_down(area.height.saturating_sub(2).max(1) as usize);
                 return;
             }
             _ => {}
@@ -7115,9 +8017,15 @@ impl App {
         // Overwrite mode: a plain character types over the one under the cursor
         // (delete it first, then the normal insert below replaces it). Skipped at
         // end-of-line, with a selection, or with multiple carets.
-        if self.overwrite && matches!(key.code, KeyCode::Char(_)) && !Self::ctrl(&key) && !Self::alt(&key) {
+        if self.overwrite
+            && matches!(key.code, KeyCode::Char(_))
+            && !Self::ctrl(&key)
+            && !Self::alt(&key)
+        {
             let over_char = self.editor.active_tab_mut().is_some_and(|t| {
-                if t.editor.has_multi_carets() || t.editor.get_selection().is_some_and(|s| !s.is_empty()) {
+                if t.editor.has_multi_carets()
+                    || t.editor.get_selection().is_some_and(|s| !s.is_empty())
+                {
                     return false;
                 }
                 let cur = t.editor.get_cursor();
@@ -7161,7 +8069,10 @@ impl App {
             self.status = t!("status.macro_empty").to_string();
             return;
         }
-        self.prompt = Some(Prompt::new(PromptKind::SaveMacro, t!("prompt.save_macro").to_string()));
+        self.prompt = Some(Prompt::new(
+            PromptKind::SaveMacro,
+            t!("prompt.save_macro").to_string(),
+        ));
     }
 
     /// Persist the recorded macro under `name` to `macros.toml`.
@@ -7170,11 +8081,18 @@ impl App {
         if name.is_empty() || self.macro_keys.is_empty() {
             return;
         }
-        let Some(path) = Settings::macros_path() else { return };
-        let mac = crate::macros::Macro { name: name.to_string(), keys: crate::macros::encode(&self.macro_keys) };
+        let Some(path) = Settings::macros_path() else {
+            return;
+        };
+        let mac = crate::macros::Macro {
+            name: name.to_string(),
+            keys: crate::macros::encode(&self.macro_keys),
+        };
         match crate::macros::upsert(&path, mac) {
             Ok(()) => self.status = t!("status.macro_saved", name = name).to_string(),
-            Err(e) => self.messages.error(t!("msg.save_failed", error = e).to_string()),
+            Err(e) => self
+                .messages
+                .error(t!("msg.save_failed", error = e).to_string()),
         }
     }
 
@@ -7182,7 +8100,9 @@ impl App {
     /// Push `text` onto the clipboard history (most-recent first, de-duplicated,
     /// capped). Empty/`None` entries are ignored.
     fn record_clipboard(&mut self, text: Option<String>) {
-        let Some(text) = text.filter(|s| !s.is_empty()) else { return };
+        let Some(text) = text.filter(|s| !s.is_empty()) else {
+            return;
+        };
         self.clipboard_ring.retain(|e| *e != text);
         self.clipboard_ring.insert(0, text);
         self.clipboard_ring.truncate(30);
@@ -7194,7 +8114,10 @@ impl App {
             self.status = t!("status.clipboard_empty").to_string();
             return;
         }
-        self.clipboard_chooser = Some(ClipboardChooser { entries: self.clipboard_ring.clone(), selected: 0 });
+        self.clipboard_chooser = Some(ClipboardChooser {
+            entries: self.clipboard_ring.clone(),
+            selected: 0,
+        });
     }
 
     fn clipboard_key(&mut self, key: KeyEvent) {
@@ -7229,8 +8152,12 @@ impl App {
     /// Insert the highlighted clipboard-history entry at the cursor and close the
     /// picker (also promoting it to the front of the ring).
     fn paste_selected_clipboard(&mut self) {
-        let Some(c) = self.clipboard_chooser.take() else { return };
-        let Some(text) = c.entries.get(c.selected).cloned() else { return };
+        let Some(c) = self.clipboard_chooser.take() else {
+            return;
+        };
+        let Some(text) = c.entries.get(c.selected).cloned() else {
+            return;
+        };
         let area = self.layout.editor;
         if self.editor.insert_str(&text, area) {
             self.mark_active_dirty();
@@ -7240,12 +8167,17 @@ impl App {
     }
 
     fn open_macro_chooser(&mut self) {
-        let macros = Settings::macros_path().map(|p| crate::macros::load(&p)).unwrap_or_default();
+        let macros = Settings::macros_path()
+            .map(|p| crate::macros::load(&p))
+            .unwrap_or_default();
         if macros.is_empty() {
             self.status = t!("status.no_macros").to_string();
             return;
         }
-        self.macro_chooser = Some(MacroChooser { macros, selected: 0 });
+        self.macro_chooser = Some(MacroChooser {
+            macros,
+            selected: 0,
+        });
     }
 
     fn macro_key(&mut self, key: KeyEvent) {
@@ -7279,7 +8211,9 @@ impl App {
 
     /// Load the highlighted saved macro into the active macro buffer and play it.
     fn run_selected_macro(&mut self) {
-        let Some(c) = self.macro_chooser.take() else { return };
+        let Some(c) = self.macro_chooser.take() else {
+            return;
+        };
         if let Some(mac) = c.macros.get(c.selected) {
             self.macro_keys = crate::macros::decode(&mac.keys);
             self.focus = Focus::Editor;
@@ -7337,8 +8271,12 @@ impl App {
 
     /// Switch to the highlighted recent project.
     fn switch_to_selected_workspace(&mut self) {
-        let Some(c) = self.workspace_chooser.take() else { return };
-        let Some(root) = c.roots.get(c.selected).cloned() else { return };
+        let Some(c) = self.workspace_chooser.take() else {
+            return;
+        };
+        let Some(root) = c.roots.get(c.selected).cloned() else {
+            return;
+        };
         let path = PathBuf::from(&root);
         if !path.is_dir() {
             self.status = t!("status.project_missing", path = root).to_string();
@@ -7379,8 +8317,13 @@ impl App {
         let (msg, seed) = match kind {
             PromptKind::WorkspaceOpen => (t!("prompt.workspace_open").to_string(), None),
             PromptKind::WorkspaceSave => {
-                let p = self.root.join(format!("workspace.{}", crate::workspace::EXTENSION));
-                (t!("prompt.workspace_save").to_string(), Some(p.to_string_lossy().into_owned()))
+                let p = self
+                    .root
+                    .join(format!("workspace.{}", crate::workspace::EXTENSION));
+                (
+                    t!("prompt.workspace_save").to_string(),
+                    Some(p.to_string_lossy().into_owned()),
+                )
             }
             _ => (t!("prompt.workspace_add_folder").to_string(), None),
         };
@@ -7395,7 +8338,11 @@ impl App {
     fn workspace_save(&mut self, path: &str) {
         let path = self.resolve(path.trim());
         let ws = crate::workspace::Workspace {
-            folders: self.workspace_folders.iter().map(|p| p.to_string_lossy().into_owned()).collect(),
+            folders: self
+                .workspace_folders
+                .iter()
+                .map(|p| p.to_string_lossy().into_owned())
+                .collect(),
             files: self
                 .editor
                 .tabs
@@ -7406,7 +8353,9 @@ impl App {
         };
         match ws.save(&path) {
             Ok(()) => self.status = t!("status.workspace_saved", path = path.display()).to_string(),
-            Err(e) => self.messages.error(t!("msg.save_failed", error = e).to_string()),
+            Err(e) => self
+                .messages
+                .error(t!("msg.save_failed", error = e).to_string()),
         }
     }
 
@@ -7417,7 +8366,8 @@ impl App {
         let ws = match crate::workspace::Workspace::load(&path) {
             Ok(ws) => ws,
             Err(e) => {
-                self.messages.error(t!("msg.open_failed", error = e).to_string());
+                self.messages
+                    .error(t!("msg.open_failed", error = e).to_string());
                 return;
             }
         };
@@ -7427,7 +8377,11 @@ impl App {
         }
         // switch_workspace reset workspace_folders to just the primary; register
         // the full set so the finder/search span them all.
-        self.workspace_folders = if folders.is_empty() { vec![self.root.clone()] } else { folders };
+        self.workspace_folders = if folders.is_empty() {
+            vec![self.root.clone()]
+        } else {
+            folders
+        };
         self.build_file_index();
         for f in &ws.files {
             let p = PathBuf::from(f);
@@ -7456,7 +8410,9 @@ impl App {
     /// non-whitespace run before it) into HTML, replacing it. No-op when the run
     /// doesn't parse as Emmet.
     fn emmet_expand(&mut self) {
-        let Some(tab) = self.editor.active_tab() else { return };
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
         let cur = tab.editor.get_cursor();
         let chars: Vec<char> = tab.editor.get_content().chars().collect();
         let mut start = cur.min(chars.len());
@@ -7481,7 +8437,12 @@ impl App {
     /// words in the buffer, cycling on repeated calls (`forward` chooses the
     /// direction). Like classic "dynamic abbreviation" expansion.
     fn autocomplete(&mut self, forward: bool) {
-        let Some(cur) = self.editor.active_tab().filter(|t| !t.is_image()).map(|t| t.editor.get_cursor()) else {
+        let Some(cur) = self
+            .editor
+            .active_tab()
+            .filter(|t| !t.is_image())
+            .map(|t| t.editor.get_cursor())
+        else {
             return;
         };
         // Continue an active cycle when the cursor still sits at the last insert.
@@ -7489,7 +8450,11 @@ impl App {
         if cycling {
             let s = self.complete_session.as_mut().unwrap();
             let n = s.candidates.len();
-            s.index = if forward { (s.index + 1) % n } else { (s.index + n - 1) % n };
+            s.index = if forward {
+                (s.index + 1) % n
+            } else {
+                (s.index + n - 1) % n
+            };
             let (anchor, end, word) = (s.anchor, s.end, s.candidates[s.index].clone());
             self.replace_range_chars(anchor, end, &word);
             if let Some(s) = self.complete_session.as_mut() {
@@ -7553,14 +8518,15 @@ impl App {
             return false;
         }
         if Self::ctrl(key) {
-            return matches!(
-                key.code,
-                KeyCode::Char('v' | 'x' | 'z' | 'Z' | 'k' | 'd')
-            );
+            return matches!(key.code, KeyCode::Char('v' | 'x' | 'z' | 'Z' | 'k' | 'd'));
         }
         matches!(
             key.code,
-            KeyCode::Char(_) | KeyCode::Enter | KeyCode::Backspace | KeyCode::Tab | KeyCode::BackTab
+            KeyCode::Char(_)
+                | KeyCode::Enter
+                | KeyCode::Backspace
+                | KeyCode::Tab
+                | KeyCode::BackTab
         )
     }
 
@@ -7581,7 +8547,9 @@ impl App {
     /// The cursor's LSP `(line, character)` for `path`'s server encoding.
     fn cursor_lsp_position(&self, path: &Path) -> (u32, u32) {
         let enc = self.lsp.encoding_for(path);
-        let Some(t) = self.editor.active_tab() else { return (0, 0) };
+        let Some(t) = self.editor.active_tab() else {
+            return (0, 0);
+        };
         let code = t.editor.code_ref();
         let cur = t.editor.get_cursor();
         let line = code.char_to_line(cur);
@@ -7594,16 +8562,22 @@ impl App {
     /// Push the active document to its language server when it has changed since
     /// the last sync (sending `didOpen` the first time, then `didChange`).
     fn lsp_sync_active(&mut self) {
-        let Some(path) = self.active_path() else { return };
+        let Some(path) = self.active_path() else {
+            return;
+        };
         if !self.lsp.handles(&path) {
             return;
         }
-        let Some(rev) = self.editor.active_tab().map(|t| t.editor.revision()) else { return };
+        let Some(rev) = self.editor.active_tab().map(|t| t.editor.revision()) else {
+            return;
+        };
         let last = self.lsp_synced.get(&path).copied();
         if last == Some(rev) {
             return;
         }
-        let Some(text) = self.editor.active_tab().map(|t| t.editor.get_content()) else { return };
+        let Some(text) = self.editor.active_tab().map(|t| t.editor.get_content()) else {
+            return;
+        };
         if last.is_none() {
             self.lsp.did_open(&path, &text);
             self.lsp.request_folding_range(&path); // fetch foldable ranges once on open
@@ -7634,7 +8608,11 @@ impl App {
                 crate::lsp::LspEvent::Hover(text) | crate::lsp::LspEvent::SignatureHelp(text) => {
                     self.hover = Some(HoverPopup { text });
                 }
-                crate::lsp::LspEvent::Definition { path, line, character } => {
+                crate::lsp::LspEvent::Definition {
+                    path,
+                    line,
+                    character,
+                } => {
                     self.lsp_jump(&path, line, character);
                 }
                 crate::lsp::LspEvent::Completion(items) => {
@@ -7663,18 +8641,28 @@ impl App {
                 crate::lsp::LspEvent::WorkspaceSymbols(syms) => self.show_workspace_symbols(&syms),
                 crate::lsp::LspEvent::WorkspaceEdit(edits) => self.apply_workspace_edit(&edits),
                 crate::lsp::LspEvent::CodeActions(actions) => {
-                    self.code_actions = Some(CodeActionMenu { actions, selected: 0 });
+                    self.code_actions = Some(CodeActionMenu {
+                        actions,
+                        selected: 0,
+                    });
                 }
                 crate::lsp::LspEvent::CodeLenses(lenses) => {
-                    self.code_lens = Some(CodeLensMenu { lenses, selected: 0 });
+                    self.code_lens = Some(CodeLensMenu {
+                        lenses,
+                        selected: 0,
+                    });
                 }
-                crate::lsp::LspEvent::SelectionRanges(ranges) => self.apply_selection_range(&ranges),
+                crate::lsp::LspEvent::SelectionRanges(ranges) => {
+                    self.apply_selection_range(&ranges);
+                }
                 crate::lsp::LspEvent::Highlights(ranges) => self.apply_document_highlights(&ranges),
                 crate::lsp::LspEvent::InlayHints(hints) => self.apply_inlay_hints(&hints),
                 crate::lsp::LspEvent::LinkedRanges(ranges) => self.begin_linked_edit(&ranges),
                 crate::lsp::LspEvent::FoldingRanges(ranges) => {
-                    let ranges: Vec<(usize, usize)> =
-                        ranges.iter().map(|&(s, e)| (s as usize, e as usize)).collect();
+                    let ranges: Vec<(usize, usize)> = ranges
+                        .iter()
+                        .map(|&(s, e)| (s as usize, e as usize))
+                        .collect();
                     if let Some(t) = self.editor.active_tab_mut() {
                         t.editor.set_fold_ranges(ranges);
                     }
@@ -7697,7 +8685,9 @@ impl App {
     /// Rebuild the active editor's diagnostic underline marks from the latest
     /// diagnostics for its file.
     fn refresh_diagnostic_marks(&mut self) {
-        let Some(path) = self.active_path() else { return };
+        let Some(path) = self.active_path() else {
+            return;
+        };
         if !self.lsp.handles(&path) {
             if let Some(t) = self.editor.active_tab_mut() {
                 t.editor.clear_diagnostic_marks();
@@ -7711,7 +8701,9 @@ impl App {
             .iter()
             .map(|d| (d.range, d.severity))
             .collect();
-        let Some(t) = self.editor.active_tab_mut() else { return };
+        let Some(t) = self.editor.active_tab_mut() else {
+            return;
+        };
         let marks = {
             let code = t.editor.code_ref();
             ranges
@@ -7737,7 +8729,9 @@ impl App {
             s.focus = Focus::Editor;
             let enc = s.lsp.encoding_for(&path);
             let (target_line, target_col) = {
-                let Some(t) = s.editor.active_tab() else { return };
+                let Some(t) = s.editor.active_tab() else {
+                    return;
+                };
                 let code = t.editor.code_ref();
                 let ln = (line as usize).min(code.len_lines().saturating_sub(1));
                 let line_start = code.line_to_char(ln);
@@ -7752,7 +8746,9 @@ impl App {
 
     /// Request hover info for the symbol under the cursor.
     fn lsp_hover(&mut self) {
-        let Some(path) = self.active_path() else { return };
+        let Some(path) = self.active_path() else {
+            return;
+        };
         if !self.lsp.handles(&path) {
             self.status = t!("status.lsp_inactive").to_string();
             return;
@@ -7763,7 +8759,9 @@ impl App {
 
     /// Request completion candidates at the cursor.
     fn lsp_complete(&mut self) {
-        let Some(path) = self.active_path() else { return };
+        let Some(path) = self.active_path() else {
+            return;
+        };
         if !self.lsp.handles(&path) {
             self.status = t!("status.lsp_inactive").to_string();
             return;
@@ -7775,7 +8773,9 @@ impl App {
     /// The identifier characters immediately before the cursor (the typed prefix
     /// a completion should extend).
     fn word_prefix_before_cursor(&self) -> String {
-        let Some(t) = self.editor.active_tab() else { return String::new() };
+        let Some(t) = self.editor.active_tab() else {
+            return String::new();
+        };
         let code = t.editor.code_ref();
         let cur = t.editor.get_cursor();
         let line = code.char_to_line(cur);
@@ -7798,11 +8798,15 @@ impl App {
         if self.completion.is_some() {
             return;
         }
-        let Some(path) = self.active_path() else { return };
+        let Some(path) = self.active_path() else {
+            return;
+        };
         if path.extension().and_then(|e| e.to_str()) != Some("org") {
             return;
         }
-        let Some(tab) = self.editor.active_tab() else { return };
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
         let cur = tab.editor.get_cursor();
         if cur < 2 || tab.editor.code_ref().char_slice(cur - 2, cur) != "[[" {
             return;
@@ -7819,7 +8823,11 @@ impl App {
         let suffix = self.editor.active_tab().map_or("]]", |t| {
             let cur = t.editor.get_cursor();
             let code = t.editor.code_ref();
-            if cur + 2 <= code.len_chars() && code.char_slice(cur, cur + 2) == "]]" { "" } else { "]]" }
+            if cur + 2 <= code.len_chars() && code.char_slice(cur, cur + 2) == "]]" {
+                ""
+            } else {
+                "]]"
+            }
         });
         let prefix = self.word_prefix_before_cursor().to_lowercase();
         let mut titles: Vec<String> = self
@@ -7848,8 +8856,12 @@ impl App {
     }
 
     fn accept_completion(&mut self) {
-        let Some(popup) = self.completion.take() else { return };
-        let Some(item) = popup.items.get(popup.selected) else { return };
+        let Some(popup) = self.completion.take() else {
+            return;
+        };
+        let Some(item) = popup.items.get(popup.selected) else {
+            return;
+        };
         let prefix = self.word_prefix_before_cursor();
         // If the candidate begins with what's typed, insert only the remainder so
         // the prefix is not duplicated; otherwise insert it whole.
@@ -7906,18 +8918,27 @@ impl App {
     /// `completionItem/resolve`, when it has no detail yet but carries resolve
     /// data.
     fn resolve_selected_completion(&mut self) {
-        let Some(path) = self.active_path() else { return };
+        let Some(path) = self.active_path() else {
+            return;
+        };
         if !self.lsp.handles(&path) {
             return;
         }
-        let Some(popup) = self.completion.as_ref() else { return };
-        let Some(item) = popup.items.get(popup.selected) else { return };
+        let Some(popup) = self.completion.as_ref() else {
+            return;
+        };
+        let Some(item) = popup.items.get(popup.selected) else {
+            return;
+        };
         if item.detail.is_some() {
             return; // already has detail to show
         }
-        let Some(data) = item.data.clone() else { return };
+        let Some(data) = item.data.clone() else {
+            return;
+        };
         let label = item.label.clone();
-        self.lsp.request_completion_resolve(&path, &label, Some(&data));
+        self.lsp
+            .request_completion_resolve(&path, &label, Some(&data));
     }
 
     fn explorer_key(&mut self, key: KeyEvent) {
@@ -7976,7 +8997,12 @@ impl App {
         let n = paths.len();
         self.clip = paths;
         self.clip_cut = cut;
-        self.status = (if cut { t!("status.cut_n", n = n) } else { t!("status.copied_n", n = n) }).to_string();
+        self.status = (if cut {
+            t!("status.cut_n", n = n)
+        } else {
+            t!("status.copied_n", n = n)
+        })
+        .to_string();
     }
 
     fn explorer_paste(&mut self) {
@@ -7987,7 +9013,8 @@ impl App {
             Some(n) if n.is_dir => n.path.clone(),
             Some(n) => n
                 .path
-                .parent().map_or_else(|| self.root.clone(), Path::to_path_buf),
+                .parent()
+                .map_or_else(|| self.root.clone(), Path::to_path_buf),
             None => self.root.clone(),
         };
         self.paste = Some(PasteOp {
@@ -8008,10 +9035,11 @@ impl App {
             let front = self.paste.as_ref().and_then(|op| op.queue.front().cloned());
             let Some(src) = front else {
                 if let Some(op) = self.paste.take()
-                    && op.cut {
-                        self.clip.clear();
-                        self.clip_cut = false;
-                    }
+                    && op.cut
+                {
+                    self.clip.clear();
+                    self.clip_cut = false;
+                }
                 self.explorer.clear_marks();
                 self.explorer.rebuild();
                 self.status = t!("status.paste_complete").into();
@@ -8073,7 +9101,9 @@ impl App {
             KeyCode::Char('o') => {
                 // Overwrite just this one, then continue.
                 let info = self.paste.as_ref().and_then(|op| {
-                    op.queue.front().map(|s| (s.clone(), op.target.clone(), op.cut))
+                    op.queue
+                        .front()
+                        .map(|s| (s.clone(), op.target.clone(), op.cut))
                 });
                 if let Some((src, target, cut)) = info {
                     let dest = target.join(src.file_name().unwrap_or_default());
@@ -8128,12 +9158,19 @@ impl App {
 
     /// Index of the first tab with unsaved changes (skipping read-only images).
     fn first_dirty_tab(&self) -> Option<usize> {
-        self.editor.tabs.iter().position(|t| t.dirty && !t.is_image())
+        self.editor
+            .tabs
+            .iter()
+            .position(|t| t.dirty && !t.is_image())
     }
 
     /// Close the active tab, prompting first if it has unsaved changes.
     fn request_close_active(&mut self) {
-        if self.editor.active_tab().is_some_and(|t| t.dirty && !t.is_image()) {
+        if self
+            .editor
+            .active_tab()
+            .is_some_and(|t| t.dirty && !t.is_image())
+        {
             self.unsaved = Some(UnsavedPrompt {
                 mode: UnsavedMode::CloseTab,
                 name: self.active_tab_name(),
@@ -8254,7 +9291,9 @@ impl App {
                                 self.close_buffers_under(&canon);
                                 removed += 1;
                             }
-                            Err(e) => self.messages.error(t!("msg.delete_failed", error = e).to_string()),
+                            Err(e) => self
+                                .messages
+                                .error(t!("msg.delete_failed", error = e).to_string()),
                         }
                     }
                     self.explorer.clear_marks();
@@ -8323,10 +9362,12 @@ impl App {
             return;
         }
         if let Some(node) = self.explorer.selected_node()
-            && !node.is_dir && !is_image_path(&node.path) {
-                let path = node.path.clone();
-                let _ = self.editor.open(&path, true);
-            }
+            && !node.is_dir
+            && !is_image_path(&node.path)
+        {
+            let path = node.path.clone();
+            let _ = self.editor.open(&path, true);
+        }
     }
 
     fn messages_key(&mut self, key: KeyEvent) {
@@ -8377,14 +9418,18 @@ impl App {
                 self.apply_editorconfig_indent(path);
                 self.status = t!("status.opened", path = path.display()).to_string();
             }
-            Err(e) => self.messages.error(t!("msg.open_failed", error = e).to_string()),
+            Err(e) => self
+                .messages
+                .error(t!("msg.open_failed", error = e).to_string()),
         }
     }
 
     /// Restore the active buffer's persisted undo tree, if one was saved for this
     /// file and its content still matches.
     fn restore_persistent_undo(&mut self, path: &Path) {
-        let Some(content) = self.editor.active_tab().map(crate::editor::Tab::text) else { return };
+        let Some(content) = self.editor.active_tab().map(crate::editor::Tab::text) else {
+            return;
+        };
         if let Some(history) = crate::undo_store::load(path, &content)
             && let Some(tab) = self.editor.active_tab_mut()
         {
@@ -8453,7 +9498,12 @@ impl App {
         for tab in &mut self.editor.tabs {
             tab.editor.set_auto_pair(on);
         }
-        self.status = t!(if on { "status.auto_pair_on" } else { "status.auto_pair_off" }).to_string();
+        self.status = t!(if on {
+            "status.auto_pair_on"
+        } else {
+            "status.auto_pair_off"
+        })
+        .to_string();
     }
 
     /// Toggle rainbow (depth-colored) brackets for every open buffer and persist it.
@@ -8520,7 +9570,11 @@ impl App {
         let Some(loc) = self.current_location() else {
             return;
         };
-        if let Some(i) = self.bookmarks.iter().position(|b| b.path == loc.path && b.line == loc.line) {
+        if let Some(i) = self
+            .bookmarks
+            .iter()
+            .position(|b| b.path == loc.path && b.line == loc.line)
+        {
             self.bookmarks.remove(i);
             self.status = t!("status.bookmark_removed").to_string();
         } else {
@@ -8567,7 +9621,10 @@ impl App {
         }
         let mut entries = self.bookmarks.clone();
         entries.sort_by(|a, b| a.path.cmp(&b.path).then(a.line.cmp(&b.line)));
-        self.location_chooser = Some(LocationChooser { entries, selected: 0 });
+        self.location_chooser = Some(LocationChooser {
+            entries,
+            selected: 0,
+        });
     }
 
     /// Run a cursor-moving jump `f`, recording the origin and destination in the
@@ -8581,13 +9638,15 @@ impl App {
             self.nav_history.truncate(self.nav_idx + 1);
         }
         if let Some(o) = origin
-            && self.nav_history.last() != Some(&o) {
-                self.nav_history.push(o);
-            }
+            && self.nav_history.last() != Some(&o)
+        {
+            self.nav_history.push(o);
+        }
         if let Some(d) = dest
-            && self.nav_history.last() != Some(&d) {
-                self.nav_history.push(d);
-            }
+            && self.nav_history.last() != Some(&d)
+        {
+            self.nav_history.push(d);
+        }
         self.nav_idx = self.nav_history.len().saturating_sub(1);
     }
 
@@ -8614,15 +9673,15 @@ impl App {
     /// Go to a recorded location without itself recording a new jump.
     fn navigate_to(&mut self, loc: &Location) {
         self.open_path(&loc.path, false);
-        self.editor.goto(loc.line, Some(loc.col), self.editor_view());
+        self.editor
+            .goto(loc.line, Some(loc.col), self.editor_view());
         self.focus = Focus::Editor;
         self.status = format!("{}:{}", loc.path.display(), loc.line);
     }
 
     fn open_image(&mut self, path: &Path) {
         let Some(picker) = self.picker.as_ref() else {
-            self.messages
-                .warn(t!("msg.image_needs_terminal"));
+            self.messages.warn(t!("msg.image_needs_terminal"));
             return;
         };
         match decode_image(path) {
@@ -8632,7 +9691,9 @@ impl App {
                 self.focus = Focus::Editor;
                 self.status = t!("status.opened_image", path = path.display()).to_string();
             }
-            Err(e) => self.messages.error(t!("msg.image_open_failed", error = e).to_string()),
+            Err(e) => self
+                .messages
+                .error(t!("msg.image_open_failed", error = e).to_string()),
         }
     }
 
@@ -8649,7 +9710,11 @@ impl App {
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
                 use crate::color_converter_tool::Field;
                 for field in Field::ALL {
-                    if rect_contains(self.layout.color_converter_rows[field.index()], mouse.column, mouse.row) {
+                    if rect_contains(
+                        self.layout.color_converter_rows[field.index()],
+                        mouse.column,
+                        mouse.row,
+                    ) {
                         if let Some(c) = self.color_converter.as_mut() {
                             c.set_focus(field);
                         }
@@ -8702,7 +9767,10 @@ impl App {
         if self.unit_converter.is_some() {
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
                 use crate::unit_converter_tool::Focus;
-                for (i, focus) in [Focus::Value, Focus::From, Focus::To].into_iter().enumerate() {
+                for (i, focus) in [Focus::Value, Focus::From, Focus::To]
+                    .into_iter()
+                    .enumerate()
+                {
                     if rect_contains(self.layout.unit_converter_rows[i], mouse.column, mouse.row) {
                         if let Some(c) = self.unit_converter.as_mut() {
                             c.focus = focus;
@@ -8817,9 +9885,10 @@ impl App {
         // it (Start closes the dialog and keeps the countdown running).
         if self.pomodoro_open {
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind
-                && rect_contains(self.layout.pomodoro_button, mouse.column, mouse.row) {
-                    self.pomodoro_primary();
-                }
+                && rect_contains(self.layout.pomodoro_button, mouse.column, mouse.row)
+            {
+                self.pomodoro_primary();
+            }
             return true;
         }
         // Keyboard-only modal overlays swallow all mouse input rather than
@@ -8940,7 +10009,9 @@ impl App {
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left)
                 if self.editor.is_split()
-                    && self.editor.resize_split_at(self.layout.editor_region, col, row) =>
+                    && self
+                        .editor
+                        .resize_split_at(self.layout.editor_region, col, row) =>
             {
                 self.split_resize = true;
                 return true;
@@ -9024,7 +10095,9 @@ impl App {
         // Split panes: a click focuses the pane under the pointer, then maps the
         // click within it.
         if self.editor.is_split()
-            && self.editor.focus_pane_at(self.layout.editor_region, col, row)
+            && self
+                .editor
+                .focus_pane_at(self.layout.editor_region, col, row)
         {
             self.focus = Focus::Editor;
             self.editor_mouse(mouse);
@@ -9078,9 +10151,17 @@ impl App {
             )
         {
             self.focus = Focus::BottomDock;
-            let sb_rect = Rect { x: sb_col, y: a.y + 1, width: 1, height: a.height - 1 };
-            self.bottom_dock.scroll =
-                crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total.saturating_sub(viewport));
+            let sb_rect = Rect {
+                x: sb_col,
+                y: a.y + 1,
+                width: 1,
+                height: a.height - 1,
+            };
+            self.bottom_dock.scroll = crate::ui::scrollbar_pos_from_row(
+                sb_rect,
+                mouse.row,
+                total.saturating_sub(viewport),
+            );
             return;
         }
         match mouse.kind {
@@ -9131,7 +10212,10 @@ impl App {
             return;
         }
         let top = self.editor.top_visible_line();
-        let total = self.editor.active_tab().map_or(0, |t| t.text().lines().count().max(1));
+        let total = self
+            .editor
+            .active_tab()
+            .map_or(0, |t| t.text().lines().count().max(1));
         let labels: Vec<(String, usize)> = (0..height)
             .map(|r| top + r)
             .take_while(|&line| line < total)
@@ -9141,7 +10225,10 @@ impl App {
         if labels.is_empty() {
             return;
         }
-        self.jump = Some(JumpMode { labels, typed: String::new() });
+        self.jump = Some(JumpMode {
+            labels,
+            typed: String::new(),
+        });
         self.focus = Focus::Editor;
     }
 
@@ -9149,15 +10236,23 @@ impl App {
     /// Esc or any non-character key cancels; a character extends the typed prefix,
     /// jumping when it matches a label and staying only while a match is possible.
     fn jump_key(&mut self, key: KeyEvent) -> bool {
-        let Some(mut jm) = self.jump.take() else { return false };
-        let KeyCode::Char(c) = key.code else { return true }; // Esc/other: cancelled
+        let Some(mut jm) = self.jump.take() else {
+            return false;
+        };
+        let KeyCode::Char(c) = key.code else {
+            return true;
+        }; // Esc/other: cancelled
         jm.typed.push(c);
         if let Some((_, line)) = jm.labels.iter().find(|(label, _)| *label == jm.typed) {
             let line = *line;
             let area = self.editor_view();
             self.editor.goto(line + 1, None, area); // goto is 1-based
             self.focus = Focus::Editor;
-        } else if jm.labels.iter().any(|(label, _)| label.starts_with(&jm.typed)) {
+        } else if jm
+            .labels
+            .iter()
+            .any(|(label, _)| label.starts_with(&jm.typed))
+        {
             self.jump = Some(jm); // keep waiting: the prefix can still match
         }
         true
@@ -9170,7 +10265,10 @@ impl App {
             return;
         }
         let rel = row.saturating_sub(mm.y) as usize;
-        let total = self.editor.active_tab().map_or(1, |t| t.text().lines().count().max(1));
+        let total = self
+            .editor
+            .active_tab()
+            .map_or(1, |t| t.text().lines().count().max(1));
         let line = (rel * total / mm.height as usize).min(total.saturating_sub(1));
         let area = self.editor_view();
         self.editor.goto(line + 1, None, area); // goto is 1-based
@@ -9227,15 +10325,28 @@ impl App {
         let full = self.layout.menu.width; // the menu bar spans the full width
         match self.dock_resize {
             Some(DockResize::Left) => {
-                let other = if self.show_messages { self.settings.messages_width } else { 0 };
+                let other = if self.show_messages {
+                    self.settings.messages_width
+                } else {
+                    0
+                };
                 let max = full.saturating_sub(MIN_EDITOR + other).max(MIN_DOCK);
                 let w = (col.saturating_sub(self.layout.explorer.x) + 1).clamp(MIN_DOCK, max);
                 self.settings.explorer_width = w;
             }
             Some(DockResize::Right) => {
-                let other = if self.show_explorer { self.settings.explorer_width } else { 0 };
+                let other = if self.show_explorer {
+                    self.settings.explorer_width
+                } else {
+                    0
+                };
                 let max = full.saturating_sub(MIN_EDITOR + other).max(MIN_DOCK);
-                let w = self.layout.messages.right().saturating_sub(col).clamp(MIN_DOCK, max);
+                let w = self
+                    .layout
+                    .messages
+                    .right()
+                    .saturating_sub(col)
+                    .clamp(MIN_DOCK, max);
                 self.settings.messages_width = w;
             }
             Some(DockResize::Bottom) | None => {}
@@ -9267,7 +10378,11 @@ impl App {
     /// Focus the split pane at in-order leaf index `idx` (clamped), making its tab
     /// active and directing cursor/mouse mapping at its rect.
     fn focus_split_pane(&mut self, idx: usize) {
-        let last = self.editor.split_layout(self.layout.editor_region).len().saturating_sub(1);
+        let last = self
+            .editor
+            .split_layout(self.layout.editor_region)
+            .len()
+            .saturating_sub(1);
         self.editor.focus_leaf(idx.min(last));
         self.focus = Focus::Editor;
     }
@@ -9275,14 +10390,17 @@ impl App {
     fn editor_mouse(&mut self, mouse: MouseEvent) {
         self.focus = Focus::Editor;
         let area = self.layout.editor;
-        let alt = mouse.modifiers.contains(crossterm::event::KeyModifiers::ALT);
+        let alt = mouse
+            .modifiers
+            .contains(crossterm::event::KeyModifiers::ALT);
         if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
             // Alt+click adds an extra caret; a plain click collapses to one.
             if alt {
                 if let Some(t) = self.editor.active_tab_mut()
-                    && let Some(pos) = t.editor.cursor_from_mouse(mouse.column, mouse.row, &area) {
-                        t.editor.add_caret_at(pos);
-                    }
+                    && let Some(pos) = t.editor.cursor_from_mouse(mouse.column, mouse.row, &area)
+                {
+                    t.editor.add_caret_at(pos);
+                }
                 return;
             }
             if let Some(t) = self.editor.active_tab_mut() {
@@ -9312,7 +10430,12 @@ impl App {
             )
         {
             self.focus = Focus::Explorer;
-            let sb_rect = Rect { x: sb_col, y: inner_top, width: 1, height: a.height - 1 };
+            let sb_rect = Rect {
+                x: sb_col,
+                y: inner_top,
+                width: 1,
+                height: a.height - 1,
+            };
             // The thumb tracks the selection, so map the drag to a selected row;
             // `ensure_visible` (in draw) scrolls the view to follow it.
             self.explorer.selected =
@@ -9366,7 +10489,12 @@ impl App {
             )
         {
             self.focus = Focus::Messages;
-            let sb_rect = Rect { x: sb_col, y: inner_top, width: 1, height: area.height - 1 };
+            let sb_rect = Rect {
+                x: sb_col,
+                y: inner_top,
+                width: 1,
+                height: area.height - 1,
+            };
             self.messages.selected =
                 crate::ui::scrollbar_pos_from_row(sb_rect, mouse.row, total.saturating_sub(1));
             return;
@@ -9418,8 +10546,11 @@ impl App {
             if rect_contains(sd, col, row) {
                 let top = sd.y + 1;
                 if let Some(items) = self.menu.subsubmenu_items() {
-                    let offset =
-                        crate::ui::dropdown_scroll(self.menu.subsub, sd.height.saturating_sub(2) as usize, items.len());
+                    let offset = crate::ui::dropdown_scroll(
+                        self.menu.subsub,
+                        sd.height.saturating_sub(2) as usize,
+                        items.len(),
+                    );
                     let idx = offset + row.saturating_sub(top) as usize;
                     if row >= top && idx < items.len() && !items[idx].is_separator() {
                         let action = items[idx].action;
@@ -9436,8 +10567,11 @@ impl App {
             if rect_contains(sd, col, row) {
                 let top = sd.y + 1;
                 if let Some(items) = self.menu.submenu_items() {
-                    let offset =
-                        crate::ui::dropdown_scroll(self.menu.sub, sd.height.saturating_sub(2) as usize, items.len());
+                    let offset = crate::ui::dropdown_scroll(
+                        self.menu.sub,
+                        sd.height.saturating_sub(2) as usize,
+                        items.len(),
+                    );
                     let idx = offset + row.saturating_sub(top) as usize;
                     if row >= top && idx < items.len() && !items[idx].is_separator() {
                         if items[idx].has_submenu() {
@@ -9459,8 +10593,11 @@ impl App {
             let top = dd.y + 1;
             if let Some(mi) = self.menu.open {
                 let items = menus()[mi].items;
-                let offset =
-                    crate::ui::dropdown_scroll(self.menu.item, dd.height.saturating_sub(2) as usize, items.len());
+                let offset = crate::ui::dropdown_scroll(
+                    self.menu.item,
+                    dd.height.saturating_sub(2) as usize,
+                    items.len(),
+                );
                 let idx = offset + row.saturating_sub(top) as usize;
                 if row >= top && idx < items.len() && !items[idx].is_separator() {
                     if items[idx].has_submenu() {
@@ -9514,9 +10651,10 @@ impl App {
     fn menu_hover(&mut self, col: u16, row: u16) {
         if rect_contains(self.layout.menu, col, row) {
             if let Some(i) = self.top_menu_index_at(col)
-                && self.menu.open != Some(i) {
-                    self.menu.open_index(i);
-                }
+                && self.menu.open != Some(i)
+            {
+                self.menu.open_index(i);
+            }
             // Left any open submenu: drop a live theme preview.
             self.revert_theme_preview();
             return;
@@ -9527,8 +10665,11 @@ impl App {
             if rect_contains(sd, col, row) {
                 let top = sd.y + 1;
                 if let Some(items) = self.menu.subsubmenu_items() {
-                    let offset =
-                        crate::ui::dropdown_scroll(self.menu.subsub, sd.height.saturating_sub(2) as usize, items.len());
+                    let offset = crate::ui::dropdown_scroll(
+                        self.menu.subsub,
+                        sd.height.saturating_sub(2) as usize,
+                        items.len(),
+                    );
                     let idx = offset + row.saturating_sub(top) as usize;
                     if row >= top && idx < items.len() && !items[idx].is_separator() {
                         self.menu.subsub = Some(idx);
@@ -9544,8 +10685,11 @@ impl App {
                 let top = sd.y + 1;
                 let mut previewed = false;
                 if let Some(items) = self.menu.submenu_items() {
-                    let offset =
-                        crate::ui::dropdown_scroll(self.menu.sub, sd.height.saturating_sub(2) as usize, items.len());
+                    let offset = crate::ui::dropdown_scroll(
+                        self.menu.sub,
+                        sd.height.saturating_sub(2) as usize,
+                        items.len(),
+                    );
                     let idx = offset + row.saturating_sub(top) as usize;
                     if row >= top && idx < items.len() && !items[idx].is_separator() {
                         self.menu.highlight_sub(idx);
@@ -9569,8 +10713,11 @@ impl App {
             let top = dd.y + 1;
             if let Some(mi) = self.menu.open {
                 let items = menus()[mi].items;
-                let offset =
-                    crate::ui::dropdown_scroll(self.menu.item, dd.height.saturating_sub(2) as usize, items.len());
+                let offset = crate::ui::dropdown_scroll(
+                    self.menu.item,
+                    dd.height.saturating_sub(2) as usize,
+                    items.len(),
+                );
                 let idx = offset + row.saturating_sub(top) as usize;
                 if row >= top && idx < items.len() && !items[idx].is_separator() {
                     self.menu.highlight_item(idx);
@@ -9598,7 +10745,10 @@ impl App {
         if self.theme_preview.as_deref() == Some(name) {
             return;
         }
-        if let Some(theme) = Self::available_custom_themes().into_iter().find(|t| t.name == name) {
+        if let Some(theme) = Self::available_custom_themes()
+            .into_iter()
+            .find(|t| t.name == name)
+        {
             crate::theme_model::apply(&theme);
             self.editor.refresh_theme();
             self.theme_preview = Some(name.to_string());
@@ -9660,9 +10810,10 @@ impl App {
     /// `view.theme:<name>` entry (for keyboard navigation, mirroring hover).
     fn preview_current_theme(&mut self) {
         if let (Some(sidx), Some(items)) = (self.menu.sub, self.menu.submenu_items())
-            && let Some(it) = items.get(sidx) {
-                self.preview_menu_theme(it.action);
-            }
+            && let Some(it) = items.get(sidx)
+        {
+            self.preview_menu_theme(it.action);
+        }
     }
 
     /// Revert a live theme hover/keyboard preview to the committed theme.
@@ -9703,8 +10854,9 @@ impl App {
     /// Apply the theme with display `name` (chosen from the View → Theme submenu),
     /// persist it, and restyle the editor. Unknown names are ignored.
     fn set_theme_by_name(&mut self, name: &str) {
-        let Some(theme) =
-            Self::available_custom_themes().into_iter().find(|t| t.name == name)
+        let Some(theme) = Self::available_custom_themes()
+            .into_iter()
+            .find(|t| t.name == name)
         else {
             return;
         };
@@ -9802,7 +10954,10 @@ impl App {
             self.status = t!("status.no_recent").to_string();
             return;
         }
-        self.recent_chooser = Some(RecentChooser { entries, selected: 0 });
+        self.recent_chooser = Some(RecentChooser {
+            entries,
+            selected: 0,
+        });
     }
 
     fn recent_key(&mut self, key: KeyEvent) {
@@ -9829,23 +10984,25 @@ impl App {
     /// Open the highlighted recent file and close the chooser.
     fn open_selected_recent(&mut self) {
         if let Some(rc) = self.recent_chooser.take()
-            && let Some(path) = rc.entries.get(rc.selected).cloned() {
-                self.with_jump(|s| {
-                    s.open_path(&path, false);
-                    s.focus = Focus::Editor;
-                });
-            }
+            && let Some(path) = rc.entries.get(rc.selected).cloned()
+        {
+            self.with_jump(|s| {
+                s.open_path(&path, false);
+                s.focus = Focus::Editor;
+            });
+        }
     }
 
     fn recent_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(rc) = self.recent_chooser.as_mut()
-                && idx < rc.entries.len() {
-                    // A click selects the row and opens it (no live preview to
-                    // justify a two-step interaction).
-                    rc.selected = idx;
-                    self.open_selected_recent();
-                }
+            && idx < rc.entries.len()
+        {
+            // A click selects the row and opens it (no live preview to
+            // justify a two-step interaction).
+            rc.selected = idx;
+            self.open_selected_recent();
+        }
     }
 
     /// Open the recent-locations (jump list) chooser, listing the position
@@ -9861,7 +11018,10 @@ impl App {
             self.status = t!("status.no_recent_locations").to_string();
             return;
         }
-        self.location_chooser = Some(LocationChooser { entries, selected: 0 });
+        self.location_chooser = Some(LocationChooser {
+            entries,
+            selected: 0,
+        });
     }
 
     fn location_key(&mut self, key: KeyEvent) {
@@ -9888,18 +11048,20 @@ impl App {
     /// Jump to the highlighted location and close the chooser.
     fn open_selected_location(&mut self) {
         if let Some(lc) = self.location_chooser.take()
-            && let Some(loc) = lc.entries.get(lc.selected).cloned() {
-                self.navigate_to(&loc);
-            }
+            && let Some(loc) = lc.entries.get(lc.selected).cloned()
+        {
+            self.navigate_to(&loc);
+        }
     }
 
     fn location_mouse(&mut self, mouse: MouseEvent) {
         if let Some(idx) = self.chooser_row(mouse)
             && let Some(lc) = self.location_chooser.as_mut()
-                && idx < lc.entries.len() {
-                    lc.selected = idx;
-                    self.open_selected_location();
-                }
+            && idx < lc.entries.len()
+        {
+            lc.selected = idx;
+            self.open_selected_location();
+        }
     }
 
     // ----- chooser mouse --------------------------------------------------
@@ -9960,9 +11122,10 @@ impl App {
         let col = ((mouse.column - r.x) / crate::ui::NERD_CELL_W) as usize;
         let row = (mouse.row - r.y) as usize;
         if let Some(p) = self.nerd_palette.as_mut()
-            && p.select_at(row, col) {
-                self.insert_selected_glyph();
-            }
+            && p.select_at(row, col)
+        {
+            self.insert_selected_glyph();
+        }
     }
 
     /// Insert the highlighted glyph into the active editor (leaving the palette
@@ -9989,11 +11152,13 @@ impl App {
     /// file extension; CSV by default). Warns when there is no editable buffer.
     fn open_edit_table(&mut self) {
         let Some(tab) = self.editor.active_tab() else {
-            self.messages.warn(t!("msg.edit_table_no_buffer").to_string());
+            self.messages
+                .warn(t!("msg.edit_table_no_buffer").to_string());
             return;
         };
         if tab.is_image() {
-            self.messages.warn(t!("msg.edit_table_no_buffer").to_string());
+            self.messages
+                .warn(t!("msg.edit_table_no_buffer").to_string());
             return;
         }
         let tsv = tab
@@ -10008,7 +11173,9 @@ impl App {
 
     /// Route a key to the open table editor and act on its outcome.
     fn edit_table_key(&mut self, key: KeyEvent) {
-        let page = usize::from(self.layout.edit_table.height).saturating_sub(1).max(1);
+        let page = usize::from(self.layout.edit_table.height)
+            .saturating_sub(1)
+            .max(1);
         let outcome = match self.edit_table.as_mut() {
             Some(grid) => grid.handle_key(key, page),
             None => return,
@@ -10023,7 +11190,11 @@ impl App {
     /// Serialize the table editor back into the active buffer and save it,
     /// reusing the normal file-save flow (which handles Save As when untitled).
     fn save_edit_table(&mut self) {
-        let Some(text) = self.edit_table.as_ref().map(crate::edit_table::Grid::to_text) else {
+        let Some(text) = self
+            .edit_table
+            .as_ref()
+            .map(crate::edit_table::Grid::to_text)
+        else {
             return;
         };
         if let Some(tab) = self.editor.active_tab_mut() {
@@ -10040,11 +11211,13 @@ impl App {
     /// outline). Warns when there is no editable buffer.
     fn open_edit_outline(&mut self) {
         let Some(tab) = self.editor.active_tab() else {
-            self.messages.warn(t!("msg.edit_outline_no_buffer").to_string());
+            self.messages
+                .warn(t!("msg.edit_outline_no_buffer").to_string());
             return;
         };
         if tab.is_image() {
-            self.messages.warn(t!("msg.edit_outline_no_buffer").to_string());
+            self.messages
+                .warn(t!("msg.edit_outline_no_buffer").to_string());
             return;
         }
         let text = tab.text();
@@ -10053,7 +11226,9 @@ impl App {
 
     /// Route a key to the open outline editor and act on its outcome.
     fn edit_outline_key(&mut self, key: KeyEvent) {
-        let page = usize::from(self.layout.edit_outline.height).saturating_sub(1).max(1);
+        let page = usize::from(self.layout.edit_outline.height)
+            .saturating_sub(1)
+            .max(1);
         let outcome = match self.edit_outline.as_mut() {
             Some(tree) => tree.handle_key(key, page),
             None => return,
@@ -10068,7 +11243,11 @@ impl App {
     /// Serialize the outline editor back into the active buffer and save it,
     /// reusing the normal file-save flow (which handles Save As when untitled).
     fn save_edit_outline(&mut self) {
-        let Some(text) = self.edit_outline.as_ref().map(crate::edit_outline::Tree::to_text) else {
+        let Some(text) = self
+            .edit_outline
+            .as_ref()
+            .map(crate::edit_outline::Tree::to_text)
+        else {
             return;
         };
         if let Some(tab) = self.editor.active_tab_mut() {
@@ -10111,7 +11290,9 @@ impl App {
 
     /// Route a key to the open SQL editor and act on its outcome.
     fn edit_sql_key(&mut self, key: KeyEvent) {
-        let page = usize::from(self.layout.edit_sql.height).saturating_sub(1).max(1);
+        let page = usize::from(self.layout.edit_sql.height)
+            .saturating_sub(1)
+            .max(1);
         let outcome = match self.edit_sql.as_mut() {
             Some(editor) => editor.handle_key(key, page),
             None => return,
@@ -10207,26 +11388,46 @@ impl App {
             Some(b) => b.handle_key(key, pages),
             None => return,
         };
-        if let Some(conns) = self.db.as_mut().and_then(crate::db::Browser::take_dirty_connections) {
+        if let Some(conns) = self
+            .db
+            .as_mut()
+            .and_then(crate::db::Browser::take_dirty_connections)
+        {
             self.settings.db_connections = conns;
             let _ = self.settings.save();
         }
-        if let Some(history) = self.db.as_mut().and_then(crate::db::Browser::take_dirty_history) {
+        if let Some(history) = self
+            .db
+            .as_mut()
+            .and_then(crate::db::Browser::take_dirty_history)
+        {
             let _ = crate::db::store::save_history(&history);
         }
-        if let Some(saved) = self.db.as_mut().and_then(crate::db::Browser::take_dirty_saved) {
+        if let Some(saved) = self
+            .db
+            .as_mut()
+            .and_then(crate::db::Browser::take_dirty_saved)
+        {
             let _ = crate::db::store::save_saved(&saved);
         }
         // A queued natural-language → SQL request: spawn the assistant CLI and
         // route its reply back into the workbench editor.
-        if let Some(req) = self.db.as_mut().and_then(crate::db::Browser::take_ai_request) {
+        if let Some(req) = self
+            .db
+            .as_mut()
+            .and_then(crate::db::Browser::take_ai_request)
+        {
             if self.ai_replace.is_some() {
                 if let Some(b) = self.db.as_mut() {
                     b.ai_failed();
                 }
             } else if let Some(rx) = self.spawn_ai_cmd(&req.prompt, &req.context) {
                 let label = t!("menu.ai").to_string();
-                self.ai_replace = Some(AiReplace { rx, dest: AiDest::Db, label });
+                self.ai_replace = Some(AiReplace {
+                    rx,
+                    dest: AiDest::Db,
+                    label,
+                });
             } else if let Some(b) = self.db.as_mut() {
                 b.ai_failed();
             }
@@ -10240,11 +11441,13 @@ impl App {
     /// Warns when there is no buffer or it does not parse in `format`.
     fn open_edit_value(&mut self, format: crate::edit_value::Format) {
         let Some(tab) = self.editor.active_tab() else {
-            self.messages.warn(t!("msg.edit_value_no_buffer").to_string());
+            self.messages
+                .warn(t!("msg.edit_value_no_buffer").to_string());
             return;
         };
         if tab.is_image() {
-            self.messages.warn(t!("msg.edit_value_no_buffer").to_string());
+            self.messages
+                .warn(t!("msg.edit_value_no_buffer").to_string());
             return;
         }
         match crate::edit_value::Tree::from_text(&tab.text(), format) {
@@ -10255,7 +11458,9 @@ impl App {
 
     /// Route a key to the open structured-value editor and act on its outcome.
     fn edit_value_key(&mut self, key: KeyEvent) {
-        let page = usize::from(self.layout.edit_value.height).saturating_sub(1).max(1);
+        let page = usize::from(self.layout.edit_value.height)
+            .saturating_sub(1)
+            .max(1);
         let outcome = match self.edit_value.as_mut() {
             Some(tree) => tree.handle_key(key, page),
             None => return,
@@ -10269,7 +11474,11 @@ impl App {
 
     /// Serialize the structured-value editor back into the active buffer and save.
     fn save_edit_value(&mut self) {
-        let Some(text) = self.edit_value.as_ref().map(crate::edit_value::Tree::to_text) else {
+        let Some(text) = self
+            .edit_value
+            .as_ref()
+            .map(crate::edit_value::Tree::to_text)
+        else {
             return;
         };
         if let Some(tab) = self.editor.active_tab_mut() {
@@ -10286,11 +11495,13 @@ impl App {
     /// is no editable buffer.
     fn open_edit_bytes(&mut self) {
         let Some(tab) = self.editor.active_tab() else {
-            self.messages.warn(t!("msg.edit_bytes_no_buffer").to_string());
+            self.messages
+                .warn(t!("msg.edit_bytes_no_buffer").to_string());
             return;
         };
         if tab.is_image() {
-            self.messages.warn(t!("msg.edit_bytes_no_buffer").to_string());
+            self.messages
+                .warn(t!("msg.edit_bytes_no_buffer").to_string());
             return;
         }
         self.edit_bytes = Some(crate::edit_bytes::Hex::from_bytes(tab.text().into_bytes()));
@@ -10298,7 +11509,9 @@ impl App {
 
     /// Route a key to the open byte editor and act on its outcome.
     fn edit_bytes_key(&mut self, key: KeyEvent) {
-        let page = usize::from(self.layout.edit_bytes.height).saturating_sub(1).max(1);
+        let page = usize::from(self.layout.edit_bytes.height)
+            .saturating_sub(1)
+            .max(1);
         let outcome = match self.edit_bytes.as_mut() {
             Some(hex) => hex.handle_key(key, page),
             None => return,
@@ -10570,7 +11783,10 @@ impl App {
     /// Insert the highlighted media type (e.g. `image/png`) into the active editor
     /// (leaving the panel open). No-op when there is no editable buffer.
     fn insert_selected_media_type(&mut self) {
-        let Some(entry) = self.media_type_panel.as_ref().and_then(crate::media_type::Panel::selected_entry)
+        let Some(entry) = self
+            .media_type_panel
+            .as_ref()
+            .and_then(crate::media_type::Panel::selected_entry)
         else {
             return;
         };
@@ -10642,7 +11858,8 @@ impl App {
         // code — and inserts just that cell's text.
         let cell = self.html_panel.as_mut().and_then(|p| {
             let idx = p.scroll + row_in_view;
-            p.select_index(idx).then(|| html_cell_at(p.selected_entity(), rel_col))
+            p.select_index(idx)
+                .then(|| html_cell_at(p.selected_entity(), rel_col))
         });
         if let Some(text) = cell {
             let area = self.layout.editor;
@@ -10686,15 +11903,26 @@ impl App {
             String::new(),
             env!("CARGO_PKG_DESCRIPTION").to_string(),
             String::new(),
-            format!("{}: {}", t!("help.license.field_license"), env!("CARGO_PKG_LICENSE")),
-            format!("{}: {}", t!("help.license.field_repository"), env!("CARGO_PKG_REPOSITORY")),
+            format!(
+                "{}: {}",
+                t!("help.license.field_license"),
+                env!("CARGO_PKG_LICENSE")
+            ),
+            format!(
+                "{}: {}",
+                t!("help.license.field_repository"),
+                env!("CARGO_PKG_REPOSITORY")
+            ),
             format!("{}: {}", t!("help.license.field_authors"), authors),
         ]
     }
 
     /// "Report an issue" help text plus the issue-tracker URL.
     fn report_issue_lines() -> Vec<String> {
-        let mut lines: Vec<String> = t!("help.report_issue.body").lines().map(str::to_string).collect();
+        let mut lines: Vec<String> = t!("help.report_issue.body")
+            .lines()
+            .map(str::to_string)
+            .collect();
         lines.push(String::new());
         lines.push(format!("{}/issues", env!("CARGO_PKG_REPOSITORY")));
         lines
@@ -10702,7 +11930,10 @@ impl App {
 
     /// The privacy statement from the i18n catalog, split into lines.
     fn privacy_lines() -> Vec<String> {
-        t!("help.privacy.body").lines().map(str::to_string).collect()
+        t!("help.privacy.body")
+            .lines()
+            .map(str::to_string)
+            .collect()
     }
 
     /// Open the user's settings file in the editor. Saves the current settings
@@ -10780,10 +12011,17 @@ impl App {
 
     /// The selected text, or the whole active buffer when nothing is selected.
     fn selected_or_all_text(&mut self) -> String {
-        let selection = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text());
+        let selection = self
+            .editor
+            .active_tab_mut()
+            .and_then(|t| t.editor.get_selection_text());
         match selection {
             Some(s) if !s.trim().is_empty() => s,
-            _ => self.editor.active_tab().map(|t| t.editor.get_content()).unwrap_or_default(),
+            _ => self
+                .editor
+                .active_tab()
+                .map(|t| t.editor.get_content())
+                .unwrap_or_default(),
         }
     }
 
@@ -10817,9 +12055,10 @@ impl App {
             return String::new();
         };
         if let Some(sel) = tab.editor.get_selection_text()
-            && !sel.trim().is_empty() {
-                return sel;
-            }
+            && !sel.trim().is_empty()
+        {
+            return sel;
+        }
         let cursor = tab.editor.get_cursor();
         if let Some((_, _, word)) = tab.editor.word_at(cursor) {
             return word;
@@ -10857,25 +12096,38 @@ impl App {
         }
         let tab_idx = self.editor.active;
         let (text, target) = {
-            let Some(tab) = self.editor.active_tab_mut() else { return };
+            let Some(tab) = self.editor.active_tab_mut() else {
+                return;
+            };
             if tab.is_image() {
                 self.status = t!("status.ai_no_input").to_string();
                 return;
             }
             match tab.editor.get_selection() {
-                Some(sel) if !sel.is_empty() => {
-                    (tab.editor.get_content_slice(sel.start, sel.end), AiTarget::Range(sel.start, sel.end))
-                }
+                Some(sel) if !sel.is_empty() => (
+                    tab.editor.get_content_slice(sel.start, sel.end),
+                    AiTarget::Range(sel.start, sel.end),
+                ),
                 _ => (tab.editor.get_content(), AiTarget::Whole),
             }
         };
         let dest = if self.settings.ai_diff_review {
-            AiDest::Diff { tab: tab_idx, target }
+            AiDest::Diff {
+                tab: tab_idx,
+                target,
+            }
         } else {
-            AiDest::Replace { tab: tab_idx, target }
+            AiDest::Replace {
+                tab: tab_idx,
+                target,
+            }
         };
         if let Some(rx) = self.spawn_ai(prompt, &text) {
-            self.ai_replace = Some(AiReplace { rx, dest, label: label.to_string() });
+            self.ai_replace = Some(AiReplace {
+                rx,
+                dest,
+                label: label.to_string(),
+            });
             self.status = t!("status.ai_running", action = label).to_string();
         }
     }
@@ -10888,7 +12140,11 @@ impl App {
             return;
         }
         if let Some(rx) = self.spawn_ai(prompt, text) {
-            self.ai_replace = Some(AiReplace { rx, dest: AiDest::NewTab, label: label.to_string() });
+            self.ai_replace = Some(AiReplace {
+                rx,
+                dest: AiDest::NewTab,
+                label: label.to_string(),
+            });
             self.status = t!("status.ai_running", action = label).to_string();
         }
     }
@@ -10910,7 +12166,11 @@ impl App {
     /// to a temp file, expand the `ai_command` template, and run it in the
     /// background. Unlike `spawn_ai` it does **not** reject empty input — a chat
     /// turn may carry no editor context — so callers must guard that themselves.
-    fn spawn_ai_cmd(&mut self, prompt: &str, text: &str) -> Option<std::sync::mpsc::Receiver<AiMsg>> {
+    fn spawn_ai_cmd(
+        &mut self,
+        prompt: &str,
+        text: &str,
+    ) -> Option<std::sync::mpsc::Receiver<AiMsg>> {
         let tmp = std::env::temp_dir().join(format!("vix-ai-{}.txt", std::process::id()));
         if std::fs::write(&tmp, text).is_err() {
             self.status = t!("status.ai_no_input").to_string();
@@ -10928,7 +12188,8 @@ impl App {
         {
             Ok(c) => c,
             Err(e) => {
-                self.messages.error(t!("msg.command_failed", error = e).to_string());
+                self.messages
+                    .error(t!("msg.command_failed", error = e).to_string());
                 return None;
             }
         };
@@ -10939,10 +12200,16 @@ impl App {
         std::thread::spawn(move || {
             use std::io::Read;
             let mut out = String::new();
-            let ok = std::io::BufReader::new(stdout).read_to_string(&mut out).is_ok();
+            let ok = std::io::BufReader::new(stdout)
+                .read_to_string(&mut out)
+                .is_ok();
             let status = reader_child.lock().expect("ai lock").wait().ok();
             let success = ok && status.and_then(|s| s.code()) == Some(0);
-            let _ = tx.send(if success { AiMsg::Done(out) } else { AiMsg::Failed });
+            let _ = tx.send(if success {
+                AiMsg::Done(out)
+            } else {
+                AiMsg::Failed
+            });
         });
         Some(rx)
     }
@@ -10952,7 +12219,9 @@ impl App {
     /// Send the HTTP request described by the active buffer (a `.http`-style
     /// document) on a background thread; the response opens in a new tab.
     fn http_send(&mut self) {
-        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else { return };
+        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else {
+            return;
+        };
         let Some(req) = crate::http_client::parse_request(&text) else {
             self.status = t!("status.http_no_request").to_string();
             return;
@@ -10975,11 +12244,15 @@ impl App {
     /// iteration; cheap when none is running.
     pub fn poll_http(&mut self) {
         let result = {
-            let Some(rx) = self.http_rx.as_ref() else { return };
+            let Some(rx) = self.http_rx.as_ref() else {
+                return;
+            };
             match rx.try_recv() {
                 Ok(r) => r,
                 Err(std::sync::mpsc::TryRecvError::Empty) => return,
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => Err(t!("status.http_failed").to_string()),
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    Err(t!("status.http_failed").to_string())
+                }
             }
         };
         self.http_rx = None;
@@ -10989,7 +12262,9 @@ impl App {
                 self.focus = Focus::Editor;
                 self.status = t!("status.http_done").to_string();
             }
-            Err(e) => self.messages.error(t!("msg.http_error", error = e).to_string()),
+            Err(e) => self
+                .messages
+                .error(t!("msg.http_error", error = e).to_string()),
         }
     }
 
@@ -11015,14 +12290,18 @@ impl App {
                 if text.is_empty() {
                     if let (AiDest::Panel, Some(panel)) = (ar.dest, self.ai_panel.as_mut()) {
                         panel.busy = false;
-                        panel.push(crate::ai_panel::Role::Error, t!("status.ai_failed", action = &ar.label));
+                        panel.push(
+                            crate::ai_panel::Role::Error,
+                            t!("status.ai_failed", action = &ar.label),
+                        );
                     }
                     if let (AiDest::Db, Some(b)) = (ar.dest, self.db.as_mut()) {
                         b.ai_failed();
                     }
                     self.status = t!("status.ai_failed", action = &ar.label).to_string();
                     if !matches!(ar.dest, AiDest::Panel | AiDest::Db) {
-                        self.messages.error(t!("status.ai_failed", action = ar.label));
+                        self.messages
+                            .error(t!("status.ai_failed", action = ar.label));
                     }
                     return;
                 }
@@ -11053,14 +12332,18 @@ impl App {
             AiMsg::Failed => {
                 if let (AiDest::Panel, Some(panel)) = (ar.dest, self.ai_panel.as_mut()) {
                     panel.busy = false;
-                    panel.push(crate::ai_panel::Role::Error, t!("status.ai_failed", action = &ar.label));
+                    panel.push(
+                        crate::ai_panel::Role::Error,
+                        t!("status.ai_failed", action = &ar.label),
+                    );
                 }
                 if let (AiDest::Db, Some(b)) = (ar.dest, self.db.as_mut()) {
                     b.ai_failed();
                 }
                 self.status = t!("status.ai_failed", action = &ar.label).to_string();
                 if !matches!(ar.dest, AiDest::Panel | AiDest::Db) {
-                    self.messages.error(t!("status.ai_failed", action = ar.label));
+                    self.messages
+                        .error(t!("status.ai_failed", action = ar.label));
                 }
             }
         }
@@ -11111,7 +12394,9 @@ impl App {
     /// Whether a DB query is running asynchronously (keeps the loop polling).
     #[must_use]
     pub fn db_query_running(&self) -> bool {
-        self.db.as_ref().is_some_and(crate::db::Browser::query_running)
+        self.db
+            .as_ref()
+            .is_some_and(crate::db::Browser::query_running)
     }
 
     // ----- AI chat panel --------------------------------------------------
@@ -11122,7 +12407,10 @@ impl App {
     fn open_ai_panel(&mut self) {
         if self.ai_panel.is_none() {
             let mut panel = crate::ai_panel::Panel::open();
-            if let Some(sel) = self.editor.active_tab_mut().and_then(|t| t.editor.get_selection_text())
+            if let Some(sel) = self
+                .editor
+                .active_tab_mut()
+                .and_then(|t| t.editor.get_selection_text())
                 && !sel.trim().is_empty()
             {
                 panel.input = sel;
@@ -11186,7 +12474,9 @@ impl App {
             self.status = t!("status.ai_busy").to_string();
             return;
         }
-        let Some(panel) = self.ai_panel.as_mut() else { return };
+        let Some(panel) = self.ai_panel.as_mut() else {
+            return;
+        };
         let prompt = panel.input.trim().to_string();
         if prompt.is_empty() {
             return;
@@ -11197,16 +12487,28 @@ impl App {
         panel.busy = true;
         if let Some(rx) = self.spawn_ai_cmd(&prompt, &context) {
             let label = t!("menu.ai").to_string();
-            self.ai_replace = Some(AiReplace { rx, dest: AiDest::Panel, label });
+            self.ai_replace = Some(AiReplace {
+                rx,
+                dest: AiDest::Panel,
+                label,
+            });
         } else if let Some(panel) = self.ai_panel.as_mut() {
             panel.busy = false;
-            panel.push(crate::ai_panel::Role::Error, t!("msg.command_failed", error = "spawn").to_string());
+            panel.push(
+                crate::ai_panel::Role::Error,
+                t!("msg.command_failed", error = "spawn").to_string(),
+            );
         }
     }
 
     /// Open the panel's most recent assistant reply in a new editor tab.
     fn ai_panel_last_to_tab(&mut self) {
-        if let Some(text) = self.ai_panel.as_ref().and_then(|p| p.last_assistant()).map(str::to_string) {
+        if let Some(text) = self
+            .ai_panel
+            .as_ref()
+            .and_then(|p| p.last_assistant())
+            .map(str::to_string)
+        {
             self.editor.new_tab_with_content(&text);
             self.ai_panel = None;
             self.focus = Focus::Editor;
@@ -11215,7 +12517,12 @@ impl App {
 
     /// Copy the panel's most recent assistant reply to the system clipboard.
     fn ai_panel_copy_last(&mut self) {
-        let Some(text) = self.ai_panel.as_ref().and_then(|p| p.last_assistant()).map(str::to_string) else {
+        let Some(text) = self
+            .ai_panel
+            .as_ref()
+            .and_then(|p| p.last_assistant())
+            .map(str::to_string)
+        else {
             return;
         };
         if let Some(tab) = self.editor.active_tab_mut() {
@@ -11236,11 +12543,17 @@ impl App {
         let rows = area.height.max(1);
         let cols = area.width.max(1);
         let shell = std::env::var("SHELL").unwrap_or_else(|_| {
-            if cfg!(windows) { "cmd.exe".to_string() } else { "/bin/sh".to_string() }
+            if cfg!(windows) {
+                "cmd.exe".to_string()
+            } else {
+                "/bin/sh".to_string()
+            }
         });
         match crate::terminal::Terminal::open(&shell, &self.root, rows, cols) {
             Ok(term) => self.terminal = Some(term),
-            Err(e) => self.messages.error(t!("msg.command_failed", error = e).to_string()),
+            Err(e) => self
+                .messages
+                .error(t!("msg.command_failed", error = e).to_string()),
         }
     }
 
@@ -11252,7 +12565,9 @@ impl App {
             self.terminal = None;
             return;
         }
-        let Some(term) = self.terminal.as_mut() else { return };
+        let Some(term) = self.terminal.as_mut() else {
+            return;
+        };
         if !term.alive() {
             self.terminal = None;
             return;
@@ -11286,13 +12601,21 @@ impl App {
     /// would replace `target` in tab `tab_idx`. No-ops (with a status note) when
     /// the assistant proposed no change.
     fn open_ai_diff(&mut self, tab_idx: usize, target: AiTarget, new_text: &str) {
-        let Some(tab) = self.editor.tabs.get(tab_idx) else { return };
+        let Some(tab) = self.editor.tabs.get(tab_idx) else {
+            return;
+        };
         let old = match target {
             AiTarget::Whole => tab.editor.get_content(),
             AiTarget::Range(start, end) => tab.editor.get_content_slice(start, end),
         };
         match crate::ai_diff::Review::from_texts(&old, new_text) {
-            Some(review) => self.ai_diff = Some(AiDiffState { review, tab: tab_idx, target }),
+            Some(review) => {
+                self.ai_diff = Some(AiDiffState {
+                    review,
+                    tab: tab_idx,
+                    target,
+                });
+            }
             None => self.status = t!("status.ai_no_change").to_string(),
         }
     }
@@ -11336,7 +12659,9 @@ impl App {
     /// Apply the reviewed result (accepted hunks applied, rejected ones reverted)
     /// to its target as a single undoable edit, then close the review.
     fn ai_diff_apply(&mut self) {
-        let Some(state) = self.ai_diff.take() else { return };
+        let Some(state) = self.ai_diff.take() else {
+            return;
+        };
         let text = state.review.result();
         self.apply_ai_replace(state.tab, state.target, &text);
         self.status = t!("status.ai_done", action = t!("menu.ai")).to_string();
@@ -11368,7 +12693,9 @@ impl App {
                     .map(|t| crate::vcard_parser::parse(&t).display_name())
                     .filter(|n| n != "(unnamed)")
                     .unwrap_or_else(|| {
-                        path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
+                        path.file_stem()
+                            .map(|s| s.to_string_lossy().into_owned())
+                            .unwrap_or_default()
                     });
                 contacts.push(crate::contact_panel::Contact { name, path });
             }
@@ -11387,7 +12714,9 @@ impl App {
         };
         match std::fs::read_to_string(&path) {
             Ok(text) => self.vcard = Some(VcardPanel::open(crate::vcard_parser::parse(&text))),
-            Err(e) => self.messages.error(t!("msg.open_failed", error = e).to_string()),
+            Err(e) => self
+                .messages
+                .error(t!("msg.open_failed", error = e).to_string()),
         }
     }
 
@@ -11439,7 +12768,10 @@ impl App {
             return;
         }
         let row_in_view = (mouse.row - r.y) as usize;
-        let hit = self.contacts.as_mut().is_some_and(|p| p.select_index(p.scroll + row_in_view));
+        let hit = self
+            .contacts
+            .as_mut()
+            .is_some_and(|p| p.select_index(p.scroll + row_in_view));
         if hit {
             self.open_selected_vcard();
         }
@@ -11494,7 +12826,10 @@ impl App {
             return;
         }
         let row_in_view = (mouse.row - r.y) as usize;
-        let hit = self.vcard.as_mut().is_some_and(|p| p.select_index(p.scroll + row_in_view));
+        let hit = self
+            .vcard
+            .as_mut()
+            .is_some_and(|p| p.select_index(p.scroll + row_in_view));
         if hit {
             self.insert_selected_vcard_value();
         }
@@ -11525,7 +12860,9 @@ impl App {
     fn gather_file_info(&self) -> crate::file_information_panel::FileInfo {
         use crate::file_information_panel::FileInfo;
         let mut info = FileInfo::default();
-        let Some(t) = self.editor.active_tab() else { return info };
+        let Some(t) = self.editor.active_tab() else {
+            return info;
+        };
         let content = t.editor.get_content();
         info.language = t.editor.language().to_string();
         info.chars = content.chars().count();
@@ -11546,9 +12883,10 @@ impl App {
                     info.mode = Some(meta.permissions().mode());
                 }
                 if let Ok(modified) = meta.modified()
-                    && let Ok(d) = modified.duration_since(std::time::UNIX_EPOCH) {
-                        info.modified_secs = i64::try_from(d.as_secs()).ok();
-                    }
+                    && let Ok(d) = modified.duration_since(std::time::UNIX_EPOCH)
+                {
+                    info.modified_secs = i64::try_from(d.as_secs()).ok();
+                }
             }
         }
         info
@@ -11663,9 +13001,10 @@ impl App {
         }
         let row_in_view = (mouse.row - r.y) as usize;
         if let Some(p) = self.text_info.as_mut()
-            && p.select_index(row_in_view) {
-                self.insert_selected_text_info();
-            }
+            && p.select_index(row_in_view)
+        {
+            self.insert_selected_text_info();
+        }
     }
 
     /// Insert the highlighted value into the active editor (leaving the panel open).
@@ -11687,14 +13026,21 @@ impl App {
 
     /// Open a read-only Markdown preview of the active buffer.
     fn open_markdown_preview(&mut self) {
-        let Some(text) = self.editor.active_tab().filter(|t| !t.is_image()).map(Tab::text) else {
+        let Some(text) = self
+            .editor
+            .active_tab()
+            .filter(|t| !t.is_image())
+            .map(Tab::text)
+        else {
             return;
         };
         self.markdown_preview = Some(MarkdownPreview::open(&text));
     }
 
     fn markdown_preview_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.editor.height as usize).max(1).saturating_sub(2);
+        let page = (self.layout.editor.height as usize)
+            .max(1)
+            .saturating_sub(2);
         match key.code {
             KeyCode::Up => {
                 if let Some(p) = self.markdown_preview.as_mut() {
@@ -11725,7 +13071,14 @@ impl App {
 
     /// The active buffer's media type (from its file extension), if recognized.
     fn active_media_type(&self) -> Option<String> {
-        let ext = self.editor.active_tab()?.path.as_ref()?.extension()?.to_string_lossy().into_owned();
+        let ext = self
+            .editor
+            .active_tab()?
+            .path
+            .as_ref()?
+            .extension()?
+            .to_string_lossy()
+            .into_owned();
         crate::media_type::for_extension(&ext).map(|m| m.media_type.to_string())
     }
 
@@ -11737,7 +13090,11 @@ impl App {
         if !force && self.snippet_library_key.as_deref() == Some(key.as_str()) {
             return;
         }
-        let files = crate::snippets::load_scoped(media.as_deref(), &self.root, &self.settings.project_snippets);
+        let files = crate::snippets::load_scoped(
+            media.as_deref(),
+            &self.root,
+            &self.settings.project_snippets,
+        );
         self.snippet_library = crate::snippets::merge(crate::snippets::bundled(), files);
         self.snippet_library_key = Some(key);
     }
@@ -11798,7 +13155,10 @@ impl App {
         }
         let row = (mouse.row - r.y) as usize;
         let idx = self.snippets.as_ref().map_or(0, |p| p.scroll) + row;
-        let hit = self.snippets.as_mut().is_some_and(|p| p.select_index(idx, &self.snippet_library));
+        let hit = self
+            .snippets
+            .as_mut()
+            .is_some_and(|p| p.select_index(idx, &self.snippet_library));
         if hit {
             self.insert_selected_snippet();
         }
@@ -11822,7 +13182,9 @@ impl App {
     /// snippet body and arm a tabstop session. Returns `true` if it expanded.
     fn expand_snippet_prefix(&mut self) -> bool {
         self.refresh_snippet_library(false);
-        let Some(tab) = self.editor.active_tab() else { return false };
+        let Some(tab) = self.editor.active_tab() else {
+            return false;
+        };
         if tab.is_image() {
             return false;
         }
@@ -11859,10 +13221,13 @@ impl App {
         let area = self.layout.editor;
         // Insertion replaces any active selection, so the body begins at the
         // selection start (used by prefix expansion); otherwise at the cursor.
-        let base = self.editor.active_tab_mut().map_or(0, |t| match t.editor.get_selection() {
-            Some(sel) if !sel.is_empty() => sel.sorted().0,
-            _ => t.editor.get_cursor(),
-        });
+        let base = self
+            .editor
+            .active_tab_mut()
+            .map_or(0, |t| match t.editor.get_selection() {
+                Some(sel) if !sel.is_empty() => sel.sorted().0,
+                _ => t.editor.get_cursor(),
+            });
         if !self.editor.insert_str(&parsed.text, area) {
             return;
         }
@@ -11870,8 +13235,11 @@ impl App {
         if parsed.stops.is_empty() {
             return;
         }
-        let stops: Vec<(usize, usize)> =
-            parsed.stops.iter().map(|s| (base + s.start, base + s.end)).collect();
+        let stops: Vec<(usize, usize)> = parsed
+            .stops
+            .iter()
+            .map(|s| (base + s.start, base + s.end))
+            .collect();
         let single = stops.len() == 1;
         self.snippet_session = Some(SnippetSession { stops, index: 0 });
         self.snippet_goto(0);
@@ -11883,7 +13251,10 @@ impl App {
 
     /// Move to tabstop `index`: select its placeholder (or place a bare caret).
     fn snippet_goto(&mut self, index: usize) {
-        let Some((start, end)) = self.snippet_session.as_ref().and_then(|s| s.stops.get(index).copied())
+        let Some((start, end)) = self
+            .snippet_session
+            .as_ref()
+            .and_then(|s| s.stops.get(index).copied())
         else {
             return;
         };
@@ -11897,9 +13268,14 @@ impl App {
     /// Advance to the next snippet tabstop, shifting later stops by the net length
     /// change the user made at the current one. Ends the session after the last.
     fn snippet_tab(&mut self) {
-        let cursor = self.editor.active_tab().map_or(0, |t| t.editor.get_cursor());
+        let cursor = self
+            .editor
+            .active_tab()
+            .map_or(0, |t| t.editor.get_cursor());
         let next = {
-            let Some(sess) = self.snippet_session.as_mut() else { return };
+            let Some(sess) = self.snippet_session.as_mut() else {
+                return;
+            };
             let cur_end = sess.stops[sess.index].1;
             // Shift every later stop by the net length change the user made at the
             // current field (cursor vs. the field's original end).
@@ -12033,13 +13409,17 @@ impl App {
         let dtx = tx.clone();
         let droot = root.clone();
         std::thread::spawn(move || {
-            if let Ok(out) = std::process::Command::new("du").arg("-sh").arg(&droot).output()
-                && out.status.success() {
-                    let text = String::from_utf8_lossy(&out.stdout);
-                    if let Some(size) = text.split_whitespace().next() {
-                        let _ = dtx.send(DashMsg::Disk(size.to_string()));
-                    }
+            if let Ok(out) = std::process::Command::new("du")
+                .arg("-sh")
+                .arg(&droot)
+                .output()
+                && out.status.success()
+            {
+                let text = String::from_utf8_lossy(&out.stdout);
+                if let Some(size) = text.split_whitespace().next() {
+                    let _ = dtx.send(DashMsg::Disk(size.to_string()));
                 }
+            }
         });
 
         let ftx = tx.clone();
@@ -12049,7 +13429,9 @@ impl App {
         });
 
         std::thread::spawn(move || {
-            let _ = tx.send(DashMsg::Commits(crate::git::commit_count(&root).unwrap_or(0)));
+            let _ = tx.send(DashMsg::Commits(
+                crate::git::commit_count(&root).unwrap_or(0),
+            ));
         });
 
         self.dashboard_rx = Some(rx);
@@ -12104,7 +13486,11 @@ impl App {
             .map(|t| {
                 crate::palette::symbols(&t.text())
                     .into_iter()
-                    .map(|s| crate::outline_panel::Entry { kind: s.kind, name: s.name, line: s.line })
+                    .map(|s| crate::outline_panel::Entry {
+                        kind: s.kind,
+                        name: s.name,
+                        line: s.line,
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -12175,7 +13561,10 @@ impl App {
 
     /// Jump the cursor to the highlighted outline symbol and close the panel.
     fn jump_to_outline(&mut self) {
-        let Some(line) = self.outline.as_ref().and_then(crate::outline_panel::Outline::selected_line)
+        let Some(line) = self
+            .outline
+            .as_ref()
+            .and_then(crate::outline_panel::Outline::selected_line)
         else {
             return;
         };
@@ -12202,7 +13591,11 @@ impl App {
             self.outline_dock_key = None;
             return;
         }
-        let key = self.editor.active_tab().filter(|t| !t.is_image()).map(|t| (self.editor.active, t.editor.revision()));
+        let key = self
+            .editor
+            .active_tab()
+            .filter(|t| !t.is_image())
+            .map(|t| (self.editor.active, t.editor.revision()));
         let Some(key) = key else {
             self.outline_dock = None;
             self.outline_dock_key = None;
@@ -12216,27 +13609,42 @@ impl App {
                 .map(|t| {
                     crate::palette::symbols(&t.text())
                         .into_iter()
-                        .map(|s| crate::outline_panel::Entry { kind: s.kind, name: s.name, line: s.line })
+                        .map(|s| crate::outline_panel::Entry {
+                            kind: s.kind,
+                            name: s.name,
+                            line: s.line,
+                        })
                         .collect()
                 })
                 .unwrap_or_default();
-            self.outline_dock = if entries.is_empty() { None } else { Some(Outline::new(entries)) };
+            self.outline_dock = if entries.is_empty() {
+                None
+            } else {
+                Some(Outline::new(entries))
+            };
         }
         if let Some(o) = self.outline_dock.as_mut() {
-            let cur = self.editor.active_tab().map_or(1, |t| t.editor.cursor_line() + 1);
+            let cur = self
+                .editor
+                .active_tab()
+                .map_or(1, |t| t.editor.cursor_line() + 1);
             o.select_nearest(cur);
         }
     }
 
     /// Jump the editor to the outline-sidebar row at viewport index `row`.
     fn outline_dock_click(&mut self, row: usize) {
-        let Some(o) = self.outline_dock.as_mut() else { return };
+        let Some(o) = self.outline_dock.as_mut() else {
+            return;
+        };
         let idx = o.scroll + row;
         if idx >= o.entries.len() {
             return;
         }
         o.selected = idx;
-        let Some(line) = o.selected_line() else { return };
+        let Some(line) = o.selected_line() else {
+            return;
+        };
         self.with_jump(|s| {
             let area = s.editor_view();
             s.editor.goto(line, None, area);
@@ -12364,7 +13772,8 @@ impl App {
                 // Score every command: when the query is empty, order by recency
                 // (recently-run first) then catalog order; otherwise rank by fuzzy
                 // score with recency as a tiebreak.
-                let recent_rank = |action: &str| self.command_recents.iter().position(|a| a == action);
+                let recent_rank =
+                    |action: &str| self.command_recents.iter().position(|a| a == action);
                 let mut scored: Vec<(i32, usize, Entry)> = Vec::new();
                 for (cat_idx, (label_key, action)) in palette::COMMANDS.iter().enumerate() {
                     let label = t!(*label_key).to_string();
@@ -12410,17 +13819,18 @@ impl App {
             }
             PMode::Symbols => {
                 if let Some(tab) = self.editor.active_tab()
-                    && !tab.is_image() {
-                        let text = tab.text();
-                        for sym in palette::symbols(&text) {
-                            if query.is_empty() || palette::fuzzy_match(&sym.name, &query) {
-                                entries.push(Entry {
-                                    label: format!("@ {}", sym.text),
-                                    action: PAction::GotoLine(sym.line),
-                                });
-                            }
+                    && !tab.is_image()
+                {
+                    let text = tab.text();
+                    for sym in palette::symbols(&text) {
+                        if query.is_empty() || palette::fuzzy_match(&sym.name, &query) {
+                            entries.push(Entry {
+                                label: format!("@ {}", sym.text),
+                                action: PAction::GotoLine(sym.line),
+                            });
                         }
                     }
+                }
             }
             PMode::WorkspaceSymbols => {
                 entries = self.workspace_symbol_entries(&query);
@@ -12459,7 +13869,11 @@ impl App {
             let Ok(text) = std::fs::read_to_string(path) else {
                 continue;
             };
-            let rel = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().into_owned();
+            let rel = path
+                .strip_prefix(&self.root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .into_owned();
             for sym in palette::symbols(&text) {
                 if !palette::fuzzy_match(&sym.name, query) {
                     continue;
@@ -12527,7 +13941,9 @@ impl App {
         self.command_recents.insert(0, action.to_string());
         self.command_recents.truncate(MAX_RECENTS);
         // Persist so the order survives across sessions.
-        self.settings.command_recents.clone_from(&self.command_recents);
+        self.settings
+            .command_recents
+            .clone_from(&self.command_recents);
         let _ = self.settings.save();
     }
 
@@ -12596,7 +14012,9 @@ impl App {
         // While the find box is open, use its (possibly empty) query; once closed,
         // repeat the last completed search so Find Next / Previous keep working.
         let pat = if self.search.is_some() {
-            self.search.as_ref().and_then(super::search::SearchBar::pattern)
+            self.search
+                .as_ref()
+                .and_then(super::search::SearchBar::pattern)
         } else {
             self.last_search.clone()
         };
@@ -12683,10 +14101,7 @@ impl App {
         // the ends (first match after the last, last match before the first).
         let cur = t.editor.get_cursor();
         let target_idx = if forward {
-            matches
-                .iter()
-                .position(|(s, _)| *s > cur)
-                .unwrap_or(0) // past the last match: wrap to the first
+            matches.iter().position(|(s, _)| *s > cur).unwrap_or(0) // past the last match: wrap to the first
         } else {
             matches
                 .iter()
@@ -12695,7 +14110,8 @@ impl App {
         };
         let target = matches[target_idx];
         t.editor.set_cursor(target.0);
-        t.editor.set_selection(Some(Selection::new(target.0, target.1)));
+        t.editor
+            .set_selection(Some(Selection::new(target.0, target.1)));
         t.editor.focus(&area);
         (target_idx + 1, matches.len())
     }
@@ -12718,7 +14134,10 @@ impl App {
     /// Toggle the search-match highlights for the active buffer: clear them if
     /// any are shown, otherwise re-highlight the last search term.
     fn toggle_search_highlight(&mut self) {
-        let has = self.editor.active_tab().is_some_and(|t| t.editor.has_marks());
+        let has = self
+            .editor
+            .active_tab()
+            .is_some_and(|t| t.editor.has_marks());
         if has {
             self.clear_marks();
             self.status = t!("status.highlights_off").into();
@@ -12896,8 +14315,11 @@ impl App {
             }
         };
         let regex = sb.regex;
-        let template =
-            if regex { crate::find_panel::unescape(&sb.replace) } else { sb.replace.clone() };
+        let template = if regex {
+            crate::find_panel::unescape(&sb.replace)
+        } else {
+            sb.replace.clone()
+        };
         let area = self.editor_view();
         let replaced = {
             let Some(t) = self.editor.active_tab_mut() else {
@@ -13047,7 +14469,9 @@ impl App {
     /// Request LSP formatting of the active document (or selection, when one
     /// exists — via range formatting).
     fn lsp_format(&mut self) {
-        let Some(path) = self.active_path() else { return };
+        let Some(path) = self.active_path() else {
+            return;
+        };
         if !self.lsp.handles(&path) {
             self.status = t!("status.lsp_inactive").to_string();
             return;
@@ -13066,7 +14490,9 @@ impl App {
             ))
         });
         match sel {
-            Some((start, end)) => self.lsp.request_range_formatting(&path, start, end, tab_size),
+            Some((start, end)) => self
+                .lsp
+                .request_range_formatting(&path, start, end, tab_size),
             None => self.lsp.request_formatting(&path, tab_size),
         }
     }
@@ -13074,9 +14500,13 @@ impl App {
     /// Apply LSP text edits to the active buffer (highest position first, so
     /// earlier offsets stay valid), then re-anchor the caret.
     fn apply_lsp_edits(&mut self, edits: &[(crate::lsp_core::Range, String)]) {
-        let Some(path) = self.active_path() else { return };
+        let Some(path) = self.active_path() else {
+            return;
+        };
         let enc = self.lsp.encoding_for(&path);
-        let Some(t) = self.editor.active_tab_mut() else { return };
+        let Some(t) = self.editor.active_tab_mut() else {
+            return;
+        };
         // Resolve every range to char offsets first, then apply tail-to-head.
         let mut resolved: Vec<(usize, usize, String)> = {
             let code = t.editor.code_ref();
@@ -13132,7 +14562,10 @@ impl App {
         }
         match action {
             "org.contacts.new" => {
-                self.prompt = Some(Prompt::new(PromptKind::ContactNew, t!("prompt.contact_new").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::ContactNew,
+                    t!("prompt.contact_new").to_string(),
+                ));
             }
             "org.contacts.find" => self.contacts_buffer(crate::org_contacts::directory),
             "org.contacts.birthdays" => self.contacts_buffer(crate::org_contacts::birthdays),
@@ -13160,12 +14593,18 @@ impl App {
             "nav.line_next" => self.editor.cursor_line_down(area),
             "nav.line_prev" => self.editor.cursor_line_up(area),
             "nav.goto_paragraph" => {
-                self.prompt = Some(Prompt::new(PromptKind::GotoParagraph, t!("prompt.goto_paragraph").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::GotoParagraph,
+                    t!("prompt.goto_paragraph").to_string(),
+                ));
             }
             "nav.para_next" => self.editor.cursor_paragraph_next(area),
             "nav.para_prev" => self.editor.cursor_paragraph_prev(area),
             "nav.goto_section" => {
-                self.prompt = Some(Prompt::new(PromptKind::GotoSection, t!("prompt.goto_section").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::GotoSection,
+                    t!("prompt.goto_section").to_string(),
+                ));
             }
             "nav.section_next" => self.editor.cursor_section_next(area),
             "nav.section_prev" => self.editor.cursor_section_prev(area),
@@ -13174,21 +14613,33 @@ impl App {
             "nav.sentence_next" => self.editor.cursor_sentence_next(area),
             "nav.sentence_prev" => self.editor.cursor_sentence_prev(area),
             "nav.goto_sentence" => {
-                self.prompt = Some(Prompt::new(PromptKind::GotoSentence, t!("prompt.goto_sentence").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::GotoSentence,
+                    t!("prompt.goto_sentence").to_string(),
+                ));
             }
             "nav.word_start" => self.editor.cursor_word_start(area),
             "nav.word_end" => self.editor.cursor_word_end(area),
             "nav.word_next" => self.editor.cursor_word_next(area),
             "nav.word_prev" => self.editor.cursor_word_prev(area),
             "nav.goto_word" => {
-                self.prompt = Some(Prompt::new(PromptKind::GotoWord, t!("prompt.goto_word").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::GotoWord,
+                    t!("prompt.goto_word").to_string(),
+                ));
             }
             "nav.matching_tag" => self.goto_matching_tag(),
             "nav.goto_percent" => {
-                self.prompt = Some(Prompt::new(PromptKind::GotoPercent, t!("prompt.goto_percent").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::GotoPercent,
+                    t!("prompt.goto_percent").to_string(),
+                ));
             }
             "nav.goto_byte" => {
-                self.prompt = Some(Prompt::new(PromptKind::GotoByte, t!("prompt.goto_byte").to_string()));
+                self.prompt = Some(Prompt::new(
+                    PromptKind::GotoByte,
+                    t!("prompt.goto_byte").to_string(),
+                ));
             }
             _ => return false,
         }
@@ -13197,7 +14648,9 @@ impl App {
 
     /// Jump to the Nth word/sentence/paragraph/section from a submitted number.
     fn accept_goto_number(&mut self, kind: PromptKind, input: &str) {
-        let Ok(n) = input.trim_end_matches('%').parse::<usize>() else { return };
+        let Ok(n) = input.trim_end_matches('%').parse::<usize>() else {
+            return;
+        };
         let area = self.editor_view();
         match kind {
             PromptKind::GotoParagraph => self.editor.goto_paragraph(n, area),
@@ -13216,7 +14669,8 @@ impl App {
             && self.lsp.handles(&path)
         {
             let (line, character) = self.cursor_lsp_position(&path);
-            self.lsp.request_prepare_call_hierarchy(&path, line, character);
+            self.lsp
+                .request_prepare_call_hierarchy(&path, line, character);
         } else {
             self.status = t!("status.lsp_inactive").to_string();
         }
@@ -13237,7 +14691,9 @@ impl App {
     /// Jump to the next (`forward`) or previous diagnostic ("issue") in the active
     /// file, wrapping around. Reports when the file has no diagnostics.
     fn goto_diagnostic(&mut self, forward: bool) {
-        let Some(path) = self.active_path() else { return };
+        let Some(path) = self.active_path() else {
+            return;
+        };
         let mut lines: Vec<u32> = self
             .lsp
             .all_diagnostics()
@@ -13252,9 +14708,18 @@ impl App {
         lines.dedup();
         let cur = u32::try_from(self.editor.cursor_line()).unwrap_or(0);
         let target = if forward {
-            lines.iter().find(|&&l| l > cur).copied().unwrap_or(lines[0])
+            lines
+                .iter()
+                .find(|&&l| l > cur)
+                .copied()
+                .unwrap_or(lines[0])
         } else {
-            lines.iter().rev().find(|&&l| l < cur).copied().unwrap_or(*lines.last().unwrap())
+            lines
+                .iter()
+                .rev()
+                .find(|&&l| l < cur)
+                .copied()
+                .unwrap_or(*lines.last().unwrap())
         };
         let area = self.editor_view();
         self.editor.goto(target as usize, None, area);
@@ -13299,7 +14764,8 @@ impl App {
         self.rename_at = Some((path, line, character));
         let seed = self.symbol_under_cursor().unwrap_or_default();
         self.prompt = Some(
-            Prompt::new(PromptKind::LspRename, t!("prompt.lsp_rename").to_string()).with_input(seed),
+            Prompt::new(PromptKind::LspRename, t!("prompt.lsp_rename").to_string())
+                .with_input(seed),
         );
     }
 
@@ -13318,9 +14784,13 @@ impl App {
     /// On a linked-editing response: store the ranges (as char offsets) and
     /// prompt for the shared replacement text, seeded with the current text.
     fn begin_linked_edit(&mut self, ranges: &[crate::lsp_core::Range]) {
-        let Some(path) = self.active_path() else { return };
+        let Some(path) = self.active_path() else {
+            return;
+        };
         let enc = self.lsp.encoding_for(&path);
-        let Some(t) = self.editor.active_tab() else { return };
+        let Some(t) = self.editor.active_tab() else {
+            return;
+        };
         let (offsets, seed) = {
             let code = t.editor.code_ref();
             let offsets: Vec<(usize, usize)> = ranges
@@ -13331,20 +14801,29 @@ impl App {
                     (s.min(e), s.max(e))
                 })
                 .collect();
-            let seed = offsets.first().map(|&(s, e)| code.slice(s, e)).unwrap_or_default();
+            let seed = offsets
+                .first()
+                .map(|&(s, e)| code.slice(s, e))
+                .unwrap_or_default();
             (offsets, seed)
         };
         self.linked_ranges = Some(offsets);
-        self.prompt =
-            Some(Prompt::new(PromptKind::LinkedEdit, t!("prompt.linked_edit").to_string()).with_input(seed));
+        self.prompt = Some(
+            Prompt::new(PromptKind::LinkedEdit, t!("prompt.linked_edit").to_string())
+                .with_input(seed),
+        );
     }
 
     /// Replace every captured linked-editing range with `text` (highest offset
     /// first so earlier offsets stay valid).
     fn apply_linked_edit(&mut self, text: &str) {
-        let Some(mut ranges) = self.linked_ranges.take() else { return };
+        let Some(mut ranges) = self.linked_ranges.take() else {
+            return;
+        };
         ranges.sort_by_key(|&(s, _)| std::cmp::Reverse(s));
-        let Some(t) = self.editor.active_tab_mut() else { return };
+        let Some(t) = self.editor.active_tab_mut() else {
+            return;
+        };
         let mut chars: Vec<char> = t.editor.get_content().chars().collect();
         for (s, e) in ranges {
             let (a, b) = (s.min(chars.len()), e.min(chars.len()));
@@ -13422,7 +14901,9 @@ impl App {
 
     /// Show document symbols (all in the active file) in the static-results panel.
     fn show_document_symbols(&mut self, syms: &[(u32, u32, String)]) {
-        let Some(path) = self.active_path() else { return };
+        let Some(path) = self.active_path() else {
+            return;
+        };
         let mut hits: Vec<Hit> = syms
             .iter()
             .map(|(line, character, name)| {
@@ -13511,11 +14992,12 @@ impl App {
 
     fn goto_definition(&mut self) {
         if let Some(path) = self.active_path()
-            && self.lsp.handles(&path) {
-                let (line, character) = self.cursor_lsp_position(&path);
-                self.lsp.request_definition(&path, line, character);
-                return;
-            }
+            && self.lsp.handles(&path)
+        {
+            let (line, character) = self.cursor_lsp_position(&path);
+            self.lsp.request_definition(&path, line, character);
+            return;
+        }
         let Some(symbol) = self.symbol_under_cursor() else {
             self.messages.warn(t!("msg.no_symbol"));
             return;
@@ -13554,14 +15036,28 @@ impl App {
         static TAGS: &[&str] = &["TODO", "FIXME", "HACK", "XXX", "BUG", "NOTE"];
         let mut hits: Vec<Hit> = Vec::new();
         'files: for path in &self.file_index {
-            let Ok(content) = std::fs::read_to_string(path) else { continue };
-            let rel = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy().into_owned();
+            let Ok(content) = std::fs::read_to_string(path) else {
+                continue;
+            };
+            let rel = path
+                .strip_prefix(&self.root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .into_owned();
             for (i, raw) in content.lines().enumerate() {
                 // Match a tag as a word (a following ':' or space/paren is typical).
-                if let Some(col) = TAGS.iter().find_map(|tag| crate::textops::tag_column(raw, tag)) {
+                if let Some(col) = TAGS
+                    .iter()
+                    .find_map(|tag| crate::textops::tag_column(raw, tag))
+                {
                     let line = i + 1;
                     let text: String = raw.trim().chars().take(120).collect();
-                    hits.push(Hit { path: path.clone(), line, col: col + 1, display: format!("{rel}:{line}: {text}") });
+                    hits.push(Hit {
+                        path: path.clone(),
+                        line,
+                        col: col + 1,
+                        display: format!("{rel}:{line}: {text}"),
+                    });
                     if hits.len() >= 2000 {
                         break 'files;
                     }
@@ -13599,7 +15095,14 @@ impl App {
                     Severity::Hint => "hint",
                 };
                 let line = d.range.start.line as usize + 1;
-                let msg: String = d.message.lines().next().unwrap_or("").chars().take(100).collect();
+                let msg: String = d
+                    .message
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .chars()
+                    .take(100)
+                    .collect();
                 hits.push(Hit {
                     path: path.clone(),
                     line,
@@ -13642,7 +15145,10 @@ impl App {
             return None;
         }
         let sym: String = chars[start..end].iter().collect();
-        let ok = sym.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_');
+        let ok = sym
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_alphabetic() || c == '_');
         ok.then_some(sym)
     }
 
@@ -13712,7 +15218,11 @@ impl App {
 
     fn run_workspace_search(&mut self) {
         // Static result lists (e.g. go-to-definition) are not re-searched.
-        if self.workspace_search.as_ref().is_some_and(|p| p.static_results) {
+        if self
+            .workspace_search
+            .as_ref()
+            .is_some_and(|p| p.static_results)
+        {
             return;
         }
         let Some(ps) = self.workspace_search.as_ref() else {
@@ -13821,7 +15331,8 @@ impl App {
             let Some(content) = self.current_text(path) else {
                 continue;
             };
-            let (new, count) = crate::find_panel::replace_all(&content, &re, use_regex, &replacement);
+            let (new, count) =
+                crate::find_panel::replace_all(&content, &re, use_regex, &replacement);
             if count == 0 || new == content {
                 continue;
             }
@@ -13836,18 +15347,26 @@ impl App {
             }
             return;
         }
-        self.replace_confirm = Some(ReplaceConfirm { plan, replaced, lines, scroll: 0 });
+        self.replace_confirm = Some(ReplaceConfirm {
+            plan,
+            replaced,
+            lines,
+            scroll: 0,
+        });
     }
 
     /// Apply a confirmed project-wide replace: write every planned file and keep
     /// open buffers in sync, then refresh the search and report the totals.
     fn apply_replace_confirm(&mut self) {
-        let Some(rc) = self.replace_confirm.take() else { return };
+        let Some(rc) = self.replace_confirm.take() else {
+            return;
+        };
         let replaced = rc.replaced;
         let mut files = 0usize;
         for (path, new) in &rc.plan {
             if let Err(e) = std::fs::write(path, new) {
-                self.messages.error(t!("msg.write_failed", path = path.display(), error = e).to_string());
+                self.messages
+                    .error(t!("msg.write_failed", path = path.display(), error = e).to_string());
                 continue;
             }
             let canon = path.canonicalize().unwrap_or_else(|_| path.clone());
@@ -13860,7 +15379,12 @@ impl App {
             files += 1;
         }
         self.run_workspace_search();
-        let note = t!("status.replaced_in_files", replaced = replaced, files = files).to_string();
+        let note = t!(
+            "status.replaced_in_files",
+            replaced = replaced,
+            files = files
+        )
+        .to_string();
         if let Some(p) = self.workspace_search.as_mut() {
             p.status.clone_from(&note);
         }
@@ -13907,7 +15431,8 @@ impl App {
             }
             KeyCode::Enter => {
                 let replacing = self.workspace_search.as_ref().is_some_and(|p| p.replacing);
-                let on_replace = self.workspace_search.as_ref().map(|p| p.field) == Some(Field::Replace);
+                let on_replace =
+                    self.workspace_search.as_ref().map(|p| p.field) == Some(Field::Replace);
                 if replacing && (Self::alt(&key) || on_replace) {
                     self.workspace_replace_all();
                 } else {
@@ -13927,7 +15452,8 @@ impl App {
             KeyCode::Backspace => {
                 // Editing any field except Replace (query or the path filters)
                 // changes the result set, so re-run the search.
-                let affects = self.workspace_search.as_ref().map(|p| p.field) != Some(Field::Replace);
+                let affects =
+                    self.workspace_search.as_ref().map(|p| p.field) != Some(Field::Replace);
                 if let Some(p) = self.workspace_search.as_mut() {
                     p.active_field_mut().pop();
                 }
@@ -13936,7 +15462,8 @@ impl App {
                 }
             }
             KeyCode::Char(c) => {
-                let affects = self.workspace_search.as_ref().map(|p| p.field) != Some(Field::Replace);
+                let affects =
+                    self.workspace_search.as_ref().map(|p| p.field) != Some(Field::Replace);
                 if let Some(p) = self.workspace_search.as_mut() {
                     p.active_field_mut().push(c);
                 }
@@ -14030,9 +15557,7 @@ impl App {
             KeyCode::Char('y' | 'Y' | ' ') => Decision::Replace,
             KeyCode::Char('n' | 'N') | KeyCode::Delete => Decision::Skip,
             KeyCode::Char('!') => Decision::ReplaceRest,
-            KeyCode::Char('q' | 'Q') | KeyCode::Esc | KeyCode::Enter => {
-                Decision::Quit
-            }
+            KeyCode::Char('q' | 'Q') | KeyCode::Esc | KeyCode::Enter => Decision::Quit,
             _ => return,
         };
         self.qr_apply(decision);
@@ -14133,13 +15658,14 @@ impl App {
             // Alt+C / Alt+R toggle case / regex for the workspace→dock search.
             KeyCode::Char(c) if Self::alt(&key) => {
                 if let Some(p) = self.prompt.as_mut()
-                    && matches!(p.kind, PromptKind::SearchToDock) {
-                        match c.to_ascii_lowercase() {
-                            'c' => p.case_sensitive = !p.case_sensitive,
-                            'r' => p.regex = !p.regex,
-                            _ => {}
-                        }
+                    && matches!(p.kind, PromptKind::SearchToDock)
+                {
+                    match c.to_ascii_lowercase() {
+                        'c' => p.case_sensitive = !p.case_sensitive,
+                        'r' => p.regex = !p.regex,
+                        _ => {}
                     }
+                }
             }
             KeyCode::Char(c) => {
                 if let Some(p) = self.prompt.as_mut() {
@@ -14155,35 +15681,8 @@ impl App {
             return;
         };
         match prompt.kind {
-            PromptKind::Open => {
-                let (path, target) = palette::parse_path_target(prompt.input.trim());
-                if path.is_empty() {
-                    return;
-                }
-                let path = self.resolve(&path);
-                self.with_jump(|s| {
-                    s.open_path(&path, false);
-                    if let Some((line, col)) = target {
-                        let area = s.editor_view();
-                        s.editor.goto(line, Some(col), area);
-                    }
-                    s.focus = Focus::Editor;
-                });
-            }
-            PromptKind::SaveAs => {
-                let raw = prompt.input.trim();
-                if raw.is_empty() {
-                    return;
-                }
-                let path = self.resolve(raw);
-                let opts = self.save_options();
-                match self.editor.save_active_as(path, opts) {
-                    Ok(p) => {
-                        self.status = t!("status.saved", path = p.display()).to_string();
-                        self.explorer.rebuild();
-                    }
-                    Err(e) => self.messages.error(t!("msg.save_failed", error = e).to_string()),
-                }
+            PromptKind::Open | PromptKind::SaveAs => {
+                self.accept_file_prompt(prompt.kind, prompt.input.trim());
             }
             PromptKind::Rename => self.rename_file(&prompt.input),
             PromptKind::RunCommand => self.run_command(&prompt.input),
@@ -14193,6 +15692,16 @@ impl App {
             PromptKind::GitCommit => self.git_commit(&prompt.input),
             PromptKind::GitNewBranch => self.git_create_branch(&prompt.input),
             PromptKind::GitClone => self.git_clone(&prompt.input),
+            PromptKind::JjClone
+            | PromptKind::JjDescribe
+            | PromptKind::JjCommit
+            | PromptKind::JjEdit
+            | PromptKind::JjRebase
+            | PromptKind::JjBookmarkCreate
+            | PromptKind::JjBookmarkSet
+            | PromptKind::JjBookmarkDelete => {
+                self.accept_jj_prompt(prompt.kind, &prompt.input);
+            }
             PromptKind::GitEditDescription => self.git_edit_description(&prompt.input),
             PromptKind::GitDeleteBranch => self.git_delete_branch(&prompt.input),
             PromptKind::GitGrep => self.git_grep(&prompt.input),
@@ -14200,7 +15709,8 @@ impl App {
                 if let Some(path) = self.active_path()
                     && self.lsp.handles(&path)
                 {
-                    self.lsp.request_workspace_symbols(&path, prompt.input.trim());
+                    self.lsp
+                        .request_workspace_symbols(&path, prompt.input.trim());
                 }
             }
             PromptKind::LspRename => {
@@ -14223,31 +15733,86 @@ impl App {
             PromptKind::CompareFile => self.open_diff_with(prompt.input.trim()),
             PromptKind::SaveMacro => self.save_macro(prompt.input.trim()),
             PromptKind::OrgCapture
-            | PromptKind::RoamFind | PromptKind::RoamInsert | PromptKind::RoamCapture
-            | PromptKind::RoamDailyCapture | PromptKind::RoamDailyDate
-            | PromptKind::RoamTag | PromptKind::RoamAlias | PromptKind::RoamRef
+            | PromptKind::RoamFind
+            | PromptKind::RoamInsert
+            | PromptKind::RoamCapture
+            | PromptKind::RoamDailyCapture
+            | PromptKind::RoamDailyDate
+            | PromptKind::RoamTag
+            | PromptKind::RoamAlias
+            | PromptKind::RoamRef
             | PromptKind::NodeTransclusion
-            | PromptKind::WorkspaceOpen | PromptKind::WorkspaceSave | PromptKind::WorkspaceAddFolder
-            | PromptKind::GotoParagraph | PromptKind::GotoSection
-            | PromptKind::GotoSentence | PromptKind::GotoWord
-            | PromptKind::GotoPercent | PromptKind::GotoByte
+            | PromptKind::WorkspaceOpen
+            | PromptKind::WorkspaceSave
+            | PromptKind::WorkspaceAddFolder
+            | PromptKind::GotoParagraph
+            | PromptKind::GotoSection
+            | PromptKind::GotoSentence
+            | PromptKind::GotoWord
+            | PromptKind::GotoPercent
+            | PromptKind::GotoByte
             | PromptKind::ContactNew => {
                 self.accept_roam_prompt(prompt.kind, prompt.input.trim());
             }
-            PromptKind::DebugRepl => {
-                let expr = prompt.input.trim();
-                if !expr.is_empty() {
-                    self.dap.evaluate(expr);
+            PromptKind::DebugRepl | PromptKind::DebugWatch => {
+                self.accept_debug_prompt(prompt.kind, prompt.input.trim());
+            }
+        }
+    }
+
+    /// Handle a completed open/save-as file prompt (`raw` is the trimmed input).
+    /// Grouped out of [`App::accept_prompt`] to keep it within the line limit.
+    fn accept_file_prompt(&mut self, kind: PromptKind, raw: &str) {
+        match kind {
+            PromptKind::Open => {
+                let (path, target) = palette::parse_path_target(raw);
+                if path.is_empty() {
+                    return;
+                }
+                let path = self.resolve(&path);
+                self.with_jump(|s| {
+                    s.open_path(&path, false);
+                    if let Some((line, col)) = target {
+                        let area = s.editor_view();
+                        s.editor.goto(line, Some(col), area);
+                    }
+                    s.focus = Focus::Editor;
+                });
+            }
+            PromptKind::SaveAs => {
+                if raw.is_empty() {
+                    return;
+                }
+                let path = self.resolve(raw);
+                let opts = self.save_options();
+                match self.editor.save_active_as(path, opts) {
+                    Ok(p) => {
+                        self.status = t!("status.saved", path = p.display()).to_string();
+                        self.explorer.rebuild();
+                    }
+                    Err(e) => self
+                        .messages
+                        .error(t!("msg.save_failed", error = e).to_string()),
                 }
             }
+            _ => {}
+        }
+    }
+
+    /// Handle a completed debugger prompt (REPL evaluate or add-watch). Grouped
+    /// out of [`App::accept_prompt`] to keep it within the line limit.
+    fn accept_debug_prompt(&mut self, kind: PromptKind, expr: &str) {
+        if expr.is_empty() {
+            return;
+        }
+        match kind {
+            PromptKind::DebugRepl => self.dap.evaluate(expr),
             PromptKind::DebugWatch => {
-                let expr = prompt.input.trim();
-                if !expr.is_empty() {
-                    self.dap_watches.push((expr.to_string(), String::new()));
-                    self.dap.evaluate(expr);
-                    self.show_debug_panel = true;
-                }
+                self.dap_watches.push((expr.to_string(), String::new()));
+                self.dap.evaluate(expr);
+                self.show_debug_panel = true;
             }
+            _ => {}
         }
     }
 
@@ -14266,7 +15831,11 @@ impl App {
         } else {
             regex::escape(query)
         };
-        let pat = if case_sensitive { core } else { format!("(?i){core}") };
+        let pat = if case_sensitive {
+            core
+        } else {
+            format!("(?i){core}")
+        };
         let re = match Regex::new(&pat) {
             Ok(r) => r,
             Err(e) => {
@@ -14326,7 +15895,10 @@ impl App {
             self.status = t!("status.rename_no_file").to_string();
             return;
         };
-        let name = cur.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        let name = cur
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
         self.prompt =
             Some(Prompt::new(PromptKind::Rename, t!("prompt.rename").to_string()).with_input(name));
     }
@@ -14346,7 +15918,8 @@ impl App {
         let new_path = if raw.contains('/') {
             self.resolve(raw)
         } else {
-            cur.parent().map_or_else(|| PathBuf::from(raw), |d| d.join(raw))
+            cur.parent()
+                .map_or_else(|| PathBuf::from(raw), |d| d.join(raw))
         };
         if new_path == cur {
             return;
@@ -14364,7 +15937,9 @@ impl App {
                 self.explorer.rebuild();
                 self.refresh_git();
             }
-            Err(e) => self.messages.error(t!("msg.rename_failed", error = e).to_string()),
+            Err(e) => self
+                .messages
+                .error(t!("msg.rename_failed", error = e).to_string()),
         }
     }
 
@@ -14393,7 +15968,8 @@ impl App {
             Ok(c) => c,
             Err(e) => {
                 self.bottom_dock.push(format!("[error: {e}]"));
-                self.messages.error(t!("msg.command_failed", error = e).to_string());
+                self.messages
+                    .error(t!("msg.command_failed", error = e).to_string());
                 return;
             }
         };
@@ -14418,7 +15994,11 @@ impl App {
                 .and_then(|s| s.code());
             let _ = tx.send(CmdMsg::Done(code));
         });
-        self.running_command = Some(RunningCommand { rx, child, label: cmd.to_string() });
+        self.running_command = Some(RunningCommand {
+            rx,
+            child,
+            label: cmd.to_string(),
+        });
     }
 
     /// Drain any streamed command output into the bottom dock. Called once per
@@ -14447,7 +16027,11 @@ impl App {
                     let code = code.unwrap_or(-1);
                     self.bottom_dock.push(format!("[exit {code}]"));
                     self.status = t!("status.command_done", code = code).to_string();
-                    let label = self.running_command.as_ref().map(|rc| rc.label.clone()).unwrap_or_default();
+                    let label = self
+                        .running_command
+                        .as_ref()
+                        .map(|rc| rc.label.clone())
+                        .unwrap_or_default();
                     let note = t!("msg.command_finished", command = label, code = code).to_string();
                     if code == 0 {
                         self.messages.info(note);
@@ -14490,7 +16074,13 @@ impl App {
         self.test_buffer.clear();
         self.test_selected = 0;
         let (pass, fail, ignore) = crate::test_runner::tally(&self.test_results);
-        let note = t!("status.tests_done", pass = pass, fail = fail, ignore = ignore).to_string();
+        let note = t!(
+            "status.tests_done",
+            pass = pass,
+            fail = fail,
+            ignore = ignore
+        )
+        .to_string();
         if fail > 0 {
             self.messages.error(note.clone());
         } else {
@@ -14545,8 +16135,10 @@ impl App {
         self.lsp.shutdown();
         self.save_session();
         if let Err(e) = self.settings.save() {
-            self.messages
-                .push(Level::Warn, t!("msg.settings_save_failed", error = e).to_string());
+            self.messages.push(
+                Level::Warn,
+                t!("msg.settings_save_failed", error = e).to_string(),
+            );
         }
     }
 }
@@ -14613,7 +16205,11 @@ impl App {
 
 /// Render a leader key fragment for display (`" "` → `SPC`).
 fn display_key(k: &str) -> String {
-    if k == " " { "SPC".to_string() } else { k.to_string() }
+    if k == " " {
+        "SPC".to_string()
+    } else {
+        k.to_string()
+    }
 }
 
 /// The `Ctrl+X …` chords shown by the Emacs which-key popup: `(key, action-id)`.
@@ -14644,7 +16240,8 @@ fn jump_label(i: usize) -> String {
 /// The top-level menu index for an `Alt+letter` mnemonic: Vix=0, File=1, Edit=2,
 /// View=3 (Alt+I, since "Vix"/"View" both start with V), Go=4 (Alt+N, since Git
 /// keeps Alt+G and Alt+J is the recent-locations jump), Run=5 (Alt+R), AI=6,
-/// DB=7 (Alt+D), Git=8, Org=9, Tools=10, Help=11. `None` for any other letter.
+/// DB=7 (Alt+D), JJ=8 (no mnemonic — Alt+J is the recent-locations jump), Git=9,
+/// Org=10, Tools=11, Help=12. `None` for any other letter.
 fn menu_index_for_alt(c: char) -> Option<usize> {
     match c.to_ascii_lowercase() {
         'v' => Some(0),
@@ -14655,10 +16252,10 @@ fn menu_index_for_alt(c: char) -> Option<usize> {
         'r' => Some(5),
         'a' => Some(6),
         'd' => Some(7),
-        'g' => Some(8),
-        'o' => Some(9),
-        't' => Some(10),
-        'h' => Some(11),
+        'g' => Some(9),
+        'o' => Some(10),
+        't' => Some(11),
+        'h' => Some(12),
         _ => None,
     }
 }
@@ -14796,7 +16393,13 @@ fn next_match_from(t: &Tab, re: &Regex, from_char: usize) -> Option<(usize, usiz
 /// Editor adapter: replace the single match at char offset `current.0` in `t`,
 /// returning the char offset just past the inserted text (where searching should
 /// resume). Pure replacement lives in [`crate::find_panel::replace_one`].
-fn do_replace(t: &mut Tab, re: &Regex, regex: bool, template: &str, current: (usize, usize)) -> usize {
+fn do_replace(
+    t: &mut Tab,
+    re: &Regex,
+    regex: bool,
+    template: &str,
+    current: (usize, usize),
+) -> usize {
     match crate::find_panel::replace_one(&t.text(), re, regex, template, current.0) {
         Some((new, resume)) => {
             t.editor.set_content(&new);
@@ -14866,8 +16469,8 @@ const MIN_EDITOR_WIDTH: u16 = 20;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
 
     #[test]
     fn org_contacts_new_field_and_views() {
@@ -14900,7 +16503,13 @@ mod tests {
         app.run_action("org.contacts.find");
         assert!(app.editor.active_tab().unwrap().text().contains("Ada"));
         app.run_action("org.contacts.vcard");
-        assert!(app.editor.active_tab().unwrap().text().contains("BEGIN:VCARD"));
+        assert!(
+            app.editor
+                .active_tab()
+                .unwrap()
+                .text()
+                .contains("BEGIN:VCARD")
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -14908,17 +16517,41 @@ mod tests {
     fn help_menu_overlays_show_license_issue_and_privacy() {
         let mut app = App::new(std::env::temp_dir(), Settings::default());
         app.run_action("help.license");
-        let lic = app.welcome.as_ref().expect("license overlay opens").lines().join("\n");
-        assert!(lic.contains("vix") && lic.contains(env!("CARGO_PKG_VERSION")), "version: {lic}");
+        let lic = app
+            .welcome
+            .as_ref()
+            .expect("license overlay opens")
+            .lines()
+            .join("\n");
+        assert!(
+            lic.contains("vix") && lic.contains(env!("CARGO_PKG_VERSION")),
+            "version: {lic}"
+        );
         assert!(lic.contains("Apache-2.0"), "license from Cargo.toml: {lic}");
 
         app.run_action("help.report_issue");
-        let issue = app.welcome.as_ref().expect("issue overlay opens").lines().join("\n");
-        assert!(issue.contains("github.com/vixide/vix/issues"), "issue URL: {issue}");
+        let issue = app
+            .welcome
+            .as_ref()
+            .expect("issue overlay opens")
+            .lines()
+            .join("\n");
+        assert!(
+            issue.contains("github.com/vixide/vix/issues"),
+            "issue URL: {issue}"
+        );
 
         app.run_action("help.privacy");
-        let priv_ = app.welcome.as_ref().expect("privacy overlay opens").lines().join("\n");
-        assert!(priv_.to_lowercase().contains("privacy"), "privacy text: {priv_}");
+        let priv_ = app
+            .welcome
+            .as_ref()
+            .expect("privacy overlay opens")
+            .lines()
+            .join("\n");
+        assert!(
+            priv_.to_lowercase().contains("privacy"),
+            "privacy text: {priv_}"
+        );
     }
 
     #[test]
@@ -14936,9 +16569,15 @@ mod tests {
         let mut app = App::new(proj.clone(), Settings::default());
         app.workspace_add_folder(&lib.to_string_lossy());
         assert!(app.workspace_folders.contains(&lib), "folder added");
-        let names: Vec<String> =
-            app.file_index.iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect();
-        assert!(names.iter().any(|n| n == "util.rs"), "index spans added folder: {names:?}");
+        let names: Vec<String> = app
+            .file_index
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            names.iter().any(|n| n == "util.rs"),
+            "index spans added folder: {names:?}"
+        );
 
         // Open a file, save the workspace, then reopen it in a fresh app.
         app.open_path(&proj.join("main.rs"), false);
@@ -14950,10 +16589,11 @@ mod tests {
         app2.workspace_open(&ws_file.to_string_lossy());
         assert!(app2.workspace_folders.contains(&proj) && app2.workspace_folders.contains(&lib));
         assert!(
-            app2.editor
-                .tabs
-                .iter()
-                .any(|t| t.path.as_ref().and_then(|p| p.file_name()).is_some_and(|n| n == "main.rs")),
+            app2.editor.tabs.iter().any(|t| t
+                .path
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .is_some_and(|n| n == "main.rs")),
             "saved file reopened"
         );
         let _ = std::fs::remove_dir_all(&base);
@@ -14969,16 +16609,26 @@ mod tests {
             ":PROPERTIES:\n:ID:       T1\n:END:\n#+title: Target\n",
         )
         .unwrap();
-        std::fs::write(dir.join("source.org"), "#+title: Source\nsee [[id:T1][Target]]\n").unwrap();
+        std::fs::write(
+            dir.join("source.org"),
+            "#+title: Source\nsee [[id:T1][Target]]\n",
+        )
+        .unwrap();
 
         let mut app = App::new(dir.clone(), Settings::default());
         app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
         app.build_file_index();
         app.open_path(&dir.join("target.org"), false);
         app.run_action("roam.backlinks_follow");
-        assert!(app.backlinks_follow && app.show_bottom_dock, "live backlinks on, dock shown");
+        assert!(
+            app.backlinks_follow && app.show_bottom_dock,
+            "live backlinks on, dock shown"
+        );
         let joined = app.bottom_dock.lines.join("\n");
-        assert!(joined.contains("Linked references (1)"), "one linked ref: {joined:?}");
+        assert!(
+            joined.contains("Linked references (1)"),
+            "one linked ref: {joined:?}"
+        );
         assert!(joined.contains("source.org"), "source listed: {joined:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -14991,7 +16641,11 @@ mod tests {
         app.layout.minimap = ratatui::layout::Rect::new(64, 0, 16, 20); // 20 rows tall
         // Row 10 of 20 over 100 lines maps to line 10*100/20 = 50.
         app.minimap_click(10);
-        assert_eq!(app.editor.cursor_line(), 50, "click maps proportionally to the file");
+        assert_eq!(
+            app.editor.cursor_line(),
+            50,
+            "click maps proportionally to the file"
+        );
     }
 
     #[test]
@@ -15002,14 +16656,20 @@ mod tests {
         let mut app = App::new(dir.clone(), Settings::default());
         app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
         app.run_action("roam.dailies_calendar");
-        assert!(app.show_calendar && app.calendar_dailies, "dailies calendar opened");
+        assert!(
+            app.show_calendar && app.calendar_dailies,
+            "dailies calendar opened"
+        );
         app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-        assert!(!app.show_calendar && !app.calendar_dailies, "calendar closed on accept");
-        let opened = app
-            .editor
-            .tabs
-            .iter()
-            .any(|t| t.path.as_ref().is_some_and(|p| p.to_string_lossy().contains("daily")));
+        assert!(
+            !app.show_calendar && !app.calendar_dailies,
+            "calendar closed on accept"
+        );
+        let opened = app.editor.tabs.iter().any(|t| {
+            t.path
+                .as_ref()
+                .is_some_and(|p| p.to_string_lossy().contains("daily"))
+        });
         assert!(opened, "today's daily note opened");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -15029,10 +16689,19 @@ mod tests {
         // Typing "[[" in an .org file opens node-title completion.
         app.on_key(KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE));
         app.on_key(KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE));
-        let popup = app.completion.as_ref().expect("wiki-link completion opened");
-        assert!(popup.items.iter().any(|i| i.label == "Alpha Notes"), "node title offered");
+        let popup = app
+            .completion
+            .as_ref()
+            .expect("wiki-link completion opened");
+        assert!(
+            popup.items.iter().any(|i| i.label == "Alpha Notes"),
+            "node title offered"
+        );
         // Auto-pair already inserted `]]`, so the insertion must not re-close.
-        assert!(popup.items.iter().any(|i| i.insert_text == "Alpha Notes"), "no double close");
+        assert!(
+            popup.items.iter().any(|i| i.insert_text == "Alpha Notes"),
+            "no double close"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -15045,14 +16714,24 @@ mod tests {
         for i in 0..60 {
             let _ = writeln!(body, "    body{i}");
         }
-        app.editor.new_tab_with_content(&format!("fn outer() {{\n{body}}}\n"));
+        app.editor
+            .new_tab_with_content(&format!("fn outer() {{\n{body}}}\n"));
         // At the top, the scope header is visible — nothing to pin.
-        assert!(app.sticky_header().is_none(), "no header when the top is visible");
+        assert!(
+            app.sticky_header().is_none(),
+            "no header when the top is visible"
+        );
         // Scroll deep into the function; its `fn outer()` line is now off-screen.
         app.editor.goto(40, None, app.layout.editor);
-        assert!(app.editor.top_visible_line() > 1, "scrolled past the header");
+        assert!(
+            app.editor.top_visible_line() > 1,
+            "scrolled past the header"
+        );
         let header = app.sticky_header().expect("enclosing scope is pinned");
-        assert!(header.contains("fn outer"), "header is the enclosing fn: {header:?}");
+        assert!(
+            header.contains("fn outer"),
+            "header is the enclosing fn: {header:?}"
+        );
     }
 
     #[cfg(feature = "lang-rust")]
@@ -15072,7 +16751,10 @@ mod tests {
         }
         app.run_action("lsp.expand_selection");
         let sel = app.editor.active_tab_mut().unwrap().editor.get_selection();
-        assert!(sel.is_some_and(|s| s.end > s.start), "a node range was selected: {sel:?}");
+        assert!(
+            sel.is_some_and(|s| s.end > s.start),
+            "a node range was selected: {sel:?}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -15087,8 +16769,19 @@ mod tests {
             t.editor.set_cursor(0);
         }
         app.refresh_word_highlight();
-        let marks = app.editor.active_tab().unwrap().editor.word_marks().cloned().unwrap_or_default();
-        assert_eq!(marks.len(), 3, "all three 'foo' occurrences marked: {marks:?}");
+        let marks = app
+            .editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .word_marks()
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(
+            marks.len(),
+            3,
+            "all three 'foo' occurrences marked: {marks:?}"
+        );
         assert_eq!(marks[0], (0, 3));
     }
 
@@ -15097,16 +16790,28 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("vix-todo-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("a.rs"), "fn f() {}\n// TODO: wire it up\nlet todos = 1; // not a tag\n").unwrap();
+        std::fs::write(
+            dir.join("a.rs"),
+            "fn f() {}\n// TODO: wire it up\nlet todos = 1; // not a tag\n",
+        )
+        .unwrap();
         std::fs::write(dir.join("b.rs"), "// FIXME broken\n").unwrap();
 
         let mut app = App::new(dir.clone(), Settings::default());
         app.build_file_index();
         app.run_action("tools.todo_finder");
         let ps = app.workspace_search.as_ref().expect("todo panel opens");
-        assert_eq!(ps.hits.len(), 2, "TODO + FIXME, not the `todos` identifier: {:?}",
-            ps.hits.iter().map(|h| &h.display).collect::<Vec<_>>());
-        assert!(ps.hits.iter().any(|h| h.display.contains("TODO: wire it up")));
+        assert_eq!(
+            ps.hits.len(),
+            2,
+            "TODO + FIXME, not the `todos` identifier: {:?}",
+            ps.hits.iter().map(|h| &h.display).collect::<Vec<_>>()
+        );
+        assert!(
+            ps.hits
+                .iter()
+                .any(|h| h.display.contains("TODO: wire it up"))
+        );
         assert!(ps.hits.iter().any(|h| h.display.contains("FIXME broken")));
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -15127,12 +16832,16 @@ mod tests {
         // Change the file on disk, then force the next poll to see a difference
         // (seed an old stored mtime so the test doesn't depend on clock resolution).
         std::fs::write(&path, "changed externally\n").unwrap();
-        app.disk_mtimes.insert(path.clone(), std::time::SystemTime::UNIX_EPOCH);
+        app.disk_mtimes
+            .insert(path.clone(), std::time::SystemTime::UNIX_EPOCH);
         app.last_disk_poll = None; // bypass the throttle
         app.poll_file_changes();
 
         let text = app.editor.active_tab().unwrap().text();
-        assert!(text.contains("changed externally"), "clean buffer reloaded: {text:?}");
+        assert!(
+            text.contains("changed externally"),
+            "clean buffer reloaded: {text:?}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -15152,11 +16861,25 @@ mod tests {
         let names: Vec<String> = app
             .file_index
             .iter()
-            .map(|p| p.strip_prefix(&dir).unwrap_or(p).to_string_lossy().replace('\\', "/"))
+            .map(|p| {
+                p.strip_prefix(&dir)
+                    .unwrap_or(p)
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
             .collect();
-        assert!(names.iter().any(|n| n == "src/keep.rs"), "tracked file indexed: {names:?}");
-        assert!(!names.iter().any(|n| n == "ignored.txt"), ".gitignore respected: {names:?}");
-        assert!(!names.iter().any(|n| n.starts_with("target/")), "target pruned: {names:?}");
+        assert!(
+            names.iter().any(|n| n == "src/keep.rs"),
+            "tracked file indexed: {names:?}"
+        );
+        assert!(
+            !names.iter().any(|n| n == "ignored.txt"),
+            ".gitignore respected: {names:?}"
+        );
+        assert!(
+            !names.iter().any(|n| n.starts_with("target/")),
+            "target pruned: {names:?}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -15166,7 +16889,13 @@ mod tests {
         let text = "let foo = 1;\nbar(foo);\n";
         // Replace `foo` on line 0 (cols 4..7) and line 1 (cols 4..7) with `baz`.
         let edit = |line: u32, s: u32, e: u32| {
-            (Range { start: Position { line, character: s }, end: Position { line, character: e } }, "baz".to_string())
+            (
+                Range {
+                    start: Position { line, character: s },
+                    end: Position { line, character: e },
+                },
+                "baz".to_string(),
+            )
         };
         let out = apply_edits_to_text(text, Encoding::Utf16, &[edit(0, 4, 7), edit(1, 4, 7)]);
         assert_eq!(out, "let baz = 1;\nbar(baz);\n");

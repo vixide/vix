@@ -63,15 +63,25 @@ pub fn parse_json(json: &str, scope: &Scope) -> Vec<Snippet> {
     };
     let mut out = Vec::new();
     for (name, val) in map {
-        let serde_json::Value::Object(obj) = val else { continue };
-        let Some(body) = obj.get("body").and_then(json_string_or_lines) else { continue };
+        let serde_json::Value::Object(obj) = val else {
+            continue;
+        };
+        let Some(body) = obj.get("body").and_then(json_string_or_lines) else {
+            continue;
+        };
         let prefixes = obj.get("prefix").map(json_string_list).unwrap_or_default();
         let description = obj
             .get("description")
             .and_then(serde_json::Value::as_str)
             .unwrap_or("")
             .to_string();
-        out.push(Snippet { name, prefixes, body, description, scope: scope.clone() });
+        out.push(Snippet {
+            name,
+            prefixes,
+            body,
+            description,
+            scope: scope.clone(),
+        });
     }
     // Stable order by name so the picker is deterministic.
     out.sort_by(|a, b| a.name.cmp(&b.name));
@@ -82,9 +92,12 @@ pub fn parse_json(json: &str, scope: &Scope) -> Vec<Snippet> {
 fn json_string_or_lines(v: &serde_json::Value) -> Option<String> {
     match v {
         serde_json::Value::String(s) => Some(s.clone()),
-        serde_json::Value::Array(a) => {
-            Some(a.iter().filter_map(serde_json::Value::as_str).collect::<Vec<_>>().join("\n"))
-        }
+        serde_json::Value::Array(a) => Some(
+            a.iter()
+                .filter_map(serde_json::Value::as_str)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        ),
         _ => None,
     }
 }
@@ -93,9 +106,12 @@ fn json_string_or_lines(v: &serde_json::Value) -> Option<String> {
 fn json_string_list(v: &serde_json::Value) -> Vec<String> {
     match v {
         serde_json::Value::String(s) if !s.is_empty() => vec![s.clone()],
-        serde_json::Value::Array(a) => {
-            a.iter().filter_map(serde_json::Value::as_str).filter(|s| !s.is_empty()).map(String::from).collect()
-        }
+        serde_json::Value::Array(a) => a
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .collect(),
         _ => Vec::new(),
     }
 }
@@ -159,11 +175,16 @@ pub fn load_file(path: &Path, scope: &Scope) -> Vec<Snippet> {
 /// A missing directory yields `[]`.
 #[must_use]
 pub fn load_dir(dir: &Path, scope: &Scope) -> Vec<Snippet> {
-    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
     let mut files: Vec<PathBuf> = entries
         .filter_map(Result::ok)
         .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")))
+        .filter(|p| {
+            p.extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("json"))
+        })
         .collect();
     files.sort();
     files.iter().flat_map(|p| load_file(p, scope)).collect()
@@ -175,7 +196,11 @@ pub fn load_dir(dir: &Path, scope: &Scope) -> Vec<Snippet> {
 /// scopes shadow earlier ones by name. All `*.json` files in each snippets
 /// directory are loaded.
 #[must_use]
-pub fn load_scoped(media_type: Option<&str>, project_root: &Path, project_rel: &str) -> Vec<Snippet> {
+pub fn load_scoped(
+    media_type: Option<&str>,
+    project_root: &Path,
+    project_rel: &str,
+) -> Vec<Snippet> {
     let mut snippets: Vec<Snippet> = Vec::new();
     if let Some(d) = global_dir() {
         snippets.extend(load_dir(&d, &Scope::Global));
@@ -190,7 +215,10 @@ pub fn load_scoped(media_type: Option<&str>, project_root: &Path, project_rel: &
         // Project: <root>/config/media-types/<type>/snippets.
         snippets.extend(load_dir(&project_root.join("config").join(&rel), &scope));
     }
-    snippets.extend(load_file(&project_file(project_root, project_rel), &Scope::Project));
+    snippets.extend(load_file(
+        &project_file(project_root, project_rel),
+        &Scope::Project,
+    ));
     snippets
 }
 
@@ -212,7 +240,9 @@ pub fn merge(mut base: Vec<Snippet>, extra: Vec<Snippet>) -> Vec<Snippet> {
 /// Find the first snippet whose prefix exactly matches `word`.
 #[must_use]
 pub fn find_by_prefix<'a>(snippets: &'a [Snippet], word: &str) -> Option<&'a Snippet> {
-    snippets.iter().find(|s| s.prefixes.iter().any(|p| p == word))
+    snippets
+        .iter()
+        .find(|s| s.prefixes.iter().any(|p| p == word))
 }
 
 /// Filter + selection state for the Snippets picker (indices into a library
@@ -245,7 +275,9 @@ impl Picker {
                 q.is_empty()
                     || s.name.to_ascii_lowercase().contains(&q)
                     || s.description.to_ascii_lowercase().contains(&q)
-                    || s.prefixes.iter().any(|p| p.to_ascii_lowercase().contains(&q))
+                    || s.prefixes
+                        .iter()
+                        .any(|p| p.to_ascii_lowercase().contains(&q))
             })
             .map(|(i, _)| i)
             .collect()
@@ -345,7 +377,10 @@ mod tests {
         let rel = media_type_rel("text/rust");
         assert_eq!(rel, std::path::Path::new("media-types/text/rust/snippets"));
         let rel = media_type_rel("application/sql");
-        assert_eq!(rel, std::path::Path::new("media-types/application/sql/snippets"));
+        assert_eq!(
+            rel,
+            std::path::Path::new("media-types/application/sql/snippets")
+        );
     }
 
     #[test]
@@ -362,8 +397,14 @@ mod tests {
 
     #[test]
     fn merge_shadows_by_name() {
-        let base = parse_json(r#"{"A": {"body": "1"}, "B": {"body": "2"}}"#, &Scope::Global);
-        let extra = parse_json(r#"{"A": {"body": "override"}, "C": {"body": "3"}}"#, &Scope::Project);
+        let base = parse_json(
+            r#"{"A": {"body": "1"}, "B": {"body": "2"}}"#,
+            &Scope::Global,
+        );
+        let extra = parse_json(
+            r#"{"A": {"body": "override"}, "C": {"body": "3"}}"#,
+            &Scope::Project,
+        );
         let merged = merge(base, extra);
         assert_eq!(merged.len(), 3);
         let a = merged.iter().find(|s| s.name == "A").unwrap();
@@ -373,7 +414,10 @@ mod tests {
 
     #[test]
     fn find_by_prefix_matches_any_listed_prefix() {
-        let s = parse_json(r#"{"P": {"prefix": ["pr", "println"], "body": "x"}}"#, &Scope::Global);
+        let s = parse_json(
+            r#"{"P": {"prefix": ["pr", "println"], "body": "x"}}"#,
+            &Scope::Global,
+        );
         assert!(find_by_prefix(&s, "println").is_some());
         assert!(find_by_prefix(&s, "pr").is_some());
         assert!(find_by_prefix(&s, "nope").is_none());
@@ -390,6 +434,9 @@ mod tests {
         p.push('a');
         p.push('l');
         assert_eq!(p.len(&lib), 1);
-        assert_eq!(p.selected_library_index(&lib).map(|i| lib[i].name.clone()), Some("Alpha".to_string()));
+        assert_eq!(
+            p.selected_library_index(&lib).map(|i| lib[i].name.clone()),
+            Some("Alpha".to_string())
+        );
     }
 }

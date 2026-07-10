@@ -59,7 +59,9 @@ impl Grid {
         let mut out: Vec<usize> = (0..self.rows.len())
             .filter(|&i| {
                 needle.is_empty()
-                    || self.rows[i].iter().any(|cell| cell.to_lowercase().contains(&needle))
+                    || self.rows[i]
+                        .iter()
+                        .any(|cell| cell.to_lowercase().contains(&needle))
             })
             .collect();
         if let Some((col, asc)) = self.sort {
@@ -130,7 +132,11 @@ impl Grid {
 
     /// Jump to the first or last filtered row.
     pub fn home_end(&mut self, home: bool) {
-        self.sel = if home { 0 } else { self.filtered().len().saturating_sub(1) };
+        self.sel = if home {
+            0
+        } else {
+            self.filtered().len().saturating_sub(1)
+        };
     }
 
     /// Append or erase one char of the live filter, clamping the selection.

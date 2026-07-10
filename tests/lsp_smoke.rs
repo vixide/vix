@@ -116,8 +116,15 @@ fn mock_server_round_trips_diagnostics_and_hover() {
     let diag_ok = !lsp.diagnostics_for(&file).is_empty();
     let _ = std::fs::remove_dir_all(&root);
 
-    assert!(diag_ok, "the mock server's diagnostic should reach the client");
-    assert_eq!(hover.as_deref(), Some("mock hover"), "hover should round-trip");
+    assert!(
+        diag_ok,
+        "the mock server's diagnostic should reach the client"
+    );
+    assert_eq!(
+        hover.as_deref(),
+        Some("mock hover"),
+        "hover should round-trip"
+    );
 }
 
 #[test]
@@ -137,7 +144,11 @@ fn rust_analyzer_publishes_diagnostics_for_a_broken_file() {
     )
     .unwrap();
     let main_rs = src.join("main.rs");
-    std::fs::write(&main_rs, "fn main() {\n    let x: u32 = \"nope\";\n    let _ = x;\n}\n").unwrap();
+    std::fs::write(
+        &main_rs,
+        "fn main() {\n    let x: u32 = \"nope\";\n    let _ = x;\n}\n",
+    )
+    .unwrap();
 
     let cfg = LspServer {
         language_id: "rust".into(),
@@ -160,5 +171,8 @@ fn rust_analyzer_publishes_diagnostics_for_a_broken_file() {
     }
     lsp.shutdown();
     let _ = std::fs::remove_dir_all(&root);
-    assert!(found, "rust-analyzer should publish a diagnostic for the broken file");
+    assert!(
+        found,
+        "rust-analyzer should publish a diagnostic for the broken file"
+    );
 }

@@ -11,7 +11,6 @@
 //! [RFC 6350]: https://www.rfc-editor.org/info/rfc6350
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -64,7 +63,9 @@ pub fn parse(text: &str) -> Vcard {
         if line.trim().is_empty() {
             continue;
         }
-        let Some(prop) = parse_line(&line) else { continue };
+        let Some(prop) = parse_line(&line) else {
+            continue;
+        };
         if matches!(prop.name.as_str(), "BEGIN" | "END" | "VERSION") {
             continue;
         }
@@ -80,10 +81,11 @@ fn unfold(text: &str) -> Vec<String> {
     for raw in text.split('\n') {
         let raw = raw.strip_suffix('\r').unwrap_or(raw);
         if let Some(rest) = raw.strip_prefix([' ', '\t'])
-            && let Some(last) = out.last_mut() {
-                last.push_str(rest);
-                continue;
-            }
+            && let Some(last) = out.last_mut()
+        {
+            last.push_str(rest);
+            continue;
+        }
         out.push(raw.to_string());
     }
     out
@@ -98,7 +100,11 @@ fn parse_line(line: &str) -> Option<Property> {
     let mut parts = left.split(';');
     let raw_name = parts.next()?;
     // Strip a group prefix: "item1.EMAIL" -> "EMAIL".
-    let name = raw_name.rsplit('.').next().unwrap_or(raw_name).to_ascii_uppercase();
+    let name = raw_name
+        .rsplit('.')
+        .next()
+        .unwrap_or(raw_name)
+        .to_ascii_uppercase();
 
     let mut params = Vec::new();
     for seg in parts {
@@ -113,7 +119,11 @@ fn parse_line(line: &str) -> Option<Property> {
             params.push(("TYPE".to_string(), seg.trim().to_string()));
         }
     }
-    Some(Property { name, params, value })
+    Some(Property {
+        name,
+        params,
+        value,
+    })
 }
 
 /// Unescape a vCard text value (`\\`, `\n`/`\N`, `\,`, `\;`).
@@ -143,7 +153,9 @@ impl Vcard {
     /// The first property named `name` (case-insensitive).
     #[must_use]
     pub fn get(&self, name: &str) -> Option<&Property> {
-        self.properties.iter().find(|p| p.name.eq_ignore_ascii_case(name))
+        self.properties
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(name))
     }
 
     /// Every property named `name` (case-insensitive), in document order.
@@ -166,9 +178,10 @@ impl Vcard {
     #[must_use]
     pub fn display_name(&self) -> String {
         if let Some(fnv) = self.value("FN")
-            && !fnv.trim().is_empty() {
-                return fnv.trim().to_string();
-            }
+            && !fnv.trim().is_empty()
+        {
+            return fnv.trim().to_string();
+        }
         if let Some(n) = self.value("N") {
             // N = Family;Given;Additional;Prefix;Suffix
             let f: Vec<&str> = n.split(';').collect();

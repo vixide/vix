@@ -17,8 +17,8 @@
 
 use futures_util::StreamExt as _;
 use sqlx::{Column as _, Row as _};
-use std::sync::mpsc;
 use std::sync::Once;
+use std::sync::mpsc;
 
 /// A result set: column headers plus stringified rows.
 pub type Table = (Vec<String>, Vec<Vec<String>>);
@@ -92,7 +92,12 @@ impl Session {
             .spawn(move || worker(&worker_url, &worker_setup, &ready_tx, &req_rx, &reply_tx))
             .map_err(|e| e.to_string())?;
         ready_rx.recv().map_err(|e| e.to_string())??;
-        Ok(Session { req_tx, reply_rx, url, setup })
+        Ok(Session {
+            req_tx,
+            reply_rx,
+            url,
+            setup,
+        })
     }
 
     /// Hand the worker a statement without waiting for its reply — the async
@@ -103,7 +108,9 @@ impl Session {
     /// Returns a disconnected message if the worker died.
     pub fn send(&self, sql: &str) -> Result<(), String> {
         let lost = || t!("msg.db_not_connected").to_string();
-        self.req_tx.send(Request::Run(sql.to_string())).map_err(|_| lost())
+        self.req_tx
+            .send(Request::Run(sql.to_string()))
+            .map_err(|_| lost())
     }
 
     /// The next streamed [`Chunk`] from a [`send`](Session::send), or `None`
@@ -164,7 +171,10 @@ fn worker(
     req_rx: &mpsc::Receiver<Request>,
     reply_tx: &mpsc::Sender<Chunk>,
 ) {
-    let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
         Ok(rt) => rt,
         Err(e) => {
             let _ = ready_tx.send(Err(e.to_string()));
@@ -197,7 +207,11 @@ fn worker(
 /// Execute one statement for its effect only (setup pragmas), discarding rows.
 async fn exec_one(conn: &mut sqlx::AnyConnection, sql: &str) -> Result<(), String> {
     let sql = sqlx::AssertSqlSafe(sql.to_string());
-    sqlx::raw_sql(sql).execute(conn).await.map(|_| ()).map_err(|e| e.to_string())
+    sqlx::raw_sql(sql)
+        .execute(conn)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// Stream one statement's rows back as [`Chunk`]s: a [`Chunk::Head`], then
@@ -205,7 +219,11 @@ async fn exec_one(conn: &mut sqlx::AnyConnection, sql: &str) -> Result<(), Strin
 /// truncated past [`MAX_ROWS`]) — or a [`Chunk::Err`]. Returns `false` when the
 /// consumer's channel has closed, so the worker can stop. `AssertSqlSafe` is
 /// the intended opt-in for the workbench's user SQL, not an injection hazard.
-async fn stream_sql(conn: &mut sqlx::AnyConnection, sql: &str, reply_tx: &mpsc::Sender<Chunk>) -> bool {
+async fn stream_sql(
+    conn: &mut sqlx::AnyConnection,
+    sql: &str,
+    reply_tx: &mpsc::Sender<Chunk>,
+) -> bool {
     let query = sqlx::raw_sql(sqlx::AssertSqlSafe(sql.to_string()));
     let mut stream = query.fetch(conn);
     let mut head_sent = false;
@@ -225,7 +243,11 @@ async fn stream_sql(conn: &mut sqlx::AnyConnection, sql: &str, reply_tx: &mpsc::
                 let cells = (0..row.columns().len()).map(|i| cell(&row, i)).collect();
                 batch.push(cells);
                 total += 1;
-                if batch.len() >= BATCH && reply_tx.send(Chunk::Rows(std::mem::take(&mut batch))).is_err() {
+                if batch.len() >= BATCH
+                    && reply_tx
+                        .send(Chunk::Rows(std::mem::take(&mut batch)))
+                        .is_err()
+                {
                     return false;
                 }
                 if total >= MAX_ROWS {
@@ -263,7 +285,9 @@ fn cell(row: &sqlx::any::AnyRow, i: usize) -> String {
         return v.map(|x| x.to_string()).unwrap_or_default();
     }
     if let Ok(v) = row.try_get::<Option<Vec<u8>>, _>(i) {
-        return v.map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
+        return v
+            .map(|b| String::from_utf8_lossy(&b).into_owned())
+            .unwrap_or_default();
     }
     String::new()
 }
@@ -283,7 +307,11 @@ mod tests {
         s.run("INSERT INTO t VALUES (1, 'ada'), (2, NULL)").unwrap();
         let (headers, rows) = s.run("SELECT a, b FROM t ORDER BY a").unwrap();
         assert_eq!(headers, vec!["a", "b"]);
-        assert_eq!(rows, vec![vec!["1", "ada"], vec!["2", ""]], "NULL renders empty");
+        assert_eq!(
+            rows,
+            vec![vec!["1", "ada"], vec!["2", ""]],
+            "NULL renders empty"
+        );
     }
 
     #[test]
@@ -294,7 +322,11 @@ mod tests {
         s.run("INSERT INTO t VALUES (1)").unwrap();
         s.run("ROLLBACK").unwrap();
         let (_, rows) = s.run("SELECT count(*) FROM t").unwrap();
-        assert_eq!(rows, vec![vec!["0"]], "the rollback really undid the insert");
+        assert_eq!(
+            rows,
+            vec![vec!["0"]],
+            "the rollback really undid the insert"
+        );
         s.run("BEGIN").unwrap();
         s.run("INSERT INTO t VALUES (2)").unwrap();
         s.run("COMMIT").unwrap();
@@ -307,7 +339,10 @@ mod tests {
         let mut s = memory();
         let err = s.run("SELECT * FROM nope").unwrap_err();
         assert!(err.contains("nope"), "driver error is surfaced: {err}");
-        assert!(s.run("SELECT 1").is_ok(), "an error does not kill the session");
+        assert!(
+            s.run("SELECT 1").is_ok(),
+            "an error does not kill the session"
+        );
     }
 
     #[test]
@@ -321,7 +356,10 @@ mod tests {
         let setup = vec!["PRAGMA query_only = ON".to_string()];
         let mut s = Session::connect("sqlite::memory:", &setup).expect("connects read-only");
         let err = s.run("CREATE TABLE t (a INTEGER)").unwrap_err();
-        assert!(!err.is_empty(), "a write is rejected at the database level: {err}");
+        assert!(
+            !err.is_empty(),
+            "a write is rejected at the database level: {err}"
+        );
         assert!(s.run("SELECT 1").is_ok(), "reads still work read-only");
     }
 
@@ -359,7 +397,9 @@ mod tests {
         s.run("CREATE TABLE t (a INTEGER)").unwrap();
         s.run("INSERT INTO t VALUES (1)").unwrap();
         s.restart().expect("restart reconnects");
-        let (_, rows) = s.run("SELECT count(*) FROM t").expect("query after restart");
+        let (_, rows) = s
+            .run("SELECT count(*) FROM t")
+            .expect("query after restart");
         assert_eq!(rows, vec![vec!["1"]], "committed data is still there");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -367,6 +407,9 @@ mod tests {
     #[test]
     fn a_failing_setup_statement_fails_the_connect() {
         let err = Session::connect("sqlite::memory:", &["NOT VALID SQL".to_string()]).unwrap_err();
-        assert!(!err.is_empty(), "a bad setup statement surfaces as a connect error");
+        assert!(
+            !err.is_empty(),
+            "a bad setup statement surfaces as a connect error"
+        );
     }
 }

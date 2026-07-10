@@ -21,7 +21,12 @@ pub struct Query {
 
 impl Default for Query {
     fn default() -> Self {
-        Query { lines: vec![String::new()], row: 0, col: 0, scroll: 0 }
+        Query {
+            lines: vec![String::new()],
+            row: 0,
+            col: 0,
+            scroll: 0,
+        }
     }
 }
 
@@ -118,7 +123,11 @@ impl Query {
 
     /// Move the cursor to the start (`home`) or end of the current line.
     pub fn home_end(&mut self, home: bool) {
-        self.col = if home { 0 } else { self.lines[self.row].chars().count() };
+        self.col = if home {
+            0
+        } else {
+            self.lines[self.row].chars().count()
+        };
     }
 
     /// Move the cursor a page up or down.
@@ -144,7 +153,11 @@ impl Query {
     /// The char offset of the cursor within [`Query::text`].
     #[must_use]
     pub fn cursor_offset(&self) -> usize {
-        self.lines[..self.row].iter().map(|l| l.chars().count() + 1).sum::<usize>() + self.col
+        self.lines[..self.row]
+            .iter()
+            .map(|l| l.chars().count() + 1)
+            .sum::<usize>()
+            + self.col
     }
 
     /// The statement under the cursor (or the one just before it), trimmed.
@@ -167,7 +180,10 @@ impl Query {
         let head: String = text.chars().take(start).collect();
         let tail: String = text.chars().skip(end).collect();
         let row = head.split('\n').count() - 1;
-        self.lines = format!("{head}{new}{tail}").split('\n').map(str::to_string).collect();
+        self.lines = format!("{head}{new}{tail}")
+            .split('\n')
+            .map(str::to_string)
+            .collect();
         if self.lines.is_empty() {
             self.lines.push(String::new());
         }
@@ -192,7 +208,9 @@ impl Query {
     /// The cursor's byte offset within the current line.
     fn byte_col(&self) -> usize {
         let line = &self.lines[self.row];
-        line.char_indices().nth(self.col).map_or(line.len(), |(i, _)| i)
+        line.char_indices()
+            .nth(self.col)
+            .map_or(line.len(), |(i, _)| i)
     }
 }
 
@@ -303,7 +321,10 @@ mod tests {
     use super::*;
 
     fn query(text: &str) -> Query {
-        Query { lines: text.split('\n').map(str::to_string).collect(), ..Query::default() }
+        Query {
+            lines: text.split('\n').map(str::to_string).collect(),
+            ..Query::default()
+        }
     }
 
     #[test]
@@ -362,12 +383,24 @@ mod tests {
     #[test]
     fn write_detection_sees_through_ctes_but_not_strings() {
         assert!(is_write_statement("DELETE FROM t"));
-        assert!(is_write_statement("with old as (select 1) delete from t"), "CTE write");
+        assert!(
+            is_write_statement("with old as (select 1) delete from t"),
+            "CTE write"
+        );
         assert!(is_write_statement("CREATE TABLE t (a int)"));
         assert!(!is_write_statement("SELECT * FROM users"));
-        assert!(!is_write_statement("select 'drop table t'"), "keyword inside a string");
-        assert!(!is_write_statement("select 1 -- delete later"), "keyword inside a comment");
-        assert!(!is_write_statement("select deleted, updated from audit"), "substrings");
+        assert!(
+            !is_write_statement("select 'drop table t'"),
+            "keyword inside a string"
+        );
+        assert!(
+            !is_write_statement("select 1 -- delete later"),
+            "keyword inside a comment"
+        );
+        assert!(
+            !is_write_statement("select deleted, updated from audit"),
+            "substrings"
+        );
     }
 
     #[test]

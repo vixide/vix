@@ -55,7 +55,11 @@ impl Completer {
         let chars: Vec<char> = line.chars().collect();
         let col = col.min(chars.len());
         let mut start = col;
-        while start > 0 && (chars[start - 1].is_ascii_alphanumeric() || chars[start - 1] == '_' || chars[start - 1] == '.') {
+        while start > 0
+            && (chars[start - 1].is_ascii_alphanumeric()
+                || chars[start - 1] == '_'
+                || chars[start - 1] == '.')
+        {
             start -= 1;
         }
         let token: String = chars[start..col].iter().collect();
@@ -64,7 +68,10 @@ impl Completer {
             let partial = &token[dot + 1..];
             let items = self.column_matches(table, partial);
             let partial_chars = partial.chars().count();
-            return Suggestions { start: col - partial_chars, items };
+            return Suggestions {
+                start: col - partial_chars,
+                items,
+            };
         }
         // Right after a `JOIN` keyword, offer whole `table ON …` clauses drawn
         // from the foreign-key graph (no minimum prefix — `JOIN ` alone lists
@@ -87,7 +94,10 @@ impl Completer {
             .cloned()
             .collect();
         items.extend(
-            KEYWORDS.iter().filter(|k| starts_ci(k, &token)).map(|k| k.to_ascii_uppercase()),
+            KEYWORDS
+                .iter()
+                .filter(|k| starts_ci(k, &token))
+                .map(|k| k.to_ascii_uppercase()),
         );
         items.dedup();
         items.truncate(MAX_SUGGESTIONS);
@@ -128,7 +138,8 @@ impl Completer {
 
 /// ASCII case-insensitive `starts_with` (non-ASCII boundaries never match).
 fn starts_ci(s: &str, prefix: &str) -> bool {
-    s.get(..prefix.len()).is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+    s.get(..prefix.len())
+        .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
 }
 
 #[cfg(test)]
@@ -153,14 +164,22 @@ mod tests {
     fn keywords_and_tables_match_by_prefix() {
         let s = engine().suggest("SELECT * FROM us", 16);
         assert!(s.items.contains(&"users".to_string()));
-        assert!(s.items.contains(&"USING".to_string()), "keywords offered uppercase: {:?}", s.items);
+        assert!(
+            s.items.contains(&"USING".to_string()),
+            "keywords offered uppercase: {:?}",
+            s.items
+        );
         assert_eq!(s.start, 14, "prefix 'us' starts at column 14");
     }
 
     #[test]
     fn dot_completes_columns_of_that_table() {
         let s = engine().suggest("SELECT users.", 13);
-        assert_eq!(s.items, vec!["id", "name", "email"], "all columns right after the dot");
+        assert_eq!(
+            s.items,
+            vec!["id", "name", "email"],
+            "all columns right after the dot"
+        );
         assert_eq!(s.start, 13);
         let s = engine().suggest("SELECT users.na", 15);
         assert_eq!(s.items, vec!["name"]);
@@ -170,10 +189,20 @@ mod tests {
     #[test]
     fn join_offers_on_clauses_from_foreign_keys() {
         let mut c = engine();
-        c.set_relationships(vec![("orders".into(), "user_id".into(), "users".into(), "id".into())]);
+        c.set_relationships(vec![(
+            "orders".into(),
+            "user_id".into(),
+            "users".into(),
+            "id".into(),
+        )]);
         // `JOIN ` with no prefix lists both joinable sides.
         let s = c.suggest("SELECT * FROM orders JOIN ", 26);
-        assert!(s.items.contains(&"users ON orders.user_id = users.id".to_string()), "{:?}", s.items);
+        assert!(
+            s.items
+                .contains(&"users ON orders.user_id = users.id".to_string()),
+            "{:?}",
+            s.items
+        );
         // Typing the parent name narrows to it and replaces from the prefix.
         let s = c.suggest("SELECT * FROM orders JOIN us", 28);
         assert_eq!(s.items, vec!["users ON orders.user_id = users.id"]);
@@ -182,8 +211,14 @@ mod tests {
 
     #[test]
     fn short_or_unknown_prefixes_stay_quiet() {
-        assert!(engine().suggest("SELECT u", 8).items.is_empty(), "one char is too eager");
-        assert!(engine().suggest("SELECT nosuch.", 14).items.is_empty(), "unknown table");
+        assert!(
+            engine().suggest("SELECT u", 8).items.is_empty(),
+            "one char is too eager"
+        );
+        assert!(
+            engine().suggest("SELECT nosuch.", 14).items.is_empty(),
+            "unknown table"
+        );
         assert!(engine().suggest("", 0).items.is_empty());
     }
 

@@ -7,8 +7,8 @@
 
 #![warn(clippy::pedantic)]
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 /// Decode the header and payload of JWT `input` into pretty-printed JSON.
 ///
@@ -30,7 +30,9 @@ pub fn decode(input: &str) -> Result<String, String> {
 
 /// Base64URL-decode one part and pretty-print it as JSON.
 fn decode_part(part: &str) -> Result<String, String> {
-    let bytes = URL_SAFE_NO_PAD.decode(part.as_bytes()).map_err(|e| e.to_string())?;
+    let bytes = URL_SAFE_NO_PAD
+        .decode(part.as_bytes())
+        .map_err(|e| e.to_string())?;
     let text = String::from_utf8(bytes).map_err(|e| e.to_string())?;
     let value: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
     serde_json::to_string_pretty(&value).map_err(|e| e.to_string())

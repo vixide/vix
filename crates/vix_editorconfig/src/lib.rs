@@ -272,9 +272,16 @@ mod tests {
 
     #[test]
     fn resolved_indent_string() {
-        let tab = Resolved { indent_is_tab: Some(true), ..Default::default() };
+        let tab = Resolved {
+            indent_is_tab: Some(true),
+            ..Default::default()
+        };
         assert_eq!(tab.indent_string(), Some("\t".to_string()));
-        let spaces = Resolved { indent_is_tab: Some(false), indent_size: Some(2), ..Default::default() };
+        let spaces = Resolved {
+            indent_is_tab: Some(false),
+            indent_size: Some(2),
+            ..Default::default()
+        };
         assert_eq!(spaces.indent_string(), Some("  ".to_string()));
         assert_eq!(Resolved::default().indent_string(), None);
     }
@@ -284,7 +291,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("vix-ec-{}", std::process::id()));
         let sub = dir.join("sub");
         std::fs::create_dir_all(&sub).unwrap();
-        std::fs::write(dir.join(".editorconfig"), "root = true\n[*]\nindent_style = space\nindent_size = 4\n").unwrap();
+        std::fs::write(
+            dir.join(".editorconfig"),
+            "root = true\n[*]\nindent_style = space\nindent_size = 4\n",
+        )
+        .unwrap();
         std::fs::write(sub.join(".editorconfig"), "[*.rs]\nindent_size = 2\n").unwrap();
         let r = resolve(&sub.join("main.rs"));
         // Nearer file overrides size; style inherited from the root file.

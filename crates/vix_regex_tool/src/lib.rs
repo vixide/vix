@@ -41,7 +41,11 @@ impl Tester {
     /// A new tester, optionally seeded with `subject`.
     #[must_use]
     pub fn new(subject: String) -> Self {
-        Tester { pattern: String::new(), subject, focus: Field::Pattern }
+        Tester {
+            pattern: String::new(),
+            subject,
+            focus: Field::Pattern,
+        }
     }
 
     /// The focused field's text.
@@ -85,9 +89,12 @@ impl Tester {
             return Outcome::Matches(Vec::new());
         }
         match regex::Regex::new(&self.pattern) {
-            Ok(re) => {
-                Outcome::Matches(re.find_iter(&self.subject).take(100).map(|m| m.as_str().to_string()).collect())
-            }
+            Ok(re) => Outcome::Matches(
+                re.find_iter(&self.subject)
+                    .take(100)
+                    .map(|m| m.as_str().to_string())
+                    .collect(),
+            ),
             Err(e) => Outcome::Error(e.to_string()),
         }
     }
@@ -103,7 +110,10 @@ mod tests {
         for c in r"\d".chars() {
             t.push(c);
         }
-        assert_eq!(t.result(), Outcome::Matches(vec!["1".into(), "2".into(), "3".into()]));
+        assert_eq!(
+            t.result(),
+            Outcome::Matches(vec!["1".into(), "2".into(), "3".into()])
+        );
     }
 
     #[test]

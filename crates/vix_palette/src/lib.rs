@@ -191,7 +191,10 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.sort_unique", "edit.sort_unique"),
     ("cmd.reverse_lines", "edit.reverse_lines"),
     ("cmd.remove_duplicate_lines", "edit.remove_duplicate_lines"),
-    ("cmd.trim_trailing_whitespace", "edit.trim_trailing_whitespace"),
+    (
+        "cmd.trim_trailing_whitespace",
+        "edit.trim_trailing_whitespace",
+    ),
     ("cmd.move_line_up", "edit.move_line_up"),
     ("cmd.move_line_down", "edit.move_line_down"),
     ("cmd.go_first", "edit.go_first"),
@@ -278,6 +281,16 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.git_pull_squash", "git.pull_squash"),
     ("cmd.git_push", "git.push"),
     ("cmd.git_fetch", "git.fetch"),
+    ("cmd.jj_status", "jj.status"),
+    ("cmd.jj_diff", "jj.diff"),
+    ("cmd.jj_log", "jj.log"),
+    ("cmd.jj_new", "jj.new"),
+    ("cmd.jj_describe", "jj.describe"),
+    ("cmd.jj_commit", "jj.commit"),
+    ("cmd.jj_squash", "jj.squash"),
+    ("cmd.jj_undo", "jj.undo"),
+    ("cmd.jj_git_push", "jj.git_push"),
+    ("cmd.jj_git_fetch", "jj.git_fetch"),
     ("cmd.conflict_next", "git.conflict_next"),
     ("cmd.conflict_ours", "git.conflict_ours"),
     ("cmd.conflict_theirs", "git.conflict_theirs"),
@@ -326,34 +339,34 @@ pub struct Symbol {
 pub fn symbols(text: &str) -> Vec<Symbol> {
     let kw = "fn|func|function|def|class|struct|enum|trait|impl|interface|type|mod|\
               namespace|package|macro_rules!";
-    let pat = format!(
-        r"(?:\b({kw})\s+([A-Za-z_][A-Za-z0-9_]*)|(#define)\s+([A-Za-z_][A-Za-z0-9_]*))"
-    );
+    let pat =
+        format!(r"(?:\b({kw})\s+([A-Za-z_][A-Za-z0-9_]*)|(#define)\s+([A-Za-z_][A-Za-z0-9_]*))");
     let Ok(re) = regex::Regex::new(&pat) else {
         return Vec::new();
     };
     let mut out = Vec::new();
     for (i, line) in text.lines().enumerate() {
         if let Some(caps) = re.captures(line)
-            && let Some(name) = caps.get(2).or_else(|| caps.get(4)) {
-                let kind = caps
-                    .get(1)
-                    .or_else(|| caps.get(3))
-                    .map_or_else(String::new, |m| m.as_str().to_string());
-                out.push(Symbol {
-                    kind,
-                    name: name.as_str().to_string(),
-                    line: i + 1,
-                    text: line.trim_start().chars().take(120).collect(),
-                });
-            }
+            && let Some(name) = caps.get(2).or_else(|| caps.get(4))
+        {
+            let kind = caps
+                .get(1)
+                .or_else(|| caps.get(3))
+                .map_or_else(String::new, |m| m.as_str().to_string());
+            out.push(Symbol {
+                kind,
+                name: name.as_str().to_string(),
+                line: i + 1,
+                text: line.trim_start().chars().take(120).collect(),
+            });
+        }
     }
     out
 }
 
 /// Case-insensitive, space-separated subsequence match. Every whitespace term
 /// must appear (in order, as a subsequence) in `haystack`.
-#[must_use] 
+#[must_use]
 pub fn fuzzy_match(haystack: &str, query: &str) -> bool {
     fuzzy_score(haystack, query).is_some()
 }
@@ -371,7 +384,11 @@ pub fn fuzzy_score(haystack: &str, query: &str) -> Option<i32> {
     for term in query.split_whitespace() {
         total += term_score(&hay, &term.to_lowercase())?;
     }
-    let q = query.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+    let q = query
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
     if !q.is_empty() {
         let hs: String = hay.iter().collect();
         if hs == q {
@@ -422,7 +439,7 @@ fn term_score(hay: &[char], needle: &str) -> Option<i32> {
 
 /// Parse a `path:line[:col]` suffix. Returns the path part and an optional
 /// (line, col) target.
-#[must_use] 
+#[must_use]
 pub fn parse_path_target(input: &str) -> (String, Option<(usize, usize)>) {
     let mut parts = input.splitn(3, ':');
     let path = parts.next().unwrap_or("").to_string();
@@ -468,7 +485,10 @@ mod tests {
         let prefix = fuzzy_score("undo selection", "undo").unwrap();
         let scattered = fuzzy_score("under do", "undo").unwrap();
         assert!(exact > prefix, "exact {exact} > prefix {prefix}");
-        assert!(prefix > scattered, "prefix {prefix} > scattered {scattered}");
+        assert!(
+            prefix > scattered,
+            "prefix {prefix} > scattered {scattered}"
+        );
     }
 
     #[test]

@@ -25,8 +25,26 @@ enum FTok {
 
 /// Keywords that start a new line at parenthesis depth zero.
 const CLAUSE_STARTERS: &[&str] = &[
-    "select", "from", "where", "group", "order", "having", "limit", "offset", "union", "except",
-    "intersect", "values", "set", "returning", "join", "left", "right", "inner", "full", "cross",
+    "select",
+    "from",
+    "where",
+    "group",
+    "order",
+    "having",
+    "limit",
+    "offset",
+    "union",
+    "except",
+    "intersect",
+    "values",
+    "set",
+    "returning",
+    "join",
+    "left",
+    "right",
+    "inner",
+    "full",
+    "cross",
 ];
 
 /// Keywords that continue a clause on an indented line of their own.
@@ -47,7 +65,11 @@ pub fn beautify(sql: &str) -> String {
         let (text, break_before, indent) = match &tok {
             FTok::Word(w) => {
                 let lower = w.to_ascii_lowercase();
-                let text = if is_keyword(&lower) { w.to_ascii_uppercase() } else { w.clone() };
+                let text = if is_keyword(&lower) {
+                    w.to_ascii_uppercase()
+                } else {
+                    w.clone()
+                };
                 if depth == 0 && starter_word && !prev_starter {
                     (text, true, 0)
                 } else if depth == 0 && CONTINUATIONS.contains(&lower.as_str()) {
@@ -158,7 +180,10 @@ mod tests {
     #[test]
     fn clauses_break_onto_their_own_lines_uppercased() {
         let got = beautify("select id, name from users where age > 21 order by name");
-        assert_eq!(got, "SELECT id, name\nFROM users\nWHERE age > 21\nORDER BY name");
+        assert_eq!(
+            got,
+            "SELECT id, name\nFROM users\nWHERE age > 21\nORDER BY name"
+        );
     }
 
     #[test]
@@ -171,7 +196,10 @@ mod tests {
     #[test]
     fn subqueries_stay_inline() {
         let got = beautify("select * from t where id in (select id from u where x=1)");
-        assert!(got.contains("(SELECT id FROM u WHERE x = 1)"), "no breaks inside parens: {got}");
+        assert!(
+            got.contains("(SELECT id FROM u WHERE x = 1)"),
+            "no breaks inside parens: {got}"
+        );
     }
 
     #[test]

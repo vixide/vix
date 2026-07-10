@@ -35,11 +35,21 @@ impl Terminal {
     ///
     /// # Errors
     /// Returns an error if the PTY cannot be created or the shell cannot spawn.
-    pub fn open(shell: &str, cwd: &std::path::Path, rows: u16, cols: u16) -> std::io::Result<Terminal> {
+    pub fn open(
+        shell: &str,
+        cwd: &std::path::Path,
+        rows: u16,
+        cols: u16,
+    ) -> std::io::Result<Terminal> {
         let rows = rows.max(1);
         let cols = cols.max(1);
         let pty = portable_pty::native_pty_system();
-        let size = portable_pty::PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
+        let size = portable_pty::PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
         let pair = pty.openpty(size).map_err(|e| to_io(&e))?;
         let mut cmd = portable_pty::CommandBuilder::new(shell);
         cmd.cwd(cwd);
@@ -68,7 +78,15 @@ impl Terminal {
             reader_alive.store(false, Ordering::SeqCst);
         });
 
-        Ok(Terminal { parser, writer, master: pair.master, _child: child, alive, rows, cols })
+        Ok(Terminal {
+            parser,
+            writer,
+            master: pair.master,
+            _child: child,
+            alive,
+            rows,
+            cols,
+        })
     }
 
     /// Whether the shell is still running (the reader thread sets this false on EOF).
@@ -85,7 +103,9 @@ impl Terminal {
 
     /// Lock the parser to read its screen for rendering.
     pub fn lock(&self) -> MutexGuard<'_, vt100::Parser> {
-        self.parser.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.parser
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Forward a key event to the shell (no-op encoding does nothing).
@@ -106,7 +126,12 @@ impl Terminal {
         }
         self.rows = rows;
         self.cols = cols;
-        let size = portable_pty::PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
+        let size = portable_pty::PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
         let _ = self.master.resize(size);
         if let Ok(mut p) = self.parser.lock() {
             p.set_size(rows, cols);
@@ -192,24 +217,39 @@ mod tests {
     #[test]
     fn plain_char_is_utf8() {
         assert_eq!(encode_key(k(KeyCode::Char('a'), KeyModifiers::NONE)), b"a");
-        assert_eq!(encode_key(k(KeyCode::Char('é'), KeyModifiers::NONE)), "é".as_bytes());
+        assert_eq!(
+            encode_key(k(KeyCode::Char('é'), KeyModifiers::NONE)),
+            "é".as_bytes()
+        );
     }
 
     #[test]
     fn ctrl_char_is_control_byte() {
-        assert_eq!(encode_key(k(KeyCode::Char('c'), KeyModifiers::CONTROL)), vec![0x03]);
-        assert_eq!(encode_key(k(KeyCode::Char('a'), KeyModifiers::CONTROL)), vec![0x01]);
+        assert_eq!(
+            encode_key(k(KeyCode::Char('c'), KeyModifiers::CONTROL)),
+            vec![0x03]
+        );
+        assert_eq!(
+            encode_key(k(KeyCode::Char('a'), KeyModifiers::CONTROL)),
+            vec![0x01]
+        );
     }
 
     #[test]
     fn alt_char_is_esc_prefixed() {
-        assert_eq!(encode_key(k(KeyCode::Char('x'), KeyModifiers::ALT)), vec![0x1b, b'x']);
+        assert_eq!(
+            encode_key(k(KeyCode::Char('x'), KeyModifiers::ALT)),
+            vec![0x1b, b'x']
+        );
     }
 
     #[test]
     fn special_keys() {
         assert_eq!(encode_key(k(KeyCode::Enter, KeyModifiers::NONE)), b"\r");
         assert_eq!(encode_key(k(KeyCode::Up, KeyModifiers::NONE)), b"\x1b[A");
-        assert_eq!(encode_key(k(KeyCode::Backspace, KeyModifiers::NONE)), vec![0x7f]);
+        assert_eq!(
+            encode_key(k(KeyCode::Backspace, KeyModifiers::NONE)),
+            vec![0x7f]
+        );
     }
 }

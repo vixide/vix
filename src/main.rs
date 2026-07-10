@@ -43,7 +43,10 @@ fn main() -> io::Result<()> {
     let settings = Settings::load();
 
     // A `--locale` flag wins over the persisted setting, but is not saved back.
-    let locale = cli.locale.clone().unwrap_or_else(|| settings.locale.clone());
+    let locale = cli
+        .locale
+        .clone()
+        .unwrap_or_else(|| settings.locale.clone());
     rust_i18n::set_locale(&locale);
 
     let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -121,7 +124,17 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
         // Poll with a timeout so the calendar clock refreshes while idle; poll
         // faster while a command is streaming, dashboard metrics are computing,
         // or a language-server request is in flight so output appears promptly.
-        let timeout = if app.command_running() || app.ai_replace_running() || app.dashboard_loading() || app.lsp_busy() || app.pomodoro_running() || app.terminal_running() || app.dap_busy() || app.parse_busy() || app.http_running() || app.db_query_running() {
+        let timeout = if app.command_running()
+            || app.ai_replace_running()
+            || app.dashboard_loading()
+            || app.lsp_busy()
+            || app.pomodoro_running()
+            || app.terminal_running()
+            || app.dap_busy()
+            || app.parse_busy()
+            || app.http_running()
+            || app.db_query_running()
+        {
             Duration::from_millis(50)
         } else {
             Duration::from_millis(500)

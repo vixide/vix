@@ -139,7 +139,13 @@ fn schema_block(columns: &Columns, rels: &Relationships) -> String {
         let cols: Vec<String> = columns
             .iter()
             .filter(|(t, _, _)| t == table)
-            .map(|(_, c, ty)| if ty.trim().is_empty() { c.clone() } else { format!("{c} {ty}") })
+            .map(|(_, c, ty)| {
+                if ty.trim().is_empty() {
+                    c.clone()
+                } else {
+                    format!("{c} {ty}")
+                }
+            })
             .collect();
         let _ = writeln!(out, "  {table}({})", cols.join(", "));
     }
@@ -149,8 +155,11 @@ fn schema_block(columns: &Columns, rels: &Relationships) -> String {
             if child.is_empty() || parent.is_empty() {
                 continue;
             }
-            let target =
-                if parent_col.is_empty() { parent.clone() } else { format!("{parent}.{parent_col}") };
+            let target = if parent_col.is_empty() {
+                parent.clone()
+            } else {
+                format!("{parent}.{parent_col}")
+            };
             let _ = writeln!(out, "  {child}.{child_col} -> {target}");
         }
     }
@@ -159,8 +168,9 @@ fn schema_block(columns: &Columns, rels: &Relationships) -> String {
 
 /// Keywords that mark the start of a SQL statement, for recovering the query
 /// from a reply that leaked prose despite the instruction.
-const SQL_STARTS: &[&str] =
-    &["select", "with", "insert", "update", "delete", "create", "explain", "pragma", "alter", "drop"];
+const SQL_STARTS: &[&str] = &[
+    "select", "with", "insert", "update", "delete", "create", "explain", "pragma", "alter", "drop",
+];
 
 /// Recover one runnable statement from the assistant's reply: prefer the first
 /// fenced ```` ``` ```` block, otherwise drop any leading prose up to the first
@@ -207,12 +217,21 @@ mod tests {
 
     #[test]
     fn context_is_schema_only_and_names_no_rows() {
-        let rels = vec![("orders".into(), "user_id".into(), "users".into(), "id".into())];
+        let rels = vec![(
+            "orders".into(),
+            "user_id".into(),
+            "users".into(),
+            "id".into(),
+        )];
         let ctx = context("sqlite", &cols(), &rels, "  how many orders per user?  ");
         assert!(ctx.contains("Engine: sqlite"));
         assert!(ctx.contains("users(id integer, name text)"), "{ctx}");
         assert!(ctx.contains("orders.user_id -> users.id"), "{ctx}");
-        assert!(ctx.trim_end().ends_with("Question: how many orders per user?"), "{ctx}");
+        assert!(
+            ctx.trim_end()
+                .ends_with("Question: how many orders per user?"),
+            "{ctx}"
+        );
     }
 
     #[test]
@@ -223,14 +242,26 @@ mod tests {
 
     #[test]
     fn optimize_context_carries_query_and_plan() {
-        let out = optimize_context("postgres", &cols(), &[], "SELECT * FROM users", "Seq Scan on users");
+        let out = optimize_context(
+            "postgres",
+            &cols(),
+            &[],
+            "SELECT * FROM users",
+            "Seq Scan on users",
+        );
         assert!(out.contains("Query:\nSELECT * FROM users"), "{out}");
         assert!(out.contains("EXPLAIN plan:\nSeq Scan on users"), "{out}");
     }
 
     #[test]
     fn error_context_carries_query_and_error() {
-        let out = error_context("sqlite", &cols(), &[], "SELECT * FROM userss", "no such table: userss");
+        let out = error_context(
+            "sqlite",
+            &cols(),
+            &[],
+            "SELECT * FROM userss",
+            "no such table: userss",
+        );
         assert!(out.contains("Query:\nSELECT * FROM userss"), "{out}");
         assert!(out.contains("Error:\nno such table: userss"), "{out}");
     }
@@ -257,7 +288,10 @@ mod tests {
 
     #[test]
     fn extract_sql_handles_bare_sql_and_empty() {
-        assert_eq!(extract_sql("  WITH t AS (SELECT 1) SELECT * FROM t  "), "WITH t AS (SELECT 1) SELECT * FROM t");
+        assert_eq!(
+            extract_sql("  WITH t AS (SELECT 1) SELECT * FROM t  "),
+            "WITH t AS (SELECT 1) SELECT * FROM t"
+        );
         assert_eq!(extract_sql("no sql here"), "no sql here");
         assert_eq!(extract_sql("   "), "");
     }

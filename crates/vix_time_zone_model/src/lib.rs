@@ -14,7 +14,6 @@
 //! The crate is pure data with no dependencies and no I/O.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -90,7 +89,10 @@ pub fn set_active(name: &str) -> bool {
 /// Panics if the active-zone lock is poisoned.
 #[must_use]
 pub fn active() -> &'static Zone {
-    let idx = ACTIVE.read().expect("time-zone lock").unwrap_or_else(utc_index);
+    let idx = ACTIVE
+        .read()
+        .expect("time-zone lock")
+        .unwrap_or_else(utc_index);
     &ZONES[idx.min(ZONES.len() - 1)]
 }
 

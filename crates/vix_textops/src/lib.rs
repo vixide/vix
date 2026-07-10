@@ -181,7 +181,13 @@ const TOGGLE_WORDS: &[(&str, &str)] = &[
     ("min", "max"),
     ("and", "or"),
 ];
-const TOGGLE_SYMBOLS: &[(&str, &str)] = &[("&&", "||"), ("==", "!="), ("<=", ">="), ("<", ">"), ("++", "--")];
+const TOGGLE_SYMBOLS: &[(&str, &str)] = &[
+    ("&&", "||"),
+    ("==", "!="),
+    ("<=", ">="),
+    ("<", ">"),
+    ("++", "--"),
+];
 
 /// Toggle the boolean-ish token at char offset `cursor` to its opposite: word
 /// pairs (`true`/`false`, `yes`/`no`, …) matched as whole words with case
@@ -207,7 +213,13 @@ pub fn smart_toggle_at(text: &str, cursor: usize) -> Option<(String, usize)> {
         let word: String = chars[s..e].iter().collect();
         let lower = word.to_ascii_lowercase();
         for (a, b) in TOGGLE_WORDS {
-            let to = if lower == *a { Some(*b) } else if lower == *b { Some(*a) } else { None };
+            let to = if lower == *a {
+                Some(*b)
+            } else if lower == *b {
+                Some(*a)
+            } else {
+                None
+            };
             if let Some(to) = to {
                 let replacement = match_case(&word, to);
                 let mut out: String = chars[..s].iter().collect();
@@ -223,7 +235,9 @@ pub fn smart_toggle_at(text: &str, cursor: usize) -> Option<(String, usize)> {
         for start in [cursor, cursor.saturating_sub(1)] {
             for (from, to) in [(*a, *b), (*b, *a)] {
                 let flen = from.chars().count();
-                if start + flen <= n && chars[start..start + flen].iter().collect::<String>() == from {
+                if start + flen <= n
+                    && chars[start..start + flen].iter().collect::<String>() == from
+                {
                     let mut out: String = chars[..start].iter().collect();
                     out.push_str(to);
                     out.extend(chars[start + flen..].iter());
@@ -237,11 +251,17 @@ pub fn smart_toggle_at(text: &str, cursor: usize) -> Option<(String, usize)> {
 
 /// Recase `replacement` to match `sample`: all-upper, Titlecase, else lowercase.
 fn match_case(sample: &str, replacement: &str) -> String {
-    if sample.chars().all(|c| c.is_uppercase() || !c.is_alphabetic()) && sample.chars().any(char::is_uppercase) {
+    if sample
+        .chars()
+        .all(|c| c.is_uppercase() || !c.is_alphabetic())
+        && sample.chars().any(char::is_uppercase)
+    {
         replacement.to_ascii_uppercase()
     } else if sample.chars().next().is_some_and(char::is_uppercase) {
         let mut c = replacement.chars();
-        c.next().map(|f| f.to_ascii_uppercase().to_string() + c.as_str()).unwrap_or_default()
+        c.next()
+            .map(|f| f.to_ascii_uppercase().to_string() + c.as_str())
+            .unwrap_or_default()
     } else {
         replacement.to_string()
     }
@@ -254,8 +274,14 @@ pub fn tag_column(line: &str, tag: &str) -> Option<usize> {
     let is_word = |c: char| c.is_alphanumeric() || c == '_';
     for (col, (byte_idx, _)) in line.char_indices().enumerate() {
         if line[byte_idx..].starts_with(tag) {
-            let before_ok = line[..byte_idx].chars().next_back().is_none_or(|c| !is_word(c));
-            let after_ok = line[byte_idx + tag.len()..].chars().next().is_none_or(|c| !is_word(c));
+            let before_ok = line[..byte_idx]
+                .chars()
+                .next_back()
+                .is_none_or(|c| !is_word(c));
+            let after_ok = line[byte_idx + tag.len()..]
+                .chars()
+                .next()
+                .is_none_or(|c| !is_word(c));
             if before_ok && after_ok {
                 return Some(col);
             }
@@ -300,7 +326,10 @@ mod tests {
     fn transpose_words_swaps_neighboring_words() {
         assert_eq!(transpose_words_at("foo bar", 5).unwrap().0, "bar foo");
         // Punctuation separator is preserved.
-        assert_eq!(transpose_words_at("alpha, beta", 8).unwrap().0, "beta, alpha");
+        assert_eq!(
+            transpose_words_at("alpha, beta", 8).unwrap().0,
+            "beta, alpha"
+        );
         // Only one word → nothing to do.
         assert!(transpose_words_at("solo", 0).is_none());
     }
@@ -308,7 +337,10 @@ mod tests {
     #[test]
     fn smart_toggle_flips_words_and_symbols() {
         // Word pair, case preserved.
-        assert_eq!(smart_toggle_at("let ok = true;", 9).unwrap().0, "let ok = false;");
+        assert_eq!(
+            smart_toggle_at("let ok = true;", 9).unwrap().0,
+            "let ok = false;"
+        );
         assert_eq!(smart_toggle_at("v = FALSE", 4).unwrap().0, "v = TRUE");
         assert_eq!(smart_toggle_at("Yes", 0).unwrap().0, "No");
         // Symbol pair at the cursor.
@@ -323,7 +355,11 @@ mod tests {
     #[test]
     fn tag_column_matches_whole_words_only() {
         assert_eq!(tag_column("// TODO: fix", "TODO"), Some(3));
-        assert_eq!(tag_column("let todos = 1;", "TODO"), None, "identifier is not a tag");
+        assert_eq!(
+            tag_column("let todos = 1;", "TODO"),
+            None,
+            "identifier is not a tag"
+        );
         assert_eq!(tag_column("no tags here", "TODO"), None);
     }
 

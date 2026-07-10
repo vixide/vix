@@ -17,7 +17,6 @@
 //! exactly one parser and one mapper, so the directions stay consistent.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -98,7 +97,12 @@ pub fn parse_tsv(text: &str) -> Vec<Vec<String>> {
     text.strip_suffix('\n')
         .unwrap_or(text)
         .split('\n')
-        .map(|line| line.trim_end_matches('\r').split('\t').map(str::to_string).collect())
+        .map(|line| {
+            line.trim_end_matches('\r')
+                .split('\t')
+                .map(str::to_string)
+                .collect()
+        })
         .collect()
 }
 
@@ -191,20 +195,26 @@ mod tests {
     fn csv_round_trips_quoted_fields() {
         let csv = "name,note\n\"Smith, J\",\"says \"\"hi\"\"\"\n";
         let rows = parse_csv(csv);
-        assert_eq!(rows, vec![
-            vec!["name".to_string(), "note".to_string()],
-            vec!["Smith, J".to_string(), "says \"hi\"".to_string()],
-        ]);
+        assert_eq!(
+            rows,
+            vec![
+                vec!["name".to_string(), "note".to_string()],
+                vec!["Smith, J".to_string(), "says \"hi\"".to_string()],
+            ]
+        );
         assert_eq!(write_csv(&rows), csv);
     }
 
     #[test]
     fn tsv_splits_and_joins() {
         let rows = parse_tsv("a\tb\n1\t2\n");
-        assert_eq!(rows, vec![
-            vec!["a".to_string(), "b".to_string()],
-            vec!["1".to_string(), "2".to_string()],
-        ]);
+        assert_eq!(
+            rows,
+            vec![
+                vec!["a".to_string(), "b".to_string()],
+                vec!["1".to_string(), "2".to_string()],
+            ]
+        );
         assert_eq!(write_tsv(&rows), "a\tb\n1\t2\n");
     }
 

@@ -12,7 +12,6 @@
 //! crate stays free of any localization dependency.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -244,7 +243,11 @@ pub fn set_custom(theme: Option<CustomTheme>) {
 /// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn custom_name() -> Option<String> {
-    CUSTOM.read().expect("theme lock").as_ref().map(|c| c.name.clone())
+    CUSTOM
+        .read()
+        .expect("theme lock")
+        .as_ref()
+        .map(|c| c.name.clone())
 }
 
 fn rgb(c: Rgb) -> Color {
@@ -258,9 +261,10 @@ fn rgb(c: Rgb) -> Color {
 #[must_use]
 pub fn region_fg(region: Region) -> Color {
     if let Some(ct) = CUSTOM.read().expect("theme lock").as_ref()
-        && let Some(c) = ct.region_colors(region).foreground {
-            return rgb(c);
-        }
+        && let Some(c) = ct.region_colors(region).foreground
+    {
+        return rgb(c);
+    }
     fg()
 }
 
@@ -271,9 +275,10 @@ pub fn region_fg(region: Region) -> Color {
 #[must_use]
 pub fn region_bg(region: Region) -> Color {
     if let Some(ct) = CUSTOM.read().expect("theme lock").as_ref()
-        && let Some(c) = ct.region_colors(region).background {
-            return rgb(c);
-        }
+        && let Some(c) = ct.region_colors(region).background
+    {
+        return rgb(c);
+    }
     bg()
 }
 
@@ -286,7 +291,8 @@ pub fn region_modifiers(region: Region) -> Modifier {
     CUSTOM
         .read()
         .expect("theme lock")
-        .as_ref().map_or_else(Modifier::empty, |ct| ct.region_colors(region).modifiers())
+        .as_ref()
+        .map_or_else(Modifier::empty, |ct| ct.region_colors(region).modifiers())
 }
 
 /// Base style (fg on bg, plus any custom font attributes) for `region`.
@@ -375,9 +381,10 @@ pub fn load_custom_themes(dir: &Path) -> Vec<CustomTheme> {
                 continue;
             }
             if let Ok(text) = std::fs::read_to_string(&path)
-                && let Some(theme) = parse_theme(&text) {
-                    out.push(theme);
-                }
+                && let Some(theme) = parse_theme(&text)
+            {
+                out.push(theme);
+            }
         }
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));
@@ -445,7 +452,9 @@ mod tests {
         assert_eq!(names, vec!["Dark".to_string(), "Nord".to_string()]);
 
         // Applying a theme makes it active.
-        apply(&theme(r#"{ "name": "Light", "editor": { "foreground": [40, 40, 40] } }"#));
+        apply(&theme(
+            r#"{ "name": "Light", "editor": { "foreground": [40, 40, 40] } }"#,
+        ));
         assert_eq!(custom_name().as_deref(), Some("Light"));
         assert_eq!(fg(), Color::Rgb(40, 40, 40));
 
@@ -462,6 +471,9 @@ mod tests {
         assert_eq!(syntax_color("nonsense"), None, "unknown token");
         // And the editor-facing pairs include the number token.
         let pairs = syntax_theme();
-        assert!(pairs.contains(&("number", "#040404".to_string())), "{pairs:?}");
+        assert!(
+            pairs.contains(&("number", "#040404".to_string())),
+            "{pairs:?}"
+        );
     }
 }

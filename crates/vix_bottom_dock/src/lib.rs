@@ -27,7 +27,12 @@ pub struct BottomDock {
 
 impl Default for BottomDock {
     fn default() -> Self {
-        BottomDock { lines: Vec::new(), scroll: 0, cap: DEFAULT_SCROLLBACK, follow: true }
+        BottomDock {
+            lines: Vec::new(),
+            scroll: 0,
+            cap: DEFAULT_SCROLLBACK,
+            follow: true,
+        }
     }
 }
 
@@ -41,7 +46,10 @@ impl BottomDock {
     /// An empty dock with a specific scrollback (minimum 1 line).
     #[must_use]
     pub fn with_scrollback(cap: usize) -> Self {
-        BottomDock { cap: cap.max(1), ..Self::default() }
+        BottomDock {
+            cap: cap.max(1),
+            ..Self::default()
+        }
     }
 
     /// Change the scrollback (minimum 1 line), trimming the buffer if it now
@@ -168,7 +176,11 @@ mod tests {
         for i in 0..5 {
             d.push(format!("l{i}"));
         }
-        assert_eq!(d.lines, ["l2", "l3", "l4"], "oldest lines drop past the cap");
+        assert_eq!(
+            d.lines,
+            ["l2", "l3", "l4"],
+            "oldest lines drop past the cap"
+        );
         // Lowering the cap trims what is already there.
         d.set_scrollback(2);
         assert_eq!(d.lines, ["l3", "l4"]);
@@ -210,6 +222,10 @@ mod tests {
         assert!(d.is_following());
         assert_eq!(d.visible(3), ["l19", "new-a", "new-b"]);
         d.push("new-c");
-        assert_eq!(d.visible(3), ["new-a", "new-b", "new-c"], "follows again at the bottom");
+        assert_eq!(
+            d.visible(3),
+            ["new-a", "new-b", "new-c"],
+            "follows again at the bottom"
+        );
     }
 }

@@ -9,7 +9,6 @@
 //! rows, maps clicks to rows, and inserts the chosen hex.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -77,7 +76,10 @@ impl Panel {
     /// Open the panel with the first color highlighted.
     #[must_use]
     pub fn open() -> Self {
-        Panel { selected: 0, scroll: 0 }
+        Panel {
+            selected: 0,
+            scroll: 0,
+        }
     }
 
     /// Total number of colors in the table.
@@ -223,6 +225,9 @@ mod tests {
         assert!(p.select_index(5));
         assert_eq!(p.selected, 5);
         assert!(!p.select_index(p.len()));
-        assert_eq!(p.selected, 5, "an out-of-range click leaves the selection put");
+        assert_eq!(
+            p.selected, 5,
+            "an out-of-range click leaves the selection put"
+        );
     }
 }

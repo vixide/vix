@@ -1,14 +1,13 @@
 #![warn(clippy::pedantic)]
-use crate::editor::{Editor};
-use crate::selection::{Selection};
-use crate::code::{EditKind};
+use crate::code::EditKind;
+use crate::editor::Editor;
+use crate::selection::Selection;
 
 /// An editing operation that can be applied to an [`Editor`].
 pub trait Action {
     /// Apply this action to `editor`, mutating its buffer and/or cursor state.
     fn apply(&mut self, editor: &mut Editor);
 }
-
 
 /// Moves the cursor one character to the right.
 ///
@@ -27,12 +26,13 @@ impl Action for MoveRight {
 
         if !self.shift
             && let Some(sel) = editor.get_selection()
-                && !sel.is_empty() {
-                    let (_, end) = sel.sorted();
-                    editor.set_cursor(end);
-                    editor.clear_selection();
-                    return;
-                }
+            && !sel.is_empty()
+        {
+            let (_, end) = sel.sorted();
+            editor.set_cursor(end);
+            editor.clear_selection();
+            return;
+        }
 
         if cursor < editor.code_mut().len() {
             let new_cursor = cursor.saturating_add(1);
@@ -63,12 +63,13 @@ impl Action for MoveLeft {
 
         if !self.shift
             && let Some(sel) = editor.get_selection()
-                && !sel.is_empty() {
-                    let (start, _) = sel.sorted();
-                    editor.set_cursor(start);
-                    editor.clear_selection();
-                    return;
-                }
+            && !sel.is_empty()
+        {
+            let (start, _) = sel.sorted();
+            editor.set_cursor(start);
+            editor.clear_selection();
+            return;
+        }
 
         if cursor > 0 {
             let new_cursor = cursor.saturating_sub(1);
@@ -99,7 +100,9 @@ impl Action for MoveUp {
         let code = editor.code_mut();
         let (row, col) = code.point(cursor);
 
-        if row == 0 { return }
+        if row == 0 {
+            return;
+        }
 
         // Aim for the remembered goal column, falling back to the current column
         // when starting a fresh vertical run.
@@ -122,11 +125,11 @@ impl Action for MoveUp {
 }
 
 /// Moves the cursor one line down.
-/// 
+///
 /// If the next line is shorter, the cursor is placed at the end of that line.
 /// If `shift` is true, the selection is extended to the new cursor position.
 /// If `shift` is false, the selection is cleared.
-/// 
+///
 pub struct MoveDown {
     /// Whether to extend the selection instead of clearing it.
     pub shift: bool,
@@ -139,7 +142,9 @@ impl Action for MoveDown {
         let code = editor.code_mut();
         let (row, col) = code.point(cursor);
         let is_last_line = row + 1 >= code.len_lines();
-        if is_last_line { return }
+        if is_last_line {
+            return;
+        }
 
         // Aim for the remembered goal column, falling back to the current column
         // when starting a fresh vertical run.
@@ -180,11 +185,12 @@ impl Action for InsertText {
 
         // 3. Remove selection if present
         if let Some(sel) = &selection
-            && !sel.is_empty() {
-                let (start, end) = sel.sorted();
-                code.remove(start, end);
-                cursor = start;
-            }
+            && !sel.is_empty()
+        {
+            let (start, end) = sel.sorted();
+            code.remove(start, end);
+            cursor = start;
+        }
         selection = None;
 
         // 4. Insert the text at the cursor
@@ -202,7 +208,7 @@ impl Action for InsertText {
 }
 
 /// Inserts a newline at the cursor with automatic indentation.
-/// 
+///
 /// The indentation is computed based on the current line and column.
 /// Delegates the actual insertion to `InsertText`.
 pub struct InsertNewline;
@@ -222,13 +228,15 @@ impl Action for InsertNewline {
         let text_to_insert = format!("\n{indent_text}");
 
         // 4. Use InsertText action to insert the text
-        let mut insert_action = InsertText { text: text_to_insert };
+        let mut insert_action = InsertText {
+            text: text_to_insert,
+        };
         insert_action.apply(editor);
     }
 }
 
 /// Deletes the selected text or the character before the cursor.
-/// 
+///
 /// - If there is a non-empty selection, deletes the selection.
 /// - If there is no selection, deletes the previous character.
 /// - If the cursor is after indentation only, deletes the entire indentation.
@@ -245,7 +253,9 @@ impl Action for Delete {
         code.tx();
         code.set_state_before(cursor, selection);
 
-        if let Some(sel) = &selection && !sel.is_empty() {
+        if let Some(sel) = &selection
+            && !sel.is_empty()
+        {
             // Delete selection
             let (start, end) = sel.sorted();
             code.remove(start, end);
@@ -301,7 +311,9 @@ impl Action for ToggleComment {
         let comment_len = comment_text.chars().count();
 
         // 3. Determine lines to modify
-        let lines_to_handle = if let Some(sel) = &selection && !sel.is_empty() {
+        let lines_to_handle = if let Some(sel) = &selection
+            && !sel.is_empty()
+        {
             let (start, end) = sel.sorted();
             let (start_row, _) = code.point(start);
             let (end_row, _) = code.point(end);
@@ -315,8 +327,8 @@ impl Action for ToggleComment {
         let all_have_comment = lines_to_handle.iter().all(|&line_idx| {
             let line_start = code.line_to_char(line_idx);
             let line_len = code.line_len(line_idx);
-            line_start + comment_len <= line_start + line_len &&
-                code.slice(line_start, line_start + comment_len) == comment_text
+            line_start + comment_len <= line_start + line_len
+                && code.slice(line_start, line_start + comment_len) == comment_text
         });
 
         // 5. Apply changes (add or remove comment)
@@ -340,7 +352,9 @@ impl Action for ToggleComment {
         }
 
         // 6. Update cursor and selection
-        if let Some(sel) = &selection && !sel.is_empty() {
+        if let Some(sel) = &selection
+            && !sel.is_empty()
+        {
             let (smin, _) = sel.sorted();
             let mut anchor = selection_anchor;
             let is_forward = anchor == smin;
@@ -382,7 +396,7 @@ impl Action for ToggleComment {
 }
 
 /// Inserts indentation at the beginning of the current line or selected lines.
-/// 
+///
 /// - If there is a selection, inserts indentation at the start of each selected line.
 /// - If there is no selection, inserts indentation at the current line.
 /// - Updates cursor and selection accordingly.
@@ -403,7 +417,9 @@ impl Action for Indent {
         let indent_text = code.indent();
 
         // 3. Determine lines to handle
-        let lines_to_handle = if let Some(sel) = &selection && !sel.is_empty() {
+        let lines_to_handle = if let Some(sel) = &selection
+            && !sel.is_empty()
+        {
             let (start, end) = sel.sorted();
             let (start_row, _) = code.point(start);
             let (end_row, _) = code.point(end);
@@ -422,7 +438,9 @@ impl Action for Indent {
         }
 
         // 5. Update cursor and selection
-        if let Some(sel) = &selection && !sel.is_empty() {
+        if let Some(sel) = &selection
+            && !sel.is_empty()
+        {
             let (smin, _) = sel.sorted();
             let mut anchor = selection_anchor;
             let is_forward = anchor == smin;
@@ -450,9 +468,8 @@ impl Action for Indent {
     }
 }
 
-
 /// Removes one indentation level from the start of the current line or selected lines.
-/// 
+///
 /// - If there is a selection, removes indentation from each selected line.
 /// - If there is no selection, removes indentation from the current line.
 /// - Updates cursor and selection accordingly.
@@ -474,7 +491,9 @@ impl Action for UnIndent {
         let indent_len = indent_text.chars().count();
 
         // 3. Determine lines to handle
-        let lines_to_handle = if let Some(sel) = &selection && !sel.is_empty() {
+        let lines_to_handle = if let Some(sel) = &selection
+            && !sel.is_empty()
+        {
             let (start, end) = sel.sorted();
             let (start_row, _) = code.point(start);
             let (end_row, _) = code.point(end);
@@ -498,7 +517,9 @@ impl Action for UnIndent {
         }
 
         // 5. Update cursor and selection
-        if let Some(sel) = &selection && !sel.is_empty() {
+        if let Some(sel) = &selection
+            && !sel.is_empty()
+        {
             let (smin, _) = sel.sorted();
             let mut anchor = selection_anchor;
             let is_forward = anchor == smin;
@@ -667,7 +688,7 @@ impl Action for Cut {
 }
 
 /// Copies the selected text to the clipboard.
-/// 
+///
 /// Does nothing if there is no active selection.
 pub struct Copy;
 
@@ -678,7 +699,9 @@ impl Action for Copy {
 
         // 2. Return early if no selection
         let Some(sel) = selection else { return };
-        if sel.is_empty() { return }
+        if sel.is_empty() {
+            return;
+        }
 
         // 3. Get text and copy to clipboard
         let text = editor.code_ref().slice(sel.start, sel.end);
@@ -687,7 +710,7 @@ impl Action for Copy {
 }
 
 /// Pastes text from the clipboard at the current cursor position.
-/// 
+///
 /// If a selection exists, it will be replaced by the pasted text.
 /// The pasted text is adjusted using language-specific indentation rules.
 pub struct Paste;
@@ -695,8 +718,12 @@ pub struct Paste;
 impl Action for Paste {
     fn apply(&mut self, editor: &mut Editor) {
         // 1. Get clipboard contents
-        let Ok(text) = editor.get_clipboard() else { return };
-        if text.is_empty() { return }
+        let Ok(text) = editor.get_clipboard() else {
+            return;
+        };
+        if text.is_empty() {
+            return;
+        }
 
         // 2. Extract current cursor and selection
         let mut cursor = editor.get_cursor();
@@ -709,12 +736,13 @@ impl Action for Paste {
 
         // 4. Remove selection if present
         if let Some(sel) = &selection
-            && !sel.is_empty() {
-                let (start, end) = sel.sorted();
-                code.remove(start, end);
-                cursor = start;
-                selection = None;
-            }
+            && !sel.is_empty()
+        {
+            let (start, end) = sel.sorted();
+            code.remove(start, end);
+            cursor = start;
+            selection = None;
+        }
 
         // 5. Perform paste with smart indentation
         let inserted = code.smart_paste(cursor, &text);
@@ -732,7 +760,7 @@ impl Action for Paste {
 }
 
 /// Undoes the last edit in the code buffer.
-/// 
+///
 /// Restores both the cursor position and selection state
 /// from the saved editor snapshot if available.
 pub struct Undo;
@@ -771,7 +799,7 @@ impl Action for Undo {
 }
 
 /// Redoes the last undone edit in the code buffer.
-/// 
+///
 /// Restores both the cursor position and selection state
 /// from the saved editor snapshot if available.
 pub struct Redo;

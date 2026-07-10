@@ -18,10 +18,10 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use vix_lsp_core::frame;
 
@@ -175,7 +175,9 @@ impl Dap {
         breakpoints: HashMap<String, Vec<usize>>,
     ) -> bool {
         self.stop();
-        let Some((prog, args)) = adapter.command.split_first() else { return false };
+        let Some((prog, args)) = adapter.command.split_first() else {
+            return false;
+        };
         let Ok(mut child) = Command::new(prog)
             .args(args)
             .stdin(Stdio::piped())
@@ -222,7 +224,11 @@ impl Dap {
     /// Terminate the active session (if any).
     pub fn stop(&mut self) {
         if let Some(mut s) = self.session.take() {
-            s.request("disconnect", &json!({ "terminateDebuggee": true }), Pending::Other);
+            s.request(
+                "disconnect",
+                &json!({ "terminateDebuggee": true }),
+                Pending::Other,
+            );
             let _ = s.child.kill();
         }
     }
@@ -284,7 +290,9 @@ impl Dap {
     pub fn poll(&mut self) -> Vec<DapEvent> {
         let mut events = Vec::new();
         let drained: Vec<Incoming> = {
-            let Some(s) = self.session.as_ref() else { return events };
+            let Some(s) = self.session.as_ref() else {
+                return events;
+            };
             let mut v = Vec::new();
             while let Ok(m) = s.rx.try_recv() {
                 v.push(m);
@@ -313,7 +321,9 @@ impl Dap {
     }
 
     fn handle_event(&mut self, msg: &Value, events: &mut Vec<DapEvent>) {
-        let Some(event) = msg.get("event").and_then(Value::as_str) else { return };
+        let Some(event) = msg.get("event").and_then(Value::as_str) else {
+            return;
+        };
         let body = msg.get("body").cloned().unwrap_or(Value::Null);
         match event {
             "initialized" => {
@@ -323,14 +333,25 @@ impl Dap {
                 events.push(DapEvent::Running);
             }
             "stopped" => {
-                let reason = body.get("reason").and_then(Value::as_str).unwrap_or("").to_string();
+                let reason = body
+                    .get("reason")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
                 let tid = body.get("threadId").and_then(Value::as_i64).unwrap_or(0);
                 if let Some(s) = self.session.as_mut() {
                     s.thread_id = Some(tid);
                     s.stopped = true;
-                    s.request("stackTrace", &json!({ "threadId": tid, "levels": 50 }), Pending::StackTrace);
+                    s.request(
+                        "stackTrace",
+                        &json!({ "threadId": tid, "levels": 50 }),
+                        Pending::StackTrace,
+                    );
                 }
-                events.push(DapEvent::Stopped { reason, thread_id: tid });
+                events.push(DapEvent::Stopped {
+                    reason,
+                    thread_id: tid,
+                });
             }
             "output" => {
                 if let Some(text) = body.get("output").and_then(Value::as_str) {
@@ -349,8 +370,12 @@ impl Dap {
         let id = msg.get("request_seq").and_then(Value::as_i64).unwrap_or(-1);
         let body = msg.get("body").cloned().unwrap_or(Value::Null);
         let success = msg.get("success").and_then(Value::as_bool).unwrap_or(false);
-        let Some(s) = self.session.as_mut() else { return };
-        let Some(kind) = s.pending.remove(&id) else { return };
+        let Some(s) = self.session.as_mut() else {
+            return;
+        };
+        let Some(kind) = s.pending.remove(&id) else {
+            return;
+        };
         match kind {
             Pending::StackTrace => {
                 let frames = parse_frames(&body);
@@ -362,15 +387,25 @@ impl Dap {
             }
             Pending::Scopes => {
                 if let Some(reference) = first_scope_reference(&body) {
-                    s.request("variables", &json!({ "variablesReference": reference }), Pending::Variables);
+                    s.request(
+                        "variables",
+                        &json!({ "variablesReference": reference }),
+                        Pending::Variables,
+                    );
                 }
             }
             Pending::Variables => events.push(DapEvent::Variables(parse_variables(&body))),
             Pending::Evaluate(expr) => {
                 let result = if success {
-                    body.get("result").and_then(Value::as_str).unwrap_or("").to_string()
+                    body.get("result")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string()
                 } else {
-                    msg.get("message").and_then(Value::as_str).unwrap_or("error").to_string()
+                    msg.get("message")
+                        .and_then(Value::as_str)
+                        .unwrap_or("error")
+                        .to_string()
                 };
                 events.push(DapEvent::Evaluated { expr, result });
             }
@@ -385,7 +420,8 @@ impl Session {
         let seq = self.seq;
         self.seq += 1;
         self.pending.insert(seq, pending);
-        let msg = json!({ "seq": seq, "type": "request", "command": command, "arguments": arguments });
+        let msg =
+            json!({ "seq": seq, "type": "request", "command": command, "arguments": arguments });
         let _ = self.stdin.write_all(&frame::encode(&msg));
         let _ = self.stdin.flush();
     }
@@ -393,8 +429,11 @@ impl Session {
     /// After the `initialized` event: set breakpoints, mark configured, send the
     /// launch request and `configurationDone`.
     fn configure(&mut self) {
-        let paths: Vec<(String, Vec<usize>)> =
-            self.breakpoints.iter().map(|(p, l)| (p.clone(), l.clone())).collect();
+        let paths: Vec<(String, Vec<usize>)> = self
+            .breakpoints
+            .iter()
+            .map(|(p, l)| (p.clone(), l.clone()))
+            .collect();
         for (path, lines) in paths {
             self.send_breakpoints(&path, &lines);
         }
@@ -407,7 +446,9 @@ impl Session {
     /// Send a `setBreakpoints` request for `path` with 1-based `lines`.
     fn send_breakpoints(&mut self, path: &str, lines: &[usize]) {
         let bps: Vec<Value> = lines.iter().map(|l| json!({ "line": l })).collect();
-        let name = std::path::Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned());
+        let name = std::path::Path::new(path)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned());
         let args = json!({
             "source": { "path": path, "name": name },
             "breakpoints": bps,
@@ -420,10 +461,16 @@ impl Session {
 /// with `{program}` expanded) with the program path.
 fn build_launch_args(adapter: &DebugAdapter, program_path: &str) -> Value {
     let mut map = serde_json::Map::new();
-    map.insert("program".to_string(), Value::String(program_path.to_string()));
+    map.insert(
+        "program".to_string(),
+        Value::String(program_path.to_string()),
+    );
     map.insert("stopOnEntry".to_string(), Value::Bool(false));
     for (k, v) in &adapter.launch {
-        map.insert(k.clone(), Value::String(v.replace("{program}", program_path)));
+        map.insert(
+            k.clone(),
+            Value::String(v.replace("{program}", program_path)),
+        );
     }
     Value::Object(map)
 }
@@ -436,13 +483,18 @@ fn parse_frames(body: &Value) -> Vec<Frame> {
             arr.iter()
                 .map(|f| Frame {
                     id: f.get("id").and_then(Value::as_i64).unwrap_or(0),
-                    name: f.get("name").and_then(Value::as_str).unwrap_or("").to_string(),
+                    name: f
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string(),
                     path: f
                         .get("source")
                         .and_then(|s| s.get("path"))
                         .and_then(Value::as_str)
                         .map(str::to_string),
-                    line: usize::try_from(f.get("line").and_then(Value::as_i64).unwrap_or(0)).unwrap_or(0),
+                    line: usize::try_from(f.get("line").and_then(Value::as_i64).unwrap_or(0))
+                        .unwrap_or(0),
                 })
                 .collect()
         })
@@ -466,8 +518,16 @@ fn parse_variables(body: &Value) -> Vec<Variable> {
         .map(|arr| {
             arr.iter()
                 .map(|v| Variable {
-                    name: v.get("name").and_then(Value::as_str).unwrap_or("").to_string(),
-                    value: v.get("value").and_then(Value::as_str).unwrap_or("").to_string(),
+                    name: v
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string(),
+                    value: v
+                        .get("value")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string(),
                 })
                 .collect()
         })
@@ -508,7 +568,9 @@ mod tests {
             adapter_id: "x".into(),
             extensions: vec!["rs".into()],
             command: vec!["dbg".into()],
-            launch: [("cwd".to_string(), "{program}.dir".to_string())].into_iter().collect(),
+            launch: [("cwd".to_string(), "{program}.dir".to_string())]
+                .into_iter()
+                .collect(),
         };
         let args = build_launch_args(&adapter, "/tmp/a.out");
         assert_eq!(args["program"], json!("/tmp/a.out"));
@@ -529,9 +591,21 @@ mod tests {
         assert_eq!(frames[0].line, 12);
 
         let vars = parse_variables(&json!({ "variables": [{ "name": "n", "value": "42" }] }));
-        assert_eq!(vars, vec![Variable { name: "n".into(), value: "42".into() }]);
+        assert_eq!(
+            vars,
+            vec![Variable {
+                name: "n".into(),
+                value: "42".into()
+            }]
+        );
 
-        assert_eq!(first_scope_reference(&json!({ "scopes": [{ "variablesReference": 3 }] })), Some(3));
-        assert_eq!(first_scope_reference(&json!({ "scopes": [{ "variablesReference": 0 }] })), None);
+        assert_eq!(
+            first_scope_reference(&json!({ "scopes": [{ "variablesReference": 3 }] })),
+            Some(3)
+        );
+        assert_eq!(
+            first_scope_reference(&json!({ "scopes": [{ "variablesReference": 0 }] })),
+            None
+        );
     }
 }

@@ -10,7 +10,7 @@
 //! write-confirmation gate. No external database or CLI is required.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use vix::db::{connect, session::Session, Browser, Pages, Pane, View};
+use vix::db::{Browser, Pages, Pane, View, connect, session::Session};
 
 fn key(browser: &mut Browser, code: KeyCode) {
     browser.handle_key(KeyEvent::new(code, KeyModifiers::NONE), Pages::default());
@@ -33,8 +33,8 @@ fn type_str(browser: &mut Browser, text: &str) {
 /// Seed a fresh `SQLite` file at `path` with `statements`.
 fn seed(path: &std::path::Path, statements: &[&str]) {
     let _ = std::fs::remove_file(path);
-    let mut session =
-        Session::connect(&format!("sqlite:{}?mode=rwc", path.display()), &[]).expect("seed connect");
+    let mut session = Session::connect(&format!("sqlite:{}?mode=rwc", path.display()), &[])
+        .expect("seed connect");
     for sql in statements {
         session.run(sql).expect("seed statement");
     }
@@ -69,18 +69,36 @@ fn sqlite_connect_browse_query_and_filter() {
     // Connect from the saved-connections list (SQLite needs no password).
     let mut b = Browser::new(vec![sqlite_connection("smoke", &file)]);
     key(&mut b, KeyCode::Enter);
-    assert_eq!(b.view, View::Workbench, "connect lands in the workbench: {:?}", b.message);
+    assert_eq!(
+        b.view,
+        View::Workbench,
+        "connect lands in the workbench: {:?}",
+        b.message
+    );
 
     // The catalog listed the table and the view.
     let names = b.tree.table_names();
-    assert!(names.contains(&"users".to_string()), "tree has the table: {names:?}");
-    assert!(names.contains(&"v_names".to_string()), "tree has the view: {names:?}");
+    assert!(
+        names.contains(&"users".to_string()),
+        "tree has the table: {names:?}"
+    );
+    assert!(
+        names.contains(&"v_names".to_string()),
+        "tree has the view: {names:?}"
+    );
 
     // Typing a table prefix pops up schema-fed completions; Tab accepts.
     assert_eq!(b.focus, Pane::Editor);
     type_str(&mut b, "SELECT id, name FROM us");
-    let popup = b.popup.as_ref().expect("autocomplete offers the table name");
-    assert!(popup.items.contains(&"users".to_string()), "{:?}", popup.items);
+    let popup = b
+        .popup
+        .as_ref()
+        .expect("autocomplete offers the table name");
+    assert!(
+        popup.items.contains(&"users".to_string()),
+        "{:?}",
+        popup.items
+    );
     key(&mut b, KeyCode::Tab);
     assert_eq!(b.query.text(), "SELECT id, name FROM users");
 
@@ -97,8 +115,14 @@ fn sqlite_connect_browse_query_and_filter() {
     key(&mut b, KeyCode::Esc); // clear the filter
 
     // Executed statements landed in the recallable history.
-    assert_eq!(b.history.entries.first().map(String::as_str), Some("SELECT id, name FROM users"));
-    assert!(b.take_dirty_history().is_some(), "host is told to persist the history");
+    assert_eq!(
+        b.history.entries.first().map(String::as_str),
+        Some("SELECT id, name FROM users")
+    );
+    assert!(
+        b.take_dirty_history().is_some(),
+        "host is told to persist the history"
+    );
 
     // Sorting by name descending puts radia first.
     key(&mut b, KeyCode::Right); // select the name column
@@ -112,7 +136,11 @@ fn sqlite_connect_browse_query_and_filter() {
     key(&mut b, KeyCode::Enter);
     let csv = std::fs::read_to_string(dir.join("out.csv")).unwrap();
     assert_eq!(csv.lines().next().unwrap(), "id,name");
-    assert_eq!(csv.lines().nth(1).unwrap(), "3,radia", "export follows the sort");
+    assert_eq!(
+        csv.lines().nth(1).unwrap(),
+        "3,radia",
+        "export follows the sort"
+    );
 
     // EXPLAIN QUERY PLAN of an unindexed scan raises the plan-doctor insight.
     b.focus = Pane::Editor;
@@ -140,7 +168,11 @@ fn sqlite_connect_browse_query_and_filter() {
     }
     type_str(&mut b, "SELECT count(*) FROM users");
     key(&mut b, KeyCode::F(5));
-    assert_eq!(b.grid.rows, vec![vec!["2".to_string()]], "the delete really ran");
+    assert_eq!(
+        b.grid.rows,
+        vec![vec!["2".to_string()]],
+        "the delete really ran"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -163,8 +195,17 @@ fn table_details_report_columns() {
     key(&mut b, KeyCode::Down);
     key(&mut b, KeyCode::Down);
     key(&mut b, KeyCode::Enter);
-    assert!(b.grid.headers.iter().any(|h| h == "name"), "{:?}", b.grid.headers);
-    let cols: Vec<&str> = b.grid.rows.iter().filter_map(|r| r.get(1).map(String::as_str)).collect();
+    assert!(
+        b.grid.headers.iter().any(|h| h == "name"),
+        "{:?}",
+        b.grid.headers
+    );
+    let cols: Vec<&str> = b
+        .grid
+        .rows
+        .iter()
+        .filter_map(|r| r.get(1).map(String::as_str))
+        .collect();
     assert_eq!(cols, vec!["a", "b"], "table_info reports both columns");
 
     let _ = std::fs::remove_dir_all(&dir);
@@ -214,16 +255,26 @@ fn query_log_records_metrics_and_erd_maps_foreign_keys() {
     // Run a user query, then open the log (Ctrl+L).
     type_str(&mut b, "SELECT * FROM users");
     key(&mut b, KeyCode::F(5));
-    b.handle_key(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::CONTROL), Pages::default());
+    b.handle_key(
+        KeyEvent::new(KeyCode::Char('l'), KeyModifiers::CONTROL),
+        Pages::default(),
+    );
     assert_eq!(b.view, View::Log);
     // Newest first: the user SELECT is at the front; catalog queries (App) sit
     // behind it from the connect-time schema load.
     let head = &b.log.entries[0];
-    assert!(head.sql.contains("SELECT * FROM users"), "logged sql: {}", head.sql);
+    assert!(
+        head.sql.contains("SELECT * FROM users"),
+        "logged sql: {}",
+        head.sql
+    );
     assert_eq!(head.rows, 1, "one row logged");
     assert!(head.ok, "success recorded");
     assert!(
-        b.log.entries.iter().any(|e| e.origin == vix::db::store::Origin::App),
+        b.log
+            .entries
+            .iter()
+            .any(|e| e.origin == vix::db::store::Origin::App),
         "catalog queries are logged as App origin",
     );
     // Enter reloads the statement into the editor.
@@ -232,10 +283,17 @@ fn query_log_records_metrics_and_erd_maps_foreign_keys() {
     assert!(b.query.text().contains("SELECT * FROM users"));
 
     // Generate the ER diagram (Ctrl+E) and check the FK edge is mapped.
-    b.handle_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL), Pages::default());
+    b.handle_key(
+        KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL),
+        Pages::default(),
+    );
     assert_eq!(b.view, View::Erd, "{:?}", b.message);
     assert!(b.cell_text.starts_with("erDiagram"), "{}", b.cell_text);
-    assert!(b.cell_text.contains("users {"), "users entity: {}", b.cell_text);
+    assert!(
+        b.cell_text.contains("users {"),
+        "users entity: {}",
+        b.cell_text
+    );
     assert!(
         b.cell_text.contains("orders }o--|| users : \"user_id\""),
         "FK edge mapped: {}",
@@ -273,20 +331,42 @@ fn ask_ai_builds_a_schema_only_request_and_applies_the_reply() {
     assert_eq!(b.view, View::Workbench, "{:?}", b.message);
 
     // Ctrl+A opens the Ask prompt; type a question and submit.
-    b.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL), Pages::default());
+    b.handle_key(
+        KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL),
+        Pages::default(),
+    );
     assert_eq!(b.view, View::Ask);
     type_str(&mut b, "how many orders does each user have?");
     key(&mut b, KeyCode::Enter);
     assert!(b.ai_busy(), "a request is queued");
 
     // The host would drain the request; check it is schema-only and read-only.
-    let req = b.take_ai_request().expect("a request is queued for the host");
-    assert!(req.prompt.contains("READ-ONLY"), "read-only connection ⇒ read-only instruction");
-    assert!(req.context.contains("users(id INTEGER, name TEXT)"), "schema in brief: {}", req.context);
-    assert!(req.context.contains("orders.user_id -> users.id"), "FK in brief: {}", req.context);
+    let req = b
+        .take_ai_request()
+        .expect("a request is queued for the host");
+    assert!(
+        req.prompt.contains("READ-ONLY"),
+        "read-only connection ⇒ read-only instruction"
+    );
+    assert!(
+        req.context.contains("users(id INTEGER, name TEXT)"),
+        "schema in brief: {}",
+        req.context
+    );
+    assert!(
+        req.context.contains("orders.user_id -> users.id"),
+        "FK in brief: {}",
+        req.context
+    );
     assert!(req.context.contains("how many orders"), "question in brief");
-    assert!(!req.context.contains("top-secret-agent"), "NO row data leaks into the brief");
-    assert!(b.take_ai_request().is_none(), "the request is taken only once");
+    assert!(
+        !req.context.contains("top-secret-agent"),
+        "NO row data leaks into the brief"
+    );
+    assert!(
+        b.take_ai_request().is_none(),
+        "the request is taken only once"
+    );
     assert!(b.ai_busy(), "still busy while the reply is awaited");
 
     // The assistant reply (fenced) lands in the editor, validated by EXPLAIN.
@@ -300,10 +380,20 @@ fn ask_ai_builds_a_schema_only_request_and_applies_the_reply() {
 
     // Optimize round: feeds the current query plus its EXPLAIN plan back.
     b.focus = Pane::Editor;
-    b.handle_key(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::CONTROL), Pages::default());
+    b.handle_key(
+        KeyEvent::new(KeyCode::Char('o'), KeyModifiers::CONTROL),
+        Pages::default(),
+    );
     let opt = b.take_ai_request().expect("optimize queues a request");
-    assert!(opt.context.contains("EXPLAIN plan:"), "optimize brief carries the plan: {}", opt.context);
-    assert!(opt.context.contains("GROUP BY user_id"), "optimize brief carries the query");
+    assert!(
+        opt.context.contains("EXPLAIN plan:"),
+        "optimize brief carries the plan: {}",
+        opt.context
+    );
+    assert!(
+        opt.context.contains("GROUP BY user_id"),
+        "optimize brief carries the query"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -333,13 +423,22 @@ fn params_import_fk_and_chart_flows() {
     type_str(&mut b, "2");
     key(&mut b, KeyCode::Enter);
     assert_eq!(b.view, View::Workbench);
-    assert_eq!(b.grid.rows, vec![vec!["grace".to_string()]], "param substituted: {:?}", b.message);
+    assert_eq!(
+        b.grid.rows,
+        vec![vec!["grace".to_string()]],
+        "param substituted: {:?}",
+        b.message
+    );
 
     // --- Expanded row view (x) opens the text viewer. ---
     b.focus = Pane::Results;
     key(&mut b, KeyCode::Char('x'));
     assert_eq!(b.view, View::Cell);
-    assert!(b.cell_text.contains("name"), "expanded row shows the column: {}", b.cell_text);
+    assert!(
+        b.cell_text.contains("name"),
+        "expanded row shows the column: {}",
+        b.cell_text
+    );
     key(&mut b, KeyCode::Esc);
 
     // --- Preview orders, then follow the user_id foreign key to users. ---
@@ -348,11 +447,21 @@ fn params_import_fk_and_chart_flows() {
     key(&mut b, KeyCode::Down);
     key(&mut b, KeyCode::Down);
     key(&mut b, KeyCode::Char('p'));
-    assert_eq!(b.grid.headers, vec!["id", "user_id"], "orders preview: {:?}", b.message);
+    assert_eq!(
+        b.grid.headers,
+        vec!["id", "user_id"],
+        "orders preview: {:?}",
+        b.message
+    );
     b.focus = Pane::Results;
     key(&mut b, KeyCode::Right); // select the user_id column
     key(&mut b, KeyCode::Char('f')); // follow the FK
-    assert_eq!(b.grid.headers, vec!["id", "name"], "followed to users: {:?}", b.message);
+    assert_eq!(
+        b.grid.headers,
+        vec!["id", "name"],
+        "followed to users: {:?}",
+        b.message
+    );
     assert_eq!(b.grid.rows.len(), 1, "one parent row");
 
     // --- Chart a (label, number) result. ---
@@ -365,25 +474,40 @@ fn params_import_fk_and_chart_flows() {
     b.focus = Pane::Results;
     key(&mut b, KeyCode::Char('c'));
     assert_eq!(b.view, View::Cell);
-    assert!(b.cell_text.contains('█'), "chart drew bars: {}", b.cell_text);
+    assert!(
+        b.cell_text.contains('█'),
+        "chart drew bars: {}",
+        b.cell_text
+    );
     key(&mut b, KeyCode::Esc);
 
     // --- CSV import creates and fills a table. ---
     let csv = dir.join("pets.csv");
     std::fs::write(&csv, "id,species\n1,cat\n2,dog\n").unwrap();
-    b.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL), Pages::default());
+    b.handle_key(
+        KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL),
+        Pages::default(),
+    );
     assert_eq!(b.view, View::Import);
     type_str(&mut b, csv.to_str().unwrap());
     key(&mut b, KeyCode::Enter);
     assert_eq!(b.view, View::Workbench);
-    assert!(b.message.as_deref().unwrap_or("").contains("pets"), "import message: {:?}", b.message);
+    assert!(
+        b.message.as_deref().unwrap_or("").contains("pets"),
+        "import message: {:?}",
+        b.message
+    );
     b.focus = Pane::Editor;
     for _ in 0..b.query.text().len() {
         key(&mut b, KeyCode::Backspace);
     }
     type_str(&mut b, "SELECT count(*) FROM pets");
     key(&mut b, KeyCode::F(5));
-    assert_eq!(b.grid.rows, vec![vec!["2".to_string()]], "imported rows are queryable");
+    assert_eq!(
+        b.grid.rows,
+        vec![vec!["2".to_string()]],
+        "imported rows are queryable"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -393,7 +517,10 @@ fn transactions_span_statements_in_the_workbench() {
     let dir = std::env::temp_dir().join(format!("vix-db-tx-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("tx.db");
-    seed(&file, &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1)"]);
+    seed(
+        &file,
+        &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1)"],
+    );
     let mut b = Browser::new(vec![sqlite_connection("tx", &file)]);
     key(&mut b, KeyCode::Enter);
     assert_eq!(b.view, View::Workbench, "{:?}", b.message);
@@ -401,7 +528,12 @@ fn transactions_span_statements_in_the_workbench() {
     // BEGIN, a DELETE, then ROLLBACK — each its own execution. Inside the open
     // transaction the write skips confirmation (it is provisional); the
     // rollback then really undoes the delete.
-    for stmt in ["BEGIN", "DELETE FROM t", "ROLLBACK", "SELECT count(*) FROM t"] {
+    for stmt in [
+        "BEGIN",
+        "DELETE FROM t",
+        "ROLLBACK",
+        "SELECT count(*) FROM t",
+    ] {
         b.focus = Pane::Editor;
         for _ in 0..b.query.text().len() {
             key(&mut b, KeyCode::Backspace);
@@ -410,7 +542,11 @@ fn transactions_span_statements_in_the_workbench() {
         key(&mut b, KeyCode::F(5));
         assert_eq!(b.view, View::Workbench, "{stmt}: {:?}", b.message);
     }
-    assert_eq!(b.grid.rows, vec![vec!["1".to_string()]], "rollback restored the row");
+    assert_eq!(
+        b.grid.rows,
+        vec![vec!["1".to_string()]],
+        "rollback restored the row"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -432,7 +568,12 @@ fn large_result_streams_in_batches() {
     type_str(&mut b, "SELECT n FROM t ORDER BY n");
     key(&mut b, KeyCode::F(5)); // key() pumps poll_query until the stream is done
     assert_eq!(b.grid.headers, vec!["n"], "{:?}", b.message);
-    assert_eq!(b.grid.rows.len(), 1500, "every streamed batch accumulated: {:?}", b.message);
+    assert_eq!(
+        b.grid.rows.len(),
+        1500,
+        "every streamed batch accumulated: {:?}",
+        b.message
+    );
     assert_eq!(b.grid.rows.first(), Some(&vec!["1".to_string()]));
     assert_eq!(b.grid.rows.last(), Some(&vec!["1500".to_string()]));
     let _ = std::fs::remove_dir_all(&dir);
@@ -443,24 +584,43 @@ fn async_query_runs_off_the_event_loop_and_cancels() {
     let dir = std::env::temp_dir().join(format!("vix-db-async-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("async.db");
-    seed(&file, &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1),(2),(3)"]);
+    seed(
+        &file,
+        &[
+            "CREATE TABLE t (a INTEGER)",
+            "INSERT INTO t VALUES (1),(2),(3)",
+        ],
+    );
     let mut b = Browser::new(vec![sqlite_connection("async", &file)]);
     key(&mut b, KeyCode::Enter);
 
     // F5 sends the query without blocking; the result arrives via poll_query.
     type_str(&mut b, "SELECT count(*) FROM t");
-    b.handle_key(KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE), Pages::default());
-    assert!(b.query_running(), "the query is in flight, not applied synchronously");
+    b.handle_key(
+        KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE),
+        Pages::default(),
+    );
+    assert!(
+        b.query_running(),
+        "the query is in flight, not applied synchronously"
+    );
     let mut spins = 0;
     while b.query_running() && spins < 1_000_000 {
         b.poll_query();
         std::thread::yield_now();
         spins += 1;
     }
-    assert_eq!(b.grid.rows, vec![vec!["3".to_string()]], "async result applied");
+    assert_eq!(
+        b.grid.rows,
+        vec![vec!["3".to_string()]],
+        "async result applied"
+    );
 
     // Cancel returns control immediately and leaves a usable session.
-    b.handle_key(KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE), Pages::default());
+    b.handle_key(
+        KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE),
+        Pages::default(),
+    );
     b.cancel_query();
     assert!(!b.query_running(), "cancel clears the in-flight query");
     b.focus = Pane::Editor;
@@ -469,7 +629,12 @@ fn async_query_runs_off_the_event_loop_and_cancels() {
     }
     type_str(&mut b, "SELECT 42");
     key(&mut b, KeyCode::F(5));
-    assert_eq!(b.grid.rows, vec![vec!["42".to_string()]], "session works after cancel: {:?}", b.message);
+    assert_eq!(
+        b.grid.rows,
+        vec![vec!["42".to_string()]],
+        "session works after cancel: {:?}",
+        b.message
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -518,14 +683,23 @@ fn staged_cell_edits_commit_in_a_transaction() {
 
     // Commit with W → persisted via UPDATE in a transaction.
     key(&mut b, KeyCode::Char('W'));
-    assert!(b.edits.is_empty(), "edits cleared after commit: {:?}", b.message);
+    assert!(
+        b.edits.is_empty(),
+        "edits cleared after commit: {:?}",
+        b.message
+    );
     b.focus = Pane::Editor;
     for _ in 0..b.query.text().len() {
         key(&mut b, KeyCode::Backspace);
     }
     type_str(&mut b, "SELECT name FROM users WHERE id = 1");
     key(&mut b, KeyCode::F(5));
-    assert_eq!(b.grid.rows, vec![vec!["Ada Lovelace".to_string()]], "edit persisted: {:?}", b.message);
+    assert_eq!(
+        b.grid.rows,
+        vec![vec!["Ada Lovelace".to_string()]],
+        "edit persisted: {:?}",
+        b.message
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -536,7 +710,10 @@ fn transaction_state_badge_and_relaxed_confirm() {
     let dir = std::env::temp_dir().join(format!("vix-db-tx2-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("tx2.db");
-    seed(&file, &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1),(2)"]);
+    seed(
+        &file,
+        &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1),(2)"],
+    );
     let mut b = Browser::new(vec![sqlite_connection("tx2", &file)]);
     key(&mut b, KeyCode::Enter);
     assert_eq!(b.tx_state(), TxState::None, "autocommit at connect");
@@ -558,7 +735,12 @@ fn transaction_state_badge_and_relaxed_confirm() {
     }
     type_str(&mut b, "DELETE FROM t WHERE a = 1");
     key(&mut b, KeyCode::F(5));
-    assert_eq!(b.view, View::Workbench, "no confirm inside a tx: {:?}", b.message);
+    assert_eq!(
+        b.view,
+        View::Workbench,
+        "no confirm inside a tx: {:?}",
+        b.message
+    );
 
     // Roll back and confirm both the state and the data are restored.
     b.rollback_tx();
@@ -569,6 +751,10 @@ fn transaction_state_badge_and_relaxed_confirm() {
     }
     type_str(&mut b, "SELECT count(*) FROM t");
     key(&mut b, KeyCode::F(5));
-    assert_eq!(b.grid.rows, vec![vec!["2".to_string()]], "rollback restored the row");
+    assert_eq!(
+        b.grid.rows,
+        vec![vec!["2".to_string()]],
+        "rollback restored the row"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

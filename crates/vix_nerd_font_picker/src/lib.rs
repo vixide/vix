@@ -13,7 +13,6 @@
 //! a particular font lacks simply renders as a fallback box; nothing breaks.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -33,68 +32,236 @@ pub const COLS: usize = 8;
 /// The curated glyphs, in grid order (row-major, [`COLS`] per row).
 pub const GLYPHS: &[Glyph] = &[
     // Files & folders
-    Glyph { ch: '\u{f07b}', name: "folder" },
-    Glyph { ch: '\u{f07c}', name: "folder-open" },
-    Glyph { ch: '\u{f15b}', name: "file" },
-    Glyph { ch: '\u{f0c5}', name: "copy" },
-    Glyph { ch: '\u{f0c7}', name: "save" },
-    Glyph { ch: '\u{f019}', name: "download" },
-    Glyph { ch: '\u{f093}', name: "upload" },
-    Glyph { ch: '\u{f1f8}', name: "trash" },
+    Glyph {
+        ch: '\u{f07b}',
+        name: "folder",
+    },
+    Glyph {
+        ch: '\u{f07c}',
+        name: "folder-open",
+    },
+    Glyph {
+        ch: '\u{f15b}',
+        name: "file",
+    },
+    Glyph {
+        ch: '\u{f0c5}',
+        name: "copy",
+    },
+    Glyph {
+        ch: '\u{f0c7}',
+        name: "save",
+    },
+    Glyph {
+        ch: '\u{f019}',
+        name: "download",
+    },
+    Glyph {
+        ch: '\u{f093}',
+        name: "upload",
+    },
+    Glyph {
+        ch: '\u{f1f8}',
+        name: "trash",
+    },
     // Editing
-    Glyph { ch: '\u{f040}', name: "pencil" },
-    Glyph { ch: '\u{f044}', name: "edit" },
-    Glyph { ch: '\u{f0ea}', name: "paste" },
-    Glyph { ch: '\u{f0c4}', name: "cut" },
-    Glyph { ch: '\u{f031}', name: "font" },
-    Glyph { ch: '\u{f035}', name: "list" },
-    Glyph { ch: '\u{f0e2}', name: "undo" },
-    Glyph { ch: '\u{f01e}', name: "redo" },
+    Glyph {
+        ch: '\u{f040}',
+        name: "pencil",
+    },
+    Glyph {
+        ch: '\u{f044}',
+        name: "edit",
+    },
+    Glyph {
+        ch: '\u{f0ea}',
+        name: "paste",
+    },
+    Glyph {
+        ch: '\u{f0c4}',
+        name: "cut",
+    },
+    Glyph {
+        ch: '\u{f031}',
+        name: "font",
+    },
+    Glyph {
+        ch: '\u{f035}',
+        name: "list",
+    },
+    Glyph {
+        ch: '\u{f0e2}',
+        name: "undo",
+    },
+    Glyph {
+        ch: '\u{f01e}',
+        name: "redo",
+    },
     // Navigation & status
-    Glyph { ch: '\u{f015}', name: "home" },
-    Glyph { ch: '\u{f002}', name: "search" },
-    Glyph { ch: '\u{f013}', name: "cog" },
-    Glyph { ch: '\u{f085}', name: "cogs" },
-    Glyph { ch: '\u{f021}', name: "refresh" },
-    Glyph { ch: '\u{f023}', name: "lock" },
-    Glyph { ch: '\u{f09c}', name: "unlock" },
-    Glyph { ch: '\u{f024}', name: "flag" },
+    Glyph {
+        ch: '\u{f015}',
+        name: "home",
+    },
+    Glyph {
+        ch: '\u{f002}',
+        name: "search",
+    },
+    Glyph {
+        ch: '\u{f013}',
+        name: "cog",
+    },
+    Glyph {
+        ch: '\u{f085}',
+        name: "cogs",
+    },
+    Glyph {
+        ch: '\u{f021}',
+        name: "refresh",
+    },
+    Glyph {
+        ch: '\u{f023}',
+        name: "lock",
+    },
+    Glyph {
+        ch: '\u{f09c}',
+        name: "unlock",
+    },
+    Glyph {
+        ch: '\u{f024}',
+        name: "flag",
+    },
     // Symbols & marks
-    Glyph { ch: '\u{f005}', name: "star" },
-    Glyph { ch: '\u{f004}', name: "heart" },
-    Glyph { ch: '\u{f00c}', name: "check" },
-    Glyph { ch: '\u{f00d}', name: "close" },
-    Glyph { ch: '\u{f067}', name: "plus" },
-    Glyph { ch: '\u{f068}', name: "minus" },
-    Glyph { ch: '\u{f071}', name: "warning" },
-    Glyph { ch: '\u{f06a}', name: "exclamation" },
+    Glyph {
+        ch: '\u{f005}',
+        name: "star",
+    },
+    Glyph {
+        ch: '\u{f004}',
+        name: "heart",
+    },
+    Glyph {
+        ch: '\u{f00c}',
+        name: "check",
+    },
+    Glyph {
+        ch: '\u{f00d}',
+        name: "close",
+    },
+    Glyph {
+        ch: '\u{f067}',
+        name: "plus",
+    },
+    Glyph {
+        ch: '\u{f068}',
+        name: "minus",
+    },
+    Glyph {
+        ch: '\u{f071}',
+        name: "warning",
+    },
+    Glyph {
+        ch: '\u{f06a}',
+        name: "exclamation",
+    },
     // People & comms
-    Glyph { ch: '\u{f007}', name: "user" },
-    Glyph { ch: '\u{f0c0}', name: "users" },
-    Glyph { ch: '\u{f0e0}', name: "envelope" },
-    Glyph { ch: '\u{f075}', name: "comment" },
-    Glyph { ch: '\u{f0f3}', name: "bell" },
-    Glyph { ch: '\u{f1d8}', name: "paper-plane" },
-    Glyph { ch: '\u{f0a1}', name: "bullhorn" },
-    Glyph { ch: '\u{f0c1}', name: "link" },
+    Glyph {
+        ch: '\u{f007}',
+        name: "user",
+    },
+    Glyph {
+        ch: '\u{f0c0}',
+        name: "users",
+    },
+    Glyph {
+        ch: '\u{f0e0}',
+        name: "envelope",
+    },
+    Glyph {
+        ch: '\u{f075}',
+        name: "comment",
+    },
+    Glyph {
+        ch: '\u{f0f3}',
+        name: "bell",
+    },
+    Glyph {
+        ch: '\u{f1d8}',
+        name: "paper-plane",
+    },
+    Glyph {
+        ch: '\u{f0a1}',
+        name: "bullhorn",
+    },
+    Glyph {
+        ch: '\u{f0c1}',
+        name: "link",
+    },
     // Dev & tools
-    Glyph { ch: '\u{f120}', name: "terminal" },
-    Glyph { ch: '\u{f121}', name: "code" },
-    Glyph { ch: '\u{f126}', name: "code-fork" },
-    Glyph { ch: '\u{f188}', name: "bug" },
-    Glyph { ch: '\u{f1c0}', name: "database" },
-    Glyph { ch: '\u{f0eb}', name: "lightbulb" },
-    Glyph { ch: '\u{f0e7}', name: "bolt" },
-    Glyph { ch: '\u{f135}', name: "rocket" },
+    Glyph {
+        ch: '\u{f120}',
+        name: "terminal",
+    },
+    Glyph {
+        ch: '\u{f121}',
+        name: "code",
+    },
+    Glyph {
+        ch: '\u{f126}',
+        name: "code-fork",
+    },
+    Glyph {
+        ch: '\u{f188}',
+        name: "bug",
+    },
+    Glyph {
+        ch: '\u{f1c0}',
+        name: "database",
+    },
+    Glyph {
+        ch: '\u{f0eb}',
+        name: "lightbulb",
+    },
+    Glyph {
+        ch: '\u{f0e7}',
+        name: "bolt",
+    },
+    Glyph {
+        ch: '\u{f135}',
+        name: "rocket",
+    },
     // Media & misc
-    Glyph { ch: '\u{f04b}', name: "play" },
-    Glyph { ch: '\u{f04c}', name: "pause" },
-    Glyph { ch: '\u{f04d}', name: "stop" },
-    Glyph { ch: '\u{f06e}', name: "eye" },
-    Glyph { ch: '\u{f017}', name: "clock" },
-    Glyph { ch: '\u{f073}', name: "calendar" },
-    Glyph { ch: '\u{f0f4}', name: "coffee" },
-    Glyph { ch: '\u{e0a0}', name: "git-branch" },
+    Glyph {
+        ch: '\u{f04b}',
+        name: "play",
+    },
+    Glyph {
+        ch: '\u{f04c}',
+        name: "pause",
+    },
+    Glyph {
+        ch: '\u{f04d}',
+        name: "stop",
+    },
+    Glyph {
+        ch: '\u{f06e}',
+        name: "eye",
+    },
+    Glyph {
+        ch: '\u{f017}',
+        name: "clock",
+    },
+    Glyph {
+        ch: '\u{f073}',
+        name: "calendar",
+    },
+    Glyph {
+        ch: '\u{f0f4}',
+        name: "coffee",
+    },
+    Glyph {
+        ch: '\u{e0a0}',
+        name: "git-branch",
+    },
 ];
 
 /// Selection state for the Nerd Font palette overlay: an index into [`GLYPHS`]

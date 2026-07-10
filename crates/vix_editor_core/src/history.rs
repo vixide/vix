@@ -42,8 +42,17 @@ impl History {
     /// live nodes.
     #[must_use]
     pub fn new(max_items: usize) -> Self {
-        let root = Node { batch: None, parent: None, children: Vec::new(), active_child: None };
-        Self { nodes: vec![Some(root)], current: 0, max_items }
+        let root = Node {
+            batch: None,
+            parent: None,
+            children: Vec::new(),
+            active_child: None,
+        };
+        Self {
+            nodes: vec![Some(root)],
+            current: 0,
+            max_items,
+        }
     }
 
     /// Record `batch` as a new state branching from the current one, and move to
@@ -90,7 +99,9 @@ impl History {
     /// Cycle which child branch `redo` will follow from the current state. Returns
     /// `true` when the current state has more than one branch to choose between.
     pub fn switch_branch(&mut self) -> bool {
-        let Some(node) = self.nodes[self.current].as_mut() else { return false };
+        let Some(node) = self.nodes[self.current].as_mut() else {
+            return false;
+        };
         if node.children.len() < 2 {
             return false;
         }
@@ -126,7 +137,9 @@ impl History {
             }
             let protected = self.protected();
             let victim = self.nodes.iter().enumerate().find_map(|(i, n)| {
-                n.as_ref().filter(|nd| nd.children.is_empty() && !protected.contains(&i)).map(|_| i)
+                n.as_ref()
+                    .filter(|nd| nd.children.is_empty() && !protected.contains(&i))
+                    .map(|_| i)
             });
             let Some(v) = victim else { return };
             if let Some(parent) = self.nodes[v].as_ref().and_then(|n| n.parent)
@@ -149,7 +162,12 @@ mod tests {
 
     fn batch(text: &str) -> EditBatch {
         let mut b = EditBatch::new();
-        b.edits.push(Edit { kind: EditKind::Insert { offset: 0, text: text.to_string() } });
+        b.edits.push(Edit {
+            kind: EditKind::Insert {
+                offset: 0,
+                text: text.to_string(),
+            },
+        });
         b
     }
 
@@ -164,7 +182,11 @@ mod tests {
         let mut h = History::new(100);
         h.push(batch("a"));
         h.push(batch("b"));
-        assert_eq!(h.redo().map(|b| first_text(&b)), None, "at the tip, nothing to redo");
+        assert_eq!(
+            h.redo().map(|b| first_text(&b)),
+            None,
+            "at the tip, nothing to redo"
+        );
         assert_eq!(h.undo().map(|b| first_text(&b)), Some("b".into()));
         assert_eq!(h.undo().map(|b| first_text(&b)), Some("a".into()));
         assert_eq!(h.undo().map(|b| first_text(&b)), None, "at the root");
@@ -183,7 +205,11 @@ mod tests {
         // Undo back to the branch point and switch branches to reach "a".
         assert_eq!(h.undo().map(|b| first_text(&b)), Some("b".into()));
         assert!(h.switch_branch(), "two branches at the root");
-        assert_eq!(h.redo().map(|b| first_text(&b)), Some("a".into()), "the old branch survived");
+        assert_eq!(
+            h.redo().map(|b| first_text(&b)),
+            Some("a".into()),
+            "the old branch survived"
+        );
     }
 
     #[test]

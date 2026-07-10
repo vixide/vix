@@ -21,7 +21,6 @@
 //! identifier. The deterministic core is [`v3_named`] / [`v5_named`].
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -68,7 +67,9 @@ pub fn v3() -> String {
 /// UUID v3 from an explicit name under the URL namespace (deterministic).
 #[must_use]
 pub fn v3_named(name: &str) -> String {
-    Uuid::new_v3(&Uuid::NAMESPACE_URL, name.as_bytes()).hyphenated().to_string()
+    Uuid::new_v3(&Uuid::NAMESPACE_URL, name.as_bytes())
+        .hyphenated()
+        .to_string()
 }
 
 /// UUID v4: 122 random bits.
@@ -86,7 +87,9 @@ pub fn v5() -> String {
 /// UUID v5 from an explicit name under the URL namespace (deterministic).
 #[must_use]
 pub fn v5_named(name: &str) -> String {
-    Uuid::new_v5(&Uuid::NAMESPACE_URL, name.as_bytes()).hyphenated().to_string()
+    Uuid::new_v5(&Uuid::NAMESPACE_URL, name.as_bytes())
+        .hyphenated()
+        .to_string()
 }
 
 /// UUID v6: like v1 but time-ordered so the IDs are lexically sortable.
@@ -154,7 +157,10 @@ mod tests {
     fn rfc_variant_bits_set() {
         // RFC 4122 variant: the high bits make the digit one of 8, 9, a, b.
         for u in [v1(), v2(), v3(), v4(), v5(), v6(), v7()] {
-            assert!(matches!(variant_digit(&u), '8' | '9' | 'a' | 'b'), "bad variant: {u}");
+            assert!(
+                matches!(variant_digit(&u), '8' | '9' | 'a' | 'b'),
+                "bad variant: {u}"
+            );
         }
     }
 

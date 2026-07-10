@@ -17,7 +17,6 @@
 //! [wooorm/dictionaries]: https://github.com/wooorm/dictionaries
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -217,7 +216,11 @@ fn should_check(word: &str) -> bool {
         return false;
     }
     let has_upper = word.chars().any(char::is_uppercase);
-    let all_caps = has_upper && word.chars().filter(|c| c.is_alphabetic()).all(char::is_uppercase);
+    let all_caps = has_upper
+        && word
+            .chars()
+            .filter(|c| c.is_alphabetic())
+            .all(char::is_uppercase);
     if all_caps {
         return false;
     }
@@ -256,9 +259,14 @@ fn hunspell_search_dirs() -> Vec<PathBuf> {
     let mut lines = text.lines();
     while let Some(line) = lines.next() {
         if line.trim_start().starts_with("SEARCH PATH:")
-            && let Some(paths) = lines.next() {
-                return paths.split(':').filter(|p| !p.is_empty()).map(PathBuf::from).collect();
-            }
+            && let Some(paths) = lines.next()
+        {
+            return paths
+                .split(':')
+                .filter(|p| !p.is_empty())
+                .map(PathBuf::from)
+                .collect();
+        }
     }
     Vec::new()
 }
@@ -294,7 +302,9 @@ pub fn system_dictionary_dirs() -> Vec<PathBuf> {
 
     // Keep existing directories, de-duplicated, order preserved.
     let mut seen = HashSet::new();
-    dirs.into_iter().filter(|d| d.is_dir() && seen.insert(d.clone())).collect()
+    dirs.into_iter()
+        .filter(|d| d.is_dir() && seen.insert(d.clone()))
+        .collect()
 }
 
 /// Locate an `.aff` + `.dic` pair for `locale` within `dirs`. Tries both the
@@ -320,7 +330,9 @@ pub fn find_dictionary(dirs: &[PathBuf], locale: &str) -> Option<(PathBuf, PathB
     // Prefix fallback: e.g. locale "en" matches a file named "en_US.dic".
     let base = locale.split(['-', '_']).next().unwrap_or(locale);
     for dir in dirs {
-        let Ok(read) = std::fs::read_dir(dir) else { continue };
+        let Ok(read) = std::fs::read_dir(dir) else {
+            continue;
+        };
         let mut dic_files: Vec<PathBuf> = read
             .flatten()
             .map(|entry| entry.path())
@@ -436,7 +448,10 @@ mod tests {
         assert!(!sc.check("teh"));
         let sugg = sc.suggest("teh");
         println!("suggest(teh) = {sugg:?}");
-        assert!(sugg.iter().any(|s| s == "the"), "expected 'the' among {sugg:?}");
+        assert!(
+            sugg.iter().any(|s| s == "the"),
+            "expected 'the' among {sugg:?}"
+        );
         let spans = sc.misspellings_in("This sentnce has a typoe in it.", 0);
         println!("misspelled spans = {spans:?}");
         assert_eq!(spans.len(), 2, "two misspelled words");

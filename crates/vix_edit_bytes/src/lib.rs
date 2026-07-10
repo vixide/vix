@@ -65,7 +65,15 @@ impl Hex {
     /// Create an editor over `bytes`.
     #[must_use]
     pub fn from_bytes(bytes: Vec<u8>) -> Self {
-        Hex { bytes, cursor: 0, nibble: false, scroll: 0, dirty: false, undo: Vec::new(), redo: Vec::new() }
+        Hex {
+            bytes,
+            cursor: 0,
+            nibble: false,
+            scroll: 0,
+            dirty: false,
+            undo: Vec::new(),
+            redo: Vec::new(),
+        }
     }
 
     /// Number of bytes.
@@ -172,7 +180,9 @@ impl Hex {
         if self.bytes.is_empty() {
             return;
         }
-        let Some(d) = c.to_digit(16).and_then(|d| u8::try_from(d).ok()) else { return };
+        let Some(d) = c.to_digit(16).and_then(|d| u8::try_from(d).ok()) else {
+            return;
+        };
         self.push_undo();
         let b = self.bytes[self.cursor];
         if self.nibble {
@@ -188,7 +198,10 @@ impl Hex {
 
     /// Capture the current state onto the undo stack and clear redo.
     fn push_undo(&mut self) {
-        self.undo.push(Snapshot { bytes: self.bytes.clone(), cursor: self.cursor });
+        self.undo.push(Snapshot {
+            bytes: self.bytes.clone(),
+            cursor: self.cursor,
+        });
         if self.undo.len() > HISTORY_CAP {
             self.undo.remove(0);
         }
@@ -198,7 +211,10 @@ impl Hex {
     /// Undo the most recent change.
     fn undo(&mut self) {
         if let Some(snap) = self.undo.pop() {
-            self.redo.push(Snapshot { bytes: self.bytes.clone(), cursor: self.cursor });
+            self.redo.push(Snapshot {
+                bytes: self.bytes.clone(),
+                cursor: self.cursor,
+            });
             self.bytes = snap.bytes;
             self.cursor = snap.cursor.min(self.bytes.len().saturating_sub(1));
             self.nibble = false;
@@ -209,7 +225,10 @@ impl Hex {
     /// Redo the most recently undone change.
     fn redo(&mut self) {
         if let Some(snap) = self.redo.pop() {
-            self.undo.push(Snapshot { bytes: self.bytes.clone(), cursor: self.cursor });
+            self.undo.push(Snapshot {
+                bytes: self.bytes.clone(),
+                cursor: self.cursor,
+            });
             self.bytes = snap.bytes;
             self.cursor = snap.cursor.min(self.bytes.len().saturating_sub(1));
             self.nibble = false;
@@ -255,7 +274,11 @@ mod tests {
         h.handle_key(code(KeyCode::Left), 4);
         assert_eq!(h.cursor(), 0, "clamps at start");
         h.handle_key(code(KeyCode::End), 4);
-        assert_eq!(h.cursor(), 11, "End clamps to last byte (row shorter than 16)");
+        assert_eq!(
+            h.cursor(),
+            11,
+            "End clamps to last byte (row shorter than 16)"
+        );
         h.handle_key(code(KeyCode::Down), 4);
         assert_eq!(h.cursor(), 11, "down past end clamps");
     }
@@ -281,7 +304,11 @@ mod tests {
         h.handle_key(code(KeyCode::Right), 4); // move resets nibble
         h.handle_key(key('1'), 4); // high nibble of byte 1, not low of byte 0
         assert_eq!(h.byte(0), 0x48);
-        assert_eq!(h.byte(1), 0x15, "'e'=0x65 with high nibble set to 1 -> 0x15");
+        assert_eq!(
+            h.byte(1),
+            0x15,
+            "'e'=0x65 with high nibble set to 1 -> 0x15"
+        );
     }
 
     #[test]

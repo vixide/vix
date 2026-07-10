@@ -18,7 +18,10 @@ pub struct Snippet {
 /// `$1`, `$2`, …, `$0` (final), and `${1:placeholder}` — which [`parse`] turns
 /// into navigable fields (Tab jumps between them).
 pub static SNIPPETS: &[Snippet] = &[
-    Snippet { name: "Bash shebang", body: "#!/usr/bin/env bash\nset -euo pipefail\n\n$0" },
+    Snippet {
+        name: "Bash shebang",
+        body: "#!/usr/bin/env bash\nset -euo pipefail\n\n$0",
+    },
     Snippet {
         name: "HTML5 boilerplate",
         body: "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  <title>${1:Title}</title>\n</head>\n<body>\n  $0\n</body>\n</html>\n",
@@ -27,8 +30,14 @@ pub static SNIPPETS: &[Snippet] = &[
         name: "MIT license header",
         body: "SPDX-License-Identifier: MIT\nCopyright (c) ${1:2026} ${2:Your Name}\n$0",
     },
-    Snippet { name: "TODO comment", body: "TODO: $0" },
-    Snippet { name: "FIXME comment", body: "FIXME: $0" },
+    Snippet {
+        name: "TODO comment",
+        body: "TODO: $0",
+    },
+    Snippet {
+        name: "FIXME comment",
+        body: "FIXME: $0",
+    },
     Snippet {
         name: "Markdown link",
         body: "[${1:text}](${2:https://example.com})$0",
@@ -91,12 +100,17 @@ pub fn parse(body: &str) -> Parsed {
             // Bare `$N`.
             if chars.get(i + 1).is_some_and(char::is_ascii_digit) {
                 let (num, j) = read_number(&chars, i + 1);
-                stops.push(Stop { num, start: len, end: len });
+                stops.push(Stop {
+                    num,
+                    start: len,
+                    end: len,
+                });
                 i = j;
                 continue;
             }
             // `${N}` or `${N:placeholder}`.
-            if chars.get(i + 1) == Some(&'{') && chars.get(i + 2).is_some_and(char::is_ascii_digit) {
+            if chars.get(i + 1) == Some(&'{') && chars.get(i + 2).is_some_and(char::is_ascii_digit)
+            {
                 let (num, mut j) = read_number(&chars, i + 2);
                 let start = len;
                 if chars.get(j) == Some(&':') {
@@ -109,7 +123,11 @@ pub fn parse(body: &str) -> Parsed {
                 }
                 if chars.get(j) == Some(&'}') {
                     j += 1;
-                    stops.push(Stop { num, start, end: len });
+                    stops.push(Stop {
+                        num,
+                        start,
+                        end: len,
+                    });
                     i = j;
                     continue;
                 }
@@ -128,7 +146,9 @@ fn read_number(chars: &[char], from: usize) -> (u32, usize) {
     let mut j = from;
     let mut num = 0u32;
     while j < chars.len() && chars[j].is_ascii_digit() {
-        num = num.saturating_mul(10).saturating_add(u32::from(chars[j] as u8 - b'0'));
+        num = num
+            .saturating_mul(10)
+            .saturating_add(u32::from(chars[j] as u8 - b'0'));
         j += 1;
     }
     (num, j)
@@ -143,7 +163,10 @@ mod tests {
         let p = parse("fn ${1:name}($2) {\n    $0\n}");
         assert_eq!(p.text, "fn name() {\n    \n}");
         // Navigation order: $1, $2, then $0 last.
-        assert_eq!(p.stops.iter().map(|s| s.num).collect::<Vec<_>>(), vec![1, 2, 0]);
+        assert_eq!(
+            p.stops.iter().map(|s| s.num).collect::<Vec<_>>(),
+            vec![1, 2, 0]
+        );
         // $1 placeholder "name" spans chars 3..7.
         assert_eq!((p.stops[0].start, p.stops[0].end), (3, 7));
         // $2 is empty (start == end).

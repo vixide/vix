@@ -1,13 +1,14 @@
 #!/bin/sh
 # Local CI-parity gate for Vix. Run before pushing or opening a PR.
 #
-# Mirrors the bar every change must clear: it builds, runs Clippy at the
-# pedantic level with warnings denied (the project's hard rule), and runs the
-# full test suite (unit + integration + doctests). Stops at the first failure.
-#
-# Note: `cargo fmt` is intentionally NOT run — Vix uses hand-tuned formatting
-# (no rustfmt.toml) and is not rustfmt-clean by design.
+# Mirrors the bar every change must clear: it checks formatting with rustfmt,
+# builds, runs Clippy at the pedantic level with warnings denied (the project's
+# hard rule), and runs the full test suite (unit + integration + doctests).
+# Stops at the first failure. See spec/rust-cargo-fmt.
 set -e
+
+echo "==> cargo fmt --check"
+cargo fmt --check
 
 echo "==> cargo build"
 cargo build --all-targets

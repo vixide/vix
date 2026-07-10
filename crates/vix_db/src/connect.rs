@@ -6,7 +6,7 @@
 //! (plus that in-memory password) as the `sqlite:` / `postgres:` / `mysql:`
 //! URL that [`crate::session`] hands to sqlx's `Any` driver.
 
-use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::{Deserialize, Serialize};
 
 /// Which database engine a connection targets.
@@ -106,7 +106,11 @@ impl Connection {
     /// The access label shown in the form and connections list.
     #[must_use]
     pub fn access_label(&self) -> &'static str {
-        if self.writable { "read-write" } else { "read-only" }
+        if self.writable {
+            "read-write"
+        } else {
+            "read-only"
+        }
     }
 
     /// One-line summary of the target, for the connections list.
@@ -115,7 +119,11 @@ impl Connection {
         match self.kind {
             Kind::Sqlite => self.file.clone(),
             Kind::Postgres | Kind::Mysql => {
-                let port = if self.port.is_empty() { self.kind.default_port() } else { &self.port };
+                let port = if self.port.is_empty() {
+                    self.kind.default_port()
+                } else {
+                    &self.port
+                };
                 format!("{}@{}:{}/{}", self.user, self.host, port, self.database)
             }
         }
@@ -129,7 +137,11 @@ impl Connection {
 #[must_use]
 pub fn url(conn: &Connection, password: &str) -> String {
     server_url(conn, password, &conn.host, {
-        if conn.port.is_empty() { conn.kind.default_port() } else { &conn.port }
+        if conn.port.is_empty() {
+            conn.kind.default_port()
+        } else {
+            &conn.port
+        }
     })
 }
 
@@ -147,7 +159,11 @@ fn server_url(conn: &Connection, password: &str, host: &str, port: &str) -> Stri
     match conn.kind {
         Kind::Sqlite => format!("sqlite:{}?mode=rwc", conn.file),
         Kind::Postgres | Kind::Mysql => {
-            let scheme = if conn.kind == Kind::Postgres { "postgres" } else { "mysql" };
+            let scheme = if conn.kind == Kind::Postgres {
+                "postgres"
+            } else {
+                "mysql"
+            };
             let user = utf8_percent_encode(&conn.user, NON_ALPHANUMERIC);
             let auth = if password.is_empty() {
                 user.to_string()
@@ -170,12 +186,14 @@ fn server_url(conn: &Connection, password: &str, host: &str, port: &str) -> Stri
 #[must_use]
 pub fn read_only_sql(kind: Kind, read_only: bool) -> Option<String> {
     match kind {
-        Kind::Sqlite => {
-            Some(format!("PRAGMA query_only = {}", if read_only { "ON" } else { "OFF" }))
-        }
-        Kind::Postgres => {
-            Some(format!("SET default_transaction_read_only = {}", if read_only { "on" } else { "off" }))
-        }
+        Kind::Sqlite => Some(format!(
+            "PRAGMA query_only = {}",
+            if read_only { "ON" } else { "OFF" }
+        )),
+        Kind::Postgres => Some(format!(
+            "SET default_transaction_read_only = {}",
+            if read_only { "on" } else { "off" }
+        )),
         Kind::Mysql => None,
     }
 }
@@ -206,7 +224,10 @@ mod tests {
             database: "orders".into(),
             ..Connection::default()
         };
-        assert_eq!(url(&conn, "hunter:2@x"), "postgres://joel:hunter%3A2%40x@db.example.com:5432/orders");
+        assert_eq!(
+            url(&conn, "hunter:2@x"),
+            "postgres://joel:hunter%3A2%40x@db.example.com:5432/orders"
+        );
         assert_eq!(url(&conn, ""), "postgres://joel@db.example.com:5432/orders");
     }
 
@@ -226,7 +247,11 @@ mod tests {
 
     #[test]
     fn connection_target_summarizes_per_kind() {
-        let mut c = Connection { kind: Kind::Sqlite, file: "a.db".into(), ..Connection::default() };
+        let mut c = Connection {
+            kind: Kind::Sqlite,
+            file: "a.db".into(),
+            ..Connection::default()
+        };
         assert_eq!(c.target(), "a.db");
         c.kind = Kind::Postgres;
         c.host = "h".into();
@@ -241,19 +266,32 @@ mod tests {
         let c = Connection::default();
         assert!(!c.writable, "a fresh connection is read-only by default");
         assert_eq!(c.access_label(), "read-only");
-        let w = Connection { writable: true, ..Connection::default() };
+        let w = Connection {
+            writable: true,
+            ..Connection::default()
+        };
         assert_eq!(w.access_label(), "read-write");
     }
 
     #[test]
     fn read_only_sql_is_per_engine() {
-        assert_eq!(read_only_sql(Kind::Sqlite, true).as_deref(), Some("PRAGMA query_only = ON"));
-        assert_eq!(read_only_sql(Kind::Sqlite, false).as_deref(), Some("PRAGMA query_only = OFF"));
+        assert_eq!(
+            read_only_sql(Kind::Sqlite, true).as_deref(),
+            Some("PRAGMA query_only = ON")
+        );
+        assert_eq!(
+            read_only_sql(Kind::Sqlite, false).as_deref(),
+            Some("PRAGMA query_only = OFF")
+        );
         assert_eq!(
             read_only_sql(Kind::Postgres, true).as_deref(),
             Some("SET default_transaction_read_only = on")
         );
-        assert_eq!(read_only_sql(Kind::Mysql, true), None, "mysql relies on the client guard");
+        assert_eq!(
+            read_only_sql(Kind::Mysql, true),
+            None,
+            "mysql relies on the client guard"
+        );
     }
 
     #[test]

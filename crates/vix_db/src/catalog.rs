@@ -126,10 +126,16 @@ impl Tree {
     pub fn from_objects(objects: &[(String, String, String)]) -> Tree {
         let mut schemas: Vec<Schema> = Vec::new();
         for (schema, name, kind) in objects {
-            let idx = schemas.iter().position(|s| s.name == *schema).unwrap_or_else(|| {
-                schemas.push(Schema { name: schema.clone(), ..Schema::default() });
-                schemas.len() - 1
-            });
+            let idx = schemas
+                .iter()
+                .position(|s| s.name == *schema)
+                .unwrap_or_else(|| {
+                    schemas.push(Schema {
+                        name: schema.clone(),
+                        ..Schema::default()
+                    });
+                    schemas.len() - 1
+                });
             let entry = &mut schemas[idx];
             match kind.as_str() {
                 "view" => entry.views.push(name.clone()),
@@ -147,7 +153,10 @@ impl Tree {
             first.expanded = true;
             first.folder_expanded[Folder::Tables.index()] = true;
         }
-        Tree { schemas, ..Tree::default() }
+        Tree {
+            schemas,
+            ..Tree::default()
+        }
     }
 
     /// The flattened list of currently-visible rows. While a search filter is
@@ -171,9 +180,21 @@ impl Tree {
                 continue;
             }
             for (folder, names, expanded) in [
-                (Folder::Tables, &s.tables, s.folder_expanded[Folder::Tables.index()]),
-                (Folder::Views, &s.views, s.folder_expanded[Folder::Views.index()]),
-                (Folder::Functions, &s.functions, s.folder_expanded[Folder::Functions.index()]),
+                (
+                    Folder::Tables,
+                    &s.tables,
+                    s.folder_expanded[Folder::Tables.index()],
+                ),
+                (
+                    Folder::Views,
+                    &s.views,
+                    s.folder_expanded[Folder::Views.index()],
+                ),
+                (
+                    Folder::Functions,
+                    &s.functions,
+                    s.folder_expanded[Folder::Functions.index()],
+                ),
             ] {
                 let matches: Vec<usize> = (0..names.len())
                     .filter(|&i| !searching || names[i].to_lowercase().contains(&needle))
@@ -358,7 +379,9 @@ pub fn scan_insight(kind: Kind, rows: &[Vec<String>]) -> bool {
     match kind {
         Kind::Postgres => cells.into_iter().any(|c| c.contains("Seq Scan")),
         // `SCAN t` without an index; `SEARCH t USING INDEX …` is the good case.
-        Kind::Sqlite => cells.into_iter().any(|c| c.contains("SCAN") && !c.contains("USING INDEX")),
+        Kind::Sqlite => cells
+            .into_iter()
+            .any(|c| c.contains("SCAN") && !c.contains("USING INDEX")),
         // EXPLAIN's access `type` column; `ALL` is a full scan.
         Kind::Mysql => cells.into_iter().any(|c| c == "ALL"),
     }
@@ -479,7 +502,9 @@ pub fn relationships_sql(kind: Kind) -> &'static str {
 pub fn primary_key_sql(kind: Kind, schema: &str, table: &str) -> String {
     let (s, t) = (quote_str(schema), quote_str(table));
     match kind {
-        Kind::Sqlite => format!("SELECT name FROM pragma_table_info('{t}') WHERE pk > 0 ORDER BY pk;"),
+        Kind::Sqlite => {
+            format!("SELECT name FROM pragma_table_info('{t}') WHERE pk > 0 ORDER BY pk;")
+        }
         Kind::Postgres => format!(
             "SELECT a.attname FROM pg_index i \
              JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) \
@@ -662,7 +687,10 @@ mod tests {
         assert_eq!((schema.as_str(), name.as_str()), ("main", "orders"));
         assert_eq!(folder, Folder::Tables);
         tree.sel = 0;
-        assert!(tree.selected_object().is_none(), "schema row is not an object");
+        assert!(
+            tree.selected_object().is_none(),
+            "schema row is not an object"
+        );
     }
 
     #[test]
@@ -672,8 +700,16 @@ mod tests {
 
     #[test]
     fn detail_sql_quotes_hostile_names() {
-        let sql = detail_sql(Kind::Sqlite, Detail::Columns, "main", "users'; DROP TABLE x;--");
-        assert!(sql.contains("users''; DROP TABLE x;--"), "single quotes are doubled");
+        let sql = detail_sql(
+            Kind::Sqlite,
+            Detail::Columns,
+            "main",
+            "users'; DROP TABLE x;--",
+        );
+        assert!(
+            sql.contains("users''; DROP TABLE x;--"),
+            "single quotes are doubled"
+        );
     }
 
     #[test]
@@ -724,8 +760,14 @@ mod tests {
 
     #[test]
     fn explain_sql_uses_engine_dialect() {
-        assert_eq!(explain_sql(Kind::Postgres, "select 1", true), "EXPLAIN ANALYZE select 1;");
-        assert_eq!(explain_sql(Kind::Postgres, "select 1", false), "EXPLAIN select 1;");
+        assert_eq!(
+            explain_sql(Kind::Postgres, "select 1", true),
+            "EXPLAIN ANALYZE select 1;"
+        );
+        assert_eq!(
+            explain_sql(Kind::Postgres, "select 1", false),
+            "EXPLAIN select 1;"
+        );
         assert_eq!(
             explain_sql(Kind::Sqlite, "select 1", true),
             "EXPLAIN QUERY PLAN select 1;",
@@ -735,11 +777,24 @@ mod tests {
 
     #[test]
     fn scan_insight_flags_full_scans_only() {
-        let rows = |cells: &[&str]| vec![cells.iter().map(|c| (*c).to_string()).collect::<Vec<_>>()];
-        assert!(scan_insight(Kind::Postgres, &rows(&["Seq Scan on users  (cost=0.00..1.10)"])));
-        assert!(!scan_insight(Kind::Postgres, &rows(&["Index Scan using users_pkey"])));
-        assert!(scan_insight(Kind::Sqlite, &rows(&["2", "0", "0", "SCAN users"])));
-        assert!(!scan_insight(Kind::Sqlite, &rows(&["3", "0", "0", "SEARCH users USING INDEX idx (a=?)"])));
+        let rows =
+            |cells: &[&str]| vec![cells.iter().map(|c| (*c).to_string()).collect::<Vec<_>>()];
+        assert!(scan_insight(
+            Kind::Postgres,
+            &rows(&["Seq Scan on users  (cost=0.00..1.10)"])
+        ));
+        assert!(!scan_insight(
+            Kind::Postgres,
+            &rows(&["Index Scan using users_pkey"])
+        ));
+        assert!(scan_insight(
+            Kind::Sqlite,
+            &rows(&["2", "0", "0", "SCAN users"])
+        ));
+        assert!(!scan_insight(
+            Kind::Sqlite,
+            &rows(&["3", "0", "0", "SEARCH users USING INDEX idx (a=?)"])
+        ));
         assert!(scan_insight(Kind::Mysql, &rows(&["1", "ALL", "NULL"])));
         assert!(!scan_insight(Kind::Mysql, &rows(&["1", "ref", "idx"])));
     }

@@ -62,7 +62,8 @@ pub fn find(text: &str, at: usize) -> Option<Conflict> {
     while i < lines.len() {
         if lines[i].trim_end().starts_with("<<<<<<<") {
             let start = i;
-            let sep = (start + 1..lines.len()).find(|&j| lines[j].trim_end().starts_with("======="));
+            let sep =
+                (start + 1..lines.len()).find(|&j| lines[j].trim_end().starts_with("======="));
             let Some(sep) = sep else { break };
             let endm = (sep + 1..lines.len()).find(|&j| lines[j].trim_end().starts_with(">>>>>>>"));
             let Some(endm) = endm else { break };

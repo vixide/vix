@@ -42,11 +42,17 @@ impl Review {
     #[must_use]
     pub fn from_texts(old: &str, new: &str) -> Option<Review> {
         use similar::{Algorithm, DiffOp, TextDiff};
-        let diff = TextDiff::configure().algorithm(Algorithm::Myers).diff_lines(old, new);
+        let diff = TextDiff::configure()
+            .algorithm(Algorithm::Myers)
+            .diff_lines(old, new);
         let old_lines: Vec<&str> = old.split_inclusive('\n').collect();
         let new_lines: Vec<&str> = new.split_inclusive('\n').collect();
         let take = |src: &[&str], i: usize, n: usize| -> Vec<String> {
-            src.get(i..i + n).unwrap_or_default().iter().map(|s| (*s).to_string()).collect()
+            src.get(i..i + n)
+                .unwrap_or_default()
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect()
         };
         let mut segs: Vec<Seg> = Vec::new();
         let mut any = false;
@@ -55,15 +61,28 @@ impl Review {
                 DiffOp::Equal { old_index, len, .. } => {
                     segs.push(Seg::Equal(take(&old_lines, old_index, len)));
                 }
-                DiffOp::Insert { old_index: _, new_index, new_len } => {
+                DiffOp::Insert {
+                    old_index: _,
+                    new_index,
+                    new_len,
+                } => {
                     any = true;
                     push_change(&mut segs, Vec::new(), take(&new_lines, new_index, new_len));
                 }
-                DiffOp::Delete { old_index, old_len, new_index: _ } => {
+                DiffOp::Delete {
+                    old_index,
+                    old_len,
+                    new_index: _,
+                } => {
                     any = true;
                     push_change(&mut segs, take(&old_lines, old_index, old_len), Vec::new());
                 }
-                DiffOp::Replace { old_index, old_len, new_index, new_len } => {
+                DiffOp::Replace {
+                    old_index,
+                    old_len,
+                    new_index,
+                    new_len,
+                } => {
                     any = true;
                     push_change(
                         &mut segs,
@@ -93,7 +112,10 @@ impl Review {
     /// Number of change hunks.
     #[must_use]
     pub fn change_count(&self) -> usize {
-        self.segs.iter().filter(|s| matches!(s, Seg::Change { .. })).count()
+        self.segs
+            .iter()
+            .filter(|s| matches!(s, Seg::Change { .. }))
+            .count()
     }
 
     /// Move the highlight to the next change (saturating).
@@ -157,11 +179,18 @@ impl Review {
 /// Append a change segment, merging it into a trailing change so an adjacent
 /// delete+insert reads as one reviewable hunk.
 fn push_change(segs: &mut Vec<Seg>, mut old: Vec<String>, mut new: Vec<String>) {
-    if let Some(Seg::Change { old: po, new: pn, .. }) = segs.last_mut() {
+    if let Some(Seg::Change {
+        old: po, new: pn, ..
+    }) = segs.last_mut()
+    {
         po.append(&mut old);
         pn.append(&mut new);
     } else {
-        segs.push(Seg::Change { old, new, accepted: true });
+        segs.push(Seg::Change {
+            old,
+            new,
+            accepted: true,
+        });
     }
 }
 

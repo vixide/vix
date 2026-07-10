@@ -11,7 +11,7 @@ use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier, Style};
 use ropey::RopeSlice;
 
-use crate::code::{grapheme_width_and_bytes_len, grapheme_width_and_chars_len, RopeGraphemes};
+use crate::code::{RopeGraphemes, grapheme_width_and_bytes_len, grapheme_width_and_chars_len};
 use crate::editor::Editor;
 
 /// One on-screen row in soft-wrap mode: a `[start, end)` character-offset slice
@@ -93,7 +93,15 @@ impl Editor {
     /// syntax/selection/mark overlays, and the caret.
     fn render_visual_row(&self, buf: &mut Buffer, vr: VRow, ctx: &RowCtx) {
         let code = self.code_ref();
-        let RowCtx { area, text_x0, right, draw_y, line_number_digits, default_text_style, .. } = *ctx;
+        let RowCtx {
+            area,
+            text_x0,
+            right,
+            draw_y,
+            line_number_digits,
+            default_text_style,
+            ..
+        } = *ctx;
 
         let line_start = code.line_to_char(vr.line);
         let line_len = code.line_len(vr.line);
@@ -121,7 +129,9 @@ impl Editor {
                 area.left()
             };
             if sign_x < right {
-                buf[(sign_x, draw_y)].set_symbol("\u{258e}").set_style(Style::default().fg(color));
+                buf[(sign_x, draw_y)]
+                    .set_symbol("\u{258e}")
+                    .set_style(Style::default().fg(color));
             }
         }
 
@@ -182,7 +192,15 @@ impl Editor {
         start_ch: usize,
         start_byte: usize,
     ) -> (Option<u16>, u16) {
-        let RowCtx { area, text_x0, right, draw_y, caret_sels, bracket, .. } = *ctx;
+        let RowCtx {
+            area,
+            text_x0,
+            right,
+            draw_y,
+            caret_sels,
+            bracket,
+            ..
+        } = *ctx;
         let mut vx: u16 = 0;
         let mut ch = start_ch;
         let mut byte = start_byte;
@@ -190,7 +208,11 @@ impl Editor {
         for g in RopeGraphemes::new(seg) {
             let (w, g_chars) = grapheme_width_and_chars_len(g);
             let (_, g_bytes) = grapheme_width_and_bytes_len(g);
-            let gw = if g.chars().next() == Some('\t') { 1 } else { u16::try_from(w).unwrap_or(u16::MAX) };
+            let gw = if g.chars().next() == Some('\t') {
+                1
+            } else {
+                u16::try_from(w).unwrap_or(u16::MAX)
+            };
             let cell_x = text_x0 + vx;
 
             if self.show_whitespace
@@ -271,7 +293,11 @@ impl Editor {
             let line_start = code.line_to_char(line);
             let line_len = code.line_len(line);
             if line_len == 0 {
-                rows.push(VRow { line, start: line_start, end: line_start });
+                rows.push(VRow {
+                    line,
+                    start: line_start,
+                    end: line_start,
+                });
                 line += 1;
                 continue;
             }
@@ -296,7 +322,11 @@ impl Editor {
                     seg_chars = 1;
                 }
                 let seg_end = (col + seg_chars).min(line_len);
-                rows.push(VRow { line, start: line_start + col, end: line_start + seg_end });
+                rows.push(VRow {
+                    line,
+                    start: line_start + col,
+                    end: line_start + seg_end,
+                });
                 col = seg_end;
             }
             line += 1;

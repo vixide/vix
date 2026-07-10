@@ -119,7 +119,11 @@ pub fn parse_status(output: &str) -> Vec<FileStatus> {
         } else {
             (Change::from_code(x), Change::from_code(y))
         };
-        out.push(FileStatus { path, staged, unstaged });
+        out.push(FileStatus {
+            path,
+            staged,
+            unstaged,
+        });
     }
     out
 }
@@ -145,17 +149,23 @@ pub enum LineMark {
 pub fn diff_marks(head: &str, current: &str) -> Vec<(usize, LineMark)> {
     use similar::{Algorithm, DiffOp, TextDiff};
 
-    let diff = TextDiff::configure().algorithm(Algorithm::Myers).diff_lines(head, current);
+    let diff = TextDiff::configure()
+        .algorithm(Algorithm::Myers)
+        .diff_lines(head, current);
     let current_lines = current.lines().count();
     let mut marks = Vec::new();
     for op in diff.ops() {
         match *op {
-            DiffOp::Insert { new_index, new_len, .. } => {
+            DiffOp::Insert {
+                new_index, new_len, ..
+            } => {
                 for i in new_index..new_index + new_len {
                     marks.push((i, LineMark::Added));
                 }
             }
-            DiffOp::Replace { new_index, new_len, .. } => {
+            DiffOp::Replace {
+                new_index, new_len, ..
+            } => {
                 for i in new_index..new_index + new_len {
                     marks.push((i, LineMark::Modified));
                 }
@@ -207,7 +217,9 @@ impl Hunk {
 pub fn hunks(head: &str, current: &str) -> Vec<Hunk> {
     use similar::{Algorithm, DiffOp, TextDiff};
 
-    let diff = TextDiff::configure().algorithm(Algorithm::Myers).diff_lines(head, current);
+    let diff = TextDiff::configure()
+        .algorithm(Algorithm::Myers)
+        .diff_lines(head, current);
     let head_lines: Vec<&str> = head.split_inclusive('\n').collect();
     let mut out: Vec<Hunk> = Vec::new();
     // Accumulated (new_lo, new_hi, old_lo, old_hi) for the run in progress.
@@ -215,8 +227,16 @@ pub fn hunks(head: &str, current: &str) -> Vec<Hunk> {
 
     let flush = |run: &mut Option<(usize, usize, usize, usize)>, out: &mut Vec<Hunk>| {
         if let Some((nlo, nhi, olo, ohi)) = run.take() {
-            let head_text = head_lines.get(olo..ohi).map(<[&str]>::concat).unwrap_or_default();
-            out.push(Hunk { current_start: nlo, current_end: nhi, head_start: olo, head_text });
+            let head_text = head_lines
+                .get(olo..ohi)
+                .map(<[&str]>::concat)
+                .unwrap_or_default();
+            out.push(Hunk {
+                current_start: nlo,
+                current_end: nhi,
+                head_start: olo,
+                head_text,
+            });
         }
     };
 
@@ -226,11 +246,25 @@ pub fn hunks(head: &str, current: &str) -> Vec<Hunk> {
                 flush(&mut run, &mut out);
                 continue;
             }
-            DiffOp::Insert { new_index, new_len, old_index, .. } => (new_index, new_len, old_index, 0),
-            DiffOp::Delete { new_index, old_index, old_len, .. } => (new_index, 0, old_index, old_len),
-            DiffOp::Replace { new_index, new_len, old_index, old_len, .. } => {
-                (new_index, new_len, old_index, old_len)
-            }
+            DiffOp::Insert {
+                new_index,
+                new_len,
+                old_index,
+                ..
+            } => (new_index, new_len, old_index, 0),
+            DiffOp::Delete {
+                new_index,
+                old_index,
+                old_len,
+                ..
+            } => (new_index, 0, old_index, old_len),
+            DiffOp::Replace {
+                new_index,
+                new_len,
+                old_index,
+                old_len,
+                ..
+            } => (new_index, new_len, old_index, old_len),
         };
         run = Some(match run {
             Some((nlo, nhi, olo, ohi)) => {
@@ -293,7 +327,12 @@ pub fn parse_blame_porcelain(output: &str) -> Option<BlameLine> {
         }
     }
     let hash = hash?;
-    Some(BlameLine { hash, author, date: epoch_to_date(time, tz), summary })
+    Some(BlameLine {
+        hash,
+        author,
+        date: epoch_to_date(time, tz),
+        summary,
+    })
 }
 
 /// Parse a git tz offset like `+0200` / `-0500` into seconds east of UTC.
@@ -331,7 +370,10 @@ fn epoch_to_date(secs: i64, tz_offset: i32) -> String {
 #[must_use]
 pub fn blame_line(dir: &Path, rel_path: &str, line: usize) -> Option<BlameLine> {
     let spec = format!("{line},{line}");
-    let out = git_stdout(dir, &["blame", "--line-porcelain", "-L", &spec, "--", rel_path])?;
+    let out = git_stdout(
+        dir,
+        &["blame", "--line-porcelain", "-L", &spec, "--", rel_path],
+    )?;
     parse_blame_porcelain(&out)
 }
 
@@ -379,7 +421,9 @@ pub fn is_dirty(dir: &Path) -> bool {
 /// The changed files reported by `git status --porcelain`.
 #[must_use]
 pub fn status(dir: &Path) -> Vec<FileStatus> {
-    git_stdout(dir, &["status", "--porcelain"]).map(|s| parse_status(&s)).unwrap_or_default()
+    git_stdout(dir, &["status", "--porcelain"])
+        .map(|s| parse_status(&s))
+        .unwrap_or_default()
 }
 
 /// The committed (`HEAD`) contents of a repo-relative path, or `None` if the path
@@ -389,7 +433,9 @@ pub fn head_blob(dir: &Path, rel_path: &str) -> Option<String> {
     // Use the raw (untrimmed) output: a blob's trailing newline is significant
     // for line-accurate diffing, gutter marks, and hunk revert.
     let out = git(dir, &["show", &format!("HEAD:{rel_path}")]).ok()?;
-    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
 /// Stage a path (`git add -- <path>`). Returns whether the command succeeded.
@@ -403,7 +449,9 @@ pub fn stage(dir: &Path, rel_path: &str) -> bool {
 #[must_use]
 pub fn index_blob(dir: &Path, rel_path: &str) -> Option<String> {
     let out = git(dir, &["show", &format!(":{rel_path}")]).ok()?;
-    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
 /// Replace the index entry for `rel_path` with exactly `content` (used to stage
@@ -413,7 +461,11 @@ pub fn index_blob(dir: &Path, rel_path: &str) -> Option<String> {
 /// # Errors
 /// Returns an error when the git plumbing commands fail.
 pub fn stage_content(dir: &Path, rel_path: &str, content: &str) -> Result<(), String> {
-    let hash = git_stdin(dir, &["hash-object", "-w", "--path", rel_path, "--stdin"], content)?;
+    let hash = git_stdin(
+        dir,
+        &["hash-object", "-w", "--path", rel_path, "--stdin"],
+        content,
+    )?;
     let sha = hash.trim();
     // Preserve the file's existing index mode when known; default to a regular
     // non-executable file.
@@ -421,8 +473,8 @@ pub fn stage_content(dir: &Path, rel_path: &str, content: &str) -> Result<(), St
         .and_then(|s| s.split_whitespace().next().map(str::to_string))
         .unwrap_or_else(|| "100644".to_string());
     let info = format!("{mode},{sha},{rel_path}");
-    let out = git(dir, &["update-index", "--add", "--cacheinfo", &info])
-        .map_err(|e| e.to_string())?;
+    let out =
+        git(dir, &["update-index", "--add", "--cacheinfo", &info]).map_err(|e| e.to_string())?;
     if out.status.success() {
         Ok(())
     } else {
@@ -466,18 +518,27 @@ pub fn unstage(dir: &Path, rel_path: &str) -> bool {
 /// `None` when not a repo or there are no commits yet.
 #[must_use]
 pub fn commit_count(dir: &Path) -> Option<u64> {
-    git_stdout(dir, &["rev-list", "--count", "HEAD"])?.trim().parse().ok()
+    git_stdout(dir, &["rev-list", "--count", "HEAD"])?
+        .trim()
+        .parse()
+        .ok()
 }
 
 /// The local branch names, current branch first when it can be determined.
 #[must_use]
 pub fn local_branches(dir: &Path) -> Vec<String> {
     let out = git_stdout(dir, &["branch", "--format=%(refname:short)"]).unwrap_or_default();
-    let mut names: Vec<String> = out.lines().map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect();
+    let mut names: Vec<String> = out
+        .lines()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect();
     if let Some(cur) = branch(dir)
-        && let Some(pos) = names.iter().position(|n| *n == cur) {
-            names.swap(0, pos);
-        }
+        && let Some(pos) = names.iter().position(|n| *n == cur)
+    {
+        names.swap(0, pos);
+    }
     names
 }
 
@@ -639,8 +700,14 @@ mod tests {
         // Modify line 2, add a new line 3, keep the rest.
         let current = "alpha\nBETA\ngamma\ndelta\n";
         let marks = diff_marks(head, current);
-        assert!(marks.contains(&(1, LineMark::Modified)), "line 2 modified: {marks:?}");
-        assert!(marks.contains(&(3, LineMark::Added)), "line 4 added: {marks:?}");
+        assert!(
+            marks.contains(&(1, LineMark::Modified)),
+            "line 2 modified: {marks:?}"
+        );
+        assert!(
+            marks.contains(&(3, LineMark::Added)),
+            "line 4 added: {marks:?}"
+        );
     }
 
     #[test]

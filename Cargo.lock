@@ -4561,7 +4561,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vix"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "arboard",
@@ -4728,70 +4728,70 @@ dependencies = [
 
 [[package]]
 name = "vix_affix"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_ai_diff"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "similar",
 ]
 
 [[package]]
 name = "vix_ai_panel"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_align"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_ascii_character_picker"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_base16"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "vix_theme_model",
 ]
 
 [[package]]
 name = "vix_base64_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "base64",
 ]
 
 [[package]]
 name = "vix_base_tool"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_bottom_dock"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_calculator_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "evalexpr",
 ]
 
 [[package]]
 name = "vix_calendar_panel"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "jiff",
 ]
 
 [[package]]
 name = "vix_case"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_checksum_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crc32fast",
  "md-5 0.10.6",
@@ -4800,7 +4800,7 @@ dependencies = [
 
 [[package]]
 name = "vix_clock_panel"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "jiff",
  "vix_time_zone_model",
@@ -4808,47 +4808,47 @@ dependencies = [
 
 [[package]]
 name = "vix_color_converter_tool"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_conflict_tool"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_contact_panel"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_convert_from_csv_into_json_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "vix_convert_tabular",
 ]
 
 [[package]]
 name = "vix_convert_from_csv_into_tsv_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "vix_convert_tabular",
 ]
 
 [[package]]
 name = "vix_convert_from_html_into_markdown_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "htmd",
 ]
 
 [[package]]
 name = "vix_convert_from_json_into_csv_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "vix_convert_tabular",
 ]
 
 [[package]]
 name = "vix_convert_from_json_into_toml_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "serde_json",
  "toml 0.8.23",
@@ -4856,14 +4856,14 @@ dependencies = [
 
 [[package]]
 name = "vix_convert_from_json_into_tsv_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "vix_convert_tabular",
 ]
 
 [[package]]
 name = "vix_convert_from_json_into_yaml_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "serde_json",
  "serde_yaml",
@@ -4871,14 +4871,14 @@ dependencies = [
 
 [[package]]
 name = "vix_convert_from_markdown_into_html_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "pulldown-cmark",
 ]
 
 [[package]]
 name = "vix_convert_from_toml_into_json_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "serde_json",
  "toml 0.8.23",
@@ -4886,21 +4886,21 @@ dependencies = [
 
 [[package]]
 name = "vix_convert_from_tsv_into_csv_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "vix_convert_tabular",
 ]
 
 [[package]]
 name = "vix_convert_from_tsv_into_json_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "vix_convert_tabular",
 ]
 
 [[package]]
 name = "vix_convert_from_yaml_into_json_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "serde_json",
  "serde_yaml",
@@ -4908,14 +4908,14 @@ dependencies = [
 
 [[package]]
 name = "vix_convert_tabular"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "vix_dap"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4924,7 +4924,7 @@ dependencies = [
 
 [[package]]
 name = "vix_db"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "arboard",
  "confy",
@@ -4943,28 +4943,28 @@ dependencies = [
 
 [[package]]
 name = "vix_diff_view"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "similar",
 ]
 
 [[package]]
 name = "vix_edit_bytes"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crossterm",
 ]
 
 [[package]]
 name = "vix_edit_sql"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crossterm",
 ]
 
 [[package]]
 name = "vix_edit_value"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crossterm",
  "serde_json",
@@ -4973,7 +4973,7 @@ dependencies = [
 
 [[package]]
 name = "vix_editor"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "ratatui",
  "ratatui-core",
@@ -4984,7 +4984,7 @@ dependencies = [
 
 [[package]]
 name = "vix_editor_core"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "arboard",
@@ -5019,33 +5019,33 @@ dependencies = [
 
 [[package]]
 name = "vix_editorconfig"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "regex",
 ]
 
 [[package]]
 name = "vix_emmet"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_file_information_panel"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_fileops"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_find_panel"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "regex",
 ]
 
 [[package]]
 name = "vix_format_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "serde_json",
  "serde_yaml",
@@ -5054,32 +5054,32 @@ dependencies = [
 
 [[package]]
 name = "vix_git"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "similar",
 ]
 
 [[package]]
 name = "vix_html_character_picker"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_http_client"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "ureq",
 ]
 
 [[package]]
 name = "vix_i18n"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "rust-i18n",
 ]
 
 [[package]]
 name = "vix_jwt_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "base64",
  "serde_json",
@@ -5087,30 +5087,30 @@ dependencies = [
 
 [[package]]
 name = "vix_keyboard_shortcut_panel"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_keymap_model"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_left_dock"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "regex",
 ]
 
 [[package]]
 name = "vix_locale_model"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_lorem"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_lsp"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "serde_json",
  "vix_lsp_core",
@@ -5119,14 +5119,14 @@ dependencies = [
 
 [[package]]
 name = "vix_lsp_core"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "vix_macros"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crossterm",
  "serde",
@@ -5135,18 +5135,18 @@ dependencies = [
 
 [[package]]
 name = "vix_markdown_preview"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "pulldown-cmark",
 ]
 
 [[package]]
 name = "vix_media_type"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_menu"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "rust-i18n",
  "vix_i18n",
@@ -5157,26 +5157,26 @@ dependencies = [
 
 [[package]]
 name = "vix_nerd_font_picker"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_org"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "regex",
 ]
 
 [[package]]
 name = "vix_org_contacts"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_outline_panel"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_palette"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "regex",
  "rust-i18n",
@@ -5185,43 +5185,43 @@ dependencies = [
 
 [[package]]
 name = "vix_pomodoro_tool"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_qr_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "qrcode",
 ]
 
 [[package]]
 name = "vix_query"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "regex",
 ]
 
 [[package]]
 name = "vix_regex_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "regex",
 ]
 
 [[package]]
 name = "vix_right_dock"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_roam"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "regex",
 ]
 
 [[package]]
 name = "vix_session"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "confy",
  "serde",
@@ -5229,7 +5229,7 @@ dependencies = [
 
 [[package]]
 name = "vix_settings"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "confy",
  "serde",
@@ -5239,11 +5239,11 @@ dependencies = [
 
 [[package]]
 name = "vix_snippet_tool"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_snippets"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "serde_json",
  "vix_settings",
@@ -5252,29 +5252,29 @@ dependencies = [
 
 [[package]]
 name = "vix_spellcheck"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "spellbook",
 ]
 
 [[package]]
 name = "vix_status_bar_panel"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_system_information_panel"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "sysinfo",
 ]
 
 [[package]]
 name = "vix_tags"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_tasks"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "serde",
  "toml 0.8.23",
@@ -5282,7 +5282,7 @@ dependencies = [
 
 [[package]]
 name = "vix_terminal"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "crossterm",
@@ -5292,26 +5292,26 @@ dependencies = [
 
 [[package]]
 name = "vix_test_runner"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_text_information_panel"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_textops"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_theme"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "vix_theme_model",
 ]
 
 [[package]]
 name = "vix_theme_model"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "ratatui",
  "serde",
@@ -5320,11 +5320,11 @@ dependencies = [
 
 [[package]]
 name = "vix_time_zone_model"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_undo_store"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -5335,40 +5335,40 @@ dependencies = [
 
 [[package]]
 name = "vix_unit_converter_tool"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_url_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "percent-encoding",
 ]
 
 [[package]]
 name = "vix_uuid_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "uuid",
 ]
 
 [[package]]
 name = "vix_vcard_panel"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "vix_vcard_parser",
 ]
 
 [[package]]
 name = "vix_vcard_parser"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_welcome_panel"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_workspace"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "serde",
  "toml 0.8.23",
@@ -5376,15 +5376,15 @@ dependencies = [
 
 [[package]]
 name = "vix_workspace_dashboard_panel"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_x11_color_picker"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "vix_zid_tool"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "getrandom 0.2.17",
 ]

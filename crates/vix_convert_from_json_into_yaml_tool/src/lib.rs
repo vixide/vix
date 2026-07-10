@@ -4,7 +4,6 @@
 //! so scalars, arrays and objects all carry over.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -24,7 +23,10 @@ mod tests {
     #[test]
     fn converts_object() {
         // Object keys come out sorted (serde_json's default map ordering).
-        assert_eq!(convert(r#"{"name":"Vix","count":3}"#).unwrap(), "count: 3\nname: Vix\n");
+        assert_eq!(
+            convert(r#"{"name":"Vix","count":3}"#).unwrap(),
+            "count: 3\nname: Vix\n"
+        );
     }
 
     #[test]
