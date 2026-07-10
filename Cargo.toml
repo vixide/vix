@@ -149,139 +149,214 @@ lang-toml = ["vix_editor_core/lang-toml"]
 lang-typescript = ["vix_editor_core/lang-typescript"]
 lang-yaml = ["vix_editor_core/lang-yaml"]
 
+# Every internal `crates/vix_*` member is declared with BOTH a `path` (used for
+# all in-workspace builds) and an explicit `version` (used when publishing to
+# crates.io). The version is the shared `workspace.package.version` above; keep
+# the two in step when bumping — a mismatched `version` here would publish
+# against the wrong dependency range even though local builds resolve by path.
 [dependencies]
 # Shared single-embed i18n backend for the whole workspace (see crates/vix_i18n).
-vix_i18n = { path = "crates/vix_i18n" }
-# Extracted leaf concept crates (one per major concept).
-vix_base16 = { path = "crates/vix_base16" }
-vix_clock_panel = { path = "crates/vix_clock_panel" }
-vix_convert_from_csv_into_json_tool = { path = "crates/vix_convert_from_csv_into_json_tool" }
-vix_convert_from_csv_into_tsv_tool = { path = "crates/vix_convert_from_csv_into_tsv_tool" }
-vix_convert_from_json_into_csv_tool = { path = "crates/vix_convert_from_json_into_csv_tool" }
-vix_convert_from_json_into_tsv_tool = { path = "crates/vix_convert_from_json_into_tsv_tool" }
-vix_convert_from_tsv_into_csv_tool = { path = "crates/vix_convert_from_tsv_into_csv_tool" }
-vix_convert_from_tsv_into_json_tool = { path = "crates/vix_convert_from_tsv_into_json_tool" }
-vix_dap = { path = "crates/vix_dap" }
-vix_db = { path = "crates/vix_db" }
-vix_editor = { path = "crates/vix_editor" }
-vix_editor_core = { path = "crates/vix_editor_core", default-features = false }
-vix_lsp = { path = "crates/vix_lsp" }
-vix_menu = { path = "crates/vix_menu" }
-vix_session = { path = "crates/vix_session" }
-vix_settings = { path = "crates/vix_settings" }
-vix_snippets = { path = "crates/vix_snippets" }
-vix_theme = { path = "crates/vix_theme" }
-vix_undo_store = { path = "crates/vix_undo_store" }
-vix_vcard_panel = { path = "crates/vix_vcard_panel" }
-vix_workspace = { path = "crates/vix_workspace" }
-vix_affix = { path = "crates/vix_affix" }
-vix_ai_diff = { path = "crates/vix_ai_diff" }
-vix_ai_panel = { path = "crates/vix_ai_panel" }
-vix_align = { path = "crates/vix_align" }
-vix_ascii_character_picker = { path = "crates/vix_ascii_character_picker" }
-vix_base64_tool = { path = "crates/vix_base64_tool" }
-vix_base_tool = { path = "crates/vix_base_tool" }
-vix_bottom_dock = { path = "crates/vix_bottom_dock" }
-vix_calculator_tool = { path = "crates/vix_calculator_tool" }
-vix_calendar_panel = { path = "crates/vix_calendar_panel" }
-vix_case = { path = "crates/vix_case" }
-vix_checksum_tool = { path = "crates/vix_checksum_tool" }
-vix_color_converter_tool = { path = "crates/vix_color_converter_tool" }
-vix_conflict_tool = { path = "crates/vix_conflict_tool" }
-vix_contact_panel = { path = "crates/vix_contact_panel" }
-vix_convert_from_html_into_markdown_tool = { path = "crates/vix_convert_from_html_into_markdown_tool" }
-vix_convert_from_json_into_toml_tool = { path = "crates/vix_convert_from_json_into_toml_tool" }
-vix_convert_from_json_into_yaml_tool = { path = "crates/vix_convert_from_json_into_yaml_tool" }
-vix_convert_from_markdown_into_html_tool = { path = "crates/vix_convert_from_markdown_into_html_tool" }
-vix_convert_from_toml_into_json_tool = { path = "crates/vix_convert_from_toml_into_json_tool" }
-vix_convert_from_yaml_into_json_tool = { path = "crates/vix_convert_from_yaml_into_json_tool" }
-vix_convert_tabular = { path = "crates/vix_convert_tabular" }
-vix_diff_view = { path = "crates/vix_diff_view" }
-vix_edit_bytes = { path = "crates/vix_edit_bytes" }
-vix_edit_sql = { path = "crates/vix_edit_sql" }
-vix_edit_value = { path = "crates/vix_edit_value" }
-vix_editorconfig = { path = "crates/vix_editorconfig" }
-vix_emmet = { path = "crates/vix_emmet" }
-vix_file_information_panel = { path = "crates/vix_file_information_panel" }
-vix_fileops = { path = "crates/vix_fileops" }
-vix_find_panel = { path = "crates/vix_find_panel" }
-vix_format_tool = { path = "crates/vix_format_tool" }
-vix_git = { path = "crates/vix_git" }
-vix_html_character_picker = { path = "crates/vix_html_character_picker" }
-vix_http_client = { path = "crates/vix_http_client" }
-vix_jwt_tool = { path = "crates/vix_jwt_tool" }
-vix_keyboard_shortcut_panel = { path = "crates/vix_keyboard_shortcut_panel" }
-vix_keymap_model = { path = "crates/vix_keymap_model" }
-vix_left_dock = { path = "crates/vix_left_dock" }
-vix_locale_model = { path = "crates/vix_locale_model" }
-vix_lorem = { path = "crates/vix_lorem" }
-vix_lsp_core = { path = "crates/vix_lsp_core" }
-vix_macros = { path = "crates/vix_macros" }
-vix_markdown_preview = { path = "crates/vix_markdown_preview" }
-vix_media_type = { path = "crates/vix_media_type" }
-vix_nerd_font_picker = { path = "crates/vix_nerd_font_picker" }
-vix_org = { path = "crates/vix_org" }
-vix_org_contacts = { path = "crates/vix_org_contacts" }
-vix_outline_panel = { path = "crates/vix_outline_panel" }
-vix_palette = { path = "crates/vix_palette" }
-vix_pomodoro_tool = { path = "crates/vix_pomodoro_tool" }
-vix_qr_tool = { path = "crates/vix_qr_tool" }
-vix_query = { path = "crates/vix_query" }
-vix_regex_tool = { path = "crates/vix_regex_tool" }
-vix_right_dock = { path = "crates/vix_right_dock" }
-vix_roam = { path = "crates/vix_roam" }
-vix_snippet_tool = { path = "crates/vix_snippet_tool" }
-vix_spellcheck = { path = "crates/vix_spellcheck" }
-vix_status_bar_panel = { path = "crates/vix_status_bar_panel" }
-vix_system_information_panel = { path = "crates/vix_system_information_panel" }
-vix_tags = { path = "crates/vix_tags" }
-vix_tasks = { path = "crates/vix_tasks" }
-vix_terminal = { path = "crates/vix_terminal" }
-vix_test_runner = { path = "crates/vix_test_runner" }
-vix_text_information_panel = { path = "crates/vix_text_information_panel" }
-vix_textops = { path = "crates/vix_textops" }
-vix_theme_model = { path = "crates/vix_theme_model" }
-vix_time_zone_model = { path = "crates/vix_time_zone_model" }
-vix_unit_converter_tool = { path = "crates/vix_unit_converter_tool" }
-vix_url_tool = { path = "crates/vix_url_tool" }
-vix_uuid_tool = { path = "crates/vix_uuid_tool" }
-vix_vcard_parser = { path = "crates/vix_vcard_parser" }
-vix_welcome_panel = { path = "crates/vix_welcome_panel" }
-vix_workspace_dashboard_panel = { path = "crates/vix_workspace_dashboard_panel" }
-vix_x11_color_picker = { path = "crates/vix_x11_color_picker" }
-vix_zid_tool = { path = "crates/vix_zid_tool" }
+vix_i18n = { path = "crates/vix_i18n", version = "1.1.0" }
+
+# Extracted concept crates (one per major concept).
+# base16-generated themes for the theme system.
+vix_base16 = { path = "crates/vix_base16", version = "1.1.0" }
+# Clock box: live date/time strings (local, UTC, ISO week, active zone) + rows.
+vix_clock_panel = { path = "crates/vix_clock_panel", version = "1.1.0" }
+# Convert: CSV text into a JSON array of objects.
+vix_convert_from_csv_into_json_tool = { path = "crates/vix_convert_from_csv_into_json_tool", version = "1.1.0" }
+# Convert: CSV text into TSV.
+vix_convert_from_csv_into_tsv_tool = { path = "crates/vix_convert_from_csv_into_tsv_tool", version = "1.1.0" }
+# Convert: a JSON array of objects into CSV.
+vix_convert_from_json_into_csv_tool = { path = "crates/vix_convert_from_json_into_csv_tool", version = "1.1.0" }
+# Convert: a JSON array of objects into TSV.
+vix_convert_from_json_into_tsv_tool = { path = "crates/vix_convert_from_json_into_tsv_tool", version = "1.1.0" }
+# Convert: TSV text into CSV.
+vix_convert_from_tsv_into_csv_tool = { path = "crates/vix_convert_from_tsv_into_csv_tool", version = "1.1.0" }
+# Convert: TSV text into a JSON array of objects.
+vix_convert_from_tsv_into_json_tool = { path = "crates/vix_convert_from_tsv_into_json_tool", version = "1.1.0" }
+# Debug Adapter Protocol (DAP) client: drive a debug adapter over stdio.
+vix_dap = { path = "crates/vix_dap", version = "1.1.0" }
+# DB workbench: connection management, schema browsing, and SQL queries.
+vix_db = { path = "crates/vix_db", version = "1.1.0" }
+# Editor host: the `CodeEditor` widget wrapper and the pane tree.
+vix_editor = { path = "crates/vix_editor", version = "1.1.0" }
+# The fully-custom terminal code-editor widget (owns the Tree-sitter grammars);
+# default-features = false leaves grammar selection to the root `lang-*` features.
+vix_editor_core = { path = "crates/vix_editor_core", version = "1.1.0", default-features = false }
+# LSP client: process management and document sync over `vix_lsp_core`.
+vix_lsp = { path = "crates/vix_lsp", version = "1.1.0" }
+# Top menu bar with keyboard-navigable dropdowns (one level of submenus).
+vix_menu = { path = "crates/vix_menu", version = "1.1.0" }
+# Per-workspace editor session, persisted with `confy`.
+vix_session = { path = "crates/vix_session", version = "1.1.0" }
+# User settings, persisted with `confy`.
+vix_settings = { path = "crates/vix_settings", version = "1.1.0" }
+# JSON snippet files: loading, scope resolution, merging, and the picker.
+vix_snippets = { path = "crates/vix_snippets", version = "1.1.0" }
+# Nerd Font icons, plus a re-export of the `vix_theme_model` theme model.
+vix_theme = { path = "crates/vix_theme", version = "1.1.0" }
+# Persistent undo: save a buffer's undo tree to disk and restore it on reopen.
+vix_undo_store = { path = "crates/vix_undo_store", version = "1.1.0" }
+# Display one parsed vCard as a table of labelled fields, plus panel state.
+vix_vcard_panel = { path = "crates/vix_vcard_panel", version = "1.1.0" }
+# A workspace: a named set of project folders plus the files to reopen.
+vix_workspace = { path = "crates/vix_workspace", version = "1.1.0" }
+# Add, drop, and toggle a prefix/suffix pair around text.
+vix_affix = { path = "crates/vix_affix", version = "1.1.0" }
+# Reviewable diff for AI text transforms (Annotate / Improve).
+vix_ai_diff = { path = "crates/vix_ai_diff", version = "1.1.0" }
+# AI chat panel: a persistent conversation surface for the configured assistant.
+vix_ai_panel = { path = "crates/vix_ai_panel", version = "1.1.0" }
+# Align lines on a delimiter (`=`, `:`, `,`, `|`, …).
+vix_align = { path = "crates/vix_align", version = "1.1.0" }
+# ASCII panel (Tools menu): the ASCII reference table + row-selection state.
+vix_ascii_character_picker = { path = "crates/vix_ascii_character_picker", version = "1.1.0" }
+# Base64 encode and decode (Tools → Convert → Base64).
+vix_base64_tool = { path = "crates/vix_base64_tool", version = "1.1.0" }
+# Convert an integer between decimal, hexadecimal, binary, and octal.
+vix_base_tool = { path = "crates/vix_base_tool", version = "1.1.0" }
+# Bottom dock: a scrollable line buffer for logs, output, and data views.
+vix_bottom_dock = { path = "crates/vix_bottom_dock", version = "1.1.0" }
+# Evaluate a typed formula, plus the Calculator dialog's editing state.
+vix_calculator_tool = { path = "crates/vix_calculator_tool", version = "1.1.0" }
+# Calendar box: the navigable month grid.
+vix_calendar_panel = { path = "crates/vix_calendar_panel", version = "1.1.0" }
+# Text case transforms applied to the editor selection (Edit → Case).
+vix_case = { path = "crates/vix_case", version = "1.1.0" }
+# Compute SHA-256 and SHA-512 checksums of text, returned as lowercase hex.
+vix_checksum_tool = { path = "crates/vix_checksum_tool", version = "1.1.0" }
+# Parse and convert colors between HEX, RGB, and HSL.
+vix_color_converter_tool = { path = "crates/vix_color_converter_tool", version = "1.1.0" }
+# Parse Git merge-conflict markers and resolve the conflict under the cursor.
+vix_conflict_tool = { path = "crates/vix_conflict_tool", version = "1.1.0" }
+# Browse a directory of vCard files as a table of contacts.
+vix_contact_panel = { path = "crates/vix_contact_panel", version = "1.1.0" }
+# Convert: HTML into Markdown.
+vix_convert_from_html_into_markdown_tool = { path = "crates/vix_convert_from_html_into_markdown_tool", version = "1.1.0" }
+# Convert: JSON into TOML.
+vix_convert_from_json_into_toml_tool = { path = "crates/vix_convert_from_json_into_toml_tool", version = "1.1.0" }
+# Convert: JSON into YAML.
+vix_convert_from_json_into_yaml_tool = { path = "crates/vix_convert_from_json_into_yaml_tool", version = "1.1.0" }
+# Convert: Markdown into HTML.
+vix_convert_from_markdown_into_html_tool = { path = "crates/vix_convert_from_markdown_into_html_tool", version = "1.1.0" }
+# Convert: TOML into JSON.
+vix_convert_from_toml_into_json_tool = { path = "crates/vix_convert_from_toml_into_json_tool", version = "1.1.0" }
+# Convert: YAML into JSON.
+vix_convert_from_yaml_into_json_tool = { path = "crates/vix_convert_from_yaml_into_json_tool", version = "1.1.0" }
+# Shared CSV/TSV/JSON conversion helpers for the Tools → Convert tools.
+vix_convert_tabular = { path = "crates/vix_convert_tabular", version = "1.1.0" }
+# Read-only side-by-side comparison: a unified diff between two texts.
+vix_diff_view = { path = "crates/vix_diff_view", version = "1.1.0" }
+# The byte editor: a hex/ASCII view for editing raw file bytes.
+vix_edit_bytes = { path = "crates/vix_edit_bytes", version = "1.1.0" }
+# The SQL edit surface: a statement-oriented view of a `.sql` buffer.
+vix_edit_sql = { path = "crates/vix_edit_sql", version = "1.1.0" }
+# The structured-value editor: a foldable tree for JSON and YAML.
+vix_edit_value = { path = "crates/vix_edit_value", version = "1.1.0" }
+# Minimal EditorConfig support: resolve the indent settings for a file.
+vix_editorconfig = { path = "crates/vix_editorconfig", version = "1.1.0" }
+# A pragmatic subset of Emmet abbreviation expansion.
+vix_emmet = { path = "crates/vix_emmet", version = "1.1.0" }
+# Information about the active editor file, plus the panel's row-selection state.
+vix_file_information_panel = { path = "crates/vix_file_information_panel", version = "1.1.0" }
+# Filesystem helpers for the explorer's copy / cut / paste / delete.
+vix_fileops = { path = "crates/vix_fileops", version = "1.1.0" }
+# Find / find-and-replace for the editor.
+vix_find_panel = { path = "crates/vix_find_panel", version = "1.1.0" }
+# Reformat the selection (or buffer) within one data format: pretty-print or minify.
+vix_format_tool = { path = "crates/vix_format_tool", version = "1.1.0" }
+# Git integration: status/diff/staging via the git CLI.
+vix_git = { path = "crates/vix_git", version = "1.1.0" }
+# HTML Characters panel (Tools menu): named-character table + picker state.
+vix_html_character_picker = { path = "crates/vix_html_character_picker", version = "1.1.0" }
+# A minimal HTTP client driven by a `.http`-style buffer.
+vix_http_client = { path = "crates/vix_http_client", version = "1.1.0" }
+# Decode a JSON Web Token's header and payload into readable JSON.
+vix_jwt_tool = { path = "crates/vix_jwt_tool", version = "1.1.0" }
+# Data for the keyboard-shortcut help overlay.
+vix_keyboard_shortcut_panel = { path = "crates/vix_keyboard_shortcut_panel", version = "1.1.0" }
+# The available keyboard navigation styles ("keymaps"); the View → Keymap submenu.
+vix_keymap_model = { path = "crates/vix_keymap_model", version = "1.1.0" }
+# Left dock: the file explorer's lazily-expanded directory tree + selection.
+vix_left_dock = { path = "crates/vix_left_dock", version = "1.1.0" }
+# Available UI languages for Vix; the View → Locale submenu.
+vix_locale_model = { path = "crates/vix_locale_model", version = "1.1.0" }
+# Lorem ipsum placeholder text (Tools → Insert → Lorem ipsum).
+vix_lorem = { path = "crates/vix_lorem", version = "1.1.0" }
+# A pure LSP client core: JSON-RPC framing, message builders, parsers, positions.
+vix_lsp_core = { path = "crates/vix_lsp_core", version = "1.1.0" }
+# Persisted keyboard macros: named recordings of editor key events.
+vix_macros = { path = "crates/vix_macros", version = "1.1.0" }
+# Render Markdown to formatted plain-text lines for a read-only preview pane.
+vix_markdown_preview = { path = "crates/vix_markdown_preview", version = "1.1.0" }
+# The IANA-style media-type (MIME) table and the picker's filter + selection.
+vix_media_type = { path = "crates/vix_media_type", version = "1.1.0" }
+# A curated set of Nerd Font glyphs and the character-picker grid state.
+vix_nerd_font_picker = { path = "crates/vix_nerd_font_picker", version = "1.1.0" }
+# Basic Org-mode operations: headline structure editing and lightweight export.
+vix_org = { path = "crates/vix_org", version = "1.1.0" }
+# Org-contacts: contact management over Org files.
+vix_org_contacts = { path = "crates/vix_org_contacts", version = "1.1.0" }
+# The code-outline list (symbol kind + name + line) and the panel's selection.
+vix_outline_panel = { path = "crates/vix_outline_panel", version = "1.1.0" }
+# Command palette (Ctrl+P) with prefix-driven modes.
+vix_palette = { path = "crates/vix_palette", version = "1.1.0" }
+# A Pomodoro work/break countdown as a small state machine.
+vix_pomodoro_tool = { path = "crates/vix_pomodoro_tool", version = "1.1.0" }
+# QR code generation (Tools → QR Code).
+vix_qr_tool = { path = "crates/vix_qr_tool", version = "1.1.0" }
+# Interactive query-replace: step through matches one at a time.
+vix_query = { path = "crates/vix_query", version = "1.1.0" }
+# A live regular-expression tester, plus the dialog's editing state.
+vix_regex_tool = { path = "crates/vix_regex_tool", version = "1.1.0" }
+# Right dock: a message drawer of advice and notifications + selection.
+vix_right_dock = { path = "crates/vix_right_dock", version = "1.1.0" }
+# Org-roam: networked, Zettelkasten-style note-taking over a directory of Org files.
+vix_roam = { path = "crates/vix_roam", version = "1.1.0" }
+# A small library of reusable text snippets, plus the picker's selection state.
+vix_snippet_tool = { path = "crates/vix_snippet_tool", version = "1.1.0" }
+# Spell-checking for the Vix editor (Hunspell-backed, over comment/string ranges).
+vix_spellcheck = { path = "crates/vix_spellcheck", version = "1.1.0" }
+# Formatting for the bottom status bar's two segments.
+vix_status_bar_panel = { path = "crates/vix_status_bar_panel", version = "1.1.0" }
+# A read-only snapshot of host system information, plus the panel's selection.
+vix_system_information_panel = { path = "crates/vix_system_information_panel", version = "1.1.0" }
+# Matching HTML/XML tag navigation.
+vix_tags = { path = "crates/vix_tags", version = "1.1.0" }
+# Project task runner: named shell commands loaded from `tasks.toml`.
+vix_tasks = { path = "crates/vix_tasks", version = "1.1.0" }
+# Integrated terminal: a real PTY hosting a shell, parsed by `vt100`.
+vix_terminal = { path = "crates/vix_terminal", version = "1.1.0" }
+# Parse test-runner output into a pass/fail list with jump-to-failure.
+vix_test_runner = { path = "crates/vix_test_runner", version = "1.1.0" }
+# Statistics about a span of text, plus the panel's row-selection state.
+vix_text_information_panel = { path = "crates/vix_text_information_panel", version = "1.1.0" }
+# Small pure text transforms used by Edit/Tools actions.
+vix_textops = { path = "crates/vix_textops", version = "1.1.0" }
+# The Vix theme model: the JSON theme model, ratatui styles, and theme loading.
+vix_theme_model = { path = "crates/vix_theme_model", version = "1.1.0" }
+# Time-zone modeling: the IANA canonical zone table + the app-wide active zone.
+vix_time_zone_model = { path = "crates/vix_time_zone_model", version = "1.1.0" }
+# Convert a number between physical units, plus the Unit Converter dialog's state.
+vix_unit_converter_tool = { path = "crates/vix_unit_converter_tool", version = "1.1.0" }
+# URL percent-encode and decode (Tools → Convert → URL).
+vix_url_tool = { path = "crates/vix_url_tool", version = "1.1.0" }
+# Generate UUIDs of every version, v1 through v8.
+vix_uuid_tool = { path = "crates/vix_uuid_tool", version = "1.1.0" }
+# A small, dependency-free vCard 4.0 (RFC 6350) parser.
+vix_vcard_parser = { path = "crates/vix_vcard_parser", version = "1.1.0" }
+# The first-run welcome screen's scroll state.
+vix_welcome_panel = { path = "crates/vix_welcome_panel", version = "1.1.0" }
+# Live workspace metrics for the dashboard overlay (Tools → Workspace Dashboard).
+vix_workspace_dashboard_panel = { path = "crates/vix_workspace_dashboard_panel", version = "1.1.0" }
+# The X11 color table and the picker's row-selection + scroll state.
+vix_x11_color_picker = { path = "crates/vix_x11_color_picker", version = "1.1.0" }
+# Generate a secure random ZID: a lowercase hexadecimal identifier.
+vix_zid_tool = { path = "crates/vix_zid_tool", version = "1.1.0" }
+
 # Terminal UI core. The whole widget ecosystem must agree on this version.
 ratatui = { workspace = true }
-# The custom code-editor widget now lives in-tree at src/editor_core/; its
-# Tree-sitter, clipboard, rope, and grammar dependencies are listed below.
-# Calendar box: date/time strings and the navigable month grid. Internal crate so
-# the calendar logic stays unit-testable on its own (it owns the jiff dependency).
-# Clock box: live date/time strings (local, UTC, ISO week, active zone) + rows.
-# Theme model: the JSON theme model, ratatui styles, and theme loading.
-# Locale model: available UI languages (the View → Locale submenu).
-# Keymap model: available keyboard navigation styles (the View → Keymap submenu).
-# Time-zone model: full IANA canonical zone table + the app-wide active zone
-# (the View → Time Zone submenu).
-# Keyboard-shortcut help rows (key combo + i18n description key).
-# Nerd Font palette (Tools menu): curated glyph set + character-picker grid state.
-# ASCII panel (Tools menu): the ASCII reference table + row-selection state.
-# X11 Colors panel (Tools menu): the X11 color table + row-selection state.
-# HTML Characters panel (Tools menu): HTML named-character table + row-selection state.
-# System Information panel (Tools menu): host OS/CPU/memory/disk snapshot.
-# File Information panel (Tools menu): active-file name/counts/size/perms/mtime.
-# Workspace Dashboard panel (Tools menu): live folder/disk/file/commit metrics.
-# Outline panel: code symbol list (kind + name + line) + selection state.
-# Welcome panel: first-run welcome text + scroll state.
-# vCard (RFC 6350) parser, and the contact-browser / single-vcard view panels.
-# LSP client core: JSON-RPC framing, message builders, parsers, position maths.
-# Spell checking: Hunspell-backed checker over comment/string ranges.
-# Git integration: status/diff/staging via the git CLI.
-# Find / find-and-replace box state (query, replacement, toggles, pattern builder).
-# Right dock: message-drawer state (advice/notifications + selection).
-# Left dock: file-explorer tree state (lazy expand, selection, multi-select).
-# Status bar: formatting for the left/right segments.
-# Bottom dock: scrollable line buffer (logs, output, data views).
-# or buffer (Base64, URL, CSV/TSV/JSON, YAML/JSON).
 # Cross-platform terminal backend. Must match the crossterm that ratatui 0.30 re-exports.
 crossterm = { workspace = true }
 # Recursive, .gitignore-aware directory walking for the file index / fuzzy finder.
