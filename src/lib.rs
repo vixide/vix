@@ -1,9 +1,12 @@
 //! Vix: Simple Terminal Rust IDE.
 //!
 //! A keyboard-friendly TUI text editor built on [`ratatui`], with Vix's
-//! fully-custom code-editor widget in the `editor_core` module. The crate is
-//! split into focused modules
-//! so the editing logic can be unit-tested and reused without a live terminal.
+//! fully-custom code-editor widget in the `vix_editor_core` crate. Vix is a
+//! cargo workspace: each major concept is its own `crates/vix_*` member crate,
+//! re-exported here under its familiar module name (`pub use vix_git as git`,
+//! etc.). This root `vix` crate holds only the `App` shell (`app`, `ui`,
+//! `search`, and the surfaces tangled with them) that cannot be split off. The
+//! split lets each concept build and unit-test on its own.
 //!
 //! ```
 //! use std::path::PathBuf;
@@ -17,10 +20,11 @@
 //!
 //! # Internationalization
 //!
-//! User-facing text is looked up with `rust_i18n`'s `t!` macro against the
-//! locale files in `locales/`. English (`en`) is the fallback; Spanish,
-//! French, German, and Welsh are also bundled. Select a language with
-//! [`rust_i18n::set_locale`] (the binary wires this to the `locale` setting and
+//! User-facing text is looked up with the `t!` macro against the locale files
+//! in `locales/`. English (`en`) is the fallback; Spanish, French, German, and
+//! Welsh are also bundled. The translation table is embedded once, in the
+//! `vix_i18n` crate, which every member crate shares; select a language with
+//! `rust_i18n::set_locale` (the binary wires this to the `locale` setting and
 //! the `--locale` flag).
 //!
 //! [`ratatui`]: https://crates.io/crates/ratatui
