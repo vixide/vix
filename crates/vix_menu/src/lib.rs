@@ -1678,6 +1678,8 @@ fn build_menus() -> Vec<MenuDef> {
             Item::sub("menu.item.view.layout", VIEW_LAYOUT),
             Item::sub("menu.item.view.editor", VIEW_EDITOR),
             Item::sub("menu.item.view.zoom", VIEW_ZOOM),
+            SEP,
+            Item::leaf("menu.item.view.menu_tooltips", "view.menu_tooltips", ""),
         ]
         .into_boxed_slice(),
     );

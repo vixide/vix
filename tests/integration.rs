@@ -1353,6 +1353,42 @@ fn vix_menu_license_shows_trademark_info() {
 }
 
 #[test]
+fn view_toggle_menu_tooltips_hides_them() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut app = app_at(Path::new("."));
+    assert!(app.settings.show_menu_tooltips, "tooltips on by default");
+    app.run_action("view.menu_tooltips");
+    assert!(!app.settings.show_menu_tooltips, "toggled off");
+
+    // With tooltips off, opening a menu and highlighting an item shows no help.
+    let file = vix::menu::menus()
+        .iter()
+        .position(|m| m.name == "menu.file")
+        .expect("file menu");
+    app.menu.open_index(file);
+    app.menu.highlight_item(0);
+    let prefix: String = vix::menu::menus()[file].items[0]
+        .help()
+        .expect("file.new help")
+        .chars()
+        .take(20)
+        .collect();
+    let mut term = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let screen: String = term
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(ratatui::buffer::Cell::symbol)
+        .collect();
+    assert!(
+        !screen.contains(&prefix),
+        "no tooltip is drawn while menu tooltips are toggled off"
+    );
+}
+
+#[test]
 fn menu_hover_shows_help_tooltip() {
     use ratatui::{Terminal, backend::TestBackend};
     let mut app = app_at(Path::new("."));

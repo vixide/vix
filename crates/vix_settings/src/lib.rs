@@ -80,6 +80,8 @@ pub struct Settings {
     pub persistent_undo: bool,
     /// Show a code-overview minimap column at the right of the editor.
     pub show_minimap: bool,
+    /// Show hover tooltips (help text) on the menu bar's menus and items.
+    pub show_menu_tooltips: bool,
     /// Passively highlight every occurrence of the word under the cursor.
     pub highlight_word: bool,
     /// Indentation inserted by Tab: `"spaces"` (default) or `"tabs"`.
@@ -220,6 +222,7 @@ impl Default for Settings {
             rainbow_brackets: false,
             persistent_undo: true,
             show_minimap: false,
+            show_menu_tooltips: true,
             highlight_word: false,
             indent_style: "spaces".to_string(),
             tab_width: 4,
