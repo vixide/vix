@@ -2989,6 +2989,7 @@ impl App {
                 self.settings.show_minimap = !self.settings.show_minimap;
                 self.status = t!("status.minimap", on = self.settings.show_minimap).to_string();
             }
+            "view.menu_tooltips" => self.toggle_menu_tooltips(),
             "view.highlight_word" => {
                 self.settings.highlight_word = !self.settings.highlight_word;
                 if !self.settings.highlight_word {
@@ -4230,6 +4231,17 @@ impl App {
         } else {
             t!("status.scrollbar_off")
         }
+        .to_string();
+    }
+
+    /// Toggle whether the menu bar shows hover tooltips (help text) for its menus
+    /// and items. Persisted via `settings.show_menu_tooltips`.
+    fn toggle_menu_tooltips(&mut self) {
+        self.settings.show_menu_tooltips = !self.settings.show_menu_tooltips;
+        self.status = t!(
+            "status.menu_tooltips",
+            on = self.settings.show_menu_tooltips
+        )
         .to_string();
     }
 

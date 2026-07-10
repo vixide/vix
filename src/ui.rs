@@ -2052,6 +2052,9 @@ fn menu_tooltip_target(app: &App) -> Option<(String, Rect, u16)> {
 /// beside its dropdown (to the right, or the left when there is no room) and
 /// aligned with the highlighted row.
 fn draw_menu_tooltip(app: &App, frame: &mut Frame) {
+    if !app.settings.show_menu_tooltips {
+        return;
+    }
     let Some((text, anchor, row_y)) = menu_tooltip_target(app) else {
         return;
     };
