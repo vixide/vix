@@ -37,6 +37,7 @@ rust-version = "1.96"
 license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only"
 repository = "https://github.com/vixide/vix"
 homepage = "https://github.com/vixide/vix"
+authors = ["Joel Parker Henderson <joel@joelparkerhenderson.com>"]
 
 # All external dependencies are declared here once; every member crate (and the
 # root `vix` package) inherits them with `{ workspace = true }` so versions and
@@ -118,6 +119,9 @@ homepage.workspace = true
 readme = "README.md"
 keywords = ["tui", "editor", "ide", "terminal", "developer"]
 categories = ["text-editors", "command-line-utilities"]
+
+
+
 
 [features]
 # Which Tree-sitter grammars to compile in. Each grammar is a sizeable C parser,
