@@ -1,4 +1,4 @@
-# Vix for Eclipse users
+# Vix™ for Eclipse users
 
 Eclipse taught a generation of engineers what an IDE workspace is: perspectives,
 Open Resource, Quick Outline, incremental builds. It also taught us what a long
@@ -92,3 +92,7 @@ thing you reach for first.
 - [`docs/language-server-protocol/index.md`](../language-server-protocol/index.md)
   — configuring language servers.
 - [`index.md`](../../index.md) — the full feature tour.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

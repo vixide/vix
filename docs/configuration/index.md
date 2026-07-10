@@ -1,6 +1,6 @@
 # Configuration
 
-Vix stores its settings with [`confy`](https://crates.io/crates/confy) as a TOML
+Vix™ stores its settings with [`confy`](https://crates.io/crates/confy) as a TOML
 file in the platform configuration directory, under the application name `vix`.
 
 | Platform | Path                                                        |
@@ -122,3 +122,7 @@ vix [FILES]...        Open one or more files; the last is focused.
 
 - [themes.md](themes.md) — custom theme JSON format.
 - [i18n.md](i18n.md) — languages and how the `locale` value is used.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

@@ -15,3 +15,7 @@ declaration (function, struct, class, etc.), found from the same symbol scan tha
 powers the Code Outline. Files with no recognized symbols show just the file name.
 
 See the specification at `spec/breadcrumbs/index.md`.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

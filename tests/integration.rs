@@ -1321,6 +1321,38 @@ fn inlay_hints_render_inline() {
 }
 
 #[test]
+fn vix_menu_license_shows_trademark_info() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut app = app_at(Path::new("."));
+    // The Vix menu offers a License item dispatching `vix.license`.
+    let vixm = vix::menu::menus()
+        .iter()
+        .position(|m| m.name == "menu.vix")
+        .expect("vix menu");
+    assert!(
+        vix::menu::menus()[vixm]
+            .items
+            .iter()
+            .any(|it| it.action == "vix.license"),
+        "Vix menu has a License item"
+    );
+    app.run_action("vix.license");
+    let mut term = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let screen: String = term
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(ratatui::buffer::Cell::symbol)
+        .collect();
+    assert!(
+        screen.contains("trademarks"),
+        "the license screen shows trademark information"
+    );
+}
+
+#[test]
 fn menu_hover_shows_help_tooltip() {
     use ratatui::{Terminal, backend::TestBackend};
     let mut app = app_at(Path::new("."));

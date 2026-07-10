@@ -1,6 +1,6 @@
 # Git
 
-Vix is Git-aware. It shows the state of your repository while you edit and lets
+Vix™ is Git-aware. It shows the state of your repository while you edit and lets
 you stage, commit, switch branches, and sync with remotes without leaving the
 editor. Vix works by **shelling out to your own `git` CLI**, so your credential
 helpers, SSH agents, and hooks behave exactly as they do on the command line.
@@ -153,3 +153,7 @@ The core Git features are in place. Remaining ideas:
 
 - Inline blame in the soft-wrap view (currently the non-wrapped view only).
 - Interactive rebase / cherry-pick helpers.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

@@ -1,6 +1,6 @@
 # EditorConfig
 
-Vix reads [EditorConfig](https://editorconfig.org/) files so a project can pin its
+Vix™ reads [EditorConfig](https://editorconfig.org/) files so a project can pin its
 indentation and on-save normalization regardless of each contributor's global
 settings. Support is on by default; set `editorconfig = false` in your config to
 turn it off.
@@ -51,3 +51,7 @@ indent_style = tab
 See the specification at `spec/editorconfig/index.md`. EditorConfig and editor
 [modelines](../modelines/index.md) cover similar ground; EditorConfig is
 project-wide, modelines are per-file directives.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

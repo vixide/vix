@@ -67,3 +67,7 @@ Paragraph — derived deterministically from a fixed passage.
 seconds). For a navigable date picker, use **Tools → Calendar** instead.
 
 See the specifications under [`spec/tools/insert/`](../../spec/tools/insert/).
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

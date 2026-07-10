@@ -1,4 +1,4 @@
-# Vix documentation index
+# Vix™ documentation index
 
 A map of the documentation in this repository. 
 
@@ -83,3 +83,7 @@ The crates are documented inline (the build denies missing docs). Browse it with
 ```sh
 cargo doc --workspace --no-deps --open
 ```
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

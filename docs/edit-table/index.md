@@ -2,7 +2,7 @@
 
 Edit Table opens the active buffer as a spreadsheet-like grid of rows and columns,
 so you can view and edit delimited data — **CSV** and **TSV** — without counting
-commas. It is one of Vix's *edit surfaces*: a full-screen overlay over the editor
+commas. It is one of Vix™'s *edit surfaces*: a full-screen overlay over the editor
 that owns its own keys and saves back to the buffer.
 
 ## Opening
@@ -40,3 +40,7 @@ editor. A `*` in the title marks unsaved edits.
 
 See also the [Edit Outline](../edit-outline/index.md) prose outliner and the
 specification at `spec/edit-table/index.md`.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

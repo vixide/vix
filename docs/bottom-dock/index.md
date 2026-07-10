@@ -75,3 +75,7 @@ Run a build and jump straight to the first error:
 2. The dock appears and streams the build output.
 3. When a line like `src/app.rs:42:9: error[...]` appears, click it to open
    `src/app.rs` at line 42, column 9.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

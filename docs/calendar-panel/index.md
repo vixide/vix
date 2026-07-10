@@ -56,3 +56,7 @@ click outside the box closes it.
 To insert today's date in your locale's format: open **Tools → Calendar** and
 click today's highlighted cell in the month grid. To insert a full UTC
 timestamp instead, click the ISO 8601 UTC line in the date/time area.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

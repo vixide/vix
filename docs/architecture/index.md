@@ -1,4 +1,4 @@
-# Vix Architecture
+# Vix™ Architecture
 
 ## Shape: one crate, many modules
 
@@ -172,3 +172,7 @@ the search-pattern builder, end-to-end regex replace with capture groups,
 theme/locale switching, and date formatting. A couple of unit tests render into a
 sized in-memory `TestBackend` to check panel output, and each module adds its own
 focused unit tests. Run everything with `cargo test`.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

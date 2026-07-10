@@ -561,6 +561,7 @@ const VIEW_KEYMAP: &[Item] = &[
 
 const VIX: &[Item] = &[
     Item::leaf("menu.item.vix.about", "vix.about", ""),
+    Item::leaf("menu.item.vix.license", "vix.license", ""),
     Item::leaf("menu.item.vix.website", "vix.website", ""),
     Item::leaf("menu.item.vix.email", "vix.email", ""),
     SEP,

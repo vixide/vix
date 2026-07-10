@@ -531,6 +531,10 @@ menu.item.help.shortcuts:
   ja: "キーボードショートカット"
 menu.item.help.license:
   en: "License"
+menu.item.vix.license:
+  en: "License"
+menu.item.vix.license.help:
+  en: "Show Vix's license and trademark information."
 menu.item.help.report_issue:
   en: "Report an Issue…"
 menu.item.help.privacy:
@@ -541,6 +545,8 @@ help.license.field_repository:
   en: "Repository"
 help.license.field_authors:
   en: "Authors"
+help.license.trademarks:
+  en: "Vix™ and Vix IDE™ are trademarks."
 help.report_issue.body:
   en: |
     Found a bug or have a feature request?

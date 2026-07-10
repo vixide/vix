@@ -31,3 +31,7 @@ Messages are listed oldest first, with one row selected.
 A background save error appears as an **Error** row in the drawer. Use `↑` / `↓`
 to highlight it, read the text, then press `Enter` or click its `x` to dismiss
 it.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

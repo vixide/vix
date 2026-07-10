@@ -1,4 +1,4 @@
-# Vix for VS Code users
+# Vix™ for VS Code users
 
 VS Code got a lot right: the command palette, quick open, sane defaults, an
 integrated terminal, and extensions for everything. Its one structural cost is
@@ -101,3 +101,7 @@ stopped spinning.
 - [`docs/language-server-protocol/index.md`](../language-server-protocol/index.md)
   — configuring language servers.
 - [`index.md`](../../index.md) — the full feature tour.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

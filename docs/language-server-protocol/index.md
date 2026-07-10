@@ -1,6 +1,6 @@
 # Language Server Protocol
 
-Vix speaks the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
+Vix™ speaks the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
 (LSP), so you get real, compiler-grade help — diagnostics, completion, hover,
 go-to-definition, rename, and more — from the same language servers other editors
 use. Vix ships **no built-in server**: you point it at a server you have
@@ -58,3 +58,7 @@ Every LSP action degrades gracefully: with no server attached it reports
 "language server inactive" in the status line and does nothing else.
 Go-to-definition additionally falls back to a heuristic, language-agnostic search
 so the `F12` jump still works without a server.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

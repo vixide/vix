@@ -1,6 +1,6 @@
 # Internationalization (i18n)
 
-The whole Vix UI is translatable. Translations are powered by
+The whole Vix™ UI is translatable. Translations are powered by
 [`rust-i18n`](https://crates.io/crates/rust-i18n): user-facing text is looked up
 at render time with the `t!` macro, so switching language re-renders everything
 immediately.
@@ -89,3 +89,7 @@ you have, and the rest stay in English until you fill them in.
 ## See also
 
 - `spec/localization/index.md` — the localization specification (source of truth).
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

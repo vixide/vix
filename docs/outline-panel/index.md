@@ -58,3 +58,7 @@ beside the editor.
 
 - A status-bar Outline button to toggle the sidebar.
 - Collapsible nesting (group methods under their `impl`/`class`).
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

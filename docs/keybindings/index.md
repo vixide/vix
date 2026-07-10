@@ -1,4 +1,4 @@
-# Vix Keybindings
+# Vix™ Keybindings
 
 Every shortcut Vix currently implements. The bindings below are the **Apple**
 keymap (the default): familiar macOS/Windows modifier shortcuts. Two other
@@ -217,3 +217,7 @@ line. Press `Esc` to return to Normal mode.
 | Command | `:q` / `:q!`        | Close tab / quit                    |
 | Command | `:wq` / `:x`        | Save and close                      |
 | Command | `:Ex`               | Focus the file explorer             |
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

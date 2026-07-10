@@ -1,4 +1,4 @@
-# Vix for Emacs users
+# Vix™ for Emacs users
 
 You do not use an editor; you inhabit one. Emacs is your mail client, your
 calendar, your shell, and occasionally a text editor. We are not going to
@@ -112,3 +112,7 @@ else's* config problem — `vix .` is a very comfortable place for Emacs hands.
 - [`spec/keymaps/index.md`](../../spec/keymaps/index.md) — the authoritative spec.
 - [`spec/org/index.md`](../../spec/org/index.md) — the Org feature spec.
 - [`index.md`](../../index.md) — the full feature tour.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

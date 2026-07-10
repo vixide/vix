@@ -64,3 +64,7 @@ it is invoked.
 - `#notes` — switch to the buffer matching `notes`.
 - `:128` — preview and jump to line 128.
 - `@parse` — jump to a declaration matching `parse` in the current file.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

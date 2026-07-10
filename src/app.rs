@@ -3027,7 +3027,9 @@ impl App {
         match action {
             "help.shortcuts" => self.show_help = true,
             "help.welcome" => self.open_welcome(),
-            "help.license" => self.welcome = Some(WelcomePanel::open(Self::license_lines())),
+            "help.license" | "vix.license" => {
+                self.welcome = Some(WelcomePanel::open(Self::license_lines()));
+            }
             "help.report_issue" => {
                 self.welcome = Some(WelcomePanel::open(Self::report_issue_lines()));
             }
@@ -11914,6 +11916,8 @@ impl App {
                 env!("CARGO_PKG_REPOSITORY")
             ),
             format!("{}: {}", t!("help.license.field_authors"), authors),
+            String::new(),
+            t!("help.license.trademarks").to_string(),
         ]
     }
 

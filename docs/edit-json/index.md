@@ -10,7 +10,7 @@ parser and serializer differ.
 Open it from **Edit → Mode → JSON…** or the command palette (*Edit JSON*). The
 buffer is parsed into a tree; object key order is preserved, and numbers keep
 their original textual form so they round-trip unchanged. If the buffer is not
-valid JSON (or YAML), Vix says so instead of opening.
+valid JSON (or YAML), Vix™ says so instead of opening.
 
 ## Folding and navigating
 
@@ -33,3 +33,7 @@ valid JSON (or YAML), Vix says so instead of opening.
 preserved) into the active buffer and saves it. **Esc** or **q** closes.
 
 See the specification at `spec/edit-value/index.md`.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.

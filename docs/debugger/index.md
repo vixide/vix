@@ -1,6 +1,6 @@
 # Debugger
 
-Vix has an integrated debugger built on the **Debug Adapter Protocol** (DAP), the
+Vix™ has an integrated debugger built on the **Debug Adapter Protocol** (DAP), the
 same standard used by VS Code. You bring a debug adapter (e.g. `debugpy`,
 `codelldb`); Vix drives it.
 
@@ -43,3 +43,7 @@ Program output streams to the bottom dock.
 
 See the specification at `spec/debugger/index.md`. One debug session runs at a
 time.
+
+---
+
+Vix™ and Vix IDE™ are trademarks.
