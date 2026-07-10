@@ -16,7 +16,6 @@
 //! bindings.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -33,16 +32,56 @@ pub struct Keymap {
 
 /// All keymaps, in menu order. Apple is first (Vix's default bindings).
 pub const KEYMAPS: &[Keymap] = &[
-    Keymap { id: "apple", name: "Apple", tooltip: "Apple controls" },
-    Keymap { id: "vscode-macos", name: "VSCode macOS", tooltip: "VS Code (macOS) bindings" },
-    Keymap { id: "vscode-windows", name: "VSCode Windows", tooltip: "VS Code (Windows) bindings" },
-    Keymap { id: "emacs", name: "Emacs", tooltip: "Emacs chords" },
-    Keymap { id: "vi", name: "Vi", tooltip: "Vi modes" },
-    Keymap { id: "spacemacs", name: "Spacemacs", tooltip: "Vi modes + Space leader" },
-    Keymap { id: "intellij-macos", name: "IntelliJ macOS", tooltip: "IntelliJ (macOS) bindings" },
-    Keymap { id: "intellij-windows", name: "IntelliJ Windows", tooltip: "IntelliJ (Windows) bindings" },
-    Keymap { id: "eclipse", name: "Eclipse", tooltip: "Eclipse (Windows) bindings" },
-    Keymap { id: "sublime", name: "Sublime Text", tooltip: "Sublime Text bindings" },
+    Keymap {
+        id: "apple",
+        name: "Apple",
+        tooltip: "Apple controls",
+    },
+    Keymap {
+        id: "vscode-macos",
+        name: "VSCode macOS",
+        tooltip: "VS Code (macOS) bindings",
+    },
+    Keymap {
+        id: "vscode-windows",
+        name: "VSCode Windows",
+        tooltip: "VS Code (Windows) bindings",
+    },
+    Keymap {
+        id: "emacs",
+        name: "Emacs",
+        tooltip: "Emacs chords",
+    },
+    Keymap {
+        id: "vi",
+        name: "Vi",
+        tooltip: "Vi modes",
+    },
+    Keymap {
+        id: "spacemacs",
+        name: "Spacemacs",
+        tooltip: "Vi modes + Space leader",
+    },
+    Keymap {
+        id: "intellij-macos",
+        name: "IntelliJ macOS",
+        tooltip: "IntelliJ (macOS) bindings",
+    },
+    Keymap {
+        id: "intellij-windows",
+        name: "IntelliJ Windows",
+        tooltip: "IntelliJ (Windows) bindings",
+    },
+    Keymap {
+        id: "eclipse",
+        name: "Eclipse",
+        tooltip: "Eclipse (Windows) bindings",
+    },
+    Keymap {
+        id: "sublime",
+        name: "Sublime Text",
+        tooltip: "Sublime Text bindings",
+    },
 ];
 
 /// The keymap with the given `id`, if known.

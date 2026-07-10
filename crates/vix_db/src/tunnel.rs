@@ -44,7 +44,11 @@ pub fn forward_spec(local_port: u16, db_host: &str, db_port: &str) -> String {
 /// set; `-p` / `-i` are added when configured.
 #[must_use]
 pub fn ssh_args(conn: &Connection, local_port: u16) -> Vec<String> {
-    let db_port = if conn.port.is_empty() { conn.kind.default_port() } else { &conn.port };
+    let db_port = if conn.port.is_empty() {
+        conn.kind.default_port()
+    } else {
+        &conn.port
+    };
     let mut args = vec![
         "-N".to_string(),
         "-o".to_string(),
@@ -105,7 +109,11 @@ pub fn open(conn: &Connection) -> Result<Option<Tunnel>, String> {
 
 /// Reserve a free local TCP port by binding to `:0` and dropping the listener.
 fn free_port() -> Option<u16> {
-    TcpListener::bind("127.0.0.1:0").ok()?.local_addr().ok().map(|addr| addr.port())
+    TcpListener::bind("127.0.0.1:0")
+        .ok()?
+        .local_addr()
+        .ok()
+        .map(|addr| addr.port())
 }
 
 /// Poll the local port until it accepts a connection (the forward is up) or the
@@ -147,25 +155,45 @@ mod tests {
 
     #[test]
     fn forward_spec_is_local_host_port() {
-        assert_eq!(forward_spec(55000, "db.internal", "5432"), "55000:db.internal:5432");
+        assert_eq!(
+            forward_spec(55000, "db.internal", "5432"),
+            "55000:db.internal:5432"
+        );
     }
 
     #[test]
     fn ssh_args_forward_to_the_db_host_and_default_port() {
         let args = ssh_args(&pg("joel", "", ""), 55000);
         assert!(args.contains(&"-N".to_string()));
-        assert!(args.windows(2).any(|w| w == ["-L", "55000:db.internal:5432"]), "{args:?}");
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["-L", "55000:db.internal:5432"]),
+            "{args:?}"
+        );
         assert_eq!(args.last().unwrap(), "joel@bastion.example.com");
-        assert!(!args.contains(&"-p".to_string()), "no -p without an ssh port");
-        assert!(!args.contains(&"-i".to_string()), "no -i without an identity");
+        assert!(
+            !args.contains(&"-p".to_string()),
+            "no -p without an ssh port"
+        );
+        assert!(
+            !args.contains(&"-i".to_string()),
+            "no -i without an identity"
+        );
     }
 
     #[test]
     fn ssh_args_add_port_identity_and_bare_host() {
         let args = ssh_args(&pg("", "2222", "/home/j/.ssh/id"), 6000);
         assert!(args.windows(2).any(|w| w == ["-p", "2222"]), "{args:?}");
-        assert!(args.windows(2).any(|w| w == ["-i", "/home/j/.ssh/id"]), "{args:?}");
-        assert_eq!(args.last().unwrap(), "bastion.example.com", "no user@ prefix when unset");
+        assert!(
+            args.windows(2).any(|w| w == ["-i", "/home/j/.ssh/id"]),
+            "{args:?}"
+        );
+        assert_eq!(
+            args.last().unwrap(),
+            "bastion.example.com",
+            "no user@ prefix when unset"
+        );
     }
 
     #[test]

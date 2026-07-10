@@ -147,21 +147,30 @@ mod tests {
     fn finds_distinct_names_skipping_noise() {
         let sql = "SELECT * FROM t WHERE a = :id AND b = :name -- :nope\n OR c = :id";
         assert_eq!(names(sql), vec!["id", "name"], "deduped, comment ignored");
-        assert!(names("SELECT ':x' AS lit").is_empty(), "colon in a string is not a param");
+        assert!(
+            names("SELECT ':x' AS lit").is_empty(),
+            "colon in a string is not a param"
+        );
         assert!(names("SELECT 1::int").is_empty(), "cast is not a param");
     }
 
     #[test]
     fn substitutes_values_as_literals() {
         let sql = "SELECT * FROM t WHERE id = :id AND name = :name";
-        let out = substitute(sql, &[("id".into(), "42".into()), ("name".into(), "O'Hara".into())]);
+        let out = substitute(
+            sql,
+            &[("id".into(), "42".into()), ("name".into(), "O'Hara".into())],
+        );
         assert_eq!(out, "SELECT * FROM t WHERE id = 42 AND name = 'O''Hara'");
     }
 
     #[test]
     fn leaves_casts_strings_and_unknown_params_intact() {
         assert_eq!(substitute("SELECT 1::int", &[]), "SELECT 1::int");
-        assert_eq!(substitute("SELECT ':x'", &[("x".into(), "y".into())]), "SELECT ':x'");
+        assert_eq!(
+            substitute("SELECT ':x'", &[("x".into(), "y".into())]),
+            "SELECT ':x'"
+        );
         assert_eq!(substitute("WHERE a = :missing", &[]), "WHERE a = :missing");
     }
 }

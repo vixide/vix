@@ -54,7 +54,13 @@ pub fn keyring_lookup(conn: &Connection) -> Option<Cmd> {
     } else if cfg!(target_os = "linux") {
         Some(Cmd {
             program: "secret-tool".into(),
-            args: vec!["lookup".into(), "service".into(), SERVICE.into(), "account".into(), account],
+            args: vec![
+                "lookup".into(),
+                "service".into(),
+                SERVICE.into(),
+                "account".into(),
+                account,
+            ],
             stdin: None,
         })
     } else {
@@ -110,7 +116,11 @@ pub fn run(cmd: &Cmd) -> Option<String> {
     use std::process::{Command, Stdio};
     let mut child = Command::new(&cmd.program)
         .args(&cmd.args)
-        .stdin(if cmd.stdin.is_some() { Stdio::piped() } else { Stdio::null() })
+        .stdin(if cmd.stdin.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
@@ -140,7 +150,9 @@ pub fn resolve(conn: &Connection) -> Option<String> {
             return Some(pw);
         }
     }
-    keyring_lookup(conn).and_then(|cmd| run(&cmd)).filter(|pw| !pw.is_empty())
+    keyring_lookup(conn)
+        .and_then(|cmd| run(&cmd))
+        .filter(|pw| !pw.is_empty())
 }
 
 /// Store `password` for `conn` in the keyring (best effort); `true` on success.
@@ -154,7 +166,10 @@ mod tests {
     use super::*;
 
     fn conn(name: &str) -> Connection {
-        Connection { name: name.into(), ..Connection::default() }
+        Connection {
+            name: name.into(),
+            ..Connection::default()
+        }
     }
 
     #[test]
@@ -162,14 +177,23 @@ mod tests {
         let c = conn("prod");
         match (keyring_lookup(&c), keyring_store(&c, "hunter2")) {
             (Some(lookup), Some(store)) => {
-                assert!(lookup.args.contains(&"prod".to_string()), "account in lookup: {lookup:?}");
-                assert!(lookup.args.contains(&SERVICE.to_string()), "service in lookup");
+                assert!(
+                    lookup.args.contains(&"prod".to_string()),
+                    "account in lookup: {lookup:?}"
+                );
+                assert!(
+                    lookup.args.contains(&SERVICE.to_string()),
+                    "service in lookup"
+                );
                 assert!(lookup.stdin.is_none(), "lookup takes no stdin");
                 // The secret reaches the store either as an arg (macOS) or on
                 // stdin (Linux), but never leaks into the lookup.
                 let via_arg = store.args.iter().any(|a| a == "hunter2");
                 let via_stdin = store.stdin.as_deref() == Some("hunter2");
-                assert!(via_arg || via_stdin, "store carries the password: {store:?}");
+                assert!(
+                    via_arg || via_stdin,
+                    "store carries the password: {store:?}"
+                );
                 assert!(!lookup.args.iter().any(|a| a == "hunter2"));
             }
             (None, None) => { /* unsupported platform — both absent, consistent */ }

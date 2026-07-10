@@ -19,7 +19,13 @@
 fn ident(name: &str) -> String {
     let mut out: String = name
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     if out.is_empty() {
         out.push('_');
@@ -50,7 +56,11 @@ pub fn mermaid(
     for table in &order {
         let _ = writeln!(out, "    {} {{", ident(table));
         for (_, col, ty) in columns.iter().filter(|(t, _, _)| t == table) {
-            let ty = if ty.trim().is_empty() { "unknown".to_string() } else { ident(ty) };
+            let ty = if ty.trim().is_empty() {
+                "unknown".to_string()
+            } else {
+                ident(ty)
+            };
             let _ = writeln!(out, "        {ty} {}", ident(col));
         }
         out.push_str("    }\n");
@@ -89,12 +99,20 @@ mod tests {
             col("orders", "id", "integer"),
             col("orders", "user_id", "integer"),
         ];
-        let rels = vec![("orders".into(), "user_id".into(), "users".into(), "id".into())];
+        let rels = vec![(
+            "orders".into(),
+            "user_id".into(),
+            "users".into(),
+            "id".into(),
+        )];
         let out = mermaid(&columns, &rels);
         assert!(out.starts_with("erDiagram\n"));
         assert!(out.contains("    users {\n"));
         assert!(out.contains("        integer id\n"));
-        assert!(out.contains("    orders }o--|| users : \"user_id\""), "{out}");
+        assert!(
+            out.contains("    orders }o--|| users : \"user_id\""),
+            "{out}"
+        );
     }
 
     #[test]
@@ -102,7 +120,10 @@ mod tests {
         let columns = vec![col("order items", "qty (int)", "character varying")];
         let out = mermaid(&columns, &[]);
         assert!(out.contains("    order_items {\n"), "{out}");
-        assert!(out.contains("        character_varying qty__int_\n"), "{out}");
+        assert!(
+            out.contains("        character_varying qty__int_\n"),
+            "{out}"
+        );
     }
 
     #[test]

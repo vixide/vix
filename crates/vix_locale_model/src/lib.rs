@@ -7,7 +7,6 @@
 //! `vix-locale-chooser` so the data has its own home.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -25,34 +24,115 @@ pub struct Locale {
 /// Each language is selectable; translation coverage is filled in incrementally
 /// in `locales/app.yml`, with any untranslated key falling back to English.
 pub const LOCALES: &[Locale] = &[
-    Locale { code: "en", name: "English" },
-    Locale { code: "es", name: "Español" },
-    Locale { code: "fr", name: "Français" },
-    Locale { code: "de", name: "Deutsch" },
-    Locale { code: "cy", name: "Cymraeg" },
-    Locale { code: "ga", name: "Gaeilge" },
-    Locale { code: "gd", name: "Gàidhlig" },
-    Locale { code: "pl", name: "Polski" },
-    Locale { code: "pt", name: "Português" },
-    Locale { code: "ru", name: "Русский" },
-    Locale { code: "ar", name: "العربية" },
-    Locale { code: "hi", name: "हिन्दी" },
-    Locale { code: "bn", name: "বাংলা" },
-    Locale { code: "zh", name: "中文" },
-    Locale { code: "ja", name: "日本語" },
-    Locale { code: "it", name: "Italiano" },
-    Locale { code: "ko", name: "한국어" },
-    Locale { code: "tr", name: "Türkçe" },
-    Locale { code: "nl", name: "Nederlands" },
-    Locale { code: "vi", name: "Tiếng Việt" },
-    Locale { code: "id", name: "Bahasa Indonesia" },
-    Locale { code: "th", name: "ไทย" },
-    Locale { code: "fa", name: "فارسی" },
-    Locale { code: "uk", name: "Українська" },
-    Locale { code: "el", name: "Ελληνικά" },
+    Locale {
+        code: "en",
+        name: "English",
+    },
+    Locale {
+        code: "es",
+        name: "Español",
+    },
+    Locale {
+        code: "fr",
+        name: "Français",
+    },
+    Locale {
+        code: "de",
+        name: "Deutsch",
+    },
+    Locale {
+        code: "cy",
+        name: "Cymraeg",
+    },
+    Locale {
+        code: "ga",
+        name: "Gaeilge",
+    },
+    Locale {
+        code: "gd",
+        name: "Gàidhlig",
+    },
+    Locale {
+        code: "pl",
+        name: "Polski",
+    },
+    Locale {
+        code: "pt",
+        name: "Português",
+    },
+    Locale {
+        code: "ru",
+        name: "Русский",
+    },
+    Locale {
+        code: "ar",
+        name: "العربية",
+    },
+    Locale {
+        code: "hi",
+        name: "हिन्दी",
+    },
+    Locale {
+        code: "bn",
+        name: "বাংলা",
+    },
+    Locale {
+        code: "zh",
+        name: "中文",
+    },
+    Locale {
+        code: "ja",
+        name: "日本語",
+    },
+    Locale {
+        code: "it",
+        name: "Italiano",
+    },
+    Locale {
+        code: "ko",
+        name: "한국어",
+    },
+    Locale {
+        code: "tr",
+        name: "Türkçe",
+    },
+    Locale {
+        code: "nl",
+        name: "Nederlands",
+    },
+    Locale {
+        code: "vi",
+        name: "Tiếng Việt",
+    },
+    Locale {
+        code: "id",
+        name: "Bahasa Indonesia",
+    },
+    Locale {
+        code: "th",
+        name: "ไทย",
+    },
+    Locale {
+        code: "fa",
+        name: "فارسی",
+    },
+    Locale {
+        code: "uk",
+        name: "Українська",
+    },
+    Locale {
+        code: "el",
+        name: "Ελληνικά",
+    },
     // Constructed languages, last.
-    Locale { code: "tlh", name: "tlhIngan Hol" },
-    Locale { code: "sjn", name: "Edhellen" },
+    Locale {
+        code: "tlh",
+        name: "tlhIngan Hol",
+    },
+    Locale {
+        code: "sjn",
+        name: "Edhellen",
+    },
 ];
 
 /// The locale with the given `code`, if bundled.

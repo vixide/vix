@@ -7,7 +7,6 @@
 //! [`Outline::select_nearest`].
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -36,7 +35,11 @@ impl Outline {
     /// Build an outline from `entries`, selecting the first row.
     #[must_use]
     pub fn new(entries: Vec<Entry>) -> Self {
-        Outline { entries, selected: 0, scroll: 0 }
+        Outline {
+            entries,
+            selected: 0,
+            scroll: 0,
+        }
     }
 
     /// Number of rows.
@@ -120,9 +123,21 @@ mod tests {
 
     fn outline() -> Outline {
         Outline::new(vec![
-            Entry { kind: "struct".into(), name: "App".into(), line: 10 },
-            Entry { kind: "fn".into(), name: "new".into(), line: 20 },
-            Entry { kind: "fn".into(), name: "run".into(), line: 40 },
+            Entry {
+                kind: "struct".into(),
+                name: "App".into(),
+                line: 10,
+            },
+            Entry {
+                kind: "fn".into(),
+                name: "new".into(),
+                line: 20,
+            },
+            Entry {
+                kind: "fn".into(),
+                name: "run".into(),
+                line: 40,
+            },
         ])
     }
 
@@ -159,7 +174,15 @@ mod tests {
 
     #[test]
     fn ensure_visible_scrolls_to_selection() {
-        let mut o = Outline::new((0..20).map(|i| Entry { kind: "fn".into(), name: format!("f{i}"), line: i + 1 }).collect());
+        let mut o = Outline::new(
+            (0..20)
+                .map(|i| Entry {
+                    kind: "fn".into(),
+                    name: format!("f{i}"),
+                    line: i + 1,
+                })
+                .collect(),
+        );
         o.selected = 15;
         o.ensure_visible(5);
         assert!(o.scroll <= 15 && 15 < o.scroll + 5);

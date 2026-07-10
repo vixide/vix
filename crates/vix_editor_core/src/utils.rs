@@ -1,8 +1,7 @@
 #![warn(clippy::pedantic)]
 /// Return the language name inferred from a filename's extension, or `"unknown"`.
-#[must_use] 
+#[must_use]
 pub fn get_lang(filename: &str) -> String {
-
     let extension = std::path::Path::new(filename)
         .extension()
         .and_then(|ext| ext.to_str())
@@ -10,12 +9,12 @@ pub fn get_lang(filename: &str) -> String {
 
     match extension {
         "rs" => "rust",
-        "js" | "jsx"  => "javascript",
-        "ts" | "tsx"=> "typescript",
+        "js" | "jsx" => "javascript",
+        "ts" | "tsx" => "typescript",
         "py" => "python",
         "go" => "go",
         "java" => "java",
-        "cpp"  => "cpp",
+        "cpp" => "cpp",
         "c" => "c",
         "cs" => "c_sharp",
         "html" => "html",
@@ -31,23 +30,19 @@ pub fn get_lang(filename: &str) -> String {
 }
 
 /// Return the default indentation string for a language (spaces or a tab).
-#[must_use] 
+#[must_use]
 pub fn indent(lang: &str) -> String {
     match lang {
-        "rust" |"python" | "php" | "toml" | "c"  | "cpp" |
-        "zig" | "kotlin" | "erlang" | "html" | "sql" => {
-            "    ".to_string()
-        },
-        "go" | "c_sharp" => {
-            "\t".to_string()
-        },
+        "rust" | "python" | "php" | "toml" | "c" | "cpp" | "zig" | "kotlin" | "erlang" | "html"
+        | "sql" => "    ".to_string(),
+        "go" | "c_sharp" => "\t".to_string(),
 
         _ => "  ".to_string(),
     }
 }
 
 /// Return the line-comment prefix for a language (e.g. `"//"`, `"#"`, `"--"`).
-#[must_use] 
+#[must_use]
 pub fn comment(lang: &str) -> &'static str {
     match lang {
         "python" | "shell" | "toml" | "yaml" => "#",
@@ -57,13 +52,15 @@ pub fn comment(lang: &str) -> &'static str {
 }
 
 /// Count how many whole `indent_unit` strings prefix `line`, up to `max_col` columns.
-#[must_use] 
+#[must_use]
 pub fn count_indent_units(
-    line: ropey::RopeSlice<'_>, 
-    indent_unit: &str, 
-    max_col: Option<usize>
+    line: ropey::RopeSlice<'_>,
+    indent_unit: &str,
+    max_col: Option<usize>,
 ) -> usize {
-    if indent_unit.is_empty() { return 0; }
+    if indent_unit.is_empty() {
+        return 0;
+    }
 
     let mut chars = line.chars();
     let mut count = 0;
@@ -79,7 +76,10 @@ pub fn count_indent_units(
         }
         count += 1;
         if let Some(max) = max_col
-            && col >= max { break; }
+            && col >= max
+        {
+            break;
+        }
     }
 
     count
@@ -88,7 +88,7 @@ pub fn count_indent_units(
 /// Parse a `#RRGGBB` (or `RRGGBB`) hex string into an `(r, g, b)` triple.
 ///
 /// Any component that is missing or invalid is treated as `0`.
-#[must_use] 
+#[must_use]
 pub fn rgb(hex: &str) -> (u8, u8, u8) {
     let hex = hex.trim_start_matches('#');
     let component = |range: std::ops::Range<usize>| {
@@ -101,13 +101,11 @@ pub fn rgb(hex: &str) -> (u8, u8, u8) {
 
 /// Calculate end position by walking through the text
 /// Returns (`end_row`, `end_col`) starting from (`start_row`, `start_col`)
-#[must_use] 
-pub fn calculate_end_position(
-    start_row: usize, start_col: usize, text: &str
-) -> (usize, usize) {
+#[must_use]
+pub fn calculate_end_position(start_row: usize, start_col: usize, text: &str) -> (usize, usize) {
     let mut end_row = start_row;
     let mut end_col = start_col;
-    
+
     for ch in text.chars() {
         if ch == '\n' {
             end_row += 1;
@@ -116,6 +114,6 @@ pub fn calculate_end_position(
             end_col += 1;
         }
     }
-    
+
     (end_row, end_col)
 }

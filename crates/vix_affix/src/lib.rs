@@ -28,7 +28,10 @@ pub fn add(text: &str, prefix: &str, suffix: &str) -> String {
 #[must_use]
 pub fn drop(text: &str, prefix: &str, suffix: &str) -> String {
     let without_prefix = text.strip_prefix(prefix).unwrap_or(text);
-    without_prefix.strip_suffix(suffix).unwrap_or(without_prefix).to_string()
+    without_prefix
+        .strip_suffix(suffix)
+        .unwrap_or(without_prefix)
+        .to_string()
 }
 
 /// [`drop`] the pair when `text` is already wrapped (starts with `prefix` and
@@ -36,7 +39,10 @@ pub fn drop(text: &str, prefix: &str, suffix: &str) -> String {
 #[must_use]
 pub fn toggle(text: &str, prefix: &str, suffix: &str) -> String {
     // Require room for both affixes so a short string isn't mistaken for wrapped.
-    if text.len() >= prefix.len() + suffix.len() && text.starts_with(prefix) && text.ends_with(suffix) {
+    if text.len() >= prefix.len() + suffix.len()
+        && text.starts_with(prefix)
+        && text.ends_with(suffix)
+    {
         drop(text, prefix, suffix)
     } else {
         add(text, prefix, suffix)

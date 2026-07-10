@@ -10,7 +10,6 @@
 //! reference.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -81,7 +80,10 @@ impl Panel {
     /// Open the panel with the first entity highlighted.
     #[must_use]
     pub fn open() -> Self {
-        Panel { selected: 0, scroll: 0 }
+        Panel {
+            selected: 0,
+            scroll: 0,
+        }
     }
 
     /// Total number of entities in the table.

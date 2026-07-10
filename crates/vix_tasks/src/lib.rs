@@ -45,10 +45,17 @@ struct TaskFile {
 /// file fails to parse. Tasks with an empty name or command are dropped.
 #[must_use]
 pub fn load(root: &Path) -> Vec<Task> {
-    let candidates = [root.join("tasks.toml"), root.join(".vix").join("tasks.toml")];
+    let candidates = [
+        root.join("tasks.toml"),
+        root.join(".vix").join("tasks.toml"),
+    ];
     for path in candidates {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
-        let Ok(parsed) = toml::from_str::<TaskFile>(&text) else { continue };
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(parsed) = toml::from_str::<TaskFile>(&text) else {
+            continue;
+        };
         let tasks: Vec<Task> = parsed
             .task
             .into_iter()
@@ -96,7 +103,13 @@ mod tests {
         "#;
         let tasks = parse(toml);
         assert_eq!(tasks.len(), 2);
-        assert_eq!(tasks[0], Task { name: "build".into(), command: "cargo build".into() });
+        assert_eq!(
+            tasks[0],
+            Task {
+                name: "build".into(),
+                command: "cargo build".into()
+            }
+        );
         assert_eq!(tasks[1].name, "test");
     }
 

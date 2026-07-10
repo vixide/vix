@@ -358,7 +358,10 @@ mod tests {
 
     #[test]
     fn custom_ai_command_with_file_placeholder_substitutes_path() {
-        let s = Settings { ai_command: "codex exec \"{prompt}\" {file}".to_string(), ..Settings::default() };
+        let s = Settings {
+            ai_command: "codex exec \"{prompt}\" {file}".to_string(),
+            ..Settings::default()
+        };
         assert_eq!(
             s.ai_command_line("Explain this text.", "/tmp/in.txt"),
             "codex exec \"Explain this text.\" /tmp/in.txt"
@@ -367,7 +370,10 @@ mod tests {
 
     #[test]
     fn custom_ai_command_without_file_placeholder_redirects_stdin() {
-        let s = Settings { ai_command: "mistral chat -m \"{prompt}\"".to_string(), ..Settings::default() };
+        let s = Settings {
+            ai_command: "mistral chat -m \"{prompt}\"".to_string(),
+            ..Settings::default()
+        };
         assert_eq!(
             s.ai_command_line("Improve this text.", "/tmp/in.txt"),
             "mistral chat -m \"Improve this text.\" < \"/tmp/in.txt\""
@@ -376,7 +382,10 @@ mod tests {
 
     #[test]
     fn empty_ai_command_falls_back_to_default() {
-        let s = Settings { ai_command: "   ".to_string(), ..Settings::default() };
+        let s = Settings {
+            ai_command: "   ".to_string(),
+            ..Settings::default()
+        };
         assert_eq!(
             s.ai_command_line("Define this text.", "/tmp/in.txt"),
             "claude -p \"Define this text.\" < \"/tmp/in.txt\""

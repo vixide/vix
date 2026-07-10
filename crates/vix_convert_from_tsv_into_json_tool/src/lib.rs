@@ -4,7 +4,6 @@
 //! with string values. See [`vix_convert_tabular`] for the shared logic.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -13,7 +12,9 @@
 /// # Errors
 /// Never fails today; returns `Result` for a uniform tool interface.
 pub fn convert(input: &str) -> Result<String, String> {
-    Ok(vix_convert_tabular::rows_to_json(&vix_convert_tabular::parse_tsv(input)))
+    Ok(vix_convert_tabular::rows_to_json(
+        &vix_convert_tabular::parse_tsv(input),
+    ))
 }
 
 #[cfg(test)]

@@ -15,7 +15,6 @@
 //! - **paragraphs**: maximal runs of non-blank lines.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -94,7 +93,10 @@ pub struct Row {
 /// Build the display rows for `stats`.
 #[must_use]
 pub fn rows(stats: &Stats) -> Vec<Row> {
-    let row = |label: &str, n: usize| Row { label: label.to_string(), value: n.to_string() };
+    let row = |label: &str, n: usize| Row {
+        label: label.to_string(),
+        value: n.to_string(),
+    };
     vec![
         row("Characters", stats.characters),
         row("Words", stats.words),
@@ -116,7 +118,10 @@ impl Panel {
     /// Open the panel over the rows built from `stats`.
     #[must_use]
     pub fn open(stats: &Stats) -> Self {
-        Panel { rows: rows(stats), selected: 0 }
+        Panel {
+            rows: rows(stats),
+            selected: 0,
+        }
     }
 
     /// Number of rows.
@@ -156,7 +161,10 @@ impl Panel {
     /// The highlighted row's value (what insertion uses).
     #[must_use]
     pub fn selected_value(&self) -> String {
-        self.rows.get(self.selected).map(|r| r.value.clone()).unwrap_or_default()
+        self.rows
+            .get(self.selected)
+            .map(|r| r.value.clone())
+            .unwrap_or_default()
     }
 }
 

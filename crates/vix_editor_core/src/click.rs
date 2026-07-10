@@ -25,30 +25,40 @@ pub struct ClickTracker {
 
 impl ClickTracker {
     /// Create a tracker that treats clicks within `max_dt` as a multi-click.
-    #[must_use] 
+    #[must_use]
     pub fn new(max_dt: Duration) -> Self {
-        Self { last: None, prev: None, max_dt }
+        Self {
+            last: None,
+            prev: None,
+            max_dt,
+        }
     }
 
     /// Record a click at `cursor` and return its classified [`ClickKind`].
     pub fn register(&mut self, cursor: usize) -> ClickKind {
         let now = Instant::now();
-        let dbl = self.last
+        let dbl = self
+            .last
             .is_some_and(|(t, p)| p == cursor && now.duration_since(t) < self.max_dt);
-        let tpl = self.last.zip(self.prev)
+        let tpl = self
+            .last
+            .zip(self.prev)
             .is_some_and(|((t1, p1), (t0, p0))| {
-                p0 == cursor && p1 == cursor &&
-                now.duration_since(t0) < self.max_dt &&
-                t1.duration_since(t0) < self.max_dt
+                p0 == cursor
+                    && p1 == cursor
+                    && now.duration_since(t0) < self.max_dt
+                    && t1.duration_since(t0) < self.max_dt
             });
 
         self.prev = self.last;
         self.last = Some((now, cursor));
 
-        if tpl { ClickKind::Triple }
-        else if dbl { ClickKind::Double }
-        else { ClickKind::Single }
+        if tpl {
+            ClickKind::Triple
+        } else if dbl {
+            ClickKind::Double
+        } else {
+            ClickKind::Single
+        }
     }
 }
-
-

@@ -72,14 +72,14 @@ pub mod search;
 pub use vix_session as session;
 pub use vix_settings as settings;
 pub use vix_snippet_tool as snippet_tool;
-pub use vix_undo_store as undo_store;
 pub use vix_snippets as snippets;
 pub use vix_tags as tags;
 pub use vix_tasks as tasks;
-pub use vix_test_runner as test_runner;
 pub use vix_terminal as terminal;
+pub use vix_test_runner as test_runner;
 pub use vix_textops as textops;
 pub use vix_theme as theme;
+pub use vix_undo_store as undo_store;
 pub mod ui;
 
 // Folded-in modules (formerly separate `vix-*` subcrates). The custom
@@ -87,25 +87,19 @@ pub mod ui;
 // are gated behind this crate's `lang-*` features.
 pub use vix_affix as affix;
 pub use vix_ai_diff as ai_diff;
-pub use vix_align as align;
 pub use vix_ai_panel as ai_panel;
+pub use vix_align as align;
 pub use vix_ascii_character_picker as ascii_character_picker;
-pub use vix_dap as dap;
-pub use vix_diff_view as diff_view;
-pub use vix_editorconfig as editorconfig;
-pub use vix_emmet as emmet;
-pub use vix_macros as macros;
-pub use vix_editor::pane_tree;
+pub use vix_base_tool as base_tool;
 pub use vix_base16 as base16;
 pub use vix_base64_tool as base64_tool;
-pub use vix_base_tool as base_tool;
 pub use vix_bottom_dock as bottom_dock;
 pub use vix_calculator_tool as calculator_tool;
 pub use vix_calendar_panel as calendar_panel;
 pub use vix_checksum_tool as checksum_tool;
-pub use vix_conflict_tool as conflict_tool;
 pub use vix_clock_panel as clock_panel;
 pub use vix_color_converter_tool as color_converter_tool;
+pub use vix_conflict_tool as conflict_tool;
 pub use vix_contact_panel as contact_panel;
 pub use vix_convert_from_csv_into_json_tool as convert_from_csv_into_json_tool;
 pub use vix_convert_from_csv_into_tsv_tool as convert_from_csv_into_tsv_tool;
@@ -120,7 +114,13 @@ pub use vix_convert_from_tsv_into_csv_tool as convert_from_tsv_into_csv_tool;
 pub use vix_convert_from_tsv_into_json_tool as convert_from_tsv_into_json_tool;
 pub use vix_convert_from_yaml_into_json_tool as convert_from_yaml_into_json_tool;
 pub use vix_convert_tabular as convert_tabular;
+pub use vix_dap as dap;
 pub use vix_db as db;
+pub use vix_diff_view as diff_view;
+pub use vix_edit_bytes as edit_bytes;
+pub use vix_editor::pane_tree;
+pub use vix_editorconfig as editorconfig;
+pub use vix_emmet as emmet;
 pub use vix_file_information_panel as file_information_panel;
 pub use vix_find_panel as find_panel;
 pub use vix_git as git;
@@ -132,6 +132,7 @@ pub use vix_left_dock as left_dock;
 pub use vix_locale_model as locale_model;
 pub use vix_lorem as lorem;
 pub use vix_lsp_core as lsp_core;
+pub use vix_macros as macros;
 pub use vix_media_type as media_type;
 pub use vix_nerd_font_picker as nerd_font_picker;
 pub use vix_org as org;
@@ -140,14 +141,16 @@ pub use vix_outline_panel as outline_panel;
 pub use vix_pomodoro_tool as pomodoro_tool;
 pub use vix_right_dock as right_dock;
 pub use vix_roam as roam;
-pub use vix_workspace as workspace;
 pub use vix_spellcheck as spellcheck;
 pub use vix_status_bar_panel as status_bar_panel;
 pub use vix_system_information_panel as system_information_panel;
-pub use vix_edit_bytes as edit_bytes;
+pub use vix_workspace as workspace;
 pub mod edit_outline;
 pub use vix_edit_sql as edit_sql;
 pub mod edit_table;
+/// The calendar box's month-grid logic; re-exported as `vix::calendar` so the
+/// app and tests share one path.
+pub use crate::calendar_panel as calendar;
 pub use vix_edit_value as edit_value;
 pub use vix_text_information_panel as text_information_panel;
 pub use vix_theme_model as theme_model;
@@ -161,9 +164,6 @@ pub use vix_welcome_panel as welcome_panel;
 pub use vix_workspace_dashboard_panel as workspace_dashboard_panel;
 pub use vix_x11_color_picker as x11_color_picker;
 pub use vix_zid_tool as zid_tool;
-/// The calendar box's month-grid logic; re-exported as `vix::calendar` so the
-/// app and tests share one path.
-pub use crate::calendar_panel as calendar;
 
 /// The clock box's date/time strings; re-exported as `vix::clock` so the app and
 /// tests share one path.

@@ -12,7 +12,6 @@
 //!   signs are optional).
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -46,15 +45,26 @@ impl Color {
             }
             _ => return None,
         };
-        Some(Color { r: red, g: green, b: blue })
+        Some(Color {
+            r: red,
+            g: green,
+            b: blue,
+        })
     }
 
     /// Parse an RGB color: `r, g, b` (each 0–255), optionally wrapped in `rgb(...)`.
     #[must_use]
     pub fn from_rgb(s: &str) -> Option<Color> {
         let parts = triple(s, "rgb")?;
-        let v: Vec<u8> = parts.iter().map(|p| p.trim().parse::<u8>().ok()).collect::<Option<_>>()?;
-        Some(Color { r: v[0], g: v[1], b: v[2] })
+        let v: Vec<u8> = parts
+            .iter()
+            .map(|p| p.trim().parse::<u8>().ok())
+            .collect::<Option<_>>()?;
+        Some(Color {
+            r: v[0],
+            g: v[1],
+            b: v[2],
+        })
     }
 
     /// Parse an HSL color: `h, s%, l%` (hue 0–360, sat/light 0–100), optionally
@@ -65,7 +75,10 @@ impl Color {
         let h: f64 = parts[0].trim().parse().ok()?;
         let sp: f64 = parts[1].trim().trim_end_matches('%').trim().parse().ok()?;
         let lp: f64 = parts[2].trim().trim_end_matches('%').trim().parse().ok()?;
-        if !(0.0..=360.0).contains(&h) || !(0.0..=100.0).contains(&sp) || !(0.0..=100.0).contains(&lp) {
+        if !(0.0..=360.0).contains(&h)
+            || !(0.0..=100.0).contains(&sp)
+            || !(0.0..=100.0).contains(&lp)
+        {
             return None;
         }
         Some(hsl_to_rgb(h, sp / 100.0, lp / 100.0))
@@ -143,7 +156,11 @@ fn triple(s: &str, name: &str) -> Option<[String; 3]> {
     if parts.len() != 3 {
         return None;
     }
-    Some([parts[0].to_string(), parts[1].to_string(), parts[2].to_string()])
+    Some([
+        parts[0].to_string(),
+        parts[1].to_string(),
+        parts[2].to_string(),
+    ])
 }
 
 /// Convert HSL (hue degrees, sat/light 0–1) to an RGB [`Color`].
@@ -165,7 +182,11 @@ fn hsl_to_rgb(hue: f64, sat: f64, light: f64) -> Color {
         let scaled = ((channel + base) * 255.0).round().clamp(0.0, 255.0);
         u8::try_from(floor_to_u32(scaled)).unwrap_or(255)
     };
-    Color { r: to_byte(red1), g: to_byte(green1), b: to_byte(blue1) }
+    Color {
+        r: to_byte(red1),
+        g: to_byte(green1),
+        b: to_byte(blue1),
+    }
 }
 
 /// Convert an RGB [`Color`] to HSL (hue degrees, sat/light 0–1).
@@ -248,7 +269,10 @@ impl Converter {
     /// A fresh converter with empty fields, focused on the HEX field.
     #[must_use]
     pub fn new() -> Self {
-        Converter { fields: [String::new(), String::new(), String::new()], focus: Field::Hex }
+        Converter {
+            fields: [String::new(), String::new(), String::new()],
+            focus: Field::Hex,
+        }
     }
 
     /// Seed every field from `color`, keeping the current focus.
@@ -330,7 +354,14 @@ mod tests {
     fn parses_hex_long_and_short() {
         assert_eq!(Color::from_hex("#ff0000"), Some(RED));
         assert_eq!(Color::from_hex("f00"), Some(RED));
-        assert_eq!(Color::from_hex("#FFF"), Some(Color { r: 255, g: 255, b: 255 }));
+        assert_eq!(
+            Color::from_hex("#FFF"),
+            Some(Color {
+                r: 255,
+                g: 255,
+                b: 255
+            })
+        );
         assert_eq!(Color::from_hex("#zz0000"), None);
         assert_eq!(Color::from_hex("#ff00"), None);
     }
@@ -346,8 +377,18 @@ mod tests {
     #[test]
     fn parses_hsl() {
         assert_eq!(Color::from_hsl("0, 100%, 50%"), Some(RED));
-        assert_eq!(Color::from_hsl("hsl(120, 100%, 50%)"), Some(Color { r: 0, g: 255, b: 0 }));
-        assert_eq!(Color::from_hsl("0, 0, 100"), Some(Color { r: 255, g: 255, b: 255 }));
+        assert_eq!(
+            Color::from_hsl("hsl(120, 100%, 50%)"),
+            Some(Color { r: 0, g: 255, b: 0 })
+        );
+        assert_eq!(
+            Color::from_hsl("0, 0, 100"),
+            Some(Color {
+                r: 255,
+                g: 255,
+                b: 255
+            })
+        );
         assert_eq!(Color::from_hsl("400, 100%, 50%"), None);
     }
 
@@ -384,7 +425,19 @@ mod tests {
 
     #[test]
     fn round_trips_through_hsl() {
-        for c in [RED, Color { r: 18, g: 52, b: 86 }, Color { r: 200, g: 200, b: 50 }] {
+        for c in [
+            RED,
+            Color {
+                r: 18,
+                g: 52,
+                b: 86,
+            },
+            Color {
+                r: 200,
+                g: 200,
+                b: 50,
+            },
+        ] {
             let back = Color::from_hsl(&c.to_hsl()).unwrap();
             // HSL rounding can shift each channel by a small amount.
             assert!((i32::from(back.r) - i32::from(c.r)).unsigned_abs() <= 3);

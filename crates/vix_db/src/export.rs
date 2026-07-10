@@ -27,8 +27,14 @@ pub enum Format {
 }
 
 /// Every format, in the order the export dialog cycles through them.
-pub const FORMATS: &[Format] =
-    &[Format::Csv, Format::Tsv, Format::Json, Format::Ndjson, Format::Markdown, Format::Sql];
+pub const FORMATS: &[Format] = &[
+    Format::Csv,
+    Format::Tsv,
+    Format::Json,
+    Format::Ndjson,
+    Format::Markdown,
+    Format::Sql,
+];
 
 impl Format {
     /// Display label (also the conventional file extension).
@@ -96,14 +102,18 @@ fn json(headers: &[String], rows: &[&Vec<String>], array: bool) -> String {
             headers
                 .iter()
                 .enumerate()
-                .map(|(i, h)| (h.clone(), serde_json::Value::from(row.get(i).map_or("", String::as_str))))
+                .map(|(i, h)| {
+                    (
+                        h.clone(),
+                        serde_json::Value::from(row.get(i).map_or("", String::as_str)),
+                    )
+                })
                 .collect::<serde_json::Map<String, serde_json::Value>>()
                 .into()
         })
         .collect();
     if array {
-        let mut out =
-            serde_json::to_string_pretty(&objects).unwrap_or_else(|_| "[]".to_string());
+        let mut out = serde_json::to_string_pretty(&objects).unwrap_or_else(|_| "[]".to_string());
         out.push('\n');
         out
     } else {
@@ -145,7 +155,11 @@ fn sql_inserts(headers: &[String], rows: &[&Vec<String>], table: &str) -> String
                 }
             })
             .collect();
-        let _ = writeln!(out, "INSERT INTO {table} ({cols}) VALUES ({});", values.join(", "));
+        let _ = writeln!(
+            out,
+            "INSERT INTO {table} ({cols}) VALUES ({});",
+            values.join(", ")
+        );
     }
     out
 }
@@ -157,7 +171,10 @@ mod tests {
     fn rows() -> (Vec<String>, Vec<Vec<String>>) {
         (
             vec!["id".into(), "name".into()],
-            vec![vec!["1".into(), "ada".into()], vec!["2".into(), "say \"hi\", ok".into()]],
+            vec![
+                vec!["1".into(), "ada".into()],
+                vec!["2".into(), "say \"hi\", ok".into()],
+            ],
         )
     }
 

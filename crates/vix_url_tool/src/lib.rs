@@ -6,11 +6,10 @@
 //! reports an error when the result is not valid UTF-8.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-use percent_encoding::{percent_decode_str, percent_encode, AsciiSet, CONTROLS};
+use percent_encoding::{AsciiSet, CONTROLS, percent_decode_str, percent_encode};
 
 /// Everything except the RFC 3986 "unreserved" set is escaped: start from all
 /// controls and add every ASCII punctuation/space character except `-`, `_`,

@@ -15,15 +15,16 @@ fn parse(s: &str) -> Result<i128, String> {
         Some(rest) => (true, rest),
         None => (false, t.strip_prefix('+').unwrap_or(&t)),
     };
-    let (radix, digits) = if let Some(h) = body.strip_prefix("0x").or_else(|| body.strip_prefix("0X")) {
-        (16, h)
-    } else if let Some(b) = body.strip_prefix("0b").or_else(|| body.strip_prefix("0B")) {
-        (2, b)
-    } else if let Some(o) = body.strip_prefix("0o").or_else(|| body.strip_prefix("0O")) {
-        (8, o)
-    } else {
-        (10, body)
-    };
+    let (radix, digits) =
+        if let Some(h) = body.strip_prefix("0x").or_else(|| body.strip_prefix("0X")) {
+            (16, h)
+        } else if let Some(b) = body.strip_prefix("0b").or_else(|| body.strip_prefix("0B")) {
+            (2, b)
+        } else if let Some(o) = body.strip_prefix("0o").or_else(|| body.strip_prefix("0O")) {
+            (8, o)
+        } else {
+            (10, body)
+        };
     if digits.is_empty() {
         return Err("no number".to_string());
     }

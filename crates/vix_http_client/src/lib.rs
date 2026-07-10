@@ -83,7 +83,12 @@ pub fn parse_request(text: &str) -> Option<Request> {
 
     // Everything remaining is the body.
     let body = lines.collect::<Vec<_>>().join("\n");
-    Some(Request { method, url, headers, body: body.trim_end().to_string() })
+    Some(Request {
+        method,
+        url,
+        headers,
+        body: body.trim_end().to_string(),
+    })
 }
 
 /// Perform `req` (blocking) and format the response as text: a status line, the
@@ -102,7 +107,11 @@ pub fn send(req: &Request) -> Result<String, String> {
     for (name, value) in &req.headers {
         r = r.set(name, value);
     }
-    let result = if req.body.is_empty() { r.call() } else { r.send_string(&req.body) };
+    let result = if req.body.is_empty() {
+        r.call()
+    } else {
+        r.send_string(&req.body)
+    };
     match result {
         // A success or an HTTP status error both carry a response worth showing.
         Ok(resp) | Err(ureq::Error::Status(_, resp)) => Ok(format_response(resp)),
@@ -114,7 +123,12 @@ pub fn send(req: &Request) -> Result<String, String> {
 /// line, body). Consumes `resp` to read its body.
 fn format_response(resp: ureq::Response) -> String {
     use std::fmt::Write as _;
-    let mut out = format!("{} {} {}\n", resp.http_version(), resp.status(), resp.status_text());
+    let mut out = format!(
+        "{} {} {}\n",
+        resp.http_version(),
+        resp.status(),
+        resp.status_text()
+    );
     for name in resp.headers_names() {
         if let Some(value) = resp.header(&name) {
             let _ = writeln!(out, "{name}: {value}");
@@ -140,7 +154,10 @@ mod tests {
         let req = parse_request(text).unwrap();
         assert_eq!(req.method, "POST");
         assert_eq!(req.url, "https://e.com/x");
-        assert_eq!(req.headers, vec![("Content-Type".to_string(), "application/json".to_string())]);
+        assert_eq!(
+            req.headers,
+            vec![("Content-Type".to_string(), "application/json".to_string())]
+        );
         assert_eq!(req.body, "{\"a\":1}");
     }
 

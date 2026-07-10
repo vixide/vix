@@ -118,7 +118,11 @@ impl Editor {
     pub fn remove_duplicate_lines(&mut self) {
         self.edit_line_range(|lines| {
             let mut seen = std::collections::HashSet::new();
-            lines.iter().filter(|l| seen.insert(l.to_string())).map(|l| (*l).to_string()).collect()
+            lines
+                .iter()
+                .filter(|l| seen.insert(l.to_string()))
+                .map(|l| (*l).to_string())
+                .collect()
         });
     }
 
@@ -184,7 +188,11 @@ impl Editor {
                 let a = self.code_ref().char_to_line(sel.start);
                 // A selection ending exactly at a line start does not include
                 // that trailing (empty) line.
-                let end = if sel.end > sel.start { sel.end - 1 } else { sel.end };
+                let end = if sel.end > sel.start {
+                    sel.end - 1
+                } else {
+                    sel.end
+                };
                 let b = self.code_ref().char_to_line(end);
                 (a.min(b), a.max(b))
             }
@@ -285,7 +293,11 @@ fn random_seed() -> u64 {
 /// Pure (seed in, permutation out) so it is deterministic and unit-testable.
 fn shuffle(lines: &[&str], seed: u64) -> Vec<String> {
     let mut v: Vec<String> = lines.iter().map(|l| (*l).to_string()).collect();
-    let mut state = if seed == 0 { 0x9E37_79B9_7F4A_7C15 } else { seed };
+    let mut state = if seed == 0 {
+        0x9E37_79B9_7F4A_7C15
+    } else {
+        seed
+    };
     for i in (1..v.len()).rev() {
         // xorshift64
         state ^= state << 13;
@@ -311,14 +323,20 @@ mod tests {
     fn move_down_swaps_with_next_line() {
         let mut e = ed("aaa\nbbb\nccc", 1); // cursor on line 0
         e.move_line_down();
-        assert_eq!(e.code_ref().slice(0, e.code_ref().len_chars()), "bbb\naaa\nccc");
+        assert_eq!(
+            e.code_ref().slice(0, e.code_ref().len_chars()),
+            "bbb\naaa\nccc"
+        );
     }
 
     #[test]
     fn move_up_swaps_with_previous_line() {
         let mut e = ed("aaa\nbbb\nccc", 5); // cursor on line 1 ("bbb")
         e.move_line_up();
-        assert_eq!(e.code_ref().slice(0, e.code_ref().len_chars()), "bbb\naaa\nccc");
+        assert_eq!(
+            e.code_ref().slice(0, e.code_ref().len_chars()),
+            "bbb\naaa\nccc"
+        );
     }
 
     #[test]
@@ -339,7 +357,10 @@ mod tests {
     fn final_newline_is_preserved() {
         let mut e = ed("aaa\nbbb\n", 1);
         e.move_line_down();
-        assert_eq!(e.code_ref().slice(0, e.code_ref().len_chars()), "bbb\naaa\n");
+        assert_eq!(
+            e.code_ref().slice(0, e.code_ref().len_chars()),
+            "bbb\naaa\n"
+        );
     }
 
     fn content(e: &Editor) -> String {

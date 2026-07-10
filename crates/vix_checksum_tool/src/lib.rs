@@ -6,7 +6,6 @@
 //! string — 64 characters for SHA-256, 128 for SHA-512.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

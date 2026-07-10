@@ -102,7 +102,7 @@ impl WorkspaceSearch {
     }
 
     /// Effective regex pattern from the query and toggles (no whole-word here).
-    #[must_use] 
+    #[must_use]
     pub fn pattern(&self) -> Option<String> {
         if self.query.len() < 2 {
             return None;

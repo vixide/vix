@@ -48,7 +48,11 @@ pub fn build(old: &str, new: &str) -> Vec<Line> {
     let mut out = Vec::new();
     for (gi, group) in groups.iter().enumerate() {
         if gi > 0 {
-            out.push(Line { kind: Kind::Sep, text: "\u{22ef}".to_string(), emphasis: Vec::new() });
+            out.push(Line {
+                kind: Kind::Sep,
+                text: "\u{22ef}".to_string(),
+                emphasis: Vec::new(),
+            });
         }
         for op in group {
             // Inline (word-level) changes give per-segment `emphasized` flags,
@@ -69,7 +73,11 @@ pub fn build(old: &str, new: &str) -> Vec<Line> {
                         emphasis.push((start, text.chars().count()));
                     }
                 }
-                out.push(Line { kind, text, emphasis });
+                out.push(Line {
+                    kind,
+                    text,
+                    emphasis,
+                });
             }
         }
     }
@@ -90,7 +98,11 @@ mod tests {
         let lines = build("one\ntwo\nthree\n", "one\nTWO\nthree\n");
         assert!(lines.iter().any(|l| l.kind == Kind::Del && l.text == "two"));
         assert!(lines.iter().any(|l| l.kind == Kind::Add && l.text == "TWO"));
-        assert!(lines.iter().any(|l| l.kind == Kind::Context && l.text == "one"));
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.kind == Kind::Context && l.text == "one")
+        );
     }
 
     #[test]
@@ -98,12 +110,18 @@ mod tests {
         // Only "quick" → "slow" differs; emphasis should cover that word, not the
         // whole line.
         let lines = build("the quick fox\n", "the slow fox\n");
-        let del = lines.iter().find(|l| l.kind == Kind::Del).expect("a deleted line");
+        let del = lines
+            .iter()
+            .find(|l| l.kind == Kind::Del)
+            .expect("a deleted line");
         assert!(!del.emphasis.is_empty(), "changed line has word emphasis");
         // The emphasized span decodes to the differing word within the line.
         let (s, e) = del.emphasis[0];
         let span: String = del.text.chars().skip(s).take(e - s).collect();
-        assert!(span.contains("quick"), "emphasis covers the changed word: {span:?}");
+        assert!(
+            span.contains("quick"),
+            "emphasis covers the changed word: {span:?}"
+        );
         assert!(e - s < del.text.chars().count(), "not the whole line");
     }
 
@@ -114,6 +132,9 @@ mod tests {
         newv[2] = "CHANGED A\n".to_string();
         newv[37] = "CHANGED B\n".to_string();
         let lines = build(&old, &newv.concat());
-        assert!(lines.iter().any(|l| l.kind == Kind::Sep), "distant hunks are separated");
+        assert!(
+            lines.iter().any(|l| l.kind == Kind::Sep),
+            "distant hunks are separated"
+        );
     }
 }

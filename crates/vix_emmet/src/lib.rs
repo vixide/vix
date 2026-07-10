@@ -35,7 +35,11 @@ pub fn expand(abbr: &str) -> Option<String> {
         return None;
     }
     let chars: Vec<char> = abbr.chars().collect();
-    let mut p = Parser { chars, pos: 0, nodes: Vec::new() };
+    let mut p = Parser {
+        chars,
+        pos: 0,
+        nodes: Vec::new(),
+    };
     let roots = p.parse()?;
     if p.pos != p.chars.len() {
         return None; // unparsed remainder (e.g. unsupported `()`)
@@ -111,8 +115,15 @@ impl Parser {
     /// modifiers in any order.
     fn parse_item(&mut self) -> Option<Node> {
         let tag = self.read_name();
-        let mut node =
-            Node { tag, id: None, classes: Vec::new(), text: None, count: 1, parent: None, children: Vec::new() };
+        let mut node = Node {
+            tag,
+            id: None,
+            classes: Vec::new(),
+            text: None,
+            count: 1,
+            parent: None,
+            children: Vec::new(),
+        };
         loop {
             match self.peek() {
                 Some('#') => {
@@ -155,11 +166,22 @@ impl Parser {
         let node = &self.nodes[idx];
         for i in 1..=node.count.max(1) {
             let indent = "  ".repeat(depth);
-            let id = node.id.as_ref().map(|v| format!(" id=\"{}\"", number(v, i))).unwrap_or_default();
+            let id = node
+                .id
+                .as_ref()
+                .map(|v| format!(" id=\"{}\"", number(v, i)))
+                .unwrap_or_default();
             let class = if node.classes.is_empty() {
                 String::new()
             } else {
-                format!(" class=\"{}\"", node.classes.iter().map(|c| number(c, i)).collect::<Vec<_>>().join(" "))
+                format!(
+                    " class=\"{}\"",
+                    node.classes
+                        .iter()
+                        .map(|c| number(c, i))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                )
             };
             let open = format!("<{}{id}{class}>", node.tag);
             if node.children.is_empty() {
@@ -196,7 +218,10 @@ mod tests {
 
     #[test]
     fn id_classes_and_text() {
-        assert_eq!(expand("a#home.nav.big{Home}").unwrap(), "<a id=\"home\" class=\"nav big\">Home</a>\n");
+        assert_eq!(
+            expand("a#home.nav.big{Home}").unwrap(),
+            "<a id=\"home\" class=\"nav big\">Home</a>\n"
+        );
     }
 
     #[test]

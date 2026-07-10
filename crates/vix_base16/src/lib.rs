@@ -12,7 +12,7 @@
 
 #![warn(clippy::pedantic)]
 
-use vix_theme_model::{parse_theme, CustomTheme};
+use vix_theme_model::{CustomTheme, parse_theme};
 
 /// One palette: a display name and the 16 `base00`–`base0F` colors as RGB hex
 /// (no leading `#`), in order.
@@ -108,13 +108,8 @@ fn rgb(hex: &str) -> String {
 /// cursor, `base0E` keywords.
 fn to_json(p: &Palette) -> String {
     let c = |i: usize| rgb(p.colors[i]);
-    let region = |fg: usize, bg: usize| {
-        format!(
-            "{{\"foreground\": {}, \"background\": {}}}",
-            c(fg),
-            c(bg)
-        )
-    };
+    let region =
+        |fg: usize, bg: usize| format!("{{\"foreground\": {}, \"background\": {}}}", c(fg), c(bg));
     format!(
         "{{\"name\": {name:?}, \"menu-bar\": {chrome}, \"status-bar\": {chrome}, \
          \"left-dock\": {chrome}, \"right-dock\": {chrome}, \
@@ -134,7 +129,11 @@ fn to_json(p: &Palette) -> String {
 /// All base16-derived themes, ready to merge into the bundled theme set.
 #[must_use]
 pub fn themes() -> Vec<CustomTheme> {
-    PALETTES.iter().map(to_json).filter_map(|j| parse_theme(&j)).collect()
+    PALETTES
+        .iter()
+        .map(to_json)
+        .filter_map(|j| parse_theme(&j))
+        .collect()
 }
 
 #[cfg(test)]
@@ -156,7 +155,10 @@ mod tests {
     #[test]
     fn colors_map_from_the_palette() {
         // Tomorrow Night: base00 background = 1d1f21, base05 foreground = c5c8c6.
-        let t = themes().into_iter().find(|t| t.name == "Base16 Tomorrow Night").unwrap();
+        let t = themes()
+            .into_iter()
+            .find(|t| t.name == "Base16 Tomorrow Night")
+            .unwrap();
         assert_eq!(t.editor.background, Some([0x1d, 0x1f, 0x21]));
         assert_eq!(t.editor.foreground, Some([0xc5, 0xc8, 0xc6]));
     }

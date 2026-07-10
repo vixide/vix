@@ -44,7 +44,11 @@ pub fn all() -> &'static [MediaType] {
     static TABLE: OnceLock<Vec<MediaType>> = OnceLock::new();
     TABLE.get_or_init(|| {
         // The spec TSV is the single source of truth (see spec/media-types/).
-        include_str!("../../../spec/media-types/media-types.tsv").lines().skip(1).filter_map(parse_line).collect()
+        include_str!("../../../spec/media-types/media-types.tsv")
+            .lines()
+            .skip(1)
+            .filter_map(parse_line)
+            .collect()
     })
 }
 
@@ -59,7 +63,12 @@ fn parse_line(line: &'static str) -> Option<MediaType> {
     if media_type.is_empty() {
         return None;
     }
-    Some(MediaType { media_type, description, extension, base })
+    Some(MediaType {
+        media_type,
+        description,
+        extension,
+        base,
+    })
 }
 
 /// Normalize a file extension for comparison: lowercase, no leading dot.
@@ -75,7 +84,9 @@ pub fn for_extension(ext: &str) -> Option<&'static MediaType> {
     if want.is_empty() {
         return None;
     }
-    all().iter().find(|m| m.extension.split(',').any(|e| norm_ext(e) == want))
+    all()
+        .iter()
+        .find(|m| m.extension.split(',').any(|e| norm_ext(e) == want))
 }
 
 /// Whether a row matches the (already lowercased) `query` across its media type,
@@ -108,7 +119,11 @@ impl Panel {
     /// Open the panel with an empty filter and the first row highlighted.
     #[must_use]
     pub fn open() -> Self {
-        Panel { query: String::new(), selected: 0, scroll: 0 }
+        Panel {
+            query: String::new(),
+            selected: 0,
+            scroll: 0,
+        }
     }
 
     /// Open the panel pre-selected to the media type for `ext`, if known.
@@ -128,7 +143,12 @@ impl Panel {
     #[must_use]
     pub fn matches(&self) -> Vec<usize> {
         let q = self.query.to_ascii_lowercase();
-        all().iter().enumerate().filter(|(_, m)| row_matches(m, &q)).map(|(i, _)| i).collect()
+        all()
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| row_matches(m, &q))
+            .map(|(i, _)| i)
+            .collect()
     }
 
     /// Number of rows matching the current filter.
@@ -221,13 +241,19 @@ mod tests {
     fn table_parses_with_common_types() {
         let t = all();
         assert!(t.len() > 100, "the media-type table has well over 100 rows");
-        assert!(t.iter().any(|m| m.media_type == "image/png" && m.extension == ".png"));
+        assert!(
+            t.iter()
+                .any(|m| m.media_type == "image/png" && m.extension == ".png")
+        );
         assert!(t.iter().any(|m| m.media_type == "application/json"));
         // The Base column classifies content as text or binary.
         let png = t.iter().find(|m| m.media_type == "image/png").unwrap();
         assert_eq!(png.base, "binary");
         assert!(!png.is_text());
-        let json = t.iter().find(|m| m.media_type == "application/json").unwrap();
+        let json = t
+            .iter()
+            .find(|m| m.media_type == "application/json")
+            .unwrap();
         assert_eq!(json.base, "text");
         assert!(json.is_text());
     }
@@ -238,7 +264,10 @@ mod tests {
         assert_eq!(for_extension(".PNG").unwrap().media_type, "image/png");
         // Multi-extension rows match every listed extension.
         assert_eq!(for_extension("yml").unwrap().media_type, "application/yaml");
-        assert_eq!(for_extension(".yaml").unwrap().media_type, "application/yaml");
+        assert_eq!(
+            for_extension(".yaml").unwrap().media_type,
+            "application/yaml"
+        );
         assert!(for_extension("nope-xyz").is_none());
         assert!(for_extension("").is_none());
     }

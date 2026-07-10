@@ -10,7 +10,6 @@
 //! host renders the table, maps clicks to rows, and inserts the chosen value.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -28,11 +27,17 @@ pub struct Row {
 
 impl Row {
     fn heading(label: &str) -> Self {
-        Row { label: label.to_string(), value: String::new() }
+        Row {
+            label: label.to_string(),
+            value: String::new(),
+        }
     }
 
     fn pair(label: &str, value: impl Into<String>) -> Self {
-        Row { label: label.to_string(), value: value.into() }
+        Row {
+            label: label.to_string(),
+            value: value.into(),
+        }
     }
 
     /// Whether this row is a section heading (no value to insert).
@@ -63,7 +68,11 @@ impl Panel {
     /// Gather a fresh snapshot and open the panel on its first row.
     #[must_use]
     pub fn open() -> Self {
-        Panel { rows: gather(), selected: 0, scroll: 0 }
+        Panel {
+            rows: gather(),
+            selected: 0,
+            scroll: 0,
+        }
     }
 
     /// Number of rows in the table.
@@ -130,7 +139,10 @@ impl Panel {
     /// The highlighted row's value (empty for a section heading).
     #[must_use]
     pub fn selected_value(&self) -> String {
-        self.rows.get(self.selected).map(|r| r.value.clone()).unwrap_or_default()
+        self.rows
+            .get(self.selected)
+            .map(|r| r.value.clone())
+            .unwrap_or_default()
     }
 }
 
@@ -177,9 +189,10 @@ pub fn human_uptime(secs: u64) -> String {
 fn env_or(keys: &[&str], fallback: &str) -> String {
     for key in keys {
         if let Ok(v) = std::env::var(key)
-            && !v.is_empty() {
-                return v;
-            }
+            && !v.is_empty()
+        {
+            return v;
+        }
     }
     fallback.to_string()
 }
@@ -194,9 +207,18 @@ pub fn gather() -> Vec<Row> {
     let mut rows = vec![
         Row::heading("Operating System"),
         Row::pair("Name", System::name().unwrap_or_else(|| unknown.into())),
-        Row::pair("Version", System::long_os_version().unwrap_or_else(|| unknown.into())),
-        Row::pair("Kernel", System::kernel_version().unwrap_or_else(|| unknown.into())),
-        Row::pair("Hostname", System::host_name().unwrap_or_else(|| unknown.into())),
+        Row::pair(
+            "Version",
+            System::long_os_version().unwrap_or_else(|| unknown.into()),
+        ),
+        Row::pair(
+            "Kernel",
+            System::kernel_version().unwrap_or_else(|| unknown.into()),
+        ),
+        Row::pair(
+            "Hostname",
+            System::host_name().unwrap_or_else(|| unknown.into()),
+        ),
         Row::pair("Architecture", std::env::consts::ARCH),
         Row::heading("CPU"),
     ];
@@ -215,7 +237,10 @@ pub fn gather() -> Vec<Row> {
     rows.push(Row::heading("Memory"));
     rows.push(Row::pair("Total RAM", human_bytes(sys.total_memory())));
     rows.push(Row::pair("Used RAM", human_bytes(sys.used_memory())));
-    rows.push(Row::pair("Available RAM", human_bytes(sys.available_memory())));
+    rows.push(Row::pair(
+        "Available RAM",
+        human_bytes(sys.available_memory()),
+    ));
     rows.push(Row::pair("Total swap", human_bytes(sys.total_swap())));
     rows.push(Row::pair("Used swap", human_bytes(sys.used_swap())));
 
@@ -238,7 +263,10 @@ pub fn gather() -> Vec<Row> {
     let load = System::load_average();
     rows.push(Row::pair(
         "Load average",
-        format!("{:.2} / {:.2} / {:.2} (1/5/15 min)", load.one, load.five, load.fifteen),
+        format!(
+            "{:.2} / {:.2} / {:.2} (1/5/15 min)",
+            load.one, load.five, load.fifteen
+        ),
     ));
 
     rows.push(Row::heading("Environment"));
@@ -275,9 +303,14 @@ mod tests {
     fn snapshot_has_headings_and_values() {
         let p = Panel::open();
         assert!(!p.is_empty(), "a snapshot produces rows");
-        assert!(p.rows.iter().any(super::Row::is_heading), "has section headings");
         assert!(
-            p.rows.iter().any(|r| r.label == "Logical cores" && !r.value.is_empty()),
+            p.rows.iter().any(super::Row::is_heading),
+            "has section headings"
+        );
+        assert!(
+            p.rows
+                .iter()
+                .any(|r| r.label == "Logical cores" && !r.value.is_empty()),
             "reports a logical core count"
         );
     }

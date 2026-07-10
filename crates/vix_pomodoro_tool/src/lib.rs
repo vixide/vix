@@ -9,7 +9,6 @@
 //! deterministic and unit-testable.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -62,7 +61,11 @@ impl Timer {
     /// A new idle timer with the default 25-minute work length.
     #[must_use]
     pub fn new() -> Self {
-        Timer { work_minutes: DEFAULT_WORK_MINUTES, phase: Phase::Idle, remaining: 0 }
+        Timer {
+            work_minutes: DEFAULT_WORK_MINUTES,
+            phase: Phase::Idle,
+            remaining: 0,
+        }
     }
 
     /// Change the work length by `delta` minutes, clamped to 1–180. Only allowed

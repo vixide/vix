@@ -77,7 +77,13 @@ pub fn pascal(s: &str) -> String {
 fn join_words(s: &str, sep: &str, upper: bool) -> String {
     split_words(s)
         .into_iter()
-        .map(|w| if upper { w.to_uppercase() } else { w.to_lowercase() })
+        .map(|w| {
+            if upper {
+                w.to_uppercase()
+            } else {
+                w.to_lowercase()
+            }
+        })
         .collect::<Vec<_>>()
         .join(sep)
 }
@@ -86,7 +92,10 @@ fn join_words(s: &str, sep: &str, upper: bool) -> String {
 fn capitalize(w: &str) -> String {
     let mut chars = w.chars();
     match chars.next() {
-        Some(first) => first.to_uppercase().chain(chars.flat_map(char::to_lowercase)).collect(),
+        Some(first) => first
+            .to_uppercase()
+            .chain(chars.flat_map(char::to_lowercase))
+            .collect(),
         None => String::new(),
     }
 }
@@ -100,9 +109,12 @@ fn split_words(s: &str) -> Vec<String> {
     for c in s.chars() {
         if c.is_alphanumeric() {
             if let Some(p) = prev
-                && (p.is_lowercase() || p.is_numeric()) && c.is_uppercase() && !cur.is_empty() {
-                    words.push(std::mem::take(&mut cur));
-                }
+                && (p.is_lowercase() || p.is_numeric())
+                && c.is_uppercase()
+                && !cur.is_empty()
+            {
+                words.push(std::mem::take(&mut cur));
+            }
             cur.push(c);
         } else if !cur.is_empty() {
             words.push(std::mem::take(&mut cur));

@@ -10,7 +10,6 @@
 //! to rows, and inserts the chosen character.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -81,7 +80,10 @@ impl Panel {
     /// Open the panel with the first row (`NUL`) highlighted.
     #[must_use]
     pub fn open() -> Self {
-        Panel { selected: 0, scroll: 0 }
+        Panel {
+            selected: 0,
+            scroll: 0,
+        }
     }
 
     /// Total number of rows in the table.
@@ -232,6 +234,9 @@ mod tests {
         assert!(p.select_index(65));
         assert_eq!(p.selected_char(), 'A');
         assert!(!p.select_index(LEN));
-        assert_eq!(p.selected, 65, "an out-of-range click leaves the selection put");
+        assert_eq!(
+            p.selected, 65,
+            "an out-of-range click leaves the selection put"
+        );
     }
 }

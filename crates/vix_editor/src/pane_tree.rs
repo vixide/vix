@@ -159,13 +159,21 @@ impl Pane {
                 *i += 1;
                 if here == target { None } else { Some(self) }
             }
-            Pane::Split { dir, ratio, first, second } => {
+            Pane::Split {
+                dir,
+                ratio,
+                first,
+                second,
+            } => {
                 let first = first.remove_leaf_inner(i, target);
                 let second = second.remove_leaf_inner(i, target);
                 match (first, second) {
-                    (Some(a), Some(b)) => {
-                        Some(Pane::Split { dir, ratio, first: Box::new(a), second: Box::new(b) })
-                    }
+                    (Some(a), Some(b)) => Some(Pane::Split {
+                        dir,
+                        ratio,
+                        first: Box::new(a),
+                        second: Box::new(b),
+                    }),
                     (Some(only), None) | (None, Some(only)) => Some(only),
                     (None, None) => None,
                 }
@@ -185,10 +193,19 @@ impl Pane {
     fn layout_inner(&self, area: Rect, i: &mut usize, out: &mut Vec<LeafBox>) {
         match self {
             Pane::Leaf(tab) => {
-                out.push(LeafBox { leaf: *i, tab: *tab, rect: area });
+                out.push(LeafBox {
+                    leaf: *i,
+                    tab: *tab,
+                    rect: area,
+                });
                 *i += 1;
             }
-            Pane::Split { dir, ratio, first, second } => {
+            Pane::Split {
+                dir,
+                ratio,
+                first,
+                second,
+            } => {
                 let (a, _div, b) = split_rects(area, *dir, *ratio);
                 first.layout_inner(a, i, out);
                 second.layout_inner(b, i, out);
@@ -206,7 +223,13 @@ impl Pane {
     }
 
     fn dividers_inner(&self, area: Rect, out: &mut Vec<(SplitDir, Rect)>) {
-        if let Pane::Split { dir, ratio, first, second } = self {
+        if let Pane::Split {
+            dir,
+            ratio,
+            first,
+            second,
+        } = self
+        {
             let (a, div, b) = split_rects(area, *dir, *ratio);
             out.push((*dir, div));
             first.dividers_inner(a, out);
@@ -217,13 +240,22 @@ impl Pane {
     /// The in-order leaf index whose rectangle contains `(col, row)`, if any.
     #[must_use]
     pub fn leaf_at(&self, area: Rect, col: u16, row: u16) -> Option<usize> {
-        self.layout(area).into_iter().find(|b| contains(b.rect, col, row)).map(|b| b.leaf)
+        self.layout(area)
+            .into_iter()
+            .find(|b| contains(b.rect, col, row))
+            .map(|b| b.leaf)
     }
 
     /// If `(col, row)` is on a divider, set that split's ratio from the pointer's
     /// position within the split's area; returns whether anything changed.
     pub fn resize_at(&mut self, area: Rect, col: u16, row: u16) -> bool {
-        if let Pane::Split { dir, ratio, first, second } = self {
+        if let Pane::Split {
+            dir,
+            ratio,
+            first,
+            second,
+        } = self
+        {
             let (a, div, b) = split_rects(area, *dir, *ratio);
             if contains(div, col, row) {
                 *ratio = ratio_from_pointer(area, *dir, col, row);
@@ -245,8 +277,18 @@ fn split_rects(area: Rect, dir: SplitDir, ratio: u16) -> (Rect, Rect, Rect) {
             let w0 = w0.clamp(1, total.saturating_sub(2).max(1));
             (
                 Rect { width: w0, ..area },
-                Rect { x: area.x + w0, y: area.y, width: 1, height: area.height },
-                Rect { x: area.x + w0 + 1, y: area.y, width: total.saturating_sub(w0 + 1), height: area.height },
+                Rect {
+                    x: area.x + w0,
+                    y: area.y,
+                    width: 1,
+                    height: area.height,
+                },
+                Rect {
+                    x: area.x + w0 + 1,
+                    y: area.y,
+                    width: total.saturating_sub(w0 + 1),
+                    height: area.height,
+                },
             )
         }
         SplitDir::Horizontal => {
@@ -255,8 +297,18 @@ fn split_rects(area: Rect, dir: SplitDir, ratio: u16) -> (Rect, Rect, Rect) {
             let h0 = h0.clamp(1, total.saturating_sub(2).max(1));
             (
                 Rect { height: h0, ..area },
-                Rect { x: area.x, y: area.y + h0, width: area.width, height: 1 },
-                Rect { x: area.x, y: area.y + h0 + 1, width: area.width, height: total.saturating_sub(h0 + 1) },
+                Rect {
+                    x: area.x,
+                    y: area.y + h0,
+                    width: area.width,
+                    height: 1,
+                },
+                Rect {
+                    x: area.x,
+                    y: area.y + h0 + 1,
+                    width: area.width,
+                    height: total.saturating_sub(h0 + 1),
+                },
             )
         }
     }
@@ -286,7 +338,12 @@ mod tests {
     use super::*;
 
     fn area() -> Rect {
-        Rect { x: 0, y: 0, width: 80, height: 24 }
+        Rect {
+            x: 0,
+            y: 0,
+            width: 80,
+            height: 24,
+        }
     }
 
     #[test]
@@ -338,7 +395,10 @@ mod tests {
         let mut p = Pane::Leaf(0);
         p.split_leaf(0, SplitDir::Vertical, 1);
         let div = p.dividers(area())[0].1;
-        assert!(p.resize_at(area(), div.x, div.y), "pointer on divider resizes");
+        assert!(
+            p.resize_at(area(), div.x, div.y),
+            "pointer on divider resizes"
+        );
         // Off a divider does nothing.
         assert!(!p.resize_at(area(), 1, 1));
     }

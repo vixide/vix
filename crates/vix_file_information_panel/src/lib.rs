@@ -8,7 +8,6 @@
 //! so a value can be inserted into the editor.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -48,7 +47,10 @@ pub struct Row {
 
 impl Row {
     fn new(label: &str, value: impl Into<String>) -> Self {
-        Row { label: label.to_string(), value: value.into() }
+        Row {
+            label: label.to_string(),
+            value: value.into(),
+        }
     }
 }
 
@@ -56,19 +58,46 @@ impl Row {
 #[must_use]
 pub fn rows(info: &FileInfo) -> Vec<Row> {
     let mut rows = vec![
-        Row::new("Name", if info.name.is_empty() { "(unsaved)".into() } else { info.name.clone() }),
-        Row::new("Path", if info.path.is_empty() { "(unsaved)".into() } else { info.path.clone() }),
+        Row::new(
+            "Name",
+            if info.name.is_empty() {
+                "(unsaved)".into()
+            } else {
+                info.name.clone()
+            },
+        ),
+        Row::new(
+            "Path",
+            if info.path.is_empty() {
+                "(unsaved)".into()
+            } else {
+                info.path.clone()
+            },
+        ),
         Row::new("Language", info.language.clone()),
-        Row::new("Modified", if info.dirty { "yes (unsaved changes)" } else { "no" }),
+        Row::new(
+            "Modified",
+            if info.dirty {
+                "yes (unsaved changes)"
+            } else {
+                "no"
+            },
+        ),
         Row::new("Characters", info.chars.to_string()),
         Row::new("Words", info.words.to_string()),
         Row::new("Lines", info.lines.to_string()),
     ];
     if let Some(bytes) = info.bytes {
-        rows.push(Row::new("Size", format!("{} ({bytes} bytes)", human_bytes(bytes))));
+        rows.push(Row::new(
+            "Size",
+            format!("{} ({bytes} bytes)", human_bytes(bytes)),
+        ));
     }
     if let Some(mode) = info.mode {
-        rows.push(Row::new("Permissions", format!("{} ({:o})", format_unix_mode(mode), mode & 0o7777)));
+        rows.push(Row::new(
+            "Permissions",
+            format!("{} ({:o})", format_unix_mode(mode), mode & 0o7777),
+        ));
     }
     if let Some(secs) = info.modified_secs {
         rows.push(Row::new("Last modified", format_unix_time(secs)));
@@ -101,9 +130,15 @@ pub fn human_bytes(n: u64) -> String {
 pub fn format_unix_mode(mode: u32) -> String {
     let bit = |shift: u32, ch: char| if mode & (1 << shift) != 0 { ch } else { '-' };
     [
-        bit(8, 'r'), bit(7, 'w'), bit(6, 'x'),
-        bit(5, 'r'), bit(4, 'w'), bit(3, 'x'),
-        bit(2, 'r'), bit(1, 'w'), bit(0, 'x'),
+        bit(8, 'r'),
+        bit(7, 'w'),
+        bit(6, 'x'),
+        bit(5, 'r'),
+        bit(4, 'w'),
+        bit(3, 'x'),
+        bit(2, 'r'),
+        bit(1, 'w'),
+        bit(0, 'x'),
     ]
     .iter()
     .collect()
@@ -148,7 +183,11 @@ impl Panel {
     /// Open the panel over the rows built from `info`.
     #[must_use]
     pub fn open(info: &FileInfo) -> Self {
-        Panel { rows: rows(info), selected: 0, scroll: 0 }
+        Panel {
+            rows: rows(info),
+            selected: 0,
+            scroll: 0,
+        }
     }
 
     /// Number of rows.
@@ -214,7 +253,10 @@ impl Panel {
     /// The highlighted row's value (what insertion uses).
     #[must_use]
     pub fn selected_value(&self) -> String {
-        self.rows.get(self.selected).map(|r| r.value.clone()).unwrap_or_default()
+        self.rows
+            .get(self.selected)
+            .map(|r| r.value.clone())
+            .unwrap_or_default()
     }
 }
 
@@ -254,23 +296,42 @@ mod tests {
         };
         let r = rows(&info);
         assert!(r.iter().any(|x| x.label == "Characters" && x.value == "10"));
-        assert!(r.iter().any(|x| x.label == "Permissions" && x.value.starts_with("rw-r--r--")));
-        assert!(r.iter().any(|x| x.label == "Size" && x.value.contains("2.0 KiB")));
-        assert!(r.iter().any(|x| x.label == "Modified" && x.value.starts_with("yes")));
+        assert!(
+            r.iter()
+                .any(|x| x.label == "Permissions" && x.value.starts_with("rw-r--r--"))
+        );
+        assert!(
+            r.iter()
+                .any(|x| x.label == "Size" && x.value.contains("2.0 KiB"))
+        );
+        assert!(
+            r.iter()
+                .any(|x| x.label == "Modified" && x.value.starts_with("yes"))
+        );
     }
 
     #[test]
     fn unsaved_buffer_omits_disk_fields() {
-        let info = FileInfo { language: "text".into(), lines: 1, ..Default::default() };
+        let info = FileInfo {
+            language: "text".into(),
+            lines: 1,
+            ..Default::default()
+        };
         let r = rows(&info);
-        assert!(r.iter().any(|x| x.label == "Name" && x.value == "(unsaved)"));
+        assert!(
+            r.iter()
+                .any(|x| x.label == "Name" && x.value == "(unsaved)")
+        );
         assert!(!r.iter().any(|x| x.label == "Size"));
         assert!(!r.iter().any(|x| x.label == "Permissions"));
     }
 
     #[test]
     fn panel_navigation_clamps() {
-        let info = FileInfo { language: "text".into(), ..Default::default() };
+        let info = FileInfo {
+            language: "text".into(),
+            ..Default::default()
+        };
         let mut p = Panel::open(&info);
         let last = p.len() - 1;
         p.up();

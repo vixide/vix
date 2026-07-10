@@ -34,8 +34,11 @@ pub fn bars(headers: &[String], rows: &[&Vec<String>]) -> Option<String> {
         return None;
     }
     let peak = parsed.iter().fold(0f64, |m, (_, v)| m.max(v.abs()));
-    let label_w =
-        parsed.iter().map(|(l, _)| l.chars().count().min(LABEL_MAX)).max().unwrap_or(0);
+    let label_w = parsed
+        .iter()
+        .map(|(l, _)| l.chars().count().min(LABEL_MAX))
+        .max()
+        .unwrap_or(0);
 
     let mut out = format!("{}  by  {}\n\n", headers[0], headers[value_col]);
     for (label, value) in &parsed {
@@ -84,7 +87,9 @@ mod tests {
     use super::*;
 
     fn rows(data: &[(&str, &str)]) -> Vec<Vec<String>> {
-        data.iter().map(|(a, b)| vec![(*a).to_string(), (*b).to_string()]).collect()
+        data.iter()
+            .map(|(a, b)| vec![(*a).to_string(), (*b).to_string()])
+            .collect()
     }
 
     #[test]
@@ -105,8 +110,14 @@ mod tests {
     fn rejects_non_numeric_and_empty() {
         let owned = rows(&[("a", "x"), ("b", "y")]);
         let refs: Vec<&Vec<String>> = owned.iter().collect();
-        assert!(bars(&["k".into(), "v".into()], &refs).is_none(), "no numbers");
-        assert!(bars(&["only".into()], &[]).is_none(), "one column / no rows");
+        assert!(
+            bars(&["k".into(), "v".into()], &refs).is_none(),
+            "no numbers"
+        );
+        assert!(
+            bars(&["only".into()], &[]).is_none(),
+            "one column / no rows"
+        );
     }
 
     #[test]

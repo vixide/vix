@@ -16,7 +16,11 @@ use vix_editor_core::history::History;
 
 /// The directory where per-file undo histories live (`<config>/undo/`).
 fn undo_dir() -> Option<PathBuf> {
-    Some(vix_settings::Settings::config_path()?.parent()?.join("undo"))
+    Some(
+        vix_settings::Settings::config_path()?
+            .parent()?
+            .join("undo"),
+    )
 }
 
 /// Hex SHA-256 of `s`.
@@ -54,7 +58,10 @@ pub fn save(file: &Path, content: &str, history: &History) {
         let _ = std::fs::create_dir_all(parent);
     }
     let hash = sha(content);
-    if let Ok(json) = serde_json::to_string(&StoredRef { hash: &hash, history }) {
+    if let Ok(json) = serde_json::to_string(&StoredRef {
+        hash: &hash,
+        history,
+    }) {
         let _ = std::fs::write(&path, json);
     }
 }

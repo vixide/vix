@@ -33,8 +33,16 @@ pub fn table_name(path: &str) -> String {
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("import");
-    let name: String =
-        stem.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' }).collect();
+    let name: String = stem
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
     let name = name.trim_matches('_').to_string();
     if name.is_empty() || name.as_bytes()[0].is_ascii_digit() {
         format!("t_{name}")
@@ -111,14 +119,27 @@ pub fn statements(kind: Kind, table: &str, records: &[Vec<String>]) -> Vec<Strin
         .map(|(i, h)| {
             let name: String = h
                 .chars()
-                .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || c == '_' {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
                 .collect();
             let name = name.trim_matches('_');
-            if name.is_empty() { format!("col{}", i + 1) } else { name.to_string() }
+            if name.is_empty() {
+                format!("col{}", i + 1)
+            } else {
+                name.to_string()
+            }
         })
         .collect();
     let ident = quote_ident(kind, table);
-    let col_defs: Vec<String> = cols.iter().map(|c| format!("{} TEXT", quote_ident(kind, c))).collect();
+    let col_defs: Vec<String> = cols
+        .iter()
+        .map(|c| format!("{} TEXT", quote_ident(kind, c)))
+        .collect();
     let create = format!("CREATE TABLE {ident} ({})", col_defs.join(", "));
 
     let data = &records[1..];
@@ -129,13 +150,20 @@ pub fn statements(kind: Kind, table: &str, records: &[Vec<String>]) -> Vec<Strin
         .iter()
         .map(|row| {
             let vals: Vec<String> = (0..width)
-                .map(|i| row.get(i).map_or_else(|| "''".to_string(), |v| quote_literal(v)))
+                .map(|i| {
+                    row.get(i)
+                        .map_or_else(|| "''".to_string(), |v| quote_literal(v))
+                })
                 .collect();
             format!("({})", vals.join(", "))
         })
         .collect();
     let col_list: Vec<String> = cols.iter().map(|c| quote_ident(kind, c)).collect();
-    let insert = format!("INSERT INTO {ident} ({}) VALUES {}", col_list.join(", "), tuples.join(", "));
+    let insert = format!(
+        "INSERT INTO {ident} ({}) VALUES {}",
+        col_list.join(", "),
+        tuples.join(", ")
+    );
     vec![create, insert]
 }
 
@@ -163,10 +191,12 @@ mod tests {
     fn statements_create_and_insert() {
         let recs = parse("id,name\n1,ada\n2,O'Hara\n", ',');
         let sql = statements(Kind::Sqlite, "people", &recs);
-        assert_eq!(sql[0], "CREATE TABLE \"people\" (\"id\" TEXT, \"name\" TEXT)");
         assert_eq!(
-            sql[1],
-            "INSERT INTO \"people\" (\"id\", \"name\") VALUES (1, 'ada'), (2, 'O''Hara')",
+            sql[0],
+            "CREATE TABLE \"people\" (\"id\" TEXT, \"name\" TEXT)"
+        );
+        assert_eq!(
+            sql[1], "INSERT INTO \"people\" (\"id\", \"name\") VALUES (1, 'ada'), (2, 'O''Hara')",
             "values quoted as literals; numbers bare",
         );
     }

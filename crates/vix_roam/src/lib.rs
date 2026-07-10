@@ -118,7 +118,10 @@ pub fn nodeify(text: &str, line: usize, id: &str) -> Option<String> {
     let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
     headline_stars(lines.get(line)?)?;
     // An existing drawer must start on the very next line.
-    if lines.get(line + 1).is_some_and(|l| l.trim().eq_ignore_ascii_case(":PROPERTIES:")) {
+    if lines
+        .get(line + 1)
+        .is_some_and(|l| l.trim().eq_ignore_ascii_case(":PROPERTIES:"))
+    {
         let mut i = line + 2;
         while i < lines.len() && !lines[i].trim().eq_ignore_ascii_case(":END:") {
             if lines[i].trim().to_ascii_uppercase().starts_with(":ID:") {
@@ -143,7 +146,9 @@ pub fn all_ids(content: &str) -> Vec<String> {
         .lines()
         .filter_map(|l| {
             let t = l.trim();
-            t.get(..4).filter(|p| p.eq_ignore_ascii_case(":ID:")).map(|_| t[4..].trim().to_string())
+            t.get(..4)
+                .filter(|p| p.eq_ignore_ascii_case(":ID:"))
+                .map(|_| t[4..].trim().to_string())
         })
         .filter(|s| !s.is_empty())
         .collect()
@@ -269,7 +274,9 @@ pub fn backlinks(target_id: &str, target_title: &str, files: &[(String, String)]
         }
         if !did_link && !title_lc.is_empty() {
             for line in content.lines() {
-                if line.to_ascii_lowercase().contains(&title_lc) && !line.trim_start().starts_with("#+title:") {
+                if line.to_ascii_lowercase().contains(&title_lc)
+                    && !line.trim_start().starts_with("#+title:")
+                {
                     unlinked.push((name.clone(), line.trim().to_string()));
                 }
             }
@@ -309,9 +316,13 @@ pub fn graph(files: &[(String, String)]) -> String {
         let _ = writeln!(out, "\tn{n}[\"{safe}\"]");
     }
     for (_, content) in files {
-        let Some(from) = node_id(content).and_then(|id| index(&id)) else { continue };
+        let Some(from) = node_id(content).and_then(|id| index(&id)) else {
+            continue;
+        };
         for cap in ID_LINK.captures_iter(content) {
-            if let Some(to) = index(cap[1].trim()) && to != from {
+            if let Some(to) = index(cap[1].trim())
+                && to != from
+            {
                 let _ = writeln!(out, "\tn{from} --> n{to}");
             }
         }
@@ -326,19 +337,32 @@ pub fn graph(files: &[(String, String)]) -> String {
 pub fn index(files: &[(String, String)]) -> String {
     let mut rows: Vec<(String, String, String)> = Vec::new();
     for (name, content) in files {
-        let Some(title) = node_title(content) else { continue };
+        let Some(title) = node_title(content) else {
+            continue;
+        };
         let tags = content
             .lines()
-            .find(|l| l.trim_start().to_ascii_lowercase().starts_with("#+filetags:"))
+            .find(|l| {
+                l.trim_start()
+                    .to_ascii_lowercase()
+                    .starts_with("#+filetags:")
+            })
             .map(|l| {
                 let value = l.split_once(':').map_or("", |(_, r)| r).trim();
-                value.split(':').filter(|t| !t.trim().is_empty()).collect::<Vec<_>>().join(", ")
+                value
+                    .split(':')
+                    .filter(|t| !t.trim().is_empty())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             })
             .unwrap_or_default();
         rows.push((title, name.clone(), tags));
     }
     rows.sort();
-    let mut out = format!("#+title: Roam Nodes ({})\n\n| Title | File | Tags |\n|-+-+-|\n", rows.len());
+    let mut out = format!(
+        "#+title: Roam Nodes ({})\n\n| Title | File | Tags |\n|-+-+-|\n",
+        rows.len()
+    );
     for (title, name, tags) in &rows {
         let _ = writeln!(out, "| {title} | [[file:{name}][{name}]] | {tags} |");
     }
@@ -391,7 +415,10 @@ mod tests {
     fn nodeify_adds_id_drawer() {
         // No drawer → a fresh one is created beneath the headline.
         let out = nodeify("* Heading\nbody\n", 0, "NID").unwrap();
-        assert_eq!(out, "* Heading\n:PROPERTIES:\n:ID:       NID\n:END:\nbody\n");
+        assert_eq!(
+            out,
+            "* Heading\n:PROPERTIES:\n:ID:       NID\n:END:\nbody\n"
+        );
         // Existing drawer → the ID is inserted into it.
         let with_drawer = "* H\n:PROPERTIES:\n:FOO: bar\n:END:\n";
         let out = nodeify(with_drawer, 0, "NID").unwrap();
@@ -464,8 +491,14 @@ mod tests {
     #[test]
     fn backlinks_separate_linked_and_unlinked() {
         let files = vec![
-            ("a.org".to_string(), "#+title: A\nSee [[id:T1][Target]] here\n".to_string()),
-            ("b.org".to_string(), "#+title: B\nI mention Target in prose\n".to_string()),
+            (
+                "a.org".to_string(),
+                "#+title: A\nSee [[id:T1][Target]] here\n".to_string(),
+            ),
+            (
+                "b.org".to_string(),
+                "#+title: B\nI mention Target in prose\n".to_string(),
+            ),
             ("c.org".to_string(), "#+title: C\nunrelated\n".to_string()),
         ];
         let out = backlinks("T1", "Target", &files);
@@ -481,9 +514,13 @@ mod tests {
         let files = vec![
             (
                 "a.org".to_string(),
-                ":PROPERTIES:\n:ID:       T1\n:END:\n#+title: Alpha\nlink [[id:T2][Beta]]\n".to_string(),
+                ":PROPERTIES:\n:ID:       T1\n:END:\n#+title: Alpha\nlink [[id:T2][Beta]]\n"
+                    .to_string(),
             ),
-            (":b".to_string(), ":PROPERTIES:\n:ID:       T2\n:END:\n#+title: Beta\n".to_string()),
+            (
+                ":b".to_string(),
+                ":PROPERTIES:\n:ID:       T2\n:END:\n#+title: Beta\n".to_string(),
+            ),
         ];
         let g = graph(&files);
         assert!(g.contains("flowchart LR"));
@@ -496,7 +533,10 @@ mod tests {
     #[test]
     fn index_tabulates_titles() {
         let files = vec![
-            ("z.org".to_string(), "#+title: Zebra\n#+filetags: :animal:\n".to_string()),
+            (
+                "z.org".to_string(),
+                "#+title: Zebra\n#+filetags: :animal:\n".to_string(),
+            ),
             ("a.org".to_string(), "#+title: Apple\n".to_string()),
             ("none.org".to_string(), "no title here\n".to_string()),
         ];

@@ -95,13 +95,29 @@ impl Tree {
                     let n = line.chars().take_while(|&c| c == ' ').count();
                     (n / 2, &line[n..])
                 };
-                Item { text: rest.to_string(), level, collapsed: false }
+                Item {
+                    text: rest.to_string(),
+                    level,
+                    collapsed: false,
+                }
             })
             .collect();
         if items.is_empty() {
-            items.push(Item { text: String::new(), level: 0, collapsed: false });
+            items.push(Item {
+                text: String::new(),
+                level: 0,
+                collapsed: false,
+            });
         }
-        Tree { items, sel: 0, scroll: 0, tab_indent, dirty: false, undo: Vec::new(), redo: Vec::new() }
+        Tree {
+            items,
+            sel: 0,
+            scroll: 0,
+            tab_indent,
+            dirty: false,
+            undo: Vec::new(),
+            redo: Vec::new(),
+        }
     }
 
     /// Total number of items (including hidden ones).
@@ -251,7 +267,11 @@ impl Tree {
             return;
         }
         let pos = vis.iter().position(|&i| i == self.sel).unwrap_or(0);
-        let np = if up { pos.saturating_sub(n) } else { (pos + n).min(vis.len() - 1) };
+        let np = if up {
+            pos.saturating_sub(n)
+        } else {
+            (pos + n).min(vis.len() - 1)
+        };
         self.sel = vis[np];
     }
 
@@ -299,7 +319,9 @@ impl Tree {
     /// Indent the item (and its subtree) one level, if it has a preceding
     /// sibling to become a child of. Expands that new parent so it stays visible.
     fn indent(&mut self) {
-        let Some(p) = self.prev_sibling(self.sel) else { return };
+        let Some(p) = self.prev_sibling(self.sel) else {
+            return;
+        };
         self.push_undo();
         let (i, j) = self.block(self.sel);
         for it in &mut self.items[i..j] {
@@ -325,7 +347,9 @@ impl Tree {
     /// Move the current item (with its subtree) above its previous sibling.
     fn move_item_up(&mut self) {
         let (i, j) = self.block(self.sel);
-        let Some(p) = self.prev_sibling(i) else { return };
+        let Some(p) = self.prev_sibling(i) else {
+            return;
+        };
         self.push_undo();
         let block: Vec<Item> = self.items.drain(i..j).collect();
         self.items.splice(p..p, block);
@@ -399,7 +423,10 @@ impl Tree {
 
     /// Capture the current state onto the undo stack and clear redo.
     fn push_undo(&mut self) {
-        self.undo.push(Snapshot { items: self.items.clone(), sel: self.sel });
+        self.undo.push(Snapshot {
+            items: self.items.clone(),
+            sel: self.sel,
+        });
         if self.undo.len() > HISTORY_CAP {
             self.undo.remove(0);
         }
@@ -408,7 +435,10 @@ impl Tree {
 
     /// Restore `snap` and return the prior state for the other stack.
     fn restore(&mut self, snap: Snapshot) -> Snapshot {
-        let prior = Snapshot { items: self.items.clone(), sel: self.sel };
+        let prior = Snapshot {
+            items: self.items.clone(),
+            sel: self.sel,
+        };
         self.items = snap.items;
         self.sel = snap.sel.min(self.items.len().saturating_sub(1));
         self.dirty = true;

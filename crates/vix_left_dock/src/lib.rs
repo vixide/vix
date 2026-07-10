@@ -82,7 +82,9 @@ impl Explorer {
     #[must_use]
     pub fn selected_paths(&self) -> Vec<PathBuf> {
         if self.marked.is_empty() {
-            self.selected_node().map(|n| vec![n.path.clone()]).unwrap_or_default()
+            self.selected_node()
+                .map(|n| vec![n.path.clone()])
+                .unwrap_or_default()
         } else {
             self.nodes
                 .iter()
@@ -107,7 +109,10 @@ impl Explorer {
         } else {
             self.up();
         }
-        let (lo, hi) = (self.anchor.min(self.selected), self.anchor.max(self.selected));
+        let (lo, hi) = (
+            self.anchor.min(self.selected),
+            self.anchor.max(self.selected),
+        );
         self.marked.clear();
         for i in lo..=hi {
             if let Some(n) = self.nodes.get(i) {
@@ -174,13 +179,15 @@ impl Explorer {
             .to_string_lossy()
             .replace('\\', "/");
         if let Some(inc) = &self.include
-            && !inc.is_match(&rel) {
-                return false;
-            }
+            && !inc.is_match(&rel)
+        {
+            return false;
+        }
         if let Some(exc) = &self.exclude
-            && exc.is_match(&rel) {
-                return false;
-            }
+            && exc.is_match(&rel)
+        {
+            return false;
+        }
         true
     }
 
@@ -202,8 +209,8 @@ impl Explorer {
             }
             let is_dir = path.is_dir();
             // The link itself, regardless of what it points at.
-            let is_symlink = std::fs::symlink_metadata(&path)
-                .is_ok_and(|m| m.file_type().is_symlink());
+            let is_symlink =
+                std::fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink());
             // Files must pass the include/exclude filters; directories are kept so
             // the tree stays navigable.
             if !is_dir && !self.allows(&path) {
@@ -295,10 +302,11 @@ impl Explorer {
             return true;
         }
         if let Some(parent) = path.parent()
-            && let Some(i) = self.nodes.iter().position(|n| n.path == parent) {
-                self.selected = i;
-                return true;
-            }
+            && let Some(i) = self.nodes.iter().position(|n| n.path == parent)
+        {
+            self.selected = i;
+            return true;
+        }
         false
     }
 
@@ -348,7 +356,12 @@ mod tests {
 
         // Exclude .txt instead.
         e.set_filter("", r"\.txt$");
-        let names: Vec<_> = e.nodes.iter().filter(|n| !n.is_dir).map(|n| n.name.clone()).collect();
+        let names: Vec<_> = e
+            .nodes
+            .iter()
+            .filter(|n| !n.is_dir)
+            .map(|n| n.name.clone())
+            .collect();
         assert_eq!(names, vec!["a.rs"]);
 
         // Clearing both restores everything.

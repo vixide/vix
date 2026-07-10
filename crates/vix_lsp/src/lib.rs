@@ -19,12 +19,12 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
+use vix_lsp_core::{Diagnostic, Encoding, frame, message};
 use vix_settings::LspServer as ServerConfig;
-use vix_lsp_core::{frame, message, Diagnostic, Encoding};
 
 /// The reserved JSON-RPC id of the `initialize` request.
 const INITIALIZE_ID: i64 = 1;
@@ -242,7 +242,9 @@ impl Lsp {
     /// event loop should tick faster to deliver the response promptly.
     #[must_use]
     pub fn busy(&self) -> bool {
-        self.servers.values().any(|s| !s.ready || !s.pending.is_empty())
+        self.servers
+            .values()
+            .any(|s| !s.ready || !s.pending.is_empty())
     }
 
     /// Launch (if needed) and return the server for `lang`, or `None` if it could
@@ -260,10 +262,14 @@ impl Lsp {
         if !self.enabled {
             return;
         }
-        let Some(config) = self.config_for(path) else { return };
+        let Some(config) = self.config_for(path) else {
+            return;
+        };
         let uri = path_to_uri(path);
         let lang = config.language_id.clone();
-        let Some(server) = self.ensure_server(&config) else { return };
+        let Some(server) = self.ensure_server(&config) else {
+            return;
+        };
         if server.docs.contains_key(&uri) {
             return; // already open
         }
@@ -279,10 +285,16 @@ impl Lsp {
         if !self.enabled {
             return;
         }
-        let Some(config) = self.config_for(path) else { return };
+        let Some(config) = self.config_for(path) else {
+            return;
+        };
         let uri = path_to_uri(path);
-        let Some(server) = self.servers.get_mut(&config.language_id) else { return };
-        let Some(version) = server.docs.get_mut(&uri) else { return };
+        let Some(server) = self.servers.get_mut(&config.language_id) else {
+            return;
+        };
+        let Some(version) = server.docs.get_mut(&uri) else {
+            return;
+        };
         *version += 1;
         let v = *version;
         server.send(message::notification(
@@ -296,29 +308,40 @@ impl Lsp {
         if !self.enabled {
             return;
         }
-        let Some(config) = self.config_for(path) else { return };
+        let Some(config) = self.config_for(path) else {
+            return;
+        };
         let uri = path_to_uri(path);
         if let Some(server) = self.servers.get_mut(&config.language_id)
-            && server.docs.remove(&uri).is_some() {
-                server.send(message::notification(
-                    "textDocument/didClose",
-                    &message::did_close_params(&uri),
-                ));
-            }
+            && server.docs.remove(&uri).is_some()
+        {
+            server.send(message::notification(
+                "textDocument/didClose",
+                &message::did_close_params(&uri),
+            ));
+        }
     }
 
     /// Send a feature request for `path` at `(line, character)`; the response
     /// arrives later via [`Lsp::poll`] as the matching [`LspEvent`].
     fn request(&mut self, path: &Path, method: &str, line: u32, character: u32, kind: Pending) {
-        let Some(config) = self.config_for(path) else { return };
+        let Some(config) = self.config_for(path) else {
+            return;
+        };
         let uri = path_to_uri(path);
-        let Some(server) = self.servers.get_mut(&config.language_id) else { return };
+        let Some(server) = self.servers.get_mut(&config.language_id) else {
+            return;
+        };
         if !server.docs.contains_key(&uri) {
             return; // only query open documents
         }
         let id = server.alloc_id();
         server.pending.insert(id, kind);
-        server.send(message::request(id, method, &message::position_params(&uri, line, character)));
+        server.send(message::request(
+            id,
+            method,
+            &message::position_params(&uri, line, character),
+        ));
     }
 
     /// Request hover info at `(line, character)`.
@@ -328,54 +351,102 @@ impl Lsp {
 
     /// Request the definition location at `(line, character)`.
     pub fn request_definition(&mut self, path: &Path, line: u32, character: u32) {
-        self.request(path, "textDocument/definition", line, character, Pending::Definition);
+        self.request(
+            path,
+            "textDocument/definition",
+            line,
+            character,
+            Pending::Definition,
+        );
     }
 
     /// Request completion candidates at `(line, character)`.
     pub fn request_completion(&mut self, path: &Path, line: u32, character: u32) {
-        self.request(path, "textDocument/completion", line, character, Pending::Completion);
+        self.request(
+            path,
+            "textDocument/completion",
+            line,
+            character,
+            Pending::Completion,
+        );
     }
 
     /// Request the implementation location(s) at `(line, character)` (jumps to
     /// the first, like definition).
     pub fn request_implementation(&mut self, path: &Path, line: u32, character: u32) {
-        self.request(path, "textDocument/implementation", line, character, Pending::Definition);
+        self.request(
+            path,
+            "textDocument/implementation",
+            line,
+            character,
+            Pending::Definition,
+        );
     }
 
     /// Request the type-definition location at `(line, character)`.
     pub fn request_type_definition(&mut self, path: &Path, line: u32, character: u32) {
-        self.request(path, "textDocument/typeDefinition", line, character, Pending::Definition);
+        self.request(
+            path,
+            "textDocument/typeDefinition",
+            line,
+            character,
+            Pending::Definition,
+        );
     }
 
     /// Request the declaration location at `(line, character)` (jumps like
     /// definition).
     pub fn request_declaration(&mut self, path: &Path, line: u32, character: u32) {
-        self.request(path, "textDocument/declaration", line, character, Pending::Definition);
+        self.request(
+            path,
+            "textDocument/declaration",
+            line,
+            character,
+            Pending::Definition,
+        );
     }
 
     /// Step 1 of call hierarchy: prepare the symbol at `(line, character)`. The
     /// response (`LspEvent::CallHierarchyPrepared`) carries the item to query.
     pub fn request_prepare_call_hierarchy(&mut self, path: &Path, line: u32, character: u32) {
-        self.request(path, "textDocument/prepareCallHierarchy", line, character, Pending::PrepareCallHierarchy);
+        self.request(
+            path,
+            "textDocument/prepareCallHierarchy",
+            line,
+            character,
+            Pending::PrepareCallHierarchy,
+        );
     }
 
     /// Step 2 of call hierarchy: request the incoming calls (callers) for the
     /// prepared `item`. The response arrives as `LspEvent::References`.
     pub fn request_incoming_calls(&mut self, path: &Path, item: serde_json::Value) {
-        let Some(config) = self.config_for(path) else { return };
-        let Some(server) = self.servers.get_mut(&config.language_id) else { return };
+        let Some(config) = self.config_for(path) else {
+            return;
+        };
+        let Some(server) = self.servers.get_mut(&config.language_id) else {
+            return;
+        };
         let id = server.alloc_id();
         server.pending.insert(id, Pending::IncomingCalls);
         let mut params = serde_json::Map::new();
         params.insert("item".to_string(), item); // consumes `item`
-        server.send(message::request(id, "callHierarchy/incomingCalls", &serde_json::Value::Object(params)));
+        server.send(message::request(
+            id,
+            "callHierarchy/incomingCalls",
+            &serde_json::Value::Object(params),
+        ));
     }
 
     /// Request all references to the symbol at `(line, character)`.
     pub fn request_references(&mut self, path: &Path, line: u32, character: u32) {
-        let Some(config) = self.config_for(path) else { return };
+        let Some(config) = self.config_for(path) else {
+            return;
+        };
         let uri = path_to_uri(path);
-        let Some(server) = self.servers.get_mut(&config.language_id) else { return };
+        let Some(server) = self.servers.get_mut(&config.language_id) else {
+            return;
+        };
         if !server.docs.contains_key(&uri) {
             return;
         }
@@ -390,33 +461,54 @@ impl Lsp {
 
     /// Request the document symbols (outline) for `path`.
     pub fn request_document_symbols(&mut self, path: &Path) {
-        self.send_request(path, "textDocument/documentSymbol", Pending::DocumentSymbols, |uri| {
-            message::text_document_params(uri)
-        });
+        self.send_request(
+            path,
+            "textDocument/documentSymbol",
+            Pending::DocumentSymbols,
+            message::text_document_params,
+        );
     }
 
     /// Request workspace symbols matching `query` (sent to `path`'s server).
     pub fn request_workspace_symbols(&mut self, path: &Path, query: &str) {
-        self.send_request(path, "workspace/symbol", Pending::WorkspaceSymbols, |_uri| {
-            message::workspace_symbol_params(query)
-        });
+        self.send_request(
+            path,
+            "workspace/symbol",
+            Pending::WorkspaceSymbols,
+            |_uri| message::workspace_symbol_params(query),
+        );
     }
 
     /// Request signature help at `(line, character)`.
     pub fn request_signature_help(&mut self, path: &Path, line: u32, character: u32) {
-        self.request(path, "textDocument/signatureHelp", line, character, Pending::SignatureHelp);
+        self.request(
+            path,
+            "textDocument/signatureHelp",
+            line,
+            character,
+            Pending::SignatureHelp,
+        );
     }
 
     /// Request the selection ranges (expand/shrink chain) at `(line, character)`.
     pub fn request_selection_range(&mut self, path: &Path, line: u32, character: u32) {
-        self.send_request(path, "textDocument/selectionRange", Pending::SelectionRange, |uri| {
-            message::selection_range_params(uri, line, character)
-        });
+        self.send_request(
+            path,
+            "textDocument/selectionRange",
+            Pending::SelectionRange,
+            |uri| message::selection_range_params(uri, line, character),
+        );
     }
 
     /// Request the occurrences of the symbol at `(line, character)` to highlight.
     pub fn request_document_highlight(&mut self, path: &Path, line: u32, character: u32) {
-        self.request(path, "textDocument/documentHighlight", line, character, Pending::DocumentHighlight);
+        self.request(
+            path,
+            "textDocument/documentHighlight",
+            line,
+            character,
+            Pending::DocumentHighlight,
+        );
     }
 
     /// Request the code lenses for `path`.
@@ -429,15 +521,29 @@ impl Lsp {
     /// Execute a server command (`workspace/executeCommand`); the response is
     /// ignored (edits arrive via a server `workspace/applyEdit` request).
     pub fn execute_command(&mut self, path: &Path, command: &str, arguments: &Value) {
-        let Some(config) = self.config_for(path) else { return };
-        let Some(server) = self.servers.get_mut(&config.language_id) else { return };
+        let Some(config) = self.config_for(path) else {
+            return;
+        };
+        let Some(server) = self.servers.get_mut(&config.language_id) else {
+            return;
+        };
         let id = server.alloc_id();
-        server.send(message::request(id, "workspace/executeCommand", &message::execute_command_params(command, arguments)));
+        server.send(message::request(
+            id,
+            "workspace/executeCommand",
+            &message::execute_command_params(command, arguments),
+        ));
     }
 
     /// Request the linked-editing ranges at `(line, character)`.
     pub fn request_linked_editing(&mut self, path: &Path, line: u32, character: u32) {
-        self.request(path, "textDocument/linkedEditingRange", line, character, Pending::LinkedEditing);
+        self.request(
+            path,
+            "textDocument/linkedEditingRange",
+            line,
+            character,
+            Pending::LinkedEditing,
+        );
     }
 
     /// Request inlay hints covering `[start, end)` of `path`.
@@ -449,19 +555,30 @@ impl Lsp {
 
     /// Request the foldable line ranges for `path`.
     pub fn request_folding_range(&mut self, path: &Path) {
-        self.send_request(path, "textDocument/foldingRange", Pending::FoldingRange, |uri| {
-            message::text_document_params(uri)
-        });
+        self.send_request(
+            path,
+            "textDocument/foldingRange",
+            Pending::FoldingRange,
+            message::text_document_params,
+        );
     }
 
     /// Resolve fuller detail/documentation for a completion item (sent to
     /// `path`'s server). `data` is the opaque payload the server round-trips.
     pub fn request_completion_resolve(&mut self, path: &Path, label: &str, data: Option<&Value>) {
-        let Some(config) = self.config_for(path) else { return };
-        let Some(server) = self.servers.get_mut(&config.language_id) else { return };
+        let Some(config) = self.config_for(path) else {
+            return;
+        };
+        let Some(server) = self.servers.get_mut(&config.language_id) else {
+            return;
+        };
         let id = server.alloc_id();
         server.pending.insert(id, Pending::CompletionResolve);
-        server.send(message::request(id, "completionItem/resolve", &message::completion_resolve_params(label, data)));
+        server.send(message::request(
+            id,
+            "completionItem/resolve",
+            &message::completion_resolve_params(label, data),
+        ));
     }
 
     /// Request a rename of the symbol at `(line, character)` to `new_name`.
@@ -480,16 +597,22 @@ impl Lsp {
         end: (u32, u32),
         diagnostics: &Value,
     ) {
-        self.send_request(path, "textDocument/codeAction", Pending::CodeAction, |uri| {
-            message::code_action_params(uri, start, end, diagnostics)
-        });
+        self.send_request(
+            path,
+            "textDocument/codeAction",
+            Pending::CodeAction,
+            |uri| message::code_action_params(uri, start, end, diagnostics),
+        );
     }
 
     /// Request formatting of the whole document `path` (`tab_size`-wide indent).
     pub fn request_formatting(&mut self, path: &Path, tab_size: u32) {
-        self.send_request(path, "textDocument/formatting", Pending::Formatting, |uri| {
-            message::formatting_params(uri, tab_size)
-        });
+        self.send_request(
+            path,
+            "textDocument/formatting",
+            Pending::Formatting,
+            |uri| message::formatting_params(uri, tab_size),
+        );
     }
 
     /// Request formatting of the range `[start, end)` (0-based positions).
@@ -500,9 +623,12 @@ impl Lsp {
         end: (u32, u32),
         tab_size: u32,
     ) {
-        self.send_request(path, "textDocument/rangeFormatting", Pending::Formatting, |uri| {
-            message::range_formatting_params(uri, start, end, tab_size)
-        });
+        self.send_request(
+            path,
+            "textDocument/rangeFormatting",
+            Pending::Formatting,
+            |uri| message::range_formatting_params(uri, start, end, tab_size),
+        );
     }
 
     /// Send a request for an open document, building params from its URI.
@@ -513,9 +639,13 @@ impl Lsp {
         kind: Pending,
         params: impl FnOnce(&str) -> Value,
     ) {
-        let Some(config) = self.config_for(path) else { return };
+        let Some(config) = self.config_for(path) else {
+            return;
+        };
         let uri = path_to_uri(path);
-        let Some(server) = self.servers.get_mut(&config.language_id) else { return };
+        let Some(server) = self.servers.get_mut(&config.language_id) else {
+            return;
+        };
         if !server.docs.contains_key(&uri) {
             return;
         }
@@ -530,7 +660,9 @@ impl Lsp {
         if !self.enabled {
             return;
         }
-        let Some(config) = self.config_for(path) else { return };
+        let Some(config) = self.config_for(path) else {
+            return;
+        };
         let uri = path_to_uri(path);
         if let Some(server) = self.servers.get_mut(&config.language_id)
             && server.docs.contains_key(&uri)
@@ -551,7 +683,9 @@ impl Lsp {
             // Drain this server's channel into owned messages first, so the
             // borrow ends before we touch `self.diagnostics`.
             let drained: Vec<Incoming> = {
-                let Some(server) = self.servers.get(&lang) else { continue };
+                let Some(server) = self.servers.get(&lang) else {
+                    continue;
+                };
                 let mut v = Vec::new();
                 while let Ok(m) = server.rx.try_recv() {
                     v.push(m);
@@ -591,7 +725,9 @@ impl Lsp {
                 }
                 if let Some(server) = self.servers.get_mut(lang) {
                     let id = msg.get("id").cloned().unwrap_or(Value::Null);
-                    server.write_now(&json!({ "jsonrpc": "2.0", "id": id, "result": { "applied": true } }));
+                    server.write_now(
+                        &json!({ "jsonrpc": "2.0", "id": id, "result": { "applied": true } }),
+                    );
                 }
                 return;
             }
@@ -602,15 +738,16 @@ impl Lsp {
         if let Some(method) = has_method {
             if method == "textDocument/publishDiagnostics"
                 && let Some(params) = msg.get("params")
-                    && let Some((uri, diags)) = message::parse_diagnostics(params) {
-                        let path = canonical(&uri_to_path(&uri));
-                        if diags.is_empty() {
-                            self.diagnostics.remove(&path);
-                        } else {
-                            self.diagnostics.insert(path.clone(), diags);
-                        }
-                        events.push(LspEvent::Diagnostics(path));
-                    }
+                && let Some((uri, diags)) = message::parse_diagnostics(params)
+            {
+                let path = canonical(&uri_to_path(&uri));
+                if diags.is_empty() {
+                    self.diagnostics.remove(&path);
+                } else {
+                    self.diagnostics.insert(path.clone(), diags);
+                }
+                events.push(LspEvent::Diagnostics(path));
+            }
             return;
         }
         // Response to one of our requests (id, no method).
@@ -624,9 +761,15 @@ impl Lsp {
             self.finish_initialize(lang, msg);
             return;
         }
-        let Some(server) = self.servers.get_mut(lang) else { return };
-        let Some(kind) = server.pending.remove(&id) else { return };
-        let Some(result) = msg.get("result") else { return };
+        let Some(server) = self.servers.get_mut(lang) else {
+            return;
+        };
+        let Some(kind) = server.pending.remove(&id) else {
+            return;
+        };
+        let Some(result) = msg.get("result") else {
+            return;
+        };
         if result.is_null() {
             return;
         }
@@ -660,7 +803,13 @@ impl Lsp {
             Pending::References => {
                 let locs: Vec<(PathBuf, u32, u32)> = message::parse_locations(result)
                     .into_iter()
-                    .map(|l| (uri_to_path(&l.uri), l.range.start.line, l.range.start.character))
+                    .map(|l| {
+                        (
+                            uri_to_path(&l.uri),
+                            l.range.start.line,
+                            l.range.start.character,
+                        )
+                    })
                     .collect();
                 if !locs.is_empty() {
                     events.push(LspEvent::References(locs));
@@ -688,7 +837,13 @@ impl Lsp {
             Pending::IncomingCalls => {
                 let locs: Vec<(PathBuf, u32, u32)> = message::parse_incoming_calls(result)
                     .into_iter()
-                    .map(|l| (uri_to_path(&l.uri), l.range.start.line, l.range.start.character))
+                    .map(|l| {
+                        (
+                            uri_to_path(&l.uri),
+                            l.range.start.line,
+                            l.range.start.character,
+                        )
+                    })
                     .collect();
                 if !locs.is_empty() {
                     events.push(LspEvent::References(locs));
@@ -701,10 +856,11 @@ impl Lsp {
                 }
             }
             Pending::WorkspaceSymbols => {
-                let syms: Vec<(PathBuf, u32, u32, String)> = message::parse_workspace_symbols(result)
-                    .into_iter()
-                    .map(|(uri, line, ch, name)| (uri_to_path(&uri), line, ch, name))
-                    .collect();
+                let syms: Vec<(PathBuf, u32, u32, String)> =
+                    message::parse_workspace_symbols(result)
+                        .into_iter()
+                        .map(|(uri, line, ch, name)| (uri_to_path(&uri), line, ch, name))
+                        .collect();
                 if !syms.is_empty() {
                     events.push(LspEvent::WorkspaceSymbols(syms));
                 }
@@ -727,8 +883,10 @@ impl Lsp {
                 let actions: Vec<CodeAction> = message::parse_code_actions(result)
                     .into_iter()
                     .map(|(title, edit)| {
-                        let edit: Vec<FileEdits> =
-                            edit.into_iter().map(|(uri, e)| (uri_to_path(&uri), e)).collect();
+                        let edit: Vec<FileEdits> = edit
+                            .into_iter()
+                            .map(|(uri, e)| (uri_to_path(&uri), e))
+                            .collect();
                         (title, edit)
                     })
                     .collect();
@@ -736,6 +894,16 @@ impl Lsp {
                     events.push(LspEvent::CodeActions(actions));
                 }
             }
+            _ => Self::response_to_events_last(kind, result, events),
+        }
+    }
+
+    /// The remaining `Pending` response kinds (selection ranges, highlights,
+    /// folding, completion-resolve, inlay hints, linked editing, code lenses).
+    /// Split from [`Server::response_to_events_more`] to keep it within the line
+    /// limit.
+    fn response_to_events_last(kind: Pending, result: &Value, events: &mut Vec<LspEvent>) {
+        match kind {
             Pending::SelectionRange => {
                 let ranges = message::parse_selection_ranges(result);
                 if !ranges.is_empty() {
@@ -749,7 +917,9 @@ impl Lsp {
                 }
             }
             Pending::FoldingRange => {
-                events.push(LspEvent::FoldingRanges(message::parse_folding_ranges(result)));
+                events.push(LspEvent::FoldingRanges(message::parse_folding_ranges(
+                    result,
+                )));
             }
             Pending::CompletionResolve => {
                 if let Some(text) = message::parse_resolved_detail(result) {
@@ -781,7 +951,9 @@ impl Lsp {
     /// On the `initialize` response: record the encoding, send `initialized`, and
     /// flush everything queued during startup.
     fn finish_initialize(&mut self, lang: &str, msg: &Value) {
-        let Some(server) = self.servers.get_mut(lang) else { return };
+        let Some(server) = self.servers.get_mut(lang) else {
+            return;
+        };
         if let Some(result) = msg.get("result") {
             server.encoding = message::parse_position_encoding(result);
         }
@@ -796,7 +968,9 @@ impl Lsp {
     /// Reply to a server-initiated request so it does not stall. We accept no
     /// dynamic capabilities and supply empty configuration.
     fn reply_to_server_request(&mut self, lang: &str, msg: &Value, method: &str) {
-        let Some(server) = self.servers.get_mut(lang) else { return };
+        let Some(server) = self.servers.get_mut(lang) else {
+            return;
+        };
         let id = msg.get("id").cloned().unwrap_or(Value::Null);
         let result = if method == "workspace/configuration" {
             let n = msg
@@ -914,12 +1088,14 @@ pub fn uri_to_path(uri: &str) -> PathBuf {
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len()
-            && let Ok(b) = u8::from_str_radix(&rest[i + 1..i + 3], 16) {
-                out.push(b);
-                i += 3;
-                continue;
-            }
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let Ok(b) = u8::from_str_radix(&rest[i + 1..i + 3], 16)
+        {
+            out.push(b);
+            i += 3;
+            continue;
+        }
         out.push(bytes[i]);
         i += 1;
     }

@@ -26,14 +26,85 @@ pub enum Outcome {
 
 /// Common SQL keywords, uppercased on format.
 const KEYWORDS: &[&str] = &[
-    "select", "from", "where", "insert", "into", "values", "update", "set", "delete", "create",
-    "table", "view", "index", "alter", "drop", "add", "column", "primary", "key", "foreign",
-    "references", "join", "inner", "left", "right", "outer", "full", "on", "group", "by", "order",
-    "having", "limit", "offset", "distinct", "as", "and", "or", "not", "null", "is", "in", "like",
-    "between", "exists", "union", "all", "with", "case", "when", "then", "else", "end", "grant",
-    "usage", "to", "default", "constraint", "unique", "check", "begin", "commit", "rollback",
-    "returning", "using", "cascade", "if", "function", "trigger", "extension", "role", "user",
-    "asc", "desc", "count", "sum", "avg", "min", "max",
+    "select",
+    "from",
+    "where",
+    "insert",
+    "into",
+    "values",
+    "update",
+    "set",
+    "delete",
+    "create",
+    "table",
+    "view",
+    "index",
+    "alter",
+    "drop",
+    "add",
+    "column",
+    "primary",
+    "key",
+    "foreign",
+    "references",
+    "join",
+    "inner",
+    "left",
+    "right",
+    "outer",
+    "full",
+    "on",
+    "group",
+    "by",
+    "order",
+    "having",
+    "limit",
+    "offset",
+    "distinct",
+    "as",
+    "and",
+    "or",
+    "not",
+    "null",
+    "is",
+    "in",
+    "like",
+    "between",
+    "exists",
+    "union",
+    "all",
+    "with",
+    "case",
+    "when",
+    "then",
+    "else",
+    "end",
+    "grant",
+    "usage",
+    "to",
+    "default",
+    "constraint",
+    "unique",
+    "check",
+    "begin",
+    "commit",
+    "rollback",
+    "returning",
+    "using",
+    "cascade",
+    "if",
+    "function",
+    "trigger",
+    "extension",
+    "role",
+    "user",
+    "asc",
+    "desc",
+    "count",
+    "sum",
+    "avg",
+    "min",
+    "max",
 ];
 
 /// Maximum retained undo steps.
@@ -115,7 +186,10 @@ impl Editor {
     /// A one-line preview of the statement at `i` (whitespace collapsed).
     #[must_use]
     pub fn preview(&self, i: usize) -> String {
-        self.statement(i).split_whitespace().collect::<Vec<_>>().join(" ")
+        self.statement(i)
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     /// Join the statements back into buffer text (one per block, `;`-terminated).
@@ -252,7 +326,10 @@ impl Editor {
 
     /// Push the current state onto the undo stack (clearing redo).
     fn push_undo(&mut self) {
-        self.undo.push(Snapshot { statements: self.statements.clone(), sel: self.sel });
+        self.undo.push(Snapshot {
+            statements: self.statements.clone(),
+            sel: self.sel,
+        });
         if self.undo.len() > HISTORY_CAP {
             self.undo.remove(0);
         }
@@ -262,7 +339,10 @@ impl Editor {
     /// Undo the last edit.
     fn undo(&mut self) {
         if let Some(prev) = self.undo.pop() {
-            self.redo.push(Snapshot { statements: self.statements.clone(), sel: self.sel });
+            self.redo.push(Snapshot {
+                statements: self.statements.clone(),
+                sel: self.sel,
+            });
             self.statements = prev.statements;
             self.sel = prev.sel.min(self.statements.len().saturating_sub(1));
             self.dirty = true;
@@ -272,7 +352,10 @@ impl Editor {
     /// Redo the last undone edit.
     fn redo(&mut self) {
         if let Some(next) = self.redo.pop() {
-            self.undo.push(Snapshot { statements: self.statements.clone(), sel: self.sel });
+            self.undo.push(Snapshot {
+                statements: self.statements.clone(),
+                sel: self.sel,
+            });
             self.statements = next.statements;
             self.sel = next.sel.min(self.statements.len().saturating_sub(1));
             self.dirty = true;
@@ -282,7 +365,11 @@ impl Editor {
 
 /// The kind label for a statement (its leading keyword, uppercased), or `SQL`.
 fn kind_of(stmt: &str) -> &'static str {
-    let first = stmt.split_whitespace().next().unwrap_or("").to_ascii_uppercase();
+    let first = stmt
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .to_ascii_uppercase();
     match first.as_str() {
         "SELECT" => "SELECT",
         "INSERT" => "INSERT",
@@ -470,8 +557,14 @@ mod tests {
         let s = split_statements(sql);
         assert_eq!(s.len(), 3);
         assert_eq!(s[0], "select 1");
-        assert!(s[1].contains("(';')"), "semicolon inside the string is kept");
-        assert!(s[2].starts_with("-- a; b"), "comment semicolon is not a split");
+        assert!(
+            s[1].contains("(';')"),
+            "semicolon inside the string is kept"
+        );
+        assert!(
+            s[2].starts_with("-- a; b"),
+            "comment semicolon is not a split"
+        );
     }
 
     #[test]
@@ -482,7 +575,10 @@ mod tests {
 
     #[test]
     fn formats_keywords_outside_strings() {
-        assert_eq!(format_sql("select * from t where a='from'"), "SELECT * FROM t WHERE a='from'");
+        assert_eq!(
+            format_sql("select * from t where a='from'"),
+            "SELECT * FROM t WHERE a='from'"
+        );
     }
 
     #[test]

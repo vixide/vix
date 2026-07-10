@@ -8,7 +8,6 @@
 //! by the host, not here.
 
 #![warn(clippy::pedantic)]
-
 #![allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
 
 use crate::actions::{
@@ -21,21 +20,37 @@ use crate::selection::Selection;
 impl Editor {
     // ----- cursor movement ------------------------------------------------
     /// Move the cursor up one line.
-    pub fn cursor_up(&mut self) { self.apply(MoveUp { shift: false }); }
+    pub fn cursor_up(&mut self) {
+        self.apply(MoveUp { shift: false });
+    }
     /// Move the cursor down one line.
-    pub fn cursor_down(&mut self) { self.apply(MoveDown { shift: false }); }
+    pub fn cursor_down(&mut self) {
+        self.apply(MoveDown { shift: false });
+    }
     /// Move the cursor one character to the left.
-    pub fn cursor_left(&mut self) { self.apply(MoveLeft { shift: false }); }
+    pub fn cursor_left(&mut self) {
+        self.apply(MoveLeft { shift: false });
+    }
     /// Move the cursor one character to the right.
-    pub fn cursor_right(&mut self) { self.apply(MoveRight { shift: false }); }
+    pub fn cursor_right(&mut self) {
+        self.apply(MoveRight { shift: false });
+    }
     /// Extend the selection one line up.
-    pub fn select_up(&mut self) { self.apply(MoveUp { shift: true }); }
+    pub fn select_up(&mut self) {
+        self.apply(MoveUp { shift: true });
+    }
     /// Extend the selection one line down.
-    pub fn select_down(&mut self) { self.apply(MoveDown { shift: true }); }
+    pub fn select_down(&mut self) {
+        self.apply(MoveDown { shift: true });
+    }
     /// Extend the selection one character to the left.
-    pub fn select_left(&mut self) { self.apply(MoveLeft { shift: true }); }
+    pub fn select_left(&mut self) {
+        self.apply(MoveLeft { shift: true });
+    }
     /// Extend the selection one character to the right.
-    pub fn select_right(&mut self) { self.apply(MoveRight { shift: true }); }
+    pub fn select_right(&mut self) {
+        self.apply(MoveRight { shift: true });
+    }
 
     /// Move the cursor to the very start of the buffer.
     pub fn cursor_start(&mut self) {
@@ -61,7 +76,8 @@ impl Editor {
 
     // ----- line motions ---------------------------------------------------
     fn line_start(&self, pos: usize) -> usize {
-        self.code_ref().line_to_char(self.code_ref().char_to_line(pos))
+        self.code_ref()
+            .line_to_char(self.code_ref().char_to_line(pos))
     }
     fn line_end(&self, pos: usize) -> usize {
         let code = self.code_ref();
@@ -102,7 +118,11 @@ impl Editor {
         self.clear_selection();
         let cur = self.get_cursor();
         let text = self.line_first_text(cur);
-        let p = if cur == text { self.line_start(cur) } else { text };
+        let p = if cur == text {
+            self.line_start(cur)
+        } else {
+            text
+        };
         self.set_cursor(p);
     }
     /// Extend the selection to the start of the current line.
@@ -127,7 +147,11 @@ impl Editor {
     pub fn select_to_start_of_text_toggle(&mut self) {
         let cur = self.get_cursor();
         let text = self.line_first_text(cur);
-        let p = if cur == text { self.line_start(cur) } else { text };
+        let p = if cur == text {
+            self.line_start(cur)
+        } else {
+            text
+        };
         self.extend_selection(p);
         self.set_cursor(p);
     }
@@ -184,9 +208,13 @@ impl Editor {
         self.set_cursor(p);
     }
     /// Move the cursor right by one sub-word (approximated as a whole word).
-    pub fn sub_word_right(&mut self) { self.word_right(); }
+    pub fn sub_word_right(&mut self) {
+        self.word_right();
+    }
     /// Move the cursor left by one sub-word (approximated as a whole word).
-    pub fn sub_word_left(&mut self) { self.word_left(); }
+    pub fn sub_word_left(&mut self) {
+        self.word_left();
+    }
     /// Extend the selection to the start of the next word.
     pub fn select_word_right(&mut self) {
         let p = self.next_word(self.get_cursor());
@@ -200,9 +228,13 @@ impl Editor {
         self.set_cursor(p);
     }
     /// Extend the selection right by one sub-word (approximated as a whole word).
-    pub fn select_sub_word_right(&mut self) { self.select_word_right(); }
+    pub fn select_sub_word_right(&mut self) {
+        self.select_word_right();
+    }
     /// Extend the selection left by one sub-word (approximated as a whole word).
-    pub fn select_sub_word_left(&mut self) { self.select_word_left(); }
+    pub fn select_sub_word_left(&mut self) {
+        self.select_word_left();
+    }
 
     /// Delete from the cursor to the start of the next word.
     pub fn delete_word_right(&mut self) {
@@ -225,9 +257,13 @@ impl Editor {
         }
     }
     /// Delete the next sub-word (approximated as a whole word).
-    pub fn delete_sub_word_right(&mut self) { self.delete_word_right(); }
+    pub fn delete_sub_word_right(&mut self) {
+        self.delete_word_right();
+    }
     /// Delete the previous sub-word (approximated as a whole word).
-    pub fn delete_sub_word_left(&mut self) { self.delete_word_left(); }
+    pub fn delete_sub_word_left(&mut self) {
+        self.delete_word_left();
+    }
 
     // ----- paragraph motions ---------------------------------------------
     fn paragraph(&self, pos: usize, forward: bool) -> usize {
@@ -293,17 +329,29 @@ impl Editor {
         }
     }
     /// Move the cursor up one page (the viewport height).
-    pub fn page_up(&mut self, view_h: usize) { self.move_by_rows(view_h.max(1), false, false); }
+    pub fn page_up(&mut self, view_h: usize) {
+        self.move_by_rows(view_h.max(1), false, false);
+    }
     /// Move the cursor down one page (the viewport height).
-    pub fn page_down(&mut self, view_h: usize) { self.move_by_rows(view_h.max(1), true, false); }
+    pub fn page_down(&mut self, view_h: usize) {
+        self.move_by_rows(view_h.max(1), true, false);
+    }
     /// Extend the selection up one page (the viewport height).
-    pub fn select_page_up(&mut self, view_h: usize) { self.move_by_rows(view_h.max(1), false, true); }
+    pub fn select_page_up(&mut self, view_h: usize) {
+        self.move_by_rows(view_h.max(1), false, true);
+    }
     /// Extend the selection down one page (the viewport height).
-    pub fn select_page_down(&mut self, view_h: usize) { self.move_by_rows(view_h.max(1), true, true); }
+    pub fn select_page_down(&mut self, view_h: usize) {
+        self.move_by_rows(view_h.max(1), true, true);
+    }
     /// Move the cursor up half a page.
-    pub fn half_page_up(&mut self, view_h: usize) { self.move_by_rows((view_h / 2).max(1), false, false); }
+    pub fn half_page_up(&mut self, view_h: usize) {
+        self.move_by_rows((view_h / 2).max(1), false, false);
+    }
     /// Move the cursor down half a page.
-    pub fn half_page_down(&mut self, view_h: usize) { self.move_by_rows((view_h / 2).max(1), true, false); }
+    pub fn half_page_down(&mut self, view_h: usize) {
+        self.move_by_rows((view_h / 2).max(1), true, false);
+    }
 
     /// Center the viewport on the cursor line.
     pub fn center(&mut self, view_h: usize) {
@@ -333,42 +381,74 @@ impl Editor {
 
     // ----- editing --------------------------------------------------------
     /// Insert a newline at the cursor.
-    pub fn insert_newline(&mut self) { self.apply(InsertNewline {}); }
+    pub fn insert_newline(&mut self) {
+        self.apply(InsertNewline {});
+    }
     /// Insert a tab (indent) at the cursor.
-    pub fn insert_tab(&mut self) { self.apply(Indent {}); }
+    pub fn insert_tab(&mut self) {
+        self.apply(Indent {});
+    }
     /// Delete the character before the cursor.
-    pub fn backspace(&mut self) { self.apply(Delete {}); }
+    pub fn backspace(&mut self) {
+        self.apply(Delete {});
+    }
     /// Forward delete (the character at the cursor).
     pub fn delete(&mut self) {
         self.apply(MoveRight { shift: false });
         self.apply(Delete {});
     }
     /// Undo the last edit.
-    pub fn undo(&mut self) { self.apply(Undo {}); }
+    pub fn undo(&mut self) {
+        self.apply(Undo {});
+    }
     /// Redo the last undone edit.
-    pub fn redo(&mut self) { self.apply(Redo {}); }
+    pub fn redo(&mut self) {
+        self.apply(Redo {});
+    }
     /// Copy the selection to the clipboard.
-    pub fn copy(&mut self) { self.apply(Copy {}); }
+    pub fn copy(&mut self) {
+        self.apply(Copy {});
+    }
     /// Cut the selection to the clipboard.
-    pub fn cut(&mut self) { self.apply(Cut {}); }
+    pub fn cut(&mut self) {
+        self.apply(Cut {});
+    }
     /// Paste the clipboard at the cursor.
-    pub fn paste(&mut self) { self.apply(Paste {}); }
+    pub fn paste(&mut self) {
+        self.apply(Paste {});
+    }
     /// Select the entire buffer.
-    pub fn select_all(&mut self) { self.apply(SelectAll {}); }
+    pub fn select_all(&mut self) {
+        self.apply(SelectAll {});
+    }
     /// Duplicate the selection (or current line).
-    pub fn duplicate(&mut self) { self.apply(Duplicate {}); }
+    pub fn duplicate(&mut self) {
+        self.apply(Duplicate {});
+    }
     /// Duplicate the current line.
-    pub fn duplicate_line(&mut self) { self.apply(Duplicate {}); }
+    pub fn duplicate_line(&mut self) {
+        self.apply(Duplicate {});
+    }
     /// Delete the current line.
-    pub fn delete_line(&mut self) { self.apply(DeleteLine {}); }
+    pub fn delete_line(&mut self) {
+        self.apply(DeleteLine {});
+    }
     /// Indent the current line.
-    pub fn indent_line(&mut self) { self.apply(Indent {}); }
+    pub fn indent_line(&mut self) {
+        self.apply(Indent {});
+    }
     /// Outdent the current line.
-    pub fn outdent_line(&mut self) { self.apply(UnIndent {}); }
+    pub fn outdent_line(&mut self) {
+        self.apply(UnIndent {});
+    }
     /// Indent the selection.
-    pub fn indent_selection(&mut self) { self.apply(Indent {}); }
+    pub fn indent_selection(&mut self) {
+        self.apply(Indent {});
+    }
     /// Outdent the selection.
-    pub fn outdent_selection(&mut self) { self.apply(UnIndent {}); }
+    pub fn outdent_selection(&mut self) {
+        self.apply(UnIndent {});
+    }
     /// Copy the current line to the clipboard (without changing the selection).
     pub fn copy_line(&mut self) {
         let saved = self.get_selection();
@@ -384,9 +464,13 @@ impl Editor {
         self.apply(Cut {});
     }
     /// Drop the selection, keeping the cursor.
-    pub fn deselect(&mut self) { self.clear_selection(); }
+    pub fn deselect(&mut self) {
+        self.clear_selection();
+    }
     /// Insert literal text (used by paste-primary fallbacks/tests).
     pub fn insert_str_action(&mut self, text: &str) {
-        self.apply(InsertText { text: text.to_string() });
+        self.apply(InsertText {
+            text: text.to_string(),
+        });
     }
 }

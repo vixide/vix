@@ -1,18 +1,18 @@
 #![warn(clippy::pedantic)]
-use std::time::Duration;
+use crate::actions::Action;
 use crate::click::{ClickKind, ClickTracker};
 use crate::code::Code;
-use crate::code::{EditKind, EditBatch};
-use crate::code::{RopeGraphemes, grapheme_width_and_chars_len, grapheme_width};
+use crate::code::{EditBatch, EditKind};
+use crate::code::{RopeGraphemes, grapheme_width, grapheme_width_and_chars_len};
 use crate::selection::{Selection, SelectionSnap};
-use crate::actions::Action;
 use crate::utils;
-use std::collections::HashMap;
-use std::cell::RefCell;
-use std::cmp::Ordering;
 use anyhow::{Result, anyhow};
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier, Style};
+use std::cell::RefCell;
+use std::cmp::Ordering;
+use std::collections::HashMap;
+use std::time::Duration;
 
 /// Serializes all system-clipboard access. The platform clipboard backends
 /// (notably macOS's Cocoa `NSPasteboard`) are not thread-safe, so concurrent
@@ -260,7 +260,10 @@ impl Editor {
             .iter()
             .map(|(name, hex)| {
                 let (r, g, b) = utils::rgb(hex);
-                ((*name).to_string(), Style::default().fg(Color::Rgb(r, g, b)))
+                (
+                    (*name).to_string(),
+                    Style::default().fg(Color::Rgb(r, g, b)),
+                )
             })
             .collect();
         self.highlights_cache.borrow_mut().clear();
@@ -276,11 +279,11 @@ impl Editor {
             let total_lines = self.code.len_lines();
             let max_line_number = total_lines.max(1);
             let line_number_digits = max_line_number.to_string().len().max(5);
-            line_number_digits + self.left_code_padding 
+            line_number_digits + self.left_code_padding
         } else {
             self.left_code_padding
         }
-    } 
+    }
 
     /// Scroll the viewport so the cursor is visible within `area`.
     pub fn focus(&mut self, area: &Rect) {
@@ -321,7 +324,7 @@ impl Editor {
         } else if col >= self.offset_x + visible_width {
             self.offset_x = col.saturating_sub(visible_width - step_size);
         }
-    
+
         if line < self.offset_y {
             self.offset_y = line;
         } else if line >= self.offset_y + visible_height {
@@ -355,26 +358,26 @@ impl Editor {
             SelectionSnap::Line { anchor } => {
                 let (anchor_start, anchor_end) = self.code.line_boundaries(anchor);
                 let (cur_start, cur_end) = self.code.line_boundaries(cursor);
-        
+
                 let (sel_start, sel_end, new_cursor) = match cursor.cmp(&anchor) {
-                    Ordering::Greater => (anchor_start, cur_end, cur_end),   // forward
-                    Ordering::Less => (cur_start, anchor_end, cur_start),    // backward
-                    Ordering::Equal => (anchor_start, anchor_end, anchor_end), 
+                    Ordering::Greater => (anchor_start, cur_end, cur_end), // forward
+                    Ordering::Less => (cur_start, anchor_end, cur_start),  // backward
+                    Ordering::Equal => (anchor_start, anchor_end, anchor_end),
                 };
-        
+
                 self.selection = Some(Selection::from_anchor_and_cursor(sel_start, sel_end));
                 self.cursor = new_cursor;
             }
             SelectionSnap::Word { anchor } => {
                 let (anchor_start, anchor_end) = self.code.word_boundaries(anchor);
                 let (cur_start, cur_end) = self.code.word_boundaries(cursor);
-        
+
                 let (sel_start, sel_end, new_cursor) = match cursor.cmp(&anchor) {
-                    Ordering::Greater => (anchor_start, cur_end, cur_end),   // forward
-                    Ordering::Less => (cur_start, anchor_end, cur_start),    // backward
+                    Ordering::Greater => (anchor_start, cur_end, cur_end), // forward
+                    Ordering::Less => (cur_start, anchor_end, cur_start),  // backward
                     Ordering::Equal => (anchor_start, anchor_end, anchor_end),
                 };
-        
+
                 self.selection = Some(Selection::from_anchor_and_cursor(sel_start, sel_end));
                 self.cursor = new_cursor;
             }
@@ -387,11 +390,9 @@ impl Editor {
     }
 
     /// Converts mouse coordinates to a cursor position within the editor area, returning `None` if outside.
-    pub fn cursor_from_mouse(
-        &self, mouse_x: u16, mouse_y: u16, area: &Rect
-    ) -> Option<usize> {
+    pub fn cursor_from_mouse(&self, mouse_x: u16, mouse_y: u16, area: &Rect) -> Option<usize> {
         let line_number_width = u16::try_from(self.get_line_number_width()).unwrap_or(u16::MAX);
-    
+
         if mouse_y < area.top()
             || mouse_y >= area.bottom()
             || mouse_x < area.left() + line_number_width
@@ -410,8 +411,14 @@ impl Editor {
             let mut ch = vr.start;
             for g in RopeGraphemes::new(&slice) {
                 let (gw0, gc) = grapheme_width_and_chars_len(g);
-                let gw = if g.chars().next() == Some('\t') { 1 } else { gw0 };
-                if cur_col + gw > clicked_col { break; }
+                let gw = if g.chars().next() == Some('\t') {
+                    1
+                } else {
+                    gw0
+                };
+                if cur_col + gw > clicked_col {
+                    break;
+                }
                 cur_col += gw;
                 ch += gc;
             }
@@ -422,31 +429,35 @@ impl Editor {
         if clicked_row >= self.code.len_lines() {
             return None;
         }
-    
+
         let clicked_col = (mouse_x - area.left() - line_number_width) as usize;
-    
+
         let line_start_char = self.code.line_to_char(clicked_row);
         let line_len = self.code.line_len(clicked_row);
-    
+
         let start_col = self.offset_x.min(line_len);
         let end_col = line_len;
-    
+
         let char_start = line_start_char + start_col;
         let char_end = line_start_char + end_col;
-    
+
         let mut current_col = 0;
-        let mut char_idx = start_col;        
+        let mut char_idx = start_col;
         let visible_chars = self.code.char_slice(char_start, char_end);
         for g in RopeGraphemes::new(&visible_chars) {
-            let (g_width, g_chars) = grapheme_width_and_chars_len(g);        
-            if current_col + g_width > clicked_col { break; }
+            let (g_width, g_chars) = grapheme_width_and_chars_len(g);
+            if current_col + g_width > clicked_col {
+                break;
+            }
             current_col += g_width;
             char_idx += g_chars;
         }
-    
-        let line = self.code.char_slice(line_start_char, line_start_char + line_len);
+
+        let line = self
+            .code
+            .char_slice(line_start_char, line_start_char + line_len);
         let visual_width: usize = RopeGraphemes::new(&line).map(grapheme_width).sum();
-    
+
         if clicked_col + self.offset_x >= visual_width {
             let mut end_idx = line.len_chars();
             if end_idx > 0 && line.char(end_idx - 1) == '\n' {
@@ -454,7 +465,7 @@ impl Editor {
             }
             char_idx = end_idx;
         }
-    
+
         Some(line_start_char + char_idx)
     }
 
@@ -470,12 +481,16 @@ impl Editor {
         let anchor = self.selection_anchor();
         self.selection = Some(Selection::from_anchor_and_cursor(anchor, new_cursor));
     }
-    
+
     /// Returns the selection anchor position, or the cursor if no selection exists.
     pub fn selection_anchor(&self) -> usize {
-        self.selection
-            .as_ref()
-            .map_or(self.cursor, |s| if self.cursor == s.start { s.end } else { s.start })
+        self.selection.as_ref().map_or(self.cursor, |s| {
+            if self.cursor == s.start {
+                s.end
+            } else {
+                s.start
+            }
+        })
     }
 
     /// Apply an editing action to the buffer.
@@ -504,7 +519,7 @@ impl Editor {
         if let Some(state) = &batch.state_after {
             self.code.set_state_after(state.offset, state.selection);
         }
-        
+
         for edit in &batch.edits {
             match &edit.kind {
                 EditKind::Insert { offset, text } => {
@@ -570,7 +585,8 @@ impl Editor {
     }
 
     fn build_theme(theme: Vec<(&str, &str)>) -> Theme {
-        theme.into_iter()
+        theme
+            .into_iter()
             .map(|(name, hex)| {
                 let (r, g, b) = utils::rgb(hex);
                 (name.to_string(), Style::default().fg(Color::Rgb(r, g, b)))
@@ -620,7 +636,9 @@ impl Editor {
     /// Currently always returns `Ok`; the system-clipboard failure path falls
     /// back to the in-memory clipboard.
     pub fn set_clipboard(&mut self, text: &str) -> Result<()> {
-        let _guard = CLIPBOARD_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = CLIPBOARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         arboard::Clipboard::new()
             .and_then(|mut c| c.set_text(text.to_string()))
             .unwrap_or_else(|_| self.clipboard = Some(text.to_string()));
@@ -633,7 +651,9 @@ impl Editor {
     /// # Errors
     /// Returns an error when neither the system nor in-memory clipboard has text.
     pub fn get_clipboard(&self) -> Result<String> {
-        let _guard = CLIPBOARD_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = CLIPBOARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         arboard::Clipboard::new()
             .and_then(|mut c| c.get_text())
             .ok()
@@ -644,12 +664,13 @@ impl Editor {
     /// Set the highlight marks as `(start char, end char, hex color)` ranges.
     pub fn set_marks(&mut self, marks: Vec<(usize, usize, &str)>) {
         self.marks = Some(
-            marks.into_iter()
+            marks
+                .into_iter()
                 .map(|(start, end, color)| {
                     let (r, g, b) = utils::rgb(color);
                     (start, end, Color::Rgb(r, g, b))
                 })
-                .collect()
+                .collect(),
         );
     }
 
@@ -661,7 +682,8 @@ impl Editor {
     /// Record the foldable line ranges reported by the language server. Drops any
     /// active fold whose range is no longer offered.
     pub fn set_fold_ranges(&mut self, ranges: Vec<(usize, usize)>) {
-        self.folds.retain(|f| ranges.iter().any(|r| r.0 == f.0 && r.1 == f.1));
+        self.folds
+            .retain(|f| ranges.iter().any(|r| r.0 == f.0 && r.1 == f.1));
         self.fold_ranges = ranges;
     }
 
@@ -700,7 +722,12 @@ impl Editor {
 
     /// Fold every foldable range.
     pub fn fold_all(&mut self) {
-        self.folds = self.fold_ranges.iter().copied().filter(|r| r.1 > r.0).collect();
+        self.folds = self
+            .fold_ranges
+            .iter()
+            .copied()
+            .filter(|r| r.1 > r.0)
+            .collect();
     }
 
     /// Unfold every active fold.
@@ -839,7 +866,9 @@ impl Editor {
 
     /// Return the text of the current selection, or `None` when empty.
     pub fn get_selection_text(&mut self) -> Option<String> {
-        if let Some(selection) = &self.selection && !selection.is_empty() {
+        if let Some(selection) = &self.selection
+            && !selection.is_empty()
+        {
             let text = self.code.slice(selection.start, selection.end);
             return Some(text);
         }
@@ -848,7 +877,7 @@ impl Editor {
 
     /// Return the current selection, if any.
     pub fn get_selection(&mut self) -> Option<Selection> {
-       self.selection
+        self.selection
     }
 
     /// Set (or clear) the current selection.
@@ -893,7 +922,11 @@ impl Editor {
     /// scrollbar). A tab counts as one character.
     #[must_use]
     pub fn max_line_width(&self) -> usize {
-        self.get_content().lines().map(|l| l.chars().count()).max().unwrap_or(0)
+        self.get_content()
+            .lines()
+            .map(|l| l.chars().count())
+            .max()
+            .unwrap_or(0)
     }
 
     /// Return a mutable reference to the underlying code buffer.
@@ -962,15 +995,16 @@ impl Editor {
     }
 
     /// Set the change callback function for handling document changes
-    pub fn set_change_callback(
-        &mut self, callback: Box<dyn Fn(Vec<crate::code::ChangeEvent>)>
-    ) {
+    pub fn set_change_callback(&mut self, callback: Box<dyn Fn(Vec<crate::code::ChangeEvent>)>) {
         self.code.set_change_callback(callback);
     }
 
     /// Return cached syntax highlights for the char range `[start, end)`.
     pub fn highlight_interval(
-        &self, start: usize, end: usize, theme: &Theme
+        &self,
+        start: usize,
+        end: usize,
+        theme: &Theme,
     ) -> Vec<(usize, usize, Style)> {
         let mut cache = self.highlights_cache.borrow_mut();
         let key = (start, end);
@@ -990,41 +1024,46 @@ impl Editor {
 
     /// Compute the cursor's visible `(x, y)` cell within `area`, or `None` when
     /// the cursor is scrolled out of view.
-    pub fn get_visible_cursor(
-        &self, area: &Rect
-    ) -> Option<(u16, u16)> {
+    pub fn get_visible_cursor(&self, area: &Rect) -> Option<(u16, u16)> {
         let line_number_width = self.get_line_number_width();
 
         let (cursor_line, cursor_char_col) = self.code.point(self.cursor);
-        
+
         if cursor_line >= self.offset_y && cursor_line < self.offset_y + area.height as usize {
             let line_start_char = self.code.line_to_char(cursor_line);
             let line_len = self.code.line_len(cursor_line);
-        
+
             let max_x = (area.width as usize).saturating_sub(line_number_width);
             let start_col = self.offset_x;
-                
+
             let cursor_visual_col: usize = {
-                let slice = self.code.char_slice(line_start_char, line_start_char + cursor_char_col.min(line_len));
+                let slice = self.code.char_slice(
+                    line_start_char,
+                    line_start_char + cursor_char_col.min(line_len),
+                );
                 RopeGraphemes::new(&slice).map(grapheme_width).sum()
             };
-            
+
             let offset_visual_col: usize = {
-                let slice = self.code.char_slice(line_start_char, line_start_char + start_col.min(line_len));
+                let slice = self
+                    .code
+                    .char_slice(line_start_char, line_start_char + start_col.min(line_len));
                 RopeGraphemes::new(&slice).map(grapheme_width).sum()
             };
-        
+
             let relative_visual_col = cursor_visual_col.saturating_sub(offset_visual_col);
             let visible_x = relative_visual_col.min(max_x);
-        
-            let cursor_x = area.left() + u16::try_from(line_number_width + visible_x).unwrap_or(u16::MAX);
-            let cursor_y = area.top() + u16::try_from(cursor_line - self.offset_y).unwrap_or(u16::MAX);
-        
+
+            let cursor_x =
+                area.left() + u16::try_from(line_number_width + visible_x).unwrap_or(u16::MAX);
+            let cursor_y =
+                area.top() + u16::try_from(cursor_line - self.offset_y).unwrap_or(u16::MAX);
+
             if cursor_x < area.right() && cursor_y < area.bottom() {
                 return Some((cursor_x, cursor_y));
             }
         }
-        
+
         None
     }
 

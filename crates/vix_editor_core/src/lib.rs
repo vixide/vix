@@ -20,11 +20,11 @@ pub mod editor;
 // Always compiled: the main crate always uses the crossterm backend.
 /// Crossterm-backed input and event handling for the editor.
 pub mod editor_crossterm;
+/// Undo/redo history of edit batches.
+pub mod history;
 /// Multiple cursors ("carets") and the operations applied across them.
 pub mod multicursor;
 pub mod named;
-/// Undo/redo history of edit batches.
-pub mod history;
 /// Rendering of the editor, including soft-wrap layout.
 pub mod render;
 /// Text selection ranges and selection-snapping modes.

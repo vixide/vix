@@ -8,8 +8,8 @@ use ratatui::widgets::{
     Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap,
 };
 
-use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::StatefulImage;
+use ratatui_image::protocol::StatefulProtocol;
 
 use crate::app::{App, Focus};
 use crate::calendar;
@@ -37,22 +37,35 @@ fn body_columns(app: &App, body: Rect) -> BodyColumns {
     let dock_max = body.width.saturating_sub(20).max(12);
     let mut constraints = Vec::new();
     if app.show_explorer {
-        constraints.push(Constraint::Length(app.settings.explorer_width.clamp(12, dock_max)));
+        constraints.push(Constraint::Length(
+            app.settings.explorer_width.clamp(12, dock_max),
+        ));
     }
     constraints.push(Constraint::Min(20));
     if app.show_messages {
-        constraints.push(Constraint::Length(app.settings.messages_width.clamp(12, dock_max)));
+        constraints.push(Constraint::Length(
+            app.settings.messages_width.clamp(12, dock_max),
+        ));
     }
     if app.settings.show_outline_dock {
-        constraints.push(Constraint::Length(app.settings.outline_width.clamp(12, dock_max)));
+        constraints.push(Constraint::Length(
+            app.settings.outline_width.clamp(12, dock_max),
+        ));
     }
     if app.show_debug_panel {
-        constraints.push(Constraint::Length(app.settings.debug_width.clamp(12, dock_max)));
+        constraints.push(Constraint::Length(
+            app.settings.debug_width.clamp(12, dock_max),
+        ));
     }
     if app.show_test_panel {
-        constraints.push(Constraint::Length(app.settings.test_width.clamp(12, dock_max)));
+        constraints.push(Constraint::Length(
+            app.settings.test_width.clamp(12, dock_max),
+        ));
     }
-    let cols = Layout::default().direction(Direction::Horizontal).constraints(constraints).split(body);
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(constraints)
+        .split(body);
     let mut ci = 0;
     let take = |ci: &mut usize| {
         let r = cols[*ci];
@@ -138,7 +151,10 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         // The center editor keeps only its top border (no left/right/bottom).
         .borders(Borders::TOP)
         .border_type(BorderType::Rounded)
-        .border_style(theme::region_title(theme::Region::Editor, app.focus == Focus::Editor));
+        .border_style(theme::region_title(
+            theme::Region::Editor,
+            app.focus == Focus::Editor,
+        ));
     let editor_inner = editor_block.inner(editor_cell);
 
     if let Some(r) = explorer_rect {
@@ -387,7 +403,9 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
 
 fn draw_pomodoro(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::pomodoro_tool::Phase;
-    let Some(timer) = app.pomodoro.as_ref() else { return };
+    let Some(timer) = app.pomodoro.as_ref() else {
+        return;
+    };
     let phase = timer.phase;
 
     let (title, hint) = if phase == Phase::Break {
@@ -429,17 +447,22 @@ fn draw_pomodoro(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(big, theme::selected()))).alignment(Alignment::Center),
+        Paragraph::new(Line::from(Span::styled(big, theme::selected())))
+            .alignment(Alignment::Center),
         rows[0],
     );
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(format!("[ {button} ]"), theme::selected())))
-            .alignment(Alignment::Center),
+        Paragraph::new(Line::from(Span::styled(
+            format!("[ {button} ]"),
+            theme::selected(),
+        )))
+        .alignment(Alignment::Center),
         rows[1],
     );
     app.layout.pomodoro_button = rows[1];
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim()))).alignment(Alignment::Center),
+        Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim())))
+            .alignment(Alignment::Center),
         rows[3],
     );
 }
@@ -480,11 +503,17 @@ fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
         w.wrap_to(text_width);
         w.clamp(view_h);
     }
-    let total = app.welcome.as_ref().map_or(0, crate::welcome_panel::Panel::len);
+    let total = app
+        .welcome
+        .as_ref()
+        .map_or(0, crate::welcome_panel::Panel::len);
     let scroll = app.welcome.as_ref().map_or(0, |w| w.scroll);
     let show_bar = total > view_h && body.width > 1;
     let text_area = if show_bar {
-        Rect { width: body.width - 1, ..body }
+        Rect {
+            width: body.width - 1,
+            ..body
+        }
     } else {
         body
     };
@@ -500,11 +529,17 @@ fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
         .unwrap_or_default();
     frame.render_widget(Paragraph::new(visible), text_area);
     if show_bar {
-        let sb_area = Rect { x: body.x + body.width - 1, ..body };
+        let sb_area = Rect {
+            x: body.x + body.width - 1,
+            ..body
+        };
         draw_scrollbar(frame, sb_area, scroll, total.saturating_sub(view_h));
     }
 
-    let hint = Line::from(Span::styled(t!("ui.welcome_hint").to_string(), theme::dim()));
+    let hint = Line::from(Span::styled(
+        t!("ui.welcome_hint").to_string(),
+        theme::dim(),
+    ));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 
     app.layout.welcome = body;
@@ -519,13 +554,21 @@ fn cursor_screen_yx(app: &App) -> Option<(u16, u16)> {
     let (line, col) = app.editor.cursor_1based();
     let off_y = t.editor.get_offset_y();
     let y = area.y + u16::try_from(line.saturating_sub(1).saturating_sub(off_y)).unwrap_or(0);
-    let x = area.x + u16::try_from(col.saturating_sub(1)).unwrap_or(0).min(area.width);
-    Some((x.min(area.x + area.width.saturating_sub(1)), y.min(area.y + area.height.saturating_sub(1))))
+    let x = area.x
+        + u16::try_from(col.saturating_sub(1))
+            .unwrap_or(0)
+            .min(area.width);
+    Some((
+        x.min(area.x + area.width.saturating_sub(1)),
+        y.min(area.y + area.height.saturating_sub(1)),
+    ))
 }
 
 /// Draw the LSP completion popup as a small list anchored at the cursor.
 fn draw_completion(app: &App, frame: &mut Frame) {
-    let Some(popup) = app.completion.as_ref() else { return };
+    let Some(popup) = app.completion.as_ref() else {
+        return;
+    };
     if popup.items.is_empty() {
         return;
     }
@@ -535,16 +578,23 @@ fn draw_completion(app: &App, frame: &mut Frame) {
     }
     let max_rows = 10.min(popup.items.len());
     // Scroll so the highlighted row stays visible.
-    let start = if popup.selected >= max_rows { popup.selected + 1 - max_rows } else { 0 };
+    let start = if popup.selected >= max_rows {
+        popup.selected + 1 - max_rows
+    } else {
+        0
+    };
     let end = (start + max_rows).min(popup.items.len());
 
     // Width from the widest visible label (+detail), capped to the area.
     let widest = popup.items[start..end]
         .iter()
-        .map(|it| it.label.chars().count() + it.detail.as_ref().map_or(0, |d| d.chars().count() + 3))
+        .map(|it| {
+            it.label.chars().count() + it.detail.as_ref().map_or(0, |d| d.chars().count() + 3)
+        })
         .max()
         .unwrap_or(10);
-    let width = (u16::try_from(widest).unwrap_or(u16::MAX) + 2).clamp(16, area.width.saturating_sub(2));
+    let width =
+        (u16::try_from(widest).unwrap_or(u16::MAX) + 2).clamp(16, area.width.saturating_sub(2));
     let height = u16::try_from(max_rows).unwrap_or(u16::MAX) + 2;
 
     let (cx, cy) = cursor_screen_yx(app).unwrap_or((area.x + 2, area.y));
@@ -555,7 +605,12 @@ fn draw_completion(app: &App, frame: &mut Frame) {
         cy.saturating_sub(height)
     };
     let x = cx.min(area.x + area.width.saturating_sub(width));
-    let rect = Rect { x, y, width, height };
+    let rect = Rect {
+        x,
+        y,
+        width,
+        height,
+    };
 
     frame.render_widget(Clear, rect);
     let rows: Vec<ListItem> = popup.items[start..end]
@@ -607,7 +662,12 @@ fn draw_hover(app: &App, frame: &mut Frame) {
         cy.saturating_sub(height)
     };
     let x = cx.min(area.x + area.width.saturating_sub(width));
-    let rect = Rect { x, y, width, height };
+    let rect = Rect {
+        x,
+        y,
+        width,
+        height,
+    };
 
     frame.render_widget(Clear, rect);
     let block = Block::default()
@@ -625,7 +685,8 @@ fn draw_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
         Some(d) => (d.title.clone(), d.body.clone(), d.editor.is_some()),
         None => return,
     };
-    let content_w = u16::try_from(body.chars().count().max(title.chars().count())).unwrap_or(u16::MAX);
+    let content_w =
+        u16::try_from(body.chars().count().max(title.chars().count())).unwrap_or(u16::MAX);
     let width = (content_w + 6).clamp(16, area.width);
     let height = 5u16.min(area.height); // border + body + blank + Ok + border
     let rect = Rect {
@@ -643,7 +704,11 @@ fn draw_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(rect);
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
         .split(inner);
     // Record the body rect so mouse selection can hit-test it.
     app.layout.dialog_body = rows[0];
@@ -670,7 +735,9 @@ fn draw_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
 
 fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::color_converter_tool::Field;
-    let Some(conv) = app.color_converter.as_ref() else { return };
+    let Some(conv) = app.color_converter.as_ref() else {
+        return;
+    };
 
     let title = t!("menu.item.tools.color_converter");
     let hint = t!("ui.color_converter_hint");
@@ -708,7 +775,11 @@ fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect) {
     for (i, field) in Field::ALL.iter().enumerate() {
         let focused = conv.focus == *field;
         let text = &conv.fields[field.index()];
-        let style = if focused { theme::selected() } else { theme::base() };
+        let style = if focused {
+            theme::selected()
+        } else {
+            theme::base()
+        };
         let caret = if focused { "_" } else { "" };
         let line = Line::from(vec![
             Span::styled(format!(" {:<4}", field.label()), theme::dim()),
@@ -730,22 +801,41 @@ fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_code_actions(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(menu) = app.code_actions.as_ref() else { return };
+    let Some(menu) = app.code_actions.as_ref() else {
+        return;
+    };
     let titles: Vec<&str> = menu.actions.iter().map(|(t, _)| t.as_str()).collect();
-    draw_chooser(frame, area, &t!("menu.item.lsp.code_action"), &titles, menu.selected);
+    draw_chooser(
+        frame,
+        area,
+        &t!("menu.item.lsp.code_action"),
+        &titles,
+        menu.selected,
+    );
 }
 
 fn draw_code_lens(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(menu) = app.code_lens.as_ref() else { return };
+    let Some(menu) = app.code_lens.as_ref() else {
+        return;
+    };
     let titles: Vec<&str> = menu.lenses.iter().map(|(_, t, _, _)| t.as_str()).collect();
-    draw_chooser(frame, area, &t!("menu.item.lsp.code_lens"), &titles, menu.selected);
+    draw_chooser(
+        frame,
+        area,
+        &t!("menu.item.lsp.code_lens"),
+        &titles,
+        menu.selected,
+    );
 }
 
 /// A centered single-column chooser: a bordered list of `titles` with `selected`
 /// highlighted. Shared by the code-action and code-lens menus.
 fn draw_chooser(frame: &mut Frame, area: Rect, title: &str, titles: &[&str], selected: usize) {
     let longest = titles.iter().map(|t| t.chars().count()).max().unwrap_or(20);
-    let width = u16::try_from(longest).unwrap_or(u16::MAX).saturating_add(4).clamp(24, area.width);
+    let width = u16::try_from(longest)
+        .unwrap_or(u16::MAX)
+        .saturating_add(4)
+        .clamp(24, area.width);
     let rows_n = u16::try_from(titles.len()).unwrap_or(u16::MAX);
     let height = rows_n.saturating_add(2).min(area.height);
     let rect = Rect {
@@ -767,7 +857,11 @@ fn draw_chooser(frame: &mut Frame, area: Rect, title: &str, titles: &[&str], sel
         .iter()
         .enumerate()
         .map(|(i, t)| {
-            let style = if i == selected { theme::selected() } else { theme::base() };
+            let style = if i == selected {
+                theme::selected()
+            } else {
+                theme::base()
+            };
             Line::from(Span::styled(format!(" {t} "), style))
         })
         .collect();
@@ -776,7 +870,9 @@ fn draw_chooser(frame: &mut Frame, area: Rect, title: &str, titles: &[&str], sel
 
 fn draw_regex_tester(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::regex_tool::{Field, Outcome};
-    let Some(t) = app.regex_tester.as_ref() else { return };
+    let Some(t) = app.regex_tester.as_ref() else {
+        return;
+    };
 
     let title = t!("menu.item.tools.regex_tester");
     let hint = t!("ui.regex_tester_hint");
@@ -810,7 +906,11 @@ fn draw_regex_tester(app: &mut App, frame: &mut Frame, area: Rect) {
         .split(inner);
 
     let field = |label: &str, text: &str, focused: bool| {
-        let style = if focused { theme::selected() } else { theme::base() };
+        let style = if focused {
+            theme::selected()
+        } else {
+            theme::base()
+        };
         let caret = if focused { "_" } else { "" };
         Line::from(vec![
             Span::styled(format!(" {label:<8}"), theme::dim()),
@@ -830,7 +930,10 @@ fn draw_regex_tester(app: &mut App, frame: &mut Frame, area: Rect) {
     let result_lines: Vec<Line> = match t.result() {
         Outcome::Error(e) => vec![Line::from(Span::styled(format!(" {e}"), theme::dim()))],
         Outcome::Matches(m) if m.is_empty() => {
-            vec![Line::from(Span::styled(t!("status.no_matches").to_string(), theme::dim()))]
+            vec![Line::from(Span::styled(
+                t!("status.no_matches").to_string(),
+                theme::dim(),
+            ))]
         }
         Outcome::Matches(m) => {
             let mut lines = vec![Line::from(Span::styled(
@@ -853,7 +956,9 @@ fn draw_regex_tester(app: &mut App, frame: &mut Frame, area: Rect) {
 
 fn draw_calculator(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::calculator_tool::{Focus, Outcome};
-    let Some(calc) = app.calculator.as_ref() else { return };
+    let Some(calc) = app.calculator.as_ref() else {
+        return;
+    };
 
     let title = t!("menu.item.tools.calculator");
     let hint = t!("ui.calculator_hint");
@@ -885,30 +990,56 @@ fn draw_calculator(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
 
-    let input_style = if calc.focus == Focus::Input { theme::selected() } else { theme::base() };
+    let input_style = if calc.focus == Focus::Input {
+        theme::selected()
+    } else {
+        theme::base()
+    };
     let caret = if calc.focus == Focus::Input { "_" } else { "" };
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(format!(" {}{caret}", calc.input), input_style))),
+        Paragraph::new(Line::from(Span::styled(
+            format!(" {}{caret}", calc.input),
+            input_style,
+        ))),
         rows[0],
     );
     app.layout.calculator_rects[0] = rows[0];
 
     // Buttons: [ Run ] [ Insert ].
     let btn = |label: String, focused: bool| {
-        let style = if focused { theme::selected() } else { theme::dim() };
+        let style = if focused {
+            theme::selected()
+        } else {
+            theme::dim()
+        };
         Span::styled(format!("[ {label} ] "), style)
     };
     let buttons = Line::from(vec![
         Span::raw(" "),
-        btn(t!("ui.calculator_run").to_string(), calc.focus == Focus::Run),
-        btn(t!("ui.calculator_insert").to_string(), calc.focus == Focus::Insert),
+        btn(
+            t!("ui.calculator_run").to_string(),
+            calc.focus == Focus::Run,
+        ),
+        btn(
+            t!("ui.calculator_insert").to_string(),
+            calc.focus == Focus::Insert,
+        ),
     ]);
     frame.render_widget(Paragraph::new(buttons), rows[1]);
     // Approximate button hit rects: split the buttons row in two halves.
     let half = rows[1].width / 2;
-    app.layout.calculator_rects[1] = Rect { x: rows[1].x, y: rows[1].y, width: half, height: 1 };
-    app.layout.calculator_rects[2] =
-        Rect { x: rows[1].x + half, y: rows[1].y, width: rows[1].width - half, height: 1 };
+    app.layout.calculator_rects[1] = Rect {
+        x: rows[1].x,
+        y: rows[1].y,
+        width: half,
+        height: 1,
+    };
+    app.layout.calculator_rects[2] = Rect {
+        x: rows[1].x + half,
+        y: rows[1].y,
+        width: rows[1].width - half,
+        height: 1,
+    };
 
     // Result or error line.
     let result_line = match &calc.outcome {
@@ -925,7 +1056,9 @@ fn draw_calculator(app: &mut App, frame: &mut Frame, area: Rect) {
 
 fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::unit_converter_tool::{Focus, UNITS};
-    let Some(conv) = app.unit_converter.as_ref() else { return };
+    let Some(conv) = app.unit_converter.as_ref() else {
+        return;
+    };
 
     let title = t!("menu.item.tools.convert.unit");
     let hint = t!("ui.unit_converter_hint");
@@ -958,14 +1091,23 @@ fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
 
-    let field_style = |focused: bool| if focused { theme::selected() } else { theme::base() };
+    let field_style = |focused: bool| {
+        if focused {
+            theme::selected()
+        } else {
+            theme::base()
+        }
+    };
 
     // Value field.
     let caret = if conv.focus == Focus::Value { "_" } else { "" };
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(format!(" {:<8}", t!("ui.unit_value")), theme::dim()),
-            Span::styled(format!("{}{caret}", conv.value), field_style(conv.focus == Focus::Value)),
+            Span::styled(
+                format!("{}{caret}", conv.value),
+                field_style(conv.focus == Focus::Value),
+            ),
         ])),
         rows[0],
     );
@@ -973,7 +1115,10 @@ fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(format!(" {:<8}", t!("ui.unit_from")), theme::dim()),
-            Span::styled(format!("‹ {} ›", UNITS[conv.from].label), field_style(conv.focus == Focus::From)),
+            Span::styled(
+                format!("‹ {} ›", UNITS[conv.from].label),
+                field_style(conv.focus == Focus::From),
+            ),
         ])),
         rows[1],
     );
@@ -981,7 +1126,10 @@ fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(format!(" {:<8}", t!("ui.unit_to")), theme::dim()),
-            Span::styled(format!("‹ {} ›", UNITS[conv.to].label), field_style(conv.focus == Focus::To)),
+            Span::styled(
+                format!("‹ {} ›", UNITS[conv.to].label),
+                field_style(conv.focus == Focus::To),
+            ),
             Span::styled(format!("   = {}", conv.output_text()), theme::base()),
         ])),
         rows[2],
@@ -995,7 +1143,9 @@ fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_confirm(app: &App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.confirm.as_ref() else { return };
+    let Some(c) = app.confirm.as_ref() else {
+        return;
+    };
     let width = (u16::try_from(c.message.chars().count()).unwrap_or(u16::MAX) + 6).min(area.width);
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
@@ -1016,7 +1166,9 @@ fn draw_confirm(app: &App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_replace_confirm(app: &App, frame: &mut Frame, area: Rect) {
-    let Some(rc) = app.replace_confirm.as_ref() else { return };
+    let Some(rc) = app.replace_confirm.as_ref() else {
+        return;
+    };
     let width = (area.width * 7 / 10).clamp(30, area.width);
     let height = (area.height * 6 / 10).clamp(8, area.height);
     let rect = Rect {
@@ -1029,7 +1181,11 @@ fn draw_replace_confirm(app: &App, frame: &mut Frame, area: Rect) {
     let title = format!(
         " {} {} ",
         icon::SEARCH,
-        t!("ui.replace_confirm_title", replaced = rc.replaced, files = rc.plan.len())
+        t!(
+            "ui.replace_confirm_title",
+            replaced = rc.replaced,
+            files = rc.plan.len()
+        )
     );
     let block = Block::default()
         .style(theme::base())
@@ -1054,15 +1210,23 @@ fn draw_replace_confirm(app: &App, frame: &mut Frame, area: Rect) {
         .map(|l| Line::from(Span::raw(l.clone())))
         .collect();
     frame.render_widget(Paragraph::new(lines), chunks[0]);
-    let hint = Line::from(Span::styled(t!("ui.replace_confirm_hint").to_string(), theme::dim()));
+    let hint = Line::from(Span::styled(
+        t!("ui.replace_confirm_hint").to_string(),
+        theme::dim(),
+    ));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 }
 
 fn draw_unsaved(app: &App, frame: &mut Frame, area: Rect) {
-    let Some(u) = app.unsaved.as_ref() else { return };
+    let Some(u) = app.unsaved.as_ref() else {
+        return;
+    };
     let message = t!("ui.unsaved_prompt", name = u.name).to_string();
     let choices = t!("ui.unsaved_choices");
-    let width = (u16::try_from(message.chars().count().max(choices.chars().count())).unwrap_or(u16::MAX) + 6).min(area.width);
+    let width = (u16::try_from(message.chars().count().max(choices.chars().count()))
+        .unwrap_or(u16::MAX)
+        + 6)
+    .min(area.width);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
         y: area.y + area.height / 3,
@@ -1086,15 +1250,25 @@ fn draw_unsaved(app: &App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_branch_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.branch_chooser.as_ref() else { return };
+    let Some(c) = app.branch_chooser.as_ref() else {
+        return;
+    };
     let hint = t!("ui.branch_hint");
-    app.layout.chooser =
-        draw_list_chooser(frame, area, &t!("ui.branch"), &hint, &c.branches, c.selected);
+    app.layout.chooser = draw_list_chooser(
+        frame,
+        area,
+        &t!("ui.branch"),
+        &hint,
+        &c.branches,
+        c.selected,
+    );
 }
 
 fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::diff_view::Kind;
-    let Some(d) = app.diff_view.as_ref() else { return };
+    let Some(d) = app.diff_view.as_ref() else {
+        return;
+    };
     let width = (area.width * 8 / 10).clamp(30, area.width);
     let height = (area.height * 8 / 10).clamp(8, area.height);
     let rect = Rect {
@@ -1144,7 +1318,12 @@ fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
                 if s > i {
                     spans.push(Span::styled(chars[i..s].iter().collect::<String>(), style));
                 }
-                spans.push(Span::styled(chars[s.min(chars.len())..e.min(chars.len())].iter().collect::<String>(), emph));
+                spans.push(Span::styled(
+                    chars[s.min(chars.len())..e.min(chars.len())]
+                        .iter()
+                        .collect::<String>(),
+                    emph,
+                ));
                 i = e;
             }
             if i < chars.len() {
@@ -1154,25 +1333,40 @@ fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
         })
         .collect();
     frame.render_widget(Paragraph::new(lines), chunks[0]);
-    let hint = Line::from(Span::styled(t!("ui.diff_view_hint").to_string(), theme::dim()));
+    let hint = Line::from(Span::styled(
+        t!("ui.diff_view_hint").to_string(),
+        theme::dim(),
+    ));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 }
 
 fn draw_workspace_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.workspace_chooser.as_ref() else { return };
+    let Some(c) = app.workspace_chooser.as_ref() else {
+        return;
+    };
     let hint = t!("ui.projects_hint");
-    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.projects"), &hint, &c.roots, c.selected);
+    app.layout.chooser =
+        draw_list_chooser(frame, area, &t!("ui.projects"), &hint, &c.roots, c.selected);
 }
 
 fn draw_macro_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.macro_chooser.as_ref() else { return };
-    let labels: Vec<String> = c.macros.iter().map(|m| format!("{} ({} keys)", m.name, m.keys.len())).collect();
+    let Some(c) = app.macro_chooser.as_ref() else {
+        return;
+    };
+    let labels: Vec<String> = c
+        .macros
+        .iter()
+        .map(|m| format!("{} ({} keys)", m.name, m.keys.len()))
+        .collect();
     let hint = t!("ui.macros_hint");
-    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.macros"), &hint, &labels, c.selected);
+    app.layout.chooser =
+        draw_list_chooser(frame, area, &t!("ui.macros"), &hint, &labels, c.selected);
 }
 
 fn draw_clipboard_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.clipboard_chooser.as_ref() else { return };
+    let Some(c) = app.clipboard_chooser.as_ref() else {
+        return;
+    };
     // Show a one-line preview of each entry (newlines/tabs flattened).
     let labels: Vec<String> = c
         .entries
@@ -1183,15 +1377,23 @@ fn draw_clipboard_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
         })
         .collect();
     let hint = t!("ui.clipboard_hint");
-    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.clipboard"), &hint, &labels, c.selected);
+    app.layout.chooser =
+        draw_list_chooser(frame, area, &t!("ui.clipboard"), &hint, &labels, c.selected);
 }
 
 fn draw_task_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(c) = app.task_chooser.as_ref() else { return };
+    let Some(c) = app.task_chooser.as_ref() else {
+        return;
+    };
     // Show "name — command" so the action is clear before running it.
-    let labels: Vec<String> = c.tasks.iter().map(|t| format!("{} — {}", t.name, t.command)).collect();
+    let labels: Vec<String> = c
+        .tasks
+        .iter()
+        .map(|t| format!("{} — {}", t.name, t.command))
+        .collect();
     let hint = t!("ui.tasks_hint");
-    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.tasks"), &hint, &labels, c.selected);
+    app.layout.chooser =
+        draw_list_chooser(frame, area, &t!("ui.tasks"), &hint, &labels, c.selected);
 }
 
 fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -1255,30 +1457,51 @@ fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         frame.render_stateful_widget(list, chunks[0], &mut state);
     }
 
-    let hint = Line::from(Span::styled(t!("ui.git_changes_hint").to_string(), theme::dim()));
+    let hint = Line::from(Span::styled(
+        t!("ui.git_changes_hint").to_string(),
+        theme::dim(),
+    ));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 
     app.layout.git_panel = Rect {
         x: chunks[0].x,
         y: chunks[0].y,
         width: chunks[0].width,
-        height: u16::try_from(app.git_status.len()).unwrap_or(u16::MAX).min(chunks[0].height),
+        height: u16::try_from(app.git_status.len())
+            .unwrap_or(u16::MAX)
+            .min(chunks[0].height),
     };
 }
 
 fn draw_context_menu(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::app::CONTEXT_ITEMS;
-    let Some(cm) = app.context_menu.as_ref() else { return };
-    let labels: Vec<String> =
-        CONTEXT_ITEMS.iter().map(|&(label, action)| {
-            if action == "menu.separator" { String::new() } else { t!(label).to_string() }
-        }).collect();
-    let width = (u16::try_from(labels.iter().map(|l| l.chars().count()).max().unwrap_or(8)).unwrap_or(u16::MAX) + 4).min(area.width);
+    let Some(cm) = app.context_menu.as_ref() else {
+        return;
+    };
+    let labels: Vec<String> = CONTEXT_ITEMS
+        .iter()
+        .map(|&(label, action)| {
+            if action == "menu.separator" {
+                String::new()
+            } else {
+                t!(label).to_string()
+            }
+        })
+        .collect();
+    let width = (u16::try_from(labels.iter().map(|l| l.chars().count()).max().unwrap_or(8))
+        .unwrap_or(u16::MAX)
+        + 4)
+    .min(area.width);
     let height = (u16::try_from(CONTEXT_ITEMS.len()).unwrap_or(u16::MAX) + 2).min(area.height);
     // Clamp so the menu stays on screen near the click.
     let x = cm.x.min(area.right().saturating_sub(width));
     let y = cm.y.min(area.bottom().saturating_sub(height));
-    let rect = Rect { x, y, width, height };
+    let rect = Rect {
+        x,
+        y,
+        width,
+        height,
+    };
     frame.render_widget(Clear, rect);
     let block = Block::default()
         .style(theme::base())
@@ -1309,7 +1532,9 @@ fn draw_context_menu(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_spell_suggest(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(p) = app.spell_suggest.as_ref() else { return };
+    let Some(p) = app.spell_suggest.as_ref() else {
+        return;
+    };
     let title = t!("ui.spell_suggest", word = p.word).to_string();
     let hint = t!("ui.spell_suggest_hint");
     let rows = p.suggestions.len().max(1);
@@ -1346,7 +1571,10 @@ fn draw_spell_suggest(app: &mut App, frame: &mut Frame, area: Rect) {
         .split(inner);
 
     if p.suggestions.is_empty() {
-        let none = Line::from(Span::styled(t!("ui.spell_no_suggestions").to_string(), theme::dim()));
+        let none = Line::from(Span::styled(
+            t!("ui.spell_no_suggestions").to_string(),
+            theme::dim(),
+        ));
         frame.render_widget(Paragraph::new(none), chunks[0]);
     } else {
         let items: Vec<ListItem> = p
@@ -1367,7 +1595,9 @@ fn draw_spell_suggest(app: &mut App, frame: &mut Frame, area: Rect) {
         x: chunks[0].x,
         y: chunks[0].y,
         width: chunks[0].width,
-        height: u16::try_from(p.suggestions.len()).unwrap_or(u16::MAX).min(chunks[0].height),
+        height: u16::try_from(p.suggestions.len())
+            .unwrap_or(u16::MAX)
+            .min(chunks[0].height),
     };
 }
 
@@ -1421,7 +1651,9 @@ fn draw_list_chooser(
 }
 
 fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(rc) = app.recent_chooser.as_ref() else { return };
+    let Some(rc) = app.recent_chooser.as_ref() else {
+        return;
+    };
     let selected = rc.selected;
     // Show the file name first (survives truncation), then its directory.
     let labels: Vec<String> = rc
@@ -1445,7 +1677,9 @@ fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 fn draw_location_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(lc) = app.location_chooser.as_ref() else { return };
+    let Some(lc) = app.location_chooser.as_ref() else {
+        return;
+    };
     let selected = lc.selected;
     // Show the file name and line first (survives truncation), then its directory.
     let labels: Vec<String> = lc
@@ -1472,17 +1706,16 @@ fn draw_location_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
 
 fn draw_paste_conflict(app: &App, frame: &mut Frame, area: Rect) {
     let Some(op) = app.paste.as_ref() else { return };
-    let Some(src) = op.conflict.as_ref() else { return };
+    let Some(src) = op.conflict.as_ref() else {
+        return;
+    };
     let name = src
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
     let lines = vec![
         Line::from(t!("ui.paste_exists", name = name).to_string()),
-        Line::from(Span::styled(
-            t!("ui.paste_choices"),
-            theme::dim(),
-        )),
+        Line::from(Span::styled(t!("ui.paste_choices"), theme::dim())),
     ];
     let width = 56u16.min(area.width);
     let rect = Rect {
@@ -1583,7 +1816,7 @@ fn draw_menu_bar(app: &App, frame: &mut Frame, area: Rect) {
 
 /// Columns (within the menu-bar rect) of the left- and right-dock toggle icons,
 /// matching the right-aligned layout drawn by `draw_menu_bar`.
-#[must_use] 
+#[must_use]
 pub fn dock_toggle_cols(menu: Rect) -> (u16, u16) {
     let right = menu.x + menu.width;
     // Layout from the right edge: FOLDER, space, BELL, space.
@@ -1655,7 +1888,12 @@ pub fn dropdown_scroll(selected: Option<usize>, inner_h: usize, len: usize) -> u
 /// Render one dropdown (Clear + bordered list) at `area`, highlighting `selected`
 /// and scrolling so it stays visible. A `●` scrollbar marks the right edge when
 /// the items overflow.
-fn render_dropdown(frame: &mut Frame, area: Rect, items: &[crate::menu::Item], selected: Option<usize>) {
+fn render_dropdown(
+    frame: &mut Frame,
+    area: Rect,
+    items: &[crate::menu::Item],
+    selected: Option<usize>,
+) {
     frame.render_widget(Clear, area);
     let block = Block::default()
         .style(theme::base())
@@ -1679,11 +1917,22 @@ fn render_dropdown(frame: &mut Frame, area: Rect, items: &[crate::menu::Item], s
             let label = it.label();
             let right = item_right(it);
             let pad = text_w.saturating_sub(label.chars().count() + right.chars().count() + 2);
-            let style = if selected == Some(offset + vis) { theme::selected() } else { theme::base() };
+            let style = if selected == Some(offset + vis) {
+                theme::selected()
+            } else {
+                theme::base()
+            };
             Line::from(vec![
                 Span::styled(format!(" {label}"), style),
                 Span::styled(" ".repeat(pad), style),
-                Span::styled(format!("{right} "), if selected == Some(offset + vis) { style } else { theme::dim() }),
+                Span::styled(
+                    format!("{right} "),
+                    if selected == Some(offset + vis) {
+                        style
+                    } else {
+                        theme::dim()
+                    },
+                ),
             ])
         })
         .collect();
@@ -1691,8 +1940,18 @@ fn render_dropdown(frame: &mut Frame, area: Rect, items: &[crate::menu::Item], s
 
     if items.len() > inner_h {
         // Draw the thumb over the right border column.
-        let sb = Rect { x: area.x + area.width - 1, y: inner.y, width: 1, height: inner.height };
-        draw_scrollbar(frame, sb, selected.unwrap_or(0), items.len().saturating_sub(1));
+        let sb = Rect {
+            x: area.x + area.width - 1,
+            y: inner.y,
+            width: 1,
+            height: inner.height,
+        };
+        draw_scrollbar(
+            frame,
+            sb,
+            selected.unwrap_or(0),
+            items.len().saturating_sub(1),
+        );
     }
 }
 
@@ -1704,40 +1963,132 @@ fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
     // An open submenu is drawn to the right of its parent item. It may be open
     // with nothing highlighted yet (`app.menu.sub == None`).
     if app.menu.submenu_open()
-        && let Some(subitems) = app.menu.submenu_items() {
-            let fa = frame.area();
-            let sub_w = dropdown_width(subitems);
-            let sub_h = u16::try_from(subitems.len()).unwrap_or(u16::MAX) + 2;
-            let sub_x = (area.x + area.width).min(fa.width.saturating_sub(sub_w));
-            let parent_row = u16::try_from(app.menu.item.unwrap_or(0)).unwrap_or(u16::MAX);
-            let sub_y = (area.y + parent_row).min(fa.height.saturating_sub(sub_h));
-            let sub_area = Rect {
-                x: sub_x,
-                y: sub_y,
-                width: sub_w.min(fa.width),
-                height: sub_h.min(fa.height.saturating_sub(sub_y)),
-            };
-            app.layout.submenu_dropdown = sub_area;
-            render_dropdown(frame, sub_area, subitems, app.menu.sub);
+        && let Some(subitems) = app.menu.submenu_items()
+    {
+        let fa = frame.area();
+        let sub_w = dropdown_width(subitems);
+        let sub_h = u16::try_from(subitems.len()).unwrap_or(u16::MAX) + 2;
+        let sub_x = (area.x + area.width).min(fa.width.saturating_sub(sub_w));
+        let parent_row = u16::try_from(app.menu.item.unwrap_or(0)).unwrap_or(u16::MAX);
+        let sub_y = (area.y + parent_row).min(fa.height.saturating_sub(sub_h));
+        let sub_area = Rect {
+            x: sub_x,
+            y: sub_y,
+            width: sub_w.min(fa.width),
+            height: sub_h.min(fa.height.saturating_sub(sub_y)),
+        };
+        app.layout.submenu_dropdown = sub_area;
+        render_dropdown(frame, sub_area, subitems, app.menu.sub);
 
-            // A third-level submenu is drawn to the right of its parent row.
-            if app.menu.subsubmenu_open()
-                && let Some(ssitems) = app.menu.subsubmenu_items() {
-                    let ss_w = dropdown_width(ssitems);
-                    let ss_h = u16::try_from(ssitems.len()).unwrap_or(u16::MAX) + 2;
-                    let ss_x = (sub_area.x + sub_area.width).min(fa.width.saturating_sub(ss_w));
-                    let prow = u16::try_from(app.menu.sub.unwrap_or(0)).unwrap_or(u16::MAX);
-                    let ss_y = (sub_area.y + prow).min(fa.height.saturating_sub(ss_h));
-                    let ss_area = Rect {
-                        x: ss_x,
-                        y: ss_y,
-                        width: ss_w.min(fa.width),
-                        height: ss_h.min(fa.height.saturating_sub(ss_y)),
-                    };
-                    app.layout.subsubmenu_dropdown = ss_area;
-                    render_dropdown(frame, ss_area, ssitems, app.menu.subsub);
-                }
+        // A third-level submenu is drawn to the right of its parent row.
+        if app.menu.subsubmenu_open()
+            && let Some(ssitems) = app.menu.subsubmenu_items()
+        {
+            let ss_w = dropdown_width(ssitems);
+            let ss_h = u16::try_from(ssitems.len()).unwrap_or(u16::MAX) + 2;
+            let ss_x = (sub_area.x + sub_area.width).min(fa.width.saturating_sub(ss_w));
+            let prow = u16::try_from(app.menu.sub.unwrap_or(0)).unwrap_or(u16::MAX);
+            let ss_y = (sub_area.y + prow).min(fa.height.saturating_sub(ss_h));
+            let ss_area = Rect {
+                x: ss_x,
+                y: ss_y,
+                width: ss_w.min(fa.width),
+                height: ss_h.min(fa.height.saturating_sub(ss_y)),
+            };
+            app.layout.subsubmenu_dropdown = ss_area;
+            render_dropdown(frame, ss_area, ssitems, app.menu.subsub);
         }
+    }
+    draw_menu_tooltip(app, frame);
+}
+
+/// Absolute screen row of dropdown item `idx` in dropdown `rect`, accounting for
+/// scroll given the current `selected` highlight and item count `len`.
+fn menu_row_y(rect: Rect, idx: usize, selected: Option<usize>, len: usize) -> u16 {
+    let inner_h = rect.height.saturating_sub(2) as usize;
+    let offset = dropdown_scroll(selected, inner_h, len);
+    rect.y + 1 + u16::try_from(idx.saturating_sub(offset)).unwrap_or(0)
+}
+
+/// The deepest currently-highlighted menu entry's help text, the dropdown it
+/// lives in, and the screen row of that entry. When a menu is open but nothing is
+/// highlighted yet, falls back to the top-level menu's own help at the dropdown's
+/// top. `None` when there is no help to show.
+fn menu_tooltip_target(app: &App) -> Option<(String, Rect, u16)> {
+    let mi = app.menu.open?;
+    if app.menu.subsubmenu_open()
+        && let Some(items) = app.menu.subsubmenu_items()
+        && let Some(idx) = app.menu.subsub
+    {
+        let rect = app.layout.subsubmenu_dropdown;
+        return items
+            .get(idx)
+            .and_then(crate::menu::Item::help)
+            .map(|h| (h, rect, menu_row_y(rect, idx, app.menu.subsub, items.len())));
+    }
+    if app.menu.submenu_open()
+        && let Some(items) = app.menu.submenu_items()
+        && let Some(idx) = app.menu.sub
+    {
+        let rect = app.layout.submenu_dropdown;
+        return items
+            .get(idx)
+            .and_then(crate::menu::Item::help)
+            .map(|h| (h, rect, menu_row_y(rect, idx, app.menu.sub, items.len())));
+    }
+    if let Some(idx) = app.menu.item {
+        let items = menus()[mi].items;
+        let rect = app.layout.menu_dropdown;
+        return items
+            .get(idx)
+            .and_then(crate::menu::Item::help)
+            .map(|h| (h, rect, menu_row_y(rect, idx, app.menu.item, items.len())));
+    }
+    let rect = app.layout.menu_dropdown;
+    menus()[mi].help().map(|h| (h, rect, rect.y))
+}
+
+/// Draw a help tooltip for the deepest currently-highlighted menu entry, placed
+/// beside its dropdown (to the right, or the left when there is no room) and
+/// aligned with the highlighted row.
+fn draw_menu_tooltip(app: &App, frame: &mut Frame) {
+    let Some((text, anchor, row_y)) = menu_tooltip_target(app) else {
+        return;
+    };
+    let fa = frame.area();
+    if fa.width < 16 {
+        return;
+    }
+    let width = u16::try_from(text.chars().count() + 2)
+        .unwrap_or(u16::MAX)
+        .clamp(12, 44)
+        .min(fa.width);
+    let inner_w = width.saturating_sub(2).max(1) as usize;
+    let rows = text.chars().count().div_ceil(inner_w).max(1);
+    let height = (u16::try_from(rows).unwrap_or(u16::MAX) + 2).min(fa.height);
+    // Prefer the right of the dropdown; fall back to its left; else clamp.
+    let x = if anchor.x + anchor.width + width <= fa.width {
+        anchor.x + anchor.width
+    } else if anchor.x >= width {
+        anchor.x - width
+    } else {
+        fa.width.saturating_sub(width)
+    };
+    let y = row_y.min(fa.height.saturating_sub(height));
+    let rect = Rect {
+        x,
+        y,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true));
+    let para = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
+    frame.render_widget(para, rect);
 }
 
 /// The badge color for a git change in the file explorer.
@@ -1752,6 +2103,52 @@ fn git_change_color(change: crate::git::Change) -> Color {
     }
 }
 
+/// Build the styled spans for explorer rows `top..end`: indent, type glyph,
+/// optional cut-dimming and mark dot, and a trailing git-change letter. Split
+/// out of [`draw_explorer`] to keep it within the line limit.
+fn explorer_rows(app: &App, top: usize, end: usize) -> Vec<Vec<Span<'static>>> {
+    app.explorer.nodes[top..end]
+        .iter()
+        .map(|n| {
+            let indent = "  ".repeat(n.depth);
+            let glyph = if n.is_symlink {
+                icon::LINK
+            } else if n.is_dir {
+                if n.expanded {
+                    icon::FOLDER_OPEN
+                } else {
+                    icon::FOLDER
+                }
+            } else {
+                theme::file_icon(&n.name)
+            };
+            let mut style = Style::default();
+            let cut_pending = app.clip_cut && app.clip.contains(&n.path);
+            if cut_pending {
+                style = style.add_modifier(Modifier::DIM);
+            }
+            let mark = if app.explorer.marked.contains(&n.path) {
+                "● "
+            } else {
+                ""
+            };
+            let mut spans = vec![
+                Span::raw(indent),
+                Span::styled(format!("{mark}{glyph} {}", n.name), style),
+            ];
+            if !n.is_dir
+                && let Some(change) = app.git_change_for(&n.path)
+            {
+                spans.push(Span::styled(
+                    format!("  {}", change.letter()),
+                    Style::default().fg(git_change_color(change)),
+                ));
+            }
+            spans
+        })
+        .collect()
+}
+
 fn draw_explorer(app: &mut App, frame: &mut Frame, area: Rect) {
     let focused = app.focus == Focus::Explorer;
     let block = Block::default()
@@ -1761,7 +2158,12 @@ fn draw_explorer(app: &mut App, frame: &mut Frame, area: Rect) {
         .border_type(BorderType::Rounded)
         .border_style(theme::region_title(theme::Region::LeftDock, focused))
         .title(if app.explorer.has_filter() {
-            format!(" {} {}  {} ", icon::FOLDER, t!("ui.explorer"), t!("ui.explorer_filtered"))
+            format!(
+                " {} {}  {} ",
+                icon::FOLDER,
+                t!("ui.explorer"),
+                t!("ui.explorer_filtered")
+            )
         } else {
             format!(" {} {} ", icon::FOLDER, t!("ui.explorer"))
         });
@@ -1777,35 +2179,7 @@ fn draw_explorer(app: &mut App, frame: &mut Frame, area: Rect) {
     // Build the full (unsliced) styled rows for the visible window.
     let win_h = inner.height as usize;
     let end = (top + win_h).min(total);
-    let rows: Vec<Vec<Span<'static>>> = app.explorer.nodes[top..end]
-        .iter()
-        .map(|n| {
-            let indent = "  ".repeat(n.depth);
-            let glyph = if n.is_symlink {
-                icon::LINK
-            } else if n.is_dir {
-                if n.expanded { icon::FOLDER_OPEN } else { icon::FOLDER }
-            } else {
-                theme::file_icon(&n.name)
-            };
-            let mut style = Style::default();
-            let cut_pending = app.clip_cut && app.clip.contains(&n.path);
-            if cut_pending {
-                style = style.add_modifier(Modifier::DIM);
-            }
-            let mark = if app.explorer.marked.contains(&n.path) { "● " } else { "" };
-            let mut spans =
-                vec![Span::raw(indent), Span::styled(format!("{mark}{glyph} {}", n.name), style)];
-            if !n.is_dir
-                && let Some(change) = app.git_change_for(&n.path) {
-                    spans.push(Span::styled(
-                        format!("  {}", change.letter()),
-                        Style::default().fg(git_change_color(change)),
-                    ));
-                }
-            spans
-        })
-        .collect();
+    let rows = explorer_rows(app, top, end);
 
     let content_w = rows.iter().map(|s| span_line_width(s)).max().unwrap_or(0);
     let hbar = allow_bars && content_w > text_w;
@@ -1833,11 +2207,21 @@ fn draw_explorer(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_stateful_widget(list, list_area, &mut state);
 
     if vbar {
-        let sb = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: u16::try_from(body_h).unwrap_or(u16::MAX) };
+        let sb = Rect {
+            x: inner.x + inner.width - 1,
+            y: inner.y,
+            width: 1,
+            height: u16::try_from(body_h).unwrap_or(u16::MAX),
+        };
         draw_scrollbar(frame, sb, app.explorer.selected, total.saturating_sub(1));
     }
     app.layout.explorer_hscrollbar = if hbar {
-        let hb = Rect { x: inner.x, y: inner.y + inner.height - 1, width: u16::try_from(text_w).unwrap_or(u16::MAX), height: 1 };
+        let hb = Rect {
+            x: inner.x,
+            y: inner.y + inner.height - 1,
+            width: u16::try_from(text_w).unwrap_or(u16::MAX),
+            height: 1,
+        };
         draw_hscrollbar(frame, hb, off, hmax);
         hb
     } else {
@@ -1852,7 +2236,11 @@ fn center_split(area: Rect, breadcrumbs: bool) -> (Rect, Option<Rect>, Rect) {
     if breadcrumbs {
         let c = Layout::default()
             .direction(dir)
-            .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Min(1)])
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Min(1),
+            ])
             .split(area);
         (c[0], Some(c[1]), c[2])
     } else {
@@ -1906,14 +2294,19 @@ const MINIMAP_WIDTH: u16 = 16;
 /// Draw the which-key popup (candidate keys for a pending prefix) anchored at the
 /// bottom of `area`. No-op when no prefix is pending or there are no candidates.
 fn draw_which_key(app: &App, frame: &mut Frame, area: Rect) {
-    let Some((title, rows)) = app.which_key() else { return };
+    let Some((title, rows)) = app.which_key() else {
+        return;
+    };
     if rows.is_empty() {
         return;
     }
     let lines: Vec<Line> = rows
         .iter()
         .map(|(k, a)| {
-            Line::from(vec![Span::styled(format!(" {k:<4}"), theme::selected()), Span::styled(format!(" {a} "), theme::dim())])
+            Line::from(vec![
+                Span::styled(format!(" {k:<4}"), theme::selected()),
+                Span::styled(format!(" {a} "), theme::dim()),
+            ])
         })
         .collect();
     let width = rows
@@ -1947,14 +2340,21 @@ fn draw_jump_labels(app: &App, frame: &mut Frame) {
     let style = theme::selected();
     for (label, line) in &jm.labels {
         // The label's row within the editor viewport (non-wrapped mapping).
-        let Some(row_off) = line.checked_sub(top) else { continue };
+        let Some(row_off) = line.checked_sub(top) else {
+            continue;
+        };
         let y = ed.y + u16::try_from(row_off).unwrap_or(u16::MAX);
         if y >= ed.y + ed.height {
             continue;
         }
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(label.clone(), style))),
-            Rect { x: ed.x, y, width: u16::try_from(label.len()).unwrap_or(2).min(ed.width), height: 1 },
+            Rect {
+                x: ed.x,
+                y,
+                width: u16::try_from(label.len()).unwrap_or(2).min(ed.width),
+                height: 1,
+            },
         );
     }
 }
@@ -1965,7 +2365,9 @@ fn draw_jump_labels(app: &App, frame: &mut Frame) {
 /// editor's current viewport (`editor_height` rows from the scroll offset) get a
 /// highlighted background so the visible region stands out.
 fn draw_minimap(app: &mut App, frame: &mut Frame, area: Rect, editor_height: usize) {
-    let Some(tab) = app.editor.active_tab() else { return };
+    let Some(tab) = app.editor.active_tab() else {
+        return;
+    };
     if tab.is_image() {
         return;
     }
@@ -1982,7 +2384,11 @@ fn draw_minimap(app: &mut App, frame: &mut Frame, area: Rect, editor_height: usi
         // The band of source lines this minimap row represents.
         let start = r * total / rows;
         let end = ((r + 1) * total / rows).max(start + 1).min(total);
-        let longest = lines[start..end].iter().map(|l| l.trim_end().chars().count()).max().unwrap_or(0);
+        let longest = lines[start..end]
+            .iter()
+            .map(|l| l.trim_end().chars().count())
+            .max()
+            .unwrap_or(0);
         // Scale the longest line (~120 cols) to the minimap width.
         let bar = (longest * width / 120).clamp(usize::from(longest > 0), width);
         let in_view = start < view_end && end > top;
@@ -2011,7 +2417,14 @@ fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) {
                 .split(inner);
             (s[0], s[1])
         } else {
-            (inner, Rect { width: 0, height: 0, ..inner })
+            (
+                inner,
+                Rect {
+                    width: 0,
+                    height: 0,
+                    ..inner
+                },
+            )
         };
         app.layout.minimap = minimap_area;
         let (editor_area, scrollbar_area) = if app.show_scrollbar {
@@ -2021,10 +2434,21 @@ fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) {
                 .split(inner);
             (s[0], s[1])
         } else {
-            (inner, Rect { width: 0, height: 0, ..inner })
+            (
+                inner,
+                Rect {
+                    width: 0,
+                    height: 0,
+                    ..inner
+                },
+            )
         };
         // Sticky scroll: reserve the top row for the enclosing scope's header.
-        let header = if editor_area.height > 1 { app.sticky_header() } else { None };
+        let header = if editor_area.height > 1 {
+            app.sticky_header()
+        } else {
+            None
+        };
         let (header_area, editor_area) = match &header {
             Some(_) => {
                 let r = Layout::default()
@@ -2053,11 +2477,16 @@ fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) {
     let dstyle = theme::region_title(theme::Region::Editor, true);
     for (dir, divider) in app.editor.split_dividers(inner) {
         if dir == SplitDir::Vertical {
-            let col: Vec<Line> = (0..divider.height).map(|_| Line::from(Span::styled("│", dstyle))).collect();
+            let col: Vec<Line> = (0..divider.height)
+                .map(|_| Line::from(Span::styled("│", dstyle)))
+                .collect();
             frame.render_widget(Paragraph::new(col), divider);
         } else {
             let row = "─".repeat(divider.width as usize);
-            frame.render_widget(Paragraph::new(Line::from(Span::styled(row, dstyle))), divider);
+            frame.render_widget(
+                Paragraph::new(Line::from(Span::styled(row, dstyle))),
+                divider,
+            );
         }
     }
 
@@ -2085,14 +2514,27 @@ fn draw_pane(app: &mut App, frame: &mut Frame, area: Rect, tab_index: usize) -> 
             .split(area);
         (s[0], s[1])
     } else {
-        (area, Rect { width: 0, height: 0, ..area })
+        (
+            area,
+            Rect {
+                width: 0,
+                height: 0,
+                ..area
+            },
+        )
     };
 
-    if app.editor.tabs.get(tab_index).is_some_and(super::editor::Tab::is_image) {
+    if app
+        .editor
+        .tabs
+        .get(tab_index)
+        .is_some_and(super::editor::Tab::is_image)
+    {
         if let Some(tab) = app.editor.tabs.get_mut(tab_index)
-            && let Some(proto) = tab.image.as_mut() {
-                frame.render_stateful_widget(StatefulImage::<StatefulProtocol>::new(), text, proto);
-            }
+            && let Some(proto) = tab.image.as_mut()
+        {
+            frame.render_stateful_widget(StatefulImage::<StatefulProtocol>::new(), text, proto);
+        }
         return text;
     }
     if let Some(tab) = app.editor.tabs.get(tab_index) {
@@ -2120,7 +2562,9 @@ fn tint_ruler(frame: &mut Frame, text: Rect, editor: &super::editor::CodeEditor)
         return; // scrolled past the guide
     }
     let gutter = u16::try_from(editor.gutter_width()).unwrap_or(u16::MAX);
-    let Ok(rel) = u16::try_from(RULER_COLUMN - off) else { return };
+    let Ok(rel) = u16::try_from(RULER_COLUMN - off) else {
+        return;
+    };
     let x = text.x + gutter + rel;
     if x < text.x || x >= text.x + text.width {
         return;
@@ -2137,12 +2581,16 @@ fn tint_ruler(frame: &mut Frame, text: Rect, editor: &super::editor::CodeEditor)
 }
 
 fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
-    let is_image = app.editor.active_tab().is_some_and(super::editor::Tab::is_image);
+    let is_image = app
+        .editor
+        .active_tab()
+        .is_some_and(super::editor::Tab::is_image);
     if is_image {
         if let Some(tab) = app.editor.active_tab_mut()
-            && let Some(proto) = tab.image.as_mut() {
-                frame.render_stateful_widget(StatefulImage::<StatefulProtocol>::new(), text, proto);
-            }
+            && let Some(proto) = tab.image.as_mut()
+        {
+            frame.render_stateful_widget(StatefulImage::<StatefulProtocol>::new(), text, proto);
+        }
         return;
     }
     let mut hbar_rect: Option<Rect> = None;
@@ -2155,9 +2603,19 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         // A horizontal scrollbar appears when not soft-wrapping and a line
         // overflows the visible text width (and the scrollbar is enabled).
         let hbar = app.settings.show_scrollbar && !soft && text.height > 1 && maxw > text_visible;
-        let editor_area = if hbar { Rect { height: text.height - 1, ..text } } else { text };
+        let editor_area = if hbar {
+            Rect {
+                height: text.height - 1,
+                ..text
+            }
+        } else {
+            text
+        };
         let vsb = if hbar {
-            Rect { height: scrollbar.height.saturating_sub(1), ..scrollbar }
+            Rect {
+                height: scrollbar.height.saturating_sub(1),
+                ..scrollbar
+            }
         } else {
             scrollbar
         };
@@ -2196,13 +2654,19 @@ fn draw_test_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         .borders(Borders::TOP | Borders::LEFT)
         .border_type(BorderType::Rounded)
         .border_style(theme::region_title(theme::Region::RightDock, false))
-        .title(format!(" {} {} {pass}/{fail}/{ignore} ", icon::CODE, t!("ui.tests")));
+        .title(format!(
+            " {} {} {pass}/{fail}/{ignore} ",
+            icon::CODE,
+            t!("ui.tests")
+        ));
     let inner = block.inner(area);
     frame.render_widget(block, area);
     app.layout.test_panel = inner;
 
     if app.test_results.is_empty() {
-        let hint = Paragraph::new(t!("ui.tests_idle").to_string()).style(theme::dim()).wrap(Wrap { trim: true });
+        let hint = Paragraph::new(t!("ui.tests_idle").to_string())
+            .style(theme::dim())
+            .wrap(Wrap { trim: true });
         frame.render_widget(hint, inner);
         return;
     }
@@ -2219,7 +2683,11 @@ fn draw_test_panel(app: &mut App, frame: &mut Frame, area: Rect) {
                 Status::Ignore => ("\u{25cb} ", theme::dim()),
             };
             let row = Line::from(vec![Span::styled(icon, style), Span::raw(r.name.clone())]);
-            if i == app.test_selected { row.style(theme::selected()) } else { row }
+            if i == app.test_selected {
+                row.style(theme::selected())
+            } else {
+                row
+            }
         })
         .collect();
     frame.render_widget(Paragraph::new(lines), inner);
@@ -2237,10 +2705,15 @@ fn draw_debug_panel(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let mut lines: Vec<Line> = Vec::new();
     let header = |lines: &mut Vec<Line>, text: String| {
-        lines.push(Line::from(Span::styled(text, theme::title(true).add_modifier(Modifier::BOLD))));
+        lines.push(Line::from(Span::styled(
+            text,
+            theme::title(true).add_modifier(Modifier::BOLD),
+        )));
     };
     if !app.dap.is_active() {
-        let hint = Paragraph::new(t!("ui.debug_idle").to_string()).style(theme::dim()).wrap(Wrap { trim: true });
+        let hint = Paragraph::new(t!("ui.debug_idle").to_string())
+            .style(theme::dim())
+            .wrap(Wrap { trim: true });
         frame.render_widget(hint, inner);
         return;
     }
@@ -2249,8 +2722,15 @@ fn draw_debug_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         lines.push(Line::from(Span::styled("  —", theme::dim())));
     }
     for f in &app.dap_stack {
-        let loc = f.path.as_deref().and_then(|p| p.rsplit('/').next()).map_or(String::new(), |n| format!("  {n}:{}", f.line));
-        lines.push(Line::from(vec![Span::raw(format!("  {}", f.name)), Span::styled(loc, theme::dim())]));
+        let loc = f
+            .path
+            .as_deref()
+            .and_then(|p| p.rsplit('/').next())
+            .map_or(String::new(), |n| format!("  {n}:{}", f.line));
+        lines.push(Line::from(vec![
+            Span::raw(format!("  {}", f.name)),
+            Span::styled(loc, theme::dim()),
+        ]));
     }
     lines.push(Line::from(""));
     header(&mut lines, t!("ui.debug_variables").to_string());
@@ -2288,7 +2768,9 @@ fn draw_outline_dock(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.outline_dock = inner;
 
     let Some(o) = app.outline_dock.as_mut() else {
-        let hint = Paragraph::new(t!("status.outline_empty").to_string()).style(theme::dim()).wrap(Wrap { trim: true });
+        let hint = Paragraph::new(t!("status.outline_empty").to_string())
+            .style(theme::dim())
+            .wrap(Wrap { trim: true });
         frame.render_widget(hint, inner);
         return;
     };
@@ -2298,9 +2780,16 @@ fn draw_outline_dock(app: &mut App, frame: &mut Frame, area: Rect) {
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in o.scroll..(o.scroll + view_h).min(total) {
         let e = &o.entries[idx];
-        let kind = if e.kind.is_empty() { String::new() } else { format!("{:<6} ", e.kind) };
+        let kind = if e.kind.is_empty() {
+            String::new()
+        } else {
+            format!("{:<6} ", e.kind)
+        };
         if idx == o.selected {
-            lines.push(Line::from(Span::styled(format!("{kind}{}", e.name), theme::selected())));
+            lines.push(Line::from(Span::styled(
+                format!("{kind}{}", e.name),
+                theme::selected(),
+            )));
         } else {
             lines.push(Line::from(vec![
                 Span::styled(kind, theme::dim()),
@@ -2360,19 +2849,35 @@ fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
     app.messages_hscroll = app.messages_hscroll.min(hmax);
     let off = app.messages_hscroll;
 
-    let items: Vec<ListItem> =
-        rows.iter().map(|s| ListItem::new(Line::from(hslice_spans(s, off, text_w)))).collect();
-    let list_area = Rect { width: u16::try_from(text_w).unwrap_or(u16::MAX), height: body_h, ..inner };
+    let items: Vec<ListItem> = rows
+        .iter()
+        .map(|s| ListItem::new(Line::from(hslice_spans(s, off, text_w))))
+        .collect();
+    let list_area = Rect {
+        width: u16::try_from(text_w).unwrap_or(u16::MAX),
+        height: body_h,
+        ..inner
+    };
     let list = List::new(items).highlight_style(theme::selected());
     let mut state = ListState::default();
     state.select(Some(app.messages.selected));
     frame.render_stateful_widget(list, list_area, &mut state);
     if vbar {
-        let sb = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: body_h };
+        let sb = Rect {
+            x: inner.x + inner.width - 1,
+            y: inner.y,
+            width: 1,
+            height: body_h,
+        };
         draw_scrollbar(frame, sb, app.messages.selected, total.saturating_sub(1));
     }
     app.layout.messages_hscrollbar = if hbar {
-        let hb = Rect { x: inner.x, y: inner.y + inner.height - 1, width: u16::try_from(text_w).unwrap_or(u16::MAX), height: 1 };
+        let hb = Rect {
+            x: inner.x,
+            y: inner.y + inner.height - 1,
+            width: u16::try_from(text_w).unwrap_or(u16::MAX),
+            height: 1,
+        };
         draw_hscrollbar(frame, hb, off, hmax);
         hb
     } else {
@@ -2397,10 +2902,16 @@ fn draw_scrollbar(frame: &mut Frame, area: Rect, pos: usize, max: usize) {
     // Proportional thumb position: round(pos.min(max) * (h-1) / max), done in
     // integer math to match the previous float rounding for in-range values.
     let span = h.saturating_sub(1);
-    let thumb = (pos.min(max) * span + max / 2).checked_div(max).unwrap_or(0);
+    let thumb = (pos.min(max) * span + max / 2)
+        .checked_div(max)
+        .unwrap_or(0);
     let mut lines: Vec<Line> = Vec::with_capacity(h);
     for r in 0..h {
-        lines.push(Line::from(if r == thumb { thumb_glyph.clone() } else { track_glyph() }));
+        lines.push(Line::from(if r == thumb {
+            thumb_glyph.clone()
+        } else {
+            track_glyph()
+        }));
     }
     frame.render_widget(Paragraph::new(lines), area);
 }
@@ -2431,7 +2942,9 @@ fn draw_hscrollbar(frame: &mut Frame, area: Rect, pos: usize, max: usize) {
     let w = area.width as usize;
     // Proportional thumb position via integer rounding (mirrors `draw_scrollbar`).
     let span = w.saturating_sub(1);
-    let thumb = (pos.min(max) * span + max / 2).checked_div(max).unwrap_or(0);
+    let thumb = (pos.min(max) * span + max / 2)
+        .checked_div(max)
+        .unwrap_or(0);
     let spans: Vec<Span> = (0..w)
         .map(|c| {
             if c == thumb {
@@ -2516,7 +3029,11 @@ fn draw_bottom_dock(app: &mut App, frame: &mut Frame, area: Rect) {
     let vbar = allow_bars && total > h;
 
     // The visible rows, and whether they overflow horizontally → a bottom hbar.
-    let view_h = if allow_bars { inner.height.saturating_sub(1) } else { inner.height } as usize;
+    let view_h = if allow_bars {
+        inner.height.saturating_sub(1)
+    } else {
+        inner.height
+    } as usize;
     let visible: Vec<String> = app.bottom_dock.visible(view_h).to_vec();
     let content_w = max_line_width(visible.iter().map(String::as_str));
     let text_w_full = if vbar { inner.width - 1 } else { inner.width } as usize;
@@ -2524,7 +3041,11 @@ fn draw_bottom_dock(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let text_w = text_w_full;
     let body_h = if hbar { inner.height - 1 } else { inner.height };
-    let text_area = Rect { width: u16::try_from(text_w).unwrap_or(u16::MAX), height: body_h, ..inner };
+    let text_area = Rect {
+        width: u16::try_from(text_w).unwrap_or(u16::MAX),
+        height: body_h,
+        ..inner
+    };
 
     let hmax = content_w.saturating_sub(text_w);
     app.bottom_hmax = hmax;
@@ -2532,18 +3053,39 @@ fn draw_bottom_dock(app: &mut App, frame: &mut Frame, area: Rect) {
     let off = app.bottom_hscroll;
 
     let lines: Vec<Line> = if app.bottom_dock.is_empty() {
-        vec![Line::from(Span::styled(t!("ui.bottom_dock_empty").to_string(), theme::dim()))]
+        vec![Line::from(Span::styled(
+            t!("ui.bottom_dock_empty").to_string(),
+            theme::dim(),
+        ))]
     } else {
-        visible.iter().map(|l| Line::from(hslice(l, off, text_w))).collect()
+        visible
+            .iter()
+            .map(|l| Line::from(hslice(l, off, text_w)))
+            .collect()
     };
     frame.render_widget(Paragraph::new(lines), text_area);
 
     if vbar {
-        let sb = Rect { x: inner.x + inner.width - 1, y: inner.y, width: 1, height: body_h };
-        draw_scrollbar(frame, sb, app.bottom_dock.scroll, total.saturating_sub(view_h));
+        let sb = Rect {
+            x: inner.x + inner.width - 1,
+            y: inner.y,
+            width: 1,
+            height: body_h,
+        };
+        draw_scrollbar(
+            frame,
+            sb,
+            app.bottom_dock.scroll,
+            total.saturating_sub(view_h),
+        );
     }
     app.layout.bottom_hscrollbar = if hbar {
-        let hb = Rect { x: inner.x, y: inner.y + inner.height - 1, width: u16::try_from(text_w).unwrap_or(u16::MAX), height: 1 };
+        let hb = Rect {
+            x: inner.x,
+            y: inner.y + inner.height - 1,
+            width: u16::try_from(text_w).unwrap_or(u16::MAX),
+            height: 1,
+        };
         draw_hscrollbar(frame, hb, off, hmax);
         hb
     } else {
@@ -2587,9 +3129,14 @@ fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
         })
         .unwrap_or_default();
 
-    let git = crate::status_bar_panel::git_segment(app.git_branch.as_deref(), icon::BRANCH, app.git_dirty());
+    let git = crate::status_bar_panel::git_segment(
+        app.git_branch.as_deref(),
+        icon::BRANCH,
+        app.git_dirty(),
+    );
     let left = crate::status_bar_panel::left_segment(&mode, &path, &dirty_flag, &app.status);
-    let right = crate::status_bar_panel::right_segment(&format!("{git}{info}"), line, col, icon::CALENDAR);
+    let right =
+        crate::status_bar_panel::right_segment(&format!("{git}{info}"), line, col, icon::CALENDAR);
 
     let bg = theme::region_base(theme::Region::StatusBar);
     // A top border separates the status bar from the body above it.
@@ -2608,15 +3155,26 @@ fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
 
-    frame.render_widget(Paragraph::new(left).style(bg).alignment(Alignment::Left), cols[0]);
-    frame.render_widget(Paragraph::new(right).style(bg).alignment(Alignment::Right), cols[1]);
+    frame.render_widget(
+        Paragraph::new(left).style(bg).alignment(Alignment::Left),
+        cols[0],
+    );
+    frame.render_widget(
+        Paragraph::new(right).style(bg).alignment(Alignment::Right),
+        cols[1],
+    );
 
     // Record the git/branch segment's rectangle (the leftmost part of the
     // right-aligned right segment, after its 1-cell padding) so a click on the
     // branch indicator opens the Git panel.
     let git_w = u16::try_from(git.chars().count()).unwrap_or(u16::MAX);
     app.layout.git_status_bar = if git_w > 0 {
-        Rect { x: cols[1].x + 1, y: cols[1].y, width: git_w.min(cols[1].width), height: 1 }
+        Rect {
+            x: cols[1].x + 1,
+            y: cols[1].y,
+            width: git_w.min(cols[1].width),
+            height: 1,
+        }
     } else {
         Rect::default()
     };
@@ -2662,7 +3220,10 @@ fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(header), rows[0]);
     frame.render_widget(Paragraph::new(month_lines(&app.calendar)), rows[1]);
 
-    let help = Line::from(Span::styled(t!("ui.calendar_hint").to_string(), theme::dim()));
+    let help = Line::from(Span::styled(
+        t!("ui.calendar_hint").to_string(),
+        theme::dim(),
+    ));
     frame.render_widget(Paragraph::new(help), rows[2]);
 }
 
@@ -2754,7 +3315,11 @@ fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
         .split(inner);
 
     // The glyph grid: COLS cells per row, each NERD_CELL_W wide so the column a
@@ -2783,7 +3348,10 @@ fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
     let name = Line::from(Span::raw(format!("  {}", p.selected_name())));
     frame.render_widget(Paragraph::new(name), chunks[1]);
 
-    let hint = Line::from(Span::styled(t!("ui.nerd_palette_hint").to_string(), theme::dim()));
+    let hint = Line::from(Span::styled(
+        t!("ui.nerd_palette_hint").to_string(),
+        theme::dim(),
+    ));
     frame.render_widget(Paragraph::new(hint), chunks[2]);
 
     // Record just the glyph rows for mouse hit-testing.
@@ -2823,10 +3391,17 @@ fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
         .split(inner);
 
-    let header = Line::from(Span::styled(t!("ui.ascii_header").to_string(), theme::dim()));
+    let header = Line::from(Span::styled(
+        t!("ui.ascii_header").to_string(),
+        theme::dim(),
+    ));
     frame.render_widget(Paragraph::new(header), chunks[0]);
 
     // Sync the scroll window to the highlighted row, then render that window.
@@ -2838,7 +3413,12 @@ fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in p.scroll..(p.scroll + view_h).min(LEN) {
         let code = u8::try_from(idx).unwrap_or(u8::MAX);
-        let text = format!("  {:>3}  {:>2}   {}", ascii::dec(code), ascii::hex(code), ascii::label(code));
+        let text = format!(
+            "  {:>3}  {:>2}   {}",
+            ascii::dec(code),
+            ascii::hex(code),
+            ascii::label(code)
+        );
         if idx == p.selected {
             lines.push(Line::from(Span::styled(text, theme::selected())));
         } else {
@@ -2855,7 +3435,9 @@ fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         x: chunks[1].x,
         y: chunks[1].y,
         width: chunks[1].width,
-        height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[1].height),
+        height: u16::try_from(view_h)
+            .unwrap_or(u16::MAX)
+            .min(chunks[1].height),
     };
 }
 
@@ -2887,7 +3469,9 @@ fn first_visible_col(grid: &crate::edit_table::Grid, widths: &[usize], avail: us
     let sel = grid.col();
     let mut first = grid.col_scroll().min(sel);
     loop {
-        let used: usize = (first..=sel).map(|c| widths.get(c).copied().unwrap_or(3) + 1).sum();
+        let used: usize = (first..=sel)
+            .map(|c| widths.get(c).copied().unwrap_or(3) + 1)
+            .sum();
         if used <= avail || first >= sel {
             break;
         }
@@ -2912,13 +3496,22 @@ fn visible_cols(grid: &crate::edit_table::Grid, widths: &[usize], avail: usize) 
 }
 
 // Build one rendered grid line for row `r` over the visible `cols`.
-fn table_row_line(grid: &crate::edit_table::Grid, r: usize, cols: &[usize], widths: &[usize]) -> Line<'static> {
+fn table_row_line(
+    grid: &crate::edit_table::Grid,
+    r: usize,
+    cols: &[usize],
+    widths: &[usize],
+) -> Line<'static> {
     let mut spans = Vec::with_capacity(cols.len() * 2);
     let editing = grid.is_editing() && r == grid.row();
     for &c in cols {
         let w = widths.get(c).copied().unwrap_or(3);
         let selected = r == grid.row() && c == grid.col();
-        let raw = if editing && selected { grid.edit_buffer() } else { grid.cell(r, c) };
+        let raw = if editing && selected {
+            grid.edit_buffer()
+        } else {
+            grid.cell(r, c)
+        };
         let style = if selected {
             theme::selected()
         } else if r == 0 {
@@ -2948,7 +3541,10 @@ fn table_status_line(grid: &crate::edit_table::Grid) -> Line<'static> {
         grid.col() + 1,
         grid.col_count(),
     );
-    Line::from(vec![Span::styled(pos, theme::dim()), Span::styled(info, theme::dim())])
+    Line::from(vec![
+        Span::styled(pos, theme::dim()),
+        Span::styled(info, theme::dim()),
+    ])
 }
 
 // Render the table editor overlay: pinned header, scrolling body with the
@@ -2958,7 +3554,11 @@ fn draw_edit_table(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     }
     frame.render_widget(Clear, area);
-    let dirty = if app.edit_table.as_ref().is_some_and(crate::edit_table::Grid::is_dirty) {
+    let dirty = if app
+        .edit_table
+        .as_ref()
+        .is_some_and(crate::edit_table::Grid::is_dirty)
+    {
         " *"
     } else {
         ""
@@ -2968,13 +3568,22 @@ fn draw_edit_table(app: &mut App, frame: &mut Frame, area: Rect) {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(theme::title(true))
-        .title(format!(" {} {}{} ", icon::TABLE, t!("ui.edit_table"), dirty));
+        .title(format!(
+            " {} {}{} ",
+            icon::TABLE,
+            t!("ui.edit_table"),
+            dirty
+        ));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
         .split(inner);
 
     let grid = app.edit_table.as_ref().unwrap();
@@ -2989,7 +3598,10 @@ fn draw_edit_table(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let grid = app.edit_table.as_ref().unwrap();
     let cols = visible_cols(grid, &widths, avail);
-    frame.render_widget(Paragraph::new(table_row_line(grid, 0, &cols, &widths)), chunks[0]);
+    frame.render_widget(
+        Paragraph::new(table_row_line(grid, 0, &cols, &widths)),
+        chunks[0],
+    );
 
     let start = grid.row_scroll();
     let mut lines = Vec::with_capacity(body_h);
@@ -3010,7 +3622,11 @@ fn outline_line(tree: &crate::edit_outline::Tree, i: usize, selected: bool) -> L
         "· "
     };
     let text = format!("{}{marker}{}", "  ".repeat(tree.level(i)), tree.text(i));
-    let style = if selected { theme::selected() } else { theme::base() };
+    let style = if selected {
+        theme::selected()
+    } else {
+        theme::base()
+    };
     Line::from(Span::styled(text, style))
 }
 
@@ -3021,7 +3637,15 @@ fn draw_edit_sql(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     }
     frame.render_widget(Clear, area);
-    let dirty = if app.edit_sql.as_ref().is_some_and(crate::edit_sql::Editor::is_dirty) { " *" } else { "" };
+    let dirty = if app
+        .edit_sql
+        .as_ref()
+        .is_some_and(crate::edit_sql::Editor::is_dirty)
+    {
+        " *"
+    } else {
+        ""
+    };
     let block = Block::default()
         .style(theme::base())
         .borders(Borders::ALL)
@@ -3051,16 +3675,25 @@ fn draw_edit_sql(app: &mut App, frame: &mut Frame, area: Rect) {
         let line = if i == editor.sel() {
             Line::from(Span::styled(text, theme::selected()))
         } else {
-            Line::from(vec![Span::styled(format!(" {kind:8} "), theme::dim()), Span::raw(trunc(&preview, width.saturating_sub(11)))])
+            Line::from(vec![
+                Span::styled(format!(" {kind:8} "), theme::dim()),
+                Span::raw(trunc(&preview, width.saturating_sub(11))),
+            ])
         };
         lines.push(line);
     }
     if total == 0 {
-        lines.push(Line::from(Span::styled(t!("ui.edit_sql_empty").to_string(), theme::dim())));
+        lines.push(Line::from(Span::styled(
+            t!("ui.edit_sql_empty").to_string(),
+            theme::dim(),
+        )));
     }
     frame.render_widget(Paragraph::new(lines), chunks[0]);
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(t!("ui.edit_sql_hint").to_string(), theme::dim()))),
+        Paragraph::new(Line::from(Span::styled(
+            t!("ui.edit_sql_hint").to_string(),
+            theme::dim(),
+        ))),
         chunks[1],
     );
 
@@ -3074,7 +3707,11 @@ fn draw_db(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     frame.render_widget(Clear, area);
-    let name = b.conn.as_ref().map(|c| format!(" — {}", c.name)).unwrap_or_default();
+    let name = b
+        .conn
+        .as_ref()
+        .map(|c| format!(" — {}", c.name))
+        .unwrap_or_default();
     let block = Block::default()
         .style(theme::base())
         .borders(Borders::ALL)
@@ -3085,7 +3722,11 @@ fn draw_db(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(block, area);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
         .split(inner);
     let view = b.view;
     match view {
@@ -3109,7 +3750,10 @@ fn draw_db(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     let b = app.db.as_ref().expect("still open");
     if let Some(msg) = &b.message {
-        frame.render_widget(Paragraph::new(Line::from(Span::styled(msg.clone(), theme::dim()))), chunks[1]);
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(msg.clone(), theme::dim()))),
+            chunks[1],
+        );
     }
     let hint = match view {
         crate::db::View::Connections => t!("ui.db_connections_hint"),
@@ -3156,7 +3800,10 @@ fn draw_db_connections(app: &mut App, frame: &mut Frame, area: Rect) {
         } else {
             Line::from(vec![
                 Span::raw(format!(" {} ", conn.name)),
-                Span::styled(format!("{:10} {}", conn.kind.label(), conn.target()), theme::dim()),
+                Span::styled(
+                    format!("{:10} {}", conn.kind.label(), conn.target()),
+                    theme::dim(),
+                ),
             ])
         };
         lines.push(line);
@@ -3185,14 +3832,26 @@ fn draw_db_form(app: &mut App, frame: &mut Frame, area: Rect) {
         t!("ui.db_field_access"),
         t!("ui.db_field_store_keyring"),
     ];
-    let on_off = |on: bool| if on { t!("ui.db_toggle_on") } else { t!("ui.db_toggle_off") };
-    let mut lines: Vec<Line> =
-        vec![Line::from(Span::styled(format!(" {}", t!("ui.db_form")), theme::title(true)))];
+    let on_off = |on: bool| {
+        if on {
+            t!("ui.db_toggle_on")
+        } else {
+            t!("ui.db_toggle_off")
+        }
+    };
+    let mut lines: Vec<Line> = vec![Line::from(Span::styled(
+        format!(" {}", t!("ui.db_form")),
+        theme::title(true),
+    ))];
     for (i, label) in labels.iter().enumerate() {
         let value = if i == crate::db::FORM_KIND {
             b.form.kind.label().to_string()
         } else if i == crate::db::FORM_WRITABLE {
-            if b.form.writable { t!("ui.db_access_write").to_string() } else { t!("ui.db_access_read").to_string() }
+            if b.form.writable {
+                t!("ui.db_access_write").to_string()
+            } else {
+                t!("ui.db_access_read").to_string()
+            }
         } else if i == crate::db::FORM_STORE {
             on_off(b.form.store_keyring).to_string()
         } else {
@@ -3202,7 +3861,10 @@ fn draw_db_form(app: &mut App, frame: &mut Frame, area: Rect) {
         let line = if i == b.form.sel {
             Line::from(Span::styled(text, theme::selected()))
         } else {
-            Line::from(vec![Span::styled(format!(" {label:<14} "), theme::dim()), Span::raw(value)])
+            Line::from(vec![
+                Span::styled(format!(" {label:<14} "), theme::dim()),
+                Span::raw(value),
+            ])
         };
         lines.push(line);
     }
@@ -3217,7 +3879,10 @@ fn draw_db_password(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let masked = "\u{2022}".repeat(b.password.chars().count());
     let lines = vec![
-        Line::from(Span::styled(format!(" {}", t!("ui.db_password")), theme::title(true))),
+        Line::from(Span::styled(
+            format!(" {}", t!("ui.db_password")),
+            theme::title(true),
+        )),
         Line::from(format!(" {masked}")),
     ];
     frame.render_widget(Paragraph::new(lines), area);
@@ -3231,16 +3896,34 @@ fn draw_db_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let history = b.view == crate::db::View::History;
-    let title = if history { t!("ui.db_history") } else { t!("ui.db_saved_title") };
-    let mut lines: Vec<Line> =
-        vec![Line::from(Span::styled(format!(" {title}"), theme::title(true)))];
-    let entries: Vec<(String, String)> = if history {
-        b.history.entries.iter().map(|e| (String::new(), e.clone())).collect()
+    let title = if history {
+        t!("ui.db_history")
     } else {
-        b.saved.queries.iter().map(|q| (q.name.clone(), q.sql.clone())).collect()
+        t!("ui.db_saved_title")
+    };
+    let mut lines: Vec<Line> = vec![Line::from(Span::styled(
+        format!(" {title}"),
+        theme::title(true),
+    ))];
+    let entries: Vec<(String, String)> = if history {
+        b.history
+            .entries
+            .iter()
+            .map(|e| (String::new(), e.clone()))
+            .collect()
+    } else {
+        b.saved
+            .queries
+            .iter()
+            .map(|q| (q.name.clone(), q.sql.clone()))
+            .collect()
     };
     if entries.is_empty() {
-        let empty = if history { t!("ui.db_history_empty") } else { t!("ui.db_saved_empty") };
+        let empty = if history {
+            t!("ui.db_history_empty")
+        } else {
+            t!("ui.db_saved_empty")
+        };
         lines.push(Line::from(Span::styled(format!(" {empty}"), theme::dim())));
     }
     let width = usize::from(area.width);
@@ -3251,7 +3934,10 @@ fn draw_db_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
         let text = if name.is_empty() {
             format!(" {}", trunc(&one_line, width.saturating_sub(2)))
         } else {
-            format!(" {name}  {}", trunc(&one_line, width.saturating_sub(name.chars().count() + 4)))
+            format!(
+                " {name}  {}",
+                trunc(&one_line, width.saturating_sub(name.chars().count() + 4))
+            )
         };
         if i == b.list_sel {
             lines.push(Line::from(Span::styled(text, theme::selected())));
@@ -3268,7 +3954,10 @@ fn draw_db_save_name(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let lines = vec![
-        Line::from(Span::styled(format!(" {}", t!("ui.db_save_name")), theme::title(true))),
+        Line::from(Span::styled(
+            format!(" {}", t!("ui.db_save_name")),
+            theme::title(true),
+        )),
         Line::from(format!(" {}", b.save_name)),
     ];
     frame.render_widget(Paragraph::new(lines), area);
@@ -3282,7 +3971,10 @@ fn draw_db_cell_edit(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let lines = vec![
-        Line::from(Span::styled(format!(" {}", t!("ui.db_cell_edit_title")), theme::title(true))),
+        Line::from(Span::styled(
+            format!(" {}", t!("ui.db_cell_edit_title")),
+            theme::title(true),
+        )),
         Line::from(format!(" {}", b.edit_input)),
     ];
     frame.render_widget(Paragraph::new(lines), area);
@@ -3296,7 +3988,10 @@ fn draw_db_import(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let lines = vec![
-        Line::from(Span::styled(format!(" {}", t!("ui.db_import_title")), theme::title(true))),
+        Line::from(Span::styled(
+            format!(" {}", t!("ui.db_import_title")),
+            theme::title(true),
+        )),
         Line::from(format!(" {}", b.import_path)),
     ];
     frame.render_widget(Paragraph::new(lines), area);
@@ -3313,7 +4008,12 @@ fn draw_db_params(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let name = p.current().unwrap_or("");
-    let title = t!("ui.db_params_title", name = name, done = p.values.len() + 1, total = p.names.len());
+    let title = t!(
+        "ui.db_params_title",
+        name = name,
+        done = p.values.len() + 1,
+        total = p.names.len()
+    );
     let lines = vec![
         Line::from(Span::styled(format!(" {title}"), theme::title(true))),
         Line::from(format!(" {}", p.input)),
@@ -3329,7 +4029,10 @@ fn draw_db_ask(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let lines = vec![
-        Line::from(Span::styled(format!(" {}", t!("ui.db_ask_title")), theme::title(true))),
+        Line::from(Span::styled(
+            format!(" {}", t!("ui.db_ask_title")),
+            theme::title(true),
+        )),
         Line::from(format!(" {}", b.ask_input)),
     ];
     frame.render_widget(Paragraph::new(lines), area);
@@ -3344,8 +4047,14 @@ fn draw_db_confirm(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let summary = b.pending_summary().unwrap_or_default();
     let lines = vec![
-        Line::from(Span::styled(format!(" {}", t!("ui.db_confirm")), theme::title(true))),
-        Line::from(Span::raw(format!(" {}", trunc(&summary, usize::from(area.width).saturating_sub(2))))),
+        Line::from(Span::styled(
+            format!(" {}", t!("ui.db_confirm")),
+            theme::title(true),
+        )),
+        Line::from(Span::raw(format!(
+            " {}",
+            trunc(&summary, usize::from(area.width).saturating_sub(2))
+        ))),
     ];
     frame.render_widget(Paragraph::new(lines), area);
 }
@@ -3368,10 +4077,9 @@ fn draw_db_cell(app: &mut App, frame: &mut Frame, area: Rect) {
     let body = block.inner(area);
     frame.render_widget(block, area);
     frame.render_widget(
-        Paragraph::new(content).wrap(Wrap { trim: false }).scroll((
-            u16::try_from(b.view_scroll).unwrap_or(u16::MAX),
-            0,
-        )),
+        Paragraph::new(content)
+            .wrap(Wrap { trim: false })
+            .scroll((u16::try_from(b.view_scroll).unwrap_or(u16::MAX), 0)),
         body,
     );
 }
@@ -3382,10 +4090,15 @@ fn draw_db_log(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(b) = app.db.as_ref() else {
         return;
     };
-    let mut lines: Vec<Line> =
-        vec![Line::from(Span::styled(format!(" {}", t!("ui.db_log_title")), theme::title(true)))];
+    let mut lines: Vec<Line> = vec![Line::from(Span::styled(
+        format!(" {}", t!("ui.db_log_title")),
+        theme::title(true),
+    ))];
     if b.log.entries.is_empty() {
-        lines.push(Line::from(Span::styled(format!(" {}", t!("ui.db_log_empty")), theme::dim())));
+        lines.push(Line::from(Span::styled(
+            format!(" {}", t!("ui.db_log_empty")),
+            theme::dim(),
+        )));
     }
     let height = usize::from(area.height).saturating_sub(1);
     let skip = b.list_sel.saturating_sub(height.saturating_sub(1));
@@ -3444,8 +4157,15 @@ fn draw_db_export(app: &mut App, frame: &mut Frame, area: Rect) {
         .iter()
         .enumerate()
         .flat_map(|(i, f)| {
-            let style = if i == b.export_format { theme::selected() } else { theme::dim() };
-            [Span::styled(format!(" {} ", f.label()), style), Span::raw(" ")]
+            let style = if i == b.export_format {
+                theme::selected()
+            } else {
+                theme::dim()
+            };
+            [
+                Span::styled(format!(" {} ", f.label()), style),
+                Span::raw(" "),
+            ]
         })
         .collect();
     let dest = if b.export_clipboard {
@@ -3454,7 +4174,10 @@ fn draw_db_export(app: &mut App, frame: &mut Frame, area: Rect) {
         format!("{}: {}", t!("ui.db_export_file"), b.export_path)
     };
     let lines = vec![
-        Line::from(Span::styled(format!(" {}", t!("ui.db_export")), theme::title(true))),
+        Line::from(Span::styled(
+            format!(" {}", t!("ui.db_export")),
+            theme::title(true),
+        )),
         Line::from(formats),
         Line::from(format!(" {dest}")),
     ];
@@ -3516,7 +4239,11 @@ fn draw_db_tree(app: &App, frame: &mut Frame, area: Rect) {
     let mut lines: Vec<Line> = Vec::with_capacity(height);
     for (i, row) in rows.iter().enumerate().skip(b.tree.scroll).take(height) {
         let arrow = if row.expandable {
-            if row.expanded { "\u{25be} " } else { "\u{25b8} " }
+            if row.expanded {
+                "\u{25be} "
+            } else {
+                "\u{25b8} "
+            }
         } else {
             "  "
         };
@@ -3536,7 +4263,10 @@ fn draw_db_tree(app: &App, frame: &mut Frame, area: Rect) {
         lines.push(line);
     }
     if rows.is_empty() {
-        lines.push(Line::from(Span::styled(t!("ui.db_tree_empty").to_string(), theme::dim())));
+        lines.push(Line::from(Span::styled(
+            t!("ui.db_tree_empty").to_string(),
+            theme::dim(),
+        )));
     }
     frame.render_widget(Paragraph::new(lines), body);
 }
@@ -3561,7 +4291,11 @@ fn draw_db_editor(app: &App, frame: &mut Frame, area: Rect) {
         crate::db::TxState::None => "",
     };
     let title = if let Some(secs) = b.query_elapsed_secs() {
-        format!(" {} — {} ", t!("ui.db_editor"), t!("ui.db_query_running", secs = secs))
+        format!(
+            " {} — {} ",
+            t!("ui.db_editor"),
+            t!("ui.db_query_running", secs = secs)
+        )
     } else {
         format!(" {} — {badge}{tx} ", t!("ui.db_editor"))
     };
@@ -3596,7 +4330,10 @@ fn draw_db_editor(app: &App, frame: &mut Frame, area: Rect) {
         let col = b.query.col.min(usize::from(body.width.saturating_sub(1)));
         frame.set_cursor_position((
             body.x + u16::try_from(col).unwrap_or(u16::MAX),
-            body.y + u16::try_from(row).unwrap_or(u16::MAX).min(body.height.saturating_sub(1)),
+            body.y
+                + u16::try_from(row)
+                    .unwrap_or(u16::MAX)
+                    .min(body.height.saturating_sub(1)),
         ));
         draw_db_popup(b, frame, body);
     }
@@ -3607,7 +4344,13 @@ fn draw_db_popup(b: &crate::db::Browser, frame: &mut Frame, body: Rect) {
     let Some(popup) = b.popup.as_ref() else {
         return;
     };
-    let width = popup.items.iter().map(|s| s.chars().count()).max().unwrap_or(0) + 2;
+    let width = popup
+        .items
+        .iter()
+        .map(|s| s.chars().count())
+        .max()
+        .unwrap_or(0)
+        + 2;
     let width = u16::try_from(width).unwrap_or(u16::MAX).min(body.width);
     let height = u16::try_from(popup.items.len()).unwrap_or(u16::MAX).min(6);
     let row = u16::try_from(b.query.row.saturating_sub(b.query.scroll)).unwrap_or(u16::MAX);
@@ -3618,7 +4361,12 @@ fn draw_db_popup(b: &crate::db::Browser, frame: &mut Frame, body: Rect) {
     } else {
         (body.y + row).saturating_sub(height)
     };
-    let rect = Rect { x, y, width, height };
+    let rect = Rect {
+        x,
+        y,
+        width,
+        height,
+    };
     frame.render_widget(Clear, rect);
     let lines: Vec<Line> = popup
         .items
@@ -3663,7 +4411,10 @@ fn draw_db_results(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(block, area);
     if b.grid.headers.is_empty() {
         frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(t!("ui.db_results_empty").to_string(), theme::dim()))),
+            Paragraph::new(Line::from(Span::styled(
+                t!("ui.db_results_empty").to_string(),
+                theme::dim(),
+            ))),
             body,
         );
         return;
@@ -3695,14 +4446,22 @@ fn draw_db_results(app: &App, frame: &mut Frame, area: Rect) {
                 _ => "",
             };
             let text = format!("{marker}{}", &b.grid.headers[c]);
-            let style =
-                if c == b.grid.cur_col && focused { theme::selected() } else { theme::title(false) };
-            Span::styled(format!("{:w$} ", trunc(&text, widths[c]), w = widths[c]), style)
+            let style = if c == b.grid.cur_col && focused {
+                theme::selected()
+            } else {
+                theme::title(false)
+            };
+            Span::styled(
+                format!("{:w$} ", trunc(&text, widths[c]), w = widths[c]),
+                style,
+            )
         })
         .collect();
     lines.push(Line::from(header));
     let height = usize::from(body.height).saturating_sub(1);
-    lines.extend(db_result_rows(b, &cols, &widths, &filtered, focused, height));
+    lines.extend(db_result_rows(
+        b, &cols, &widths, &filtered, focused, height,
+    ));
     frame.render_widget(Paragraph::new(lines), body);
 }
 
@@ -3718,7 +4477,9 @@ fn db_result_rows(
     height: usize,
 ) -> Vec<Line<'static>> {
     use std::fmt::Write as _;
-    let edited = Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
+    let edited = Style::default()
+        .fg(Color::Yellow)
+        .add_modifier(Modifier::BOLD);
     let mut lines = Vec::new();
     for (i, &ri) in filtered.iter().enumerate().skip(b.grid.scroll).take(height) {
         let selected = i == b.grid.sel && focused;
@@ -3763,7 +4524,11 @@ fn draw_edit_outline(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     }
     frame.render_widget(Clear, area);
-    let dirty = if app.edit_outline.as_ref().is_some_and(crate::edit_outline::Tree::is_dirty) {
+    let dirty = if app
+        .edit_outline
+        .as_ref()
+        .is_some_and(crate::edit_outline::Tree::is_dirty)
+    {
         " *"
     } else {
         ""
@@ -3773,7 +4538,12 @@ fn draw_edit_outline(app: &mut App, frame: &mut Frame, area: Rect) {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(theme::title(true))
-        .title(format!(" {} {}{} ", icon::LIST, t!("ui.edit_outline"), dirty));
+        .title(format!(
+            " {} {}{} ",
+            icon::LIST,
+            t!("ui.edit_outline"),
+            dirty
+        ));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -3795,7 +4565,10 @@ fn draw_edit_outline(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     frame.render_widget(Paragraph::new(lines), chunks[0]);
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(t!("ui.edit_outline_hint").to_string(), theme::dim()))),
+        Paragraph::new(Line::from(Span::styled(
+            t!("ui.edit_outline_hint").to_string(),
+            theme::dim(),
+        ))),
         chunks[1],
     );
 
@@ -3811,7 +4584,11 @@ fn value_line(tree: &crate::edit_value::Tree, i: usize, editing: bool) -> Line<'
         "  "
     };
     let label = tree.label(i);
-    let value = if editing && selected { tree.edit_buffer() } else { tree.value(i) };
+    let value = if editing && selected {
+        tree.edit_buffer()
+    } else {
+        tree.value(i)
+    };
     let head = if label.is_empty() {
         String::new()
     } else if tree.is_container(i) {
@@ -3820,7 +4597,11 @@ fn value_line(tree: &crate::edit_value::Tree, i: usize, editing: bool) -> Line<'
         format!("{label}: ")
     };
     let text = format!("{}{marker}{head}{value}", "  ".repeat(tree.depth(i)));
-    let style = if selected { theme::selected() } else { theme::base() };
+    let style = if selected {
+        theme::selected()
+    } else {
+        theme::base()
+    };
     Line::from(Span::styled(text, style))
 }
 
@@ -3830,7 +4611,11 @@ fn draw_edit_value(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     frame.render_widget(Clear, area);
-    let dirty = if app.edit_value.as_ref().is_some_and(crate::edit_value::Tree::is_dirty) {
+    let dirty = if app
+        .edit_value
+        .as_ref()
+        .is_some_and(crate::edit_value::Tree::is_dirty)
+    {
         " *"
     } else {
         ""
@@ -3866,7 +4651,10 @@ fn draw_edit_value(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     frame.render_widget(Paragraph::new(lines), chunks[0]);
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(t!("ui.edit_value_hint").to_string(), theme::dim()))),
+        Paragraph::new(Line::from(Span::styled(
+            t!("ui.edit_value_hint").to_string(),
+            theme::dim(),
+        ))),
         chunks[1],
     );
     app.layout.edit_value = chunks[0];
@@ -3880,7 +4668,11 @@ fn bytes_line(hex: &crate::edit_bytes::Hex, row: usize) -> Line<'static> {
     for col in 0..COLS {
         let idx = off + col;
         if idx < hex.len() {
-            let style = if idx == hex.cursor() { theme::selected() } else { theme::base() };
+            let style = if idx == hex.cursor() {
+                theme::selected()
+            } else {
+                theme::base()
+            };
             spans.push(Span::styled(format!("{:02x} ", hex.byte(idx)), style));
         } else {
             spans.push(Span::raw("   "));
@@ -3891,8 +4683,16 @@ fn bytes_line(hex: &crate::edit_bytes::Hex, row: usize) -> Line<'static> {
         let idx = off + col;
         if idx < hex.len() {
             let b = hex.byte(idx);
-            let ch = if (0x20..0x7f).contains(&b) { char::from(b) } else { '.' };
-            let style = if idx == hex.cursor() { theme::selected() } else { theme::dim() };
+            let ch = if (0x20..0x7f).contains(&b) {
+                char::from(b)
+            } else {
+                '.'
+            };
+            let style = if idx == hex.cursor() {
+                theme::selected()
+            } else {
+                theme::dim()
+            };
             spans.push(Span::styled(ch.to_string(), style));
         }
     }
@@ -3905,7 +4705,11 @@ fn draw_edit_bytes(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     }
     frame.render_widget(Clear, area);
-    let dirty = if app.edit_bytes.as_ref().is_some_and(crate::edit_bytes::Hex::is_dirty) {
+    let dirty = if app
+        .edit_bytes
+        .as_ref()
+        .is_some_and(crate::edit_bytes::Hex::is_dirty)
+    {
         " *"
     } else {
         ""
@@ -3915,7 +4719,12 @@ fn draw_edit_bytes(app: &mut App, frame: &mut Frame, area: Rect) {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(theme::title(true))
-        .title(format!(" {} {}{} ", icon::TABLE, t!("ui.edit_bytes"), dirty));
+        .title(format!(
+            " {} {}{} ",
+            icon::TABLE,
+            t!("ui.edit_bytes"),
+            dirty
+        ));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -3936,7 +4745,10 @@ fn draw_edit_bytes(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     frame.render_widget(Paragraph::new(lines), chunks[0]);
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(t!("ui.edit_bytes_hint").to_string(), theme::dim()))),
+        Paragraph::new(Line::from(Span::styled(
+            t!("ui.edit_bytes_hint").to_string(),
+            theme::dim(),
+        ))),
         chunks[1],
     );
     app.layout.edit_bytes = chunks[0];
@@ -3945,7 +4757,9 @@ fn draw_edit_bytes(app: &mut App, frame: &mut Frame, area: Rect) {
 // Render the QR code overlay: the Unicode QR art, forced to black-on-white so it
 // scans regardless of the active theme, centered with a hint line.
 fn draw_qrcode(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(art) = app.qrcode.as_ref() else { return };
+    let Some(art) = app.qrcode.as_ref() else {
+        return;
+    };
     let lines: Vec<&str> = art.lines().collect();
     let art_w = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0);
     let width = (u16::try_from(art_w).unwrap_or(u16::MAX) + 2).min(area.width);
@@ -3978,7 +4792,10 @@ fn draw_qrcode(app: &mut App, frame: &mut Frame, area: Rect) {
         .collect();
     frame.render_widget(Paragraph::new(body), chunks[0]);
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(t!("ui.qrcode_hint").to_string(), theme::dim()))),
+        Paragraph::new(Line::from(Span::styled(
+            t!("ui.qrcode_hint").to_string(),
+            theme::dim(),
+        ))),
         chunks[1],
     );
 }
@@ -4011,7 +4828,11 @@ fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
         .split(inner);
 
     let header = Line::from(Span::styled(t!("ui.x11_header").to_string(), theme::dim()));
@@ -4037,13 +4858,19 @@ fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     // Reserve a one-column gutter for the scrollbar when the table overflows.
     let show_bar = total > view_h && chunks[1].width > 1;
     let row_area = if show_bar {
-        Rect { width: chunks[1].width - 1, ..chunks[1] }
+        Rect {
+            width: chunks[1].width - 1,
+            ..chunks[1]
+        }
     } else {
         chunks[1]
     };
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
-        let sb_area = Rect { x: chunks[1].x + chunks[1].width - 1, ..chunks[1] };
+        let sb_area = Rect {
+            x: chunks[1].x + chunks[1].width - 1,
+            ..chunks[1]
+        };
         draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
     }
 
@@ -4054,7 +4881,9 @@ fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         x: chunks[1].x,
         y: chunks[1].y,
         width: row_area.width,
-        height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[1].height),
+        height: u16::try_from(view_h)
+            .unwrap_or(u16::MAX)
+            .min(chunks[1].height),
     };
 }
 
@@ -4084,14 +4913,24 @@ fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
         .split(inner);
 
     // Filter line: a typed query, or a dim prompt when empty.
     let filter = if p.query.is_empty() {
-        Line::from(Span::styled(t!("ui.media_types_filter").to_string(), theme::dim()))
+        Line::from(Span::styled(
+            t!("ui.media_types_filter").to_string(),
+            theme::dim(),
+        ))
     } else {
-        Line::from(vec![Span::styled("/ ", theme::dim()), Span::raw(p.query.clone())])
+        Line::from(vec![
+            Span::styled("/ ", theme::dim()),
+            Span::raw(p.query.clone()),
+        ])
     };
     frame.render_widget(Paragraph::new(filter), chunks[0]);
 
@@ -4106,8 +4945,12 @@ fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     for (row, &idx) in filtered.iter().enumerate().skip(p.scroll).take(view_h) {
         let m = &table[idx];
         let tag = if m.is_text() { "txt" } else { "bin" };
-        let text =
-            format!(" {:30} {:8} {tag}  {}", trunc(m.media_type, 30), trunc(m.extension, 8), m.description);
+        let text = format!(
+            " {:30} {:8} {tag}  {}",
+            trunc(m.media_type, 30),
+            trunc(m.extension, 8),
+            m.description
+        );
         let line = if row == p.selected {
             Line::from(Span::styled(text, theme::selected()))
         } else {
@@ -4116,21 +4959,36 @@ fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         lines.push(line);
     }
     let show_bar = total > view_h && chunks[1].width > 1;
-    let row_area = if show_bar { Rect { width: chunks[1].width - 1, ..chunks[1] } } else { chunks[1] };
+    let row_area = if show_bar {
+        Rect {
+            width: chunks[1].width - 1,
+            ..chunks[1]
+        }
+    } else {
+        chunks[1]
+    };
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
-        let sb_area = Rect { x: chunks[1].x + chunks[1].width - 1, ..chunks[1] };
+        let sb_area = Rect {
+            x: chunks[1].x + chunks[1].width - 1,
+            ..chunks[1]
+        };
         draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
     }
 
-    let hint = Line::from(Span::styled(t!("ui.media_types_hint").to_string(), theme::dim()));
+    let hint = Line::from(Span::styled(
+        t!("ui.media_types_hint").to_string(),
+        theme::dim(),
+    ));
     frame.render_widget(Paragraph::new(hint), chunks[2]);
 
     app.layout.media_type_panel = Rect {
         x: chunks[1].x,
         y: chunks[1].y,
         width: row_area.width,
-        height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[1].height),
+        height: u16::try_from(view_h)
+            .unwrap_or(u16::MAX)
+            .min(chunks[1].height),
     };
 }
 
@@ -4172,7 +5030,11 @@ fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
         .split(inner);
 
     let header = Line::from(Span::styled(t!("ui.html_header").to_string(), theme::dim()));
@@ -4184,7 +5046,10 @@ fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     let p = app.html_panel.as_ref().unwrap();
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
-    for (i, e) in entities[p.scroll..(p.scroll + view_h).min(total)].iter().enumerate() {
+    for (i, e) in entities[p.scroll..(p.scroll + view_h).min(total)]
+        .iter()
+        .enumerate()
+    {
         let text = format!("  {:2}  {:26}  {}", e.glyph, e.name, e.code);
         let idx = p.scroll + i;
         if idx == p.selected {
@@ -4196,13 +5061,19 @@ fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     // Reserve a one-column gutter for the scrollbar when the table overflows.
     let show_bar = total > view_h && chunks[1].width > 1;
     let row_area = if show_bar {
-        Rect { width: chunks[1].width - 1, ..chunks[1] }
+        Rect {
+            width: chunks[1].width - 1,
+            ..chunks[1]
+        }
     } else {
         chunks[1]
     };
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
-        let sb_area = Rect { x: chunks[1].x + chunks[1].width - 1, ..chunks[1] };
+        let sb_area = Rect {
+            x: chunks[1].x + chunks[1].width - 1,
+            ..chunks[1]
+        };
         draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
     }
 
@@ -4213,7 +5084,9 @@ fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         x: chunks[1].x,
         y: chunks[1].y,
         width: row_area.width,
-        height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[1].height),
+        height: u16::try_from(view_h)
+            .unwrap_or(u16::MAX)
+            .min(chunks[1].height),
     };
 }
 
@@ -4272,24 +5145,34 @@ fn draw_outline(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     frame.render_widget(Paragraph::new(lines), chunks[0]);
 
-    let hint = Line::from(Span::styled(t!("ui.outline_hint").to_string(), theme::dim()));
+    let hint = Line::from(Span::styled(
+        t!("ui.outline_hint").to_string(),
+        theme::dim(),
+    ));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 
     app.layout.outline = Rect {
         x: chunks[0].x,
         y: chunks[0].y,
         width: chunks[0].width,
-        height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[0].height),
+        height: u16::try_from(view_h)
+            .unwrap_or(u16::MAX)
+            .min(chunks[0].height),
     };
 }
 
 fn draw_dashboard(app: &App, frame: &mut Frame, area: Rect) {
-    let Some(d) = app.dashboard.as_ref() else { return };
+    let Some(d) = app.dashboard.as_ref() else {
+        return;
+    };
     let pending = t!("ui.dashboard_computing");
     let num = |n: Option<u64>| n.map_or_else(|| pending.to_string(), |v| v.to_string());
     let rows = [
         (t!("ui.dashboard_folder"), d.folder.clone()),
-        (t!("ui.dashboard_disk"), d.disk_usage.clone().unwrap_or_else(|| pending.to_string())),
+        (
+            t!("ui.dashboard_disk"),
+            d.disk_usage.clone().unwrap_or_else(|| pending.to_string()),
+        ),
         (t!("ui.dashboard_files"), num(d.file_count)),
         (t!("ui.dashboard_commits"), num(d.commit_count)),
     ];
@@ -4327,14 +5210,19 @@ fn draw_dashboard(app: &App, frame: &mut Frame, area: Rect) {
         .collect();
     frame.render_widget(Paragraph::new(lines), chunks[0]);
 
-    let hint = Line::from(Span::styled(t!("ui.dashboard_hint").to_string(), theme::dim()));
+    let hint = Line::from(Span::styled(
+        t!("ui.dashboard_hint").to_string(),
+        theme::dim(),
+    ));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 }
 
 #[allow(clippy::too_many_lines)]
 fn draw_ai_diff(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::ai_diff::Seg;
-    let Some(review) = app.ai_diff_review() else { return };
+    let Some(review) = app.ai_diff_review() else {
+        return;
+    };
     let width = (area.width * 8 / 10).clamp(30, area.width);
     let height = (area.height * 8 / 10).clamp(8, area.height);
     let rect = Rect {
@@ -4373,7 +5261,10 @@ fn draw_ai_diff(app: &mut App, frame: &mut Frame, area: Rect) {
         match seg {
             Seg::Equal(ls) => {
                 for l in ls {
-                    lines.push(Line::from(Span::styled(format!("  {}", l.trim_end_matches('\n')), theme::dim())));
+                    lines.push(Line::from(Span::styled(
+                        format!("  {}", l.trim_end_matches('\n')),
+                        theme::dim(),
+                    )));
                 }
             }
             Seg::Change { old, new, accepted } => {
@@ -4403,13 +5294,19 @@ fn draw_ai_diff(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     // Scroll so the selected hunk stays visible: anchor the view near it.
     let view_h = body.height as usize;
-    let anchor = selected_seg
-        .map_or(0, |sid| review.segs[..sid].iter().map(seg_line_count).sum::<usize>());
-    let start = anchor.saturating_sub(view_h / 3).min(lines.len().saturating_sub(view_h));
+    let anchor = selected_seg.map_or(0, |sid| {
+        review.segs[..sid].iter().map(seg_line_count).sum::<usize>()
+    });
+    let start = anchor
+        .saturating_sub(view_h / 3)
+        .min(lines.len().saturating_sub(view_h));
     let window: Vec<Line> = lines.into_iter().skip(start).take(view_h).collect();
     frame.render_widget(Paragraph::new(window), body);
 
-    let hint = Line::from(Span::styled(t!("ui.ai_diff_hint").to_string(), theme::dim()));
+    let hint = Line::from(Span::styled(
+        t!("ui.ai_diff_hint").to_string(),
+        theme::dim(),
+    ));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 }
 
@@ -4437,7 +5334,12 @@ fn draw_terminal(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     let width = area.width.max(2);
     let height = area.height.max(2);
-    let rect = Rect { x: area.x, y: area.y, width, height };
+    let rect = Rect {
+        x: area.x,
+        y: area.y,
+        width,
+        height,
+    };
     frame.render_widget(Clear, rect);
     let block = Block::default()
         .style(theme::base())
@@ -4452,7 +5354,9 @@ fn draw_terminal(app: &mut App, frame: &mut Frame, area: Rect) {
     if let Some(term) = app.terminal.as_mut() {
         term.resize(inner.height, inner.width);
     }
-    let Some(term) = app.terminal.as_ref() else { return };
+    let Some(term) = app.terminal.as_ref() else {
+        return;
+    };
     let parser = term.lock();
     let screen = parser.screen();
     let (rows, cols) = screen.size();
@@ -4463,8 +5367,14 @@ fn draw_terminal(app: &mut App, frame: &mut Frame, area: Rect) {
             let (text, mut style) = match screen.cell(row, col) {
                 Some(cell) => {
                     let contents = cell.contents();
-                    let text = if contents.is_empty() { " ".to_string() } else { contents };
-                    let mut s = Style::default().fg(vt_color(cell.fgcolor())).bg(vt_color(cell.bgcolor()));
+                    let text = if contents.is_empty() {
+                        " ".to_string()
+                    } else {
+                        contents
+                    };
+                    let mut s = Style::default()
+                        .fg(vt_color(cell.fgcolor()))
+                        .bg(vt_color(cell.bgcolor()));
                     if cell.bold() {
                         s = s.add_modifier(Modifier::BOLD);
                     }
@@ -4527,7 +5437,11 @@ fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
         .split(inner);
     let body = chunks[0];
     let view_h = body.height as usize;
@@ -4551,7 +5465,11 @@ fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.ai_panel = body;
 
     // Input line: a leading prompt glyph then the in-progress text plus a caret.
-    let input = app.ai_panel.as_ref().map(|p| p.input.clone()).unwrap_or_default();
+    let input = app
+        .ai_panel
+        .as_ref()
+        .map(|p| p.input.clone())
+        .unwrap_or_default();
     let input_line = Line::from(vec![
         Span::styled("› ", theme::title(true).add_modifier(Modifier::BOLD)),
         Span::raw(input),
@@ -4559,15 +5477,22 @@ fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     ]);
     frame.render_widget(Paragraph::new(input_line), chunks[1]);
 
-    let hint = Line::from(Span::styled(t!("ui.ai_panel_hint").to_string(), theme::dim()));
+    let hint = Line::from(Span::styled(
+        t!("ui.ai_panel_hint").to_string(),
+        theme::dim(),
+    ));
     frame.render_widget(Paragraph::new(hint), chunks[2]);
 }
 
 fn draw_contacts(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(total) = app.contacts.as_ref().map(crate::contact_panel::Panel::len) else { return };
+    let Some(total) = app.contacts.as_ref().map(crate::contact_panel::Panel::len) else {
+        return;
+    };
     let width = 40u16.min(area.width);
     let max_rows = area.height.saturating_sub(3).max(1);
-    let rows = u16::try_from(total.max(1)).unwrap_or(u16::MAX).min(max_rows);
+    let rows = u16::try_from(total.max(1))
+        .unwrap_or(u16::MAX)
+        .min(max_rows);
     let height = (rows + 3).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
@@ -4595,10 +5520,20 @@ fn draw_contacts(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     let p = app.contacts.as_ref().unwrap();
     let show_bar = total > view_h && chunks[0].width > 1;
-    let list_area = if show_bar { Rect { width: chunks[0].width - 1, ..chunks[0] } } else { chunks[0] };
+    let list_area = if show_bar {
+        Rect {
+            width: chunks[0].width - 1,
+            ..chunks[0]
+        }
+    } else {
+        chunks[0]
+    };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     if p.is_empty() {
-        lines.push(Line::from(Span::styled(t!("ui.no_contacts").to_string(), theme::dim())));
+        lines.push(Line::from(Span::styled(
+            t!("ui.no_contacts").to_string(),
+            theme::dim(),
+        )));
     } else {
         for idx in p.scroll..(p.scroll + view_h).min(total) {
             let text = format!("  {}", p.contacts[idx].name);
@@ -4611,20 +5546,41 @@ fn draw_contacts(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     frame.render_widget(Paragraph::new(lines), list_area);
     if show_bar {
-        let sb_area = Rect { x: chunks[0].x + chunks[0].width - 1, ..chunks[0] };
+        let sb_area = Rect {
+            x: chunks[0].x + chunks[0].width - 1,
+            ..chunks[0]
+        };
         draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
     }
-    let hint = Line::from(Span::styled(t!("ui.contacts_hint").to_string(), theme::dim()));
+    let hint = Line::from(Span::styled(
+        t!("ui.contacts_hint").to_string(),
+        theme::dim(),
+    ));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
-    app.layout.contacts = Rect { x: chunks[0].x, y: chunks[0].y, width: list_area.width, height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[0].height) };
+    app.layout.contacts = Rect {
+        x: chunks[0].x,
+        y: chunks[0].y,
+        width: list_area.width,
+        height: u16::try_from(view_h)
+            .unwrap_or(u16::MAX)
+            .min(chunks[0].height),
+    };
 }
 
 fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(total) = app.vcard.as_ref().map(crate::vcard_panel::Panel::len) else { return };
-    let title = app.vcard.as_ref().map(crate::vcard_panel::Panel::title).unwrap_or_default();
+    let Some(total) = app.vcard.as_ref().map(crate::vcard_panel::Panel::len) else {
+        return;
+    };
+    let title = app
+        .vcard
+        .as_ref()
+        .map(crate::vcard_panel::Panel::title)
+        .unwrap_or_default();
     let width = 60u16.min(area.width);
     let max_rows = area.height.saturating_sub(3).max(1);
-    let rows = u16::try_from(total.max(1)).unwrap_or(u16::MAX).min(max_rows);
+    let rows = u16::try_from(total.max(1))
+        .unwrap_or(u16::MAX)
+        .min(max_rows);
     let height = (rows + 3).min(area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
@@ -4652,7 +5608,14 @@ fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     let p = app.vcard.as_ref().unwrap();
     let show_bar = total > view_h && chunks[0].width > 1;
-    let list_area = if show_bar { Rect { width: chunks[0].width - 1, ..chunks[0] } } else { chunks[0] };
+    let list_area = if show_bar {
+        Rect {
+            width: chunks[0].width - 1,
+            ..chunks[0]
+        }
+    } else {
+        chunks[0]
+    };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in p.scroll..(p.scroll + view_h).min(total) {
         let row = &p.rows[idx];
@@ -4665,12 +5628,22 @@ fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     frame.render_widget(Paragraph::new(lines), list_area);
     if show_bar {
-        let sb_area = Rect { x: chunks[0].x + chunks[0].width - 1, ..chunks[0] };
+        let sb_area = Rect {
+            x: chunks[0].x + chunks[0].width - 1,
+            ..chunks[0]
+        };
         draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
     }
     let hint = Line::from(Span::styled(t!("ui.vcard_hint").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
-    app.layout.vcard = Rect { x: chunks[0].x, y: chunks[0].y, width: list_area.width, height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[0].height) };
+    app.layout.vcard = Rect {
+        x: chunks[0].x,
+        y: chunks[0].y,
+        width: list_area.width,
+        height: u16::try_from(view_h)
+            .unwrap_or(u16::MAX)
+            .min(chunks[0].height),
+    };
 }
 
 fn draw_snippets(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -4698,13 +5671,23 @@ fn draw_snippets(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
         .split(inner);
 
     let filter = if picker.query.is_empty() {
-        Line::from(Span::styled(t!("ui.snippets_filter").to_string(), theme::dim()))
+        Line::from(Span::styled(
+            t!("ui.snippets_filter").to_string(),
+            theme::dim(),
+        ))
     } else {
-        Line::from(vec![Span::styled("/ ", theme::dim()), Span::raw(picker.query.clone())])
+        Line::from(vec![
+            Span::styled("/ ", theme::dim()),
+            Span::raw(picker.query.clone()),
+        ])
     };
     frame.render_widget(Paragraph::new(filter), chunks[0]);
 
@@ -4720,7 +5703,10 @@ fn draw_snippets(app: &mut App, frame: &mut Frame, area: Rect) {
     let mut rows: Vec<Line> = Vec::with_capacity(view_h);
     for (row, &i) in filtered.iter().enumerate().skip(picker.scroll).take(view_h) {
         let s = &lib[i];
-        let prefix = s.prefixes.first().map_or_else(String::new, |p| format!("[{p}] "));
+        let prefix = s
+            .prefixes
+            .first()
+            .map_or_else(String::new, |p| format!("[{p}] "));
         let text = format!(" {}{}  ", prefix, s.name);
         let scope = s.scope.label();
         let pad = colw.saturating_sub(text.chars().count() + scope.chars().count() + 1);
@@ -4735,21 +5721,36 @@ fn draw_snippets(app: &mut App, frame: &mut Frame, area: Rect) {
         }
     }
     let show_bar = total > view_h && chunks[1].width > 1;
-    let row_area = if show_bar { Rect { width: chunks[1].width - 1, ..chunks[1] } } else { chunks[1] };
+    let row_area = if show_bar {
+        Rect {
+            width: chunks[1].width - 1,
+            ..chunks[1]
+        }
+    } else {
+        chunks[1]
+    };
     frame.render_widget(Paragraph::new(rows), row_area);
     if show_bar {
-        let sb = Rect { x: chunks[1].x + chunks[1].width - 1, ..chunks[1] };
+        let sb = Rect {
+            x: chunks[1].x + chunks[1].width - 1,
+            ..chunks[1]
+        };
         draw_scrollbar(frame, sb, picker.selected, total.saturating_sub(1));
     }
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(t!("ui.snippets_hint").to_string(), theme::dim()))),
+        Paragraph::new(Line::from(Span::styled(
+            t!("ui.snippets_hint").to_string(),
+            theme::dim(),
+        ))),
         chunks[2],
     );
     app.layout.snippets = row_area;
 }
 
 fn draw_markdown_preview(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(panel) = app.markdown_preview.as_mut() else { return };
+    let Some(panel) = app.markdown_preview.as_mut() else {
+        return;
+    };
     // A large centered reading pane.
     let width = 80u16.min(area.width.saturating_sub(2)).max(20);
     let height = area.height.saturating_sub(2).max(6);
@@ -4789,13 +5790,22 @@ fn draw_markdown_preview(app: &mut App, frame: &mut Frame, area: Rect) {
         .collect();
     frame.render_widget(Paragraph::new(lines), inner);
     if panel.lines.len() > view_h {
-        let sb = Rect { x: rect.x + rect.width - 1, y: inner.y, width: 1, height: inner.height };
+        let sb = Rect {
+            x: rect.x + rect.width - 1,
+            y: inner.y,
+            width: 1,
+            height: inner.height,
+        };
         draw_scrollbar(frame, sb, panel.scroll, max_scroll);
     }
 }
 
 fn draw_text_info(app: &mut App, frame: &mut Frame, area: Rect) {
-    let Some(n) = app.text_info.as_ref().map(crate::text_information_panel::Panel::len) else {
+    let Some(n) = app
+        .text_info
+        .as_ref()
+        .map(crate::text_information_panel::Panel::len)
+    else {
         return;
     };
     let width = 40u16.min(area.width).max(24);
@@ -4834,14 +5844,19 @@ fn draw_text_info(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     frame.render_widget(Paragraph::new(lines), chunks[0]);
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(t!("ui.system_info_hint").to_string(), theme::dim()))),
+        Paragraph::new(Line::from(Span::styled(
+            t!("ui.system_info_hint").to_string(),
+            theme::dim(),
+        ))),
         chunks[1],
     );
     app.layout.text_info = Rect {
         x: chunks[0].x,
         y: chunks[0].y,
         width: chunks[0].width,
-        height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[0].height),
+        height: u16::try_from(view_h)
+            .unwrap_or(u16::MAX)
+            .min(chunks[0].height),
     };
 }
 
@@ -4892,14 +5907,19 @@ fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     frame.render_widget(Paragraph::new(lines), chunks[0]);
 
-    let hint = Line::from(Span::styled(t!("ui.system_info_hint").to_string(), theme::dim()));
+    let hint = Line::from(Span::styled(
+        t!("ui.system_info_hint").to_string(),
+        theme::dim(),
+    ));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 
     app.layout.file_info = Rect {
         x: chunks[0].x,
         y: chunks[0].y,
         width: chunks[0].width,
-        height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[0].height),
+        height: u16::try_from(view_h)
+            .unwrap_or(u16::MAX)
+            .min(chunks[0].height),
     };
 }
 
@@ -4955,14 +5975,19 @@ fn draw_system_info(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     frame.render_widget(Paragraph::new(lines), chunks[0]);
 
-    let hint = Line::from(Span::styled(t!("ui.system_info_hint").to_string(), theme::dim()));
+    let hint = Line::from(Span::styled(
+        t!("ui.system_info_hint").to_string(),
+        theme::dim(),
+    ));
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 
     app.layout.system_info = Rect {
         x: chunks[0].x,
         y: chunks[0].y,
         width: chunks[0].width,
-        height: u16::try_from(view_h).unwrap_or(u16::MAX).min(chunks[0].height),
+        height: u16::try_from(view_h)
+            .unwrap_or(u16::MAX)
+            .min(chunks[0].height),
     };
 }
 
@@ -5017,7 +6042,9 @@ fn centered(area: Rect, pct_x: u16, pct_y: u16) -> Rect {
 }
 
 fn draw_palette(app: &App, frame: &mut Frame, area: Rect) {
-    let Some(p) = app.palette.as_ref() else { return };
+    let Some(p) = app.palette.as_ref() else {
+        return;
+    };
     let rect = centered(area, 70, 70);
     frame.render_widget(Clear, rect);
     let block = Block::default()
@@ -5025,13 +6052,22 @@ fn draw_palette(app: &App, frame: &mut Frame, area: Rect) {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(theme::title(true))
-        .title(format!(" {} {} [{}] ", icon::SEARCH, t!("ui.command_palette"), p.mode().label()));
+        .title(format!(
+            " {} {} [{}] ",
+            icon::SEARCH,
+            t!("ui.command_palette"),
+            p.mode().label()
+        ));
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
         .split(inner);
 
     let input = Line::from(vec![
@@ -5053,15 +6089,14 @@ fn draw_palette(app: &App, frame: &mut Frame, area: Rect) {
     }
     frame.render_stateful_widget(list, rows[1], &mut state);
 
-    let hint = Line::from(Span::styled(
-        t!("ui.palette_prefixes"),
-        theme::dim(),
-    ));
+    let hint = Line::from(Span::styled(t!("ui.palette_prefixes"), theme::dim()));
     frame.render_widget(Paragraph::new(hint), rows[2]);
 }
 
 fn draw_workspace_search(app: &App, frame: &mut Frame, area: Rect) {
-    let Some(ps) = app.workspace_search.as_ref() else { return };
+    let Some(ps) = app.workspace_search.as_ref() else {
+        return;
+    };
     let rect = centered(area, 80, 80);
     frame.render_widget(Clear, rect);
     let title = if ps.static_results {
@@ -5084,17 +6119,33 @@ fn draw_workspace_search(app: &App, frame: &mut Frame, area: Rect) {
     let head = if ps.replacing { 6 } else { 5 };
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(head), Constraint::Min(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(head),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
         .split(inner);
 
     let mut header = Vec::new();
     let q_focus = !ps.replacing || ps.field == Field::Query;
     header.push(field_line(&t!("ui.field_find"), &ps.query, q_focus));
     if ps.replacing {
-        header.push(field_line(&t!("ui.field_replace"), &ps.replace, ps.field == Field::Replace));
+        header.push(field_line(
+            &t!("ui.field_replace"),
+            &ps.replace,
+            ps.field == Field::Replace,
+        ));
     }
-    header.push(field_line(&t!("ui.field_include"), &ps.include_path, ps.field == Field::IncludePath));
-    header.push(field_line(&t!("ui.field_exclude"), &ps.exclude_path, ps.field == Field::ExcludePath));
+    header.push(field_line(
+        &t!("ui.field_include"),
+        &ps.include_path,
+        ps.field == Field::IncludePath,
+    ));
+    header.push(field_line(
+        &t!("ui.field_exclude"),
+        &ps.exclude_path,
+        ps.field == Field::ExcludePath,
+    ));
     let toggle = |on: bool, label: &str| {
         let style = if on { theme::selected() } else { theme::dim() };
         Span::styled(format!(" {label} "), style)
@@ -5124,7 +6175,10 @@ fn draw_workspace_search(app: &App, frame: &mut Frame, area: Rect) {
     } else {
         t!("ui.ps_hint")
     };
-    frame.render_widget(Paragraph::new(Line::from(Span::styled(hint, theme::dim()))), rows[2]);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(hint, theme::dim()))),
+        rows[2],
+    );
 }
 
 /// Render a left-to-right row of labeled buttons (each ` label `, one-cell gap),
@@ -5141,7 +6195,12 @@ fn button_row(frame: &mut Frame, row: Rect, buttons: &[(String, Style)]) -> Vec<
             break;
         }
         let w = w.min(right - x);
-        let r = Rect { x, y: row.y, width: w, height: 1 };
+        let r = Rect {
+            x,
+            y: row.y,
+            width: w,
+            height: 1,
+        };
         frame.render_widget(Paragraph::new(Line::from(Span::styled(text, *style))), r);
         rects[i] = r;
         x = x.saturating_add(w + 1);
@@ -5191,16 +6250,28 @@ fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     } else {
         vec![Constraint::Length(1); 3]
     };
-    let rows = Layout::default().direction(Direction::Vertical).constraints(constraints).split(inner);
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(constraints)
+        .split(inner);
 
     let q_focus = !replacing || s.field == Field::Query;
-    frame.render_widget(Paragraph::new(field_line(&t!("ui.field_find"), &s.query, q_focus)), rows[0]);
+    frame.render_widget(
+        Paragraph::new(field_line(&t!("ui.field_find"), &s.query, q_focus)),
+        rows[0],
+    );
 
     // Case / Word / Regex toggle buttons (highlighted when on).
     let toggle_style = |on: bool| if on { theme::selected() } else { theme::dim() };
     let toggles = vec![
-        (t!("ui.toggle_case").to_string(), toggle_style(s.case_sensitive)),
-        (t!("ui.toggle_smartcase").to_string(), toggle_style(s.smart_case)),
+        (
+            t!("ui.toggle_case").to_string(),
+            toggle_style(s.case_sensitive),
+        ),
+        (
+            t!("ui.toggle_smartcase").to_string(),
+            toggle_style(s.smart_case),
+        ),
         (t!("ui.toggle_word").to_string(), toggle_style(s.whole_word)),
         (t!("ui.toggle_regex").to_string(), toggle_style(s.regex)),
     ];
@@ -5212,7 +6283,11 @@ fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
 
     if replacing {
         frame.render_widget(
-            Paragraph::new(field_line(&t!("ui.field_replace"), &s.replace, s.field == Field::Replace)),
+            Paragraph::new(field_line(
+                &t!("ui.field_replace"),
+                &s.replace,
+                s.field == Field::Replace,
+            )),
             rows[2],
         );
         // Once / Ask / All replace buttons (reverse-video, like pressable buttons).
@@ -5244,7 +6319,11 @@ fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
 
 fn field_line(label: &str, value: &str, focused: bool) -> Line<'static> {
     let marker = if focused { "\u{276f}" } else { " " };
-    let lstyle = if focused { theme::title(true) } else { theme::dim() };
+    let lstyle = if focused {
+        theme::title(true)
+    } else {
+        theme::dim()
+    };
     Line::from(vec![
         Span::styled(format!("{marker} {label} "), lstyle),
         Span::raw(value.to_string()),
@@ -5259,7 +6338,10 @@ fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
     let multiline = matches!(p.kind, crate::app::PromptKind::GitCommit);
     let width = area.width * 6 / 10;
     let body_rows: u16 = if multiline {
-        u16::try_from(p.input.split('\n').count()).unwrap_or(1).clamp(1, 12) + 1
+        u16::try_from(p.input.split('\n').count())
+            .unwrap_or(1)
+            .clamp(1, 12)
+            + 1
     } else if toggles {
         2
     } else {
@@ -5291,7 +6373,10 @@ fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
         let mut lines: Vec<Line> = Vec::with_capacity(parts.len());
         for (i, part) in parts.iter().enumerate() {
             let prefix = if i == 0 { "\u{276f} " } else { "  " };
-            let mut spans = vec![Span::styled(prefix, theme::title(true)), Span::raw((*part).to_string())];
+            let mut spans = vec![
+                Span::styled(prefix, theme::title(true)),
+                Span::raw((*part).to_string()),
+            ];
             if i == last {
                 spans.push(Span::styled("\u{2588}", theme::dim()));
             }
@@ -5315,7 +6400,11 @@ fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
             .split(inner);
         frame.render_widget(Paragraph::new(input), rows[0]);
         let on = |b: bool| if b { "on" } else { "off" };
-        let hint = format!("Alt C case: {}   Alt R regex: {}", on(p.case_sensitive), on(p.regex));
+        let hint = format!(
+            "Alt C case: {}   Alt R regex: {}",
+            on(p.case_sensitive),
+            on(p.regex)
+        );
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(hint, theme::dim()))),
             rows[1],
@@ -5368,7 +6457,10 @@ fn draw_help(app: &App, frame: &mut Frame, area: Rect) {
         })
         .collect();
     let body = if lines.is_empty() {
-        vec![Line::from(Span::styled(t!("ui.no_matches").to_string(), theme::dim()))]
+        vec![Line::from(Span::styled(
+            t!("ui.no_matches").to_string(),
+            theme::dim(),
+        ))]
     } else {
         lines
     };

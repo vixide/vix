@@ -7,7 +7,6 @@
 //! visible window with a scrollbar and forwards scroll keys.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -66,7 +65,12 @@ impl Panel {
     #[must_use]
     pub fn open(paragraphs: Vec<String>) -> Self {
         let wrapped = paragraphs.clone();
-        Panel { paragraphs, wrapped, wrap_width: usize::MAX, scroll: 0 }
+        Panel {
+            paragraphs,
+            wrapped,
+            wrap_width: usize::MAX,
+            scroll: 0,
+        }
     }
 
     /// Re-wrap the paragraphs to `width` columns (no-op if unchanged), clamping
@@ -75,7 +79,11 @@ impl Panel {
         if width == self.wrap_width {
             return;
         }
-        self.wrapped = self.paragraphs.iter().flat_map(|l| wrap_line(l, width)).collect();
+        self.wrapped = self
+            .paragraphs
+            .iter()
+            .flat_map(|l| wrap_line(l, width))
+            .collect();
         self.wrap_width = width;
         self.scroll = self.scroll.min(self.wrapped.len().saturating_sub(1));
     }
@@ -157,8 +165,14 @@ mod tests {
         // The long paragraph wrapped into several lines, the blank stayed blank,
         // and no display line exceeds the width.
         assert!(lines.len() > 3, "paragraph wrapped: {lines:?}");
-        assert!(lines.iter().any(std::string::String::is_empty), "blank line preserved");
-        assert!(lines.iter().all(|l| l.chars().count() <= 9), "no line exceeds width: {lines:?}");
+        assert!(
+            lines.iter().any(std::string::String::is_empty),
+            "blank line preserved"
+        );
+        assert!(
+            lines.iter().all(|l| l.chars().count() <= 9),
+            "no line exceeds width: {lines:?}"
+        );
         assert_eq!(lines.last().unwrap(), "short");
     }
 
@@ -172,7 +186,11 @@ mod tests {
         for _ in 0..100 {
             p.down(viewport);
         }
-        assert_eq!(p.scroll, 30 - viewport, "down clamps to the last full window");
+        assert_eq!(
+            p.scroll,
+            30 - viewport,
+            "down clamps to the last full window"
+        );
         p.page_up(1000);
         assert_eq!(p.scroll, 0);
     }

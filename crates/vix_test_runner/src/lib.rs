@@ -80,13 +80,18 @@ pub fn parse(output: &str) -> Vec<TestResult> {
                 "SKIPPED" => Some(Status::Ignore),
                 _ => None,
             };
-            if let Some(status) = status && !name.is_empty() {
+            if let Some(status) = status
+                && !name.is_empty()
+            {
                 upsert(&mut results, name, status);
                 continue;
             }
         }
         // libtest failure detail: `---- name stdout ----` then a panic location.
-        if let Some(name) = trimmed.strip_prefix("---- ").and_then(|s| s.strip_suffix(" stdout ----")) {
+        if let Some(name) = trimmed
+            .strip_prefix("---- ")
+            .and_then(|s| s.strip_suffix(" stdout ----"))
+        {
             current_failure = Some(name.trim().to_string());
             continue;
         }
@@ -108,7 +113,11 @@ fn upsert(results: &mut Vec<TestResult>, name: &str, status: Status) {
     if let Some(r) = results.iter_mut().find(|r| r.name == name) {
         r.status = status;
     } else {
-        results.push(TestResult { name: name.to_string(), status, location: None });
+        results.push(TestResult {
+            name: name.to_string(),
+            status,
+            location: None,
+        });
     }
 }
 
@@ -122,7 +131,9 @@ fn attach_location(results: &mut [TestResult], name: &str, loc: (String, usize))
 /// Extract a `<file>:<line>` from a `thread '…' panicked at <file>:<line>:<col>`
 /// line (or a bare `<file>:<line>:<col>` prefix).
 fn panic_location(line: &str) -> Option<(String, usize)> {
-    let after = line.rfind("panicked at ").map_or(line, |i| &line[i + "panicked at ".len()..]);
+    let after = line
+        .rfind("panicked at ")
+        .map_or(line, |i| &line[i + "panicked at ".len()..]);
     let mut parts = after.trim().splitn(3, ':');
     let file = parts.next()?.trim();
     let line_no: usize = parts.next()?.trim().parse().ok()?;

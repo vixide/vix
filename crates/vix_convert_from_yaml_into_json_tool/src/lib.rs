@@ -4,7 +4,6 @@
 //! pretty-printed JSON, so scalars, sequences and mappings all carry over.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

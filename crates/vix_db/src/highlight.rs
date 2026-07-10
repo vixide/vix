@@ -13,14 +13,91 @@ use ratatui::style::{Color, Style};
 /// SQL keywords recognized by the highlighter, the completer, and the
 /// formatter. Lowercase; matching is ASCII case-insensitive.
 pub const KEYWORDS: &[&str] = &[
-    "add", "all", "alter", "and", "as", "asc", "avg", "begin", "between", "by", "cascade", "case",
-    "check", "column", "commit", "constraint", "count", "create", "cross", "database", "default",
-    "delete", "desc", "distinct", "drop", "else", "end", "except", "exists", "extension", "foreign",
-    "from", "full", "function", "grant", "group", "having", "if", "in", "index", "inner", "insert",
-    "intersect", "into", "is", "join", "key", "left", "like", "limit", "max", "min", "not", "null",
-    "offset", "on", "or", "order", "outer", "primary", "references", "returning", "revoke", "right",
-    "role", "rollback", "select", "set", "sum", "table", "then", "to", "trigger", "truncate",
-    "union", "unique", "update", "usage", "user", "using", "values", "view", "when", "where", "with",
+    "add",
+    "all",
+    "alter",
+    "and",
+    "as",
+    "asc",
+    "avg",
+    "begin",
+    "between",
+    "by",
+    "cascade",
+    "case",
+    "check",
+    "column",
+    "commit",
+    "constraint",
+    "count",
+    "create",
+    "cross",
+    "database",
+    "default",
+    "delete",
+    "desc",
+    "distinct",
+    "drop",
+    "else",
+    "end",
+    "except",
+    "exists",
+    "extension",
+    "foreign",
+    "from",
+    "full",
+    "function",
+    "grant",
+    "group",
+    "having",
+    "if",
+    "in",
+    "index",
+    "inner",
+    "insert",
+    "intersect",
+    "into",
+    "is",
+    "join",
+    "key",
+    "left",
+    "like",
+    "limit",
+    "max",
+    "min",
+    "not",
+    "null",
+    "offset",
+    "on",
+    "or",
+    "order",
+    "outer",
+    "primary",
+    "references",
+    "returning",
+    "revoke",
+    "right",
+    "role",
+    "rollback",
+    "select",
+    "set",
+    "sum",
+    "table",
+    "then",
+    "to",
+    "trigger",
+    "truncate",
+    "union",
+    "unique",
+    "update",
+    "usage",
+    "user",
+    "using",
+    "values",
+    "view",
+    "when",
+    "where",
+    "with",
 ];
 
 /// A highlight class for one span of text.
@@ -112,7 +189,11 @@ pub fn highlight_line(line: &str, in_block: bool) -> (Vec<(Tok, String)>, bool) 
                 i += 1;
             }
             let word: String = chars[start..i].iter().collect();
-            let tok = if is_keyword(&word) { Tok::Keyword } else { Tok::Plain };
+            let tok = if is_keyword(&word) {
+                Tok::Keyword
+            } else {
+                Tok::Plain
+            };
             push(&mut spans, tok, word);
         } else {
             push(&mut spans, Tok::Plain, c.to_string());
@@ -149,9 +230,16 @@ mod tests {
         let spans = classes("SELECT name, 42 FROM t -- done");
         assert_eq!(spans[0], (Tok::Keyword, "SELECT".to_string()));
         assert!(spans.contains(&(Tok::Num, "42".to_string())));
-        assert!(spans.iter().any(|(t, s)| *t == Tok::Comment && s.starts_with("--")));
+        assert!(
+            spans
+                .iter()
+                .any(|(t, s)| *t == Tok::Comment && s.starts_with("--"))
+        );
         let spans = classes("WHERE a = 'from'");
-        assert!(spans.contains(&(Tok::Str, "'from'".to_string())), "keyword inside a string stays a string");
+        assert!(
+            spans.contains(&(Tok::Str, "'from'".to_string())),
+            "keyword inside a string stays a string"
+        );
     }
 
     #[test]
@@ -173,6 +261,10 @@ mod tests {
 
     #[test]
     fn keyword_list_meets_the_spec_size() {
-        assert!(KEYWORDS.len() >= 70, "spec promises 70+ keywords, have {}", KEYWORDS.len());
+        assert!(
+            KEYWORDS.len() >= 70,
+            "spec promises 70+ keywords, have {}",
+            KEYWORDS.len()
+        );
     }
 }

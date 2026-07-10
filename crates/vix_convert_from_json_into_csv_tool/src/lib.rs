@@ -4,7 +4,6 @@
 //! object becomes one row. See [`vix_convert_tabular`] for the shared logic.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -14,7 +13,9 @@
 /// Returns an error when the input is not valid JSON, not an array, or contains
 /// a non-object element.
 pub fn convert(input: &str) -> Result<String, String> {
-    Ok(vix_convert_tabular::write_csv(&vix_convert_tabular::json_to_rows(input)?))
+    Ok(vix_convert_tabular::write_csv(
+        &vix_convert_tabular::json_to_rows(input)?,
+    ))
 }
 
 #[cfg(test)]

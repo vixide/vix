@@ -53,8 +53,14 @@ enum Val {
     /// A number kept in its textual form so it round-trips unchanged.
     Num(String),
     Str(String),
-    Arr { collapsed: bool, items: Vec<Val> },
-    Obj { collapsed: bool, entries: Vec<(String, Val)> },
+    Arr {
+        collapsed: bool,
+        items: Vec<Val>,
+    },
+    Obj {
+        collapsed: bool,
+        entries: Vec<(String, Val)>,
+    },
 }
 
 /// One step of a path locating a node within the tree.
@@ -195,7 +201,10 @@ impl Tree {
     /// Whether visible row `i` is a collapsed container.
     #[must_use]
     pub fn is_collapsed(&self, i: usize) -> bool {
-        matches!(self.rows.get(i).map(|r| r.kind), Some(Kind::Container(true)))
+        matches!(
+            self.rows.get(i).map(|r| r.kind),
+            Some(Kind::Container(true))
+        )
     }
 
     /// Serialize the tree back to text in its format.
@@ -281,7 +290,9 @@ impl Tree {
 
     /// Collapse the selected container, or jump to its parent.
     fn collapse_or_parent(&mut self) {
-        let Some(row) = self.rows.get(self.sel) else { return };
+        let Some(row) = self.rows.get(self.sel) else {
+            return;
+        };
         if matches!(row.kind, Kind::Container(false)) {
             let path = row.path.clone();
             self.set_collapsed(&path, true);
@@ -298,7 +309,9 @@ impl Tree {
 
     /// Expand the selected container, or step into its first child.
     fn expand_or_child(&mut self) {
-        let Some(row) = self.rows.get(self.sel) else { return };
+        let Some(row) = self.rows.get(self.sel) else {
+            return;
+        };
         match row.kind {
             Kind::Container(true) => {
                 let path = row.path.clone();
@@ -317,7 +330,9 @@ impl Tree {
 
     /// Toggle the selected container's fold state.
     fn toggle(&mut self) {
-        let Some(row) = self.rows.get(self.sel) else { return };
+        let Some(row) = self.rows.get(self.sel) else {
+            return;
+        };
         if let Kind::Container(c) = row.kind {
             let path = row.path.clone();
             self.set_collapsed(&path, !c);
@@ -341,7 +356,9 @@ impl Tree {
     /// Commit the edit buffer into the selected scalar as one undo step.
     fn commit_edit(&mut self) {
         self.mode = Mode::Normal;
-        let Some(row) = self.rows.get(self.sel) else { return };
+        let Some(row) = self.rows.get(self.sel) else {
+            return;
+        };
         let path = row.path.clone();
         let new = parse_scalar(&self.edit_buf);
         if let Some(node) = at_mut(&mut self.root, &path) {
@@ -466,7 +483,13 @@ fn flatten(val: &Val, depth: usize, label: String, path: Vec<Seg>, out: &mut Vec
                 }
             }
         }
-        scalar => out.push(Row { depth, label, value: scalar_text(scalar), kind: Kind::Scalar, path }),
+        scalar => out.push(Row {
+            depth,
+            label,
+            value: scalar_text(scalar),
+            kind: Kind::Scalar,
+            path,
+        }),
     }
 }
 
@@ -490,7 +513,10 @@ fn from_yaml(v: &serde_yaml::Value) -> Val {
         Y::Bool(b) => Val::Bool(*b),
         Y::Number(n) => Val::Num(n.to_string()),
         Y::String(s) => Val::Str(s.clone()),
-        Y::Sequence(items) => Val::Arr { collapsed: false, items: items.iter().map(from_yaml).collect() },
+        Y::Sequence(items) => Val::Arr {
+            collapsed: false,
+            items: items.iter().map(from_yaml).collect(),
+        },
         Y::Mapping(m) => Val::Obj {
             collapsed: false,
             entries: m.iter().map(|(k, v)| (yaml_key(k), from_yaml(v))).collect(),
@@ -674,7 +700,11 @@ mod tests {
     #[test]
     fn json_round_trips_and_preserves_key_order() {
         let t = Tree::from_text(r#"{"b": 1, "a": 2}"#, Format::Json).unwrap();
-        assert_eq!(t.to_text(), "{\n  \"b\": 1,\n  \"a\": 2\n}\n", "keys stay in source order");
+        assert_eq!(
+            t.to_text(),
+            "{\n  \"b\": 1,\n  \"a\": 2\n}\n",
+            "keys stay in source order"
+        );
     }
 
     #[test]

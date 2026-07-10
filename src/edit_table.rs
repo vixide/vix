@@ -94,7 +94,11 @@ impl Grid {
     /// least one row and one column.
     #[must_use]
     pub fn from_text(text: &str, tsv: bool) -> Self {
-        let mut rows = if tsv { parse_tsv(text) } else { parse_csv(text) };
+        let mut rows = if tsv {
+            parse_tsv(text)
+        } else {
+            parse_csv(text)
+        };
         normalize(&mut rows);
         Grid {
             rows,
@@ -128,7 +132,10 @@ impl Grid {
     /// The cell at `(r, c)`, or `""` when out of range.
     #[must_use]
     pub fn cell(&self, r: usize, c: usize) -> &str {
-        self.rows.get(r).and_then(|row| row.get(c)).map_or("", String::as_str)
+        self.rows
+            .get(r)
+            .and_then(|row| row.get(c))
+            .map_or("", String::as_str)
     }
 
     /// The selected row index.
@@ -377,7 +384,11 @@ impl Grid {
             return;
         }
         self.push_undo();
-        if let Some(cell) = self.rows.get_mut(self.row).and_then(|r| r.get_mut(self.col)) {
+        if let Some(cell) = self
+            .rows
+            .get_mut(self.row)
+            .and_then(|r| r.get_mut(self.col))
+        {
             *cell = text;
             self.dirty = true;
         }
@@ -389,7 +400,11 @@ impl Grid {
             return;
         }
         self.push_undo();
-        if let Some(cell) = self.rows.get_mut(self.row).and_then(|r| r.get_mut(self.col)) {
+        if let Some(cell) = self
+            .rows
+            .get_mut(self.row)
+            .and_then(|r| r.get_mut(self.col))
+        {
             cell.clear();
             self.dirty = true;
         }
@@ -457,7 +472,10 @@ impl Grid {
         let c = self.col;
         let header = self.rows.remove(0);
         self.rows.sort_by(|a, b| {
-            let ord = cmp_cells(a.get(c).map_or("", String::as_str), b.get(c).map_or("", String::as_str));
+            let ord = cmp_cells(
+                a.get(c).map_or("", String::as_str),
+                b.get(c).map_or("", String::as_str),
+            );
             if ascending { ord } else { ord.reverse() }
         });
         self.rows.insert(0, header);
@@ -504,7 +522,11 @@ impl Grid {
 
     /// A snapshot of the current grid + cursor.
     fn snapshot(&self) -> Snapshot {
-        Snapshot { rows: self.rows.clone(), row: self.row, col: self.col }
+        Snapshot {
+            rows: self.rows.clone(),
+            row: self.row,
+            col: self.col,
+        }
     }
 
     /// Restore `snap` into the grid and return the prior state for the other stack.

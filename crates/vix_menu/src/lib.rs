@@ -33,18 +33,39 @@ pub const SEPARATOR: &str = "menu.separator";
 impl Item {
     /// A leaf item that runs `action` when selected.
     const fn leaf(label: &'static str, action: &'static str, shortcut: &'static str) -> Item {
-        Item { label, action, shortcut, submenu: None }
+        Item {
+            label,
+            action,
+            shortcut,
+            submenu: None,
+        }
     }
 
     /// An item that opens a nested submenu when selected.
     const fn sub(label: &'static str, items: &'static [Item]) -> Item {
-        Item { label, action: "", shortcut: "", submenu: Some(items) }
+        Item {
+            label,
+            action: "",
+            shortcut: "",
+            submenu: Some(items),
+        }
     }
 
     /// The label translated into the active locale.
     #[must_use]
     pub fn label(&self) -> String {
         t!(self.label).to_string()
+    }
+
+    /// Hover-tooltip help text for this entry, translated into the active locale.
+    /// Derived from the label key by appending `.help`; `None` when no such key
+    /// exists (see [`help_text`]). Separators never have help.
+    #[must_use]
+    pub fn help(&self) -> Option<String> {
+        if self.is_separator() {
+            return None;
+        }
+        help_text(self.label)
     }
 
     /// Whether this entry is a separator (a non-selectable divider line).
@@ -60,8 +81,24 @@ impl Item {
     }
 }
 
+/// Optional hover-tooltip help text for a menu label `key`: the translation of
+/// `"{key}.help"`, or `None` when no such key exists. rust-i18n returns the key
+/// itself for a missing translation, so a result equal to the looked-up key means
+/// "no help defined". Shared by [`Item::help`] and [`MenuDef::help`].
+#[must_use]
+fn help_text(key: &str) -> Option<String> {
+    let help_key = format!("{key}.help");
+    let text = t!(&help_key).to_string();
+    if text == help_key { None } else { Some(text) }
+}
+
 /// A dropdown separator (divider line).
-const SEP: Item = Item { label: "", action: SEPARATOR, shortcut: "", submenu: None };
+const SEP: Item = Item {
+    label: "",
+    action: SEPARATOR,
+    shortcut: "",
+    submenu: None,
+};
 
 /// A top-level menu and its items.
 pub struct MenuDef {
@@ -77,6 +114,14 @@ impl MenuDef {
     pub fn title(&self) -> String {
         t!(self.name).to_string()
     }
+
+    /// Hover-tooltip help text for this top-level menu, translated into the active
+    /// locale. Derived from the name key by appending `.help`; `None` when no such
+    /// key exists (see [`help_text`]).
+    #[must_use]
+    pub fn help(&self) -> Option<String> {
+        help_text(self.name)
+    }
 }
 
 const FILE: &[Item] = &[
@@ -84,12 +129,20 @@ const FILE: &[Item] = &[
     Item::leaf("menu.item.file.scratch", "file.scratch", ""),
     SEP,
     Item::leaf("menu.item.file.open", "file.open", "Ctrl O"),
-    Item::leaf("menu.item.file.open_recent", "file.open_recent", "Ctrl Shift O"),
+    Item::leaf(
+        "menu.item.file.open_recent",
+        "file.open_recent",
+        "Ctrl Shift O",
+    ),
     Item::leaf("menu.item.file.switch_project", "file.switch_project", ""),
     SEP,
     Item::leaf("menu.item.file.workspace_open", "workspace.open", ""),
     Item::leaf("menu.item.file.workspace_save", "workspace.save", ""),
-    Item::leaf("menu.item.file.workspace_add_folder", "workspace.add_folder", ""),
+    Item::leaf(
+        "menu.item.file.workspace_add_folder",
+        "workspace.add_folder",
+        "",
+    ),
     SEP,
     Item::leaf("menu.item.file.save", "file.save", "Ctrl S"),
     Item::leaf("menu.item.file.save_as", "file.save_as", "Ctrl Shift S"),
@@ -97,7 +150,11 @@ const FILE: &[Item] = &[
     SEP,
     Item::leaf("menu.item.file.close", "file.close", "Ctrl W"),
     Item::leaf("menu.item.file.close_all", "file.close_all", "Ctrl Shift W"),
-    Item::leaf("menu.item.file.reopen_closed", "file.reopen_closed", "Ctrl Shift T"),
+    Item::leaf(
+        "menu.item.file.reopen_closed",
+        "file.reopen_closed",
+        "Ctrl Shift T",
+    ),
 ];
 
 /// Find-related items, grouped under Edit → Find.
@@ -105,12 +162,32 @@ const EDIT_FIND: &[Item] = &[
     Item::leaf("menu.item.edit.find", "edit.find", "Ctrl F"),
     Item::leaf("menu.item.edit.find_next", "edit.find_next", "Ctrl G"),
     Item::leaf("menu.item.edit.find_prev", "edit.find_prev", "Ctrl Shift G"),
-    Item::leaf("menu.item.edit.find_selection", "search.next_selection", "Alt N"),
-    Item::leaf("menu.item.edit.toggle_highlight", "toggle_highlight_search", ""),
+    Item::leaf(
+        "menu.item.edit.find_selection",
+        "search.next_selection",
+        "Alt N",
+    ),
+    Item::leaf(
+        "menu.item.edit.toggle_highlight",
+        "toggle_highlight_search",
+        "",
+    ),
     SEP,
-    Item::leaf("menu.item.edit.find_in_files", "search.workspace", "Ctrl Shift F"),
-    Item::leaf("menu.item.edit.replace_in_files", "search.workspace_replace", ""),
-    Item::leaf("menu.item.edit.search_workspace_dock", "search.workspace_dock", ""),
+    Item::leaf(
+        "menu.item.edit.find_in_files",
+        "search.workspace",
+        "Ctrl Shift F",
+    ),
+    Item::leaf(
+        "menu.item.edit.replace_in_files",
+        "search.workspace_replace",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.edit.search_workspace_dock",
+        "search.workspace_dock",
+        "",
+    ),
 ];
 
 /// Align selected lines on a delimiter, grouped under Edit → Align.
@@ -125,12 +202,28 @@ const EDIT_ALIGN: &[Item] = &[
 /// grouped under Edit → Surround.
 const EDIT_SURROUND: &[Item] = &[
     Item::leaf("menu.item.edit.surround.paren", "edit.surround.paren", ""),
-    Item::leaf("menu.item.edit.surround.bracket", "edit.surround.bracket", ""),
+    Item::leaf(
+        "menu.item.edit.surround.bracket",
+        "edit.surround.bracket",
+        "",
+    ),
     Item::leaf("menu.item.edit.surround.brace", "edit.surround.brace", ""),
     Item::leaf("menu.item.edit.surround.angle", "edit.surround.angle", ""),
-    Item::leaf("menu.item.edit.surround.double_quote", "edit.surround.double_quote", ""),
-    Item::leaf("menu.item.edit.surround.single_quote", "edit.surround.single_quote", ""),
-    Item::leaf("menu.item.edit.surround.backtick", "edit.surround.backtick", ""),
+    Item::leaf(
+        "menu.item.edit.surround.double_quote",
+        "edit.surround.double_quote",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.edit.surround.single_quote",
+        "edit.surround.single_quote",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.edit.surround.backtick",
+        "edit.surround.backtick",
+        "",
+    ),
 ];
 
 const EDIT: &[Item] = &[
@@ -141,7 +234,11 @@ const EDIT: &[Item] = &[
     Item::leaf("menu.item.edit.cut", "edit.cut", "Ctrl X"),
     Item::leaf("menu.item.edit.copy", "edit.copy", "Ctrl C"),
     Item::leaf("menu.item.edit.paste", "edit.paste", "Ctrl V"),
-    Item::leaf("menu.item.edit.paste_from_history", "edit.paste_from_history", ""),
+    Item::leaf(
+        "menu.item.edit.paste_from_history",
+        "edit.paste_from_history",
+        "",
+    ),
     SEP,
     Item::sub("menu.item.edit.select_menu", EDIT_SELECT),
     Item::sub("menu.item.edit.lines_menu", EDIT_MOVE),
@@ -150,14 +247,26 @@ const EDIT: &[Item] = &[
     Item::sub("menu.item.edit.find_menu", EDIT_FIND),
     Item::sub("menu.item.edit.mode", EDIT_MODE),
     SEP,
-    Item::leaf("menu.item.edit.toggle_comment", "edit.toggle_comment", "Ctrl /"),
+    Item::leaf(
+        "menu.item.edit.toggle_comment",
+        "edit.toggle_comment",
+        "Ctrl /",
+    ),
     Item::leaf("menu.item.edit.comment_banner", "edit.comment_banner", ""),
     Item::leaf("menu.item.edit.emmet_expand", "edit.emmet_expand", ""),
     Item::leaf("menu.item.edit.toggle_value", "edit.toggle_value", ""),
     Item::leaf("menu.item.edit.transpose_chars", "edit.transpose_chars", ""),
     Item::leaf("menu.item.edit.transpose_words", "edit.transpose_words", ""),
-    Item::leaf("menu.item.edit.increment_number", "edit.increment_number", ""),
-    Item::leaf("menu.item.edit.decrement_number", "edit.decrement_number", ""),
+    Item::leaf(
+        "menu.item.edit.increment_number",
+        "edit.increment_number",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.edit.decrement_number",
+        "edit.decrement_number",
+        "",
+    ),
     SEP,
     Item::sub("menu.item.edit.macro", EDIT_MACRO),
 ];
@@ -242,7 +351,11 @@ const GO: &[Item] = &[
     Item::leaf("menu.go.next_change", "git.diff_next", ""),
     Item::leaf("menu.go.prev_change", "git.diff_prev", ""),
     SEP,
-    Item::leaf("menu.item.edit.recent_locations", "nav.recent_locations", ""),
+    Item::leaf(
+        "menu.item.edit.recent_locations",
+        "nav.recent_locations",
+        "",
+    ),
     Item::leaf("menu.go.jump", "nav.jump", ""),
     Item::sub("menu.go.bookmarks", GO_BOOKMARKS),
     SEP,
@@ -272,7 +385,11 @@ const EDIT_MOVE: &[Item] = &[
     Item::leaf("menu.item.edit.shuffle", "edit.shuffle", ""),
     Item::leaf("menu.item.edit.reverse", "edit.reverse_lines", ""),
     Item::leaf("menu.item.edit.dedupe", "edit.remove_duplicate_lines", ""),
-    Item::leaf("menu.item.edit.squeeze_blank_lines", "edit.squeeze_blank_lines", ""),
+    Item::leaf(
+        "menu.item.edit.squeeze_blank_lines",
+        "edit.squeeze_blank_lines",
+        "",
+    ),
     Item::leaf("menu.item.edit.trim", "edit.trim_trailing_whitespace", ""),
     SEP,
     Item::sub("menu.item.edit.eol_menu", EDIT_EOL),
@@ -286,15 +403,39 @@ const EDIT_EOL: &[Item] = &[
 
 /// Selection commands, grouped under Edit → Select.
 const EDIT_SELECT: &[Item] = &[
-    Item::leaf("menu.item.edit.select_more", "edit.select_more", "Ctrl Shift →"),
-    Item::leaf("menu.item.edit.select_less", "edit.select_less", "Ctrl Shift ←"),
+    Item::leaf(
+        "menu.item.edit.select_more",
+        "edit.select_more",
+        "Ctrl Shift →",
+    ),
+    Item::leaf(
+        "menu.item.edit.select_less",
+        "edit.select_less",
+        "Ctrl Shift ←",
+    ),
     SEP,
     Item::leaf("menu.item.edit.select_line", "edit.select_line", ""),
-    Item::leaf("menu.item.edit.select_paragraph", "edit.select_paragraph", ""),
+    Item::leaf(
+        "menu.item.edit.select_paragraph",
+        "edit.select_paragraph",
+        "",
+    ),
     Item::leaf("menu.item.edit.select_section", "edit.select_section", ""),
-    Item::leaf("menu.item.edit.select_all_occurrences", "edit.select_all_occurrences", ""),
-    Item::leaf("menu.item.edit.column_select_down", "edit.column_select_down", "Alt Shift ↓"),
-    Item::leaf("menu.item.edit.column_select_up", "edit.column_select_up", "Alt Shift ↑"),
+    Item::leaf(
+        "menu.item.edit.select_all_occurrences",
+        "edit.select_all_occurrences",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.edit.column_select_down",
+        "edit.column_select_down",
+        "Alt Shift ↓",
+    ),
+    Item::leaf(
+        "menu.item.edit.column_select_up",
+        "edit.column_select_up",
+        "Alt Shift ↑",
+    ),
     Item::leaf("menu.item.edit.select_all", "edit.select_all", "Ctrl A"),
 ];
 
@@ -322,10 +463,18 @@ const EDIT_CASE: &[Item] = &[
 
 /// Editor split commands, grouped under View → Split.
 const VIEW_SPLIT: &[Item] = &[
-    Item::leaf("menu.item.view.split_horizontal", "view.split_horizontal", ""),
+    Item::leaf(
+        "menu.item.view.split_horizontal",
+        "view.split_horizontal",
+        "",
+    ),
     Item::leaf("menu.item.view.split_vertical", "view.split_vertical", ""),
     SEP,
-    Item::leaf("menu.item.view.focus_other_pane", "view.focus_other_pane", "F6"),
+    Item::leaf(
+        "menu.item.view.focus_other_pane",
+        "view.focus_other_pane",
+        "F6",
+    ),
     Item::leaf("menu.item.view.unsplit", "view.unsplit", ""),
 ];
 
@@ -352,7 +501,11 @@ const VIEW_ZOOM: &[Item] = &[
 
 const VIEW_EDITOR: &[Item] = &[
     Item::leaf("menu.item.view.line_numbers", "view.line_numbers", ""),
-    Item::leaf("menu.item.view.relative_line_numbers", "view.relative_line_numbers", ""),
+    Item::leaf(
+        "menu.item.view.relative_line_numbers",
+        "view.relative_line_numbers",
+        "",
+    ),
     Item::leaf("menu.item.view.read_only", "view.read_only", ""),
     Item::leaf("menu.item.view.whitespace", "view.whitespace", ""),
     Item::leaf("menu.item.view.scrollbar", "view.scrollbar", ""),
@@ -371,9 +524,17 @@ const VIEW_EDITOR: &[Item] = &[
     Item::leaf("menu.item.view.spellcheck", "view.spellcheck", ""),
     SEP,
     Item::leaf("menu.item.view.auto_pair", "view.auto_pair", ""),
-    Item::leaf("menu.item.view.rainbow_brackets", "view.rainbow_brackets", ""),
+    Item::leaf(
+        "menu.item.view.rainbow_brackets",
+        "view.rainbow_brackets",
+        "",
+    ),
     Item::leaf("menu.item.view.trim_on_save", "view.trim_on_save", ""),
-    Item::leaf("menu.item.view.final_newline_on_save", "view.final_newline_on_save", ""),
+    Item::leaf(
+        "menu.item.view.final_newline_on_save",
+        "view.final_newline_on_save",
+        "",
+    ),
     Item::leaf("menu.item.view.format_on_save", "view.format_on_save", ""),
     Item::leaf("menu.item.view.auto_save", "view.auto_save", ""),
     SEP,
@@ -433,31 +594,95 @@ const TOOLS_INSERT_ZID: &[Item] = &[
 /// template at the cursor. The item labels are shared with the Markdown submenu
 /// (same display text), so they reuse the `…insert.markdown.*` label keys.
 const TOOLS_INSERT_HTML: &[Item] = &[
-    Item::leaf("menu.item.tools.insert.markdown.headline1", "tools.insert.html.headline1", ""),
-    Item::leaf("menu.item.tools.insert.markdown.headline2", "tools.insert.html.headline2", ""),
-    Item::leaf("menu.item.tools.insert.markdown.headline3", "tools.insert.html.headline3", ""),
-    Item::leaf("menu.item.tools.insert.markdown.link", "tools.insert.html.link", ""),
-    Item::leaf("menu.item.tools.insert.markdown.list", "tools.insert.html.list", ""),
-    Item::leaf("menu.item.tools.insert.markdown.table", "tools.insert.html.table", ""),
+    Item::leaf(
+        "menu.item.tools.insert.markdown.headline1",
+        "tools.insert.html.headline1",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.markdown.headline2",
+        "tools.insert.html.headline2",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.markdown.headline3",
+        "tools.insert.html.headline3",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.markdown.link",
+        "tools.insert.html.link",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.markdown.list",
+        "tools.insert.html.list",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.markdown.table",
+        "tools.insert.html.table",
+        "",
+    ),
 ];
 
 /// Markdown snippets, grouped under Tools → Insert → Markdown. Each inserts a
 /// small Markdown template at the cursor.
 const TOOLS_INSERT_MARKDOWN: &[Item] = &[
-    Item::leaf("menu.item.tools.insert.markdown.headline1", "tools.insert.markdown.headline1", ""),
-    Item::leaf("menu.item.tools.insert.markdown.headline2", "tools.insert.markdown.headline2", ""),
-    Item::leaf("menu.item.tools.insert.markdown.headline3", "tools.insert.markdown.headline3", ""),
-    Item::leaf("menu.item.tools.insert.markdown.link", "tools.insert.markdown.link", ""),
-    Item::leaf("menu.item.tools.insert.markdown.list", "tools.insert.markdown.list", ""),
-    Item::leaf("menu.item.tools.insert.markdown.table", "tools.insert.markdown.table", ""),
-    Item::leaf("menu.item.tools.insert.markdown.todos", "tools.insert.markdown.todos", ""),
+    Item::leaf(
+        "menu.item.tools.insert.markdown.headline1",
+        "tools.insert.markdown.headline1",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.markdown.headline2",
+        "tools.insert.markdown.headline2",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.markdown.headline3",
+        "tools.insert.markdown.headline3",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.markdown.link",
+        "tools.insert.markdown.link",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.markdown.list",
+        "tools.insert.markdown.list",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.markdown.table",
+        "tools.insert.markdown.table",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.markdown.todos",
+        "tools.insert.markdown.todos",
+        "",
+    ),
 ];
 
 /// Lorem ipsum placeholder snippets, grouped under Tools → Insert → Lorem ipsum.
 const TOOLS_INSERT_LOREM: &[Item] = &[
-    Item::leaf("menu.item.tools.insert.lorem.words", "tools.insert.lorem.words", ""),
-    Item::leaf("menu.item.tools.insert.lorem.sentence", "tools.insert.lorem.sentence", ""),
-    Item::leaf("menu.item.tools.insert.lorem.paragraph", "tools.insert.lorem.paragraph", ""),
+    Item::leaf(
+        "menu.item.tools.insert.lorem.words",
+        "tools.insert.lorem.words",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.lorem.sentence",
+        "tools.insert.lorem.sentence",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.lorem.paragraph",
+        "tools.insert.lorem.paragraph",
+        "",
+    ),
 ];
 
 /// Date/time presets, grouped under Tools → Insert → Date/Time. Each inserts the
@@ -465,84 +690,300 @@ const TOOLS_INSERT_LOREM: &[Item] = &[
 const TOOLS_INSERT_DATETIME: &[Item] = &[
     Item::leaf("menu.name.iso8601", "tools.insert.datetime.iso8601", ""),
     Item::leaf("menu.name.rfc3339", "tools.insert.datetime.rfc3339", ""),
-    Item::leaf("menu.item.tools.insert.datetime.epoch", "tools.insert.datetime.epoch", ""),
+    Item::leaf(
+        "menu.item.tools.insert.datetime.epoch",
+        "tools.insert.datetime.epoch",
+        "",
+    ),
 ];
 
 /// Insert helpers, grouped under Tools → Insert.
 /// SQL (`PostgreSQL`) snippets, grouped under Tools → Insert → SQL. Each inserts a
 /// ready-to-edit statement at the cursor.
 const TOOLS_INSERT_SQL: &[Item] = &[
-    Item::leaf("menu.item.tools.insert.sql.alter_role", "tools.insert.sql.alter_role", ""),
-    Item::leaf("menu.item.tools.insert.sql.create_extension", "tools.insert.sql.create_extension", ""),
-    Item::leaf("menu.item.tools.insert.sql.create_function", "tools.insert.sql.create_function", ""),
-    Item::leaf("menu.item.tools.insert.sql.create_user", "tools.insert.sql.create_user", ""),
-    Item::leaf("menu.item.tools.insert.sql.grant_create", "tools.insert.sql.grant_create", ""),
-    Item::leaf("menu.item.tools.insert.sql.grant_usage", "tools.insert.sql.grant_usage", ""),
-    Item::leaf("menu.item.tools.insert.sql.create_table", "tools.insert.sql.create_table", ""),
+    Item::leaf(
+        "menu.item.tools.insert.sql.alter_role",
+        "tools.insert.sql.alter_role",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.sql.create_extension",
+        "tools.insert.sql.create_extension",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.sql.create_function",
+        "tools.insert.sql.create_function",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.sql.create_user",
+        "tools.insert.sql.create_user",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.sql.grant_create",
+        "tools.insert.sql.grant_create",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.sql.grant_usage",
+        "tools.insert.sql.grant_usage",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.sql.create_table",
+        "tools.insert.sql.create_table",
+        "",
+    ),
 ];
 
 /// Org/LaTeX markup snippets, grouped under Tools → Insert → LaTeX. Each inserts
 /// a ready-to-edit construct at the cursor.
 const TOOLS_INSERT_LATEX: &[Item] = &[
-    Item::leaf("menu.item.tools.insert.latex.headline", "tools.insert.latex.headline", ""),
-    Item::leaf("menu.item.tools.insert.latex.subheadline", "tools.insert.latex.subheadline", ""),
-    Item::leaf("menu.item.tools.insert.latex.link", "tools.insert.latex.link", ""),
-    Item::leaf("menu.item.tools.insert.latex.bold", "tools.insert.latex.bold", ""),
-    Item::leaf("menu.item.tools.insert.latex.italic", "tools.insert.latex.italic", ""),
-    Item::leaf("menu.item.tools.insert.latex.underline", "tools.insert.latex.underline", ""),
-    Item::leaf("menu.item.tools.insert.latex.table", "tools.insert.latex.table", ""),
-    Item::leaf("menu.item.tools.insert.latex.deadline", "tools.insert.latex.deadline", ""),
-    Item::leaf("menu.item.tools.insert.latex.scheduled", "tools.insert.latex.scheduled", ""),
-    Item::leaf("menu.item.tools.insert.latex.time_range", "tools.insert.latex.time_range", ""),
-    Item::leaf("menu.item.tools.insert.latex.timestamp", "tools.insert.latex.timestamp", ""),
-    Item::leaf("menu.item.tools.insert.latex.timestamp_repeater", "tools.insert.latex.timestamp_repeater", ""),
-    Item::leaf("menu.item.tools.insert.latex.quote", "tools.insert.latex.quote", ""),
-    Item::leaf("menu.item.tools.insert.latex.verse", "tools.insert.latex.verse", ""),
-    Item::leaf("menu.item.tools.insert.latex.center", "tools.insert.latex.center", ""),
-    Item::leaf("menu.item.tools.insert.latex.drawer", "tools.insert.latex.drawer", ""),
+    Item::leaf(
+        "menu.item.tools.insert.latex.headline",
+        "tools.insert.latex.headline",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.latex.subheadline",
+        "tools.insert.latex.subheadline",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.latex.link",
+        "tools.insert.latex.link",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.latex.bold",
+        "tools.insert.latex.bold",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.latex.italic",
+        "tools.insert.latex.italic",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.latex.underline",
+        "tools.insert.latex.underline",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.latex.table",
+        "tools.insert.latex.table",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.latex.deadline",
+        "tools.insert.latex.deadline",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.latex.scheduled",
+        "tools.insert.latex.scheduled",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.latex.time_range",
+        "tools.insert.latex.time_range",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.latex.timestamp",
+        "tools.insert.latex.timestamp",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.latex.timestamp_repeater",
+        "tools.insert.latex.timestamp_repeater",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.latex.quote",
+        "tools.insert.latex.quote",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.latex.verse",
+        "tools.insert.latex.verse",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.latex.center",
+        "tools.insert.latex.center",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.latex.drawer",
+        "tools.insert.latex.drawer",
+        "",
+    ),
 ];
 
 /// Org-mode snippets, grouped under Tools → Insert → Org.
 const TOOLS_INSERT_ORG: &[Item] = &[
-    Item::leaf("menu.item.tools.insert.org.title", "tools.insert.org.title", ""),
-    Item::leaf("menu.item.tools.insert.org.author", "tools.insert.org.author", ""),
-    Item::leaf("menu.item.tools.insert.org.headline", "tools.insert.org.headline", ""),
-    Item::leaf("menu.item.tools.insert.org.subheadline", "tools.insert.org.subheadline", ""),
-    Item::leaf("menu.item.tools.insert.org.link", "tools.insert.org.link", ""),
-    Item::leaf("menu.item.tools.insert.org.image", "tools.insert.org.image", ""),
-    Item::leaf("menu.item.tools.insert.org.list", "tools.insert.org.list", ""),
-    Item::leaf("menu.item.tools.insert.org.ordered_list", "tools.insert.org.ordered_list", ""),
-    Item::leaf("menu.item.tools.insert.org.check_list", "tools.insert.org.check_list", ""),
-    Item::leaf("menu.item.tools.insert.org.table", "tools.insert.org.table", ""),
-    Item::leaf("menu.item.tools.insert.org.todo", "tools.insert.org.todo", ""),
-    Item::leaf("menu.item.tools.insert.org.done", "tools.insert.org.done", ""),
-    Item::leaf("menu.item.tools.insert.org.deadline", "tools.insert.org.deadline", ""),
-    Item::leaf("menu.item.tools.insert.org.scheduled", "tools.insert.org.scheduled", ""),
-    Item::leaf("menu.item.tools.insert.org.time_range", "tools.insert.org.time_range", ""),
-    Item::leaf("menu.item.tools.insert.org.timestamp", "tools.insert.org.timestamp", ""),
-    Item::leaf("menu.item.tools.insert.org.timestamp_repeater", "tools.insert.org.timestamp_repeater", ""),
-    Item::leaf("menu.item.tools.insert.org.drawer", "tools.insert.org.drawer", ""),
-    Item::leaf("menu.item.tools.insert.org.properties", "tools.insert.org.properties", ""),
+    Item::leaf(
+        "menu.item.tools.insert.org.title",
+        "tools.insert.org.title",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.author",
+        "tools.insert.org.author",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.headline",
+        "tools.insert.org.headline",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.subheadline",
+        "tools.insert.org.subheadline",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.link",
+        "tools.insert.org.link",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.image",
+        "tools.insert.org.image",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.list",
+        "tools.insert.org.list",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.ordered_list",
+        "tools.insert.org.ordered_list",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.check_list",
+        "tools.insert.org.check_list",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.table",
+        "tools.insert.org.table",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.todo",
+        "tools.insert.org.todo",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.done",
+        "tools.insert.org.done",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.deadline",
+        "tools.insert.org.deadline",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.scheduled",
+        "tools.insert.org.scheduled",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.time_range",
+        "tools.insert.org.time_range",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.timestamp",
+        "tools.insert.org.timestamp",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.timestamp_repeater",
+        "tools.insert.org.timestamp_repeater",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.drawer",
+        "tools.insert.org.drawer",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.org.properties",
+        "tools.insert.org.properties",
+        "",
+    ),
     SEP,
     // Inline emphasis markers (formerly the "Markers" submenu). Each toggles the
     // marker character(s) around the selection. Menus are three levels deep, so
     // these live directly inside Org rather than as a fourth-level submenu.
-    Item::leaf("menu.item.tools.insert.marker.tag", "tools.insert.marker.tag", ""),
-    Item::leaf("menu.item.tools.insert.marker.bold", "tools.insert.marker.bold", ""),
-    Item::leaf("menu.item.tools.insert.marker.italic", "tools.insert.marker.italic", ""),
-    Item::leaf("menu.item.tools.insert.marker.underline", "tools.insert.marker.underline", ""),
-    Item::leaf("menu.item.tools.insert.marker.strikethrough", "tools.insert.marker.strikethrough", ""),
-    Item::leaf("menu.item.tools.insert.marker.code", "tools.insert.marker.code", ""),
-    Item::leaf("menu.item.tools.insert.marker.verbatim", "tools.insert.marker.verbatim", ""),
+    Item::leaf(
+        "menu.item.tools.insert.marker.tag",
+        "tools.insert.marker.tag",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.marker.bold",
+        "tools.insert.marker.bold",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.marker.italic",
+        "tools.insert.marker.italic",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.marker.underline",
+        "tools.insert.marker.underline",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.marker.strikethrough",
+        "tools.insert.marker.strikethrough",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.marker.code",
+        "tools.insert.marker.code",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.marker.verbatim",
+        "tools.insert.marker.verbatim",
+        "",
+    ),
 ];
 
 /// Org block constructs, grouped under Tools → Insert → Begin-End. Each toggles a
 /// `#+BEGIN_…`/`#+END_…` block around the selection.
 const TOOLS_INSERT_BLOCK: &[Item] = &[
-    Item::leaf("menu.item.tools.insert.block.comment", "tools.insert.block.comment", ""),
-    Item::leaf("menu.item.tools.insert.block.center", "tools.insert.block.center", ""),
-    Item::leaf("menu.item.tools.insert.block.quote", "tools.insert.block.quote", ""),
-    Item::leaf("menu.item.tools.insert.block.verse", "tools.insert.block.verse", ""),
+    Item::leaf(
+        "menu.item.tools.insert.block.comment",
+        "tools.insert.block.comment",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.block.center",
+        "tools.insert.block.center",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.block.quote",
+        "tools.insert.block.quote",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.insert.block.verse",
+        "tools.insert.block.verse",
+        "",
+    ),
 ];
 
 const TOOLS_INSERT: &[Item] = &[
@@ -561,8 +1002,16 @@ const TOOLS_INSERT: &[Item] = &[
 /// Checksum digests, grouped under Tools → Checksum. Each replaces the selection
 /// (or whole buffer) with its hex digest.
 const TOOLS_CHECKSUM: &[Item] = &[
-    Item::leaf("menu.item.tools.checksum.sha256", "tools.checksum.sha256", ""),
-    Item::leaf("menu.item.tools.checksum.sha512", "tools.checksum.sha512", ""),
+    Item::leaf(
+        "menu.item.tools.checksum.sha256",
+        "tools.checksum.sha256",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.checksum.sha512",
+        "tools.checksum.sha512",
+        "",
+    ),
     Item::leaf("menu.name.md5", "tools.checksum.md5", ""),
     Item::leaf("menu.name.crc32", "tools.checksum.crc32", ""),
 ];
@@ -571,12 +1020,28 @@ const TOOLS_CHECKSUM: &[Item] = &[
 // names (CSV/TSV/JSON/…) route through shared `menu.name.*` keys that hold the
 // (locale-neutral) name; only Encode/Decode carry descriptive translations.
 const TOOLS_CONVERT_BASE64: &[Item] = &[
-    Item::leaf("menu.item.tools.convert.encode", "tools.convert.base64.encode", ""),
-    Item::leaf("menu.item.tools.convert.decode", "tools.convert.base64.decode", ""),
+    Item::leaf(
+        "menu.item.tools.convert.encode",
+        "tools.convert.base64.encode",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.convert.decode",
+        "tools.convert.base64.decode",
+        "",
+    ),
 ];
 const TOOLS_CONVERT_URL: &[Item] = &[
-    Item::leaf("menu.item.tools.convert.encode", "tools.convert.url.encode", ""),
-    Item::leaf("menu.item.tools.convert.decode", "tools.convert.url.decode", ""),
+    Item::leaf(
+        "menu.item.tools.convert.encode",
+        "tools.convert.url.encode",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.convert.decode",
+        "tools.convert.url.decode",
+        "",
+    ),
 ];
 const TOOLS_CONVERT_CSV: &[Item] = &[
     Item::leaf("menu.name.json", "tools.convert.csv.json", ""),
@@ -600,8 +1065,16 @@ const TOOLS_CONVERT_NUMBER: &[Item] = &[
     Item::leaf("menu.name.bin", "tools.convert.number.bin", ""),
     Item::leaf("menu.name.oct", "tools.convert.number.oct", ""),
 ];
-const TOOLS_CONVERT_HTML: &[Item] = &[Item::leaf("menu.name.markdown", "tools.convert.html.markdown", "")];
-const TOOLS_CONVERT_MARKDOWN: &[Item] = &[Item::leaf("menu.name.html", "tools.convert.markdown.html", "")];
+const TOOLS_CONVERT_HTML: &[Item] = &[Item::leaf(
+    "menu.name.markdown",
+    "tools.convert.html.markdown",
+    "",
+)];
+const TOOLS_CONVERT_MARKDOWN: &[Item] = &[Item::leaf(
+    "menu.name.html",
+    "tools.convert.markdown.html",
+    "",
+)];
 
 /// ditaa ASCII-art shapes, grouped under Tools → Draw. Each inserts an ASCII
 /// diagram fragment at the cursor (see <https://ditaa.sourceforge.net/>).
@@ -616,10 +1089,22 @@ const TOOLS_DRAW: &[Item] = &[
     Item::leaf("menu.item.tools.draw.dashed_h", "tools.draw.dashed_h", ""),
     Item::leaf("menu.item.tools.draw.dashed_v", "tools.draw.dashed_v", ""),
     SEP,
-    Item::leaf("menu.item.tools.draw.arrow_right", "tools.draw.arrow_right", ""),
-    Item::leaf("menu.item.tools.draw.arrow_left", "tools.draw.arrow_left", ""),
+    Item::leaf(
+        "menu.item.tools.draw.arrow_right",
+        "tools.draw.arrow_right",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.draw.arrow_left",
+        "tools.draw.arrow_left",
+        "",
+    ),
     Item::leaf("menu.item.tools.draw.arrow_up", "tools.draw.arrow_up", ""),
-    Item::leaf("menu.item.tools.draw.arrow_down", "tools.draw.arrow_down", ""),
+    Item::leaf(
+        "menu.item.tools.draw.arrow_down",
+        "tools.draw.arrow_down",
+        "",
+    ),
     Item::leaf("menu.item.tools.draw.point", "tools.draw.point", ""),
     SEP,
     Item::leaf("menu.item.tools.draw.flow", "tools.draw.flow", ""),
@@ -628,8 +1113,16 @@ const TOOLS_DRAW: &[Item] = &[
 
 /// In-place reformatters, grouped under Tools → Format.
 const TOOLS_FORMAT: &[Item] = &[
-    Item::leaf("menu.item.tools.format.json_pretty", "tools.format.json_pretty", ""),
-    Item::leaf("menu.item.tools.format.json_minify", "tools.format.json_minify", ""),
+    Item::leaf(
+        "menu.item.tools.format.json_pretty",
+        "tools.format.json_pretty",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.format.json_minify",
+        "tools.format.json_minify",
+        "",
+    ),
     Item::leaf("menu.name.yaml", "tools.format.yaml", ""),
     Item::leaf("menu.name.toml", "tools.format.toml", ""),
 ];
@@ -684,9 +1177,17 @@ const TOOLS: &[Item] = &[
     Item::sub("menu.item.tools.convert", TOOLS_CONVERT),
     Item::sub("menu.item.tools.format", TOOLS_FORMAT),
     Item::sub("menu.item.tools.draw", TOOLS_DRAW),
-    Item::leaf("menu.item.tools.color_converter", "tools.color_converter", ""),
+    Item::leaf(
+        "menu.item.tools.color_converter",
+        "tools.color_converter",
+        "",
+    ),
     Item::leaf("menu.item.tools.convert.unit", "tools.convert.unit", ""),
-    Item::leaf("menu.item.tools.markdown_preview", "tools.markdown_preview", ""),
+    Item::leaf(
+        "menu.item.tools.markdown_preview",
+        "tools.markdown_preview",
+        "",
+    ),
     Item::leaf("menu.item.tools.qrcode", "tools.qrcode", ""),
     Item::leaf("menu.item.tools.snippets", "tools.snippets", ""),
     SEP,
@@ -706,8 +1207,16 @@ const TOOLS: &[Item] = &[
 /// Language-server (LSP) actions, grouped under Tools → Language Server.
 const TOOLS_LSP: &[Item] = &[
     Item::leaf("menu.item.lsp.definition", "nav.goto_definition", "F12"),
-    Item::leaf("menu.item.lsp.implementation", "nav.goto_implementation", ""),
-    Item::leaf("menu.item.lsp.type_definition", "nav.goto_type_definition", ""),
+    Item::leaf(
+        "menu.item.lsp.implementation",
+        "nav.goto_implementation",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.lsp.type_definition",
+        "nav.goto_type_definition",
+        "",
+    ),
     SEP,
     Item::leaf("menu.item.lsp.references", "lsp.references", ""),
     Item::leaf("menu.item.lsp.call_hierarchy", "lsp.call_hierarchy", ""),
@@ -728,7 +1237,11 @@ const TOOLS_LSP: &[Item] = &[
     Item::leaf("menu.item.lsp.complete", "lsp.complete", "Ctrl Space"),
     SEP,
     Item::leaf("menu.item.lsp.document_symbols", "lsp.document_symbols", ""),
-    Item::leaf("menu.item.lsp.workspace_symbols", "lsp.workspace_symbols", ""),
+    Item::leaf(
+        "menu.item.lsp.workspace_symbols",
+        "lsp.workspace_symbols",
+        "",
+    ),
     SEP,
     Item::leaf("menu.item.lsp.diagnostics", "lsp.diagnostics", ""),
 ];
@@ -832,6 +1345,54 @@ const GIT: &[Item] = &[
     Item::leaf("menu.item.git.fetch", "git.fetch", ""),
 ];
 
+/// Revision-history views, grouped under JJ → Log.
+const JJ_LOG: &[Item] = &[
+    Item::leaf("menu.item.jj.log", "jj.log", ""),
+    Item::leaf("menu.item.jj.log_all", "jj.log_all", ""),
+    Item::leaf("menu.item.jj.op_log", "jj.op_log", ""),
+];
+
+/// Bookmark commands (jj's named pointers, akin to git branches), grouped under
+/// JJ → Bookmark.
+const JJ_BOOKMARK: &[Item] = &[
+    Item::leaf("menu.item.jj.bookmark_create", "jj.bookmark_create", ""),
+    Item::leaf("menu.item.jj.bookmark_set", "jj.bookmark_set", ""),
+    Item::leaf("menu.item.jj.bookmark_delete", "jj.bookmark_delete", ""),
+    Item::leaf("menu.item.jj.bookmark_list", "jj.bookmark_list", ""),
+];
+
+/// Git-remote commands (`jj git …`), grouped under JJ → Git.
+const JJ_REMOTE: &[Item] = &[
+    Item::leaf("menu.item.jj.git_push", "jj.git_push", ""),
+    Item::leaf("menu.item.jj.git_fetch", "jj.git_fetch", ""),
+];
+
+/// Jujutsu (jj) version control — a Git-compatible VCS. Mirrors the Git menu's
+/// purpose using `jj` commands; output streams into the bottom dock.
+const JJ: &[Item] = &[
+    Item::leaf("menu.item.jj.init", "jj.init", ""),
+    Item::leaf("menu.item.jj.clone", "jj.clone", ""),
+    Item::sub("menu.item.jj.bookmark", JJ_BOOKMARK),
+    SEP,
+    Item::leaf("menu.item.jj.status", "jj.status", ""),
+    Item::leaf("menu.item.jj.diff", "jj.diff", ""),
+    Item::leaf("menu.item.jj.show", "jj.show", ""),
+    Item::sub("menu.item.jj.log", JJ_LOG),
+    SEP,
+    Item::leaf("menu.item.jj.new", "jj.new", ""),
+    Item::leaf("menu.item.jj.describe", "jj.describe", ""),
+    Item::leaf("menu.item.jj.commit", "jj.commit", ""),
+    Item::leaf("menu.item.jj.edit", "jj.edit", ""),
+    SEP,
+    Item::leaf("menu.item.jj.squash", "jj.squash", ""),
+    Item::leaf("menu.item.jj.abandon", "jj.abandon", ""),
+    Item::leaf("menu.item.jj.restore", "jj.restore", ""),
+    Item::leaf("menu.item.jj.rebase", "jj.rebase", ""),
+    SEP,
+    Item::leaf("menu.item.jj.undo", "jj.undo", ""),
+    Item::sub("menu.item.jj.git", JJ_REMOTE),
+];
+
 /// Headline structure commands, grouped under Org → Headline.
 const ORG_HEADLINE: &[Item] = &[
     Item::leaf("menu.item.org.promote", "org.promote", ""),
@@ -850,9 +1411,17 @@ const ORG_EXPORT: &[Item] = &[
 /// Org-roam daily-note commands, grouped under Org → Roam → Dailies.
 const ORG_ROAM_DAILIES: &[Item] = &[
     Item::leaf("menu.item.org.roam.dailies_today", "roam.dailies_today", ""),
-    Item::leaf("menu.item.org.roam.dailies_capture", "roam.dailies_capture", ""),
+    Item::leaf(
+        "menu.item.org.roam.dailies_capture",
+        "roam.dailies_capture",
+        "",
+    ),
     Item::leaf("menu.item.org.roam.dailies_date", "roam.dailies_date", ""),
-    Item::leaf("menu.item.org.roam.dailies_calendar", "roam.dailies_calendar", ""),
+    Item::leaf(
+        "menu.item.org.roam.dailies_calendar",
+        "roam.dailies_calendar",
+        "",
+    ),
 ];
 
 /// Org-roam node-metadata commands, grouped under Org → Roam → Metadata.
@@ -870,7 +1439,11 @@ const ORG_ROAM: &[Item] = &[
     SEP,
     Item::leaf("menu.item.org.roam.capture", "roam.capture", ""),
     Item::leaf("menu.item.org.roam.backlinks", "roam.backlinks", ""),
-    Item::leaf("menu.item.org.roam.backlinks_follow", "roam.backlinks_follow", ""),
+    Item::leaf(
+        "menu.item.org.roam.backlinks_follow",
+        "roam.backlinks_follow",
+        "",
+    ),
     SEP,
     Item::sub("menu.item.org.roam.dailies", ORG_ROAM_DAILIES),
     Item::sub("menu.item.org.roam.metadata", ORG_ROAM_METADATA),
@@ -886,26 +1459,58 @@ const ORG_NODE: &[Item] = &[
     Item::leaf("menu.item.org.node.find", "roam.node_find", ""),
     Item::leaf("menu.item.org.node.insert_link", "roam.node_insert", ""),
     Item::leaf("menu.item.org.node.link_complete", "roam.link_complete", ""),
-    Item::leaf("menu.item.org.node.insert_transclusion", "node.insert_transclusion", ""),
+    Item::leaf(
+        "menu.item.org.node.insert_transclusion",
+        "node.insert_transclusion",
+        "",
+    ),
     Item::leaf("menu.item.org.node.random", "roam.node_random", ""),
     SEP,
     Item::leaf("menu.item.org.node.nodeify", "node.nodeify", ""),
-    Item::leaf("menu.item.org.node.extract_subtree", "node.extract_subtree", ""),
+    Item::leaf(
+        "menu.item.org.node.extract_subtree",
+        "node.extract_subtree",
+        "",
+    ),
     SEP,
     Item::leaf("menu.item.org.node.backlinks", "roam.backlinks", ""),
     Item::leaf("menu.item.org.node.dead_links", "node.dead_links", ""),
     SEP,
-    Item::leaf("menu.item.org.node.rename_by_title", "node.rename_by_title", ""),
+    Item::leaf(
+        "menu.item.org.node.rename_by_title",
+        "node.rename_by_title",
+        "",
+    ),
     Item::leaf("menu.item.org.node.reset", "node.reset", ""),
 ];
 
 /// Org-contacts: insert a contact field into the current entry's drawer.
 const ORG_CONTACTS_FIELD: &[Item] = &[
-    Item::leaf("menu.item.org.contacts.email", "org.contacts.field.email", ""),
-    Item::leaf("menu.item.org.contacts.phone", "org.contacts.field.phone", ""),
-    Item::leaf("menu.item.org.contacts.address", "org.contacts.field.address", ""),
-    Item::leaf("menu.item.org.contacts.birthday", "org.contacts.field.birthday", ""),
-    Item::leaf("menu.item.org.contacts.nickname", "org.contacts.field.nickname", ""),
+    Item::leaf(
+        "menu.item.org.contacts.email",
+        "org.contacts.field.email",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.org.contacts.phone",
+        "org.contacts.field.phone",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.org.contacts.address",
+        "org.contacts.field.address",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.org.contacts.birthday",
+        "org.contacts.field.birthday",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.org.contacts.nickname",
+        "org.contacts.field.nickname",
+        "",
+    ),
     Item::leaf("menu.item.org.contacts.note", "org.contacts.field.note", ""),
 ];
 
@@ -917,7 +1522,11 @@ const ORG_CONTACTS: &[Item] = &[
     SEP,
     Item::sub("menu.item.org.contacts.insert_field", ORG_CONTACTS_FIELD),
     SEP,
-    Item::leaf("menu.item.org.contacts.birthdays", "org.contacts.birthdays", ""),
+    Item::leaf(
+        "menu.item.org.contacts.birthdays",
+        "org.contacts.birthdays",
+        "",
+    ),
     Item::leaf("menu.item.org.contacts.vcard", "org.contacts.vcard", ""),
 ];
 
@@ -931,7 +1540,11 @@ const ORG: &[Item] = &[
     Item::sub("menu.item.org.headline", ORG_HEADLINE),
     Item::leaf("menu.item.org.cycle_todo", "org.cycle_todo", ""),
     Item::leaf("menu.item.org.toggle_checkbox", "org.toggle_checkbox", ""),
-    Item::leaf("menu.item.org.update_statistics", "org.update_statistics", ""),
+    Item::leaf(
+        "menu.item.org.update_statistics",
+        "org.update_statistics",
+        "",
+    ),
     SEP,
     Item::leaf("menu.item.org.clock_in", "org.clock_in", ""),
     Item::leaf("menu.item.org.clock_out", "org.clock_out", ""),
@@ -999,7 +1612,8 @@ fn locale_submenu() -> &'static [Item] {
     let items: Vec<Item> = vix_locale_model::LOCALES
         .iter()
         .map(|l| {
-            let action: &'static str = Box::leak(format!("view.locale:{}", l.code).into_boxed_str());
+            let action: &'static str =
+                Box::leak(format!("view.locale:{}", l.code).into_boxed_str());
             Item::leaf(l.name, action, "")
         })
         .collect();
@@ -1034,7 +1648,11 @@ const RUN: &[Item] = &[
     Item::leaf("menu.item.run.start", "run.start", ""),
     Item::leaf("menu.item.run.stop", "run.stop", ""),
     SEP,
-    Item::leaf("menu.item.run.toggle_breakpoint", "run.toggle_breakpoint", ""),
+    Item::leaf(
+        "menu.item.run.toggle_breakpoint",
+        "run.toggle_breakpoint",
+        "",
+    ),
     SEP,
     Item::leaf("menu.item.run.continue", "run.continue", ""),
     Item::leaf("menu.item.run.step_over", "run.step_over", ""),
@@ -1063,18 +1681,58 @@ fn build_menus() -> Vec<MenuDef> {
         .into_boxed_slice(),
     );
     vec![
-        MenuDef { name: "menu.vix", items: VIX },
-        MenuDef { name: "menu.file", items: FILE },
-        MenuDef { name: "menu.edit", items: EDIT },
-        MenuDef { name: "menu.view", items: view_items },
-        MenuDef { name: "menu.go", items: GO },
-        MenuDef { name: "menu.run", items: RUN },
-        MenuDef { name: "menu.ai", items: AI },
-        MenuDef { name: "menu.db", items: DB },
-        MenuDef { name: "menu.git", items: GIT },
-        MenuDef { name: "menu.org", items: ORG },
-        MenuDef { name: "menu.tools", items: TOOLS },
-        MenuDef { name: "menu.help", items: HELP },
+        MenuDef {
+            name: "menu.vix",
+            items: VIX,
+        },
+        MenuDef {
+            name: "menu.file",
+            items: FILE,
+        },
+        MenuDef {
+            name: "menu.edit",
+            items: EDIT,
+        },
+        MenuDef {
+            name: "menu.view",
+            items: view_items,
+        },
+        MenuDef {
+            name: "menu.go",
+            items: GO,
+        },
+        MenuDef {
+            name: "menu.run",
+            items: RUN,
+        },
+        MenuDef {
+            name: "menu.ai",
+            items: AI,
+        },
+        MenuDef {
+            name: "menu.db",
+            items: DB,
+        },
+        MenuDef {
+            name: "menu.jj",
+            items: JJ,
+        },
+        MenuDef {
+            name: "menu.git",
+            items: GIT,
+        },
+        MenuDef {
+            name: "menu.org",
+            items: ORG,
+        },
+        MenuDef {
+            name: "menu.tools",
+            items: TOOLS,
+        },
+        MenuDef {
+            name: "menu.help",
+            items: HELP,
+        },
     ]
 }
 
@@ -1269,11 +1927,12 @@ impl Menu {
             return;
         }
         if let Some(it) = self.item
-            && let Some(sub) = menus()[i].items[it].submenu {
-                self.sub_open = true;
-                self.sub = Some(first_selectable(sub));
-                return;
-            }
+            && let Some(sub) = menus()[i].items[it].submenu
+        {
+            self.sub_open = true;
+            self.sub = Some(first_selectable(sub));
+            return;
+        }
         let n = menus().len();
         self.open_index((i + 1) % n);
     }
@@ -1433,13 +2092,37 @@ impl Menu {
 mod tests {
     use super::*;
 
+    /// Hover help resolves via the `{label}.help` i18n convention: a real key
+    /// yields text, a bogus label yields `None`, and separators never have help.
+    #[test]
+    fn help_text_present_for_known_absent_for_bogus() {
+        assert_eq!(help_text("menu.item.__no_such_item__"), None);
+        // `menu.file` / `menu.item.file.new` carry `.help` keys in locales/app.yml.
+        let file = menus()
+            .iter()
+            .find(|m| m.name == "menu.file")
+            .expect("file menu");
+        assert!(file.help().is_some(), "top-level menu help present");
+        let new = file
+            .items
+            .iter()
+            .find(|it| it.label == "menu.item.file.new")
+            .expect("file.new item");
+        assert!(new.help().is_some(), "menu item help present");
+        assert_eq!(SEP.help(), None, "separators have no help");
+    }
+
     /// The View → Keymap submenu must stay in sync with the keymap model: one
     /// item per keymap, each action `view.keymap:<id>` in list order.
     #[test]
     fn keymap_submenu_matches_model() {
         let ids: Vec<&str> = VIEW_KEYMAP
             .iter()
-            .map(|it| it.action.strip_prefix("view.keymap:").expect("keymap action prefix"))
+            .map(|it| {
+                it.action
+                    .strip_prefix("view.keymap:")
+                    .expect("keymap action prefix")
+            })
             .collect();
         let model: Vec<&str> = vix_keymap_model::KEYMAPS.iter().map(|k| k.id).collect();
         assert_eq!(ids, model);
@@ -1448,7 +2131,10 @@ mod tests {
     /// Index of the Tools menu and of its Generate item, derived from the live
     /// menu so the test is independent of ordering.
     fn tools_and_generate() -> (usize, usize) {
-        let tools = menus().iter().position(|m| m.name == "menu.tools").expect("tools menu");
+        let tools = menus()
+            .iter()
+            .position(|m| m.name == "menu.tools")
+            .expect("tools menu");
         let gen_idx = menus()[tools]
             .items
             .iter()
@@ -1464,7 +2150,9 @@ mod tests {
         let actions: Vec<&str> = TOOLS_INSERT_UUID.iter().map(|it| it.action).collect();
         assert_eq!(
             actions,
-            (1..=8).map(|n| format!("tools.insert.uuid.v{n}")).collect::<Vec<_>>()
+            (1..=8)
+                .map(|n| format!("tools.insert.uuid.v{n}"))
+                .collect::<Vec<_>>()
         );
     }
 
@@ -1505,7 +2193,15 @@ mod tests {
             .and_then(|it| it.submenu)
             .expect("Edit has a Macro submenu");
         let actions: Vec<&str> = mac.iter().map(|it| it.action).collect();
-        assert_eq!(actions, vec!["macro.record", "macro.play", "macro.save", "macro.play_saved"]);
+        assert_eq!(
+            actions,
+            vec![
+                "macro.record",
+                "macro.play",
+                "macro.save",
+                "macro.play_saved"
+            ]
+        );
         // The macro items no longer sit directly in the Edit menu.
         assert!(!edit.items.iter().any(|it| it.action == "macro.record"));
     }
@@ -1544,7 +2240,12 @@ mod tests {
         m.item = Some(gen_idx);
         m.right();
         assert!(m.sub_open, "submenu opens");
-        assert_eq!(m.sub, Some(first_selectable(menus()[tools].items[gen_idx].submenu.unwrap())));
+        assert_eq!(
+            m.sub,
+            Some(first_selectable(
+                menus()[tools].items[gen_idx].submenu.unwrap()
+            ))
+        );
     }
 
     #[test]
@@ -1555,7 +2256,10 @@ mod tests {
         let first = first_selectable(menus()[0].items);
         assert_eq!(m.item, Some(first));
         m.up(); // moves up to the title (nothing highlighted)
-        assert_eq!(m.item, None, "Up from the first item highlights the menu title");
+        assert_eq!(
+            m.item, None,
+            "Up from the first item highlights the menu title"
+        );
         m.up(); // from the title, Up wraps to the last item
         assert_eq!(m.item, Some(prev_selectable(menus()[0].items, 0)));
     }

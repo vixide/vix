@@ -7,7 +7,6 @@
 //! data — no filesystem IO here.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
@@ -36,7 +35,11 @@ impl Panel {
     /// Open the browser over `contacts`.
     #[must_use]
     pub fn open(contacts: Vec<Contact>) -> Self {
-        Panel { contacts, selected: 0, scroll: 0 }
+        Panel {
+            contacts,
+            selected: 0,
+            scroll: 0,
+        }
     }
 
     /// Number of contacts.
@@ -118,8 +121,14 @@ mod tests {
 
     fn sample() -> Vec<Contact> {
         vec![
-            Contact { name: "Ada".into(), path: "/c/ada.vcf".into() },
-            Contact { name: "Grace".into(), path: "/c/grace.vcf".into() },
+            Contact {
+                name: "Ada".into(),
+                path: "/c/ada.vcf".into(),
+            },
+            Contact {
+                name: "Grace".into(),
+                path: "/c/grace.vcf".into(),
+            },
         ]
     }
 

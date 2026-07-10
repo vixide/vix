@@ -9,12 +9,11 @@
 //! clock in the application-wide active time zone.
 
 #![warn(clippy::pedantic)]
-
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-use jiff::tz::{Offset, TimeZone};
 use jiff::Zoned;
+use jiff::tz::{Offset, TimeZone};
 
 /// Current time in the system's local time zone.
 #[must_use]
@@ -79,7 +78,10 @@ pub fn iso_week_date(now: &Zoned) -> String {
 pub fn datetime_at_offset(now: &Zoned, offset_minutes: i32) -> String {
     let secs = (offset_minutes * 60).clamp(-93_599, 93_599);
     let offset = Offset::from_seconds(secs).unwrap_or(Offset::UTC);
-    now.timestamp().to_zoned(TimeZone::fixed(offset)).strftime("%Y-%m-%d %H:%M:%S").to_string()
+    now.timestamp()
+        .to_zoned(TimeZone::fixed(offset))
+        .strftime("%Y-%m-%d %H:%M:%S")
+        .to_string()
 }
 
 /// The active zone's current wall clock (`YYYY-MM-DD HH:MM:SS`), using its
@@ -124,10 +126,22 @@ impl Clock {
     #[must_use]
     pub fn rows(&self, now: &Zoned) -> Vec<Row> {
         vec![
-            Row { key: "local", value: local_datetime(now) },
-            Row { key: "utc", value: utc_iso(now) },
-            Row { key: "iso_week", value: iso_week_date(now) },
-            Row { key: "zone", value: active_zone_datetime(now) },
+            Row {
+                key: "local",
+                value: local_datetime(now),
+            },
+            Row {
+                key: "utc",
+                value: utc_iso(now),
+            },
+            Row {
+                key: "iso_week",
+                value: iso_week_date(now),
+            },
+            Row {
+                key: "zone",
+                value: active_zone_datetime(now),
+            },
         ]
     }
 
@@ -158,7 +172,10 @@ impl Clock {
     /// The highlighted row's value at instant `now` (for insertion).
     #[must_use]
     pub fn selected_value(&self, now: &Zoned) -> Option<String> {
-        self.rows(now).into_iter().nth(self.selected).map(|r| r.value)
+        self.rows(now)
+            .into_iter()
+            .nth(self.selected)
+            .map(|r| r.value)
     }
 }
 
