@@ -7,9 +7,9 @@ use. Vix ships **no built-in server**: you point it at a server you have
 installed (e.g. `rust-analyzer`, `pyright`, `gopls`, `typescript-language-server`),
 and Vix manages the process and protocol.
 
-The protocol core lives in the `lsp_core` module (JSON-RPC framing, request
+The protocol core lives in the `vix-lsp-core` crate (JSON-RPC framing, request
 builders, response parsers, and char↔UTF-16/UTF-8 position maths); the process IO
-and editor wiring live in `src/lsp.rs`. The authoritative method list is
+and editor wiring live in the `vix-lsp` crate. The authoritative method list is
 [`crates/vix-lsp/spec/language-server-protocol.tsv`](../../crates/vix-lsp/spec/language-server-protocol.tsv).
 
 ## Configuration

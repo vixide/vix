@@ -5,6 +5,25 @@ text files, edits them, saves them.
 
 Nerd Font icons, monospace.
 
+## Specification-driven development
+
+The specification is the **single source of truth**. Vix is built
+specification-first: each behavior is described in a spec, and the code
+implements the spec. When code and spec disagree, decide which is correct and
+make them match — edit the spec when intent changes, edit the code when it
+drifted.
+
+Specs are **per crate**. Vix is a Cargo workspace: a thin App shell (root package
+`vix`, `src/`) over ~98 `vix-*` member crates under `crates/`. Each member crate
+owns its spec at `crates/<crate>/spec/index.md` (multi-topic crates add
+`spec/<topic>/index.md` sub-specs), so a crate and its specification travel
+together. This repo-root `spec/` holds only the cross-cutting / app-level and
+build/meta specs that no single crate owns — this overview, `navigation`,
+`comparisons`, `tools`, `license`, `rust-clippy-pedantic`, `test`, and the like.
+See [`AGENTS.md`](../../AGENTS.md) and
+[`AGENTS/workflow.md`](../../AGENTS/workflow.md) for the workflow, and
+[`AGENTS/share/crate-map.md`](../../AGENTS/share/crate-map.md) for the full map.
+
 ## Crates
 
 Vix is built on a deliberately small, version-compatible crate set. The whole
