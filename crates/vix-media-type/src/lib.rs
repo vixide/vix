@@ -44,7 +44,7 @@ pub fn all() -> &'static [MediaType] {
     static TABLE: OnceLock<Vec<MediaType>> = OnceLock::new();
     TABLE.get_or_init(|| {
         // The spec TSV is the single source of truth (see spec/media-types/).
-        include_str!("../../../spec/media-types/media-types.tsv")
+        include_str!("../../../../spec/media-types/media-types.tsv")
             .lines()
             .skip(1)
             .filter_map(parse_line)
