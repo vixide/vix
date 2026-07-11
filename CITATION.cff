@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+title: Vix IDE
+url: https://github.com/vixide/vix
+date-released: 2026-06-08T06:35:24Z
+message: >-
+  If you use this work and you want to cite it,
+  then you can use the metadata from this file.
+type: software
+authors:
+  - given-names: Joel Parker
+    family-names: Henderson
+    email: joel@joelparkerhenderson.com
+    affiliation: joelparkerhenderson.com
+    orcid: 'https://orcid.org/0009-0000-4681-282X'
+identifiers:
+  - type: url
+    value: 'https://github.com/vixide/vix'
+    description: Vix IDE: Modern text editor for the terminal written in Rust
+repository-artifact: https://crates.io/crates/vix
+repository-code: https://github.com/vixide/vix
+license:
+  - BSD-3-clause
+  - Apache-2.0
+  - MIT
+  - GPL-2.0-only
+  - GPL-3.0-only
+abstract: >-
+  Vix IDE is a modern text editor for the terminal written in Rust.
