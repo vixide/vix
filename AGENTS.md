@@ -7,15 +7,23 @@ This file is the entry point; see [`AGENTS/`](AGENTS/) for topic guides and
 ## What Vix is
 
 Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust IDE"),
-built on `ratatui`. It is a **single Cargo crate** (edition 2024, no workspace
-members): the application plus ~100 focused modules under `src/`, including the
-custom editor widget `editor_core`. See [`docs/architecture/index.md`](docs/architecture/index.md).
+built on `ratatui`. It is a **Cargo workspace** (edition 2024): a thin **App
+shell** (root package `vix`, `src/`) — CLI, event loop, `App` state, rendering,
+explorer — over ~98 focused **`vix-*` member crates** under `crates/`, including
+the custom editor widget `vix-editor-core`. `src/lib.rs` re-exports the member
+crates under short module names (`pub use vix_git as git;`), so `crate::git`,
+`crate::menu`, `crate::db` still name them. See
+[`docs/architecture/index.md`](docs/architecture/index.md).
 
 ## Source of truth
 
-`spec/*.md` is the **specification and the source of truth**. Development is
-spec-driven: when behavior and spec disagree, decide which is correct, then make
-them match — update the spec when intent changes, update the code when the code
+Specs are the **specification and the source of truth**, and development is
+specification-driven. Each member crate owns its spec at
+`crates/<crate>/spec/index.md` (multi-topic crates add `spec/<topic>/index.md`);
+the repo-root `spec/` holds only cross-cutting / app-level and build/meta specs
+(`index`, `navigation`, `comparisons`, `license`, `tools`, `rust-clippy-pedantic`,
+…). When behavior and spec disagree, decide which is correct, then make them
+match — update the spec when intent changes, update the code when the code
 drifted. Keep specs and implementation in sync.
 
 ## Build, test, lint
@@ -34,8 +42,8 @@ grammars are feature-gated: `--features syntax-all` for every grammar,
 
 ## Hard rules enforced by the build
 
-The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
-(see `src/lib.rs`). Therefore:
+Every crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
+(see each crate's `src/lib.rs`). Therefore:
 
 - **Every public item needs a doc comment.** A new `pub fn`/`struct`/`field`
   without `///` fails the build.
@@ -75,28 +83,29 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 
 | You want to…                         | Go to…                                                       |
 | ------------------------------------ | ------------------------------------------------------------ |
-| Add/route a command                  | `src/app.rs` (`run_action`), `src/menu.rs`, `src/palette.rs` |
+| Add/route a command                  | `src/app.rs` (`run_action`), `crates/vix-menu/`, `crates/vix-palette/` |
 | Change rendering                     | `src/ui.rs`                                                  |
 | Add/translate UI text                | `locales/app.yml` (+ `t!` at the call site)                  |
-| Add a setting                        | `src/settings.rs`                                            |
-| Change the editor widget             | `src/editor_core/` (engine reused; widget is Vix's)         |
-| Change soft-wrap / bracket rendering | `src/editor_core/wrap.rs`, `src/editor_core/brackets.rs`    |
-| Change theme colors/model            | `src/theme_model.rs`                                        |
-| Change available UI languages        | `src/locale_model.rs`                                       |
-| Change keyboard navigation styles    | `src/keymap_model.rs` + keymap dispatch in `src/app.rs`     |
-| Change the calendar                  | `src/calendar_panel.rs`                                     |
-| Change spell checking                | `src/spellcheck.rs` + wiring in `src/app.rs` / `src/ui.rs`  |
-| Change git status/diff/staging       | `src/git.rs` + wiring in `src/app.rs` / `src/ui.rs`         |
-| Change the find/replace engine       | `src/find_panel.rs` (matches/replace_all/unescape/PathFilter) |
-| Change LSP support                   | `src/lsp.rs` (host) + `src/lsp_core/` (protocol)            |
-| Change the database workbench        | `src/db/` (module tree; `crates/vix-db/spec`)                          |
+| Add a setting                        | `crates/vix-settings/`                                       |
+| Change the editor widget             | `crates/vix-editor-core/` (engine reused; widget is Vix's)  |
+| Change soft-wrap / bracket rendering | `crates/vix-editor-core/src/wrap.rs`, `.../brackets.rs`     |
+| Change theme colors/model            | `crates/vix-theme/`, `crates/vix-theme-model/`             |
+| Change available UI languages        | `crates/vix-locale-model/`, `crates/vix-i18n/`             |
+| Change keyboard navigation styles    | `crates/vix-keymap-model/` + keymap dispatch in `src/app.rs` |
+| Change the calendar                  | `crates/vix-calendar-panel/`                               |
+| Change spell checking                | `crates/vix-spellcheck/` + wiring in `src/app.rs` / `src/ui.rs` |
+| Change git status/diff/staging       | `crates/vix-git/` + wiring in `src/app.rs` / `src/ui.rs`   |
+| Change the find/replace engine       | `crates/vix-find-panel/` (matches/replace_all/unescape/PathFilter) |
+| Change LSP support                   | `crates/vix-lsp/` (host) + `crates/vix-lsp-core/` (protocol) |
+| Change the database workbench        | `crates/vix-db/` (module tree + `crates/vix-db/spec`)      |
 
 See [`AGENTS/share/crate-map.md`](AGENTS/share/crate-map.md) for the full map.
 
 ## Making a change (checklist)
 
-1. Read the relevant `spec/*.md`; update it if intent is changing.
-2. Implement; keep editing logic out of `src/ui.rs`.
+1. Read the owning crate's `spec/index.md` (or the cross-cutting root `spec/`);
+   update it if intent is changing.
+2. Implement in the owning crate; keep editing logic out of `src/ui.rs`.
 3. Internationalize any new text (YAML key + `t!`).
 4. Document every new public item (`deny(missing_docs)`).
 5. Add/extend tests (`tests/integration.rs` or a module's unit tests).

@@ -5,16 +5,16 @@ on top.
 
 ## Documentation
 
-- `#![deny(missing_docs)]` is on at the crate root. Document all public items
+- `#![deny(missing_docs)]` is on at every crate root. Document all public items
   with `///`; module headers use `//!`.
 - Doc comments say *what and why*, briefly. Implementation details that would
   surprise a reader get an inline `//` comment explaining the *why*.
 
 ## Lints
 
-- `#![forbid(unsafe_code)]` and `#![warn(clippy::pedantic)]` at the crate root,
+- `#![forbid(unsafe_code)]` and `#![warn(clippy::pedantic)]` at every crate root,
   and `#![warn(clippy::pedantic)]` is repeated in **every module file** (lints are
-  per-module). Keep `cargo clippy --all-targets -- -D warnings` clean.
+  per-module). Keep `cargo clippy --workspace --all-targets -- -D warnings` clean.
 - **No blanket allows.** There is no `#![allow(clippy::pedantic)]` and no
   `#![allow(missing_docs)]`; fix findings in code (saturating `try_from` casts,
   extract helpers for `too_many_lines`, context structs for `too_many_arguments`,
@@ -37,8 +37,9 @@ on top.
 
 ## Actions
 
-- Commands are string ids dispatched by `App::run_action`. Menu (`src/menu.rs`)
-  and palette (`src/palette.rs`) reference the same ids.
+- Commands are string ids dispatched by `App::run_action` (in the App shell,
+  `src/app.rs`). The menu (`crates/vix-menu/`) and palette (`crates/vix-palette/`,
+  re-exported as `crate::menu` / `crate::palette`) reference the same ids.
 - To add a command: add the `run_action` arm, then reference it from a menu item
   and/or `palette::COMMANDS`, and add its i18n label key.
 

@@ -1,12 +1,14 @@
 # Spec-driven workflow
 
-Vix is developed specification-first. The `spec/*.md` files describe intended
-behavior and are the source of truth; the code implements them.
+Vix is developed specification-first. Each member crate's `spec/index.md`
+describes that crate's intended behavior and is the source of truth; the code
+implements it. Cross-cutting / app-level specs live at the repo-root `spec/`.
 
 ## The loop
 
-1. **Read the spec.** Find the relevant `spec/*.md` (see the map below). If the
-   change alters intended behavior, edit the spec first so it stays authoritative.
+1. **Read the spec.** Find the owning crate's `spec/index.md` (or the relevant
+   root `spec/` topic — see the map below). If the change alters intended
+   behavior, edit the spec first so it stays authoritative.
 2. **Implement** in the smallest fitting module. Keep editing/state logic in the
    library; keep rendering in `src/ui.rs`.
 3. **Internationalize** any new user-facing text: add the key(s) to
@@ -21,8 +23,9 @@ behavior and are the source of truth; the code implements them.
 
 Drift is when code, spec, and docs disagree. To audit:
 
-- Compare each `spec/*/index.md` against the implementation it describes.
-- Compare `README.md` / `docs/*` against current features and module names.
+- Compare each crate's `spec/index.md` against the crate it describes (and the
+  root `spec/` topics against the app shell).
+- Compare `README.md` / `docs/*` against current features and crate/module names.
 - Check that every action id used by a menu/palette has a `run_action` arm and an
   i18n label key.
 - Check that user-facing strings go through `t!`.
@@ -31,11 +34,12 @@ Fix drift by aligning all three (code, spec, docs).
 
 ## Spec map
 
-Each spec lives at `spec/<name>/index.md`. Notable ones:
+Feature specs live at `crates/<crate>/spec/index.md`; cross-cutting ones stay at
+the repo-root `spec/`. Notable ones:
 
 | Spec                              | Covers                                       |
 | --------------------------------- | -------------------------------------------- |
-| `spec/index.md`                   | Overview, build/run, status                  |
+| `spec/index`                      | Overview, dependency crates, build/run       |
 | `crates/vix-menu/spec`                      | Menu bar structure and items                 |
 | `crates/vix-keymap-model/spec`                    | Keymaps: Apple/VSCode/Emacs/Vi/Spacemacs/IntelliJ/Eclipse |
 | `spec/navigation`                 | Position history, go-to-definition/symbol    |

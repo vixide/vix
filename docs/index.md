@@ -6,8 +6,8 @@ A map of the documentation in this repository.
 
 Highlights:
 
-- [Architecture](architecture/index.md) — single-crate module layout, event
-  flow, rendering, theming, i18n, configuration, testing.
+- [Architecture](architecture/index.md) — workspace layout (App shell + `vix-*`
+  member crates), event flow, rendering, theming, i18n, configuration, testing.
 - [Keybindings](keybindings/index.md) — every keyboard shortcut and mouse
   gesture, including keymaps.
 - [Configuration](configuration/index.md) — settings file, every key, CLI
@@ -47,13 +47,14 @@ Highlights:
 - Markup: [Org](org/index.md) (Org-mode basics — headlines, TODO, export).
 - Reference: [Media Types](media-types/index.md) (MIME picker by type/extension).
 
-## Specification (`spec/`) — source of truth
+## Specification — source of truth
 
-All specs live under `spec/`, one directory per topic or action
-(`spec/<name>/index.md`).
+Specs are **per crate**: each member crate owns `crates/<crate>/spec/index.md`
+(multi-topic crates add `spec/<topic>/index.md` sub-specs). The repo-root
+[`spec/`](spec/) holds only cross-cutting / app-level and build/meta specs.
 
-- Overview: [spec/index.md](spec/index.md). Each spec lives at
-  `spec/<name>/index.md`.
+- Overview: [spec/index](spec/index/index.md) — goals, dependency crates,
+  build/run.
 - Core: [menus](crates/vix-menu/spec/index.md) · [keyboard](crates/vix-keyboard-shortcut-panel/spec/index.md) ·
   [keymaps](crates/vix-keymap-model/spec/index.md) · [navigation](spec/navigation/index.md) ·
   [command-palette](crates/vix-palette/spec/index.md) ·
@@ -64,8 +65,9 @@ All specs live under `spec/`, one directory per topic or action
   [spellcheck](crates/vix-spellcheck/spec/index.md) · [case-change](crates/vix-case/spec/index.md) ·
   [themes](crates/vix-theme/spec/index.md) · [localization](crates/vix-i18n/spec/index.md) ·
   tools under [spec/tools/](spec/tools/) · [comparisons](spec/comparisons/index.md)
-- Per-action: one `spec/<action>/index.md` for each editor action in the catalog
-  (`crates/vix-editor-core/spec/index.md`).
+- Editor actions: one `spec/<action>/index.md` per action under
+  [`crates/vix-editor/spec/`](crates/vix-editor/spec/), catalogued in
+  [`crates/vix-editor-core/spec/index.md`](crates/vix-editor-core/spec/index.md).
 
 ## Contributor & agent guidance (`AGENTS/`)
 

@@ -1,17 +1,22 @@
 # Vix™ Architecture
 
-## Shape: one crate, many modules
+## Shape: a workspace of focused crates
 
-Vix is a **single Cargo crate** (edition 2024, no workspace members): a library
-(`src/lib.rs`) with a thin binary (`src/main.rs`) on top. The binary owns only
-the CLI, the terminal lifecycle, the event loop, and process suspend; everything
-else is a module in the library. This keeps the editing logic
-terminal-independent, so it can be unit-tested and driven from examples without a
-real TTY (see `tests/integration.rs` and `examples/`).
+Vix is a **Cargo workspace** (edition 2024). The root package `vix` is a thin
+**App shell**: a library (`src/lib.rs`) with a thin binary (`src/main.rs`) on
+top. The binary owns only the CLI, the terminal lifecycle, the event loop, and
+process suspend; the shell library holds the `App` state, event routing,
+rendering (`src/ui.rs`), and the explorer. Everything else is a **`vix-*` member
+crate** under `crates/` — ~98 of them, each independently testable. This keeps
+the editing logic terminal-independent, so it can be unit-tested and driven from
+examples without a real TTY (see `tests/integration.rs` and `examples/`).
 
-Self-contained concerns live in their own modules under `src/` (formerly separate
-`vix-*` subcrates), each independently testable. The editor widget is the
-`editor_core` module; key examples:
+`src/lib.rs` **re-exports** each member crate under a short module name
+(`pub use vix_git as git;`, `pub use vix_menu as menu;`, …), so the rest of the
+code — and the tables below — reach them as `crate::git`, `crate::menu`,
+`crate::editor_core`, etc., whether they are App-shell modules or member crates.
+The editor widget is the `vix-editor-core` crate (`crate::editor_core`); key
+examples:
 
 | Module                       | Responsibility                                                        |
 | ---------------------------- | --------------------------------------------------------------------- |
@@ -23,12 +28,12 @@ Self-contained concerns live in their own modules under `src/` (formerly separat
 | `locale_model` / `keymap_model` | Available UI languages; keyboard navigation styles (Apple/VSCode/Emacs/Vi/Spacemacs/IntelliJ/Eclipse). |
 | `keyboard_shortcut_panel`    | The keyboard-help rows (key combo + i18n description key).            |
 
-The pattern for the panel/model modules is **data and logic in the module, host
-renders**: each exposes pure state and helpers; `src/ui.rs` draws them, and they
-return i18n *keys* (not translated text) so the host translates. See
-`AGENTS/share/crate-map.md` for the full module map.
+The pattern for the panel/model crates is **data and logic in the crate, host
+renders**: each exposes pure state and helpers; the App shell's `src/ui.rs` draws
+them, and they return i18n *keys* (not translated text) so the host translates.
+See `AGENTS/share/crate-map.md` for the full crate/module map.
 
-## Application modules (`src/`)
+## Core modules (App shell + re-exported crates)
 
 | Module           | Responsibility                                                       |
 | ---------------- | -------------------------------------------------------------------- |
