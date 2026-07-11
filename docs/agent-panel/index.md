@@ -34,7 +34,7 @@ The panel reuses the shared `spawn_ai` machinery: your message becomes the
 `{prompt}` in the `ai_command` template and the prior conversation is supplied on
 stdin as context. The reply is captured in the background and appended to the
 transcript when it arrives (the same async path the AI menu uses). See
-`spec/ai/index.md` and the [configuration](../configuration/index.md) docs for
+`crates/vix-ai-panel/spec/ai/index.md` and the [configuration](../configuration/index.md) docs for
 `ai_command`.
 
 ---

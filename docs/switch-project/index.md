@@ -18,10 +18,10 @@ When you switch, Vix:
   new root.
 
 Recent projects come from the same per-workspace session store described under
-[session restore](../../spec/session-restore/index.md); each workspace you open is
+[session restore](../../crates/vix-session/spec/index.md); each workspace you open is
 remembered automatically.
 
-See the specification at `spec/switch-project/index.md`.
+See the specification at `crates/vix-workspace/spec/index.md`.
 
 ---
 

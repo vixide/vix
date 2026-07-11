@@ -2,7 +2,7 @@
 //! filter state.
 //!
 //! Snippets are defined in JSON files (the VS Code shape — see
-//! `spec/snippets/index.md`) gathered from four scopes: bundled, global,
+//! `spec/index.md`) gathered from four scopes: bundled, global,
 //! media-type, and project. The tabstop syntax in a snippet body is parsed by
 //! [`vix_snippet_tool::parse`]; this module handles the files and the merge.
 

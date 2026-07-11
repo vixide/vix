@@ -36,19 +36,19 @@ Each spec lives at `spec/<name>/index.md`. Notable ones:
 | Spec                              | Covers                                       |
 | --------------------------------- | -------------------------------------------- |
 | `spec/index.md`                   | Overview, build/run, status                  |
-| `spec/menus`                      | Menu bar structure and items                 |
-| `spec/keymaps`                    | Keymaps: Apple/VSCode/Emacs/Vi/Spacemacs/IntelliJ/Eclipse |
+| `crates/vix-menu/spec`                      | Menu bar structure and items                 |
+| `crates/vix-keymap-model/spec`                    | Keymaps: Apple/VSCode/Emacs/Vi/Spacemacs/IntelliJ/Eclipse |
 | `spec/navigation`                 | Position history, go-to-definition/symbol    |
-| `spec/command-palette`            | Palette modes and behavior                   |
-| `spec/file-explorer`              | Explorer tree and file ops                   |
-| `spec/find-and-replace`           | Find/replace, workspace search, query-replace |
-| `spec/editor`                     | The editor widget (soft wrap, brackets, folds, …) |
-| `spec/lsp`, `spec/debugger`       | Language Server Protocol; DAP debugger        |
-| `spec/git-integration`            | Git status/diff/staging/conflicts            |
+| `crates/vix-palette/spec`            | Palette modes and behavior                   |
+| `crates/vix-fileops/spec`              | Explorer tree and file ops                   |
+| `crates/vix-query/spec`           | Find/replace, workspace search, query-replace |
+| `crates/vix-editor/spec`                     | The editor widget (soft wrap, brackets, folds, …) |
+| `crates/vix-lsp/spec`, `crates/vix-dap/spec`       | Language Server Protocol; DAP debugger        |
+| `crates/vix-git/spec/git-integration`            | Git status/diff/staging/conflicts            |
 | `spec/tools`                      | Tools menu (convert/generate/checksum/…)      |
-| `spec/snippets`, `spec/media-types` | JSON snippet scopes; the media-type catalog |
-| `spec/org`, `spec/edit-sql`       | Org-mode editing; the SQL edit surface        |
-| `spec/themes`                     | Theme model + custom JSON format             |
-| `spec/localization`               | Internationalization / languages             |
+| `crates/vix-snippets/spec`, `crates/vix-media-type/spec` | JSON snippet scopes; the media-type catalog |
+| `crates/vix-org/spec`, `crates/vix-edit-sql/spec`       | Org-mode editing; the SQL edit surface        |
+| `crates/vix-theme/spec`                     | Theme model + custom JSON format             |
+| `crates/vix-i18n/spec`               | Internationalization / languages             |
 | `spec/rust-clippy-pedantic`       | `clippy::pedantic` on all targets            |
 | `spec/comparisons`, `spec/test`   | Editor comparisons; manual test scenarios    |

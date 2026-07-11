@@ -40,7 +40,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `recent_files`  | list   | `[]`     | Recently opened files (absolute paths), most-recent first, capped at 15. Updated automatically; surfaced by **File → Open Recent…**. |
 | `spellcheck`    | bool   | `false`  | Underline misspelled words in comments/strings (**View → Editor → Toggle Spellcheck**). |
 | `dictionary_path` | string | `""` | Extra directory to search for Hunspell dictionaries, on top of the autodetected standard locations (`/usr/share/hunspell`, `/Library/Spelling`, `~/.local/share/hunspell`, `hunspell -D`, …). Empty = autodetect only. Both `<dir>/<name>.{aff,dic}` and `<dir>/<name>/index.{aff,dic}` layouts work. The spellcheck language follows the UI `locale`. |
-| `lsp_enabled`   | bool   | `true`   | Master switch for Language Server Protocol features (diagnostics, hover, go-to-definition, completion). When off, no servers launch. See `spec/lsp.md`. |
+| `lsp_enabled`   | bool   | `true`   | Master switch for Language Server Protocol features (diagnostics, hover, go-to-definition, completion). When off, no servers launch. See `crates/vix-lsp/spec.md`. |
 | `lsp_servers`   | list   | `[]`     | Language servers, matched to files by extension. Each entry has `language_id`, `extensions`, and `command`. Empty by default — Vix ships no built-in server. |
 | `contacts_dir`  | string | `""`     | Directory of vCard (`.vcf`) files for **Tools → Contacts…**. Empty = the workspace root. |
 | `ai_command`    | string | `claude -p "{prompt}"` | Command template the **AI** menu runs. `{prompt}` is replaced with the action's instruction; the input text is fed on stdin (or substituted for `{file}` if the template contains it). Point this at any assistant CLI — `claude`, `codex`, `mistral`, `ollama run …`. |
@@ -51,10 +51,10 @@ their defaults, so it is safe to delete or hand-edit.
 | `show_outline_dock` | bool | `false` | Show the code-outline sidebar (symbol list that follows the cursor). Toggle via **View → Layout → Outline Sidebar**. |
 | `outline_width` | int    | `28`     | Width (columns) of the outline sidebar. |
 | `debug_width`   | int    | `36`     | Width (columns) of the debugger panel. |
-| `debug_adapters`| list   | `[]`     | Debug adapters (DAP), matched to files by extension. Each entry has `adapter_id`, `extensions`, `command`, and an optional `launch` table. See `spec/debugger/index.md`. |
+| `debug_adapters`| list   | `[]`     | Debug adapters (DAP), matched to files by extension. Each entry has `adapter_id`, `extensions`, `command`, and an optional `launch` table. See `crates/vix-dap/spec/index.md`. |
 | `test_command`  | string | `cargo test` | Command run by **Tools → Run Tests**; its output is parsed into the test panel. |
 | `test_width`    | int    | `40`     | Width (columns) of the test-results panel. |
-| `project_snippets` | string | `config/snippets/snippets.json` | Project snippet file, relative to the project root. See `spec/snippets/index.md`. |
+| `project_snippets` | string | `config/snippets/snippets.json` | Project snippet file, relative to the project root. See `crates/vix-snippets/spec/index.md`. |
 
 Example `config.toml`:
 

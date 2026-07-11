@@ -54,18 +54,18 @@ All specs live under `spec/`, one directory per topic or action
 
 - Overview: [spec/index.md](spec/index.md). Each spec lives at
   `spec/<name>/index.md`.
-- Core: [menus](spec/menus/index.md) · [keyboard](spec/keyboard/index.md) ·
-  [keymaps](spec/keymaps/index.md) · [navigation](spec/navigation/index.md) ·
-  [command-palette](spec/command-palette/index.md) ·
-  [file-explorer](spec/file-explorer/index.md) · [editor](spec/editor/index.md) ·
-  [find-and-replace](spec/find-and-replace/index.md) · [hover](spec/hover/index.md)
-- Features: [lsp](spec/lsp/index.md) ·
-  [git-integration](spec/git-integration/index.md) ·
-  [spellcheck](spec/spellcheck/index.md) · [case-change](spec/case-change/index.md) ·
-  [themes](spec/themes/index.md) · [localization](spec/localization/index.md) ·
+- Core: [menus](crates/vix-menu/spec/index.md) · [keyboard](crates/vix-keyboard-shortcut-panel/spec/index.md) ·
+  [keymaps](crates/vix-keymap-model/spec/index.md) · [navigation](spec/navigation/index.md) ·
+  [command-palette](crates/vix-palette/spec/index.md) ·
+  [file-explorer](crates/vix-fileops/spec/index.md) · [editor](crates/vix-editor/spec/index.md) ·
+  [find-and-replace](crates/vix-query/spec/index.md) · [hover](crates/vix-lsp/spec/hover/index.md)
+- Features: [lsp](crates/vix-lsp/spec/index.md) ·
+  [git-integration](crates/vix-git/spec/git-integration/index.md) ·
+  [spellcheck](crates/vix-spellcheck/spec/index.md) · [case-change](crates/vix-case/spec/index.md) ·
+  [themes](crates/vix-theme/spec/index.md) · [localization](crates/vix-i18n/spec/index.md) ·
   tools under [spec/tools/](spec/tools/) · [comparisons](spec/comparisons/index.md)
 - Per-action: one `spec/<action>/index.md` for each editor action in the catalog
-  (`spec/actions/index.md`).
+  (`crates/vix-editor-core/spec/index.md`).
 
 ## Contributor & agent guidance (`AGENTS/`)
 

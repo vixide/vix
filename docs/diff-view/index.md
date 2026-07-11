@@ -17,7 +17,7 @@ unsaved edits):
 Scroll with `↑` / `↓` or `PageUp` / `PageDown`, and close with `Esc` (or `q`). If
 the two are identical, Vix says so in the status bar instead of opening the view.
 
-See the specification at `spec/diff-view/index.md`. For changes against the Git
+See the specification at `crates/vix-diff-view/spec/index.md`. For changes against the Git
 HEAD version of a file, use the [diff gutter and per-hunk tools](../git-panel/index.md)
 instead.
 

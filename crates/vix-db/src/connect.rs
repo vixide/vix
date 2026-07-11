@@ -55,7 +55,7 @@ impl Kind {
 }
 
 /// One saved database connection. Passwords are deliberately absent: they are
-/// prompted for at connect time and held only in memory (see `spec/db`).
+/// prompted for at connect time and held only in memory (see `spec/index.md`).
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Connection {

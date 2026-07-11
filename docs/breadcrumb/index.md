@@ -14,7 +14,7 @@ As you move the cursor, the symbol segment updates to the nearest enclosing
 declaration (function, struct, class, etc.), found from the same symbol scan that
 powers the Code Outline. Files with no recognized symbols show just the file name.
 
-See the specification at `spec/breadcrumbs/index.md`.
+See the specification at `crates/vix-editor/spec/breadcrumbs/index.md`.
 
 ---
 

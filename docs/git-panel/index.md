@@ -136,8 +136,8 @@ then:
 - **Git → Diff Next / Previous** jump between changed hunks.
 
 Hunk staging is safe: it only acts when the index still matches the expected text
-for the hunk's region. See `spec/stage-hunk/index.md` and
-`spec/unstage-hunk/index.md`.
+for the hunk's region. See `crates/vix-git/spec/stage-hunk/index.md` and
+`crates/vix-git/spec/unstage-hunk/index.md`.
 
 ## Blame
 

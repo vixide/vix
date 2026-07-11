@@ -1,4 +1,4 @@
-//! Named editor actions (the `spec/actions/actions.tsv` catalog), as `snake_case`
+//! Named editor actions (the `spec/actions.tsv` catalog), as `snake_case`
 //! methods on [`Editor`]. These wrap the lower-level `Action` structs and rope
 //! helpers so the host can dispatch them by name (`run_action`) and bind them to
 //! keys. Methods that need the viewport height take it as `view_h`.

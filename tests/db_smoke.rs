@@ -1,4 +1,4 @@
-//! End-to-end smoke tests for the DB workbench (`spec/db`).
+//! End-to-end smoke tests for the DB workbench (the `vix-db` crate spec).
 //!
 //! Since the workbench moved from CLI clients to embedded sqlx drivers,
 //! these tests are fully self-contained: fixtures are seeded through a real

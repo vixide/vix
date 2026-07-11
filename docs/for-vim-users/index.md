@@ -107,7 +107,7 @@ keeps those while deleting the parts you merely tolerate.
 ## See also
 
 - [`docs/keymaps/index.md`](../keymaps/index.md) — every keymap, every binding.
-- [`spec/keymaps/index.md`](../../spec/keymaps/index.md) — the authoritative spec.
+- [`crates/vix-keymap-model/spec/index.md`](../../crates/vix-keymap-model/spec/index.md) — the authoritative spec.
 - [`index.md`](../../index.md) — the full feature tour.
 
 ---

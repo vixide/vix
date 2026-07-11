@@ -1,0 +1,14 @@
+# Hsplit
+
+Editor action `hsplit`.
+
+| Form | Identifier |
+| ---- | ---------- |
+| kebab | `hsplit` |
+| snake | `hsplit` |
+| Pascal | `HSplit` |
+
+Run it from the command palette or a key binding via the action id `hsplit`.
+It is dispatched by `App::run_action("hsplit")` and, for editing actions, backed
+by `Editor::hsplit` in `editor_core`. See `crates/vix-editor-core/spec/index.md` for the full
+catalog.

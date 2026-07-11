@@ -6056,7 +6056,7 @@ fn split_panes_open_focus_and_close() {
     assert!(!app.editor.is_split(), "unsplitting back to one pane");
 }
 
-// ---- Generated smoke tests for the action catalog (spec/actions/actions.tsv).
+// ---- Generated smoke tests for the action catalog (crates/vix-editor-core/spec/actions.tsv).
 // Each runs the action on a small buffer and checks the app stays sane.
 
 #[test]

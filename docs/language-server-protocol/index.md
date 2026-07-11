@@ -10,7 +10,7 @@ and Vix manages the process and protocol.
 The protocol core lives in the `lsp_core` module (JSON-RPC framing, request
 builders, response parsers, and char↔UTF-16/UTF-8 position maths); the process IO
 and editor wiring live in `src/lsp.rs`. The authoritative method list is
-[`spec/lsp/language-server-protocol.tsv`](../../spec/lsp/language-server-protocol.tsv).
+[`crates/vix-lsp/spec/language-server-protocol.tsv`](../../crates/vix-lsp/spec/language-server-protocol.tsv).
 
 ## Configuration
 

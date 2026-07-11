@@ -174,11 +174,11 @@ pub struct Settings {
     /// pass/fail tree (e.g. `cargo test`, `pytest -v`, `npm test`).
     pub test_command: String,
     /// Project snippet file, relative to the project root. Loaded alongside the
-    /// global and media-type snippet files. See `spec/snippets/index.md`.
+    /// global and media-type snippet files. See the `vix-snippets` crate spec.
     pub project_snippets: String,
     /// Width (columns) of the test-results panel.
     pub test_width: u16,
-    /// Saved database connections for the **DB** menu (`spec/db`). Passwords
+    /// Saved database connections for the **DB** menu (the `vix-db` crate spec). Passwords
     /// are never stored here; they are prompted for per session.
     pub db_connections: Vec<vix_db::connect::Connection>,
 }

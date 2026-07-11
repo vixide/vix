@@ -67,7 +67,7 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
   (Apple / VSCode macOS / VSCode Windows / Emacs / Vi / Spacemacs / IntelliJ
   macOS / IntelliJ Windows / Eclipse / Sublime Text) in `App::on_key`; keymaps translate keys
   into the same `run_action` calls and editor motions rather than duplicating
-  behavior. See `spec/keymaps`.
+  behavior. See `crates/vix-keymap-model/spec`.
 - **One `ratatui` version.** The whole widget stack must agree on `ratatui` 0.30
   / `crossterm` 0.29. Don't add a widget crate on a different version.
 
@@ -89,7 +89,7 @@ The `vix` crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 | Change git status/diff/staging       | `src/git.rs` + wiring in `src/app.rs` / `src/ui.rs`         |
 | Change the find/replace engine       | `src/find_panel.rs` (matches/replace_all/unescape/PathFilter) |
 | Change LSP support                   | `src/lsp.rs` (host) + `src/lsp_core/` (protocol)            |
-| Change the database workbench        | `src/db/` (module tree; `spec/db`)                          |
+| Change the database workbench        | `src/db/` (module tree; `crates/vix-db/spec`)                          |
 
 See [`AGENTS/share/crate-map.md`](AGENTS/share/crate-map.md) for the full map.
 

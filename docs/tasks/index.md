@@ -32,7 +32,7 @@ streams to the bottom dock and the completion is recorded in the
 [notification panel](../notification-panel/index.md) (Info on success, Error on a
 non-zero exit). If no `tasks.toml` is found, Vix says so in the status bar.
 
-See the specification at `spec/tasks/index.md`.
+See the specification at `crates/vix-tasks/spec/index.md`.
 
 ---
 

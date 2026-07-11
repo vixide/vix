@@ -34,7 +34,7 @@ leading tabs, or two spaces per level, auto-detected from the buffer.
 regenerated from each item's level) and saves it. **Esc** or **q** closes.
 
 This is distinct from the read-only **Code Outline** (Ctrl+Shift+O), which lists
-code symbols. See the specification at `spec/edit-outline/index.md`.
+code symbols. See the specification at `crates/vix-outline-panel/spec/edit-outline/index.md`.
 
 ---
 

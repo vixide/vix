@@ -1,6 +1,6 @@
 //! The query beautifier (Alt+Shift+F in the query editor).
 //!
-//! Rewrites one SQL statement into the house style promised by `spec/db`:
+//! Rewrites one SQL statement into the house style promised by `spec/index.md`:
 //! keywords `UPPERCASE`, each major clause (`SELECT`, `FROM`, `WHERE`,
 //! `GROUP BY`, `ORDER BY`, joins, …) starting a new line, and `AND` / `OR`
 //! conditions continued on their own lines with 4-space indentation. String

@@ -28,7 +28,7 @@ closes.
 
 Note: the bytes are decoded to UTF-8 (lossily) for the text buffer, so this
 surface targets the bytes of text files; a full binary round-trip is a future
-refinement. See the specification at `spec/edit-bytes/index.md`.
+refinement. See the specification at `crates/vix-edit-bytes/spec/index.md`.
 
 ---
 

@@ -1,6 +1,6 @@
 //! Intelligent autocomplete for the query editor.
 //!
-//! Three suggestion sources, per `spec/db`: SQL keywords (prefix-matched,
+//! Three suggestion sources, per `spec/index.md`: SQL keywords (prefix-matched,
 //! offered `UPPERCASE`), table names from the connected database, and — when
 //! the prefix is `table.partial` — that table's columns. The engine is pure:
 //! the workbench feeds it the schema at connect time and asks for suggestions

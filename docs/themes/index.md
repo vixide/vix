@@ -1,6 +1,6 @@
 # Themes
 
-Every theme in Vix™ is a **JSON theme** (see `spec/themes/index.md`). A set ships
+Every theme in Vix™ is a **JSON theme** (see `crates/vix-theme/spec/index.md`). A set ships
 bundled in the binary — including **Dark** (the default) and **Light** — and you
 can add your own. Pick a theme live in **View → Theme…** (↑↓ to preview, Enter to
 apply, Esc to cancel). The chosen theme's name is saved to the `theme` setting.
@@ -94,7 +94,7 @@ no longer be found, Vix falls back to Dark.
 
 ## See also
 
-- `spec/themes/index.md` — the theme specification (source of truth).
+- `crates/vix-theme/spec/index.md` — the theme specification (source of truth).
 - [configuration.md](configuration.md) — the `theme` setting and file locations.
 
 ---

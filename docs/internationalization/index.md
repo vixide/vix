@@ -88,7 +88,7 @@ you have, and the rest stay in English until you fill them in.
 
 ## See also
 
-- `spec/localization/index.md` — the localization specification (source of truth).
+- `crates/vix-i18n/spec/index.md` — the localization specification (source of truth).
 
 ---
 

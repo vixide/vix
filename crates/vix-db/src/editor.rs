@@ -4,7 +4,7 @@
 //! it can find the statement under the cursor — splitting on top-level
 //! semicolons, ignoring those inside strings and comments — so Ctrl+Enter /
 //! F5 executes only that statement and Alt+Shift+F formats only it
-//! (`spec/db`: "Execute at Cursor", "Respects Semicolons").
+//! (`spec/index.md`: "Execute at Cursor", "Respects Semicolons").
 
 /// The query editor: lines of SQL plus cursor and scroll state.
 #[derive(Debug, Clone)]

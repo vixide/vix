@@ -18,7 +18,7 @@ theme, with a quiet-zone border. Press **Esc**, **Enter**, or **q** to close it.
 
 The encoder is a thin wrapper over the `qrcode` crate (Unicode renderer only; no
 image or SVG backends are compiled in). See the specification at
-`spec/qr-code/index.md`.
+`crates/vix-qr-tool/spec/index.md`.
 
 ---
 

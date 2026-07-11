@@ -41,7 +41,7 @@ From the **Debug** menu (or the command palette):
 
 Program output streams to the bottom dock.
 
-See the specification at `spec/debugger/index.md`. One debug session runs at a
+See the specification at `crates/vix-dap/spec/index.md`. One debug session runs at a
 time.
 
 ---

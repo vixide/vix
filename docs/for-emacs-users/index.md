@@ -109,8 +109,8 @@ else's* config problem — `vix .` is a very comfortable place for Emacs hands.
 ## See also
 
 - [`docs/keymaps/index.md`](../keymaps/index.md) — every keymap, every binding.
-- [`spec/keymaps/index.md`](../../spec/keymaps/index.md) — the authoritative spec.
-- [`spec/org/index.md`](../../spec/org/index.md) — the Org feature spec.
+- [`crates/vix-keymap-model/spec/index.md`](../../crates/vix-keymap-model/spec/index.md) — the authoritative spec.
+- [`crates/vix-org/spec/index.md`](../../crates/vix-org/spec/index.md) — the Org feature spec.
 - [`index.md`](../../index.md) — the full feature tour.
 
 ---

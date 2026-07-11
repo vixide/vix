@@ -66,7 +66,7 @@ Shared terms used across the code, specs, and docs.
   snippets, inline Org markers and blocks, Lorem ipsum, and Date/Time presets.
   Actions are `tools.insert.*`.
 - **Media type** — a MIME-style content type (`text/rust`, `image/png`) from the
-  `media_type` catalog (`spec/media-types`). Each is classified **text** or
+  `media_type` catalog (`crates/vix-media-type/spec`). Each is classified **text** or
   **binary** (the `Base` column) and maps to file extension(s).
 - **Snippet** — a reusable template with tabstops, defined in JSON files
   (bundled, global, per-media-type, project scopes; `crate::snippets`) and
@@ -78,7 +78,7 @@ Shared terms used across the code, specs, and docs.
 - **DAP / debugger** — the Run menu's Debug Adapter Protocol client
   (`crate::dap`): breakpoints, stepping, call stack, variables, watches, REPL.
 - **Database workbench** — the **DB** menu's full-screen overlay (`crate::db`,
-  `spec/db`) over embedded sqlx `Any` drivers (SQLite / PostgreSQL / MySQL): a
+  `crates/vix-db/spec`) over embedded sqlx `Any` drivers (SQLite / PostgreSQL / MySQL): a
   schema tree, a syntax-highlighted SQL editor with autocomplete, and a
   filterable results grid, plus history/saved queries, a query log, EXPLAIN, an
   ER diagram, CSV/TSV import, and export. **Read-only by default** (`writable`
