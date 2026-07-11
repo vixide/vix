@@ -1,0 +1,10 @@
+[package]
+name = "vix-unit-converter-tool"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Convert a number between physical units, plus the Unit Converter dialog's state."
+
+[dependencies]

@@ -1,0 +1,11 @@
+[package]
+name = "vix-zid-tool"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Generate a secure random ZID: a lowercase hexadecimal identifier."
+
+[dependencies]
+getrandom = { workspace = true }

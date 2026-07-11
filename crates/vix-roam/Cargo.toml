@@ -1,0 +1,11 @@
+[package]
+name = "vix-roam"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Org-roam: networked, Zettelkasten-style note-taking over a directory of Org files."
+
+[dependencies]
+regex = { workspace = true }

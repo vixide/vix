@@ -1,0 +1,13 @@
+[package]
+name = "vix-edit-value"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The structured-value editor: a foldable tree for JSON and YAML."
+
+[dependencies]
+crossterm = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }

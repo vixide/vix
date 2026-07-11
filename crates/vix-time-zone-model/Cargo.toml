@@ -1,0 +1,10 @@
+[package]
+name = "vix-time-zone-model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Time-zone modeling: the IANA canonical zone table + the app-wide active zone."
+
+[dependencies]

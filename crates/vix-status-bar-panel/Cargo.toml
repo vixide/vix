@@ -1,0 +1,10 @@
+[package]
+name = "vix-status-bar-panel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Formatting for the bottom status bar's two segments."
+
+[dependencies]

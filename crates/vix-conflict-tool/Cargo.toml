@@ -1,0 +1,10 @@
+[package]
+name = "vix-conflict-tool"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Parse Git merge-conflict markers and resolve the conflict under the cursor."
+
+[dependencies]

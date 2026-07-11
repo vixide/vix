@@ -1,0 +1,14 @@
+[package]
+name = "vix-settings"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "User settings, persisted with `confy`."
+
+[dependencies]
+confy = { workspace = true }
+serde = { workspace = true }
+vix-dap = { path = "../vix-dap", version = "1.2.0" }
+vix-db = { path = "../vix-db", version = "1.2.0" }

@@ -1,0 +1,10 @@
+[package]
+name = "vix-contact-panel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Browse a directory of vCard files as a table of contacts."
+
+[dependencies]

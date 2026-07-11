@@ -1,0 +1,10 @@
+[package]
+name = "vix-media-type"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The IANA-style media-type (MIME) table and the picker's filter + selection."
+
+[dependencies]

@@ -1,0 +1,10 @@
+[package]
+name = "vix-test-runner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Parse test-runner output into a pass/fail list with jump-to-failure."
+
+[dependencies]

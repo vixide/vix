@@ -1,0 +1,10 @@
+[package]
+name = "vix-bottom-dock"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Bottom dock: a scrollable line buffer for logs, output, and data views."
+
+[dependencies]

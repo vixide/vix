@@ -1,0 +1,11 @@
+[package]
+name = "vix-edit-sql"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The SQL edit surface: a statement-oriented view of a `.sql` buffer."
+
+[dependencies]
+crossterm = { workspace = true }

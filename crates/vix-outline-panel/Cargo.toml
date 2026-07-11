@@ -1,0 +1,10 @@
+[package]
+name = "vix-outline-panel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The code-outline list (symbol kind + name + line) and the panel's selection."
+
+[dependencies]

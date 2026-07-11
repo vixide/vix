@@ -1,0 +1,11 @@
+[package]
+name = "vix-theme"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Nerd Font icons, plus a re-export of the `vix_theme_model` theme model."
+
+[dependencies]
+vix-theme-model = { path = "../vix-theme-model", version = "1.2.0" }

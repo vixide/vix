@@ -1,0 +1,11 @@
+[package]
+name = "vix-editorconfig"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Minimal EditorConfig support: resolve the indent settings for a file."
+
+[dependencies]
+regex = { workspace = true }

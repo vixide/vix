@@ -1,0 +1,12 @@
+[package]
+name = "vix-session"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Per-workspace editor session, persisted with `confy`."
+
+[dependencies]
+confy = { workspace = true }
+serde = { workspace = true }

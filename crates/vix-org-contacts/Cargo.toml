@@ -1,0 +1,10 @@
+[package]
+name = "vix-org-contacts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Org-contacts: contact management over Org files."
+
+[dependencies]

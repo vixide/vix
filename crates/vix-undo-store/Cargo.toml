@@ -1,0 +1,15 @@
+[package]
+name = "vix-undo-store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Persistent undo: save a buffer's undo tree to disk and restore it on reopen."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+vix-editor-core = { path = "../vix-editor-core", version = "1.2.0", default-features = false }
+vix-settings = { path = "../vix-settings", version = "1.2.0" }

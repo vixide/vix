@@ -1,0 +1,10 @@
+[package]
+name = "vix-ascii-character-picker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "ASCII panel (Tools menu): the ASCII reference table + row-selection state."
+
+[dependencies]

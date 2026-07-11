@@ -1,0 +1,11 @@
+[package]
+name = "vix-base64-tool"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Base64 encode and decode (Tools → Convert → Base64)."
+
+[dependencies]
+base64 = { workspace = true }

@@ -1,0 +1,11 @@
+[package]
+name = "vix-left-dock"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Left dock: the file explorer's lazily-expanded directory tree + selection."
+
+[dependencies]
+regex = { workspace = true }
