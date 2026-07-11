@@ -1,0 +1,12 @@
+[package]
+name = "vix-clock-panel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Clock box: live date/time strings (local, UTC, ISO week, active zone) + rows."
+
+[dependencies]
+jiff = { workspace = true }
+vix-time-zone-model = { path = "../vix-time-zone-model", version = "1.2.0" }

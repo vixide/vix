@@ -1,0 +1,11 @@
+[package]
+name = "vix-spellcheck"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Spell-checking for the Vix editor (Hunspell-backed, over comment/string ranges)."
+
+[dependencies]
+spellbook = { workspace = true }

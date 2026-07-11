@@ -1,0 +1,11 @@
+[package]
+name = "vix-convert-from-tsv-into-json-tool"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Convert: TSV text into a JSON array of objects."
+
+[dependencies]
+vix-convert-tabular = { path = "../vix-convert-tabular", version = "1.2.0" }

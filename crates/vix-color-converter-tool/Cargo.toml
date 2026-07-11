@@ -1,0 +1,10 @@
+[package]
+name = "vix-color-converter-tool"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Parse and convert colors between HEX, RGB, and HSL."
+
+[dependencies]

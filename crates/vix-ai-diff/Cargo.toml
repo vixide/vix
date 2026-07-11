@@ -1,0 +1,11 @@
+[package]
+name = "vix-ai-diff"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Reviewable diff for AI text transforms (Annotate / Improve)."
+
+[dependencies]
+similar = { workspace = true }

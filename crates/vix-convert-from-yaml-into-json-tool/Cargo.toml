@@ -1,0 +1,12 @@
+[package]
+name = "vix-convert-from-yaml-into-json-tool"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Convert: YAML into JSON."
+
+[dependencies]
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }

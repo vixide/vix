@@ -1,0 +1,11 @@
+[package]
+name = "vix-base16"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "base16-generated themes for the theme system."
+
+[dependencies]
+vix-theme-model = { path = "../vix-theme-model", version = "1.2.0" }

@@ -1,0 +1,11 @@
+[package]
+name = "vix-text-information-panel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Statistics about a span of text, plus the panel's row-selection state."
+
+[dependencies]
+

@@ -1,0 +1,10 @@
+[package]
+name = "vix-fileops"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Filesystem helpers for the explorer's copy / cut / paste / delete."
+
+[dependencies]

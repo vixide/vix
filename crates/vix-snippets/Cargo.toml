@@ -1,0 +1,13 @@
+[package]
+name = "vix-snippets"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "JSON snippet files: loading, scope resolution, merging, and the picker."
+
+[dependencies]
+serde_json = { workspace = true }
+vix-settings = { path = "../vix-settings", version = "1.2.0" }
+vix-snippet-tool = { path = "../vix-snippet-tool", version = "1.2.0" }

@@ -1,0 +1,11 @@
+[package]
+name = "vix-ai-panel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "AI chat panel: a persistent conversation surface for the configured assistant."
+
+[dependencies]
+

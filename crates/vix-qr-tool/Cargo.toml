@@ -1,0 +1,11 @@
+[package]
+name = "vix-qr-tool"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "QR code generation (Tools → QR Code)."
+
+[dependencies]
+qrcode = { workspace = true }

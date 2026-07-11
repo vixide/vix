@@ -1,0 +1,10 @@
+[package]
+name = "vix-keymap-model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The available keyboard navigation styles (\"keymaps\"); the View → Keymap submenu."
+
+[dependencies]

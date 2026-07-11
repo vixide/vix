@@ -1,0 +1,11 @@
+[package]
+name = "vix-vcard-panel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Display one parsed vCard as a table of labelled fields, plus panel state."
+
+[dependencies]
+vix-vcard-parser = { path = "../vix-vcard-parser", version = "1.2.0" }

@@ -1,0 +1,10 @@
+[package]
+name = "vix-affix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Add, drop, and toggle a prefix/suffix pair around text."
+
+[dependencies]

@@ -1,0 +1,10 @@
+[package]
+name = "vix-x11-color-picker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The X11 color table and the picker's row-selection + scroll state."
+
+[dependencies]

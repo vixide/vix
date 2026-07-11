@@ -1,0 +1,10 @@
+[package]
+name = "vix-vcard-parser"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A small, dependency-free vCard 4.0 (RFC 6350) parser."
+
+[dependencies]

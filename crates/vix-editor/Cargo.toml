@@ -1,0 +1,15 @@
+[package]
+name = "vix-editor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Editor host: the `CodeEditor` widget wrapper and the pane tree."
+
+[dependencies]
+ratatui = { workspace = true }
+ratatui-core = { workspace = true }
+ratatui-image = { workspace = true }
+vix-editor-core = { path = "../vix-editor-core", version = "1.2.0", default-features = false }
+vix-theme = { path = "../vix-theme", version = "1.2.0" }
