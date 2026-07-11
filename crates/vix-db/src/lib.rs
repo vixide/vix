@@ -1,6 +1,6 @@
 //! The DB workbench: connection management, schema browsing, and SQL queries.
 //!
-//! Implements `spec/db`: a **DB** menu opens a full-screen overlay that walks
+//! Implements `spec/index.md`: a **DB** menu opens a full-screen overlay that walks
 //! through saved connections (passwords are prompted per session and never
 //! written to disk), then presents a three-pane workbench — schema tree on
 //! the left, a syntax-highlighted SQL editor with autocomplete on the right,

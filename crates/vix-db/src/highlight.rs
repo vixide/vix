@@ -3,7 +3,7 @@
 //! A small hand-rolled tokenizer, not a grammar: each line is split into
 //! spans tagged keyword / string / number / comment / plain, and [`style`]
 //! maps each class to the active Vix theme's `syntax` colors — the same
-//! ones the code editor uses — falling back to `spec/db`'s palette (keywords
+//! ones the code editor uses — falling back to `spec/index.md`'s palette (keywords
 //! cyan, strings green, numbers yellow, comments gray) for themes that leave
 //! a token unset. Block comments can span lines, so the tokenizer threads a
 //! "still inside `/* … */`" flag from line to line.
@@ -123,7 +123,7 @@ pub fn is_keyword(word: &str) -> bool {
 
 /// The render style for one highlight class: the active Vix theme's `syntax`
 /// color for the matching token (`keyword` / `string` / `number` /
-/// `comment`), or `spec/db`'s fallback palette when the theme leaves the
+/// `comment`), or `spec/index.md`'s fallback palette when the theme leaves the
 /// token unset.
 #[must_use]
 pub fn style(tok: Tok) -> Style {

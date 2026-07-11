@@ -39,7 +39,7 @@ saves it (the normal Save / Save As flow applies). **Esc** or **q** closes the
 editor. A `*` in the title marks unsaved edits.
 
 See also the [Edit Outline](../edit-outline/index.md) prose outliner and the
-specification at `spec/edit-table/index.md`.
+specification at `crates/vix-editor/spec/edit-table/index.md`.
 
 ---
 

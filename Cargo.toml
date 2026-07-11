@@ -438,7 +438,7 @@ tree-sitter-toml-ng = { workspace = true, optional = true }
 tree-sitter-typescript = { workspace = true, optional = true }
 tree-sitter-yaml = { workspace = true, optional = true }
 
-# DB workbench (spec/db): embedded database drivers via the `Any` runtime
+# DB workbench (crates/vix-db/spec): embedded database drivers via the `Any` runtime
 # driver — SQLite (bundled C), and pure-Rust PostgreSQL/MySQL over rustls (no
 # system OpenSSL, same rationale as ureq). Replaces shelling out to the
 # sqlite3/psql/mysql CLIs and holds one persistent connection per session.

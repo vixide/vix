@@ -29,8 +29,8 @@ editing aligned columns of text.
 same column, without a column span.
 
 To drop the extra carets and return to a single cursor, use *Remove Multi Cursor*
-(or *Remove All Multi Cursors*). See `spec/select-all-occurrences/index.md` and
-`spec/column-select/index.md`.
+(or *Remove All Multi Cursors*). See `crates/vix-editor/spec/select-all-occurrences/index.md` and
+`crates/vix-editor/spec/column-select/index.md`.
 
 ---
 

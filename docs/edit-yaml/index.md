@@ -22,7 +22,7 @@ Navigation, folding, and value editing are identical to Edit JSON — see
 ## Saving and closing
 
 **Ctrl + S** serializes the tree back to YAML into the active buffer and saves it.
-**Esc** or **q** closes. See the specification at `spec/edit-value/index.md`.
+**Esc** or **q** closes. See the specification at `crates/vix-edit-value/spec/index.md`.
 
 ---
 

@@ -32,7 +32,7 @@ valid JSON (or YAML), Vix™ says so instead of opening.
 **Ctrl + S** serializes the tree back to JSON (pretty-printed, key order
 preserved) into the active buffer and saves it. **Esc** or **q** closes.
 
-See the specification at `spec/edit-value/index.md`.
+See the specification at `crates/vix-edit-value/spec/index.md`.
 
 ---
 

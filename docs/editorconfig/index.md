@@ -48,7 +48,7 @@ indent_size = 2
 indent_style = tab
 ```
 
-See the specification at `spec/editorconfig/index.md`. EditorConfig and editor
+See the specification at `crates/vix-editorconfig/spec/index.md`. EditorConfig and editor
 [modelines](../modelines/index.md) cover similar ground; EditorConfig is
 project-wide, modelines are per-file directives.
 

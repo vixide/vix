@@ -1258,7 +1258,7 @@ const AI: &[Item] = &[
     Item::leaf("menu.item.ai.improve", "ai.improve", ""),
 ];
 
-/// Database workbench (`spec/db`): connection management, schema browsing,
+/// Database workbench (the `vix-db` crate spec): connection management, schema browsing,
 /// and the SQL query editor.
 const DB: &[Item] = &[
     Item::leaf("menu.item.db.connections", "db.connections", ""),

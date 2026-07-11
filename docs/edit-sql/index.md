@@ -17,7 +17,7 @@ From the list you can:
 - **Save** back to the buffer with `Ctrl+S`; **Esc** or `q` closes.
 
 It's a practical way to reorganize and clean up SQL scripts — not a full SQL
-parser. See the specification at [`spec/edit-sql/index.md`](../../spec/edit-sql/index.md).
+parser. See the specification at [`crates/vix-edit-sql/spec/index.md`](../../crates/vix-edit-sql/spec/index.md).
 
 ---
 

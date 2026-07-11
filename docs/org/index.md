@@ -54,7 +54,7 @@ To drop in Org snippets, emphasis markers, or `#+BEGIN_…` blocks, use
 **Tools → Insert → Org / Markers / Begin-End** (see [Insert](../insert/index.md)).
 Markers and blocks **toggle** around the current selection.
 
-See the specification at [`spec/org/index.md`](../../spec/org/index.md).
+See the specification at [`crates/vix-org/spec/index.md`](../../crates/vix-org/spec/index.md).
 
 ---
 

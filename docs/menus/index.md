@@ -143,7 +143,7 @@ and **Go to Percent / Byte**.
 
 ## Run menu
 
-The debugger (Debug Adapter Protocol; see [`../../spec/debugger/index.md`](../../spec/debugger/index.md)):
+The debugger (Debug Adapter Protocol; see [`../../crates/vix-dap/spec/index.md`](../../crates/vix-dap/spec/index.md)):
 **Start / Stop**, **Toggle Breakpoint**, **Continue / Step Over / Step Into /
 Step Out / Pause**, **Add Watch…**, **Evaluate…** (REPL), and **Toggle Debug
 Panel**.
@@ -186,7 +186,7 @@ text with the result (undoable).
 
 ## DB menu
 
-The database workbench (see [`../../spec/db/index.md`](../../spec/db/index.md)):
+The database workbench (see [`../../crates/vix-db/spec/index.md`](../../crates/vix-db/spec/index.md)):
 **Connections** / **New Query**, **Execute** / **Execute All** (`F5`/`F9`),
 **Explain** / **Explain Analyze** (`F6`/`F7`), **Format**, **History** /
 **Saved** / **Save Query…**, **Export…**, **Begin** / **Commit** / **Rollback**,
@@ -221,7 +221,7 @@ The **Branch** submenu:
 
 ## Org menu
 
-Org-mode editing on the active buffer (see [`../../spec/org/index.md`](../../spec/org/index.md)):
+Org-mode editing on the active buffer (see [`../../crates/vix-org/spec/index.md`](../../crates/vix-org/spec/index.md)):
 **Capture**, **Cycle Visibility**, **Headline ▸**, **Cycle TODO**, **Toggle
 Checkbox**, **Update Statistics**, **Clock In / Out**, **Agenda**, **Time
 Report**, **Roam ▸** (nodes / backlinks / dailies), **Node ▸**, **Contacts ▸**,

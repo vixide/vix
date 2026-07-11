@@ -21,7 +21,7 @@ The catalog covers the common web types plus popular developer and modern format
 *common* set, not the full IANA registry.
 
 See the specification and data table at
-[`spec/media-types/`](../../spec/media-types/index.md).
+[`crates/vix-media-type/spec/`](../../crates/vix-media-type/spec/index.md).
 
 ---
 

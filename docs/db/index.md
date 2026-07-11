@@ -95,8 +95,8 @@ Type SQL; multiple statements separated by `;` are fine.
   separate from settings.
 
 All of this is also reachable from the **DB** menu and the command palette.
-See the specification at [`spec/db/index.md`](../../spec/db/index.md) and the
-session design notes at [`spec/db/session.md`](../../spec/db/session.md).
+See the specification at [`crates/vix-db/spec/index.md`](../../crates/vix-db/spec/index.md) and the
+session design notes at [`crates/vix-db/spec/session.md`](../../crates/vix-db/spec/session.md).
 
 ---
 

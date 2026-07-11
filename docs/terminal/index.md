@@ -24,7 +24,7 @@ The terminal resizes with the window so programs lay out correctly.
 - Mouse events are not forwarded to the shell yet.
 - The view shows the live screen; terminal scrollback isn't browsable from Vix.
 
-See the specification at `spec/terminal/index.md`. For one-off, non-interactive
+See the specification at `crates/vix-terminal/spec/index.md`. For one-off, non-interactive
 commands whose output you want to keep, use **Tools → Run Command** (it streams to
 the bottom dock) or define a [task](../tasks/index.md).
 

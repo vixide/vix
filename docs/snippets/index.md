@@ -36,7 +36,7 @@ newlines). For example:
 ```
 
 (The files are JSON, not XML; TextMate's interpolated shell code and `\u` escapes
-are not supported.) See the full reference at `spec/snippets/index.md`.
+are not supported.) See the full reference at `crates/vix-snippets/spec/index.md`.
 
 ## Tabstops
 
@@ -69,7 +69,7 @@ Snippet bodies use a small syntax:
 | `$0`              | The final cursor position                        |
 | `\$`              | A literal dollar sign                            |
 
-See the specification at `spec/snippets/index.md`. For one-shot generated text
+See the specification at `crates/vix-snippets/spec/index.md`. For one-shot generated text
 (UUIDs, dates, language boilerplate) see [Insert](../insert/index.md).
 
 ---

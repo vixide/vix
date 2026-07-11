@@ -26,7 +26,7 @@ test_command = "cargo test"   # or "pytest -v", "npm test", "go test ./..."
 Vix™ understands `cargo test` (libtest) and the common `name PASSED/FAILED/SKIPPED`
 format used by `pytest -v` and others.
 
-See the specification at `spec/test-runner/index.md`. For arbitrary project
+See the specification at `crates/vix-test-runner/spec/index.md`. For arbitrary project
 commands (not just tests) see [Tasks](../tasks/index.md).
 
 ---
