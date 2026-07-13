@@ -51,4 +51,19 @@ mod tests {
     fn decode_rejects_garbage() {
         assert!(decode("not valid base64!!!").is_err());
     }
+
+    proptest::proptest! {
+        // Decoding arbitrary input never panics (returns Err on invalid data).
+        #[test]
+        fn decode_never_panics(s in ".*") {
+            let _ = decode(&s);
+        }
+
+        // encode → decode round-trips exactly for any UTF-8 input.
+        #[test]
+        fn encode_then_decode_round_trips(s in ".*") {
+            let encoded = encode(&s).unwrap();
+            proptest::prop_assert_eq!(decode(&encoded).unwrap(), s);
+        }
+    }
 }

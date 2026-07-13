@@ -83,4 +83,20 @@ mod tests {
     fn decode_passes_plain_text() {
         assert_eq!(decode("hello").unwrap(), "hello");
     }
+
+    proptest::proptest! {
+        // Decoding arbitrary input (stray %, non-hex, truncated escapes) never
+        // panics.
+        #[test]
+        fn decode_never_panics(s in ".*") {
+            let _ = decode(&s);
+        }
+
+        // encode → decode round-trips exactly for any UTF-8 input.
+        #[test]
+        fn encode_then_decode_round_trips(s in ".*") {
+            let encoded = encode(&s).unwrap();
+            proptest::prop_assert_eq!(decode(&encoded).unwrap(), s);
+        }
+    }
 }

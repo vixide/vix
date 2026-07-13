@@ -9,3 +9,6 @@ description = "URL percent-encode and decode (Tools → Convert → URL)."
 
 [dependencies]
 percent-encoding = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

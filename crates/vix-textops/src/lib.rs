@@ -384,4 +384,45 @@ mod tests {
         assert_eq!(rot13("Hello, World!"), "Uryyb, Jbeyq!");
         assert_eq!(rot13(&rot13("Hello, World!")), "Hello, World!");
     }
+
+    // ---- property-based ("fuzz") tests ------------------------------------
+
+    use proptest::prelude::*;
+
+    proptest! {
+        // Arbitrary text (including multibyte) and an ARBITRARY cursor — the
+        // cursor is a caller-supplied integer, so out-of-range values must be
+        // clamped, never panic on indexing or a non-char-boundary slice.
+        #[test]
+        fn cursor_ops_never_panic(text in ".*", cursor in 0usize..5000, delta in -4i64..4) {
+            let _ = bump_number_at(&text, cursor, delta);
+            let _ = transpose_chars_at(&text, cursor);
+            let _ = transpose_words_at(&text, cursor);
+            let _ = smart_toggle_at(&text, cursor);
+            let _ = to_lf(&text);
+            let _ = to_crlf(&text);
+            let _ = squeeze_blank_lines(&text);
+            let _ = rot13(&text);
+            let _ = tag_column(&text, "TODO");
+            let _ = tag_column(&text, &text); // tag == whole line edge case
+        }
+
+        // Any cursor a cursor-op returns must land within the returned text.
+        #[test]
+        fn returned_cursor_stays_in_bounds(text in ".*", cursor in 0usize..2000) {
+            let ops = [
+                bump_number_at(&text, cursor, 1),
+                transpose_chars_at(&text, cursor),
+                transpose_words_at(&text, cursor),
+                smart_toggle_at(&text, cursor),
+            ];
+            for (out, pos) in ops.into_iter().flatten() {
+                prop_assert!(
+                    pos <= out.chars().count(),
+                    "returned cursor {pos} past end {}",
+                    out.chars().count()
+                );
+            }
+        }
+    }
 }

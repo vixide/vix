@@ -9,3 +9,6 @@ description = "Evaluate a typed formula, plus the Calculator dialog's editing st
 
 [dependencies]
 evalexpr = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

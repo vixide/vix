@@ -9,3 +9,6 @@ description = "Base64 encode and decode (Tools → Convert → Base64)."
 
 [dependencies]
 base64 = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

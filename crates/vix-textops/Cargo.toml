@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Small pure text transforms used by Edit/Tools actions."
 
 [dependencies]
+
+[dev-dependencies]
+proptest = { workspace = true }

@@ -304,4 +304,21 @@ mod tests {
         p.down();
         assert_eq!(p.selected, last);
     }
+
+    proptest::proptest! {
+        // Filtering with an arbitrary query never panics, and every returned
+        // index is in range for `all()`.
+        #[test]
+        fn filtering_with_arbitrary_query_is_safe(q in ".*") {
+            let mut p = Panel::open();
+            for c in q.chars().take(100) {
+                p.push(c);
+            }
+            let matches = p.matches();
+            let n = all().len();
+            for i in matches {
+                proptest::prop_assert!(i < n, "index {i} out of range {n}");
+            }
+        }
+    }
 }

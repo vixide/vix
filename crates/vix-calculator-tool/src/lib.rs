@@ -177,4 +177,23 @@ mod tests {
         c.focus_prev();
         assert_eq!(c.focus, Focus::Input);
     }
+
+    proptest::proptest! {
+        // Evaluating an arbitrary formula never panics (invalid input → Err).
+        #[test]
+        fn eval_never_panics(s in ".*") {
+            let _ = eval(&s);
+        }
+
+        // Driving the dialog with arbitrary keystrokes never panics.
+        #[test]
+        fn dialog_input_never_panics(s in ".*") {
+            let mut c = Calculator::new();
+            for ch in s.chars().take(200) {
+                c.push(ch);
+            }
+            c.run();
+            let _ = c.result();
+        }
+    }
 }

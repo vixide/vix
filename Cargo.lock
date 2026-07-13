@@ -4913,6 +4913,7 @@ name = "vix-base64-tool"
 version = "1.2.0"
 dependencies = [
  "base64",
+ "proptest",
 ]
 
 [[package]]
@@ -4924,6 +4925,7 @@ name = "vix-calculator-tool"
 version = "1.2.0"
 dependencies = [
  "evalexpr",
+ "proptest",
 ]
 
 [[package]]
@@ -5307,6 +5309,9 @@ dependencies = [
 [[package]]
 name = "vix-media-type"
 version = "1.2.0"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "vix-menu"
@@ -5359,6 +5364,7 @@ version = "1.2.0"
 name = "vix-qr-tool"
 version = "1.2.0"
 dependencies = [
+ "proptest",
  "qrcode",
 ]
 
@@ -5469,6 +5475,9 @@ version = "1.2.0"
 [[package]]
 name = "vix-textops"
 version = "1.2.0"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "vix-theme"
@@ -5511,6 +5520,7 @@ name = "vix-url-tool"
 version = "1.2.0"
 dependencies = [
  "percent-encoding",
+ "proptest",
 ]
 
 [[package]]

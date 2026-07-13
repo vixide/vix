@@ -46,4 +46,13 @@ mod tests {
     fn empty_text_is_none() {
         assert!(render("").is_none());
     }
+
+    proptest::proptest! {
+        // Rendering arbitrary text never panics: too-long input (past QR
+        // capacity) returns None rather than crashing.
+        #[test]
+        fn render_never_panics(s in ".*") {
+            let _ = render(&s);
+        }
+    }
 }

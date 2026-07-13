@@ -9,3 +9,6 @@ description = "QR code generation (Tools → QR Code)."
 
 [dependencies]
 qrcode = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

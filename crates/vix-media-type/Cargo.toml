@@ -8,3 +8,6 @@ repository.workspace = true
 description = "The IANA-style media-type (MIME) table and the picker's filter + selection."
 
 [dependencies]
+
+[dev-dependencies]
+proptest = { workspace = true }
