@@ -16,6 +16,13 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+/// Upper bound on the total number of elements a single abbreviation may expand
+/// to. A multiply operator (`*N`) — and nested multiplies, which compound —
+/// would otherwise let a tiny input (e.g. `div*900000000` or `a*1e5>b*1e5`)
+/// force gigabytes of string growth and a multi-minute hang. Expansion beyond
+/// this budget returns `None` rather than attempting the allocation.
+const MAX_NODES: usize = 100_000;
+
 /// One element node in the parsed abbreviation tree.
 struct Node {
     tag: String,
@@ -45,8 +52,9 @@ pub fn expand(abbr: &str) -> Option<String> {
         return None; // unparsed remainder (e.g. unsupported `()`)
     }
     let mut out = String::new();
+    let mut budget = MAX_NODES;
     for r in roots {
-        p.render(r, 0, &mut out);
+        p.render(r, 0, &mut out, &mut budget)?;
     }
     Some(out)
 }
@@ -150,6 +158,11 @@ impl Parser {
                     self.pos += 1;
                     let n = self.read_name();
                     node.count = n.parse().ok()?;
+                    // Reject an obviously explosive per-node count up front; the
+                    // render budget also bounds the compounded (nested) total.
+                    if node.count > MAX_NODES {
+                        return None;
+                    }
                 }
                 _ => break,
             }
@@ -161,10 +174,14 @@ impl Parser {
     }
 
     /// Render node `idx` (repeating it `count` times) into `out` at `depth`.
-    fn render(&self, idx: usize, depth: usize, out: &mut String) {
+    /// `budget` is the number of elements still allowed to be emitted; it is
+    /// decremented per rendered element and rendering aborts with `None` once it
+    /// is exhausted, bounding the compounded cost of nested multiplies.
+    fn render(&self, idx: usize, depth: usize, out: &mut String, budget: &mut usize) -> Option<()> {
         use std::fmt::Write as _;
         let node = &self.nodes[idx];
         for i in 1..=node.count.max(1) {
+            *budget = budget.checked_sub(1)?;
             let indent = "  ".repeat(depth);
             let id = node
                 .id
@@ -190,11 +207,12 @@ impl Parser {
             } else {
                 let _ = writeln!(out, "{indent}{open}");
                 for &c in &node.children {
-                    self.render(c, depth + 1, out);
+                    self.render(c, depth + 1, out, budget)?;
                 }
                 let _ = writeln!(out, "{indent}</{}>", node.tag);
             }
         }
+        Some(())
     }
 }
 
@@ -249,5 +267,51 @@ mod tests {
     #[test]
     fn grouping_unsupported_returns_none() {
         assert!(expand("(a>b)+c").is_none());
+    }
+
+    #[test]
+    fn rejects_explosive_multiply() {
+        // Single huge count, compounded nested counts, and an overflow-shaped
+        // literal must all be refused rather than attempt a giant allocation.
+        for abbr in [
+            "div*900000000",
+            "span*100000>b*100000",
+            "a*999999999999999999999",
+        ] {
+            assert!(expand(abbr).is_none(), "should refuse: {abbr}");
+        }
+        // Reasonable expansions right at/under the surface still work.
+        assert_eq!(expand("ul>li*3").unwrap().matches("<li>").count(), 3);
+    }
+
+    #[test]
+    fn expansion_stays_within_the_node_budget() {
+        // Just over the budget when compounded (400*300 = 120_000 > 100_000).
+        assert!(expand("div*400>span*300").is_none());
+        // Comfortably under it succeeds.
+        let html = expand("div*10>span*10").unwrap();
+        assert_eq!(html.matches("<span>").count(), 100);
+    }
+
+    // ---- property-based ("fuzz") tests ------------------------------------
+
+    use proptest::prelude::*;
+
+    proptest! {
+        // No abbreviation, however malformed, may panic or blow the node budget.
+        #[test]
+        fn expand_never_panics_and_is_bounded(abbr in ".*") {
+            if let Some(html) = expand(&abbr) {
+                // Total emitted open-tags cannot exceed the budget.
+                let opens = html.matches('<').count();
+                prop_assert!(opens <= MAX_NODES * 2, "elements exceeded budget: {opens}");
+            }
+        }
+
+        // Digit-heavy multiply strings (the DoS vector) never hang or panic.
+        #[test]
+        fn multiply_counts_are_safe(tag in "[a-z]{1,4}", n in 0u64..u64::MAX) {
+            let _ = expand(&format!("{tag}*{n}"));
+        }
     }
 }

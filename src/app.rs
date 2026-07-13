@@ -4880,10 +4880,13 @@ impl App {
 
     /// Org-roam: open (creating if needed) the daily note for `date`.
     fn roam_open_daily(&mut self, date: &str) {
-        let path = self
-            .root
-            .join(crate::roam::DAILIES_DIR)
-            .join(crate::roam::daily_filename(date));
+        // Reject anything that isn't a real `YYYY-MM-DD`, so a prompt like
+        // `../../etc/x` can't be turned into a path outside the notes directory.
+        let Some(filename) = crate::roam::daily_filename(date) else {
+            self.status = t!("status.roam_invalid_date", date = date).to_string();
+            return;
+        };
+        let path = self.root.join(crate::roam::DAILIES_DIR).join(filename);
         if path.exists() {
             self.open_path(&path, false);
             return;
@@ -4901,10 +4904,11 @@ impl App {
             return;
         }
         let date = Self::roam_today();
-        let path = self
-            .root
-            .join(crate::roam::DAILIES_DIR)
-            .join(crate::roam::daily_filename(&date));
+        // `roam_today` always yields a valid `YYYY-MM-DD`; bail defensively if not.
+        let Some(filename) = crate::roam::daily_filename(&date) else {
+            return;
+        };
+        let path = self.root.join(crate::roam::DAILIES_DIR).join(filename);
         let time = jiff::Zoned::now().strftime("%H:%M").to_string();
         let entry = crate::roam::daily_entry(&time, text);
         let mut content = std::fs::read_to_string(&path)
@@ -7099,11 +7103,10 @@ impl App {
             self.status = t!("status.git_not_repo").into();
             return;
         }
-        let tmp = std::env::temp_dir().join(format!("vix-branchdesc-{}.txt", std::process::id()));
-        if std::fs::write(&tmp, desc).is_err() {
+        let Ok(tmp) = crate::fileops::write_private_temp("vix-branchdesc", desc.as_bytes()) else {
             self.status = t!("status.git_not_repo").into();
             return;
-        }
+        };
         let path = tmp.display();
         self.git_panel = None;
         self.run_command(&format!(
@@ -8385,6 +8388,14 @@ impl App {
                 return;
             }
         };
+        // A workspace file is portable and may be attacker-supplied. Refuse one
+        // that would re-root the file index at a filesystem root (`/`), which
+        // would recursively walk the whole disk.
+        if ws.has_root_or_empty_folder() {
+            self.messages
+                .error(t!("msg.workspace_unsafe_root").to_string());
+            return;
+        }
         let folders: Vec<PathBuf> = ws.folders.iter().map(PathBuf::from).collect();
         if let Some(primary) = folders.first() {
             self.switch_workspace(&primary.clone());
@@ -8397,13 +8408,24 @@ impl App {
             folders
         };
         self.build_file_index();
+        // Only auto-open files contained within the workspace's own folders, so a
+        // crafted workspace can't silently open arbitrary system paths (e.g.
+        // `/etc/passwd`, `~/.ssh/id_rsa`) into editor tabs.
+        let skipped = ws.external_files().len();
         for f in &ws.files {
+            if !ws.file_within_folders(f) {
+                continue;
+            }
             let p = PathBuf::from(f);
             if p.exists() {
                 self.open_path(&p, false);
             }
         }
-        self.status = t!("status.workspace_opened", path = path.display()).to_string();
+        self.status = if skipped > 0 {
+            t!("status.workspace_opened_skipped", path = path.display(), count = skipped).to_string()
+        } else {
+            t!("status.workspace_opened", path = path.display()).to_string()
+        };
     }
 
     /// Add a folder to the current workspace so the finder/search span it too.
@@ -12187,11 +12209,13 @@ impl App {
         prompt: &str,
         text: &str,
     ) -> Option<std::sync::mpsc::Receiver<AiMsg>> {
-        let tmp = std::env::temp_dir().join(format!("vix-ai-{}.txt", std::process::id()));
-        if std::fs::write(&tmp, text).is_err() {
+        // A private, unpredictable temp file (0600, O_EXCL) so a local attacker
+        // can't pre-plant a symlink at the name and redirect the write, nor read
+        // the buffer contents left behind in a shared /tmp.
+        let Ok(tmp) = crate::fileops::write_private_temp("vix-ai", text.as_bytes()) else {
             self.status = t!("status.ai_no_input").to_string();
             return None;
-        }
+        };
         let path = tmp.display().to_string();
         let cmd = self.settings.ai_command_line(prompt, &path);
         let mut child = match std::process::Command::new("sh")
@@ -12219,7 +12243,13 @@ impl App {
             let ok = std::io::BufReader::new(stdout)
                 .read_to_string(&mut out)
                 .is_ok();
-            let status = reader_child.lock().expect("ai lock").wait().ok();
+            let status = reader_child
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .wait()
+                .ok();
+            // The input file is no longer needed once the CLI has exited.
+            let _ = std::fs::remove_file(&tmp);
             let success = ok && status.and_then(|s| s.code()) == Some(0);
             let _ = tx.send(if success {
                 AiMsg::Done(out)
@@ -16001,13 +16031,24 @@ impl App {
                     return; // the app dropped the receiver
                 }
             }
-            // Pipe closed: the process is finishing. Reap it for the exit code.
-            let code = reader_child
-                .lock()
-                .expect("command lock")
-                .wait()
-                .ok()
-                .and_then(|s| s.code());
+            // Pipe closed: the process is finishing. Reap it for the exit code,
+            // but NEVER hold the lock across a blocking `wait()` — a cancel on the
+            // UI thread takes the same lock to `kill()`, and if a process closed
+            // its stdout while still alive, a blocking `wait()` would hold the
+            // lock forever and deadlock cancellation. Poll with `try_wait`,
+            // releasing the lock between polls, and recover from poisoning so one
+            // panicked thread can't take the UI thread down with it.
+            let code = loop {
+                let status = reader_child
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .try_wait();
+                match status {
+                    Ok(Some(s)) => break s.code(),
+                    Ok(None) => std::thread::sleep(std::time::Duration::from_millis(25)),
+                    Err(_) => break None,
+                }
+            };
             let _ = tx.send(CmdMsg::Done(code));
         });
         self.running_command = Some(RunningCommand {
@@ -16132,7 +16173,14 @@ impl App {
     /// the reader thread reaps it.
     fn cancel_command(&mut self) {
         if let Some(rc) = self.running_command.as_ref() {
-            let _ = rc.child.lock().expect("command lock").kill();
+            // Recover from a poisoned lock so cancellation still works after a
+            // panic in the reader thread; the reader never holds this lock across
+            // a blocking call, so `kill()` cannot block here.
+            let _ = rc
+                .child
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .kill();
             self.bottom_dock.push("[cancelled]".to_string());
         }
     }

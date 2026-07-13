@@ -88,7 +88,15 @@ impl Tester {
         if self.pattern.is_empty() {
             return Outcome::Matches(Vec::new());
         }
-        match regex::Regex::new(&self.pattern) {
+        // Bound the compiled program explicitly: the pattern recompiles on every
+        // keystroke, and a large-but-valid pattern could otherwise spike CPU/RAM
+        // during interactive typing. (The `regex` crate is finite-automata based,
+        // so there is no catastrophic-backtracking ReDoS to worry about.)
+        match regex::RegexBuilder::new(&self.pattern)
+            .size_limit(1 << 20)
+            .dfa_size_limit(1 << 20)
+            .build()
+        {
             Ok(re) => Outcome::Matches(
                 re.find_iter(&self.subject)
                     .take(100)
@@ -120,6 +128,17 @@ mod tests {
     fn reports_compile_error() {
         let mut t = Tester::new("x".to_string());
         t.push('(');
+        assert!(matches!(t.result(), Outcome::Error(_)));
+    }
+
+    #[test]
+    fn oversized_pattern_errors_rather_than_spiking() {
+        // A pattern whose compiled program exceeds the size limit yields a clean
+        // error instead of allocating unboundedly.
+        let mut t = Tester::new("subject".to_string());
+        for c in "a{1000}{1000}{1000}".chars() {
+            t.push(c);
+        }
         assert!(matches!(t.result(), Outcome::Error(_)));
     }
 

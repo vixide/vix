@@ -245,4 +245,26 @@ mod tests {
         assert_eq!(v.display_name(), "Grace Hopper");
         assert_eq!(parse("").display_name(), "(unnamed)");
     }
+
+    proptest::proptest! {
+        // Parsing arbitrary bytes-as-text never panics (a vCard can be an opened,
+        // attacker-supplied file), and `display_name` is always well-defined.
+        #[test]
+        fn parse_never_panics(text in ".*") {
+            let v = parse(&text);
+            let _ = v.display_name();
+        }
+
+        // Realistic property-line shapes (name;params:value) never panic and the
+        // parser never slices on a non-char-boundary.
+        #[test]
+        fn property_lines_never_panic(
+            name in "[A-Za-z]{0,10}",
+            param in ".*",
+            value in ".*",
+        ) {
+            let line = format!("{name};{param}:{value}\n");
+            let _ = parse(&line);
+        }
+    }
 }

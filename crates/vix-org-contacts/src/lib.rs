@@ -121,9 +121,9 @@ pub fn directory(files: &[(String, String)]) -> String {
         let _ = writeln!(
             out,
             "| {} | {} | {} |",
-            c.name,
-            c.field("EMAIL").unwrap_or(""),
-            c.field("PHONE").unwrap_or("")
+            org_cell(&c.name),
+            org_cell(c.field("EMAIL").unwrap_or("")),
+            org_cell(c.field("PHONE").unwrap_or(""))
         );
     }
     out
@@ -148,32 +148,59 @@ pub fn birthdays(files: &[(String, String)]) -> String {
     out
 }
 
+/// Escape a value for a vCard property (RFC 6350 §3.4): backslash, comma and
+/// semicolon are escaped, newlines become the literal `\n`, and carriage
+/// returns are dropped. Without this, a field value containing `;`/`,`/newline
+/// injects extra structured-value components or whole new property lines into
+/// the exported vCard (e.g. a `NOTE` of `x\nTEL:+1-000-EVIL` forging a phone).
+fn vcard_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            ';' => out.push_str("\\;"),
+            ',' => out.push_str("\\,"),
+            '\n' => out.push_str("\\n"),
+            '\r' => {}
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+/// Sanitize a value for a single Org **table cell**: `|` (column separator) and
+/// newlines would break the table structure, so they are replaced with safe
+/// equivalents.
+fn org_cell(s: &str) -> String {
+    s.replace('|', "\\vert").replace(['\n', '\r'], " ")
+}
+
 /// Export all contacts to **vCard 3.0** text.
 #[must_use]
 pub fn to_vcard(files: &[(String, String)]) -> String {
     let mut out = String::new();
     for c in all(files) {
         out.push_str("BEGIN:VCARD\nVERSION:3.0\n");
-        let _ = writeln!(out, "FN:{}", c.name);
+        let _ = writeln!(out, "FN:{}", vcard_escape(&c.name));
         if let Some(email) = c.field("EMAIL") {
             for addr in email.split_whitespace() {
-                let _ = writeln!(out, "EMAIL:{addr}");
+                let _ = writeln!(out, "EMAIL:{}", vcard_escape(addr));
             }
         }
         if let Some(phone) = c.field("PHONE") {
-            let _ = writeln!(out, "TEL:{phone}");
+            let _ = writeln!(out, "TEL:{}", vcard_escape(phone));
         }
         if let Some(addr) = c.field("ADDRESS") {
-            let _ = writeln!(out, "ADR:{addr}");
+            let _ = writeln!(out, "ADR:{}", vcard_escape(addr));
         }
         if let Some(bday) = c.field("BIRTHDAY") {
-            let _ = writeln!(out, "BDAY:{bday}");
+            let _ = writeln!(out, "BDAY:{}", vcard_escape(bday));
         }
         if let Some(nick) = c.field("NICKNAME") {
-            let _ = writeln!(out, "NICKNAME:{nick}");
+            let _ = writeln!(out, "NICKNAME:{}", vcard_escape(nick));
         }
         if let Some(note) = c.field("NOTE") {
-            let _ = writeln!(out, "NOTE:{note}");
+            let _ = writeln!(out, "NOTE:{}", vcard_escape(note));
         }
         out.push_str("END:VCARD\n");
     }
@@ -250,5 +277,58 @@ mod tests {
         assert!(v.contains("EMAIL:ada@analytical.engine"));
         assert!(v.contains("BDAY:1815-12-10"));
         assert!(v.matches("END:VCARD").count() == 2);
+    }
+
+    #[test]
+    fn vcard_escapes_structural_characters() {
+        assert_eq!(vcard_escape("a;b,c\\d"), "a\\;b\\,c\\\\d");
+        // A NOTE that tries to forge a TEL line is neutralized: the newline
+        // becomes a literal `\n`, so no new property line is emitted.
+        let org = "* Bob\n  :PROPERTIES:\n  :NOTE: hi;x\n  :EMAIL: e@x\n  :END:\n";
+        let v = to_vcard(&[("c.org".into(), org.to_string())]);
+        assert!(v.contains("NOTE:hi\\;x"), "got: {v}");
+        // Exactly one TEL/EMAIL structure per real field — no injected lines.
+        assert_eq!(v.matches("\nNOTE:").count(), 1);
+    }
+
+    #[test]
+    fn directory_table_cells_cannot_break_the_table() {
+        // A contact name containing a pipe would otherwise add spurious columns.
+        let org = "* a | b\n  :PROPERTIES:\n  :EMAIL: e@x\n  :END:\n";
+        let d = directory(&[("c.org".into(), org.to_string())]);
+        // The row for this contact has exactly the 3 intended columns (4 pipes).
+        let row = d.lines().find(|l| l.contains("\\vert")).expect("row present");
+        assert_eq!(row.matches('|').count(), 4, "row: {row}");
+    }
+
+    proptest::proptest! {
+        // A NOTE field of arbitrary text can never inject an extra vCard property
+        // line: `vcard_escape` maps newlines to the literal `\n`, so the emitted
+        // vCard for one contact has exactly one line per real field.
+        #[test]
+        fn vcard_note_cannot_inject_property_lines(note in ".*") {
+            let org = format!("* X\n  :PROPERTIES:\n  :NOTE: {}\n  :EMAIL: e@x\n  :END:\n",
+                note.replace('\n', " ")); // the property parser is single-line
+            let v = to_vcard(&[("c.org".into(), org)]);
+            // Exactly one NOTE line, one EMAIL line, one FN line.
+            proptest::prop_assert!(v.matches("\nNOTE:").count() <= 1);
+            // No line other than the known vCard properties/markers appears.
+            for line in v.lines() {
+                let ok = line.is_empty()
+                    || ["BEGIN:VCARD", "END:VCARD", "VERSION:", "FN:", "EMAIL:",
+                        "TEL:", "ADR:", "BDAY:", "NICKNAME:", "NOTE:"]
+                        .iter()
+                        .any(|p| line.starts_with(p));
+                proptest::prop_assert!(ok, "unexpected injected line: {line:?}");
+            }
+        }
+
+        // vcard_escape never panics and never leaves a bare newline in its output.
+        #[test]
+        fn vcard_escape_removes_line_breaks(s in ".*") {
+            let e = vcard_escape(&s);
+            proptest::prop_assert!(!e.contains('\n'));
+            proptest::prop_assert!(!e.contains('\r'));
+        }
     }
 }

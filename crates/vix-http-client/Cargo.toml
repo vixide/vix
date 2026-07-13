@@ -9,3 +9,6 @@ description = "A minimal HTTP client driven by a `.http`-style buffer."
 
 [dependencies]
 ureq = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

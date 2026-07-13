@@ -24,10 +24,22 @@ pub struct Terminal {
     parser: Arc<Mutex<vt100::Parser>>,
     writer: Box<dyn Write + Send>,
     master: Box<dyn portable_pty::MasterPty + Send>,
-    _child: Box<dyn portable_pty::Child + Send + Sync>,
+    child: Box<dyn portable_pty::Child + Send + Sync>,
     alive: Arc<AtomicBool>,
     rows: u16,
     cols: u16,
+}
+
+impl Drop for Terminal {
+    fn drop(&mut self) {
+        // `portable_pty::Child` does not kill the shell on drop, and the reader
+        // thread holds a cloned master fd, so without this the shell process and
+        // its reader thread would leak on every terminal close/reopen. Killing
+        // and reaping the child closes the PTY slave, so the reader sees EOF and
+        // exits.
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
 }
 
 impl Terminal {
@@ -82,7 +94,7 @@ impl Terminal {
             parser,
             writer,
             master: pair.master,
-            _child: child,
+            child,
             alive,
             rows,
             cols,
@@ -250,6 +262,26 @@ mod tests {
         assert_eq!(
             encode_key(k(KeyCode::Backspace, KeyModifiers::NONE)),
             vec![0x7f]
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn dropping_the_terminal_kills_the_shell_and_reader() {
+        use std::time::{Duration, Instant};
+        let term = Terminal::open("/bin/sh", std::path::Path::new("/"), 24, 80)
+            .expect("spawn a shell");
+        // Observe the reader thread's liveness flag past the drop.
+        let alive = Arc::clone(&term.alive);
+        assert!(alive.load(Ordering::SeqCst), "reader should start alive");
+        drop(term); // Drop kills+reaps the child → PTY EOF → reader exits.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while alive.load(Ordering::SeqCst) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        assert!(
+            !alive.load(Ordering::SeqCst),
+            "reader thread never saw EOF — the shell leaked"
         );
     }
 }

@@ -9,3 +9,6 @@ description = "Shared CSV/TSV/JSON conversion helpers for the Tools → Convert 
 
 [dependencies]
 serde_json = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

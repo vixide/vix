@@ -658,13 +658,38 @@ fn escape_html(s: &str) -> String {
         .replace('\'', "&#39;")
 }
 
+/// Return `url` if it uses a safe scheme for an exported hyperlink, otherwise
+/// `"#"`. The exported HTML is a standalone document a user opens in a browser,
+/// so an active `javascript:`/`data:`/`vbscript:` href would run attacker script
+/// (stored XSS from a crafted `.org` file). Allow only http(s), mailto, file,
+/// fragment/relative, and scheme-less relative links; neutralize everything else.
+fn safe_href(url: &str) -> String {
+    let lower = url.trim_start().to_ascii_lowercase();
+    let ok = lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("mailto:")
+        || lower.starts_with("file:")
+        || lower.starts_with('#')
+        || lower.starts_with('/')
+        || !lower.contains(':'); // scheme-less relative path
+    if ok { url.to_string() } else { "#".to_string() }
+}
+
 /// Convert Org inline markup to HTML (escaping text first).
 fn inline_html(s: &str) -> String {
+    use regex::Captures;
     let s = escape_html(s);
-    // Links: the regex ran on escaped text, so brackets are intact.
-    let s = LINK.replace_all(&s, "<a href=\"$1\">$2</a>").into_owned();
+    // Links: the regex ran on escaped text, so brackets are intact. The href is
+    // scheme-checked so a `javascript:`/`data:` URL can't produce an active link.
+    let s = LINK
+        .replace_all(&s, |c: &Captures| {
+            format!("<a href=\"{}\">{}</a>", safe_href(&c[1]), &c[2])
+        })
+        .into_owned();
     let s = BARE_LINK
-        .replace_all(&s, "<a href=\"$1\">$1</a>")
+        .replace_all(&s, |c: &Captures| {
+            format!("<a href=\"{}\">{}</a>", safe_href(&c[1]), &c[1])
+        })
         .into_owned();
     let s = emph(&s, '*', "<b>", "</b>");
     let s = emph(&s, '/', "<i>", "</i>");
@@ -733,6 +758,56 @@ pub fn to_html(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn html_export_neutralizes_dangerous_link_schemes() {
+        let danger = [
+            "[[javascript:alert(1)][x]]",
+            "[[JavaScript:alert(document.cookie)][x]]",
+            "[[  javascript:alert(1)][x]]",
+            "[[data:text/html,<script>1</script>][x]]",
+            "[[vbscript:msgbox][x]]",
+            "[[javascript:alert(1)]]", // bare link form
+        ];
+        for org in danger {
+            let html = to_html(org);
+            let lower = html.to_ascii_lowercase();
+            assert!(!lower.contains("href=\"javascript"), "leaked scheme: {html}");
+            assert!(!lower.contains("href=\"data:"), "leaked data: {html}");
+            assert!(!lower.contains("href=\"vbscript"), "leaked vbscript: {html}");
+        }
+        // Safe links still render with their href intact (mailto:/fragment
+        // links carry no `/`, so they're unaffected by the emphasis pass).
+        assert!(to_html("[[mailto:a@b.test][mail]]").contains("href=\"mailto:a@b.test\""));
+        assert!(to_html("[[#section][jump]]").contains("href=\"#section\""));
+        // An http(s) scheme is recognized as safe by the guard itself.
+        assert_eq!(safe_href("https://x.test"), "https://x.test");
+        assert_eq!(safe_href("javascript:alert(1)"), "#");
+    }
+
+    proptest::proptest! {
+        // For ANY org input, the exported HTML never contains an active
+        // `javascript:`/`data:`/`vbscript:` href, and never panics.
+        #[test]
+        fn to_html_never_emits_active_script_hrefs(s in ".*") {
+            let html = to_html(&s).to_ascii_lowercase();
+            proptest::prop_assert!(!html.contains("href=\"javascript"), "{html}");
+            proptest::prop_assert!(!html.contains("href=\"data:"), "{html}");
+            proptest::prop_assert!(!html.contains("href=\"vbscript"), "{html}");
+        }
+
+        // The scheme guard maps every dangerous scheme to `#` and never panics.
+        #[test]
+        fn safe_href_neutralizes_non_allowlisted_schemes(scheme in "[a-zA-Z]{2,12}", rest in ".*") {
+            let url = format!("{scheme}:{rest}");
+            let out = safe_href(&url);
+            let lower = scheme.to_ascii_lowercase();
+            let allowed = matches!(lower.as_str(), "http" | "https" | "mailto" | "file");
+            if !allowed {
+                proptest::prop_assert_eq!(out, "#".to_string(), "unallowed scheme leaked: {}", url);
+            }
+        }
+    }
 
     #[test]
     fn detects_headline_levels() {

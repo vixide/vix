@@ -245,7 +245,10 @@ impl Default for Settings {
             time_zone: "UTC".to_string(),
             restore_session: true,
             sticky_search_highlight: true,
-            ai_command: "claude -p \"{prompt}\"".to_string(),
+            // Placeholders are single-quoted by `ai_command_line`, so the
+            // template must NOT add quotes of its own (doing so would let chat
+            // text break out and inject shell commands).
+            ai_command: "claude -p {prompt}".to_string(),
             ai_diff_review: true,
             editorconfig: true,
             auto_pair: true,
@@ -281,22 +284,26 @@ impl Settings {
     /// Build the shell command the AI menu runs for `prompt` over the input text
     /// stored at `file`, expanding the [`ai_command`](Self::ai_command) template.
     ///
-    /// `{prompt}` is replaced with the instruction. If the template contains
-    /// `{file}` it is replaced with `file`; otherwise ` < "<file>"` is appended so
-    /// the text is fed on stdin (the conventional shape for `claude -p`). An empty
-    /// template falls back to the default `claude` invocation.
+    /// `{prompt}` and `{file}` are substituted as **POSIX single-quoted** strings
+    /// so that a chat message — free user text, e.g. containing `"`, `` ` ``,
+    /// `$(…)`, or `;` — cannot break out of its argument and inject shell
+    /// commands when the result is run via `sh -c`. Because the placeholders
+    /// arrive pre-quoted, templates must **not** wrap them in quotes of their own
+    /// (the built-in default does not). If the template contains `{file}` it is
+    /// substituted; otherwise the text is fed on stdin via an appended redirect.
+    /// An empty template falls back to the default `claude` invocation.
     #[must_use]
     pub fn ai_command_line(&self, prompt: &str, file: &str) -> String {
         let template = if self.ai_command.trim().is_empty() {
-            "claude -p \"{prompt}\""
+            "claude -p {prompt}"
         } else {
             self.ai_command.as_str()
         };
-        let with_prompt = template.replace("{prompt}", prompt);
+        let with_prompt = template.replace("{prompt}", &sh_single_quote(prompt));
         if with_prompt.contains("{file}") {
-            with_prompt.replace("{file}", file)
+            with_prompt.replace("{file}", &sh_single_quote(file))
         } else {
-            format!("{with_prompt} < \"{file}\"")
+            format!("{with_prompt} < {}", sh_single_quote(file))
         }
     }
 
@@ -346,40 +353,46 @@ impl Settings {
     }
 }
 
+/// Quote `s` as a single POSIX shell token using single quotes, escaping any
+/// embedded single quote as `'\''`. The result is inert under `sh -c`: nothing
+/// inside is expanded, so it is safe to interpolate untrusted text into a
+/// command line.
+fn sh_single_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('\'');
+    for c in s.chars() {
+        if c == '\'' {
+            out.push_str("'\\''");
+        } else {
+            out.push(c);
+        }
+    }
+    out.push('\'');
+    out
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Settings;
+    use super::{Settings, sh_single_quote};
 
     #[test]
-    fn default_ai_command_pipes_text_to_claude_on_stdin() {
+    fn default_ai_command_single_quotes_prompt_and_stdin_file() {
         let s = Settings::default();
         assert_eq!(
             s.ai_command_line("Summarize this text.", "/tmp/in.txt"),
-            "claude -p \"Summarize this text.\" < \"/tmp/in.txt\""
+            "claude -p 'Summarize this text.' < '/tmp/in.txt'"
         );
     }
 
     #[test]
-    fn custom_ai_command_with_file_placeholder_substitutes_path() {
+    fn custom_ai_command_with_file_placeholder_substitutes_quoted_path() {
         let s = Settings {
-            ai_command: "codex exec \"{prompt}\" {file}".to_string(),
+            ai_command: "codex exec {prompt} {file}".to_string(),
             ..Settings::default()
         };
         assert_eq!(
             s.ai_command_line("Explain this text.", "/tmp/in.txt"),
-            "codex exec \"Explain this text.\" /tmp/in.txt"
-        );
-    }
-
-    #[test]
-    fn custom_ai_command_without_file_placeholder_redirects_stdin() {
-        let s = Settings {
-            ai_command: "mistral chat -m \"{prompt}\"".to_string(),
-            ..Settings::default()
-        };
-        assert_eq!(
-            s.ai_command_line("Improve this text.", "/tmp/in.txt"),
-            "mistral chat -m \"Improve this text.\" < \"/tmp/in.txt\""
+            "codex exec 'Explain this text.' '/tmp/in.txt'"
         );
     }
 
@@ -391,7 +404,29 @@ mod tests {
         };
         assert_eq!(
             s.ai_command_line("Define this text.", "/tmp/in.txt"),
-            "claude -p \"Define this text.\" < \"/tmp/in.txt\""
+            "claude -p 'Define this text.' < '/tmp/in.txt'"
         );
+    }
+
+    #[test]
+    fn prompt_cannot_inject_shell_commands() {
+        let s = Settings::default();
+        // A chat message packed with shell metacharacters must remain a single,
+        // inert argument — no unescaped `$(`, backtick, `;`, or `"` breakout.
+        let evil = "\"; rm -rf ~; echo $(id) `whoami`";
+        let cmd = s.ai_command_line(evil, "/tmp/in.txt");
+        // The prompt is fully enclosed in one single-quoted span.
+        assert!(cmd.starts_with("claude -p '"), "{cmd}");
+        // No command-substitution or statement separators survive OUTSIDE quotes:
+        // the only single quotes are the delimiters we added plus the escaped
+        // form `'\''` for the literal `"` there isn't; verify metachars are quoted.
+        assert!(cmd.contains("'\"; rm -rf ~; echo $(id) `whoami`'"), "{cmd}");
+    }
+
+    #[test]
+    fn sh_single_quote_escapes_embedded_single_quotes() {
+        assert_eq!(sh_single_quote("a'b"), "'a'\\''b'");
+        assert_eq!(sh_single_quote("plain"), "'plain'");
+        assert_eq!(sh_single_quote("$(x)`y`"), "'$(x)`y`'");
     }
 }

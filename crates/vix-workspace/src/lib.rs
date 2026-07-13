@@ -16,9 +16,37 @@
 
 #![warn(clippy::pedantic)]
 
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+
+/// Lexically normalize a path: resolve `.` and `..` components textually
+/// (without touching the filesystem, so it never follows a symlink or requires
+/// the path to exist). Used for containment checks on untrusted workspace paths.
+fn normalize_lexical(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for comp in path.components() {
+        match comp {
+            Component::ParentDir => {
+                // Pop a normal component; keep `..` that would escape the root.
+                if !out.pop() {
+                    out.push("..");
+                }
+            }
+            Component::CurDir => {}
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
+/// Resolve `path` to a real path for containment comparison: canonicalize it if
+/// it exists (resolving symlinks and `..`), otherwise fall back to lexical
+/// normalization so non-existent paths are still handled deterministically.
+fn resolve(path: &str) -> PathBuf {
+    let p = Path::new(path);
+    std::fs::canonicalize(p).unwrap_or_else(|_| normalize_lexical(p))
+}
 
 /// The conventional extension for a Vix workspace file.
 pub const EXTENSION: &str = "vix-workspace";
@@ -51,6 +79,57 @@ impl Workspace {
         toml::from_str(text)
     }
 
+    /// Whether any folder is a filesystem root (`/`, a bare drive) or empty.
+    ///
+    /// A workspace file is portable and may be attacker-supplied. Re-rooting the
+    /// fuzzy finder / project search at `/` would trigger a recursive walk of the
+    /// entire filesystem (a denial-of-service and an information-disclosure of
+    /// every path); no legitimate workspace does this, so callers should refuse
+    /// to open such a workspace.
+    #[must_use]
+    pub fn has_root_or_empty_folder(&self) -> bool {
+        self.folders.iter().any(|f| {
+            let norm = normalize_lexical(Path::new(f));
+            // A folder that names nothing concrete — a filesystem root (`/`,
+            // `C:\`), the empty string, or a path that `..`-escapes above the
+            // root (`/..`) — has no `Normal` component. Such a "folder" can only
+            // re-root the index at or above `/`.
+            !norm
+                .components()
+                .any(|c| matches!(c, Component::Normal(_)))
+        })
+    }
+
+    /// Whether `file` lies within one of this workspace's `folders`. Used to
+    /// avoid auto-opening arbitrary absolute paths a malicious workspace file
+    /// smuggled in (e.g. `/etc/passwd`, `~/.ssh/id_rsa`) that are unrelated to
+    /// the workspace's own folders.
+    ///
+    /// Paths that exist are canonicalized before comparison — this resolves
+    /// symlinked prefixes (so a canonical file path still matches a non-canonical
+    /// folder, and vice versa) and, being a real-path check, also defeats
+    /// symlink escapes. Non-existent paths fall back to lexical normalization.
+    #[must_use]
+    pub fn file_within_folders(&self, file: &str) -> bool {
+        let file = resolve(file);
+        self.folders.iter().any(|folder| {
+            let folder = resolve(folder);
+            !folder.as_os_str().is_empty() && file.starts_with(&folder)
+        })
+    }
+
+    /// The subset of `files` that are **not** contained within any workspace
+    /// folder — the entries a caller should decline to auto-open without an
+    /// explicit user confirmation.
+    #[must_use]
+    pub fn external_files(&self) -> Vec<String> {
+        self.files
+            .iter()
+            .filter(|f| !self.file_within_folders(f))
+            .cloned()
+            .collect()
+    }
+
     /// Read a workspace file from `path`.
     ///
     /// # Errors
@@ -68,7 +147,7 @@ impl Workspace {
         let text = self
             .to_toml()
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        std::fs::write(path, text)
+        vix_fileops::write_atomic(path, text.as_bytes())
     }
 }
 
@@ -91,5 +170,48 @@ mod tests {
         let ws = Workspace::from_toml("folders = [\"/x\"]\n").unwrap();
         assert_eq!(ws.folders, vec!["/x".to_string()]);
         assert!(ws.files.is_empty());
+    }
+
+    #[test]
+    fn rejects_root_folder_reroot() {
+        assert!(Workspace {
+            folders: vec!["/".into()],
+            files: vec![],
+        }
+        .has_root_or_empty_folder());
+        assert!(Workspace {
+            folders: vec![String::new()],
+            files: vec![],
+        }
+        .has_root_or_empty_folder());
+        // A `..`-laden path that collapses to root is also caught.
+        assert!(Workspace {
+            folders: vec!["/home/me/../../..".into()],
+            files: vec![],
+        }
+        .has_root_or_empty_folder());
+        assert!(!Workspace {
+            folders: vec!["/home/me/proj".into()],
+            files: vec![],
+        }
+        .has_root_or_empty_folder());
+    }
+
+    #[test]
+    fn external_files_are_flagged() {
+        let ws = Workspace {
+            folders: vec!["/home/me/proj".into()],
+            files: vec![
+                "/home/me/proj/src/main.rs".into(), // inside — fine
+                "/etc/passwd".into(),               // outside — flagged
+                "/home/me/proj/../secret".into(),   // escapes via `..` — flagged
+            ],
+        };
+        assert!(ws.file_within_folders("/home/me/proj/src/main.rs"));
+        assert!(!ws.file_within_folders("/etc/passwd"));
+        assert_eq!(
+            ws.external_files(),
+            vec!["/etc/passwd".to_string(), "/home/me/proj/../secret".to_string()]
+        );
     }
 }

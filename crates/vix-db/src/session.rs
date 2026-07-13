@@ -184,7 +184,7 @@ fn worker(
     let mut conn = match rt.block_on(<sqlx::AnyConnection as sqlx::Connection>::connect(url)) {
         Ok(conn) => conn,
         Err(e) => {
-            let _ = ready_tx.send(Err(e.to_string()));
+            let _ = ready_tx.send(Err(redact_url_secret(&e.to_string(), url)));
             return;
         }
     };
@@ -202,6 +202,28 @@ fn worker(
         }
     }
     let _ = rt.block_on(sqlx::Connection::close(conn));
+}
+
+/// Remove any credential from a connection error before it is shown in the UI.
+///
+/// sqlx connect/config errors are stringified for display and, depending on the
+/// error variant, can echo the DSN — which embeds `user:password@host`. This
+/// replaces the full URL and, defensively, the bare password substring with
+/// placeholders so a password can never surface in a status message or log.
+fn redact_url_secret(msg: &str, url: &str) -> String {
+    let mut out = msg.replace(url, "<database-url>");
+    if let Some(pw) = password_of(url).filter(|p| !p.is_empty()) {
+        out = out.replace(pw, "<redacted>");
+    }
+    out
+}
+
+/// The password component of a `scheme://user:password@host/…` URL, if present.
+fn password_of(url: &str) -> Option<&str> {
+    let after_scheme = url.split_once("://")?.1;
+    let authority = after_scheme.split(['/', '?']).next()?;
+    let userinfo = authority.rsplit_once('@')?.0;
+    userinfo.split_once(':').map(|(_, pw)| pw)
 }
 
 /// Execute one statement for its effect only (setup pragmas), discarding rows.
@@ -298,6 +320,30 @@ mod tests {
 
     fn memory() -> Session {
         Session::connect("sqlite::memory:", &[]).expect("in-memory sqlite connects")
+    }
+
+    #[test]
+    fn password_is_redacted_from_error_text() {
+        let url = "postgres://joel:sup3rsecret@db.internal:5432/app";
+        // An error that echoes the whole DSN.
+        let msg = format!("error connecting to {url}: timeout");
+        let red = redact_url_secret(&msg, url);
+        assert!(!red.contains("sup3rsecret"), "password leaked: {red}");
+        assert!(!red.contains(url), "full DSN leaked: {red}");
+        // An error that echoes only the password (e.g. an auth failure detail).
+        let msg2 = "password authentication failed for password sup3rsecret";
+        let red2 = redact_url_secret(msg2, url);
+        assert!(!red2.contains("sup3rsecret"), "bare password leaked: {red2}");
+    }
+
+    #[test]
+    fn password_of_extracts_only_the_password() {
+        assert_eq!(
+            password_of("mysql://u:p%40ss@h:3306/d"),
+            Some("p%40ss")
+        );
+        assert_eq!(password_of("postgres://user@host/db"), None); // no password
+        assert_eq!(password_of("sqlite::memory:"), None); // no authority
     }
 
     #[test]

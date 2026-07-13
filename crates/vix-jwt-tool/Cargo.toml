@@ -10,3 +10,6 @@ description = "Decode a JSON Web Token's header and payload into readable JSON."
 [dependencies]
 base64 = { workspace = true }
 serde_json = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

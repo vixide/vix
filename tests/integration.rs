@@ -7116,3 +7116,67 @@ fn catalog_none() {
     app.run_action("none");
     assert!(app.editor.active_tab().is_some());
 }
+
+/// Regression test for the run-command deadlock: a child that closes its stdout
+/// but keeps running must still be cancellable. The reader thread reaps the
+/// child with non-blocking `try_wait` (releasing the shared lock between polls),
+/// so a `kill()` from another thread — the shape of `cancel_command` — acquires
+/// the lock and terminates the child promptly instead of blocking forever behind
+/// a `lock().wait()`.
+#[test]
+#[cfg(unix)]
+fn running_command_cancel_is_not_blocked_by_a_detached_child() {
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+
+    // Close stdout immediately, then sleep: EOF reaches the reader while the
+    // process is still alive — exactly the case a blocking `wait()` deadlocks on.
+    let mut child = std::process::Command::new("sh")
+        .arg("-c")
+        .arg("exec 1>&-; sleep 30")
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn sh");
+    let stdout = child.stdout.take().unwrap();
+    let child = Arc::new(Mutex::new(child));
+
+    // Reader thread mirrors run_command: drain stdout, then poll try_wait.
+    let reader_child = Arc::clone(&child);
+    let reader = std::thread::spawn(move || {
+        use std::io::{BufRead, BufReader};
+        for _ in BufReader::new(stdout).lines().map_while(Result::ok) {}
+        loop {
+            match reader_child
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .try_wait()
+            {
+                // Reaped, or an unexpected wait error: stop polling either way.
+                Ok(Some(_)) | Err(_) => break,
+                Ok(None) => std::thread::sleep(Duration::from_millis(25)),
+            }
+        }
+    });
+
+    std::thread::sleep(Duration::from_millis(200)); // let the reader reach reaping
+
+    // Run the cancel (lock + kill) on its own thread and wait for it via a
+    // channel. With the correct lock discipline this completes near-instantly;
+    // with the old `lock().wait()` bug it would block ~30s (until `sleep 30`
+    // exits). A 20s watchdog cleanly separates "returned" from "deadlocked"
+    // without being flaky under heavy parallel test load.
+    let cancel_child = Arc::clone(&child);
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = cancel_child
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .kill();
+        let _ = done_tx.send(());
+    });
+    assert!(
+        done_rx.recv_timeout(Duration::from_secs(20)).is_ok(),
+        "cancel blocked behind the reader's lock — deadlock"
+    );
+    reader.join().unwrap();
+}

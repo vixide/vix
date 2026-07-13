@@ -9,3 +9,6 @@ description = "Basic Org-mode operations: headline structure editing and lightwe
 
 [dependencies]
 regex = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

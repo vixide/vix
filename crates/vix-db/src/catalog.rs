@@ -321,13 +321,36 @@ fn quote_str(name: &str) -> String {
     name.replace('\'', "''")
 }
 
-/// A `value` as a SQL literal: bare when it is a plain number, otherwise a
-/// single-quoted, escaped string. Used by foreign-key follow to build a
-/// `WHERE col = <value>` clause safely.
+/// Whether `s` is a plain integer or decimal number (optionally signed) — the
+/// only shape safe to emit as a bare SQL literal. Deliberately excludes the
+/// forms `f64::parse` also accepts (`inf`, `nan`, `1e3`, `0x…`), which some
+/// engines treat as bare identifiers or re-render unexpectedly.
+fn is_plain_number(s: &str) -> bool {
+    let body = s.strip_prefix(['+', '-']).unwrap_or(s);
+    if body.is_empty() {
+        return false;
+    }
+    let mut seen_dot = false;
+    let mut seen_digit = false;
+    for c in body.chars() {
+        match c {
+            '0'..='9' => seen_digit = true,
+            '.' if !seen_dot => seen_dot = true,
+            _ => return false,
+        }
+    }
+    seen_digit
+}
+
+/// A `value` as a SQL literal: bare when it is a plain integer/decimal number,
+/// otherwise a single-quoted, escaped string. Used by foreign-key follow to
+/// build a `WHERE col = <value>` clause safely. Any SQL metacharacter forces the
+/// quoted branch, so this is not an injection surface; the number check is kept
+/// strict to avoid `inf`/`nan`/exponent value confusion.
 #[must_use]
 pub fn quote_literal(value: &str) -> String {
     let trimmed = value.trim();
-    if !trimmed.is_empty() && trimmed.parse::<f64>().is_ok() {
+    if is_plain_number(trimmed) {
         trimmed.to_string()
     } else {
         format!("'{}'", quote_str(value))
@@ -650,6 +673,22 @@ fn mysql_detail_sql(detail: Detail, t: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quote_literal_only_emits_plain_numbers_bare() {
+        // Plain integers/decimals are bare.
+        assert_eq!(quote_literal("42"), "42");
+        assert_eq!(quote_literal("-3.14"), "-3.14");
+        assert_eq!(quote_literal("+7"), "+7");
+        // Value-confusion forms that `f64` would accept are quoted.
+        assert_eq!(quote_literal("inf"), "'inf'");
+        assert_eq!(quote_literal("nan"), "'nan'");
+        assert_eq!(quote_literal("1e3"), "'1e3'");
+        assert_eq!(quote_literal("0x10"), "'0x10'");
+        // Injection attempts are always quoted and escaped.
+        assert_eq!(quote_literal("a' OR '1'='1"), "'a'' OR ''1''=''1'");
+        assert_eq!(quote_literal(""), "''");
+    }
 
     fn sample() -> Tree {
         Tree::from_objects(&[

@@ -8,3 +8,6 @@ repository.workspace = true
 description = "A small, dependency-free vCard 4.0 (RFC 6350) parser."
 
 [dependencies]
+
+[dev-dependencies]
+proptest = { workspace = true }

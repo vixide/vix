@@ -8,3 +8,6 @@ repository.workspace = true
 description = "A pragmatic subset of Emmet abbreviation expansion."
 
 [dependencies]
+
+[dev-dependencies]
+proptest = { workspace = true }

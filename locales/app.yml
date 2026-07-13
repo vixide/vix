@@ -12235,6 +12235,8 @@ status.org_exported:
   ja: "新しい %{ext} バッファにエクスポートしました"
 status.roam_created:
   en: "Created node: %{title}"
+status.roam_invalid_date:
+  en: "Not a valid YYYY-MM-DD date: %{date}"
 status.roam_no_nodes:
   en: "No Org-roam nodes found in the project"
 status.roam_not_node:
@@ -12331,6 +12333,8 @@ status.workspace_saved:
   en: "Saved workspace to %{path}"
 status.workspace_opened:
   en: "Opened workspace %{path}"
+status.workspace_opened_skipped:
+  en: "Opened workspace %{path} (skipped %{count} file(s) outside its folders)"
 status.workspace_folder_added:
   en: "Added folder to workspace: %{path}"
 status.workspace_not_a_folder:
@@ -14058,6 +14062,8 @@ msg.edit_table_no_buffer:
 msg.open_failed:
   en: "Open failed: %{error}"
   es: "Error al abrir: %{error}"
+msg.workspace_unsafe_root:
+  en: "Refused to open workspace: it re-roots at a filesystem root"
   fr: "Échec de l'ouverture : %{error}"
   de: "Öffnen fehlgeschlagen: %{error}"
   cy: "Methwyd ag agor: %{error}"

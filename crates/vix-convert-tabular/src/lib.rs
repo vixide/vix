@@ -68,7 +68,20 @@ pub fn parse_csv(text: &str) -> Vec<Vec<String>> {
     rows
 }
 
+/// Whether `field` would be interpreted as a formula by a spreadsheet app
+/// (Excel/LibreOffice/Sheets) when the CSV is opened. Such cells enable "CSV
+/// injection": `=`, `+`, `-`, `@` start a formula, and a leading tab or CR can
+/// smuggle one past naive guards. See OWASP "CSV Injection".
+fn needs_formula_guard(field: &str) -> bool {
+    matches!(field.chars().next(), Some('=' | '+' | '-' | '@' | '\t' | '\r'))
+}
+
 /// Write rows as CSV, quoting any field that contains a comma, quote, CR or LF.
+///
+/// Fields that a spreadsheet would evaluate as a formula (leading `=`, `+`, `-`,
+/// `@`, tab, or CR) are neutralized by prefixing a single quote (`'`) so the
+/// value is imported as literal text rather than executed — the widely-used
+/// mitigation for CSV/formula injection.
 #[must_use]
 pub fn write_csv(rows: &[Vec<String>]) -> String {
     let mut out = String::new();
@@ -77,6 +90,13 @@ pub fn write_csv(rows: &[Vec<String>]) -> String {
             if i > 0 {
                 out.push(',');
             }
+            let guarded;
+            let field: &str = if needs_formula_guard(field) {
+                guarded = format!("'{field}");
+                &guarded
+            } else {
+                field
+            };
             if field.contains([',', '"', '\n', '\r']) {
                 out.push('"');
                 out.push_str(&field.replace('"', "\"\""));
@@ -251,5 +271,73 @@ mod tests {
     #[test]
     fn empty_data_is_empty_json_array() {
         assert_eq!(rows_to_json(&parse_csv("a,b\n")), "[]");
+    }
+
+    #[test]
+    fn write_csv_neutralizes_formula_cells() {
+        // Each leading-metacharacter cell is prefixed with `'` so a spreadsheet
+        // imports it as text instead of executing it.
+        let cases = [
+            ("=1+1", "'=1+1"),
+            ("+cmd", "'+cmd"),
+            ("-2+3", "'-2+3"),
+            ("@SUM(A1)", "'@SUM(A1)"),
+            ("=cmd|'/c calc'!A1", "'=cmd|'/c calc'!A1"), // classic DDE payload, neutralized
+        ];
+        for (raw, expected_cell) in cases {
+            let out = write_csv(&[vec![raw.to_string()]]);
+            assert_eq!(out, format!("{expected_cell}\n"), "input {raw:?}");
+        }
+        // Ordinary text is untouched.
+        assert_eq!(write_csv(&[vec!["ok".into()]]), "ok\n");
+        // A tab-leading cell is also guarded (tab itself needs no CSV quoting).
+        assert_eq!(write_csv(&[vec!["\t=1".into()]]), "'\t=1\n");
+    }
+
+    #[test]
+    fn write_csv_guards_then_quotes_when_both_apply() {
+        // A formula cell that also contains a comma is guarded *and* quoted.
+        let out = write_csv(&[vec!["=A1,B1".into()]]);
+        assert_eq!(out, "\"'=A1,B1\"\n");
+    }
+
+    // ---- property-based ("fuzz") tests ------------------------------------
+
+    use proptest::prelude::*;
+
+    proptest! {
+        // Parsing arbitrary bytes-as-text never panics.
+        #[test]
+        fn parse_csv_never_panics(text in ".*") {
+            let _ = parse_csv(&text);
+        }
+
+        // Every emitted CSV cell is safe: no data line begins with a formula
+        // metacharacter (it would be `'`-guarded first), for arbitrary content.
+        #[test]
+        fn write_csv_output_has_no_unguarded_formula_cell(
+            rows in proptest::collection::vec(
+                proptest::collection::vec(".*", 1..4), 1..4)
+        ) {
+            let out = write_csv(&rows);
+            for line in out.lines() {
+                // Split on top-level commas is hard with quoting; instead assert
+                // the whole line never *starts* a field with a bare metachar.
+                // A guarded cell starts with `'` or `"'`.
+                let first = line.chars().next();
+                if let Some(c) = first {
+                    prop_assert!(
+                        !matches!(c, '=' | '+' | '@'),
+                        "line starts with formula char: {line:?}"
+                    );
+                }
+            }
+        }
+
+        // JSON→rows→CSV never panics for arbitrary JSON-ish input.
+        #[test]
+        fn json_to_rows_never_panics(s in ".*") {
+            let _ = json_to_rows(&s);
+        }
     }
 }

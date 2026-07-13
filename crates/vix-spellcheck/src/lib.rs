@@ -249,10 +249,42 @@ fn dict_name_candidates(locale: &str) -> Vec<String> {
     out
 }
 
+/// Resolve `name` on `PATH` only (never the current directory), returning its
+/// absolute path. On Windows a bare `Command::new(name)` would also search the
+/// process's cwd — so if Vix were launched from inside a malicious repo, a
+/// planted `hunspell.exe` there would run. Resolving against `PATH` closes that.
+fn which_on_path(name: &str) -> Option<PathBuf> {
+    let exts: Vec<String> = if cfg!(windows) {
+        std::env::var("PATHEXT")
+            .unwrap_or_else(|_| ".EXE".into())
+            .split(';')
+            .map(str::to_string)
+            .collect()
+    } else {
+        vec![String::new()]
+    };
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        if dir.as_os_str().is_empty() {
+            continue;
+        }
+        for ext in &exts {
+            let candidate = dir.join(format!("{name}{ext}"));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
 /// Parse the search paths reported by `hunspell -D` (printed to stderr under a
 /// `SEARCH PATH:` header as a colon-separated list).
 fn hunspell_search_dirs() -> Vec<PathBuf> {
-    let Ok(out) = Command::new("hunspell").arg("-D").output() else {
+    let Some(hunspell) = which_on_path("hunspell") else {
+        return Vec::new();
+    };
+    let Ok(out) = Command::new(hunspell).arg("-D").output() else {
         return Vec::new();
     };
     let text = String::from_utf8_lossy(&out.stderr);

@@ -103,6 +103,13 @@ pub fn parse_request(text: &str) -> Option<Request> {
 /// completed (DNS, connection, TLS). An HTTP error *status* is not an error here:
 /// the formatted error response is returned as `Ok`.
 pub fn send(req: &Request) -> Result<String, String> {
+    // Only http(s) may be requested. A `.http` buffer can be an opened file, so
+    // restricting the scheme keeps a crafted request from reaching other URL
+    // handlers (e.g. `file://`); ureq itself doesn't implement such schemes, but
+    // rejecting them explicitly is defense-in-depth and a clear error.
+    if !scheme_is_http(&req.url) {
+        return Err(format!("unsupported URL scheme (only http/https): {}", req.url));
+    }
     let mut r = ureq::request(&req.method, &req.url);
     for (name, value) in &req.headers {
         r = r.set(name, value);
@@ -117,6 +124,12 @@ pub fn send(req: &Request) -> Result<String, String> {
         Ok(resp) | Err(ureq::Error::Status(_, resp)) => Ok(format_response(resp)),
         Err(e) => Err(e.to_string()),
     }
+}
+
+/// Whether `url` begins with a permitted (`http`/`https`) scheme, case-insensitively.
+fn scheme_is_http(url: &str) -> bool {
+    let lower = url.trim_start().to_ascii_lowercase();
+    lower.starts_with("http://") || lower.starts_with("https://")
 }
 
 /// Format a `ureq` response into a readable text block (status, headers, blank
@@ -184,5 +197,48 @@ mod tests {
         assert_eq!(req.url, "https://e.com/z");
         assert_eq!(req.headers, vec![("X-Key".to_string(), "9".to_string())]);
         assert_eq!(req.body, "hello");
+    }
+
+    #[test]
+    fn only_http_schemes_are_permitted() {
+        assert!(scheme_is_http("http://e.com/x"));
+        assert!(scheme_is_http("HTTPS://E.com/x"));
+        assert!(!scheme_is_http("file:///etc/passwd"));
+        assert!(!scheme_is_http("gopher://x/"));
+        assert!(!scheme_is_http("ftp://x/"));
+        // `send` refuses a non-http request without performing any I/O.
+        let req = parse_request("GET file:///etc/passwd\n").unwrap();
+        assert!(send(&req).is_err());
+    }
+
+    // ---- property-based ("fuzz") tests ------------------------------------
+
+    use proptest::prelude::*;
+
+    proptest! {
+        // Parsing an arbitrary buffer never panics; any request it yields keeps
+        // the "url has a scheme" invariant `send` relies on.
+        #[test]
+        fn parse_request_never_panics(text in ".*") {
+            if let Some(req) = parse_request(&text) {
+                prop_assert!(req.url.contains("://"), "url without scheme: {:?}", req.url);
+            }
+        }
+
+        // A parsed request whose URL is not http(s) is always refused by `send`
+        // (this runs no real I/O because the guard rejects before the request).
+        #[test]
+        fn non_http_urls_are_refused(scheme in "[a-z]{2,6}", rest in "[a-z0-9./]{1,10}") {
+            let url = format!("{scheme}://{rest}");
+            let req = Request {
+                method: "GET".into(),
+                url: url.clone(),
+                headers: vec![],
+                body: String::new(),
+            };
+            if !scheme_is_http(&url) {
+                prop_assert!(send(&req).is_err(), "non-http not refused: {url}");
+            }
+        }
     }
 }

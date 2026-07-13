@@ -154,10 +154,31 @@ pub fn all_ids(content: &str) -> Vec<String> {
         .collect()
 }
 
-/// The filename for the daily note of `date` (a `YYYY-MM-DD` string).
+/// Whether `date` is a well-formed `YYYY-MM-DD` string.
+///
+/// The daily-note date reaches [`daily_filename`] from a free-text prompt and is
+/// then joined onto the dailies directory to build a path to write. Validating
+/// the exact `YYYY-MM-DD` shape here stops path traversal — e.g. a prompt of
+/// `../../../../tmp/pwned` would otherwise create/overwrite a file far outside
+/// the notes directory.
 #[must_use]
-pub fn daily_filename(date: &str) -> String {
-    format!("{date}.org")
+pub fn is_valid_daily_date(date: &str) -> bool {
+    let b = date.as_bytes();
+    b.len() == 10
+        && b[4] == b'-'
+        && b[7] == b'-'
+        && date
+            .bytes()
+            .enumerate()
+            .all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
+}
+
+/// The filename for the daily note of `date` (a `YYYY-MM-DD` string). Returns
+/// `None` when `date` is not a valid `YYYY-MM-DD`, so a crafted date can't be
+/// turned into a traversal path.
+#[must_use]
+pub fn daily_filename(date: &str) -> Option<String> {
+    is_valid_daily_date(date).then(|| format!("{date}.org"))
 }
 
 /// A fresh daily-note file titled with its date (no `:ID:` — the host fills it).
@@ -312,7 +333,18 @@ pub fn graph(files: &[(String, String)]) -> String {
     let index = |id: &str| ids.iter().position(|(i, _)| i == id);
     let mut out = String::from("#+title: Roam Graph\n\n#+begin_src mermaid\nflowchart LR\n");
     for (n, (_, title)) in ids.iter().enumerate() {
-        let safe = title.replace('"', "'");
+        // Neutralize characters that would break out of the quoted Mermaid node
+        // label (`"`) or confuse its bracket parser (`[` `]` `{` `}`), plus any
+        // stray control characters from a crafted node title.
+        let safe: String = title
+            .chars()
+            .map(|c| match c {
+                '"' => '\'',
+                '[' | ']' | '{' | '}' => ' ',
+                c if c.is_control() => ' ',
+                c => c,
+            })
+            .collect();
         let _ = writeln!(out, "\tn{n}[\"{safe}\"]");
     }
     for (_, content) in files {
@@ -550,8 +582,39 @@ mod tests {
 
     #[test]
     fn daily_helpers() {
-        assert_eq!(daily_filename("2026-06-28"), "2026-06-28.org");
+        assert_eq!(daily_filename("2026-06-28").as_deref(), Some("2026-06-28.org"));
         assert!(daily_template("2026-06-28", "D1").contains("#+title: 2026-06-28"));
         assert_eq!(daily_entry("09:30", "stand-up"), "* 09:30 stand-up\n");
+    }
+
+    #[test]
+    fn daily_filename_rejects_traversal_and_junk() {
+        assert!(is_valid_daily_date("2026-07-12"));
+        for bad in [
+            "../../../tmp/evil",
+            "2026-07-12/../../etc",
+            "2026-7-12",       // wrong widths
+            "2026_07_12",      // wrong separators
+            "20260712",        // no separators
+            "abcd-ef-gh",      // non-digits
+            "2026-07-12.org",  // extra text
+            "",
+        ] {
+            assert!(!is_valid_daily_date(bad), "should reject {bad:?}");
+            assert_eq!(daily_filename(bad), None, "no filename for {bad:?}");
+        }
+    }
+
+    #[test]
+    fn graph_label_cannot_break_out_of_the_mermaid_node() {
+        let files = vec![(
+            "n.org".to_string(),
+            ":PROPERTIES:\n:ID: a1\n:END:\n#+title: evil\"] ; click a1 \"x\n".to_string(),
+        )];
+        let g = graph(&files);
+        let label_line = g.lines().find(|l| l.contains("n0[")).expect("node line");
+        // The only quotes on the label line are the two that wrap the label.
+        assert_eq!(label_line.matches('"').count(), 2, "line: {label_line}");
+        assert!(!label_line.contains(']') || label_line.trim_end().ends_with("\"]"));
     }
 }

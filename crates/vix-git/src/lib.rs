@@ -15,8 +15,10 @@
 #![deny(missing_docs)]
 #![warn(clippy::pedantic)]
 
+use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
+use std::sync::OnceLock;
 
 /// A kind of change to a file (in the index or the working tree).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -379,8 +381,63 @@ pub fn blame_line(dir: &Path, rel_path: &str, line: usize) -> Option<BlameLine> 
 
 // ----- runners (shell out to `git`) --------------------------------------
 
+/// Absolute path to the `git` executable, resolved from `PATH` exactly once.
+///
+/// Every git runner sets `current_dir(dir)` to the opened repository, which is
+/// attacker-controllable content. On Windows, `Command::new("git")` (a bare
+/// name) is resolved by `CreateProcessW` using a search order that includes the
+/// child's current directory — so a repo shipping a `git.exe`/`git.bat` in its
+/// root would run that planted binary. Resolving against `PATH` only (never the
+/// cwd) closes this binary-planting vector. Falls back to the bare name if the
+/// lookup fails (behaviour unchanged on systems where `git` isn't on `PATH`).
+fn git_program() -> &'static OsString {
+    static PROG: OnceLock<OsString> = OnceLock::new();
+    PROG.get_or_init(|| which_on_path("git").unwrap_or_else(|| "git".into()))
+}
+
+/// Find `name` on `PATH` (honouring `PATHEXT` on Windows), returning its
+/// absolute path. Never consults the current directory.
+fn which_on_path(name: &str) -> Option<OsString> {
+    let exts: Vec<String> = if cfg!(windows) {
+        std::env::var("PATHEXT")
+            .unwrap_or_else(|_| ".EXE".into())
+            .split(';')
+            .map(str::to_string)
+            .collect()
+    } else {
+        vec![String::new()]
+    };
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        if dir.as_os_str().is_empty() {
+            continue; // an empty PATH entry means cwd — never search it
+        }
+        for ext in &exts {
+            let candidate = dir.join(format!("{name}{ext}"));
+            if candidate.is_file() {
+                return Some(candidate.into_os_string());
+            }
+        }
+    }
+    None
+}
+
+/// Whether `name` is safe to pass to `git` as a positional ref argument: not
+/// empty, not option-shaped (a leading `-` would be parsed as a flag), and free
+/// of whitespace/control characters. git itself forbids most of these in real
+/// ref names, but validating before spawning stops argument injection through
+/// crafted `.git/refs` entries or prompt input.
+fn valid_ref_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.starts_with('-')
+        && !name.chars().any(|c| c.is_whitespace() || c.is_control())
+}
+
 fn git(dir: &Path, args: &[&str]) -> std::io::Result<std::process::Output> {
-    Command::new("git").current_dir(dir).args(args).output()
+    Command::new(git_program())
+        .current_dir(dir)
+        .args(args)
+        .output()
 }
 
 /// Run `git` and return trimmed stdout on success, or `None` on any failure.
@@ -486,7 +543,7 @@ pub fn stage_content(dir: &Path, rel_path: &str, content: &str) -> Result<(), St
 fn git_stdin(dir: &Path, args: &[&str], input: &str) -> Result<String, String> {
     use std::io::Write;
     use std::process::Stdio;
-    let mut child = Command::new("git")
+    let mut child = Command::new(git_program())
         .current_dir(dir)
         .args(args)
         .stdin(Stdio::piped())
@@ -548,7 +605,12 @@ pub fn local_branches(dir: &Path) -> Vec<String> {
 /// # Errors
 /// Returns the trimmed stderr text when `git switch` exits non-zero or cannot run.
 pub fn checkout(dir: &Path, branch: &str) -> Result<(), String> {
-    match git(dir, &["switch", branch]) {
+    if !valid_ref_name(branch) {
+        return Err(format!("invalid branch name: {branch:?}"));
+    }
+    // `--end-of-options` guarantees the ref can never be read as a flag, even
+    // if it slipped past `valid_ref_name`.
+    match git(dir, &["switch", "--end-of-options", branch]) {
         Ok(o) if o.status.success() => Ok(()),
         Ok(o) => Err(String::from_utf8_lossy(&o.stderr).trim().to_string()),
         Err(e) => Err(e.to_string()),
@@ -562,6 +624,9 @@ pub fn checkout(dir: &Path, branch: &str) -> Result<(), String> {
 /// # Errors
 /// Returns the trimmed stderr text when `git switch -c` exits non-zero or cannot run.
 pub fn create_branch(dir: &Path, name: &str) -> Result<(), String> {
+    if !valid_ref_name(name) {
+        return Err(format!("invalid branch name: {name:?}"));
+    }
     match git(dir, &["switch", "-c", name]) {
         Ok(o) if o.status.success() => Ok(()),
         Ok(o) => Err(String::from_utf8_lossy(&o.stderr).trim().to_string()),
@@ -615,6 +680,38 @@ fn run_ok(dir: &Path, args: &[&str]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn valid_ref_name_rejects_option_shaped_and_control_input() {
+        assert!(valid_ref_name("main"));
+        assert!(valid_ref_name("feature/x-y"));
+        // Option-shaped names that git would otherwise interpret as flags.
+        assert!(!valid_ref_name("--detach"));
+        assert!(!valid_ref_name("-oProxyCommand=x"));
+        assert!(!valid_ref_name("--upload-pack=evil"));
+        // Empty / whitespace / control characters.
+        assert!(!valid_ref_name(""));
+        assert!(!valid_ref_name("a b"));
+        assert!(!valid_ref_name("a\nb"));
+    }
+
+    #[test]
+    fn checkout_and_create_branch_refuse_dash_prefixed_names() {
+        // No git process is spawned: validation fails first, so any temp dir works.
+        let dir = std::env::temp_dir();
+        assert!(checkout(&dir, "--detach").is_err());
+        assert!(create_branch(&dir, "-c").is_err());
+        assert!(create_branch(&dir, "--orphan").is_err());
+    }
+
+    #[test]
+    fn which_on_path_never_returns_a_relative_or_cwd_path() {
+        // Whatever it resolves (git may or may not be installed in CI), it must
+        // be an absolute path — never a bare name resolvable against the cwd.
+        if let Some(p) = which_on_path("git") {
+            assert!(Path::new(&p).is_absolute(), "git resolved to non-absolute: {p:?}");
+        }
+    }
 
     #[test]
     fn hunks_groups_a_modified_line() {

@@ -722,7 +722,10 @@ impl Editor {
         if opts.ensure_final_newline && !data.is_empty() && !data.ends_with('\n') {
             data.push('\n');
         }
-        fs::write(path, data)?;
+        // Atomic, crash-safe save: a temp file is flushed and renamed over the
+        // target, so a crash or full disk mid-write can't truncate the user's
+        // file, and a concurrent reader never sees a half-written buffer.
+        vix_fileops::write_atomic(path, data.as_bytes())?;
         self.tabs[idx].dirty = false;
         self.tabs[idx].preview = false;
         Ok(())

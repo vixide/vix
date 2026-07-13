@@ -25,7 +25,29 @@ pub fn decode(input: &str) -> Result<String, String> {
     };
     let header = decode_part(header)?;
     let payload = decode_part(payload)?;
-    Ok(format!("// header\n{header}\n\n// payload\n{payload}\n"))
+    // This tool only *decodes*; it cannot verify the signature (no key). Make
+    // that explicit so a viewer never mistakes the claims for authenticated
+    // data, and call out the `alg:none` case (an unsigned token) specifically.
+    let mut banner =
+        String::from("// WARNING: signature NOT verified — these claims are untrusted\n");
+    if header_is_alg_none(&header) {
+        banner.push_str("// WARNING: alg=none — this token is unsigned\n");
+    }
+    Ok(format!(
+        "{banner}// header\n{header}\n\n// payload\n{payload}\n"
+    ))
+}
+
+/// Whether the decoded header JSON declares `"alg": "none"` (case-insensitive).
+fn header_is_alg_none(header_json: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(header_json)
+        .ok()
+        .and_then(|v| {
+            v.get("alg")
+                .and_then(|a| a.as_str())
+                .map(|s| s.eq_ignore_ascii_case("none"))
+        })
+        .unwrap_or(false)
 }
 
 /// Base64URL-decode one part and pretty-print it as JSON.
@@ -52,11 +74,48 @@ mod tests {
         assert!(out.contains("\"alg\": \"HS256\""), "{out}");
         assert!(out.contains("\"name\": \"John Doe\""), "{out}");
         assert!(out.contains("// payload"), "{out}");
+        // Every decode makes clear the signature was not checked.
+        assert!(out.contains("NOT verified"), "{out}");
+        assert!(!out.to_lowercase().contains("alg=none"), "HS256 is signed");
+    }
+
+    #[test]
+    fn flags_alg_none_unsigned_tokens() {
+        // {"alg":"none","typ":"JWT"} . {"admin":true} . (empty signature)
+        let none = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJhZG1pbiI6dHJ1ZX0.";
+        let out = decode(none).unwrap();
+        assert!(out.contains("NOT verified"), "{out}");
+        assert!(out.to_lowercase().contains("alg=none"), "{out}");
     }
 
     #[test]
     fn rejects_non_jwt() {
         assert!(decode("not-a-token").is_err());
         assert!(decode("").is_err());
+    }
+
+    // ---- property-based ("fuzz") tests ------------------------------------
+
+    use proptest::prelude::*;
+
+    proptest! {
+        // Decoding arbitrary input never panics, and any successful decode always
+        // carries the "not verified" warning (never presenting claims as trusted).
+        #[test]
+        fn decode_never_panics_and_always_warns(s in ".*") {
+            if let Ok(out) = decode(&s) {
+                prop_assert!(out.contains("NOT verified"), "missing warning: {out}");
+            }
+        }
+
+        // Dotted base64-ish triples (the realistic shape) never panic.
+        #[test]
+        fn dotted_triples_never_panic(
+            a in "[A-Za-z0-9_-]{0,40}",
+            b in "[A-Za-z0-9_-]{0,40}",
+            c in "[A-Za-z0-9_-]{0,40}",
+        ) {
+            let _ = decode(&format!("{a}.{b}.{c}"));
+        }
     }
 }

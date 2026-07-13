@@ -62,7 +62,10 @@ pub fn save(file: &Path, content: &str, history: &History) {
         hash: &hash,
         history,
     }) {
-        let _ = std::fs::write(&path, json);
+        // Atomic write: two editor instances share the same hash-named store, so
+        // a plain truncating write could let a reader observe a half-written file
+        // (load then silently drops the history). Write-then-rename avoids the tear.
+        let _ = vix_fileops::write_atomic(&path, json.as_bytes());
     }
 }
 

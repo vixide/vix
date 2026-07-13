@@ -8,3 +8,6 @@ repository.workspace = true
 description = "Org-contacts: contact management over Org files."
 
 [dependencies]
+
+[dev-dependencies]
+proptest = { workspace = true }
