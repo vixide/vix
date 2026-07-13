@@ -9,7 +9,7 @@ description = "Top menu bar with keyboard-navigable dropdowns (one level of subm
 
 [dependencies]
 rust-i18n = { workspace = true }
-vix-i18n = { path = "../vix-i18n", version = "1.2.0" }
-vix-keymap-model = { path = "../vix-keymap-model", version = "1.2.0" }
-vix-locale-model = { path = "../vix-locale-model", version = "1.2.0" }
-vix-time-zone-model = { path = "../vix-time-zone-model", version = "1.2.0" }
+vix-i18n = { path = "../vix-i18n", version = "1.3.0" }
+vix-keymap-model = { path = "../vix-keymap-model", version = "1.3.0" }
+vix-locale-model = { path = "../vix-locale-model", version = "1.3.0" }
+vix-time-zone-model = { path = "../vix-time-zone-model", version = "1.3.0" }

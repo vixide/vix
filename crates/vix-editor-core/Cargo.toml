@@ -40,7 +40,7 @@ lang-yaml = ["dep:tree-sitter-yaml"]
 [dependencies]
 anyhow = { workspace = true }
 crossterm = { workspace = true }
-vix-clipboard = { path = "../vix-clipboard", version = "1.2.0" }
+vix-clipboard = { path = "../vix-clipboard", version = "1.3.0" }
 getrandom = { workspace = true }
 ratatui-core = { workspace = true }
 ropey = { workspace = true }

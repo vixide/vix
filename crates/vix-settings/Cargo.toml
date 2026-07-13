@@ -10,5 +10,5 @@ description = "User settings, persisted with `confy`."
 [dependencies]
 confy = { workspace = true }
 serde = { workspace = true }
-vix-dap = { path = "../vix-dap", version = "1.2.0" }
-vix-db = { path = "../vix-db", version = "1.2.0" }
+vix-dap = { path = "../vix-dap", version = "1.3.0" }
+vix-db = { path = "../vix-db", version = "1.3.0" }

@@ -8,4 +8,4 @@ repository.workspace = true
 description = "Nerd Font icons, plus a re-export of the `vix_theme_model` theme model."
 
 [dependencies]
-vix-theme-model = { path = "../vix-theme-model", version = "1.2.0" }
+vix-theme-model = { path = "../vix-theme-model", version = "1.3.0" }

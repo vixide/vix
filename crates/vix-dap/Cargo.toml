@@ -10,4 +10,4 @@ description = "Debug Adapter Protocol (DAP) client: drive a debug adapter over s
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
-vix-lsp-core = { path = "../vix-lsp-core", version = "1.2.0" }
+vix-lsp-core = { path = "../vix-lsp-core", version = "1.3.0" }

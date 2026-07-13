@@ -9,5 +9,5 @@ description = "LSP client: process management and document sync over `vix_lsp_co
 
 [dependencies]
 serde_json = { workspace = true }
-vix-lsp-core = { path = "../vix-lsp-core", version = "1.2.0" }
-vix-settings = { path = "../vix-settings", version = "1.2.0" }
+vix-lsp-core = { path = "../vix-lsp-core", version = "1.3.0" }
+vix-settings = { path = "../vix-settings", version = "1.3.0" }
