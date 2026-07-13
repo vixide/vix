@@ -14,13 +14,6 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::time::Duration;
 
-/// Serializes all system-clipboard access. The platform clipboard backends
-/// (notably macOS's Cocoa `NSPasteboard`) are not thread-safe, so concurrent
-/// `arboard` calls from parallel test threads corrupt memory and crash the
-/// process. Holding this lock around every clipboard operation makes access
-/// sequential; in the single-threaded app it is uncontended.
-static CLIPBOARD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 // keyword and ratatui style
 type Theme = HashMap<String, Style>;
 // start byte, end byte, style
@@ -636,12 +629,12 @@ impl Editor {
     /// Currently always returns `Ok`; the system-clipboard failure path falls
     /// back to the in-memory clipboard.
     pub fn set_clipboard(&mut self, text: &str) -> Result<()> {
-        let _guard = CLIPBOARD_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        arboard::Clipboard::new()
-            .and_then(|mut c| c.set_text(text.to_string()))
-            .unwrap_or_else(|_| self.clipboard = Some(text.to_string()));
+        // Route through the shared, lock-guarded clipboard helper so every crate
+        // accesses the (non-thread-safe) platform backend sequentially. Fall back
+        // to the in-memory clipboard if the system clipboard is unavailable.
+        if vix_clipboard::set(text).is_err() {
+            self.clipboard = Some(text.to_string());
+        }
         Ok(())
     }
 
@@ -651,11 +644,7 @@ impl Editor {
     /// # Errors
     /// Returns an error when neither the system nor in-memory clipboard has text.
     pub fn get_clipboard(&self) -> Result<String> {
-        let _guard = CLIPBOARD_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        arboard::Clipboard::new()
-            .and_then(|mut c| c.get_text())
+        vix_clipboard::get()
             .ok()
             .or_else(|| self.clipboard.clone())
             .ok_or_else(|| anyhow!("cant get clipboard"))

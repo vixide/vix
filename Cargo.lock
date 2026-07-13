@@ -4879,6 +4879,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-clipboard"
+version = "1.2.0"
+dependencies = [
+ "anyhow",
+ "arboard",
+]
+
+[[package]]
 name = "vix-clock-panel"
 version = "1.2.0"
 dependencies = [
@@ -5007,7 +5015,6 @@ dependencies = [
 name = "vix-db"
 version = "1.2.0"
 dependencies = [
- "arboard",
  "confy",
  "crossterm",
  "futures-util",
@@ -5018,6 +5025,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tokio",
+ "vix-clipboard",
  "vix-i18n",
  "vix-theme",
 ]
@@ -5069,7 +5077,6 @@ name = "vix-editor-core"
 version = "1.2.0"
 dependencies = [
  "anyhow",
- "arboard",
  "crossterm",
  "getrandom 0.2.17",
  "ratatui-core",
@@ -5097,6 +5104,7 @@ dependencies = [
  "tree-sitter-yaml",
  "unicode-segmentation",
  "unicode-width 0.2.2",
+ "vix-clipboard",
 ]
 
 [[package]]

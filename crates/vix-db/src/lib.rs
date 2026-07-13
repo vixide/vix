@@ -2460,8 +2460,9 @@ impl Browser {
 
     /// Copy `text` to the system clipboard.
     fn yank(&mut self, text: &str) {
-        let outcome = arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string()));
-        self.message = Some(match outcome {
+        // Go through the shared, lock-guarded helper so this never races the
+        // editor's clipboard access on the (non-thread-safe) platform backend.
+        self.message = Some(match vix_clipboard::set(text) {
             Ok(()) => t!("msg.db_copied").to_string(),
             Err(e) => e.to_string(),
         });
