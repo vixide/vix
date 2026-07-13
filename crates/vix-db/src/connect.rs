@@ -94,6 +94,15 @@ pub struct Connection {
     pub ssh_port: String,
     /// Path to an SSH identity file (optional; agent auth is used otherwise).
     pub ssh_identity: String,
+    /// TLS mode appended to the server URL. Empty (the default) preserves the
+    /// driver default (`prefer` — encrypt if offered, but silently fall back to
+    /// plaintext and don't verify the certificate). Set to e.g. `require`
+    /// (encrypt), `verify-ca`, or `verify-full` (encrypt + verify cert/hostname)
+    /// to prevent a plaintext downgrade / MITM. Rendered as `sslmode=` for
+    /// Postgres and `ssl-mode=` for MySQL. Ignored for `SQLite`. For an
+    /// SSH-tunnelled connection (local `127.0.0.1` endpoint) prefer `verify-ca`,
+    /// since `verify-full` checks the hostname against the loopback address.
+    pub sslmode: String,
 }
 
 impl Connection {
@@ -170,7 +179,27 @@ fn server_url(conn: &Connection, password: &str, host: &str, port: &str) -> Stri
             } else {
                 format!("{user}:{}", utf8_percent_encode(password, NON_ALPHANUMERIC))
             };
-            format!("{scheme}://{auth}@{host}:{port}/{}", conn.database)
+            let mut url = format!("{scheme}://{auth}@{host}:{port}/{}", conn.database);
+            // Restrict the TLS mode to the alphabet its known values use
+            // (`require`, `verify-full`, `VERIFY_IDENTITY`, …); this preserves
+            // hyphens/underscores while preventing a crafted value from injecting
+            // extra query parameters (`&`, `=`) into the URL.
+            let value: String = conn
+                .sslmode
+                .trim()
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+                .collect();
+            if !value.is_empty() {
+                // Postgres reads `sslmode`; sqlx-mysql reads `ssl-mode`.
+                let key = if conn.kind == Kind::Postgres {
+                    "sslmode"
+                } else {
+                    "ssl-mode"
+                };
+                url.push_str(&format!("?{key}={value}"));
+            }
+            url
         }
     }
 }
@@ -243,6 +272,44 @@ mod tests {
             ..Connection::default()
         };
         assert_eq!(url(&conn, "pw"), "mysql://root:pw@localhost:3307/test");
+    }
+
+    #[test]
+    fn sslmode_is_appended_per_engine_and_omitted_when_empty() {
+        // Default (empty) preserves the current behaviour: no TLS query param.
+        let mut pg = Connection {
+            kind: Kind::Postgres,
+            host: "h".into(),
+            user: "u".into(),
+            database: "d".into(),
+            ..Connection::default()
+        };
+        assert_eq!(url(&pg, ""), "postgres://u@h:5432/d");
+
+        // Postgres renders `sslmode=`.
+        pg.sslmode = "verify-full".into();
+        assert_eq!(url(&pg, ""), "postgres://u@h:5432/d?sslmode=verify-full");
+
+        // MySQL renders `ssl-mode=`.
+        let my = Connection {
+            kind: Kind::Mysql,
+            host: "h".into(),
+            user: "u".into(),
+            database: "d".into(),
+            sslmode: "VERIFY_IDENTITY".into(),
+            ..Connection::default()
+        };
+        assert_eq!(url(&my, ""), "mysql://u@h:3306/d?ssl-mode=VERIFY_IDENTITY");
+
+        // A tunnelled connection carries the mode through to the local endpoint.
+        assert_eq!(
+            url_via_local(&pg, "", 55000),
+            "postgres://u@127.0.0.1:55000/d?sslmode=verify-full"
+        );
+
+        // A crafted value cannot inject extra query parameters.
+        pg.sslmode = "require&search_path=evil".into();
+        assert_eq!(url(&pg, ""), "postgres://u@h:5432/d?sslmode=requiresearch_pathevil");
     }
 
     #[test]

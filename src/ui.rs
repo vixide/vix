@@ -3832,6 +3832,7 @@ fn draw_db_form(app: &mut App, frame: &mut Frame, area: Rect) {
         t!("ui.db_field_ssh_user"),
         t!("ui.db_field_ssh_port"),
         t!("ui.db_field_ssh_identity"),
+        t!("ui.db_field_sslmode"),
         t!("ui.db_field_access"),
         t!("ui.db_field_store_keyring"),
     ];

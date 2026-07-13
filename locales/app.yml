@@ -14913,6 +14913,8 @@ ui.db_field_ssh_identity:
   en: "SSH key"
   es: "Clave SSH"
   fr: "Clé SSH"
+ui.db_field_sslmode:
+  en: "TLS mode"
   de: "SSH-Schlüssel"
   cy: "Allwedd SSH"
   ga: "Eochair SSH"

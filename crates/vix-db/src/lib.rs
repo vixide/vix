@@ -213,8 +213,8 @@ impl Pane {
 }
 
 /// Number of text form fields (name, kind, file, host, port, user, database,
-/// password command, ssh host/user/port/identity).
-pub const FORM_FIELDS: usize = 12;
+/// password command, ssh host/user/port/identity, sslmode).
+pub const FORM_FIELDS: usize = 13;
 
 /// Index of the kind row in the form (cycled, not typed).
 pub const FORM_KIND: usize = 1;
@@ -225,6 +225,9 @@ pub const FORM_PASSWORD_COMMAND: usize = 7;
 /// Index of the SSH-tunnel host text field (the following three are user,
 /// port, identity).
 pub const FORM_SSH_HOST: usize = 8;
+
+/// Index of the TLS-mode text field (`sslmode` / `ssl-mode`).
+pub const FORM_SSLMODE: usize = 12;
 
 /// Index of the access row (read-only / read-write), toggled, not typed.
 pub const FORM_WRITABLE: usize = FORM_FIELDS;
@@ -275,6 +278,7 @@ impl Form {
         f.fields[FORM_SSH_HOST + 1].clone_from(&conn.ssh_user);
         f.fields[FORM_SSH_HOST + 2].clone_from(&conn.ssh_port);
         f.fields[FORM_SSH_HOST + 3].clone_from(&conn.ssh_identity);
+        f.fields[FORM_SSLMODE].clone_from(&conn.sslmode);
         f
     }
 
@@ -296,6 +300,7 @@ impl Form {
             ssh_user: self.fields[FORM_SSH_HOST + 1].clone(),
             ssh_port: self.fields[FORM_SSH_HOST + 2].clone(),
             ssh_identity: self.fields[FORM_SSH_HOST + 3].clone(),
+            sslmode: self.fields[FORM_SSLMODE].clone(),
         }
     }
 }
