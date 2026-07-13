@@ -13441,6 +13441,13 @@ impl App {
     /// Open the Workspace Dashboard and kick off the background metric computations
     /// (disk usage via `du`, a recursive file count, and the git commit count).
     fn open_dashboard(&mut self) {
+        // Idempotent while already open: re-invoking the action must not spawn
+        // another batch of metric threads (and another `du` scan) on top of the
+        // in-flight one. Reopening after a close (`dashboard_rx` cleared) does
+        // recompute.
+        if self.dashboard.is_some() && self.dashboard_rx.is_some() {
+            return;
+        }
         let folder = self
             .root
             .file_name()

@@ -5203,6 +5203,38 @@ fn workspace_dashboard_opens_counts_files_and_closes() {
 }
 
 #[test]
+fn reopening_the_dashboard_while_open_is_idempotent() {
+    // Re-invoking the action while the dashboard is already open must not spawn
+    // another batch of metric threads / `du` scans. Observable proxy: a resolved
+    // metric is preserved rather than reset by a fresh (re)compute.
+    let dir = unique_dir("dashboard-idem");
+    fs::write(dir.join("a.txt"), "x\n").unwrap();
+    fs::write(dir.join("b.txt"), "y\n").unwrap();
+    let mut app = app_at(&dir);
+
+    app.run_action("tools.dashboard");
+    for _ in 0..200 {
+        app.poll_dashboard();
+        if app.dashboard.as_ref().unwrap().file_count.is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert_eq!(app.dashboard.as_ref().unwrap().file_count, Some(2));
+
+    // Second invocation while still open: the resolved count must survive (a
+    // missing guard would replace the dashboard with a fresh, unresolved one).
+    app.run_action("tools.dashboard");
+    assert!(app.dashboard.is_some());
+    assert_eq!(
+        app.dashboard.as_ref().unwrap().file_count,
+        Some(2),
+        "reopening while open must not reset the in-flight computation"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn system_info_panel_opens_inserts_and_closes() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.system_info");
