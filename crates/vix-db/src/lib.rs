@@ -1792,6 +1792,9 @@ impl Browser {
         if editor::is_write_statement(&stmt) {
             if !self.write_enabled {
                 self.message = Some(t!("msg.db_read_only").to_string());
+                // This attempt never reaches `start_query`, so drop any staged
+                // history template rather than let it attach to a later query.
+                self.history_override = None;
                 return;
             }
             if self.tx == TxState::None {
@@ -1906,6 +1909,9 @@ impl Browser {
     /// reply; [`Self::poll_query`] finishes it. The workbench is "busy" until
     /// then (only `Ctrl+C` responds).
     fn start_query(&mut self, sql: String, kind: QueryKind) {
+        // Consume any staged history template up front so it applies to exactly
+        // this query and can never leak onto a later one, even if we bail below.
+        let history_sql = self.history_override.take().unwrap_or_else(|| sql.clone());
         let Some(session) = self.session.as_ref() else {
             self.message = Some(t!("msg.db_not_connected").to_string());
             return;
@@ -1915,10 +1921,6 @@ impl Browser {
             return;
         }
         self.message = Some(t!("msg.db_running").to_string());
-        // Persist the template if one was staged (a parameterized query),
-        // otherwise persist the executed SQL. `take` ensures the override applies
-        // to exactly one query.
-        let history_sql = self.history_override.take().unwrap_or_else(|| sql.clone());
         self.pending_query = Some(Pending {
             started: std::time::Instant::now(),
             sql,
@@ -2866,6 +2868,51 @@ mod tests {
         assert!(
             !entry.contains("hunter2"),
             "the prompted secret must never reach persisted history: {entry:?}"
+        );
+    }
+
+    #[test]
+    fn readonly_rejected_param_write_does_not_corrupt_later_history() {
+        let mut b = browser();
+        b.session = Some(session::Session::connect("sqlite::memory:", &[]).expect("memory db"));
+        b.write_enabled = false; // read-only: a write is rejected before running
+
+        // Attempt a parameterized WRITE; it is rejected and must NOT leave its
+        // template staged for the next query.
+        b.view = View::Params;
+        b.params = Some(ParamPrompt {
+            sql: "UPDATE t SET x = :v".into(),
+            names: vec!["v".into()],
+            values: vec![],
+            input: String::new(),
+        });
+        for c in "sekret".chars() {
+            b.handle_key(key(KeyCode::Char(c)), Pages::default());
+        }
+        b.handle_key(key(KeyCode::Enter), Pages::default());
+        assert!(b.pending_query.is_none(), "read-only write must not run");
+
+        // Now run a plain parameterized READ to completion.
+        b.view = View::Params;
+        b.params = Some(ParamPrompt {
+            sql: "SELECT :n AS n".into(),
+            names: vec!["n".into()],
+            values: vec![],
+            input: String::new(),
+        });
+        b.handle_key(key(KeyCode::Char('1')), Pages::default());
+        b.handle_key(key(KeyCode::Enter), Pages::default());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while b.pending_query.is_some() && std::time::Instant::now() < deadline {
+            b.poll_query();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let entry = b.history.entries.first().expect("read query recorded");
+        assert_eq!(entry, "SELECT :n AS n", "history reflects the read, not the rejected write");
+        assert!(
+            !b.history.entries.iter().any(|e| e.contains("UPDATE")),
+            "the rejected write's template leaked into history: {:?}",
+            b.history.entries
         );
     }
 

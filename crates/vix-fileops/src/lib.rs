@@ -116,15 +116,39 @@ pub fn remove_path(path: &Path) -> io::Result<()> {
 /// rather than replacing the link with a regular file. The temp file is created
 /// with `O_EXCL` (`create_new`), so a pre-planted symlink at the temp name
 /// causes an error instead of a follow — closing the classic `/tmp`-style
-/// temp-file hijack. On Unix the temp is created 0600 while being written, then
-/// the original file's permissions (if any) are restored on the final file.
+/// temp-file hijack.
+///
+/// Permissions match a plain write: an existing file keeps its exact mode; a new
+/// file gets the process umask default (`0666 & ~umask`), just as `fs::write`
+/// would. Note that, being a rename, this replaces the inode — hard links,
+/// ownership, ACLs, and xattrs are not carried over (only the Unix mode is).
+///
+/// The atomic path needs write+execute permission on the *parent directory* (to
+/// create the temp and rename it). When only the file itself is writable (a
+/// writable file inside a directory you can't write), this falls back to a plain
+/// in-place write — losing atomicity but preserving the ability to save, as
+/// `fs::write` did before.
 ///
 /// # Errors
 ///
-/// Returns an error if the temp file cannot be created/written, or the rename
-/// fails (e.g. across filesystems — callers writing to the same directory as the
-/// target, which is the norm, are unaffected).
+/// Returns an error only if both the atomic write and the in-place fallback
+/// fail (e.g. the file itself is not writable, or the disk is full).
 pub fn write_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
+    match write_atomic_inner(path, data) {
+        Ok(()) => Ok(()),
+        Err(atomic_err) => {
+            // Fall back to a truncating in-place write, which needs write
+            // permission only on the file (not its directory).
+            let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+            fs::write(&target, data).map_err(|_| atomic_err)
+        }
+    }
+}
+
+/// The atomic write-temp-then-rename path. Returns an error (which
+/// [`write_atomic`] uses to trigger the in-place fallback) if the directory
+/// can't be written, the temp can't be created, or the rename fails.
+fn write_atomic_inner(path: &Path, data: &[u8]) -> io::Result<()> {
     use std::io::Write as _;
 
     let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
@@ -136,10 +160,15 @@ pub fn write_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
     let seq = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
     let tmp = dir.join(format!(".{base}.vixtmp-{}-{seq}", std::process::id()));
 
+    // An existing file's mode is known up front so the temp can be created with
+    // it (no window where private content is world-readable); a new file is
+    // created at the process default so umask is respected exactly like a plain
+    // create — creating at a fixed 0600 would make every new file owner-only.
+    let existing = fs::metadata(&target).ok().map(|m| m.permissions());
     let mut opts = fs::OpenOptions::new();
     opts.write(true).create_new(true);
     #[cfg(unix)]
-    {
+    if existing.is_some() {
         use std::os::unix::fs::OpenOptionsExt as _;
         opts.mode(0o600);
     }
@@ -152,9 +181,10 @@ pub fn write_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
         return Err(e);
     }
 
-    // Preserve the existing file's permission bits, if it already existed.
-    if let Ok(meta) = fs::metadata(&target) {
-        let _ = f.set_permissions(meta.permissions());
+    // Restore the existing file's exact permission bits (the 0600 temp above may
+    // have been narrower than the original, e.g. a group-writable file).
+    if let Some(perms) = existing {
+        let _ = f.set_permissions(perms);
     }
     drop(f);
 
@@ -264,6 +294,61 @@ mod tests {
             .filter(|e| e.file_name().to_string_lossy().contains("vixtmp"))
             .collect();
         assert!(leftovers.is_empty(), "temp files leaked: {leftovers:?}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn write_atomic_new_file_matches_a_plain_write_mode() {
+        use std::os::unix::fs::PermissionsExt as _;
+        // A brand-new file must get the umask-default mode, exactly like
+        // `fs::write` — not a fixed owner-only 0600.
+        let dir = scratch("atomic-newmode");
+        let a = dir.join("via_atomic.txt");
+        write_atomic(&a, b"x").unwrap();
+        let b = dir.join("via_plain.txt");
+        fs::write(&b, b"x").unwrap();
+        let ma = fs::metadata(&a).unwrap().permissions().mode() & 0o777;
+        let mb = fs::metadata(&b).unwrap().permissions().mode() & 0o777;
+        assert_eq!(ma, mb, "new-file mode must match a plain write (umask-respected)");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn write_atomic_preserves_an_existing_files_exact_mode() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = scratch("atomic-preserve");
+        let p = dir.join("f.txt");
+        fs::write(&p, b"old").unwrap();
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o640)).unwrap();
+        write_atomic(&p, b"new").unwrap();
+        assert_eq!(fs::read(&p).unwrap(), b"new");
+        assert_eq!(
+            fs::metadata(&p).unwrap().permissions().mode() & 0o777,
+            0o640,
+            "existing file's exact mode must be preserved"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn write_atomic_saves_a_writable_file_in_an_unwritable_directory() {
+        use std::os::unix::fs::PermissionsExt as _;
+        // The file is writable but its directory is not: the atomic temp+rename
+        // can't run, so the save must fall back to an in-place write (as root the
+        // atomic path just succeeds — either way the save works).
+        let dir = scratch("atomic-rodir");
+        let p = dir.join("f.txt");
+        fs::write(&p, b"old").unwrap();
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o644)).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o555)).unwrap();
+        let result = write_atomic(&p, b"new");
+        // Restore dir perms first so cleanup can proceed no matter what.
+        let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o755));
+        result.expect("save must succeed via the in-place fallback");
+        assert_eq!(fs::read(&p).unwrap(), b"new");
         let _ = fs::remove_dir_all(&dir);
     }
 
