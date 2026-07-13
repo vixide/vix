@@ -189,6 +189,7 @@ impl Dap {
         };
         let (Some(stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
             let _ = child.kill();
+            let _ = child.wait(); // reap the just-killed child
             return false;
         };
         let (tx, rx) = channel();
@@ -230,6 +231,7 @@ impl Dap {
                 Pending::Other,
             );
             let _ = s.child.kill();
+            let _ = s.child.wait(); // reap so no zombie adapter is left behind
         }
     }
 

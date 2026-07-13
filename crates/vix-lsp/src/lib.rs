@@ -695,7 +695,12 @@ impl Lsp {
             for incoming in drained {
                 match incoming {
                     Incoming::Exited => {
-                        self.servers.remove(&lang);
+                        // Reap the exited child so it doesn't linger as a zombie
+                        // (a crashing/restarting server would otherwise leak one
+                        // per incident). The reader saw EOF, so `wait` is prompt.
+                        if let Some(mut server) = self.servers.remove(&lang) {
+                            let _ = server.child.wait();
+                        }
                         break;
                     }
                     Incoming::Message(msg) => self.handle(&lang, &msg, &mut events),
@@ -991,6 +996,7 @@ impl Lsp {
             server.write_now(&message::request(server.next_id, "shutdown", &Value::Null));
             server.write_now(&message::notification("exit", &Value::Null));
             let _ = server.child.kill();
+            let _ = server.child.wait(); // reap so no zombie is left behind
         }
     }
 }
