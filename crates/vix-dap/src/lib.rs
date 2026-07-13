@@ -114,7 +114,9 @@ enum Pending {
 /// One active debug session.
 struct Session {
     child: Child,
-    stdin: ChildStdin,
+    /// Framed messages to write to the adapter's stdin, drained by a dedicated
+    /// writer thread so a stalled adapter can never block the UI thread.
+    writer: Sender<Vec<u8>>,
     rx: Receiver<Incoming>,
     seq: i64,
     pending: HashMap<i64, Pending>,
@@ -194,10 +196,12 @@ impl Dap {
         };
         let (tx, rx) = channel();
         spawn_reader(stdout, tx);
+        let (wtx, wrx) = channel::<Vec<u8>>();
+        spawn_writer(stdin, wrx);
         let launch_args = build_launch_args(adapter, program_path);
         let mut session = Session {
             child,
-            stdin,
+            writer: wtx,
             rx,
             seq: 1,
             pending: HashMap::new(),
@@ -424,8 +428,9 @@ impl Session {
         self.pending.insert(seq, pending);
         let msg =
             json!({ "seq": seq, "type": "request", "command": command, "arguments": arguments });
-        let _ = self.stdin.write_all(&frame::encode(&msg));
-        let _ = self.stdin.flush();
+        // Non-blocking hand-off to the writer thread; never block the UI thread
+        // on a stalled adapter's stdin pipe.
+        let _ = self.writer.send(frame::encode(&msg));
     }
 
     /// After the `initialized` event: set breakpoints, mark configured, send the
@@ -534,6 +539,19 @@ fn parse_variables(body: &Value) -> Vec<Variable> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Background thread: drain framed messages off `wrx` and write them to the
+/// adapter's stdin, so a stalled adapter can never block the UI thread. Exits
+/// when the channel closes (the [`Session`] was dropped) or a write fails.
+fn spawn_writer(mut stdin: ChildStdin, wrx: Receiver<Vec<u8>>) {
+    std::thread::spawn(move || {
+        while let Ok(buf) = wrx.recv() {
+            if stdin.write_all(&buf).is_err() || stdin.flush().is_err() {
+                return;
+            }
+        }
+    });
 }
 
 /// Background thread: decode framed DAP messages from `stdout` into `tx`.

@@ -124,7 +124,9 @@ pub enum LspEvent {
 /// One running language server.
 struct Server {
     child: Child,
-    stdin: ChildStdin,
+    /// Framed messages to write to the server's stdin, drained by a dedicated
+    /// writer thread so a stalled server can never block the UI thread.
+    writer: Sender<Vec<u8>>,
     rx: Receiver<Incoming>,
     /// Next id for a client→server request.
     next_id: i64,
@@ -141,10 +143,14 @@ struct Server {
 }
 
 impl Server {
-    /// Write a framed message to the server's stdin now (no readiness gate).
+    /// Hand a framed message to the writer thread (no readiness gate).
+    ///
+    /// Document sync sends the whole buffer on every change; writing it to the
+    /// server's stdin directly from the event loop would block the UI thread
+    /// once a stalled server fills the OS pipe buffer. Sending to the writer
+    /// channel is non-blocking; a closed channel (writer gone) is ignored.
     fn write_now(&mut self, msg: &Value) {
-        let _ = self.stdin.write_all(&frame::encode(msg));
-        let _ = self.stdin.flush();
+        let _ = self.writer.send(frame::encode(msg));
     }
 
     /// Send `msg`, or queue it until `initialize` completes.
@@ -1015,9 +1021,11 @@ fn spawn(config: &ServerConfig, root_uri: Option<&str>) -> Option<Server> {
     let stdout = child.stdout.take()?;
     let (tx, rx) = channel();
     spawn_reader(stdout, tx);
+    let (wtx, wrx) = channel::<Vec<u8>>();
+    spawn_writer(stdin, wrx);
     let mut server = Server {
         child,
-        stdin,
+        writer: wtx,
         rx,
         next_id: INITIALIZE_ID + 1,
         pending: HashMap::new(),
@@ -1033,6 +1041,20 @@ fn spawn(config: &ServerConfig, root_uri: Option<&str>) -> Option<Server> {
     );
     server.write_now(&init);
     Some(server)
+}
+
+/// Drain framed messages off `wrx` and write them to the server's stdin. Runs
+/// on its own thread so a stalled server (a full pipe buffer) can never block
+/// the UI thread. Exits when the channel closes (the [`Server`] was dropped) or
+/// a write fails (the server died).
+fn spawn_writer(mut stdin: ChildStdin, wrx: Receiver<Vec<u8>>) {
+    std::thread::spawn(move || {
+        while let Ok(buf) = wrx.recv() {
+            if stdin.write_all(&buf).is_err() || stdin.flush().is_err() {
+                return;
+            }
+        }
+    });
 }
 
 /// Read framed messages off `stdout` and forward each decoded value to `tx`.
@@ -1137,5 +1159,37 @@ mod tests {
     fn disabled_or_unconfigured_is_inactive() {
         assert!(!Lsp::new(false, vec![], Path::new("/")).is_active());
         assert!(!Lsp::new(true, vec![], Path::new("/")).is_active());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn writer_thread_decouples_the_caller_from_a_stalled_stdin() {
+        use std::time::{Duration, Instant};
+        // A child that never reads its stdin, so the OS pipe fills after ~64 KiB.
+        let mut child = Command::new("sh")
+            .arg("-c")
+            .arg("sleep 5")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn sh");
+        let stdin = child.stdin.take().unwrap();
+        let (wtx, wrx) = channel::<Vec<u8>>();
+        spawn_writer(stdin, wrx);
+
+        // Queue several MiB. The writer thread blocks on the full pipe, but the
+        // caller's sends (what `write_now` does) must never block — the whole
+        // point of moving writes off the UI thread.
+        let t0 = Instant::now();
+        for _ in 0..64 {
+            wtx.send(vec![b'x'; 65_536]).unwrap();
+        }
+        assert!(
+            t0.elapsed() < Duration::from_secs(2),
+            "sending blocked the caller — writes are not decoupled from stdin"
+        );
+        let _ = child.kill();
+        let _ = child.wait();
     }
 }
