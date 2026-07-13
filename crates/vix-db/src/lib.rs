@@ -162,8 +162,12 @@ enum QueryKind {
 struct Pending {
     /// When the query was sent (for the elapsed indicator).
     started: std::time::Instant,
-    /// The statement (for history / logging / transaction tracking).
+    /// The statement (for logging / transaction tracking) — the exact SQL sent.
     sql: String,
+    /// The text to persist in history — the bind-parameter template when the
+    /// statement came from substitution, otherwise identical to `sql`. Keeping
+    /// this separate stops prompted secret values from being written to disk.
+    history_sql: String,
     /// How to apply the reply.
     kind: QueryKind,
 }
@@ -366,6 +370,11 @@ pub struct Browser {
     save_sql: String,
     /// Execution awaiting write/DDL confirmation.
     pending_run: Option<PendingRun>,
+    /// When set, the text to record in the *persisted* history for the next
+    /// started query, in place of the executed SQL. Used to keep bind-parameter
+    /// **templates** (`… = :name`) in history rather than the substituted
+    /// statement, so a prompted secret value is never written to disk.
+    history_override: Option<String>,
     /// Raw content shown by the cell viewer.
     pub cell_text: String,
     /// Whether the cell viewer pretty-prints JSON content.
@@ -467,6 +476,7 @@ impl Browser {
             save_name: String::new(),
             save_sql: String::new(),
             pending_run: None,
+            history_override: None,
             cell_text: String::new(),
             cell_pretty: false,
             export_format: 0,
@@ -714,6 +724,9 @@ impl Browser {
             }
             KeyCode::Esc | KeyCode::Char('n' | 'q') => {
                 self.pending_run = None;
+                // Cancelling a confirmed (possibly parameterized) write discards
+                // any staged history template so it can't attach to a later query.
+                self.history_override = None;
                 self.view = View::Workbench;
             }
             _ => {}
@@ -1805,6 +1818,9 @@ impl Browser {
                     let pairs: Vec<(String, String)> =
                         prompt.names.into_iter().zip(prompt.values).collect();
                     let sql = params::substitute(&prompt.sql, &pairs);
+                    // Record the placeholder template — never the substituted
+                    // secret values — in the persisted history.
+                    self.history_override = Some(prompt.sql.clone());
                     self.view = View::Workbench;
                     self.execute_sql(sql);
                 }
@@ -1894,9 +1910,14 @@ impl Browser {
             return;
         }
         self.message = Some(t!("msg.db_running").to_string());
+        // Persist the template if one was staged (a parameterized query),
+        // otherwise persist the executed SQL. `take` ensures the override applies
+        // to exactly one query.
+        let history_sql = self.history_override.take().unwrap_or_else(|| sql.clone());
         self.pending_query = Some(Pending {
             started: std::time::Instant::now(),
             sql,
+            history_sql,
             kind,
         });
     }
@@ -1966,7 +1987,10 @@ impl Browser {
         self.set_uneditable();
         match pending.kind {
             QueryKind::Run => {
-                self.history.push(&pending.sql);
+                // Persist the template (never the substituted secret) to the
+                // on-disk history; the in-memory session log above keeps the real
+                // executed SQL.
+                self.history.push(&pending.history_sql);
                 self.dirty.history = true;
                 self.last_error = None;
                 self.note_tx(&pending.sql, true);
@@ -2802,6 +2826,41 @@ mod tests {
         b.open_history();
         b.handle_key(key(KeyCode::Enter), Pages::default());
         assert_eq!(b.query.text(), "select 1;\nselect 2");
+    }
+
+    #[test]
+    fn parameterized_query_history_stores_template_not_secret() {
+        let mut b = browser();
+        // A real in-memory session so the query actually runs and finalizes.
+        b.session = Some(session::Session::connect("sqlite::memory:", &[]).expect("memory db"));
+        b.view = View::Params;
+        b.params = Some(ParamPrompt {
+            sql: "SELECT :secret AS x".into(),
+            names: vec!["secret".into()],
+            values: vec![],
+            input: String::new(),
+        });
+        // Type the secret value, then Enter runs the substituted statement.
+        for c in "hunter2".chars() {
+            b.handle_key(key(KeyCode::Char(c)), Pages::default());
+        }
+        b.handle_key(key(KeyCode::Enter), Pages::default());
+        // Drive the async query to completion.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while b.pending_query.is_some() && std::time::Instant::now() < deadline {
+            b.poll_query();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(b.pending_query.is_none(), "query never finished: {:?}", b.message);
+        let entry = b.history.entries.first().expect("a history entry was recorded");
+        assert_eq!(
+            entry, "SELECT :secret AS x",
+            "history must store the placeholder template"
+        );
+        assert!(
+            !entry.contains("hunter2"),
+            "the prompted secret must never reach persisted history: {entry:?}"
+        );
     }
 
     #[test]
