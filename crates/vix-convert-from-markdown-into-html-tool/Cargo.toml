@@ -9,3 +9,6 @@ description = "Convert: Markdown into HTML."
 
 [dependencies]
 pulldown-cmark = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

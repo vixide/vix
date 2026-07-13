@@ -10,3 +10,6 @@ description = "Convert: JSON into YAML."
 [dependencies]
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

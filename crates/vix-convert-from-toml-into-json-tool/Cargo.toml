@@ -10,3 +10,6 @@ description = "Convert: TOML into JSON."
 [dependencies]
 serde_json = { workspace = true }
 toml = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

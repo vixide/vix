@@ -35,4 +35,12 @@ mod tests {
         assert!(html.contains("<ul>"), "got: {html}");
         assert!(html.contains("<li>one</li>"), "got: {html}");
     }
+
+    proptest::proptest! {
+        // Converting arbitrary (possibly malformed) Markdown never panics.
+        #[test]
+        fn convert_never_panics(s in ".*") {
+            let _ = convert(&s);
+        }
+    }
 }

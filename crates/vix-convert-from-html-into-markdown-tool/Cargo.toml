@@ -9,3 +9,6 @@ description = "Convert: HTML into Markdown."
 
 [dependencies]
 htmd = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

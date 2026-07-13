@@ -4995,6 +4995,7 @@ name = "vix-convert-from-html-into-markdown-tool"
 version = "1.2.0"
 dependencies = [
  "htmd",
+ "proptest",
 ]
 
 [[package]]
@@ -5008,6 +5009,7 @@ dependencies = [
 name = "vix-convert-from-json-into-toml-tool"
 version = "1.2.0"
 dependencies = [
+ "proptest",
  "serde_json",
  "toml 0.8.23",
 ]
@@ -5023,6 +5025,7 @@ dependencies = [
 name = "vix-convert-from-json-into-yaml-tool"
 version = "1.2.0"
 dependencies = [
+ "proptest",
  "serde_json",
  "serde_yaml",
 ]
@@ -5031,6 +5034,7 @@ dependencies = [
 name = "vix-convert-from-markdown-into-html-tool"
 version = "1.2.0"
 dependencies = [
+ "proptest",
  "pulldown-cmark",
 ]
 
@@ -5038,6 +5042,7 @@ dependencies = [
 name = "vix-convert-from-toml-into-json-tool"
 version = "1.2.0"
 dependencies = [
+ "proptest",
  "serde_json",
  "toml 0.8.23",
 ]
@@ -5060,6 +5065,7 @@ dependencies = [
 name = "vix-convert-from-yaml-into-json-tool"
 version = "1.2.0"
 dependencies = [
+ "proptest",
  "serde_json",
  "serde_yaml",
 ]
@@ -5127,6 +5133,7 @@ name = "vix-edit-value"
 version = "1.2.0"
 dependencies = [
  "crossterm",
+ "proptest",
  "serde_json",
  "serde_yaml",
 ]

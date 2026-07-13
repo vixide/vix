@@ -38,4 +38,18 @@ mod tests {
     fn rejects_invalid_json() {
         assert!(convert("{nope}").is_err());
     }
+
+    proptest::proptest! {
+        #[test]
+        fn convert_never_panics(s in ".*") {
+            let _ = convert(&s);
+        }
+    }
+
+    #[test]
+    fn deeply_nested_input_does_not_overflow() {
+        // Pathological nesting must return an error, not overflow the stack.
+        let deep = format!("{}{}", "[".repeat(100_000), "]".repeat(100_000));
+        let _ = convert(&deep);
+    }
 }

@@ -724,4 +724,21 @@ mod tests {
         assert_eq!(t.handle_key(key('q'), 8), Outcome::Close);
         assert_eq!(t.handle_key(code(KeyCode::Esc), 8), Outcome::Close);
     }
+
+    proptest::proptest! {
+        // Parsing arbitrary text as JSON or YAML never panics (invalid → None).
+        #[test]
+        fn from_text_never_panics(s in ".*") {
+            let _ = Tree::from_text(&s, Format::Json);
+            let _ = Tree::from_text(&s, Format::Yaml);
+        }
+    }
+
+    #[test]
+    fn deeply_nested_value_does_not_overflow() {
+        // The recursive `from_yaml`/`rebuild` walk must not stack-overflow on
+        // pathologically nested input; serde's depth limit rejects it as None.
+        let deep = format!("{}{}", "[".repeat(100_000), "]".repeat(100_000));
+        assert!(Tree::from_text(&deep, Format::Json).is_none());
+    }
 }

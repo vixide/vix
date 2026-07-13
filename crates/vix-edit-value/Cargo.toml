@@ -11,3 +11,6 @@ description = "The structured-value editor: a foldable tree for JSON and YAML."
 crossterm = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

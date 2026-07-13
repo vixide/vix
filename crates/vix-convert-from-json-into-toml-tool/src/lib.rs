@@ -39,4 +39,11 @@ mod tests {
     fn rejects_invalid_json() {
         assert!(convert("{nope}").is_err());
     }
+
+    proptest::proptest! {
+        #[test]
+        fn convert_never_panics(s in ".*") {
+            let _ = convert(&s);
+        }
+    }
 }

@@ -31,4 +31,11 @@ mod tests {
     fn rejects_invalid_toml() {
         assert!(convert("= bad").is_err());
     }
+
+    proptest::proptest! {
+        #[test]
+        fn convert_never_panics(s in ".*") {
+            let _ = convert(&s);
+        }
+    }
 }

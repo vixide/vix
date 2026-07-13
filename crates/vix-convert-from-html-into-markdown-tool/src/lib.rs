@@ -30,4 +30,12 @@ mod tests {
         let md = convert("<a href=\"https://x.test\">link</a>").unwrap();
         assert!(md.contains("[link](https://x.test)"), "got: {md}");
     }
+
+    proptest::proptest! {
+        // Converting arbitrary (possibly malformed) HTML never panics.
+        #[test]
+        fn convert_never_panics(s in ".*") {
+            let _ = convert(&s);
+        }
+    }
 }
