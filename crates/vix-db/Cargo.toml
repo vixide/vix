@@ -21,3 +21,11 @@ tokio = { workspace = true }
 vix-clipboard = { path = "../vix-clipboard", version = "1.2.0" }
 vix-i18n = { path = "../vix-i18n", version = "1.2.0" }
 vix-theme = { path = "../vix-theme", version = "1.2.0" }
+
+# macOS: store DB passwords through the native Security framework rather than
+# shelling out to `security add-generic-password -w <password>`, which exposes
+# the plaintext password as a process argument (visible in `ps`). Scoped to
+# macOS so Linux/Windows builds don't pull in the backend; Linux keeps the
+# already-secure `secret-tool` CLI (secret on stdin).
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }

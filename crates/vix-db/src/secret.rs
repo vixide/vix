@@ -3,13 +3,17 @@
 //!
 //! The order, tried before the interactive prompt: the connection's
 //! `password_command` (any command that prints the secret — `pass`, `op read`,
-//! a wrapper script), then the OS keyring via its CLI (`security` on macOS,
-//! `secret-tool` on Linux). On a supported platform a prompted password can be
-//! stored back so later connects skip the prompt.
+//! a wrapper script), then the OS keyring. On a supported platform a prompted
+//! password can be stored back so later connects skip the prompt.
+//!
+//! The keyring backend is platform-specific: macOS uses the native Security
+//! framework (via the `keyring` crate) so the password never appears as a
+//! process argument; Linux uses the `secret-tool` CLI with the secret passed on
+//! stdin. Both keep the plaintext out of the process table.
 //!
 //! sqlx does not read `~/.pgpass` / `~/.my.cnf`, so those are deliberately not
 //! part of the waterfall. The command *construction* is pure and unit-tested;
-//! only [`run`] touches the process table.
+//! only [`run`] and the keyring backends touch the OS.
 
 use super::connect::Connection;
 
@@ -33,78 +37,86 @@ fn account(conn: &Connection) -> String {
     conn.name.clone()
 }
 
-/// The command that reads `conn`'s password from the OS keyring, or `None` on
-/// a platform without a supported keyring CLI.
+/// The `secret-tool lookup` command reading `conn`'s password (Linux).
+#[cfg(all(unix, not(target_os = "macos")))]
+fn secret_tool_lookup(conn: &Connection) -> Cmd {
+    Cmd {
+        program: "secret-tool".into(),
+        args: vec![
+            "lookup".into(),
+            "service".into(),
+            SERVICE.into(),
+            "account".into(),
+            account(conn),
+        ],
+        stdin: None,
+    }
+}
+
+/// The `secret-tool store` command saving `password` for `conn` (Linux). The
+/// secret travels on stdin, never as an argument.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn secret_tool_store(conn: &Connection, password: &str) -> Cmd {
+    Cmd {
+        program: "secret-tool".into(),
+        args: vec![
+            "store".into(),
+            "--label".into(),
+            format!("vix-db {}", account(conn)),
+            "service".into(),
+            SERVICE.into(),
+            "account".into(),
+            account(conn),
+        ],
+        stdin: Some(password.to_string()),
+    }
+}
+
+/// Read `conn`'s password from the OS keyring, or `None` when it is absent or
+/// the platform has no supported keyring. On macOS this uses the native
+/// Security framework (no secret on the process argument list); on Linux it
+/// runs `secret-tool lookup`.
 #[must_use]
-pub fn keyring_lookup(conn: &Connection) -> Option<Cmd> {
-    let account = account(conn);
-    if cfg!(target_os = "macos") {
-        Some(Cmd {
-            program: "security".into(),
-            args: vec![
-                "find-generic-password".into(),
-                "-w".into(),
-                "-s".into(),
-                SERVICE.into(),
-                "-a".into(),
-                account,
-            ],
-            stdin: None,
-        })
-    } else if cfg!(target_os = "linux") {
-        Some(Cmd {
-            program: "secret-tool".into(),
-            args: vec![
-                "lookup".into(),
-                "service".into(),
-                SERVICE.into(),
-                "account".into(),
-                account,
-            ],
-            stdin: None,
-        })
-    } else {
+pub fn keyring_get(conn: &Connection) -> Option<String> {
+    #[cfg(target_os = "macos")]
+    {
+        keyring::Entry::new(SERVICE, &account(conn))
+            .ok()?
+            .get_password()
+            .ok()
+            .filter(|pw| !pw.is_empty())
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        run(&secret_tool_lookup(conn)).filter(|pw| !pw.is_empty())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = conn;
         None
     }
 }
 
-/// The command that stores `password` for `conn` in the OS keyring, or `None`
-/// on an unsupported platform. macOS takes the secret as an argument; Linux's
-/// `secret-tool` reads it from stdin.
+/// Store `password` for `conn` in the OS keyring; `true` on success. macOS uses
+/// the native Security framework (the secret is never a process argument);
+/// Linux runs `secret-tool store` with the secret on stdin. Unsupported
+/// platforms return `false`.
 #[must_use]
-pub fn keyring_store(conn: &Connection, password: &str) -> Option<Cmd> {
-    let account = account(conn);
-    if cfg!(target_os = "macos") {
-        Some(Cmd {
-            program: "security".into(),
-            args: vec![
-                "add-generic-password".into(),
-                "-U".into(), // update if it already exists
-                "-s".into(),
-                SERVICE.into(),
-                "-a".into(),
-                account,
-                "-w".into(),
-                password.into(),
-            ],
-            stdin: None,
-        })
-    } else if cfg!(target_os = "linux") {
-        Some(Cmd {
-            program: "secret-tool".into(),
-            args: vec![
-                "store".into(),
-                "--label".into(),
-                format!("vix-db {account}"),
-                "service".into(),
-                SERVICE.into(),
-                "account".into(),
-                account,
-            ],
-            stdin: Some(password.to_string()),
-        })
-    } else {
-        None
+pub fn keyring_set(conn: &Connection, password: &str) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        keyring::Entry::new(SERVICE, &account(conn))
+            .and_then(|entry| entry.set_password(password))
+            .is_ok()
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        run(&secret_tool_store(conn, password)).is_some()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (conn, password);
+        false
     }
 }
 
@@ -150,15 +162,13 @@ pub fn resolve(conn: &Connection) -> Option<String> {
             return Some(pw);
         }
     }
-    keyring_lookup(conn)
-        .and_then(|cmd| run(&cmd))
-        .filter(|pw| !pw.is_empty())
+    keyring_get(conn)
 }
 
 /// Store `password` for `conn` in the keyring (best effort); `true` on success.
 #[must_use]
 pub fn store(conn: &Connection, password: &str) -> bool {
-    keyring_store(conn, password).is_some_and(|cmd| run(&cmd).is_some())
+    keyring_set(conn, password)
 }
 
 #[cfg(test)]
@@ -172,33 +182,26 @@ mod tests {
         }
     }
 
+    // On Linux the keyring store command must carry the secret on stdin, never
+    // as a process argument (visible in `ps`). macOS no longer builds a command
+    // at all — it uses the native Security framework — so this test is Linux-only.
+    #[cfg(all(unix, not(target_os = "macos")))]
     #[test]
-    fn lookup_and_store_commands_are_well_formed_per_platform() {
+    fn secret_tool_store_puts_the_password_on_stdin_not_argv() {
         let c = conn("prod");
-        match (keyring_lookup(&c), keyring_store(&c, "hunter2")) {
-            (Some(lookup), Some(store)) => {
-                assert!(
-                    lookup.args.contains(&"prod".to_string()),
-                    "account in lookup: {lookup:?}"
-                );
-                assert!(
-                    lookup.args.contains(&SERVICE.to_string()),
-                    "service in lookup"
-                );
-                assert!(lookup.stdin.is_none(), "lookup takes no stdin");
-                // The secret reaches the store either as an arg (macOS) or on
-                // stdin (Linux), but never leaks into the lookup.
-                let via_arg = store.args.iter().any(|a| a == "hunter2");
-                let via_stdin = store.stdin.as_deref() == Some("hunter2");
-                assert!(
-                    via_arg || via_stdin,
-                    "store carries the password: {store:?}"
-                );
-                assert!(!lookup.args.iter().any(|a| a == "hunter2"));
-            }
-            (None, None) => { /* unsupported platform — both absent, consistent */ }
-            other => panic!("lookup/store availability should match: {other:?}"),
-        }
+        let store = secret_tool_store(&c, "hunter2");
+        assert!(
+            !store.args.iter().any(|a| a == "hunter2"),
+            "password must not be a process argument: {store:?}"
+        );
+        assert_eq!(store.stdin.as_deref(), Some("hunter2"), "secret on stdin");
+        assert!(store.args.contains(&"prod".to_string()), "account present");
+        assert!(store.args.contains(&SERVICE.to_string()), "service present");
+
+        // The lookup carries neither stdin nor the secret.
+        let lookup = secret_tool_lookup(&c);
+        assert!(lookup.stdin.is_none());
+        assert!(!lookup.args.iter().any(|a| a == "hunter2"));
     }
 
     #[test]
