@@ -584,6 +584,13 @@ impl Code {
             // stays responsive.
             if self.content.len_bytes() < ASYNC_PARSE_THRESHOLD || !self.request_async_parse() {
                 self.reparse();
+                // The buffer is now current via a synchronous reparse, so any
+                // earlier in-flight async request is superseded. Clear the stale
+                // pending flag so `parse_pending` can't latch true and make the
+                // host fast-poll forever.
+                if let Some(worker) = self.parse_worker.as_mut() {
+                    worker.requested = worker.installed;
+                }
             }
         }
     }
@@ -648,6 +655,11 @@ impl Code {
         let mut newest: Option<ParseResult> = None;
         if let Some(worker) = self.parse_worker.as_mut() {
             while let Ok(res) = worker.results.try_recv() {
+                // Acknowledge delivery of every result (even a superseded or
+                // treeless one) by advancing `installed`. Without this, a result
+                // that doesn't get installed would leave `requested != installed`
+                // and `parse_pending` latched true forever.
+                worker.installed = worker.installed.max(res.generation);
                 newest = Some(res);
             }
         }
@@ -656,20 +668,22 @@ impl Code {
         // superseded parse has an older generation, or returns no tree).
         if res.generation == self.edit_gen && res.tree.is_some() {
             self.tree = res.tree;
-            if let Some(worker) = self.parse_worker.as_mut() {
-                worker.installed = res.generation;
-            }
             return true;
         }
         false
     }
 
     /// Whether a background reparse is in flight (the host polls faster while so).
+    ///
+    /// Pending means a *newer* generation was requested than has been installed.
+    /// Using `>` (not `!=`) keeps this correct even when a late async result
+    /// advances `installed` past a `requested` that a synchronous reparse reset —
+    /// otherwise the flag could latch true and make the host fast-poll forever.
     #[must_use]
     pub fn parse_pending(&self) -> bool {
         self.parse_worker
             .as_ref()
-            .is_some_and(|w| w.requested != w.installed)
+            .is_some_and(|w| w.requested > w.installed)
     }
 
     fn reparse(&mut self) {
@@ -1341,6 +1355,36 @@ mod tests {
             "nothing pending once the latest result lands"
         );
         assert_eq!(code.content.char(0), '/', "edit applied");
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn parse_pending_clears_after_a_sync_reparse_supersedes_an_async_one() {
+        use std::time::{Duration, Instant};
+        // Start over the async threshold so an edit issues a background parse.
+        let big = "fn f() { let x = 1; }\n".repeat(3000);
+        assert!(big.len() > ASYNC_PARSE_THRESHOLD);
+        let mut code = Code::new(&big, "rust", None).unwrap();
+
+        code.insert(0, "// edit\n"); // async parse requested (requested != installed)
+        assert!(code.parse_pending(), "async reparse requested");
+
+        // Shrink the buffer below the threshold: the next edit reparses
+        // synchronously and must NOT leave the pending flag latched forever.
+        let len = code.content.len_bytes();
+        code.remove(0, len - 10);
+        assert!(code.content.len_bytes() < ASYNC_PARSE_THRESHOLD);
+
+        // Drain any late async result; the flag must settle to false promptly.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while code.parse_pending() && Instant::now() < deadline {
+            code.poll_parse();
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            !code.parse_pending(),
+            "parse_pending latched true after a superseding sync reparse"
+        );
     }
 
     #[test]
