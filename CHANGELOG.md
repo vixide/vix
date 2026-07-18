@@ -6,7 +6,65 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Org task workflow: Emacs chords, close-with-note, and an interactive
+  agenda.**
+  - The **Emacs** keymap now wires the Org `Ctrl+C` chord family: `C-c C-t`
+    cycles a headline's TODO keyword, `C-c C-c` runs the context action (toggle
+    the checkbox on the line, else recompute statistics), and `C-u C-c C-t`
+    (universal argument) marks the headline `DONE` with a closing note. A new
+    `C-c-` prefix indicator and which-key list make the chords discoverable.
+  - **Mark Done with Note…** (`org.close_note`, in the Org menu and `C-u C-c
+    C-t`): prompts for a note, then marks the headline `DONE`, stamps
+    `CLOSED: [now]` under it, and logs the note into its `:LOGBOOK:` drawer —
+    Emacs `org-log-done` behaviour. New pure `org::close_headline`.
+  - The **Agenda Tracker** is now interactive: it opens read-only, and pressing
+    `t` on a task line cycles that task's TODO state directly in its source
+    `.org` file, reloads any open buffer for it, and rebuilds the agenda in
+    place. New pure `org::agenda_items` / `org::render_agenda` (structured items
+    + a line→source map); the agenda now reindexes before compiling so newly
+    added `.org` files are included.
+- **Org drawer folding with Tab.** In an `.org` buffer, pressing **Tab** on a
+  drawer header line (one that starts and ends with a colon, e.g.
+  `:PROPERTIES:`) folds that drawer — hiding its body through `:END:` like code
+  folding — and marks the collapsed header with a trailing `...`
+  (`:PROPERTIES:...`). Tab again on the header unfolds it. Folding is view-only
+  and never edits the buffer — so it works even in read-only buffers; on any
+  other line Tab still indents. New pure helper `org::drawer_range` and editor
+  method `toggle_manual_fold`; folded lines now render a trailing `...` in the
+  editor generally.
+- **File → Open… is now a comprehensive file browser** (new crate
+  `vix-file-browser-panel`, built on `walkdir`): a recursive listing of the
+  workspace root with live search — fuzzy text, `*.rs`-style globs, and
+  `ext:rs` / `.rs` extension filters, all combinable, plus the classic
+  `:line[:col]` jump suffix. Sort by name, size, date created, or date
+  modified (`Ctrl S` cycles, `Ctrl R` flips), toggle hidden files (`Alt H`),
+  navigate directories (Enter/→ enters, ← goes up), and fall back to the
+  classic type-a-path prompt with `Ctrl O` (new action `file.open_path`).
+  Fuzzy queries rank by relevance until an explicit sort is chosen.
+- **Org → Capture submenu** (first in the Org menu): **Anything…** (the old
+  Capture…, now pre-filled from the new `org_anything_capture_template`
+  setting), **Contact…** (moved from Org → Contacts → New Contact…), and the
+  new **Todo…** — a multiline editing area (Alt+Enter = newline) pre-filled
+  from the new `org_todo_capture_template` setting (default `* TODO `) and
+  inserted verbatim at the cursor (action `org.capture_todo`).
+
 ### Changed
+
+- **Help → Keyboard Shortcuts… now lists every active shortcut** in a
+  two-column table — action name and key combo — assembled from the curated
+  global rows, every menu-item accelerator, and the active keymap's chord
+  tables (Spacemacs leader, Emacs `Ctrl X`). Click a column header to sort it
+  ascending, click again for descending; type to filter; ↑↓/PgUp/PgDn and the
+  wheel scroll.
+- **File → Open Recent… is now a multi-column table**: file basename, path,
+  size, created at, and modified at.
+- **All three docks now show by default** — the left dock (explorer), right
+  dock (messages), and bottom dock (`show_bottom_dock` default flipped to
+  `true`). Also fixed a latent bug where, before the first render, a visible
+  dock's unrecorded rectangle made clicks on row/column 0 start a dock
+  resize.
 
 - **Harmonize the modal keymaps.** Spacemacs Normal mode now shares the Vi
   keymap's Normal-mode handler, gaining the full vocabulary (`w`/`b`, `gg`/`G`,

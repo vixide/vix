@@ -125,6 +125,13 @@ pub enum PromptKind {
     DebugWatch,
     /// Enter an Org capture — a quick idea/task inserted as a `* TODO` headline.
     OrgCapture,
+    /// Edit an Org TODO capture in a multiline area (Alt+Enter = newline),
+    /// pre-filled from the `org_todo_capture_template` setting; the text is
+    /// inserted verbatim at the cursor.
+    OrgCaptureTodo,
+    /// Enter a closing note (multiline; Alt+Enter = newline) while marking the
+    /// headline at the cursor DONE (`C-u C-c C-t`).
+    OrgCloseNote,
     /// Org-roam: find or create a node by title.
     RoamFind,
     /// Org-roam: insert a link to a node (found or created) by title.
@@ -303,6 +310,21 @@ USING GIN ((
 ";
 
 /// A command running in a background thread, streaming into the bottom dock.
+/// Backing state for the interactive Org agenda buffer: enough to map a cursor
+/// line back to its source task (so `t` can cycle its TODO state on disk) and to
+/// confirm the active buffer really is this agenda before acting on it.
+struct AgendaView {
+    /// Absolute source path + 0-based headline line for each agenda item, indexed
+    /// as [`vix_org::render_agenda`]'s map refers to them.
+    items: Vec<(PathBuf, usize)>,
+    /// Buffer line index → index into `items`, or `None` for title/heading/blank
+    /// lines (the map returned by [`vix_org::render_agenda`]).
+    line_map: Vec<Option<usize>>,
+    /// The rendered agenda text, compared against the active buffer to verify it
+    /// is still the (read-only) agenda before `t` acts.
+    rendered: String,
+}
+
 struct RunningCommand {
     /// Receiver for the reader thread's output.
     rx: std::sync::mpsc::Receiver<CmdMsg>,
@@ -782,11 +804,25 @@ pub struct Location {
     pub col: usize,
 }
 
+/// One row of the recent-files chooser: the path plus the on-disk stats shown
+/// in its columns (basename, path, size, created at, modified at).
+pub struct RecentEntry {
+    /// The file's path.
+    pub path: PathBuf,
+    /// Size in bytes.
+    pub size: u64,
+    /// Creation time in seconds since the Unix epoch, where recorded.
+    pub created: Option<i64>,
+    /// Last-modified time in seconds since the Unix epoch, or `None`.
+    pub modified: Option<i64>,
+}
+
 /// Recent-files chooser overlay state (File -> Open Recent). Lists previously
-/// opened files; Enter (or a click) reopens the highlighted one.
+/// opened files in a multi-column table; Enter (or a click) reopens the
+/// highlighted one.
 pub struct RecentChooser {
-    /// Recent file paths, most-recent first.
-    pub entries: Vec<PathBuf>,
+    /// Recent files, most-recent first, with their on-disk stats.
+    pub entries: Vec<RecentEntry>,
     /// Index of the highlighted entry.
     pub selected: usize,
 }
@@ -855,6 +891,15 @@ pub struct Layout {
     /// Row list rectangle of the open chooser overlay (recent files), so a
     /// click can hit-test which row was picked.
     pub chooser: Rect,
+    /// Row-list rectangle of the open file browser (File → Open…), so a click
+    /// can hit-test which row was picked and paging knows the view height.
+    pub file_browser: Rect,
+    /// Column-header rectangles (action, keys) of the keyboard-shortcut
+    /// overlay, so a click can sort by that column.
+    pub help_headers: [Rect; 2],
+    /// Body (data-rows) rectangle of the keyboard-shortcut overlay, used to
+    /// size paging and clamp the scroll.
+    pub help_body: Rect,
     /// Glyph-grid rectangle of the open Nerd Font palette, so a click can
     /// hit-test which cell was picked.
     pub nerd_palette: Rect,
@@ -1024,6 +1069,8 @@ pub struct App {
     pub workspace_chooser: Option<WorkspaceChooser>,
     /// Read-only diff overlay (Tools → Compare With File…), when open.
     pub diff_view: Option<DiffViewState>,
+    /// File browser overlay (File → Open…), when open.
+    pub file_browser: Option<crate::file_browser_panel::Panel>,
     /// Recent-files chooser overlay, when open.
     pub recent_chooser: Option<RecentChooser>,
     /// Recent-locations (jump list) chooser overlay, when open.
@@ -1265,10 +1312,9 @@ pub struct App {
     pub show_clock: bool,
     /// Row-selection state for the clock box.
     pub clock: crate::clock::Clock,
-    /// Whether the keyboard-help overlay is shown.
-    pub show_help: bool,
-    /// Live filter text for the keyboard-help browser (matches keys + description).
-    pub help_filter: String,
+    /// Keyboard-shortcut overlay (Help → Keyboard Shortcuts…, F1), when open:
+    /// a filterable, header-sortable action/shortcut table.
+    pub help: Option<crate::keyboard_shortcut_panel::Panel>,
     /// Status-bar text.
     pub status: String,
     /// Set to request application exit.
@@ -1318,6 +1364,15 @@ pub struct App {
     /// Emacs keymap: a `Ctrl+X` prefix has been pressed and the next key
     /// completes the chord. Always false in other keymaps.
     emacs_prefix: bool,
+    /// Emacs keymap: a `Ctrl+C` prefix has been pressed (the Org command family,
+    /// e.g. `C-c C-t`, `C-c C-c`) and the next key completes the chord.
+    emacs_c_prefix: bool,
+    /// Emacs keymap: a `Ctrl+U` universal argument is pending, applying to the
+    /// next command (used by `C-u C-c C-t` to close a task *with* a note).
+    emacs_universal: bool,
+    /// The interactive Org agenda view backing the current agenda buffer, if one
+    /// is open — maps buffer lines to source tasks so `t` can toggle them.
+    agenda: Option<AgendaView>,
     /// Vi / Spacemacs keymaps: true in Insert mode, false in Normal mode.
     /// Meaningless in the non-modal keymaps.
     modal_insert: bool,
@@ -1415,6 +1470,7 @@ impl App {
             clipboard_chooser: None,
             workspace_chooser: None,
             diff_view: None,
+            file_browser: None,
             recent_chooser: None,
             location_chooser: None,
             nerd_palette: None,
@@ -1520,8 +1576,7 @@ impl App {
             calendar: crate::calendar::Calendar::new(),
             show_clock: false,
             clock: crate::clock::Clock::new(),
-            show_help: false,
-            help_filter: String::new(),
+            help: None,
             focus: Focus::Editor,
             status: t!("status.ready").to_string(),
             should_quit: false,
@@ -1547,6 +1602,9 @@ impl App {
             bottom_hmax: 0,
             dock_resize: None,
             emacs_prefix: false,
+            emacs_c_prefix: false,
+            emacs_universal: false,
+            agenda: None,
             modal_insert: false,
             vim_cmd: None,
             vim_pending: None,
@@ -1738,17 +1796,39 @@ impl App {
             self.welcome_key(key);
             return true;
         }
-        if self.show_help {
+        if self.help.is_some() {
+            let page = (self.layout.help_body.height as usize).max(1);
             match key.code {
-                KeyCode::Esc | KeyCode::F(1) => {
-                    self.show_help = false;
-                    self.help_filter.clear();
-                }
+                KeyCode::Esc | KeyCode::F(1) => self.help = None,
                 KeyCode::Backspace => {
-                    self.help_filter.pop();
+                    if let Some(h) = self.help.as_mut() {
+                        h.backspace();
+                    }
+                }
+                KeyCode::Up => {
+                    if let Some(h) = self.help.as_mut() {
+                        h.scroll_up(1);
+                    }
+                }
+                KeyCode::Down => {
+                    if let Some(h) = self.help.as_mut() {
+                        h.scroll_down(1);
+                    }
+                }
+                KeyCode::PageUp => {
+                    if let Some(h) = self.help.as_mut() {
+                        h.scroll_up(page);
+                    }
+                }
+                KeyCode::PageDown => {
+                    if let Some(h) = self.help.as_mut() {
+                        h.scroll_down(page);
+                    }
                 }
                 KeyCode::Char(c) if !Self::ctrl(&key) && !Self::alt(&key) => {
-                    self.help_filter.push(c);
+                    if let Some(h) = self.help.as_mut() {
+                        h.push(c);
+                    }
                 }
                 _ => {}
             }
@@ -1876,6 +1956,7 @@ impl App {
         panel!(edit_value, edit_value_key);
         panel!(edit_bytes, edit_bytes_key);
         panel!(edit_sql, edit_sql_key);
+        panel!(file_browser, file_browser_key);
         panel!(recent_chooser, recent_key);
         panel!(location_chooser, location_key);
         panel!(nerd_palette, nerd_key);
@@ -2041,6 +2122,7 @@ impl App {
                 t!("status.vim_normal").to_string()
             }),
             Keymap::Emacs if self.emacs_prefix => Some("C-x-".to_string()),
+            Keymap::Emacs if self.emacs_c_prefix => Some("C-c-".to_string()),
             Keymap::Spacemacs => Some(if let Some(seq) = &self.spacemacs_leader {
                 format!("SPC {seq}")
             } else if self.modal_insert {
@@ -2064,6 +2146,13 @@ impl App {
                     .map(|&(k, a)| (k.to_string(), a.to_string()))
                     .collect();
                 Some(("C-x".to_string(), rows))
+            }
+            Keymap::Emacs if self.emacs_c_prefix => {
+                let rows = EMACS_CTRL_C
+                    .iter()
+                    .map(|&(k, a)| (k.to_string(), a.to_string()))
+                    .collect();
+                Some(("C-c".to_string(), rows))
             }
             Keymap::Spacemacs => {
                 let seq = self.spacemacs_leader.as_ref()?;
@@ -2403,7 +2492,7 @@ impl App {
                 true
             }
             KeyCode::F(1) => {
-                self.show_help = true;
+                self.open_help();
                 true
             }
             KeyCode::F(12) => {
@@ -2477,6 +2566,22 @@ impl App {
             self.emacs_prefix = false;
             return self.emacs_chord_key(key);
         }
+        // Second key of a `Ctrl+C …` chord (the Org command family).
+        if self.emacs_c_prefix {
+            self.emacs_c_prefix = false;
+            return self.emacs_c_chord_key(key);
+        }
+        // `Ctrl+U` starts a universal argument, applied to the next command
+        // (here: `C-u C-c C-t` closes a task with a note instead of just cycling).
+        if Self::ctrl(&key) && matches!(key.code, KeyCode::Char('u')) {
+            self.emacs_universal = true;
+            self.status = t!("status.emacs_universal").to_string();
+            return true;
+        }
+        // Any key other than the `Ctrl+C` prefix cancels a pending universal arg.
+        if self.emacs_universal && !(Self::ctrl(&key) && matches!(key.code, KeyCode::Char('c'))) {
+            self.emacs_universal = false;
+        }
         if Self::alt(&key) && !Self::ctrl(&key) {
             return self.emacs_meta_key(key);
         }
@@ -2485,6 +2590,7 @@ impl App {
         {
             match c.to_ascii_lowercase() {
                 'x' => self.emacs_prefix = true,
+                'c' => self.emacs_c_prefix = true,
                 'g' => self.status = t!("status.emacs_quit").to_string(),
                 's' => self.run_action("edit.find"),
                 'f' => self.editor_motion(KeyCode::Right),
@@ -2530,6 +2636,32 @@ impl App {
             KeyCode::Char('0' | '1') => self.run_action("view.unsplit"),
             _ => self.status = t!("status.emacs_no_chord").to_string(),
         }
+        true
+    }
+
+    /// The second key of an Emacs `Ctrl+C …` chord — the Org command family.
+    /// Always consumes the key. `C-c C-t` cycles a headline's TODO state (or,
+    /// after `C-u`, closes it with a note), and `C-c C-c` runs the context action
+    /// (toggle a checkbox / refresh statistics).
+    fn emacs_c_chord_key(&mut self, key: KeyEvent) -> bool {
+        let universal = std::mem::take(&mut self.emacs_universal);
+        if Self::ctrl(&key)
+            && let KeyCode::Char(c) = key.code
+        {
+            match c.to_ascii_lowercase() {
+                't' => {
+                    self.run_action(if universal {
+                        "org.close_note"
+                    } else {
+                        "org.cycle_todo"
+                    });
+                }
+                'c' => self.run_action("org.ctrl_c_ctrl_c"),
+                _ => self.status = t!("status.emacs_no_chord").to_string(),
+            }
+            return true;
+        }
+        self.status = t!("status.emacs_no_chord").to_string();
         true
     }
 
@@ -2803,7 +2935,8 @@ impl App {
                 self.status = t!("status.new_buffer").into();
             }
             "file.scratch" => self.new_scratch_buffer(),
-            "file.open" => {
+            "file.open" => self.open_file_browser(),
+            "file.open_path" => {
                 self.prompt = Some(Prompt::new(PromptKind::Open, t!("prompt.open").to_string()));
             }
             "file.open_recent" => self.open_recent_chooser(),
@@ -3026,7 +3159,7 @@ impl App {
     /// handled. Extracted to keep [`App::run_view_action`] within the line limit.
     fn run_help_action(&mut self, action: &str) -> bool {
         match action {
-            "help.shortcuts" => self.show_help = true,
+            "help.shortcuts" => self.open_help(),
             "help.welcome" => self.open_welcome(),
             "help.license" | "vix.license" => {
                 self.welcome = Some(WelcomePanel::open(Self::license_lines()));
@@ -3914,7 +4047,13 @@ impl App {
             "first_split" => self.focus_split_pane(0),
             "last_split" => self.focus_split_pane(usize::MAX),
             // toggles / app
-            "toggle_help" | "toggle_key_menu" => self.show_help = !self.show_help,
+            "toggle_help" | "toggle_key_menu" => {
+                if self.help.is_some() {
+                    self.help = None;
+                } else {
+                    self.open_help();
+                }
+            }
             "toggle_diff_gutter" => self.run_action("view.scrollbar"),
             "escape" => {
                 if let Some(t) = self.editor.active_tab_mut() {
@@ -4352,12 +4491,15 @@ impl App {
                 self.org_rewrite_line(crate::org::toggle_checkbox);
                 self.org_refresh_statistics();
             }
+            "org.ctrl_c_ctrl_c" => self.org_ctrl_c_ctrl_c(),
+            "org.close_note" => self.org_begin_close_note(),
             "org.update_statistics" => self.org_refresh_statistics(),
             "org.move_up" => self.org_move_subtree(crate::org::move_subtree_up),
             "org.move_down" => self.org_move_subtree(crate::org::move_subtree_down),
             "org.export_markdown" => self.org_export(crate::org::to_markdown, "md"),
             "org.export_html" => self.org_export(crate::org::to_html, "html"),
             "org.capture" => self.org_capture(),
+            "org.capture_todo" => self.org_capture_todo(),
             "org.clock_in" => self.org_clock_in(),
             "org.clock_out" => self.org_clock_out(),
             "org.agenda" => self.org_agenda(),
@@ -4545,6 +4687,67 @@ impl App {
         }
     }
 
+    /// Org `C-c C-c`: the context action on the cursor line. On a list item with
+    /// a checkbox, toggle it; otherwise recompute the buffer's statistics
+    /// cookies and checkbox parents (matching how Org's `C-c C-c` "does the right
+    /// thing" for the common editing cases).
+    fn org_ctrl_c_ctrl_c(&mut self) {
+        let on_checkbox = self.editor.active_tab().is_some_and(|t| {
+            let text = t.editor.get_content();
+            let line = t.editor.cursor_line();
+            text.split('\n')
+                .nth(line)
+                .is_some_and(crate::org::has_checkbox)
+        });
+        if on_checkbox {
+            self.org_rewrite_line(crate::org::toggle_checkbox);
+        }
+        self.org_refresh_statistics();
+    }
+
+    /// Org `C-u C-c C-t`: begin closing the headline at the cursor with a note.
+    /// Opens a note prompt (submitted with Enter, Alt+Enter inserts a newline);
+    /// on submit, [`Self::org_close_note`] marks it DONE with a `CLOSED:` stamp
+    /// and a `:LOGBOOK:` entry. A no-op with a status note off a headline.
+    fn org_begin_close_note(&mut self) {
+        let on_headline = self.editor.active_tab().is_some_and(|t| {
+            let text = t.editor.get_content();
+            let line = t.editor.cursor_line();
+            text.split('\n')
+                .nth(line)
+                .and_then(crate::org::headline_level)
+                .is_some()
+        });
+        if !on_headline {
+            self.status = t!("status.org_not_headline").to_string();
+            return;
+        }
+        self.prompt = Some(Prompt::new(
+            PromptKind::OrgCloseNote,
+            t!("prompt.org_close_note").to_string(),
+        ));
+    }
+
+    /// Complete an Org close-with-note: mark the headline at the cursor DONE,
+    /// stamp `CLOSED: [now]`, and log `note` into its `:LOGBOOK:` drawer.
+    fn org_close_note(&mut self, note: &str) {
+        let now = Self::org_timestamp();
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        if let Some(new) = crate::org::close_headline(&text, line, &now, note) {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(line);
+            tab.dirty = true;
+            self.org_refresh_statistics();
+            self.status = t!("status.org_closed").to_string();
+        } else {
+            self.status = t!("status.org_not_headline").to_string();
+        }
+    }
+
     /// Run an Org subtree move, following the cursor to the subtree's new line.
     fn org_move_subtree(&mut self, f: fn(&str, usize) -> Option<(String, usize)>) {
         let Some(tab) = self.editor.active_tab_mut() else {
@@ -4571,13 +4774,28 @@ impl App {
         self.status = t!("status.org_exported", ext = ext).to_string();
     }
 
-    /// Open the Org capture dialog: a single-line prompt whose text is inserted as
-    /// a `* TODO` headline at the cursor.
+    /// Open the Org "capture anything" dialog: a single-line prompt whose text
+    /// is inserted as a `* TODO` headline at the cursor. Pre-filled from the
+    /// `org_anything_capture_template` setting.
     fn org_capture(&mut self) {
-        self.prompt = Some(Prompt::new(
-            PromptKind::OrgCapture,
-            t!("prompt.org_capture").to_string(),
-        ));
+        self.prompt = Some(
+            Prompt::new(PromptKind::OrgCapture, t!("prompt.org_capture").to_string())
+                .with_input(self.settings.org_anything_capture_template.clone()),
+        );
+    }
+
+    /// Open the Org "capture TODO" dialog: a multiline editing area
+    /// (Alt+Enter inserts a newline) pre-filled from the
+    /// `org_todo_capture_template` setting; the text is inserted verbatim at
+    /// the cursor.
+    fn org_capture_todo(&mut self) {
+        self.prompt = Some(
+            Prompt::new(
+                PromptKind::OrgCaptureTodo,
+                t!("prompt.org_capture_todo").to_string(),
+            )
+            .with_input(self.settings.org_todo_capture_template.clone()),
+        );
     }
 
     /// The current local time as an Org timestamp (`YYYY-MM-DD Day HH:MM`).
@@ -4609,9 +4827,10 @@ impl App {
         }
     }
 
-    /// Compile an agenda from every `.org` file in the project into a new tab.
-    fn org_agenda(&mut self) {
-        let mut files: Vec<(String, String)> = Vec::new();
+    /// Gather every project `.org` file as `(absolute path, display name,
+    /// contents)`, skipping any that fail to read. Shared by the agenda builder.
+    fn org_agenda_files(&self) -> Vec<(PathBuf, String, String)> {
+        let mut out = Vec::new();
         for path in &self.file_index {
             if path
                 .extension()
@@ -4623,12 +4842,133 @@ impl App {
                     .unwrap_or(path)
                     .to_string_lossy()
                     .into_owned();
-                files.push((name, content));
+                out.push((path.clone(), name, content));
             }
         }
-        let agenda = crate::org::agenda(&files);
-        self.editor.new_tab_with_content(&agenda);
-        self.status = t!("status.org_agenda", count = files.len()).to_string();
+        out
+    }
+
+    /// Build the agenda buffer text and its backing [`AgendaView`] (line→source
+    /// map) from the project's `.org` files, plus the file count for the status.
+    fn build_agenda_view(&self) -> (String, AgendaView, usize) {
+        let gathered = self.org_agenda_files();
+        let files: Vec<(String, String)> = gathered
+            .iter()
+            .map(|(_, n, c)| (n.clone(), c.clone()))
+            .collect();
+        let items = crate::org::agenda_items(&files);
+        let (text, line_map) = crate::org::render_agenda(&items);
+        let by_name: std::collections::HashMap<&str, &Path> = gathered
+            .iter()
+            .map(|(p, n, _)| (n.as_str(), p.as_path()))
+            .collect();
+        let item_locs: Vec<(PathBuf, usize)> = items
+            .iter()
+            .map(|it| {
+                let path = by_name
+                    .get(it.file.as_str())
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_default();
+                (path, it.line)
+            })
+            .collect();
+        let view = AgendaView {
+            items: item_locs,
+            line_map,
+            rendered: text.clone(),
+        };
+        (text, view, gathered.len())
+    }
+
+    /// Compile an agenda from every `.org` file in the project into a read-only
+    /// tab. The buffer is interactive: pressing `t` on a task line cycles that
+    /// task's TODO state in its source file (see [`Self::agenda_todo_at_cursor`]).
+    fn org_agenda(&mut self) {
+        self.build_file_index(); // pick up any newly added .org files
+        let (text, view, count) = self.build_agenda_view();
+        self.editor.new_tab_with_content(&text);
+        if let Some(tab) = self.editor.active_tab_mut() {
+            tab.read_only = true;
+        }
+        self.agenda = Some(view);
+        self.focus = Focus::Editor;
+        self.status = t!("status.org_agenda", count = count).to_string();
+    }
+
+    /// Rebuild the open agenda buffer in place after a task changed, keeping the
+    /// cursor on `cursor_line`.
+    fn rebuild_agenda(&mut self, cursor_line: usize) {
+        let (text, view, _) = self.build_agenda_view();
+        if let Some(tab) = self.editor.active_tab_mut() {
+            tab.editor.set_content(&text);
+            let last = text.split('\n').count().saturating_sub(1);
+            tab.editor.set_cursor_line(cursor_line.min(last));
+            tab.dirty = false;
+            tab.read_only = true;
+        }
+        self.agenda = Some(view);
+    }
+
+    /// Org view-only keys handled before the read-only guard in the editor: a
+    /// plain Tab folds/unfolds the drawer under the cursor, and a plain `t` in an
+    /// agenda buffer cycles the task there. Returns `true` if the key was
+    /// consumed (so it neither indents nor types).
+    fn org_view_key(&mut self, key: KeyEvent) -> bool {
+        let plain = !Self::ctrl(&key) && !Self::alt(&key);
+        if plain && !Self::shift(&key) && key.code == KeyCode::Tab && self.org_toggle_drawer_fold()
+        {
+            return true;
+        }
+        if plain && key.code == KeyCode::Char('t') && self.agenda_todo_at_cursor() {
+            return true;
+        }
+        false
+    }
+
+    /// Org agenda `t`: cycle the TODO state of the task on the cursor line in its
+    /// source `.org` file, then reload any open buffer for that file and rebuild
+    /// the agenda. Returns `true` if the key was consumed — only when the active
+    /// buffer is the current agenda view (so `t` types normally elsewhere).
+    fn agenda_todo_at_cursor(&mut self) -> bool {
+        if self.agenda.is_none() {
+            return false;
+        }
+        let Some(tab) = self.editor.active_tab() else {
+            return false;
+        };
+        let cur_text = tab.text();
+        let line = tab.editor.cursor_line();
+        // Confirm the active buffer is still the agenda, and locate the task.
+        let target = match &self.agenda {
+            Some(view) if view.rendered == cur_text => view
+                .line_map
+                .get(line)
+                .copied()
+                .flatten()
+                .map(|idx| view.items[idx].clone()),
+            _ => return false,
+        };
+        let Some((path, src_line)) = target else {
+            self.status = t!("status.org_agenda_no_task").to_string();
+            return true;
+        };
+        let Ok(content) = std::fs::read_to_string(&path) else {
+            self.status = t!("status.org_agenda_error").to_string();
+            return true;
+        };
+        let Some(new) = crate::org::cycle_todo(&content, src_line) else {
+            self.status = t!("status.org_not_headline").to_string();
+            return true;
+        };
+        if std::fs::write(&path, &new).is_err() {
+            self.status = t!("status.org_agenda_error").to_string();
+            return true;
+        }
+        // Refresh any open, clean buffer for the edited file, then rebuild.
+        self.editor.reload_clean_from_disk();
+        self.rebuild_agenda(line);
+        self.status = t!("status.org_agenda_toggled").to_string();
+        true
     }
 
     /// Build a clock-time report from the active buffer into a new tab.
@@ -4648,6 +4988,11 @@ impl App {
         match kind {
             PromptKind::OrgCapture if !input.is_empty() => {
                 self.insert_content(&format!("* TODO {input}\n"));
+            }
+            PromptKind::OrgCaptureTodo if !input.is_empty() => {
+                // The multiline capture is inserted verbatim (plus a final
+                // newline), so the template's own structure survives.
+                self.insert_content(&format!("{input}\n"));
             }
             PromptKind::RoamFind | PromptKind::RoamCapture => {
                 self.roam_visit_or_create(input);
@@ -5704,6 +6049,42 @@ impl App {
 
     /// Toggle the fold whose range starts at the cursor's line (LSP-provided
     /// ranges). Reports when there is nothing foldable there.
+    /// In an `.org` buffer, fold or unfold the drawer whose `:NAME:` header the
+    /// cursor sits on (hiding its body through `:END:`, or revealing it again),
+    /// mirroring code folding. Returns `true` if it handled the key — so the
+    /// caller lets Tab fall through to indentation everywhere else. A no-op (and
+    /// `false`) when the buffer is not Org, a selection is active, or the cursor
+    /// is not on a drawer header.
+    fn org_toggle_drawer_fold(&mut self) -> bool {
+        let is_org = self
+            .active_path()
+            .and_then(|p| p.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase))
+            .as_deref()
+            == Some("org");
+        if !is_org {
+            return false;
+        }
+        let Some(t) = self.editor.active_tab_mut() else {
+            return false;
+        };
+        // With a selection, Tab means "indent"; leave drawer folding for a plain
+        // caret on the header line.
+        if t.editor.get_selection().is_some_and(|s| !s.is_empty()) {
+            return false;
+        }
+        let range = {
+            let code = t.editor.code_ref();
+            let line = code.char_to_line(t.editor.get_cursor());
+            let text = code.get_content();
+            let lines: Vec<&str> = text.split('\n').collect();
+            crate::org::drawer_range(&lines, line)
+        };
+        let Some((start, end)) = range else {
+            return false;
+        };
+        t.editor.toggle_manual_fold(start, end)
+    }
+
     fn toggle_fold_at_cursor(&mut self) {
         if let Some(t) = self.editor.active_tab_mut() {
             let line = {
@@ -7966,6 +8347,11 @@ impl App {
         if self.editor.active_tab().is_some_and(Tab::is_image) {
             return;
         }
+        // Org view-only keys (drawer fold on Tab, agenda `t`) run ahead of the
+        // read-only guard because they never edit the buffer text.
+        if self.org_view_key(key) {
+            return;
+        }
         // Read-only buffers accept navigation but not edits.
         if self.active_read_only() && (Self::is_edit_key(&key) || key.code == KeyCode::Delete) {
             self.status = t!("status.read_only_blocked").to_string();
@@ -8422,7 +8808,12 @@ impl App {
             }
         }
         self.status = if skipped > 0 {
-            t!("status.workspace_opened_skipped", path = path.display(), count = skipped).to_string()
+            t!(
+                "status.workspace_opened_skipped",
+                path = path.display(),
+                count = skipped
+            )
+            .to_string()
         } else {
             t!("status.workspace_opened", path = path.display()).to_string()
         };
@@ -9824,7 +10215,10 @@ impl App {
     /// one consumed it (overlays swallow mouse input rather than letting it fall
     /// through to the panes underneath). Extracted from [`App::on_mouse`] to keep
     /// that function within the line limit.
-    fn try_overlay_mouse(&mut self, mouse: MouseEvent) -> bool {
+    /// Mouse handling for the modal overlays (welcome, context menu and the
+    /// right-click that opens it, the info dialog). Split out of
+    /// [`App::try_overlay_mouse`] to keep it within the line limit.
+    fn try_modal_mouse(&mut self, mouse: MouseEvent) -> bool {
         // The welcome overlay is modal: the wheel scrolls it, nothing else.
         if self.welcome.is_some() {
             self.welcome_mouse(mouse);
@@ -9861,6 +10255,13 @@ impl App {
             }
             return true;
         }
+        false
+    }
+
+    fn try_overlay_mouse(&mut self, mouse: MouseEvent) -> bool {
+        if self.try_modal_mouse(mouse) {
+            return true;
+        }
         if self.try_tool_dialog_mouse(mouse) {
             return true;
         }
@@ -9874,6 +10275,8 @@ impl App {
                 }
             };
         }
+        panel!(help, help_mouse);
+        panel!(file_browser, file_browser_mouse);
         panel!(recent_chooser, recent_mouse);
         panel!(location_chooser, location_mouse);
         panel!(nerd_palette, nerd_mouse);
@@ -9929,8 +10332,7 @@ impl App {
         }
         // Keyboard-only modal overlays swallow all mouse input rather than
         // letting a click fall through to the editor/explorer underneath.
-        self.show_help
-            || self.palette.is_some()
+        self.palette.is_some()
             || self.prompt.is_some()
             || self.query_replace.is_some()
             || self.workspace_search.is_some()
@@ -10007,12 +10409,15 @@ impl App {
         // Dock resizing: press a dock's inner edge (the explorer's right border
         // or the messages drawer's left border) and drag to resize it. The drag
         // continues even if the pointer drifts off that column.
-        let left_edge = self
-            .show_explorer
+        // Edges only exist once a render has recorded the dock's rectangle; a
+        // zeroed (never-drawn) rect would otherwise claim row/column 0.
+        let left_edge = (self.show_explorer && self.layout.explorer.width > 0)
             .then(|| self.layout.explorer.right().saturating_sub(1));
-        let right_edge = self.show_messages.then_some(self.layout.messages.x);
+        let right_edge = (self.show_messages && self.layout.messages.width > 0)
+            .then_some(self.layout.messages.x);
         // The bottom dock's top edge (its top border row), draggable to resize.
-        let bottom_edge = self.show_bottom_dock.then_some(self.layout.bottom_dock.y);
+        let bottom_edge = (self.show_bottom_dock && self.layout.bottom_dock.height > 0)
+            .then_some(self.layout.bottom_dock.y);
         match mouse.kind {
             // The bottom edge is a row, so check it first (a column edge could
             // otherwise win on that row).
@@ -10978,13 +11383,277 @@ impl App {
 
     /// Open the recent-files chooser, listing the saved recent paths that still
     /// exist. Does nothing (just a status note) when there are none.
+    /// Open the keyboard-shortcut overlay (Help → Keyboard Shortcuts…, F1)
+    /// over every active shortcut.
+    fn open_help(&mut self) {
+        self.help = Some(crate::keyboard_shortcut_panel::Panel::open(
+            self.shortcut_rows(),
+        ));
+    }
+
+    /// Every active keyboard shortcut as an action-name/key-combo row: the
+    /// curated global rows, every menu-item accelerator, and the active
+    /// keymap's chord tables (the Spacemacs leader, the Emacs `Ctrl X` map).
+    /// Deduplicated on (action, keys), first source wins.
+    fn shortcut_rows(&self) -> Vec<crate::keyboard_shortcut_panel::Shortcut> {
+        use crate::keyboard_shortcut_panel::Shortcut;
+        let mut out: Vec<Shortcut> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        let mut add = |action: String, keys: String| {
+            if !keys.is_empty() && seen.insert((action.to_lowercase(), keys.to_lowercase())) {
+                out.push(Shortcut { action, keys });
+            }
+        };
+        for r in crate::keyboard_shortcut_panel::ROWS {
+            add(t!(r.desc).to_string(), r.keys.to_string());
+        }
+        for menu in crate::menu::menus() {
+            collect_menu_shortcuts(menu.items, &mut add);
+        }
+        match self.settings.keymap.as_str() {
+            "spacemacs" => {
+                for (seq, action) in SPACEMACS_LEADER {
+                    let keys = std::iter::once("SPC".to_string())
+                        .chain(seq.chars().map(|c| display_key(&c.to_string())))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    add(Self::action_title(action), keys);
+                }
+            }
+            "emacs" => {
+                for (k, action) in EMACS_CTRL_X {
+                    add(
+                        Self::action_title(action),
+                        format!("Ctrl X {}", emacs_key_display(k)),
+                    );
+                }
+                for (k, action) in EMACS_CTRL_C {
+                    add(
+                        Self::action_title(action),
+                        format!("Ctrl C {}", emacs_key_display(k)),
+                    );
+                }
+            }
+            _ => {}
+        }
+        out
+    }
+
+    /// The translated menu label for an action id, or the id itself when no
+    /// menu item runs that action (matching what the which-key popup shows).
+    fn action_title(action: &str) -> String {
+        fn find(items: &[crate::menu::Item], action: &str) -> Option<String> {
+            for it in items {
+                if let Some(sub) = it.submenu {
+                    if let Some(label) = find(sub, action) {
+                        return Some(label);
+                    }
+                } else if it.action == action {
+                    return Some(it.label());
+                }
+            }
+            None
+        }
+        crate::menu::menus()
+            .iter()
+            .find_map(|m| find(m.items, action))
+            .unwrap_or_else(|| action.to_string())
+    }
+
+    /// Mouse handling for the keyboard-shortcut overlay: the wheel scrolls;
+    /// a click on a column header sorts by it (again to flip the direction).
+    fn help_mouse(&mut self, mouse: MouseEvent) {
+        use crate::keyboard_shortcut_panel::Column;
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                if let Some(h) = self.help.as_mut() {
+                    h.scroll_up(3);
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                if let Some(h) = self.help.as_mut() {
+                    h.scroll_down(3);
+                }
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                let headers = self.layout.help_headers;
+                let col = if rect_contains(headers[0], mouse.column, mouse.row) {
+                    Some(Column::Action)
+                } else if rect_contains(headers[1], mouse.column, mouse.row) {
+                    Some(Column::Keys)
+                } else {
+                    None
+                };
+                if let (Some(col), Some(h)) = (col, self.help.as_mut()) {
+                    h.toggle_sort(col);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Open the file browser (File → Open…) rooted at the workspace root.
+    fn open_file_browser(&mut self) {
+        self.file_browser = Some(crate::file_browser_panel::Panel::open(&self.root));
+    }
+
+    /// Keys for the file-browser overlay. Plain typing edits the filter;
+    /// Ctrl S / Ctrl R / Alt H drive sort, direction, and hidden files;
+    /// Ctrl O falls back to the classic path prompt (`file.open_path`).
+    fn file_browser_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.file_browser.height as usize).max(1);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(fb) = self.file_browser.as_mut() {
+                    fb.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(fb) = self.file_browser.as_mut() {
+                    fb.down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(fb) = self.file_browser.as_mut() {
+                    fb.page_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(fb) = self.file_browser.as_mut() {
+                    fb.page_down(page);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(fb) = self.file_browser.as_mut() {
+                    fb.selected = 0;
+                    fb.scroll = 0;
+                }
+            }
+            KeyCode::End => {
+                if let Some(fb) = self.file_browser.as_mut() {
+                    fb.selected = fb.len().saturating_sub(1);
+                }
+            }
+            // Left walks up to the parent; Right enters a highlighted directory.
+            KeyCode::Left => {
+                if let Some(fb) = self.file_browser.as_mut() {
+                    fb.parent();
+                }
+            }
+            KeyCode::Right => {
+                if let Some(fb) = self.file_browser.as_mut()
+                    && fb.selected_entry().is_some_and(|e| e.is_dir)
+                {
+                    fb.activate();
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(fb) = self.file_browser.as_mut() {
+                    fb.backspace();
+                }
+            }
+            KeyCode::Char('s') if Self::ctrl(&key) => {
+                if let Some(fb) = self.file_browser.as_mut() {
+                    fb.cycle_sort();
+                }
+            }
+            KeyCode::Char('r') if Self::ctrl(&key) => {
+                if let Some(fb) = self.file_browser.as_mut() {
+                    fb.toggle_order();
+                }
+            }
+            KeyCode::Char('h') if Self::alt(&key) => {
+                if let Some(fb) = self.file_browser.as_mut() {
+                    fb.toggle_hidden();
+                }
+            }
+            KeyCode::Char('o') if Self::ctrl(&key) => {
+                self.file_browser = None;
+                self.run_action("file.open_path");
+            }
+            KeyCode::Char(c) if !Self::ctrl(&key) && !Self::alt(&key) => {
+                if let Some(fb) = self.file_browser.as_mut() {
+                    fb.push(c);
+                }
+            }
+            KeyCode::Enter => self.file_browser_open_selected(),
+            KeyCode::Esc => self.file_browser = None,
+            _ => {}
+        }
+    }
+
+    /// Act on the file browser's highlighted row: open a file in the editor
+    /// (closing the browser), or re-root the browser into a directory.
+    fn file_browser_open_selected(&mut self) {
+        let Some(fb) = self.file_browser.as_mut() else {
+            return;
+        };
+        // A ":line[:col]" query suffix jumps after opening, like the Open prompt.
+        let target = fb.target();
+        if let Some(path) = fb.activate() {
+            self.file_browser = None;
+            self.with_jump(|s| {
+                s.open_path(&path, false);
+                if let Some((line, col)) = target {
+                    let area = s.editor_view();
+                    s.editor.goto(line, Some(col), area);
+                }
+                s.focus = Focus::Editor;
+            });
+        }
+    }
+
+    fn file_browser_mouse(&mut self, mouse: MouseEvent) {
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                if let Some(fb) = self.file_browser.as_mut() {
+                    fb.up();
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                if let Some(fb) = self.file_browser.as_mut() {
+                    fb.down();
+                }
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                let r = self.layout.file_browser;
+                if !rect_contains(r, mouse.column, mouse.row) {
+                    return;
+                }
+                let mut hit = false;
+                if let Some(fb) = self.file_browser.as_mut() {
+                    let idx = fb.scroll + (mouse.row - r.y) as usize;
+                    if idx < fb.len() {
+                        fb.selected = idx;
+                        hit = true;
+                    }
+                }
+                // A click selects the row and opens it, like the recent chooser.
+                if hit {
+                    self.file_browser_open_selected();
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn open_recent_chooser(&mut self) {
-        let entries: Vec<PathBuf> = self
+        let entries: Vec<RecentEntry> = self
             .settings
             .recent_files
             .iter()
             .map(PathBuf::from)
             .filter(|p| p.is_file())
+            .map(|path| {
+                use crate::file_browser_panel::unix_secs;
+                let meta = std::fs::metadata(&path).ok();
+                RecentEntry {
+                    size: meta.as_ref().map_or(0, std::fs::Metadata::len),
+                    created: meta.as_ref().and_then(|m| unix_secs(m.created().ok())),
+                    modified: meta.as_ref().and_then(|m| unix_secs(m.modified().ok())),
+                    path,
+                }
+            })
             .collect();
         if entries.is_empty() {
             self.status = t!("status.no_recent").to_string();
@@ -11020,7 +11689,7 @@ impl App {
     /// Open the highlighted recent file and close the chooser.
     fn open_selected_recent(&mut self) {
         if let Some(rc) = self.recent_chooser.take()
-            && let Some(path) = rc.entries.get(rc.selected).cloned()
+            && let Some(path) = rc.entries.get(rc.selected).map(|e| e.path.clone())
         {
             self.with_jump(|s| {
                 s.open_path(&path, false);
@@ -15697,7 +16366,12 @@ impl App {
             // plain Enter still submits.
             KeyCode::Enter if Self::alt(&key) => {
                 if let Some(p) = self.prompt.as_mut()
-                    && matches!(p.kind, PromptKind::GitCommit)
+                    && matches!(
+                        p.kind,
+                        PromptKind::GitCommit
+                            | PromptKind::OrgCaptureTodo
+                            | PromptKind::OrgCloseNote
+                    )
                 {
                     p.input.push('\n');
                 }
@@ -15785,7 +16459,11 @@ impl App {
             }
             PromptKind::CompareFile => self.open_diff_with(prompt.input.trim()),
             PromptKind::SaveMacro => self.save_macro(prompt.input.trim()),
+            // A closing note may be empty (mark DONE + CLOSED with no LOGBOOK
+            // entry), so it is dispatched outside the "non-empty" roam group.
+            PromptKind::OrgCloseNote => self.org_close_note(prompt.input.trim()),
             PromptKind::OrgCapture
+            | PromptKind::OrgCaptureTodo
             | PromptKind::RoamFind
             | PromptKind::RoamInsert
             | PromptKind::RoamCapture
@@ -16274,6 +16952,28 @@ impl App {
     }
 }
 
+/// Collect every leaf menu item with a keyboard accelerator (recursing into
+/// submenus) into `add` as a (translated label, shortcut) pair. Feeds the
+/// keyboard-shortcut overlay.
+fn collect_menu_shortcuts(items: &[crate::menu::Item], add: &mut impl FnMut(String, String)) {
+    for it in items {
+        if let Some(sub) = it.submenu {
+            collect_menu_shortcuts(sub, add);
+        } else if !it.is_separator() && !it.shortcut.is_empty() {
+            add(it.label(), it.shortcut.to_string());
+        }
+    }
+}
+
+/// Render an Emacs `Ctrl X`-map key for display: `"C-f"` → `"Ctrl F"`, a bare
+/// key unchanged.
+fn emacs_key_display(k: &str) -> String {
+    k.strip_prefix("C-").map_or_else(
+        || k.to_string(),
+        |rest| format!("Ctrl {}", rest.to_uppercase()),
+    )
+}
+
 /// Render a leader key fragment for display (`" "` → `SPC`).
 fn display_key(k: &str) -> String {
     if k == " " {
@@ -16294,6 +16994,14 @@ const EMACS_CTRL_X: &[(&str, &str)] = &[
     ("2", "view.split_horizontal"),
     ("3", "view.split_vertical"),
     ("1", "view.unsplit"),
+];
+
+/// The Emacs `Ctrl+C` chord table — the Org command family. `C-u C-c C-t` (close
+/// with a note) is a universal-argument variant of `C-c C-t`, not a distinct
+/// chord, so it is not listed separately.
+const EMACS_CTRL_C: &[(&str, &str)] = &[
+    ("C-t", "org.cycle_todo"),
+    ("C-c", "org.ctrl_c_ctrl_c"),
 ];
 
 /// A short jump label for index `i`: `a`..`z`, then `aa`, `ab`, … (base-26 over

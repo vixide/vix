@@ -304,6 +304,39 @@ fn org_capture_inserts_todo_and_time_report_tabulates() {
             .contains("* TODO Buy milk")
     );
 
+    // Capture → Todo… opens a multiline prompt pre-filled from the template.
+    let mut app = app_at(Path::new("."));
+    app.run_action("org.capture_todo");
+    let p = app.prompt.as_ref().expect("Org → Capture → Todo… prompts");
+    assert_eq!(p.input, "* TODO ", "pre-filled from the default template");
+    for c in "Plan trip".chars() {
+        app.on_key(key(c));
+    }
+    // Alt+Enter inserts a newline; plain Enter submits verbatim.
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT));
+    for c in "  details".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .text()
+            .contains("* TODO Plan trip\n  details\n"),
+        "multiline capture inserted verbatim"
+    );
+
+    // A custom template pre-fills the multiline editor.
+    let mut app = app_at(Path::new("."));
+    app.settings.org_todo_capture_template = "* TODO %\n  SCHEDULED:".to_string();
+    app.run_action("org.capture_todo");
+    assert_eq!(
+        app.prompt.as_ref().unwrap().input,
+        "* TODO %\n  SCHEDULED:",
+        "org_todo_capture_template pre-fills the editing area"
+    );
+
     // Time Tracker builds a clock report in a new tab.
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "* Task\nCLOCK: [a]--[b] =>  1:00\n");
@@ -1448,6 +1481,176 @@ fn folding_hides_lines_and_renders() {
 }
 
 #[test]
+fn org_tab_folds_drawer_under_cursor() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let dir = unique_dir("org-drawer-fold");
+    let file = dir.join("notes.org");
+    fs::write(&file, "* Name\n:properties:\n:foo: 123\n:end:\nbody\n").unwrap();
+
+    let mut app = app_at(&dir);
+    app.open_initial(&file.clone());
+
+    // Put the caret on the `:properties:` drawer header (line 1).
+    app.run_action("edit.go_first");
+    app.on_key(keycode(KeyCode::Down));
+
+    // Tab folds the drawer: its body (`:foo:` and `:end:`) is hidden, the header
+    // stays visible.
+    app.on_key(keycode(KeyCode::Tab));
+    {
+        let ed = &app.editor.active_tab().unwrap().editor;
+        assert!(ed.has_folds(), "drawer folded");
+        assert!(!ed.is_line_hidden(1), "header line stays visible");
+        assert!(ed.is_line_hidden(2) && ed.is_line_hidden(3), "body hidden");
+        assert!(!ed.is_line_hidden(4), "line after the drawer visible");
+    }
+
+    // The folded header renders `:properties:...`; its body text is off-screen.
+    // Hide the side docks so the editor pane is wide enough to show the marker.
+    app.show_explorer = false;
+    app.show_messages = false;
+    let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let screen: String = term
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(ratatui::buffer::Cell::symbol)
+        .collect();
+    assert!(
+        screen.contains(":properties:..."),
+        "folded drawer header shows the ... marker"
+    );
+    assert!(!screen.contains(":foo: 123"), "drawer body is hidden");
+
+    // The caret stayed on the visible header line, so Tab again unfolds it, and
+    // the buffer text is never mutated by folding.
+    app.on_key(keycode(KeyCode::Tab));
+    assert!(
+        !app.editor.active_tab().unwrap().editor.has_folds(),
+        "drawer unfolded"
+    );
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "* Name\n:properties:\n:foo: 123\n:end:\nbody\n",
+        "folding never edits the buffer text"
+    );
+
+    // Folding is view-only, so it works even in a read-only buffer (where Tab
+    // would otherwise be blocked as an edit key).
+    app.run_action("view.read_only");
+    assert!(app.editor.active_tab().unwrap().read_only, "buffer read-only");
+    app.run_action("edit.go_first");
+    app.on_key(keycode(KeyCode::Down)); // onto the `:properties:` header
+    app.on_key(keycode(KeyCode::Tab));
+    assert!(
+        app.editor.active_tab().unwrap().editor.has_folds(),
+        "drawer folds even while read-only"
+    );
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn emacs_org_ctrl_c_chords_cycle_todo_and_close_with_note() {
+    let dir = unique_dir("emacs-org");
+    let file = dir.join("todo.org");
+    fs::write(&file, "* Task\n").unwrap();
+    let mut app = app_at(&dir);
+    app.settings.keymap = "emacs".to_string();
+    app.open_initial(&file.clone());
+    app.run_action("edit.go_first"); // cursor on the headline
+
+    // C-c C-t cycles none -> TODO -> DONE.
+    app.on_key(ctrl('c'));
+    app.on_key(ctrl('t'));
+    assert!(
+        app.editor.active_tab().unwrap().text().starts_with("* TODO Task"),
+        "C-c C-t adds TODO"
+    );
+    app.on_key(ctrl('c'));
+    app.on_key(ctrl('t'));
+    assert!(
+        app.editor.active_tab().unwrap().text().starts_with("* DONE Task"),
+        "C-c C-t advances to DONE"
+    );
+
+    // C-u C-c C-t opens a closing-note prompt; submitting logs CLOSED + LOGBOOK.
+    app.on_key(ctrl('u'));
+    app.on_key(ctrl('c'));
+    app.on_key(ctrl('t'));
+    assert!(app.prompt.is_some(), "C-u C-c C-t opens the close-note prompt");
+    type_str(&mut app, "shipped");
+    app.on_key(keycode(KeyCode::Enter));
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains("CLOSED: ["), "closed stamp added: {text}");
+    assert!(text.contains(":LOGBOOK:"), "logbook drawer added: {text}");
+    assert!(text.contains("shipped"), "note body logged: {text}");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn org_ctrl_c_ctrl_c_toggles_checkbox() {
+    let dir = unique_dir("org-ccc");
+    let file = dir.join("list.org");
+    fs::write(&file, "- [ ] a\n- [ ] b\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&file.clone());
+    app.run_action("edit.go_first"); // line 0: - [ ] a
+
+    app.run_action("org.ctrl_c_ctrl_c");
+    assert!(
+        app.editor.active_tab().unwrap().text().starts_with("- [x] a"),
+        "C-c C-c on a checkbox line marks it done"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn org_agenda_t_cycles_task_in_its_source_file() {
+    let dir = unique_dir("org-agenda-t");
+    let file = dir.join("work.org");
+    fs::write(&file, "* TODO Ship it\n").unwrap();
+    let mut app = app_at(&dir);
+
+    app.run_action("org.agenda");
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains("#+title: Agenda"), "agenda buffer opened: {text}");
+    assert!(
+        text.contains("- TODO Ship it (work.org)"),
+        "agenda lists the unscheduled task: {text}"
+    );
+
+    // Move the cursor onto the task line and press `t`.
+    let line = text.split('\n').position(|l| l.contains("Ship it")).unwrap();
+    app.run_action("edit.go_first");
+    for _ in 0..line {
+        app.on_key(keycode(KeyCode::Down));
+    }
+    app.on_key(key('t'));
+
+    // The source file was cycled to DONE on disk.
+    let disk = fs::read_to_string(&file).unwrap();
+    assert!(disk.contains("* DONE Ship it"), "source file cycled to DONE: {disk}");
+    // The agenda rebuilt itself; a DONE headline is no longer an unscheduled TODO.
+    let text2 = app.editor.active_tab().unwrap().text();
+    assert!(!text2.contains("Ship it"), "DONE task drops from the agenda: {text2}");
+
+    // The agenda buffer is read-only, so a stray letter does not edit it.
+    let before = app.editor.active_tab().unwrap().text();
+    app.on_key(key('z'));
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        before,
+        "agenda buffer stays read-only"
+    );
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn lsp_navigation_actions_report_inactive_without_server() {
     // With no language server attached, the LSP nav actions are no-ops that
     // report inactivity rather than panicking.
@@ -1504,11 +1707,11 @@ fn bookmarks_toggle_and_list() {
 #[test]
 fn toggle_key_menu_shows_the_shortcuts_overlay() {
     let mut app = app_at(Path::new("."));
-    assert!(!app.show_help);
+    assert!(app.help.is_none());
     app.run_action("toggle_key_menu");
-    assert!(app.show_help, "key menu opens the shortcuts overlay");
+    assert!(app.help.is_some(), "key menu opens the shortcuts overlay");
     app.run_action("toggle_key_menu");
-    assert!(!app.show_help);
+    assert!(app.help.is_none());
 }
 
 #[test]
@@ -2700,11 +2903,115 @@ fn click_recent_row_opens_file() {
 #[test]
 fn help_overlay_toggles() {
     let mut app = app_at(Path::new("."));
-    assert!(!app.show_help);
+    assert!(app.help.is_none());
     app.on_key(KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE));
-    assert!(app.show_help, "F1 opens the help overlay");
+    assert!(app.help.is_some(), "F1 opens the help overlay");
     app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert!(!app.show_help, "Esc closes the help overlay");
+    assert!(app.help.is_none(), "Esc closes the help overlay");
+}
+
+#[test]
+fn help_overlay_lists_all_active_shortcuts_and_sorts() {
+    use vix::keyboard_shortcut_panel::Column;
+    let mut app = app_at(Path::new("."));
+    app.on_key(KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE));
+    let h = app.help.as_ref().expect("open");
+    // Curated global rows and menu accelerators are both present.
+    assert!(
+        h.rows.iter().any(|s| s.keys == "Ctrl P"),
+        "curated global row present"
+    );
+    assert!(
+        h.rows.iter().any(|s| s.keys == "Ctrl Shift T"),
+        "menu accelerator (File → Reopen Closed) present"
+    );
+    // Typing filters both columns; header toggles sort the table.
+    let total = h.len();
+    for c in "ctrl s".chars() {
+        app.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    let h = app.help.as_ref().unwrap();
+    assert!(h.len() < total, "filter narrows the list");
+    let h = app.help.as_mut().unwrap();
+    h.query.clear();
+    h.toggle_sort(Column::Keys);
+    let asc: Vec<String> = h
+        .matches()
+        .iter()
+        .map(|&i| h.rows[i].keys.clone())
+        .collect();
+    h.toggle_sort(Column::Keys);
+    let desc: Vec<String> = h
+        .matches()
+        .iter()
+        .map(|&i| h.rows[i].keys.clone())
+        .collect();
+    let mut rev = desc.clone();
+    rev.reverse();
+    assert_eq!(asc, rev, "second click flips the order");
+}
+
+#[test]
+fn new_overlays_render_without_panicking() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    let dir = unique_dir("overlaydraw");
+    fs::write(dir.join("a.txt"), "hello").unwrap();
+    let mut app = app_at(&dir);
+    let mut term = Terminal::new(TestBackend::new(100, 30)).unwrap();
+
+    // File browser (File → Open…).
+    app.run_action("file.open");
+    assert!(app.file_browser.is_some());
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    assert!(
+        app.layout.file_browser.height > 0,
+        "browser rows rect recorded"
+    );
+    app.on_key(esc());
+
+    // Keyboard shortcuts (Help → Keyboard Shortcuts…), sorted by keys.
+    app.run_action("help.shortcuts");
+    if let Some(h) = app.help.as_mut() {
+        h.toggle_sort(vix::keyboard_shortcut_panel::Column::Keys);
+    }
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    assert!(
+        app.layout.help_headers[0].width > 0 && app.layout.help_headers[1].width > 0,
+        "clickable header rects recorded"
+    );
+    app.on_key(esc());
+
+    // Multi-column recent chooser (File → Open Recent…).
+    app.settings
+        .recent_files
+        .push(dir.join("a.txt").display().to_string());
+    app.run_action("file.open_recent");
+    assert!(app.recent_chooser.is_some());
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn help_overlay_includes_the_active_keymap_chords() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "spacemacs".to_string();
+    app.run_action("help.shortcuts");
+    let h = app.help.as_ref().expect("open");
+    assert!(
+        h.rows.iter().any(|s| s.keys == "SPC f f"),
+        "Spacemacs leader chords listed: {:?}",
+        h.rows.iter().map(|s| &s.keys).collect::<Vec<_>>()
+    );
+    app.help = None;
+    app.settings.keymap = "emacs".to_string();
+    app.run_action("help.shortcuts");
+    let h = app.help.as_ref().expect("open");
+    assert!(
+        h.rows.iter().any(|s| s.keys == "Ctrl X Ctrl F"),
+        "Emacs Ctrl X chords listed"
+    );
 }
 
 #[test]
@@ -3383,7 +3690,7 @@ fn clicking_a_dock_location_jumps_to_it() {
     let file = dir.join("hit.txt");
     fs::write(&file, "a\nb\nTARGET\nd\n").unwrap();
     let mut app = app_at(&dir);
-    app.run_action("view.bottom_dock");
+    // The bottom dock is shown by default.
     // A grep-style line: path:line:col:text (pointing at line 3).
     app.bottom_dock
         .push(format!("{}:3:1: TARGET", file.display()));
@@ -3408,7 +3715,6 @@ fn bottom_dock_top_edge_drag_resizes() {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
     let mut app = app_at(Path::new("."));
-    app.run_action("view.bottom_dock");
     let mut term = Terminal::new(TestBackend::new(80, 40)).unwrap();
     term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
 
@@ -3456,7 +3762,6 @@ fn bottom_dock_focus_and_scroll() {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
     let mut app = app_at(Path::new("."));
-    app.run_action("view.bottom_dock");
     for i in 0..50 {
         app.bottom_dock.push(format!("line {i}"));
     }
@@ -3489,19 +3794,24 @@ fn toggle_bottom_dock_flips_persists_and_renders() {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
     let mut app = app_at(Path::new("."));
-    assert!(!app.show_bottom_dock, "hidden by default");
+    // All three docks (left explorer, right messages, bottom) show by default.
+    assert!(app.show_bottom_dock, "shown by default");
+    assert!(
+        app.show_explorer && app.show_messages,
+        "side docks default on"
+    );
 
     app.run_action("view.bottom_dock");
-    assert!(app.show_bottom_dock, "the action shows the bottom dock");
-    assert!(app.settings.show_bottom_dock, "the choice persists");
+    assert!(!app.show_bottom_dock, "the action hides the bottom dock");
+    assert!(!app.settings.show_bottom_dock, "the choice persists");
+
+    app.run_action("view.bottom_dock");
+    assert!(app.show_bottom_dock, "toggling again shows it");
 
     // The dock buffers lines and renders without panicking.
     app.bottom_dock.push("hello from the bottom dock");
     let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
     term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
-
-    app.run_action("view.bottom_dock");
-    assert!(!app.show_bottom_dock, "toggling again hides it");
 }
 
 #[test]
@@ -3986,10 +4296,23 @@ fn ctrl_w_closes_active_buffer() {
 }
 
 #[test]
-fn ctrl_o_opens_prompt_and_esc_closes() {
+fn ctrl_o_opens_file_browser_and_esc_closes() {
     let mut app = app_at(Path::new("."));
     app.on_key(ctrl('o'));
-    assert!(app.prompt.is_some(), "Ctrl+O opens the Open prompt");
+    assert!(app.file_browser.is_some(), "Ctrl+O opens the file browser");
+    app.on_key(esc());
+    assert!(app.file_browser.is_none(), "Esc closes the browser");
+}
+
+#[test]
+fn file_browser_ctrl_o_falls_back_to_the_path_prompt() {
+    let mut app = app_at(Path::new("."));
+    app.on_key(ctrl('o'));
+    assert!(app.file_browser.is_some());
+    // Ctrl+O inside the browser swaps to the classic type-a-path prompt.
+    app.on_key(ctrl('o'));
+    assert!(app.file_browser.is_none(), "browser closed");
+    assert!(app.prompt.is_some(), "path prompt opened");
     app.on_key(esc());
     assert!(app.prompt.is_none(), "Esc closes the prompt");
 }
@@ -5796,12 +6119,12 @@ fn emacs_keymap_ctrl_movement() {
 fn emacs_keymap_chords_open_find_and_quit() {
     let mut app = app_at(Path::new("."));
     app.settings.keymap = "emacs".to_string();
-    // C-x C-f opens the file prompt.
+    // C-x C-f opens the file browser (find-file).
     app.on_key(ctrl('x'));
     app.on_key(ctrl('f'));
-    assert!(app.prompt.is_some(), "C-x C-f opens the open-file prompt");
+    assert!(app.file_browser.is_some(), "C-x C-f opens the file browser");
     app.on_key(esc());
-    assert!(app.prompt.is_none());
+    assert!(app.file_browser.is_none());
     // Standalone C-s opens find.
     app.on_key(ctrl('s'));
     assert!(app.search.is_some(), "C-s opens find");
@@ -5817,9 +6140,9 @@ fn vscode_keymap_quick_open_command_palette_and_goto_line() {
     let mut app = app_at(Path::new("."));
     app.settings.keymap = "vscode-macos".to_string();
 
-    // Ctrl+P is Quick Open (the file prompt), not the Command Palette.
+    // Ctrl+P is Quick Open (the fuzzy file browser), not the Command Palette.
     app.on_key(ctrl('p'));
-    assert!(app.prompt.is_some(), "Ctrl+P opens Quick Open");
+    assert!(app.file_browser.is_some(), "Ctrl+P opens Quick Open");
     assert!(app.palette.is_none());
     app.on_key(esc());
 

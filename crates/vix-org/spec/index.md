@@ -13,6 +13,26 @@ headline structure, TODO/checkbox toggling, folding, and lightweight export.
   (`* Top`, `** Child`). The star count is the level.
 - **Subtree**: a headline plus all following lines up to the next headline of the
   same or higher level.
+- **Drawer**: a `:NAME:` header line (e.g. `:PROPERTIES:`, `:LOGBOOK:`) through
+  a matching `:END:` line. The lines between hold the drawer's contents (property
+  lines such as `:foo: 123`).
+
+## Drawer folding
+
+With the cursor on a drawer header line — one that starts and ends with a colon,
+like `:PROPERTIES:` — pressing **Tab** folds the drawer, hiding its body (through
+`:END:`) the way code folding hides a block. The header stays visible with a
+trailing `...` to signal the hidden content; pressing **Tab** again on the header
+unfolds it. Folding is view-only — it never edits the buffer text. On any other
+line Tab indents as usual. The foldable range is computed by `org::drawer_range`
+(unit-tested); the editor's `toggle_manual_fold` performs the fold.
+
+```
+* Name              * Name
+:properties:   Tab  :properties:...
+:foo: 123     ───▶
+:end:
+```
 
 ## Menu
 
@@ -20,18 +40,21 @@ The **Org** menu (`Alt+O`):
 
 | Item | Action | Effect |
 | ---- | ------ | ------ |
-| Capture… | `org.capture` | Open a single-line prompt; the text is inserted as a `* TODO` headline at the cursor. |
+| Capture → Anything… | `org.capture` | Open a single-line prompt, pre-filled from the `org_anything_capture_template` setting; the text is inserted as a `* TODO` headline at the cursor. |
+| Capture → Contact… | `org.contacts.new` | Prompt for a name and insert an org-contacts entry (moved here from Org → Contacts). |
+| Capture → Todo… | `org.capture_todo` | Open a multiline editing area (Alt+Enter = newline), pre-filled from the `org_todo_capture_template` setting (default `* TODO `); the text is inserted verbatim at the cursor. |
 | Cycle Visibility (Fold) | `org.cycle_visibility` | Fold/unfold at the cursor (reuses the editor fold toggle). |
 | Headline → Promote | `org.promote` | Remove one `*` from every headline in the subtree (refused at level 1). |
 | Headline → Demote | `org.demote` | Add one `*` to every headline in the subtree. |
 | Headline → Move Subtree Up | `org.move_up` | Swap the subtree with the previous sibling. |
 | Headline → Move Subtree Down | `org.move_down` | Swap the subtree with the next sibling. |
 | Cycle TODO | `org.cycle_todo` | Cycle the headline keyword: none → `TODO` → `DONE` → none. |
+| Mark Done with Note… | `org.close_note` | Prompt for a closing note (multiline; Alt+Enter = newline), then mark the headline `DONE`, stamp `CLOSED: [now]` under it, and log the note into its `:LOGBOOK:` drawer. |
 | Toggle Checkbox | `org.toggle_checkbox` | Toggle a list item's `[ ]` ⇄ `[x]`. |
 | Update Statistics | `org.update_statistics` | Recompute every checkbox parent state and `[/]`/`[%]` cookie in the buffer. |
 | Clock In | `org.clock_in` | Insert an open `CLOCK: [now]` entry at the cursor (local time). |
 | Clock Out | `org.clock_out` | Close the most recent open `CLOCK:` entry with the end time and `=> H:MM` duration. |
-| Agenda Tracker | `org.agenda` | Compile `DEADLINE:`/`SCHEDULED:` items and `TODO` headlines from every `.org` file in the project into a single dated agenda buffer. |
+| Agenda Tracker | `org.agenda` | Reindex, then compile `DEADLINE:`/`SCHEDULED:` items and `TODO` headlines from every `.org` file into a single dated **interactive** agenda buffer (read-only; `t` cycles the task under the cursor in its source file). |
 | Time Tracker | `org.time_report` | Sum each headline's `CLOCK:` durations in the active buffer into a time-report table. |
 | Export → Markdown | `org.export_markdown` | Convert the buffer to Markdown in a new tab. |
 | Export → HTML | `org.export_html` | Convert the buffer to a standalone HTML document in a new tab. |
@@ -43,6 +66,33 @@ from the `=> H:MM` totals Org writes.
 Structure commands operate on the headline/line under the cursor; the cursor
 follows a moved subtree. When a command does not apply (e.g. the cursor is not on
 a headline, or there is no sibling to swap with), the status bar says so.
+
+### Emacs chords
+
+Under the **Emacs** keymap, the familiar Org `C-c` chords are wired to these
+commands (discoverable via the which-key popup after `C-c`):
+
+| Chord | Action | Effect |
+| ----- | ------ | ------ |
+| `C-c C-t` | `org.cycle_todo` | Cycle the headline's TODO keyword. |
+| `C-u C-c C-t` | `org.close_note` | Mark the headline `DONE` and record a closing note + `CLOSED:` timestamp (the universal-argument variant). |
+| `C-c C-c` | `org.ctrl_c_ctrl_c` | Context action: toggle the checkbox on the cursor line, else recompute statistics cookies. |
+
+`C-u` is the Emacs universal argument; it applies to the next command and is
+cancelled by any key other than the `C-c` prefix.
+
+### Interactive agenda
+
+**Agenda Tracker** opens a read-only buffer. Pressing `t` on a task line cycles
+that task's TODO state (`org::cycle_todo`) directly in its **source `.org` file
+on disk**, reloads any open, clean buffer for that file, and rebuilds the agenda
+in place (keeping the cursor line) — mirroring Emacs `org-agenda-todo`. The pure
+`org::agenda_items` records each entry's source line, and `org::render_agenda`
+returns both the buffer text and a line→item map so the host can act on the line
+under the cursor. Marking a task `DONE` with a note (`C-u C-c C-t`) uses
+`org::close_headline`, which forces the keyword to `DONE`, inserts (or refreshes)
+a `CLOSED: [now]` planning line, and logs the note into a `:LOGBOOK:` drawer as
+`- Note taken on [now] \\` + the indented body.
 
 ### Checkbox & statistics cookies
 

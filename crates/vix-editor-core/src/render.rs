@@ -299,16 +299,7 @@ impl Editor {
             let text_x = area.left() + line_number_width_u16;
             let right_edge = area.left() + area.width;
 
-            // Fold marker in the gutter padding column just before the text.
-            if let Some(folded) = self.fold_marker(line_idx) {
-                let fx = text_x.saturating_sub(1);
-                if fx >= area.left() && fx < right_edge {
-                    let sym = if folded { "\u{25b8}" } else { "\u{25be}" }; // ▸ folded, ▾ open
-                    buf[(fx, draw_y)]
-                        .set_symbol(sym)
-                        .set_style(line_number_style);
-                }
-            }
+            self.draw_fold_marker(buf, line_idx, area.left(), text_x, right_edge, draw_y);
 
             if self.show_whitespace {
                 self.draw_whitespace_line(
@@ -353,6 +344,70 @@ impl Editor {
                 right_edge,
                 draw_y,
             );
+            self.draw_fold_ellipsis(
+                buf,
+                line_idx,
+                line_start_char,
+                line_len,
+                text_x,
+                right_edge,
+                draw_y,
+                default_text_style,
+            );
+        }
+    }
+
+    /// Draw the fold marker (▸ folded, ▾ open) in the gutter padding column just
+    /// before a foldable line's text.
+    fn draw_fold_marker(
+        &self,
+        buf: &mut Buffer,
+        line_idx: usize,
+        area_left: u16,
+        text_x: u16,
+        right_edge: u16,
+        draw_y: u16,
+    ) {
+        if let Some(folded) = self.fold_marker(line_idx) {
+            let fx = text_x.saturating_sub(1);
+            if fx >= area_left && fx < right_edge {
+                let sym = if folded { "\u{25b8}" } else { "\u{25be}" }; // ▸ folded, ▾ open
+                buf[(fx, draw_y)]
+                    .set_symbol(sym)
+                    .set_style(self.line_number_style);
+            }
+        }
+    }
+
+    /// Render a trailing `...` right after a folded start line's text, so a
+    /// collapsed fold (e.g. an Org drawer `:PROPERTIES:...`) shows that content
+    /// is hidden below it, mirroring how Org and outline editors mark a fold.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_fold_ellipsis(
+        &self,
+        buf: &mut Buffer,
+        line_idx: usize,
+        line_start_char: usize,
+        line_len: usize,
+        text_x: u16,
+        right_edge: u16,
+        draw_y: u16,
+        text_style: Style,
+    ) {
+        if self.offset_x != 0 || self.fold_marker(line_idx) != Some(true) {
+            return;
+        }
+        let full = self
+            .code_ref()
+            .char_slice(line_start_char, line_start_char + line_len);
+        let lw: usize = RopeGraphemes::new(&full)
+            .map(|g| grapheme_width_and_chars_len(g).0)
+            .sum();
+        let ex = text_x + u16::try_from(lw).unwrap_or(u16::MAX);
+        if ex < right_edge {
+            let avail = (right_edge - ex) as usize;
+            let shown: String = "...".chars().take(avail).collect();
+            buf.set_string(ex, draw_y, &shown, text_style);
         }
     }
 

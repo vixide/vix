@@ -1518,7 +1518,7 @@ const ORG_CONTACTS_FIELD: &[Item] = &[
 /// Org-contacts commands (contacts stored as Org headlines), grouped under
 /// Org → Contacts.
 const ORG_CONTACTS: &[Item] = &[
-    Item::leaf("menu.item.org.contacts.new", "org.contacts.new", ""),
+    // New Contact… moved to Org → Capture → Contact… (same action id).
     Item::leaf("menu.item.org.contacts.find", "org.contacts.find", ""),
     SEP,
     Item::sub("menu.item.org.contacts.insert_field", ORG_CONTACTS_FIELD),
@@ -1531,15 +1531,23 @@ const ORG_CONTACTS: &[Item] = &[
     Item::leaf("menu.item.org.contacts.vcard", "org.contacts.vcard", ""),
 ];
 
+/// Capture helpers, grouped under Org → Capture.
+const ORG_CAPTURE: &[Item] = &[
+    Item::leaf("menu.item.org.capture.anything", "org.capture", ""),
+    Item::leaf("menu.item.org.capture.contact", "org.contacts.new", ""),
+    Item::leaf("menu.item.org.capture.todo", "org.capture_todo", ""),
+];
+
 /// Org-mode editing commands, grouped under the top-level Org menu. Insertion of
 /// Org snippets/markers/blocks lives under Tools → Insert.
 const ORG: &[Item] = &[
-    Item::leaf("menu.item.org.capture", "org.capture", ""),
+    Item::sub("menu.item.org.capture", ORG_CAPTURE),
     SEP,
     Item::leaf("menu.item.org.cycle_visibility", "org.cycle_visibility", ""),
     SEP,
     Item::sub("menu.item.org.headline", ORG_HEADLINE),
     Item::leaf("menu.item.org.cycle_todo", "org.cycle_todo", ""),
+    Item::leaf("menu.item.org.close_note", "org.close_note", ""),
     Item::leaf("menu.item.org.toggle_checkbox", "org.toggle_checkbox", ""),
     Item::leaf(
         "menu.item.org.update_statistics",

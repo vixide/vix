@@ -696,6 +696,31 @@ impl Editor {
         false
     }
 
+    /// Toggle a fold over the explicit inclusive `(start, end)` line range,
+    /// without a language server having reported it — used for Org drawer
+    /// folding, where the range is computed on the fly. Folds the range if it is
+    /// open, unfolds it if already folded, keeping the caret out of the hidden
+    /// region. Returns `true` if the fold state changed (always, unless the
+    /// range is empty). The folded start line renders the ▸ marker and a
+    /// trailing `...`, matching code folding.
+    pub fn toggle_manual_fold(&mut self, start: usize, end: usize) -> bool {
+        if end <= start {
+            return false;
+        }
+        if let Some(i) = self.folds.iter().position(|f| f.0 == start) {
+            self.folds.remove(i);
+            return true;
+        }
+        self.folds.push((start, end));
+        // Keep the caret out of the now-hidden region.
+        let cursor_line = self.code_ref().char_to_line(self.cursor);
+        if self.is_line_hidden(cursor_line) {
+            let start_char = self.code_ref().line_to_char(start);
+            self.set_cursor(start_char);
+        }
+        true
+    }
+
     /// Whether `line` is hidden inside a currently-folded range
     /// (`start < line <= end`).
     #[must_use]

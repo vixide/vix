@@ -71,8 +71,8 @@ never inherits a stale mode:
 ## Emacs chords
 
 In the Emacs keymap, `Ctrl`-key chords drive motions and commands, and `Ctrl+X`
-acts as a prefix whose next key completes a two-key chord. While the prefix is
-pending, the status bar shows the mode indicator `C-x-`.
+and `Ctrl+C` act as prefixes whose next key completes a two-key chord. While a
+prefix is pending, the status bar shows the mode indicator (`C-x-` or `C-c-`).
 
 | Chord | Action |
 | ----- | ------ |
@@ -98,9 +98,17 @@ pending, the status bar shows the mode indicator `C-x-`.
 | `Ctrl+X O` | Focus the other pane |
 | `Ctrl+X 2` / `Ctrl+X 3` | Split horizontal / vertical |
 | `Ctrl+X 1` / `Ctrl+X 0` | Unsplit |
+| `Ctrl+C Ctrl+T` | Org: cycle the headline's TODO state |
+| `Ctrl+U Ctrl+C Ctrl+T` | Org: mark DONE with a closing note + `CLOSED:` stamp |
+| `Ctrl+C Ctrl+C` | Org: context action (toggle checkbox / update statistics) |
 
-A `Ctrl+X` prefix followed by an unrecognized key reports "no chord" and clears
-the prefix; while the prefix is pending, the which-key popup lists the chords.
+`Ctrl+U` is the universal argument: it applies to the next command (here, the
+Org close-with-note variant of `Ctrl+C Ctrl+T`) and is cancelled by any key
+other than the `Ctrl+C` prefix.
+
+A `Ctrl+X` / `Ctrl+C` prefix followed by an unrecognized key reports "no chord"
+and clears the prefix; while a prefix is pending, the which-key popup lists the
+chords.
 The motion chords (`Ctrl+F`, `Ctrl+N`, …) act only when the editor pane is
 focused. Bound `Alt` keys take priority over menu mnemonics in this keymap;
 unbound `Alt` keys still open the menus.

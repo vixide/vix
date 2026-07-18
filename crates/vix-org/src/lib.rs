@@ -49,6 +49,52 @@ pub fn subtree_range(lines: &[&str], line: usize) -> Option<(usize, usize)> {
     Some((line, end))
 }
 
+/// The name of a `:NAME:` line — a colon, a run of non-colon, non-whitespace
+/// characters, a closing colon, and nothing else after trimming — or `None`.
+/// Matches a drawer header (`:PROPERTIES:`, `:LOGBOOK:`) or the `:END:`
+/// terminator, but not a property line like `:foo: 123` (which does not end
+/// with a colon).
+fn drawer_name(line: &str) -> Option<&str> {
+    let inner = line.trim().strip_prefix(':')?.strip_suffix(':')?;
+    if inner.is_empty() || inner.contains([':', ' ', '\t']) {
+        None
+    } else {
+        Some(inner)
+    }
+}
+
+/// Whether `line` opens an Org drawer: a `:NAME:` header line that is not the
+/// `:END:` terminator (nor a property line, which carries a value after the
+/// second colon). `:PROPERTIES:` and `:LOGBOOK:` are headers; `:END:` and
+/// `:foo: 123` are not.
+#[must_use]
+pub fn is_drawer_header(line: &str) -> bool {
+    drawer_name(line).is_some_and(|n| !n.eq_ignore_ascii_case("END"))
+}
+
+/// The inclusive `[header, end]` line range of the drawer opened at `line` —
+/// the `:NAME:` header through its matching `:END:` line. `None` if `line` is
+/// not a drawer header, or no `:END:` closes it before the next headline or the
+/// end of the buffer. The header line stays visible when folded; the body lines
+/// (`header+1 ..= end`) are what a drawer fold hides.
+#[must_use]
+pub fn drawer_range(lines: &[&str], line: usize) -> Option<(usize, usize)> {
+    if !is_drawer_header(lines.get(line)?) {
+        return None;
+    }
+    let mut end = line + 1;
+    while end < lines.len() {
+        if headline_level(lines[end]).is_some() {
+            return None; // a headline closes the section before any :END:
+        }
+        if lines[end].trim().eq_ignore_ascii_case(":END:") {
+            return Some((line, end));
+        }
+        end += 1;
+    }
+    None
+}
+
 /// Promote (shallower, fewer stars) every headline in the subtree at `line`.
 /// No-op returning `None` if not on a headline or any headline is already level 1.
 #[must_use]
@@ -110,9 +156,92 @@ pub fn cycle_todo(text: &str, line: usize) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+/// Rewrite `headline` so its TODO keyword is `keyword` (e.g. `DONE`), replacing
+/// any existing `TODO`/`DONE` keyword or inserting one before the title text.
+/// Returns the line unchanged if it is not a headline.
+fn set_headline_keyword(headline: &str, keyword: &str) -> String {
+    let Some(stars) = headline_level(headline) else {
+        return headline.to_string();
+    };
+    let (prefix, rest) = headline.split_at(stars + 1); // include the space
+    let body = rest
+        .strip_prefix(&format!("{TODO} "))
+        .or_else(|| rest.strip_prefix(&format!("{DONE} ")))
+        .unwrap_or(if rest == TODO || rest == DONE { "" } else { rest });
+    if body.is_empty() {
+        format!("{prefix}{keyword}")
+    } else {
+        format!("{prefix}{keyword} {body}")
+    }
+}
+
+/// Mark the headline at `line` `DONE` and record its completion the way Emacs
+/// Org's `org-todo` with logging does (`C-u C-c C-t`):
+///
+/// * force the keyword to `DONE`,
+/// * insert (or refresh) a `CLOSED: [now]` planning line just under the
+///   headline, and
+/// * when `note` is non-empty, log it into the headline's `:LOGBOOK:` drawer as
+///   `- Note taken on [now] \\` followed by the note body indented two spaces
+///   (creating the drawer if the headline has none, else prepending as the
+///   newest entry).
+///
+/// Returns the rewritten buffer, or `None` if `line` is not a headline.
+#[must_use]
+pub fn close_headline(text: &str, line: usize, now: &str, note: &str) -> Option<String> {
+    let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
+    let level = headline_level(lines.get(line)?)?;
+    lines[line] = set_headline_keyword(&lines[line], DONE);
+
+    // The CLOSED planning line sits immediately under the headline; refresh an
+    // existing one rather than stacking duplicates.
+    let closed = format!("CLOSED: [{now}]");
+    let closed_idx = line + 1;
+    if lines
+        .get(closed_idx)
+        .is_some_and(|l| l.trim_start().starts_with("CLOSED:"))
+    {
+        lines[closed_idx] = closed;
+    } else {
+        lines.insert(closed_idx, closed);
+    }
+
+    if !note.is_empty() {
+        let mut entry: Vec<String> = vec![format!("- Note taken on [{now}] \\\\")];
+        entry.extend(note.split('\n').map(|l| format!("  {l}")));
+        // The subtree body runs until the next headline of the same/higher level.
+        let mut end = closed_idx + 1;
+        while end < lines.len() && headline_level(&lines[end]).is_none_or(|l| l > level) {
+            end += 1;
+        }
+        if let Some(lb) =
+            (closed_idx + 1..end).find(|&i| lines[i].trim().eq_ignore_ascii_case(":LOGBOOK:"))
+        {
+            for (k, e) in entry.into_iter().enumerate() {
+                lines.insert(lb + 1 + k, e);
+            }
+        } else {
+            let mut drawer = vec![":LOGBOOK:".to_string()];
+            drawer.extend(entry);
+            drawer.push(":END:".to_string());
+            for (k, d) in drawer.into_iter().enumerate() {
+                lines.insert(closed_idx + 1 + k, d);
+            }
+        }
+    }
+    Some(lines.join("\n"))
+}
+
 static CHECKBOX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^(\s*(?:[-+*]|\d+[.)])\s+)\[([ xX-])\]").expect("checkbox regex")
 });
+
+/// Whether `line` carries a list checkbox (`- [ ]`, `1. [X]`, …) — the lines on
+/// which Org's `C-c C-c` toggles the box.
+#[must_use]
+pub fn has_checkbox(line: &str) -> bool {
+    CHECKBOX.is_match(line)
+}
 
 /// Toggle a list checkbox on the line at `line`: `[ ]` ⇄ `[x]` (treating `[-]`
 /// and `[X]` as checked). `None` if the line has no checkbox.
@@ -434,20 +563,46 @@ fn first_date(s: &str) -> Option<String> {
     }
 }
 
-/// Compile an **agenda** from `(filename, content)` Org documents: `DEADLINE:` and
-/// `SCHEDULED:` planning lines grouped by date, plus `TODO` headlines that have no
-/// date. Returns an Org document (open it in a buffer). Pure and testable.
+/// One entry in a compiled agenda, carrying enough provenance to act on it (the
+/// source `file` display name and 0-based headline `line`) so an interactive
+/// agenda can toggle the underlying task.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AgendaItem {
+    /// `Some(YYYY-MM-DD)` for a dated (`DEADLINE`/`SCHEDULED`) entry, `None` for
+    /// an unscheduled `TODO`.
+    pub date: Option<String>,
+    /// `DEADLINE`, `SCHEDULED`, or `TODO`.
+    pub kind: String,
+    /// The headline text (after the leading stars), e.g. `TODO Ship it`.
+    pub headline: String,
+    /// The source document's display name (as supplied to [`agenda_items`]).
+    pub file: String,
+    /// 0-based line of the headline within its source document.
+    pub line: usize,
+}
+
+/// Compile the agenda **items** from `(filename, content)` Org documents:
+/// `DEADLINE:` / `SCHEDULED:` planning lines (dated) and `TODO` headlines that
+/// carry no date (unscheduled). Items are returned in document order; each
+/// records the source line of its headline so a caller can act on it. Pure.
 #[must_use]
-pub fn agenda(files: &[(String, String)]) -> String {
-    let mut dated: Vec<(String, String, String, String)> = Vec::new(); // date, kind, headline, file
-    let mut undated: Vec<(String, String)> = Vec::new(); // headline, file
+pub fn agenda_items(files: &[(String, String)]) -> Vec<AgendaItem> {
+    let mut items: Vec<AgendaItem> = Vec::new();
     for (name, content) in files {
         let mut current = String::new();
-        for line in content.lines() {
+        let mut current_line = 0;
+        for (idx, line) in content.lines().enumerate() {
             if let Some(level) = headline_level(line) {
                 current = line[level..].trim().to_string();
+                current_line = idx;
                 if current.split_whitespace().next() == Some("TODO") {
-                    undated.push((current.clone(), name.clone()));
+                    items.push(AgendaItem {
+                        date: None,
+                        kind: "TODO".to_string(),
+                        headline: current.clone(),
+                        file: name.clone(),
+                        line: current_line,
+                    });
                 }
                 continue;
             }
@@ -456,28 +611,83 @@ pub fn agenda(files: &[(String, String)]) -> String {
                 if let Some(rest) = trimmed.strip_prefix(&format!("{kind}:"))
                     && let Some(date) = first_date(rest)
                 {
-                    dated.push((date, kind.to_string(), current.clone(), name.clone()));
+                    items.push(AgendaItem {
+                        date: Some(date),
+                        kind: kind.to_string(),
+                        headline: current.clone(),
+                        file: name.clone(),
+                        line: current_line,
+                    });
                 }
             }
         }
     }
-    dated.sort();
-    let mut out = String::from("#+title: Agenda\n");
-    let mut last = String::new();
-    for (date, kind, headline, file) in &dated {
-        if *date != last {
-            let _ = writeln!(out, "\n* {date}");
-            last.clone_from(date);
+    items
+}
+
+/// Render agenda `items` into an Org document (dated entries grouped by date,
+/// then an *Unscheduled tasks* section) alongside a per-line map: `map[i]` is
+/// the index into `items` of the entry shown on buffer line `i`, or `None` for
+/// title/heading/blank lines. The text is identical to what [`agenda`] returns.
+#[must_use]
+pub fn render_agenda(items: &[AgendaItem]) -> (String, Vec<Option<usize>>) {
+    let mut buf = String::new();
+    let mut map: Vec<Option<usize>> = Vec::new();
+    let push = |buf: &mut String, map: &mut Vec<Option<usize>>, line: &str, item| {
+        buf.push_str(line);
+        buf.push('\n');
+        map.push(item);
+    };
+    push(&mut buf, &mut map, "#+title: Agenda", None);
+
+    // Dated entries, sorted by (date, kind, headline, file) and grouped by date.
+    let mut dated: Vec<usize> = (0..items.len()).filter(|&i| items[i].date.is_some()).collect();
+    dated.sort_by(|&a, &b| {
+        let x = &items[a];
+        let y = &items[b];
+        (&x.date, &x.kind, &x.headline, &x.file).cmp(&(&y.date, &y.kind, &y.headline, &y.file))
+    });
+    let mut last: Option<&str> = None;
+    for &i in &dated {
+        let it = &items[i];
+        let date = it.date.as_deref().unwrap_or_default();
+        if last != Some(date) {
+            push(&mut buf, &mut map, "", None);
+            push(&mut buf, &mut map, &format!("* {date}"), None);
+            last = Some(date);
         }
-        let _ = writeln!(out, "- {kind}: {headline} ({file})");
+        push(
+            &mut buf,
+            &mut map,
+            &format!("- {}: {} ({})", it.kind, it.headline, it.file),
+            Some(i),
+        );
     }
+
+    // Unscheduled TODOs, in document order.
+    let undated: Vec<usize> = (0..items.len()).filter(|&i| items[i].date.is_none()).collect();
     if !undated.is_empty() {
-        out.push_str("\n* Unscheduled tasks\n");
-        for (headline, file) in &undated {
-            let _ = writeln!(out, "- {headline} ({file})");
+        push(&mut buf, &mut map, "", None);
+        push(&mut buf, &mut map, "* Unscheduled tasks", None);
+        for &i in &undated {
+            let it = &items[i];
+            push(
+                &mut buf,
+                &mut map,
+                &format!("- {} ({})", it.headline, it.file),
+                Some(i),
+            );
         }
     }
-    out
+    (buf, map)
+}
+
+/// Compile an **agenda** from `(filename, content)` Org documents: `DEADLINE:` and
+/// `SCHEDULED:` planning lines grouped by date, plus `TODO` headlines that have no
+/// date. Returns an Org document (open it in a buffer). Pure and testable.
+#[must_use]
+pub fn agenda(files: &[(String, String)]) -> String {
+    render_agenda(&agenda_items(files)).0
 }
 
 /// Minutes in a `CLOCK:` line's explicit `=> H:MM` total, if present.
@@ -772,9 +982,15 @@ mod tests {
         for org in danger {
             let html = to_html(org);
             let lower = html.to_ascii_lowercase();
-            assert!(!lower.contains("href=\"javascript"), "leaked scheme: {html}");
+            assert!(
+                !lower.contains("href=\"javascript"),
+                "leaked scheme: {html}"
+            );
             assert!(!lower.contains("href=\"data:"), "leaked data: {html}");
-            assert!(!lower.contains("href=\"vbscript"), "leaked vbscript: {html}");
+            assert!(
+                !lower.contains("href=\"vbscript"),
+                "leaked vbscript: {html}"
+            );
         }
         // Safe links still render with their href intact (mailto:/fragment
         // links carry no `/`, so they're unaffected by the emphasis pass).
@@ -818,6 +1034,37 @@ mod tests {
     }
 
     #[test]
+    fn detects_drawer_headers_and_ranges() {
+        assert!(is_drawer_header(":properties:"));
+        assert!(is_drawer_header(":PROPERTIES:"));
+        assert!(is_drawer_header("  :logbook:  ")); // leading/trailing space ok
+        assert!(!is_drawer_header(":end:")); // the terminator is not a header
+        assert!(!is_drawer_header(":foo: 123")); // a property line, not a header
+        assert!(!is_drawer_header("* Name")); // a headline
+        assert!(!is_drawer_header("plain"));
+        assert!(!is_drawer_header("::"));
+
+        let text = "* Name\n:properties:\n:foo: 123\n:end:\nbody";
+        let lines: Vec<&str> = text.split('\n').collect();
+        // The drawer header at line 1 spans through its :end: at line 3.
+        assert_eq!(drawer_range(&lines, 1), Some((1, 3)));
+        // A property line inside the drawer is not itself a foldable header.
+        assert_eq!(drawer_range(&lines, 2), None);
+        // The headline is not a drawer.
+        assert_eq!(drawer_range(&lines, 0), None);
+
+        // A drawer with no matching :END: before EOF does not fold.
+        let dangling: Vec<&str> = "* Name\n:properties:\n:foo: 123".split('\n').collect();
+        assert_eq!(drawer_range(&dangling, 1), None);
+
+        // A headline appearing before :END: closes the section: no fold.
+        let interrupted: Vec<&str> = "* Name\n:properties:\n* Other\n:end:"
+            .split('\n')
+            .collect();
+        assert_eq!(drawer_range(&interrupted, 1), None);
+    }
+
+    #[test]
     fn promote_and_demote_the_whole_subtree() {
         let text = "* A\n** B\nbody\n* C";
         let demoted = demote(text, 0).unwrap();
@@ -840,6 +1087,84 @@ mod tests {
         assert_eq!(t, "* DONE Task");
         let t = cycle_todo(&t, 0).unwrap();
         assert_eq!(t, "* Task");
+    }
+
+    #[test]
+    fn close_headline_marks_done_with_closed_and_logbook_note() {
+        let now = "2024-08-23 Fri 11:30";
+        let t = "* TODO Ship it\nsome body";
+        let out = close_headline(t, 0, now, "Reviewed and shipped").unwrap();
+        assert!(out.contains("* DONE Ship it"), "keyword set to DONE: {out}");
+        assert!(
+            out.contains("CLOSED: [2024-08-23 Fri 11:30]"),
+            "closed stamp added: {out}"
+        );
+        assert!(out.contains(":LOGBOOK:"), "logbook drawer created: {out}");
+        assert!(
+            out.contains("- Note taken on [2024-08-23 Fri 11:30] \\\\"),
+            "note entry uses org continuation marker: {out}"
+        );
+        assert!(out.contains("  Reviewed and shipped"), "note body indented: {out}");
+        assert!(out.contains(":END:"), "drawer closed: {out}");
+        // The CLOSED line sits directly under the headline, above the drawer.
+        let lines: Vec<&str> = out.split('\n').collect();
+        assert_eq!(lines[0], "* DONE Ship it");
+        assert_eq!(lines[1], "CLOSED: [2024-08-23 Fri 11:30]");
+        assert_eq!(lines[2], ":LOGBOOK:");
+
+        // An empty note marks done + CLOSED but writes no LOGBOOK drawer.
+        let bare = close_headline("* TODO A", 0, now, "").unwrap();
+        assert_eq!(bare, "* DONE A\nCLOSED: [2024-08-23 Fri 11:30]");
+
+        // A second close refreshes the existing CLOSED line rather than stacking.
+        let again = close_headline(&bare, 0, "2024-08-24 Sat 09:00", "").unwrap();
+        assert_eq!(again, "* DONE A\nCLOSED: [2024-08-24 Sat 09:00]");
+
+        // A pre-existing LOGBOOK gets the new note prepended as the newest entry.
+        let with_lb = "* TODO B\n:LOGBOOK:\n- older entry\n:END:";
+        let out = close_headline(with_lb, 0, now, "newer").unwrap();
+        let li: Vec<&str> = out.split('\n').collect();
+        let lb = li.iter().position(|l| *l == ":LOGBOOK:").unwrap();
+        assert_eq!(li[lb + 1], "- Note taken on [2024-08-23 Fri 11:30] \\\\");
+        assert_eq!(li[lb + 2], "  newer");
+        assert!(li[lb + 3].contains("older entry"), "older entry kept: {out}");
+
+        // Not a headline → None.
+        assert!(close_headline("plain text", 0, now, "x").is_none());
+    }
+
+    #[test]
+    fn agenda_items_record_source_lines_and_render_maps() {
+        let files = vec![(
+            "work.org".to_string(),
+            "* TODO Ship it\nDEADLINE: <2024-08-23 Fri>\n* Notes\n* TODO Loose end\n".to_string(),
+        )];
+        let items = agenda_items(&files);
+        // Two TODO headlines (lines 0 and 3) and one DEADLINE (attached to line 0).
+        let todo0 = items.iter().find(|i| i.headline == "TODO Ship it" && i.date.is_none()).unwrap();
+        assert_eq!(todo0.line, 0);
+        let deadline = items.iter().find(|i| i.kind == "DEADLINE").unwrap();
+        assert_eq!(deadline.line, 0, "deadline attributed to its headline line");
+        let loose = items.iter().find(|i| i.headline == "TODO Loose end").unwrap();
+        assert_eq!(loose.line, 3);
+
+        // The render's line map points each entry line back to its item index.
+        let (text, map) = render_agenda(&items);
+        for (buf_line, entry) in map.iter().enumerate() {
+            if let Some(idx) = entry {
+                let line = text.split('\n').nth(buf_line).unwrap();
+                assert!(line.starts_with("- "), "mapped line is an entry: {line:?}");
+                assert!(line.contains(&items[*idx].headline));
+            }
+        }
+    }
+
+    #[test]
+    fn has_checkbox_detects_list_boxes() {
+        assert!(has_checkbox("- [ ] task"));
+        assert!(has_checkbox("  1. [X] done"));
+        assert!(!has_checkbox("- plain item"));
+        assert!(!has_checkbox("* TODO headline"));
     }
 
     #[test]
