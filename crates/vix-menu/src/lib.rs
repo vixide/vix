@@ -1409,6 +1409,16 @@ const ORG_EXPORT: &[Item] = &[
     Item::leaf("menu.name.html", "org.export_html", ""),
 ];
 
+/// The built-in Org agenda views (Org manual: "Agenda Views"), grouped under
+/// Org → Agenda. Each opens a read-only, interactive agenda buffer.
+const ORG_AGENDA: &[Item] = &[
+    Item::leaf("menu.item.org.agenda.week", "org.agenda", ""),
+    Item::leaf("menu.item.org.agenda.todo", "org.agenda.todo", ""),
+    Item::leaf("menu.item.org.agenda.match", "org.agenda.match", ""),
+    Item::leaf("menu.item.org.agenda.search", "org.agenda.search", ""),
+    Item::leaf("menu.item.org.agenda.stuck", "org.agenda.stuck", ""),
+];
+
 /// Org-roam daily-note commands, grouped under Org → Roam → Dailies.
 const ORG_ROAM_DAILIES: &[Item] = &[
     Item::leaf("menu.item.org.roam.dailies_today", "roam.dailies_today", ""),
@@ -1557,7 +1567,7 @@ const ORG: &[Item] = &[
     SEP,
     Item::leaf("menu.item.org.clock_in", "org.clock_in", ""),
     Item::leaf("menu.item.org.clock_out", "org.clock_out", ""),
-    Item::leaf("menu.item.org.agenda", "org.agenda", ""),
+    Item::sub("menu.item.org.agenda", ORG_AGENDA),
     Item::leaf("menu.item.org.time_report", "org.time_report", ""),
     SEP,
     Item::sub("menu.item.org.roam", ORG_ROAM),

@@ -8,6 +8,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Org → Agenda submenu with the built-in agenda views.** The former single
+  *Agenda Tracker* item is now an **Agenda** submenu offering the views from the
+  Org manual's Agenda Views: **Weekly/Daily Agenda** (`org.agenda`), **Global
+  TODO List** (`org.agenda.todo`), **Match Tags/Property…** (`org.agenda.match`,
+  prompt-driven), **Search…** (`org.agenda.search`, prompt-driven), and **Stuck
+  Projects** (`org.agenda.stuck`). Every view opens read-only and interactive —
+  pressing `t` on a task cycles it in its source file and rebuilds the same view.
+  New pure builders `org::todo_list` / `tags_match` / `search` / `stuck_projects`
+  / `render_list`.
 - **Org task workflow: Emacs chords, close-with-note, and an interactive
   agenda.**
   - The **Emacs** keymap now wires the Org `Ctrl+C` chord family: `C-c C-t`

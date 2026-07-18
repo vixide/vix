@@ -4119,7 +4119,17 @@ menu.item.org.clock_in:
 menu.item.org.clock_out:
   en: "Clock Out"
 menu.item.org.agenda:
-  en: "Agenda Tracker"
+  en: "Agenda"
+menu.item.org.agenda.week:
+  en: "Weekly/Daily Agenda"
+menu.item.org.agenda.todo:
+  en: "Global TODO List"
+menu.item.org.agenda.match:
+  en: "Match Tags/Property…"
+menu.item.org.agenda.search:
+  en: "Search…"
+menu.item.org.agenda.stuck:
+  en: "Stuck Projects"
 menu.item.org.time_report:
   en: "Time Tracker"
 menu.item.org.export:
@@ -10841,6 +10851,10 @@ prompt.org_capture:
   ja: "キャプチャ (Org TODO)"
 prompt.org_close_note:
   en: "Closing note (Alt+Enter = newline)"
+prompt.org_agenda_match:
+  en: "Match tags (e.g. work-boss)"
+prompt.org_agenda_search:
+  en: "Search keywords"
 prompt.org_capture_todo:
   en: "Capture TODO (Alt+Enter = newline)"
   es: "Capturar TODO (Alt+Enter = nueva línea)"
@@ -12421,6 +12435,16 @@ status.org_agenda:
   ja: "%{count} 個の .org ファイルから予定表を作成"
 status.org_closed:
   en: "Headline marked DONE and closed"
+status.org_agenda_view:
+  en: "Agenda view: %{count} item(s)"
+agenda.todo.title:
+  en: "Global TODO List"
+agenda.stuck.title:
+  en: "Stuck Projects"
+agenda.match.title:
+  en: "Match: %{query}"
+agenda.search.title:
+  en: "Search: %{query}"
 status.org_agenda_toggled:
   en: "Task state cycled in its source file"
 status.org_agenda_no_task:

@@ -54,7 +54,7 @@ The **Org** menu (`Alt+O`):
 | Update Statistics | `org.update_statistics` | Recompute every checkbox parent state and `[/]`/`[%]` cookie in the buffer. |
 | Clock In | `org.clock_in` | Insert an open `CLOCK: [now]` entry at the cursor (local time). |
 | Clock Out | `org.clock_out` | Close the most recent open `CLOCK:` entry with the end time and `=> H:MM` duration. |
-| Agenda Tracker | `org.agenda` | Reindex, then compile `DEADLINE:`/`SCHEDULED:` items and `TODO` headlines from every `.org` file into a single dated **interactive** agenda buffer (read-only; `t` cycles the task under the cursor in its source file). |
+| Agenda → * | (submenu) | The built-in agenda views (see below). |
 | Time Tracker | `org.time_report` | Sum each headline's `CLOCK:` durations in the active buffer into a time-report table. |
 | Export → Markdown | `org.export_markdown` | Convert the buffer to Markdown in a new tab. |
 | Export → HTML | `org.export_html` | Convert the buffer to a standalone HTML document in a new tab. |
@@ -81,17 +81,32 @@ commands (discoverable via the which-key popup after `C-c`):
 `C-u` is the Emacs universal argument; it applies to the next command and is
 cancelled by any key other than the `C-c` prefix.
 
-### Interactive agenda
+### Agenda views
 
-**Agenda Tracker** opens a read-only buffer. Pressing `t` on a task line cycles
-that task's TODO state (`org::cycle_todo`) directly in its **source `.org` file
-on disk**, reloads any open, clean buffer for that file, and rebuilds the agenda
-in place (keeping the cursor line) — mirroring Emacs `org-agenda-todo`. The pure
-`org::agenda_items` records each entry's source line, and `org::render_agenda`
-returns both the buffer text and a line→item map so the host can act on the line
-under the cursor. Marking a task `DONE` with a note (`C-u C-c C-t`) uses
-`org::close_headline`, which forces the keyword to `DONE`, inserts (or refreshes)
-a `CLOSED: [now]` planning line, and logs the note into a `:LOGBOOK:` drawer as
+The **Org → Agenda** submenu offers the built-in views from the Org manual's
+[Agenda Views](https://orgmode.org/manual/Agenda-Views.html), each compiled from
+every project `.org` file (reindexed first) into a **read-only, interactive**
+buffer:
+
+| Item | Action | Org key | Builder | Shows |
+| ---- | ------ | ------- | ------- | ----- |
+| Weekly/Daily Agenda | `org.agenda` | `a` | `org::agenda_items` | `DEADLINE:`/`SCHEDULED:` items grouped by date, plus unscheduled `TODO`s. |
+| Global TODO List | `org.agenda.todo` | `t` | `org::todo_list` | Every not-`DONE` `TODO` headline. |
+| Match Tags/Property… | `org.agenda.match` | `m` | `org::tags_match` | Headlines whose trailing `:tags:` satisfy a query (`+tag`, `-tag`, bare `tag`; case-insensitive — a pragmatic subset of Org's match syntax). |
+| Search… | `org.agenda.search` | `s` | `org::search` | Headlines whose entry body contains **all** the given keywords. |
+| Stuck Projects | `org.agenda.stuck` | `#` | `org::stuck_projects` | Not-`DONE` headlines that have children but no not-`DONE` child (no next action). |
+
+All views are **interactive**: pressing `t` on a task line cycles that task's
+TODO state (`org::cycle_todo`) directly in its **source `.org` file on disk**,
+reloads any open, clean buffer for that file, and rebuilds the *same* view in
+place (keeping the cursor line) — mirroring Emacs `org-agenda-todo`. The pure
+builders return `Vec<AgendaItem>` (each carrying its source line); `render_agenda`
+/ `render_list` turn those into the buffer text plus a line→item map so the host
+can act on the line under the cursor.
+
+Marking a task `DONE` with a note (`C-u C-c C-t`) uses `org::close_headline`,
+which forces the keyword to `DONE`, inserts (or refreshes) a `CLOSED: [now]`
+planning line, and logs the note into a `:LOGBOOK:` drawer as
 `- Note taken on [now] \\` + the indented body.
 
 ### Checkbox & statistics cookies

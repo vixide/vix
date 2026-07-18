@@ -690,6 +690,213 @@ pub fn agenda(files: &[(String, String)]) -> String {
     render_agenda(&agenda_items(files)).0
 }
 
+// ----- Other built-in agenda views ------------------------------------------
+
+/// The headline text (after the leading stars) of a headline `line`.
+fn headline_text(line: &str) -> &str {
+    match headline_level(line) {
+        Some(level) => line[level..].trim_start(),
+        None => line,
+    }
+}
+
+/// Make an [`AgendaItem`] for the (undated) list views from a headline.
+fn list_item(headline: &str, file: &str, line: usize) -> AgendaItem {
+    AgendaItem {
+        date: None,
+        kind: String::new(),
+        headline: headline_text(headline).to_string(),
+        file: file.to_string(),
+        line,
+    }
+}
+
+/// The **global TODO list** (Org agenda `t`): every headline across `files`
+/// whose keyword is a not-DONE TODO. Pure.
+#[must_use]
+pub fn todo_list(files: &[(String, String)]) -> Vec<AgendaItem> {
+    let mut out = Vec::new();
+    for (name, content) in files {
+        for (idx, line) in content.lines().enumerate() {
+            if headline_todo(line) == Some(false) {
+                out.push(list_item(line, name, idx));
+            }
+        }
+    }
+    out
+}
+
+/// The trailing `:a:b:c:` tags of a headline, lower-cased, or empty.
+fn headline_tags(line: &str) -> Vec<String> {
+    let trimmed = line.trim_end();
+    let Some(sp) = trimmed.rfind(char::is_whitespace) else {
+        return Vec::new();
+    };
+    let tail = &trimmed[sp + 1..];
+    if tail.len() < 2 || !tail.starts_with(':') || !tail.ends_with(':') {
+        return Vec::new();
+    }
+    let inner = &tail[1..tail.len() - 1];
+    if inner.is_empty()
+        || inner.split(':').any(|t| {
+            t.is_empty()
+                || !t
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || matches!(c, '_' | '@' | '#' | '%'))
+        })
+    {
+        return Vec::new();
+    }
+    inner.split(':').map(str::to_ascii_lowercase).collect()
+}
+
+/// Parse a pragmatic tag-match `query` into `(required, excluded)` tag lists.
+/// Tokens are separated by whitespace or `+`/`-`; a `-` marks the following tag
+/// as excluded, `+` (or nothing) as required (e.g. `work+urgent-boss`). Tags are
+/// lower-cased for case-insensitive matching.
+fn parse_tag_query(query: &str) -> (Vec<String>, Vec<String>) {
+    let mut required = Vec::new();
+    let mut excluded = Vec::new();
+    let mut sign = '+';
+    let mut cur = String::new();
+    let mut flush = |cur: &mut String, sign: char| {
+        if !cur.is_empty() {
+            let tag = std::mem::take(cur).to_ascii_lowercase();
+            if sign == '-' {
+                excluded.push(tag);
+            } else {
+                required.push(tag);
+            }
+        }
+    };
+    for ch in query.chars() {
+        match ch {
+            '+' | '-' => {
+                flush(&mut cur, sign);
+                sign = ch;
+            }
+            c if c.is_whitespace() => {
+                flush(&mut cur, sign);
+                sign = '+';
+            }
+            c => cur.push(c),
+        }
+    }
+    flush(&mut cur, sign);
+    (required, excluded)
+}
+
+/// **Match tags** (Org agenda `m`): headlines across `files` whose trailing
+/// `:tags:` satisfy `query` — all required tags present and no excluded tag
+/// present (a pragmatic subset of Org's match syntax: `+tag`, `-tag`, bare
+/// `tag`, case-insensitive). An empty query matches every tagged headline. Pure.
+#[must_use]
+pub fn tags_match(files: &[(String, String)], query: &str) -> Vec<AgendaItem> {
+    let (required, excluded) = parse_tag_query(query);
+    let mut out = Vec::new();
+    for (name, content) in files {
+        for (idx, line) in content.lines().enumerate() {
+            if headline_level(line).is_none() {
+                continue;
+            }
+            let tags = headline_tags(line);
+            if tags.is_empty() {
+                continue;
+            }
+            let ok = required.iter().all(|r| tags.contains(r))
+                && !excluded.iter().any(|e| tags.contains(e));
+            if ok {
+                out.push(list_item(line, name, idx));
+            }
+        }
+    }
+    out
+}
+
+/// **Search view** (Org agenda `s`): headlines whose entry body (the headline
+/// through the line before the next headline) contains *all* whitespace-split
+/// words of `query`, case-insensitively. An empty query matches nothing. Pure.
+#[must_use]
+pub fn search(files: &[(String, String)], query: &str) -> Vec<AgendaItem> {
+    let words: Vec<String> = query.split_whitespace().map(str::to_ascii_lowercase).collect();
+    let mut out = Vec::new();
+    if words.is_empty() {
+        return out;
+    }
+    for (name, content) in files {
+        let lines: Vec<&str> = content.lines().collect();
+        for (idx, line) in lines.iter().enumerate() {
+            if headline_level(line).is_none() {
+                continue;
+            }
+            let mut end = idx + 1;
+            while end < lines.len() && headline_level(lines[end]).is_none() {
+                end += 1;
+            }
+            let body = lines[idx..end].join("\n").to_ascii_lowercase();
+            if words.iter().all(|w| body.contains(w)) {
+                out.push(list_item(line, name, idx));
+            }
+        }
+    }
+    out
+}
+
+/// **Stuck projects** (Org agenda `#`): a *project* is a not-DONE headline with
+/// at least one child headline; it is *stuck* when none of its descendants is a
+/// not-DONE TODO (no next action). Returns the stuck project headlines. Pure.
+#[must_use]
+pub fn stuck_projects(files: &[(String, String)]) -> Vec<AgendaItem> {
+    let mut out = Vec::new();
+    for (name, content) in files {
+        let lines: Vec<&str> = content.lines().collect();
+        for (idx, line) in lines.iter().enumerate() {
+            let Some(level) = headline_level(line) else {
+                continue;
+            };
+            if headline_todo(line) == Some(true) {
+                continue; // the project itself is already DONE
+            }
+            let mut end = idx + 1;
+            while end < lines.len() && headline_level(lines[end]).is_none_or(|l| l > level) {
+                end += 1;
+            }
+            let children = &lines[idx + 1..end];
+            let has_child = children.iter().any(|l| headline_level(l).is_some());
+            let has_next_action = children.iter().any(|l| headline_todo(l) == Some(false));
+            if has_child && !has_next_action {
+                out.push(list_item(line, name, idx));
+            }
+        }
+    }
+    out
+}
+
+/// Render a flat list `view` (TODO list / match / search / stuck projects) into
+/// an Org document titled `title`, alongside the per-line map (`map[i]` is the
+/// item index shown on buffer line `i`, or `None`). Mirrors [`render_agenda`]'s
+/// contract so the same interactive machinery drives every view.
+#[must_use]
+pub fn render_list(title: &str, items: &[AgendaItem]) -> (String, Vec<Option<usize>>) {
+    let mut buf = String::new();
+    let mut map: Vec<Option<usize>> = Vec::new();
+    let push = |buf: &mut String, map: &mut Vec<Option<usize>>, line: &str, item| {
+        buf.push_str(line);
+        buf.push('\n');
+        map.push(item);
+    };
+    push(&mut buf, &mut map, &format!("#+title: {title}"), None);
+    for (i, it) in items.iter().enumerate() {
+        push(
+            &mut buf,
+            &mut map,
+            &format!("- {} ({})", it.headline, it.file),
+            Some(i),
+        );
+    }
+    (buf, map)
+}
+
 /// Minutes in a `CLOCK:` line's explicit `=> H:MM` total, if present.
 fn clock_minutes(line: &str) -> Option<u32> {
     let rest = line.trim().strip_prefix("CLOCK:")?;
@@ -1157,6 +1364,75 @@ mod tests {
                 assert!(line.contains(&items[*idx].headline));
             }
         }
+    }
+
+    #[test]
+    fn todo_list_collects_not_done_headlines() {
+        let files = vec![(
+            "a.org".to_string(),
+            "* TODO one\n* DONE two\n* three\n** TODO nested\n".to_string(),
+        )];
+        let items = todo_list(&files);
+        let heads: Vec<&str> = items.iter().map(|i| i.headline.as_str()).collect();
+        assert_eq!(heads, vec!["TODO one", "TODO nested"]);
+        assert_eq!(items[1].line, 3, "source line recorded");
+    }
+
+    #[test]
+    fn tags_match_honours_required_and_excluded_tags() {
+        let files = vec![(
+            "a.org".to_string(),
+            "* Alfa :work:urgent:\n* Bravo :work:\n* Charlie :home:\n* Delta\n".to_string(),
+        )];
+        // `work-urgent` = require work, exclude urgent.
+        let items = tags_match(&files, "work-urgent");
+        let heads: Vec<&str> = items.iter().map(|i| i.headline.as_str()).collect();
+        assert_eq!(heads, vec!["Bravo :work:"]);
+        // Bare tag requires it; case-insensitive.
+        assert_eq!(tags_match(&files, "HOME").len(), 1);
+        // A headline with no tags never matches.
+        assert!(tags_match(&files, "work").iter().all(|i| i.headline != "Delta"));
+    }
+
+    #[test]
+    fn search_matches_entries_containing_all_words() {
+        let files = vec![(
+            "a.org".to_string(),
+            "* Meeting\nnotes about budget\n* Other\nplan lunch\n".to_string(),
+        )];
+        let hit = search(&files, "budget");
+        assert_eq!(hit.len(), 1);
+        assert_eq!(hit[0].headline, "Meeting");
+        // All words must appear in the entry body.
+        assert!(search(&files, "budget lunch").is_empty());
+        assert!(search(&files, "").is_empty(), "empty query matches nothing");
+    }
+
+    #[test]
+    fn stuck_projects_finds_projects_without_a_next_action() {
+        let files = vec![(
+            "a.org".to_string(),
+            // Alfa: has a TODO child -> not stuck.
+            // Bravo: children all DONE/plain -> stuck.
+            // Charlie: leaf (no children) -> not a project.
+            "* Alfa\n** TODO do it\n* Bravo\n** DONE gone\n** note\n* Charlie\n".to_string(),
+        )];
+        let items = stuck_projects(&files);
+        let heads: Vec<&str> = items.iter().map(|i| i.headline.as_str()).collect();
+        assert_eq!(heads, vec!["Bravo"]);
+    }
+
+    #[test]
+    fn render_list_titles_and_maps_entries() {
+        let files = vec![("a.org".to_string(), "* TODO one\n* TODO two\n".to_string())];
+        let items = todo_list(&files);
+        let (text, map) = render_list("TODO List", &items);
+        assert!(text.starts_with("#+title: TODO List\n"));
+        assert!(text.contains("- TODO one (a.org)"));
+        // The title line maps to nothing; entry lines map to their item.
+        assert_eq!(map[0], None);
+        assert_eq!(map[1], Some(0));
+        assert_eq!(map[2], Some(1));
     }
 
     #[test]

@@ -1651,6 +1651,74 @@ fn org_agenda_t_cycles_task_in_its_source_file() {
 }
 
 #[test]
+fn org_agenda_views_list_todos_matches_searches_and_stuck_projects() {
+    let dir = unique_dir("org-agenda-views");
+    fs::write(
+        dir.join("work.org"),
+        "* TODO Ship it :urgent:\n* DONE Old thing\n* Project A\n** TODO next step\n\
+         * Project B\n** DONE finished\n** notes only\n",
+    )
+    .unwrap();
+    fs::write(dir.join("notes.org"), "* Meeting\nbudget review here\n").unwrap();
+    let mut app = app_at(&dir);
+
+    // Global TODO list: only not-DONE TODO headlines.
+    app.run_action("org.agenda.todo");
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains("#+title: Global TODO List"), "todo view title: {text}");
+    assert!(text.contains("- TODO Ship it :urgent: (work.org)"), "lists TODO: {text}");
+    assert!(text.contains("- TODO next step (work.org)"));
+    assert!(!text.contains("Old thing"), "DONE excluded: {text}");
+
+    // Stuck projects: a project (has children) with no not-DONE child.
+    app.run_action("org.agenda.stuck");
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains("#+title: Stuck Projects"), "stuck view title: {text}");
+    assert!(text.contains("- Project B (work.org)"), "Project B is stuck: {text}");
+    assert!(!text.contains("Project A"), "Project A has a next action: {text}");
+
+    // Match view (tags): prompt-driven.
+    app.run_action("org.agenda.match");
+    assert!(app.prompt.is_some(), "match opens a query prompt");
+    type_str(&mut app, "urgent");
+    app.on_key(keycode(KeyCode::Enter));
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains("#+title: Match: urgent"), "match view title: {text}");
+    assert!(text.contains("Ship it"), "urgent-tagged headline matched: {text}");
+
+    // Search view (text): prompt-driven, matches entry body.
+    app.run_action("org.agenda.search");
+    assert!(app.prompt.is_some(), "search opens a query prompt");
+    type_str(&mut app, "budget");
+    app.on_key(keycode(KeyCode::Enter));
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.contains("#+title: Search: budget"), "search view title: {text}");
+    assert!(text.contains("- Meeting (notes.org)"), "entry body matched: {text}");
+
+    // `t` in a list view cycles the source task and rebuilds the SAME view.
+    app.run_action("org.agenda.todo");
+    let text = app.editor.active_tab().unwrap().text();
+    let line = text.split('\n').position(|l| l.contains("Ship it")).unwrap();
+    app.run_action("edit.go_first");
+    for _ in 0..line {
+        app.on_key(keycode(KeyCode::Down));
+    }
+    app.on_key(key('t')); // TODO -> DONE
+    let rebuilt = app.editor.active_tab().unwrap().text();
+    assert!(
+        rebuilt.contains("#+title: Global TODO List"),
+        "rebuilds the todo view, not the weekly agenda: {rebuilt}"
+    );
+    assert!(!rebuilt.contains("Ship it"), "the now-DONE task drops from the list: {rebuilt}");
+    assert!(
+        fs::read_to_string(dir.join("work.org")).unwrap().contains("* DONE Ship it"),
+        "source file updated on disk"
+    );
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn lsp_navigation_actions_report_inactive_without_server() {
     // With no language server attached, the LSP nav actions are no-ops that
     // report inactivity rather than panicking.

@@ -132,6 +132,10 @@ pub enum PromptKind {
     /// Enter a closing note (multiline; Alt+Enter = newline) while marking the
     /// headline at the cursor DONE (`C-u C-c C-t`).
     OrgCloseNote,
+    /// Enter a tags/property match query for the Org agenda match view.
+    OrgAgendaMatch,
+    /// Enter keywords for the Org agenda text-search view.
+    OrgAgendaSearch,
     /// Org-roam: find or create a node by title.
     RoamFind,
     /// Org-roam: insert a link to a node (found or created) by title.
@@ -313,12 +317,31 @@ USING GIN ((
 /// Backing state for the interactive Org agenda buffer: enough to map a cursor
 /// line back to its source task (so `t` can cycle its TODO state on disk) and to
 /// confirm the active buffer really is this agenda before acting on it.
+/// Which built-in Org agenda view a buffer shows (Org manual: "Agenda Views"),
+/// carrying any query so `t` can rebuild the *same* view after a task changes.
+#[derive(Clone)]
+enum AgendaKind {
+    /// Weekly/daily agenda (`org.agenda`): dated planning lines + unscheduled
+    /// TODOs.
+    Weekly,
+    /// Global TODO list (`org.agenda.todo`).
+    Todo,
+    /// Stuck projects (`org.agenda.stuck`).
+    Stuck,
+    /// Tags/property match (`org.agenda.match`) for the held query.
+    Match(String),
+    /// Text search (`org.agenda.search`) for the held query.
+    Search(String),
+}
+
 struct AgendaView {
+    /// Which view this is, so `t` rebuilds the same one.
+    kind: AgendaKind,
     /// Absolute source path + 0-based headline line for each agenda item, indexed
-    /// as [`vix_org::render_agenda`]'s map refers to them.
+    /// as the view's render map refers to them.
     items: Vec<(PathBuf, usize)>,
     /// Buffer line index → index into `items`, or `None` for title/heading/blank
-    /// lines (the map returned by [`vix_org::render_agenda`]).
+    /// lines (the map returned by the view's renderer).
     line_map: Vec<Option<usize>>,
     /// The rendered agenda text, compared against the active buffer to verify it
     /// is still the (read-only) agenda before `t` acts.
@@ -4503,6 +4526,20 @@ impl App {
             "org.clock_in" => self.org_clock_in(),
             "org.clock_out" => self.org_clock_out(),
             "org.agenda" => self.org_agenda(),
+            "org.agenda.todo" => self.open_view(&AgendaKind::Todo),
+            "org.agenda.stuck" => self.open_view(&AgendaKind::Stuck),
+            "org.agenda.match" => {
+                self.prompt = Some(Prompt::new(
+                    PromptKind::OrgAgendaMatch,
+                    t!("prompt.org_agenda_match").to_string(),
+                ));
+            }
+            "org.agenda.search" => {
+                self.prompt = Some(Prompt::new(
+                    PromptKind::OrgAgendaSearch,
+                    t!("prompt.org_agenda_search").to_string(),
+                ));
+            }
             "org.time_report" => self.org_time_report(),
             _ => return self.roam_action(action),
         }
@@ -4848,16 +4885,36 @@ impl App {
         out
     }
 
-    /// Build the agenda buffer text and its backing [`AgendaView`] (line→source
-    /// map) from the project's `.org` files, plus the file count for the status.
-    fn build_agenda_view(&self) -> (String, AgendaView, usize) {
+    /// Build the buffer text and backing [`AgendaView`] for the built-in agenda
+    /// `kind` from the project's `.org` files, plus the number of listed items.
+    fn build_view(&self, kind: &AgendaKind) -> (String, AgendaView, usize) {
         let gathered = self.org_agenda_files();
         let files: Vec<(String, String)> = gathered
             .iter()
             .map(|(_, n, c)| (n.clone(), c.clone()))
             .collect();
-        let items = crate::org::agenda_items(&files);
-        let (text, line_map) = crate::org::render_agenda(&items);
+        let (items, text, line_map) = match kind {
+            AgendaKind::Weekly => {
+                let items = crate::org::agenda_items(&files);
+                let (text, map) = crate::org::render_agenda(&items);
+                (items, text, map)
+            }
+            AgendaKind::Todo => {
+                Self::list_view(&t!("agenda.todo.title"), crate::org::todo_list(&files))
+            }
+            AgendaKind::Stuck => {
+                Self::list_view(&t!("agenda.stuck.title"), crate::org::stuck_projects(&files))
+            }
+            AgendaKind::Match(q) => Self::list_view(
+                &t!("agenda.match.title", query = q),
+                crate::org::tags_match(&files, q),
+            ),
+            AgendaKind::Search(q) => Self::list_view(
+                &t!("agenda.search.title", query = q),
+                crate::org::search(&files, q),
+            ),
+        };
+        let count = items.len();
         let by_name: std::collections::HashMap<&str, &Path> = gathered
             .iter()
             .map(|(p, n, _)| (n.as_str(), p.as_path()))
@@ -4873,32 +4930,50 @@ impl App {
             })
             .collect();
         let view = AgendaView {
+            kind: kind.clone(),
             items: item_locs,
             line_map,
             rendered: text.clone(),
         };
-        (text, view, gathered.len())
+        (text, view, count)
     }
 
-    /// Compile an agenda from every `.org` file in the project into a read-only
-    /// tab. The buffer is interactive: pressing `t` on a task line cycles that
-    /// task's TODO state in its source file (see [`Self::agenda_todo_at_cursor`]).
-    fn org_agenda(&mut self) {
+    /// Render a flat list view (`title` + entries) to `(items, text, line_map)`.
+    fn list_view(
+        title: &str,
+        items: Vec<crate::org::AgendaItem>,
+    ) -> (Vec<crate::org::AgendaItem>, String, Vec<Option<usize>>) {
+        let (text, map) = crate::org::render_list(title, &items);
+        (items, text, map)
+    }
+
+    /// Open a built-in agenda `kind` in a read-only tab. The buffer is
+    /// interactive: pressing `t` on a task line cycles that task's TODO state in
+    /// its source file (see [`Self::agenda_todo_at_cursor`]).
+    fn open_view(&mut self, kind: &AgendaKind) {
         self.build_file_index(); // pick up any newly added .org files
-        let (text, view, count) = self.build_agenda_view();
+        let (text, view, count) = self.build_view(kind);
         self.editor.new_tab_with_content(&text);
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.read_only = true;
         }
         self.agenda = Some(view);
         self.focus = Focus::Editor;
-        self.status = t!("status.org_agenda", count = count).to_string();
+        self.status = t!("status.org_agenda_view", count = count).to_string();
+    }
+
+    /// Weekly/daily agenda (Org agenda `a`).
+    fn org_agenda(&mut self) {
+        self.open_view(&AgendaKind::Weekly);
     }
 
     /// Rebuild the open agenda buffer in place after a task changed, keeping the
-    /// cursor on `cursor_line`.
+    /// cursor on `cursor_line` and preserving which view is shown.
     fn rebuild_agenda(&mut self, cursor_line: usize) {
-        let (text, view, _) = self.build_agenda_view();
+        let Some(kind) = self.agenda.as_ref().map(|v| v.kind.clone()) else {
+            return;
+        };
+        let (text, view, _) = self.build_view(&kind);
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_content(&text);
             let last = text.split('\n').count().saturating_sub(1);
@@ -16462,6 +16537,12 @@ impl App {
             // A closing note may be empty (mark DONE + CLOSED with no LOGBOOK
             // entry), so it is dispatched outside the "non-empty" roam group.
             PromptKind::OrgCloseNote => self.org_close_note(prompt.input.trim()),
+            PromptKind::OrgAgendaMatch => {
+                self.open_view(&AgendaKind::Match(prompt.input.trim().to_string()));
+            }
+            PromptKind::OrgAgendaSearch => {
+                self.open_view(&AgendaKind::Search(prompt.input.trim().to_string()));
+            }
             PromptKind::OrgCapture
             | PromptKind::OrgCaptureTodo
             | PromptKind::RoamFind
