@@ -73,7 +73,10 @@ pub fn parse_csv(text: &str) -> Vec<Vec<String>> {
 /// injection": `=`, `+`, `-`, `@` start a formula, and a leading tab or CR can
 /// smuggle one past naive guards. See OWASP "CSV Injection".
 fn needs_formula_guard(field: &str) -> bool {
-    matches!(field.chars().next(), Some('=' | '+' | '-' | '@' | '\t' | '\r'))
+    matches!(
+        field.chars().next(),
+        Some('=' | '+' | '-' | '@' | '\t' | '\r')
+    )
 }
 
 /// Write rows as CSV, quoting any field that contains a comma, quote, CR or LF.

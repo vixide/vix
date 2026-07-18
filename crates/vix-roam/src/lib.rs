@@ -582,7 +582,10 @@ mod tests {
 
     #[test]
     fn daily_helpers() {
-        assert_eq!(daily_filename("2026-06-28").as_deref(), Some("2026-06-28.org"));
+        assert_eq!(
+            daily_filename("2026-06-28").as_deref(),
+            Some("2026-06-28.org")
+        );
         assert!(daily_template("2026-06-28", "D1").contains("#+title: 2026-06-28"));
         assert_eq!(daily_entry("09:30", "stand-up"), "* 09:30 stand-up\n");
     }
@@ -593,11 +596,11 @@ mod tests {
         for bad in [
             "../../../tmp/evil",
             "2026-07-12/../../etc",
-            "2026-7-12",       // wrong widths
-            "2026_07_12",      // wrong separators
-            "20260712",        // no separators
-            "abcd-ef-gh",      // non-digits
-            "2026-07-12.org",  // extra text
+            "2026-7-12",      // wrong widths
+            "2026_07_12",     // wrong separators
+            "20260712",       // no separators
+            "abcd-ef-gh",     // non-digits
+            "2026-07-12.org", // extra text
             "",
         ] {
             assert!(!is_valid_daily_date(bad), "should reject {bad:?}");

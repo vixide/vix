@@ -2859,8 +2859,16 @@ mod tests {
             b.poll_query();
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
-        assert!(b.pending_query.is_none(), "query never finished: {:?}", b.message);
-        let entry = b.history.entries.first().expect("a history entry was recorded");
+        assert!(
+            b.pending_query.is_none(),
+            "query never finished: {:?}",
+            b.message
+        );
+        let entry = b
+            .history
+            .entries
+            .first()
+            .expect("a history entry was recorded");
         assert_eq!(
             entry, "SELECT :secret AS x",
             "history must store the placeholder template"
@@ -2908,7 +2916,10 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         let entry = b.history.entries.first().expect("read query recorded");
-        assert_eq!(entry, "SELECT :n AS n", "history reflects the read, not the rejected write");
+        assert_eq!(
+            entry, "SELECT :n AS n",
+            "history reflects the read, not the rejected write"
+        );
         assert!(
             !b.history.entries.iter().any(|e| e.contains("UPDATE")),
             "the rejected write's template leaked into history: {:?}",

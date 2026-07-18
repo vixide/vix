@@ -709,7 +709,10 @@ mod tests {
         // Whatever it resolves (git may or may not be installed in CI), it must
         // be an absolute path — never a bare name resolvable against the cwd.
         if let Some(p) = which_on_path("git") {
-            assert!(Path::new(&p).is_absolute(), "git resolved to non-absolute: {p:?}");
+            assert!(
+                Path::new(&p).is_absolute(),
+                "git resolved to non-absolute: {p:?}"
+            );
         }
     }
 

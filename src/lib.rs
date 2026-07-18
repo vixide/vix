@@ -121,6 +121,7 @@ pub use vix_edit_bytes as edit_bytes;
 pub use vix_editor::pane_tree;
 pub use vix_editorconfig as editorconfig;
 pub use vix_emmet as emmet;
+pub use vix_file_browser_panel as file_browser_panel;
 pub use vix_file_information_panel as file_information_panel;
 pub use vix_find_panel as find_panel;
 pub use vix_git as git;

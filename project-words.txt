@@ -10,6 +10,7 @@ vix
 ratatui
 ropey
 crossterm
+walkdir
 treesitter
 clippy
 rustls

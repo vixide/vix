@@ -108,7 +108,10 @@ pub fn send(req: &Request) -> Result<String, String> {
     // handlers (e.g. `file://`); ureq itself doesn't implement such schemes, but
     // rejecting them explicitly is defense-in-depth and a clear error.
     if !scheme_is_http(&req.url) {
-        return Err(format!("unsupported URL scheme (only http/https): {}", req.url));
+        return Err(format!(
+            "unsupported URL scheme (only http/https): {}",
+            req.url
+        ));
     }
     let mut r = ureq::request(&req.method, &req.url);
     for (name, value) in &req.headers {

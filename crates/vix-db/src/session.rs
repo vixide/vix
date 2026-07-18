@@ -333,15 +333,15 @@ mod tests {
         // An error that echoes only the password (e.g. an auth failure detail).
         let msg2 = "password authentication failed for password sup3rsecret";
         let red2 = redact_url_secret(msg2, url);
-        assert!(!red2.contains("sup3rsecret"), "bare password leaked: {red2}");
+        assert!(
+            !red2.contains("sup3rsecret"),
+            "bare password leaked: {red2}"
+        );
     }
 
     #[test]
     fn password_of_extracts_only_the_password() {
-        assert_eq!(
-            password_of("mysql://u:p%40ss@h:3306/d"),
-            Some("p%40ss")
-        );
+        assert_eq!(password_of("mysql://u:p%40ss@h:3306/d"), Some("p%40ss"));
         assert_eq!(password_of("postgres://user@host/db"), None); // no password
         assert_eq!(password_of("sqlite::memory:"), None); // no authority
     }

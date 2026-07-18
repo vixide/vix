@@ -50,7 +50,9 @@ fn reject_option_like(label: &str, value: &str) -> Result<(), String> {
         return Err(format!("{label} must not start with '-': {value:?}"));
     }
     if v.chars().any(|c| c.is_whitespace() || c.is_control()) {
-        return Err(format!("{label} must not contain whitespace or control characters"));
+        return Err(format!(
+            "{label} must not contain whitespace or control characters"
+        ));
     }
     Ok(())
 }
@@ -250,19 +252,31 @@ mod tests {
         // → RCE) is refused before any process is spawned.
         let mut host = pg("joel", "", "");
         host.ssh_host = "-oProxyCommand=touch /tmp/pwned".into();
-        assert!(ssh_args(&host, 5000).is_err(), "ssh_host option must be rejected");
+        assert!(
+            ssh_args(&host, 5000).is_err(),
+            "ssh_host option must be rejected"
+        );
 
         let mut user = pg("", "", "");
         user.ssh_user = "-oProxyCommand=x".into();
-        assert!(ssh_args(&user, 5000).is_err(), "ssh_user option must be rejected");
+        assert!(
+            ssh_args(&user, 5000).is_err(),
+            "ssh_user option must be rejected"
+        );
 
         let mut ident = pg("joel", "", "");
         ident.ssh_identity = "-oProxyCommand=x".into();
-        assert!(ssh_args(&ident, 5000).is_err(), "ssh_identity option must be rejected");
+        assert!(
+            ssh_args(&ident, 5000).is_err(),
+            "ssh_identity option must be rejected"
+        );
 
         let mut dbhost = pg("joel", "", "");
         dbhost.host = "-oProxyCommand=x".into();
-        assert!(ssh_args(&dbhost, 5000).is_err(), "db host option must be rejected");
+        assert!(
+            ssh_args(&dbhost, 5000).is_err(),
+            "db host option must be rejected"
+        );
 
         // A benign connection still succeeds and never emits an attacker option.
         let args = ssh_args(&pg("joel", "", ""), 5000).unwrap();
@@ -273,7 +287,10 @@ mod tests {
     fn ssh_args_reject_whitespace_and_control_chars() {
         let mut c = pg("joel", "", "");
         c.ssh_host = "bastion.example.com evil".into();
-        assert!(ssh_args(&c, 5000).is_err(), "embedded space must be rejected");
+        assert!(
+            ssh_args(&c, 5000).is_err(),
+            "embedded space must be rejected"
+        );
         c.ssh_host = "bastion\nHost *".into();
         assert!(ssh_args(&c, 5000).is_err(), "newline must be rejected");
     }

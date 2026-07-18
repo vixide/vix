@@ -4,29 +4,6 @@
 [workspace]
 members = ["crates/*"]
 
-# Config for 'dist'
-[workspace.metadata.dist]
-# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.31.0"
-# CI backends to support
-ci = "github"
-# The installers to generate for each app
-installers = ["shell", "powershell", "npm", "homebrew"]
-# Target platforms to build apps for (Rust target-triple syntax)
-targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-musl", "x86_64-pc-windows-msvc"]
-# Path that installers should place binaries in
-install-path = "CARGO_HOME"
-# Where to host releases
-hosting = "github"
-# Whether to install an updater program
-install-updater = false
-# Homebrew tap repo to publish the formula to.
-tap = "vixide/homebrew-tap"
-# Run the Homebrew publish job (pushes the formula to the tap above).
-publish-jobs = ["homebrew"]
-# npm scope for the published package (=> @vixide/vix).
-npm-scope = "@vixide"
-
 # Metadata shared by the root `vix` package and every `crates/vix-*` member, so
 # version/edition/license/etc. are declared once and inherited with
 # `field.workspace = true`.
@@ -46,6 +23,7 @@ authors = ["Joel Parker Henderson <joel@joelparkerhenderson.com>"]
 ratatui = { version = "0.30", features = ["crossterm"] }
 crossterm = "0.29"
 ignore = "0.4"
+walkdir = "2"
 ureq = "2"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
@@ -114,6 +92,7 @@ name = "vix"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+authors.workspace = true
 description = "Vix IDE: a visual integrated development environment that is TUI, friendly, featureful, high-speed, and high-security."
 license.workspace = true
 repository.workspace = true
@@ -121,6 +100,12 @@ homepage.workspace = true
 readme = "README.md"
 keywords = ["tui", "editor", "ide", "terminal", "developer"]
 categories = ["text-editors", "command-line-utilities"]
+
+[package.metadata.wix]
+upgrade-guid = "FEEBD501-4333-4380-A051-E232AD127DED"
+path-guid = "DB77424D-5C03-419E-810B-73753D47005E"
+license = false
+eula = false
 
 [features]
 # Which Tree-sitter grammars to compile in. Each grammar is a sizeable C parser,
@@ -261,6 +246,8 @@ vix-edit-value = { path = "crates/vix-edit-value", version = "1.3.0" }
 vix-editorconfig = { path = "crates/vix-editorconfig", version = "1.3.0" }
 # A pragmatic subset of Emmet abbreviation expansion.
 vix-emmet = { path = "crates/vix-emmet", version = "1.3.0" }
+# File browser (File → Open…): walkdir-backed listing with fuzzy search, sort, and filters.
+vix-file-browser-panel = { path = "crates/vix-file-browser-panel", version = "1.3.0" }
 # Information about the active editor file, plus the panel's row-selection state.
 vix-file-information-panel = { path = "crates/vix-file-information-panel", version = "1.3.0" }
 # Filesystem helpers for the explorer's copy / cut / paste / delete.

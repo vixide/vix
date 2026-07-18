@@ -4813,6 +4813,7 @@ dependencies = [
  "vix-editor-core",
  "vix-editorconfig",
  "vix-emmet",
+ "vix-file-browser-panel",
  "vix-file-information-panel",
  "vix-fileops",
  "vix-find-panel",
@@ -5197,6 +5198,14 @@ name = "vix-emmet"
 version = "1.3.0"
 dependencies = [
  "proptest",
+]
+
+[[package]]
+name = "vix-file-browser-panel"
+version = "1.3.0"
+dependencies = [
+ "vix-palette",
+ "walkdir",
 ]
 
 [[package]]

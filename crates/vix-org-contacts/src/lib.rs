@@ -297,7 +297,10 @@ mod tests {
         let org = "* a | b\n  :PROPERTIES:\n  :EMAIL: e@x\n  :END:\n";
         let d = directory(&[("c.org".into(), org.to_string())]);
         // The row for this contact has exactly the 3 intended columns (4 pipes).
-        let row = d.lines().find(|l| l.contains("\\vert")).expect("row present");
+        let row = d
+            .lines()
+            .find(|l| l.contains("\\vert"))
+            .expect("row present");
         assert_eq!(row.matches('|').count(), 4, "row: {row}");
     }
 

@@ -49,7 +49,7 @@ field is absent.
 | `show_messages` | boolean | `true` | Show the message drawer on startup. |
 | `show_status_bar` | boolean | `true` | Show the bottom status bar. |
 | `show_scrollbar` | boolean | `true` | Show the editor's right-side scroll bar. |
-| `show_bottom_dock` | boolean | `false` | Show the bottom dock (log/output/data panel). |
+| `show_bottom_dock` | boolean | `true` | Show the bottom dock (log/output/data panel). All three docks (left explorer, right messages, bottom) are shown by default. |
 | `bottom_dock_height` | integer | `9` | Height in rows of the bottom dock; drag its top edge to resize. |
 | `scrollback` | integer | `1000` | Maximum lines retained in the bottom dock (scrollback); the oldest are dropped past this. |
 | `preview_tabs` | boolean | `true` | Open single-clicked / arrow-scanned files in an ephemeral preview tab. |
@@ -70,6 +70,8 @@ field is absent.
 | `lsp_servers` | array of tables | `[]` | Configured language servers, matched to files by extension (see below). |
 | `welcomed` | boolean | `false` | Whether the first-run welcome screen has been shown. Set true after the welcome panel first appears, so it does not pop up on every launch. |
 | `contacts_dir` | string | `""` | Directory of vCard (`.vcf`) files for the contact browser (**Tools → Contacts…**). Empty = use the workspace root. |
+| `org_anything_capture_template` | string | `""` | Template pre-filling the **Org → Capture → Anything…** prompt (the `org.capture` action). Empty = a blank prompt. |
+| `org_todo_capture_template` | string | `"* TODO "` | Template pre-filling the **Org → Capture → Todo…** multiline editing area (the `org.capture_todo` action; Alt+Enter inserts a newline). |
 | `time_zone` | string | `"UTC"` | Active time zone as an IANA canonical name (e.g. `"UTC"`, `"America/New_York"`). Chosen via **Tools → Time Zone…**; used app-wide (e.g. the clock panel). |
 | `restore_session` | bool | `true` | Reopen the previous [session](../session-restore/index.md) (open files, focused tab, cursor positions) when launched in a workspace with no file argument. Saved per workspace in `session.toml`. |
 | `sticky_search_highlight` | bool | `true` | Keep [search-match highlights](../find-and-replace/index.md) visible after the Find box closes, until toggled off. When `false`, closing Find clears them. |

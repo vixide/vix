@@ -309,7 +309,10 @@ mod tests {
 
         // A crafted value cannot inject extra query parameters.
         pg.sslmode = "require&search_path=evil".into();
-        assert_eq!(url(&pg, ""), "postgres://u@h:5432/d?sslmode=requiresearch_pathevil");
+        assert_eq!(
+            url(&pg, ""),
+            "postgres://u@h:5432/d?sslmode=requiresearch_pathevil"
+        );
     }
 
     #[test]

@@ -269,8 +269,8 @@ mod tests {
     #[cfg(unix)]
     fn dropping_the_terminal_kills_the_shell_and_reader() {
         use std::time::{Duration, Instant};
-        let term = Terminal::open("/bin/sh", std::path::Path::new("/"), 24, 80)
-            .expect("spawn a shell");
+        let term =
+            Terminal::open("/bin/sh", std::path::Path::new("/"), 24, 80).expect("spawn a shell");
         // Observe the reader thread's liveness flag past the drop.
         let alive = Arc::clone(&term.alive);
         assert!(alive.load(Ordering::SeqCst), "reader should start alive");

@@ -256,21 +256,7 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.git_panel.is_some() {
         draw_git_panel(app, frame, area);
     }
-    if app.branch_chooser.is_some() {
-        draw_branch_chooser(app, frame, area);
-    }
-    if app.task_chooser.is_some() {
-        draw_task_chooser(app, frame, area);
-    }
-    if app.diff_view.is_some() {
-        draw_diff_view(app, frame, area);
-    }
-    if app.location_chooser.is_some() {
-        draw_location_chooser(app, frame, area);
-    }
-    if app.recent_chooser.is_some() {
-        draw_recent_chooser(app, frame, area);
-    }
+    draw_chooser_overlays(app, frame, area);
     if app.nerd_palette.is_some() {
         draw_nerd_palette(app, frame, area);
     }
@@ -369,7 +355,7 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.paste.as_ref().is_some_and(|p| p.conflict.is_some()) {
         draw_paste_conflict(app, frame, area);
     }
-    if app.show_help {
+    if app.help.is_some() {
         draw_help(app, frame, area);
     }
     if app.dialog.is_some() {
@@ -398,6 +384,29 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     if app.welcome.is_some() {
         draw_welcome(app, frame, area);
+    }
+}
+
+/// The chooser-family overlays (branch/task/diff/location/recent/file
+/// browser). Split out of [`draw_overlays`] to keep it within the line limit.
+fn draw_chooser_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.branch_chooser.is_some() {
+        draw_branch_chooser(app, frame, area);
+    }
+    if app.task_chooser.is_some() {
+        draw_task_chooser(app, frame, area);
+    }
+    if app.diff_view.is_some() {
+        draw_diff_view(app, frame, area);
+    }
+    if app.location_chooser.is_some() {
+        draw_location_chooser(app, frame, area);
+    }
+    if app.recent_chooser.is_some() {
+        draw_recent_chooser(app, frame, area);
+    }
+    if app.file_browser.is_some() {
+        draw_file_browser(app, frame, area);
     }
 }
 
@@ -1650,30 +1659,102 @@ fn draw_list_chooser(
     rows[0]
 }
 
+/// The recent-files chooser: a multi-column table — basename, path, size,
+/// created at, modified at — with the highlighted row opened by Enter or a
+/// click. Records the data-row rectangle for mouse hit-testing.
 fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(rc) = app.recent_chooser.as_ref() else {
         return;
     };
-    let selected = rc.selected;
-    // Show the file name first (survives truncation), then its directory.
-    let labels: Vec<String> = rc
-        .entries
-        .iter()
-        .map(|p| {
-            let name = p
-                .file_name()
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            match p.parent() {
-                Some(dir) if !dir.as_os_str().is_empty() => {
-                    format!("{name}  —  {}", dir.display())
-                }
-                _ => name,
-            }
-        })
-        .collect();
-    let hint = t!("ui.recent_hint");
-    app.layout.chooser = draw_list_chooser(frame, area, &t!("ui.recent"), &hint, &labels, selected);
+    let width = 100u16.min(area.width);
+    let rows_h = u16::try_from(rc.entries.len()).unwrap_or(u16::MAX);
+    let height = (rows_h + 5).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 4,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::PALETTE, t!("ui.recent")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
+        .split(inner);
+
+    // Fixed name (22), size (9), and date (16 + 16) columns; path gets the rest.
+    let name_w = 22usize;
+    let path_w = (chunks[0].width as usize)
+        .saturating_sub(name_w + 9 + 16 + 16 + 6)
+        .max(8);
+    let row_text = |name: &str, path: &str, size: &str, created: &str, modified: &str| {
+        format!(
+            " {:<name_w$} {:<path_w$} {:>9} {:<16} {:<16}",
+            trunc(name, name_w),
+            trunc(path, path_w),
+            size,
+            created,
+            modified,
+        )
+    };
+    let header = row_text(
+        &t!("ui.file_browser_sort_name"),
+        &t!("ui.recent_col_path"),
+        &t!("ui.file_browser_sort_size"),
+        &t!("ui.file_browser_sort_created"),
+        &t!("ui.file_browser_sort_modified"),
+    );
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(header, theme::title(true)))),
+        chunks[0],
+    );
+
+    let view_h = chunks[1].height as usize;
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for (row, e) in rc.entries.iter().enumerate().take(view_h) {
+        let name = e
+            .path
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let dir = e
+            .path
+            .parent()
+            .map(|d| d.display().to_string())
+            .unwrap_or_default();
+        let text = row_text(
+            &name,
+            &dir,
+            &crate::file_browser_panel::size_label(e.size),
+            &unix_secs_label(e.created),
+            &unix_secs_label(e.modified),
+        );
+        let line = if row == rc.selected {
+            Line::from(Span::styled(text, theme::selected()))
+        } else {
+            Line::from(Span::raw(text))
+        };
+        lines.push(line);
+    }
+    frame.render_widget(Paragraph::new(lines), chunks[1]);
+
+    let hint = Line::from(Span::styled(t!("ui.recent_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[2]);
+
+    // Mouse hit-testing maps clicks to data rows only (the header is not a row).
+    app.layout.chooser = chunks[1];
 }
 
 fn draw_location_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -1702,6 +1783,183 @@ fn draw_location_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let hint = t!("ui.locations_hint");
     app.layout.chooser =
         draw_list_chooser(frame, area, &t!("ui.locations"), &hint, &labels, selected);
+}
+
+/// The file browser overlay (File → Open…): root + filter lines, the entry
+/// rows (name, size, modified date), and status + hint lines. Records the
+/// row-list rectangle for mouse hit-testing and paging.
+fn draw_file_browser(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.file_browser.is_none() {
+        return;
+    }
+    let width = 76u16.min(area.width);
+    let height = (area.height.saturating_sub(4)).max(8).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 4,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::FOLDER_OPEN, t!("ui.file_browser")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(inner);
+
+    let fb = app.file_browser.as_ref().unwrap();
+    draw_file_browser_header(fb, frame, chunks[0], chunks[1]);
+
+    let view_h = chunks[2].height as usize;
+    if let Some(fb) = app.file_browser.as_mut() {
+        fb.ensure_visible(view_h);
+    }
+    let fb = app.file_browser.as_ref().unwrap();
+    let filtered = fb.matches();
+    let total = filtered.len();
+    // Fixed size (9) and date (16) columns; the path takes the rest.
+    let path_w = (chunks[2].width as usize).saturating_sub(9 + 16 + 5).max(8);
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for (row, &idx) in filtered.iter().enumerate().skip(fb.scroll).take(view_h) {
+        let text = file_browser_row(&fb.entries[idx], path_w);
+        let line = if row == fb.selected {
+            Line::from(Span::styled(text, theme::selected()))
+        } else {
+            Line::from(Span::raw(text))
+        };
+        lines.push(line);
+    }
+    let show_bar = total > view_h && chunks[2].width > 1;
+    let row_area = if show_bar {
+        Rect {
+            width: chunks[2].width - 1,
+            ..chunks[2]
+        }
+    } else {
+        chunks[2]
+    };
+    frame.render_widget(Paragraph::new(lines), row_area);
+    if show_bar {
+        let sb_area = Rect {
+            x: chunks[2].x + chunks[2].width - 1,
+            ..chunks[2]
+        };
+        draw_scrollbar(frame, sb_area, fb.selected, total.saturating_sub(1));
+    }
+
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            file_browser_status(fb, total),
+            theme::dim(),
+        ))),
+        chunks[3],
+    );
+
+    let hint = Line::from(Span::styled(
+        t!("ui.file_browser_hint").to_string(),
+        theme::dim(),
+    ));
+    frame.render_widget(Paragraph::new(hint), chunks[4]);
+
+    app.layout.file_browser = Rect {
+        x: chunks[2].x,
+        y: chunks[2].y,
+        width: row_area.width,
+        height: u16::try_from(view_h)
+            .unwrap_or(u16::MAX)
+            .min(chunks[2].height),
+    };
+}
+
+/// The file browser's root line (the directory being browsed) and filter line
+/// (the typed query, or a dim prompt when empty).
+fn draw_file_browser_header(
+    fb: &crate::file_browser_panel::Panel,
+    frame: &mut Frame,
+    root_area: Rect,
+    filter_area: Rect,
+) {
+    let root = Line::from(vec![
+        Span::styled(format!("{} ", icon::FOLDER), theme::dim()),
+        Span::raw(fb.root.display().to_string()),
+    ]);
+    frame.render_widget(Paragraph::new(root), root_area);
+
+    let filter = if fb.query.is_empty() {
+        Line::from(Span::styled(
+            t!("ui.file_browser_filter").to_string(),
+            theme::dim(),
+        ))
+    } else {
+        Line::from(vec![
+            Span::styled("/ ", theme::dim()),
+            Span::raw(fb.query.clone()),
+        ])
+    };
+    frame.render_widget(Paragraph::new(filter), filter_area);
+}
+
+/// One file-browser row: relative path (directories get a `/` suffix), size,
+/// and modified date, in fixed columns.
+fn file_browser_row(e: &crate::file_browser_panel::Entry, path_w: usize) -> String {
+    let shown = if e.is_dir {
+        format!("{}/", e.rel)
+    } else {
+        e.rel.clone()
+    };
+    let size = if e.is_dir {
+        String::new()
+    } else {
+        crate::file_browser_panel::size_label(e.size)
+    };
+    format!(
+        " {:<path_w$} {:>9}  {:<16}",
+        trunc(&shown, path_w),
+        size,
+        unix_secs_label(e.modified),
+    )
+}
+
+/// The file-browser status line: sort column + direction, match count, and
+/// the hidden-files / truncation flags when set.
+fn file_browser_status(fb: &crate::file_browser_panel::Panel, total: usize) -> String {
+    let arrow = if fb.ascending { "↑" } else { "↓" };
+    let mut parts = vec![
+        format!("{} {arrow}", t!(fb.sort.label_key())),
+        t!("ui.file_browser_count", count = total).to_string(),
+    ];
+    if fb.show_hidden {
+        parts.push(t!("ui.file_browser_hidden").to_string());
+    }
+    if fb.truncated {
+        parts.push(t!("ui.file_browser_truncated").to_string());
+    }
+    parts.join(" · ")
+}
+
+/// Unix seconds as a local `YYYY-MM-DD HH:MM` label; empty when unknown.
+fn unix_secs_label(secs: Option<i64>) -> String {
+    secs.and_then(|s| jiff::Timestamp::from_second(s).ok())
+        .map(|ts| {
+            ts.to_zoned(jiff::tz::TimeZone::system())
+                .strftime("%Y-%m-%d %H:%M")
+                .to_string()
+        })
+        .unwrap_or_default()
 }
 
 fn draw_paste_conflict(app: &App, frame: &mut Frame, area: Rect) {
@@ -6339,7 +6597,10 @@ fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
     // The workspace→dock search prompt shows case/regex toggles on a second line.
     let toggles = matches!(p.kind, crate::app::PromptKind::SearchToDock);
     // The git-commit prompt accepts a multi-line message (Alt+Enter = newline).
-    let multiline = matches!(p.kind, crate::app::PromptKind::GitCommit);
+    let multiline = matches!(
+        p.kind,
+        crate::app::PromptKind::GitCommit | crate::app::PromptKind::OrgCaptureTodo
+    );
     let width = area.width * 6 / 10;
     let body_rows: u16 = if multiline {
         u16::try_from(p.input.split('\n').count())
@@ -6418,7 +6679,11 @@ fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
     }
 }
 
-fn draw_help(app: &App, frame: &mut Frame, area: Rect) {
+fn draw_help(app: &mut App, frame: &mut Frame, area: Rect) {
+    use crate::keyboard_shortcut_panel::Column;
+    let Some(h) = app.help.as_ref() else {
+        return;
+    };
     let rect = centered(area, 60, 70);
     frame.render_widget(Clear, rect);
     let block = Block::default()
@@ -6432,34 +6697,82 @@ fn draw_help(app: &App, frame: &mut Frame, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(1)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
         .split(inner);
     // Filter line: a search glyph then the live query and a caret.
-    let filter = app.help_filter.as_str();
     let search = Line::from(vec![
         Span::styled(format!("{} ", icon::SEARCH), theme::title(true)),
-        Span::raw(filter.to_string()),
+        Span::raw(h.query.clone()),
         Span::styled("\u{2588}", theme::dim()),
     ]);
     frame.render_widget(Paragraph::new(search), chunks[0]);
 
-    let needle = filter.to_lowercase();
-    let rows = crate::keyboard_shortcut_panel::ROWS;
-    let key_w = rows.iter().map(|r| r.keys.len()).max().unwrap_or(0);
-    let lines: Vec<Line> = rows
+    // Two columns: action name, then key combo. The keys column is as wide as
+    // the widest combo; the action column takes the rest.
+    let keys_w = h
+        .rows
         .iter()
-        .filter(|r| {
-            needle.is_empty()
-                || r.keys.to_lowercase().contains(&needle)
-                || t!(r.desc).to_lowercase().contains(&needle)
-        })
-        .map(|r| {
-            Line::from(vec![
-                Span::styled(format!(" {:<key_w$} ", r.keys), theme::title(true)),
-                Span::raw(format!("  {}", t!(r.desc))),
-            ])
-        })
-        .collect();
+        .map(|s| s.keys.chars().count())
+        .max()
+        .unwrap_or(8)
+        .clamp(8, 28);
+    let action_w = (chunks[1].width as usize).saturating_sub(keys_w + 3).max(8);
+
+    // Header row with sort indicators; clicking a header sorts that column.
+    let marker = |col: Column| match h.sort {
+        Some((c, true)) if c == col => " ↑",
+        Some((c, false)) if c == col => " ↓",
+        _ => "",
+    };
+    let header = Line::from(vec![
+        Span::styled(
+            format!(
+                " {:<action_w$}",
+                format!("{}{}", t!("ui.help_col_action"), marker(Column::Action))
+            ),
+            theme::title(true),
+        ),
+        Span::styled(
+            format!(
+                "  {:<keys_w$}",
+                format!("{}{}", t!("ui.help_col_keys"), marker(Column::Keys))
+            ),
+            theme::title(true),
+        ),
+    ]);
+    frame.render_widget(Paragraph::new(header), chunks[1]);
+    let header_w = u16::try_from(action_w + 1).unwrap_or(u16::MAX);
+    app.layout.help_headers = [
+        Rect {
+            width: header_w.min(chunks[1].width),
+            ..chunks[1]
+        },
+        Rect {
+            x: chunks[1].x + header_w.min(chunks[1].width),
+            width: chunks[1].width.saturating_sub(header_w),
+            ..chunks[1]
+        },
+    ];
+
+    let view_h = chunks[2].height as usize;
+    if let Some(h) = app.help.as_mut() {
+        h.clamp_scroll(view_h);
+    }
+    let h = app.help.as_ref().unwrap();
+    let filtered = h.matches();
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for &idx in filtered.iter().skip(h.scroll).take(view_h) {
+        let s = &h.rows[idx];
+        lines.push(Line::from(vec![
+            Span::raw(format!(" {:<action_w$}", trunc(&s.action, action_w))),
+            Span::styled(format!("  {}", s.keys), theme::title(true)),
+        ]));
+    }
     let body = if lines.is_empty() {
         vec![Line::from(Span::styled(
             t!("ui.no_matches").to_string(),
@@ -6468,5 +6781,9 @@ fn draw_help(app: &App, frame: &mut Frame, area: Rect) {
     } else {
         lines
     };
-    frame.render_widget(Paragraph::new(body).wrap(Wrap { trim: false }), chunks[1]);
+    frame.render_widget(Paragraph::new(body), chunks[2]);
+    app.layout.help_body = chunks[2];
+
+    let hint = Line::from(Span::styled(t!("ui.help_hint").to_string(), theme::dim()));
+    frame.render_widget(Paragraph::new(hint), chunks[3]);
 }

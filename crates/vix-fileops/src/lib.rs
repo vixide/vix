@@ -153,10 +153,7 @@ fn write_atomic_inner(path: &Path, data: &[u8]) -> io::Result<()> {
 
     let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let dir = target.parent().unwrap_or_else(|| Path::new("."));
-    let base = target
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("out");
+    let base = target.file_name().and_then(|s| s.to_str()).unwrap_or("out");
     let seq = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
     let tmp = dir.join(format!(".{base}.vixtmp-{}-{seq}", std::process::id()));
 
@@ -273,7 +270,8 @@ mod tests {
     /// A unique scratch directory for one test, created fresh.
     fn scratch(tag: &str) -> PathBuf {
         let seq = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("vix-fileops-{tag}-{}-{seq}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("vix-fileops-{tag}-{}-{seq}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -310,7 +308,10 @@ mod tests {
         fs::write(&b, b"x").unwrap();
         let ma = fs::metadata(&a).unwrap().permissions().mode() & 0o777;
         let mb = fs::metadata(&b).unwrap().permissions().mode() & 0o777;
-        assert_eq!(ma, mb, "new-file mode must match a plain write (umask-respected)");
+        assert_eq!(
+            ma, mb,
+            "new-file mode must match a plain write (umask-respected)"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -365,7 +366,10 @@ mod tests {
         write_atomic(&link, b"updated").unwrap();
         assert_eq!(fs::read(&real).unwrap(), b"updated");
         assert!(
-            fs::symlink_metadata(&link).unwrap().file_type().is_symlink(),
+            fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
             "the symlink must be preserved, not replaced by a regular file"
         );
         let _ = fs::remove_dir_all(&dir);
@@ -385,7 +389,10 @@ mod tests {
         copy_recursive(&src, &dst).unwrap();
         let copied = dst.join("link");
         assert!(
-            fs::symlink_metadata(&copied).unwrap().file_type().is_symlink(),
+            fs::symlink_metadata(&copied)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
             "must copy the link itself, not the secret's contents"
         );
         let _ = fs::remove_dir_all(&base);
@@ -404,7 +411,10 @@ mod tests {
         remove_path(&link).unwrap();
         // The link is gone but the target directory and its contents remain.
         assert!(!link.exists());
-        assert!(real_dir.join("keep.txt").exists(), "target dir was destroyed via the link");
+        assert!(
+            real_dir.join("keep.txt").exists(),
+            "target dir was destroyed via the link"
+        );
         let _ = fs::remove_dir_all(&base);
     }
 

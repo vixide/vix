@@ -104,7 +104,7 @@ through the workspace dependency graph (e.g. `vix-editor`, `vix-menu`,
 | Boxes       | `vix-calendar-panel`, `vix-clock-panel`.                                       |
 | Contacts    | `vix-vcard-parser` (RFC 6350), `vix-vcard-panel`, `vix-contact-panel`.         |
 | Docks       | `vix-left-dock` (explorer), `vix-right-dock` (messages), `vix-bottom-dock` (output buffer). |
-| Files / ops | `vix-fileops` (explorer copy/cut/paste/delete filesystem helpers).            |
+| Files / ops | `vix-fileops` (explorer copy/cut/paste/delete filesystem helpers), `vix-file-browser-panel` (File → Open… browser: walkdir listing + fuzzy/glob/ext search, sort, filters). |
 | Models      | `vix-keymap-model`, `vix-locale-model`, `vix-theme-model`, `vix-time-zone-model`. |
 | Help        | `vix-keyboard-shortcut-panel`.                                                |
 | i18n        | `vix-i18n` (embedded rust-i18n catalog).                                      |

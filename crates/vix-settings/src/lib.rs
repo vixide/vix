@@ -136,6 +136,12 @@ pub struct Settings {
     /// Directory of vCard (`.vcf`) files for the contact browser (Tools →
     /// Contacts…). Empty = use the workspace root.
     pub contacts_dir: String,
+    /// Template pre-filling the Org → Capture → Anything… prompt
+    /// (the `org.capture` action). Empty = start with a blank prompt.
+    pub org_anything_capture_template: String,
+    /// Template pre-filling the Org → Capture → Todo… multiline editing
+    /// area (the `org.capture_todo` action).
+    pub org_todo_capture_template: String,
     /// Active time zone as an IANA canonical name (e.g. `"UTC"`,
     /// `"America/New_York"`). Chosen via Tools → Time Zone…; used app-wide
     /// (e.g. the clock panel).
@@ -210,7 +216,7 @@ impl Default for Settings {
             show_breadcrumbs: false,
             show_outline_dock: false,
             show_scrollbar: true,
-            show_bottom_dock: false,
+            show_bottom_dock: true,
             bottom_dock_height: 9,
             scrollback: 1000,
             preview_tabs: true,
@@ -242,6 +248,8 @@ impl Default for Settings {
             lsp_servers: Vec::new(),
             welcomed: false,
             contacts_dir: String::new(),
+            org_anything_capture_template: String::new(),
+            org_todo_capture_template: "* TODO ".to_string(),
             time_zone: "UTC".to_string(),
             restore_session: true,
             sticky_search_highlight: true,

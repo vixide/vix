@@ -94,9 +94,7 @@ impl Workspace {
             // `C:\`), the empty string, or a path that `..`-escapes above the
             // root (`/..`) — has no `Normal` component. Such a "folder" can only
             // re-root the index at or above `/`.
-            !norm
-                .components()
-                .any(|c| matches!(c, Component::Normal(_)))
+            !norm.components().any(|c| matches!(c, Component::Normal(_)))
         })
     }
 
@@ -174,27 +172,35 @@ mod tests {
 
     #[test]
     fn rejects_root_folder_reroot() {
-        assert!(Workspace {
-            folders: vec!["/".into()],
-            files: vec![],
-        }
-        .has_root_or_empty_folder());
-        assert!(Workspace {
-            folders: vec![String::new()],
-            files: vec![],
-        }
-        .has_root_or_empty_folder());
+        assert!(
+            Workspace {
+                folders: vec!["/".into()],
+                files: vec![],
+            }
+            .has_root_or_empty_folder()
+        );
+        assert!(
+            Workspace {
+                folders: vec![String::new()],
+                files: vec![],
+            }
+            .has_root_or_empty_folder()
+        );
         // A `..`-laden path that collapses to root is also caught.
-        assert!(Workspace {
-            folders: vec!["/home/me/../../..".into()],
-            files: vec![],
-        }
-        .has_root_or_empty_folder());
-        assert!(!Workspace {
-            folders: vec!["/home/me/proj".into()],
-            files: vec![],
-        }
-        .has_root_or_empty_folder());
+        assert!(
+            Workspace {
+                folders: vec!["/home/me/../../..".into()],
+                files: vec![],
+            }
+            .has_root_or_empty_folder()
+        );
+        assert!(
+            !Workspace {
+                folders: vec!["/home/me/proj".into()],
+                files: vec![],
+            }
+            .has_root_or_empty_folder()
+        );
     }
 
     #[test]
@@ -211,7 +217,10 @@ mod tests {
         assert!(!ws.file_within_folders("/etc/passwd"));
         assert_eq!(
             ws.external_files(),
-            vec!["/etc/passwd".to_string(), "/home/me/proj/../secret".to_string()]
+            vec![
+                "/etc/passwd".to_string(),
+                "/home/me/proj/../secret".to_string()
+            ]
         );
     }
 }
