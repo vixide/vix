@@ -1,0 +1,79 @@
+# Continuous delivery for Codeberg (codeberg.org/vixide/vix).
+#
+# On a version tag, build a statically linked Linux binary, package it with a
+# checksum, and publish it as a Codeberg (Forgejo) Release. The other forges do
+# the equivalent: GitHub via `dist` (.github/workflows/release.yml), GitLab via
+# the `release` stage of .gitlab-ci.yml. See spec/ci/index.md.
+#
+# Token: the automatic `FORGEJO_TOKEN` is used by default. If the instance
+# grants it read-only rights, add a repository secret `RELEASE_TOKEN` holding a
+# personal access token with `write:repository`, and it takes precedence.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "**[0-9]+.[0-9]+.[0-9]+*"
+
+env:
+  CARGO_TERM_COLOR: always
+  # Keep in sync with `workspace.package.rust-version` in Cargo.toml.
+  RUST_TOOLCHAIN: "1.96.1"
+  # A fully static musl binary, matching the Makefile's `build-linux` target.
+  LINUX_TARGET: x86_64-unknown-linux-musl
+
+jobs:
+  release:
+    name: build + publish
+    runs-on: docker
+    steps:
+      - name: Checkout
+        uses: https://code.forgejo.org/actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends build-essential pkg-config musl-tools
+
+      - name: Install Rust ${{ env.RUST_TOOLCHAIN }}
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal \
+                --default-toolchain "$RUST_TOOLCHAIN" \
+                --target "$LINUX_TARGET"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Build release binary
+        # `.cargo/config.toml` points the musl target at the macOS
+        # cross-toolchain (`x86_64-linux-musl-gcc`), which does not exist here;
+        # Debian's `musl-tools` provides `musl-gcc` instead. Cargo lets the real
+        # environment win over its config `[env]` table (those entries are not
+        # `force = true`), and `CARGO_TARGET_*_LINKER` overrides the config's
+        # `linker`, so these three variables are enough to retarget the build.
+        env:
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+          CC_x86_64_unknown_linux_musl: musl-gcc
+          AR_x86_64_unknown_linux_musl: ar
+        run: cargo build --release --locked --target "$LINUX_TARGET"
+
+      - name: Package tarball and checksum
+        run: |
+          name="vix-${GITHUB_REF_NAME}-${LINUX_TARGET}"
+          mkdir -p "dist/release" "dist/$name"
+          cp "target/$LINUX_TARGET/release/vix" README.md CHANGELOG.md LICENSE "dist/$name/"
+          tar -czf "dist/release/$name.tar.gz" -C dist "$name"
+          (cd dist/release && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
+
+      - name: Publish Codeberg release
+        uses: https://code.forgejo.org/actions/forgejo-release@v2
+        with:
+          direction: upload
+          url: ${{ github.server_url }}
+          repo: ${{ github.repository }}
+          tag: ${{ github.ref_name }}
+          token: ${{ secrets.RELEASE_TOKEN || secrets.FORGEJO_TOKEN }}
+          release-dir: dist/release
+          release-notes: "See [CHANGELOG.md](${{ github.server_url }}/${{ github.repository }}/src/tag/${{ github.ref_name }}/CHANGELOG.md)."
+          override: true
+          verbose: true

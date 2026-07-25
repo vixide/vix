@@ -262,6 +262,22 @@ affordances
 kilolines
 unjudging
 
+# Forges & CI/CD (spec/ci)
+codeberg
+Codeberg
+Codeberg's
+forgejo
+Forgejo
+rustup
+RUSTDOCFLAGS
+dtolnay
+Swatinem
+catthehacker
+curlimages
+lychee
+retarget
+tlsv
+
 # Common code tokens that appear in prose/comments
 struct
 structs

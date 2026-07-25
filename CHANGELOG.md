@@ -8,6 +8,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **CI/CD on all three forges.** Vix is pushed to GitHub, GitLab, and Codeberg,
+  and each now enforces the same gate as `scripts/check` — `cargo fmt --check`,
+  build, Clippy pedantic with `-D warnings`, the test suite, and warnings-denied
+  `cargo doc`. GitHub adds `.github/workflows/ci.yml` (lint job, Linux + macOS
+  test matrix, MSRV check, `Swatinem/rust-cache`); GitLab adds `.gitlab-ci.yml`
+  (check/test stages, plus a tag-triggered static musl build published to the
+  package registry and a GitLab Release); Codeberg adds `.forgejo/workflows/`
+  (single-job gate for Forgejo Actions, plus a tag-triggered release). Releases
+  on GitHub continue to be produced by `dist`. New spec: `spec/ci/index.md`.
+
 - **Org → Agenda submenu with the built-in agenda views.** The former single
   *Agenda Tracker* item is now an **Agenda** submenu offering the views from the
   Org manual's Agenda Views: **Weekly/Daily Agenda** (`org.agenda`), **Global

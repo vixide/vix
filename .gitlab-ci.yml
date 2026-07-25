@@ -1,0 +1,152 @@
+# Continuous integration and delivery for GitLab (gitlab.com/vixide/vix).
+#
+# The `check` and `test` stages are the same CI-parity gate `scripts/check`
+# runs locally: rustfmt, build, Clippy at the pedantic level with warnings
+# denied, and the full test suite. Vix is mirrored to three forges, so the same
+# gate exists three times:
+#
+#   GitHub    .github/workflows/ci.yml
+#   GitLab    .gitlab-ci.yml            (this file)
+#   Codeberg  .forgejo/workflows/ci.yml
+#
+# Keep the four in step — see spec/ci/index.md.
+#
+# The `release` stage runs only for tag pipelines: it builds a statically
+# linked Linux binary, publishes the tarball to the project's generic package
+# registry, and creates a GitLab Release pointing at it. It needs no secrets —
+# `CI_JOB_TOKEN` is injected by GitLab.
+
+stages:
+  - check
+  - test
+  - release
+
+# Pin to the toolchain floor from `Cargo.toml` (`workspace.package.rust-version`)
+# so GitLab CI fails the same way a user on the minimum toolchain would.
+default:
+  image: rust:1.96
+  # Cache the registry and the build directory per branch. `target/` is large
+  # but re-downloading and recompiling ~98 crates every pipeline costs more.
+  cache:
+    key: "$CI_COMMIT_REF_SLUG"
+    paths:
+      - .cargo/registry/index/
+      - .cargo/registry/cache/
+      - .cargo/git/db/
+      - target/
+
+variables:
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+  CARGO_TERM_COLOR: "always"
+  RUST_BACKTRACE: "1"
+  # The Linux artifact is a fully static musl binary, matching the Makefile's
+  # `build-linux` target and the `dist` release targets.
+  LINUX_TARGET: "x86_64-unknown-linux-musl"
+
+# Run pipelines for merge requests and for the default branch, and tag
+# pipelines for releases — but never a duplicate branch pipeline alongside an
+# open merge request.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+fmt:
+  stage: check
+  script:
+    - rustup component add rustfmt
+    - cargo fmt --all --check
+
+clippy:
+  stage: check
+  script:
+    - rustup component add clippy
+    - cargo clippy --workspace --all-targets -- -D warnings
+
+test:
+  stage: test
+  script:
+    - cargo build --workspace --all-targets
+    - cargo test --workspace
+
+doc:
+  stage: test
+  variables:
+    RUSTDOCFLAGS: "-D warnings"
+  script:
+    - cargo doc --workspace --no-deps
+
+# ---------------------------------------------------------------------------
+# Release (tag pipelines only)
+# ---------------------------------------------------------------------------
+
+# Build the static Linux binary and package it as a tarball.
+#
+# `.cargo/config.toml` points the musl target at the macOS cross-toolchain
+# (`x86_64-linux-musl-gcc`), which does not exist here; Debian's `musl-tools`
+# provides `musl-gcc` instead. Cargo lets the real environment win over its
+# config `[env]` table (those entries are not `force = true`), and
+# `CARGO_TARGET_*_LINKER` overrides the config's `linker`, so setting these
+# three variables is enough to retarget the build.
+release:build:
+  stage: release
+  rules:
+    - if: $CI_COMMIT_TAG
+  variables:
+    CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: "musl-gcc"
+    CC_x86_64_unknown_linux_musl: "musl-gcc"
+    AR_x86_64_unknown_linux_musl: "ar"
+  script:
+    - apt-get update && apt-get install --yes --no-install-recommends musl-tools
+    - rustup target add "$LINUX_TARGET"
+    - cargo build --release --locked --target "$LINUX_TARGET"
+    - mkdir -p "dist/vix-$CI_COMMIT_TAG-$LINUX_TARGET"
+    - cp "target/$LINUX_TARGET/release/vix" README.md CHANGELOG.md LICENSE "dist/vix-$CI_COMMIT_TAG-$LINUX_TARGET/"
+    - tar -czf "dist/vix-$CI_COMMIT_TAG-$LINUX_TARGET.tar.gz" -C dist "vix-$CI_COMMIT_TAG-$LINUX_TARGET"
+    - (cd dist && sha256sum "vix-$CI_COMMIT_TAG-$LINUX_TARGET.tar.gz" > "vix-$CI_COMMIT_TAG-$LINUX_TARGET.tar.gz.sha256")
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
+
+# Push the tarball and its checksum into the project's generic package
+# registry, so the Release assets have a stable, permanent URL.
+release:upload:
+  stage: release
+  image: curlimages/curl:latest
+  needs: ["release:build"]
+  rules:
+    - if: $CI_COMMIT_TAG
+  cache: {}
+  script:
+    - |
+      for file in "vix-$CI_COMMIT_TAG-$LINUX_TARGET.tar.gz" "vix-$CI_COMMIT_TAG-$LINUX_TARGET.tar.gz.sha256"; do
+        curl --fail --silent --show-error \
+          --header "JOB-TOKEN: $CI_JOB_TOKEN" \
+          --upload-file "dist/$file" \
+          "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/vix/$CI_COMMIT_TAG/$file"
+      done
+
+# Create the GitLab Release itself, linking the uploaded assets.
+release:publish:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs: ["release:upload"]
+  rules:
+    - if: $CI_COMMIT_TAG
+  cache: {}
+  script:
+    - echo "Creating GitLab Release $CI_COMMIT_TAG"
+  release:
+    tag_name: "$CI_COMMIT_TAG"
+    name: "Vix $CI_COMMIT_TAG"
+    description: "See [CHANGELOG.md]($CI_PROJECT_URL/-/blob/$CI_COMMIT_TAG/CHANGELOG.md)."
+    assets:
+      links:
+        - name: "vix-$CI_COMMIT_TAG-$LINUX_TARGET.tar.gz"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/vix/$CI_COMMIT_TAG/vix-$CI_COMMIT_TAG-$LINUX_TARGET.tar.gz"
+          link_type: "package"
+        - name: "vix-$CI_COMMIT_TAG-$LINUX_TARGET.tar.gz.sha256"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/vix/$CI_COMMIT_TAG/vix-$CI_COMMIT_TAG-$LINUX_TARGET.tar.gz.sha256"
+          link_type: "other"

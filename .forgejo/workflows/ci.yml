@@ -1,0 +1,90 @@
+# Continuous integration for Codeberg (codeberg.org/vixide/vix).
+#
+# Codeberg runs Forgejo Actions ("Codeberg CI"), which reads workflows from
+# `.forgejo/workflows/` and is broadly GitHub-Actions compatible. Two
+# differences matter here:
+#
+#   * `runs-on: docker` selects Codeberg's shared runner; its default image is
+#     `ghcr.io/catthehacker/ubuntu:act-latest`, a GitHub-runner lookalike with
+#     Node (needed by JavaScript actions) but no Rust toolchain, so we install
+#     Rust with rustup below.
+#   * `uses:` is written as a full URL, because a bare `owner/action` resolves
+#     against the instance's default actions host rather than github.com.
+#
+# This job is the same CI-parity gate `scripts/check` runs locally: rustfmt,
+# build, Clippy at the pedantic level with warnings denied, and the full test
+# suite. Vix is mirrored to three forges, so the same gate exists three times:
+#
+#   GitHub    .github/workflows/ci.yml
+#   GitLab    .gitlab-ci.yml
+#   Codeberg  .forgejo/workflows/ci.yml   (this file)
+#
+# Keep the four in step — see spec/ci/index.md. Codeberg's shared runners are a
+# donated, shared resource, so this is one job that does everything rather than
+# several jobs that each recompile the workspace.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # Keep in sync with `workspace.package.rust-version` in Cargo.toml.
+  RUST_TOOLCHAIN: "1.96.1"
+
+jobs:
+  check:
+    name: fmt + build + clippy + test
+    runs-on: docker
+    steps:
+      - name: Checkout
+        uses: https://code.forgejo.org/actions/checkout@v4
+
+      - name: Install build dependencies
+        # Tree-sitter grammars, mimalloc, and image codecs are vendored C, so a
+        # working C toolchain is required.
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends build-essential pkg-config
+
+      - name: Install Rust ${{ env.RUST_TOOLCHAIN }}
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal \
+                --default-toolchain "$RUST_TOOLCHAIN" \
+                --component rustfmt --component clippy
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Cache cargo registry and build directory
+        uses: https://code.forgejo.org/actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: cargo-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ env.RUST_TOOLCHAIN }}-
+
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
+
+      - name: cargo build --all-targets
+        run: cargo build --workspace --all-targets
+
+      - name: cargo clippy (pedantic, -D warnings)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace
+
+      - name: cargo doc (warnings denied)
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps

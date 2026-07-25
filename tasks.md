@@ -24,15 +24,20 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
 
 ## Phase 0 — Safety net
 
-- [ ] **T001 — CI workflow.** Add `.github/workflows/ci.yml`: jobs for
+- [x] **T001 — CI workflow.** Add `.github/workflows/ci.yml`: jobs for
   `cargo build --workspace`, `cargo test --workspace`,
   `cargo clippy --workspace --all-targets -- -D warnings`,
   `cargo fmt --all --check`; matrix `ubuntu-latest` + `macos-latest`;
   triggers push + PR; `Swatinem/rust-cache`. Keep total wall time sane
   (share a build via job needs or one job with steps).
+  Done — plus an MSRV job, and the same gate for the other two forges
+  (`.gitlab-ci.yml`, `.forgejo/workflows/`) with their release pipelines.
+  See `spec/ci/index.md`.
 - [ ] **T002 — Docs CI job.** In `ci.yml`, add a job that link-checks all
   `*.md` (lychee, offline-links at minimum, external links non-blocking)
   and runs `cargo doc --workspace --no-deps` with warnings denied.
+  Partly done: the `cargo doc` half runs with `RUSTDOCFLAGS=-D warnings` on
+  all three forges; the lychee link check is still to do.
 - [ ] **T003 — cargo-deny.** Add `deny.toml` (licenses: Apache-2.0/MIT
   compatible; advisories; bans on duplicate major versions where feasible)
   and a CI job running `cargo deny check`.

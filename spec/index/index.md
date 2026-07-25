@@ -19,7 +19,8 @@ owns its spec at `crates/<crate>/spec/index.md` (multi-topic crates add
 `spec/<topic>/index.md` sub-specs), so a crate and its specification travel
 together. This repo-root `spec/` holds only the cross-cutting / app-level and
 build/meta specs that no single crate owns — this overview, `navigation`,
-`comparisons`, `tools`, `license`, `rust-clippy-pedantic`, `test`, and the like.
+`comparisons`, `tools`, `license`, `rust-clippy-pedantic`, `test`, `ci`, and the
+like.
 See [`AGENTS.md`](../../AGENTS.md) and
 [`AGENTS/workflow.md`](../../AGENTS/workflow.md) for the workflow, and
 [`AGENTS/share/crate-map.md`](../../AGENTS/share/crate-map.md) for the full map.
