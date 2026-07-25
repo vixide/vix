@@ -12,3 +12,4 @@ confy = { workspace = true }
 serde = { workspace = true }
 vix-dap = { path = "../vix-dap", version = "1.3.0" }
 vix-db = { path = "../vix-db", version = "1.3.0" }
+vix-org-capture = { path = "../vix-org-capture", version = "1.3.0" }

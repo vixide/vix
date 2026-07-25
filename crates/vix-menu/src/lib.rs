@@ -1528,8 +1528,13 @@ const ORG_CONTACTS_FIELD: &[Item] = &[
 /// Org-contacts commands (contacts stored as Org headlines), grouped under
 /// Org → Contacts.
 const ORG_CONTACTS: &[Item] = &[
-    // New Contact… moved to Org → Capture → Contact… (same action id).
+    // New Contact… moved to Org → Capture → Contact… (action org.capture.contact).
     Item::leaf("menu.item.org.contacts.find", "org.contacts.find", ""),
+    Item::leaf(
+        "menu.item.org.contacts.link_complete",
+        "org.contacts.link_complete",
+        "",
+    ),
     SEP,
     Item::sub("menu.item.org.contacts.insert_field", ORG_CONTACTS_FIELD),
     SEP,
@@ -1544,8 +1549,12 @@ const ORG_CONTACTS: &[Item] = &[
 /// Capture helpers, grouped under Org → Capture.
 const ORG_CAPTURE: &[Item] = &[
     Item::leaf("menu.item.org.capture.anything", "org.capture", ""),
-    Item::leaf("menu.item.org.capture.contact", "org.contacts.new", ""),
-    Item::leaf("menu.item.org.capture.todo", "org.capture_todo", ""),
+    Item::leaf("menu.item.org.capture.babel", "org.capture.babel", ""),
+    Item::leaf("menu.item.org.capture.contact", "org.capture.contact", ""),
+    Item::leaf("menu.item.org.capture.note", "org.capture.note", ""),
+    Item::leaf("menu.item.org.capture.task", "org.capture.task", ""),
+    SEP,
+    Item::leaf("menu.item.org.capture.select", "org.capture.select", ""),
 ];
 
 /// Org-mode editing commands, grouped under the top-level Org menu. Insertion of
@@ -1557,6 +1566,8 @@ const ORG: &[Item] = &[
     SEP,
     Item::sub("menu.item.org.headline", ORG_HEADLINE),
     Item::leaf("menu.item.org.cycle_todo", "org.cycle_todo", ""),
+    Item::leaf("menu.item.org.priority.up", "org.priority.up", ""),
+    Item::leaf("menu.item.org.priority.down", "org.priority.down", ""),
     Item::leaf("menu.item.org.close_note", "org.close_note", ""),
     Item::leaf("menu.item.org.toggle_checkbox", "org.toggle_checkbox", ""),
     Item::leaf(
@@ -2131,6 +2142,50 @@ mod tests {
             .expect("file.new item");
         assert!(new.help().is_some(), "menu item help present");
         assert_eq!(SEP.help(), None, "separators have no help");
+    }
+
+    /// Every menu label that is an i18n key (by convention, prefixed `menu.` —
+    /// see [`Item::label`]) must actually translate. A few submenus (theme,
+    /// locale, time zone, …) are built at runtime with the raw display text
+    /// *as* the label (no `menu.` prefix), since there's nothing to translate;
+    /// those are intentionally skipped here. rust-i18n returns the key itself
+    /// for a missing translation, so a `menu.`-prefixed label coming back
+    /// unchanged means `locales/app.yml` has no entry for it — or, as happened
+    /// once, the entry existed but `vix-i18n`'s embedded table was stale
+    /// because Cargo didn't know a locale-only edit should trigger a rebuild
+    /// (see `crates/vix-i18n/build.rs`).
+    #[test]
+    fn every_menu_label_translates() {
+        fn check_items(items: &[Item], path: &mut Vec<&'static str>) {
+            for item in items {
+                if item.is_separator() {
+                    continue;
+                }
+                path.push(item.label);
+                if item.label.starts_with("menu.") {
+                    assert_ne!(
+                        item.label(),
+                        item.label,
+                        "menu label did not translate: {}",
+                        path.join(" > ")
+                    );
+                }
+                if let Some(sub) = item.submenu {
+                    check_items(sub, path);
+                }
+                path.pop();
+            }
+        }
+        for menu in menus() {
+            assert_ne!(
+                menu.title(),
+                menu.name,
+                "menu title did not translate: {}",
+                menu.name
+            );
+            let mut path = vec![menu.name];
+            check_items(menu.items, &mut path);
+        }
     }
 
     /// The View → Keymap submenu must stay in sync with the keymap model: one

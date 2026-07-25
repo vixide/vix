@@ -4102,6 +4102,10 @@ menu.item.org.update_statistics:
   en: "Update Statistics"
 menu.item.org.cycle_todo:
   en: "Cycle TODO"
+menu.item.org.priority.up:
+  en: "Priority Up"
+menu.item.org.priority.down:
+  en: "Priority Down"
 menu.item.org.close_note:
   en: "Mark Done with Note…"
 menu.item.org.toggle_checkbox:
@@ -4112,8 +4116,14 @@ menu.item.org.capture.anything:
   en: "Anything…"
 menu.item.org.capture.contact:
   en: "Contact…"
-menu.item.org.capture.todo:
-  en: "Todo…"
+menu.item.org.capture.task:
+  en: "Task…"
+menu.item.org.capture.babel:
+  en: "Babel…"
+menu.item.org.capture.note:
+  en: "Note…"
+menu.item.org.capture.select:
+  en: "Choose Template…"
 menu.item.org.clock_in:
   en: "Clock In"
 menu.item.org.clock_out:
@@ -4196,10 +4206,10 @@ menu.item.org.node.reset:
   en: "Rebuild Cache"
 menu.item.org.contacts:
   en: "Contacts"
-menu.item.org.contacts.new:
-  en: "New Contact…"
 menu.item.org.contacts.find:
   en: "Find Contacts"
+menu.item.org.contacts.link_complete:
+  en: "Complete Link…"
 menu.item.org.contacts.insert_field:
   en: "Insert Field"
 menu.item.org.contacts.email:
@@ -4218,8 +4228,6 @@ menu.item.org.contacts.birthdays:
   en: "Birthdays"
 menu.item.org.contacts.vcard:
   en: "Export to vCard"
-prompt.contact_new:
-  en: "New contact name"
 menu.name.url:
   en: "URL"
 menu.name.dec:
@@ -7909,6 +7917,10 @@ ui.locations_hint:
   pt: "↑↓ selecionar   Enter ir   Esc cancelar"
   ru: "↑↓ выбрать   Enter перейти   Esc отмена"
   zh: "↑↓ 选择   Enter 跳转   Esc 取消"
+ui.capture_chooser:
+  en: "Org Capture"
+ui.capture_chooser_hint:
+  en: "↑↓ select   Enter capture   Esc cancel"
 ui.paste_conflict:
   en: "Paste conflict"
   es: "Conflicto al pegar"
@@ -10833,44 +10845,30 @@ prompt.debug_watch:
   bn: "ওয়াচ এক্সপ্রেশন"
   zh: "监视表达式"
   ja: "ウォッチ式"
-prompt.org_capture:
-  en: "Capture (Org TODO)"
-  es: "Captura (Org TODO)"
-  fr: "Capture (TODO Org)"
-  de: "Erfassen (Org-TODO)"
-  cy: "Dal (Org TODO)"
-  ga: "Gabháil (Org TODO)"
-  gd: "Glac (Org TODO)"
-  pl: "Przechwyć (Org TODO)"
-  pt: "Capturar (Org TODO)"
-  ru: "Захват (Org TODO)"
-  ar: "التقاط (Org TODO)"
-  hi: "कैप्चर (Org TODO)"
-  bn: "ক্যাপচার (Org TODO)"
-  zh: "捕获 (Org TODO)"
-  ja: "キャプチャ (Org TODO)"
+prompt.org_capture_tags:
+  en: "Tags (space-separated)"
+prompt.org_capture_review:
+  en: "Review capture: %{description} (Alt+Enter = newline)"
+  es: "Revisar captura: %{description} (Alt+Enter = nueva línea)"
+  fr: "Relire la capture : %{description} (Alt+Entrée = nouvelle ligne)"
+  de: "Erfassung prüfen: %{description} (Alt+Enter = neue Zeile)"
+  cy: "Adolygu dal: %{description} (Alt+Enter = llinell newydd)"
+  ga: "Athbhreithnigh gabháil: %{description} (Alt+Enter = líne nua)"
+  gd: "Ath-sgrùdadh glacaidh: %{description} (Alt+Enter = loidhne ùr)"
+  pl: "Przejrzyj przechwycenie: %{description} (Alt+Enter = nowy wiersz)"
+  pt: "Revisar captura: %{description} (Alt+Enter = nova linha)"
+  ru: "Просмотр захвата: %{description} (Alt+Enter = новая строка)"
+  ar: "مراجعة الالتقاط: %{description} (‏Alt+Enter = سطر جديد)"
+  hi: "कैप्चर समीक्षा: %{description} (Alt+Enter = नई पंक्ति)"
+  bn: "ক্যাপচার পর্যালোচনা: %{description} (Alt+Enter = নতুন লাইন)"
+  zh: "查看捕获：%{description}（Alt+Enter = 换行）"
+  ja: "キャプチャを確認: %{description}（Alt+Enter = 改行）"
 prompt.org_close_note:
   en: "Closing note (Alt+Enter = newline)"
 prompt.org_agenda_match:
   en: "Match tags (e.g. work-boss)"
 prompt.org_agenda_search:
   en: "Search keywords"
-prompt.org_capture_todo:
-  en: "Capture TODO (Alt+Enter = newline)"
-  es: "Capturar TODO (Alt+Enter = nueva línea)"
-  fr: "Capturer TODO (Alt+Entrée = nouvelle ligne)"
-  de: "TODO erfassen (Alt+Enter = neue Zeile)"
-  cy: "Dal TODO (Alt+Enter = llinell newydd)"
-  ga: "Gabháil TODO (Alt+Enter = líne nua)"
-  gd: "Glac TODO (Alt+Enter = loidhne ùr)"
-  pl: "Przechwyć TODO (Alt+Enter = nowy wiersz)"
-  pt: "Capturar TODO (Alt+Enter = nova linha)"
-  ru: "Захват TODO (Alt+Enter = новая строка)"
-  ar: "التقاط TODO (‏Alt+Enter = سطر جديد)"
-  hi: "TODO कैप्चर (Alt+Enter = नई पंक्ति)"
-  bn: "TODO ক্যাপচার (Alt+Enter = নতুন লাইন)"
-  zh: "捕获 TODO（Alt+Enter = 换行）"
-  ja: "TODO キャプチャ（Alt+Enter = 改行）"
 prompt.roam_find:
   en: "Find or create node (title)"
 prompt.roam_insert:
@@ -12521,6 +12519,18 @@ status.roam_invalid_date:
   en: "Not a valid YYYY-MM-DD date: %{date}"
 status.roam_no_nodes:
   en: "No Org-roam nodes found in the project"
+status.org_captured:
+  en: "Captured: %{description}"
+status.org_capture_missing_key:
+  en: "No org_capture_templates entry with key \"%{key}\""
+status.org_capture_no_templates:
+  en: "No org_capture_templates configured"
+status.org_capture_id_not_found:
+  en: "No node with :ID: %{id} found in the project"
+status.org_contacts_no_matches:
+  en: "No matching contacts found"
+status.org_contacts_link_no_context:
+  en: "Type [[mailto: or [[contact: first, then complete the link"
 status.roam_not_node:
   en: "Active buffer is not a node (no #+title:)"
 status.roam_backlinks:
@@ -25186,22 +25196,6 @@ menu.item.org.contacts.note.help:
   bn: "বর্তমান পরিচিতিতে একটি নোট ফিল্ড যোগ করুন।"
   zh: "在当前联系人中插入备注字段。"
   ja: "現在の連絡先にメモフィールドを挿入します。"
-menu.item.org.contacts.new.help:
-  en: "Create a new contact entry."
-  es: "Crea una nueva entrada de contacto."
-  fr: "Crée une nouvelle fiche de contact."
-  de: "Erstellt einen neuen Kontakteintrag."
-  cy: "Creu cofnod cyswllt newydd."
-  ga: "Cruthaigh iontráil teagmhálaí nua."
-  gd: "Cruthaich clàr neach-aithne ùr."
-  pl: "Tworzy nowy wpis kontaktu."
-  pt: "Cria uma nova entrada de contato."
-  ru: "Создаёт новую запись контакта."
-  ar: "إنشاء إدخال جهة اتصال جديدة."
-  hi: "एक नई संपर्क प्रविष्टि बनाएँ।"
-  bn: "একটি নতুন পরিচিতি এন্ট্রি তৈরি করুন।"
-  zh: "创建新的联系人条目。"
-  ja: "新しい連絡先エントリを作成します。"
 menu.item.org.contacts.find.help:
   en: "Search your contacts by name or field."
   es: "Busca tus contactos por nombre o campo."
@@ -25218,6 +25212,8 @@ menu.item.org.contacts.find.help:
   bn: "নাম বা ফিল্ড অনুসারে আপনার পরিচিতি খুঁজুন।"
   zh: "按姓名或字段搜索联系人。"
   ja: "名前またはフィールドで連絡先を検索します。"
+menu.item.org.contacts.link_complete.help:
+  en: "Autocomplete a mailto: or contact: link at the cursor from your contacts."
 menu.item.org.contacts.insert_field.help:
   en: "Open the menu to insert a contact field."
   es: "Abre el menú para insertar un campo de contacto."
@@ -25314,6 +25310,12 @@ menu.item.org.headline.help:
   bn: "Org শিরোনাম নিয়ে কাজ করার কমান্ড খুলুন।"
   zh: "打开用于处理 Org 标题的命令。"
   ja: "Org 見出しを扱うコマンドを開きます。"
+menu.item.org.priority.up.help:
+  en: "Move the headline's priority cookie toward the highest priority."
+menu.item.org.priority.down.help:
+  en: "Move the headline's priority cookie toward the lowest priority."
+menu.item.org.capture.select.help:
+  en: "Choose from every configured Org-capture template."
 menu.item.org.cycle_todo.help:
   en: "Cycle the TODO keyword state of the current headline."
   es: "Alterna el estado de la palabra clave TODO del encabezado actual."

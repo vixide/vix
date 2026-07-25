@@ -40,15 +40,20 @@ The **Org** menu (`Alt+O`):
 
 | Item | Action | Effect |
 | ---- | ------ | ------ |
-| Capture → Anything… | `org.capture` | Open a single-line prompt, pre-filled from the `org_anything_capture_template` setting; the text is inserted as a `* TODO` headline at the cursor. |
-| Capture → Contact… | `org.contacts.new` | Prompt for a name and insert an org-contacts entry (moved here from Org → Contacts). |
-| Capture → Todo… | `org.capture_todo` | Open a multiline editing area (Alt+Enter = newline), pre-filled from the `org_todo_capture_template` setting (default `* TODO `); the text is inserted verbatim at the cursor. |
+| Capture → Anything… | `org.capture` | Run the built-in `"a"` template: prompt for a task, insert `* TODO <task>` at the cursor. |
+| Capture → Babel… | `org.capture.babel` | Run the built-in `"b"` template: prompt for a language, open a multiline review buffer around a `#+begin_src <language>` / `#+end_src` block (Alt+Enter = newline). |
+| Capture → Contact… | `org.capture.contact` | Run the built-in `"c"` template: prompt for Name/Email/Phone/Address/Birthday, insert an org-contacts entry (moved here from Org → Contacts). |
+| Capture → Note… | `org.capture.note` | Run the built-in `"n"` template: prompt for note text, insert `* <note>` plus a `%U` creation timestamp at the cursor. |
+| Capture → Task… | `org.capture.task` | Run the built-in `"t"` template: open a multiline review buffer pre-filled with `* TODO ` (Alt+Enter = newline), insert its (possibly edited) text verbatim at the cursor. |
+| Capture → Choose Template… | `org.capture.select` | Open a chooser listing every configured template; Enter runs the highlighted one (see below). |
 | Cycle Visibility (Fold) | `org.cycle_visibility` | Fold/unfold at the cursor (reuses the editor fold toggle). |
 | Headline → Promote | `org.promote` | Remove one `*` from every headline in the subtree (refused at level 1). |
 | Headline → Demote | `org.demote` | Add one `*` to every headline in the subtree. |
 | Headline → Move Subtree Up | `org.move_up` | Swap the subtree with the previous sibling. |
 | Headline → Move Subtree Down | `org.move_down` | Swap the subtree with the next sibling. |
 | Cycle TODO | `org.cycle_todo` | Cycle the headline keyword: none → `TODO` → `DONE` → none. |
+| Priority Up | `org.priority.up` | Move the headline's `[#X]` priority cookie one step toward `org_priority_highest` (setting no cookie yet → `org_priority_default`; clamped at `org_priority_highest`, no wraparound). |
+| Priority Down | `org.priority.down` | Same, toward `org_priority_lowest`. |
 | Mark Done with Note… | `org.close_note` | Prompt for a closing note (multiline; Alt+Enter = newline), then mark the headline `DONE`, stamp `CLOSED: [now]` under it, and log the note into its `:LOGBOOK:` drawer. |
 | Toggle Checkbox | `org.toggle_checkbox` | Toggle a list item's `[ ]` ⇄ `[x]`. |
 | Update Statistics | `org.update_statistics` | Recompute every checkbox parent state and `[/]`/`[%]` cookie in the buffer. |
@@ -66,6 +71,74 @@ from the `=> H:MM` totals Org writes.
 Structure commands operate on the headline/line under the cursor; the cursor
 follows a moved subtree. When a command does not apply (e.g. the cursor is not on
 a headline, or there is no sibling to swap with), the status bar says so.
+
+### Capture
+
+The **Org → Capture** submenu is a template-driven system, in the shape of
+Emacs `org-capture`: named templates (the `org_capture_templates` setting,
+`vix-settings` spec) with `%^{Prompt}`-style placeholders, wrapped as a
+headline/item/checkbox/table-row, and filed at a target — the cursor, a node
+by `:ID:`, a file, a headline within a file, or a date tree. The pure logic
+(placeholder extraction/expansion, entry wrapping, target parsing, and all
+five insertion shapes) lives in the unit-tested `vix-org-capture` crate;
+`App` drives the interactive parts (prompting, the clipboard, the active
+buffer) and file I/O. Full design: [`spec/org/capture/index.md`](../../../spec/org/capture/index.md).
+
+Five built-in templates are seeded by default — `"a"` Anything, `"t"` Task,
+`"b"` Babel, `"n"` Note, `"c"` Contact — the fixed menu items above run them
+by key (`org.capture`/`org.capture.task`/`org.capture.babel`/
+`org.capture.note`/`org.capture.contact`), so nothing regresses if you never
+touch `org_capture_templates`. **Choose Template…** opens every configured
+template (built-in and custom) in a chooser.
+
+Placeholders: `%^{Label}` (and `%^{Label|choices}`, prompted in order,
+wizard-style — the choice list's first entry pre-fills the prompt),
+`%t`/`%T`/`%u`/`%U` (active/inactive timestamp, date/date-time),
+`%<strftime>`, `%a` (a link back to where capture was invoked), `%i` (the
+active selection), `%f`/`%F` (active file name/path), `%c` (clipboard), `%^g`/
+`%^G` (a trailing tag prompt), `%?` (where the cursor lands after filing),
+`%%` (literal `%`).
+
+Targets: `cursor` (default — today's only behavior for the three built-ins),
+`id:<ID>` (files under the node/headline carrying that `:ID:`, reusing
+Roam/Node's id system), `file:<path>`, `file+headline:<path>#<Headline>`
+(creating the headline if missing), `file+datetree:<path>` (a growing
+`Year > Month > Day` outline tree, distinct from Roam Dailies'
+one-file-per-day). A template with no unanswered prompts (or one that skips
+review via `immediate_finish`) files immediately; otherwise the expanded text
+opens in a final multiline review buffer (Alt+Enter = newline) before filing.
+
+Each `%^{}` field prompt shows a **live preview** of the whole template above
+the input box, not just the isolated field — the same way Emacs's capture
+buffer stays visible behind the minibuffer prompt. Already-answered fields
+are substituted for real; the field about to be answered is marked
+`‹Label›`; later fields still show `[Label]`; every other placeholder (`%t`,
+`%a`, …) is expanded immediately since it needs no input. The preview scrolls
+to keep the current field's line in view for templates with many fields (the
+org-contacts template's 17 is the extreme case). Built by
+`vix_org_capture::preview` (pure, unit-tested) and `App::capture_preview`;
+rendered by `draw_prompt_preview` (`src/ui.rs`).
+
+### Priority
+
+A priority cookie `[#X]` sits right after a headline's TODO/DONE keyword (or
+right after the stars, if it has none), e.g. `* TODO [#0] Call a friend`.
+Three settings control the range and default (`vix-settings` spec):
+`org_priority_highest`/`org_priority_lowest` (which character sorts as most/
+least important — Vix defaults to numeric `'0'`..`'9'`, unlike Emacs's
+default `'A'`..`'C'`) and `org_priority_default` (given to a headline that
+had no cookie yet, defaulting to `'0'`). **Priority Up**/**Down** step the
+cursor's headline one character toward `org_priority_highest`/`_lowest`,
+clamping at the bound rather than wrapping around or removing the cookie.
+The pure logic (`org::priority`, `org::set_priority`, `org::priority_up`,
+`org::priority_down`) is unit-tested for both the numeric scheme and the
+classic letter scheme.
+
+A capture template can prompt for a priority using the multi-choice
+placeholder form (`spec/org/capture/index.md`):
+`[#%^{Priority|0|0|1|2|3|4|5|6|7|8|9}]` — the prompt pre-fills with `0` (the
+first choice); the full candidate list is parsed but not yet offered as a
+select popup.
 
 ### Emacs chords
 
@@ -194,16 +267,41 @@ The **Org → Contacts** submenu brings
 to Org files. A contact is a headline (its text is the name) whose `:PROPERTIES:`
 drawer holds `EMAIL` / `PHONE` / `ADDRESS` / `BIRTHDAY` / `NICKNAME` / `NOTE`.
 
+New Contact… moved to **Org → Capture → Contact…** (`org.capture.contact`,
+see above) once capture became template-driven.
+
 | Item | Action | Effect |
 | ---- | ------ | ------ |
-| New Contact… | `org.contacts.new` | Prompt for a name; insert a contact headline + property-drawer skeleton at the cursor. |
 | Find Contacts | `org.contacts.find` | Compile a name/email/phone table of every contact in the project's `.org` files. |
+| Complete Link… | `org.contacts.link_complete` | Autocomplete a `[[mailto:`/`[[contact:` link at the cursor (see below). |
 | Insert Field → Email/Phone/Address/Birthday/Nickname/Note | `org.contacts.field.*` | Insert a `:KEY:` property line into the current entry's drawer. |
 | Birthdays | `org.contacts.birthdays` | List contacts that have a `BIRTHDAY`, sorted by date. |
 | Export to vCard | `org.contacts.vcard` | Convert all contacts to a vCard 3.0 buffer. |
 
 Pure logic (parse, directory, birthdays, vCard) lives in the unit-tested
 `crate::org_contacts` module.
+
+### Link completion
+
+Typing `[[mailto:` or `[[contact:` anywhere (a TODO item, a note, …) and then
+pressing **Tab** or **Alt+Tab** opens a completion popup sourced from every
+contact in the project's `.org` files:
+
+- `[[mailto:` → email addresses, shown as `Name <email>`; accepting one
+  completes the link to `[[mailto:email][Name]]`. Contacts without an
+  `EMAIL` field are not offered.
+- `[[contact:` → contact names; accepting one completes the link to
+  `[[contact:Name]]`.
+
+The trigger only fires immediately after typing the marker (no chars typed
+in between), mirroring the Org-roam `[[` wiki-link completion — start typing
+past the marker and the popup no longer applies (any other key dismisses
+it). The same lookup is reachable from the command palette / **Complete
+Link…** menu item, which requires the cursor to already sit right after one
+of the two markers. `crate::org_contacts` has no notion of `contact:` as an
+Org link *type* (Vix does not register a link handler for it — it is purely
+this completion's insertion target); `mailto:` is the standard Org link
+scheme.
 
 ## Insertion
 

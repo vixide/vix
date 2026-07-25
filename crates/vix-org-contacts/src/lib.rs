@@ -4,10 +4,12 @@
 //! A *contact* is an ordinary Org headline (its text is the name) whose
 //! `:PROPERTIES:` drawer holds structured fields — `EMAIL`, `PHONE`, `ADDRESS`,
 //! `BIRTHDAY`, `NICKNAME`, `NOTE`, … (the canonical org-contacts property names).
-//! This module is the pure, testable core: a new-contact skeleton, a single
-//! property line, parsing contacts out of Org text, and compiling cross-file
-//! views (a directory listing, a birthday list, and a vCard 3.0 export). The host
-//! (`app`) wires these to the Org → Contacts menu.
+//! This module is the pure, testable core: a single property line, parsing
+//! contacts out of Org text, and compiling cross-file views (a directory
+//! listing, a birthday list, and a vCard 3.0 export). The host (`app`) wires
+//! these to the Org → Contacts menu; new-contact creation is an Org-capture
+//! template (`org_capture_templates`, key `"c"`) rather than a function here —
+//! see the `vix-org-capture` crate.
 //!
 //! All functions are pure so they can be unit-tested without a live editor.
 
@@ -38,14 +40,6 @@ impl Contact {
             .find(|(k, v)| k.eq_ignore_ascii_case(key) && !v.is_empty())
             .map(|(_, v)| v.as_str())
     }
-}
-
-/// A new-contact skeleton: a top-level headline plus a property drawer with the
-/// common empty fields, ready to fill in.
-#[must_use]
-pub fn new_contact(name: &str) -> String {
-    let name = name.trim();
-    format!("* {name}\n  :PROPERTIES:\n  :EMAIL:\n  :PHONE:\n  :ADDRESS:\n  :BIRTHDAY:\n  :END:\n")
 }
 
 /// A single indented property line for the Insert-Field commands, e.g.
@@ -232,10 +226,7 @@ mod tests {
     }
 
     #[test]
-    fn new_contact_and_field_line() {
-        let c = new_contact("Grace Hopper");
-        assert!(c.starts_with("* Grace Hopper\n  :PROPERTIES:"));
-        assert!(c.contains(":EMAIL:"));
+    fn field_line_uppercases_the_key() {
         assert_eq!(field_line("email"), "  :EMAIL: ");
     }
 

@@ -149,6 +149,8 @@ vix-i18n = { path = "crates/vix-i18n", version = "1.3.0" }
 # Extracted concept crates (one per major concept).
 # base16-generated themes for the theme system.
 vix-base16 = { path = "crates/vix-base16", version = "1.3.0" }
+# Process-wide serialized access to the system clipboard.
+vix-clipboard = { path = "crates/vix-clipboard", version = "1.3.0" }
 # Clock box: live date/time strings (local, UTC, ISO week, active zone) + rows.
 vix-clock-panel = { path = "crates/vix-clock-panel", version = "1.3.0" }
 # Convert: CSV text into a JSON array of objects.
@@ -286,6 +288,8 @@ vix-media-type = { path = "crates/vix-media-type", version = "1.3.0" }
 vix-nerd-font-picker = { path = "crates/vix-nerd-font-picker", version = "1.3.0" }
 # Basic Org-mode operations: headline structure editing and lightweight export.
 vix-org = { path = "crates/vix-org", version = "1.3.0" }
+# Org-capture: template-driven capture with placeholders and targets.
+vix-org-capture = { path = "crates/vix-org-capture", version = "1.3.0" }
 # Org-contacts: contact management over Org files.
 vix-org-contacts = { path = "crates/vix-org-contacts", version = "1.3.0" }
 # The code-outline list (symbol kind + name + line) and the panel's selection.

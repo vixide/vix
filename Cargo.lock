@@ -4786,6 +4786,7 @@ dependencies = [
  "vix-calendar-panel",
  "vix-case",
  "vix-checksum-tool",
+ "vix-clipboard",
  "vix-clock-panel",
  "vix-color-converter-tool",
  "vix-conflict-tool",
@@ -4836,6 +4837,7 @@ dependencies = [
  "vix-menu",
  "vix-nerd-font-picker",
  "vix-org",
+ "vix-org-capture",
  "vix-org-contacts",
  "vix-outline-panel",
  "vix-palette",
@@ -5353,6 +5355,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-org-capture"
+version = "1.3.0"
+dependencies = [
+ "proptest",
+ "serde",
+]
+
+[[package]]
 name = "vix-org-contacts"
 version = "1.3.0"
 dependencies = [
@@ -5425,6 +5435,7 @@ dependencies = [
  "serde",
  "vix-dap",
  "vix-db",
+ "vix-org-capture",
 ]
 
 [[package]]

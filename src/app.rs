@@ -123,12 +123,13 @@ pub enum PromptKind {
     DebugRepl,
     /// Enter an expression to add as a debugger watch.
     DebugWatch,
-    /// Enter an Org capture — a quick idea/task inserted as a `* TODO` headline.
-    OrgCapture,
-    /// Edit an Org TODO capture in a multiline area (Alt+Enter = newline),
-    /// pre-filled from the `org_todo_capture_template` setting; the text is
-    /// inserted verbatim at the cursor.
-    OrgCaptureTodo,
+    /// Answer one step of an in-progress Org-capture wizard: a `%^{}` field
+    /// prompt, or (once every field is answered) the tag prompt.
+    OrgCaptureField,
+    /// Review/edit a capture's expanded template (multiline; Alt+Enter =
+    /// newline) before filing it — skipped when the template sets
+    /// `immediate_finish`.
+    OrgCaptureReview,
     /// Enter a closing note (multiline; Alt+Enter = newline) while marking the
     /// headline at the cursor DONE (`C-u C-c C-t`).
     OrgCloseNote,
@@ -172,8 +173,6 @@ pub enum PromptKind {
     GotoPercent,
     /// Jump to a byte offset (Go → Byte).
     GotoByte,
-    /// Org-contacts: insert a new-contact skeleton for the entered name.
-    ContactNew,
     /// Jujutsu: enter a repository URL to clone (`jj git clone`).
     JjClone,
     /// Jujutsu: enter a description for the working-copy change (`jj describe`).
@@ -204,6 +203,10 @@ pub struct Prompt {
     pub case_sensitive: bool,
     /// Regex matching (`Alt+R`); only used by `SearchToDock`.
     pub regex: bool,
+    /// A read-only preview shown above the input (only `OrgCaptureField`): the
+    /// capture template in progress, with answered fields substituted, the
+    /// field about to be answered marked `‹Label›`, and later ones `[Label]`.
+    pub preview: Option<String>,
 }
 
 impl Prompt {
@@ -215,6 +218,7 @@ impl Prompt {
             input: String::new(),
             case_sensitive: false,
             regex: false,
+            preview: None,
         }
     }
 
@@ -223,6 +227,30 @@ impl Prompt {
         self.input = input;
         self
     }
+
+    /// Attach a read-only template preview shown above the input.
+    fn with_preview(mut self, preview: String) -> Self {
+        self.preview = Some(preview);
+        self
+    }
+}
+
+/// State for an in-progress Org-capture: which template, its unanswered
+/// `%^{}` field prompts, the answers collected so far, and (if the template
+/// uses `%^g`/`%^G`) the tag prompt's answer.
+struct PendingCapture {
+    /// The template being captured.
+    template: vix_org_capture::CaptureTemplate,
+    /// Every `%^{}` field prompt in the template, in order.
+    prompts: Vec<vix_org_capture::FieldPrompt>,
+    /// Answers collected so far, in prompt order.
+    answers: Vec<String>,
+    /// Index of the next unanswered prompt in `prompts`.
+    next: usize,
+    /// Whether the template uses `%^g`/`%^G` and so needs a tag prompt.
+    wants_tags: bool,
+    /// The tag prompt's answer, once given.
+    tags: Option<String>,
 }
 
 /// Output from a running command, streamed from its reader thread.
@@ -860,6 +888,14 @@ pub struct LocationChooser {
     pub selected: usize,
 }
 
+/// Org-capture template chooser overlay state (**Org → Capture → Choose
+/// Template…**). Lists every `org_capture_templates` entry; Enter (or a
+/// click) starts capturing with the highlighted one.
+pub struct CaptureChooser {
+    /// Index of the highlighted template in `settings.org_capture_templates`.
+    pub selected: usize,
+}
+
 /// Rectangles recorded during rendering, used for mouse hit-testing and for
 /// telling the code editor which viewport to scroll within.
 #[derive(Default)]
@@ -1098,6 +1134,14 @@ pub struct App {
     pub recent_chooser: Option<RecentChooser>,
     /// Recent-locations (jump list) chooser overlay, when open.
     pub location_chooser: Option<LocationChooser>,
+    /// Org-capture template chooser overlay, when open.
+    pub capture_chooser: Option<CaptureChooser>,
+    /// State for an in-progress Org-capture wizard, while its prompts are
+    /// being answered.
+    pending_capture: Option<PendingCapture>,
+    /// The template awaiting the final review-buffer step of a capture, while
+    /// that prompt is open.
+    capture_review: Option<vix_org_capture::CaptureTemplate>,
     /// Nerd Font palette (character picker) overlay, when open.
     pub nerd_palette: Option<NerdPalette>,
     /// ASCII panel (reference table) overlay, when open.
@@ -1496,6 +1540,9 @@ impl App {
             file_browser: None,
             recent_chooser: None,
             location_chooser: None,
+            capture_chooser: None,
+            pending_capture: None,
+            capture_review: None,
             nerd_palette: None,
             ascii_panel: None,
             edit_table: None,
@@ -1982,6 +2029,7 @@ impl App {
         panel!(file_browser, file_browser_key);
         panel!(recent_chooser, recent_key);
         panel!(location_chooser, location_key);
+        panel!(capture_chooser, capture_chooser_key);
         panel!(nerd_palette, nerd_key);
         panel!(ascii_panel, ascii_key);
         panel!(x11_panel, x11_key);
@@ -4510,6 +4558,8 @@ impl App {
                 self.org_rewrite_line(crate::org::cycle_todo);
                 self.org_refresh_statistics();
             }
+            "org.priority.up" => self.org_priority(true),
+            "org.priority.down" => self.org_priority(false),
             "org.toggle_checkbox" => {
                 self.org_rewrite_line(crate::org::toggle_checkbox);
                 self.org_refresh_statistics();
@@ -4521,8 +4571,11 @@ impl App {
             "org.move_down" => self.org_move_subtree(crate::org::move_subtree_down),
             "org.export_markdown" => self.org_export(crate::org::to_markdown, "md"),
             "org.export_html" => self.org_export(crate::org::to_html, "html"),
-            "org.capture" => self.org_capture(),
-            "org.capture_todo" => self.org_capture_todo(),
+            "org.capture" => self.start_capture_by_key("a"),
+            "org.capture.task" => self.start_capture_by_key("t"),
+            "org.capture.babel" => self.start_capture_by_key("b"),
+            "org.capture.note" => self.start_capture_by_key("n"),
+            "org.capture.select" => self.open_capture_chooser(),
             "org.clock_in" => self.org_clock_in(),
             "org.clock_out" => self.org_clock_out(),
             "org.agenda" => self.org_agenda(),
@@ -4643,6 +4696,33 @@ impl App {
         let line = tab.editor.cursor_line();
         let text = tab.editor.get_content();
         if let Some(new) = f(&text, line) {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(line);
+            tab.dirty = true;
+        } else {
+            self.status = t!("status.org_not_headline").to_string();
+        }
+    }
+
+    /// Move the headline at the cursor's `[#X]` priority cookie one step
+    /// toward `highest` (`up`) or `lowest`, using the
+    /// `org_priority_highest`/`_lowest`/`_default` settings
+    /// (`org.priority.up` / `org.priority.down`).
+    fn org_priority(&mut self, up: bool) {
+        let highest = self.settings.org_priority_highest;
+        let lowest = self.settings.org_priority_lowest;
+        let default = self.settings.org_priority_default;
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        let result = if up {
+            crate::org::priority_up(&text, line, highest, lowest, default)
+        } else {
+            crate::org::priority_down(&text, line, highest, lowest, default)
+        };
+        if let Some(new) = result {
             tab.editor.set_content(&new);
             tab.editor.set_cursor_line(line);
             tab.dirty = true;
@@ -4811,28 +4891,311 @@ impl App {
         self.status = t!("status.org_exported", ext = ext).to_string();
     }
 
-    /// Open the Org "capture anything" dialog: a single-line prompt whose text
-    /// is inserted as a `* TODO` headline at the cursor. Pre-filled from the
-    /// `org_anything_capture_template` setting.
-    fn org_capture(&mut self) {
-        self.prompt = Some(
-            Prompt::new(PromptKind::OrgCapture, t!("prompt.org_capture").to_string())
-                .with_input(self.settings.org_anything_capture_template.clone()),
-        );
+    /// Start capturing with the `org_capture_templates` entry whose `key`
+    /// matches (the fixed **Capture → Anything…/Todo…/Contact…** menu items
+    /// resolve to the built-in `"a"`/`"t"`/`"c"` templates this way). Reports
+    /// a status message instead if no such template is configured.
+    fn start_capture_by_key(&mut self, key: &str) {
+        let Some(template) = self
+            .settings
+            .org_capture_templates
+            .iter()
+            .find(|t| t.key == key)
+            .cloned()
+        else {
+            self.status = t!("status.org_capture_missing_key", key = key).to_string();
+            return;
+        };
+        self.start_capture(template);
     }
 
-    /// Open the Org "capture TODO" dialog: a multiline editing area
-    /// (Alt+Enter inserts a newline) pre-filled from the
-    /// `org_todo_capture_template` setting; the text is inserted verbatim at
-    /// the cursor.
-    fn org_capture_todo(&mut self) {
-        self.prompt = Some(
-            Prompt::new(
-                PromptKind::OrgCaptureTodo,
-                t!("prompt.org_capture_todo").to_string(),
+    /// Open the Org-capture chooser (**Capture → Choose Template…**): every
+    /// configured template, selectable by arrow keys/click.
+    fn open_capture_chooser(&mut self) {
+        if self.settings.org_capture_templates.is_empty() {
+            self.status = t!("status.org_capture_no_templates").to_string();
+            return;
+        }
+        self.capture_chooser = Some(CaptureChooser { selected: 0 });
+    }
+
+    /// Begin capturing with `template`: queue its `%^{}` field prompts (and a
+    /// tag prompt, if it uses `%^g`/`%^G`), then open the first one.
+    fn start_capture(&mut self, template: vix_org_capture::CaptureTemplate) {
+        let prompts = vix_org_capture::extract_prompts(&template.template);
+        let wants_tags = vix_org_capture::wants_tags(&template.template);
+        self.pending_capture = Some(PendingCapture {
+            template,
+            prompts,
+            answers: Vec::new(),
+            next: 0,
+            wants_tags,
+            tags: None,
+        });
+        self.advance_capture();
+    }
+
+    /// Open the next unanswered prompt in the active capture wizard, or
+    /// finish the capture once every field (and the tag prompt, if any) has
+    /// been answered. Each prompt carries a live preview of the template in
+    /// progress (see [`App::capture_preview`]).
+    fn advance_capture(&mut self) {
+        let Some(pc) = self.pending_capture.as_ref() else {
+            return;
+        };
+        let next_idx = pc.next;
+        let field = pc.prompts.get(next_idx).cloned();
+        let show_tags_prompt = field.is_none() && pc.wants_tags && pc.tags.is_none();
+        if let Some(field) = field {
+            let mut prompt = Prompt::new(PromptKind::OrgCaptureField, field.label.clone())
+                .with_input(field.default.clone());
+            if let Some(preview) = self.capture_preview(Some(next_idx), false) {
+                prompt = prompt.with_preview(preview);
+            }
+            self.prompt = Some(prompt);
+        } else if show_tags_prompt {
+            let mut prompt = Prompt::new(
+                PromptKind::OrgCaptureField,
+                t!("prompt.org_capture_tags").to_string(),
+            );
+            if let Some(preview) = self.capture_preview(None, true) {
+                prompt = prompt.with_preview(preview);
+            }
+            self.prompt = Some(prompt);
+        } else {
+            self.finish_capture();
+        }
+    }
+
+    /// A live preview of the active capture's template: answered fields
+    /// substituted, the field at `current` (if any) marked `‹Label›`
+    /// (`tags_current` does the same for the trailing tag prompt), every
+    /// other placeholder (`%t`, `%a`, …) expanded immediately from
+    /// [`App::capture_context`]. `None` if no capture is in progress.
+    fn capture_preview(&mut self, current: Option<usize>, tags_current: bool) -> Option<String> {
+        let pc = self.pending_capture.as_ref()?;
+        let template = pc.template.template.clone();
+        let prompts = pc.prompts.clone();
+        let answers = pc.answers.clone();
+        let tags = pc.tags.clone();
+        let ctx = self.capture_context();
+        let tags = tags.as_deref().map(Self::format_capture_tags);
+        Some(vix_org_capture::preview(
+            &template,
+            &prompts,
+            &answers,
+            current,
+            tags.as_deref(),
+            tags_current,
+            &ctx,
+        ))
+    }
+
+    /// Accept one answer in the active capture wizard: a `%^{}` field until
+    /// they're exhausted, then (if the template wants tags) the tag prompt.
+    fn accept_capture_field(&mut self, input: &str) {
+        let Some(pc) = self.pending_capture.as_mut() else {
+            return;
+        };
+        if pc.next < pc.prompts.len() {
+            pc.answers.push(input.to_string());
+            pc.next += 1;
+        } else {
+            pc.tags = Some(input.to_string());
+        }
+        self.advance_capture();
+    }
+
+    /// Expand and wrap the active capture's template. Files it immediately
+    /// when the template sets `immediate_finish`; otherwise opens a final
+    /// review buffer (multiline, Alt+Enter = newline) the user can edit
+    /// before filing.
+    fn finish_capture(&mut self) {
+        let Some(pc) = self.pending_capture.take() else {
+            return;
+        };
+        let ctx = self.capture_context();
+        let tags = pc.tags.as_deref().map(Self::format_capture_tags);
+        let expansion =
+            vix_org_capture::expand(&pc.template.template, &pc.answers, tags.as_deref(), &ctx);
+        let wrapped = vix_org_capture::wrap_entry(pc.template.entry_type, &expansion.text);
+        if pc.template.immediate_finish {
+            self.file_capture(&pc.template, &wrapped);
+        } else {
+            self.prompt = Some(
+                Prompt::new(
+                    PromptKind::OrgCaptureReview,
+                    t!(
+                        "prompt.org_capture_review",
+                        description = pc.template.description.clone()
+                    )
+                    .to_string(),
+                )
+                .with_input(wrapped),
+            );
+            self.capture_review = Some(pc.template);
+        }
+    }
+
+    /// Accept the (possibly hand-edited) review buffer and file it.
+    fn accept_capture_review(&mut self, input: &str) {
+        if let Some(template) = self.capture_review.take() {
+            self.file_capture(&template, input);
+        }
+    }
+
+    /// Turn raw whitespace-separated tag text (`"work urgent"`) into Org's
+    /// trailing tag syntax (`":work:urgent:"`); empty input yields no tags.
+    fn format_capture_tags(raw: &str) -> String {
+        let tags: Vec<&str> = raw.split_whitespace().collect();
+        if tags.is_empty() {
+            String::new()
+        } else {
+            format!(":{}:", tags.join(":"))
+        }
+    }
+
+    /// Build the placeholder-expansion [`vix_org_capture::Context`] from the
+    /// current date/time, active buffer, selection, and clipboard.
+    fn capture_context(&mut self) -> vix_org_capture::Context {
+        let now = jiff::Zoned::now();
+        let path = self.active_path();
+        let line = self
+            .editor
+            .active_tab()
+            .map_or(0, |t| t.editor.cursor_line());
+        let annotation = path.as_ref().map_or_else(String::new, |p| {
+            let rel = p
+                .strip_prefix(&self.root)
+                .unwrap_or(p)
+                .to_string_lossy()
+                .into_owned();
+            format!("[[file:{rel}::{}][{rel}:{}]]", line + 1, line + 1)
+        });
+        let initial = self
+            .editor
+            .active_tab_mut()
+            .and_then(|t| t.editor.get_selection_text())
+            .unwrap_or_default();
+        let file_name = path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let file_path = path
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let clipboard = vix_clipboard::get().unwrap_or_default();
+        vix_org_capture::Context {
+            year: i32::from(now.year()),
+            month: u32::from(now.month().unsigned_abs()),
+            day: u32::from(now.day().unsigned_abs()),
+            hour: u32::from(now.hour().unsigned_abs()),
+            minute: u32::from(now.minute().unsigned_abs()),
+            weekday: now.strftime("%a").to_string(),
+            annotation,
+            initial,
+            file_name,
+            file_path,
+            clipboard,
+        }
+    }
+
+    /// File `wrapped` (already expanded and entry-wrapped) per `template`'s
+    /// target, prepend/empty-lines/clock-in properties.
+    fn file_capture(&mut self, template: &vix_org_capture::CaptureTemplate, wrapped: &str) {
+        let wrapped = if template.clock_in {
+            Self::insert_capture_clock(wrapped, &crate::org::clock_in(&Self::org_timestamp()))
+        } else {
+            wrapped.to_string()
+        };
+        let prepend = template.prepend;
+        let empty_lines = template.empty_lines;
+        let filed = match vix_org_capture::Target::parse(&template.target) {
+            vix_org_capture::Target::Cursor => {
+                self.insert_content(&format!("{wrapped}\n"));
+                true
+            }
+            vix_org_capture::Target::File(rel) => {
+                self.file_capture_write(&rel, |content| {
+                    vix_org_capture::insert_top_level(content, &wrapped, prepend, empty_lines)
+                });
+                true
+            }
+            vix_org_capture::Target::FileHeadline(rel, headline) => {
+                self.file_capture_write(&rel, |content| {
+                    vix_org_capture::insert_under_headline(
+                        content,
+                        &headline,
+                        &wrapped,
+                        prepend,
+                        empty_lines,
+                    )
+                });
+                true
+            }
+            vix_org_capture::Target::FileDatetree(rel) => {
+                let ctx = self.capture_context();
+                self.file_capture_write(&rel, |content| {
+                    vix_org_capture::insert_datetree(content, &ctx, &wrapped, prepend, empty_lines)
+                });
+                true
+            }
+            vix_org_capture::Target::Id(id) => {
+                self.file_capture_by_id(&id, &wrapped, prepend, empty_lines)
+            }
+        };
+        if filed {
+            self.status = t!(
+                "status.org_captured",
+                description = template.description.clone()
             )
-            .with_input(self.settings.org_todo_capture_template.clone()),
-        );
+            .to_string();
+        }
+    }
+
+    /// Read the project file at `rel` (relative to the workspace root, empty
+    /// content if it doesn't exist yet), run `build` over its content, then
+    /// write the result back and open it.
+    fn file_capture_write(&mut self, rel: &str, build: impl FnOnce(&str) -> String) {
+        let path = self.root.join(rel);
+        let content = std::fs::read_to_string(&path).unwrap_or_default();
+        let new = build(&content);
+        self.roam_write_and_open(&path, &new);
+    }
+
+    /// File `wrapped` under the headline/node carrying `:ID: id`, searching
+    /// every project `.org` file. Reports and returns `false` if no such id
+    /// is found.
+    fn file_capture_by_id(
+        &mut self,
+        id: &str,
+        wrapped: &str,
+        prepend: bool,
+        empty_lines: u8,
+    ) -> bool {
+        for path in self.file_index.clone() {
+            if path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("org"))
+                && let Ok(content) = std::fs::read_to_string(&path)
+                && let Some(new) =
+                    vix_org_capture::insert_under_id(&content, id, wrapped, prepend, empty_lines)
+            {
+                self.roam_write_and_open(&path, &new);
+                return true;
+            }
+        }
+        self.status = t!("status.org_capture_id_not_found", id = id).to_string();
+        false
+    }
+
+    /// Splice a `CLOCK:` line right after `wrapped`'s first (headline) line.
+    fn insert_capture_clock(wrapped: &str, clock_line: &str) -> String {
+        match wrapped.split_once('\n') {
+            Some((first, rest)) => format!("{first}\n  {clock_line}\n{rest}"),
+            None => format!("{wrapped}\n  {clock_line}"),
+        }
     }
 
     /// The current local time as an Org timestamp (`YYYY-MM-DD Day HH:MM`).
@@ -4902,9 +5265,10 @@ impl App {
             AgendaKind::Todo => {
                 Self::list_view(&t!("agenda.todo.title"), crate::org::todo_list(&files))
             }
-            AgendaKind::Stuck => {
-                Self::list_view(&t!("agenda.stuck.title"), crate::org::stuck_projects(&files))
-            }
+            AgendaKind::Stuck => Self::list_view(
+                &t!("agenda.stuck.title"),
+                crate::org::stuck_projects(&files),
+            ),
             AgendaKind::Match(q) => Self::list_view(
                 &t!("agenda.match.title", query = q),
                 crate::org::tags_match(&files, q),
@@ -5061,22 +5425,13 @@ impl App {
     /// Dispatch a submitted Org-roam / Org-node prompt to the matching action.
     fn accept_roam_prompt(&mut self, kind: PromptKind, input: &str) {
         match kind {
-            PromptKind::OrgCapture if !input.is_empty() => {
-                self.insert_content(&format!("* TODO {input}\n"));
-            }
-            PromptKind::OrgCaptureTodo if !input.is_empty() => {
-                // The multiline capture is inserted verbatim (plus a final
-                // newline), so the template's own structure survives.
-                self.insert_content(&format!("{input}\n"));
-            }
+            PromptKind::OrgCaptureField => self.accept_capture_field(input),
+            PromptKind::OrgCaptureReview => self.accept_capture_review(input),
             PromptKind::RoamFind | PromptKind::RoamCapture => {
                 self.roam_visit_or_create(input);
             }
             PromptKind::RoamInsert => self.roam_insert_link(input),
             PromptKind::NodeTransclusion => self.node_insert_transclusion(input),
-            PromptKind::ContactNew if !input.is_empty() => {
-                self.insert_content(&crate::org_contacts::new_contact(input));
-            }
             PromptKind::WorkspaceOpen => self.workspace_open(input),
             PromptKind::WorkspaceSave => self.workspace_save(input),
             PromptKind::WorkspaceAddFolder => self.workspace_add_folder(input),
@@ -6133,7 +6488,11 @@ impl App {
     fn org_toggle_drawer_fold(&mut self) -> bool {
         let is_org = self
             .active_path()
-            .and_then(|p| p.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase))
+            .and_then(|p| {
+                p.extension()
+                    .and_then(|e| e.to_str())
+                    .map(str::to_ascii_lowercase)
+            })
             .as_deref()
             == Some("org");
         if !is_org {
@@ -8451,6 +8810,15 @@ impl App {
                 _ => {}
             }
         }
+        // A Tab or Alt+Tab (M-Tab) right after typing `[[mailto:`/`[[contact:` in
+        // an Org buffer opens Org-contacts email/name completion.
+        if matches!(key.code, KeyCode::Tab)
+            && !Self::ctrl(&key)
+            && !Self::shift(&key)
+            && self.maybe_complete_org_contact_link()
+        {
+            return;
+        }
         // A plain Tab after a snippet prefix word expands that snippet.
         if matches!(key.code, KeyCode::Tab)
             && !Self::ctrl(&key)
@@ -9354,6 +9722,90 @@ impl App {
                 data: None,
             })
             .collect();
+        self.completion = Some(CompletionPopup { items, selected: 0 });
+    }
+
+    /// When the cursor sits right after a freshly typed `[[mailto:` or
+    /// `[[contact:` in an `.org` file, open the Org-contacts completion popup
+    /// (email addresses for `mailto:`, contact names for `contact:`). Returns
+    /// `true` when the popup was opened, so the key that triggered it (Tab or
+    /// Alt+Tab) is consumed instead of indenting.
+    fn maybe_complete_org_contact_link(&mut self) -> bool {
+        if self.completion.is_some() {
+            return false;
+        }
+        let Some(path) = self.active_path() else {
+            return false;
+        };
+        if path.extension().and_then(|e| e.to_str()) != Some("org") {
+            return false;
+        }
+        let Some(tab) = self.editor.active_tab() else {
+            return false;
+        };
+        let code = tab.editor.code_ref();
+        let cur = tab.editor.get_cursor();
+        let line = code.char_to_line(cur);
+        let line_start = code.line_to_char(line);
+        let before = code.slice(line_start, cur);
+        let Some(&(_, mailto)) = [("[[mailto:", true), ("[[contact:", false)]
+            .iter()
+            .find(|(marker, _)| before.ends_with(marker))
+        else {
+            return false;
+        };
+        self.open_org_contact_link_completion(mailto);
+        true
+    }
+
+    /// Populate the completion popup with contact emails (`mailto: true`) or
+    /// contact names (`mailto: false`), compiled from every project `.org`
+    /// file's Org-contacts entries. No-op (with a status message) when there
+    /// are no matching contacts.
+    fn open_org_contact_link_completion(&mut self, mailto: bool) {
+        // Append the closing `]]` only when it isn't already there (auto-pair may
+        // have inserted it when the user typed `[[`).
+        let suffix = self.editor.active_tab().map_or("]]", |t| {
+            let cur = t.editor.get_cursor();
+            let code = t.editor.code_ref();
+            if cur + 2 <= code.len_chars() && code.char_slice(cur, cur + 2) == "]]" {
+                ""
+            } else {
+                "]]"
+            }
+        });
+        let contacts = crate::org_contacts::all(&self.roam_node_files());
+        let mut items: Vec<crate::lsp_core::CompletionItem> = if mailto {
+            contacts
+                .iter()
+                .filter_map(|c| {
+                    let email = c.field("EMAIL")?;
+                    Some(crate::lsp_core::CompletionItem {
+                        label: format!("{} <{email}>", c.name),
+                        insert_text: format!("{email}][{}{suffix}", c.name),
+                        detail: None,
+                        data: None,
+                    })
+                })
+                .collect()
+        } else {
+            contacts
+                .iter()
+                .map(|c| crate::lsp_core::CompletionItem {
+                    label: c.name.clone(),
+                    insert_text: format!("{}{suffix}", c.name),
+                    detail: None,
+                    data: None,
+                })
+                .collect()
+        };
+        items.sort_by(|a, b| a.label.cmp(&b.label));
+        items.dedup_by(|a, b| a.label == b.label);
+        items.truncate(200);
+        if items.is_empty() {
+            self.status = t!("status.org_contacts_no_matches").to_string();
+            return;
+        }
         self.completion = Some(CompletionPopup { items, selected: 0 });
     }
 
@@ -10354,6 +10806,7 @@ impl App {
         panel!(file_browser, file_browser_mouse);
         panel!(recent_chooser, recent_mouse);
         panel!(location_chooser, location_mouse);
+        panel!(capture_chooser, capture_chooser_mouse);
         panel!(nerd_palette, nerd_mouse);
         panel!(ascii_panel, ascii_mouse);
         panel!(x11_panel, x11_mouse);
@@ -11841,6 +12294,51 @@ impl App {
         {
             lc.selected = idx;
             self.open_selected_location();
+        }
+    }
+
+    fn capture_chooser_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => {
+                let n = self.settings.org_capture_templates.len();
+                if let Some(cc) = self.capture_chooser.as_mut() {
+                    cc.selected = (cc.selected + n - 1) % n;
+                }
+            }
+            KeyCode::Down => {
+                let n = self.settings.org_capture_templates.len();
+                if let Some(cc) = self.capture_chooser.as_mut() {
+                    cc.selected = (cc.selected + 1) % n;
+                }
+            }
+            KeyCode::Enter => self.accept_capture_chooser(),
+            KeyCode::Esc => {
+                self.capture_chooser = None;
+            }
+            _ => {}
+        }
+    }
+
+    /// Start capturing with the highlighted template and close the chooser.
+    fn accept_capture_chooser(&mut self) {
+        if let Some(cc) = self.capture_chooser.take()
+            && let Some(template) = self
+                .settings
+                .org_capture_templates
+                .get(cc.selected)
+                .cloned()
+        {
+            self.start_capture(template);
+        }
+    }
+
+    fn capture_chooser_mouse(&mut self, mouse: MouseEvent) {
+        if let Some(idx) = self.chooser_row(mouse)
+            && let Some(cc) = self.capture_chooser.as_mut()
+            && idx < self.settings.org_capture_templates.len()
+        {
+            cc.selected = idx;
+            self.accept_capture_chooser();
         }
     }
 
@@ -15358,15 +15856,15 @@ impl App {
             return true;
         }
         match action {
-            "org.contacts.new" => {
-                self.prompt = Some(Prompt::new(
-                    PromptKind::ContactNew,
-                    t!("prompt.contact_new").to_string(),
-                ));
-            }
+            "org.capture.contact" => self.start_capture_by_key("c"),
             "org.contacts.find" => self.contacts_buffer(crate::org_contacts::directory),
             "org.contacts.birthdays" => self.contacts_buffer(crate::org_contacts::birthdays),
             "org.contacts.vcard" => self.contacts_buffer(crate::org_contacts::to_vcard),
+            "org.contacts.link_complete" => {
+                if !self.maybe_complete_org_contact_link() {
+                    self.status = t!("status.org_contacts_link_no_context").to_string();
+                }
+            }
             _ => return false,
         }
         true
@@ -16444,7 +16942,8 @@ impl App {
                     && matches!(
                         p.kind,
                         PromptKind::GitCommit
-                            | PromptKind::OrgCaptureTodo
+                            | PromptKind::OrgCaptureField
+                            | PromptKind::OrgCaptureReview
                             | PromptKind::OrgCloseNote
                     )
                 {
@@ -16543,8 +17042,8 @@ impl App {
             PromptKind::OrgAgendaSearch => {
                 self.open_view(&AgendaKind::Search(prompt.input.trim().to_string()));
             }
-            PromptKind::OrgCapture
-            | PromptKind::OrgCaptureTodo
+            PromptKind::OrgCaptureField
+            | PromptKind::OrgCaptureReview
             | PromptKind::RoamFind
             | PromptKind::RoamInsert
             | PromptKind::RoamCapture
@@ -16562,8 +17061,7 @@ impl App {
             | PromptKind::GotoSentence
             | PromptKind::GotoWord
             | PromptKind::GotoPercent
-            | PromptKind::GotoByte
-            | PromptKind::ContactNew => {
+            | PromptKind::GotoByte => {
                 self.accept_roam_prompt(prompt.kind, prompt.input.trim());
             }
             PromptKind::DebugRepl | PromptKind::DebugWatch => {
@@ -17080,10 +17578,7 @@ const EMACS_CTRL_X: &[(&str, &str)] = &[
 /// The Emacs `Ctrl+C` chord table — the Org command family. `C-u C-c C-t` (close
 /// with a note) is a universal-argument variant of `C-c C-t`, not a distinct
 /// chord, so it is not listed separately.
-const EMACS_CTRL_C: &[(&str, &str)] = &[
-    ("C-t", "org.cycle_todo"),
-    ("C-c", "org.ctrl_c_ctrl_c"),
-];
+const EMACS_CTRL_C: &[(&str, &str)] = &[("C-t", "org.cycle_todo"), ("C-c", "org.ctrl_c_ctrl_c")];
 
 /// A short jump label for index `i`: `a`..`z`, then `aa`, `ab`, … (base-26 over
 /// lowercase letters), so early lines get single-key labels.
@@ -17346,12 +17841,16 @@ mod tests {
         app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
         app.build_file_index();
 
-        // New Contact inserts a skeleton headline + drawer at the cursor.
-        app.run_action("org.contacts.new");
+        // New Contact runs the built-in Contact capture template: a Name
+        // prompt, then Email/Phone/Address/Birthday (left blank here), then
+        // files immediately (its `immediate_finish` is set).
+        app.run_action("org.capture.contact");
         for c in "Grace".chars() {
             app.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
         }
-        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        for _ in 0..5 {
+            app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        }
         let buf = app.editor.active_tab().unwrap().text();
         assert!(buf.contains("* Grace") && buf.contains(":PROPERTIES:") && buf.contains(":EMAIL:"));
 
@@ -17562,6 +18061,67 @@ mod tests {
             popup.items.iter().any(|i| i.insert_text == "Alpha Notes"),
             "no double close"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn org_contact_link_completes_email_and_name_on_tab() {
+        let dir = std::env::temp_dir().join(format!("vix-contact-link-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("contacts.org"),
+            "* Alice Adams\n  :PROPERTIES:\n  :EMAIL: alice@example.com\n  :END:\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("doc.org"), "\n").unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.build_file_index();
+        app.open_path(&dir.join("doc.org"), false);
+
+        // Typing "[[mailto:" then Tab completes an email address.
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_content("[[mailto:");
+            let end = t.editor.code_ref().len_chars();
+            t.editor.set_cursor(end);
+        }
+        app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        let popup = app.completion.as_ref().expect("mailto completion opened");
+        assert!(
+            popup
+                .items
+                .iter()
+                .any(|i| i.label == "Alice Adams <alice@example.com>"),
+            "email candidate offered"
+        );
+        assert!(
+            popup
+                .items
+                .iter()
+                .any(|i| i.insert_text == "alice@example.com][Alice Adams]]"),
+            "completes to a mailto link with a display name"
+        );
+
+        // Typing "[[contact:" then Tab completes a contact name instead.
+        app.completion = None;
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_content("[[contact:");
+            let end = t.editor.code_ref().len_chars();
+            t.editor.set_cursor(end);
+        }
+        app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        let popup = app.completion.as_ref().expect("contact completion opened");
+        assert!(
+            popup.items.iter().any(|i| i.label == "Alice Adams"),
+            "name candidate offered"
+        );
+        assert!(
+            popup.items.iter().any(|i| i.insert_text == "Alice Adams]]"),
+            "completes to a contact-name link"
+        );
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -62,12 +62,29 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   navigate directories (Enter/→ enters, ← goes up), and fall back to the
   classic type-a-path prompt with `Ctrl O` (new action `file.open_path`).
   Fuzzy queries rank by relevance until an explicit sort is chosen.
-- **Org → Capture submenu** (first in the Org menu): **Anything…** (the old
-  Capture…, now pre-filled from the new `org_anything_capture_template`
-  setting), **Contact…** (moved from Org → Contacts → New Contact…), and the
-  new **Todo…** — a multiline editing area (Alt+Enter = newline) pre-filled
-  from the new `org_todo_capture_template` setting (default `* TODO `) and
-  inserted verbatim at the cursor (action `org.capture_todo`).
+- **Org → Capture submenu** (first in the Org menu), now a template-driven
+  system in the shape of Emacs `org-capture` (new `vix-org-capture` crate; see
+  `spec/org/capture/index.md`): named templates (the `org_capture_templates`
+  setting) with `%^{Prompt}`-style placeholders (`%^{Label|choices}`,
+  `%t`/`%T`/`%u`/`%U`, `%<strftime>`, `%a`, `%i`, `%f`/`%F`, `%c`, `%^g`/`%^G`,
+  `%?`, `%%`), wrapped as a headline/item/checkbox/table-row, and filed at a
+  target (`cursor`, `id:`, `file:`, `file+headline:`, `file+datetree:`). Five
+  built-in templates ship by default — **Anything…** (`org.capture`),
+  **Contact…** (`org.capture.contact`, moved from Org → Contacts → New
+  Contact…), **Task…** (`org.capture.task`, a multiline review buffer,
+  Alt+Enter = newline), **Babel…** (`org.capture.babel`, prompts for a
+  language, opens a review buffer around a `#+begin_src`/`#+end_src` block),
+  and **Note…** (`org.capture.note`, a plain headline with a `%U` creation
+  timestamp) — plus **Choose Template…** (`org.capture.select`) for any
+  custom templates added to `org_capture_templates`. Each `%^{}` field prompt
+  now shows a live preview of the whole template above the input — answered
+  fields substituted, the current one marked `‹Label›`, later ones `[Label]`,
+  scrolled to keep the current field in view — instead of an isolated prompt
+  box with no context.
+- **Org → Priority Up/Down** (`org.priority.up`/`.down`): step a headline's
+  `[#X]` priority cookie toward the `org_priority_highest`/`org_priority_lowest`
+  settings (default numeric `'0'`..`'9'`, `'0'` = highest), clamped at the
+  bound. New pure `org::priority`/`set_priority`/`priority_up`/`priority_down`.
 
 ### Changed
 
@@ -120,6 +137,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Stale locale table after editing `locales/app.yml`.** `vix-i18n` embeds
+  the translation table at macro-expansion time (`rust_i18n::i18n!`), which
+  Cargo couldn't detect as a dependency — editing only `locales/app.yml`
+  never triggered a rebuild, so several recently-added/renamed menu labels
+  (`org.capture.task`/`.babel`/`.note`/`.select`, `org.priority.up`/`.down`)
+  rendered as their raw i18n key instead of translated text until something
+  else happened to recompile `vix-i18n`. Fixed with
+  `crates/vix-i18n/build.rs` (`cargo:rerun-if-changed=../../locales/app.yml`);
+  guarded against regressing by a new `vix-menu` test,
+  `every_menu_label_translates`, that walks the whole menu tree.
 - **Menu navigation.** In a dropdown, pressing `Right` on a submenu now opens it
   **and highlights its first item** (was: nothing highlighted). Pressing `Up` on
   the first dropdown item now moves to the **menu title** (nothing highlighted)

@@ -167,12 +167,147 @@ fn set_headline_keyword(headline: &str, keyword: &str) -> String {
     let body = rest
         .strip_prefix(&format!("{TODO} "))
         .or_else(|| rest.strip_prefix(&format!("{DONE} ")))
-        .unwrap_or(if rest == TODO || rest == DONE { "" } else { rest });
+        .unwrap_or(if rest == TODO || rest == DONE {
+            ""
+        } else {
+            rest
+        });
     if body.is_empty() {
         format!("{prefix}{keyword}")
     } else {
         format!("{prefix}{keyword} {body}")
     }
+}
+
+// ----- Priority ---------------------------------------------------------
+
+/// Split a headline's post-stars text `rest` into its TODO/DONE keyword
+/// (including the trailing space, or `""` if there is none) and the
+/// remaining body.
+fn split_keyword(rest: &str) -> (&str, &str) {
+    if let Some(body) = rest.strip_prefix(&format!("{TODO} ")) {
+        (&rest[..=TODO.len()], body)
+    } else if rest == TODO {
+        (rest, "")
+    } else if let Some(body) = rest.strip_prefix(&format!("{DONE} ")) {
+        (&rest[..=DONE.len()], body)
+    } else if rest == DONE {
+        (rest, "")
+    } else {
+        ("", rest)
+    }
+}
+
+/// Strip a leading priority cookie `[#X]` (and the single space after it, if
+/// any) from `body`, returning the cookie's character and the remaining text.
+fn strip_priority(body: &str) -> Option<(char, &str)> {
+    let mut chars = body.strip_prefix("[#")?.chars();
+    let p = chars.next()?;
+    let after = chars.as_str().strip_prefix(']')?;
+    Some((p, after.strip_prefix(' ').unwrap_or(after)))
+}
+
+/// The priority cookie (`[#X]`) on `headline`, read right after its TODO/DONE
+/// keyword (or right after the stars, if there is no keyword). `None` if
+/// `headline` isn't a headline or carries no cookie.
+#[must_use]
+pub fn priority(headline: &str) -> Option<char> {
+    let stars = headline_level(headline)?;
+    let (_, rest) = headline.split_at(stars + 1);
+    let (_, body) = split_keyword(rest);
+    strip_priority(body).map(|(p, _)| p)
+}
+
+/// Set, replace, or remove the priority cookie on the headline at `line`.
+/// `priority = None` removes an existing cookie (a no-op if there wasn't
+/// one). Returns `None` if `line` is not a headline.
+#[must_use]
+pub fn set_priority(text: &str, line: usize, priority: Option<char>) -> Option<String> {
+    let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
+    let headline = lines.get(line)?;
+    let stars = headline_level(headline)?;
+    let (prefix, rest) = headline.split_at(stars + 1);
+    let (keyword, body) = split_keyword(rest);
+    let bare = strip_priority(body).map_or(body, |(_, after)| after);
+    let new_body = match priority {
+        Some(p) if bare.is_empty() => format!("[#{p}]"),
+        Some(p) => format!("[#{p}] {bare}"),
+        None => bare.to_string(),
+    };
+    lines[line] = format!("{prefix}{keyword}{new_body}");
+    Some(lines.join("\n"))
+}
+
+/// The valid priority characters from `highest` to `lowest` inclusive, in
+/// that order (so index 0 is always `highest`).
+fn priority_range(highest: char, lowest: char) -> Vec<char> {
+    let (lo, hi) = if highest <= lowest {
+        (highest as u32, lowest as u32)
+    } else {
+        (lowest as u32, highest as u32)
+    };
+    let mut chars: Vec<char> = (lo..=hi).filter_map(char::from_u32).collect();
+    if highest > lowest {
+        chars.reverse();
+    }
+    chars
+}
+
+/// Move the headline at `line`'s priority one step toward `highest` if
+/// `up`, else toward `lowest`; clamped at that bound (no wraparound). Sets
+/// `default` if there is no cookie yet. `None` if `line` is not a headline.
+fn step_priority(
+    text: &str,
+    line: usize,
+    highest: char,
+    lowest: char,
+    default: char,
+    up: bool,
+) -> Option<String> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let headline = *lines.get(line)?;
+    headline_level(headline)?;
+    let order = priority_range(highest, lowest);
+    let next = match priority(headline).and_then(|c| order.iter().position(|&x| x == c)) {
+        None => default,
+        Some(idx) => {
+            let new_idx = if up {
+                idx.saturating_sub(1)
+            } else {
+                (idx + 1).min(order.len().saturating_sub(1))
+            };
+            order.get(new_idx).copied().unwrap_or(default)
+        }
+    };
+    set_priority(text, line, Some(next))
+}
+
+/// Move the headline at `line`'s priority one step toward `highest` (Shift+Up
+/// equivalent). Sets `default` if there is no cookie yet; clamped at
+/// `highest` (no wraparound). `None` if `line` is not a headline.
+#[must_use]
+pub fn priority_up(
+    text: &str,
+    line: usize,
+    highest: char,
+    lowest: char,
+    default: char,
+) -> Option<String> {
+    step_priority(text, line, highest, lowest, default, true)
+}
+
+/// Move the headline at `line`'s priority one step toward `lowest`
+/// (Shift+Down equivalent). Sets `default` if there is no cookie yet;
+/// clamped at `lowest` (no wraparound). `None` if `line` is not a headline.
+#[must_use]
+pub fn priority_down(
+    text: &str,
+    line: usize,
+    highest: char,
+    lowest: char,
+    default: char,
+) -> Option<String> {
+    step_priority(text, line, highest, lowest, default, false)
 }
 
 /// Mark the headline at `line` `DONE` and record its completion the way Emacs
@@ -641,7 +776,9 @@ pub fn render_agenda(items: &[AgendaItem]) -> (String, Vec<Option<usize>>) {
     push(&mut buf, &mut map, "#+title: Agenda", None);
 
     // Dated entries, sorted by (date, kind, headline, file) and grouped by date.
-    let mut dated: Vec<usize> = (0..items.len()).filter(|&i| items[i].date.is_some()).collect();
+    let mut dated: Vec<usize> = (0..items.len())
+        .filter(|&i| items[i].date.is_some())
+        .collect();
     dated.sort_by(|&a, &b| {
         let x = &items[a];
         let y = &items[b];
@@ -665,7 +802,9 @@ pub fn render_agenda(items: &[AgendaItem]) -> (String, Vec<Option<usize>>) {
     }
 
     // Unscheduled TODOs, in document order.
-    let undated: Vec<usize> = (0..items.len()).filter(|&i| items[i].date.is_none()).collect();
+    let undated: Vec<usize> = (0..items.len())
+        .filter(|&i| items[i].date.is_none())
+        .collect();
     if !undated.is_empty() {
         push(&mut buf, &mut map, "", None);
         push(&mut buf, &mut map, "* Unscheduled tasks", None);
@@ -818,7 +957,10 @@ pub fn tags_match(files: &[(String, String)], query: &str) -> Vec<AgendaItem> {
 /// words of `query`, case-insensitively. An empty query matches nothing. Pure.
 #[must_use]
 pub fn search(files: &[(String, String)], query: &str) -> Vec<AgendaItem> {
-    let words: Vec<String> = query.split_whitespace().map(str::to_ascii_lowercase).collect();
+    let words: Vec<String> = query
+        .split_whitespace()
+        .map(str::to_ascii_lowercase)
+        .collect();
     let mut out = Vec::new();
     if words.is_empty() {
         return out;
@@ -1265,9 +1407,7 @@ mod tests {
         assert_eq!(drawer_range(&dangling, 1), None);
 
         // A headline appearing before :END: closes the section: no fold.
-        let interrupted: Vec<&str> = "* Name\n:properties:\n* Other\n:end:"
-            .split('\n')
-            .collect();
+        let interrupted: Vec<&str> = "* Name\n:properties:\n* Other\n:end:".split('\n').collect();
         assert_eq!(drawer_range(&interrupted, 1), None);
     }
 
@@ -1297,6 +1437,67 @@ mod tests {
     }
 
     #[test]
+    fn priority_reads_the_cookie_after_keyword_or_stars() {
+        assert_eq!(priority("* TODO [#A] Task"), Some('A'));
+        assert_eq!(priority("* [#0] Task"), Some('0'));
+        assert_eq!(priority("* TODO Task"), None);
+        assert_eq!(priority("* [#A]"), Some('A'));
+        assert_eq!(priority("not a headline"), None);
+    }
+
+    #[test]
+    fn set_priority_inserts_replaces_and_removes() {
+        assert_eq!(
+            set_priority("* TODO Task", 0, Some('A')).unwrap(),
+            "* TODO [#A] Task"
+        );
+        assert_eq!(
+            set_priority("* TODO [#A] Task", 0, Some('B')).unwrap(),
+            "* TODO [#B] Task"
+        );
+        assert_eq!(
+            set_priority("* TODO [#A] Task", 0, None).unwrap(),
+            "* TODO Task"
+        );
+        // No keyword and no body: the cookie is the whole headline text.
+        assert_eq!(set_priority("* ", 0, Some('0')).unwrap(), "* [#0]");
+        assert_eq!(set_priority("not a headline", 0, Some('A')), None);
+    }
+
+    #[test]
+    fn priority_up_and_down_step_and_clamp_numeric_range() {
+        // 0 = highest, 9 = lowest (this repo's preferred numeric scheme).
+        let (highest, lowest, default) = ('0', '9', '0');
+        let t = "* TODO Task";
+        let t = priority_up(t, 0, highest, lowest, default).unwrap();
+        assert_eq!(t, "* TODO [#0] Task", "no cookie yet -> the default");
+        let t = priority_down(&t, 0, highest, lowest, default).unwrap();
+        assert_eq!(t, "* TODO [#1] Task", "down moves toward lowest");
+        let t = priority_up(&t, 0, highest, lowest, default).unwrap();
+        assert_eq!(t, "* TODO [#0] Task", "up moves back toward highest");
+        // Already at highest: up clamps, no wraparound.
+        let t = priority_up(&t, 0, highest, lowest, default).unwrap();
+        assert_eq!(t, "* TODO [#0] Task");
+        // Walk down to the lowest bound and confirm it clamps too.
+        let mut t = t;
+        for _ in 0..12 {
+            t = priority_down(&t, 0, highest, lowest, default).unwrap();
+        }
+        assert_eq!(t, "* TODO [#9] Task");
+    }
+
+    #[test]
+    fn priority_up_and_down_on_letter_scheme_where_highest_sorts_first() {
+        // Classic Emacs default: A = highest, C = lowest.
+        let t = priority_up("* Task", 0, 'A', 'C', 'B').unwrap();
+        assert_eq!(t, "* [#B] Task", "no cookie yet -> the default");
+        let t = priority_up(&t, 0, 'A', 'C', 'B').unwrap();
+        assert_eq!(t, "* [#A] Task");
+        let t = priority_down(&t, 0, 'A', 'C', 'B').unwrap();
+        assert_eq!(t, "* [#B] Task");
+    }
+
+    #[test]
     fn close_headline_marks_done_with_closed_and_logbook_note() {
         let now = "2024-08-23 Fri 11:30";
         let t = "* TODO Ship it\nsome body";
@@ -1311,7 +1512,10 @@ mod tests {
             out.contains("- Note taken on [2024-08-23 Fri 11:30] \\\\"),
             "note entry uses org continuation marker: {out}"
         );
-        assert!(out.contains("  Reviewed and shipped"), "note body indented: {out}");
+        assert!(
+            out.contains("  Reviewed and shipped"),
+            "note body indented: {out}"
+        );
         assert!(out.contains(":END:"), "drawer closed: {out}");
         // The CLOSED line sits directly under the headline, above the drawer.
         let lines: Vec<&str> = out.split('\n').collect();
@@ -1334,7 +1538,10 @@ mod tests {
         let lb = li.iter().position(|l| *l == ":LOGBOOK:").unwrap();
         assert_eq!(li[lb + 1], "- Note taken on [2024-08-23 Fri 11:30] \\\\");
         assert_eq!(li[lb + 2], "  newer");
-        assert!(li[lb + 3].contains("older entry"), "older entry kept: {out}");
+        assert!(
+            li[lb + 3].contains("older entry"),
+            "older entry kept: {out}"
+        );
 
         // Not a headline → None.
         assert!(close_headline("plain text", 0, now, "x").is_none());
@@ -1348,11 +1555,17 @@ mod tests {
         )];
         let items = agenda_items(&files);
         // Two TODO headlines (lines 0 and 3) and one DEADLINE (attached to line 0).
-        let todo0 = items.iter().find(|i| i.headline == "TODO Ship it" && i.date.is_none()).unwrap();
+        let todo0 = items
+            .iter()
+            .find(|i| i.headline == "TODO Ship it" && i.date.is_none())
+            .unwrap();
         assert_eq!(todo0.line, 0);
         let deadline = items.iter().find(|i| i.kind == "DEADLINE").unwrap();
         assert_eq!(deadline.line, 0, "deadline attributed to its headline line");
-        let loose = items.iter().find(|i| i.headline == "TODO Loose end").unwrap();
+        let loose = items
+            .iter()
+            .find(|i| i.headline == "TODO Loose end")
+            .unwrap();
         assert_eq!(loose.line, 3);
 
         // The render's line map points each entry line back to its item index.
@@ -1391,7 +1604,11 @@ mod tests {
         // Bare tag requires it; case-insensitive.
         assert_eq!(tags_match(&files, "HOME").len(), 1);
         // A headline with no tags never matches.
-        assert!(tags_match(&files, "work").iter().all(|i| i.headline != "Delta"));
+        assert!(
+            tags_match(&files, "work")
+                .iter()
+                .all(|i| i.headline != "Delta")
+        );
     }
 
     #[test]

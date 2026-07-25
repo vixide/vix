@@ -402,6 +402,9 @@ fn draw_chooser_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.location_chooser.is_some() {
         draw_location_chooser(app, frame, area);
     }
+    if app.capture_chooser.is_some() {
+        draw_capture_chooser(app, frame, area);
+    }
     if app.recent_chooser.is_some() {
         draw_recent_chooser(app, frame, area);
     }
@@ -1783,6 +1786,31 @@ fn draw_location_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let hint = t!("ui.locations_hint");
     app.layout.chooser =
         draw_list_chooser(frame, area, &t!("ui.locations"), &hint, &labels, selected);
+}
+
+/// The Org-capture template chooser overlay (Org → Capture → Choose
+/// Template…): every configured `org_capture_templates` entry as
+/// `<description> (<key>)`.
+fn draw_capture_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(cc) = app.capture_chooser.as_ref() else {
+        return;
+    };
+    let selected = cc.selected;
+    let labels: Vec<String> = app
+        .settings
+        .org_capture_templates
+        .iter()
+        .map(|t| format!("{} ({})", t.description, t.key))
+        .collect();
+    let hint = t!("ui.capture_chooser_hint");
+    app.layout.chooser = draw_list_chooser(
+        frame,
+        area,
+        &t!("ui.capture_chooser"),
+        &hint,
+        &labels,
+        selected,
+    );
 }
 
 /// The file browser overlay (File → Open…): root + filter lines, the entry
@@ -6592,6 +6620,48 @@ fn field_line(label: &str, value: &str, focused: bool) -> Line<'static> {
     ])
 }
 
+/// Render an Org-capture template preview (see `App::capture_preview`) into
+/// the top `preview_rows` of `inner`, plus a one-row divider, scrolled to keep
+/// the field being filled in (marked `‹Label›`) visible. Returns the
+/// remaining rect for the input area below.
+fn draw_prompt_preview(frame: &mut Frame, inner: Rect, text: &str, preview_rows: u16) -> Rect {
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(preview_rows),
+            Constraint::Length(1),
+            Constraint::Min(1),
+        ])
+        .split(inner);
+    let line_count = text.lines().count();
+    let current_line = text
+        .lines()
+        .position(|l| l.contains('\u{2039}'))
+        .unwrap_or(0);
+    let scroll_y = u16::try_from(current_line)
+        .unwrap_or(0)
+        .saturating_sub(preview_rows / 2)
+        .min(
+            u16::try_from(line_count)
+                .unwrap_or(0)
+                .saturating_sub(preview_rows),
+        );
+    frame.render_widget(
+        Paragraph::new(text)
+            .style(theme::dim())
+            .scroll((scroll_y, 0)),
+        rows[0],
+    );
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            "\u{2500}".repeat(rows[1].width as usize),
+            theme::dim(),
+        ))),
+        rows[1],
+    );
+    rows[2]
+}
+
 fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
     let Some(p) = app.prompt.as_ref() else { return };
     // The workspace→dock search prompt shows case/regex toggles on a second line.
@@ -6599,7 +6669,9 @@ fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
     // The git-commit prompt accepts a multi-line message (Alt+Enter = newline).
     let multiline = matches!(
         p.kind,
-        crate::app::PromptKind::GitCommit | crate::app::PromptKind::OrgCaptureTodo
+        crate::app::PromptKind::GitCommit
+            | crate::app::PromptKind::OrgCaptureField
+            | crate::app::PromptKind::OrgCaptureReview
     );
     let width = area.width * 6 / 10;
     let body_rows: u16 = if multiline {
@@ -6612,11 +6684,22 @@ fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
     } else {
         1
     };
+    // Org-capture field prompts carry a live preview of the template in
+    // progress (`App::capture_preview`), rendered above the input, capped so
+    // the dialog can't outgrow the screen and scrolled to keep the field
+    // being filled in (marked `‹Label›`) in view.
+    let preview_line_count = p.preview.as_deref().map_or(0, |t| t.lines().count());
+    let preview_rows = u16::try_from(preview_line_count).unwrap_or(0).min(14);
+    let preview_extra = if preview_rows > 0 {
+        preview_rows + 1
+    } else {
+        0
+    };
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,
         y: area.y + area.height / 3,
         width,
-        height: body_rows + 2,
+        height: (body_rows + preview_extra + 2).min(area.height),
     };
     frame.render_widget(Clear, rect);
     let block = Block::default()
@@ -6627,6 +6710,17 @@ fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
         .title(format!(" {} ", p.title));
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
+
+    let inner = if preview_rows > 0 {
+        draw_prompt_preview(
+            frame,
+            inner,
+            p.preview.as_deref().unwrap_or_default(),
+            preview_rows,
+        )
+    } else {
+        inner
+    };
 
     if multiline {
         let rows = Layout::default()

@@ -136,12 +136,21 @@ pub struct Settings {
     /// Directory of vCard (`.vcf`) files for the contact browser (Tools →
     /// Contacts…). Empty = use the workspace root.
     pub contacts_dir: String,
-    /// Template pre-filling the Org → Capture → Anything… prompt
-    /// (the `org.capture` action). Empty = start with a blank prompt.
-    pub org_anything_capture_template: String,
-    /// Template pre-filling the Org → Capture → Todo… multiline editing
-    /// area (the `org.capture_todo` action).
-    pub org_todo_capture_template: String,
+    /// Org-capture templates for the **Org → Capture** submenu: named,
+    /// placeholder-driven templates filed at a cursor/id/file/headline/
+    /// datetree target. Seeded with `Anything`/`Todo`/`Contact` by default;
+    /// see the `vix-org-capture` crate and `spec/org/capture/index.md`.
+    pub org_capture_templates: Vec<vix_org_capture::CaptureTemplate>,
+    /// Highest-priority character for a headline's `[#X]` priority cookie
+    /// (**Org → Priority**). "Highest" sorts first — Vix's default is
+    /// numeric (`'0'` highest .. `'9'` lowest), unlike Emacs's default
+    /// `'A'`..`'C'`.
+    pub org_priority_highest: char,
+    /// Lowest-priority character; see `org_priority_highest`.
+    pub org_priority_lowest: char,
+    /// Priority given to a headline that had no cookie yet, by **Org →
+    /// Priority → Increase/Decrease**.
+    pub org_priority_default: char,
     /// Active time zone as an IANA canonical name (e.g. `"UTC"`,
     /// `"America/New_York"`). Chosen via Tools → Time Zone…; used app-wide
     /// (e.g. the clock panel).
@@ -248,8 +257,10 @@ impl Default for Settings {
             lsp_servers: Vec::new(),
             welcomed: false,
             contacts_dir: String::new(),
-            org_anything_capture_template: String::new(),
-            org_todo_capture_template: "* TODO ".to_string(),
+            org_capture_templates: vix_org_capture::defaults(),
+            org_priority_highest: '0',
+            org_priority_lowest: '9',
+            org_priority_default: '0',
             time_zone: "UTC".to_string(),
             restore_session: true,
             sticky_search_highlight: true,

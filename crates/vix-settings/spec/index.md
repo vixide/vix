@@ -70,8 +70,10 @@ field is absent.
 | `lsp_servers` | array of tables | `[]` | Configured language servers, matched to files by extension (see below). |
 | `welcomed` | boolean | `false` | Whether the first-run welcome screen has been shown. Set true after the welcome panel first appears, so it does not pop up on every launch. |
 | `contacts_dir` | string | `""` | Directory of vCard (`.vcf`) files for the contact browser (**Tools → Contacts…**). Empty = use the workspace root. |
-| `org_anything_capture_template` | string | `""` | Template pre-filling the **Org → Capture → Anything…** prompt (the `org.capture` action). Empty = a blank prompt. |
-| `org_todo_capture_template` | string | `"* TODO "` | Template pre-filling the **Org → Capture → Todo…** multiline editing area (the `org.capture_todo` action; Alt+Enter inserts a newline). |
+| `org_capture_templates` | array of tables | `Anything`/`Todo`/`Contact` (see below) | Named, placeholder-driven templates for the **Org → Capture** submenu (see below). |
+| `org_priority_highest` | char | `'0'` | Highest-priority character for a headline's `[#X]` cookie (**Org → Priority Up/Down**). "Highest" sorts first — Vix's default is numeric (`'0'` highest .. `'9'` lowest), unlike Emacs's default `'A'`..`'C'`. |
+| `org_priority_lowest` | char | `'9'` | Lowest-priority character; see `org_priority_highest`. |
+| `org_priority_default` | char | `'0'` | Priority given to a headline that had no `[#X]` cookie yet, by **Org → Priority Up/Down**. |
 | `time_zone` | string | `"UTC"` | Active time zone as an IANA canonical name (e.g. `"UTC"`, `"America/New_York"`). Chosen via **Tools → Time Zone…**; used app-wide (e.g. the clock panel). |
 | `restore_session` | bool | `true` | Reopen the previous [session](../session-restore/index.md) (open files, focused tab, cursor positions) when launched in a workspace with no file argument. Saved per workspace in `session.toml`. |
 | `sticky_search_highlight` | bool | `true` | Keep [search-match highlights](../find-and-replace/index.md) visible after the Find box closes, until toggled off. When `false`, closing Find clears them. |
@@ -120,6 +122,39 @@ command = ["rust-analyzer"]
 
 Servers are matched to a file by its extension. With `lsp_enabled = false`, no
 servers are launched regardless of what `lsp_servers` contains.
+
+## Org-capture templates
+
+`org_capture_templates` holds the entries for **Org → Capture**: each is a
+named template with placeholders and a filing target. See
+[`crates/vix-org/spec/index.md`](../../vix-org/spec/index.md) § Capture and
+[`spec/org/capture/index.md`](../../../spec/org/capture/index.md) for the
+placeholder syntax and target shapes. Each entry is a TOML table:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `key` | string | Short id shown in the Capture menu/chooser. |
+| `description` | string | Human-readable label. |
+| `entry_type` | string | `"entry"` (default; a headline), `"plain"`, `"item"`, `"check-item"`, or `"table-line"`. |
+| `target` | string | `"cursor"` (default), `"id:<ID>"`, `"file:<path>"`, `"file+headline:<path>#<Headline>"`, or `"file+datetree:<path>"`. |
+| `template` | string | The template body — literal text plus placeholders. |
+| `prepend` | boolean | Insert at the top of the target instead of the bottom. Default `false`. |
+| `empty_lines` | integer | Blank lines to pad before/after the inserted entry. Default `0`. |
+| `immediate_finish` | boolean | Skip the review step and file immediately once every prompt is answered. Default `false`. |
+| `clock_in` | boolean | Start a `CLOCK:` entry on the newly captured headline. Default `false`. |
+
+The defaults seed three templates (`a` Anything, `t` Todo, `c` Contact, all
+targeting the cursor) that match Vix's original fixed capture actions. Add
+more as TOML array-of-tables entries, e.g. a journal captured into a date
+tree:
+
+```toml
+[[org_capture_templates]]
+key = "j"
+description = "Journal"
+target = "file+datetree:journal.org"
+template = "* %U %^{Entry}"
+```
 
 ## Persistence on exit
 
