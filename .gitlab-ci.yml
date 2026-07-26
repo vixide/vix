@@ -46,10 +46,16 @@ variables:
 # Run pipelines for merge requests and for the default branch, and tag
 # pipelines for releases — but never a duplicate branch pipeline alongside an
 # open merge request.
+#
+# Scheduled pipelines are allowed so that a weekly schedule configured in the
+# GitLab UI actually runs the `deny` job; GitLab has no in-YAML equivalent of
+# the `cron:` triggers the GitHub and Codeberg security workflows use, and
+# without this rule such a schedule would silently do nothing.
 workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 fmt:
@@ -63,6 +69,32 @@ clippy:
   script:
     - rustup component add clippy
     - cargo clippy --workspace --all-targets -- -D warnings
+
+# Supply-chain gate: RUSTSEC advisories, disallowed licenses, banned or
+# wildcard crates, untrusted sources — the policy is in deny.toml.
+#
+# Deliberately outside the `scripts/check` parity gate: that gate is
+# reproducible offline from the lockfile, while this one is not, because the
+# advisory database moves under a lockfile that has not changed. That is also
+# why the `schedule` rule exists in `workflow.rules` above. Keep this job in
+# step with .github/workflows/security.yml and .forgejo/workflows/security.yml.
+#
+# cargo-deny is pinned and checksummed rather than `cargo install`ed: a
+# supply-chain gate should not itself install an unverified binary, and
+# nothing here needs compiling.
+deny:
+  stage: check
+  variables:
+    CARGO_DENY_VERSION: "0.20.2"
+    CARGO_DENY_SHA256: "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f"
+  script:
+    - tarball="cargo-deny-$CARGO_DENY_VERSION-x86_64-unknown-linux-musl.tar.gz"
+    - curl --proto '=https' --tlsv1.2 -sSfL -o "$tarball" "https://github.com/EmbarkStudios/cargo-deny/releases/download/$CARGO_DENY_VERSION/$tarball"
+    - echo "$CARGO_DENY_SHA256  $tarball" | sha256sum --check --strict
+    - tar -xzf "$tarball" --strip-components=1 -C /usr/local/bin "cargo-deny-$CARGO_DENY_VERSION-x86_64-unknown-linux-musl/cargo-deny"
+    # `--all-features` so the optional Tree-sitter grammar features are in the
+    # graph; `--workspace` so every `crates/vix-*` member is a root.
+    - cargo deny --workspace --all-features check
 
 test:
   stage: test

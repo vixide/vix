@@ -1,0 +1,58 @@
+# Supply-chain policy for the Vix workspace (tasks.md T003).
+#
+# Checked by `cargo deny --workspace --all-features check`, which runs in CI on
+# every push and pull request and weekly on a schedule (see spec/ci/index.md).
+# Four checks: advisories, licenses, bans, sources.
+
+[advisories]
+# An unpatched RUSTSEC advisory fails the build. When one has no fix yet, add
+# its id here with a dated note rather than lowering the bar globally.
+yanked = "deny"
+ignore = [
+    # 2026-07-26: `paste` is unmaintained (no vulnerability). It is a
+    # build-time proc-macro reached only transitively, and not by a path this
+    # workspace chooses:
+    #   ratatui-image -> icy_sixel -> quantette -> image (default-formats
+    #   enables avif) -> ravif -> rav1e -> paste
+    # Sixel image preview is why ratatui-image is here, so the only ways out
+    # are upstream (rav1e dropping paste) or dropping image preview. Revisit
+    # when ratatui-image or rav1e moves.
+    "RUSTSEC-2024-0436",
+]
+
+[licenses]
+# Vix is offered under "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR
+# GPL-3.0-only" (workspace.package.license). A dependency whose terms are more
+# restrictive than the weakest of those takes that choice away from anyone who
+# ships a build, so the allowance below is permissive licenses only, plus
+# MPL-2.0, whose copyleft is per-file and does not reach the linking crate.
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "NCSA",
+    "Unicode-3.0",
+    "Unlicense",
+    "X11",
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+# Duplicate major versions are allowed but visible: they are how a vulnerable
+# transitive copy survives an upgrade of its sibling.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

@@ -34,7 +34,10 @@ confy = "2.0.0"
 clap = { version = "4.6.1", features = ["derive"] }
 rust-i18n = "4.1.0"
 base64 = "0.22"
-evalexpr = "13"
+# Held at 11.x deliberately: evalexpr 12.0.0 relicensed from MIT to
+# AGPL-3.0-only, which is incompatible with the license Vix offers. Do not
+# bump without replacing the calculator's evaluator — `cargo deny` fails on it.
+evalexpr = "11"
 getrandom = "0.2"
 htmd = "0.5"
 jiff = "0.2"
@@ -53,7 +56,9 @@ serde_yaml = "0.9.34"
 markdown = "1.0.0"
 nix = { version = "0.29", features = ["signal"] }
 qrcode = { version = "0.14", default-features = false }
-portable-pty = "0.8"
+# 0.9 is the floor: 0.8 pulled the unmaintained `serial` crate
+# (RUSTSEC-2017-0008); 0.9 uses `serial2` instead.
+portable-pty = "0.9"
 vt100 = "0.15"
 anyhow = "1.0"
 arboard = { version = "3.6", default-features = false }

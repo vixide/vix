@@ -23,11 +23,11 @@ already said.
 
 ## Files
 
-| Forge    | CI                          | CD                              |
-| -------- | --------------------------- | ------------------------------- |
-| GitHub   | `.github/workflows/ci.yml`  | `.github/workflows/release.yml` |
-| GitLab   | `.gitlab-ci.yml`            | `release` stage of the same file |
-| Codeberg | `.forgejo/workflows/ci.yml` | `.forgejo/workflows/release.yml` |
+| Forge    | CI                          | CD                              | Supply chain                       |
+| -------- | --------------------------- | ------------------------------- | ---------------------------------- |
+| GitHub   | `.github/workflows/ci.yml`  | `.github/workflows/release.yml` | `.github/workflows/security.yml`   |
+| GitLab   | `.gitlab-ci.yml`            | `release` stage of the same file | `deny` job of the same file       |
+| Codeberg | `.forgejo/workflows/ci.yml` | `.forgejo/workflows/release.yml` | `.forgejo/workflows/security.yml` |
 
 When the gate changes, change all four files plus `scripts/check` together.
 They are deliberately duplicated rather than abstracted: each forge's syntax is
@@ -104,6 +104,41 @@ a repository secret `RELEASE_TOKEN` (a personal access token with
 Actions are opt-in per repository: **Settings → Units → Actions** on
 codeberg.org/vixide/vix. Without it, the workflow files are inert.
 
+## Supply chain
+
+`cargo deny --workspace --all-features check` enforces [`deny.toml`](../../deny.toml)
+on every push and pull request, and weekly on all three forges: RUSTSEC
+advisories, an allow-list of licenses, wildcard/duplicate bans, and registry
+sources.
+
+It sits **outside** the gate above, on purpose. `scripts/check` is reproducible
+offline from the lockfile; this is not — the advisory database moves under a
+lockfile that has not changed, so a green run yesterday says nothing about
+today. That is what the weekly schedule is for. It also means a red `deny` run
+is not necessarily a red commit: it is often the world changing, not the tree.
+
+Three details worth knowing before editing those files:
+
+- **`--all-features`** puts the optional Tree-sitter grammar features in the
+  graph. Without it, `syntax-all` grammars are invisible to the scan.
+- **cargo-deny is pinned and checksummed**, not `cargo install`ed: a
+  supply-chain gate should not itself install an unverified binary, and
+  nothing in the job needs compiling. Bump the version and the SHA-256
+  together, on all three forges.
+- **GitLab has no in-YAML cron**, so its weekly run needs a schedule created
+  in the UI (**Build → Pipeline schedules**). The `schedule` entry in
+  `workflow.rules` is what lets such a schedule run at all.
+
+The license allow-list is permissive-only, plus MPL-2.0 (per-file copyleft,
+which does not reach the linking crate). Vix offers itself under
+"Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only", so a
+dependency with stronger terms would quietly take that choice away from anyone
+who ships a build — this check is what makes that visible. Two consequences
+are already recorded in the tree: `evalexpr` is pinned to 11.x because 12.0.0
+relicensed to AGPL-3.0-only, and `RUSTSEC-2024-0436` (`paste`, unmaintained)
+is ignored with a dated note because it arrives through
+`ratatui-image → icy_sixel → quantette → image/avif → rav1e`.
+
 ## Cross-toolchain note
 
 The musl release builds on GitLab and Codeberg override three variables:
@@ -127,8 +162,6 @@ so the three variables are enough. See `spec/rust-cargo-config-toml-musl`.
 Tracked in [`tasks.md`](../../tasks.md):
 
 - **T002** — markdown link checking (`lychee`) alongside the `cargo doc` job.
-- **T003** — `deny.toml` and a `cargo deny check` job (licenses, advisories,
-  duplicate versions).
 
 Spell checking (CSpell, `cspell.json`) is not a CI job yet: the tree still has
 outstanding findings, so it would fail on day one.

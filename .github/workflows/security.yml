@@ -1,0 +1,72 @@
+# Supply-chain gate for GitHub (github.com/vixide/vix).
+#
+# `cargo deny` reads deny.toml and checks the whole dependency graph for
+# RUSTSEC advisories, disallowed licenses, banned or wildcard crates, and
+# untrusted sources.
+#
+# This is deliberately *not* part of the `scripts/check` parity gate in
+# ci.yml. That gate is reproducible offline from the lockfile; this one is
+# not — the advisory database moves under a lockfile that has not changed, so
+# it needs the network, an extra tool, and a schedule of its own.
+#
+# Vix is mirrored to three forges, so this gate exists three times:
+#
+#   GitHub    .github/workflows/security.yml   (this file)
+#   GitLab    .gitlab-ci.yml                   (the `deny` job)
+#   Codeberg  .forgejo/workflows/security.yml
+#
+# Keep them in step — see spec/ci/index.md.
+
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, Monday 02:00 UTC — catches advisories filed after a merge.
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Pinned to a release, and checked against the SHA-256 published beside it,
+  # so the supply-chain gate does not itself install an unverified binary.
+  # Bump both together.
+  CARGO_DENY_VERSION: "0.20.2"
+  CARGO_DENY_SHA256: "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f"
+
+jobs:
+  deny:
+    name: cargo deny (advisories + licenses + bans + sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      # Nothing is compiled here, but `cargo deny` shells out to
+      # `cargo metadata`, so the registry index is the cost worth caching. A
+      # key of its own keeps this job clear of the build matrix's caches.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: cargo-deny
+      - name: Install cargo-deny ${{ env.CARGO_DENY_VERSION }}
+        run: |
+          tarball="cargo-deny-$CARGO_DENY_VERSION-x86_64-unknown-linux-musl.tar.gz"
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$tarball" \
+            "https://github.com/EmbarkStudios/cargo-deny/releases/download/$CARGO_DENY_VERSION/$tarball"
+          echo "$CARGO_DENY_SHA256  $tarball" | sha256sum --check --strict
+          tar -xzf "$tarball" --strip-components=1 -C /usr/local/bin \
+            "cargo-deny-$CARGO_DENY_VERSION-x86_64-unknown-linux-musl/cargo-deny"
+      # `--all-features` so the optional Tree-sitter grammar features are in
+      # the graph; `--workspace` so every `crates/vix-*` member is a root.
+      - name: cargo deny check
+        run: cargo deny --workspace --all-features check

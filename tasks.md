@@ -38,9 +38,17 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   and runs `cargo doc --workspace --no-deps` with warnings denied.
   Partly done: the `cargo doc` half runs with `RUSTDOCFLAGS=-D warnings` on
   all three forges; the lychee link check is still to do.
-- [ ] **T003 — cargo-deny.** Add `deny.toml` (licenses: Apache-2.0/MIT
+- [x] **T003 — cargo-deny.** Add `deny.toml` (licenses: Apache-2.0/MIT
   compatible; advisories; bans on duplicate major versions where feasible)
   and a CI job running `cargo deny check`.
+  Done — `deny.toml` plus a `cargo deny --workspace --all-features check` job
+  on all three forges (`.github/workflows/security.yml`, the `deny` job in
+  `.gitlab-ci.yml`, `.forgejo/workflows/security.yml`), each weekly as well as
+  per push/PR. Getting to green took five dependency fixes: `evalexpr` pinned
+  to 11.x (12.0.0 relicensed to AGPL-3.0-only), `portable-pty` 0.8 → 0.9
+  (drops the unmaintained `serial`), and `anyhow`/`crossbeam-epoch`/`spin`
+  updated off advisories. Duplicate majors are `warn`, not `deny`: 42 of them
+  today, almost all `windows-*`. See `spec/ci/index.md`.
 - [ ] **T004 — TUI snapshot harness.** Add `tests/snapshots.rs` (or a
   `vix-test-support` crate) that boots the App against ratatui
   `TestBackend` at 100×30, feeds scripted key events, and asserts golden
