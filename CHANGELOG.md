@@ -6,6 +6,36 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-07-26
+
+### Fixed
+
+- **`evalexpr` held at 11.x (licensing).** `evalexpr` 12.0.0 relicensed from
+  MIT to AGPL-3.0-only, and Vix 1.4.0 shipped with `evalexpr = "13"`. Vix is
+  offered under "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR
+  GPL-3.0-only", so that dependency took the licensing choice away from anyone
+  distributing a build. The Calculator now uses 11.3.1, the last MIT release;
+  its behaviour and tests are unchanged. **Anyone who built from 1.4.0 should
+  upgrade.**
+- **`portable-pty` 0.8 → 0.9**, which replaces the unmaintained `serial`
+  crate (RUSTSEC-2017-0008) with `serial2`.
+- **`anyhow`, `crossbeam-epoch`, and `spin` updated** off an unsoundness
+  (RUSTSEC-2026-0190), a vulnerability (RUSTSEC-2026-0204), and a yanked
+  release respectively.
+
+### Added
+
+- **Supply-chain gate on all three forges** (T003). `deny.toml` sets the
+  policy — RUSTSEC advisories, a permissive license allow-list, wildcard bans,
+  registry sources — and `cargo deny --workspace --all-features check`
+  enforces it via `.github/workflows/security.yml`, the `deny` job in
+  `.gitlab-ci.yml`, and `.forgejo/workflows/security.yml`, weekly as well as
+  on every push and pull request. It deliberately sits outside the
+  `scripts/check` gate: that one is reproducible offline from the lockfile,
+  while the advisory database moves under a lockfile that has not changed.
+  cargo-deny is pinned and checksummed rather than `cargo install`ed. See
+  `spec/ci/index.md`.
+
 ## [1.4.0] - 2026-07-26
 
 ### Added
