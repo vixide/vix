@@ -405,6 +405,9 @@ fn draw_chooser_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.capture_chooser.is_some() {
         draw_capture_chooser(app, frame, area);
     }
+    if app.refile_chooser.is_some() {
+        draw_refile_chooser(app, frame, area);
+    }
     if app.recent_chooser.is_some() {
         draw_recent_chooser(app, frame, area);
     }
@@ -1807,6 +1810,25 @@ fn draw_capture_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
         frame,
         area,
         &t!("ui.capture_chooser"),
+        &hint,
+        &labels,
+        selected,
+    );
+}
+
+/// The Org refile-target chooser (Org → Edit Structure → Refile Subtree…):
+/// every candidate headline, indented by level.
+fn draw_refile_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(c) = app.refile_chooser.as_ref() else {
+        return;
+    };
+    let selected = c.selected;
+    let labels: Vec<String> = c.targets.iter().map(|(_, l)| l.clone()).collect();
+    let hint = t!("ui.refile_chooser_hint");
+    app.layout.chooser = draw_list_chooser(
+        frame,
+        area,
+        &t!("ui.refile_chooser"),
         &hint,
         &labels,
         selected,
@@ -4735,7 +4757,7 @@ fn draw_db_results(app: &App, frame: &mut Frame, area: Rect) {
                 Some((col, false)) if col == c => "\u{25bc}",
                 _ => "",
             };
-            let text = format!("{marker}{}", &b.grid.headers[c]);
+            let text = format!("{marker}{}", b.grid.headers[c]);
             let style = if c == b.grid.cur_col && focused {
                 theme::selected()
             } else {

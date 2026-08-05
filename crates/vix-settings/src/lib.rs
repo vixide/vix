@@ -151,6 +151,10 @@ pub struct Settings {
     /// Priority given to a headline that had no cookie yet, by **Org →
     /// Priority → Increase/Decrease**.
     pub org_priority_default: char,
+    /// The Org agenda's explicit file list (workspace-relative paths),
+    /// managed by **Org → Agenda → File List**. Empty (the default) means
+    /// every `.org` file in the project — the pre-list behavior.
+    pub org_agenda_files: Vec<String>,
     /// Active time zone as an IANA canonical name (e.g. `"UTC"`,
     /// `"America/New_York"`). Chosen via Tools → Time Zone…; used app-wide
     /// (e.g. the clock panel).
@@ -261,6 +265,7 @@ impl Default for Settings {
             org_priority_highest: '0',
             org_priority_lowest: '9',
             org_priority_default: '0',
+            org_agenda_files: Vec::new(),
             time_zone: "UTC".to_string(),
             restore_session: true,
             sticky_search_highlight: true,

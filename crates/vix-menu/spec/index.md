@@ -49,9 +49,11 @@ The menus, left to right, are
 | *— separator —* | | |
 | Open…        | `Ctrl+O`       | Open an existing file       |
 | Open Recent… | `Ctrl+Shift+O` | Reopen a recently opened file (chooser) |
+| Insert File… | | Insert another file's contents at the cursor |
 | Save         | `Ctrl+S`       | Save the file               |
 | Save As… | `Ctrl+Shift+S` | Save under a different name |
 | Rename…  | | Rename the active file on disk (bare name keeps the directory) |
+| Revert   | | Reload the file from disk, discarding unsaved edits (undoable) |
 | *— separator —* | | |
 | Close    | `Ctrl+W`       | Close the active buffer     |
 | Close All Tabs | | Close every buffer (leaves one empty) |
@@ -304,10 +306,19 @@ The **Branch** submenu:
 ## Org menu
 
 Org-mode editing on the active buffer; see [`org/index.md`](../org/index.md).
-Actions are `org.*`. Capture, Cycle Visibility, Headline ▸ (promote/demote,
-move subtree), Cycle TODO, Toggle Checkbox, Update Statistics, Clock In / Out,
-Agenda, Time Report, Roam ▸ (nodes / backlinks / dailies), Node ▸, Contacts ▸,
-and Export ▸ (Markdown / HTML).
+Actions are `org.*`. Grouped after the Emacs Org menu: Capture ▸, Show/Hide ▸
+(cycle/fold-all/show-all, sparse TODO/match trees), New Heading, Navigate
+Headings ▸, Edit Structure ▸ (promote/demote, move/copy/cut/paste subtree,
+sort children, refile via a headline chooser), Editing ▸ (Emphasis ▸, Insert
+Block ▸, edit source block, footnotes), Archive ▸, Hyperlinks ▸
+(store/insert/follow, next/previous), Cycle TODO, Priority Up/Down, Mark Done
+with Note…, Toggle Checkbox, Update Statistics, Tags & Properties ▸ (set
+tags/property, column view), Dates & Scheduling ▸ (timestamps,
+schedule/deadline, ±1 day), Clock In / Out, Time Tracker, Agenda ▸, Roam ▸
+(nodes / backlinks / dailies), Node ▸, Contacts ▸, Export ▸
+(Markdown / HTML / LaTeX / iCalendar), and Refresh Context. Items bound in
+the Emacs keymap's `C-c` chord family display that chord in the shortcut
+column for reference.
 
 ## Help menu
 

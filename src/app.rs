@@ -117,6 +117,23 @@ pub enum PromptKind {
     ExplorerExclude,
     /// Enter a file path to compare the active buffer against (diff overlay).
     CompareFile,
+    /// Enter a file path whose contents to insert at the cursor.
+    InsertFile,
+    /// Enter a `YYYY-MM-DD` date to set the headline's `SCHEDULED:` entry.
+    OrgSchedule,
+    /// Enter a `YYYY-MM-DD` date to set the headline's `DEADLINE:` entry.
+    OrgDeadline,
+    /// Enter text for an Org sparse tree: subtrees not containing it fold.
+    OrgSparseMatch,
+    /// Enter the target of an Org link to insert (`[[target][description]]`).
+    OrgLinkTarget,
+    /// Enter the description of the Org link being inserted (empty for a bare
+    /// `[[target]]` link).
+    OrgLinkDesc,
+    /// Enter the headline's tags (colon/comma/space separated; empty clears).
+    OrgSetTags,
+    /// Enter `NAME VALUE` for a property to set in the headline's drawer.
+    OrgSetProperty,
     /// Enter a name to save the just-recorded keyboard macro under.
     SaveMacro,
     /// Enter an expression to evaluate in the debugger (REPL).
@@ -896,6 +913,27 @@ pub struct CaptureChooser {
     pub selected: usize,
 }
 
+/// State of a dedicated source-block edit (Org `C-c '`): where the block came
+/// from, so a second `org.edit_src` can write the edited body back.
+struct SrcEdit {
+    /// Path of the source Org buffer (`None` for an untitled one).
+    source: Option<PathBuf>,
+    /// Tab index of the source buffer at entry (fallback for untitled ones).
+    source_index: usize,
+    /// Line of the block's `#+begin_src` fence in the source buffer.
+    begin_line: usize,
+}
+
+/// Org refile-target chooser overlay state (**Org → Edit Structure → Refile
+/// Subtree…**). Lists every headline outside the subtree being moved; Enter
+/// (or a click) refiles under the highlighted one.
+pub struct RefileChooser {
+    /// Candidate targets: `(headline line, indented display label)`.
+    pub targets: Vec<(usize, String)>,
+    /// Index of the highlighted target.
+    pub selected: usize,
+}
+
 /// Rectangles recorded during rendering, used for mouse hit-testing and for
 /// telling the code editor which viewport to scroll within.
 #[derive(Default)]
@@ -1136,6 +1174,8 @@ pub struct App {
     pub location_chooser: Option<LocationChooser>,
     /// Org-capture template chooser overlay, when open.
     pub capture_chooser: Option<CaptureChooser>,
+    /// Org refile-target chooser overlay, when open.
+    pub refile_chooser: Option<RefileChooser>,
     /// State for an in-progress Org-capture wizard, while its prompts are
     /// being answered.
     pending_capture: Option<PendingCapture>,
@@ -1325,6 +1365,20 @@ pub struct App {
     /// Cursor position captured when an LSP rename prompt was opened, used to
     /// send the rename request on submit: `(file, 0-based line, character)`.
     rename_at: Option<(PathBuf, u32, u32)>,
+    /// The last Org link stored with **Org → Hyperlinks → Store Link** (seeds
+    /// the Insert Link… prompt).
+    stored_org_link: Option<String>,
+    /// Org agenda restriction lock (**Org → Agenda → Set Restriction Lock**):
+    /// when set, agenda views scan only this file. Session-only, like Emacs's
+    /// `C-c C-x <`.
+    agenda_restriction: Option<PathBuf>,
+    /// In-progress dedicated source-block edit (Org `C-c '`), if any.
+    src_edit: Option<SrcEdit>,
+    /// Pending third key of an Emacs `C-c C-x …` chord.
+    emacs_c_x_prefix: bool,
+    /// The link target entered in the first Insert Link… prompt, held while the
+    /// description prompt is open.
+    pending_link_target: Option<String>,
     /// Direction of a pending `selectionRange` request (`true` = expand, `false`
     /// = shrink), applied when the response arrives.
     expand_selection_dir: Option<bool>,
@@ -1541,6 +1595,7 @@ impl App {
             recent_chooser: None,
             location_chooser: None,
             capture_chooser: None,
+            refile_chooser: None,
             pending_capture: None,
             capture_review: None,
             nerd_palette: None,
@@ -1625,6 +1680,11 @@ impl App {
             macro_playing: false,
             complete_session: None,
             rename_at: None,
+            stored_org_link: None,
+            agenda_restriction: None,
+            src_edit: None,
+            emacs_c_x_prefix: false,
+            pending_link_target: None,
             expand_selection_dir: None,
             show_inlay_hints: true,
             suspend_requested: false,
@@ -2030,6 +2090,7 @@ impl App {
         panel!(recent_chooser, recent_key);
         panel!(location_chooser, location_key);
         panel!(capture_chooser, capture_chooser_key);
+        panel!(refile_chooser, refile_chooser_key);
         panel!(nerd_palette, nerd_key);
         panel!(ascii_panel, ascii_key);
         panel!(x11_panel, x11_key);
@@ -2193,6 +2254,7 @@ impl App {
                 t!("status.vim_normal").to_string()
             }),
             Keymap::Emacs if self.emacs_prefix => Some("C-x-".to_string()),
+            Keymap::Emacs if self.emacs_c_x_prefix => Some("C-c C-x-".to_string()),
             Keymap::Emacs if self.emacs_c_prefix => Some("C-c-".to_string()),
             Keymap::Spacemacs => Some(if let Some(seq) = &self.spacemacs_leader {
                 format!("SPC {seq}")
@@ -2217,6 +2279,13 @@ impl App {
                     .map(|&(k, a)| (k.to_string(), a.to_string()))
                     .collect();
                 Some(("C-x".to_string(), rows))
+            }
+            Keymap::Emacs if self.emacs_c_x_prefix => {
+                let rows = EMACS_CTRL_C_X
+                    .iter()
+                    .map(|&(k, a)| (k.to_string(), a.to_string()))
+                    .collect();
+                Some(("C-c C-x".to_string(), rows))
             }
             Keymap::Emacs if self.emacs_c_prefix => {
                 let rows = EMACS_CTRL_C
@@ -2637,6 +2706,11 @@ impl App {
             self.emacs_prefix = false;
             return self.emacs_chord_key(key);
         }
+        // Third key of a `Ctrl+C Ctrl+X …` chord (the extended Org family).
+        if self.emacs_c_x_prefix {
+            self.emacs_c_x_prefix = false;
+            return self.emacs_c_x_chord_key(key);
+        }
         // Second key of a `Ctrl+C …` chord (the Org command family).
         if self.emacs_c_prefix {
             self.emacs_c_prefix = false;
@@ -2716,24 +2790,56 @@ impl App {
     /// (toggle a checkbox / refresh statistics).
     fn emacs_c_chord_key(&mut self, key: KeyEvent) -> bool {
         let universal = std::mem::take(&mut self.emacs_universal);
-        if Self::ctrl(&key)
-            && let KeyCode::Char(c) = key.code
-        {
-            match c.to_ascii_lowercase() {
-                't' => {
-                    self.run_action(if universal {
-                        "org.close_note"
-                    } else {
-                        "org.cycle_todo"
-                    });
-                }
-                'c' => self.run_action("org.ctrl_c_ctrl_c"),
-                _ => self.status = t!("status.emacs_no_chord").to_string(),
-            }
+        let KeyCode::Char(c) = key.code else {
+            self.status = t!("status.emacs_no_chord").to_string();
+            return true;
+        };
+        // `C-c C-x` opens the third-key chord family.
+        if Self::ctrl(&key) && c.eq_ignore_ascii_case(&'x') {
+            self.emacs_c_x_prefix = true;
             return true;
         }
-        self.status = t!("status.emacs_no_chord").to_string();
+        let pressed = Self::chord_key_name(&key, c);
+        if pressed == "C-t" {
+            // The universal-argument variant closes with a note.
+            self.run_action(if universal {
+                "org.close_note"
+            } else {
+                "org.cycle_todo"
+            });
+            return true;
+        }
+        if let Some(&(_, action)) = EMACS_CTRL_C.iter().find(|&&(k, _)| k == pressed) {
+            self.run_action(action);
+        } else {
+            self.status = t!("status.emacs_no_chord").to_string();
+        }
         true
+    }
+
+    /// Third key of an Emacs `Ctrl+C Ctrl+X …` chord (the extended Org family).
+    fn emacs_c_x_chord_key(&mut self, key: KeyEvent) -> bool {
+        let KeyCode::Char(c) = key.code else {
+            self.status = t!("status.emacs_no_chord").to_string();
+            return true;
+        };
+        let pressed = Self::chord_key_name(&key, c);
+        if let Some(&(_, action)) = EMACS_CTRL_C_X.iter().find(|&&(k, _)| k == pressed) {
+            self.run_action(action);
+        } else {
+            self.status = t!("status.emacs_no_chord").to_string();
+        }
+        true
+    }
+
+    /// The chord-table name of a pressed key: `C-<char>` with Ctrl held, the
+    /// bare char otherwise.
+    fn chord_key_name(key: &KeyEvent, c: char) -> String {
+        if Self::ctrl(key) {
+            format!("C-{}", c.to_ascii_lowercase())
+        } else {
+            c.to_string()
+        }
     }
 
     /// Emacs `Meta` (Alt) bindings. Returns true if consumed; unbound Alt keys
@@ -3011,6 +3117,7 @@ impl App {
                 self.prompt = Some(Prompt::new(PromptKind::Open, t!("prompt.open").to_string()));
             }
             "file.open_recent" => self.open_recent_chooser(),
+            "file.insert_file" => self.open_insert_file_prompt(),
             "file.switch_project" => self.open_workspace_chooser(),
             "workspace.open" => self.prompt_workspace(PromptKind::WorkspaceOpen),
             "workspace.save" => self.prompt_workspace(PromptKind::WorkspaceSave),
@@ -3035,6 +3142,7 @@ impl App {
                 );
             }
             "file.rename" => self.open_rename_prompt(),
+            "file.revert" => self.revert_active(),
             "file.close" => self.request_close_active(),
             "file.close_all" => {
                 for p in self.editor.close_all() {
@@ -4594,7 +4702,74 @@ impl App {
                 ));
             }
             "org.time_report" => self.org_time_report(),
-            _ => return self.roam_action(action),
+            _ => return self.org_edit_action(action) || self.roam_action(action),
+        }
+        true
+    }
+
+    /// Dispatch the Org structure / date / link / tag editing actions (the
+    /// Emacs Org-menu parity set). Returns `true` if `action` was handled.
+    /// Extracted to keep [`App::org_action`] within the line limit.
+    fn org_edit_action(&mut self, action: &str) -> bool {
+        match action {
+            "org.new_heading" => self.org_new_heading(),
+            "org.nav.up" => self.org_goto(crate::org::nav_parent),
+            "org.nav.next" => self.org_goto(crate::org::nav_next),
+            "org.nav.previous" => self.org_goto(crate::org::nav_prev),
+            "org.nav.forward" => self.org_goto(crate::org::nav_forward_same),
+            "org.nav.backward" => self.org_goto(crate::org::nav_backward_same),
+            "org.subtree.copy" => self.org_subtree_clip(false),
+            "org.subtree.cut" => self.org_subtree_clip(true),
+            "org.subtree.paste" => self.org_paste_subtree(),
+            "org.sort_children" => self.org_rewrite_line(crate::org::sort_children),
+            "org.refile" => self.open_refile_chooser(),
+            "org.sparse.todo" => self.org_sparse_todo(),
+            "org.sparse.match" => {
+                if self.editor.active_tab().is_some() {
+                    self.prompt = Some(Prompt::new(
+                        PromptKind::OrgSparseMatch,
+                        t!("prompt.org_sparse_match").to_string(),
+                    ));
+                }
+            }
+            "org.footnote" => self.org_footnote(),
+            "org.edit_src" => self.org_edit_src(),
+            "org.column_view" => self.org_export(crate::org::column_view, "org"),
+            "org.archive.subtree" => self.org_archive_subtree(),
+            "org.archive.tag" => {
+                self.org_rewrite_line(|t, l| crate::org::toggle_tag(t, l, "ARCHIVE"));
+            }
+            "org.set_tags" => self.org_set_tags_prompt(),
+            "org.set_property" => {
+                if self.editor.active_tab().is_some() {
+                    self.prompt = Some(Prompt::new(
+                        PromptKind::OrgSetProperty,
+                        t!("prompt.org_set_property").to_string(),
+                    ));
+                }
+            }
+            "org.timestamp" => self.org_insert_timestamp(true),
+            "org.timestamp_inactive" => self.org_insert_timestamp(false),
+            "org.schedule" => self.org_plan_prompt(PromptKind::OrgSchedule),
+            "org.deadline" => self.org_plan_prompt(PromptKind::OrgDeadline),
+            "org.date_up" => self.org_shift_date(1),
+            "org.date_down" => self.org_shift_date(-1),
+            "org.agenda.lock" => self.org_agenda_lock(),
+            "org.agenda.unlock" => self.org_agenda_unlock(),
+            "org.agenda.file_add" => self.org_agenda_file_add(),
+            "org.agenda.file_remove" => self.org_agenda_file_remove(),
+            "org.agenda.file_clear" => self.org_agenda_file_clear(),
+            "org.agenda.file_list" => self.org_agenda_file_show(),
+            "org.link.store" => self.org_store_link(),
+            "org.link.insert" => self.org_insert_link_prompt(),
+            "org.link.follow" => self.org_follow_link(),
+            "org.link.next" => self.org_goto_link(true),
+            "org.link.prev" => self.org_goto_link(false),
+            "org.export_latex" => self.org_export(crate::org::to_latex, "tex"),
+            "org.export_ics" => self.org_export_ics(),
+            a if a.starts_with("org.emphasis.") => return self.org_emphasis(a),
+            a if a.starts_with("org.block.") => return self.org_insert_block(a),
+            _ => return false,
         }
         true
     }
@@ -4882,13 +5057,757 @@ impl App {
     }
 
     /// Export the active buffer with `f` into a new untitled tab named with `ext`.
-    fn org_export(&mut self, f: fn(&str) -> String, ext: &str) {
+    fn org_export(&mut self, f: impl Fn(&str) -> String, ext: &str) {
         let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else {
             return;
         };
         let converted = f(&text);
         self.editor.new_tab_with_content(&converted);
         self.status = t!("status.org_exported", ext = ext).to_string();
+    }
+
+    /// Export the active buffer's `SCHEDULED:`/`DEADLINE:` entries as an
+    /// iCalendar document in a new tab (Org → Export → iCalendar).
+    fn org_export_ics(&mut self) {
+        let name = self.active_tab_name();
+        let now = jiff::Timestamp::now()
+            .strftime("%Y%m%dT%H%M%SZ")
+            .to_string();
+        self.org_export(move |t| crate::org::to_ics(t, &name, &now), "ics");
+    }
+
+    // ----- Org structure / dates / links (Emacs Org-menu parity) ----------
+
+    /// Insert a sibling headline below the cursor line (Org `M-RET`), leaving
+    /// the cursor after its stars, ready for the title.
+    fn org_new_heading(&mut self) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        let (new, new_line) = crate::org::new_heading(&text, line);
+        let offset = new
+            .split('\n')
+            .take(new_line)
+            .map(|l| l.chars().count() + 1)
+            .sum::<usize>()
+            + new.split('\n').nth(new_line).map_or(0, |l| l.chars().count());
+        tab.editor.set_content(&new);
+        tab.editor.set_cursor(offset);
+        tab.dirty = true;
+    }
+
+    /// Move the cursor to the headline chosen by an `org.nav.*` motion, with a
+    /// status note when there is no heading that way.
+    fn org_goto(&mut self, f: fn(&str, usize) -> Option<usize>) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        if let Some(target) = f(&text, line) {
+            tab.editor.set_cursor_line(target);
+        } else {
+            self.status = t!("status.org_no_heading").to_string();
+        }
+    }
+
+    /// Copy — or with `cut`, remove — the subtree governing the cursor to the
+    /// system clipboard (Org `C-c C-x M-w` / `C-c C-x C-w`).
+    fn org_subtree_clip(&mut self, cut: bool) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        let Some((start, end)) = crate::org::governing_subtree(&text, line) else {
+            self.status = t!("status.org_not_headline").to_string();
+            return;
+        };
+        let lines: Vec<&str> = text.split('\n').collect();
+        let _ = vix_clipboard::set(&format!("{}\n", lines[start..end].join("\n")));
+        if cut {
+            let rest: Vec<&str> = lines
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| !(start..end).contains(i))
+                .map(|(_, s)| *s)
+                .collect();
+            tab.editor.set_content(&rest.join("\n"));
+            tab.editor
+                .set_cursor_line(start.min(rest.len().saturating_sub(1)));
+            tab.dirty = true;
+            self.status = t!("status.org_subtree_cut").to_string();
+        } else {
+            self.status = t!("status.org_subtree_copied").to_string();
+        }
+    }
+
+    /// Paste the clipboard as a sibling of the subtree governing the cursor
+    /// (Org `C-c C-x C-y`), releveled to match.
+    fn org_paste_subtree(&mut self) {
+        let clip = vix_clipboard::get().unwrap_or_default();
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        if let Some((new, new_line)) = crate::org::paste_subtree(&text, line, &clip) {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(new_line);
+            tab.dirty = true;
+        } else {
+            self.status = t!("status.org_no_subtree_clip").to_string();
+        }
+    }
+
+    /// Open the refile-target chooser (Org `C-c C-w`): every headline outside
+    /// the subtree being moved, indented by level.
+    fn open_refile_chooser(&mut self) {
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        let Some((start, end)) = crate::org::governing_subtree(&text, line) else {
+            self.status = t!("status.org_not_headline").to_string();
+            return;
+        };
+        let targets: Vec<(usize, String)> = crate::org::headlines(&text)
+            .into_iter()
+            .filter(|(l, _, _)| !(start..end).contains(l))
+            .map(|(l, level, title)| (l, format!("{}{title}", "  ".repeat(level - 1))))
+            .collect();
+        if targets.is_empty() {
+            self.status = t!("status.org_no_refile_target").to_string();
+            return;
+        }
+        self.refile_chooser = Some(RefileChooser {
+            targets,
+            selected: 0,
+        });
+    }
+
+    fn refile_chooser_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => {
+                if let Some(c) = self.refile_chooser.as_mut() {
+                    let n = c.targets.len();
+                    c.selected = (c.selected + n - 1) % n;
+                }
+            }
+            KeyCode::Down => {
+                if let Some(c) = self.refile_chooser.as_mut() {
+                    c.selected = (c.selected + 1) % c.targets.len();
+                }
+            }
+            KeyCode::Enter => self.accept_refile_chooser(),
+            KeyCode::Esc => {
+                self.refile_chooser = None;
+            }
+            _ => {}
+        }
+    }
+
+    fn refile_chooser_mouse(&mut self, mouse: MouseEvent) {
+        if let Some(idx) = self.chooser_row(mouse)
+            && let Some(c) = self.refile_chooser.as_mut()
+            && idx < c.targets.len()
+        {
+            c.selected = idx;
+            self.accept_refile_chooser();
+        }
+    }
+
+    /// Refile the subtree under the chooser's highlighted headline.
+    fn accept_refile_chooser(&mut self) {
+        let Some(c) = self.refile_chooser.take() else {
+            return;
+        };
+        let Some(&(target, _)) = c.targets.get(c.selected) else {
+            return;
+        };
+        self.org_refile_apply(target);
+    }
+
+    /// Move the subtree at the cursor to the end of the subtree at
+    /// `target_line`, like Org `C-c C-w`.
+    fn org_refile_apply(&mut self, target_line: usize) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        if let Some((new, new_line)) = crate::org::refile(&text, line, target_line) {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(new_line);
+            tab.dirty = true;
+            self.status = t!("status.org_refiled").to_string();
+        } else {
+            self.status = t!("status.org_no_refile_target").to_string();
+        }
+    }
+
+    /// Fold the buffer into a sparse tree showing only TODO entries
+    /// (Org `C-c / t`).
+    fn org_sparse_todo(&mut self) {
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
+        let folds = crate::org::todo_tree_folds(&tab.editor.get_content());
+        self.org_apply_sparse(&folds);
+    }
+
+    /// Fold the buffer into a sparse tree showing only subtrees containing
+    /// `query` (Org `C-c /`'s occur view).
+    fn org_sparse_match(&mut self, query: &str) {
+        if query.is_empty() {
+            return;
+        }
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
+        let folds = crate::org::occur_folds(&tab.editor.get_content(), query);
+        self.org_apply_sparse(&folds);
+    }
+
+    /// Apply sparse-tree `folds` (clearing existing folds first) and report
+    /// how many subtrees were hidden. Show All (`editor.unfold_all`) clears.
+    fn org_apply_sparse(&mut self, folds: &[(usize, usize)]) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        tab.editor.unfold_all();
+        for &(start, end) in folds {
+            tab.editor.toggle_manual_fold(start, end);
+        }
+        self.status = t!("status.org_sparse", count = folds.len()).to_string();
+    }
+
+    /// Org `C-c '`: with the cursor in a `#+begin_src` block, open its body in
+    /// a dedicated tab; from that tab, the same action writes the (possibly
+    /// edited) body back into the block and closes the tab. Switching to a
+    /// file-backed tab first abandons the pending edit.
+    fn org_edit_src(&mut self) {
+        if self.src_edit.is_some() && self.editor.active_tab().is_some_and(|t| t.path.is_none()) {
+            self.org_edit_src_finish();
+            return;
+        }
+        self.src_edit = None; // any stale session is abandoned
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        let Some((begin, end, _lang)) = crate::org::src_block_at(&text, line) else {
+            self.status = t!("status.org_no_src_block").to_string();
+            return;
+        };
+        let body: Vec<&str> = text
+            .split('\n')
+            .skip(begin + 1)
+            .take(end - begin - 1)
+            .collect();
+        self.src_edit = Some(SrcEdit {
+            source: tab.path.clone(),
+            source_index: self.editor.active,
+            begin_line: begin,
+        });
+        self.editor
+            .new_tab_with_content(&format!("{}\n", body.join("\n")));
+        self.focus = Focus::Editor;
+        self.status = t!("status.org_src_editing").to_string();
+    }
+
+    /// Write the dedicated-buffer body back into its source block, close the
+    /// dedicated tab, and return to the source buffer.
+    fn org_edit_src_finish(&mut self) {
+        let Some(se) = self.src_edit.take() else {
+            return;
+        };
+        let Some(body) = self.editor.active_tab().map(crate::editor::Tab::text) else {
+            return;
+        };
+        let _ = self.editor.close_active();
+        // Locate the source tab again: by path when saved, else by its index.
+        let idx = se
+            .source
+            .as_ref()
+            .and_then(|p| self.editor.tabs.iter().position(|t| t.path.as_ref() == Some(p)))
+            .or_else(|| (se.source_index < self.editor.tabs.len()).then_some(se.source_index));
+        let Some(idx) = idx else {
+            self.status = t!("status.org_src_gone").to_string();
+            return;
+        };
+        self.editor.active = idx;
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let text = tab.editor.get_content();
+        if let Some(new) = crate::org::replace_src_body(&text, se.begin_line, &body) {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(se.begin_line);
+            tab.dirty = true;
+            self.status = t!("status.org_src_applied").to_string();
+        } else {
+            self.status = t!("status.org_src_gone").to_string();
+        }
+        self.focus = Focus::Editor;
+    }
+
+    /// Org's footnote action (`C-c C-x f`): jump reference ⇄ definition, or
+    /// create the next numbered footnote at the cursor.
+    fn org_footnote(&mut self) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let cursor = tab.editor.get_cursor();
+        let text = tab.editor.get_content();
+        let (new, pos) = crate::org::footnote(&text, cursor);
+        if new != text {
+            tab.editor.set_content(&new);
+            tab.dirty = true;
+        }
+        tab.editor.set_cursor(pos);
+    }
+
+    /// Follow an `id:` link: open the project `.org` file whose `:ID:`
+    /// property matches, at its headline.
+    fn org_follow_id(&mut self, id: &str) {
+        for path in self.file_index.clone() {
+            if !path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("org"))
+            {
+                continue;
+            }
+            let Ok(content) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            if let Some(line) = crate::org::id_location(&content, id) {
+                self.with_jump(|s| {
+                    s.open_path(&path, false);
+                    if let Some(tab) = s.editor.active_tab_mut() {
+                        tab.editor.set_cursor_line(line);
+                    }
+                    s.focus = Focus::Editor;
+                });
+                return;
+            }
+        }
+        self.status = t!("status.org_no_link_target").to_string();
+    }
+
+    /// Move the subtree at the cursor into the sibling `<file>_archive` file
+    /// (Org's default archive location), stamped with `:ARCHIVE_TIME:`.
+    fn org_archive_subtree(&mut self) {
+        let Some(path) = self.editor.active_tab().and_then(|t| t.path.clone()) else {
+            self.status = t!("status.org_archive_unsaved").to_string();
+            return;
+        };
+        let now = Self::org_timestamp();
+        let (line, text) = match self.editor.active_tab() {
+            Some(t) => (t.editor.cursor_line(), t.editor.get_content()),
+            None => return,
+        };
+        let Some((rest, block)) = crate::org::archive_subtree(&text, line, &now) else {
+            self.status = t!("status.org_not_headline").to_string();
+            return;
+        };
+        let mut archive = path.into_os_string();
+        archive.push("_archive");
+        let archive = PathBuf::from(archive);
+        let mut existing = std::fs::read_to_string(&archive).unwrap_or_default();
+        if !existing.is_empty() && !existing.ends_with('\n') {
+            existing.push('\n');
+        }
+        existing.push_str(&block);
+        existing.push('\n');
+        if let Err(e) = std::fs::write(&archive, existing) {
+            self.messages
+                .error(t!("msg.save_failed", error = e).to_string());
+            return;
+        }
+        if let Some(tab) = self.editor.active_tab_mut() {
+            let target = line.min(rest.split('\n').count().saturating_sub(1));
+            tab.editor.set_content(&rest);
+            tab.editor.set_cursor_line(target);
+            tab.dirty = true;
+        }
+        self.status = t!("status.org_archived", path = archive.display()).to_string();
+    }
+
+    /// Open the Set Tags… prompt seeded with the governing headline's tags.
+    fn org_set_tags_prompt(&mut self) {
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
+        let seed = crate::org::get_tags(&tab.editor.get_content(), tab.editor.cursor_line())
+            .unwrap_or_default();
+        self.prompt = Some(
+            Prompt::new(PromptKind::OrgSetTags, t!("prompt.org_set_tags").to_string())
+                .with_input(seed),
+        );
+    }
+
+    /// Apply the Set Tags… prompt: replace the governing headline's tags.
+    fn org_set_tags(&mut self, tags: &str) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        if let Some(new) = crate::org::set_tags(&text, line, tags) {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(line);
+            tab.dirty = true;
+        } else {
+            self.status = t!("status.org_not_headline").to_string();
+        }
+    }
+
+    /// Apply the Set Property… prompt (`NAME VALUE`) to the governing
+    /// headline's `:PROPERTIES:` drawer.
+    fn org_set_property(&mut self, input: &str) {
+        let (name, value) = input
+            .split_once(char::is_whitespace)
+            .unwrap_or((input, ""));
+        if name.is_empty() {
+            return;
+        }
+        let (name, value) = (name.trim().to_string(), value.trim().to_string());
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        if let Some(new) = crate::org::set_property(&text, line, &name, &value) {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(line);
+            tab.dirty = true;
+        } else {
+            self.status = t!("status.org_not_headline").to_string();
+        }
+    }
+
+    /// Insert an active `<…>` or inactive `[…]` timestamp for today at the
+    /// cursor (Org `C-c .` / `C-c !`).
+    fn org_insert_timestamp(&mut self, active: bool) {
+        let today = jiff::Zoned::now().strftime("%Y-%m-%d").to_string();
+        if let Some(stamp) = crate::org::timestamp_for(&today, active) {
+            self.insert_content(&stamp);
+        }
+    }
+
+    /// Open the Schedule…/Deadline… date prompt seeded with today.
+    fn org_plan_prompt(&mut self, kind: PromptKind) {
+        if self.editor.active_tab().is_none() {
+            return;
+        }
+        let key = if matches!(kind, PromptKind::OrgSchedule) {
+            "prompt.org_schedule"
+        } else {
+            "prompt.org_deadline"
+        };
+        let today = jiff::Zoned::now().strftime("%Y-%m-%d").to_string();
+        self.prompt = Some(Prompt::new(kind, t!(key).to_string()).with_input(today));
+    }
+
+    /// Apply a Schedule…/Deadline… prompt: set the governing headline's
+    /// planning entry to the entered date.
+    fn org_plan(&mut self, keyword: &str, date: &str) {
+        let Some(stamp) = crate::org::timestamp_for(date, true) else {
+            self.status = t!("status.org_bad_date").to_string();
+            return;
+        };
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        if let Some(new) = crate::org::plan(&text, line, keyword, &stamp) {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(line);
+            tab.dirty = true;
+        } else {
+            self.status = t!("status.org_not_headline").to_string();
+        }
+    }
+
+    /// Shift the date under the cursor by `delta` days, rewriting its weekday
+    /// (Org `S-↑`/`S-↓` on a timestamp).
+    fn org_shift_date(&mut self, delta: i64) {
+        self.rewrite_at_cursor(
+            move |t, c| crate::org::shift_timestamp_at(t, c, delta),
+            Some("status.org_no_timestamp"),
+        );
+    }
+
+    /// The active file's workspace-relative path (the form stored in the
+    /// agenda file list), or `None` with a status note for an unsaved buffer.
+    fn active_rel_path(&mut self) -> Option<String> {
+        let Some(path) = self.active_path() else {
+            self.status = t!("status.org_archive_unsaved").to_string();
+            return None;
+        };
+        Some(
+            path.strip_prefix(&self.root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .into_owned(),
+        )
+    }
+
+    /// Lock the agenda to the active file (Org `C-c C-x <`). Session-only;
+    /// while locked, every agenda view scans just this file.
+    fn org_agenda_lock(&mut self) {
+        let Some(path) = self.active_path() else {
+            self.status = t!("status.org_archive_unsaved").to_string();
+            return;
+        };
+        let rel = path
+            .strip_prefix(&self.root)
+            .unwrap_or(&path)
+            .display()
+            .to_string();
+        self.status = t!("status.org_agenda_locked", path = rel).to_string();
+        self.agenda_restriction = Some(path);
+    }
+
+    /// Remove the agenda restriction lock (Org `C-c C-x >`).
+    fn org_agenda_unlock(&mut self) {
+        self.agenda_restriction = None;
+        self.status = t!("status.org_agenda_unlocked").to_string();
+    }
+
+    /// Add the active file to the persisted agenda file list.
+    fn org_agenda_file_add(&mut self) {
+        let Some(rel) = self.active_rel_path() else {
+            return;
+        };
+        if self.settings.org_agenda_files.contains(&rel) {
+            self.status = t!("status.org_agenda_file_present", path = rel).to_string();
+            return;
+        }
+        self.settings.org_agenda_files.push(rel.clone());
+        let _ = self.settings.save();
+        self.status = t!("status.org_agenda_file_added", path = rel).to_string();
+    }
+
+    /// Remove the active file from the persisted agenda file list.
+    fn org_agenda_file_remove(&mut self) {
+        let Some(rel) = self.active_rel_path() else {
+            return;
+        };
+        let before = self.settings.org_agenda_files.len();
+        self.settings.org_agenda_files.retain(|p| p != &rel);
+        if self.settings.org_agenda_files.len() == before {
+            self.status = t!("status.org_agenda_file_absent", path = rel).to_string();
+        } else {
+            let _ = self.settings.save();
+            self.status = t!("status.org_agenda_file_removed", path = rel).to_string();
+        }
+    }
+
+    /// Clear the agenda file list, restoring the every-project-file default.
+    fn org_agenda_file_clear(&mut self) {
+        self.settings.org_agenda_files.clear();
+        let _ = self.settings.save();
+        self.status = t!("status.org_agenda_files_cleared").to_string();
+    }
+
+    /// Show the agenda's current scope in the status bar: the restriction
+    /// lock, the explicit file list, or the all-project-files default.
+    fn org_agenda_file_show(&mut self) {
+        if let Some(locked) = self.agenda_restriction.clone() {
+            let rel = locked
+                .strip_prefix(&self.root)
+                .unwrap_or(&locked)
+                .display()
+                .to_string();
+            self.status = t!("status.org_agenda_locked", path = rel).to_string();
+        } else if self.settings.org_agenda_files.is_empty() {
+            self.status = t!("status.org_agenda_files_all").to_string();
+        } else {
+            self.status = t!(
+                "status.org_agenda_files_list",
+                files = self.settings.org_agenda_files.join(", ")
+            )
+            .to_string();
+        }
+    }
+
+    /// Store an Org link to the cursor's file and line (Org `C-c l`); it seeds
+    /// the next Insert Link… prompt.
+    fn org_store_link(&mut self) {
+        let Some(path) = self.active_path() else {
+            self.status = t!("status.org_archive_unsaved").to_string();
+            return;
+        };
+        let line = self
+            .editor
+            .active_tab()
+            .map_or(0, |t| t.editor.cursor_line());
+        let rel = path
+            .strip_prefix(&self.root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .into_owned();
+        let stored = format!("[[file:{rel}::{}][{rel}:{}]]", line + 1, line + 1);
+        self.status = t!("status.org_link_stored", link = stored.clone()).to_string();
+        self.stored_org_link = Some(stored);
+    }
+
+    /// Open the Insert Link… target prompt, seeded with the stored link.
+    fn org_insert_link_prompt(&mut self) {
+        if self.editor.active_tab().is_none() {
+            return;
+        }
+        let seed = self.stored_org_link.clone().unwrap_or_default();
+        self.prompt = Some(
+            Prompt::new(
+                PromptKind::OrgLinkTarget,
+                t!("prompt.org_link_target").to_string(),
+            )
+            .with_input(seed),
+        );
+    }
+
+    /// Insert the pending `[[target][description]]` link at the cursor (the
+    /// second half of Insert Link…; empty description gives `[[target]]`).
+    fn org_insert_link(&mut self, desc: &str) {
+        let Some(target) = self.pending_link_target.take() else {
+            return;
+        };
+        let link = if desc.is_empty() {
+            format!("[[{target}]]")
+        } else {
+            format!("[[{target}][{desc}]]")
+        };
+        self.insert_content(&link);
+    }
+
+    /// Move the cursor to the next/previous Org link in the buffer.
+    fn org_goto_link(&mut self, forward: bool) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let cursor = tab.editor.get_cursor();
+        let text = tab.editor.get_content();
+        if let Some(pos) = crate::org::link_pos(&text, cursor, forward) {
+            tab.editor.set_cursor(pos);
+        } else {
+            self.status = t!("status.org_no_link").to_string();
+        }
+    }
+
+    /// Follow the Org link under the cursor (Org `C-c C-o`): open `file:` links
+    /// in the editor (honoring a `::line` suffix), copy web/mail URLs to the
+    /// clipboard (a TUI has no browser), and jump to a matching headline for
+    /// internal `*Headline` targets.
+    fn org_follow_link(&mut self) {
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
+        let cursor = tab.editor.get_cursor();
+        let text = tab.editor.get_content();
+        let Some((target, _)) = crate::org::link_at(&text, cursor) else {
+            self.status = t!("status.org_no_link").to_string();
+            return;
+        };
+        if target.starts_with("http://")
+            || target.starts_with("https://")
+            || target.starts_with("mailto:")
+        {
+            let _ = vix_clipboard::set(&target);
+            self.status = t!("status.org_link_copied", url = target).to_string();
+        } else if let Some(id) = target.strip_prefix("id:") {
+            let id = id.to_string();
+            self.org_follow_id(&id);
+        } else if let Some(rest) = target.strip_prefix("file:") {
+            let (path, line_no) = rest
+                .split_once("::")
+                .map_or((rest, None), |(p, n)| (p, n.parse::<usize>().ok()));
+            let path = self.resolve(path);
+            self.with_jump(|s| {
+                s.open_path(&path, false);
+                if let Some(n) = line_no {
+                    let area = s.editor_view();
+                    s.editor.goto(n, None, area);
+                }
+                s.focus = Focus::Editor;
+            });
+        } else {
+            let name = target.trim_start_matches('*').trim().to_lowercase();
+            let hit = crate::org::headlines(&text)
+                .into_iter()
+                .find(|(_, _, title)| title.to_lowercase().contains(&name))
+                .map(|(l, _, _)| l);
+            if let Some(l) = hit {
+                if let Some(tab) = self.editor.active_tab_mut() {
+                    tab.editor.set_cursor_line(l);
+                }
+            } else {
+                self.status = t!("status.org_no_link_target").to_string();
+            }
+        }
+    }
+
+    /// Wrap the selection in an Org emphasis marker pair for `org.emphasis.*`
+    /// (Org `C-c C-x C-f`). Returns `true` if `action` matched.
+    fn org_emphasis(&mut self, action: &str) -> bool {
+        let marker = match action {
+            "org.emphasis.bold" => "*",
+            "org.emphasis.italic" => "/",
+            "org.emphasis.underline" => "_",
+            "org.emphasis.code" => "~",
+            "org.emphasis.verbatim" => "=",
+            "org.emphasis.strike" => "+",
+            _ => return false,
+        };
+        self.toggle_wrap(marker, marker);
+        true
+    }
+
+    /// Dispatch a submitted Org prompt (schedule / deadline / refile / link /
+    /// tags / property). Extracted to keep [`App::accept_prompt`] within the
+    /// line limit.
+    fn accept_org_prompt(&mut self, kind: PromptKind, input: &str) {
+        match kind {
+            PromptKind::OrgSchedule => self.org_plan("SCHEDULED", input),
+            PromptKind::OrgDeadline => self.org_plan("DEADLINE", input),
+            PromptKind::OrgSparseMatch => self.org_sparse_match(input),
+            PromptKind::OrgLinkTarget => {
+                if !input.is_empty() {
+                    self.pending_link_target = Some(input.to_string());
+                    self.prompt = Some(Prompt::new(
+                        PromptKind::OrgLinkDesc,
+                        t!("prompt.org_link_desc").to_string(),
+                    ));
+                }
+            }
+            PromptKind::OrgLinkDesc => self.org_insert_link(input),
+            PromptKind::OrgSetTags => self.org_set_tags(input),
+            PromptKind::OrgSetProperty => self.org_set_property(input),
+            _ => {}
+        }
+    }
+
+    /// Insert an empty `#+begin_…`/`#+end_…` block at the cursor for
+    /// `org.block.*` (Org `C-c C-,`). Returns `true` if `action` matched.
+    fn org_insert_block(&mut self, action: &str) -> bool {
+        let kind = match action {
+            "org.block.src" => "src",
+            "org.block.example" => "example",
+            "org.block.quote" => "quote",
+            "org.block.center" => "center",
+            "org.block.verse" => "verse",
+            "org.block.comment" => "comment",
+            _ => return false,
+        };
+        self.insert_content(&format!("#+begin_{kind}\n\n#+end_{kind}\n"));
+        true
     }
 
     /// Start capturing with the `org_capture_templates` entry whose `key`
@@ -5230,19 +6149,35 @@ impl App {
     /// Gather every project `.org` file as `(absolute path, display name,
     /// contents)`, skipping any that fail to read. Shared by the agenda builder.
     fn org_agenda_files(&self) -> Vec<(PathBuf, String, String)> {
+        // Scope: the restriction lock wins, then the explicit agenda file
+        // list, else every project `.org` file.
+        let paths: Vec<PathBuf> = if let Some(locked) = &self.agenda_restriction {
+            vec![locked.clone()]
+        } else if self.settings.org_agenda_files.is_empty() {
+            self.file_index
+                .iter()
+                .filter(|p| {
+                    p.extension()
+                        .is_some_and(|e| e.eq_ignore_ascii_case("org"))
+                })
+                .cloned()
+                .collect()
+        } else {
+            self.settings
+                .org_agenda_files
+                .iter()
+                .map(|p| self.resolve(p))
+                .collect()
+        };
         let mut out = Vec::new();
-        for path in &self.file_index {
-            if path
-                .extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case("org"))
-                && let Ok(content) = std::fs::read_to_string(path)
-            {
+        for path in paths {
+            if let Ok(content) = std::fs::read_to_string(&path) {
                 let name = path
                     .strip_prefix(&self.root)
-                    .unwrap_or(path)
+                    .unwrap_or(&path)
                     .to_string_lossy()
                     .into_owned();
-                out.push((path.clone(), name, content));
+                out.push((path, name, content));
             }
         }
         out
@@ -8578,6 +9513,65 @@ impl App {
         });
     }
 
+    // ----- Insert File / Revert -------------------------------------------
+
+    /// Prompt for a file whose contents to insert at the cursor.
+    fn open_insert_file_prompt(&mut self) {
+        if self.editor.active_tab().is_none() {
+            return;
+        }
+        self.prompt = Some(Prompt::new(
+            PromptKind::InsertFile,
+            t!("prompt.insert_file").to_string(),
+        ));
+    }
+
+    /// Insert the contents of the file at `input` (resolved relative to the
+    /// workspace root) into the active buffer at the cursor.
+    fn insert_file_at_cursor(&mut self, input: &str) {
+        if input.is_empty() {
+            return;
+        }
+        let path = self.resolve(input);
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            self.messages
+                .error(t!("msg.open_failed", error = path.display()).to_string());
+            return;
+        };
+        let area = self.layout.editor;
+        if self.editor.insert_str(&text, area) {
+            self.status = t!("status.inserted_file", path = path.display()).to_string();
+        }
+    }
+
+    /// Revert the active buffer to its on-disk contents, discarding unsaved
+    /// edits. The reload is a single undo step, so a mistaken revert can be
+    /// undone; the cursor stays where it still fits.
+    fn revert_active(&mut self) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        if tab.is_image() {
+            return;
+        }
+        let Some(path) = tab.path.clone() else {
+            self.status = t!("status.revert_no_file").to_string();
+            return;
+        };
+        match std::fs::read_to_string(&path) {
+            Ok(content) => {
+                let cursor = tab.editor.get_cursor();
+                tab.editor.set_content(&content);
+                tab.editor.set_cursor(cursor.min(content.chars().count()));
+                tab.dirty = false;
+                self.status = t!("status.reverted", path = path.display()).to_string();
+            }
+            Err(e) => self
+                .messages
+                .error(t!("msg.open_failed", error = e).to_string()),
+        }
+    }
+
     fn diff_view_key(&mut self, key: KeyEvent) {
         let page = self.layout.editor.height.max(1) as usize;
         match key.code {
@@ -10807,6 +11801,7 @@ impl App {
         panel!(recent_chooser, recent_mouse);
         panel!(location_chooser, location_mouse);
         panel!(capture_chooser, capture_chooser_mouse);
+        panel!(refile_chooser, refile_chooser_mouse);
         panel!(nerd_palette, nerd_mouse);
         panel!(ascii_panel, ascii_mouse);
         panel!(x11_panel, x11_mouse);
@@ -11959,6 +12954,12 @@ impl App {
                     add(
                         Self::action_title(action),
                         format!("Ctrl C {}", emacs_key_display(k)),
+                    );
+                }
+                for (k, action) in EMACS_CTRL_C_X {
+                    add(
+                        Self::action_title(action),
+                        format!("Ctrl C Ctrl X {}", emacs_key_display(k)),
                     );
                 }
             }
@@ -17032,6 +18033,16 @@ impl App {
                 self.explorer.set_filter(&include, prompt.input.trim());
             }
             PromptKind::CompareFile => self.open_diff_with(prompt.input.trim()),
+            PromptKind::InsertFile => self.insert_file_at_cursor(prompt.input.trim()),
+            PromptKind::OrgSchedule
+            | PromptKind::OrgDeadline
+            | PromptKind::OrgSparseMatch
+            | PromptKind::OrgLinkTarget
+            | PromptKind::OrgLinkDesc
+            | PromptKind::OrgSetTags
+            | PromptKind::OrgSetProperty => {
+                self.accept_org_prompt(prompt.kind, prompt.input.trim());
+            }
             PromptKind::SaveMacro => self.save_macro(prompt.input.trim()),
             // A closing note may be empty (mark DONE + CLOSED with no LOGBOOK
             // entry), so it is dispatched outside the "non-empty" roam group.
@@ -17575,10 +18586,41 @@ const EMACS_CTRL_X: &[(&str, &str)] = &[
     ("1", "view.unsplit"),
 ];
 
-/// The Emacs `Ctrl+C` chord table — the Org command family. `C-u C-c C-t` (close
-/// with a note) is a universal-argument variant of `C-c C-t`, not a distinct
-/// chord, so it is not listed separately.
-const EMACS_CTRL_C: &[(&str, &str)] = &[("C-t", "org.cycle_todo"), ("C-c", "org.ctrl_c_ctrl_c")];
+/// The Emacs `Ctrl+C` chord table — the Org command family, matching the
+/// Emacs Org bindings. `C-u C-c C-t` (close with a note) is a
+/// universal-argument variant of `C-c C-t`, not a distinct chord, so it is not
+/// listed separately. `C-x` continues into [`EMACS_CTRL_C_X`].
+const EMACS_CTRL_C: &[(&str, &str)] = &[
+    ("C-t", "org.cycle_todo"),
+    ("C-c", "org.ctrl_c_ctrl_c"),
+    ("C-s", "org.schedule"),
+    ("C-d", "org.deadline"),
+    ("C-w", "org.refile"),
+    ("C-q", "org.set_tags"),
+    ("C-o", "org.link.follow"),
+    ("C-l", "org.link.insert"),
+    ("l", "org.link.store"),
+    ("a", "org.agenda"),
+    (".", "org.timestamp"),
+    ("!", "org.timestamp_inactive"),
+    ("'", "org.edit_src"),
+    ("/", "org.sparse.match"),
+];
+
+/// The Emacs `Ctrl+C Ctrl+X` chord table — the extended Org command family.
+/// (`C-i` arrives as Tab in some terminals; the menu covers those cases.)
+const EMACS_CTRL_C_X: &[(&str, &str)] = &[
+    ("f", "org.footnote"),
+    ("a", "org.archive.tag"),
+    ("<", "org.agenda.lock"),
+    (">", "org.agenda.unlock"),
+    ("C-s", "org.archive.subtree"),
+    ("C-c", "org.column_view"),
+    ("C-i", "org.clock_in"),
+    ("C-o", "org.clock_out"),
+    ("C-w", "org.subtree.cut"),
+    ("C-y", "org.subtree.paste"),
+];
 
 /// A short jump label for index `i`: `a`..`z`, then `aa`, `ab`, … (base-26 over
 /// lowercase letters), so early lines get single-key labels.
@@ -18263,6 +19305,292 @@ mod tests {
             "clean buffer reloaded: {text:?}"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn revert_discards_unsaved_edits() {
+        let dir = std::env::temp_dir().join(format!("vix-revert-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("note.txt");
+        std::fs::write(&path, "original\n").unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.open_path(&path, false);
+        let area = app.layout.editor;
+        app.editor.insert_str("edited ", area);
+        assert!(app.editor.active_tab().unwrap().dirty);
+
+        app.run_action("file.revert");
+        let tab = app.editor.active_tab().unwrap();
+        assert_eq!(tab.text(), "original\n", "buffer reverted to disk contents");
+        assert!(!tab.dirty, "reverted buffer is clean");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn insert_file_inserts_contents_at_cursor() {
+        let dir = std::env::temp_dir().join(format!("vix-insfile-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("snippet.txt"), "SNIPPET\n").unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.run_action("file.insert_file");
+        let prompt = app.prompt.take().expect("insert-file prompt opened");
+        assert!(matches!(prompt.kind, PromptKind::InsertFile));
+
+        // Accept the prompt with a workspace-relative path.
+        app.insert_file_at_cursor("snippet.txt");
+        let text = app.editor.active_tab().unwrap().text();
+        assert!(text.contains("SNIPPET"), "file contents inserted: {text:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn org_schedule_tags_property_and_date_shift() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor.new_tab_with_content("* One\nbody\n* Two\n");
+        app.org_plan("SCHEDULED", "2026-08-05");
+        let text = app.editor.active_tab().unwrap().text();
+        assert!(text.contains("* One\nSCHEDULED: <2026-08-05 Wed>"), "{text:?}");
+
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_cursor_line(1); // onto the planning line
+        }
+        app.run_action("org.date_up");
+        let text = app.editor.active_tab().unwrap().text();
+        assert!(text.contains("SCHEDULED: <2026-08-06 Thu>"), "{text:?}");
+
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_cursor_line(0);
+        }
+        app.org_set_tags("work urgent");
+        app.org_set_property("Effort 2h");
+        let text = app.editor.active_tab().unwrap().text();
+        assert!(text.contains("* One :work:urgent:"), "{text:?}");
+        assert!(
+            text.contains(":PROPERTIES:\n:Effort: 2h\n:END:"),
+            "{text:?}"
+        );
+        // An invalid date is refused with a status note, not applied.
+        app.org_plan("DEADLINE", "not-a-date");
+        assert!(!app.editor.active_tab().unwrap().text().contains("DEADLINE"));
+    }
+
+    #[test]
+    fn org_new_heading_and_navigation() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor.new_tab_with_content("* One\nbody\n** Child\n* Two\n");
+        app.run_action("org.new_heading");
+        let text = app.editor.active_tab().unwrap().text();
+        assert_eq!(text.split('\n').nth(1), Some("* "), "sibling inserted");
+
+        app.run_action("org.nav.next");
+        let line = app.editor.active_tab().unwrap().editor.cursor_line();
+        assert_eq!(line, 3, "next heading is the child");
+        app.run_action("org.nav.up");
+        let line = app.editor.active_tab().unwrap().editor.cursor_line();
+        assert_eq!(line, 1, "up goes to the parent headline");
+    }
+
+    #[test]
+    fn org_refile_chooser_moves_subtree_under_target() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor.new_tab_with_content("* One\n** Task\nbody\n* Two\n");
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_cursor_line(1);
+        }
+        app.run_action("org.refile");
+        let chooser = app.refile_chooser.as_ref().expect("chooser opened");
+        // Candidates exclude the subtree being moved.
+        let labels: Vec<&str> = chooser.targets.iter().map(|(_, l)| l.as_str()).collect();
+        assert_eq!(labels, ["One", "Two"], "source subtree excluded");
+        app.refile_chooser_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        app.refile_chooser_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(app.refile_chooser.is_none(), "chooser closed");
+        let text = app.editor.active_tab().unwrap().text();
+        let two = text.find("* Two").expect("target present");
+        let task = text.find("** Task").expect("subtree present");
+        assert!(task > two, "task refiled under Two: {text:?}");
+    }
+
+    #[test]
+    fn org_sparse_todo_folds_non_matching_subtrees() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor
+            .new_tab_with_content("* TODO Ship\nbody\n* Notes\nplain\n");
+        app.run_action("org.sparse.todo");
+        let tab = app.editor.active_tab().unwrap();
+        assert!(!tab.editor.is_line_hidden(1), "TODO body visible");
+        assert!(tab.editor.is_line_hidden(3), "non-TODO body hidden");
+        // Show All clears the sparse tree.
+        app.run_action("editor.unfold_all");
+        let tab = app.editor.active_tab().unwrap();
+        assert!(!tab.editor.is_line_hidden(3));
+    }
+
+    #[test]
+    fn org_footnote_roundtrip_in_buffer() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor.new_tab_with_content("some text\n");
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_cursor(4);
+        }
+        app.run_action("org.footnote");
+        let text = app.editor.active_tab().unwrap().text();
+        assert!(text.starts_with("some[fn:1] text"), "{text:?}");
+        assert!(text.contains("* Footnotes"), "{text:?}");
+        // From the reference, the action jumps to the definition line.
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_cursor(5); // inside "[fn:1]"
+        }
+        app.run_action("org.footnote");
+        let tab = app.editor.active_tab().unwrap();
+        let line = tab.editor.cursor_line();
+        let def_line = tab
+            .text()
+            .split('\n')
+            .position(|l| l.starts_with("[fn:1]"))
+            .expect("definition line");
+        assert_eq!(line, def_line, "jumped to the definition");
+    }
+
+    #[test]
+    fn org_follow_internal_link_jumps_to_headline() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor.new_tab_with_content("[[*Two][go]]\n* One\n* Two\n");
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_cursor(2); // inside the link
+        }
+        app.run_action("org.link.follow");
+        let line = app.editor.active_tab().unwrap().editor.cursor_line();
+        assert_eq!(line, 2, "cursor jumped to the Two headline");
+    }
+
+    #[test]
+    fn org_agenda_scoping_by_file_list_and_lock() {
+        let dir = std::env::temp_dir().join(format!("vix-agenda-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.org"), "* TODO Alpha\n").unwrap();
+        std::fs::write(dir.join("b.org"), "* TODO Beta\n").unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.build_file_index();
+
+        // Default scope: every project .org file.
+        assert_eq!(app.org_agenda_files().len(), 2);
+
+        // An explicit file list narrows the scope.
+        app.settings.org_agenda_files = vec!["a.org".to_string()];
+        let files = app.org_agenda_files();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].1.ends_with("a.org"), "{:?}", files[0].1);
+
+        // The restriction lock wins over the list.
+        app.open_path(&dir.join("b.org"), false);
+        app.run_action("org.agenda.lock");
+        let files = app.org_agenda_files();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].1.ends_with("b.org"), "{:?}", files[0].1);
+
+        // Unlocking falls back to the file list.
+        app.run_action("org.agenda.unlock");
+        let files = app.org_agenda_files();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].1.ends_with("a.org"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn org_edit_src_roundtrip_applies_edited_body() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor
+            .new_tab_with_content("* H\n#+begin_src rust\nlet x = 1;\n#+end_src\n");
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_cursor_line(2);
+        }
+        let tabs_before = app.editor.tabs.len();
+        app.run_action("org.edit_src");
+        assert_eq!(app.editor.tabs.len(), tabs_before + 1, "dedicated tab");
+        assert_eq!(
+            app.editor.active_tab().unwrap().text(),
+            "let x = 1;\n",
+            "body extracted"
+        );
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_content("let x = 2;\n");
+        }
+        app.run_action("org.edit_src");
+        assert_eq!(app.editor.tabs.len(), tabs_before, "dedicated tab closed");
+        let text = app.editor.active_tab().unwrap().text();
+        assert!(
+            text.contains("#+begin_src rust\nlet x = 2;\n#+end_src"),
+            "body written back: {text:?}"
+        );
+    }
+
+    #[test]
+    fn org_column_view_opens_table_tab() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor
+            .new_tab_with_content("* TODO [#1] Ship :work:\n** Sub\n");
+        app.run_action("org.column_view");
+        let table = app.editor.active_tab().unwrap().text();
+        assert!(table.starts_with("| ITEM | TODO | PRIORITY | TAGS |"));
+        assert!(table.contains("| Ship | TODO | [#1] | :work: |"), "{table:?}");
+    }
+
+    #[test]
+    fn emacs_c_c_x_chords_dispatch_extended_org_family() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor.new_tab_with_content("* Task\n");
+        // `C-c C-x` arms the third-key prefix instead of dispatching.
+        assert!(app.emacs_c_chord_key(KeyEvent::new(
+            KeyCode::Char('x'),
+            KeyModifiers::CONTROL
+        )));
+        assert!(app.emacs_c_x_prefix, "C-c C-x arms the extended family");
+        app.emacs_c_x_prefix = false;
+        // `C-c C-x a` toggles the ARCHIVE tag.
+        assert!(app.emacs_c_x_chord_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE)));
+        let text = app.editor.active_tab().unwrap().text();
+        assert!(text.contains(":ARCHIVE:"), "{text:?}");
+        // `C-c .` (a non-ctrl second key) inserts a timestamp.
+        assert!(app.emacs_c_chord_key(KeyEvent::new(KeyCode::Char('.'), KeyModifiers::NONE)));
+        let text = app.editor.active_tab().unwrap().text();
+        assert!(text.contains('<') && text.contains('>'), "{text:?}");
+    }
+
+    #[test]
+    fn org_block_insert_and_latex_export() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor.new_tab_with_content("* Title\n");
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_cursor(8); // end of buffer
+        }
+        app.run_action("org.block.src");
+        let text = app.editor.active_tab().unwrap().text();
+        assert!(text.contains("#+begin_src\n\n#+end_src"), "{text:?}");
+
+        app.run_action("org.export_latex");
+        let exported = app.editor.active_tab().unwrap().text();
+        assert!(exported.contains(r"\section{Title}"), "{exported:?}");
+        assert!(exported.contains(r"\begin{document}"));
     }
 
     #[test]

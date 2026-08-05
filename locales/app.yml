@@ -1355,6 +1355,8 @@ menu.item.file.switch_project:
   bn: "প্রকল্প পরিবর্তন…"
   zh: "切换项目…"
   ja: "プロジェクトを切り替え…"
+menu.item.file.insert:
+  en: "Insert File…"
 menu.item.file.workspace_open:
   en: "Open Workspace from File…"
 menu.item.file.workspace_save:
@@ -1411,6 +1413,8 @@ menu.item.file.rename:
   bn: "নাম পরিবর্তন…"
   zh: "重命名…"
   ja: "名前を変更…"
+menu.item.file.revert:
+  en: "Revert"
 menu.item.file.close:
   en: "Close"
   es: "Cerrar"
@@ -4088,8 +4092,128 @@ menu.item.tools.insert.block.verse:
   en: "Verse"
 menu.item.org.cycle_visibility:
   en: "Cycle Visibility (Fold)"
+menu.item.org.showhide:
+  en: "Show/Hide"
+menu.item.org.fold_all:
+  en: "Overview (Fold All)"
+menu.item.org.show_all:
+  en: "Show All"
+menu.item.org.sparse_todo:
+  en: "Sparse TODO Tree"
+menu.item.org.sparse_todo.help:
+  en: "Fold every subtree without a TODO entry; Show All clears it."
+menu.item.org.sparse_match:
+  en: "Sparse Tree Match…"
+menu.item.org.sparse_match.help:
+  en: "Fold every subtree not containing the entered text; Show All clears it."
+menu.item.org.edit_src:
+  en: "Edit Source Block"
+menu.item.org.edit_src.help:
+  en: "Open the source block's body in a dedicated tab; run again there to apply it back."
+menu.item.org.column_view:
+  en: "Column View"
+menu.item.org.column_view.help:
+  en: "Tabulate every headline's TODO state, priority, and tags in a new tab."
+menu.item.org.footnote:
+  en: "Footnote New/Jump"
+menu.item.org.footnote.help:
+  en: "On a footnote reference jump to its definition (and back); elsewhere insert a new footnote."
+menu.item.org.new_heading:
+  en: "New Heading"
+menu.item.org.navigate:
+  en: "Navigate Headings"
+menu.item.org.nav.up:
+  en: "Up to Parent"
+menu.item.org.nav.previous:
+  en: "Previous Heading"
+menu.item.org.nav.next:
+  en: "Next Heading"
+menu.item.org.nav.backward:
+  en: "Previous Same Level"
+menu.item.org.nav.forward:
+  en: "Next Same Level"
 menu.item.org.headline:
-  en: "Headline"
+  en: "Edit Structure"
+menu.item.org.subtree_copy:
+  en: "Copy Subtree"
+menu.item.org.subtree_cut:
+  en: "Cut Subtree"
+menu.item.org.subtree_paste:
+  en: "Paste Subtree"
+menu.item.org.sort_children:
+  en: "Sort Children"
+menu.item.org.refile:
+  en: "Refile Subtree…"
+menu.item.org.editing:
+  en: "Editing"
+menu.item.org.emphasis:
+  en: "Emphasis"
+menu.item.org.emphasis.bold:
+  en: "Bold"
+menu.item.org.emphasis.italic:
+  en: "Italic"
+menu.item.org.emphasis.underline:
+  en: "Underline"
+menu.item.org.emphasis.code:
+  en: "Code"
+menu.item.org.emphasis.verbatim:
+  en: "Verbatim"
+menu.item.org.emphasis.strike:
+  en: "Strikethrough"
+menu.item.org.block:
+  en: "Insert Block"
+menu.item.org.block.src:
+  en: "Source"
+menu.item.org.block.example:
+  en: "Example"
+menu.item.org.block.quote:
+  en: "Quote"
+menu.item.org.block.center:
+  en: "Center"
+menu.item.org.block.verse:
+  en: "Verse"
+menu.item.org.block.comment:
+  en: "Comment"
+menu.item.org.archive:
+  en: "Archive"
+menu.item.org.archive.subtree:
+  en: "Archive Subtree to File"
+menu.item.org.archive.tag:
+  en: "Toggle ARCHIVE Tag"
+menu.item.org.links:
+  en: "Hyperlinks"
+menu.item.org.links.store:
+  en: "Store Link to Here"
+menu.item.org.links.insert:
+  en: "Insert Link…"
+menu.item.org.links.follow:
+  en: "Follow Link"
+menu.item.org.links.next:
+  en: "Next Link"
+menu.item.org.links.prev:
+  en: "Previous Link"
+menu.item.org.tags_props:
+  en: "Tags & Properties"
+menu.item.org.set_tags:
+  en: "Set Tags…"
+menu.item.org.set_property:
+  en: "Set Property…"
+menu.item.org.dates:
+  en: "Dates & Scheduling"
+menu.item.org.dates.timestamp:
+  en: "Insert Timestamp"
+menu.item.org.dates.timestamp_inactive:
+  en: "Insert Inactive Timestamp"
+menu.item.org.dates.schedule:
+  en: "Schedule Item…"
+menu.item.org.dates.deadline:
+  en: "Deadline…"
+menu.item.org.dates.up:
+  en: "Date 1 Day Later"
+menu.item.org.dates.down:
+  en: "Date 1 Day Earlier"
+menu.item.org.refresh:
+  en: "Refresh Context"
 menu.item.org.promote:
   en: "Promote"
 menu.item.org.demote:
@@ -4140,10 +4264,44 @@ menu.item.org.agenda.search:
   en: "Search…"
 menu.item.org.agenda.stuck:
   en: "Stuck Projects"
+menu.item.org.agenda.lock:
+  en: "Set Restriction Lock (This File)"
+menu.item.org.agenda.lock.help:
+  en: "Restrict every agenda view to the current file until the lock is removed."
+menu.item.org.agenda.unlock:
+  en: "Remove Restriction Lock"
+menu.item.org.agenda.files:
+  en: "File List for Agenda"
+menu.item.org.agenda.files.help:
+  en: "Choose which files the agenda scans; an empty list means every .org file in the project."
+menu.item.org.agenda.file_add:
+  en: "Add Current File"
+menu.item.org.agenda.file_remove:
+  en: "Remove Current File"
+menu.item.org.agenda.file_clear:
+  en: "Clear List (All Project Files)"
+menu.item.org.agenda.file_list:
+  en: "Show Scope"
 menu.item.org.time_report:
   en: "Time Tracker"
 menu.item.org.export:
   en: "Export"
+menu.item.org.export.markdown:
+  en: "Markdown"
+menu.item.org.export.markdown.help:
+  en: "Convert the Org document to Markdown in a new tab."
+menu.item.org.export.html:
+  en: "HTML"
+menu.item.org.export.html.help:
+  en: "Convert the Org document to a standalone HTML page in a new tab."
+menu.item.org.export.latex:
+  en: "LaTeX"
+menu.item.org.export.latex.help:
+  en: "Convert the Org document to a standalone LaTeX article in a new tab."
+menu.item.org.export.ics:
+  en: "iCalendar"
+menu.item.org.export.ics.help:
+  en: "Export SCHEDULED and DEADLINE entries as iCalendar events in a new tab."
 menu.item.org.roam:
   en: "Roam"
 menu.item.org.roam.node_find:
@@ -7917,6 +8075,10 @@ ui.locations_hint:
   pt: "↑↓ selecionar   Enter ir   Esc cancelar"
   ru: "↑↓ выбрать   Enter перейти   Esc отмена"
   zh: "↑↓ 选择   Enter 跳转   Esc 取消"
+ui.refile_chooser:
+  en: "Refile Subtree To"
+ui.refile_chooser_hint:
+  en: "↑↓ select   Enter refile   Esc cancel"
 ui.capture_chooser:
   en: "Org Capture"
 ui.capture_chooser_hint:
@@ -10903,6 +11065,8 @@ prompt.save_macro:
   bn: "ম্যাক্রো সংরক্ষণ করুন"
   zh: "宏另存为"
   ja: "マクロに名前を付けて保存"
+prompt.insert_file:
+  en: "Insert file"
 prompt.compare_file:
   en: "Compare with file"
   es: "Comparar con archivo"
@@ -12383,6 +12547,76 @@ status.tests_done:
   bn: "টেস্ট: %{pass} পাস, %{fail} ব্যর্থ, %{ignore} উপেক্ষিত"
   zh: "测试：%{pass} 通过，%{fail} 失败，%{ignore} 忽略"
   ja: "テスト: %{pass} 成功、%{fail} 失敗、%{ignore} 無視"
+prompt.org_schedule:
+  en: "Schedule date (YYYY-MM-DD)"
+prompt.org_deadline:
+  en: "Deadline date (YYYY-MM-DD)"
+prompt.org_sparse_match:
+  en: "Sparse tree: show subtrees containing"
+prompt.org_link_target:
+  en: "Link target"
+prompt.org_link_desc:
+  en: "Link description (empty for a bare link)"
+prompt.org_set_tags:
+  en: "Tags (colon separated; empty clears)"
+prompt.org_set_property:
+  en: "Property (NAME VALUE)"
+status.org_agenda_locked:
+  en: "Agenda locked to %{path}"
+status.org_agenda_unlocked:
+  en: "Agenda restriction removed"
+status.org_agenda_file_added:
+  en: "Added %{path} to the agenda files"
+status.org_agenda_file_present:
+  en: "%{path} is already an agenda file"
+status.org_agenda_file_removed:
+  en: "Removed %{path} from the agenda files"
+status.org_agenda_file_absent:
+  en: "%{path} is not in the agenda file list"
+status.org_agenda_files_cleared:
+  en: "Agenda file list cleared (all project files)"
+status.org_agenda_files_all:
+  en: "Agenda scope: every .org file in the project"
+status.org_agenda_files_list:
+  en: "Agenda files: %{files}"
+status.org_no_src_block:
+  en: "Not inside a source block"
+status.org_src_editing:
+  en: "Editing source block — run Edit Source Block (C-c ') again to apply"
+status.org_src_applied:
+  en: "Source block updated"
+status.org_src_gone:
+  en: "Source block not found; edit discarded"
+status.org_no_heading:
+  en: "No heading that way"
+status.org_subtree_copied:
+  en: "Subtree copied"
+status.org_subtree_cut:
+  en: "Subtree cut"
+status.org_no_subtree_clip:
+  en: "Clipboard does not start with an Org headline"
+status.org_refiled:
+  en: "Subtree refiled"
+status.org_sparse:
+  en: "Sparse tree: %{count} subtree(s) folded"
+status.org_no_refile_target:
+  en: "No matching headline to refile under"
+status.org_archived:
+  en: "Archived to %{path}"
+status.org_archive_unsaved:
+  en: "Save the file first"
+status.org_bad_date:
+  en: "Invalid date (expected YYYY-MM-DD)"
+status.org_no_timestamp:
+  en: "No date at the cursor"
+status.org_link_stored:
+  en: "Stored %{link}"
+status.org_no_link:
+  en: "No link at the cursor"
+status.org_link_copied:
+  en: "Copied %{url} to the clipboard"
+status.org_no_link_target:
+  en: "No matching headline for that link"
 status.org_not_headline:
   en: "Not on an Org headline"
   es: "No está en un encabezado de Org"
@@ -14189,6 +14423,12 @@ msg.unknown_action:
   bn: "অজানা কর্ম: %{action}"
   zh: "未知操作：%{action}"
   ja: "不明なアクション: %{action}"
+status.inserted_file:
+  en: "Inserted %{path}"
+status.reverted:
+  en: "Reverted %{path}"
+status.revert_no_file:
+  en: "No file to revert"
 msg.external_change_unsaved:
   en: "%{path} changed on disk; your unsaved edits were kept"
 status.reloaded_external:
@@ -17628,6 +17868,10 @@ menu.item.file.rename.help:
   bn: "ডিস্কে বর্তমান ফাইলের নাম পরিবর্তন করে।"
   zh: "重命名磁盘上的当前文件。"
   ja: "ディスク上の現在のファイル名を変更します。"
+menu.item.file.insert.help:
+  en: "Insert another file's contents at the cursor."
+menu.item.file.revert.help:
+  en: "Reload the file from disk, discarding unsaved edits (undoable)."
 menu.item.file.close.help:
   en: "Close the current tab."
   es: "Cierra la pestaña actual."

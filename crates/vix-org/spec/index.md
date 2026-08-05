@@ -46,23 +46,78 @@ The **Org** menu (`Alt+O`):
 | Capture → Note… | `org.capture.note` | Run the built-in `"n"` template: prompt for note text, insert `* <note>` plus a `%U` creation timestamp at the cursor. |
 | Capture → Task… | `org.capture.task` | Run the built-in `"t"` template: open a multiline review buffer pre-filled with `* TODO ` (Alt+Enter = newline), insert its (possibly edited) text verbatim at the cursor. |
 | Capture → Choose Template… | `org.capture.select` | Open a chooser listing every configured template; Enter runs the highlighted one (see below). |
-| Cycle Visibility (Fold) | `org.cycle_visibility` | Fold/unfold at the cursor (reuses the editor fold toggle). |
-| Headline → Promote | `org.promote` | Remove one `*` from every headline in the subtree (refused at level 1). |
-| Headline → Demote | `org.demote` | Add one `*` to every headline in the subtree. |
-| Headline → Move Subtree Up | `org.move_up` | Swap the subtree with the previous sibling. |
-| Headline → Move Subtree Down | `org.move_down` | Swap the subtree with the next sibling. |
+| Show/Hide → Cycle Visibility (Fold) | `org.cycle_visibility` | Fold/unfold at the cursor (reuses the editor fold toggle). |
+| Show/Hide → Overview (Fold All) | `editor.fold_all` | Fold every foldable range (the editor's fold-all). |
+| Show/Hide → Show All | `editor.unfold_all` | Unfold everything (also clears a sparse tree). |
+| Show/Hide → Sparse TODO Tree | `org.sparse.todo` | Fold every subtree containing no `TODO` headline down to its headline (Org `C-c / t`). Single-line subtrees keep their headline visible — the fold engine hides bodies, not headers. |
+| Show/Hide → Sparse Tree Match… | `org.sparse.match` | Prompt for text; fold every subtree not containing it, case-insensitive (Org's occur view). |
+| New Heading | `org.new_heading` | Insert a sibling headline below the cursor line (same level as the governing headline; level 1 outside any subtree), cursor after the stars. |
+| Navigate Headings → Up to Parent | `org.nav.up` | From a body, the governing headline; from a headline, its parent. |
+| Navigate Headings → Previous/Next Heading | `org.nav.previous` / `org.nav.next` | The adjacent headline at any level. |
+| Navigate Headings → Previous/Next Same Level | `org.nav.backward` / `org.nav.forward` | The adjacent sibling headline, stopping at the parent boundary. |
+| Edit Structure → Promote | `org.promote` | Remove one `*` from every headline in the subtree (refused at level 1). |
+| Edit Structure → Demote | `org.demote` | Add one `*` to every headline in the subtree. |
+| Edit Structure → Move Subtree Up | `org.move_up` | Swap the subtree with the previous sibling. |
+| Edit Structure → Move Subtree Down | `org.move_down` | Swap the subtree with the next sibling. |
+| Edit Structure → Copy/Cut Subtree | `org.subtree.copy` / `org.subtree.cut` | Copy the subtree governing the cursor to the system clipboard (cut also removes it). |
+| Edit Structure → Paste Subtree | `org.subtree.paste` | Paste the clipboard as a sibling of the subtree at the cursor, releveled to match; refused when the clipboard does not start with a headline. |
+| Edit Structure → Sort Children | `org.sort_children` | Sort the subtree's direct children alphabetically (top-level trees when outside any subtree). |
+| Edit Structure → Refile Subtree… | `org.refile` | Open a chooser listing every headline outside the subtree being moved (indented by level; ↑↓/click + Enter); the subtree moves under the chosen target, releveled one deeper. |
+| Editing → Emphasis → * | `org.emphasis.*` | Wrap the selection in the Org marker pair: bold `*`, italic `/`, underline `_`, code `~`, verbatim `=`, strikethrough `+` (reuses the surround toggle). |
+| Editing → Insert Block → * | `org.block.*` | Insert an empty `#+begin_<kind>`/`#+end_<kind>` block: src, example, quote, center, verse, comment. |
+| Editing → Edit Source Block | `org.edit_src` | Org `C-c '`: with the cursor in a `#+begin_src` block, open its body in a dedicated tab; the same action there writes the edited body back into the block (re-validating the fence line) and closes the tab. Switching to a file-backed tab first abandons the pending edit. |
+| Editing → Footnote New/Jump | `org.footnote` | Org `C-c C-x f`, all three behaviors: on a `[fn:x]` reference jump to its definition; on a definition line jump back to the first reference; elsewhere insert the next numbered reference and append its definition under a `* Footnotes` headline (created when missing). |
+| Archive → Archive Subtree to File | `org.archive.subtree` | Move the subtree into the sibling `<file>_archive` file (created/appended), promoted to level 1 and stamped with an `:ARCHIVE_TIME:` property. Needs a saved file. |
+| Archive → Toggle ARCHIVE Tag | `org.archive.tag` | Add/remove the `:ARCHIVE:` tag on the governing headline. |
+| Hyperlinks → Store Link to Here | `org.link.store` | Remember a `[[file:rel::line][rel:line]]` link to the cursor; it seeds the next Insert Link… prompt. |
+| Hyperlinks → Insert Link… | `org.link.insert` | Prompt for target then description, insert `[[target][description]]` (bare `[[target]]` when the description is empty). |
+| Hyperlinks → Follow Link | `org.link.follow` | Open `file:` links in the editor (honoring a `::line` suffix), copy `http(s):`/`mailto:` URLs to the clipboard (a TUI has no browser), resolve `id:` links by scanning project `.org` files for the matching `:ID:` property (opens that file at its headline), and jump to the matching headline for internal `*Headline` targets. |
+| Hyperlinks → Next/Previous Link | `org.link.next` / `org.link.prev` | Move the cursor to the adjacent `[[…]]` link in the buffer. |
 | Cycle TODO | `org.cycle_todo` | Cycle the headline keyword: none → `TODO` → `DONE` → none. |
 | Priority Up | `org.priority.up` | Move the headline's `[#X]` priority cookie one step toward `org_priority_highest` (setting no cookie yet → `org_priority_default`; clamped at `org_priority_highest`, no wraparound). |
 | Priority Down | `org.priority.down` | Same, toward `org_priority_lowest`. |
 | Mark Done with Note… | `org.close_note` | Prompt for a closing note (multiline; Alt+Enter = newline), then mark the headline `DONE`, stamp `CLOSED: [now]` under it, and log the note into its `:LOGBOOK:` drawer. |
 | Toggle Checkbox | `org.toggle_checkbox` | Toggle a list item's `[ ]` ⇄ `[x]`. |
 | Update Statistics | `org.update_statistics` | Recompute every checkbox parent state and `[/]`/`[%]` cookie in the buffer. |
+| Tags & Properties → Set Tags… | `org.set_tags` | Prompt (seeded with the current tags) and replace the governing headline's trailing `:tag:tag:` group; empty input clears them. |
+| Tags & Properties → Set Property… | `org.set_property` | Prompt for `NAME VALUE`; create or update the `:NAME:` line in the headline's `:PROPERTIES:` drawer (created after any planning line when missing). |
+| Tags & Properties → Column View | `org.column_view` | Org `C-c C-x C-c`, read-only flavor: tabulate every headline (ITEM indented by level, TODO, PRIORITY, TAGS) as an Org table in a new tab. |
+| Dates & Scheduling → Insert Timestamp | `org.timestamp` / `org.timestamp_inactive` | Insert `<today Dow>` (active) or `[today Dow]` (inactive) at the cursor. |
+| Dates & Scheduling → Schedule Item… / Deadline… | `org.schedule` / `org.deadline` | Prompt for a `YYYY-MM-DD` date (seeded with today) and set the headline's `SCHEDULED:`/`DEADLINE:` entry — replacing it on an existing planning line, appending there, or inserting a planning line after the headline. |
+| Dates & Scheduling → Date 1 Day Later/Earlier | `org.date_up` / `org.date_down` | Shift the date under the cursor by ±1 day, rewriting its weekday. |
 | Clock In | `org.clock_in` | Insert an open `CLOCK: [now]` entry at the cursor (local time). |
 | Clock Out | `org.clock_out` | Close the most recent open `CLOCK:` entry with the end time and `=> H:MM` duration. |
 | Agenda → * | (submenu) | The built-in agenda views (see below). |
 | Time Tracker | `org.time_report` | Sum each headline's `CLOCK:` durations in the active buffer into a time-report table. |
 | Export → Markdown | `org.export_markdown` | Convert the buffer to Markdown in a new tab. |
 | Export → HTML | `org.export_html` | Convert the buffer to a standalone HTML document in a new tab. |
+| Export → LaTeX | `org.export_latex` | Convert the buffer to a standalone LaTeX article in a new tab (sections, itemize lists, verbatim blocks, `\href` links, escaping). |
+| Export → iCalendar | `org.export_ics` | Export the buffer's `SCHEDULED:`/`DEADLINE:` entries as RFC 5545 all-day events in a new tab. |
+| Refresh Context (C-c C-c) | `org.ctrl_c_ctrl_c` | The context action: toggle the checkbox on a list item, else recompute statistics cookies (also bound to the Emacs-keymap `C-c C-c` chord). |
+
+### Agenda scope
+
+Every agenda view scans a file set decided by, in priority order:
+
+1. **Restriction lock** (Org → Agenda → Set Restriction Lock, Emacs
+   `C-c C-x <`): when set, only the locked file. Session-only state; Remove
+   Restriction Lock (`C-c C-x >` in Emacs) clears it. Locking also covers
+   Emacs's "Special views current file": lock, then open any agenda view.
+2. **File list** (Org → Agenda → File List ▸): the `org_agenda_files`
+   setting (workspace-relative paths, persisted; `vix-settings` spec). Add
+   Current File / Remove Current File edit it; Clear List empties it.
+3. **Default**: every `.org` file in the project index.
+
+**Show Scope** reports the active scope in the status bar. Files in the list
+that do not exist are skipped when the agenda is built.
+
+| Item | Action | Effect |
+| ---- | ------ | ------ |
+| Agenda → Set Restriction Lock (This File) | `org.agenda.lock` | Lock agenda views to the active file (needs a saved file). |
+| Agenda → Remove Restriction Lock | `org.agenda.unlock` | Clear the lock. |
+| Agenda → File List → Add/Remove Current File | `org.agenda.file_add` / `org.agenda.file_remove` | Edit the persisted `org_agenda_files` list. |
+| Agenda → File List → Clear List | `org.agenda.file_clear` | Empty the list (back to all project files). |
+| Agenda → File List → Show Scope | `org.agenda.file_list` | Status-bar report of lock / list / default scope. |
 
 Agenda and Time Tracker output open in a new buffer. The pure builders
 (`org::agenda`, `org::time_report`) are unit tested; `CLOCK:` durations are read
@@ -150,9 +205,25 @@ commands (discoverable via the which-key popup after `C-c`):
 | `C-c C-t` | `org.cycle_todo` | Cycle the headline's TODO keyword. |
 | `C-u C-c C-t` | `org.close_note` | Mark the headline `DONE` and record a closing note + `CLOSED:` timestamp (the universal-argument variant). |
 | `C-c C-c` | `org.ctrl_c_ctrl_c` | Context action: toggle the checkbox on the cursor line, else recompute statistics cookies. |
+| `C-c C-s` / `C-c C-d` | `org.schedule` / `org.deadline` | Schedule / deadline prompt. |
+| `C-c C-w` | `org.refile` | Refile-target chooser. |
+| `C-c C-q` | `org.set_tags` | Set Tags prompt. |
+| `C-c C-l` / `C-c C-o` / `C-c l` | `org.link.insert` / `.follow` / `.store` | Link commands. |
+| `C-c .` / `C-c !` | `org.timestamp` / `org.timestamp_inactive` | Insert a timestamp. |
+| `C-c '` | `org.edit_src` | Edit source block in a dedicated tab (and apply back). |
+| `C-c /` | `org.sparse.match` | Sparse-tree match prompt. |
+| `C-c a` | `org.agenda` | Weekly/daily agenda. |
+| `C-c C-x f` | `org.footnote` | Footnote new/jump. |
+| `C-c C-x a` / `C-c C-x C-s` | `org.archive.tag` / `org.archive.subtree` | Archive commands. |
+| `C-c C-x <` / `C-c C-x >` | `org.agenda.lock` / `org.agenda.unlock` | Agenda restriction lock. |
+| `C-c C-x C-i` / `C-c C-x C-o` | `org.clock_in` / `org.clock_out` | Clocking (`C-i` arrives as Tab in some terminals; use the menu there). |
+| `C-c C-x C-w` / `C-c C-x C-y` | `org.subtree.cut` / `org.subtree.paste` | Subtree kill/yank. |
+| `C-c C-x C-c` | `org.column_view` | Column view. |
 
 `C-u` is the Emacs universal argument; it applies to the next command and is
-cancelled by any key other than the `C-c` prefix.
+cancelled by any key other than the `C-c` prefix. `C-c C-x` is a third-key
+prefix with its own which-key popup. These chords live only in the Emacs
+keymap; the Org menu displays them in its shortcut column as the reference.
 
 ### Agenda views
 

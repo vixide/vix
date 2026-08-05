@@ -684,6 +684,752 @@ pub fn move_subtree_up(text: &str, line: usize) -> Option<(String, usize)> {
     Some((out.join("\n"), prev))
 }
 
+// ----- Headline location & structure editing --------------------------------
+
+/// The line of the headline governing `line`: the nearest headline at or above
+/// it. `None` when the cursor sits before the first headline.
+fn governing(lines: &[&str], line: usize) -> Option<usize> {
+    let last = lines.len().checked_sub(1)?;
+    (0..=line.min(last))
+        .rev()
+        .find(|&i| headline_level(lines[i]).is_some())
+}
+
+/// Rewrite a headline's stars to shift its level by `delta` (clamped to ≥ 1).
+/// Non-headline lines pass through unchanged.
+fn relevel(line: &str, delta: i64) -> String {
+    match headline_level(line) {
+        Some(level) => {
+            let new = usize::try_from((i64::try_from(level).unwrap_or(i64::MAX) + delta).max(1))
+                .unwrap_or(1);
+            format!("{} {}", "*".repeat(new), line[level..].trim_start())
+        }
+        None => line.to_string(),
+    }
+}
+
+/// Insert a sibling headline after the cursor line (Org `M-RET`): same level as
+/// the governing headline, or level 1 outside any subtree. Returns the new text
+/// and the line of the inserted headline (its stars and trailing space, ready to
+/// type the title).
+#[must_use]
+pub fn new_heading(text: &str, line: usize) -> (String, usize) {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let level = governing(&lines, line)
+        .and_then(|h| headline_level(lines[h]))
+        .unwrap_or(1);
+    let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
+    let at = (line + 1).min(out.len());
+    out.insert(at, format!("{} ", "*".repeat(level)));
+    (out.join("\n"), at)
+}
+
+/// Org `C-c C-u`: the governing headline when the cursor is in a body, else the
+/// parent headline (nearest above with a smaller level). `None` at top level.
+#[must_use]
+pub fn nav_parent(text: &str, line: usize) -> Option<usize> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let h = governing(&lines, line)?;
+    if h != line {
+        return Some(h);
+    }
+    let level = headline_level(lines[h])?;
+    (0..h)
+        .rev()
+        .find(|&i| headline_level(lines[i]).is_some_and(|l| l < level))
+}
+
+/// The next headline after `line` (any level), like Org `C-c C-n`.
+#[must_use]
+pub fn nav_next(text: &str, line: usize) -> Option<usize> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    (line + 1..lines.len()).find(|&i| headline_level(lines[i]).is_some())
+}
+
+/// The previous headline before `line` (any level), like Org `C-c C-p`.
+#[must_use]
+pub fn nav_prev(text: &str, line: usize) -> Option<usize> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    (0..line.min(lines.len())).rev().find(|&i| headline_level(lines[i]).is_some())
+}
+
+/// The next sibling headline (same level, within the same parent), like Org
+/// `C-c C-f`. Stops at the parent boundary.
+#[must_use]
+pub fn nav_forward_same(text: &str, line: usize) -> Option<usize> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let h = governing(&lines, line)?;
+    let level = headline_level(lines[h])?;
+    for (i, l) in lines.iter().enumerate().skip(h + 1) {
+        match headline_level(l) {
+            Some(l) if l < level => return None,
+            Some(l) if l == level => return Some(i),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// The previous sibling headline (same level, within the same parent), like Org
+/// `C-c C-b`. Stops at the parent boundary.
+#[must_use]
+pub fn nav_backward_same(text: &str, line: usize) -> Option<usize> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let h = governing(&lines, line)?;
+    let level = headline_level(lines[h])?;
+    for (i, l) in lines.iter().enumerate().take(h).rev() {
+        match headline_level(l) {
+            Some(l) if l < level => return None,
+            Some(l) if l == level => return Some(i),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Every headline in `text` as `(line, level, title)` (title = text after the
+/// stars, trimmed). Used by refile target matching and link following.
+#[must_use]
+pub fn headlines(text: &str) -> Vec<(usize, usize, String)> {
+    text.split('\n')
+        .enumerate()
+        .filter_map(|(i, l)| headline_level(l).map(|lv| (i, lv, l[lv..].trim().to_string())))
+        .collect()
+}
+
+/// The `[start, end)` line range of the subtree governing `line` (walking up to
+/// the nearest headline first). `None` before the first headline.
+#[must_use]
+pub fn governing_subtree(text: &str, line: usize) -> Option<(usize, usize)> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    subtree_range(&lines, governing(&lines, line)?)
+}
+
+/// Sort the children of the subtree governing `line` alphabetically by headline
+/// text (case-insensitive): direct children when inside a subtree, the top-level
+/// trees when before the first headline. `None` with fewer than two children.
+#[must_use]
+pub fn sort_children(text: &str, line: usize) -> Option<String> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let (start, end, child_level) = match governing(&lines, line) {
+        Some(h) => {
+            let (s, e) = subtree_range(&lines, h)?;
+            (s + 1, e, headline_level(lines[h])? + 1)
+        }
+        None => (0, lines.len(), 1),
+    };
+    let mut blocks: Vec<(usize, usize)> = Vec::new();
+    let mut i = start;
+    while i < end {
+        if headline_level(lines[i]) == Some(child_level) {
+            let (s, e) = subtree_range(&lines, i)?;
+            let e = e.min(end);
+            blocks.push((s, e));
+            i = e;
+        } else {
+            i += 1;
+        }
+    }
+    if blocks.len() < 2 {
+        return None;
+    }
+    let first = blocks[0].0;
+    let mut sorted = blocks.clone();
+    sorted.sort_by_key(|&(s, _)| {
+        let l = lines[s];
+        let lv = headline_level(l).unwrap_or(0);
+        l[lv..].trim().to_ascii_lowercase()
+    });
+    let mut out: Vec<&str> = lines[..first].to_vec();
+    for &(s, e) in &sorted {
+        out.extend_from_slice(&lines[s..e]);
+    }
+    out.extend_from_slice(&lines[end..]);
+    Some(out.join("\n"))
+}
+
+/// Refile the subtree governing `line` to the end of the subtree at
+/// `target_line` (releveled to one deeper than the target), like Org `C-c C-w`.
+/// Returns the new text and the moved headline's line. `None` when either side
+/// is not a headline or the target lies inside the source subtree.
+#[must_use]
+pub fn refile(text: &str, line: usize, target_line: usize) -> Option<(String, usize)> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let src = governing(&lines, line)?;
+    let (ss, se) = subtree_range(&lines, src)?;
+    if (ss..se).contains(&target_line) {
+        return None;
+    }
+    let target_level = headline_level(lines.get(target_line)?)?;
+    let (_, te) = subtree_range(&lines, target_line)?;
+    let src_level = headline_level(lines[ss])?;
+    let delta = i64::try_from(target_level + 1).ok()? - i64::try_from(src_level).ok()?;
+    let block: Vec<String> = lines[ss..se].iter().map(|l| relevel(l, delta)).collect();
+    let mut out: Vec<String> = lines
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| !(ss..se).contains(i))
+        .map(|(_, s)| (*s).to_string())
+        .collect();
+    let insert_at = if te > ss { te - (se - ss) } else { te };
+    for (k, l) in block.into_iter().enumerate() {
+        out.insert(insert_at + k, l);
+    }
+    Some((out.join("\n"), insert_at))
+}
+
+/// Paste a cut/copied subtree after the subtree governing `line`, releveled to
+/// match it as a sibling (level 1 outside any subtree), like Org `C-c C-x C-y`.
+/// Returns the new text and the pasted headline's line. `None` when `clip` does
+/// not start with a headline.
+#[must_use]
+pub fn paste_subtree(text: &str, line: usize, clip: &str) -> Option<(String, usize)> {
+    let clip = clip.trim_end_matches('\n');
+    let clip_lines: Vec<&str> = clip.split('\n').collect();
+    let clip_level = headline_level(clip_lines.first()?)?;
+    let lines: Vec<&str> = text.split('\n').collect();
+    let (at, target_level) = match governing(&lines, line) {
+        Some(h) => {
+            let (_, e) = subtree_range(&lines, h)?;
+            (e, headline_level(lines[h])?)
+        }
+        None => ((line + 1).min(lines.len()), 1),
+    };
+    let delta = i64::try_from(target_level).ok()? - i64::try_from(clip_level).ok()?;
+    let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
+    for (k, l) in clip_lines.iter().enumerate() {
+        out.insert(at + k, relevel(l, delta));
+    }
+    Some((out.join("\n"), at))
+}
+
+// ----- Tags & properties -----------------------------------------------------
+
+/// The trailing `:tag1:tag2:` group on a headline, with leading whitespace.
+static TAGS: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[ \t]+(:(?:[A-Za-z0-9_@#%]+:)+)[ \t]*$").expect("tags regex"));
+
+/// The tags of the headline governing `line`, colon-joined without the outer
+/// colons (e.g. `"work:urgent"`, `""` when untagged). `None` off any subtree.
+#[must_use]
+pub fn get_tags(text: &str, line: usize) -> Option<String> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let h = governing(&lines, line)?;
+    Some(TAGS.captures(lines[h]).map_or_else(String::new, |c| {
+        c[1].trim_matches(':').replace("::", ":")
+    }))
+}
+
+/// Set the tags of the headline governing `line` (Org `C-c C-q`). `tags` may be
+/// colon-, comma-, or space-separated; empty input removes all tags.
+#[must_use]
+pub fn set_tags(text: &str, line: usize, tags: &str) -> Option<String> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let h = governing(&lines, line)?;
+    let head = TAGS.replace(lines[h], "").trim_end().to_string();
+    let list: Vec<&str> = tags
+        .split([':', ',', ' ', '\t'])
+        .filter(|s| !s.is_empty())
+        .collect();
+    let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
+    out[h] = if list.is_empty() {
+        head
+    } else {
+        format!("{head} :{}:", list.join(":"))
+    };
+    Some(out.join("\n"))
+}
+
+/// Add `tag` to the governing headline, or remove it when already present
+/// (case-sensitive), like Org `C-c C-x a` for the ARCHIVE tag.
+#[must_use]
+pub fn toggle_tag(text: &str, line: usize, tag: &str) -> Option<String> {
+    let cur = get_tags(text, line)?;
+    let mut list: Vec<&str> = cur.split(':').filter(|s| !s.is_empty()).collect();
+    if let Some(i) = list.iter().position(|t| *t == tag) {
+        list.remove(i);
+    } else {
+        list.push(tag);
+    }
+    set_tags(text, line, &list.join(":"))
+}
+
+/// Whether `line` is an Org planning line (`SCHEDULED:` / `DEADLINE:` /
+/// `CLOSED:` after the headline).
+fn is_planning(line: &str) -> bool {
+    let t = line.trim_start();
+    ["SCHEDULED:", "DEADLINE:", "CLOSED:"]
+        .iter()
+        .any(|k| t.starts_with(k))
+}
+
+/// Set property `name` to `value` in the `:PROPERTIES:` drawer of the headline
+/// governing `line` (Org `C-c C-x p`), creating the drawer (after any planning
+/// line) when missing and replacing the property when present.
+#[must_use]
+pub fn set_property(text: &str, line: usize, name: &str, value: &str) -> Option<String> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let h = governing(&lines, line)?;
+    let mut at = h + 1;
+    if at < lines.len() && is_planning(lines[at]) {
+        at += 1;
+    }
+    let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
+    let entry = format!(":{name}: {value}");
+    let needle = format!(":{}:", name.to_ascii_lowercase());
+    if at < lines.len() && lines[at].trim().eq_ignore_ascii_case(":PROPERTIES:") {
+        let (_, end) = drawer_range(&lines, at)?;
+        if let Some(i) = (at + 1..end)
+            .find(|&i| lines[i].trim_start().to_ascii_lowercase().starts_with(&needle))
+        {
+            out[i] = entry;
+        } else {
+            out.insert(end, entry);
+        }
+    } else {
+        out.splice(at..at, [":PROPERTIES:".to_string(), entry, ":END:".to_string()]);
+    }
+    Some(out.join("\n"))
+}
+
+// ----- Archive ---------------------------------------------------------------
+
+/// Cut the subtree governing `line` for archiving: returns the remaining text
+/// and the extracted subtree, promoted to level 1 with an `:ARCHIVE_TIME:`
+/// property stamped `time` (Org `C-c C-x C-s`). `None` off any subtree.
+#[must_use]
+pub fn archive_subtree(text: &str, line: usize, time: &str) -> Option<(String, String)> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let h = governing(&lines, line)?;
+    let (ss, se) = subtree_range(&lines, h)?;
+    let level = headline_level(lines[ss])?;
+    let delta = 1 - i64::try_from(level).ok()?;
+    let block: Vec<String> = lines[ss..se].iter().map(|l| relevel(l, delta)).collect();
+    let block = set_property(&block.join("\n"), 0, "ARCHIVE_TIME", time)?;
+    let rest: Vec<&str> = lines
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| !(ss..se).contains(i))
+        .map(|(_, s)| *s)
+        .collect();
+    Some((rest.join("\n"), block))
+}
+
+// ----- Dates & scheduling ----------------------------------------------------
+
+/// Parse `YYYY-MM-DD` into `(year, month, day)`.
+fn parse_ymd(s: &str) -> Option<(i64, i64, i64)> {
+    let bytes = s.as_bytes();
+    if s.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
+        return None;
+    }
+    let year: i64 = s[..4].parse().ok()?;
+    let month: i64 = s[5..7].parse().ok()?;
+    let day: i64 = s[8..10].parse().ok()?;
+    ((1..=12).contains(&month) && (1..=31).contains(&day)).then_some((year, month, day))
+}
+
+/// Civil date for days since 1970-01-01 (inverse of [`days_from_civil`]).
+fn civil_from_days(z: i64) -> (i64, i64, i64) {
+    let z = z + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    (era * 400 + yoe + i64::from(m <= 2), m, d)
+}
+
+/// Three-letter weekday for days since 1970-01-01 (a Thursday).
+fn weekday_name(days: i64) -> &'static str {
+    ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"][usize::try_from(days.rem_euclid(7))
+        .expect("rem_euclid(7) fits usize")]
+}
+
+/// An Org timestamp for a `YYYY-MM-DD` date with the weekday computed:
+/// `<2026-08-05 Wed>` (active) or `[2026-08-05 Wed]` (inactive). `None` on a
+/// malformed date.
+#[must_use]
+pub fn timestamp_for(date: &str, active: bool) -> Option<String> {
+    let (y, m, d) = parse_ymd(date)?;
+    let dow = weekday_name(days_from_civil(y, m, d));
+    Some(if active {
+        format!("<{date} {dow}>")
+    } else {
+        format!("[{date} {dow}]")
+    })
+}
+
+/// A `YYYY-MM-DD` date with an optional weekday, as found inside timestamps.
+static DATE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\d{4}-\d{2}-\d{2}( [A-Za-z]{2,3})?").expect("date regex"));
+
+/// The 0-based line index and starting char offset of the line containing char
+/// offset `cursor`.
+fn line_of_char(text: &str, cursor: usize) -> (usize, usize) {
+    let mut start = 0;
+    for (i, l) in text.split('\n').enumerate() {
+        let len = l.chars().count();
+        if cursor <= start + len {
+            return (i, start);
+        }
+        start += len + 1;
+    }
+    (text.split('\n').count().saturating_sub(1), start)
+}
+
+/// Shift the date under the cursor by `delta_days`, rewriting its weekday (Org
+/// `S-↑`/`S-↓` on a timestamp). Falls back to the line's only date when the
+/// cursor is not on one; `None` when the line has no date or several.
+#[must_use]
+pub fn shift_timestamp_at(text: &str, cursor: usize, delta_days: i64) -> Option<(String, usize)> {
+    let (line_idx, line_start) = line_of_char(text, cursor);
+    let lines: Vec<&str> = text.split('\n').collect();
+    let l = *lines.get(line_idx)?;
+    let col = cursor - line_start.min(cursor);
+    let matches: Vec<regex::Match> = DATE.find_iter(l).collect();
+    let m = matches
+        .iter()
+        .find(|m| {
+            let sc = l[..m.start()].chars().count();
+            let ec = sc + l[m.start()..m.end()].chars().count();
+            (sc..=ec).contains(&col)
+        })
+        .or_else(|| (matches.len() == 1).then(|| &matches[0]))?;
+    let (y, mo, d) = parse_ymd(&m.as_str()[..10])?;
+    let days = days_from_civil(y, mo, d) + delta_days;
+    let (ny, nm, nd) = civil_from_days(days);
+    let mut new_date = format!("{ny:04}-{nm:02}-{nd:02}");
+    if m.as_str().len() > 10 {
+        let _ = write!(new_date, " {}", weekday_name(days));
+    }
+    let new_line = format!("{}{}{}", &l[..m.start()], new_date, &l[m.end()..]);
+    let mut out: Vec<&str> = lines.clone();
+    out[line_idx] = &new_line;
+    Some((out.join("\n"), cursor))
+}
+
+/// Set the `SCHEDULED:`/`DEADLINE:` (`keyword`) entry of the headline governing
+/// `line` to `stamp` (a full `<…>` timestamp): replace it on an existing
+/// planning line, append it there, or insert a new planning line after the
+/// headline (Org `C-c C-s` / `C-c C-d`).
+#[must_use]
+pub fn plan(text: &str, line: usize, keyword: &str, stamp: &str) -> Option<String> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let h = governing(&lines, line)?;
+    let pl = h + 1;
+    let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
+    if pl < lines.len() && is_planning(lines[pl]) {
+        let re = Regex::new(&format!(r"{keyword}:\s*[<\[][^>\]]*[>\]]")).ok()?;
+        out[pl] = if re.is_match(lines[pl]) {
+            re.replace(lines[pl], format!("{keyword}: {stamp}").as_str())
+                .into_owned()
+        } else {
+            format!("{} {keyword}: {stamp}", lines[pl].trim_end())
+        };
+    } else {
+        out.insert(pl, format!("{keyword}: {stamp}"));
+    }
+    Some(out.join("\n"))
+}
+
+// ----- Hyperlinks ------------------------------------------------------------
+
+/// The `[[target][description]]` or `[[target]]` link under the cursor, as
+/// `(target, Some(description))` / `(target, None)`. `None` off any link.
+#[must_use]
+pub fn link_at(text: &str, cursor: usize) -> Option<(String, Option<String>)> {
+    let (line_idx, line_start) = line_of_char(text, cursor);
+    let l = *text.split('\n').collect::<Vec<_>>().get(line_idx)?;
+    let col = cursor - line_start.min(cursor);
+    let contains = |l: &str, start: usize, end: usize| {
+        let sc = l[..start].chars().count();
+        let ec = sc + l[start..end].chars().count();
+        (sc..=ec).contains(&col)
+    };
+    for c in LINK.captures_iter(l) {
+        let m = c.get(0)?;
+        if contains(l, m.start(), m.end()) {
+            return Some((c[1].to_string(), Some(c[2].to_string())));
+        }
+    }
+    for c in BARE_LINK.captures_iter(l) {
+        let m = c.get(0)?;
+        if contains(l, m.start(), m.end()) {
+            return Some((c[1].to_string(), None));
+        }
+    }
+    None
+}
+
+/// The char offset of the next (`forward`) or previous link start after/before
+/// `cursor`, cycling not included. `None` when there is no link that way.
+#[must_use]
+pub fn link_pos(text: &str, cursor: usize, forward: bool) -> Option<usize> {
+    let mut starts: Vec<usize> = LINK
+        .find_iter(text)
+        .chain(BARE_LINK.find_iter(text))
+        .map(|m| text[..m.start()].chars().count())
+        .collect();
+    starts.sort_unstable();
+    starts.dedup();
+    if forward {
+        starts.into_iter().find(|&s| s > cursor)
+    } else {
+        starts.into_iter().rev().find(|&s| s < cursor)
+    }
+}
+
+// ----- Sparse trees ----------------------------------------------------------
+
+/// The fold ranges of a sparse tree: for every subtree containing no line
+/// matching `pred`, the topmost such headline and the last line of its subtree
+/// (inclusive — the headline stays visible as a fold marker, the body hides).
+/// Subtrees with a match are descended into so non-matching children fold.
+fn sparse_folds(text: &str, pred: impl Fn(&str) -> bool) -> Vec<(usize, usize)> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let mut folds = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        if headline_level(lines[i]).is_some() {
+            let Some((s, e)) = subtree_range(&lines, i) else {
+                break;
+            };
+            if lines[s..e].iter().any(|l| pred(l)) {
+                i += 1; // a match inside: descend, folding only its misses
+            } else {
+                if e - 1 > s {
+                    folds.push((s, e - 1));
+                }
+                i = e;
+            }
+        } else {
+            i += 1;
+        }
+    }
+    folds
+}
+
+/// Whether a line is a headline whose keyword is `TODO`.
+fn is_todo_headline(line: &str) -> bool {
+    headline_level(line)
+        .is_some_and(|lv| line[lv..].split_whitespace().next() == Some("TODO"))
+}
+
+/// Sparse-tree folds showing only `TODO` headlines (Org `C-c / t`): every
+/// subtree without a TODO folds down to its headline.
+#[must_use]
+pub fn todo_tree_folds(text: &str) -> Vec<(usize, usize)> {
+    sparse_folds(text, is_todo_headline)
+}
+
+/// Sparse-tree folds showing only subtrees containing `query`
+/// (case-insensitive; Org `C-c /`'s occur view).
+#[must_use]
+pub fn occur_folds(text: &str, query: &str) -> Vec<(usize, usize)> {
+    let q = query.to_lowercase();
+    sparse_folds(text, |l| l.to_lowercase().contains(&q))
+}
+
+// ----- Footnotes -------------------------------------------------------------
+
+/// A `[fn:LABEL]` footnote token.
+static FOOTNOTE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\[fn:([A-Za-z0-9_-]+)\]").expect("footnote regex"));
+
+/// The char offset of the start of 0-based `line` in `text`.
+fn line_start_char(text: &str, line: usize) -> usize {
+    text.split('\n')
+        .take(line)
+        .map(|l| l.chars().count() + 1)
+        .sum()
+}
+
+/// Org's footnote action (`C-c C-x f`), all three behaviors in one:
+/// on a `[fn:x]` **reference**, jump to its definition (created under a
+/// `* Footnotes` headline when missing); on a **definition** line (starting
+/// with `[fn:x]`), jump back to the first reference; anywhere else, insert a
+/// new numbered reference at the cursor and append its empty definition.
+/// Returns the new text (unchanged for pure jumps) and cursor.
+#[must_use]
+pub fn footnote(text: &str, cursor: usize) -> (String, usize) {
+    let (line_idx, line_start) = line_of_char(text, cursor);
+    let lines: Vec<&str> = text.split('\n').collect();
+    let line = lines.get(line_idx).copied().unwrap_or_default();
+    let col = cursor - line_start.min(cursor);
+    let on_definition = FOOTNOTE.find(line).is_some_and(|m| m.start() == 0);
+    let label_at_cursor = FOOTNOTE.captures_iter(line).find_map(|c| {
+        let m = c.get(0)?;
+        let sc = line[..m.start()].chars().count();
+        let ec = sc + line[m.start()..m.end()].chars().count();
+        (sc..=ec).contains(&col).then(|| c[1].to_string())
+    });
+    match label_at_cursor {
+        // On a definition: jump to the first reference elsewhere.
+        Some(label) if on_definition && col <= label.chars().count() + 5 => {
+            let needle = format!("[fn:{label}]");
+            for (i, l) in lines.iter().enumerate() {
+                if let Some(pos) = l.find(&needle)
+                    && (i != line_idx || pos != 0)
+                {
+                    let sc = l[..pos].chars().count();
+                    return (text.to_string(), line_start_char(text, i) + sc);
+                }
+            }
+            (text.to_string(), cursor)
+        }
+        // On a reference: jump to (or create) the definition.
+        Some(label) => {
+            let needle = format!("[fn:{label}]");
+            if let Some(i) = lines
+                .iter()
+                .enumerate()
+                .find_map(|(i, l)| (i != line_idx && l.starts_with(&needle)).then_some(i))
+            {
+                return (text.to_string(), line_start_char(text, i));
+            }
+            let new = append_footnote_definition(text, &label);
+            let pos = new.chars().count();
+            (new, pos)
+        }
+        // Elsewhere: create the next numbered footnote.
+        None => {
+            let next = FOOTNOTE
+                .captures_iter(text)
+                .filter_map(|c| c[1].parse::<u64>().ok())
+                .max()
+                .unwrap_or(0)
+                + 1;
+            let mut new: String = text.chars().take(cursor).collect();
+            let tail: String = text.chars().skip(cursor).collect();
+            let _ = write!(new, "[fn:{next}]");
+            new.push_str(&tail);
+            let new = append_footnote_definition(&new, &next.to_string());
+            let pos = new.chars().count();
+            (new, pos)
+        }
+    }
+}
+
+/// Append an empty `[fn:label] ` definition at the end of `text`, under a
+/// `* Footnotes` headline (created when missing, matching Org's default
+/// `org-footnote-section`). The cursor belongs at the end of the result.
+fn append_footnote_definition(text: &str, label: &str) -> String {
+    let mut out = text.trim_end_matches('\n').to_string();
+    let has_section = out
+        .split('\n')
+        .any(|l| headline_level(l).is_some_and(|lv| l[lv..].trim() == "Footnotes"));
+    if !has_section {
+        out.push_str("\n\n* Footnotes");
+    }
+    let _ = write!(out, "\n\n[fn:{label}] ");
+    out
+}
+
+/// The governing headline line of the `:ID: value` property line matching
+/// `id` (the property line itself before any headline). `None` when `text`
+/// carries no such property.
+#[must_use]
+pub fn id_location(text: &str, id: &str) -> Option<usize> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let hit = lines.iter().position(|l| {
+        let t = l.trim();
+        t.len() >= 4
+            && t[..4].eq_ignore_ascii_case(":id:")
+            && t[4..].trim() == id
+    })?;
+    Some(governing(&lines, hit).unwrap_or(hit))
+}
+
+// ----- Source blocks ---------------------------------------------------------
+
+/// Whether `line` opens a source block, returning its language (may be empty).
+fn src_begin(line: &str) -> Option<String> {
+    let t = line.trim_start();
+    let rest = if t.len() >= 11 && t[..11].eq_ignore_ascii_case("#+begin_src") {
+        &t[11..]
+    } else {
+        return None;
+    };
+    Some(rest.split_whitespace().next().unwrap_or_default().to_string())
+}
+
+/// The `#+begin_src` block containing `line` (begin/end line inclusive, or the
+/// cursor on either fence), as `(begin, end, language)`. `None` outside any
+/// block or in an unterminated one.
+#[must_use]
+pub fn src_block_at(text: &str, line: usize) -> Option<(usize, usize, String)> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let begin = (0..=line.min(lines.len().saturating_sub(1)))
+        .rev()
+        .find(|&i| src_begin(lines[i]).is_some())?;
+    let lang = src_begin(lines[begin])?;
+    let end = (begin + 1..lines.len()).find(|&i| {
+        lines[i]
+            .trim_start()
+            .to_ascii_lowercase()
+            .starts_with("#+end_src")
+    })?;
+    (line <= end).then_some((begin, end, lang))
+}
+
+/// Replace the body of the source block opening at `begin_line` with `body`
+/// (trailing newline optional). `None` when `begin_line` no longer opens a
+/// terminated source block — e.g. the buffer changed while a dedicated-buffer
+/// edit was open.
+#[must_use]
+pub fn replace_src_body(text: &str, begin_line: usize, body: &str) -> Option<String> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    src_begin(lines.get(begin_line)?)?;
+    let (begin, end, _) = src_block_at(text, begin_line)?;
+    if begin != begin_line {
+        return None;
+    }
+    let mut out: Vec<&str> = lines[..=begin].to_vec();
+    let body = body.trim_end_matches('\n');
+    if !body.is_empty() {
+        out.extend(body.split('\n'));
+    }
+    out.extend_from_slice(&lines[end..]);
+    Some(out.join("\n"))
+}
+
+// ----- Column view -----------------------------------------------------------
+
+/// Render the buffer's headlines as an Org column-view table (Org
+/// `C-c C-x C-c`, read-only flavor): `ITEM` (indented by level), `TODO`,
+/// `PRIORITY`, and `TAGS` columns.
+#[must_use]
+pub fn column_view(text: &str) -> String {
+    let mut out = String::from("| ITEM | TODO | PRIORITY | TAGS |\n|---|---|---|---|\n");
+    for line in text.split('\n') {
+        let Some(level) = headline_level(line) else {
+            continue;
+        };
+        let bare = TAGS.replace(line, "");
+        let tags = TAGS
+            .captures(line)
+            .map_or_else(String::new, |c| c[1].to_string());
+        let (keyword, body) = split_keyword(bare[level..].trim());
+        let (prio, title) = match strip_priority(body) {
+            Some((p, after)) => (format!("[#{p}]"), after),
+            None => (String::new(), body),
+        };
+        let _ = writeln!(
+            out,
+            "| {}{} | {} | {} | {} |",
+            "  ".repeat(level - 1),
+            title.replace('|', "\\vert{}"),
+            keyword.trim(),
+            prio,
+            tags,
+        );
+    }
+    out
+}
+
 // ----- Agenda & time tracking -----------------------------------------------
 
 /// Extract the `YYYY-MM-DD` date from the first `<…>`/`[…]` timestamp in `s`.
@@ -1314,9 +2060,393 @@ pub fn to_html(text: &str) -> String {
     )
 }
 
+/// Escape the LaTeX special characters in plain text.
+fn escape_latex(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str(r"\textbackslash{}"),
+            '{' => out.push_str(r"\{"),
+            '}' => out.push_str(r"\}"),
+            '$' => out.push_str(r"\$"),
+            '&' => out.push_str(r"\&"),
+            '#' => out.push_str(r"\#"),
+            '%' => out.push_str(r"\%"),
+            '_' => out.push_str(r"\_"),
+            '^' => out.push_str(r"\^{}"),
+            '~' => out.push_str(r"\~{}"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Link sentinels used by [`inline_latex`]: links are captured before escaping
+/// (the control chars survive the escape pass) and restored as `\href` after.
+static SENTINEL: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new("\u{1}([^\u{2}]*)\u{2}([^\u{3}]*)\u{3}").expect("sentinel"));
+
+/// Convert Org inline markup to LaTeX (escaping text first). Emphasis markers
+/// are matched on the escaped text, so `_`/`~` (escaped above) drop out as
+/// markers; bold/italic/strike and links are what remain meaningful.
+fn inline_latex(s: &str) -> String {
+    use regex::Captures;
+    let s = LINK
+        .replace_all(s, |c: &Captures| format!("\u{1}{}\u{2}{}\u{3}", &c[1], &c[2]))
+        .into_owned();
+    let s = escape_latex(&s);
+    let s = emph(&s, '*', r"\textbf{", "}");
+    let s = emph(&s, '/', r"\textit{", "}");
+    let s = emph(&s, '=', r"\texttt{", "}");
+    let s = emph(&s, '+', r"\sout{", "}");
+    SENTINEL
+        .replace_all(&s, |c: &Captures| {
+            format!(r"\href{{{}}}{{{}}}", c[1].replace(['{', '}'], ""), &c[2])
+        })
+        .into_owned()
+}
+
+/// Convert Org text to a small standalone LaTeX document (a pragmatic subset:
+/// title/author, headlines to sections, bullet lists, verbatim blocks).
+#[must_use]
+pub fn to_latex(text: &str) -> String {
+    let title = text.split('\n').find_map(|l| {
+        l.strip_prefix("#+title:")
+            .or_else(|| l.strip_prefix("#+TITLE:"))
+            .map(str::trim)
+    });
+    let author = text.split('\n').find_map(|l| {
+        l.strip_prefix("#+author:")
+            .or_else(|| l.strip_prefix("#+AUTHOR:"))
+            .map(str::trim)
+    });
+    let mut body: Vec<String> = Vec::new();
+    let mut in_list = false;
+    let mut in_verbatim = false;
+    let close_list = |body: &mut Vec<String>, in_list: &mut bool| {
+        if *in_list {
+            body.push(r"\end{itemize}".to_string());
+            *in_list = false;
+        }
+    };
+    for raw in text.split('\n') {
+        let line = raw.trim_end();
+        let lower = line.trim_start().to_ascii_lowercase();
+        if in_verbatim {
+            if lower.starts_with("#+end_") {
+                body.push(r"\end{verbatim}".to_string());
+                in_verbatim = false;
+            } else {
+                body.push(raw.to_string()); // verbatim: no escaping
+            }
+        } else if lower.starts_with("#+begin_src") || lower.starts_with("#+begin_example") {
+            close_list(&mut body, &mut in_list);
+            body.push(r"\begin{verbatim}".to_string());
+            in_verbatim = true;
+        } else if line.starts_with("#+") {
+            close_list(&mut body, &mut in_list); // other keywords/blocks dropped
+        } else if let Some(level) = headline_level(line) {
+            close_list(&mut body, &mut in_list);
+            let cmd = match level {
+                1 => r"\section",
+                2 => r"\subsection",
+                3 => r"\subsubsection",
+                4 => r"\paragraph",
+                _ => r"\subparagraph",
+            };
+            body.push(format!("{cmd}{{{}}}", inline_latex(line[level..].trim_start())));
+        } else if let Some(item) = line
+            .trim_start()
+            .strip_prefix("- ")
+            .or_else(|| line.trim_start().strip_prefix("+ "))
+        {
+            if !in_list {
+                body.push(r"\begin{itemize}".to_string());
+                in_list = true;
+            }
+            body.push(format!(r"\item {}", inline_latex(item)));
+        } else if line.trim().is_empty() {
+            close_list(&mut body, &mut in_list);
+            body.push(String::new());
+        } else {
+            body.push(inline_latex(line));
+        }
+    }
+    if in_verbatim {
+        body.push(r"\end{verbatim}".to_string());
+    }
+    close_list(&mut body, &mut in_list);
+    let mut head = String::from(
+        "\\documentclass{article}\n\\usepackage[T1]{fontenc}\n\\usepackage{hyperref}\n\\usepackage[normalem]{ulem}\n",
+    );
+    if let Some(t) = title {
+        let _ = writeln!(head, "\\title{{{}}}", inline_latex(t));
+    }
+    if let Some(a) = author {
+        let _ = writeln!(head, "\\author{{{}}}", inline_latex(a));
+    }
+    head.push_str("\\begin{document}\n");
+    if title.is_some() {
+        head.push_str("\\maketitle\n");
+    }
+    format!("{head}{}\n\\end{{document}}\n", body.join("\n"))
+}
+
+/// Escape an iCalendar text value (RFC 5545: backslash, semicolon, comma,
+/// newline).
+fn escape_ics(s: &str) -> String {
+    s.replace('\\', r"\\")
+        .replace(';', r"\;")
+        .replace(',', r"\,")
+        .replace('\n', r"\n")
+}
+
+/// Convert the `SCHEDULED:`/`DEADLINE:` entries of one Org document into an
+/// iCalendar (RFC 5545) all-day-event calendar. `now` is the `DTSTAMP` value
+/// (UTC `YYYYMMDDTHHMMSSZ`); `name` seeds the event UIDs.
+#[must_use]
+pub fn to_ics(text: &str, name: &str, now: &str) -> String {
+    let items = agenda_items(&[(name.to_string(), text.to_string())]);
+    let mut out = String::from("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//vix//org//EN\r\n");
+    for (i, it) in items.iter().enumerate() {
+        let Some(date) = &it.date else { continue };
+        let compact: String = date.chars().filter(char::is_ascii_digit).collect();
+        let summary = if it.kind == "DEADLINE" {
+            format!("DEADLINE: {}", it.headline)
+        } else {
+            it.headline.clone()
+        };
+        let _ = write!(
+            out,
+            "BEGIN:VEVENT\r\nUID:{i}-{}@vix\r\nDTSTAMP:{now}\r\nDTSTART;VALUE=DATE:{compact}\r\nSUMMARY:{}\r\nEND:VEVENT\r\n",
+            escape_ics(name),
+            escape_ics(&summary),
+        );
+    }
+    out.push_str("END:VCALENDAR\r\n");
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const DOC: &str = "#+title: T\n* One :old:\nbody\n** Child B\n** Child A\n* Two\nSCHEDULED: <2026-08-05 Wed>\n";
+
+    #[test]
+    fn new_heading_inserts_sibling_at_same_level() {
+        let (text, line) = new_heading("* One\n** Sub\nbody", 2);
+        assert_eq!(line, 3);
+        assert_eq!(text.split('\n').nth(3), Some("** "));
+        // Outside any subtree: level 1.
+        let (text, line) = new_heading("plain", 0);
+        assert_eq!(text.split('\n').nth(line), Some("* "));
+    }
+
+    #[test]
+    fn navigation_moves_between_headlines() {
+        assert_eq!(nav_parent(DOC, 2), Some(1)); // body -> its headline
+        assert_eq!(nav_parent(DOC, 3), Some(1)); // child headline -> parent
+        assert_eq!(nav_next(DOC, 1), Some(3));
+        assert_eq!(nav_prev(DOC, 3), Some(1));
+        assert_eq!(nav_forward_same(DOC, 3), Some(4));
+        assert_eq!(nav_backward_same(DOC, 4), Some(3));
+        assert_eq!(nav_forward_same(DOC, 4), None); // parent boundary
+    }
+
+    #[test]
+    fn sort_children_orders_direct_children() {
+        let sorted = sort_children(DOC, 1).expect("sortable");
+        let lines: Vec<&str> = sorted.split('\n').collect();
+        assert_eq!(lines[3], "** Child A");
+        assert_eq!(lines[4], "** Child B");
+        assert_eq!(lines[2], "body", "parent body stays before children");
+    }
+
+    #[test]
+    fn refile_moves_subtree_under_target() {
+        let (text, line) = refile(DOC, 3, 5).expect("refile");
+        let lines: Vec<&str> = text.split('\n').collect();
+        assert_eq!(lines[line], "** Child B", "releveled under level-1 target");
+        assert!(text.contains("* Two"));
+        // Target inside the source subtree is refused.
+        assert!(refile(DOC, 1, 3).is_none());
+    }
+
+    #[test]
+    fn paste_subtree_relevels_to_sibling() {
+        let (text, line) = paste_subtree(DOC, 3, "* Pasted\nbody\n").expect("paste");
+        assert_eq!(text.split('\n').nth(line), Some("** Pasted"));
+    }
+
+    #[test]
+    fn tags_get_set_and_toggle() {
+        assert_eq!(get_tags(DOC, 2).as_deref(), Some("old"));
+        let text = set_tags(DOC, 2, "work urgent").expect("set");
+        assert!(text.contains("* One :work:urgent:"));
+        let text = set_tags(&text, 2, "").expect("clear");
+        assert!(text.contains("\n* One\n"));
+        let text = toggle_tag(DOC, 1, "ARCHIVE").expect("toggle on");
+        assert!(text.contains(":old:ARCHIVE:"));
+        let text = toggle_tag(&text, 1, "ARCHIVE").expect("toggle off");
+        assert!(text.contains("* One :old:"));
+    }
+
+    #[test]
+    fn set_property_creates_and_updates_drawer() {
+        let text = set_property("* H\nbody", 0, "ID", "42").expect("create");
+        assert_eq!(text, "* H\n:PROPERTIES:\n:ID: 42\n:END:\nbody");
+        let text = set_property(&text, 0, "id", "43").expect("update");
+        assert!(text.contains(":id: 43") && !text.contains(":ID: 42"));
+        // A planning line stays between headline and drawer.
+        let text = set_property("* H\nSCHEDULED: <2026-01-01 Thu>", 0, "K", "v").expect("plan");
+        assert_eq!(
+            text,
+            "* H\nSCHEDULED: <2026-01-01 Thu>\n:PROPERTIES:\n:K: v\n:END:"
+        );
+    }
+
+    #[test]
+    fn archive_subtree_extracts_and_stamps() {
+        let (rest, block) = archive_subtree(DOC, 3, "2026-08-05 Wed 12:00").expect("archive");
+        assert!(!rest.contains("Child B"));
+        assert!(block.starts_with("* Child B"), "promoted to level 1: {block}");
+        assert!(block.contains(":ARCHIVE_TIME: 2026-08-05 Wed 12:00"));
+    }
+
+    #[test]
+    fn timestamps_compute_weekdays_and_shift() {
+        assert_eq!(
+            timestamp_for("2026-08-05", true).as_deref(),
+            Some("<2026-08-05 Wed>")
+        );
+        assert_eq!(
+            timestamp_for("2026-08-05", false).as_deref(),
+            Some("[2026-08-05 Wed]")
+        );
+        assert!(timestamp_for("2026-13-05", true).is_none());
+        // Shift across a month boundary, weekday rewritten.
+        let text = "SCHEDULED: <2026-08-31 Mon>";
+        let (new, _) = shift_timestamp_at(text, 15, 1).expect("shift");
+        assert_eq!(new, "SCHEDULED: <2026-09-01 Tue>");
+        let (new, _) = shift_timestamp_at(text, 15, -1).expect("shift back");
+        assert_eq!(new, "SCHEDULED: <2026-08-30 Sun>");
+    }
+
+    #[test]
+    fn plan_sets_and_replaces_schedule() {
+        let text = plan("* H\nbody", 0, "SCHEDULED", "<2026-08-05 Wed>").expect("insert");
+        assert_eq!(text, "* H\nSCHEDULED: <2026-08-05 Wed>\nbody");
+        let text = plan(&text, 0, "DEADLINE", "<2026-08-09 Sun>").expect("append");
+        assert!(text.contains("SCHEDULED: <2026-08-05 Wed> DEADLINE: <2026-08-09 Sun>"));
+        let text = plan(&text, 0, "DEADLINE", "<2026-08-10 Mon>").expect("replace");
+        assert!(text.contains("DEADLINE: <2026-08-10 Mon>"));
+        assert!(!text.contains("2026-08-09"));
+    }
+
+    #[test]
+    fn links_are_found_and_iterated() {
+        let text = "see [[https://x.test][site]] and [[*Target]]\n";
+        assert_eq!(
+            link_at(text, 6),
+            Some(("https://x.test".to_string(), Some("site".to_string())))
+        );
+        assert_eq!(link_at(text, 35), Some(("*Target".to_string(), None)));
+        assert_eq!(link_pos(text, 0, true), Some(4));
+        assert_eq!(link_pos(text, 10, true), Some(33));
+        assert_eq!(link_pos(text, 33, false), Some(4));
+    }
+
+    #[test]
+    fn sparse_folds_hide_non_matching_subtrees() {
+        let doc = "* TODO Ship\nbody\n* Notes\nplain\n** TODO Sub\nx\n* Done stuff\ny\n";
+        let folds = todo_tree_folds(doc);
+        // "Notes" contains a TODO child, so only its non-TODO parts fold; the
+        // "Done stuff" subtree folds whole; "Ship" stays open.
+        // (6, 8): the trailing blank line belongs to the last subtree.
+        assert!(folds.contains(&(6, 8)), "Done stuff folded: {folds:?}");
+        assert!(!folds.iter().any(|&(s, _)| s == 0), "TODO subtree open");
+        assert!(!folds.iter().any(|&(s, _)| s == 2), "ancestor of match open");
+        let folds = occur_folds(doc, "plain");
+        assert!(!folds.iter().any(|&(s, _)| s == 2), "occur keeps its subtree");
+        assert!(folds.iter().any(|&(s, _)| s == 0), "occur folds the miss");
+    }
+
+    #[test]
+    fn footnote_creates_then_jumps_both_ways() {
+        // Create: reference at the cursor, definition under * Footnotes.
+        let (text, pos) = footnote("body here\n", 4);
+        assert!(text.starts_with("body[fn:1] here"), "{text:?}");
+        assert!(text.contains("* Footnotes\n\n[fn:1] "), "{text:?}");
+        assert_eq!(pos, text.chars().count(), "cursor at the definition end");
+        // Jump from the reference to the definition line.
+        let ref_pos = text.find("[fn:1]").unwrap() + 1;
+        let (same, def_pos) = footnote(&text, ref_pos);
+        assert_eq!(same, text, "jump does not edit");
+        let def_line_start = text.rfind("[fn:1] ").unwrap();
+        assert_eq!(def_pos, text[..def_line_start].chars().count());
+        // Jump from the definition back to the reference.
+        let (same, back) = footnote(&text, def_pos + 1);
+        assert_eq!(same, text);
+        assert_eq!(back, text[..text.find("[fn:1]").unwrap()].chars().count());
+    }
+
+    #[test]
+    fn id_location_finds_governing_headline() {
+        let doc = "* One\n:PROPERTIES:\n:ID: abc-123\n:END:\n* Two\n";
+        assert_eq!(id_location(doc, "abc-123"), Some(0));
+        assert_eq!(id_location(doc, "missing"), None);
+    }
+
+    #[test]
+    fn src_block_roundtrip() {
+        let doc = "* H\n#+begin_src rust\nlet x = 1;\n#+end_src\ntail\n";
+        assert_eq!(
+            src_block_at(doc, 2),
+            Some((1, 3, "rust".to_string())),
+            "cursor in the body"
+        );
+        assert_eq!(src_block_at(doc, 1).map(|b| b.0), Some(1), "on the fence");
+        assert_eq!(src_block_at(doc, 4), None, "after the block");
+        let new = replace_src_body(doc, 1, "a\nb\n").expect("replace");
+        assert_eq!(new, "* H\n#+begin_src rust\na\nb\n#+end_src\ntail\n");
+        let new = replace_src_body(doc, 1, "").expect("empty body");
+        assert_eq!(new, "* H\n#+begin_src rust\n#+end_src\ntail\n");
+        assert!(replace_src_body(doc, 0, "x").is_none(), "not a fence line");
+    }
+
+    #[test]
+    fn column_view_tabulates_headlines() {
+        let doc = "* TODO [#1] Ship it :work:\nbody\n** Sub task\n";
+        let table = column_view(doc);
+        assert!(table.starts_with("| ITEM | TODO | PRIORITY | TAGS |"));
+        assert!(
+            table.contains("| Ship it | TODO | [#1] | :work: |"),
+            "{table:?}"
+        );
+        assert!(table.contains("|   Sub task |  |  |  |"), "{table:?}");
+    }
+
+    #[test]
+    fn latex_export_covers_structure_and_escaping() {
+        let tex = to_latex("#+title: T&T\n* A_B\n- item 50%\n#+begin_src rust\nlet x = a_b;\n#+end_src\n*bold* text\n");
+        assert!(tex.contains(r"\title{T\&T}"));
+        assert!(tex.contains(r"\section{A\_B}"));
+        assert!(tex.contains(r"\item item 50\%"));
+        assert!(tex.contains("\\begin{verbatim}\nlet x = a_b;\n\\end{verbatim}"));
+        assert!(tex.contains(r"\textbf{bold} text"));
+        assert!(tex.ends_with("\\end{document}\n"));
+    }
+
+    #[test]
+    fn ics_export_emits_dated_events_only() {
+        let ics = to_ics(DOC, "plan.org", "20260805T120000Z");
+        assert!(ics.contains("DTSTART;VALUE=DATE:20260805"));
+        assert!(ics.contains("SUMMARY:Two"));
+        assert!(!ics.contains("Child A"), "undated headlines are skipped");
+        assert!(ics.starts_with("BEGIN:VCALENDAR"));
+        assert!(ics.ends_with("END:VCALENDAR\r\n"));
+    }
 
     #[test]
     fn html_export_neutralizes_dangerous_link_schemes() {

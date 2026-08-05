@@ -135,6 +135,7 @@ const FILE: &[Item] = &[
         "Ctrl Shift O",
     ),
     Item::leaf("menu.item.file.switch_project", "file.switch_project", ""),
+    Item::leaf("menu.item.file.insert", "file.insert_file", ""),
     SEP,
     Item::leaf("menu.item.file.workspace_open", "workspace.open", ""),
     Item::leaf("menu.item.file.workspace_save", "workspace.save", ""),
@@ -147,6 +148,7 @@ const FILE: &[Item] = &[
     Item::leaf("menu.item.file.save", "file.save", "Ctrl S"),
     Item::leaf("menu.item.file.save_as", "file.save_as", "Ctrl Shift S"),
     Item::leaf("menu.item.file.rename", "file.rename", ""),
+    Item::leaf("menu.item.file.revert", "file.revert", ""),
     SEP,
     Item::leaf("menu.item.file.close", "file.close", "Ctrl W"),
     Item::leaf("menu.item.file.close_all", "file.close_all", "Ctrl Shift W"),
@@ -1401,22 +1403,152 @@ const ORG_HEADLINE: &[Item] = &[
     SEP,
     Item::leaf("menu.item.org.move_up", "org.move_up", ""),
     Item::leaf("menu.item.org.move_down", "org.move_down", ""),
+    SEP,
+    Item::leaf("menu.item.org.subtree_copy", "org.subtree.copy", ""),
+    Item::leaf("menu.item.org.subtree_cut", "org.subtree.cut", "C-c C-x C-w"),
+    Item::leaf(
+        "menu.item.org.subtree_paste",
+        "org.subtree.paste",
+        "C-c C-x C-y",
+    ),
+    SEP,
+    Item::leaf("menu.item.org.sort_children", "org.sort_children", ""),
+    Item::leaf("menu.item.org.refile", "org.refile", "C-c C-w"),
+];
+
+/// Folding commands, grouped under Org → Show/Hide (the fold engine is the
+/// editor's; these are the Org-flavored entry points).
+const ORG_SHOWHIDE: &[Item] = &[
+    Item::leaf("menu.item.org.cycle_visibility", "org.cycle_visibility", ""),
+    SEP,
+    Item::leaf("menu.item.org.fold_all", "editor.fold_all", ""),
+    Item::leaf("menu.item.org.show_all", "editor.unfold_all", ""),
+    SEP,
+    Item::leaf("menu.item.org.sparse_todo", "org.sparse.todo", ""),
+    Item::leaf("menu.item.org.sparse_match", "org.sparse.match", "C-c /"),
+];
+
+/// Heading motions, grouped under Org → Navigate.
+const ORG_NAVIGATE: &[Item] = &[
+    Item::leaf("menu.item.org.nav.up", "org.nav.up", ""),
+    Item::leaf("menu.item.org.nav.previous", "org.nav.previous", ""),
+    Item::leaf("menu.item.org.nav.next", "org.nav.next", ""),
+    SEP,
+    Item::leaf("menu.item.org.nav.backward", "org.nav.backward", ""),
+    Item::leaf("menu.item.org.nav.forward", "org.nav.forward", ""),
+];
+
+/// Inline emphasis wrappers, grouped under Org → Editing → Emphasis.
+const ORG_EMPHASIS: &[Item] = &[
+    Item::leaf("menu.item.org.emphasis.bold", "org.emphasis.bold", ""),
+    Item::leaf("menu.item.org.emphasis.italic", "org.emphasis.italic", ""),
+    Item::leaf(
+        "menu.item.org.emphasis.underline",
+        "org.emphasis.underline",
+        "",
+    ),
+    Item::leaf("menu.item.org.emphasis.code", "org.emphasis.code", ""),
+    Item::leaf("menu.item.org.emphasis.verbatim", "org.emphasis.verbatim", ""),
+    Item::leaf("menu.item.org.emphasis.strike", "org.emphasis.strike", ""),
+];
+
+/// Block-structure templates, grouped under Org → Editing → Insert Block.
+const ORG_BLOCK: &[Item] = &[
+    Item::leaf("menu.item.org.block.src", "org.block.src", ""),
+    Item::leaf("menu.item.org.block.example", "org.block.example", ""),
+    Item::leaf("menu.item.org.block.quote", "org.block.quote", ""),
+    Item::leaf("menu.item.org.block.center", "org.block.center", ""),
+    Item::leaf("menu.item.org.block.verse", "org.block.verse", ""),
+    Item::leaf("menu.item.org.block.comment", "org.block.comment", ""),
+];
+
+/// Markup helpers, grouped under Org → Editing.
+const ORG_EDITING: &[Item] = &[
+    Item::sub("menu.item.org.emphasis", ORG_EMPHASIS),
+    Item::sub("menu.item.org.block", ORG_BLOCK),
+    SEP,
+    Item::leaf("menu.item.org.edit_src", "org.edit_src", "C-c '"),
+    Item::leaf("menu.item.org.footnote", "org.footnote", "C-c C-x f"),
+];
+
+/// Archiving commands, grouped under Org → Archive.
+const ORG_ARCHIVE: &[Item] = &[
+    Item::leaf(
+        "menu.item.org.archive.subtree",
+        "org.archive.subtree",
+        "C-c C-x C-s",
+    ),
+    Item::leaf("menu.item.org.archive.tag", "org.archive.tag", "C-c C-x a"),
+];
+
+/// Link commands, grouped under Org → Hyperlinks.
+const ORG_LINKS: &[Item] = &[
+    Item::leaf("menu.item.org.links.store", "org.link.store", "C-c l"),
+    Item::leaf("menu.item.org.links.insert", "org.link.insert", "C-c C-l"),
+    Item::leaf("menu.item.org.links.follow", "org.link.follow", "C-c C-o"),
+    SEP,
+    Item::leaf("menu.item.org.links.next", "org.link.next", ""),
+    Item::leaf("menu.item.org.links.prev", "org.link.prev", ""),
+];
+
+/// Tag and property drawer commands, grouped under Org → Tags & Properties.
+const ORG_TAGS_PROPS: &[Item] = &[
+    Item::leaf("menu.item.org.set_tags", "org.set_tags", "C-c C-q"),
+    Item::leaf("menu.item.org.set_property", "org.set_property", ""),
+    SEP,
+    Item::leaf("menu.item.org.column_view", "org.column_view", "C-c C-x C-c"),
+];
+
+/// Timestamp and planning commands, grouped under Org → Dates & Scheduling.
+const ORG_DATES: &[Item] = &[
+    Item::leaf("menu.item.org.dates.timestamp", "org.timestamp", "C-c ."),
+    Item::leaf(
+        "menu.item.org.dates.timestamp_inactive",
+        "org.timestamp_inactive",
+        "C-c !",
+    ),
+    SEP,
+    Item::leaf("menu.item.org.dates.schedule", "org.schedule", "C-c C-s"),
+    Item::leaf("menu.item.org.dates.deadline", "org.deadline", "C-c C-d"),
+    SEP,
+    Item::leaf("menu.item.org.dates.up", "org.date_up", ""),
+    Item::leaf("menu.item.org.dates.down", "org.date_down", ""),
 ];
 
 /// Export targets, grouped under Org → Export.
 const ORG_EXPORT: &[Item] = &[
-    Item::leaf("menu.name.markdown", "org.export_markdown", ""),
-    Item::leaf("menu.name.html", "org.export_html", ""),
+    Item::leaf("menu.item.org.export.markdown", "org.export_markdown", ""),
+    Item::leaf("menu.item.org.export.html", "org.export_html", ""),
+    Item::leaf("menu.item.org.export.latex", "org.export_latex", ""),
+    Item::leaf("menu.item.org.export.ics", "org.export_ics", ""),
+];
+
+/// Agenda file-list management, grouped under Org → Agenda → File List.
+const ORG_AGENDA_FILES: &[Item] = &[
+    Item::leaf("menu.item.org.agenda.file_add", "org.agenda.file_add", ""),
+    Item::leaf(
+        "menu.item.org.agenda.file_remove",
+        "org.agenda.file_remove",
+        "",
+    ),
+    Item::leaf("menu.item.org.agenda.file_clear", "org.agenda.file_clear", ""),
+    SEP,
+    Item::leaf("menu.item.org.agenda.file_list", "org.agenda.file_list", ""),
 ];
 
 /// The built-in Org agenda views (Org manual: "Agenda Views"), grouped under
-/// Org → Agenda. Each opens a read-only, interactive agenda buffer.
+/// Org → Agenda, plus the scoping commands (restriction lock, file list).
+/// Each view opens a read-only, interactive agenda buffer.
 const ORG_AGENDA: &[Item] = &[
-    Item::leaf("menu.item.org.agenda.week", "org.agenda", ""),
+    Item::leaf("menu.item.org.agenda.week", "org.agenda", "C-c a"),
     Item::leaf("menu.item.org.agenda.todo", "org.agenda.todo", ""),
     Item::leaf("menu.item.org.agenda.match", "org.agenda.match", ""),
     Item::leaf("menu.item.org.agenda.search", "org.agenda.search", ""),
     Item::leaf("menu.item.org.agenda.stuck", "org.agenda.stuck", ""),
+    SEP,
+    Item::leaf("menu.item.org.agenda.lock", "org.agenda.lock", "C-c C-x <"),
+    Item::leaf("menu.item.org.agenda.unlock", "org.agenda.unlock", "C-c C-x >"),
+    Item::sub("menu.item.org.agenda.files", ORG_AGENDA_FILES),
 ];
 
 /// Org-roam daily-note commands, grouped under Org → Roam → Dailies.
@@ -1562,22 +1694,30 @@ const ORG_CAPTURE: &[Item] = &[
 const ORG: &[Item] = &[
     Item::sub("menu.item.org.capture", ORG_CAPTURE),
     SEP,
-    Item::leaf("menu.item.org.cycle_visibility", "org.cycle_visibility", ""),
-    SEP,
+    Item::sub("menu.item.org.showhide", ORG_SHOWHIDE),
+    Item::leaf("menu.item.org.new_heading", "org.new_heading", ""),
+    Item::sub("menu.item.org.navigate", ORG_NAVIGATE),
     Item::sub("menu.item.org.headline", ORG_HEADLINE),
-    Item::leaf("menu.item.org.cycle_todo", "org.cycle_todo", ""),
+    Item::sub("menu.item.org.editing", ORG_EDITING),
+    Item::sub("menu.item.org.archive", ORG_ARCHIVE),
+    SEP,
+    Item::sub("menu.item.org.links", ORG_LINKS),
+    SEP,
+    Item::leaf("menu.item.org.cycle_todo", "org.cycle_todo", "C-c C-t"),
     Item::leaf("menu.item.org.priority.up", "org.priority.up", ""),
     Item::leaf("menu.item.org.priority.down", "org.priority.down", ""),
-    Item::leaf("menu.item.org.close_note", "org.close_note", ""),
+    Item::leaf("menu.item.org.close_note", "org.close_note", "C-u C-c C-t"),
     Item::leaf("menu.item.org.toggle_checkbox", "org.toggle_checkbox", ""),
     Item::leaf(
         "menu.item.org.update_statistics",
         "org.update_statistics",
         "",
     ),
+    Item::sub("menu.item.org.tags_props", ORG_TAGS_PROPS),
+    Item::sub("menu.item.org.dates", ORG_DATES),
     SEP,
-    Item::leaf("menu.item.org.clock_in", "org.clock_in", ""),
-    Item::leaf("menu.item.org.clock_out", "org.clock_out", ""),
+    Item::leaf("menu.item.org.clock_in", "org.clock_in", "C-c C-x C-i"),
+    Item::leaf("menu.item.org.clock_out", "org.clock_out", "C-c C-x C-o"),
     Item::leaf("menu.item.org.time_report", "org.time_report", ""),
     SEP,
     Item::sub("menu.item.org.agenda", ORG_AGENDA),
@@ -1585,6 +1725,8 @@ const ORG: &[Item] = &[
     Item::sub("menu.item.org.node", ORG_NODE),
     Item::sub("menu.item.org.contacts", ORG_CONTACTS),
     Item::sub("menu.item.org.export", ORG_EXPORT),
+    SEP,
+    Item::leaf("menu.item.org.refresh", "org.ctrl_c_ctrl_c", "C-c C-c"),
 ];
 
 const HELP: &[Item] = &[

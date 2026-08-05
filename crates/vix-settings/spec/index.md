@@ -74,6 +74,7 @@ field is absent.
 | `org_priority_highest` | char | `'0'` | Highest-priority character for a headline's `[#X]` cookie (**Org → Priority Up/Down**). "Highest" sorts first — Vix's default is numeric (`'0'` highest .. `'9'` lowest), unlike Emacs's default `'A'`..`'C'`. |
 | `org_priority_lowest` | char | `'9'` | Lowest-priority character; see `org_priority_highest`. |
 | `org_priority_default` | char | `'0'` | Priority given to a headline that had no `[#X]` cookie yet, by **Org → Priority Up/Down**. |
+| `org_agenda_files` | array of strings | `[]` | The Org agenda's explicit file list (workspace-relative paths), managed by **Org → Agenda → File List**. Empty means every `.org` file in the project. |
 | `time_zone` | string | `"UTC"` | Active time zone as an IANA canonical name (e.g. `"UTC"`, `"America/New_York"`). Chosen via **Tools → Time Zone…**; used app-wide (e.g. the clock panel). |
 | `restore_session` | bool | `true` | Reopen the previous [session](../session-restore/index.md) (open files, focused tab, cursor positions) when launched in a workspace with no file argument. Saved per workspace in `session.toml`. |
 | `sticky_search_highlight` | bool | `true` | Keep [search-match highlights](../find-and-replace/index.md) visible after the Find box closes, until toggled off. When `false`, closing Find clears them. |
