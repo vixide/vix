@@ -6,6 +6,52 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-05
+
+### Added
+
+- **File → Insert File…** (`file.insert_file`): insert another file's
+  contents at the cursor, resolved against the workspace root.
+- **File → Revert** (`file.revert`): reload the active buffer from disk,
+  discarding unsaved edits as a single (undoable) step.
+- **Emacs Org-menu parity.** The Org menu is reorganized into the Emacs
+  org-mode menu groups, closing the gap analysis against
+  `spec/emacs-menus/index.md`:
+  - **Dates & Scheduling ▸** — active/inactive timestamps for today,
+    Schedule Item… / Deadline… date prompts (weekday computed, planning
+    line created or updated), and ±1-day date shifting under the cursor.
+  - **Structure** — New Heading, Navigate Headings ▸ (parent, previous/next,
+    same-level both ways), and Edit Structure ▸ grows Copy/Cut/Paste Subtree
+    (system clipboard, paste relevels), Sort Children, and Refile Subtree…
+    via a headline-chooser overlay.
+  - **Show/Hide ▸** — fold-all/show-all plus sparse trees: Sparse TODO Tree
+    and Sparse Tree Match… fold every subtree without a match.
+  - **Editing ▸** — Emphasis wrapping, Insert Block templates, Footnote
+    New/Jump (`C-c C-x f` semantics), and Edit Source Block: a `#+begin_src`
+    body opens in a dedicated tab and the same action writes it back
+    (`C-c '`).
+  - **Archive ▸** — Archive Subtree to the sibling `<file>_archive` file
+    (promoted to level 1, stamped `:ARCHIVE_TIME:`) and the ARCHIVE tag
+    toggle.
+  - **Hyperlinks ▸** — store/insert/follow links (`file:` with `::line`,
+    `id:` resolved across project files, internal `*Headline` targets;
+    web/mail URLs copy to the clipboard), next/previous link.
+  - **Tags & Properties ▸** — Set Tags…, Set Property…, and a read-only
+    Column View table.
+  - **Agenda scoping** — a session restriction lock (`C-c C-x <`/`>`) and a
+    persisted agenda file list (new `org_agenda_files` setting) ahead of the
+    all-project-files default.
+  - **Export ▸** — LaTeX (standalone article) and iCalendar (SCHEDULED /
+    DEADLINE as all-day events) join Markdown and HTML.
+  - **Emacs keymap chords** — the full `C-c` Org family plus a `C-c C-x`
+    third-key table, with which-key popups; the Org menu displays the chords
+    in its shortcut column.
+
+### Changed
+
+- Patch-level dependency bumps: `ratatui-image` 11.0.6, `clap` 4.6.5,
+  `rust-i18n` 4.2.1, `rust-embed` 8.12.
+
 ## [1.4.1] - 2026-07-26
 
 ### Fixed

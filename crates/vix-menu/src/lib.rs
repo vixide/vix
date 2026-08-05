@@ -1405,7 +1405,11 @@ const ORG_HEADLINE: &[Item] = &[
     Item::leaf("menu.item.org.move_down", "org.move_down", ""),
     SEP,
     Item::leaf("menu.item.org.subtree_copy", "org.subtree.copy", ""),
-    Item::leaf("menu.item.org.subtree_cut", "org.subtree.cut", "C-c C-x C-w"),
+    Item::leaf(
+        "menu.item.org.subtree_cut",
+        "org.subtree.cut",
+        "C-c C-x C-w",
+    ),
     Item::leaf(
         "menu.item.org.subtree_paste",
         "org.subtree.paste",
@@ -1448,7 +1452,11 @@ const ORG_EMPHASIS: &[Item] = &[
         "",
     ),
     Item::leaf("menu.item.org.emphasis.code", "org.emphasis.code", ""),
-    Item::leaf("menu.item.org.emphasis.verbatim", "org.emphasis.verbatim", ""),
+    Item::leaf(
+        "menu.item.org.emphasis.verbatim",
+        "org.emphasis.verbatim",
+        "",
+    ),
     Item::leaf("menu.item.org.emphasis.strike", "org.emphasis.strike", ""),
 ];
 
@@ -1496,7 +1504,11 @@ const ORG_TAGS_PROPS: &[Item] = &[
     Item::leaf("menu.item.org.set_tags", "org.set_tags", "C-c C-q"),
     Item::leaf("menu.item.org.set_property", "org.set_property", ""),
     SEP,
-    Item::leaf("menu.item.org.column_view", "org.column_view", "C-c C-x C-c"),
+    Item::leaf(
+        "menu.item.org.column_view",
+        "org.column_view",
+        "C-c C-x C-c",
+    ),
 ];
 
 /// Timestamp and planning commands, grouped under Org → Dates & Scheduling.
@@ -1531,7 +1543,11 @@ const ORG_AGENDA_FILES: &[Item] = &[
         "org.agenda.file_remove",
         "",
     ),
-    Item::leaf("menu.item.org.agenda.file_clear", "org.agenda.file_clear", ""),
+    Item::leaf(
+        "menu.item.org.agenda.file_clear",
+        "org.agenda.file_clear",
+        "",
+    ),
     SEP,
     Item::leaf("menu.item.org.agenda.file_list", "org.agenda.file_list", ""),
 ];
@@ -1547,7 +1563,11 @@ const ORG_AGENDA: &[Item] = &[
     Item::leaf("menu.item.org.agenda.stuck", "org.agenda.stuck", ""),
     SEP,
     Item::leaf("menu.item.org.agenda.lock", "org.agenda.lock", "C-c C-x <"),
-    Item::leaf("menu.item.org.agenda.unlock", "org.agenda.unlock", "C-c C-x >"),
+    Item::leaf(
+        "menu.item.org.agenda.unlock",
+        "org.agenda.unlock",
+        "C-c C-x >",
+    ),
     Item::sub("menu.item.org.agenda.files", ORG_AGENDA_FILES),
 ];
 

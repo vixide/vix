@@ -750,7 +750,9 @@ pub fn nav_next(text: &str, line: usize) -> Option<usize> {
 #[must_use]
 pub fn nav_prev(text: &str, line: usize) -> Option<usize> {
     let lines: Vec<&str> = text.split('\n').collect();
-    (0..line.min(lines.len())).rev().find(|&i| headline_level(lines[i]).is_some())
+    (0..line.min(lines.len()))
+        .rev()
+        .find(|&i| headline_level(lines[i]).is_some())
 }
 
 /// The next sibling headline (same level, within the same parent), like Org
@@ -915,9 +917,10 @@ static TAGS: LazyLock<Regex> =
 pub fn get_tags(text: &str, line: usize) -> Option<String> {
     let lines: Vec<&str> = text.split('\n').collect();
     let h = governing(&lines, line)?;
-    Some(TAGS.captures(lines[h]).map_or_else(String::new, |c| {
-        c[1].trim_matches(':').replace("::", ":")
-    }))
+    Some(
+        TAGS.captures(lines[h])
+            .map_or_else(String::new, |c| c[1].trim_matches(':').replace("::", ":")),
+    )
 }
 
 /// Set the tags of the headline governing `line` (Org `C-c C-q`). `tags` may be
@@ -979,15 +982,21 @@ pub fn set_property(text: &str, line: usize, name: &str, value: &str) -> Option<
     let needle = format!(":{}:", name.to_ascii_lowercase());
     if at < lines.len() && lines[at].trim().eq_ignore_ascii_case(":PROPERTIES:") {
         let (_, end) = drawer_range(&lines, at)?;
-        if let Some(i) = (at + 1..end)
-            .find(|&i| lines[i].trim_start().to_ascii_lowercase().starts_with(&needle))
-        {
+        if let Some(i) = (at + 1..end).find(|&i| {
+            lines[i]
+                .trim_start()
+                .to_ascii_lowercase()
+                .starts_with(&needle)
+        }) {
             out[i] = entry;
         } else {
             out.insert(end, entry);
         }
     } else {
-        out.splice(at..at, [":PROPERTIES:".to_string(), entry, ":END:".to_string()]);
+        out.splice(
+            at..at,
+            [":PROPERTIES:".to_string(), entry, ":END:".to_string()],
+        );
     }
     Some(out.join("\n"))
 }
@@ -1044,8 +1053,8 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
 
 /// Three-letter weekday for days since 1970-01-01 (a Thursday).
 fn weekday_name(days: i64) -> &'static str {
-    ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"][usize::try_from(days.rem_euclid(7))
-        .expect("rem_euclid(7) fits usize")]
+    ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"]
+        [usize::try_from(days.rem_euclid(7)).expect("rem_euclid(7) fits usize")]
 }
 
 /// An Org timestamp for a `YYYY-MM-DD` date with the weekday computed:
@@ -1214,8 +1223,7 @@ fn sparse_folds(text: &str, pred: impl Fn(&str) -> bool) -> Vec<(usize, usize)> 
 
 /// Whether a line is a headline whose keyword is `TODO`.
 fn is_todo_headline(line: &str) -> bool {
-    headline_level(line)
-        .is_some_and(|lv| line[lv..].split_whitespace().next() == Some("TODO"))
+    headline_level(line).is_some_and(|lv| line[lv..].split_whitespace().next() == Some("TODO"))
 }
 
 /// Sparse-tree folds showing only `TODO` headlines (Org `C-c / t`): every
@@ -1336,9 +1344,7 @@ pub fn id_location(text: &str, id: &str) -> Option<usize> {
     let lines: Vec<&str> = text.split('\n').collect();
     let hit = lines.iter().position(|l| {
         let t = l.trim();
-        t.len() >= 4
-            && t[..4].eq_ignore_ascii_case(":id:")
-            && t[4..].trim() == id
+        t.len() >= 4 && t[..4].eq_ignore_ascii_case(":id:") && t[4..].trim() == id
     })?;
     Some(governing(&lines, hit).unwrap_or(hit))
 }
@@ -1353,7 +1359,12 @@ fn src_begin(line: &str) -> Option<String> {
     } else {
         return None;
     };
-    Some(rest.split_whitespace().next().unwrap_or_default().to_string())
+    Some(
+        rest.split_whitespace()
+            .next()
+            .unwrap_or_default()
+            .to_string(),
+    )
 }
 
 /// The `#+begin_src` block containing `line` (begin/end line inclusive, or the
@@ -2092,7 +2103,9 @@ static SENTINEL: LazyLock<Regex> =
 fn inline_latex(s: &str) -> String {
     use regex::Captures;
     let s = LINK
-        .replace_all(s, |c: &Captures| format!("\u{1}{}\u{2}{}\u{3}", &c[1], &c[2]))
+        .replace_all(s, |c: &Captures| {
+            format!("\u{1}{}\u{2}{}\u{3}", &c[1], &c[2])
+        })
         .into_owned();
     let s = escape_latex(&s);
     let s = emph(&s, '*', r"\textbf{", "}");
@@ -2154,7 +2167,10 @@ pub fn to_latex(text: &str) -> String {
                 4 => r"\paragraph",
                 _ => r"\subparagraph",
             };
-            body.push(format!("{cmd}{{{}}}", inline_latex(line[level..].trim_start())));
+            body.push(format!(
+                "{cmd}{{{}}}",
+                inline_latex(line[level..].trim_start())
+            ));
         } else if let Some(item) = line
             .trim_start()
             .strip_prefix("- ")
@@ -2310,7 +2326,10 @@ mod tests {
     fn archive_subtree_extracts_and_stamps() {
         let (rest, block) = archive_subtree(DOC, 3, "2026-08-05 Wed 12:00").expect("archive");
         assert!(!rest.contains("Child B"));
-        assert!(block.starts_with("* Child B"), "promoted to level 1: {block}");
+        assert!(
+            block.starts_with("* Child B"),
+            "promoted to level 1: {block}"
+        );
         assert!(block.contains(":ARCHIVE_TIME: 2026-08-05 Wed 12:00"));
     }
 
@@ -2366,9 +2385,15 @@ mod tests {
         // (6, 8): the trailing blank line belongs to the last subtree.
         assert!(folds.contains(&(6, 8)), "Done stuff folded: {folds:?}");
         assert!(!folds.iter().any(|&(s, _)| s == 0), "TODO subtree open");
-        assert!(!folds.iter().any(|&(s, _)| s == 2), "ancestor of match open");
+        assert!(
+            !folds.iter().any(|&(s, _)| s == 2),
+            "ancestor of match open"
+        );
         let folds = occur_folds(doc, "plain");
-        assert!(!folds.iter().any(|&(s, _)| s == 2), "occur keeps its subtree");
+        assert!(
+            !folds.iter().any(|&(s, _)| s == 2),
+            "occur keeps its subtree"
+        );
         assert!(folds.iter().any(|&(s, _)| s == 0), "occur folds the miss");
     }
 
@@ -2429,7 +2454,9 @@ mod tests {
 
     #[test]
     fn latex_export_covers_structure_and_escaping() {
-        let tex = to_latex("#+title: T&T\n* A_B\n- item 50%\n#+begin_src rust\nlet x = a_b;\n#+end_src\n*bold* text\n");
+        let tex = to_latex(
+            "#+title: T&T\n* A_B\n- item 50%\n#+begin_src rust\nlet x = a_b;\n#+end_src\n*bold* text\n",
+        );
         assert!(tex.contains(r"\title{T\&T}"));
         assert!(tex.contains(r"\section{A\_B}"));
         assert!(tex.contains(r"\item item 50\%"));

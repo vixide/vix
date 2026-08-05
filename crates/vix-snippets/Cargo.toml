@@ -9,5 +9,5 @@ description = "JSON snippet files: loading, scope resolution, merging, and the p
 
 [dependencies]
 serde_json = { workspace = true }
-vix-settings = { path = "../vix-settings", version = "1.4.1" }
-vix-snippet-tool = { path = "../vix-snippet-tool", version = "1.4.1" }
+vix-settings = { path = "../vix-settings", version = "1.5.0" }
+vix-snippet-tool = { path = "../vix-snippet-tool", version = "1.5.0" }

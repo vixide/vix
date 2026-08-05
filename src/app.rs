@@ -5092,7 +5092,10 @@ impl App {
             .take(new_line)
             .map(|l| l.chars().count() + 1)
             .sum::<usize>()
-            + new.split('\n').nth(new_line).map_or(0, |l| l.chars().count());
+            + new
+                .split('\n')
+                .nth(new_line)
+                .map_or(0, |l| l.chars().count());
         tab.editor.set_content(&new);
         tab.editor.set_cursor(offset);
         tab.dirty = true;
@@ -5334,7 +5337,12 @@ impl App {
         let idx = se
             .source
             .as_ref()
-            .and_then(|p| self.editor.tabs.iter().position(|t| t.path.as_ref() == Some(p)))
+            .and_then(|p| {
+                self.editor
+                    .tabs
+                    .iter()
+                    .position(|t| t.path.as_ref() == Some(p))
+            })
             .or_else(|| (se.source_index < self.editor.tabs.len()).then_some(se.source_index));
         let Some(idx) = idx else {
             self.status = t!("status.org_src_gone").to_string();
@@ -5446,8 +5454,11 @@ impl App {
         let seed = crate::org::get_tags(&tab.editor.get_content(), tab.editor.cursor_line())
             .unwrap_or_default();
         self.prompt = Some(
-            Prompt::new(PromptKind::OrgSetTags, t!("prompt.org_set_tags").to_string())
-                .with_input(seed),
+            Prompt::new(
+                PromptKind::OrgSetTags,
+                t!("prompt.org_set_tags").to_string(),
+            )
+            .with_input(seed),
         );
     }
 
@@ -5470,9 +5481,7 @@ impl App {
     /// Apply the Set Property… prompt (`NAME VALUE`) to the governing
     /// headline's `:PROPERTIES:` drawer.
     fn org_set_property(&mut self, input: &str) {
-        let (name, value) = input
-            .split_once(char::is_whitespace)
-            .unwrap_or((input, ""));
+        let (name, value) = input.split_once(char::is_whitespace).unwrap_or((input, ""));
         if name.is_empty() {
             return;
         }
@@ -6156,10 +6165,7 @@ impl App {
         } else if self.settings.org_agenda_files.is_empty() {
             self.file_index
                 .iter()
-                .filter(|p| {
-                    p.extension()
-                        .is_some_and(|e| e.eq_ignore_ascii_case("org"))
-                })
+                .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("org")))
                 .cloned()
                 .collect()
         } else {
@@ -19356,7 +19362,10 @@ mod tests {
         app.editor.new_tab_with_content("* One\nbody\n* Two\n");
         app.org_plan("SCHEDULED", "2026-08-05");
         let text = app.editor.active_tab().unwrap().text();
-        assert!(text.contains("* One\nSCHEDULED: <2026-08-05 Wed>"), "{text:?}");
+        assert!(
+            text.contains("* One\nSCHEDULED: <2026-08-05 Wed>"),
+            "{text:?}"
+        );
 
         if let Some(t) = app.editor.active_tab_mut() {
             t.editor.set_cursor_line(1); // onto the planning line
@@ -19385,7 +19394,8 @@ mod tests {
     fn org_new_heading_and_navigation() {
         let mut app = App::new(std::env::temp_dir(), Settings::default());
         app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
-        app.editor.new_tab_with_content("* One\nbody\n** Child\n* Two\n");
+        app.editor
+            .new_tab_with_content("* One\nbody\n** Child\n* Two\n");
         app.run_action("org.new_heading");
         let text = app.editor.active_tab().unwrap().text();
         assert_eq!(text.split('\n').nth(1), Some("* "), "sibling inserted");
@@ -19402,7 +19412,8 @@ mod tests {
     fn org_refile_chooser_moves_subtree_under_target() {
         let mut app = App::new(std::env::temp_dir(), Settings::default());
         app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
-        app.editor.new_tab_with_content("* One\n** Task\nbody\n* Two\n");
+        app.editor
+            .new_tab_with_content("* One\n** Task\nbody\n* Two\n");
         if let Some(t) = app.editor.active_tab_mut() {
             t.editor.set_cursor_line(1);
         }
@@ -19467,7 +19478,8 @@ mod tests {
     fn org_follow_internal_link_jumps_to_headline() {
         let mut app = App::new(std::env::temp_dir(), Settings::default());
         app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
-        app.editor.new_tab_with_content("[[*Two][go]]\n* One\n* Two\n");
+        app.editor
+            .new_tab_with_content("[[*Two][go]]\n* One\n* Two\n");
         if let Some(t) = app.editor.active_tab_mut() {
             t.editor.set_cursor(2); // inside the link
         }
@@ -19550,7 +19562,10 @@ mod tests {
         app.run_action("org.column_view");
         let table = app.editor.active_tab().unwrap().text();
         assert!(table.starts_with("| ITEM | TODO | PRIORITY | TAGS |"));
-        assert!(table.contains("| Ship | TODO | [#1] | :work: |"), "{table:?}");
+        assert!(
+            table.contains("| Ship | TODO | [#1] | :work: |"),
+            "{table:?}"
+        );
     }
 
     #[test]
@@ -19559,10 +19574,7 @@ mod tests {
         app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
         app.editor.new_tab_with_content("* Task\n");
         // `C-c C-x` arms the third-key prefix instead of dispatching.
-        assert!(app.emacs_c_chord_key(KeyEvent::new(
-            KeyCode::Char('x'),
-            KeyModifiers::CONTROL
-        )));
+        assert!(app.emacs_c_chord_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL)));
         assert!(app.emacs_c_x_prefix, "C-c C-x arms the extended family");
         app.emacs_c_x_prefix = false;
         // `C-c C-x a` toggles the ARCHIVE tag.
