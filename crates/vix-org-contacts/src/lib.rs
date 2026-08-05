@@ -267,7 +267,7 @@ mod tests {
         assert!(v.contains("EMAIL:ada@example.com"));
         assert!(v.contains("EMAIL:ada@analytical.engine"));
         assert!(v.contains("BDAY:1815-12-10"));
-        assert!(v.matches("END:VCARD").count() == 2);
+        assert_eq!(v.matches("END:VCARD").count(), 2);
     }
 
     #[test]

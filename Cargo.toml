@@ -28,11 +28,11 @@ ureq = "2"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-ratatui-image = { version = "11.0.4", default-features = false, features = ["image-defaults", "crossterm"] }
+ratatui-image = { version = "11.0.6", default-features = false, features = ["image-defaults", "crossterm"] }
 image = "0.25"
 confy = "2.0.0"
-clap = { version = "4.6.1", features = ["derive"] }
-rust-i18n = "4.1.0"
+clap = { version = "4.6.5", features = ["derive"] }
+rust-i18n = "4.2.1"
 base64 = "0.22"
 # Held at 11.x deliberately: evalexpr 12.0.0 relicensed from MIT to
 # AGPL-3.0-only, which is incompatible with the license Vix offers. Do not
@@ -64,7 +64,7 @@ anyhow = "1.0"
 arboard = { version = "3.6", default-features = false }
 ratatui-core = "0.1"
 ropey = "1.6"
-rust-embed = { version = "8.11", features = ["include-exclude"] }
+rust-embed = { version = "8.12", features = ["include-exclude"] }
 streaming-iterator = "0.1"
 tree-sitter = "0.26"
 unicode-segmentation = "1.13"
@@ -86,7 +86,7 @@ tree-sitter-toml-ng = { version = "0.7.0" }
 tree-sitter-typescript = { version = "0.23" }
 tree-sitter-yaml = { version = "0.7" }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "any", "sqlite", "postgres", "mysql"] }
-tokio = { version = "1.52.3", features = ["rt", "net", "time"] }
+tokio = { version = "1.53.1", features = ["rt", "net", "time"] }
 futures-util = { version = "0.3", default-features = false }
 mimalloc = "0.1"
 # Property-based ("fuzz") testing of parsers and converters (dev-only).
