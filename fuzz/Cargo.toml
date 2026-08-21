@@ -1,0 +1,70 @@
+# Fuzz targets for Vix's pure cores. A separate workspace on purpose: these
+# targets need nightly and libFuzzer's sanitizer instrumentation, so they must
+# not be built by `cargo build` / `cargo check --workspace` at the repo root.
+#
+# Run one with:  cargo +nightly fuzz run <target>
+# See fuzz/README.md and spec/test/index.md.
+
+[package]
+name = "vix-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+vix-conflict-tool = { path = "../crates/vix-conflict-tool" }
+vix-http-client = { path = "../crates/vix-http-client" }
+vix-lsp-core = { path = "../crates/vix-lsp-core" }
+vix-org-table = { path = "../crates/vix-org-table" }
+vix-textops = { path = "../crates/vix-textops" }
+vix-vcard-parser = { path = "../crates/vix-vcard-parser" }
+
+[[bin]]
+name = "textops"
+path = "fuzz_targets/textops.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "org_table"
+path = "fuzz_targets/org_table.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "lsp_frame"
+path = "fuzz_targets/lsp_frame.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "vcard"
+path = "fuzz_targets/vcard.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "conflict"
+path = "fuzz_targets/conflict.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "http_request"
+path = "fuzz_targets/http_request.rs"
+test = false
+doc = false
+bench = false
