@@ -16,9 +16,12 @@ Not `AGENTS`, not `Agents`.
   A single shouting directory is an exception a reader has to remember, and one
   more thing to get wrong in a path.
 - **Case-insensitive filesystems hide mistakes.** macOS and Windows will happily
-  open `AGENTS/workflow.md` when the file is at `agents/workflow.md`; Linux and
-  CI will not. One spelling, always, removes the class of bug where a link works
-  for the author and 404s for everyone else.
+  open a link to *AGENTS/workflow.md* when the file is at `agents/workflow.md`;
+  Linux and CI will not. One spelling, always, removes the class of bug where a
+  link works for the author and 404s for everyone else — this repo hit exactly
+  that: the directory rename never actually took effect in git on a
+  case-insensitive checkout (`git mv AGENTS agents` silently no-ops there), so
+  every link to it 404'd on Linux CI until `scripts/check-docs` caught it.
 - **Tools that scan for agent material look for the lowercase name**, because
   that is what the convention outside this repository uses too.
 

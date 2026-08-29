@@ -49,7 +49,7 @@ function, where it runs on every `cargo test`.
 
 1. The code must be **pure** — text (or bytes) in, value out, no filesystem, no
    network, no terminal. If it is not, extract the pure part first; that is the
-   house pattern anyway (see `AGENTS/conventions.md`, "Pure-logic modules").
+   house pattern anyway (see `agents/conventions.md`, "Pure-logic modules").
 2. Add the crate to `fuzz/Cargo.toml`'s `[dependencies]` and a `[[bin]]` entry.
 3. Write `fuzz_targets/<name>.rs`. Assert the *invariants*, not just the absence
    of a panic — a fuzz target that only calls the function finds crashes but

@@ -43,7 +43,7 @@ def markdown_files():
         path = os.path.join(ROOT, base)
         if os.path.exists(path):
             yield path
-    for top in ("AGENTS", "spec", "docs", "crates"):
+    for top in ("agents", "spec", "docs", "crates"):
         for dirpath, dirnames, filenames in os.walk(os.path.join(ROOT, top)):
             dirnames[:] = [d for d in dirnames if d not in ("target", ".git")]
             if top == "crates" and f"{os.sep}spec" not in dirpath:
@@ -117,7 +117,7 @@ def check_crate_specs(crates):
 
 def check_crate_map(crates):
     """Report crates missing from the crate map, and map entries with no crate."""
-    path = os.path.join(ROOT, "AGENTS", "share", "crate-map.md")
+    path = os.path.join(ROOT, "agents", "share", "crate-map.md")
     if not os.path.exists(path):
         return ["agents/share/crate-map.md is missing"], []
     text = open(path, encoding="utf-8").read()
