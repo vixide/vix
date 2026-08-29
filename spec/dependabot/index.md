@@ -12,8 +12,13 @@ Enable GitHub Dependabot `.github/dependabot.yml` for scheduled update PRs.
 - **Scheduled update PRs**: [`.github/dependabot.yml`](../../.github/dependabot.yml),
   weekly, one entry for the root `cargo` graph (with an `ignore` for
   `evalexpr` past 12.0.0 — AGPL-relicensed, incompatible with the license Vix
-  offers, see the comment beside it in `Cargo.toml`) plus `github-actions` for
-  the workflow files. GitHub-only: Dependabot reads `.github/dependabot.yml`
+  offers, see the comment beside it in `Cargo.toml` — plus `getrandom`,
+  `ureq`, and `vt100` past the versions that broke `vix-editor-core`,
+  `vix-http-client`, and `vix-terminal` respectively when the first grouped
+  update PR (#6) proposed them; unlike `evalexpr` these aren't a permanent
+  policy, just unmigrated — lift once someone updates those call sites) plus
+  `github-actions` for the workflow files. GitHub-only: Dependabot reads
+  `.github/dependabot.yml`
   from the repository as GitHub sees it, so GitLab's and Codeberg's mirrors do
   not need an equivalent — `cargo deny` (`.github/workflows/security.yml`, the
   `deny` job of `.gitlab-ci.yml`, and `.forgejo/workflows/security.yml`)
@@ -43,3 +48,10 @@ Enable GitHub Dependabot `.github/dependabot.yml` for scheduled update PRs.
   `dist init -y` to regenerate `release.yml` — check whether the new `dist`
   release actually changed that action's pin before assuming the two will
   match up.
+- **A grouped `cargo-dependencies` PR mixes safe and breaking bumps** — the
+  `groups: cargo-dependencies: patterns: ["*"]` in the `cargo` entry above
+  means one PR can bundle a dozen crates, and `cargo build` fails on the
+  bundle as a whole even when most of them are fine. Handle by hand: apply
+  the whole diff, build, and revert (with an `ignore` entry, see above) only
+  the ones that actually broke something — of 11 proposed once (#6), 8
+  applied clean and 3 didn't.

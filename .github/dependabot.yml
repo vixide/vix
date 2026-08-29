@@ -33,6 +33,18 @@ updates:
       # evaluator.
       - dependency-name: "evalexpr"
         versions: [">=12.0.0"]
+      # Breaking API changes past these versions, hit and reverted while
+      # triaging a grouped update — not a policy block like evalexpr's, just
+      # unmigrated. Lift once someone updates the call sites: getrandom::
+      # getrandom() -> ::fill() (vix-editor-core), ureq::request()/Response/
+      # Error::Status's new shapes (vix-http-client), vt100::Parser::set_size
+      # renamed or removed (vix-terminal).
+      - dependency-name: "getrandom"
+        versions: [">=0.3.0"]
+      - dependency-name: "ureq"
+        versions: [">=3.0.0"]
+      - dependency-name: "vt100"
+        versions: [">=0.16.0"]
     groups:
       cargo-dependencies:
         patterns:

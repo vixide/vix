@@ -25,9 +25,14 @@ fn undo_dir() -> Option<PathBuf> {
 
 /// Hex SHA-256 of `s`.
 fn sha(s: &str) -> String {
+    use std::fmt::Write as _;
     let mut h = Sha256::new();
     h.update(s.as_bytes());
-    format!("{:x}", h.finalize())
+    // digest 0.11's `Output` no longer implements `LowerHex` directly.
+    h.finalize().iter().fold(String::new(), |mut out, b| {
+        let _ = write!(out, "{b:02x}");
+        out
+    })
 }
 
 /// The store path for `file` (named by a hash of its absolute path).

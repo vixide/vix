@@ -229,7 +229,7 @@ pub fn gather() -> Vec<Row> {
         }
         rows.push(Row::pair("Vendor", cpu.vendor_id()));
     }
-    if let Some(physical) = sys.physical_core_count() {
+    if let Some(physical) = sysinfo::System::physical_core_count() {
         rows.push(Row::pair("Physical cores", physical.to_string()));
     }
     rows.push(Row::pair("Logical cores", sys.cpus().len().to_string()));
