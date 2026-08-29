@@ -3860,8 +3860,12 @@ fn cancel_command_kills_a_running_command() {
     assert!(app.command_running(), "the command is running");
 
     app.run_action("tools.cancel_command");
+    // A generous budget (10s): killing and reaping a child process can lag
+    // well past typical polling on a loaded/shared CI runner, and this test
+    // has been observed to flake at a tighter budget on GitHub's runners
+    // even though it is instant locally.
     let mut waited = 0;
-    while app.command_running() && waited < 300 {
+    while app.command_running() && waited < 1000 {
         app.poll_command();
         std::thread::sleep(std::time::Duration::from_millis(10));
         waited += 1;

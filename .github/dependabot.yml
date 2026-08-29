@@ -9,23 +9,32 @@
 version: 2
 updates:
   # The main workspace (root Cargo.toml + every crates/vix-*).
+  #
+  # No separate entry for fuzz/: despite declaring its own [workspace],
+  # fuzz/Cargo.toml path-depends on several crates/vix-* members of *this*
+  # workspace, so an update scoped to /fuzz still ends up editing the root
+  # Cargo.toml's [workspace.dependencies] (those crates' `{ workspace = true }`
+  # deps resolve there) — not isolated the way fuzz/README.md's "separate
+  # workspace, so `cargo build`/`cargo check --workspace` at the repo root
+  # never touches it" describes. A grouped /fuzz PR did exactly this once
+  # (bumped evalexpr past the AGPL-license line this repo pins it below, and
+  # getrandom across a breaking API change) — see spec/dependabot/index.md.
+  # This entry already covers fuzz/'s transitive deps that live in the root
+  # graph; only fuzz/Cargo.lock's own pins (libfuzzer-sys and its own tree)
+  # go unwatched, which is an acceptable gap for a dev-only, non-CI-built tool.
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # AGPL-3.0-only as of 12.0.0 — incompatible with the license Vix
+      # offers (see the comment beside evalexpr in Cargo.toml and deny.toml's
+      # license allowlist). Do not lift without replacing the calculator's
+      # evaluator.
+      - dependency-name: "evalexpr"
+        versions: [">=12.0.0"]
     groups:
       cargo-dependencies:
-        patterns:
-          - "*"
-
-  # fuzz/ is a separate workspace on purpose (nightly + sanitizer
-  # instrumentation) — see fuzz/README.md — so it needs its own entry.
-  - package-ecosystem: "cargo"
-    directory: "/fuzz"
-    schedule:
-      interval: "weekly"
-    groups:
-      fuzz-cargo-dependencies:
         patterns:
           - "*"
 
