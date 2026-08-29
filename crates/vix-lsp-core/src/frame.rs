@@ -17,7 +17,7 @@ pub fn encode(value: &Value) -> Vec<u8> {
 
 /// Incremental decoder for the framed byte stream coming back from a server.
 ///
-/// Push raw stdout bytes as they arrive, then repeatedly call [`Decoder::next`]
+/// Push raw stdout bytes as they arrive, then repeatedly call [`Decoder::pop`]
 /// to pop each complete JSON message. Partial messages stay buffered.
 #[derive(Default)]
 pub struct Decoder {

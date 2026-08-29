@@ -169,7 +169,7 @@ fn tokenize_quoted(s: &str) -> Vec<String> {
 
 /// Scan `drawer_lines` for `:PROPERTY_ALL:` lines (Org's allowed-value lists),
 /// tokenizing each value list (quoted-with-spaces tokens count as one value;
-/// see [`tokenize_quoted`]).
+/// see `tokenize_quoted`, private).
 #[must_use]
 pub fn parse_all_values(drawer_lines: &[&str]) -> BTreeMap<String, Vec<String>> {
     let mut map = BTreeMap::new();
@@ -613,7 +613,7 @@ fn is_special_property(name: &str) -> bool {
         .any(|s| s.eq_ignore_ascii_case(name))
 }
 
-/// The fixed TODO-like keyword list this crate recognizes (see [`KEYWORDS`]),
+/// The fixed TODO-like keyword list this crate recognizes (see `KEYWORDS`, private),
 /// for callers (the interactive column-view overlay) that need a fallback
 /// cycle for a `TODO` column with no explicit `TODO_ALL` allowed-value list —
 /// matching real Org, where `TODO` always has *some* cycle even undeclared.

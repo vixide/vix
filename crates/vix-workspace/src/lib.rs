@@ -1,7 +1,7 @@
 //! A *workspace*: a named set of project folders plus the files to reopen, saved
 //! to and loaded from a standalone file (the VS Code "workspace file" idea).
 //!
-//! Unlike the per-directory [`crate::session`] (which auto-restores the last
+//! Unlike the per-directory session (`vix-session`, which auto-restores the last
 //! state for a single root), a workspace is an explicit, portable file the user
 //! saves and opens by name. It can gather several folders so the fuzzy file
 //! finder and search span all of them, and records the open files so reopening

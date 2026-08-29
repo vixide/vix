@@ -19,9 +19,9 @@ no sleeps, no screen scraping.
 | **Documentation** | `scripts/check-docs` | Links resolve, every crate owns a spec, the crate map is complete, `README.md` twins match | `scripts/check` |
 
 `scripts/check` runs the gate the way CI does: fmt, build, clippy at pedantic
-with `-D warnings`, the test suite, and the documentation checks. Fuzzing and
-benchmarks are deliberately outside it — one needs nightly, the other needs a
-quiet machine.
+with `-D warnings`, the test suite, `cargo doc` with `-D warnings`, and the
+documentation checks. Fuzzing and benchmarks are deliberately outside it — one
+needs nightly, the other needs a quiet machine.
 
 ## Writing an integration test
 

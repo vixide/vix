@@ -59,7 +59,7 @@ impl Item {
 
     /// Hover-tooltip help text for this entry, translated into the active locale.
     /// Derived from the label key by appending `.help`; `None` when no such key
-    /// exists (see [`help_text`]). Separators never have help.
+    /// exists (see `help_text`, private). Separators never have help.
     #[must_use]
     pub fn help(&self) -> Option<String> {
         if self.is_separator() {
@@ -117,7 +117,7 @@ impl MenuDef {
 
     /// Hover-tooltip help text for this top-level menu, translated into the active
     /// locale. Derived from the name key by appending `.help`; `None` when no such
-    /// key exists (see [`help_text`]).
+    /// key exists (see `help_text`, private).
     #[must_use]
     pub fn help(&self) -> Option<String> {
         help_text(self.name)

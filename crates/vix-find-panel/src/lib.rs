@@ -3,7 +3,7 @@
 //! This crate owns both the box's *state* — the query and replacement text,
 //! which field has focus, the case / whole-word / regex toggles, and the
 //! [`SearchBar::pattern`] builder — and the *search/replace logic* over buffer
-//! text: [`matches`], [`next_match`], [`replace_all`], [`replace_one`], and the
+//! text: [`matches()`], [`next_match`], [`replace_all`], [`replace_one`], and the
 //! replacement-template [`unescape`]. All operate on `&str` with **character**
 //! offsets; the host owns the buffer and applies the returned text.
 

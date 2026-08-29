@@ -1,6 +1,6 @@
 //! Debug Adapter Protocol (DAP) client: drive a debug adapter over stdio.
 //!
-//! Mirrors the LSP client ([`crate::lsp`]) — same `Content-Length` framing (reused
+//! Mirrors the LSP client (`vix-lsp`) — same `Content-Length` framing (reused
 //! from [`vix_lsp_core::frame`]) over a child process's stdin/stdout, with a
 //! background reader thread feeding a channel that the host drains via [`Dap::poll`].
 //! DAP messages differ from LSP's JSON-RPC: requests are
@@ -25,7 +25,7 @@ use serde_json::{Value, json};
 
 use vix_lsp_core::frame;
 
-/// A configured debug adapter (parallels [`crate::settings::LspServer`]).
+/// A configured debug adapter (parallels `LspServer` in `vix-settings`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DebugAdapter {
     /// Adapter id sent in `initialize` (e.g. `"codelldb"`, `"debugpy"`).
@@ -132,7 +132,7 @@ struct Session {
     stopped: bool,
 }
 
-/// The DAP client: at most one active [`Session`].
+/// The DAP client: at most one active `Session` (private).
 pub struct Dap {
     session: Option<Session>,
 }

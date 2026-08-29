@@ -12,7 +12,7 @@
 //! matters most.
 //!
 //! Implemented: Rust, Python, Go, JavaScript/TypeScript, Ruby (RSpec and
-//! Minitest, via [`TestFrameworkHint`]), and Elixir. Not implemented (out of
+//! Minitest, via [`TestFrameworkHint`](crate::test_at_point::TestFrameworkHint)), and Elixir. Not implemented (out of
 //! scope, budget reasons): Java (branching on Maven vs. Gradle would need a
 //! `TestFrameworkHint` variant and a third command shape), Erlang, and F# —
 //! the dispatch in [`test_at_point`] is a plain per-extension `match`, so

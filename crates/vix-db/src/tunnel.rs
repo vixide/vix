@@ -125,7 +125,7 @@ pub fn wanted(conn: &Connection) -> bool {
 /// # Errors
 ///
 /// Returns a display-ready message if no local port is free, `ssh` cannot be
-/// spawned, or the forward does not come up within [`READY_TIMEOUT`].
+/// spawned, or the forward does not come up within `READY_TIMEOUT` (10s).
 pub fn open(conn: &Connection) -> Result<Option<Tunnel>, String> {
     if !wanted(conn) {
         return Ok(None);

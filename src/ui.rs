@@ -3597,7 +3597,7 @@ pub const CAL_PREV: char = '\u{25c0}';
 pub const CAL_NEXT: char = '\u{25b6}';
 
 /// Columns each glyph cell occupies in the Nerd Font palette grid. The mouse
-/// hit-test in [`crate::app::App::nerd_mouse`] divides by this, so the renderer
+/// hit-test in `App::nerd_mouse` (private) divides by this, so the renderer
 /// and the hit-test must agree on it.
 pub const NERD_CELL_W: u16 = 4;
 

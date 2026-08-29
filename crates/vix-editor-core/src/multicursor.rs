@@ -1,7 +1,7 @@
 //! Multiple cursors ("carets").
 //!
 //! The editor keeps one *primary* cursor (`cursor` + `selection`); this module
-//! adds zero or more *extra* carets in [`Editor::carets`]. Editing and movement
+//! adds zero or more *extra* carets in `Editor::carets` (private). Editing and movement
 //! are applied at every caret at once, and `Ctrl+D` grows the set by selecting
 //! the next occurrence of the current selection/word.
 //!

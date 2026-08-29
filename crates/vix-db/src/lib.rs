@@ -10,7 +10,7 @@
 //! [`session`] so transactions span statements — no external client tools.
 //!
 //! Pure state lives in the submodules ([`catalog`], [`complete`], [`editor`],
-//! [`format`], [`highlight`], [`results`]); [`connect`] models the saved
+//! [`format`](mod@format), [`highlight`], [`results`]); [`connect`] models the saved
 //! connection and its URL, and [`session`] owns the live connection. This
 //! module is the state machine the host drives with keys.
 

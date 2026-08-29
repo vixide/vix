@@ -58,7 +58,7 @@ grammars are feature-gated: `--features syntax-all` for every grammar,
 `--no-default-features` for none.
 
 `scripts/check` (or `make check`) runs the whole gate locally — fmt, build,
-clippy, tests, and the documentation checks. CI enforces the same gate on all
+clippy, tests, `cargo doc`, and the documentation checks. CI enforces the same gate on all
 three forges Vix is pushed to (GitHub, GitLab, Codeberg); when the gate changes,
 change every forge's config with it. See [`spec/ci/index.md`](spec/ci/index.md).
 

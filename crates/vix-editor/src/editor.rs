@@ -61,7 +61,7 @@ fn word_starts(text: &str) -> Vec<usize> {
     starts
 }
 
-/// On-save text-normalization options (from [`crate::settings::Settings`]).
+/// On-save text-normalization options (from `Settings` in `vix-settings`).
 #[derive(Clone, Copy)]
 pub struct SaveOptions {
     /// Strip trailing spaces/tabs from every line.
@@ -856,7 +856,7 @@ impl Editor {
     }
 
     /// Move the active cursor to the end of the last line of the current
-    /// paragraph and scroll it into `area`. See [`cursor_paragraph_start`].
+    /// paragraph and scroll it into `area`. See [`Self::cursor_paragraph_start`].
     pub fn cursor_paragraph_end(&mut self, area: Rect) {
         if let Some(t) = self.active_tab_mut() {
             let cur = t.editor.get_cursor();
@@ -900,7 +900,7 @@ impl Editor {
     }
 
     /// Move the active cursor to the end of the last line of the current section
-    /// and scroll it into `area`. See [`cursor_section_start`].
+    /// and scroll it into `area`. See [`Self::cursor_section_start`].
     pub fn cursor_section_end(&mut self, area: Rect) {
         if let Some(t) = self.active_tab_mut() {
             let cur = t.editor.get_cursor();

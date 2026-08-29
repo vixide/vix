@@ -3,7 +3,7 @@
 //! The session records the open files, the focused tab, and each tab's cursor
 //! position for every workspace root Vix has been used in, so relaunching in the
 //! same directory (with no file given on the command line) reopens what was
-//! there. It lives next to [`Settings`](crate::settings::Settings) in the config
+//! there. It lives next to `Settings` (`vix-settings`) in the config
 //! directory as `session.toml`, but is a separate file so it can be cleared
 //! without touching preferences.
 //!

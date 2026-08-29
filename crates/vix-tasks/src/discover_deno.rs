@@ -5,7 +5,7 @@ use crate::task::{NamedTask, TaskSource};
 /// Parse the `tasks` object of a `deno.json`/`deno.jsonc`, prefixing each
 /// task name with `deno:` and its command with `deno task NAME`. `deno.jsonc`
 /// allows `//` line comments, which plain JSON does not, so this strips them
-/// first with a pragmatic line-based heuristic ([`strip_line_comments`]) —
+/// first with a pragmatic line-based heuristic (`strip_line_comments`, private) —
 /// it does not handle `/* */` block comments or trailing commas, both of
 /// which JSONC also permits but real-world `deno.json` files rarely use.
 /// Malformed JSON or a missing/non-object `tasks` key returns an empty

@@ -6,7 +6,7 @@
 //! for structured data. Saving serializes the tree back to JSON or YAML.
 //!
 //! JSON and YAML share one model: both parse (via `serde_yaml`, which also reads
-//! JSON) into [`Val`], and only the serializer differs (a key-order-preserving
+//! JSON) into `Val` (private), and only the serializer differs (a key-order-preserving
 //! JSON pretty-printer, or `serde_yaml` for YAML). The [`Format`] chosen at open
 //! time decides the title and the serializer.
 //!
