@@ -6,6 +6,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **MSRV policy**: the Minimum Supported Rust Version is the current stable
+  release minus two (`N−2`), today **1.96**. Declared once in `Cargo.toml`
+  (`rust-version`), inherited by every member crate, and verified by CI's
+  `msrv` job on all three forges — see
+  [`spec/rust-msrv-n-minus-2/index.md`](spec/rust-msrv-n-minus-2/index.md).
+
 ## [1.5.0] - 2026-08-05
 
 ### Added

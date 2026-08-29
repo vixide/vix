@@ -22,7 +22,7 @@ specification-driven. Each member crate owns its spec at
 `crates/<crate>/spec/index.md` (multi-topic crates add `spec/<topic>/index.md`);
 the repo-root `spec/` holds only cross-cutting / app-level and build/meta specs
 (`index`, `navigation`, `comparisons`, `license`, `tools`, `rust-clippy-pedantic`,
-…). When behavior and spec disagree, decide which is correct, then make them
+`rust-msrv-n-minus-2`, …). When behavior and spec disagree, decide which is correct, then make them
 match — update the spec when intent changes, update the code when the code
 drifted. Keep specs and implementation in sync.
 
@@ -36,7 +36,9 @@ cargo run                   # run the editor in the current directory
 cargo run -- --locale fr    # run in a specific language
 ```
 
-Edition 2024; the toolchain floor is in `Cargo.toml` (`rust-version`). Syntax
+Edition 2024; the toolchain floor is in `Cargo.toml` (`rust-version`) — current
+stable minus two, verified by CI, see
+[`spec/rust-msrv-n-minus-2/index.md`](spec/rust-msrv-n-minus-2/index.md). Syntax
 grammars are feature-gated: `--features syntax-all` for every grammar,
 `--no-default-features` for none.
 

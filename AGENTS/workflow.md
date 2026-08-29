@@ -55,4 +55,5 @@ the repo-root `spec/`. Notable ones:
 | `crates/vix-theme/spec`                     | Theme model + custom JSON format             |
 | `crates/vix-i18n/spec`               | Internationalization / languages             |
 | `spec/rust-clippy-pedantic`       | `clippy::pedantic` on all targets            |
+| `spec/rust-msrv-n-minus-2`        | MSRV policy: current stable minus two        |
 | `spec/comparisons`, `spec/test`   | Editor comparisons; manual test scenarios    |

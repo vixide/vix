@@ -44,8 +44,9 @@ Three jobs, so a formatting failure is visible without waiting for the tests:
   double wall time for little extra signal, because the editing logic is
   terminal-independent and tested without a TTY.
 - **msrv** — `cargo check` on the toolchain floor declared by
-  `workspace.package.rust-version` in `Cargo.toml`. Bump the matrix entry when
-  that floor moves.
+  `workspace.package.rust-version` in `Cargo.toml` — current stable minus two,
+  see [`spec/rust-msrv-n-minus-2/index.md`](../rust-msrv-n-minus-2/index.md).
+  Bump the matrix entry when that floor moves.
 
 Caching is `Swatinem/rust-cache`; runs are cancelled when superseded on the
 same ref.
@@ -60,7 +61,8 @@ step is why the `HOMEBREW_TAP_TOKEN` secret exists (see
 
 ## GitLab
 
-Stages `check` → `test` → `release`, on the pinned `rust:1.96` image. The
+Stages `check` → `test` → `release`, on the pinned `rust:1.96` image (the
+MSRV — see [`spec/rust-msrv-n-minus-2/index.md`](../rust-msrv-n-minus-2/index.md)). The
 `workflow.rules` block runs pipelines for merge requests, the default branch,
 and tags, but never a duplicate branch pipeline beside an open merge request.
 Cargo's registry and `target/` are cached per ref.
