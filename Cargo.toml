@@ -24,7 +24,7 @@ ratatui = { version = "0.30", features = ["crossterm"] }
 crossterm = "0.29"
 ignore = "0.4"
 walkdir = "2"
-ureq = "2"
+ureq = "3"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -33,33 +33,33 @@ image = "0.25"
 confy = "2.0.0"
 clap = { version = "4.6.6", features = ["derive"] }
 rust-i18n = "4.2.1"
-base64 = "0.22"
+base64 = "0.23"
 # Held at 11.x deliberately: evalexpr 12.0.0 relicensed from MIT to
 # AGPL-3.0-only, which is incompatible with the license Vix offers. Do not
 # bump without replacing the calculator's evaluator — `cargo deny` fails on it.
-evalexpr = "11"
-getrandom = "0.2"
+evalexpr = "13"
+getrandom = "0.4"
 htmd = "0.5"
 jiff = "0.2"
 percent-encoding = "2"
 pulldown-cmark = "0.13"
-sha2 = "0.10"
-similar = { version = "2", features = ["inline"] }
+sha2 = "0.11"
+similar = { version = "3", features = ["inline"] }
 spellbook = "0.4"
-sysinfo = "0.33"
-toml = "0.8"
-md-5 = "0.10"
+sysinfo = "0.39"
+toml = "0.9"
+md-5 = "0.11"
 crc32fast = "1"
 uuid = { version = "1", features = ["v1", "v3", "v4", "v5", "v6", "v7", "v8"] }
 include_dir = "0.7.4"
 serde_yaml = "0.9.34"
 markdown = "1.0.0"
-nix = { version = "0.29", features = ["signal"] }
+nix = { version = "0.31", features = ["signal"] }
 qrcode = { version = "0.14", default-features = false }
 # 0.9 is the floor: 0.8 pulled the unmaintained `serial` crate
 # (RUSTSEC-2017-0008); 0.9 uses `serial2` instead.
 portable-pty = "0.9"
-vt100 = "0.15"
+vt100 = "0.16"
 anyhow = "1.0"
 arboard = { version = "3.6", default-features = false }
 ratatui-core = "0.1"
@@ -93,7 +93,7 @@ mimalloc = "0.1"
 proptest = "1"
 # Statistical benchmarking of the hot paths (dev-only). `harness = false` on each
 # [[bench]]; see benches/ and spec/test/index.md.
-criterion = { version = "0.7", default-features = false, features = ["cargo_bench_support"] }
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 
 [package]
 name = "vix"
