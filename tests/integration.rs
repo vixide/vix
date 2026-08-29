@@ -7904,7 +7904,7 @@ fn running_command_cancel_is_not_blocked_by_a_detached_child() {
         let _ = done_tx.send(());
     });
     assert!(
-        done_rx.recv_timeout(Duration::from_secs(120)).is_ok(),
+        done_rx.recv_timeout(Duration::from_mins(2)).is_ok(),
         "cancel never returned — blocked behind the reader's lock"
     );
 
