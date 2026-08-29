@@ -27,7 +27,11 @@ fn rust_sources(root: &Path) -> Vec<PathBuf> {
             let name = entry.file_name();
             let name = name.to_string_lossy();
             if path.is_dir() {
-                if name == "target" || name == ".git" || name == "fuzz" {
+                // `.cargo` is skipped because GitLab CI points CARGO_HOME at
+                // `$CI_PROJECT_DIR/.cargo` (for caching — see .gitlab-ci.yml),
+                // landing the registry source cache, vendored dependency
+                // source included, inside the workspace this walks.
+                if name == "target" || name == ".git" || name == "fuzz" || name == ".cargo" {
                     continue;
                 }
                 walk(&path, out);
