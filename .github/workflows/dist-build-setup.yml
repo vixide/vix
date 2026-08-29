@@ -1,0 +1,16 @@
+# Injected by dist (dist-workspace.toml's `github-build-setup`) as a step in
+# every dist build job, right before `dist build` runs. See
+# spec/rust-cargo-config-toml-musl/index.md and .cargo/config.toml.
+#
+# .cargo/config.toml pins AR_x86_64-unknown-linux-musl to the triple-prefixed
+# `x86_64-linux-musl-ar` Homebrew's musl-cross provides, which local macOS
+# cross-builds need (macOS's own `ar`/`ranlib` cannot index musl's ELF
+# objects — verified: it silently drops the member instead of erroring).
+# dist's Ubuntu runner only gets `musl-tools` (a `musl-gcc` wrapper, no
+# separately-named `ar`), so that override points at a binary that does not
+# exist there. The plain system `ar` is a native Linux/GNU binutils `ar` on
+# that runner, which — unlike macOS's — handles ELF objects natively
+# regardless of libc, so it is the right (and only necessary) override here.
+- name: Point AR at the system ar for the musl target (CI-only override)
+  shell: bash
+  run: echo "AR_x86_64-unknown-linux-musl=ar" >> "$GITHUB_ENV"
