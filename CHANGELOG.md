@@ -6,6 +6,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-08-29
+
 ### Added
 
 - **A Project menu** (`vix-tasks`): six lifecycle command slots — Configure,
