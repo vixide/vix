@@ -14,16 +14,18 @@ make them match — edit the spec when intent changes, edit the code when it
 drifted.
 
 Specs are **per crate**. Vix is a Cargo workspace: a thin App shell (root package
-`vix`, `src/`) over ~98 `vix-*` member crates under `crates/`. Each member crate
+`vix`, `src/`) over 102 `vix-*` member crates under `crates/`. Each member crate
 owns its spec at `crates/<crate>/spec/index.md` (multi-topic crates add
 `spec/<topic>/index.md` sub-specs), so a crate and its specification travel
 together. This repo-root `spec/` holds only the cross-cutting / app-level and
 build/meta specs that no single crate owns — this overview, `navigation`,
-`comparisons`, `tools`, `license`, `rust-clippy-pedantic`, `test`, `ci`, and the
-like.
+`comparisons`, `emacs-menus`, `tools`, `license`, `trademarks`,
+`rust-clippy-pedantic`, `rust-cargo-fmt`, `test`, `ci`, `debian`, and the like.
+A spec that describes one crate's behavior belongs with that crate; `scripts/check-docs`
+enforces that every crate owns a `spec/index.md`.
 See [`AGENTS.md`](../../AGENTS.md) and
-[`AGENTS/workflow.md`](../../AGENTS/workflow.md) for the workflow, and
-[`AGENTS/share/crate-map.md`](../../AGENTS/share/crate-map.md) for the full map.
+[`agents/workflow.md`](../../agents/workflow.md) for the workflow, and
+[`agents/share/crate-map.md`](../../agents/share/crate-map.md) for the full map.
 
 ## Crates
 
@@ -57,6 +59,19 @@ widget pins that.
 | markdown      | Markdown parser & converter                           | https://crates.io/crate/markdown       | librust-markdown-dev                                                                           |
 | csv           | Comma Separated Values                                | https://crates.io/crate/csv            | librust-csv-dev                                                                                |
 | toml          | Tom's Obvious Minimal Language                        | https://crates.io/crate/toml           | librust-toml-dev                                                                               |
+
+`Cargo.toml` is authoritative for the full dependency set; the table above lists
+the load-bearing ones. Also linked, grouped by why:
+
+| Why | Crates |
+| --- | ------ |
+| Editor engine | `ropey` (rope buffer), `unicode-segmentation`, `unicode-width`, `streaming-iterator`, `ratatui-core`, `rust-embed` (Tree-sitter queries in `langs/`) |
+| Clipboard | `arboard`, behind `vix-clipboard`'s process-wide lock and opt-in |
+| Database workbench | `sqlx` (`Any` driver: bundled SQLite, pure-Rust Postgres/MySQL), `tokio`, `futures-util` |
+| Terminal panel | `portable-pty`, `vt100`, `nix` (suspend/resume) |
+| Hashes & ids | `sha2`, `md-5`, `crc32fast`, `uuid`, `getrandom`, `base64`, `percent-encoding` |
+| Markup | `pulldown-cmark`, `htmd` (HTML → Markdown), `qrcode` |
+| Files | `ignore` (gitignore-aware walking), `anyhow` |
 
 The center editing area uses **`editor_core`** — Vix's fully-custom code-editor
 widget (Tree-sitter syntax highlighting, undo/redo history, selection, system
@@ -92,9 +107,10 @@ command-palette file finder operate within it.
   highlighting, undo/redo, selection, system clipboard, block cursor)
   - Top tab bar: each tab is one text file; preview tabs render dimmed
   - Show/hide line numbers, whitespace, scroll bar, soft wrap (`View ▸ Editor`)
-  - Editing comforts: select all (`Ctrl+A`), duplicate line (`Ctrl+D`), delete
-    line (`Ctrl+K`), move line up/down (`Alt+↑`/`Alt+↓`), jump to the matching
-    bracket (`Ctrl+]`), and auto-indent on Enter (see `editor_core/spec/index.md`)
+  - Editing comforts: select all (`Ctrl+A`), duplicate line (`Ctrl+Shift+D`),
+    delete line (`Ctrl+K`), forward delete (`Ctrl+D`, the macOS binding), move
+    line up/down (`Alt+↑`/`Alt+↓`), jump to the matching bracket (`Ctrl+]`), and
+    auto-indent on Enter (see `crates/vix-editor-core/spec/index.md`)
   - Right-side scroll bar (`ratatui::widgets::Scrollbar`)
   - Opening an image file (png/jpg/gif/bmp/webp/…) shows it in a read-only
     image tab via `ratatui-image` (needs a graphics-capable terminal)
@@ -102,7 +118,7 @@ command-palette file finder operate within it.
   - List of advice and notifications; each item shows a close `x`
     (dismiss with `x`, `Delete`, or `Enter` while the drawer is focused)
 - Bottom dock (toggle with `View ▸ Show/Hide Bottom Dock`; see
-  `bottom_dock/spec/index.md`) — a full-width, resizable, scrollable line panel pinned
+  `crates/vix-bottom-dock/spec/index.md`) — a full-width, resizable, scrollable line panel pinned
   above the status bar for logs/output/data
   - **Run Command** (`Tools ▸ Run Command…`) streams a shell command's output
     here; **Cancel Command** kills it
@@ -120,135 +136,95 @@ command-palette file finder operate within it.
   menu name to open it
 - Keyboard shortcut help: press `F1` (or `Help ▸ Keyboard Shortcuts`) for an
   overlay of every binding
-
 ## Architecture
 
-The crate exposes a library (`src/lib.rs`) plus a thin binary (`src/main.rs`).
-Splitting it this way keeps all editing logic terminal-independent and unit
-testable.
+The root package exposes a library (`src/lib.rs`) plus a thin binary
+(`src/main.rs`). Splitting it this way keeps all editing logic
+terminal-independent and unit-testable: the binary owns the terminal, and
+nothing else does.
 
-| Module             | Responsibility                                                 |
-| ------------------ | -------------------------------------------------------------- |
-| `app`              | Central state, event routing, action dispatch, keymap dispatch |
-| `editor`           | Tabs/buffers wrapping `editor_core`; open/save/goto             |
-| `explorer`         | Left-drawer directory tree                                     |
-| `menu`             | Menu-bar definitions (i18n-keyed) and dropdown state           |
-| `palette`          | Command palette (file/`>`/`#`/`:`/`@` modes) + fuzzy matching  |
-| `search`           | Find / find-and-replace toolbar state                          |
-| `workspace_search` | Workspace-wide search/replace panel state                      |
-| `query`            | Interactive query-replace session                              |
-| `messages`         | Right-drawer notifications                                     |
-| `fileops`          | Explorer copy/cut/paste/delete filesystem helpers              |
-| `settings`         | confy-backed settings (TOML) at `~/.config/vix/config.toml`    |
-| `theme`            | Nerd Font icons + re-export of `theme_model`             |
-| `ui`               | All rendering; lays out the frame and draws each pane          |
+The App shell is deliberately small — everything that can be a crate is one:
 
-The calendar date/time logic, theme model, locale list, keymap (keyboard
-navigation style) list, keyboard-help rows, Nerd Font glyph set, and find /
-replace box state live in the internal crates `calendar_panel`,
-`theme_model`, `locale_model`, `keymap_model`,
-`keyboard_shortcut_panel`, `nerd_font_picker`, `find_panel`,
-`left_dock` (explorer), `right_dock` (messages), `bottom_dock`, and
-`status_bar_panel`. Bundled themes are embedded in the binary with
-`include_dir`. See `docs/architecture.md`.
+| Shell module          | Responsibility                                                  |
+| --------------------- | ---------------------------------------------------------------- |
+| `main.rs`             | CLI (`clap`), locale resolution, terminal setup/teardown, the event loop, suspend/resume |
+| `lib.rs`              | Crate root: lint posture, `i18n!` catalog, and the `pub use vix_* as …` re-exports |
+| `app.rs`              | `App` state, `on_key` / `on_mouse` / `on_paste`, `run_action`, overlay routing, feature wiring |
+| `ui.rs`               | All rendering: frame layout and every pane/overlay draw function |
+| `explorer.rs`         | The directory tree flattened into rows                          |
+| `messages.rs`         | The notification drawer model                                   |
+| `search.rs`, `workspace_search.rs` | Search bar helpers; workspace-wide search/replace state |
+| `edit_table.rs`, `edit_outline.rs`, `column_view.rs` | Overlay editors that live in the shell because they drive the active buffer directly |
 
-Event flow: `main` runs the loop, calling `ui::draw(&mut app)` (which records
-each pane's rectangle for mouse hit-testing) then feeding each `crossterm` event
-to `App::on_key` or `App::on_mouse`. `on_key` resolves modal layers in priority
-order — help, dialog, calendar, theme/locale/keymap/recent choosers, Nerd Font
-palette, query-replace, workspace search, confirm, paste-conflict, prompt, palette,
-search, menu — before
-the active **keymap** dispatch (Apple / VSCode / Emacs / Vi / Spacemacs /
-IntelliJ / Eclipse; see
-`keymap_model/spec/index.md`) and, finally, the focused pane (editor / explorer /
-messages / bottom dock). Each loop iteration also drains any streamed
-command output into the bottom dock. Menu items and palette commands share one
-set of action identifiers dispatched by `App::run_action`.
+Everything else — the editor widget, menu, palette, find/replace, settings,
+themes, locales, keymaps, docks, panels, pickers, Git, LSP/DAP, Org, the
+database workbench, and every pure text tool — is a `vix-*` member crate.
+`src/lib.rs` re-exports each under a short name (`pub use vix_git as git;`), so
+shell code says `crate::git`, `crate::menu`, `crate::db`. See
+[`agents/share/crate-map.md`](../../agents/share/crate-map.md) for the full map
+and [`docs/architecture/index.md`](../../docs/architecture/index.md) for the
+narrative version.
+
+### Event flow
+
+`main` runs the loop: draw, then poll one `crossterm` event.
+`ui::draw(&mut app)` records each pane's rectangle so mouse events can be
+hit-tested. Keys go to `App::on_key`, mouse to `App::on_mouse`, and a bracketed
+paste to `App::on_paste` (see
+[`crates/vix-editor/spec/bracketed-paste/index.md`](../../crates/vix-editor/spec/bracketed-paste/index.md)).
+
+`on_key` resolves, in strict priority order:
+
+1. Key-release events (dropped) and, on macOS, the `Command` → `Control` fold
+   ([`crates/vix-editor/spec/command-key/index.md`](../../crates/vix-editor/spec/command-key/index.md)).
+2. Jump-label mode, the LSP completion popup, and a pending hover tooltip.
+3. Modal overlays — welcome, help, dialogs, tool dialogs, calendar/clock, then
+   the panel layer (terminal, database, edit surfaces, choosers, query-replace,
+   workspace search, confirm, prompt, palette, search, menu). `App::overlay_capturing_keys`
+   mirrors this chain for callers that need to ask "is the editor reachable?"
+   without dispatching; the two must be changed together.
+4. Org-table context keys, when the cursor is inside a pipe table.
+5. The active **keymap** (Apple, VSCode macOS/Windows, Emacs, Vi, Spacemacs,
+   IntelliJ macOS/Windows, Eclipse, Sublime Text — see
+   [`crates/vix-keymap-model/spec/index.md`](../../crates/vix-keymap-model/spec/index.md)),
+   which translates keys into `run_action` ids and editor motions rather than
+   duplicating behavior.
+6. The focused pane: editor, explorer, messages, or bottom dock.
+
+Each loop iteration also drains background work — streamed command output, LSP
+and DAP messages, async database results, HTTP responses, file-change reloads,
+auto-save — into the state the next draw reads. Menu items, palette commands,
+and keymap chords all share one set of action ids dispatched by
+`App::run_action`.
 
 ## Implementation status
 
-Shipped: menu bar, tabbed editor with Tree-sitter syntax highlighting, file
-explorer, message drawer, status bar, calendar box, command palette (5 modes),
-incremental find, find & replace (regex, capture groups, escapes, case/word
-toggles), interactive query-replace (`Ctrl+Alt+R`, `y/n/!/q`), settings
-persistence, the `path:line:col` open syntax, mouse interactions
-(click-to-position, drag-select, wheel scroll, tab/pane/menu clicks), in-terminal
-image viewing, and the `F1` keyboard-shortcut help overlay.
+Vix is **shipped and in use**; the feature set below is built, specified, and
+tested. Each crate's own `spec/index.md` is authoritative for its area and marks
+anything still in design.
 
-Also shipped: explorer file clipboard (copy/cut/paste with conflict prompt),
-multi-selection, delete-with-confirm, and buffers that follow file moves.
+| Area | State |
+| ---- | ----- |
+| Editing core | Tabs, undo **tree** (branch-preserving, persisted per file), soft wrap, bracket matching, indent guides, rainbow brackets, sticky scroll, minimap, multiple cursors, column selection, structural selection, read-only lock |
+| Text transforms | Case, sort/dedupe/shuffle/reverse, squeeze blanks, line endings, ROT13, align, surround, transpose, delete-by-unit, wrap/fill, increment/toggle values, Emmet |
+| Files & explorer | Tree, preview tabs, copy/cut/paste with conflict prompts, multi-select, delete, buffers that follow moves, File → Open browser, recent files, sessions and workspaces |
+| Search | Incremental find, find/replace with regex + capture groups, smart case, workspace-wide search/replace, interactive query-replace, TODO finder |
+| Navigation | Position history, go-to definition/symbol/line/percent/byte, jump labels, matching tag, breadcrumbs, outline panel |
+| Language support | Tree-sitter highlighting (feature-gated grammars), LSP (diagnostics, hover, completion, references, call hierarchy, rename, code actions/lens, inlay hints), DAP debugging |
+| Version control | Git status/diff/blame, per-hunk stage/unstage/revert, branch/stash/amend, merge-conflict resolver, diff gutter, word-level diff |
+| Data & tools | Database workbench (SQLite/Postgres/MySQL), HTTP client, test runner, task runner, integrated terminal, converters, generators, pickers, info panels |
+| Org mode | Headlines, TODO/checkbox cookies, agenda, capture, refile, footnotes, id links, tables (`TBLFM`), column view, Org-roam, dailies, backlinks, export |
+| Presentation | Monochrome bundled themes plus custom JSON themes, base16 palettes, Zen mode, split panes (up to 2×2), 27 UI languages, ten keymaps |
+| Terminal integration | Mouse (click/drag/wheel/hover), in-terminal images, bracketed paste, macOS `Command` folded to `Control`, suspend/resume |
 
-Also shipped: workspace-wide search & replace (`Ctrl+Shift+F`, searches open
-buffers in their unsaved state), position history (`Alt+Left`/`Alt+Right`), and
-"go to definition" (`F12`) — a fast offline heuristic over declaration-style
-lines rather than a semantic LSP.
+### Quality gates
 
-Also shipped: **internationalization** (`rust-i18n`; 27 selectable languages
-including Klingon and Sindarin, English fallback, `--locale` flag + `locale`
-setting + live **View → Locale…**), **themes** (every theme is a JSON theme;
-Dark, Light, and more ship bundled, plus user-installed; live **View → Theme…**;
-see `theme_model/spec/index.md`), **keymaps** (Apple / VSCode macOS / Emacs / Vi /
-Spacemacs / IntelliJ macOS / IntelliJ Windows / Eclipse keyboard navigation
-styles, live **View → Keymap…**; see `keymap_model/spec/index.md`),
-**configuration** (`confy` TOML), a **CLI** (`clap`), the **Vix menu**
-(About / Website / Email modal dialogs), **resizable docks** (drag a dock's inner
-edge), **dock toggle icons** in the menu bar, **Open Recent**, **go-to-symbol**
-(palette `@`), **comment toggle** (`Ctrl+/`), and **on-save normalization**
-(`trim_trailing_whitespace` / `ensure_final_newline` settings).
-
-Also shipped (editor widget): the center editor is now **`editor_core`**, Vix's
-fully-custom widget (replacing the vendored fork; see `editor_core/spec/index.md`), with
-**soft wrap** (**View → Editor → Show/Hide Soft Wrap**, the `soft_wrap` setting),
-**bracket matching** (highlight the partner of the bracket at the cursor; no
-auto-insert), **indentation settings** (`indent_style` / `tab_width` drive what
-Tab inserts), **Smart Home** (`Home` → first non-blank, then column 0),
-**find occurrence of selection** (`Alt+N` / `Alt+P`), **live go-to-line preview**
-(the cursor follows the number typed in palette `:` mode), **visible whitespace**
-(**View → Editor → Show/Hide Whitespace**), and a **richer status bar**
-(language, line ending, encoding, selection char/line count).
-
-Also shipped: **menu separators** grouping dropdown items (File/Edit/View);
-**Nerd Font Palette** (Tools → a glyph picker, `nerd_font_picker`);
-**Show/Hide Bottom Status** (`View → Show/Hide Bottom Status`, `show_status_bar`
-setting); more **editing comforts** — Select All (`Ctrl+A`), Duplicate Line
-(`Ctrl+D`), Move Line Up/Down (`Alt+↑`/`Alt+↓`), Jump to Matching Bracket
-(`Ctrl+]`), and auto-indent on Enter; the find / replace box state extracted to
-`find_panel` with **click-to-focus** fields; and **borderless screen edges**
-(the left/right docks drop their outer border and the editor its left/right
-borders).
-
-Also shipped: the left/right docks and the status bar were extracted to internal
-crates (`left_dock`, `right_dock`, `status_bar_panel`); a new
-**bottom dock** (`bottom_dock`, `View → Show/Hide Bottom Dock`) — resizable
-(drag its top edge), scrollable (sticky-bottom), with **click-to-jump** on
-`path:line` lines — fed by **Run Command** / **Cancel Command** (Tools) and
-**Search in Workspace → Dock** (Edit → Find; `Alt+C` case / `Alt+R` regex). Also:
-nested **submenus** (View → Editor, Edit → Find), **menu type-ahead** (type a
-letter to jump to the next matching item), **Close All Tabs**, **Reopen Closed
-Tab** (`Ctrl+Shift+T`), **Find Next/Previous** (`Ctrl+G`/`Ctrl+Shift+G`, remember
-the last search), and the **calendar** gained click-to-insert and clickable
-month-nav arrows.
-
-Also shipped: an **unsaved-changes prompt** on tab close / quit (Save / Don't
-Save / Cancel); the **ASCII panel** (Tools → ASCII; `ascii_character_picker`); the
-**System Information panel** (Tools → System Information; `system_information_panel`,
-via `sysinfo`); **case transforms** (Edit → Case: upper/lower/title/kebab/snake/
-camel/pascal; `src/case.rs`); a configurable bottom-dock **scrollback** setting;
-and **workspace-search path filters** (Include/Exclude path regex).
-
-Also shipped: **spell checking** (`spellcheck`, via `spellbook`) — red
-underline of misspellings in comments/strings (View → Editor → Toggle
-Spellcheck), `Ctrl+;` suggestions popup (replace / add to dictionary / ignore),
-Hunspell dictionaries autodetected from standard locations (`dictionary_path`
-setting); see `spellcheck.md` and `dictionaries.md`.
-
-Also shipped: **git integration** (`git`, shelling out to the `git` CLI) —
-branch + dirty indicator in the status bar, M/A/?/D/R/U badges in the explorer, a
-colored diff gutter against HEAD, and a **Git** menu with a Changes panel
-(stage/unstage/commit), Switch Branch, and Pull/Push/Fetch; see
-`git-integration.md`.
-
-Roadmap (designed in the sibling spec files, not yet built): a real LSP client
-(semantic go-to-definition, completions, diagnostics), display tab width
-(literal tabs as `tab_width` columns), and git conflict resolution. Each sibling
-spec marks its own status.
+- `cargo clippy --workspace --all-targets -- -D warnings`, at `clippy::pedantic`,
+  with `#![forbid(unsafe_code)]` and `#![deny(missing_docs)]` in every crate
+  ([`spec/rust-clippy-pedantic/index.md`](../rust-clippy-pedantic/index.md)).
+- `cargo test` — unit, integration, and doc tests, none of which need a TTY.
+- `cargo fuzz` targets over the pure text/parse cores, and `cargo bench`
+  (Criterion) over the hot paths ([`spec/test/index.md`](../test/index.md)).
+- `scripts/check` runs the whole gate locally; `scripts/check-docs` checks that
+  this documentation still matches the tree it describes.
+- CI runs the same gate on all three forges ([`spec/ci/index.md`](../ci/index.md)).

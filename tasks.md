@@ -53,7 +53,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   `vix-test-support` crate) that boots the App against ratatui
   `TestBackend` at 100×30, feeds scripted key events, and asserts golden
   text screens (insta `assert_snapshot!`). Document how to review/update
-  snapshots in `AGENTS/conventions.md`.
+  snapshots in `agents/conventions.md`.
 - [ ] **T005 — Seed snapshots.** Using T004: welcome screen, editor with a
   Rust file, File menu open, palette open with query, find bar with
   matches, git panel, table edit surface, F1 help overlay, zen mode, a
@@ -69,7 +69,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   tabular/JSON/YAML/TOML converter round-trip, modeline parsing, macro
   token parsing (`vix-macros`). Run each locally ≥ 10 min; fix all crashes
   found; add regression tests for fixes. Fuzzing is not in CI (cost), but
-  document the invocation in `AGENTS/conventions.md`.
+  document the invocation in `agents/conventions.md`.
 - [ ] **T008 — Binary-size tracking.** CI step that builds
   `--release` (default features), records the stripped binary size, and
   comments/records it so growth is visible per PR.
@@ -223,7 +223,7 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   (Vix / Vim / Helix / Micro / Zed-ish columns, honest ✓/✗).
 - [ ] **T309 — CHANGELOG discipline.** Backfill `CHANGELOG.md` top section
   from git history since the last entry; add the "changelog entry per
-  user-visible change" rule to `AGENTS/conventions.md` (already implied by
+  user-visible change" rule to `agents/conventions.md` (already implied by
   this file — make it explicit there).
 
 ## Phase 4 — Tutorials

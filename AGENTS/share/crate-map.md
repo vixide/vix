@@ -2,15 +2,16 @@
 
 Vix is a **Cargo workspace** (`[workspace] members = ["crates/*"]`) on **edition
 2024**. The root package `vix` (`src/`) is the thin **App shell** — CLI, event
-loop, `App` state, rendering, and the explorer — and it depends on the ~98
+loop, `App` state, rendering, and the explorer — and it depends on the 102
 `vix-*` **member crates** under `crates/` that hold every feature plus the custom
 editor widget (`vix-editor-core`). Shared reference for where things live.
 
 **Specs are per-crate.** Each member crate owns its source-of-truth spec at
 `crates/<crate>/spec/index.md` (multi-topic crates keep `spec/<topic>/index.md`
 sub-specs). The top-level `spec/` keeps only cross-cutting / app-level and
-build/meta docs (`index`, `navigation`, `comparisons`, `license`, `debian`,
-`homebrew-tap-token`, `rust-cargo-*`, `rust-clippy-pedantic`, `test`, `tools`).
+build/meta docs (`index`, `navigation`, `comparisons`, `emacs-menus`, `license`,
+`trademarks`, `debian`, `homebrew-tap-token`, `ci`, `rust-cargo-*`,
+`rust-clippy-pedantic`, `main-rs-and-lib-rs-boilerplate`, `test`, `tools`).
 
 ## Lint posture
 
@@ -68,6 +69,7 @@ features (`syntax-common` by default, `syntax-all` for everything).
 | `workspace_search.rs` | `WorkspaceSearch`: workspace-wide search/replace + static results.  |
 | `edit_table.rs`       | CSV/TSV spreadsheet overlay (`Grid`).                               |
 | `edit_outline.rs`     | Prose-hierarchy outline overlay (`Tree`).                           |
+| `column_view.rs`      | Org column-view overlay (spec-driven columns, editable in place).   |
 | `ui.rs`               | All rendering: layout + per-pane/overlay draw functions.            |
 
 Everything else the shell used to own now lives in a member crate, reached
@@ -85,15 +87,16 @@ through the workspace dependency graph (e.g. `vix-editor`, `vix-menu`,
 | Spellcheck  | `vix-spellcheck` (Hunspell via `spellbook`).                                  |
 | Snippets    | `vix-snippets` (JSON snippet files: scopes, parse, merge, picker), `vix-snippet-tool` (tabstop engine + bundled snippets). |
 | Media types | `vix-media-type` (the MIME catalog parsed from `crates/vix-media-type/spec/media-types.tsv`; text/binary base, extension lookup, picker). |
-| Org mode    | `vix-org` (headline structure, TODO/checkbox, Markdown/HTML export), `vix-affix` (prefix/suffix add/drop/toggle helpers), `vix-roam` (Org-roam nodes/backlinks/dailies/transclusion), `vix-org-contacts` (contact parsing + vCard). |
-| Run / test  | `vix-tasks` (named `tasks.toml` runner), `vix-test-runner` (parse test output into a pass/fail tree), `vix-terminal` (integrated shell), `vix-diff-view` (compare-with-file). |
+| Org mode    | `vix-org` (headline structure, TODO/checkbox, column view, Markdown/HTML export), `vix-org-table` (the built-in table editor: structural edits + `TBLFM` formulas), `vix-org-capture` (capture templates + placeholder expansion), `vix-affix` (prefix/suffix add/drop/toggle helpers), `vix-roam` (Org-roam nodes/backlinks/dailies/transclusion), `vix-org-contacts` (contact parsing + vCard). |
+| Run / test  | `vix-tasks` (named `tasks.toml` tasks, project-type lifecycle commands, task discovery, monorepo subprojects, test-at-point — Project menu), `vix-test-runner` (parse test output into a pass/fail tree), `vix-terminal` (integrated shell), `vix-diff-view` (compare-with-file). |
 | Config      | `vix-editorconfig` (`.editorconfig` parsing), `vix-macros` (persisted keyboard macros), `vix-workspace` (`.toml` workspace: folders + files + split pane tree), `vix-settings` (confy-backed `Settings`), `vix-session` (save/restore). |
 | AI          | `vix-ai-panel` (chat panel), `vix-ai-diff` (AI diff review).                  |
 | Database    | `vix-db` (the **DB** menu workbench, `crates/vix-db/spec`): a full-screen overlay over embedded sqlx `Any` drivers (bundled SQLite, pure-Rust Postgres/MySQL over rustls). Submodules: `session` (one persistent connection per workbench on a worker thread; blocking `run` + async `send`/`poll` streaming `Chunk`s + `restart`), `connect` (saved-connection model + URLs), `catalog` (schema tree + per-engine metadata/EXPLAIN/DDL SQL), `editor`/`highlight`/`complete`/`format` (SQL editor: statement split, write detection, JOIN-aware autocomplete, beautify), `results` (grid: filter/sort/select/append), `store` (history + saved queries + session query log), `export` (6 formats), `ai` (schema-only NL→SQL, `spawn_ai` bridge), `chart` (ASCII bars), `erd` (Mermaid ER diagram), `import` (CSV/TSV → table), `params` (`:name` binds), `secret` (credential waterfall: `password_command` + OS keyring), `tunnel` (SSH `-L` forward). |
 | Text tools  | `vix-format-tool`, `vix-jwt-tool`, `vix-base-tool`, `vix-base64-tool`, `vix-url-tool`, `vix-uuid-tool`, `vix-zid-tool`, `vix-checksum-tool`, `vix-regex-tool`, `vix-markdown-preview`, `vix-convert-tabular`, `vix-convert-from-*-into-*-tool` (12). |
-| Pure text ops | `vix-align` (align lines on a delimiter), `vix-textops` (line-ending convert / squeeze blanks / ROT13, plus cursor-relative rewrites: increment number, smart toggle, transpose, `tag_column`), `vix-case` (selection case transforms), `vix-emmet` (abbreviation → HTML), `vix-tags` (HTML/XML matching-tag jump). Pure `text → text` / offset helpers with unit tests, driven from Edit/Go/Tools actions. |
+| Pure text ops | `vix-align` (align lines on a delimiter), `vix-textops` (line-ending convert / squeeze blanks / ROT13 / hard wrap, plus cursor-relative rewrites: increment number, smart toggle, transpose chars/words/lines/sentences/paragraphs/sections, wrap paragraph, `sentence_starts`, `tag_column`), `vix-case` (selection case transforms), `vix-emmet` (abbreviation → HTML), `vix-tags` (HTML/XML matching-tag jump). Pure `text → text` / offset helpers with unit tests, driven from Edit/Go/Tools actions. |
 | Networking  | `vix-http-client` (`.http`-buffer parser + blocking `ureq` send; response into a tab). |
 | Undo store  | `vix-undo-store` (persist/restore the undo tree per file under `<config>/undo/`, content-hash guarded). |
+| Clipboard   | `vix-clipboard` (process-wide serialized clipboard access; the platform pasteboard is opt-in through `use_system`, so a test run never touches it). |
 | Themes      | `vix-theme` (Nerd Font icons + theme style helpers), `vix-base16` (bundled base16 color themes). |
 | Edit surfaces | `vix-edit-value` (JSON/YAML tree, `Tree` + `Format`), `vix-edit-bytes` (hex/ASCII byte editor, `Hex`), `vix-edit-sql` (SQL statement list, `Editor`). Overlay editors with their own `handle_key`/`Outcome`, under **Edit → Mode**. (`edit_table`/`edit_outline` overlays live in the App shell.) |
 | Generators  | `vix-qr-tool` (QR code via the `qrcode` crate, Unicode renderer), `vix-lorem` (deterministic lorem-ipsum text). |
@@ -113,7 +116,7 @@ through the workspace dependency graph (e.g. `vix-editor`, `vix-menu`,
 
 | Path            | Contents                                                            |
 | --------------- | ------------------------------------------------------------------- |
-| `crates/`       | The ~98 `vix-*` workspace member crates (each with its own `spec/`).|
+| `crates/`       | The 102 `vix-*` workspace member crates (each with its own `spec/`).|
 | `langs/`        | Tree-sitter highlight queries (`<lang>/highlights.scm`), embedded.  |
 | `locales/`      | `app.yml` — rust-i18n translations (English fallback).              |
 | `dictionaries/` | Hunspell dictionaries — gitignored; see `crates/vix-spellcheck/spec/dictionaries`. |
@@ -121,4 +124,7 @@ through the workspace dependency graph (e.g. `vix-editor`, `vix-menu`,
 | `spec/`         | Cross-cutting / app-level and build/meta specs (per-crate specs live in `crates/<crate>/spec/`). |
 | `docs/`         | Architecture, keybindings, themes, i18n, LSP, configuration, panels. |
 | `examples/`     | `headless_edit.rs`, `list_commands.rs`.                             |
-| `tests/`        | `integration.rs`, `db_smoke.rs` — terminal-independent tests.       |
+| `tests/`        | `integration.rs`, `db_smoke.rs`, `lsp_smoke.rs` — terminal-independent tests. |
+| `fuzz/`         | `cargo-fuzz` targets over the pure text/parse cores.                |
+| `benches/`      | Criterion benchmarks (`cargo bench`).                               |
+| `scripts/`      | `check` (the CI-parity gate) and `check-docs` (documentation integrity). |

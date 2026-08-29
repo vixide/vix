@@ -18,7 +18,7 @@ Code's JSON snippets):
 - **Media-type** — `~/.config/vix/media-types/<type>/<subtype>/snippets/snippets.json`,
   e.g. `…/media-types/text/rust/snippets/snippets.json` for Rust files. Applies
   only to buffers of that media type.
-- **Project** — `config/snippets/snippets.json` under the project root (set the
+- **Project** — `<config>/snippets/snippets.json` under the project root (set the
   path with the `project_snippets` setting).
 
 Each file is a JSON object of `"Name": { "prefix": …, "body": …, "description": … }`

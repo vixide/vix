@@ -95,7 +95,7 @@ no longer be found, Vix falls back to Dark.
 ## See also
 
 - `crates/vix-theme/spec/index.md` — the theme specification (source of truth).
-- [configuration.md](configuration.md) — the `theme` setting and file locations.
+- [configuration.md](../configuration/index.md) — the `theme` setting and file locations.
 
 ---
 

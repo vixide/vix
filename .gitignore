@@ -7,5 +7,12 @@ target/
 vix-*/Cargo.lock
 
 # Hunspell spell-check dictionaries (~287 MB); fetched separately, not vendored.
-# See spec/dictionaries.md.
+# See crates/vix-spellcheck/spec/dictionaries/index.md.
 dictionaries/
+
+# Fuzzing: the generated corpus and any crash inputs. A crash worth keeping
+# becomes a unit test in the crate that owns the code, not a committed blob.
+# See fuzz/README.md.
+fuzz/corpus/
+fuzz/artifacts/
+fuzz/coverage/

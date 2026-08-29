@@ -7,7 +7,7 @@ Vix is a **Cargo workspace** (edition 2024). The root package `vix` is a thin
 top. The binary owns only the CLI, the terminal lifecycle, the event loop, and
 process suspend; the shell library holds the `App` state, event routing,
 rendering (`src/ui.rs`), and the explorer. Everything else is a **`vix-*` member
-crate** under `crates/` — ~98 of them, each independently testable. This keeps
+crate** under `crates/` — 102 of them, each independently testable. This keeps
 the editing logic terminal-independent, so it can be unit-tested and driven from
 examples without a real TTY (see `tests/integration.rs` and `examples/`).
 
@@ -25,13 +25,13 @@ examples:
 | `git` / `conflict_tool`      | Git status/diff/staging via the git CLI; merge-conflict marker parsing. |
 | `calendar_panel`             | Calendar date/time strings and the navigable Monday-first month grid (owns `jiff`). |
 | `theme_model`                | Monochrome Dark/Light modes, the ratatui styles derived from them, **custom JSON themes** (per-region RGB), and chooser state. |
-| `locale_model` / `keymap_model` | Available UI languages; keyboard navigation styles (Apple/VSCode/Emacs/Vi/Spacemacs/IntelliJ/Eclipse). |
+| `locale_model` / `keymap_model` | Available UI languages; the ten keyboard navigation styles (Apple, VSCode macOS/Windows, Emacs, Vi, Spacemacs, IntelliJ macOS/Windows, Eclipse, Sublime Text). |
 | `keyboard_shortcut_panel`    | The keyboard-help rows (key combo + i18n description key).            |
 
 The pattern for the panel/model crates is **data and logic in the crate, host
 renders**: each exposes pure state and helpers; the App shell's `src/ui.rs` draws
 them, and they return i18n *keys* (not translated text) so the host translates.
-See `AGENTS/share/crate-map.md` for the full crate/module map.
+See `agents/share/crate-map.md` for the full crate/module map.
 
 ## Core modules (App shell + re-exported crates)
 
@@ -131,7 +131,7 @@ colors. When a custom theme is active, `region_fg`/`region_bg`/`region_base`
 return its colors (falling back to the monochrome default for any unspecified
 channel), and the editor widget is given the custom syntax palette and cursor
 color. The theme chooser lists the two built-ins followed by every discovered
-custom theme. See [themes.md](themes.md).
+custom theme. See [themes.md](../themes/index.md).
 
 ## Internationalization
 
@@ -141,14 +141,14 @@ English is the fallback. The macro is initialized once in `src/lib.rs`. Data
 crates (menus, palette, theme, keyboard help) store i18n *keys*; the host
 translates. The active locale is a process-global set via `rust_i18n::set_locale`
 — resolved at startup from `--locale` or the `locale` setting, and switchable
-live in **View → Locale…**. See [i18n.md](i18n.md).
+live in **View → Locale…**. See [i18n.md](../internationalization/index.md).
 
 ## Configuration
 
 `Settings` is a serde struct persisted with `confy` as TOML under the platform
 config directory. `main` loads it before building the `App` so the saved theme
 and language apply before any UI text is produced. A `--locale` flag overrides
-the saved language for one run without persisting. See [configuration.md](configuration.md).
+the saved language for one run without persisting. See [configuration.md](../configuration/index.md).
 
 ## Dependency version pinning (one ratatui only)
 

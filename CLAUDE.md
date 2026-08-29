@@ -22,5 +22,5 @@ Quick orientation:
   text via `t!` + `locales/app.yml`; one action id, one `run_action` arm.
 
 For everything else — conventions, the spec-driven workflow, the crate map, and
-the glossary — see [`AGENTS.md`](AGENTS.md) and the [`AGENTS/`](AGENTS/) topic
+the glossary — see [`AGENTS.md`](AGENTS.md) and the [`agents/`](agents/) topic
 guides.

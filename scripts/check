@@ -3,8 +3,9 @@
 #
 # Mirrors the bar every change must clear: it checks formatting with rustfmt,
 # builds, runs Clippy at the pedantic level with warnings denied (the project's
-# hard rule), and runs the full test suite (unit + integration + doctests).
-# Stops at the first failure. See spec/rust-cargo-fmt.
+# hard rule), runs the full test suite (unit + integration + doctests), and
+# checks that the documentation still matches the tree it describes.
+# Stops at the first failure. See spec/rust-cargo-fmt and spec/ci.
 set -e
 
 echo "==> cargo fmt --check"
@@ -19,4 +20,7 @@ cargo clippy --all-targets -- -D warnings
 echo "==> cargo test"
 cargo test
 
-echo "OK: build + clippy + tests all passed"
+echo "==> scripts/check-docs"
+python3 "$(dirname "$0")/check-docs"
+
+echo "OK: build + clippy + tests + docs all passed"

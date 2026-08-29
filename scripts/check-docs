@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""Documentation-integrity gate for Vix.
+
+The specs are living documentation — the source of truth for spec-driven
+development — so they are checked like code. This script fails on:
+
+1. **Broken references.** A markdown link or a code-span path (`` `docs/x.md` ``)
+   that names a file which is not there. Runtime-only paths a user creates
+   (`~/.config/...`, `.vix/...`) are exempt, as are the generic placeholders the
+   guides use to *describe* the layout (`crates/<crate>/spec/index.md`, a bare
+   `spec/index.md`, `...`). `CHANGELOG.md` is exempt as a whole: its entries are
+   a historical record, pinned to the paths that were current when written.
+2. **README/index drift.** Every documentation directory carries `index.md` (the
+   name the doc map uses) and a byte-identical `README.md` (the name forges
+   render). If the two differ, one of them was edited alone.
+3. **Missing crate specs.** Every workspace member under `crates/` owns a spec
+   at `crates/<crate>/spec/index.md` (`AGENTS.md`, "Source of truth").
+4. **Crate-map drift.** Every crate appears in `agents/share/crate-map.md`, and
+   the map names no crate that has been removed.
+
+Run it directly, or as part of `scripts/check`. Exit status 0 when clean.
+"""
+
+import fnmatch
+import os
+import re
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
+CODE_PATH = re.compile(r"`([A-Za-z0-9_./<>-]+\.(?:md|rs|toml|yml|yaml|json|txt))`")
+
+# Paths that exist only at run time, or that stand in for a shape rather than a
+# file. Neither is a broken reference.
+EXEMPT_PREFIX = ("~", ".vix/", "http", "mailto:", "target/")
+EXEMPT_EXACT = {"spec/index.md", "spec/<topic>/index.md", "index.md", "README.md"}
+
+
+def markdown_files():
+    """Every markdown file that is documentation (not vendored, not built)."""
+    for base in ("AGENTS.md", "index.md", "README.md", "CLAUDE.md"):
+        path = os.path.join(ROOT, base)
+        if os.path.exists(path):
+            yield path
+    for top in ("AGENTS", "spec", "docs", "crates"):
+        for dirpath, dirnames, filenames in os.walk(os.path.join(ROOT, top)):
+            dirnames[:] = [d for d in dirnames if d not in ("target", ".git")]
+            if top == "crates" and f"{os.sep}spec" not in dirpath:
+                continue
+            for name in filenames:
+                if name.endswith(".md"):
+                    yield os.path.join(dirpath, name)
+
+
+def is_exempt(ref):
+    """Whether `ref` is a placeholder or a run-time path rather than a file."""
+    return (
+        ref.startswith(EXEMPT_PREFIX)
+        or ref in EXEMPT_EXACT
+        or "<" in ref
+        or "..." in ref
+    )
+
+
+def check_references():
+    """Report every link/code-span path that does not resolve to a file."""
+    bad = []
+    for path in markdown_files():
+        text = open(path, encoding="utf-8").read()
+        here = os.path.dirname(path)
+        refs = [m.group(1).split("#")[0].strip() for m in LINK.finditer(text)]
+        refs += [m.group(1) for m in CODE_PATH.finditer(text) if "/" in m.group(1)]
+        for ref in refs:
+            if not ref or is_exempt(ref):
+                continue
+            candidates = [os.path.normpath(os.path.join(here, ref))]
+            if not ref.startswith(("./", "../", "/")):
+                candidates.append(os.path.normpath(os.path.join(ROOT, ref)))
+            if not any(os.path.exists(c) for c in candidates):
+                bad.append((os.path.relpath(path, ROOT), ref))
+    return bad
+
+
+def check_readme_twins():
+    """Report every `index.md` whose sibling `README.md` has drifted from it."""
+    bad = []
+    for path in markdown_files():
+        if os.path.basename(path) != "index.md":
+            continue
+        twin = os.path.join(os.path.dirname(path), "README.md")
+        if not os.path.exists(twin):
+            continue
+        if open(path, "rb").read() != open(twin, "rb").read():
+            bad.append(os.path.relpath(twin, ROOT))
+    return bad
+
+
+def workspace_crates():
+    """Every directory under `crates/` that is a workspace member."""
+    crates_dir = os.path.join(ROOT, "crates")
+    return sorted(
+        name
+        for name in os.listdir(crates_dir)
+        if os.path.exists(os.path.join(crates_dir, name, "Cargo.toml"))
+    )
+
+
+def check_crate_specs(crates):
+    """Report every crate with no `spec/index.md`."""
+    return [
+        c
+        for c in crates
+        if not os.path.exists(os.path.join(ROOT, "crates", c, "spec", "index.md"))
+    ]
+
+
+def check_crate_map(crates):
+    """Report crates missing from the crate map, and map entries with no crate."""
+    path = os.path.join(ROOT, "AGENTS", "share", "crate-map.md")
+    if not os.path.exists(path):
+        return ["agents/share/crate-map.md is missing"], []
+    text = open(path, encoding="utf-8").read()
+    # Names as written, plus the `vix-convert-from-*-into-*-tool` style globs the
+    # map uses for a whole family of near-identical crates.
+    listed = set(re.findall(r"\bvix-[a-z0-9*-]+\b", text))
+    globs = {n for n in listed if "*" in n}
+    plain = listed - globs
+
+    def covered(crate):
+        return crate in plain or any(fnmatch.fnmatch(crate, g) for g in globs)
+
+    missing = [c for c in crates if not covered(c)]
+    known = set(crates) | {"vix-i18n"}
+    stale = sorted(
+        n
+        for n in plain
+        if n not in known and not any(c.startswith(n) for c in crates)
+    )
+    return missing, stale
+
+
+def main():
+    failures = 0
+
+    bad_refs = check_references()
+    if bad_refs:
+        failures += 1
+        print(f"FAIL: {len(bad_refs)} broken documentation reference(s)")
+        for path, ref in bad_refs:
+            print(f"  {path}: {ref}")
+    else:
+        print("OK: every documentation reference resolves")
+
+    drifted = check_readme_twins()
+    if drifted:
+        failures += 1
+        print(f"FAIL: {len(drifted)} README.md differ(s) from its index.md")
+        for path in drifted:
+            print(f"  {path}  (run: cp {path[:-9]}index.md {path})")
+    else:
+        print("OK: every README.md matches its index.md")
+
+    crates = workspace_crates()
+    no_spec = check_crate_specs(crates)
+    if no_spec:
+        failures += 1
+        print(f"FAIL: {len(no_spec)} crate(s) without spec/index.md")
+        for name in no_spec:
+            print(f"  crates/{name}")
+    else:
+        print(f"OK: all {len(crates)} crates own a spec")
+
+    missing, stale = check_crate_map(crates)
+    if missing or stale:
+        failures += 1
+        print("FAIL: agents/share/crate-map.md is out of step with crates/")
+        for name in missing:
+            print(f"  missing from the map: {name}")
+        for name in stale:
+            print(f"  named by the map but not a crate: {name}")
+    else:
+        print("OK: the crate map lists every crate")
+
+    if failures:
+        print(f"\n{failures} documentation check(s) failed")
+        return 1
+    print("\nOK: documentation is consistent")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

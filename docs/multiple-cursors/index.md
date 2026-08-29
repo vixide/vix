@@ -17,7 +17,7 @@ one keystroke, putting a caret on each match. Then type to change them all at on
 
 ## Column (rectangular) selection
 
-**Alt + Shift + ↓ / ↑** (also **Edit → Select → Column Select Down/Up**) extend a
+**Alt + Shift + ↑ / ↓** (also **Edit → Select → Column Select Up/Down**) extend a
 vertical, rectangular selection: a caret is added on the next/previous line over
 the same columns as the current selection (or a bare caret with none), clamped to
 each line's length. Typing or deleting then applies to the whole block — handy for

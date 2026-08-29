@@ -30,7 +30,7 @@ left-to-right, so right-to-left scripts (e.g. Arabic) are not yet laid out RTL.
 Three ways, in increasing precedence:
 
 1. **Setting** — the `locale` key in the config file (see
-   [configuration.md](configuration.md)).
+   [configuration.md](../configuration/index.md)).
 2. **In-app** — **View → Locale…** (↑↓ to preview live, Enter to apply and save,
    Esc to cancel). Languages are listed by their endonym.
 3. **CLI** — `vix --locale fr` overrides both for one run, without saving.
