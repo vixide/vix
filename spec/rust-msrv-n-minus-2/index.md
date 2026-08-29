@@ -18,7 +18,7 @@ toolchain the code in this workspace may assume.
   (`1.(N-2).x`) are all acceptable; the recorded value uses `.0`.
 - Pre-release channels (beta, nightly) are never the MSRV and MUST NOT be
   required by any workspace target, including the fuzz targets — see
-  [rust-fuzz.md](../rust-fuzz.md), which keeps the nightly-only fuzz crate outside
+  [`fuzz/README.md`](../../fuzz/README.md), which keeps the nightly-only fuzz crate outside
   the workspace precisely so this rule holds.
 
 ## Where the MSRV is recorded
