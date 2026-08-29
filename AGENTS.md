@@ -22,7 +22,8 @@ specification-driven. Each member crate owns its spec at
 `crates/<crate>/spec/index.md` (multi-topic crates add `spec/<topic>/index.md`);
 the repo-root `spec/` holds only cross-cutting / app-level and build/meta specs
 (`index`, `navigation`, `tools`, `test`, `ci`, `comparisons`, `emacs-menus`,
-`license`, `trademarks`, `rust-msrv-n-minus-2`, `rust-clippy-pedantic`, …).
+`license`, `trademarks`, `rust-msrv-n-minus-2`, `rust-clippy-pedantic`,
+`dependabot`, …).
 When behavior and spec disagree, decide which is correct, then make them match —
 update the spec when intent changes, update the code when the code drifted. Keep
 specs and implementation in sync.

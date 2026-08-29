@@ -85,6 +85,7 @@ the repo-root `spec/`. Notable ones:
 | `spec/rust-clippy-pedantic`             | `clippy::pedantic` on all targets             |
 | `spec/rust-msrv-n-minus-2`              | The MSRV policy: current stable minus two   |
 | `spec/agents-directory-name-is-lowercase` | Why the guidance lives in `agents/`, lowercase |
+| `spec/dependabot`                       | Dependabot: security updates + scheduled PRs  |
 | `spec/comparisons`, `spec/emacs-menus`  | Editor comparisons; Emacs menu parity         |
 | `crates/vix-menu/spec`                  | Menu bar structure and every item             |
 | `crates/vix-keymap-model/spec`          | The ten keymaps and how keys dispatch         |

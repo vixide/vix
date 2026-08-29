@@ -1,0 +1,36 @@
+# Scheduled dependency-update PRs. See spec/dependabot/index.md.
+#
+# GitHub-only: Dependabot reads this file from the repository as GitHub sees
+# it, so GitLab's and Codeberg's mirrors need no equivalent. `cargo deny`
+# (.github/workflows/security.yml, the `deny` job of .gitlab-ci.yml, and
+# .forgejo/workflows/security.yml) already scans advisories on all three
+# forges; this adds version-bump PRs on top of that, on GitHub.
+
+version: 2
+updates:
+  # The main workspace (root Cargo.toml + every crates/vix-*).
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      cargo-dependencies:
+        patterns:
+          - "*"
+
+  # fuzz/ is a separate workspace on purpose (nightly + sanitizer
+  # instrumentation) — see fuzz/README.md — so it needs its own entry.
+  - package-ecosystem: "cargo"
+    directory: "/fuzz"
+    schedule:
+      interval: "weekly"
+    groups:
+      fuzz-cargo-dependencies:
+        patterns:
+          - "*"
+
+  # Actions used by the GitHub workflow files.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
