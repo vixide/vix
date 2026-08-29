@@ -30,3 +30,16 @@ Enable GitHub Dependabot `.github/dependabot.yml` for scheduled update PRs.
   breaking API change (`cargo build --workspace` failed on `main`'s own
   crates as a result). Closed unmerged; removed the entry rather than trying
   to fence it with more `ignore` rules.
+- **`.github/workflows/release.yml` is generated** (`dist init`, per
+  `spec/ci/index.md`), but the `github-actions` entry scans every file under
+  `.github/workflows/`, `release.yml` included, and Dependabot has no
+  per-file exclusion for that ecosystem. The first `actions/checkout`,
+  `actions/upload-artifact`, and `actions/download-artifact` bumps it opened
+  (#1–#3) each hand-edited `release.yml` too, which `dist`'s own `plan` job
+  then correctly rejected as drifted from what `cargo-dist-version` in
+  `dist-workspace.toml` generates. Handle these by hand rather than merging
+  the raw diff: apply the bump to `ci.yml`/`security.yml` directly (those
+  *are* hand-maintained), and separately bump `cargo-dist-version` and run
+  `dist init -y` to regenerate `release.yml` — check whether the new `dist`
+  release actually changed that action's pin before assuming the two will
+  match up.
