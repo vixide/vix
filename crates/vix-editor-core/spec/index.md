@@ -7,7 +7,7 @@ three spellings of one name:
 - **kebab-case** — the canonical id used in `spec/<kebab>/index.md` and in
   documentation.
 - **snake_case** — the Rust method on [`editor_core::Editor`] (see
-  `editor_core/src/named.rs`) and the id accepted by `App::run_named_action`.
+  `crates/vix-editor-core/src/named.rs`) and the id accepted by `App::run_named_action`.
 - **PascalCase** — the conceptual `Action` name.
 
 The source of truth is [`actions.tsv`](actions.tsv): one row per action, three
@@ -28,6 +28,11 @@ The host routes a snake_case id through `App::run_named_action(id)`:
 
 Every action has a smoke test in `tests/integration.rs`
 (`catalog_<snake>()`), and its own page under `spec/<kebab>/index.md`.
+
+## Sub-specs
+
+- [Syntax highlighting](syntax-highlighting/index.md) — Tree-sitter grammars,
+  injections, the compiled-query cache, and incremental/background reparsing.
 
 ## Catalog
 

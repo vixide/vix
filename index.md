@@ -28,10 +28,13 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
 - **Editing comforts** — Smart Home (`Home` → first non-blank, then col 0),
   comment toggle (`Ctrl+/`) and **comment banners**, **surround** selection with
   brackets/quotes, **align** lines on a delimiter, **increment/decrement** and
-  **toggle** the value under the cursor, **transpose** chars/words, **Emmet**
-  expansion, find next/previous occurrence of the selection (`Alt+N`/`Alt+P`),
-  live go-to-line preview (palette `:`), and on-save trim-trailing-whitespace /
-  ensure-final-newline / **format-on-save** / **auto-save** / auto-reload.
+  **toggle** the value under the cursor, **delete** or **transpose** a
+  character/word/sentence/paragraph/section at the cursor, **wrap** (fill) a
+  paragraph or selection to a column, **Emmet** expansion, find next/previous
+  occurrence of the selection (`Alt+N`/`Alt+P`), live go-to-line preview
+  (palette `:`), and on-save trim-trailing-whitespace / ensure-final-newline /
+  **format-on-save** / **auto-save** / auto-reload. On macOS, `Command` drives
+  the same bindings as `Control`.
 - **Line & text transforms** — sort, dedupe, shuffle, reverse, **squeeze blank
   lines**, **convert line endings** (LF/CRLF), case conversions, and **ROT13**,
   applied to the selection or whole buffer.
@@ -81,8 +84,10 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
 - **Snippets** — a searchable picker plus prefix-and-Tab expansion, loaded from
   JSON files (bundled, global, per-media-type, and project scopes).
 - **Org mode** (Org menu) — headline promote/demote, subtree move, TODO cycling,
-  checkbox toggle, fold cycling, export to Markdown/HTML, and **Org-roam**: nodes,
-  `[[`-completion, a **dailies calendar**, and a **live backlinks** panel.
+  checkbox toggle, fold cycling, export to Markdown/HTML, a structural
+  **table editor** with `TBLFM` formulas, an interactive **Column View**
+  overlay, and **Org-roam**: nodes, `[[`-completion, a **dailies calendar**,
+  and a **live backlinks** panel.
 - **TODO finder** (Tools) — scan the project for TODO/FIXME/HACK/XXX/BUG/NOTE
   comment tags into a jump-list.
 - **HTTP client** (Tools → Send HTTP Request) — send a request from a `.http`
@@ -96,6 +101,10 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
   variables, watches, and an evaluate REPL.
 - **Integrated terminal & tasks** — a shell in a panel, plus named `tasks.toml`
   commands and a compare-with-file diff.
+- **Project menu** — per-project-type lifecycle commands (configure, compile,
+  test, install, package, run), tasks discovered from npm/yarn/pnpm/bun,
+  Deno, Composer, just, go-task, Rake, and Make, **test-at-point**, and a
+  monorepo **subproject** family, all reachable by `C-c p c …` chords.
 - **Multi-cursor & column editing** — a caret on every match of the selection
   (select-all-occurrences), or a rectangular block (`Alt+Shift+↑/↓`).
 - **Git** — status / diff / blame, **stage / unstage / revert per hunk**, diff
@@ -122,7 +131,7 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
 
 ## Install & run
 
-Requires a Rust toolchain (1.95+).
+Requires a Rust toolchain (1.96+).
 
 ```sh
 cargo run                  # open the editor rooted at the current directory

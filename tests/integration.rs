@@ -1391,10 +1391,17 @@ fn diagnostics_panel_empty_reports_none() {
 }
 
 #[test]
-fn specs_have_no_stale_subcrate_references() {
-    // Guard against architecture drift: after folding the subcrates into modules,
-    // no spec should mention the old `vix-editor`/`vix_editor` crate or a
-    // "Subcrate".
+fn specs_reference_crates_by_their_workspace_paths() {
+    // Guard against architecture drift in the *current* direction. Vix is a
+    // workspace of `crates/vix-*` members, so a spec names one by its workspace
+    // path (`crates/vix-find-panel/spec/index.md`). The flat, pre-workspace
+    // spelling (`find_panel/spec/index.md`) is drift: those paths resolve to
+    // nothing, and they describe a layout that no longer exists.
+    //
+    // This replaced a test asserting the opposite — that no spec may mention
+    // `vix-editor` — written while the crates were briefly folded into modules.
+    // That decision was reversed; the test outlived it and started failing
+    // correct documentation.
     fn walk(dir: &Path, hits: &mut Vec<String>) {
         let Ok(entries) = fs::read_dir(dir) else {
             return;
@@ -1402,23 +1409,43 @@ fn specs_have_no_stale_subcrate_references() {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
+                if path.file_name().is_some_and(|n| n == "target") {
+                    continue;
+                }
                 walk(&path, hits);
             } else if path.extension().is_some_and(|e| e == "md" || e == "tsv") {
                 let text = fs::read_to_string(&path).unwrap_or_default();
-                for needle in ["vix-editor", "vix_editor", "Subcrate ", "subcrate "] {
-                    if text.contains(needle) {
-                        hits.push(format!("{}: {needle}", path.display()));
+                for line in text.lines() {
+                    // `some_module/spec/…` — an underscored module name is the
+                    // old spelling; workspace crates are `vix-kebab-case`.
+                    for (at, _) in line.match_indices("/spec/") {
+                        let before = &line[..at];
+                        let name: String = before
+                            .chars()
+                            .rev()
+                            .take_while(|c| c.is_alphanumeric() || *c == '_')
+                            .collect();
+                        if name.contains('_') {
+                            let name: String = name.chars().rev().collect();
+                            hits.push(format!("{}: {name}/spec/", path.display()));
+                        }
+                    }
+                    if line.contains("Subcrate ") || line.contains("subcrate ") {
+                        hits.push(format!("{}: subcrate", path.display()));
                     }
                 }
             }
         }
     }
-    let spec = Path::new(env!("CARGO_MANIFEST_DIR")).join("spec");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut hits = Vec::new();
-    walk(&spec, &mut hits);
+    walk(&root.join("spec"), &mut hits);
+    walk(&root.join("crates"), &mut hits);
+    hits.sort();
+    hits.dedup();
     assert!(
         hits.is_empty(),
-        "stale subcrate references in spec:\n{}",
+        "specs name crates by a pre-workspace path:\n{}",
         hits.join("\n")
     );
 }
@@ -2030,6 +2057,9 @@ fn spawn_multi_cursor_below_adds_a_caret() {
 #[test]
 fn ctrl_d_adds_a_caret_and_edits_all_occurrences() {
     let mut app = app_at(Path::new("."));
+    // The editor core's Ctrl+D. The Apple keymap claims that key for forward
+    // delete, so drive this through a keymap that leaves it to the editor.
+    app.settings.keymap = "vscode-macos".to_string();
     type_str(&mut app, "foo foo foo");
     // Cursor is at end; move to the start so the first word is "foo".
     app.on_key(ctrl('a')); // select all, then collapse to start via Left
@@ -4720,6 +4750,56 @@ fn alt_letters_open_specific_menus() {
 }
 
 #[test]
+fn alt_letter_toggles_the_menu_it_names() {
+    let menu_index = |name: &str| {
+        vix::menu::menus()
+            .iter()
+            .position(|m| m.name == name)
+            .unwrap()
+    };
+    let mut app = app_at(Path::new("."));
+
+    // Alt+F opens File; pressing it again closes the dropdown.
+    app.on_key(alt(KeyCode::Char('f')));
+    assert_eq!(app.menu.open, Some(menu_index("menu.file")));
+    app.on_key(alt(KeyCode::Char('f')));
+    assert!(!app.menu.is_open(), "Alt+F again closes the File menu");
+
+    // Another menu's letter switches to it rather than closing.
+    app.on_key(alt(KeyCode::Char('f')));
+    app.on_key(alt(KeyCode::Char('e')));
+    assert_eq!(
+        app.menu.open,
+        Some(menu_index("menu.edit")),
+        "Alt+E switches from File to Edit"
+    );
+
+    // The toggle reaches down through an open submenu too.
+    let edit_items = vix::menu::menus()[menu_index("menu.edit")].items;
+    let sub_row = edit_items
+        .iter()
+        .position(vix::menu::Item::has_submenu)
+        .expect("the Edit menu has a submenu");
+    app.menu.highlight_item(sub_row);
+    app.menu.right();
+    assert!(app.menu.submenu_open(), "the submenu is open");
+    app.on_key(alt(KeyCode::Char('e')));
+    assert!(
+        !app.menu.is_open(),
+        "Alt+E closes Edit from inside a submenu"
+    );
+
+    // A letter that names no menu is still ignored while one is open.
+    app.on_key(alt(KeyCode::Char('e')));
+    app.on_key(alt(KeyCode::Char('z')));
+    assert_eq!(
+        app.menu.open,
+        Some(menu_index("menu.edit")),
+        "an unassigned mnemonic leaves the open menu alone"
+    );
+}
+
+#[test]
 fn undo_tree_preserves_a_branch_after_a_new_edit() {
     let mut app = app_at(Path::new("."));
     // Type "A", undo it, then type "B" — the case linear undo would lose.
@@ -6068,6 +6148,32 @@ fn click_menu_bar_opens_menu() {
     // Column 2 falls inside the first menu's " Vix " label (cols 1..6).
     app.on_mouse(click(2, 0));
     assert_eq!(app.menu.open, Some(0), "clicking the bar opens that menu");
+}
+
+#[test]
+fn click_the_open_menu_name_again_closes_it() {
+    let mut app = app_at(Path::new("."));
+    app.layout.menu = Rect::new(0, 0, 100, 1);
+    // Column 2 falls inside the first menu's " Vix " label (cols 1..6).
+    app.on_mouse(click(2, 0));
+    assert_eq!(app.menu.open, Some(0), "the first click opens the menu");
+    // Clicking the same name again toggles the dropdown shut.
+    app.on_mouse(click(2, 0));
+    assert!(
+        !app.menu.is_open(),
+        "clicking the open menu's own name closes it"
+    );
+    // ...and a third click reopens it, rather than staying shut.
+    app.on_mouse(click(2, 0));
+    assert_eq!(app.menu.open, Some(0), "clicking again reopens the menu");
+    // Clicking a *different* name still switches menus instead of closing.
+    let second = top_menu_col(&app, 1);
+    app.on_mouse(click(second, 0));
+    assert_eq!(
+        app.menu.open,
+        Some(1),
+        "clicking another name switches to that menu"
+    );
 }
 
 #[test]
@@ -7724,9 +7830,22 @@ fn catalog_none() {
 /// so a `kill()` from another thread — the shape of `cancel_command` — acquires
 /// the lock and terminates the child promptly instead of blocking forever behind
 /// a `lock().wait()`.
+///
+/// The assertion is on *how the child died*, not on how long anything took: a
+/// cancelled child is killed by a signal, while one that outlived a blocked
+/// cancel exits normally when its `sleep` ends. An earlier version judged that
+/// with a 20-second stopwatch and flaked on a loaded machine — and it flaked for
+/// a reason worth keeping in mind: its reader took the lock *inside the `match`
+/// scrutinee*, so the guard lived to the end of the `match` and was held across
+/// the sleep. That is not what `run_command` does, so the test was modelling a
+/// lock discipline the code does not have, and measuring lock starvation (8+
+/// seconds, sometimes never) instead of the deadlock it meant to catch. The
+/// reader below mirrors the real statement structure; the remaining timeout is
+/// only a guard against a true deadlock, which is infinite rather than slow.
 #[test]
 #[cfg(unix)]
 fn running_command_cancel_is_not_blocked_by_a_detached_child() {
+    use std::os::unix::process::ExitStatusExt;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
@@ -7741,19 +7860,25 @@ fn running_command_cancel_is_not_blocked_by_a_detached_child() {
     let stdout = child.stdout.take().unwrap();
     let child = Arc::new(Mutex::new(child));
 
-    // Reader thread mirrors run_command: drain stdout, then poll try_wait.
+    // Reader thread mirrors run_command: drain stdout, then poll try_wait. It
+    // hands back the status it reaped, which is what the test judges.
     let reader_child = Arc::clone(&child);
     let reader = std::thread::spawn(move || {
         use std::io::{BufRead, BufReader};
         for _ in BufReader::new(stdout).lines().map_while(Result::ok) {}
         loop {
-            match reader_child
+            // Bind the result to its own statement, exactly as `run_command`
+            // does: the `MutexGuard` is a temporary of *this* statement, so it
+            // is dropped here rather than living to the end of a `match` — that
+            // is what frees the lock between polls and lets a cancel in.
+            let status = reader_child
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .try_wait()
-            {
-                // Reaped, or an unexpected wait error: stop polling either way.
-                Ok(Some(_)) | Err(_) => break,
+                .try_wait();
+            match status {
+                Ok(Some(status)) => return Some(status),
+                // An unexpected wait error: stop polling, with nothing to report.
+                Err(_) => return None,
                 Ok(None) => std::thread::sleep(Duration::from_millis(25)),
             }
         }
@@ -7762,10 +7887,9 @@ fn running_command_cancel_is_not_blocked_by_a_detached_child() {
     std::thread::sleep(Duration::from_millis(200)); // let the reader reach reaping
 
     // Run the cancel (lock + kill) on its own thread and wait for it via a
-    // channel. With the correct lock discipline this completes near-instantly;
-    // with the old `lock().wait()` bug it would block ~30s (until `sleep 30`
-    // exits). A 20s watchdog cleanly separates "returned" from "deadlocked"
-    // without being flaky under heavy parallel test load.
+    // channel. The generous timeout only separates "returned" from "deadlocked
+    // forever" — the old bug blocked until `sleep 30` exited, which this would
+    // still wait out, and the exit-status assertion below is what catches it.
     let cancel_child = Arc::clone(&child);
     let (done_tx, done_rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -7776,8 +7900,429 @@ fn running_command_cancel_is_not_blocked_by_a_detached_child() {
         let _ = done_tx.send(());
     });
     assert!(
-        done_rx.recv_timeout(Duration::from_secs(20)).is_ok(),
-        "cancel blocked behind the reader's lock — deadlock"
+        done_rx.recv_timeout(Duration::from_secs(120)).is_ok(),
+        "cancel never returned — blocked behind the reader's lock"
     );
-    reader.join().unwrap();
+
+    let status = reader.join().unwrap().expect("the child was reaped");
+    assert!(
+        status.signal().is_some(),
+        "the child exited on its own ({status:?}) instead of being killed by the \
+         cancel — the cancel was blocked until `sleep 30` finished"
+    );
+}
+
+/// Fill the active buffer with `text` and put the cursor at char `cursor`.
+fn buffer_with(app: &mut App, text: &str, cursor: usize) {
+    let tab = app.editor.active_tab_mut().unwrap();
+    tab.editor.set_content(text);
+    tab.editor.set_cursor(cursor);
+}
+
+#[test]
+fn transpose_submenu_actions_swap_the_units_around_the_cursor() {
+    let mut app = app_at(Path::new("."));
+
+    // Characters and words (the pre-existing pair, now under Edit → Transpose).
+    buffer_with(&mut app, "ab", 1);
+    app.run_action("edit.transpose_chars");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "ba");
+    buffer_with(&mut app, "foo bar", 5);
+    app.run_action("edit.transpose_words");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "bar foo");
+
+    // Lines: the cursor's line swaps with the one above it.
+    buffer_with(&mut app, "one\ntwo\nthree\n", 5);
+    app.run_action("edit.transpose_lines");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "two\none\nthree\n");
+
+    // Sentences: the separator between them stays put.
+    buffer_with(&mut app, "One. Two. Three.", 5);
+    app.run_action("edit.transpose_sentences");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "Two. One. Three.");
+
+    // Paragraphs: blank-line delimited blocks, blank lines preserved.
+    buffer_with(&mut app, "a1\na2\n\nb1\nb2\n", 6);
+    app.run_action("edit.transpose_paragraphs");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "b1\nb2\n\na1\na2\n"
+    );
+
+    // Sections: two or more blank lines delimit; a single blank line does not.
+    buffer_with(&mut app, "a\n\nb\n\n\nc\n", 9);
+    app.run_action("edit.transpose_sections");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "c\n\n\na\n\nb\n");
+
+    // No pair above the first line: a no-op rather than a scramble.
+    buffer_with(&mut app, "one\ntwo\n", 0);
+    app.run_action("edit.transpose_lines");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "one\ntwo\n");
+}
+
+#[test]
+fn command_key_drives_the_control_bindings_on_macos() {
+    let mut app = app_at(Path::new("."));
+    let cmd = |c: char| KeyEvent::new(KeyCode::Char(c), KeyModifiers::SUPER);
+
+    app.on_key(cmd('f'));
+    if !cfg!(target_os = "macos") {
+        assert!(
+            app.search.is_none(),
+            "off macOS the Super modifier is left alone"
+        );
+        return;
+    }
+    assert!(app.search.is_some(), "Cmd+F opens Find, like Ctrl+F");
+    app.on_key(esc());
+
+    // The rest of the chord survives the fold: Cmd+Z undoes, Cmd+Shift+Z redoes.
+    buffer_with(&mut app, "", 0);
+    type_str(&mut app, "abc");
+    app.on_key(cmd('z'));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "ab");
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('z'),
+        KeyModifiers::SUPER | KeyModifiers::SHIFT,
+    ));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "abc");
+}
+
+#[test]
+fn find_dialog_offers_replace_as_a_mode() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, "alpha beta alpha", 0);
+
+    // A plain Find, then `Alt+P` turns it into a find-and-replace in place —
+    // no closing the box and hunting for a separate Replace command.
+    app.run_action("edit.find");
+    assert!(
+        !app.search.as_ref().unwrap().replacing,
+        "Find opens as a find"
+    );
+    app.on_key(alt(KeyCode::Char('h')));
+    let bar = app.search.as_ref().unwrap();
+    assert!(bar.replacing, "Alt+H turns on replace");
+    assert_eq!(
+        bar.field,
+        vix::search::Field::Replace,
+        "and puts the cursor where the user just asked to type"
+    );
+
+    // Toggling back returns to a plain find without losing the query.
+    app.search.as_mut().unwrap().query = "alpha".to_string();
+    app.on_key(alt(KeyCode::Char('h')));
+    let bar = app.search.as_ref().unwrap();
+    assert!(!bar.replacing);
+    assert_eq!(bar.field, vix::search::Field::Query);
+    assert_eq!(bar.query, "alpha", "the query survives the round trip");
+}
+
+#[test]
+fn find_dialog_scope_option_widens_the_search() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, "needle", 0);
+
+    // Type a query into the find box, then widen the scope: the workspace panel
+    // opens already carrying the query and the toggles, which is what replaced
+    // the separate "Find in Files…" menu item.
+    app.run_action("edit.find");
+    app.on_key(alt(KeyCode::Char('h'))); // replace on, to check it carries too
+    app.search.as_mut().unwrap().query = "needle".to_string();
+    app.search.as_mut().unwrap().replace = "pin".to_string();
+    app.search.as_mut().unwrap().regex = true;
+    app.on_key(alt(KeyCode::Char('i')));
+
+    assert!(app.search.is_none(), "the find box hands over");
+    let panel = app
+        .workspace_search
+        .as_ref()
+        .expect("workspace panel opened");
+    assert_eq!(panel.query, "needle", "the query came along");
+    assert_eq!(panel.replace, "pin", "so did the replacement");
+    assert!(panel.replacing, "and the replace mode");
+    assert!(panel.regex, "and the toggles");
+
+    // The panel is the "Files" stage; widening again lists into the dock.
+    app.on_key(alt(KeyCode::Char('i')));
+    assert!(
+        app.workspace_search.is_none(),
+        "the panel hands over in turn"
+    );
+}
+
+#[test]
+fn bracketed_paste_is_one_edit_and_undoes_in_one_step() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, "", 0);
+
+    // A pasted block lands verbatim: no auto-pairing, and no auto-indent
+    // cascade re-indenting each line after a newline (what happened when the
+    // terminal delivered a paste as individual key events).
+    app.on_paste("fn f() {\n    let s = \"hi\";\n}\n");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "fn f() {\n    let s = \"hi\";\n}\n"
+    );
+
+    // And it is a single undo step, not one per character.
+    app.run_action("edit.undo");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "",
+        "undo removes the whole paste"
+    );
+
+    // A paste replaces the selection, like pasting the clipboard does.
+    buffer_with(&mut app, "keep me", 0);
+    app.run_action("edit.select_all");
+    app.on_paste("replaced");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "replaced");
+}
+
+#[test]
+fn bracketed_paste_goes_to_the_overlay_taking_keys() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, "", 0);
+
+    // With the command palette open the text belongs to its input, not to the
+    // buffer behind it.
+    app.run_action("tools.palette");
+    assert!(app.palette.is_some(), "palette is open");
+    app.on_paste("needle");
+    assert!(
+        app.palette.as_ref().unwrap().query().contains("needle"),
+        "the palette got the pasted text"
+    );
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "",
+        "the buffer is untouched"
+    );
+    app.on_key(esc());
+
+    // Same for the find bar.
+    app.run_action("edit.find");
+    app.on_paste("term");
+    assert!(app.search.is_some(), "find bar is open");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "",
+        "the buffer is untouched"
+    );
+    app.on_key(esc());
+
+    // Nothing layered over the editor: the paste lands in the buffer again.
+    app.on_paste("into the buffer");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "into the buffer");
+}
+
+#[test]
+fn tests_copy_and_paste_through_the_in_memory_clipboard() {
+    // Regression guard: the platform clipboard is opt-in (only `main` calls
+    // `use_system`), so a test run cannot overwrite what the developer copied.
+    // A keymap test used to cut a scratch line onto the real macOS pasteboard.
+    assert!(
+        !vix::clipboard::is_system(),
+        "tests must not touch the system clipboard"
+    );
+
+    // Copy and paste still round-trip — through the in-memory clipboard.
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, "hello", 0);
+    app.run_action("edit.select_all");
+    app.run_action("edit.copy");
+    app.run_action("escape"); // drop the selection so the paste appends
+    app.run_action("edit.go_last");
+    app.run_action("edit.paste");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "hellohello");
+}
+
+#[test]
+fn apple_keymap_ctrl_d_deletes_the_character_ahead() {
+    let mut app = app_at(Path::new("."));
+    assert_eq!(app.settings.keymap, "apple", "default keymap");
+
+    // macOS forward delete: the character to the right of the cursor goes, the
+    // cursor stays, so a second press eats the next one.
+    buffer_with(&mut app, "abc", 1);
+    app.on_key(ctrl('d'));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "ac");
+    app.on_key(ctrl('d'));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "a");
+    assert!(
+        !app.editor.active_tab().unwrap().editor.has_multi_carets(),
+        "Ctrl+D no longer spawns a caret in the Apple keymap"
+    );
+
+    // Nothing ahead at the end of the buffer: a no-op, not a backspace.
+    buffer_with(&mut app, "abc", 3);
+    app.on_key(ctrl('d'));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "abc");
+
+    // Ctrl+Shift+D still duplicates the line.
+    buffer_with(&mut app, "abc", 0);
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('d'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "abc\nabc");
+
+    // Other keymaps keep the editor core's add-next-occurrence on Ctrl+D.
+    app.settings.keymap = "vscode-macos".to_string();
+    buffer_with(&mut app, "foo foo", 0);
+    app.on_key(ctrl('d'));
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "foo foo",
+        "VS Code's Ctrl+D selects, it does not delete"
+    );
+}
+
+#[test]
+fn delete_submenu_actions_remove_the_unit_at_the_cursor() {
+    let mut app = app_at(Path::new("."));
+
+    // Character: the one under the cursor goes, the cursor stays.
+    buffer_with(&mut app, "abc", 1);
+    app.run_action("edit.delete.character");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "ac");
+
+    // Word: taken with the spacing after it, so the line closes up.
+    buffer_with(&mut app, "one two three", 4);
+    app.run_action("edit.delete.word");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "one three");
+
+    // Sentence: the line break after it is left alone.
+    buffer_with(&mut app, "One. Two.\nThree.", 5);
+    app.run_action("edit.delete.sentence");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "One.\nThree.");
+
+    // Paragraph: the blank lines separating it from the next one go too.
+    buffer_with(&mut app, "a1\na2\n\nb1\nb2\n", 0);
+    app.run_action("edit.delete.paragraph");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "b1\nb2\n");
+
+    // Section: two or more blank lines delimit; a single blank line does not.
+    buffer_with(&mut app, "a\n\nb\n\n\nc\n", 0);
+    app.run_action("edit.delete.section");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "c\n");
+
+    // Nothing at the end of the buffer: a no-op rather than a scramble.
+    buffer_with(&mut app, "abc", 3);
+    app.run_action("edit.delete.character");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "abc");
+}
+
+#[test]
+fn wrap_fills_the_cursor_paragraph_or_the_selection() {
+    let settings = Settings {
+        wrap_column: 10,
+        ..Settings::default()
+    };
+    let mut app = app_with(settings);
+
+    // No selection: only the paragraph holding the cursor is refilled.
+    buffer_with(&mut app, "one two three four\n\nleave me alone\n", 0);
+    app.run_action("edit.wrap");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "one two\nthree four\n\nleave me alone\n"
+    );
+
+    // Already wrapped → no-op, with a status note.
+    app.status.clear();
+    app.run_action("edit.wrap");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "one two\nthree four\n\nleave me alone\n"
+    );
+    assert!(!app.status.is_empty(), "reports there was nothing to wrap");
+
+    // With a selection, the selected text is what gets wrapped.
+    buffer_with(&mut app, "aa bb cc dd ee\nkeep\n", 0);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_selection_range(0, 14);
+    app.run_action("edit.wrap");
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "aa bb cc\ndd ee\nkeep\n"
+    );
+}
+
+#[test]
+fn wrap_uses_the_wrap_column_setting() {
+    // The same paragraph wraps differently at 20 columns than at the default 80.
+    let text = "alpha beta gamma delta epsilon\n";
+    let mut wide = app_with(Settings::default());
+    buffer_with(&mut wide, text, 0);
+    wide.run_action("edit.wrap");
+    assert_eq!(
+        wide.editor.active_tab().unwrap().text(),
+        text,
+        "already inside the default 80-column wrap"
+    );
+
+    let mut narrow = app_with(Settings {
+        wrap_column: 20,
+        ..Settings::default()
+    });
+    buffer_with(&mut narrow, text, 0);
+    narrow.run_action("edit.wrap");
+    assert_eq!(
+        narrow.editor.active_tab().unwrap().text(),
+        "alpha beta gamma\ndelta epsilon\n"
+    );
+}
+
+#[test]
+fn welcome_dialog_shows_on_the_first_launch_only() {
+    // Two launches against one config file in a temp dir, so the user's real
+    // config is never touched.
+    let dir = unique_dir("welcome");
+    let config = dir.join("config.toml");
+    fs::remove_file(&config).ok();
+
+    // First launch: no config file yet, so the dialog is enabled and opens.
+    let first = Settings::load_from(&config);
+    assert!(
+        first.show_welcome_dialog,
+        "a fresh config starts with the welcome dialog enabled"
+    );
+    let mut app = App::new(dir.clone(), first).with_settings_path(&config);
+    app.layout.editor = Rect::new(0, 0, 80, 24);
+    app.maybe_show_welcome();
+    assert!(
+        app.welcome.is_some(),
+        "the welcome dialog opens on the first launch"
+    );
+    assert!(
+        !app.settings.show_welcome_dialog,
+        "showing it turns the setting off"
+    );
+
+    // Quit: dismiss the dialog and drop the app. Nothing is saved on the way
+    // out — the setting was already written to disk when the dialog appeared.
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(app.welcome.is_none(), "Esc closes the welcome dialog");
+    drop(app);
+
+    // Second launch: the saved config now has the dialog turned off.
+    let second = Settings::load_from(&config);
+    assert!(
+        !second.show_welcome_dialog,
+        "the first show persisted show_welcome_dialog = false"
+    );
+    let mut app = App::new(dir.clone(), second).with_settings_path(&config);
+    app.layout.editor = Rect::new(0, 0, 80, 24);
+    app.maybe_show_welcome();
+    assert!(
+        app.welcome.is_none(),
+        "no welcome dialog on the second launch"
+    );
+
+    fs::remove_dir_all(&dir).ok();
 }

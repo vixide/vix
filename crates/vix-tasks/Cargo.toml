@@ -5,8 +5,14 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Project task runner: named shell commands loaded from `tasks.toml`."
+description = "Project task running: named tasks, per-project-type lifecycle commands, discovered tasks, subprojects, and test-at-point."
 
 [dependencies]
+regex = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 toml = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

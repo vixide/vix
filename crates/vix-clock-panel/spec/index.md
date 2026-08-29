@@ -40,4 +40,4 @@ builders (`local_clock`, `local_datetime`, `utc_iso`, `iso_week_date`,
 `datetime_at_offset`, `active_zone_datetime`) and a `Clock` row model
 (`rows`, `up`/`down`/`select`, `selected_value`). The host owns `show_clock`, the
 `Clock` state, the `tools.clock` toggle, key/mouse routing, and `draw_clock`. See
-`clock_panel/spec/index.md`.
+`crates/vix-clock-panel/spec/index.md`.

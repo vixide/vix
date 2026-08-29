@@ -9,7 +9,11 @@ carets are added on top of it.
 - **`Ctrl+D`** — select the word at the cursor; press again to select the **next
   occurrence** and add a caret there (the new match becomes primary). Repeat to
   keep adding matches; it wraps around the buffer. With an existing selection,
-  `Ctrl+D` searches for that selection's text.
+  `Ctrl+D` searches for that selection's text. This is the editor widget's own
+  binding, so it is live in the keymaps that leave `Ctrl+D` alone (VS Code,
+  IntelliJ, …). The **Apple** keymap claims that key for macOS forward delete
+  (see `crates/vix-keymap-model/spec/index.md`); there, add carets with
+  `Alt`+click or **Edit → Select → Select All Occurrences**.
 - **`Alt`+click** — add an extra caret at the clicked position.
 - **`Esc`** — drop all extra carets, keeping the primary.
 - A plain click collapses back to a single cursor.

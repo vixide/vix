@@ -8,11 +8,162 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **MSRV policy**: the Minimum Supported Rust Version is the current stable
-  release minus two (`N−2`), today **1.96**. Declared once in `Cargo.toml`
-  (`rust-version`), inherited by every member crate, and verified by CI's
-  `msrv` job on all three forges — see
-  [`spec/rust-msrv-n-minus-2/index.md`](spec/rust-msrv-n-minus-2/index.md).
+- **A Project menu** (`vix-tasks`): six lifecycle command slots — Configure,
+  Compile, Test, Install, Package, Run (`C-c p c o/c/t/i/p/r`) — resolved from
+  the detected project type (Cargo, npm/yarn/pnpm/bun, Make, just,
+  Python/Poetry, Go, Deno), a shareable `.vix/project.toml` override, and a
+  per-user resolved-command cache, in that order. Also: **Run Task…**
+  (the merged `tasks.toml` + project-type + discovered task list — discovery
+  covers npm/yarn/pnpm/bun scripts, Deno tasks, Composer scripts, justfile
+  recipes, go-task Taskfiles, Rake tasks, and Make targets), **Test at
+  Point** (`C-c p c .`, Rust/Python/Go/JS/TS/Ruby/Elixir), **Repeat Last
+  Task**, and a **Subproject ▸** family (`C-c p c m …`) that repeats the six
+  lifecycle commands plus Find File, scoped to the nearest enclosing
+  subproject of a monorepo. See
+  [`crates/vix-tasks/spec/index.md`](crates/vix-tasks/spec/index.md).
+- **Org table editor + Column View.** A structural Org table editor
+  (`vix-org-table`: cell/row/column edits that keep the table aligned, plus
+  pragmatic `TBLFM` formula evaluation) and an interactive, write-through
+  **Column View** overlay (Org `C-c C-x C-c`) on the outline at the cursor —
+  edit a headline's properties as a table, with dynamic-block (`columnview`)
+  capture and update. See
+  [`crates/vix-org/spec/index.md`](crates/vix-org/spec/index.md#column-view)
+  and [`crates/vix-org-table/spec/index.md`](crates/vix-org-table/spec/index.md).
+- **macOS: the `Command` key now drives Vix's `Control` bindings.** `Cmd+S`
+  saves, `Cmd+F` finds, `Cmd+Shift+Z` redoes — the modifier is folded into
+  `Control` before dispatch, so it works in every keymap with no second binding
+  table. Vix asks the terminal for the kitty keyboard protocol on startup, since
+  that is the only way `Command` can be reported at all; terminals without it
+  (Terminal.app) are unaffected, and terminals that keep a `Cmd` shortcut for
+  their own menus still never forward it.
+- **Edit → Delete ▸**: delete the text unit at the cursor — **Character**
+  (Emacs `C-d`), **Word**, **Sentence**, **Paragraph** (blank-line delimited),
+  or **Section** (two or more blank lines delimit). Each takes the separator
+  after the unit with it — or the one before it for the last unit — so the text
+  closes up; Character, Word, and Sentence stay inside the line, while Paragraph
+  and Section swallow the blank lines between blocks.
+- **Edit → Transpose ▸** groups the transpose commands and extends them past
+  characters and words: **Lines** (swap the cursor's line with the one above,
+  Emacs `C-x C-t`), **Sentences**, **Paragraphs** (blank-line delimited), and
+  **Sections** (two or more blank lines delimit). Each swaps the unit before
+  the cursor with the unit at it, keeping the separator between them.
+  Transpose Characters / Transpose Words are now **Characters** / **Words**
+  inside that submenu; their actions and `Ctrl+T` / `Alt+T` keys are unchanged.
+- **Edit → Wrap** (`edit.wrap`): hard-wrap (fill) the selection, or the
+  paragraph at the cursor when nothing is selected, at the new `wrap_column`
+  setting (default `80`). Keeps indentation, a comment/quote marker shared by
+  every line, and list bullets with a hanging indent; blank lines separate
+  paragraphs, and no word is ever split.
+
+- **One Find dialog instead of four commands.** The find box now carries the two
+  things that used to be separate menu items: **Replace** (`Alt+H`, or the
+  button) turns a find into a find-and-replace in place, and **In:** (`Alt+I`)
+  chooses where to look — **Buffer**, **Files**, or **Workspace**. Widening
+  carries the query, the replacement, and the case/regex toggles to the surface
+  that shows that many results, so nothing is retyped. **Find in Files…**,
+  **Replace in Files…**, and **Find In Workspace…** are gone from the menu; their
+  action ids (and `Ctrl+Shift+F`) still work for key bindings and the palette.
+  The workspace panel takes `Alt+H` too, and `Alt+I` there moves on to the dock.
+- **Edit → Find sits above Edit → Select**, and **Column Select Up** above
+  **Column Select Down**, so the pair reads in arrow order.
+- **Fuzz testing** (`fuzz/`, `cargo +nightly fuzz run <target>`): six
+  coverage-guided targets over the code that parses input Vix did not write —
+  `textops`, `org_table`, `lsp_frame` (LSP `Content-Length` framing), `vcard`,
+  `conflict` (merge markers), and `http_request`. Each asserts invariants, not
+  just the absence of a panic. See [`fuzz/README.md`](fuzz/README.md).
+- **Benchmarks** (`benches/`, `cargo bench`): Criterion benchmarks for the
+  per-keystroke and per-frame paths — text transforms, opening/typing/pasting/
+  undo in the editor widget, find-in-buffer, and palette fuzzy filtering.
+- **`scripts/check-docs`**, now part of `scripts/check`: fails on a broken
+  documentation link, a crate with no spec, a crate missing from the crate map,
+  or a `README.md` that has drifted from its `index.md` twin.
+
+### Changed
+
+- The first-run welcome dialog is now controlled by a `show_welcome_dialog`
+  setting (default `true`), replacing the inverted `welcomed` flag. Vix turns it
+  off and **saves the settings immediately** after showing the dialog, instead of
+  waiting for a clean exit, so a crashed or killed first run no longer brings the
+  dialog back. Set it to `true` again to see the welcome screen on the next
+  launch. A config file that already had `welcomed = true` shows the dialog once
+  more, then settles.
+
+### Fixed
+
+- **Pasting in the terminal is one edit again.** `Cmd+V` (and any other paste
+  made with the terminal's own shortcut) arrived as one key event per character,
+  so undo removed the paste one character at a time, auto-indent re-indented
+  every pasted line — an indented block walked right, closing braces included —
+  and auto-pairing doubled brackets and quotes. Vix now enables **bracketed
+  paste**: the text arrives in one piece and is inserted at the cursor as a
+  single edit, exactly like `Ctrl+V`. Pastes into a prompt, the palette, the
+  find bar, or a panel still go to that input.
+- **Pasting a whole line keeps its trailing newline.** The indentation-aware
+  paste dropped it, so the next paste ran onto the same line.
+- **Opening a file was ~26 ms slower than it needed to be.** Every buffer
+  compiled its language's Tree-sitter highlight query from scratch — on every
+  file opened, every preview tab the explorer scans past with an arrow key, and
+  every split, plus once per injected language. Compiled queries are now cached
+  per language for the life of the process: opening a 200-line Rust file went
+  from 26 ms to 0.6 ms, and a 5,000-line file from 41 ms to 15 ms.
+- **Aligning a lone `|-` line no longer deletes it.** An Org table with no data
+  rows has no columns to size, and rendering it produced an empty string — which
+  the caller then wrote over the table's lines. It renders as `|---|` now, the
+  way Emacs squares up a bare rule. (Found by the new `org_table` fuzz target.)
+- **Switching the UI language showed `Language: %{locale}`.** `t!` reserves
+  `locale` for choosing the target locale, so the argument never reached the
+  placeholder. The placeholder is `%{language}` now.
+- **A failing git command lost its reason.** The message was handed the error
+  text but had nowhere to put it; there is now a `msg.git_failed_reason` string
+  that shows it, in fifteen languages.
+- **Command-palette filtering is ~40% faster.** The fuzzy matcher allocated a
+  `Vec<char>` and a second copy of every candidate string on every keystroke;
+  it now allocates once per candidate. Filtering 20,000 paths went from 4.5 ms
+  to 2.8 ms per keystroke. The previous implementation is kept as a test-only
+  reference that the current one must agree with, over fixed cases and a
+  property test.
+- **A flaky regression test made the suite unreliable.** The run-command cancel
+  test judged "did the cancel get through?" with a 20-second stopwatch, and its
+  own reader held the mutex *across* its poll sleep — a lock discipline
+  `run_command` does not have. It was therefore measuring lock starvation (8+
+  seconds under load, sometimes never) rather than the deadlock it guards. It
+  now mirrors the real code and asserts how the child died — killed by a signal,
+  not exited on its own — and runs in 0.2 s instead of 20-30 s.
+- **The Org menu had no hover tooltips.** All 66 of its items (and submenus) now
+  carry help text, so no menu item anywhere is left blank with
+  `show_menu_tooltips` on.
+- **The file explorer's delete confirmation showed `confirm.delete`.** The
+  message had no entry in `locales/app.yml`, and a missing key renders as the
+  key itself. It is translated now, and `tests/i18n_keys.rs` fails the build for
+  any `t!` key the catalog does not define.
+- **`Ctrl+D` is forward delete in the Apple keymap.** It now removes the
+  character to the right of the cursor, like the `Delete` key and every macOS
+  text field, instead of falling through to the editor widget's
+  add-next-occurrence caret. `Ctrl+Shift+D` still duplicates the line or
+  selection, and the keymaps modeled on VS Code, IntelliJ, and Sublime keep
+  their own `Ctrl+D`; in the Apple keymap, add carets with `Alt`+click or
+  **Edit → Select → Select All Occurrences**.
+- **Forward delete at the end of the buffer no longer backspaces.** With the
+  cursor past the last character, `Delete` (and now `Ctrl+D`) stepped right —
+  a no-op there — and then deleted backwards, eating the character *behind* the
+  cursor. It is a no-op now.
+- **Running the tests no longer overwrites your clipboard.** The test suite
+  copied and cut through the real platform clipboard, so `cargo test` left
+  whatever a test had cut (usually the word `doomed`, from a keymap test) on the
+  macOS pasteboard — every later paste, in any app, produced it. The platform
+  clipboard is now opt-in: `vix-clipboard` keeps an in-memory clipboard until
+  `use_system` is called, and only the `vix` binary calls it, at startup.
+- **Naming the open menu again now closes its dropdown.** A second click on the
+  same top-level name re-opened the menu instead of toggling it shut; clicking a
+  different name still switches menus. `Alt+<letter>` mnemonics toggle the same
+  way and now work from inside an open dropdown or submenu, where they were
+  previously ignored.
+- **File explorer crash when a directory changes while it is being read.** The
+  explorer sorted entries with a key that re-stats the filesystem during the
+  sort, so a file or directory created or removed mid-sort could make the same
+  entry compare two different ways and panic Rust's sort ("comparison function
+  does not correctly implement a total order"). The key is now computed once per
+  entry. This also fixes the intermittent panic in the app's render tests.
 
 ## [1.5.0] - 2026-08-05
 
@@ -698,7 +849,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Single-crate architecture (edition 2024).** Every former `vix-*` subcrate is
   now a module under `src/`; the editor widget is the `editor_core` module
   (Tree-sitter highlight queries in `langs/`, gated behind `lang-*` features).
-  The workspace has no members. See `AGENTS/share/crate-map.md`.
+  The workspace has no members. See `agents/share/crate-map.md`.
 - **`#![warn(clippy::pedantic)]` in every module**, with no blanket
   `#![allow(clippy::pedantic)]`/`#![allow(missing_docs)]` — findings fixed in
   code; only four targeted `struct_excessive_bools` allows remain.
@@ -988,7 +1139,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `calendar_panel`, `nerd_font_picker`, and `find_panel`
   (the find / find-and-replace box state).
 - New docs: `docs/themes.md`, `docs/i18n.md`, `docs/configuration.md`,
-  `index.md`, `AGENTS.md` (+ `AGENTS/`), and this changelog.
+  `index.md`, `AGENTS.md` (+ `agents/`), and this changelog.
 
 ### Changed
 

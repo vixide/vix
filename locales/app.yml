@@ -223,6 +223,82 @@ menu.org:
   bn: "Org"
   zh: "Org"
   ja: "Org"
+menu.project:
+  en: "Project"
+menu.project.help:
+  en: "Open the Project menu for build, test, and task commands."
+menu.item.project.configure:
+  en: "Configure"
+menu.item.project.configure.help:
+  en: "Run this project type's configure command (prepares it to build)."
+menu.item.project.compile:
+  en: "Compile"
+menu.item.project.compile.help:
+  en: "Run this project type's build/compile command."
+menu.item.project.test:
+  en: "Test"
+menu.item.project.test.help:
+  en: "Run this project type's test-suite command."
+menu.item.project.test_at_point:
+  en: "Test at Point"
+menu.item.project.test_at_point.help:
+  en: "Run just the test under the cursor. No confirm prompt, for speed."
+menu.item.project.install:
+  en: "Install"
+menu.item.project.install.help:
+  en: "Run this project type's install command."
+menu.item.project.package:
+  en: "Package"
+menu.item.project.package.help:
+  en: "Run this project type's package/distribution-build command."
+menu.item.project.run:
+  en: "Run"
+menu.item.project.run.help:
+  en: "Run this project type's run command."
+menu.item.project.run_task:
+  en: "Run Task…"
+menu.item.project.run_task.help:
+  en: "Choose from user-configured, project-type, and discovered tasks."
+menu.item.project.repeat_last_task:
+  en: "Repeat Last Task"
+menu.item.project.repeat_last_task.help:
+  en: "Re-run the most recently run project command of any kind."
+menu.item.project.subproject:
+  en: "Subproject"
+menu.item.project.subproject.help:
+  en: "Commands scoped to the nearest enclosing subproject instead of the workspace root."
+menu.item.project.subproject.find_file:
+  en: "Find File"
+menu.item.project.subproject.find_file.help:
+  en: "Fuzzy-find a file within the nearest enclosing subproject."
+menu.item.project.subproject.configure:
+  en: "Configure"
+menu.item.project.subproject.configure.help:
+  en: "Run the subproject's configure command."
+menu.item.project.subproject.compile:
+  en: "Compile"
+menu.item.project.subproject.compile.help:
+  en: "Run the subproject's build/compile command."
+menu.item.project.subproject.test:
+  en: "Test"
+menu.item.project.subproject.test.help:
+  en: "Run the subproject's test-suite command."
+menu.item.project.subproject.install:
+  en: "Install"
+menu.item.project.subproject.install.help:
+  en: "Run the subproject's install command."
+menu.item.project.subproject.package:
+  en: "Package"
+menu.item.project.subproject.package.help:
+  en: "Run the subproject's package/distribution-build command."
+menu.item.project.subproject.run:
+  en: "Run"
+menu.item.project.subproject.run.help:
+  en: "Run the subproject's run command."
+menu.item.project.discard_command_cache:
+  en: "Discard Command Cache"
+menu.item.project.discard_command_cache.help:
+  en: "Clear the cached resolved lifecycle commands (not history or the .vix/project.toml override)."
 menu.run:
   en: "Run"
 menu.item.run.start:
@@ -1667,10 +1743,34 @@ menu.item.edit.eol_crlf:
   en: "To CRLF (Windows)"
 menu.item.tools.convert.rot13:
   en: "ROT13"
+menu.item.edit.delete_menu:
+  en: "Delete"
+menu.item.edit.delete.character:
+  en: "Character"
+menu.item.edit.delete.word:
+  en: "Word"
+menu.item.edit.delete.sentence:
+  en: "Sentence"
+menu.item.edit.delete.paragraph:
+  en: "Paragraph"
+menu.item.edit.delete.section:
+  en: "Section"
+menu.item.edit.transpose_menu:
+  en: "Transpose"
 menu.item.edit.transpose_chars:
-  en: "Transpose Characters"
+  en: "Characters"
 menu.item.edit.transpose_words:
-  en: "Transpose Words"
+  en: "Words"
+menu.item.edit.transpose_lines:
+  en: "Lines"
+menu.item.edit.transpose_sentences:
+  en: "Sentences"
+menu.item.edit.transpose_paragraphs:
+  en: "Paragraphs"
+menu.item.edit.transpose_sections:
+  en: "Sections"
+menu.item.edit.wrap:
+  en: "Wrap"
 menu.item.edit.increment_number:
   en: "Increment Number"
 menu.item.edit.decrement_number:
@@ -1861,22 +1961,6 @@ menu.item.edit.select_section:
   bn: "বিভাগ নির্বাচন"
   zh: "选择节"
   ja: "セクションを選択"
-menu.item.edit.move_menu:
-  en: "Move"
-  es: "Mover"
-  fr: "Déplacer"
-  de: "Verschieben"
-  cy: "Symud"
-  ga: "Bog"
-  gd: "Gluais"
-  pl: "Przenieś"
-  pt: "Mover"
-  ru: "Переместить"
-  ar: "تحريك"
-  hi: "ले जाएँ"
-  bn: "সরান"
-  zh: "移动"
-  ja: "移動"
 menu.item.edit.lines_menu:
   en: "Lines"
   es: "Líneas"
@@ -2021,70 +2105,6 @@ menu.item.edit.trim:
   bn: "শেষের ফাঁকা সরান"
   zh: "去除行尾空白"
   ja: "末尾の空白を削除"
-menu.item.edit.go_menu:
-  en: "Go"
-  es: "Ir"
-  fr: "Aller"
-  de: "Gehe zu"
-  cy: "Mynd"
-  ga: "Téigh"
-  gd: "Rach"
-  pl: "Idź"
-  pt: "Ir"
-  ru: "Перейти"
-  ar: "انتقال"
-  hi: "जाएँ"
-  bn: "যান"
-  zh: "转到"
-  ja: "ジャンプ"
-menu.item.edit.go_first:
-  en: "File Start"
-  es: "Inicio del archivo"
-  fr: "Début du fichier"
-  de: "Dateianfang"
-  cy: "Dechrau'r Ffeil"
-  ga: "Tús an Chomhaid"
-  gd: "Toiseach an Fhaidhle"
-  pl: "Początek pliku"
-  pt: "Início do arquivo"
-  ru: "Начало файла"
-  ar: "بداية الملف"
-  hi: "फ़ाइल का आरंभ"
-  bn: "ফাইলের শুরু"
-  zh: "文件开头"
-  ja: "ファイルの先頭"
-menu.item.edit.go_last:
-  en: "File End"
-  es: "Fin del archivo"
-  fr: "Fin du fichier"
-  de: "Dateiende"
-  cy: "Diwedd y Ffeil"
-  ga: "Deireadh an Chomhaid"
-  gd: "Deireadh an Fhaidhle"
-  pl: "Koniec pliku"
-  pt: "Fim do arquivo"
-  ru: "Конец файла"
-  ar: "نهاية الملف"
-  hi: "फ़ाइल का अंत"
-  bn: "ফাইলের শেষ"
-  zh: "文件末尾"
-  ja: "ファイルの末尾"
-menu.item.edit.go_line:
-  en: "Line Number"
-  es: "Número de línea"
-  fr: "Numéro de ligne"
-  de: "Zeilennummer"
-  cy: "Rhif Llinell"
-  ga: "Uimhir Líne"
-  gd: "Àireamh Loidhne"
-  pl: "Numer wiersza"
-  pt: "Número da linha"
-  ru: "Номер строки"
-  ar: "رقم السطر"
-  hi: "पंक्ति संख्या"
-  bn: "লাইন নম্বর"
-  zh: "行号"
-  ja: "行番号"
 menu.item.edit.bookmark_toggle:
   en: "Toggle Bookmark"
   es: "Alternar marcador"
@@ -2165,102 +2185,6 @@ menu.item.edit.recent_locations:
   bn: "সাম্প্রতিক অবস্থান…"
   zh: "最近的位置…"
   ja: "最近の場所…"
-menu.item.edit.line_start:
-  en: "Line Start"
-  es: "Inicio de línea"
-  fr: "Début de ligne"
-  de: "Zeilenanfang"
-  cy: "Dechrau'r Llinell"
-  ga: "Tús na Líne"
-  gd: "Toiseach na Loidhne"
-  pl: "Początek wiersza"
-  pt: "Início da linha"
-  ru: "Начало строки"
-  ar: "بداية السطر"
-  hi: "पंक्ति का आरंभ"
-  bn: "লাইনের শুরু"
-  zh: "行首"
-  ja: "行頭"
-menu.item.edit.line_end:
-  en: "Line End"
-  es: "Fin de línea"
-  fr: "Fin de ligne"
-  de: "Zeilenende"
-  cy: "Diwedd y Llinell"
-  ga: "Deireadh na Líne"
-  gd: "Deireadh na Loidhne"
-  pl: "Koniec wiersza"
-  pt: "Fim da linha"
-  ru: "Конец строки"
-  ar: "نهاية السطر"
-  hi: "पंक्ति का अंत"
-  bn: "লাইনের শেষ"
-  zh: "行尾"
-  ja: "行末"
-menu.item.edit.para_start:
-  en: "Paragraph Start"
-  es: "Inicio de párrafo"
-  fr: "Début de paragraphe"
-  de: "Absatzanfang"
-  cy: "Dechrau'r Paragraff"
-  ga: "Tús an Ailt"
-  gd: "Toiseach a' Pharagraf"
-  pl: "Początek akapitu"
-  pt: "Início do parágrafo"
-  ru: "Начало абзаца"
-  ar: "بداية الفقرة"
-  hi: "अनुच्छेद का आरंभ"
-  bn: "অনুচ্ছেদের শুরু"
-  zh: "段落开头"
-  ja: "段落の先頭"
-menu.item.edit.para_end:
-  en: "Paragraph End"
-  es: "Fin de párrafo"
-  fr: "Fin de paragraphe"
-  de: "Absatzende"
-  cy: "Diwedd y Paragraff"
-  ga: "Deireadh an Ailt"
-  gd: "Deireadh a' Pharagraf"
-  pl: "Koniec akapitu"
-  pt: "Fim do parágrafo"
-  ru: "Конец абзаца"
-  ar: "نهاية الفقرة"
-  hi: "अनुच्छेद का अंत"
-  bn: "অনুচ্ছেদের শেষ"
-  zh: "段落末尾"
-  ja: "段落の末尾"
-menu.item.edit.section_start:
-  en: "Section Start"
-  es: "Inicio de sección"
-  fr: "Début de section"
-  de: "Abschnittsanfang"
-  cy: "Dechrau'r Adran"
-  ga: "Tús na Roinne"
-  gd: "Toiseach na h-Earrainn"
-  pl: "Początek sekcji"
-  pt: "Início da seção"
-  ru: "Начало раздела"
-  ar: "بداية القسم"
-  hi: "अनुभाग का आरंभ"
-  bn: "বিভাগের শুরু"
-  zh: "节开头"
-  ja: "セクションの先頭"
-menu.item.edit.section_end:
-  en: "Section End"
-  es: "Fin de sección"
-  fr: "Fin de section"
-  de: "Abschnittsende"
-  cy: "Diwedd yr Adran"
-  ga: "Deireadh na Roinne"
-  gd: "Deireadh na h-Earrainn"
-  pl: "Koniec sekcji"
-  pt: "Fim da seção"
-  ru: "Конец раздела"
-  ar: "نهاية القسم"
-  hi: "अनुभाग का अंत"
-  bn: "বিভাগের শেষ"
-  zh: "节末尾"
-  ja: "セクションの末尾"
 menu.item.edit.move_up:
   en: "Move Up"
   es: "Mover arriba"
@@ -3263,54 +3187,6 @@ menu.item.view.spellcheck:
   bn: "বানান পরীক্ষা টগল করুন"
   zh: "切换拼写检查"
   ja: "スペルチェックの切り替え"
-menu.item.tools.line_numbers:
-  en: "Toggle Line Numbers"
-  es: "Alternar números de línea"
-  fr: "Basculer les numéros de ligne"
-  de: "Zeilennummern umschalten"
-  cy: "Toglo Rhifau Llinell"
-  ar: "تبديل أرقام الأسطر"
-  bn: "লাইন নম্বর টগল করুন"
-  ga: "Scoránaigh uimhreacha líne"
-  gd: "Toglaich àireamhan loidhne"
-  hi: "लाइन नंबर टॉगल करें"
-  ja: "行番号の切り替え"
-  pl: "Przełącz numery wierszy"
-  pt: "Alternar números de linha"
-  ru: "Номера строк"
-  zh: "切换行号"
-menu.item.view.explorer:
-  en: "Toggle Explorer"
-  es: "Alternar explorador"
-  fr: "Basculer l'explorateur"
-  de: "Explorer umschalten"
-  cy: "Toglo Archwiliwr"
-  ar: "تبديل المستكشف"
-  bn: "এক্সপ্লোরার টগল করুন"
-  ga: "Scoránaigh an Taiscéalaí"
-  gd: "Toglaich an Rannsachair"
-  hi: "एक्सप्लोरर टॉगल करें"
-  ja: "エクスプローラーの切り替え"
-  pl: "Przełącz eksplorator"
-  pt: "Alternar explorador"
-  ru: "Проводник"
-  zh: "切换资源管理器"
-menu.item.view.messages:
-  en: "Toggle Messages"
-  es: "Alternar mensajes"
-  fr: "Basculer les messages"
-  de: "Nachrichten umschalten"
-  cy: "Toglo Negeseuon"
-  ar: "تبديل الرسائل"
-  bn: "বার্তা টগল করুন"
-  ga: "Scoránaigh teachtaireachtaí"
-  gd: "Toglaich teachdaireachdan"
-  hi: "संदेश टॉगल करें"
-  ja: "メッセージの切り替え"
-  pl: "Przełącz komunikaty"
-  pt: "Alternar mensagens"
-  ru: "Сообщения"
-  zh: "切换消息"
 menu.item.tools.calendar:
   en: "Calendar…"
   es: "Calendario…"
@@ -4026,8 +3902,6 @@ menu.name.latex:
   en: "LaTeX"
 menu.name.org:
   en: "Org"
-menu.item.tools.insert.markers:
-  en: "Markers"
 menu.item.tools.insert.block:
   en: "Begin-End"
 menu.item.tools.insert.org.title:
@@ -4094,10 +3968,16 @@ menu.item.org.cycle_visibility:
   en: "Cycle Visibility (Fold)"
 menu.item.org.showhide:
   en: "Show/Hide"
+menu.item.org.showhide.help:
+  en: "Fold and unfold the outline."
 menu.item.org.fold_all:
   en: "Overview (Fold All)"
+menu.item.org.fold_all.help:
+  en: "Fold every subtree to its top-level headings (Org's overview state)."
 menu.item.org.show_all:
   en: "Show All"
+menu.item.org.show_all.help:
+  en: "Unfold everything, showing the whole buffer."
 menu.item.org.sparse_todo:
   en: "Sparse TODO Tree"
 menu.item.org.sparse_todo.help:
@@ -4110,110 +3990,320 @@ menu.item.org.edit_src:
   en: "Edit Source Block"
 menu.item.org.edit_src.help:
   en: "Open the source block's body in a dedicated tab; run again there to apply it back."
-menu.item.org.column_view:
+menu.item.org.column_view_menu:
   en: "Column View"
+menu.item.org.column_view_menu.help:
+  en: "A live spreadsheet overlay on the outline, driven by the COLUMNS format spec."
+menu.item.org.column_view:
+  en: "Turn On"
 menu.item.org.column_view.help:
+  en: "Open the interactive Column View overlay on the outline at the cursor."
+menu.item.org.column_view_export:
+  en: "Quick Column Export"
+menu.item.org.column_view_export.help:
   en: "Tabulate every headline's TODO state, priority, and tags in a new tab."
+menu.item.org.columns.insert_dblock:
+  en: "Insert Column View Dynamic Block…"
+menu.item.org.columns.insert_dblock.help:
+  en: "Insert a #+BEGIN: columnview block at the cursor, scoped by an entered :id."
+menu.item.org.columns.update_dblock:
+  en: "Update Dynamic Block at Point"
+menu.item.org.columns.update_dblock.help:
+  en: "Recompute the columnview dynamic block the cursor is on."
+menu.item.org.columns.update_all_dblocks:
+  en: "Update All Dynamic Blocks"
+menu.item.org.columns.update_all_dblocks.help:
+  en: "Recompute every columnview dynamic block in the buffer."
 menu.item.org.footnote:
   en: "Footnote New/Jump"
 menu.item.org.footnote.help:
   en: "On a footnote reference jump to its definition (and back); elsewhere insert a new footnote."
 menu.item.org.new_heading:
   en: "New Heading"
+menu.item.org.new_heading.help:
+  en: "Insert a new heading at the current level, below this subtree."
 menu.item.org.navigate:
   en: "Navigate Headings"
+menu.item.org.navigate.help:
+  en: "Move between headings by outline structure."
 menu.item.org.nav.up:
   en: "Up to Parent"
+menu.item.org.nav.up.help:
+  en: "Move to the parent heading, one outline level up."
 menu.item.org.nav.previous:
   en: "Previous Heading"
+menu.item.org.nav.previous.help:
+  en: "Move to the previous heading, whatever its level."
 menu.item.org.nav.next:
   en: "Next Heading"
+menu.item.org.nav.next.help:
+  en: "Move to the next heading, whatever its level."
 menu.item.org.nav.backward:
   en: "Previous Same Level"
+menu.item.org.nav.backward.help:
+  en: "Move to the previous heading at the same outline level."
 menu.item.org.nav.forward:
   en: "Next Same Level"
+menu.item.org.nav.forward.help:
+  en: "Move to the next heading at the same outline level."
 menu.item.org.headline:
   en: "Edit Structure"
 menu.item.org.subtree_copy:
   en: "Copy Subtree"
+menu.item.org.subtree_copy.help:
+  en: "Copy the subtree at the cursor, headline and body together."
 menu.item.org.subtree_cut:
   en: "Cut Subtree"
+menu.item.org.subtree_cut.help:
+  en: "Cut the subtree at the cursor, headline and body together."
 menu.item.org.subtree_paste:
   en: "Paste Subtree"
+menu.item.org.subtree_paste.help:
+  en: "Paste a cut or copied subtree at the cursor, adjusting its level."
 menu.item.org.sort_children:
   en: "Sort Children"
+menu.item.org.sort_children.help:
+  en: "Sort the subtree's children — alphabetically, by TODO state, or by date."
 menu.item.org.refile:
   en: "Refile Subtree…"
+menu.item.org.refile.help:
+  en: "Move the subtree under another heading, chosen from the refile targets."
+menu.item.org.table:
+  en: "Table"
+menu.item.org.table.help:
+  en: "Org's built-in pipe-table editor: alignment, field/row/column edits, sort, sums, and TBLFM formulas."
+menu.item.org.table.align:
+  en: "Align Table"
+menu.item.org.table.align.help:
+  en: "Re-render the table at the cursor: pad columns and right-align numeric ones."
+menu.item.org.table.insert_row_above:
+  en: "Insert Row Above"
+menu.item.org.table.insert_row_above.help:
+  en: "Insert an empty row above the current one."
+menu.item.org.table.insert_row_below:
+  en: "Insert Row Below"
+menu.item.org.table.insert_row_below.help:
+  en: "Insert an empty row below the current one."
+menu.item.org.table.kill_row:
+  en: "Delete Row"
+menu.item.org.table.kill_row.help:
+  en: "Remove the row at the cursor."
+menu.item.org.table.move_row_up:
+  en: "Move Row Up"
+menu.item.org.table.move_row_up.help:
+  en: "Swap the current row with the one above it."
+menu.item.org.table.move_row_down:
+  en: "Move Row Down"
+menu.item.org.table.move_row_down.help:
+  en: "Swap the current row with the one below it."
+menu.item.org.table.insert_hline:
+  en: "Insert Horizontal Line"
+menu.item.org.table.insert_hline.help:
+  en: "Insert a horizontal rule below the current row."
+menu.item.org.table.hline_and_move:
+  en: "Insert Line Below and Move"
+menu.item.org.table.hline_and_move.help:
+  en: "Insert a horizontal rule below the current row, then a fresh empty row below that, and move there."
+menu.item.org.table.insert_column:
+  en: "Insert Column"
+menu.item.org.table.insert_column.help:
+  en: "Insert an empty column at the cursor, shifting the rest rightward."
+menu.item.org.table.delete_column:
+  en: "Delete Column"
+menu.item.org.table.delete_column.help:
+  en: "Remove the column at the cursor."
+menu.item.org.table.move_column_left:
+  en: "Move Column Left"
+menu.item.org.table.move_column_left.help:
+  en: "Swap the current column with the one to its left."
+menu.item.org.table.move_column_right:
+  en: "Move Column Right"
+menu.item.org.table.move_column_right.help:
+  en: "Swap the current column with the one to its right."
+menu.item.org.table.sort:
+  en: "Sort Table…"
+menu.item.org.table.sort.help:
+  en: "Sort the table's rows by a column: alphabetic, numeric, or time order."
+menu.item.org.table.sum_column:
+  en: "Sum Column"
+menu.item.org.table.sum_column.help:
+  en: "Sum the numeric cells of the current column onto the status line and clipboard."
+menu.item.org.table.recalc:
+  en: "Recalculate (Apply Formulas)"
+menu.item.org.table.recalc.help:
+  en: "Realign the table and apply its #+TBLFM: formulas, if any."
+menu.item.org.table.transpose:
+  en: "Transpose Table"
+menu.item.org.table.transpose.help:
+  en: "Swap the table's rows and columns, dropping horizontal rules."
+menu.item.org.table.copy_down:
+  en: "Copy Field from Above"
+menu.item.org.table.copy_down.help:
+  en: "Fill an empty field from the nearest non-empty field above it, or copy a filled field down to the next row."
+menu.item.org.table.create_from_region:
+  en: "Create Table from Selection"
+menu.item.org.table.create_from_region.help:
+  en: "Convert the selected comma/tab/whitespace-delimited text into a pipe table (or insert an empty one)."
+menu.item.org.table.export_tsv:
+  en: "Export to TSV"
+menu.item.org.table.export_tsv.help:
+  en: "Export the table's data rows as tab-separated text in a new tab."
+menu.item.org.table.rectangle:
+  en: "Rectangle"
+menu.item.org.table.rectangle.help:
+  en: "Copy, cut, and paste a rectangular block of table cells."
+menu.item.org.table.rectangle.copy:
+  en: "Copy Rectangle"
+menu.item.org.table.rectangle.copy.help:
+  en: "Copy the selected cell rectangle (or just the current field) to the table rectangle clipboard."
+menu.item.org.table.rectangle.cut:
+  en: "Cut Rectangle"
+menu.item.org.table.rectangle.cut.help:
+  en: "Copy the selected cell rectangle to the table rectangle clipboard and blank it in place."
+menu.item.org.table.rectangle.paste:
+  en: "Paste Rectangle"
+menu.item.org.table.rectangle.paste.help:
+  en: "Paste the table rectangle clipboard with its upper-left cell at the cursor."
 menu.item.org.editing:
   en: "Editing"
+menu.item.org.editing.help:
+  en: "Markup, blocks, and text-level Org editing."
 menu.item.org.emphasis:
   en: "Emphasis"
+menu.item.org.emphasis.help:
+  en: "Wrap the selection in Org emphasis markers."
 menu.item.org.emphasis.bold:
   en: "Bold"
+menu.item.org.emphasis.bold.help:
+  en: "Wrap the selection in *bold* markers."
 menu.item.org.emphasis.italic:
   en: "Italic"
+menu.item.org.emphasis.italic.help:
+  en: "Wrap the selection in /italic/ markers."
 menu.item.org.emphasis.underline:
   en: "Underline"
+menu.item.org.emphasis.underline.help:
+  en: "Wrap the selection in _underline_ markers."
 menu.item.org.emphasis.code:
   en: "Code"
+menu.item.org.emphasis.code.help:
+  en: "Wrap the selection in ~code~ markers."
 menu.item.org.emphasis.verbatim:
   en: "Verbatim"
+menu.item.org.emphasis.verbatim.help:
+  en: "Wrap the selection in =verbatim= markers."
 menu.item.org.emphasis.strike:
   en: "Strikethrough"
+menu.item.org.emphasis.strike.help:
+  en: "Wrap the selection in +strikethrough+ markers."
 menu.item.org.block:
   en: "Insert Block"
+menu.item.org.block.help:
+  en: "Insert a #+BEGIN/#+END block around the selection, or empty at the cursor."
 menu.item.org.block.src:
   en: "Source"
+menu.item.org.block.src.help:
+  en: "Wrap in a #+BEGIN_SRC block, for source code."
 menu.item.org.block.example:
   en: "Example"
+menu.item.org.block.example.help:
+  en: "Wrap in a #+BEGIN_EXAMPLE block (fixed-width, not evaluated)."
 menu.item.org.block.quote:
   en: "Quote"
+menu.item.org.block.quote.help:
+  en: "Wrap in a #+BEGIN_QUOTE block."
 menu.item.org.block.center:
   en: "Center"
+menu.item.org.block.center.help:
+  en: "Wrap in a #+BEGIN_CENTER block (centered on export)."
 menu.item.org.block.verse:
   en: "Verse"
+menu.item.org.block.verse.help:
+  en: "Wrap in a #+BEGIN_VERSE block, keeping line breaks."
 menu.item.org.block.comment:
   en: "Comment"
+menu.item.org.block.comment.help:
+  en: "Wrap in a #+BEGIN_COMMENT block (dropped on export)."
 menu.item.org.archive:
   en: "Archive"
+menu.item.org.archive.help:
+  en: "Move finished subtrees out of the way."
 menu.item.org.archive.subtree:
   en: "Archive Subtree to File"
+menu.item.org.archive.subtree.help:
+  en: "Move the subtree to the archive file, keeping its outline path."
 menu.item.org.archive.tag:
   en: "Toggle ARCHIVE Tag"
+menu.item.org.archive.tag.help:
+  en: "Toggle the ARCHIVE tag: a tagged subtree stays put but folds away."
 menu.item.org.links:
   en: "Hyperlinks"
+menu.item.org.links.help:
+  en: "Insert, follow, and move between Org links."
 menu.item.org.links.store:
   en: "Store Link to Here"
+menu.item.org.links.store.help:
+  en: "Store a link to this location, ready to insert somewhere else."
 menu.item.org.links.insert:
   en: "Insert Link…"
+menu.item.org.links.insert.help:
+  en: "Insert a link, offering the stored link and completion for [[ targets."
 menu.item.org.links.follow:
   en: "Follow Link"
+menu.item.org.links.follow.help:
+  en: "Open the link at the cursor: a file, a heading, an id, or a URL."
 menu.item.org.links.next:
   en: "Next Link"
+menu.item.org.links.next.help:
+  en: "Move the cursor to the next link in the buffer."
 menu.item.org.links.prev:
   en: "Previous Link"
+menu.item.org.links.prev.help:
+  en: "Move the cursor to the previous link in the buffer."
 menu.item.org.tags_props:
   en: "Tags & Properties"
+menu.item.org.tags_props.help:
+  en: "Tags, properties, and the column view built from them."
 menu.item.org.set_tags:
   en: "Set Tags…"
+menu.item.org.set_tags.help:
+  en: "Set the headline's tags, completing from tags already used in the file."
 menu.item.org.set_property:
   en: "Set Property…"
+menu.item.org.set_property.help:
+  en: "Set a property on the headline, stored in its :PROPERTIES: drawer."
 menu.item.org.dates:
   en: "Dates & Scheduling"
+menu.item.org.dates.help:
+  en: "Timestamps, scheduling, and deadlines."
 menu.item.org.dates.timestamp:
   en: "Insert Timestamp"
+menu.item.org.dates.timestamp.help:
+  en: "Insert an active timestamp, which the agenda picks up."
 menu.item.org.dates.timestamp_inactive:
   en: "Insert Inactive Timestamp"
+menu.item.org.dates.timestamp_inactive.help:
+  en: "Insert an inactive timestamp ([…]), which the agenda ignores."
 menu.item.org.dates.schedule:
   en: "Schedule Item…"
+menu.item.org.dates.schedule.help:
+  en: "Set a SCHEDULED date on the headline — the day to start work."
 menu.item.org.dates.deadline:
   en: "Deadline…"
+menu.item.org.dates.deadline.help:
+  en: "Set a DEADLINE on the headline — the date it must be finished by."
 menu.item.org.dates.up:
   en: "Date 1 Day Later"
+menu.item.org.dates.up.help:
+  en: "Shift the timestamp at the cursor one day later."
 menu.item.org.dates.down:
   en: "Date 1 Day Earlier"
+menu.item.org.dates.down.help:
+  en: "Shift the timestamp at the cursor one day earlier."
 menu.item.org.refresh:
   en: "Refresh Context"
+menu.item.org.refresh.help:
+  en: "Act on the thing at the cursor: recalculate a table, update a cookie, refresh a block."
 menu.item.org.promote:
   en: "Promote"
 menu.item.org.demote:
@@ -4232,20 +4322,32 @@ menu.item.org.priority.down:
   en: "Priority Down"
 menu.item.org.close_note:
   en: "Mark Done with Note…"
+menu.item.org.close_note.help:
+  en: "Mark the headline DONE and record a closing note with the timestamp."
 menu.item.org.toggle_checkbox:
   en: "Toggle Checkbox"
 menu.item.org.capture:
   en: "Capture"
 menu.item.org.capture.anything:
   en: "Anything…"
+menu.item.org.capture.anything.help:
+  en: "Capture a note with the Anything template, choosing where it is filed."
 menu.item.org.capture.contact:
   en: "Contact…"
+menu.item.org.capture.contact.help:
+  en: "Capture a contact: a headline with an org-contacts property drawer."
 menu.item.org.capture.task:
   en: "Task…"
+menu.item.org.capture.task.help:
+  en: "Capture a TODO task, filed at the template's target."
 menu.item.org.capture.babel:
   en: "Babel…"
+menu.item.org.capture.babel.help:
+  en: "Capture a Babel source block with its language and header arguments."
 menu.item.org.capture.note:
   en: "Note…"
+menu.item.org.capture.note.help:
+  en: "Capture a quick note, filed at the template's target."
 menu.item.org.capture.select:
   en: "Choose Template…"
 menu.item.org.clock_in:
@@ -4256,32 +4358,52 @@ menu.item.org.agenda:
   en: "Agenda"
 menu.item.org.agenda.week:
   en: "Weekly/Daily Agenda"
+menu.item.org.agenda.week.help:
+  en: "Show the agenda for the coming week, built from scheduled items and deadlines."
 menu.item.org.agenda.todo:
   en: "Global TODO List"
+menu.item.org.agenda.todo.help:
+  en: "List every TODO across the agenda files, whatever its date."
 menu.item.org.agenda.match:
   en: "Match Tags/Property…"
+menu.item.org.agenda.match.help:
+  en: "Collect headlines matching a tag or property query."
 menu.item.org.agenda.search:
   en: "Search…"
+menu.item.org.agenda.search.help:
+  en: "Search the agenda files for headlines containing text."
 menu.item.org.agenda.stuck:
   en: "Stuck Projects"
+menu.item.org.agenda.stuck.help:
+  en: "List projects with no next action — a top-level TODO whose subtree has none."
 menu.item.org.agenda.lock:
   en: "Set Restriction Lock (This File)"
 menu.item.org.agenda.lock.help:
   en: "Restrict every agenda view to the current file until the lock is removed."
 menu.item.org.agenda.unlock:
   en: "Remove Restriction Lock"
+menu.item.org.agenda.unlock.help:
+  en: "Drop the restriction lock, so the agenda covers all agenda files again."
 menu.item.org.agenda.files:
   en: "File List for Agenda"
 menu.item.org.agenda.files.help:
   en: "Choose which files the agenda scans; an empty list means every .org file in the project."
 menu.item.org.agenda.file_add:
   en: "Add Current File"
+menu.item.org.agenda.file_add.help:
+  en: "Add the current file to the agenda's file list, so only listed files are scanned."
 menu.item.org.agenda.file_remove:
   en: "Remove Current File"
+menu.item.org.agenda.file_remove.help:
+  en: "Remove the current file from the agenda's file list."
 menu.item.org.agenda.file_clear:
   en: "Clear List (All Project Files)"
+menu.item.org.agenda.file_clear.help:
+  en: "Clear the agenda file list, so the agenda scans every .org file in the project again."
 menu.item.org.agenda.file_list:
   en: "Show Scope"
+menu.item.org.agenda.file_list.help:
+  en: "Show which files the agenda currently scans."
 menu.item.org.time_report:
   en: "Time Tracker"
 menu.item.org.export:
@@ -4494,70 +4616,6 @@ menu.item.tools.calculator:
   bn: "ক্যালকুলেটর…"
   zh: "计算器…"
   ja: "電卓…"
-menu.item.tools.edit_outline:
-  en: "Edit Outline…"
-  es: "Editar esquema…"
-  fr: "Modifier le plan…"
-  de: "Gliederung bearbeiten…"
-  cy: "Golygu Amlinell…"
-  ga: "Cuir Imlíne in Eagar…"
-  gd: "Deasaich Oir-loidhne…"
-  pl: "Edytuj konspekt…"
-  pt: "Editar tópicos…"
-  ru: "Редактировать структуру…"
-  ar: "تحرير المخطط…"
-  hi: "रूपरेखा संपादित करें…"
-  bn: "রূপরেখা সম্পাদনা…"
-  zh: "编辑大纲…"
-  ja: "アウトラインを編集…"
-menu.item.tools.edit_json:
-  en: "Edit JSON…"
-  es: "Editar JSON…"
-  fr: "Modifier le JSON…"
-  de: "JSON bearbeiten…"
-  cy: "Golygu JSON…"
-  ga: "Cuir JSON in Eagar…"
-  gd: "Deasaich JSON…"
-  pl: "Edytuj JSON…"
-  pt: "Editar JSON…"
-  ru: "Редактировать JSON…"
-  ar: "تحرير JSON…"
-  hi: "JSON संपादित करें…"
-  bn: "JSON সম্পাদনা…"
-  zh: "编辑 JSON…"
-  ja: "JSON を編集…"
-menu.item.tools.edit_yaml:
-  en: "Edit YAML…"
-  es: "Editar YAML…"
-  fr: "Modifier le YAML…"
-  de: "YAML bearbeiten…"
-  cy: "Golygu YAML…"
-  ga: "Cuir YAML in Eagar…"
-  gd: "Deasaich YAML…"
-  pl: "Edytuj YAML…"
-  pt: "Editar YAML…"
-  ru: "Редактировать YAML…"
-  ar: "تحرير YAML…"
-  hi: "YAML संपादित करें…"
-  bn: "YAML সম্পাদনা…"
-  zh: "编辑 YAML…"
-  ja: "YAML を編集…"
-menu.item.tools.edit_bytes:
-  en: "Edit Bytes…"
-  es: "Editar bytes…"
-  fr: "Modifier les octets…"
-  de: "Bytes bearbeiten…"
-  cy: "Golygu Beitiau…"
-  ga: "Cuir Beartaí in Eagar…"
-  gd: "Deasaich Baidhtean…"
-  pl: "Edytuj bajty…"
-  pt: "Editar bytes…"
-  ru: "Редактировать байты…"
-  ar: "تحرير البايتات…"
-  hi: "बाइट्स संपादित करें…"
-  bn: "বাইট সম্পাদনা…"
-  zh: "编辑字节…"
-  ja: "バイトを編集…"
 menu.item.tools.qrcode:
   en: "QR Code…"
   es: "Código QR…"
@@ -4638,22 +4696,6 @@ msg.qrcode_empty:
   bn: "QR কোড তৈরি করতে টেক্সট বা একটি অ-খালি লাইন নির্বাচন করুন"
   zh: "选择文本或非空行以生成二维码"
   ja: "QRコードを作成するにはテキストまたは空でない行を選択してください"
-menu.item.tools.edit_table:
-  en: "Edit Table…"
-  es: "Editar tabla…"
-  fr: "Modifier le tableau…"
-  de: "Tabelle bearbeiten…"
-  cy: "Golygu Tabl…"
-  ga: "Cuir Tábla in Eagar…"
-  gd: "Deasaich Clàr…"
-  pl: "Edytuj tabelę…"
-  pt: "Editar tabela…"
-  ru: "Редактировать таблицу…"
-  ar: "تحرير الجدول…"
-  hi: "तालिका संपादित करें…"
-  bn: "টেবিল সম্পাদনা…"
-  zh: "编辑表格…"
-  ja: "テーブルを編集…"
 menu.item.tools.snippets:
   en: "Snippets…"
   es: "Fragmentos…"
@@ -5182,22 +5224,6 @@ menu.item.lsp.diagnostics:
   bn: "ডায়াগনস্টিকস…"
   zh: "诊断…"
   ja: "診断…"
-menu.item.tools.system_info:
-  en: "System Information…"
-  es: "Información del sistema…"
-  fr: "Informations système…"
-  de: "Systeminformationen…"
-  cy: "Gwybodaeth System…"
-  ga: "Eolas Córais…"
-  gd: "Fiosrachadh Siostaim…"
-  pl: "Informacje o systemie…"
-  pt: "Informações do sistema…"
-  ru: "Сведения о системе…"
-  ar: "معلومات النظام…"
-  hi: "सिस्टम जानकारी…"
-  bn: "সিস্টেম তথ্য…"
-  zh: "系统信息…"
-  ja: "システム情報…"
 menu.item.tools.characters:
   en: "Characters"
   es: "Caracteres"
@@ -5294,38 +5320,6 @@ menu.item.tools.about.system:
   bn: "সিস্টেম…"
   zh: "系统…"
   ja: "システム…"
-menu.item.tools.text_info:
-  en: "Text Information…"
-  es: "Información del texto…"
-  fr: "Informations sur le texte…"
-  de: "Textinformationen…"
-  cy: "Gwybodaeth Testun…"
-  ga: "Eolas Téacs…"
-  gd: "Fiosrachadh Teacsa…"
-  pl: "Informacje o tekście…"
-  pt: "Informações do texto…"
-  ru: "Сведения о тексте…"
-  ar: "معلومات النص…"
-  hi: "पाठ जानकारी…"
-  bn: "টেক্সট তথ্য…"
-  zh: "文本信息…"
-  ja: "テキスト情報…"
-menu.item.tools.file_info:
-  en: "File Information…"
-  es: "Información del archivo…"
-  fr: "Informations sur le fichier…"
-  de: "Dateiinformationen…"
-  cy: "Gwybodaeth Ffeil…"
-  ga: "Eolas Comhaid…"
-  gd: "Fiosrachadh Faidhle…"
-  pl: "Informacje o pliku…"
-  pt: "Informações do arquivo…"
-  ru: "Сведения о файле…"
-  ar: "معلومات الملف…"
-  hi: "फ़ाइल जानकारी…"
-  bn: "ফাইল তথ্য…"
-  zh: "文件信息…"
-  ja: "ファイル情報…"
 menu.item.tools.contacts:
   en: "Contacts…"
   es: "Contactos…"
@@ -5342,22 +5336,6 @@ menu.item.tools.contacts:
   bn: "পরিচিতি…"
   zh: "联系人…"
   ja: "連絡先…"
-menu.item.tools.dashboard:
-  en: "Workspace Information…"
-  es: "Información del espacio de trabajo…"
-  fr: "Informations sur l'espace de travail…"
-  de: "Arbeitsbereich-Informationen…"
-  cy: "Gwybodaeth Gweithle…"
-  ga: "Eolas Spáis Oibre…"
-  gd: "Fiosrachadh Rùm-obrach…"
-  pl: "Informacje o obszarze roboczym…"
-  pt: "Informações do espaço de trabalho…"
-  ru: "Сведения о рабочей области…"
-  ar: "معلومات مساحة العمل…"
-  hi: "कार्यक्षेत्र जानकारी…"
-  bn: "কর্মক্ষেত্রের তথ্য…"
-  zh: "工作区信息…"
-  ja: "ワークスペース情報…"
 menu.item.tools.run_command:
   en: "Run Command…"
   es: "Ejecutar comando…"
@@ -5486,54 +5464,6 @@ menu.item.tools.palette:
   bn: "কমান্ড প্যালেট"
   zh: "命令面板"
   ja: "コマンドパレット"
-menu.item.help.website:
-  en: "Website"
-  es: "Sitio web"
-  fr: "Site web"
-  de: "Webseite"
-  cy: "Gwefan"
-  ar: "الموقع الإلكتروني"
-  bn: "ওয়েবসাইট"
-  ga: "Suíomh Gréasáin"
-  gd: "Làrach-lìn"
-  hi: "वेबसाइट"
-  ja: "ウェブサイト"
-  pl: "Witryna"
-  pt: "Site"
-  ru: "Веб-сайт"
-  zh: "网站"
-menu.item.help.email:
-  en: "Email Us"
-  es: "Envíanos un correo"
-  fr: "Écrivez-nous"
-  de: "E-Mail senden"
-  cy: "E-bostiwch Ni"
-  ar: "راسلنا"
-  bn: "আমাদের ইমেল করুন"
-  ga: "Seol Ríomhphost"
-  gd: "Cuir post-d thugainn"
-  hi: "हमें ईमेल करें"
-  ja: "メールを送る"
-  pl: "Napisz do nas"
-  pt: "Envie-nos um e-mail"
-  ru: "Написать нам"
-  zh: "给我们发邮件"
-menu.item.help.about:
-  en: "About Vix"
-  es: "Acerca de Vix"
-  fr: "À propos de Vix"
-  de: "Über Vix"
-  cy: "Ynghylch Vix"
-  ar: "حول Vix"
-  bn: "Vix সম্পর্কে"
-  ga: "Maidir le Vix"
-  gd: "Mu dheidhinn Vix"
-  hi: "Vix के बारे में"
-  ja: "Vix について"
-  pl: "O Vix"
-  pt: "Sobre o Vix"
-  ru: "О Vix"
-  zh: "关于 Vix"
 
 # ---------------------------------------------------------------------------
 # Command palette — mode labels and command labels
@@ -6819,54 +6749,6 @@ cmd.explorer_filter_exclude:
   bn: "এক্সপ্লোরার: বাদ regex ফিল্টার"
   zh: "资源管理器：排除正则过滤"
   ja: "エクスプローラー：除外する正規表現フィルター"
-cmd.theme:
-  en: "Theme…"
-  es: "Tema…"
-  fr: "Thème…"
-  de: "Design…"
-  cy: "Thema…"
-  ga: "Téama…"
-  gd: "Ùrlar…"
-  pl: "Motyw…"
-  pt: "Tema…"
-  ru: "Тема…"
-  ar: "السمة…"
-  hi: "थीम…"
-  bn: "থিম…"
-  zh: "主题…"
-  ja: "テーマ…"
-cmd.locale:
-  en: "Locale…"
-  es: "Idioma…"
-  fr: "Langue…"
-  de: "Sprache…"
-  cy: "Iaith…"
-  ga: "Logánra…"
-  gd: "Sgìre…"
-  pl: "Język…"
-  pt: "Idioma…"
-  ru: "Язык…"
-  ar: "اللغة…"
-  hi: "भाषा…"
-  bn: "ভাষা…"
-  zh: "语言…"
-  ja: "ロケール…"
-cmd.keymap:
-  en: "Keymap…"
-  es: "Estilo de teclado…"
-  fr: "Style clavier…"
-  de: "Tastenstil…"
-  cy: "Dull Bysell…"
-  ga: "Stíl Eochrach…"
-  gd: "Dòigh-iuchrach…"
-  pl: "Styl klawiszy…"
-  pt: "Estilo de teclas…"
-  ru: "Раскладка…"
-  ar: "نمط المفاتيح…"
-  hi: "कीवे…"
-  bn: "কীওয়ে…"
-  zh: "按键方式…"
-  ja: "キー操作…"
 cmd.toggle_left_dock:
   en: "Toggle Left Dock"
   es: "Alternar panel izquierdo"
@@ -7687,38 +7569,6 @@ cmd.prev_tab:
 # ---------------------------------------------------------------------------
 # Themes
 # ---------------------------------------------------------------------------
-theme.dark:
-  en: "Dark"
-  es: "Oscuro"
-  fr: "Sombre"
-  de: "Dunkel"
-  cy: "Tywyll"
-  ga: "Dorcha"
-  gd: "Dorcha"
-  pl: "Ciemny"
-  pt: "Escuro"
-  ru: "Тёмная"
-  ar: "داكن"
-  hi: "गहरा"
-  bn: "গাঢ়"
-  zh: "深色"
-  ja: "ダーク"
-theme.light:
-  en: "Light"
-  es: "Claro"
-  fr: "Clair"
-  de: "Hell"
-  cy: "Golau"
-  ga: "Geal"
-  gd: "Soilleir"
-  pl: "Jasny"
-  pt: "Claro"
-  ru: "Светлая"
-  ar: "فاتح"
-  hi: "हल्का"
-  bn: "হালকা"
-  zh: "浅色"
-  ja: "ライト"
 
 # ---------------------------------------------------------------------------
 # Panel and overlay titles
@@ -7819,102 +7669,6 @@ ui.ok:
   bn: "ঠিক আছে"
   zh: "确定"
   ja: "OK"
-ui.theme:
-  en: "Themes"
-  es: "Temas"
-  fr: "Thèmes"
-  de: "Designs"
-  cy: "Themâu"
-  ga: "Téamaí"
-  gd: "Ùrlaran"
-  pl: "Motywy"
-  pt: "Temas"
-  ru: "Темы"
-  ar: "السمات"
-  hi: "थीम"
-  bn: "থিম"
-  zh: "主题"
-  ja: "テーマ"
-ui.locale:
-  en: "Language"
-  es: "Idioma"
-  fr: "Langue"
-  de: "Sprache"
-  cy: "Iaith"
-  ga: "Teanga"
-  gd: "Cànan"
-  pl: "Język"
-  pt: "Idioma"
-  ru: "Язык"
-  ar: "اللغة"
-  hi: "भाषा"
-  bn: "ভাষা"
-  zh: "语言"
-  ja: "言語"
-ui.keymap:
-  en: "Keymap"
-  es: "Estilo de teclado"
-  fr: "Style clavier"
-  de: "Tastenstil"
-  cy: "Dull Bysell"
-  ga: "Stíl Eochrach"
-  gd: "Dòigh-iuchrach"
-  pl: "Styl klawiszy"
-  pt: "Estilo de teclas"
-  ru: "Раскладка"
-  ar: "نمط المفاتيح"
-  hi: "कीवे"
-  bn: "কীওয়ে"
-  zh: "按键方式"
-  ja: "キー操作"
-ui.time_zone:
-  en: "Time Zone"
-  es: "Zona horaria"
-  fr: "Fuseau horaire"
-  de: "Zeitzone"
-  cy: "Cylch Amser"
-  ga: "Crios Ama"
-  gd: "Roinn-tìde"
-  pl: "Strefa czasowa"
-  pt: "Fuso horário"
-  ru: "Часовой пояс"
-  ar: "المنطقة الزمنية"
-  hi: "समय क्षेत्र"
-  bn: "সময় অঞ্চল"
-  zh: "时区"
-  ja: "タイムゾーン"
-ui.time_zone_active:
-  en: "   active: %{zone}"
-  es: "   activa: %{zone}"
-  fr: "   active : %{zone}"
-  de: "   aktiv: %{zone}"
-  cy: "   gweithredol: %{zone}"
-  ga: "   gníomhach: %{zone}"
-  gd: "   gnìomhach: %{zone}"
-  pl: "   aktywna: %{zone}"
-  pt: "   ativo: %{zone}"
-  ru: "   активный: %{zone}"
-  ar: "   النشط: %{zone}"
-  hi: "   सक्रिय: %{zone}"
-  bn: "   সক্রিয়: %{zone}"
-  zh: "   当前：%{zone}"
-  ja: "   現在: %{zone}"
-ui.time_zone_hint:
-  en: "type to filter   ↑↓ select   Enter set   Esc cancel"
-  es: "escribe para filtrar   ↑↓ seleccionar   Enter fijar   Esc cancelar"
-  fr: "tapez pour filtrer   ↑↓ sélectionner   Entrée définir   Échap annuler"
-  de: "tippen zum Filtern   ↑↓ wählen   Enter setzen   Esc abbrechen"
-  cy: "teipiwch i hidlo   ↑↓ dewis   Enter gosod   Esc canslo"
-  ga: "clóscríobh chun scagadh   ↑↓ roghnaigh   Enter socraigh   Esc cealaigh"
-  gd: "sgrìobh gus sìoladh   ↑↓ tagh   Enter suidhich   Esc sguir"
-  pl: "pisz, aby filtrować   ↑↓ wybierz   Enter ustaw   Esc anuluj"
-  pt: "digite para filtrar   ↑↓ selecionar   Enter definir   Esc cancelar"
-  ru: "вводите для фильтра   ↑↓ выбор   Enter задать   Esc отмена"
-  ar: "اكتب للتصفية   ↑↓ اختيار   Enter تعيين   Esc إلغاء"
-  hi: "फ़िल्टर हेतु टाइप करें   ↑↓ चुनें   Enter सेट   Esc रद्द"
-  bn: "ফিল্টার করতে টাইপ করুন   ↑↓ নির্বাচন   Enter সেট   Esc বাতিল"
-  zh: "输入以筛选   ↑↓ 选择   Enter 设置   Esc 取消"
-  ja: "入力で絞り込み   ↑↓ 選択   Enter 設定   Esc キャンセル"
 ui.clock:
   en: "Clock"
   es: "Reloj"
@@ -8435,6 +8189,14 @@ ui.edit_table_editing:
   bn: "সম্পাদনা — Enter সেল সংরক্ষণ · Esc বাতিল"
   zh: "编辑中 — Enter 保存单元格 · Esc 取消"
   ja: "編集中 — Enter セルを保存 · Esc キャンセル"
+ui.column_view:
+  en: "Column View"
+ui.column_view_hint:
+  en: "↑↓←→ move   e edit   n/p cycle   1-9/0 jump   a allowed   C-c C-c toggle   </> width   M-←→ move col   S-M-←→ ins/del col   M-↑↓ move row   q close"
+ui.column_view_editing:
+  en: "Editing — Enter save field · Esc cancel"
+ui.column_view_editing_allowed:
+  en: "Editing allowed values — Enter save · Esc cancel"
 ui.ascii:
   en: "ASCII Characters"
   es: "Caracteres ASCII"
@@ -9259,22 +9021,6 @@ ui.keyboard_shortcuts:
 # ---------------------------------------------------------------------------
 # UI hints, field labels, toggles, empty states
 # ---------------------------------------------------------------------------
-ui.theme_hint:
-  en: "↑↓ preview   Enter apply   Esc cancel"
-  es: "↑↓ vista previa   Enter aplicar   Esc cancelar"
-  fr: "↑↓ aperçu   Entrée appliquer   Échap annuler"
-  de: "↑↓ Vorschau   Enter anwenden   Esc abbrechen"
-  cy: "↑↓ rhagolwg   Enter cymhwyso   Esc canslo"
-  ar: "↑↓ معاينة   Enter تطبيق   Esc إلغاء"
-  bn: "↑↓ পূর্বরূপ   Enter প্রয়োগ   Esc বাতিল"
-  ga: "↑↓ réamhamharc   Enter cuir i bhfeidhm   Esc cealaigh"
-  gd: "↑↓ ro-shealladh   Enter cuir an sàs   Esc sguir"
-  hi: "↑↓ पूर्वावलोकन   Enter लागू करें   Esc रद्द"
-  ja: "↑↓ プレビュー   Enter 適用   Esc キャンセル"
-  pl: "↑↓ podgląd   Enter zastosuj   Esc anuluj"
-  pt: "↑↓ visualizar   Enter aplicar   Esc cancelar"
-  ru: "↑↓ предпросмотр   Enter применить   Esc отмена"
-  zh: "↑↓ 预览   Enter 应用   Esc 取消"
 ui.nerd_palette_hint:
   en: "←↑↓→ move   Enter insert   Esc close"
   es: "←↑↓→ mover   Enter insertar   Esc cerrar"
@@ -10481,6 +10227,86 @@ ui.toggle_regex:
   bn: "Regex (Alt R)"
   zh: "正则 (Alt R)"
   ja: "正規表現 (Alt R)"
+ui.toggle_replace:
+  en: "Replace"
+  es: "Reemplazar"
+  fr: "Remplacer"
+  de: "Ersetzen"
+  cy: "Amnewid"
+  ga: "Ionadaigh"
+  gd: "Cuir 'na àite"
+  pl: "Zamień"
+  pt: "Substituir"
+  ru: "Замена"
+  ar: "استبدال"
+  hi: "बदलें"
+  bn: "প্রতিস্থাপন"
+  zh: "替换"
+  ja: "置換"
+ui.find_scope_buffer:
+  en: "In: Buffer"
+  es: "En: búfer"
+  fr: "Dans : tampon"
+  de: "In: Puffer"
+  cy: "Yn: byffer"
+  ga: "I: maolán"
+  gd: "Ann: bufair"
+  pl: "W: buforze"
+  pt: "Em: buffer"
+  ru: "Где: буфер"
+  ar: "في: المخزن"
+  hi: "में: बफ़र"
+  bn: "মধ্যে: বাফার"
+  zh: "范围：缓冲区"
+  ja: "範囲: バッファ"
+ui.find_scope_files:
+  en: "In: Files"
+  es: "En: archivos"
+  fr: "Dans : fichiers"
+  de: "In: Dateien"
+  cy: "Yn: ffeiliau"
+  ga: "I: comhaid"
+  gd: "Ann: faidhlichean"
+  pl: "W: plikach"
+  pt: "Em: arquivos"
+  ru: "Где: файлы"
+  ar: "في: الملفات"
+  hi: "में: फ़ाइलें"
+  bn: "মধ্যে: ফাইল"
+  zh: "范围：文件"
+  ja: "範囲: ファイル"
+ui.find_scope_workspace:
+  en: "In: Workspace"
+  es: "En: espacio de trabajo"
+  fr: "Dans : espace de travail"
+  de: "In: Arbeitsbereich"
+  cy: "Yn: gweithle"
+  ga: "I: spás oibre"
+  gd: "Ann: rùm-obrach"
+  pl: "W: obszarze roboczym"
+  pt: "Em: espaço de trabalho"
+  ru: "Где: рабочая область"
+  ar: "في: مساحة العمل"
+  hi: "में: कार्यक्षेत्र"
+  bn: "মধ্যে: কর্মক্ষেত্র"
+  zh: "范围：工作区"
+  ja: "範囲: ワークスペース"
+ui.search_hint_options:
+  en: "Alt H: replace   Alt I: where to look"
+  es: "Alt P: reemplazar   Alt I: dónde buscar"
+  fr: "Alt H : remplacer   Alt I : où chercher"
+  de: "Alt P: ersetzen   Alt I: wo suchen"
+  cy: "Alt P: amnewid   Alt I: ble i chwilio"
+  ga: "Alt P: ionadaigh   Alt I: cá háit"
+  gd: "Alt P: cuir 'na àite   Alt I: càit an coimhead"
+  pl: "Alt P: zamień   Alt I: gdzie szukać"
+  pt: "Alt P: substituir   Alt I: onde procurar"
+  ru: "Alt P: замена   Alt I: где искать"
+  ar: "Alt P: استبدال   Alt I: أين تبحث"
+  hi: "Alt P: बदलें   Alt I: कहाँ खोजें"
+  bn: "Alt P: প্রতিস্থাপন   Alt I: কোথায় খুঁজবেন"
+  zh: "Alt H：替换   Alt I：查找范围"
+  ja: "Alt P: 置換   Alt I: 検索範囲"
 ui.btn_once:
   en: "Once"
   es: "Una vez"
@@ -11067,6 +10893,18 @@ prompt.save_macro:
   ja: "マクロに名前を付けて保存"
 prompt.insert_file:
   en: "Insert file"
+prompt.project_configure:
+  en: "Configure command"
+prompt.project_compile:
+  en: "Compile command"
+prompt.project_test:
+  en: "Test command"
+prompt.project_install:
+  en: "Install command"
+prompt.project_package:
+  en: "Package command"
+prompt.project_run:
+  en: "Run command"
 prompt.compare_file:
   en: "Compare with file"
   es: "Comparar con archivo"
@@ -11307,54 +11145,6 @@ msg.welcome_hint:
   bn: "Ctrl B ফাইল এক্সপ্লোরার টগল করে, Ctrl E ফোকাস পরিবর্তন করে।"
   zh: "Ctrl B 切换文件资源管理器，Ctrl E 切换焦点。"
   ja: "Ctrl B でファイルエクスプローラーを切り替え、Ctrl E でフォーカスを切り替えます。"
-msg.website:
-  en: "Website: https://github.com/sixarm/vix"
-  es: "Sitio web: https://github.com/sixarm/vix"
-  fr: "Site web : https://github.com/sixarm/vix"
-  de: "Webseite: https://github.com/sixarm/vix"
-  cy: "Gwefan: https://github.com/sixarm/vix"
-  ar: "الموقع الإلكتروني: https://github.com/sixarm/vix"
-  bn: "ওয়েবসাইট: https://github.com/sixarm/vix"
-  ga: "Suíomh Gréasáin: https://github.com/sixarm/vix"
-  gd: "Làrach-lìn: https://github.com/sixarm/vix"
-  hi: "वेबसाइट: https://github.com/sixarm/vix"
-  ja: "ウェブサイト: https://github.com/sixarm/vix"
-  pl: "Witryna: https://github.com/sixarm/vix"
-  pt: "Site: https://github.com/sixarm/vix"
-  ru: "Веб-сайт: https://github.com/sixarm/vix"
-  zh: "网站: https://github.com/sixarm/vix"
-msg.email:
-  en: "Email: hello@sixarm.com"
-  es: "Correo: hello@sixarm.com"
-  fr: "E-mail : hello@sixarm.com"
-  de: "E-Mail: hello@sixarm.com"
-  cy: "E-bost: hello@sixarm.com"
-  ar: "البريد الإلكتروني: hello@sixarm.com"
-  bn: "ইমেল: hello@sixarm.com"
-  ga: "Ríomhphost: hello@sixarm.com"
-  gd: "Post-d: hello@sixarm.com"
-  hi: "ईमेल: hello@sixarm.com"
-  ja: "メール: hello@sixarm.com"
-  pl: "E-mail: hello@sixarm.com"
-  pt: "E-mail: hello@sixarm.com"
-  ru: "Эл. почта: hello@sixarm.com"
-  zh: "邮箱: hello@sixarm.com"
-msg.about:
-  en: "Vix — Simple Terminal Rust IDE. Open, edit, and save text files."
-  es: "Vix — IDE de Rust para terminal. Abre, edita y guarda archivos de texto."
-  fr: "Vix — IDE Rust pour terminal. Ouvrez, modifiez et enregistrez des fichiers texte."
-  de: "Vix — Einfache Terminal-Rust-IDE. Textdateien öffnen, bearbeiten und speichern."
-  cy: "Vix — IDE Rust syml ar gyfer y derfynell. Agor, golygu a chadw ffeiliau testun."
-  ar: "Vix — بيئة تطوير Rust بسيطة للطرفية. افتح ملفات النصوص وحرّرها واحفظها."
-  bn: "Vix — সরল টার্মিনাল Rust IDE। টেক্সট ফাইল খুলুন, সম্পাদনা করুন ও সংরক্ষণ করুন।"
-  ga: "Vix — IDE Rust simplí don teirminéal. Oscail, cuir in eagar agus sábháil comhaid téacs."
-  gd: "Vix — IDE Rust sìmplidh airson an tèirmineil. Fosgail, deasaich is sàbhail faidhlichean teacsa."
-  hi: "Vix — सरल टर्मिनल Rust IDE। टेक्स्ट फ़ाइलें खोलें, संपादित करें और सहेजें।"
-  ja: "Vix — シンプルなターミナル Rust IDE。テキストファイルを開き、編集し、保存します。"
-  pl: "Vix — proste terminalowe IDE Rust. Otwieraj, edytuj i zapisuj pliki tekstowe."
-  pt: "Vix — IDE Rust simples para terminal. Abra, edite e salve arquivos de texto."
-  ru: "Vix — простая терминальная Rust IDE. Открывайте, редактируйте и сохраняйте текстовые файлы."
-  zh: "Vix — 简单的终端 Rust IDE。打开、编辑并保存文本文件。"
 
 # ---------------------------------------------------------------------------
 # Status-bar / message strings (with %{...} placeholders for dynamic values)
@@ -12331,6 +12121,8 @@ status.no_number:
   en: "No number at the cursor"
 status.no_toggle:
   en: "Nothing to toggle at the cursor"
+status.no_wrap:
+  en: "Nothing to wrap at the cursor"
 status.relative_line_numbers:
   en: "Relative line numbers: %{on}"
 status.read_only:
@@ -12531,6 +12323,18 @@ status.no_tasks:
   bn: "কোনো টাস্ক সংজ্ঞায়িত নেই (tasks.toml যোগ করুন)"
   zh: "未定义任务（添加 tasks.toml）"
   ja: "タスクが定義されていません（tasks.toml を追加）"
+status.project_no_command:
+  en: "No command configured for this project type."
+status.project_no_last_command:
+  en: "No project command has been run yet."
+status.project_no_test_at_point:
+  en: "No test found at cursor."
+status.project_test_no_file:
+  en: "The active buffer has no file to test."
+status.project_no_subproject:
+  en: "No subproject manifest found between this file and the project root."
+status.project_cache_discarded:
+  en: "Project command cache cleared."
 status.tests_done:
   en: "Tests: %{pass} passed, %{fail} failed, %{ignore} ignored"
   es: "Pruebas: %{pass} pasadas, %{fail} fallidas, %{ignore} ignoradas"
@@ -12561,6 +12365,20 @@ prompt.org_set_tags:
   en: "Tags (colon separated; empty clears)"
 prompt.org_set_property:
   en: "Property (NAME VALUE)"
+prompt.org_table_sort:
+  en: "Sort table (COLUMN [a|n|t] [r])"
+prompt.org_columns_insert_column:
+  en: "New column property name"
+prompt.org_columns_insert_dblock:
+  en: "Dynamic block scope :id (empty = local)"
+status.org_columns_dblock_inserted:
+  en: "Column View dynamic block inserted"
+status.org_columns_dblock_updated:
+  en: "Column View dynamic block updated"
+status.org_columns_dblock_not_found:
+  en: "Place the cursor on a #+BEGIN: columnview line first"
+status.org_columns_dblocks_updated_all:
+  en: "All Column View dynamic blocks updated"
 status.org_agenda_locked:
   en: "Agenda locked to %{path}"
 status.org_agenda_unlocked:
@@ -12649,22 +12467,22 @@ status.org_no_sibling:
   bn: "অদলবদলের জন্য কোনো সহোদর সাবট্রি নেই"
   zh: "没有可交换的同级子树"
   ja: "入れ替える兄弟サブツリーがありません"
-status.org_agenda:
-  en: "Agenda compiled from %{count} .org file(s)"
-  es: "Agenda compilada de %{count} archivo(s) .org"
-  fr: "Agenda compilé à partir de %{count} fichier(s) .org"
-  de: "Agenda aus %{count} .org-Datei(en) erstellt"
-  cy: "Agenda wedi'i lunio o %{count} ffeil .org"
-  ga: "Clár oibre tiomsaithe ó %{count} comhad .org"
-  gd: "Clàr-gnothaich air a chur ri chèile à %{count} faidhle .org"
-  pl: "Agenda zebrana z %{count} plik(ów) .org"
-  pt: "Agenda compilada de %{count} ficheiro(s) .org"
-  ru: "Повестка собрана из %{count} файлов .org"
-  ar: "تم تجميع جدول الأعمال من %{count} ملف .org"
-  hi: "%{count} .org फ़ाइल(ों) से एजेंडा संकलित"
-  bn: "%{count}টি .org ফাইল থেকে এজেন্ডা সংকলিত"
-  zh: "已从 %{count} 个 .org 文件编译议程"
-  ja: "%{count} 個の .org ファイルから予定表を作成"
+status.org_table_no_table:
+  en: "Not inside an Org table"
+status.org_table_sorted:
+  en: "Table sorted"
+status.org_table_sum:
+  en: "Sum: %{sum} (copied to the clipboard)"
+status.org_table_created:
+  en: "Table created"
+status.org_table_rectangle_copied:
+  en: "Rectangle copied"
+status.org_table_rectangle_cut:
+  en: "Rectangle cut"
+status.org_table_rectangle_pasted:
+  en: "Rectangle pasted"
+status.org_table_rectangle_empty:
+  en: "No rectangle copied yet"
 status.org_closed:
   en: "Headline marked DONE and closed"
 status.org_agenda_view:
@@ -13347,6 +13165,22 @@ status.cut_cancelled:
   pt: "Recorte cancelado"
   ru: "Вырезание отменено"
   zh: "剪切已取消"
+confirm.delete:
+  en: "Delete %{n} item(s)?"
+  es: "¿Eliminar %{n} elemento(s)?"
+  fr: "Supprimer %{n} élément(s) ?"
+  de: "%{n} Element(e) löschen?"
+  cy: "Dileu %{n} eitem?"
+  ar: "هل تريد حذف %{n} عنصر؟"
+  bn: "%{n}টি আইটেম মুছবেন?"
+  ga: "%{n} mír a scriosadh?"
+  gd: "A bheil thu airson %{n} nì a sguabadh às?"
+  hi: "%{n} आइटम हटाएँ?"
+  ja: "%{n} 件を削除しますか？"
+  pl: "Usunąć %{n} elem.?"
+  pt: "Excluir %{n} item(ns)?"
+  ru: "Удалить элементов: %{n}?"
+  zh: "删除 %{n} 项？"
 status.deleted_n:
   en: "Deleted %{n} item(s)"
   es: "Eliminados %{n} elemento(s)"
@@ -13667,54 +13501,22 @@ status.theme:
   bn: "থিম: %{theme}"
   zh: "主题：%{theme}"
   ja: "テーマ: %{theme}"
-status.theme_unchanged:
-  en: "Theme unchanged"
-  es: "Tema sin cambios"
-  fr: "Thème inchangé"
-  de: "Design unverändert"
-  cy: "Thema heb ei newid"
-  ga: "Téama gan athrú"
-  gd: "Ùrlar gun atharrachadh"
-  pl: "Motyw bez zmian"
-  pt: "Tema inalterado"
-  ru: "Тема не изменена"
-  ar: "لم تتغير السمة"
-  hi: "थीम अपरिवर्तित"
-  bn: "থিম অপরিবর্তিত"
-  zh: "主题未更改"
-  ja: "テーマは変更されていません"
 status.locale:
-  en: "Language: %{locale}"
-  es: "Idioma: %{locale}"
-  fr: "Langue : %{locale}"
-  de: "Sprache: %{locale}"
-  cy: "Iaith: %{locale}"
-  ga: "Teanga: %{locale}"
-  gd: "Cànan: %{locale}"
-  pl: "Język: %{locale}"
-  pt: "Idioma: %{locale}"
-  ru: "Язык: %{locale}"
-  ar: "اللغة: %{locale}"
-  hi: "भाषा: %{locale}"
-  bn: "ভাষা: %{locale}"
-  zh: "语言：%{locale}"
-  ja: "言語: %{locale}"
-status.locale_unchanged:
-  en: "Language unchanged"
-  es: "Idioma sin cambios"
-  fr: "Langue inchangée"
-  de: "Sprache unverändert"
-  cy: "Iaith heb ei newid"
-  ga: "Teanga gan athrú"
-  gd: "Cànan gun atharrachadh"
-  pl: "Język bez zmian"
-  pt: "Idioma inalterado"
-  ru: "Язык не изменён"
-  ar: "لم تتغير اللغة"
-  hi: "भाषा अपरिवर्तित"
-  bn: "ভাষা অপরিবর্তিত"
-  zh: "语言未更改"
-  ja: "言語は変更されていません"
+  en: "Language: %{language}"
+  es: "Idioma: %{language}"
+  fr: "Langue : %{language}"
+  de: "Sprache: %{language}"
+  cy: "Iaith: %{language}"
+  ga: "Teanga: %{language}"
+  gd: "Cànan: %{language}"
+  pl: "Język: %{language}"
+  pt: "Idioma: %{language}"
+  ru: "Язык: %{language}"
+  ar: "اللغة: %{language}"
+  hi: "भाषा: %{language}"
+  bn: "ভাষা: %{language}"
+  zh: "语言：%{language}"
+  ja: "言語: %{language}"
 status.keymap:
   en: "Keymap: %{keymap}"
   es: "Estilo de teclado: %{keymap}"
@@ -13731,22 +13533,6 @@ status.keymap:
   bn: "কীওয়ে: %{keymap}"
   zh: "按键方式：%{keymap}"
   ja: "キー操作: %{keymap}"
-status.keymap_unchanged:
-  en: "Keymap unchanged"
-  es: "Estilo de teclado sin cambios"
-  fr: "Style clavier inchangé"
-  de: "Tastenstil unverändert"
-  cy: "Dull Bysell heb ei newid"
-  ga: "Stíl eochrach gan athrú"
-  gd: "Dòigh-iuchrach gun atharrachadh"
-  pl: "Styl klawiszy bez zmian"
-  pt: "Estilo de teclas inalterado"
-  ru: "Раскладка не изменена"
-  ar: "لم يتغير نمط المفاتيح"
-  hi: "कीवे अपरिवर्तित"
-  bn: "কীওয়ে অপরিবর্তিত"
-  zh: "按键方式未更改"
-  ja: "キー操作は変更されていません"
 status.time_zone:
   en: "Time zone: %{zone}"
   es: "Zona horaria: %{zone}"
@@ -13763,22 +13549,6 @@ status.time_zone:
   bn: "সময় অঞ্চল: %{zone}"
   zh: "时区：%{zone}"
   ja: "タイムゾーン: %{zone}"
-status.time_zone_unchanged:
-  en: "Time zone unchanged"
-  es: "Zona horaria sin cambios"
-  fr: "Fuseau horaire inchangé"
-  de: "Zeitzone unverändert"
-  cy: "Cylch amser heb ei newid"
-  ga: "Crios ama gan athrú"
-  gd: "Roinn-tìde gun atharrachadh"
-  pl: "Strefa czasowa bez zmian"
-  pt: "Fuso horário inalterado"
-  ru: "Часовой пояс не изменён"
-  ar: "لم تتغير المنطقة الزمنية"
-  hi: "समय क्षेत्र अपरिवर्तित"
-  bn: "সময় অঞ্চল অপরিবর্তিত"
-  zh: "时区未更改"
-  ja: "タイムゾーンは変更されていません"
 status.vim_normal:
   en: "-- NORMAL --"
   es: "-- NORMAL --"
@@ -14465,22 +14235,6 @@ msg.rename_failed:
   bn: "নাম পরিবর্তন ব্যর্থ: %{error}"
   zh: "重命名失败：%{error}"
   ja: "名前の変更に失敗しました: %{error}"
-msg.paste_failed:
-  en: "Paste failed: %{error}"
-  es: "Error al pegar: %{error}"
-  fr: "Échec du collage : %{error}"
-  de: "Einfügen fehlgeschlagen: %{error}"
-  cy: "Methwyd â gludo: %{error}"
-  ga: "Theip ar ghreamú: %{error}"
-  gd: "Dh'fhàillig an cur ann: %{error}"
-  pl: "Wklejanie nie powiodło się: %{error}"
-  pt: "Falha ao colar: %{error}"
-  ru: "Не удалось вставить: %{error}"
-  ar: "فشل اللصق: %{error}"
-  hi: "चिपकाना विफल: %{error}"
-  bn: "আটকানো ব্যর্থ: %{error}"
-  zh: "粘贴失败：%{error}"
-  ja: "貼り付けに失敗しました: %{error}"
 msg.delete_failed:
   en: "Delete failed: %{error}"
   es: "Error al eliminar: %{error}"
@@ -14577,6 +14331,8 @@ msg.edit_bytes_no_buffer:
   bn: "এর বাইট সম্পাদনা করতে একটি বাফার খুলুন"
   zh: "打开缓冲区以编辑其字节"
   ja: "バイトを編集するにはバッファーを開いてください"
+msg.column_view_no_buffer:
+  en: "Open an Org file to use Column View"
 msg.edit_table_no_buffer:
   en: "Open a CSV or TSV file to edit it as a table"
   es: "Abre un archivo CSV o TSV para editarlo como tabla"
@@ -14627,6 +14383,22 @@ msg.git_failed:
   bn: "git কমান্ড ব্যর্থ"
   zh: "git 命令失败"
   ja: "git コマンドが失敗しました"
+msg.git_failed_reason:
+  en: "Git command failed: %{error}"
+  es: "El comando git falló: %{error}"
+  fr: "La commande git a échoué: %{error}"
+  de: "Git-Befehl fehlgeschlagen: %{error}"
+  cy: "Methodd y gorchymyn git: %{error}"
+  ga: "Theip ar an ordú git: %{error}"
+  gd: "Dh'fhàillig an àithne git: %{error}"
+  pl: "Polecenie git nie powiodło się: %{error}"
+  pt: "O comando git falhou: %{error}"
+  ru: "Команда git не выполнена: %{error}"
+  ar: "فشل أمر git: %{error}"
+  hi: "git कमांड विफल: %{error}"
+  bn: "git কমান্ড ব্যর্থ: %{error}"
+  zh: "git 命令失败: %{error}"
+  ja: "git コマンドが失敗しました: %{error}"
 msg.git_commit_failed:
   en: "Commit failed: %{error}"
   es: "Error al confirmar: %{error}"
@@ -18496,6 +18268,118 @@ menu.item.edit.toggle_value.help:
   bn: "কার্সারের নিচের মান টগল করুন, যেমন true বা false।"
   zh: "切换光标下的值，例如 true 或 false。"
   ja: "カーソル下の値（true や false など）を切り替えます。"
+menu.item.edit.delete_menu.help:
+  en: "Delete the text unit at the cursor: character, word, sentence, paragraph or section."
+  es: "Elimina la unidad de texto en el cursor: carácter, palabra, oración, párrafo o sección."
+  fr: "Supprime l'unité de texte au curseur : caractère, mot, phrase, paragraphe ou section."
+  de: "Löscht die Texteinheit am Cursor: Zeichen, Wort, Satz, Absatz oder Abschnitt."
+  cy: "Dileu'r uned destun wrth y cyrchwr: nod, gair, brawddeg, paragraff neu adran."
+  ga: "Scrios an t-aonad téacs ag an gcúrsóir: carachtar, focal, abairt, alt nó roinn."
+  gd: "Sguab às an t-aonad teacsa aig a' chùrsair: caractar, facal, seantans, paragraf no earrann."
+  pl: "Usuwa jednostkę tekstu przy kursorze: znak, słowo, zdanie, akapit lub sekcję."
+  pt: "Exclui a unidade de texto no cursor: caractere, palavra, frase, parágrafo ou seção."
+  ru: "Удаляет текстовую единицу у курсора: символ, слово, предложение, абзац или раздел."
+  ar: "يحذف وحدة النص عند المؤشر: حرف أو كلمة أو جملة أو فقرة أو قسم."
+  hi: "कर्सर पर पाठ इकाई हटाएँ: अक्षर, शब्द, वाक्य, अनुच्छेद या अनुभाग।"
+  bn: "কার্সারে থাকা লেখার একক মুছুন: অক্ষর, শব্দ, বাক্য, অনুচ্ছেদ বা বিভাগ।"
+  zh: "删除光标处的文本单位：字符、单词、句子、段落或小节。"
+  ja: "カーソル位置のテキスト単位（文字・単語・文・段落・セクション）を削除します。"
+menu.item.edit.delete.character.help:
+  en: "Delete the character at the cursor."
+  es: "Elimina el carácter en el cursor."
+  fr: "Supprime le caractère au curseur."
+  de: "Löscht das Zeichen am Cursor."
+  cy: "Dileu'r nod wrth y cyrchwr."
+  ga: "Scrios an carachtar ag an gcúrsóir."
+  gd: "Sguab às an caractar aig a' chùrsair."
+  pl: "Usuwa znak przy kursorze."
+  pt: "Exclui o caractere no cursor."
+  ru: "Удаляет символ у курсора."
+  ar: "يحذف الحرف عند المؤشر."
+  hi: "कर्सर पर मौजूद अक्षर हटाएँ।"
+  bn: "কার্সারে থাকা অক্ষরটি মুছুন।"
+  zh: "删除光标处的字符。"
+  ja: "カーソル位置の文字を削除します。"
+menu.item.edit.delete.word.help:
+  en: "Delete the word at the cursor, along with the spacing after it."
+  es: "Elimina la palabra en el cursor, junto con el espacio que la sigue."
+  fr: "Supprime le mot au curseur, ainsi que l'espace qui le suit."
+  de: "Löscht das Wort am Cursor samt dem Leerraum dahinter."
+  cy: "Dileu'r gair wrth y cyrchwr, ynghyd â'r bwlch ar ei ôl."
+  ga: "Scrios an focal ag an gcúrsóir, mar aon leis an spás ina dhiaidh."
+  gd: "Sguab às am facal aig a' chùrsair, còmhla ris an àite às a dhèidh."
+  pl: "Usuwa słowo przy kursorze wraz z odstępem po nim."
+  pt: "Exclui a palavra no cursor, junto com o espaço depois dela."
+  ru: "Удаляет слово у курсора вместе с пробелом после него."
+  ar: "يحذف الكلمة عند المؤشر مع المسافة التي تليها."
+  hi: "कर्सर पर मौजूद शब्द और उसके बाद का स्थान हटाएँ।"
+  bn: "কার্সারে থাকা শব্দ এবং তার পরের ফাঁক মুছুন।"
+  zh: "删除光标处的单词及其后的空格。"
+  ja: "カーソル位置の単語と、その後ろの空白を削除します。"
+menu.item.edit.delete.sentence.help:
+  en: "Delete the sentence at the cursor, along with the spacing after it."
+  es: "Elimina la oración en el cursor, junto con el espacio que la sigue."
+  fr: "Supprime la phrase au curseur, ainsi que l'espace qui la suit."
+  de: "Löscht den Satz am Cursor samt dem Leerraum dahinter."
+  cy: "Dileu'r frawddeg wrth y cyrchwr, ynghyd â'r bwlch ar ei hôl."
+  ga: "Scrios an abairt ag an gcúrsóir, mar aon leis an spás ina diaidh."
+  gd: "Sguab às an seantans aig a' chùrsair, còmhla ris an àite às a dhèidh."
+  pl: "Usuwa zdanie przy kursorze wraz z odstępem po nim."
+  pt: "Exclui a frase no cursor, junto com o espaço depois dela."
+  ru: "Удаляет предложение у курсора вместе с пробелом после него."
+  ar: "يحذف الجملة عند المؤشر مع المسافة التي تليها."
+  hi: "कर्सर पर मौजूद वाक्य और उसके बाद का स्थान हटाएँ।"
+  bn: "কার্সারে থাকা বাক্য এবং তার পরের ফাঁক মুছুন।"
+  zh: "删除光标处的句子及其后的空格。"
+  ja: "カーソル位置の文と、その後ろの空白を削除します。"
+menu.item.edit.delete.paragraph.help:
+  en: "Delete the paragraph at the cursor, along with the blank lines after it."
+  es: "Elimina el párrafo en el cursor, junto con las líneas en blanco que lo siguen."
+  fr: "Supprime le paragraphe au curseur, ainsi que les lignes vides qui le suivent."
+  de: "Löscht den Absatz am Cursor samt den Leerzeilen dahinter."
+  cy: "Dileu'r paragraff wrth y cyrchwr, ynghyd â'r llinellau gwag ar ei ôl."
+  ga: "Scrios an t-alt ag an gcúrsóir, mar aon leis na línte bána ina dhiaidh."
+  gd: "Sguab às am paragraf aig a' chùrsair, còmhla ris na loidhnichean bàna às a dhèidh."
+  pl: "Usuwa akapit przy kursorze wraz z pustymi wierszami po nim."
+  pt: "Exclui o parágrafo no cursor, junto com as linhas em branco depois dele."
+  ru: "Удаляет абзац у курсора вместе с пустыми строками после него."
+  ar: "يحذف الفقرة عند المؤشر مع الأسطر الفارغة التي تليها."
+  hi: "कर्सर पर मौजूद अनुच्छेद और उसके बाद की खाली पंक्तियाँ हटाएँ।"
+  bn: "কার্সারে থাকা অনুচ্ছেদ এবং তার পরের ফাঁকা লাইনগুলি মুছুন।"
+  zh: "删除光标处的段落及其后的空行。"
+  ja: "カーソル位置の段落と、その後ろの空行を削除します。"
+menu.item.edit.delete.section.help:
+  en: "Delete the section at the cursor, along with the break after it."
+  es: "Elimina la sección en el cursor, junto con el salto que la sigue."
+  fr: "Supprime la section au curseur, ainsi que la coupure qui la suit."
+  de: "Löscht den Abschnitt am Cursor samt dem Umbruch dahinter."
+  cy: "Dileu'r adran wrth y cyrchwr, ynghyd â'r bwlch ar ei hôl."
+  ga: "Scrios an roinn ag an gcúrsóir, mar aon leis an mbriseadh ina diaidh."
+  gd: "Sguab às an earrann aig a' chùrsair, còmhla ris a' bhriseadh às a dhèidh."
+  pl: "Usuwa sekcję przy kursorze wraz z przerwą po niej."
+  pt: "Exclui a seção no cursor, junto com a quebra depois dela."
+  ru: "Удаляет раздел у курсора вместе с разрывом после него."
+  ar: "يحذف القسم عند المؤشر مع الفاصل الذي يليه."
+  hi: "कर्सर पर मौजूद अनुभाग और उसके बाद का विराम हटाएँ।"
+  bn: "কার্সারে থাকা বিভাগ এবং তার পরের বিরতি মুছুন।"
+  zh: "删除光标处的小节及其后的分隔。"
+  ja: "カーソル位置のセクションと、その後ろの区切りを削除します。"
+menu.item.edit.transpose_menu.help:
+  en: "Open commands to swap two pieces of text."
+  es: "Abre comandos para intercambiar dos partes del texto."
+  fr: "Ouvrir les commandes pour permuter deux parties du texte."
+  de: "Öffnet Befehle, um zwei Textteile zu vertauschen."
+  cy: "Agor gorchmynion i gyfnewid dwy ran o destun."
+  ga: "Oscail orduithe chun dhá chuid téacs a mhalartú."
+  gd: "Fosgail àitheantan airson dà phàirt teacsa iomlaideadh."
+  pl: "Otwiera polecenia zamiany dwóch fragmentów tekstu."
+  pt: "Abre comandos para trocar duas partes do texto."
+  ru: "Открыть команды для перестановки двух фрагментов текста."
+  ar: "فتح أوامر لتبديل جزأين من النص."
+  hi: "पाठ के दो भागों की अदला-बदली के लिए कमांड खोलें।"
+  bn: "টেক্সটের দুটি অংশ অদলবদল করার কমান্ড খুলুন।"
+  zh: "打开交换两段文本的命令。"
+  ja: "テキストの 2 つの部分を入れ替えるコマンドを開きます。"
 menu.item.edit.transpose_chars.help:
   en: "Swap the two characters around the cursor."
   es: "Intercambia los dos caracteres alrededor del cursor."
@@ -18528,6 +18412,86 @@ menu.item.edit.transpose_words.help:
   bn: "কার্সারের চারপাশের দুটি শব্দ অদলবদল করুন।"
   zh: "交换光标两侧的两个单词。"
   ja: "カーソル前後の 2 つの単語を入れ替えます。"
+menu.item.edit.transpose_lines.help:
+  en: "Swap the current line with the line above."
+  es: "Intercambia la línea actual con la línea anterior."
+  fr: "Permute la ligne courante avec la ligne précédente."
+  de: "Vertauscht die aktuelle Zeile mit der Zeile darüber."
+  cy: "Cyfnewid y llinell bresennol â'r llinell uwchben."
+  ga: "Malartaigh an líne reatha leis an líne thuas."
+  gd: "Iomlaidich an loidhne làithreach leis an loidhne gu h-àrd."
+  pl: "Zamienia bieżący wiersz z wierszem powyżej."
+  pt: "Troca a linha atual com a linha acima."
+  ru: "Меняет местами текущую строку и строку выше."
+  ar: "يبدّل السطر الحالي مع السطر الذي فوقه."
+  hi: "वर्तमान पंक्ति की ऊपर वाली पंक्ति से अदला-बदली करें।"
+  bn: "বর্তমান লাইনটি উপরের লাইনের সাথে অদলবদল করুন।"
+  zh: "将当前行与上一行交换。"
+  ja: "現在の行と 1 つ上の行を入れ替えます。"
+menu.item.edit.transpose_sentences.help:
+  en: "Swap the two sentences around the cursor."
+  es: "Intercambia las dos oraciones alrededor del cursor."
+  fr: "Permute les deux phrases autour du curseur."
+  de: "Vertauscht die beiden Sätze um den Cursor."
+  cy: "Cyfnewid y ddwy frawddeg o boptu'r cyrchwr."
+  ga: "Malartaigh an dá abairt timpeall an chúrsóra."
+  gd: "Iomlaidich an dà sheantans timcheall a' chùrsair."
+  pl: "Zamienia miejscami dwa zdania wokół kursora."
+  pt: "Troca as duas frases em torno do cursor."
+  ru: "Меняет местами два предложения вокруг курсора."
+  ar: "يبدّل الجملتين المحيطتين بالمؤشر."
+  hi: "कर्सर के आसपास के दो वाक्यों की अदला-बदली करें।"
+  bn: "কার্সারের চারপাশের দুটি বাক্য অদলবদল করুন।"
+  zh: "交换光标两侧的两个句子。"
+  ja: "カーソル前後の 2 つの文を入れ替えます。"
+menu.item.edit.transpose_paragraphs.help:
+  en: "Swap the two paragraphs around the cursor."
+  es: "Intercambia los dos párrafos alrededor del cursor."
+  fr: "Permute les deux paragraphes autour du curseur."
+  de: "Vertauscht die beiden Absätze um den Cursor."
+  cy: "Cyfnewid y ddau baragraff o boptu'r cyrchwr."
+  ga: "Malartaigh an dá alt timpeall an chúrsóra."
+  gd: "Iomlaidich an dà pharagraf timcheall a' chùrsair."
+  pl: "Zamienia miejscami dwa akapity wokół kursora."
+  pt: "Troca os dois parágrafos em torno do cursor."
+  ru: "Меняет местами два абзаца вокруг курсора."
+  ar: "يبدّل الفقرتين المحيطتين بالمؤشر."
+  hi: "कर्सर के आसपास के दो अनुच्छेदों की अदला-बदली करें।"
+  bn: "কার্সারের চারপাশের দুটি অনুচ্ছেদ অদলবদল করুন।"
+  zh: "交换光标两侧的两个段落。"
+  ja: "カーソル前後の 2 つの段落を入れ替えます。"
+menu.item.edit.transpose_sections.help:
+  en: "Swap the two sections around the cursor."
+  es: "Intercambia las dos secciones alrededor del cursor."
+  fr: "Permute les deux sections autour du curseur."
+  de: "Vertauscht die beiden Abschnitte um den Cursor."
+  cy: "Cyfnewid y ddwy adran o boptu'r cyrchwr."
+  ga: "Malartaigh an dá roinn timpeall an chúrsóra."
+  gd: "Iomlaidich an dà earrann timcheall a' chùrsair."
+  pl: "Zamienia miejscami dwie sekcje wokół kursora."
+  pt: "Troca as duas seções em torno do cursor."
+  ru: "Меняет местами два раздела вокруг курсора."
+  ar: "يبدّل القسمين المحيطين بالمؤشر."
+  hi: "कर्सर के आसपास के दो अनुभागों की अदला-बदली करें।"
+  bn: "কার্সারের চারপাশের দুটি বিভাগ অদলবদল করুন।"
+  zh: "交换光标两侧的两个小节。"
+  ja: "カーソル前後の 2 つのセクションを入れ替えます。"
+menu.item.edit.wrap.help:
+  en: "Wrap the selection, or the paragraph at the cursor, at the wrap column."
+  es: "Ajusta la selección, o el párrafo del cursor, a la columna de ajuste."
+  fr: "Coupe les lignes de la sélection, ou du paragraphe au curseur, à la colonne de coupure."
+  de: "Bricht die Auswahl oder den Absatz am Cursor an der Umbruchspalte um."
+  cy: "Lapio'r dewisiad, neu'r paragraff wrth y cyrchwr, wrth y golofn lapio."
+  ga: "Timfhill an roghnúchán, nó an t-alt ag an gcúrsóir, ag an gcolún timfhillte."
+  gd: "Paisg an taghadh, no am paragraf aig a' chùrsair, aig a' cholbh pasgaidh."
+  pl: "Zawija zaznaczenie lub akapit przy kursorze na kolumnie zawijania."
+  pt: "Quebra a seleção, ou o parágrafo no cursor, na coluna de quebra."
+  ru: "Переносит выделение или абзац у курсора по колонке переноса."
+  ar: "يلفّ التحديد أو الفقرة عند المؤشر عند عمود اللف."
+  hi: "चयन, या कर्सर वाले अनुच्छेद को, रैप कॉलम पर लपेटें।"
+  bn: "নির্বাচন, বা কার্সারের অনুচ্ছেদ, র‍্যাপ কলামে মুড়ে দিন।"
+  zh: "在换行列处折行选区或光标所在段落。"
+  ja: "選択範囲、またはカーソル位置の段落を折り返し桁で折り返します。"
 menu.item.edit.increment_number.help:
   en: "Increase the number under the cursor by one."
   es: "Aumenta en uno el número bajo el cursor."

@@ -24,7 +24,7 @@ use crate::menu::{Menu, menus};
 use crate::messages::{Level, Messages};
 use crate::palette::{self, Action as PAction, Entry, Mode as PMode, Palette};
 use crate::query::{Decision, QueryReplace};
-use crate::search::{Field, SearchBar};
+use crate::search::{Field, Scope, SearchBar};
 use crate::settings::Settings;
 use crate::workspace_search::{Hit, WorkspaceSearch};
 
@@ -119,6 +119,10 @@ pub enum PromptKind {
     CompareFile,
     /// Enter a file path whose contents to insert at the cursor.
     InsertFile,
+    /// Confirm/edit a resolved `project.*` lifecycle command before running
+    /// it (`App::pending_project_command` carries which slot and, for the
+    /// subproject family, which directory).
+    ProjectCommand,
     /// Enter a `YYYY-MM-DD` date to set the headline's `SCHEDULED:` entry.
     OrgSchedule,
     /// Enter a `YYYY-MM-DD` date to set the headline's `DEADLINE:` entry.
@@ -134,6 +138,15 @@ pub enum PromptKind {
     OrgSetTags,
     /// Enter `NAME VALUE` for a property to set in the headline's drawer.
     OrgSetProperty,
+    /// Enter `<column> [a|n|t] [r]` to sort the table at the cursor
+    /// (`org-table-sort-lines` / `C-c ^`).
+    OrgTableSort,
+    /// Enter a property name for a new Column View column, inserted before
+    /// the current column (`S-M-Right` inside the Column View overlay).
+    OrgColumnsInsertColumn,
+    /// Enter the `:id` scope for a new `#+BEGIN: columnview` dynamic block
+    /// (`org.columns.insert_dblock`); empty defaults to `local`.
+    OrgColumnsInsertDblock,
     /// Enter a name to save the just-recorded keyboard macro under.
     SaveMacro,
     /// Enter an expression to evaluate in the debugger (REPL).
@@ -558,13 +571,120 @@ pub struct BranchChooser {
     pub merge: bool,
 }
 
-/// The task chooser (Tools → Tasks…): the workspace's `tasks.toml` entries and
-/// the highlighted row. Choosing one runs its command via the Run pipeline.
+/// The task chooser (Tools → Tasks…, Project → Run Task…): named tasks —
+/// either just the workspace's `tasks.toml` entries (Tools → Tasks…) or the
+/// full `vix-tasks` merge of user-configured, project-type, and discovered
+/// tasks (Project → Run Task…) — and the highlighted row.
+/// Choosing one runs its command via the Run pipeline.
 pub struct TaskChooser {
-    /// Loaded tasks, in file order.
-    pub tasks: Vec<crate::tasks::Task>,
+    /// Loaded tasks, in file/merge order.
+    pub tasks: Vec<crate::tasks::task::NamedTask>,
     /// Index of the highlighted task.
     pub selected: usize,
+}
+
+/// One of the six project lifecycle command slots (`crate::tasks::
+/// lifecycle::LifecycleCommands`'s fields), addressed generically so the six
+/// `project.*` lifecycle actions (and their `project.subproject.*`
+/// counterparts) can share one prompt/cache/history code path instead of six
+/// near-identical copies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProjectSlot {
+    /// `project.configure` / `project.subproject.configure`.
+    Configure,
+    /// `project.compile` / `project.subproject.compile`.
+    Compile,
+    /// `project.test` / `project.subproject.test`.
+    Test,
+    /// `project.install` / `project.subproject.install`.
+    Install,
+    /// `project.package` / `project.subproject.package`.
+    Package,
+    /// `project.run` / `project.subproject.run`.
+    Run,
+}
+
+impl ProjectSlot {
+    /// This slot's command out of a resolved [`crate::tasks::lifecycle::LifecycleCommands`].
+    fn get(self, c: &crate::tasks::lifecycle::LifecycleCommands) -> Option<String> {
+        match self {
+            ProjectSlot::Configure => c.configure.clone(),
+            ProjectSlot::Compile => c.compile.clone(),
+            ProjectSlot::Test => c.test.clone(),
+            ProjectSlot::Install => c.install.clone(),
+            ProjectSlot::Package => c.package.clone(),
+            ProjectSlot::Run => c.run.clone(),
+        }
+    }
+
+    /// Set this slot's cached command.
+    fn set(self, c: &mut crate::tasks::lifecycle::LifecycleCommands, val: Option<String>) {
+        match self {
+            ProjectSlot::Configure => c.configure = val,
+            ProjectSlot::Compile => c.compile = val,
+            ProjectSlot::Test => c.test = val,
+            ProjectSlot::Install => c.install = val,
+            ProjectSlot::Package => c.package = val,
+            ProjectSlot::Run => c.run = val,
+        }
+    }
+
+    /// This slot's command history within `h`.
+    fn history_mut(self, h: &mut ProjectHistory) -> &mut Vec<String> {
+        match self {
+            ProjectSlot::Configure => &mut h.configure,
+            ProjectSlot::Compile => &mut h.compile,
+            ProjectSlot::Test => &mut h.test,
+            ProjectSlot::Install => &mut h.install,
+            ProjectSlot::Package => &mut h.package,
+            ProjectSlot::Run => &mut h.run,
+        }
+    }
+
+    /// The locale key for this slot's confirm-prompt title.
+    fn prompt_title_key(self) -> &'static str {
+        match self {
+            ProjectSlot::Configure => "prompt.project_configure",
+            ProjectSlot::Compile => "prompt.project_compile",
+            ProjectSlot::Test => "prompt.project_test",
+            ProjectSlot::Install => "prompt.project_install",
+            ProjectSlot::Package => "prompt.project_package",
+            ProjectSlot::Run => "prompt.project_run",
+        }
+    }
+}
+
+/// Per-lifecycle-slot command run history for the current workspace root
+/// (`project.*`/`project.subproject.*` actions), most-recent last — each
+/// command type keeps its own command history. Mirrors
+/// `vix_session::WorkspaceSession`'s six `project_history_*` fields (kept as
+/// plain fields there so `vix-session` stays free of a dependency on this
+/// crate's `vix-tasks`).
+#[derive(Debug, Clone, Default)]
+struct ProjectHistory {
+    /// History for the `configure` slot.
+    configure: Vec<String>,
+    /// History for the `compile` slot.
+    compile: Vec<String>,
+    /// History for the `test` slot.
+    test: Vec<String>,
+    /// History for the `install` slot.
+    install: Vec<String>,
+    /// History for the `package` slot.
+    package: Vec<String>,
+    /// History for the `run` slot.
+    run: Vec<String>,
+}
+
+/// Context for a pending [`PromptKind::ProjectCommand`] prompt: which slot,
+/// and (for `project.subproject.*`) the subproject's absolute directory to
+/// run the command in instead of the workspace root.
+struct PendingProjectCommand {
+    /// Which lifecycle slot is being confirmed/edited.
+    slot: ProjectSlot,
+    /// `None` for the top-level (workspace-root) actions; `Some(dir)` for
+    /// `project.subproject.*`.
+    dir: Option<PathBuf>,
 }
 
 /// A read-only diff overlay (Tools → Compare With File…): the active buffer
@@ -1006,6 +1126,9 @@ pub struct Layout {
     /// Body (data-rows) rectangle of the open table editor, used to size paging
     /// and the scroll window.
     pub edit_table: Rect,
+    /// Body (data-rows) rectangle of the open Column View overlay, used to
+    /// size paging and the scroll window.
+    pub column_view: Rect,
     /// Body rectangle of the open outline editor, used to size paging and the
     /// scroll window.
     pub edit_outline: Rect,
@@ -1065,9 +1188,9 @@ pub struct Layout {
     /// Inner content rectangle of the open find / replace box, so a click can
     /// focus the Find or Replace field.
     pub search: Rect,
-    /// Clickable button rectangles in the find box: the Case/Word/Regex toggles
-    /// and, in replace mode, the Once/Ask/All replace buttons. `Rect::default()`
-    /// when not shown.
+    /// Clickable button rectangles in the find box: the Case/Word/Regex toggles,
+    /// the Replace-mode and scope options, and, in replace mode, the Once/Ask/All
+    /// replace buttons. `Rect::default()` when not shown.
     pub search_case: Rect,
     /// See [`Self::search_case`].
     pub search_smartcase: Rect,
@@ -1075,6 +1198,12 @@ pub struct Layout {
     pub search_word: Rect,
     /// See [`Self::search_case`].
     pub search_regex: Rect,
+    /// The Replace option: turns the find box into a find-and-replace in place.
+    /// See [`Self::search_case`].
+    pub search_replace_toggle: Rect,
+    /// The scope option: cycles this buffer → files → workspace, carrying the
+    /// query with it. See [`Self::search_case`].
+    pub search_scope: Rect,
     /// See [`Self::search_case`].
     pub search_once: Rect,
     /// See [`Self::search_case`].
@@ -1188,6 +1317,8 @@ pub struct App {
     pub ascii_panel: Option<AsciiPanel>,
     /// Table editor (CSV/TSV spreadsheet) overlay, when open.
     pub edit_table: Option<crate::edit_table::Grid>,
+    /// Interactive Org Column View overlay, when open.
+    pub column_view: Option<crate::column_view::ColumnView>,
     /// Outline editor (prose hierarchy) overlay, when open.
     pub edit_outline: Option<crate::edit_outline::Tree>,
     /// Structured-value editor (JSON/YAML tree) overlay, when open.
@@ -1338,6 +1469,10 @@ pub struct App {
     pub picker: Option<Picker>,
     /// Persisted user settings.
     pub settings: Settings,
+    /// Settings file this app persists to. `None` — the normal case — uses the
+    /// user's config directory; set via [`App::with_settings_path`] to keep a
+    /// run's settings out of it (tests, embedders).
+    pub settings_path: Option<PathBuf>,
     /// Which pane has focus.
     pub focus: Focus,
     /// Whether the explorer pane is shown.
@@ -1374,8 +1509,19 @@ pub struct App {
     agenda_restriction: Option<PathBuf>,
     /// In-progress dedicated source-block edit (Org `C-c '`), if any.
     src_edit: Option<SrcEdit>,
+    /// Org table rectangle clipboard (`C-c C-x M-w`/`C-w`/`C-y`), separate from
+    /// the normal text clipboard, matching Emacs's own dedicated table
+    /// rectangle clipboard. Row-major cell text.
+    table_rectangle_clip: Option<Vec<Vec<String>>>,
     /// Pending third key of an Emacs `C-c C-x …` chord.
     emacs_c_x_prefix: bool,
+    /// Pending third key of an Emacs `C-c p …` chord (the `project.*` family).
+    emacs_c_p_prefix: bool,
+    /// Pending fourth key of an Emacs `C-c p c …` chord.
+    emacs_c_p_c_prefix: bool,
+    /// Pending fifth key of an Emacs `C-c p c m …` chord (the
+    /// `project.subproject.*` family).
+    emacs_c_p_c_m_prefix: bool,
     /// The link target entered in the first Insert Link… prompt, held while the
     /// description prompt is open.
     pending_link_target: Option<String>,
@@ -1447,6 +1593,30 @@ pub struct App {
     /// Cursor offset captured when the palette opened, so the `:` go-to-line
     /// preview can revert on cancel and the jump records the true origin.
     palette_origin: Option<usize>,
+    /// When set (by `project.subproject.find_file`), restricts the palette's
+    /// Files mode to entries under this project-relative directory instead
+    /// of the whole workspace. Cleared whenever the palette closes.
+    palette_file_scope: Option<String>,
+    /// In-memory cache of resolved/edited lifecycle commands for the current
+    /// workspace root (`project.*`/`project.subproject.*` actions) — the
+    /// highest-precedence layer in `crate::tasks::lifecycle::
+    /// effective_lifecycle`. Lazily loaded from the session store by
+    /// [`App::ensure_project_session_loaded`].
+    project_command_cache: crate::tasks::lifecycle::LifecycleCommands,
+    /// Per-slot command run history for the current workspace root, paired
+    /// with `project_command_cache`.
+    project_history: ProjectHistory,
+    /// The most recently run project command of any kind (a lifecycle
+    /// command or a named task), for `project.repeat_last_task`.
+    project_last_command: Option<String>,
+    /// Whether `project_command_cache`/`project_history`/`project_last_command`
+    /// have been loaded from the session store yet this run. Guards both the
+    /// lazy load (so it happens at most once) and the save on exit (so a run
+    /// that never touches a `project.*` action does not overwrite previously
+    /// saved project state with empty defaults).
+    project_session_loaded: bool,
+    /// Context for a pending [`PromptKind::ProjectCommand`] prompt.
+    pending_project_command: Option<PendingProjectCommand>,
     /// Action ids of commands recently run from the palette, most-recent first
     /// (capped). Surfaced at the top of the `>` command list when the query is
     /// empty, and used as a tiebreak when ranking matches.
@@ -1601,6 +1771,7 @@ impl App {
             nerd_palette: None,
             ascii_panel: None,
             edit_table: None,
+            column_view: None,
             edit_outline: None,
             edit_value: None,
             edit_bytes: None,
@@ -1683,7 +1854,11 @@ impl App {
             stored_org_link: None,
             agenda_restriction: None,
             src_edit: None,
+            table_rectangle_clip: None,
             emacs_c_x_prefix: false,
+            emacs_c_p_prefix: false,
+            emacs_c_p_c_prefix: false,
+            emacs_c_p_c_m_prefix: false,
             pending_link_target: None,
             expand_selection_dir: None,
             show_inlay_hints: true,
@@ -1712,8 +1887,15 @@ impl App {
             should_quit: false,
             layout: Layout::default(),
             settings,
+            settings_path: None,
             file_index: Vec::new(),
             palette_origin: None,
+            palette_file_scope: None,
+            project_command_cache: crate::tasks::lifecycle::LifecycleCommands::default(),
+            project_history: ProjectHistory::default(),
+            project_last_command: None,
+            project_session_loaded: false,
+            pending_project_command: None,
             command_recents,
             last_search: None,
             closed_tabs: Vec::new(),
@@ -1742,13 +1924,35 @@ impl App {
         }
     }
 
-    /// On first run, open the welcome screen and mark it seen (persisted on exit)
-    /// so it does not reappear. Called by `main` after construction; kept out of
-    /// [`App::new`] so tests build a clean, overlay-free app.
+    /// Persist settings to [`App::settings_path`] when one is set, else to the
+    /// user's config directory. Every in-app settings write goes through here so
+    /// a run pointed at another config file never touches the user's.
+    fn store_settings(&self) -> Result<(), confy::ConfyError> {
+        match &self.settings_path {
+            Some(path) => self.settings.save_to(path),
+            None => self.settings.save(),
+        }
+    }
+
+    /// Persist this app's settings to `path` instead of the user's config
+    /// directory. Builder form of [`App::settings_path`], for tests and
+    /// embedders that need an isolated config file.
+    #[must_use]
+    pub fn with_settings_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.settings_path = Some(path.into());
+        self
+    }
+
+    /// On first run, open the welcome screen, then turn the
+    /// `show_welcome_dialog` setting off and save immediately so it does not
+    /// reappear on the next launch — even if this run never exits cleanly.
+    /// Called by `main` after construction; kept out of [`App::new`] so tests
+    /// build a clean, overlay-free app.
     pub fn maybe_show_welcome(&mut self) {
-        if !self.settings.welcomed {
+        if self.settings.show_welcome_dialog {
             self.welcome = Some(WelcomePanel::open(Self::welcome_lines()));
-            self.settings.welcomed = true;
+            self.settings.show_welcome_dialog = false;
+            let _ = self.store_settings();
         }
     }
 
@@ -1884,13 +2088,29 @@ impl App {
             split,
             visits: 0, // filled/incremented by Session::set_workspace
             last_visit: jiff::Zoned::now().timestamp().as_second(),
+            // The project.* cache/history fields are filled in by
+            // `save_session`, which has the full picture (this run's
+            // in-memory copy vs. the prior on-disk save); left at their
+            // defaults here.
+            ..Default::default()
         }
     }
 
     /// Capture the current session and persist it to the per-workspace store.
+    /// Also carries the project command cache/history forward: unchanged
+    /// when this run never loaded it (see
+    /// [`App::ensure_project_session_loaded`]), else this run's in-memory
+    /// copy.
     fn save_session(&self) {
-        let ws = self.workspace_session();
+        let mut ws = self.workspace_session();
+        let key = self.session_key();
         let mut session = crate::session::Session::load();
+        if let Some(prior) = session.workspace(&key) {
+            Self::carry_forward_project_fields(&mut ws, prior);
+        }
+        if self.project_session_loaded {
+            self.fill_project_fields(&mut ws);
+        }
         session.set_workspace(ws);
         let _ = session.save();
     }
@@ -1919,6 +2139,87 @@ impl App {
             return false;
         }
         true
+    }
+
+    /// Whether a modal layer is taking keystrokes, so a keypress does not reach
+    /// the editor. Mirrors the conditions of the dispatch chain below —
+    /// [`App::try_overlay_key`], [`App::try_tool_dialog_key`], and
+    /// [`App::try_panel_key`] — plus the jump-label mode `on_key` checks first;
+    /// keep this list in step with them.
+    ///
+    /// Used to route a bracketed paste ([`App::on_paste`]): text pasted while a
+    /// prompt, the palette, the search bar, or a panel is up belongs to that
+    /// input, not to the buffer behind it.
+    fn overlay_capturing_keys(&self) -> bool {
+        macro_rules! any_open {
+            ($($field:ident),* $(,)?) => { $(self.$field.is_some() ||)* false };
+        }
+        any_open!(
+            // `on_key`'s jump-label mode, then `try_overlay_key`.
+            jump,
+            welcome,
+            help,
+            dialog,
+            // `try_tool_dialog_key`.
+            color_converter,
+            unit_converter,
+            calculator,
+            regex_tester,
+            code_actions,
+            code_lens,
+            // `try_panel_key`.
+            terminal,
+            db,
+            edit_table,
+            column_view,
+            edit_outline,
+            edit_value,
+            edit_bytes,
+            edit_sql,
+            file_browser,
+            recent_chooser,
+            location_chooser,
+            capture_chooser,
+            refile_chooser,
+            nerd_palette,
+            ascii_panel,
+            x11_panel,
+            media_type_panel,
+            html_panel,
+            system_info,
+            file_info,
+            text_info,
+            markdown_preview,
+            snippets,
+            vcard,
+            contacts,
+            dashboard,
+            qrcode,
+            ai_diff,
+            ai_panel,
+            outline,
+            query_replace,
+            replace_confirm,
+            workspace_search,
+            confirm,
+            unsaved,
+            spell_suggest,
+            context_menu,
+            git_panel,
+            branch_chooser,
+            task_chooser,
+            macro_chooser,
+            clipboard_chooser,
+            workspace_chooser,
+            diff_view,
+            prompt,
+            palette,
+            search,
+        ) || self.pomodoro_open
+            || self.show_calendar
+            || self.show_clock
+            || self.menu.is_open()
+            || self.paste.as_ref().is_some_and(|p| p.conflict.is_some())
     }
 
     fn try_overlay_key(&mut self, key: KeyEvent) -> bool {
@@ -2082,6 +2383,7 @@ impl App {
         panel!(terminal, terminal_key);
         panel!(db, db_key);
         panel!(edit_table, edit_table_key);
+        panel!(column_view, column_view_key);
         panel!(edit_outline, edit_outline_key);
         panel!(edit_value, edit_value_key);
         panel!(edit_bytes, edit_bytes_key);
@@ -2146,11 +2448,35 @@ impl App {
         false
     }
 
+    /// Fold macOS's `Command` modifier into `Control`, so `Cmd+C` drives the
+    /// same binding as `Ctrl+C` and every other keymap chord works from the key
+    /// Mac users reach for. Other modifiers on the chord (`Shift`, `Alt`) are
+    /// kept, so `Cmd+Shift+Z` becomes `Ctrl+Shift+Z`.
+    ///
+    /// Off macOS the key is returned untouched: `Super` there is the window
+    /// manager's key, not an editor modifier.
+    ///
+    /// A terminal only reports `Command` at all when the kitty keyboard
+    /// protocol is on (see `src/main.rs`, which asks for it) *and* the terminal
+    /// does not keep that particular `Cmd` shortcut for its own menus — which
+    /// most do, `Cmd+C` and `Cmd+V` included. Whatever does arrive is folded
+    /// here.
+    #[must_use]
+    fn command_as_control(mut key: KeyEvent) -> KeyEvent {
+        if cfg!(target_os = "macos") && key.modifiers.contains(KeyModifiers::SUPER) {
+            key.modifiers.remove(KeyModifiers::SUPER);
+            key.modifiers.insert(KeyModifiers::CONTROL);
+        }
+        key
+    }
+
     /// Handle a key event, routing it to the active modal layer or focused pane.
     pub fn on_key(&mut self, key: KeyEvent) {
         if key.kind == KeyEventKind::Release {
             return;
         }
+        // macOS: `Command` stands in for `Control` throughout.
+        let key = Self::command_as_control(key);
         // Jump-to-line mode captures all keys until a label matches or Esc.
         if self.jump.is_some() && self.jump_key(key) {
             return;
@@ -2169,6 +2495,15 @@ impl App {
         }
         // Modal layers, in priority order.
         if self.try_overlay_key(key) {
+            return;
+        }
+        // Org table context-sensitive keys (Tab/S-Tab/RET field & row nav,
+        // Meta-/Shift-arrow structural edits) take priority over every
+        // keymap's own bindings for the same keys — including `Alt`+arrow and
+        // `Ctrl+Shift`+arrow, which `global_shared_key` below would otherwise
+        // claim first — but only while the cursor is actually inside a pipe
+        // table; see `org_table_key`.
+        if self.org_table_key(key) {
             return;
         }
         // Keymap-specific dispatch. Each keymap first gets a chance to consume the
@@ -2235,6 +2570,43 @@ impl App {
         }
     }
 
+    /// Handle a bracketed paste: text the terminal hands over in one piece
+    /// (`Event::Paste`) rather than as individual key events.
+    ///
+    /// With the editor focused the whole chunk is inserted as **one** edit, so
+    /// undo removes the paste in a single step, and verbatim, so auto-indent and
+    /// auto-pairing cannot mangle it on the way in. That is the point of asking
+    /// the terminal to bracket pastes: delivered as keystrokes, a paste left one
+    /// undo entry per character, and every pasted newline re-indented the line
+    /// after it.
+    ///
+    /// Anything layered over the editor — a prompt, the palette, the search bar,
+    /// a panel — still receives the paste as keystrokes, which is what those
+    /// inputs expect; the same goes for the explorer and the docks.
+    pub fn on_paste(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        if self.focus == Focus::Editor && !self.overlay_capturing_keys() {
+            if self.active_read_only() {
+                self.status = t!("status.read_only_blocked").to_string();
+                return;
+            }
+            let area = self.editor_view();
+            self.editor.paste_str(text, area);
+            return;
+        }
+        // Replay for every other target. `\r\n` is one line break, not two.
+        for ch in text.replace("\r\n", "\n").chars() {
+            let code = match ch {
+                '\n' | '\r' => KeyCode::Enter,
+                '\t' => KeyCode::Tab,
+                c => KeyCode::Char(c),
+            };
+            self.on_key(KeyEvent::new(code, KeyModifiers::NONE));
+        }
+    }
+
     /// The keyboard navigation style currently in effect.
     fn active_keymap(&self) -> Keymap {
         Keymap::from_id(&self.settings.keymap)
@@ -2255,6 +2627,9 @@ impl App {
             }),
             Keymap::Emacs if self.emacs_prefix => Some("C-x-".to_string()),
             Keymap::Emacs if self.emacs_c_x_prefix => Some("C-c C-x-".to_string()),
+            Keymap::Emacs if self.emacs_c_p_c_m_prefix => Some("C-c p c m-".to_string()),
+            Keymap::Emacs if self.emacs_c_p_c_prefix => Some("C-c p c-".to_string()),
+            Keymap::Emacs if self.emacs_c_p_prefix => Some("C-c p-".to_string()),
             Keymap::Emacs if self.emacs_c_prefix => Some("C-c-".to_string()),
             Keymap::Spacemacs => Some(if let Some(seq) = &self.spacemacs_leader {
                 format!("SPC {seq}")
@@ -2287,6 +2662,28 @@ impl App {
                     .collect();
                 Some(("C-c C-x".to_string(), rows))
             }
+            Keymap::Emacs if self.emacs_c_p_c_m_prefix => {
+                let rows = EMACS_CTRL_C_P_C_M
+                    .iter()
+                    .map(|&(k, a)| (k.to_string(), a.to_string()))
+                    .collect();
+                Some(("C-c p c m".to_string(), rows))
+            }
+            Keymap::Emacs if self.emacs_c_p_c_prefix => {
+                // `m` continues into the subproject family (see
+                // `EMACS_CTRL_C_P_C`'s doc comment); shown here as a hint row
+                // even though it is not itself a dispatchable action.
+                let mut rows: Vec<(String, String)> = EMACS_CTRL_C_P_C
+                    .iter()
+                    .map(|&(k, a)| (k.to_string(), a.to_string()))
+                    .collect();
+                rows.push(("m".to_string(), "project.subproject.*".to_string()));
+                Some(("C-c p c".to_string(), rows))
+            }
+            Keymap::Emacs if self.emacs_c_p_prefix => Some((
+                "C-c p".to_string(),
+                vec![("c".to_string(), "project.*".to_string())],
+            )),
             Keymap::Emacs if self.emacs_c_prefix => {
                 let rows = EMACS_CTRL_C
                     .iter()
@@ -2352,6 +2749,15 @@ impl App {
                 'g' => self.run_action("edit.find_next"),
                 'r' if Self::alt(&key) => self.run_action("edit.query_replace"),
                 'r' => self.run_action("edit.replace"),
+                // macOS convention: `Ctrl+D` is forward delete — it removes the
+                // character to the right of the cursor, exactly like the `Delete`
+                // key. It is claimed here so it never reaches `editor_core`,
+                // whose own `Ctrl+D` adds the next occurrence as a caret (that
+                // binding stays in the keymaps modeled on VS Code and Sublime).
+                // `Ctrl+Shift+D` still duplicates the line or selection.
+                'd' if !Self::shift(&key) && self.focus == Focus::Editor => {
+                    self.editor_motion(KeyCode::Delete);
+                }
                 // Many terminals emit the same control byte (0x1F) for
                 // Ctrl+/, Ctrl+7, and Ctrl+_, so accept all three for Comment.
                 '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
@@ -2576,7 +2982,7 @@ impl App {
             && let KeyCode::Char(c) = key.code
             && let Some(i) = menu_index_for_alt(c)
         {
-            self.menu.open_index(i);
+            self.toggle_menu(i);
             return true;
         }
         match key.code {
@@ -2711,6 +3117,22 @@ impl App {
             self.emacs_c_x_prefix = false;
             return self.emacs_c_x_chord_key(key);
         }
+        // Fifth key of a `Ctrl+C p c m …` chord (the `project.subproject.*`
+        // family).
+        if self.emacs_c_p_c_m_prefix {
+            self.emacs_c_p_c_m_prefix = false;
+            return self.emacs_c_p_c_m_chord_key(key);
+        }
+        // Fourth key of a `Ctrl+C p c …` chord (the `project.*` family).
+        if self.emacs_c_p_c_prefix {
+            self.emacs_c_p_c_prefix = false;
+            return self.emacs_c_p_c_chord_key(key);
+        }
+        // Third key of a `Ctrl+C p …` chord.
+        if self.emacs_c_p_prefix {
+            self.emacs_c_p_prefix = false;
+            return self.emacs_c_p_chord_key(key);
+        }
         // Second key of a `Ctrl+C …` chord (the Org command family).
         if self.emacs_c_prefix {
             self.emacs_c_prefix = false;
@@ -2790,6 +3212,12 @@ impl App {
     /// (toggle a checkbox / refresh statistics).
     fn emacs_c_chord_key(&mut self, key: KeyEvent) -> bool {
         let universal = std::mem::take(&mut self.emacs_universal);
+        // `C-c RET` / `org-table-hline-and-move`: RET arrives as `KeyCode::Enter`,
+        // not a `Char`, so it cannot go through the `EMACS_CTRL_C` char table.
+        if key.code == KeyCode::Enter {
+            self.run_action("org.table.hline_and_move");
+            return true;
+        }
         let KeyCode::Char(c) = key.code else {
             self.status = t!("status.emacs_no_chord").to_string();
             return true;
@@ -2800,6 +3228,12 @@ impl App {
             return true;
         }
         let pressed = Self::chord_key_name(&key, c);
+        // `C-c p` opens the `project.*` chord family (see
+        // `EMACS_CTRL_C_P_C`'s doc comment for why `p` is plain, not `C-p`).
+        if pressed == "p" {
+            self.emacs_c_p_prefix = true;
+            return true;
+        }
         if pressed == "C-t" {
             // The universal-argument variant closes with a note.
             self.run_action(if universal {
@@ -2807,6 +3241,12 @@ impl App {
             } else {
                 "org.cycle_todo"
             });
+            return true;
+        }
+        if pressed == "C-c" && universal {
+            // `C-u C-c C-c`: force-apply `#+TBLFM:` formulas (org-table-recalc's
+            // universal-argument variant), instead of the plain context action.
+            self.run_action("org.table.recalc");
             return true;
         }
         if let Some(&(_, action)) = EMACS_CTRL_C.iter().find(|&&(k, _)| k == pressed) {
@@ -2818,13 +3258,86 @@ impl App {
     }
 
     /// Third key of an Emacs `Ctrl+C Ctrl+X …` chord (the extended Org family).
+    /// Inside a pipe table, `C-w`/`C-y`/`M-w` mean the table's own rectangle
+    /// clipboard (`org-table-cut/paste/copy-rectangle`) instead of their usual
+    /// subtree cut/paste/copy meanings, matching how Org itself
+    /// context-sensitively shadows these same chords inside a table.
     fn emacs_c_x_chord_key(&mut self, key: KeyEvent) -> bool {
+        if self.org_table_active_at_cursor() {
+            let (alt, ctrl) = (Self::alt(&key), Self::ctrl(&key));
+            match key.code {
+                KeyCode::Char('w') if alt && !ctrl => {
+                    self.run_action("org.table.copy_rectangle");
+                    return true;
+                }
+                KeyCode::Char('w') if ctrl && !alt => {
+                    self.run_action("org.table.cut_rectangle");
+                    return true;
+                }
+                KeyCode::Char('y') if ctrl && !alt => {
+                    self.run_action("org.table.paste_rectangle");
+                    return true;
+                }
+                _ => {}
+            }
+        }
         let KeyCode::Char(c) = key.code else {
             self.status = t!("status.emacs_no_chord").to_string();
             return true;
         };
         let pressed = Self::chord_key_name(&key, c);
         if let Some(&(_, action)) = EMACS_CTRL_C_X.iter().find(|&&(k, _)| k == pressed) {
+            self.run_action(action);
+        } else {
+            self.status = t!("status.emacs_no_chord").to_string();
+        }
+        true
+    }
+
+    /// Third key of an Emacs `Ctrl+C p …` chord. The only recognized
+    /// continuation is a plain `c`, opening the fourth-key `project.*`
+    /// family; any other key cleanly cancels back to normal editing, like an
+    /// unrecognized key at any other chord depth.
+    fn emacs_c_p_chord_key(&mut self, key: KeyEvent) -> bool {
+        if key.code == KeyCode::Char('c') && !Self::ctrl(&key) {
+            self.emacs_c_p_c_prefix = true;
+        } else {
+            self.status = t!("status.emacs_no_chord").to_string();
+        }
+        true
+    }
+
+    /// Fourth key of an Emacs `Ctrl+C p c …` chord — the `project.*` family.
+    /// A plain `m` opens the fifth-key `project.subproject.*` family
+    /// ([`EMACS_CTRL_C_P_C_M`]); any other key is looked up in
+    /// [`EMACS_CTRL_C_P_C`].
+    fn emacs_c_p_c_chord_key(&mut self, key: KeyEvent) -> bool {
+        if key.code == KeyCode::Char('m') && !Self::ctrl(&key) {
+            self.emacs_c_p_c_m_prefix = true;
+            return true;
+        }
+        let KeyCode::Char(c) = key.code else {
+            self.status = t!("status.emacs_no_chord").to_string();
+            return true;
+        };
+        let pressed = Self::chord_key_name(&key, c);
+        if let Some(&(_, action)) = EMACS_CTRL_C_P_C.iter().find(|&&(k, _)| k == pressed) {
+            self.run_action(action);
+        } else {
+            self.status = t!("status.emacs_no_chord").to_string();
+        }
+        true
+    }
+
+    /// Fifth key of an Emacs `Ctrl+C p c m …` chord — the
+    /// `project.subproject.*` family ([`EMACS_CTRL_C_P_C_M`]).
+    fn emacs_c_p_c_m_chord_key(&mut self, key: KeyEvent) -> bool {
+        let KeyCode::Char(c) = key.code else {
+            self.status = t!("status.emacs_no_chord").to_string();
+            return true;
+        };
+        let pressed = Self::chord_key_name(&key, c);
+        if let Some(&(_, action)) = EMACS_CTRL_C_P_C_M.iter().find(|&&(k, _)| k == pressed) {
             self.run_action(action);
         } else {
             self.status = t!("status.emacs_no_chord").to_string();
@@ -3232,6 +3745,7 @@ impl App {
             a if self.run_text_tool_action(a) => {}
             other if self.run_view_action(other) => {}
             other if self.run_git_action(other) => {}
+            other if self.run_project_action(other) => {}
             other if self.run_named_action(other) => {}
             other => self
                 .messages
@@ -3449,6 +3963,40 @@ impl App {
             // Jujutsu (`jj.*`) is a sibling VCS dispatcher; chain to it here so
             // `run_action` needs only the one Git delegation arm.
             other => return self.run_jj_action(other),
+        }
+        true
+    }
+
+    /// Dispatch a `project.*`/`project.subproject.*` action (the
+    /// `vix-tasks` wiring). Returns `true` if `action` was handled.
+    fn run_project_action(&mut self, action: &str) -> bool {
+        match action {
+            "project.configure" => self.open_project_command_prompt(ProjectSlot::Configure, None),
+            "project.compile" => self.open_project_command_prompt(ProjectSlot::Compile, None),
+            "project.test" => self.open_project_command_prompt(ProjectSlot::Test, None),
+            "project.install" => self.open_project_command_prompt(ProjectSlot::Install, None),
+            "project.package" => self.open_project_command_prompt(ProjectSlot::Package, None),
+            "project.run" => self.open_project_command_prompt(ProjectSlot::Run, None),
+            "project.test_at_point" => self.project_test_at_point(),
+            "project.run_task" => self.open_project_run_task(),
+            "project.repeat_last_task" => self.repeat_last_project_task(),
+            "project.discard_command_cache" => self.discard_project_command_cache(),
+            "project.subproject.find_file" => self.open_subproject_find_file(),
+            "project.subproject.configure" => {
+                self.open_subproject_command_prompt(ProjectSlot::Configure);
+            }
+            "project.subproject.compile" => {
+                self.open_subproject_command_prompt(ProjectSlot::Compile);
+            }
+            "project.subproject.test" => self.open_subproject_command_prompt(ProjectSlot::Test),
+            "project.subproject.install" => {
+                self.open_subproject_command_prompt(ProjectSlot::Install);
+            }
+            "project.subproject.package" => {
+                self.open_subproject_command_prompt(ProjectSlot::Package);
+            }
+            "project.subproject.run" => self.open_subproject_command_prompt(ProjectSlot::Run),
+            _ => return false,
         }
         true
     }
@@ -3710,6 +4258,16 @@ impl App {
             "edit.comment_banner" => self.comment_banner(),
             "edit.transpose_chars" => self.transpose(crate::textops::transpose_chars_at),
             "edit.transpose_words" => self.transpose(crate::textops::transpose_words_at),
+            "edit.transpose_lines" => self.transpose(crate::textops::transpose_lines_at),
+            "edit.transpose_sentences" => self.transpose(crate::textops::transpose_sentences_at),
+            "edit.transpose_paragraphs" => self.transpose(crate::textops::transpose_paragraphs_at),
+            "edit.transpose_sections" => self.transpose(crate::textops::transpose_sections_at),
+            "edit.delete.character" => self.delete_unit(crate::textops::delete_char_at),
+            "edit.delete.word" => self.delete_unit(crate::textops::delete_word_at),
+            "edit.delete.sentence" => self.delete_unit(crate::textops::delete_sentence_at),
+            "edit.delete.paragraph" => self.delete_unit(crate::textops::delete_paragraph_at),
+            "edit.delete.section" => self.delete_unit(crate::textops::delete_section_at),
+            "edit.wrap" => self.wrap_text(),
             "edit.increment_number" => self.bump_number(1),
             "edit.decrement_number" => self.bump_number(-1),
             "edit.align.equals" => {
@@ -4702,7 +5260,11 @@ impl App {
                 ));
             }
             "org.time_report" => self.org_time_report(),
-            _ => return self.org_edit_action(action) || self.roam_action(action),
+            _ => {
+                return self.org_edit_action(action)
+                    || self.roam_action(action)
+                    || self.org_table_action(action);
+            }
         }
         true
     }
@@ -4734,7 +5296,11 @@ impl App {
             }
             "org.footnote" => self.org_footnote(),
             "org.edit_src" => self.org_edit_src(),
-            "org.column_view" => self.org_export(crate::org::column_view, "org"),
+            "org.column_view" => self.open_column_view(),
+            "org.column_view_export" => self.org_export(crate::org::column_view, "org"),
+            "org.columns.insert_dblock" => self.org_columns_insert_dblock_prompt(),
+            "org.columns.update_dblock" => self.org_columns_update_dblock(),
+            "org.columns.update_all_dblocks" => self.org_columns_update_all_dblocks(),
             "org.archive.subtree" => self.org_archive_subtree(),
             "org.archive.tag" => {
                 self.org_rewrite_line(|t, l| crate::org::toggle_tag(t, l, "ARCHIVE"));
@@ -4955,6 +5521,34 @@ impl App {
         self.rewrite_at_cursor(f, None);
     }
 
+    /// Delete the text unit at the cursor with `f` (character, word, sentence,
+    /// paragraph or section), updating the buffer and cursor. No-op when `f`
+    /// finds no such unit.
+    fn delete_unit(&mut self, f: fn(&str, usize) -> Option<(String, usize)>) {
+        self.rewrite_at_cursor(f, None);
+    }
+
+    /// Hard-wrap (fill) text at the `wrap_column` setting: the selection when
+    /// there is one, otherwise the paragraph around the cursor (the run of
+    /// non-blank lines holding it). No-op (with a status note) when the text is
+    /// already wrapped or the cursor is not in a paragraph.
+    fn wrap_text(&mut self) {
+        let width = self.settings.wrap_column;
+        let selected = self
+            .editor
+            .active_tab_mut()
+            .and_then(|t| t.editor.get_selection())
+            .is_some_and(|sel| !sel.is_empty());
+        if selected {
+            self.transform_selection_or_buffer(|text| crate::textops::wrap(text, width));
+        } else {
+            self.rewrite_at_cursor(
+                |text, cursor| crate::textops::wrap_paragraph_at(text, cursor, width),
+                Some("status.no_wrap"),
+            );
+        }
+    }
+
     /// Toggle the boolean-ish token under the cursor to its opposite (true/false,
     /// yes/no, `&&`/`||`, …). No-op (with a status note) when nothing matches.
     fn smart_toggle(&mut self) {
@@ -4979,11 +5573,17 @@ impl App {
         }
     }
 
-    /// Org `C-c C-c`: the context action on the cursor line. On a list item with
-    /// a checkbox, toggle it; otherwise recompute the buffer's statistics
-    /// cookies and checkbox parents (matching how Org's `C-c C-c` "does the right
-    /// thing" for the common editing cases).
+    /// Org `C-c C-c`: the context action on the cursor line. On a pipe table
+    /// (or its `#+TBLFM:` line), realign it and apply any formulas
+    /// ([`Self::org_table_recalc`]) — a table row is never simultaneously a
+    /// checkbox line, so this never shadows the checkbox case below. On a
+    /// list item with a checkbox, toggle it; otherwise recompute the buffer's
+    /// statistics cookies and checkbox parents (matching how Org's `C-c C-c`
+    /// "does the right thing" for the common editing cases).
     fn org_ctrl_c_ctrl_c(&mut self) {
+        if self.org_table_recalc() {
+            return;
+        }
         let on_checkbox = self.editor.active_tab().is_some_and(|t| {
             let text = t.editor.get_content();
             let line = t.editor.cursor_line();
@@ -5600,7 +6200,7 @@ impl App {
             return;
         }
         self.settings.org_agenda_files.push(rel.clone());
-        let _ = self.settings.save();
+        let _ = self.store_settings();
         self.status = t!("status.org_agenda_file_added", path = rel).to_string();
     }
 
@@ -5614,7 +6214,7 @@ impl App {
         if self.settings.org_agenda_files.len() == before {
             self.status = t!("status.org_agenda_file_absent", path = rel).to_string();
         } else {
-            let _ = self.settings.save();
+            let _ = self.store_settings();
             self.status = t!("status.org_agenda_file_removed", path = rel).to_string();
         }
     }
@@ -5622,7 +6222,7 @@ impl App {
     /// Clear the agenda file list, restoring the every-project-file default.
     fn org_agenda_file_clear(&mut self) {
         self.settings.org_agenda_files.clear();
-        let _ = self.settings.save();
+        let _ = self.store_settings();
         self.status = t!("status.org_agenda_files_cleared").to_string();
     }
 
@@ -5799,6 +6399,20 @@ impl App {
             PromptKind::OrgLinkDesc => self.org_insert_link(input),
             PromptKind::OrgSetTags => self.org_set_tags(input),
             PromptKind::OrgSetProperty => self.org_set_property(input),
+            PromptKind::OrgTableSort => self.accept_org_table_sort(input),
+            PromptKind::OrgColumnsInsertColumn => self.org_columns_insert_column(input),
+            PromptKind::OrgColumnsInsertDblock => self.org_columns_insert_dblock(input),
+            _ => {}
+        }
+    }
+
+    /// Handle a completed agenda-restriction prompt (`raw` is the trimmed
+    /// input). Grouped out of [`App::accept_prompt`] to keep it within the
+    /// line limit.
+    fn accept_org_agenda_prompt(&mut self, kind: PromptKind, raw: &str) {
+        match kind {
+            PromptKind::OrgAgendaMatch => self.open_view(&AgendaKind::Match(raw.to_string())),
+            PromptKind::OrgAgendaSearch => self.open_view(&AgendaKind::Search(raw.to_string())),
             _ => {}
         }
     }
@@ -6421,6 +7035,17 @@ impl App {
     /// Today's date as `YYYY-MM-DD` in the local zone.
     fn roam_today() -> String {
         jiff::Zoned::now().strftime("%Y-%m-%d").to_string()
+    }
+
+    /// Today's date as a `(year, month, day)` tuple in the local zone, for
+    /// Org column-view `CLOCKSUM_T`/age calculations.
+    fn today_ymd() -> (i32, u32, u32) {
+        let now = jiff::Zoned::now();
+        (
+            i32::from(now.year()),
+            u32::from(now.month().unsigned_abs()),
+            u32::from(now.day().unsigned_abs()),
+        )
     }
 
     /// Every `.org` file in the project as `(relative-name, content)` pairs.
@@ -7427,16 +8052,7 @@ impl App {
     /// `false`) when the buffer is not Org, a selection is active, or the cursor
     /// is not on a drawer header.
     fn org_toggle_drawer_fold(&mut self) -> bool {
-        let is_org = self
-            .active_path()
-            .and_then(|p| {
-                p.extension()
-                    .and_then(|e| e.to_str())
-                    .map(str::to_ascii_lowercase)
-            })
-            .as_deref()
-            == Some("org");
-        if !is_org {
+        if !self.active_is_org() {
             return false;
         }
         let Some(t) = self.editor.active_tab_mut() else {
@@ -7458,6 +8074,594 @@ impl App {
             return false;
         };
         t.editor.toggle_manual_fold(start, end)
+    }
+
+    /// Whether the active tab's path has a (case-insensitive) `.org`
+    /// extension. Shared gate for every Org-only, non-`org.*`-prefixed
+    /// context check (drawer folding, table editing).
+    fn active_is_org(&self) -> bool {
+        self.active_path()
+            .and_then(|p| {
+                p.extension()
+                    .and_then(|e| e.to_str())
+                    .map(str::to_ascii_lowercase)
+            })
+            .as_deref()
+            == Some("org")
+    }
+
+    // ----- Org table editor (crates/vix-org-table) -------------------------
+    //
+    // Context-sensitive Tab/RET/Meta-arrow/Shift-arrow handling lives in
+    // `org_table_key`, gated on the cursor being inside a pipe table so it
+    // never affects any other keybinding. The `org.table.*` actions below
+    // (menu items, `C-c`-chord bindings) follow the same
+    // `(text, cursor) -> Option<new state>` adapter shape as
+    // `org_rewrite_line`/`org_move_subtree`, reporting
+    // `status.org_table_no_table` on a miss.
+
+    /// The active tab's cursor as `(0-based line, byte offset within that
+    /// line)` — the column convention `vix_org_table`'s functions expect,
+    /// converted from the editor's char-offset cursor.
+    fn org_table_cursor_pos(tab: &crate::editor::Tab) -> (usize, usize) {
+        let code = tab.editor.code_ref();
+        let cursor = tab.editor.get_cursor();
+        let line = code.char_to_line(cursor);
+        let line_start = code.line_to_char(line);
+        let char_col = cursor - line_start;
+        let line_text = code.slice(line_start, line_start + code.line_len(line));
+        let byte_col = line_text
+            .char_indices()
+            .nth(char_col)
+            .map_or(line_text.len(), |(b, _)| b);
+        (line, byte_col)
+    }
+
+    /// Move the active tab's cursor to `line`'s byte offset `byte_col` (a
+    /// position returned by a `vix_org_table` function against the buffer's
+    /// *current* content — call this only after `set_content`).
+    fn org_table_set_cursor(tab: &mut crate::editor::Tab, line: usize, byte_col: usize) {
+        let code = tab.editor.code_ref();
+        let line = line.min(code.len_lines().saturating_sub(1));
+        let line_start = code.line_to_char(line);
+        let line_text = code.slice(line_start, line_start + code.line_len(line));
+        let b = byte_col.min(line_text.len());
+        let char_col = line_text[..b].chars().count();
+        tab.editor.set_cursor(line_start + char_col);
+    }
+
+    /// The 0-indexed `|`-delimited field that byte offset `col` falls into on
+    /// `line` — a small, deliberately duplicated miniature of
+    /// `vix_org_table`'s private `field_index_at` (not part of that crate's
+    /// public API), used only to translate a cursor/selection position into
+    /// the field-index corners the rectangle functions take.
+    fn org_table_field_index_at(line: &str, col: usize) -> usize {
+        let delims: Vec<usize> = line.match_indices('|').map(|(i, _)| i).collect();
+        if delims.len() < 2 {
+            return 0;
+        }
+        let max_field = delims.len() - 2;
+        let mut idx = 0;
+        for (i, &p) in delims.iter().enumerate() {
+            if p < col {
+                idx = i;
+            } else {
+                break;
+            }
+        }
+        idx.min(max_field)
+    }
+
+    /// Whether the active tab is a `.org` file and the cursor is inside a
+    /// pipe table. Used to context-sensitively shadow chords that mean
+    /// something else outside a table (e.g. `C-c C-x C-w`/`C-y`/`M-w`).
+    fn org_table_active_at_cursor(&self) -> bool {
+        if !self.active_is_org() {
+            return false;
+        }
+        self.editor.active_tab().is_some_and(|t| {
+            let text = t.editor.get_content();
+            let line = t.editor.cursor_line();
+            crate::org_table::table_range(&text, line).is_some()
+        })
+    }
+
+    /// Context-sensitive Org table keys: `Tab`/`S-Tab`/`RET` field & row
+    /// navigation, `S-RET` copy-down, and Meta-/Shift-arrow structural edits —
+    /// matching Emacs's `org-table-*` bindings. Only intercepts when the
+    /// active tab is a `.org` file, is not read-only, AND the cursor is
+    /// actually inside a pipe table (`vix_org_table::table_range`); otherwise
+    /// returns `false` immediately so every other keymap's bindings for these
+    /// same keys (word motion, jump history, line move, selection extension,
+    /// …) are completely unaffected outside tables. Called from
+    /// [`App::on_key`] ahead of the keymap-specific dispatch — earlier than
+    /// [`App::org_view_key`] — because `Alt`+arrow and `Ctrl+Shift`+arrow are
+    /// already bound globally in [`App::global_shared_key`], which runs
+    /// before the per-focus [`App::editor_key`] ever sees the key; inside an
+    /// actual table those global bindings are deliberately shadowed.
+    fn org_table_key(&mut self, key: KeyEvent) -> bool {
+        if self.focus != Focus::Editor || self.active_read_only() || !self.active_is_org() {
+            return false;
+        }
+        let Some(tab) = self.editor.active_tab() else {
+            return false;
+        };
+        let text = tab.editor.get_content();
+        let line = tab.editor.cursor_line();
+        if crate::org_table::table_range(&text, line).is_none() {
+            return false;
+        }
+        let (_, byte_col) = Self::org_table_cursor_pos(tab);
+
+        let ctrl = Self::ctrl(&key);
+        let alt = Self::alt(&key);
+        let shift = Self::shift(&key);
+
+        let result: Option<(String, usize, usize)> = match key.code {
+            KeyCode::Tab if !ctrl && !alt && !shift => {
+                crate::org_table::next_field(&text, line, byte_col)
+            }
+            KeyCode::Tab if !ctrl && !alt && shift => {
+                crate::org_table::previous_field(&text, line, byte_col)
+            }
+            KeyCode::BackTab if !ctrl && !alt => {
+                crate::org_table::previous_field(&text, line, byte_col)
+            }
+            KeyCode::Enter if !ctrl && !alt && !shift => {
+                crate::org_table::next_row(&text, line, byte_col)
+            }
+            KeyCode::Enter if !ctrl && !alt && shift => {
+                crate::org_table::copy_down(&text, line, byte_col, false)
+            }
+            KeyCode::Left if alt && !ctrl && shift => {
+                crate::org_table::delete_column(&text, line, byte_col).map(|(t, c)| (t, line, c))
+            }
+            KeyCode::Right if alt && !ctrl && shift => {
+                crate::org_table::insert_column(&text, line, byte_col).map(|(t, c)| (t, line, c))
+            }
+            KeyCode::Up if alt && !ctrl && shift => {
+                crate::org_table::kill_row(&text, line).map(|t| (t, line, byte_col))
+            }
+            // `M-S-<down>`: insert a new row *above* the current one (Org's
+            // own default for this chord — the "below" variant is the
+            // prefix-argument case, not wired here).
+            KeyCode::Down if alt && !ctrl && shift => {
+                crate::org_table::insert_row(&text, line, false).map(|(t, l)| (t, l, byte_col))
+            }
+            KeyCode::Left if alt && !ctrl && !shift => {
+                crate::org_table::move_column_left(&text, line, byte_col).map(|(t, c)| (t, line, c))
+            }
+            KeyCode::Right if alt && !ctrl && !shift => {
+                crate::org_table::move_column_right(&text, line, byte_col)
+                    .map(|(t, c)| (t, line, c))
+            }
+            KeyCode::Up if alt && !ctrl && !shift => {
+                crate::org_table::move_row_up(&text, line).map(|(t, l)| (t, l, byte_col))
+            }
+            KeyCode::Down if alt && !ctrl && !shift => {
+                crate::org_table::move_row_down(&text, line).map(|(t, l)| (t, l, byte_col))
+            }
+            KeyCode::Up if shift && !ctrl && !alt => {
+                crate::org_table::move_cell_up(&text, line, byte_col)
+            }
+            KeyCode::Down if shift && !ctrl && !alt => {
+                crate::org_table::move_cell_down(&text, line, byte_col)
+            }
+            KeyCode::Left if shift && !ctrl && !alt => {
+                crate::org_table::move_cell_left(&text, line, byte_col)
+            }
+            KeyCode::Right if shift && !ctrl && !alt => {
+                crate::org_table::move_cell_right(&text, line, byte_col)
+            }
+            _ => return false,
+        };
+
+        if let Some((new_text, new_line, new_col)) = result
+            && let Some(t) = self.editor.active_tab_mut()
+        {
+            t.editor.set_content(&new_text);
+            Self::org_table_set_cursor(t, new_line, new_col);
+            t.dirty = true;
+        }
+        // Consumed either way: a `None` result (e.g. Shift-Tab at the first
+        // field, or a column-move with no neighbor) is a silent no-op,
+        // matching Emacs — the key must not leak through to any other
+        // handler while inside the table.
+        true
+    }
+
+    /// Run an Org-table transform keyed only on the cursor line
+    /// (`(text, line) -> Option<new text>`), keeping the cursor's line.
+    /// Mirrors [`Self::org_rewrite_line`]; reports `status.org_table_no_table`
+    /// on a miss (cursor not inside a table).
+    fn org_table_line_op(&mut self, f: impl FnOnce(&str, usize) -> Option<String>) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        if let Some(new) = f(&text, line) {
+            tab.editor.set_content(&new);
+            tab.editor
+                .set_cursor_line(line.min(new.split('\n').count().saturating_sub(1)));
+            tab.dirty = true;
+        } else {
+            self.status = t!("status.org_table_no_table").to_string();
+        }
+    }
+
+    /// Run an Org-table row transform (`(text, line) -> Option<(new text, new
+    /// line)>`), following the cursor to the returned line. Mirrors
+    /// [`Self::org_move_subtree`].
+    fn org_table_row_op(&mut self, f: impl FnOnce(&str, usize) -> Option<(String, usize)>) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        if let Some((new, new_line)) = f(&text, line) {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(new_line);
+            tab.dirty = true;
+        } else {
+            self.status = t!("status.org_table_no_table").to_string();
+        }
+    }
+
+    /// Run an Org-table column transform (`(text, line, byte col) ->
+    /// Option<(new text, new byte col on the same line)>`), following the
+    /// cursor to the returned field.
+    fn org_table_col_op(&mut self, f: impl FnOnce(&str, usize, usize) -> Option<(String, usize)>) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let (line, byte_col) = Self::org_table_cursor_pos(tab);
+        let text = tab.editor.get_content();
+        if let Some((new, new_col)) = f(&text, line, byte_col) {
+            tab.editor.set_content(&new);
+            Self::org_table_set_cursor(tab, line, new_col);
+            tab.dirty = true;
+        } else {
+            self.status = t!("status.org_table_no_table").to_string();
+        }
+    }
+
+    /// Run an Org-table cell transform (`(text, line, byte col) ->
+    /// Option<(new text, new line, new byte col)>`), following the cursor to
+    /// the returned field.
+    fn org_table_cell_op(
+        &mut self,
+        f: impl FnOnce(&str, usize, usize) -> Option<(String, usize, usize)>,
+    ) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let (line, byte_col) = Self::org_table_cursor_pos(tab);
+        let text = tab.editor.get_content();
+        if let Some((new, new_line, new_col)) = f(&text, line, byte_col) {
+            tab.editor.set_content(&new);
+            Self::org_table_set_cursor(tab, new_line, new_col);
+            tab.dirty = true;
+        } else {
+            self.status = t!("status.org_table_no_table").to_string();
+        }
+    }
+
+    /// `C-c C-c` / `C-u C-c C-c` on a table (or its `#+TBLFM:` line):
+    /// realign it, applying its `#+TBLFM:` formulas if any immediately
+    /// follow (`vix_org_table::recalc`). Returns `true` when this context
+    /// matched (whether or not the buffer actually changed), so callers give
+    /// it priority over other `C-c C-c` meanings (checkbox toggle, statistics
+    /// refresh) without clobbering them outside a table.
+    fn org_table_recalc(&mut self) -> bool {
+        if !self.active_is_org() {
+            return false;
+        }
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return false;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        let is_tblfm = text
+            .split('\n')
+            .nth(line)
+            .map(str::trim_start)
+            .is_some_and(|l| {
+                l.get(..8)
+                    .is_some_and(|p| p.eq_ignore_ascii_case("#+TBLFM:"))
+            });
+        let target_line = if is_tblfm {
+            line.checked_sub(1)
+        } else {
+            Some(line)
+        };
+        let Some(target_line) = target_line else {
+            return false;
+        };
+        if crate::org_table::table_range(&text, target_line).is_none() {
+            return false;
+        }
+        if let Some(new) = crate::org_table::recalc(&text, target_line) {
+            let new_last = new.split('\n').count().saturating_sub(1);
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(line.min(new_last));
+            tab.dirty = true;
+        }
+        true
+    }
+
+    /// Sum the numeric cells of the column under the cursor (`C-c +`),
+    /// showing the total on the status line and copying it to the system
+    /// clipboard, matching `org-table-sum`.
+    fn org_table_sum_column(&mut self) {
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
+        let text = tab.editor.get_content();
+        let (line, byte_col) = Self::org_table_cursor_pos(tab);
+        match crate::org_table::sum_column(&text, line, byte_col) {
+            Some(sum) => {
+                let formatted = Self::format_table_number(sum);
+                let _ = vix_clipboard::set(&formatted);
+                self.status = t!("status.org_table_sum", sum = formatted).to_string();
+            }
+            None => self.status = t!("status.org_table_no_table").to_string(),
+        }
+    }
+
+    /// Format a table-formula-style number: integers with no decimal point,
+    /// non-integers to 2 decimal places with trailing zeros trimmed.
+    fn format_table_number(v: f64) -> String {
+        if v.fract().abs() < 1e-9 {
+            #[allow(clippy::cast_possible_truncation)] // pragmatic: table sums are small
+            return (v.round() as i64).to_string();
+        }
+        let s = format!("{v:.2}");
+        let trimmed = s.trim_end_matches('0').trim_end_matches('.');
+        if trimmed.is_empty() || trimmed == "-" {
+            "0".to_string()
+        } else {
+            trimmed.to_string()
+        }
+    }
+
+    /// Open the sort prompt for the table at the cursor (`C-c ^`), seeded
+    /// with the cursor's 1-indexed column.
+    fn org_table_sort_prompt(&mut self) {
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
+        let (_, byte_col) = Self::org_table_cursor_pos(tab);
+        let line_text = tab
+            .editor
+            .get_content()
+            .split('\n')
+            .nth(tab.editor.cursor_line())
+            .unwrap_or("")
+            .to_string();
+        let column = Self::org_table_field_index_at(&line_text, byte_col);
+        self.prompt = Some(
+            Prompt::new(
+                PromptKind::OrgTableSort,
+                t!("prompt.org_table_sort").to_string(),
+            )
+            .with_input((column + 1).to_string()),
+        );
+    }
+
+    /// Accept the sort prompt (`C-c ^`): `<column> [a|n|t] [r]` — 1-indexed
+    /// column, optional sort kind (Alphabetic/Numeric/Time, default
+    /// Alphabetic), optional trailing `r` to reverse.
+    fn accept_org_table_sort(&mut self, input: &str) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.editor.get_content();
+        let Some((first, last)) = crate::org_table::table_range(&text, line) else {
+            self.status = t!("status.org_table_no_table").to_string();
+            return;
+        };
+        let mut parts = input.split_whitespace();
+        let column = parts
+            .next()
+            .and_then(|s| s.parse::<usize>().ok())
+            .map_or(0, |n| n.saturating_sub(1));
+        let mut kind = crate::org_table::SortKind::Alphabetic;
+        let mut reverse = false;
+        for tok in parts {
+            match tok.to_ascii_lowercase().as_str() {
+                "n" => kind = crate::org_table::SortKind::Numeric,
+                "t" => kind = crate::org_table::SortKind::Time,
+                "a" => kind = crate::org_table::SortKind::Alphabetic,
+                "r" => reverse = true,
+                _ => {}
+            }
+        }
+        if let Some(new) =
+            crate::org_table::sort_rows(&text, first, last, column, kind, reverse, false)
+        {
+            tab.editor.set_content(&new);
+            tab.editor.set_cursor_line(line);
+            tab.dirty = true;
+            self.status = t!("status.org_table_sorted").to_string();
+        } else {
+            self.status = t!("status.org_table_no_table").to_string();
+        }
+    }
+
+    /// `C-c |` / `org-table-create-or-convert-from-region`: convert the
+    /// active selection's delimited text into a pipe table in place, or (with
+    /// no selection) insert an empty one-field table at the cursor.
+    fn org_table_create_from_region(&mut self) {
+        let selection = self
+            .editor
+            .active_tab_mut()
+            .and_then(|t| t.editor.get_selection_text());
+        let table_text = match selection {
+            Some(sel) if !sel.trim().is_empty() => crate::org_table::from_delimited(&sel),
+            _ => "|   |".to_string(),
+        };
+        let area = self.editor_view();
+        if self.editor.insert_str(&table_text, area) {
+            self.status = t!("status.org_table_created").to_string();
+        }
+    }
+
+    /// `org-table-export`: export the table at the cursor as tab-separated
+    /// text in a new untitled tab (one-shot, no round-trip back to the
+    /// source, matching the other `org.export_*` actions).
+    fn org_table_export_tsv(&mut self) {
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
+        let text = tab.editor.get_content();
+        let line = tab.editor.cursor_line();
+        let Some((first, last)) = crate::org_table::table_range(&text, line) else {
+            self.status = t!("status.org_table_no_table").to_string();
+            return;
+        };
+        let table = crate::org_table::parse(&text, first, last);
+        let tsv = crate::org_table::to_tsv(&table);
+        self.editor.new_tab_with_content(&tsv);
+        self.status = t!("status.org_exported", ext = "tsv").to_string();
+    }
+
+    /// The Org table rectangle corners implied by the active selection, or
+    /// (with none) just the field under the cursor — "If there is no active
+    /// region, copy just the current field", per the manual. Corners are
+    /// `(line, field index)`, the convention `copy_rectangle`/`cut_rectangle`
+    /// take. `None` outside a table.
+    fn org_table_selection_corners(&mut self) -> Option<((usize, usize), (usize, usize))> {
+        let tab = self.editor.active_tab_mut()?;
+        let text = tab.editor.get_content();
+        let cursor = tab.editor.get_cursor();
+        let selection = tab.editor.get_selection();
+        let code = tab.editor.code_ref();
+        let (a_char, b_char) = match selection {
+            Some(sel) if !sel.is_empty() => (sel.start, sel.end.saturating_sub(1).max(sel.start)),
+            _ => (cursor, cursor),
+        };
+        let to_field = |ch: usize| -> (usize, usize) {
+            let line = code.char_to_line(ch.min(code.len_chars()));
+            let line_start = code.line_to_char(line);
+            let line_text = code.slice(line_start, line_start + code.line_len(line));
+            let char_col = ch.saturating_sub(line_start);
+            let byte_col = line_text
+                .char_indices()
+                .nth(char_col)
+                .map_or(line_text.len(), |(b, _)| b);
+            (line, Self::org_table_field_index_at(&line_text, byte_col))
+        };
+        let corner_a = to_field(a_char);
+        let corner_b = to_field(b_char);
+        crate::org_table::table_range(&text, corner_a.0)?;
+        Some((corner_a, corner_b))
+    }
+
+    /// `C-c C-x M-w`: copy the rectangle implied by the active selection (or
+    /// just the current field) into the table rectangle clipboard.
+    fn org_table_copy_rectangle(&mut self) {
+        let Some((a, b)) = self.org_table_selection_corners() else {
+            self.status = t!("status.org_table_no_table").to_string();
+            return;
+        };
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
+        let text = tab.editor.get_content();
+        self.table_rectangle_clip = Some(crate::org_table::copy_rectangle(&text, a, b));
+        self.status = t!("status.org_table_rectangle_copied").to_string();
+    }
+
+    /// `C-c C-x C-w`: like [`Self::org_table_copy_rectangle`], but also
+    /// blanks the copied fields in the source table.
+    fn org_table_cut_rectangle(&mut self) {
+        let Some((a, b)) = self.org_table_selection_corners() else {
+            self.status = t!("status.org_table_no_table").to_string();
+            return;
+        };
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let text = tab.editor.get_content();
+        let line = tab.editor.cursor_line();
+        let (new_text, rect) = crate::org_table::cut_rectangle(&text, a, b);
+        tab.editor.set_content(&new_text);
+        tab.editor.set_cursor_line(line);
+        tab.dirty = true;
+        self.table_rectangle_clip = Some(rect);
+        self.status = t!("status.org_table_rectangle_cut").to_string();
+    }
+
+    /// `C-c C-x C-y`: paste the table rectangle clipboard with its upper-left
+    /// cell at the field under the cursor.
+    fn org_table_paste_rectangle(&mut self) {
+        let Some(rect) = self.table_rectangle_clip.clone() else {
+            self.status = t!("status.org_table_rectangle_empty").to_string();
+            return;
+        };
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let (line, byte_col) = Self::org_table_cursor_pos(tab);
+        let text = tab.editor.get_content();
+        if crate::org_table::table_range(&text, line).is_none() {
+            self.status = t!("status.org_table_no_table").to_string();
+            return;
+        }
+        let new_text = crate::org_table::paste_rectangle(&text, line, byte_col, &rect);
+        tab.editor.set_content(&new_text);
+        tab.editor.set_cursor_line(line);
+        tab.dirty = true;
+        self.status = t!("status.org_table_rectangle_pasted").to_string();
+    }
+
+    /// Dispatch an `org.table.*` action. Returns `true` if `action` matched.
+    /// Extracted to keep [`App::org_action`] within the line limit.
+    fn org_table_action(&mut self, action: &str) -> bool {
+        match action {
+            "org.table.align" => self.org_table_line_op(crate::org_table::align),
+            "org.table.recalc" => {
+                if !self.org_table_recalc() {
+                    self.status = t!("status.org_table_no_table").to_string();
+                }
+            }
+            "org.table.insert_row_above" => {
+                self.org_table_row_op(|t, l| crate::org_table::insert_row(t, l, false));
+            }
+            "org.table.insert_row_below" => {
+                self.org_table_row_op(|t, l| crate::org_table::insert_row(t, l, true));
+            }
+            "org.table.kill_row" => self.org_table_line_op(crate::org_table::kill_row),
+            "org.table.move_row_up" => self.org_table_row_op(crate::org_table::move_row_up),
+            "org.table.move_row_down" => self.org_table_row_op(crate::org_table::move_row_down),
+            "org.table.insert_hline" => {
+                self.org_table_line_op(|t, l| crate::org_table::insert_hline(t, l, false));
+            }
+            "org.table.hline_and_move" => self.org_table_row_op(crate::org_table::hline_and_move),
+            "org.table.insert_column" => self.org_table_col_op(crate::org_table::insert_column),
+            "org.table.delete_column" => self.org_table_col_op(crate::org_table::delete_column),
+            "org.table.move_column_left" => {
+                self.org_table_col_op(crate::org_table::move_column_left);
+            }
+            "org.table.move_column_right" => {
+                self.org_table_col_op(crate::org_table::move_column_right);
+            }
+            "org.table.sort" => self.org_table_sort_prompt(),
+            "org.table.sum_column" => self.org_table_sum_column(),
+            "org.table.copy_down" => {
+                self.org_table_cell_op(|t, l, c| crate::org_table::copy_down(t, l, c, false));
+            }
+            "org.table.transpose" => self.org_table_line_op(crate::org_table::transpose),
+            "org.table.create_from_region" => self.org_table_create_from_region(),
+            "org.table.export_tsv" => self.org_table_export_tsv(),
+            "org.table.copy_rectangle" => self.org_table_copy_rectangle(),
+            "org.table.cut_rectangle" => self.org_table_cut_rectangle(),
+            "org.table.paste_rectangle" => self.org_table_paste_rectangle(),
+            _ => return false,
+        }
+        true
     }
 
     fn toggle_fold_at_cursor(&mut self) {
@@ -8156,7 +9360,7 @@ impl App {
                 self.refresh_git_gutter();
                 self.status = t!(ok_key).to_string();
             }
-            Err(e) => self.status = t!("msg.git_failed", error = e).to_string(),
+            Err(e) => self.status = t!("msg.git_failed_reason", error = e).to_string(),
         }
     }
 
@@ -9422,7 +10626,7 @@ impl App {
     /// Open the task chooser from the workspace's `tasks.toml`, or report when no
     /// tasks are defined.
     fn open_tasks(&mut self) {
-        let tasks = crate::tasks::load(&self.root);
+        let tasks = crate::tasks::task::from_vix_tasks(&crate::tasks::load(&self.root));
         if tasks.is_empty() {
             self.status = t!("status.no_tasks").to_string();
             return;
@@ -9460,6 +10664,10 @@ impl App {
     }
 
     /// Run the highlighted task's command through the async Run pipeline.
+    /// Also records it in the project `run` slot's history and as the most
+    /// recent project command of any kind (`project.repeat_last_task`),
+    /// whichever chooser it came from (Tools → Tasks… or Project → Run
+    /// Task…) — one code path, so the two never drift.
     fn run_selected_task(&mut self) {
         let Some(c) = self.task_chooser.take() else {
             return;
@@ -9467,7 +10675,471 @@ impl App {
         if let Some(task) = c.tasks.get(c.selected) {
             let command = task.command.clone();
             self.run_command(&command);
+            self.ensure_project_session_loaded();
+            crate::tasks::history::push_history(
+                &mut self.project_history.run,
+                command.clone(),
+                crate::tasks::history::DuplicatePolicy::IgnoreConsecutive,
+            );
+            self.project_last_command = Some(command);
         }
+    }
+
+    // ----- Project (vix-tasks wiring) --------------------------------------
+    //
+    // `vix-tasks` provides the pure logic (project-type detection, lifecycle
+    // command resolution, task discovery/merging, subprojects, history
+    // policy, test-at-point); everything host-side — filesystem
+    // reads, the confirm prompt, running commands, and persistence — lives
+    // here. Two-tier persistence: the shareable `<root>/.vix/project.toml`
+    // override (`App::load_project_override`), and the private per-user
+    // cache/history in the session store (`App::project_command_cache`/
+    // `project_history`, lazily loaded by `ensure_project_session_loaded`
+    // and saved in `save_session`).
+
+    /// Load this workspace root's persisted project command cache, history,
+    /// and last-run command from the session store, at most once per run.
+    /// A no-op once already loaded (whether or not a saved session existed).
+    fn ensure_project_session_loaded(&mut self) {
+        if self.project_session_loaded {
+            return;
+        }
+        self.project_session_loaded = true;
+        let key = self.session_key();
+        let Some(ws) = crate::session::Session::load().workspace(&key).cloned() else {
+            return;
+        };
+        self.project_command_cache = crate::tasks::lifecycle::LifecycleCommands {
+            configure: ws.project_cmd_configure,
+            compile: ws.project_cmd_compile,
+            test: ws.project_cmd_test,
+            install: ws.project_cmd_install,
+            package: ws.project_cmd_package,
+            run: ws.project_cmd_run,
+        };
+        self.project_history = ProjectHistory {
+            configure: ws.project_history_configure,
+            compile: ws.project_history_compile,
+            test: ws.project_history_test,
+            install: ws.project_history_install,
+            package: ws.project_history_package,
+            run: ws.project_history_run,
+        };
+        self.project_last_command = ws.project_last_command;
+    }
+
+    /// Copy `prior`'s persisted project cache/history/last-command into `ws`.
+    /// Called by `save_session` before any in-memory overlay so a run that
+    /// never touches a `project.*` action carries the previous save forward
+    /// instead of overwriting it with empty defaults.
+    fn carry_forward_project_fields(
+        ws: &mut crate::session::WorkspaceSession,
+        prior: &crate::session::WorkspaceSession,
+    ) {
+        ws.project_cmd_configure
+            .clone_from(&prior.project_cmd_configure);
+        ws.project_cmd_compile
+            .clone_from(&prior.project_cmd_compile);
+        ws.project_cmd_test.clone_from(&prior.project_cmd_test);
+        ws.project_cmd_install
+            .clone_from(&prior.project_cmd_install);
+        ws.project_cmd_package
+            .clone_from(&prior.project_cmd_package);
+        ws.project_cmd_run.clone_from(&prior.project_cmd_run);
+        ws.project_history_configure
+            .clone_from(&prior.project_history_configure);
+        ws.project_history_compile
+            .clone_from(&prior.project_history_compile);
+        ws.project_history_test
+            .clone_from(&prior.project_history_test);
+        ws.project_history_install
+            .clone_from(&prior.project_history_install);
+        ws.project_history_package
+            .clone_from(&prior.project_history_package);
+        ws.project_history_run
+            .clone_from(&prior.project_history_run);
+        ws.project_last_command
+            .clone_from(&prior.project_last_command);
+    }
+
+    /// Write this run's in-memory project cache/history/last-command into
+    /// `ws`. Only called when `project_session_loaded` — see
+    /// [`App::carry_forward_project_fields`].
+    fn fill_project_fields(&self, ws: &mut crate::session::WorkspaceSession) {
+        ws.project_cmd_configure
+            .clone_from(&self.project_command_cache.configure);
+        ws.project_cmd_compile
+            .clone_from(&self.project_command_cache.compile);
+        ws.project_cmd_test
+            .clone_from(&self.project_command_cache.test);
+        ws.project_cmd_install
+            .clone_from(&self.project_command_cache.install);
+        ws.project_cmd_package
+            .clone_from(&self.project_command_cache.package);
+        ws.project_cmd_run
+            .clone_from(&self.project_command_cache.run);
+        ws.project_history_configure
+            .clone_from(&self.project_history.configure);
+        ws.project_history_compile
+            .clone_from(&self.project_history.compile);
+        ws.project_history_test
+            .clone_from(&self.project_history.test);
+        ws.project_history_install
+            .clone_from(&self.project_history.install);
+        ws.project_history_package
+            .clone_from(&self.project_history.package);
+        ws.project_history_run.clone_from(&self.project_history.run);
+        ws.project_last_command
+            .clone_from(&self.project_last_command);
+    }
+
+    /// Load the shareable per-project lifecycle command override from
+    /// `<root>/.vix/project.toml` (a per-project override file — meant to be
+    /// checked into the repo and shared with a team). Missing file or
+    /// unparseable TOML both fall through to an all-`None` override,
+    /// matching `crate::tasks::load`'s "missing/bad file → empty" convention.
+    fn load_project_override(&self) -> crate::tasks::lifecycle::LifecycleCommands {
+        #[derive(serde::Deserialize, Default)]
+        struct ProjectOverrideFile {
+            configure: Option<String>,
+            compile: Option<String>,
+            test: Option<String>,
+            install: Option<String>,
+            package: Option<String>,
+            run: Option<String>,
+        }
+        let path = self.root.join(".vix").join("project.toml");
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            return crate::tasks::lifecycle::LifecycleCommands::default();
+        };
+        let parsed: ProjectOverrideFile = toml::from_str(&text).unwrap_or_default();
+        crate::tasks::lifecycle::LifecycleCommands {
+            configure: parsed.configure,
+            compile: parsed.compile,
+            test: parsed.test,
+            install: parsed.install,
+            package: parsed.package,
+            run: parsed.run,
+        }
+    }
+
+    /// The names of every entry directly inside `dir`, or empty on any error
+    /// (missing directory, permissions, …).
+    fn dir_entry_names(dir: &Path) -> Vec<String> {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return Vec::new();
+        };
+        entries
+            .flatten()
+            .filter_map(|e| e.file_name().into_string().ok())
+            .collect()
+    }
+
+    /// Detect the registered `vix-tasks` project type(s) for `dir` by
+    /// marker-file presence, additionally inspecting `pyproject.toml`'s
+    /// content (when present) to tell `python-poetry` apart from a generic
+    /// PEP 621/Flit/Hatch project.
+    fn detect_project_types_at(
+        dir: &Path,
+    ) -> Vec<&'static crate::tasks::project_type::ProjectType> {
+        let names = Self::dir_entry_names(dir);
+        let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+        let pyproject = if refs.contains(&"pyproject.toml") {
+            std::fs::read_to_string(dir.join("pyproject.toml")).ok()
+        } else {
+            None
+        };
+        let contents: Vec<(&str, &str)> = pyproject
+            .as_deref()
+            .map(|body| ("pyproject.toml", body))
+            .into_iter()
+            .collect();
+        crate::tasks::project_type::detect_project_types_with_content(&refs, &contents)
+    }
+
+    /// Resolve the effective lifecycle command for `slot` at `dir`: detect
+    /// `dir`'s project type(s), merge their defaults, then apply the
+    /// `.vix/project.toml` override and the session's resolved-command
+    /// cache — `crate::tasks::lifecycle`'s own documented precedence.
+    /// The override and cache are always the workspace root's (this crate
+    /// keeps one flat override/cache per workspace, not one per
+    /// subproject), so `project.subproject.*` actions only vary the
+    /// *default* by directory.
+    fn resolve_lifecycle(&mut self, slot: ProjectSlot, dir: &Path) -> Option<String> {
+        self.ensure_project_session_loaded();
+        let types = Self::detect_project_types_at(dir);
+        let default = crate::tasks::lifecycle::default_lifecycle(&types);
+        let over = self.load_project_override();
+        let effective = crate::tasks::lifecycle::effective_lifecycle(
+            &default,
+            &over,
+            &self.project_command_cache,
+        );
+        slot.get(&effective)
+    }
+
+    /// Open the confirm/edit prompt for `slot`, resolved at `dir` (the
+    /// workspace root for the top-level `project.*` actions, or a
+    /// subproject's directory for `project.subproject.*`). Reports and
+    /// stops when the slot has no command for this project type.
+    fn open_project_command_prompt(&mut self, slot: ProjectSlot, dir: Option<PathBuf>) {
+        let detect_dir = dir.clone().unwrap_or_else(|| self.root.clone());
+        let Some(cmd) = self.resolve_lifecycle(slot, &detect_dir) else {
+            self.status = t!("status.project_no_command").to_string();
+            return;
+        };
+        self.pending_project_command = Some(PendingProjectCommand { slot, dir });
+        self.prompt = Some(
+            Prompt::new(
+                PromptKind::ProjectCommand,
+                t!(slot.prompt_title_key()).to_string(),
+            )
+            .with_input(cmd),
+        );
+    }
+
+    /// Handle the completed `project.*`/`project.subproject.*` confirm
+    /// prompt: run the (possibly edited) command, cache it as this slot's
+    /// new resolved command, and push it onto the slot's history and the
+    /// project's last-command-of-any-kind.
+    fn accept_project_command_prompt(&mut self, input: &str) {
+        let Some(pending) = self.pending_project_command.take() else {
+            return;
+        };
+        let cmd = input.trim();
+        if cmd.is_empty() {
+            return;
+        }
+        match &pending.dir {
+            Some(dir) => self.run_command_in(dir, cmd),
+            None => self.run_command(cmd),
+        }
+        pending
+            .slot
+            .set(&mut self.project_command_cache, Some(cmd.to_string()));
+        crate::tasks::history::push_history(
+            pending.slot.history_mut(&mut self.project_history),
+            cmd.to_string(),
+            crate::tasks::history::DuplicatePolicy::IgnoreConsecutive,
+        );
+        self.project_last_command = Some(cmd.to_string());
+    }
+
+    /// Re-run the most recently run project command of any kind (a lifecycle
+    /// command or a named task) — `project.repeat_last_task`.
+    fn repeat_last_project_task(&mut self) {
+        self.ensure_project_session_loaded();
+        let Some(cmd) = self.project_last_command.clone() else {
+            self.status = t!("status.project_no_last_command").to_string();
+            return;
+        };
+        self.run_command(&cmd);
+    }
+
+    /// Clear the session's cached lifecycle commands for this workspace root
+    /// — `project.discard_command_cache`. Leaves history and the
+    /// `.vix/project.toml` override untouched.
+    fn discard_project_command_cache(&mut self) {
+        self.ensure_project_session_loaded();
+        self.project_command_cache = crate::tasks::lifecycle::LifecycleCommands::default();
+        self.status = t!("status.project_cache_discarded").to_string();
+    }
+
+    /// Read whichever discovered-task manifests are present at `dir` and
+    /// return the merged `Discovered`-tier tasks (all seven sources
+    /// `vix-tasks` supports). Cheap existence checks before each read.
+    fn discovered_tasks_at(dir: &Path) -> Vec<crate::tasks::task::NamedTask> {
+        let read = |name: &str| std::fs::read_to_string(dir.join(name)).ok();
+        let mut out = Vec::new();
+        if let Some(body) = read("package.json") {
+            let names = Self::dir_entry_names(dir);
+            let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+            let manager = crate::tasks::project_type::detect_package_manager(&refs);
+            out.extend(crate::tasks::discover_npm::discover_npm_scripts(
+                &body, manager,
+            ));
+        }
+        if let Some(body) = read("deno.json").or_else(|| read("deno.jsonc")) {
+            out.extend(crate::tasks::discover_deno::discover_deno_tasks(&body));
+        }
+        if let Some(body) = read("composer.json") {
+            out.extend(crate::tasks::discover_composer::discover_composer_scripts(
+                &body,
+            ));
+        }
+        if let Some(body) = read("justfile")
+            .or_else(|| read(".justfile"))
+            .or_else(|| read("Justfile"))
+        {
+            out.extend(crate::tasks::discover_just::discover_just_recipes(&body));
+        }
+        if let Some(body) = read("Taskfile.yml").or_else(|| read("Taskfile.yaml")) {
+            out.extend(crate::tasks::discover_taskfile::discover_taskfile_tasks(
+                &body,
+            ));
+        }
+        // Rake: the top-level `Rakefile` plus any `*.rake` files directly at
+        // the root or under `rakelib/` — a practical subset of "the Rakefile
+        // plus any .rake files", not an exhaustive recursive scan.
+        let mut rakefiles: Vec<(String, String)> = Vec::new();
+        if let Some(body) = read("Rakefile") {
+            rakefiles.push(("Rakefile".to_string(), body));
+        }
+        let is_rake_file = |name: &str| {
+            Path::new(name)
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("rake"))
+        };
+        for name in Self::dir_entry_names(dir) {
+            if is_rake_file(&name)
+                && let Some(body) = read(&name)
+            {
+                rakefiles.push((name, body));
+            }
+        }
+        let rakelib = dir.join("rakelib");
+        if rakelib.is_dir() {
+            for name in Self::dir_entry_names(&rakelib) {
+                if is_rake_file(&name)
+                    && let Ok(body) = std::fs::read_to_string(rakelib.join(&name))
+                {
+                    rakefiles.push((format!("rakelib/{name}"), body));
+                }
+            }
+        }
+        if !rakefiles.is_empty() {
+            let use_bundler = dir.join("Gemfile").is_file();
+            let refs: Vec<(&str, &str)> = rakefiles
+                .iter()
+                .map(|(n, b)| (n.as_str(), b.as_str()))
+                .collect();
+            out.extend(crate::tasks::discover_rake::discover_rake_tasks(
+                &refs,
+                use_bundler,
+            ));
+        }
+        if let Some(body) = read("Makefile")
+            .or_else(|| read("makefile"))
+            .or_else(|| read("GNUmakefile"))
+        {
+            out.extend(crate::tasks::discover_make::discover_make_targets(&body));
+        }
+        out
+    }
+
+    /// Open the merged task chooser (`project.run_task`): user-configured
+    /// tasks (`tasks.toml`) plus discovered tasks from any present
+    /// manifests, merged with `crate::tasks::task::merge_tasks`. The
+    /// project-type tier is always empty — `crate::tasks::ProjectType`
+    /// carries no named tasks of its own, only the six lifecycle slots (see
+    /// `crates/vix-tasks/spec/index.md`).
+    fn open_project_run_task(&mut self) {
+        let user = crate::tasks::task::from_vix_tasks(&crate::tasks::load(&self.root));
+        let discovered = Self::discovered_tasks_at(&self.root);
+        let merged = crate::tasks::task::merge_tasks(&[], &user, &discovered);
+        if merged.is_empty() {
+            self.status = t!("status.no_tasks").to_string();
+            return;
+        }
+        self.task_chooser = Some(TaskChooser {
+            tasks: merged,
+            selected: 0,
+        });
+    }
+
+    /// Resolve the test at the active tab's cursor line
+    /// (`crate::tasks::test_at_point`) and run it immediately, with no
+    /// confirm prompt — matching the manual's own "runs it right away"
+    /// behavior for this one command, since re-confirming would defeat the
+    /// point of a fast "run the test under my cursor" binding. Does not
+    /// touch the project command cache or history — this command
+    /// deliberately keeps its own note.
+    fn project_test_at_point(&mut self) {
+        let Some(tab) = self.editor.active_tab() else {
+            return;
+        };
+        let Some(path) = tab.path.clone() else {
+            self.status = t!("status.project_test_no_file").to_string();
+            return;
+        };
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_string();
+        let rel = path
+            .strip_prefix(&self.root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let text = tab.text();
+        let lines: Vec<&str> = text.lines().collect();
+        let cursor_line = tab.editor.cursor_line();
+        match crate::tasks::test_at_point::test_at_point(
+            &ext,
+            &rel,
+            &lines,
+            cursor_line,
+            crate::tasks::test_at_point::TestFrameworkHint::Unknown,
+        ) {
+            Some(m) => self.run_command(&m.command),
+            None => self.status = t!("status.project_no_test_at_point").to_string(),
+        }
+    }
+
+    /// Every subproject below the workspace root (monorepo support), from
+    /// the already gitignore-aware, vendor-pruned file index.
+    fn subprojects(&self) -> Vec<crate::tasks::subproject::Subproject> {
+        let relative_paths: Vec<String> = self
+            .file_index
+            .iter()
+            .filter_map(|p| p.strip_prefix(&self.root).ok())
+            .map(|p| p.to_string_lossy().replace('\\', "/"))
+            .collect();
+        let refs: Vec<&str> = relative_paths.iter().map(String::as_str).collect();
+        crate::tasks::subproject::find_subprojects(&refs)
+    }
+
+    /// The nearest enclosing subproject for the active tab's file, or `None`
+    /// if it has none (no path, or no subproject manifest between it and the
+    /// workspace root).
+    fn nearest_subproject_for_active_file(
+        &mut self,
+    ) -> Option<crate::tasks::subproject::Subproject> {
+        self.build_file_index();
+        let path = self.editor.active_tab().and_then(|t| t.path.clone())?;
+        let rel = path
+            .strip_prefix(&self.root)
+            .ok()?
+            .to_string_lossy()
+            .replace('\\', "/");
+        let subs = self.subprojects();
+        crate::tasks::subproject::nearest_subproject(&subs, &rel).cloned()
+    }
+
+    /// `project.subproject.find_file`: open the palette's fuzzy file finder
+    /// scoped to the nearest subproject's files, reusing the existing
+    /// chooser rather than building a second one.
+    fn open_subproject_find_file(&mut self) {
+        let Some(sub) = self.nearest_subproject_for_active_file() else {
+            self.status = t!("status.project_no_subproject").to_string();
+            return;
+        };
+        self.palette_file_scope = Some(sub.relative_root);
+        self.open_palette_seeded("");
+    }
+
+    /// `project.subproject.{configure,compile,test,install,package,run}`:
+    /// same flow as the top-level lifecycle actions, but project-type
+    /// detection and the run's working directory are the nearest enclosing
+    /// subproject's, not the workspace root's.
+    fn open_subproject_command_prompt(&mut self, slot: ProjectSlot) {
+        let Some(sub) = self.nearest_subproject_for_active_file() else {
+            self.status = t!("status.project_no_subproject").to_string();
+            return;
+        };
+        let dir = self.root.join(&sub.relative_root);
+        self.open_project_command_prompt(slot, Some(dir));
     }
 
     // ----- Compare With File (diff view) ----------------------------------
@@ -12598,6 +14270,17 @@ impl App {
             return;
         }
         if let Some(i) = self.top_menu_index_at(col) {
+            self.toggle_menu(i);
+        }
+    }
+
+    /// Open top-level menu `i`, or close the menu bar when that menu is already
+    /// the open one. Menu names toggle: naming the open menu again — by click or
+    /// by `Alt+<letter>` mnemonic — dismisses it, while naming another switches.
+    fn toggle_menu(&mut self, i: usize) {
+        if self.menu.open == Some(i) {
+            self.close_menu();
+        } else {
             self.menu.open_index(i);
         }
     }
@@ -12767,6 +14450,13 @@ impl App {
                 }
             }
             KeyCode::F(10) => self.close_menu(),
+            // Menu-bar mnemonics keep working while a dropdown is open: the open
+            // menu's own letter closes it, another menu's letter switches to it.
+            KeyCode::Char(c) if Self::alt(&key) => {
+                if let Some(i) = menu_index_for_alt(c) {
+                    self.toggle_menu(i);
+                }
+            }
             // Type-ahead: a plain letter jumps to the next matching item.
             KeyCode::Char(c) if !Self::ctrl(&key) && !Self::alt(&key) => {
                 self.menu.type_ahead(c);
@@ -12870,7 +14560,7 @@ impl App {
         };
         rust_i18n::set_locale(loc.code);
         self.settings.locale = loc.code.to_string();
-        self.status = t!("status.locale", locale = loc.code).to_string();
+        self.status = t!("status.locale", language = loc.code).to_string();
     }
 
     // ----- keymap ---------------------------------------------------------
@@ -12966,6 +14656,18 @@ impl App {
                     add(
                         Self::action_title(action),
                         format!("Ctrl C Ctrl X {}", emacs_key_display(k)),
+                    );
+                }
+                for (k, action) in EMACS_CTRL_C_P_C {
+                    add(
+                        Self::action_title(action),
+                        format!("Ctrl C P C {}", emacs_key_display(k)),
+                    );
+                }
+                for (k, action) in EMACS_CTRL_C_P_C_M {
+                    add(
+                        Self::action_title(action),
+                        format!("Ctrl C P C M {}", emacs_key_display(k)),
                     );
                 }
             }
@@ -13492,6 +15194,175 @@ impl App {
         self.run_action("file.save");
     }
 
+    /// Open the interactive Column View overlay (Org `C-c C-x C-c`) on the
+    /// active `.org` buffer, anchored at the cursor line. Warns when there is
+    /// no editable Org buffer.
+    fn open_column_view(&mut self) {
+        let Some(tab) = self.editor.active_tab() else {
+            self.messages
+                .warn(t!("msg.column_view_no_buffer").to_string());
+            return;
+        };
+        if tab.is_image() || !self.active_is_org() {
+            self.messages
+                .warn(t!("msg.column_view_no_buffer").to_string());
+            return;
+        }
+        let text = tab.text();
+        let line = tab.editor.cursor_line();
+        let file_name = self
+            .active_path()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()));
+        let today = Self::today_ymd();
+        self.column_view = Some(crate::column_view::ColumnView::open(
+            &text, line, today, file_name,
+        ));
+    }
+
+    /// Route a key to the open Column View overlay and act on its outcome.
+    fn column_view_key(&mut self, key: KeyEvent) {
+        let Some(mut text) = self.editor.active_tab().map(crate::editor::Tab::text) else {
+            self.column_view = None;
+            return;
+        };
+        let Some(view) = self.column_view.as_mut() else {
+            return;
+        };
+        let outcome = view.handle_key(key, &mut text);
+        let status = view.take_status();
+        if let Some(msg) = status {
+            self.status = msg;
+        }
+        if let Some(tab) = self.editor.active_tab_mut()
+            && tab.text() != text
+        {
+            tab.editor.set_content(&text);
+            tab.dirty = true;
+        }
+        match outcome {
+            crate::column_view::Outcome::Close => self.column_view = None,
+            crate::column_view::Outcome::NeedsColumnPrompt => {
+                self.prompt = Some(Prompt::new(
+                    PromptKind::OrgColumnsInsertColumn,
+                    t!("prompt.org_columns_insert_column").to_string(),
+                ));
+            }
+            crate::column_view::Outcome::Consumed => {}
+        }
+    }
+
+    /// Accept the `S-M-Right` "insert column" prompt: add a blank column
+    /// named `property` before the current one in the open Column View.
+    fn org_columns_insert_column(&mut self, property: &str) {
+        let property = property.trim();
+        if property.is_empty() {
+            return;
+        }
+        let Some(text) = self.editor.active_tab().map(crate::editor::Tab::text) else {
+            return;
+        };
+        if let Some(view) = self.column_view.as_mut() {
+            view.insert_column_before(property, &text);
+        }
+    }
+
+    /// Open the `:id` scope prompt for `org.columns.insert_dblock`.
+    fn org_columns_insert_dblock_prompt(&mut self) {
+        if self.editor.active_tab().is_some() {
+            self.prompt = Some(Prompt::new(
+                PromptKind::OrgColumnsInsertDblock,
+                t!("prompt.org_columns_insert_dblock").to_string(),
+            ));
+        }
+    }
+
+    /// Insert a fresh `#+BEGIN: columnview :id <id> ... #+END:` dynamic
+    /// block at the cursor, scoped by the prompt's `:id` answer (blank
+    /// defaults to `local`, matching [`vix_org::parse_dblock_params`]).
+    fn org_columns_insert_dblock(&mut self, id: &str) {
+        let today = Self::today_ymd();
+        let file_name = self
+            .active_path()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()));
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.text();
+        let id = id.trim();
+        let params = crate::org::DblockParams {
+            id: if id.is_empty() {
+                "local".to_string()
+            } else {
+                id.to_string()
+            },
+            hlines: None,
+            vlines: false,
+            maxlevel: None,
+            skip_empty_rows: false,
+            exclude_tags: Vec::new(),
+            indent: false,
+            link: false,
+            format: None,
+        };
+        let rendered =
+            crate::org::render_columnview_dblock(&text, line, &params, today, file_name.as_deref());
+        let mut lines: Vec<&str> = text.split('\n').collect();
+        let rendered_lines: Vec<&str> = rendered.split('\n').collect();
+        lines.splice(line..line, rendered_lines.iter().copied());
+        let new_text = lines.join("\n");
+        tab.editor.set_content(&new_text);
+        tab.editor.set_cursor_line(line);
+        tab.dirty = true;
+        self.status = t!("status.org_columns_dblock_inserted").to_string();
+    }
+
+    /// `org.columns.update_dblock`: recompute the `columnview` dblock whose
+    /// `#+BEGIN:` line the cursor sits on. Reports a status note off one.
+    fn org_columns_update_dblock(&mut self) {
+        let today = Self::today_ymd();
+        let file_name = self
+            .active_path()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()));
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let line = tab.editor.cursor_line();
+        let text = tab.text();
+        match crate::org::update_columnview_dblock(&text, line, today, file_name.as_deref()) {
+            Some(new_text) => {
+                tab.editor.set_content(&new_text);
+                tab.editor.set_cursor_line(line);
+                tab.dirty = true;
+                self.status = t!("status.org_columns_dblock_updated").to_string();
+            }
+            None => self.status = t!("status.org_columns_dblock_not_found").to_string(),
+        }
+    }
+
+    /// `org.columns.update_all_dblocks`: recompute every `columnview` dblock
+    /// found anywhere in the active buffer.
+    fn org_columns_update_all_dblocks(&mut self) {
+        let today = Self::today_ymd();
+        let file_name = self
+            .active_path()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()));
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let text = tab.text();
+        let new_text =
+            crate::org::update_all_columnview_dblocks(&text, today, file_name.as_deref());
+        if new_text != text {
+            let line = tab.editor.cursor_line();
+            let clamped = line.min(new_text.split('\n').count().saturating_sub(1));
+            tab.editor.set_content(&new_text);
+            tab.editor.set_cursor_line(clamped);
+            tab.dirty = true;
+        }
+        self.status = t!("status.org_columns_dblocks_updated_all").to_string();
+    }
+
     /// Open the outline editor on the active buffer (parsed as an indented
     /// outline). Warns when there is no editable buffer.
     fn open_edit_outline(&mut self) {
@@ -13679,7 +15550,7 @@ impl App {
             .and_then(crate::db::Browser::take_dirty_connections)
         {
             self.settings.db_connections = conns;
-            let _ = self.settings.save();
+            let _ = self.store_settings();
         }
         if let Some(history) = self
             .db
@@ -14230,7 +16101,7 @@ impl App {
             self.status = t!("status.settings_no_path").to_string();
             return;
         };
-        let _ = self.settings.save();
+        let _ = self.store_settings();
         self.with_jump(|s| {
             s.open_path(&path, false);
             s.focus = Focus::Editor;
@@ -16043,6 +17914,40 @@ impl App {
         self.file_index = out;
     }
 
+    /// The palette's Files-mode entries for `query`, honoring
+    /// `palette_file_scope` when set (`project.subproject.find_file`).
+    /// Grouped out of [`App::recompute_palette`] to keep it within the line
+    /// limit.
+    fn palette_file_entries(&self, query: &str) -> Vec<Entry> {
+        let (qpath, target) = palette::parse_path_target(query);
+        let mut entries = Vec::new();
+        for path in &self.file_index {
+            let rel = path
+                .strip_prefix(&self.root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .into_owned();
+            // `project.subproject.find_file` scopes this list to one
+            // subproject's files (see `App::palette_file_scope`).
+            if let Some(scope) = self.palette_file_scope.as_deref()
+                && rel != scope
+                && !rel.starts_with(&format!("{scope}/"))
+            {
+                continue;
+            }
+            if qpath.is_empty() || palette::fuzzy_match(&rel, &qpath) {
+                entries.push(Entry {
+                    label: rel,
+                    action: PAction::OpenFile(path.clone(), target),
+                });
+            }
+            if entries.len() >= 200 {
+                break;
+            }
+        }
+        entries
+    }
+
     fn recompute_palette(&mut self) {
         let Some(p) = self.palette.as_ref() else {
             return;
@@ -16051,25 +17956,7 @@ impl App {
         let query = p.query().to_string();
         let mut entries: Vec<Entry> = Vec::new();
         match mode {
-            PMode::Files => {
-                let (qpath, target) = palette::parse_path_target(&query);
-                for path in &self.file_index {
-                    let rel = path
-                        .strip_prefix(&self.root)
-                        .unwrap_or(path)
-                        .to_string_lossy()
-                        .into_owned();
-                    if qpath.is_empty() || palette::fuzzy_match(&rel, &qpath) {
-                        entries.push(Entry {
-                            label: rel,
-                            action: PAction::OpenFile(path.clone(), target),
-                        });
-                    }
-                    if entries.len() >= 200 {
-                        break;
-                    }
-                }
-            }
+            PMode::Files => entries = self.palette_file_entries(&query),
             PMode::Commands => {
                 // Score every command: when the query is empty, order by recency
                 // (recently-run first) then catalog order; otherwise rank by fuzzy
@@ -16199,6 +18086,7 @@ impl App {
                 self.restore_palette_origin();
                 self.palette = None;
                 self.palette_origin = None;
+                self.palette_file_scope = None;
             }
             KeyCode::Up => {
                 if let Some(p) = self.palette.as_mut() {
@@ -16246,7 +18134,7 @@ impl App {
         self.settings
             .command_recents
             .clone_from(&self.command_recents);
-        let _ = self.settings.save();
+        let _ = self.store_settings();
     }
 
     fn accept_palette(&mut self) {
@@ -16257,6 +18145,7 @@ impl App {
             return;
         };
         self.palette = None;
+        self.palette_file_scope = None;
         // Undo any live go-to-line preview so the action below jumps from (and
         // records in the history) the cursor's real pre-palette position.
         self.restore_palette_origin();
@@ -16298,6 +18187,57 @@ impl App {
 
     fn start_search(&mut self, replacing: bool) {
         self.search = Some(SearchBar::new(replacing));
+    }
+
+    /// Move the find box to its next scope (buffer → files → workspace → buffer)
+    /// and act on it.
+    ///
+    /// This is what replaced the separate **Find in Files…** and **Find in
+    /// Workspace…** menu items: one dialog, with the place to look as an option
+    /// inside it. Widening carries the query, the replacement, and the
+    /// case/regex toggles to the surface that can show that many results — the
+    /// workspace panel for **Files**, the bottom dock for **Workspace** — so
+    /// nothing is retyped. Cycling back to **Buffer** returns to the find box
+    /// with the query it had.
+    fn widen_search_scope(&mut self) {
+        let Some(bar) = self.search.as_mut() else {
+            return;
+        };
+        let scope = bar.cycle_scope();
+        let (query, replace, replacing, case_sensitive, regex) = (
+            bar.query.clone(),
+            bar.replace.clone(),
+            bar.replacing,
+            bar.case_sensitive,
+            bar.regex,
+        );
+        match scope {
+            Scope::Buffer => {}
+            Scope::Files => {
+                self.search = None;
+                self.build_file_index();
+                let mut panel = WorkspaceSearch::new(replacing);
+                panel.query = query;
+                panel.replace = replace;
+                panel.case_sensitive = case_sensitive;
+                panel.regex = regex;
+                self.workspace_search = Some(panel);
+                self.run_workspace_search();
+            }
+            Scope::Workspace => {
+                self.search = None;
+                if query.is_empty() {
+                    // Nothing to list yet: ask for the pattern, as the dock
+                    // search does when invoked on its own.
+                    self.prompt = Some(Prompt::new(
+                        PromptKind::SearchToDock,
+                        t!("prompt.search_dock").to_string(),
+                    ));
+                } else {
+                    self.search_workspace_to_dock(&query, case_sensitive, regex);
+                }
+            }
+        }
     }
 
     /// Whether typing in the search box should live-preview the next match.
@@ -16509,6 +18449,10 @@ impl App {
                     self.find_step(true);
                 }
             }
+            // `Alt+I` widens the search instead of the user closing the box and
+            // finding another menu item; it takes the query, the replacement,
+            // and the toggles with it.
+            KeyCode::Char('i' | 'I') if Self::alt(&key) => self.widen_search_scope(),
             KeyCode::Char(c) if Self::alt(&key) => {
                 if let Some(s) = self.search.as_mut() {
                     match c.to_ascii_lowercase() {
@@ -16516,6 +18460,10 @@ impl App {
                         's' => s.smart_case = !s.smart_case,
                         'w' => s.whole_word = !s.whole_word,
                         'r' => s.regex = !s.regex,
+                        // Replace is a mode of this dialog, not a separate one.
+                        // `h` as in the `Ctrl+H` every other editor uses; `Alt+P`
+                        // is taken by `search.prev_selection`.
+                        'h' => s.toggle_replace(),
                         _ => {}
                     }
                 }
@@ -16547,6 +18495,17 @@ impl App {
         let (col, row) = (mouse.column, mouse.row);
         let hit = |r: Rect| rect_contains(r, col, row);
 
+        // The Replace and scope options: the same two moves as `Alt+P` / `Alt+I`.
+        if hit(self.layout.search_replace_toggle) {
+            if let Some(s) = self.search.as_mut() {
+                s.toggle_replace();
+            }
+            return;
+        }
+        if hit(self.layout.search_scope) {
+            self.widen_search_scope();
+            return;
+        }
         // Toggle buttons.
         if hit(self.layout.search_case)
             || hit(self.layout.search_smartcase)
@@ -17741,11 +19700,38 @@ impl App {
                     self.open_selected_hit();
                 }
             }
+            // The scope option continues here: the panel is the "Files" stage,
+            // so `Alt+I` moves on to the workspace listing in the dock.
+            KeyCode::Char('i' | 'I') if Self::alt(&key) => {
+                let Some(p) = self.workspace_search.as_ref() else {
+                    return;
+                };
+                let (query, case, regex) = (p.query.clone(), p.case_sensitive, p.regex);
+                self.workspace_search = None;
+                if query.is_empty() {
+                    self.prompt = Some(Prompt::new(
+                        PromptKind::SearchToDock,
+                        t!("prompt.search_dock").to_string(),
+                    ));
+                } else {
+                    self.search_workspace_to_dock(&query, case, regex);
+                }
+            }
             KeyCode::Char(c) if Self::alt(&key) => {
                 if let Some(p) = self.workspace_search.as_mut() {
                     match c.to_ascii_lowercase() {
                         'c' => p.case_sensitive = !p.case_sensitive,
                         'r' => p.regex = !p.regex,
+                        // Replace is a mode of this panel, so a search started
+                        // as a find can become a replace without reopening.
+                        'h' => {
+                            p.replacing = !p.replacing;
+                            p.field = if p.replacing {
+                                Field::Replace
+                            } else {
+                                Field::Query
+                            };
+                        }
                         _ => {}
                     }
                 }
@@ -18040,24 +20026,24 @@ impl App {
             }
             PromptKind::CompareFile => self.open_diff_with(prompt.input.trim()),
             PromptKind::InsertFile => self.insert_file_at_cursor(prompt.input.trim()),
+            PromptKind::ProjectCommand => self.accept_project_command_prompt(&prompt.input),
             PromptKind::OrgSchedule
             | PromptKind::OrgDeadline
             | PromptKind::OrgSparseMatch
             | PromptKind::OrgLinkTarget
             | PromptKind::OrgLinkDesc
             | PromptKind::OrgSetTags
-            | PromptKind::OrgSetProperty => {
+            | PromptKind::OrgSetProperty
+            | PromptKind::OrgTableSort
+            | PromptKind::OrgColumnsInsertColumn
+            | PromptKind::OrgColumnsInsertDblock => {
                 self.accept_org_prompt(prompt.kind, prompt.input.trim());
             }
             PromptKind::SaveMacro => self.save_macro(prompt.input.trim()),
-            // A closing note may be empty (mark DONE + CLOSED with no LOGBOOK
-            // entry), so it is dispatched outside the "non-empty" roam group.
+            // A closing note may be empty (DONE + CLOSED, no LOGBOOK entry).
             PromptKind::OrgCloseNote => self.org_close_note(prompt.input.trim()),
-            PromptKind::OrgAgendaMatch => {
-                self.open_view(&AgendaKind::Match(prompt.input.trim().to_string()));
-            }
-            PromptKind::OrgAgendaSearch => {
-                self.open_view(&AgendaKind::Search(prompt.input.trim().to_string()));
+            PromptKind::OrgAgendaMatch | PromptKind::OrgAgendaSearch => {
+                self.accept_org_agenda_prompt(prompt.kind, prompt.input.trim());
             }
             PromptKind::OrgCaptureField
             | PromptKind::OrgCaptureReview
@@ -18212,10 +20198,6 @@ impl App {
         self.status = t!("status.matches_in_files", count = count, files = files).to_string();
     }
 
-    /// Run a shell command in the workspace root, streaming its output (stdout and
-    /// stderr merged) into the bottom dock, which is shown. The command runs in a
-    /// background thread; [`App::poll_command`] drains its output each frame and
-    /// [`App::cancel_command`] kills it.
     /// Open the rename prompt for the active file, seeded with its current name.
     fn open_rename_prompt(&mut self) {
         let Some(cur) = self.editor.active_tab().and_then(|t| t.path.clone()) else {
@@ -18270,7 +20252,21 @@ impl App {
         }
     }
 
+    /// Run `cmd` in the workspace root. See [`App::run_command_in`], which
+    /// this delegates to — the one async pipeline every command-running
+    /// action funnels through.
     fn run_command(&mut self, cmd: &str) {
+        let root = self.root.clone();
+        self.run_command_in(&root, cmd);
+    }
+
+    /// Run a shell command in `dir` (the workspace root for every caller
+    /// except `project.subproject.*`, which runs at the nearest subproject's
+    /// directory), streaming its output (stdout and stderr merged) into the
+    /// bottom dock, which is shown. The command runs in a background
+    /// thread; [`App::poll_command`] drains its output each frame and
+    /// [`App::cancel_command`] kills it.
+    fn run_command_in(&mut self, dir: &Path, cmd: &str) {
         let cmd = cmd.trim();
         if cmd.is_empty() {
             return;
@@ -18287,7 +20283,7 @@ impl App {
         let mut child = match std::process::Command::new("sh")
             .arg("-c")
             .arg(format!("{{ {cmd} ; }} 2>&1"))
-            .current_dir(&self.root)
+            .current_dir(dir)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
             .spawn()
@@ -18479,7 +20475,7 @@ impl App {
     pub fn on_exit(&mut self) {
         self.lsp.shutdown();
         self.save_session();
-        if let Err(e) = self.settings.save() {
+        if let Err(e) = self.store_settings() {
             self.messages.push(
                 Level::Warn,
                 t!("msg.settings_save_failed", error = e).to_string(),
@@ -18611,6 +20607,10 @@ const EMACS_CTRL_C: &[(&str, &str)] = &[
     ("!", "org.timestamp_inactive"),
     ("'", "org.edit_src"),
     ("/", "org.sparse.match"),
+    ("-", "org.table.insert_hline"),
+    ("^", "org.table.sort"),
+    ("+", "org.table.sum_column"),
+    ("|", "org.table.create_from_region"),
 ];
 
 /// The Emacs `Ctrl+C Ctrl+X` chord table — the extended Org command family.
@@ -18622,10 +20622,41 @@ const EMACS_CTRL_C_X: &[(&str, &str)] = &[
     (">", "org.agenda.unlock"),
     ("C-s", "org.archive.subtree"),
     ("C-c", "org.column_view"),
+    ("C-u", "org.columns.update_dblock"),
     ("C-i", "org.clock_in"),
     ("C-o", "org.clock_out"),
     ("C-w", "org.subtree.cut"),
     ("C-y", "org.subtree.paste"),
+];
+
+/// The Emacs `Ctrl+C p c` chord table — the `project.*` family, a classic
+/// terminal-friendly `C-c p` prefix (rather than a Super-key `s-p` prefix,
+/// which a terminal cannot always receive). None of these keys are
+/// Ctrl-modified: `p`, `c`, and each action letter are typed plain, after the
+/// one literal `Ctrl+C`. `m` continues into [`EMACS_CTRL_C_P_C_M`] (handled
+/// as a special case, like `C-x` in [`EMACS_CTRL_C`], so it is not listed
+/// here as a leaf action).
+const EMACS_CTRL_C_P_C: &[(&str, &str)] = &[
+    ("o", "project.configure"),
+    ("c", "project.compile"),
+    ("t", "project.test"),
+    (".", "project.test_at_point"),
+    ("i", "project.install"),
+    ("p", "project.package"),
+    ("r", "project.run"),
+    ("x", "project.run_task"),
+    ("X", "project.repeat_last_task"),
+];
+
+/// The Emacs `Ctrl+C p c m` chord table — the `project.subproject.*` family.
+const EMACS_CTRL_C_P_C_M: &[(&str, &str)] = &[
+    ("f", "project.subproject.find_file"),
+    ("o", "project.subproject.configure"),
+    ("c", "project.subproject.compile"),
+    ("t", "project.subproject.test"),
+    ("i", "project.subproject.install"),
+    ("p", "project.subproject.package"),
+    ("r", "project.subproject.run"),
 ];
 
 /// A short jump label for index `i`: `a`..`z`, then `aa`, `ab`, … (base-26 over
@@ -18644,7 +20675,9 @@ fn jump_label(i: usize) -> String {
 /// View=3 (Alt+I, since "Vix"/"View" both start with V), Go=4 (Alt+N, since Git
 /// keeps Alt+G and Alt+J is the recent-locations jump), Run=5 (Alt+R), AI=6,
 /// DB=7 (Alt+D), JJ=8 (no mnemonic — Alt+J is the recent-locations jump), Git=9,
-/// Org=10, Tools=11, Help=12. `None` for any other letter.
+/// Org=10, Project=11 (no mnemonic — Alt+P already means `search.prev_selection`
+/// in the editor; see `global_shared_key`), Tools=12, Help=13. `None` for any
+/// other letter.
 fn menu_index_for_alt(c: char) -> Option<usize> {
     match c.to_ascii_lowercase() {
         'v' => Some(0),
@@ -18657,8 +20690,8 @@ fn menu_index_for_alt(c: char) -> Option<usize> {
         'd' => Some(7),
         'g' => Some(9),
         'o' => Some(10),
-        't' => Some(11),
-        'h' => Some(12),
+        't' => Some(12),
+        'h' => Some(13),
         _ => None,
     }
 }
@@ -18874,6 +20907,39 @@ mod tests {
     use super::*;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+
+    /// macOS folds `Command` into `Control`; every other platform leaves the
+    /// `Super` modifier alone, and a chord without `Command` is never touched.
+    #[test]
+    fn command_folds_into_control_on_macos() {
+        let cmd_shift = KeyEvent::new(
+            KeyCode::Char('z'),
+            KeyModifiers::SUPER | KeyModifiers::SHIFT,
+        );
+        let folded = App::command_as_control(cmd_shift).modifiers;
+        if cfg!(target_os = "macos") {
+            assert!(
+                folded.contains(KeyModifiers::CONTROL),
+                "Command acts as Control"
+            );
+            assert!(!folded.contains(KeyModifiers::SUPER), "Command is consumed");
+            assert!(
+                folded.contains(KeyModifiers::SHIFT),
+                "the rest of the chord survives"
+            );
+        } else {
+            assert_eq!(
+                folded,
+                KeyModifiers::SUPER | KeyModifiers::SHIFT,
+                "Super is the window manager's key off macOS"
+            );
+        }
+        let ctrl = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        assert_eq!(
+            App::command_as_control(ctrl).modifiers,
+            KeyModifiers::CONTROL
+        );
+    }
 
     #[test]
     fn org_contacts_new_field_and_views() {
@@ -19554,18 +21620,86 @@ mod tests {
     }
 
     #[test]
-    fn org_column_view_opens_table_tab() {
+    fn org_column_view_opens_interactive_overlay_and_edits_the_real_buffer() {
         let mut app = App::new(std::env::temp_dir(), Settings::default());
         app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
         app.editor
             .new_tab_with_content("* TODO [#1] Ship :work:\n** Sub\n");
+        app.editor.active_tab_mut().unwrap().path = Some(PathBuf::from("test.org"));
+        let tabs_before = app.editor.tabs.len();
         app.run_action("org.column_view");
+        assert!(app.column_view.is_some(), "overlay opened");
+        assert_eq!(app.editor.tabs.len(), tabs_before, "no new tab created");
+
+        // Move to the Sub row's TODO column and cycle it: the key must edit
+        // the real active tab's buffer text, not a detached copy.
+        app.column_view_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        app.column_view_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        app.column_view_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+        let text = app.editor.active_tab().unwrap().text();
+        assert!(text.contains("** TODO Sub"), "{text:?}");
+
+        app.column_view_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+        assert!(app.column_view.is_none(), "q closes the overlay");
+    }
+
+    #[test]
+    fn org_column_view_no_org_buffer_warns_and_does_not_open() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor.new_tab_with_content("plain text\n");
+        app.run_action("org.column_view");
+        assert!(app.column_view.is_none());
+    }
+
+    #[test]
+    fn org_column_view_export_still_produces_the_old_style_table() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor
+            .new_tab_with_content("* TODO [#1] Ship :work:\n** Sub\n");
+        app.run_action("org.column_view_export");
         let table = app.editor.active_tab().unwrap().text();
         assert!(table.starts_with("| ITEM | TODO | PRIORITY | TAGS |"));
         assert!(
             table.contains("| Ship | TODO | [#1] | :work: |"),
             "{table:?}"
         );
+    }
+
+    #[test]
+    fn org_columns_dblock_insert_and_update_round_trip() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor
+            .new_tab_with_content("* Project\n** TODO Task One\n** DONE Task Two\n");
+        app.editor.active_tab_mut().unwrap().path = Some(PathBuf::from("proj.org"));
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_cursor_line(0);
+        }
+        app.org_columns_insert_dblock("local");
+        let text = app.editor.active_tab().unwrap().text();
+        assert!(text.contains("#+BEGIN: columnview :id local"), "{text:?}");
+        assert!(
+            text.contains("Task One") && text.contains("Task Two"),
+            "{text:?}"
+        );
+        assert!(text.contains("#+END:"), "{text:?}");
+
+        // Editing a headline, then updating the dblock in place, must pick
+        // up the change.
+        if let Some(t) = app.editor.active_tab_mut() {
+            let edited = t.text().replace("Task One", "Task One Renamed");
+            t.editor.set_content(&edited);
+            let line = edited
+                .lines()
+                .position(|l| l.starts_with("#+BEGIN:"))
+                .unwrap();
+            t.editor.set_cursor_line(line);
+        }
+        app.org_columns_update_dblock();
+        let updated = app.editor.active_tab().unwrap().text();
+        assert!(updated.contains("Task One Renamed"), "{updated:?}");
     }
 
     #[test]
@@ -19585,6 +21719,150 @@ mod tests {
         assert!(app.emacs_c_chord_key(KeyEvent::new(KeyCode::Char('.'), KeyModifiers::NONE)));
         let text = app.editor.active_tab().unwrap().text();
         assert!(text.contains('<') && text.contains('>'), "{text:?}");
+    }
+
+    #[test]
+    fn project_compile_resolves_cargo_build_and_confirms_before_running() {
+        let dir = std::env::temp_dir().join(format!("vix-proj-compile-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.run_action("project.compile");
+        let prompt = app.prompt.as_ref().expect("compile opens a confirm prompt");
+        assert!(matches!(prompt.kind, PromptKind::ProjectCommand));
+        assert_eq!(prompt.input, "cargo build");
+
+        // Accepting runs the (possibly-edited) command, caches it as the new
+        // resolved `compile` command, and pushes it onto that slot's history
+        // and the project's last-command-of-any-kind.
+        app.accept_prompt();
+        assert!(
+            app.running_command.is_some(),
+            "accepting the prompt started the run pipeline"
+        );
+        assert_eq!(
+            app.project_command_cache.compile.as_deref(),
+            Some("cargo build")
+        );
+        assert_eq!(app.project_history.compile, vec!["cargo build".to_string()]);
+        assert_eq!(app.project_last_command.as_deref(), Some("cargo build"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn project_discard_command_cache_clears_only_the_cache() {
+        let dir = std::env::temp_dir().join(format!("vix-proj-discard-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".vix")).unwrap();
+        std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
+        std::fs::write(dir.join(".vix/project.toml"), "compile = \"make\"\n").unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.ensure_project_session_loaded();
+        app.project_command_cache.compile = Some("cargo build --release".to_string());
+        app.project_history.compile = vec!["cargo build".to_string()];
+
+        app.run_action("project.discard_command_cache");
+
+        // The cache is cleared…
+        assert!(app.project_command_cache.compile.is_none());
+        // …but history…
+        assert_eq!(app.project_history.compile, vec!["cargo build".to_string()]);
+        // …and the `.vix/project.toml` override are untouched.
+        let override_text = std::fs::read_to_string(dir.join(".vix/project.toml")).unwrap();
+        assert_eq!(override_text, "compile = \"make\"\n");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn project_test_at_point_runs_the_test_under_cursor_without_a_prompt() {
+        let dir =
+            std::env::temp_dir().join(format!("vix-proj-test-at-point-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor.new_tab_with_content(
+            "fn helper() {}\n\n#[test]\nfn it_works() {\n    assert!(true);\n}\n",
+        );
+        app.editor.active_tab_mut().unwrap().path = Some(dir.join("src/lib.rs"));
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_cursor_line(4); // the `assert!(true);` line
+        }
+
+        app.run_action("project.test_at_point");
+        assert!(
+            app.prompt.is_none(),
+            "test-at-point runs immediately, with no confirm prompt"
+        );
+        let rc = app
+            .running_command
+            .as_ref()
+            .expect("the resolved test command started running");
+        assert_eq!(rc.label, "cargo test -- --exact it_works");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn project_subproject_actions_report_no_subproject_outside_any_manifest() {
+        let dir = std::env::temp_dir().join(format!("vix-proj-subproj-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(dir.join("src/main.rs"), "fn main() {}\n").unwrap();
+        // No manifest anywhere below `dir`, so no subproject exists.
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.editor.new_tab_with_content("fn main() {}\n");
+        app.editor.active_tab_mut().unwrap().path = Some(dir.join("src/main.rs"));
+
+        app.run_action("project.subproject.compile");
+        assert!(app.prompt.is_none());
+        assert_eq!(app.status, t!("status.project_no_subproject").to_string());
+
+        app.run_action("project.subproject.find_file");
+        assert!(app.palette.is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn emacs_c_p_chords_dispatch_project_actions() {
+        let dir = std::env::temp_dir().join(format!("vix-proj-chords-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut app = App::new(dir.clone(), Settings::default());
+        // `C-c p` arms the third-key prefix instead of dispatching.
+        assert!(app.emacs_c_chord_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE)));
+        assert!(app.emacs_c_p_prefix, "C-c p arms the project family");
+        app.emacs_c_p_prefix = false;
+        // `C-c p c` arms the fourth-key prefix.
+        assert!(app.emacs_c_p_chord_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE)));
+        assert!(app.emacs_c_p_c_prefix, "C-c p c arms the command family");
+        app.emacs_c_p_c_prefix = false;
+        // `C-c p c x` dispatches `project.run_task`; no tasks are defined
+        // here, so it reports as much — still proof the chord reached the
+        // action rather than falling through to "no chord".
+        assert!(app.emacs_c_p_c_chord_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE)));
+        assert_eq!(app.status, t!("status.no_tasks").to_string());
+        // `C-c p c m` arms the fifth-key prefix, and `C-c p c m r` dispatches
+        // `project.subproject.run`; no subproject exists here either.
+        assert!(app.emacs_c_p_c_chord_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE)));
+        assert!(
+            app.emacs_c_p_c_m_prefix,
+            "C-c p c m arms the subproject family"
+        );
+        app.emacs_c_p_c_m_prefix = false;
+        assert!(app.emacs_c_p_c_m_chord_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE)));
+        assert_eq!(app.status, t!("status.project_no_subproject").to_string());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -19710,5 +21988,137 @@ mod tests {
         // Editing keys are ignored on an image tab.
         app.on_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         assert!(!app.editor.active_tab().unwrap().dirty);
+    }
+
+    // ----- Org table editor (crates/vix-org-table) -------------------------
+
+    #[test]
+    fn org_table_tab_advances_field_and_realigns() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor.new_tab_with_content("|a|bb|\n");
+        app.editor.active_tab_mut().unwrap().path = Some(PathBuf::from("test.org"));
+        if let Some(t) = app.editor.active_tab_mut() {
+            App::org_table_set_cursor(t, 0, 1); // inside the first field ("a")
+        }
+        assert!(
+            app.org_table_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)),
+            "Tab inside a table field must be intercepted"
+        );
+        let tab = app.editor.active_tab().unwrap();
+        let text = tab.text();
+        let line0 = text.lines().next().unwrap();
+        assert_ne!(
+            line0, "|a|bb|",
+            "table realigned (padded) by the Tab: {line0:?}"
+        );
+        assert!(line0.contains('a') && line0.contains("bb"), "{line0:?}");
+        let (line, byte_col) = App::org_table_cursor_pos(tab);
+        assert_eq!(line, 0);
+        assert_eq!(
+            App::org_table_field_index_at(line0, byte_col),
+            1,
+            "cursor advanced to the second field: {byte_col} in {line0:?}"
+        );
+    }
+
+    #[test]
+    fn org_table_enter_advances_or_creates_a_row() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor.new_tab_with_content("| a | b |\n");
+        app.editor.active_tab_mut().unwrap().path = Some(PathBuf::from("test.org"));
+        if let Some(t) = app.editor.active_tab_mut() {
+            App::org_table_set_cursor(t, 0, 2); // inside the first field ("a")
+        }
+        assert!(
+            app.org_table_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            "Enter inside a table field must be intercepted"
+        );
+        let tab = app.editor.active_tab().unwrap();
+        assert_eq!(tab.text().lines().count(), 2, "a fresh row was appended");
+        assert_eq!(
+            tab.editor.cursor_line(),
+            1,
+            "cursor followed onto the new row"
+        );
+    }
+
+    #[test]
+    fn org_table_key_does_not_intercept_ordinary_text() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor
+            .new_tab_with_content("* Heading\nSome ordinary text.\n");
+        app.editor.active_tab_mut().unwrap().path = Some(PathBuf::from("test.org"));
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_cursor_line(1);
+        }
+        assert!(
+            !app.org_table_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)),
+            "Tab on non-table text must fall through to normal indent behavior"
+        );
+        assert_eq!(
+            app.editor.active_tab().unwrap().text(),
+            "* Heading\nSome ordinary text.\n",
+            "no-op: nothing was intercepted or rewritten"
+        );
+    }
+
+    #[test]
+    fn org_table_insert_row_above_shifts_the_current_row_down() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor.new_tab_with_content("| a | b |\n| c | d |\n");
+        app.editor.active_tab_mut().unwrap().path = Some(PathBuf::from("test.org"));
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_cursor_line(1); // the "c | d" row
+        }
+        app.run_action("org.table.insert_row_above");
+        let tab = app.editor.active_tab().unwrap();
+        let text = tab.text();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 3, "a row was inserted: {lines:?}");
+        assert!(lines[0].contains('a') && lines[0].contains('b'));
+        assert!(
+            !lines[1].contains('c') && !lines[1].contains('d'),
+            "the new row is empty: {:?}",
+            lines[1]
+        );
+        assert!(
+            lines[2].contains('c') && lines[2].contains('d'),
+            "{lines:?}"
+        );
+        assert_eq!(tab.editor.cursor_line(), 1, "cursor follows the new row");
+    }
+
+    #[test]
+    fn org_table_sum_column_reports_the_total_on_the_status_line() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor.new_tab_with_content("| 1 |\n| 2 |\n| 3 |\n");
+        app.editor.active_tab_mut().unwrap().path = Some(PathBuf::from("test.org"));
+        app.run_action("org.table.sum_column");
+        assert!(
+            app.status.contains('6'),
+            "status reports the column sum: {:?}",
+            app.status
+        );
+    }
+
+    #[test]
+    fn org_table_sort_prompt_opens_and_reorders_rows() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor.new_tab_with_content("| 3 |\n| 1 |\n| 2 |\n");
+        app.editor.active_tab_mut().unwrap().path = Some(PathBuf::from("test.org"));
+        app.run_action("org.table.sort");
+        let prompt = app.prompt.take().expect("sort prompt opened");
+        assert!(matches!(prompt.kind, PromptKind::OrgTableSort));
+
+        // Sort ascending, numerically, by column 1.
+        app.accept_org_table_sort("1 n");
+        let text = app.editor.active_tab().unwrap().text();
+        assert_eq!(text, "| 1 |\n| 2 |\n| 3 |\n", "{text:?}");
     }
 }

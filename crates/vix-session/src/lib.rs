@@ -69,6 +69,63 @@ pub struct WorkspaceSession {
     /// Unix seconds of the last open (for frecency ranking); 0 if unknown.
     #[serde(default)]
     pub last_visit: i64,
+
+    // ----- project task-runner state (`vix-tasks` wiring) -----------------
+    //
+    // The private, per-user half of the two-tier persistence model (the
+    // shareable half is the host's `.vix/project.toml`, outside this crate).
+    // Kept as plain fields rather than a `vix_tasks::lifecycle::
+    // LifecycleCommands`/history struct so this crate stays a leaf with no
+    // dependency on the `vix-tasks` feature crate; the host converts at
+    // the call site. `#[serde(default)]` (redundant with the struct-level
+    // attribute, kept for documentation) lets older `session.toml` files
+    // without these fields still load.
+    /// Cached (previously resolved or user-edited) lifecycle commands,
+    /// mirroring `vix_tasks::lifecycle::LifecycleCommands`'s six slots.
+    /// Takes precedence over the project-type default and the
+    /// `.vix/project.toml` override, so an edited command sticks.
+    #[serde(default)]
+    pub project_cmd_configure: Option<String>,
+    /// See [`WorkspaceSession::project_cmd_configure`].
+    #[serde(default)]
+    pub project_cmd_compile: Option<String>,
+    /// See [`WorkspaceSession::project_cmd_configure`].
+    #[serde(default)]
+    pub project_cmd_test: Option<String>,
+    /// See [`WorkspaceSession::project_cmd_configure`].
+    #[serde(default)]
+    pub project_cmd_install: Option<String>,
+    /// See [`WorkspaceSession::project_cmd_configure`].
+    #[serde(default)]
+    pub project_cmd_package: Option<String>,
+    /// See [`WorkspaceSession::project_cmd_configure`].
+    #[serde(default)]
+    pub project_cmd_run: Option<String>,
+    /// Command run history for the `configure` lifecycle slot, most-recent
+    /// last. Each lifecycle slot keeps its own separate history, so cycling
+    /// through past commands at one slot's prompt never shows another
+    /// slot's commands.
+    #[serde(default)]
+    pub project_history_configure: Vec<String>,
+    /// See [`WorkspaceSession::project_history_configure`].
+    #[serde(default)]
+    pub project_history_compile: Vec<String>,
+    /// See [`WorkspaceSession::project_history_configure`].
+    #[serde(default)]
+    pub project_history_test: Vec<String>,
+    /// See [`WorkspaceSession::project_history_configure`].
+    #[serde(default)]
+    pub project_history_install: Vec<String>,
+    /// See [`WorkspaceSession::project_history_configure`].
+    #[serde(default)]
+    pub project_history_package: Vec<String>,
+    /// See [`WorkspaceSession::project_history_configure`].
+    #[serde(default)]
+    pub project_history_run: Vec<String>,
+    /// The most recently run project command of any kind (a lifecycle
+    /// command or a named task), for "repeat last task".
+    #[serde(default)]
+    pub project_last_command: Option<String>,
 }
 
 /// A restorable split layout: the pane tree plus the focused leaf (in-order).
@@ -247,5 +304,51 @@ mod tests {
     #[test]
     fn workspace_missing_is_none() {
         assert!(Session::default().workspace("/nope").is_none());
+    }
+
+    #[test]
+    fn project_fields_round_trip_through_toml() {
+        let mut s = Session::default();
+        s.set_workspace(WorkspaceSession {
+            root: "/proj".into(),
+            project_cmd_compile: Some("cargo build --workspace".into()),
+            project_history_compile: vec!["cargo build".into(), "cargo build --workspace".into()],
+            project_last_command: Some("cargo build --workspace".into()),
+            ..Default::default()
+        });
+        let toml = toml::to_string(&s).expect("serializes");
+        let back: Session = toml::from_str(&toml).expect("deserializes");
+        let ws = back.workspace("/proj").expect("round-tripped");
+        assert_eq!(
+            ws.project_cmd_compile.as_deref(),
+            Some("cargo build --workspace")
+        );
+        assert_eq!(
+            ws.project_history_compile,
+            vec![
+                "cargo build".to_string(),
+                "cargo build --workspace".to_string()
+            ]
+        );
+        assert_eq!(
+            ws.project_last_command.as_deref(),
+            Some("cargo build --workspace")
+        );
+    }
+
+    #[test]
+    fn old_session_toml_without_project_fields_still_loads() {
+        // Simulates a `session.toml` written before this feature existed.
+        let old_toml = r#"
+            [[workspaces]]
+            root = "/legacy"
+            files = ["/legacy/main.rs"]
+            active = 0
+        "#;
+        let s: Session = toml::from_str(old_toml).expect("old file still parses");
+        let ws = s.workspace("/legacy").expect("workspace present");
+        assert_eq!(ws.project_cmd_compile, None);
+        assert!(ws.project_history_compile.is_empty());
+        assert_eq!(ws.project_last_command, None);
     }
 }

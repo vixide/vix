@@ -18,7 +18,14 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use clap::Parser;
-use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event};
+use crossterm::event::{
+    self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+    Event,
+};
+#[cfg(target_os = "macos")]
+use crossterm::event::{
+    KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+};
 use crossterm::execute;
 
 use vix::app::App;
@@ -39,6 +46,12 @@ struct Cli {
 }
 
 fn main() -> io::Result<()> {
+    // Opt this process into the real system clipboard. Everything that does not
+    // call this — the test suite above all — copies and pastes through an
+    // in-memory clipboard instead, so running the tests cannot overwrite what
+    // the user had on their pasteboard.
+    vix::clipboard::use_system();
+
     let cli = Cli::parse();
     let settings = Settings::load();
 
@@ -67,6 +80,23 @@ fn main() -> io::Result<()> {
 
     let mut terminal = ratatui::init();
     let _ = execute!(io::stdout(), EnableMouseCapture);
+    // Ask the terminal to bracket pastes, so pasted text arrives as one
+    // `Event::Paste` instead of as one key event per character: that is what
+    // lets a paste be a single edit (and a single undo step) and keeps
+    // auto-indent from re-indenting each pasted line. Best-effort — terminals
+    // without support simply keep sending keys.
+    let _ = execute!(io::stdout(), EnableBracketedPaste);
+    // macOS: ask for the kitty keyboard protocol's disambiguated key encoding.
+    // It is the only way a terminal can report the `Command` modifier at all —
+    // crossterm sets `KeyModifiers::SUPER` only with these flags on — and Vix
+    // folds Command into Control (`App::command_as_control`). Best-effort: a
+    // terminal without support ignores the request and keeps its old encoding,
+    // and one that keeps `Cmd` for its own menus never forwards it.
+    #[cfg(target_os = "macos")]
+    let _ = execute!(
+        io::stdout(),
+        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+    );
     // Also request any-motion mouse tracking (xterm mode 1003) so plain hover is
     // reported, not just clicks and drags. This drives the menu mouseover; every
     // other pane ignores button-less motion. Best-effort — terminals without
@@ -83,7 +113,9 @@ fn main() -> io::Result<()> {
     app.picker = ratatui_image::picker::Picker::from_query_stdio_with_options(query).ok();
     let result = run(&mut terminal, &mut app);
     let _ = write!(io::stdout(), "\x1b[?1003l");
-    let _ = execute!(io::stdout(), DisableMouseCapture);
+    #[cfg(target_os = "macos")]
+    let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
+    let _ = execute!(io::stdout(), DisableBracketedPaste, DisableMouseCapture);
     let _ = io::stdout().flush();
     ratatui::restore();
     app.on_exit();
@@ -143,6 +175,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
             match event::read()? {
                 Event::Key(key) => app.on_key(key),
                 Event::Mouse(mouse) => app.on_mouse(mouse),
+                Event::Paste(text) => app.on_paste(&text),
                 _ => {}
             }
         }
@@ -159,12 +192,19 @@ fn suspend(terminal: &mut ratatui::DefaultTerminal) {
     #[cfg(unix)]
     {
         let _ = write!(io::stdout(), "\x1b[?1003l");
-        let _ = execute!(io::stdout(), DisableMouseCapture);
+        #[cfg(target_os = "macos")]
+        let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
+        let _ = execute!(io::stdout(), DisableBracketedPaste, DisableMouseCapture);
         let _ = io::stdout().flush();
         ratatui::restore();
         let _ = nix::sys::signal::raise(nix::sys::signal::Signal::SIGTSTP);
         *terminal = ratatui::init();
-        let _ = execute!(io::stdout(), EnableMouseCapture);
+        let _ = execute!(io::stdout(), EnableMouseCapture, EnableBracketedPaste);
+        #[cfg(target_os = "macos")]
+        let _ = execute!(
+            io::stdout(),
+            PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+        );
         let _ = write!(io::stdout(), "\x1b[?1003h");
         let _ = io::stdout().flush();
     }

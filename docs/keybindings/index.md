@@ -18,7 +18,9 @@ Switch via **View → Keymap…**; the choice persists. See [Keymaps](#keymaps).
 | `Ctrl+Shift+T`   | Reopen the most recently closed tab                  |
 | `Ctrl+Q`         | Quit                                                 |
 | `Ctrl+P`         | Open the command palette                             |
-| `Ctrl+F`         | Find                                                 |
+| `Ctrl+F`         | Open the find dialog                                 |
+| `Alt+H`          | In the find dialog: turn replace on or off           |
+| `Alt+I`          | In the find dialog: where to look — buffer, files, workspace |
 | `Ctrl+R`         | Find & Replace                                       |
 | `Ctrl+Alt+R`     | Interactive query-replace (y/n/!/q)                  |
 | `Ctrl+Shift+F`   | Search across the whole workspace                      |
@@ -33,6 +35,17 @@ Switch via **View → Keymap…**; the choice persists. See [Keymaps](#keymaps).
 | `Alt+F/E/V/T/H`  | Open the File / Edit / View / Tools / Help menu      |
 | `F1`             | Open the searchable keyboard-shortcut browser (type to filter) |
 
+## macOS: the Command key
+
+On macOS, `Command` does whatever `Control` does — `Cmd+S` saves, `Cmd+F` finds,
+`Cmd+Shift+Z` redoes — for every shortcut on this page and in every keymap.
+
+Whether Vix ever sees the key is up to the terminal: it must speak the kitty
+keyboard protocol (Vix asks for it at startup; Terminal.app does not support it)
+and it must forward that particular shortcut rather than keep it for its own
+menus. Most terminals keep `Cmd+C`, `Cmd+V`, and `Cmd+N` for themselves; you can
+usually free a specific one in the terminal's keyboard settings.
+
 ## Editor (when the editor is focused)
 
 | Shortcut          | Action                                |
@@ -43,7 +56,8 @@ Switch via **View → Keymap…**; the choice persists. See [Keymaps](#keymaps).
 | `Ctrl+C`          | Copy selection                        |
 | `Ctrl+V`          | Paste                                 |
 | `Ctrl+A`          | Select all                            |
-| `Ctrl+D`          | Duplicate the current line (or selection) |
+| `Ctrl+D`          | Forward delete: the character to the right of the cursor |
+| `Ctrl+Shift+D`    | Duplicate the current line (or selection) |
 | `Ctrl+K`          | Delete the current line               |
 | `Alt+↑` / `Alt+↓` | Move the current line up / down       |
 | `Ctrl+]`          | Jump to the matching bracket          |
@@ -54,6 +68,10 @@ Switch via **View → Keymap…**; the choice persists. See [Keymaps](#keymaps).
 | `Home`            | Smart Home: first non-blank, then column 0 |
 | `Enter`           | New line, carrying the previous line's indentation |
 | Typing / `Backspace` / `Delete` / `Tab` | Edit text               |
+
+Pasting with the *terminal's* own shortcut (`Cmd+V` on macOS, `Ctrl+Shift+V`
+elsewhere) works too: Vix enables bracketed paste, so the text arrives in one
+piece — inserted verbatim, and undone in a single step.
 
 The editor is the `editor_core` widget, which adds Tree-sitter
 syntax highlighting and the line operations above.

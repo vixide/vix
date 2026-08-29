@@ -81,7 +81,11 @@ The **Org** menu (`Alt+O`):
 | Update Statistics | `org.update_statistics` | Recompute every checkbox parent state and `[/]`/`[%]` cookie in the buffer. |
 | Tags & Properties → Set Tags… | `org.set_tags` | Prompt (seeded with the current tags) and replace the governing headline's trailing `:tag:tag:` group; empty input clears them. |
 | Tags & Properties → Set Property… | `org.set_property` | Prompt for `NAME VALUE`; create or update the `:NAME:` line in the headline's `:PROPERTIES:` drawer (created after any planning line when missing). |
-| Tags & Properties → Column View | `org.column_view` | Org `C-c C-x C-c`, read-only flavor: tabulate every headline (ITEM indented by level, TODO, PRIORITY, TAGS) as an Org table in a new tab. |
+| Tags & Properties → Column View → Turn On | `org.column_view` | Org `C-c C-x C-c`: open the interactive, write-through Column View overlay on the outline at the cursor (see [Column view](#column-view) below). |
+| Tags & Properties → Column View → Quick Column Export | `org.column_view_export` | The old one-shot behavior: tabulate every headline (ITEM indented by level, TODO, PRIORITY, TAGS) as a static Org table in a new tab. |
+| Tags & Properties → Column View → Dynamic Block → Insert… | `org.columns.insert_dblock` | Prompt for a `:id` scope, then insert a fresh `#+BEGIN: columnview ... #+END:` block at the cursor. |
+| Tags & Properties → Column View → Dynamic Block → Update at Point | `org.columns.update_dblock` | Recompute the `columnview` dblock the cursor is on (`C-c C-x C-u`). |
+| Tags & Properties → Column View → Dynamic Block → Update All | `org.columns.update_all_dblocks` | Recompute every `columnview` dblock in the buffer. |
 | Dates & Scheduling → Insert Timestamp | `org.timestamp` / `org.timestamp_inactive` | Insert `<today Dow>` (active) or `[today Dow]` (inactive) at the cursor. |
 | Dates & Scheduling → Schedule Item… / Deadline… | `org.schedule` / `org.deadline` | Prompt for a `YYYY-MM-DD` date (seeded with today) and set the headline's `SCHEDULED:`/`DEADLINE:` entry — replacing it on an existing planning line, appending there, or inserting a planning line after the headline. |
 | Dates & Scheduling → Date 1 Day Later/Earlier | `org.date_up` / `org.date_down` | Shift the date under the cursor by ±1 day, rewriting its weekday. |
@@ -137,7 +141,7 @@ by `:ID:`, a file, a headline within a file, or a date tree. The pure logic
 (placeholder extraction/expansion, entry wrapping, target parsing, and all
 five insertion shapes) lives in the unit-tested `vix-org-capture` crate;
 `App` drives the interactive parts (prompting, the clipboard, the active
-buffer) and file I/O. Full design: [`spec/org/capture/index.md`](../../../spec/org/capture/index.md).
+buffer) and file I/O. Full design: [`crates/vix-org-capture/spec/index.md`](../../../crates/vix-org-capture/spec/index.md).
 
 Five built-in templates are seeded by default — `"a"` Anything, `"t"` Task,
 `"b"` Babel, `"n"` Note, `"c"` Contact — the fixed menu items above run them
@@ -190,7 +194,7 @@ The pure logic (`org::priority`, `org::set_priority`, `org::priority_up`,
 classic letter scheme.
 
 A capture template can prompt for a priority using the multi-choice
-placeholder form (`spec/org/capture/index.md`):
+placeholder form (`crates/vix-org-capture/spec/index.md`):
 `[#%^{Priority|0|0|1|2|3|4|5|6|7|8|9}]` — the prompt pre-fills with `0` (the
 first choice); the full candidate list is parsed but not yet offered as a
 select popup.
@@ -218,7 +222,8 @@ commands (discoverable via the which-key popup after `C-c`):
 | `C-c C-x <` / `C-c C-x >` | `org.agenda.lock` / `org.agenda.unlock` | Agenda restriction lock. |
 | `C-c C-x C-i` / `C-c C-x C-o` | `org.clock_in` / `org.clock_out` | Clocking (`C-i` arrives as Tab in some terminals; use the menu there). |
 | `C-c C-x C-w` / `C-c C-x C-y` | `org.subtree.cut` / `org.subtree.paste` | Subtree kill/yank. |
-| `C-c C-x C-c` | `org.column_view` | Column view. |
+| `C-c C-x C-c` | `org.column_view` | Open the interactive Column View overlay (see [Column view](#column-view) below). |
+| `C-c C-x C-u` | `org.columns.update_dblock` | Recompute the `columnview` dblock the cursor is on. |
 
 `C-u` is the Emacs universal argument; it applies to the next command and is
 cancelled by any key other than the `C-c` prefix. `C-c C-x` is a third-key
@@ -275,6 +280,192 @@ ambiguity (`checkbox` or `todo`); adding `recursive` counts TODO entries in the
 whole subtree, not just direct children. Cookies and parent checkboxes are
 recomputed automatically after **Toggle Checkbox** / **Cycle TODO**, and on
 demand via **Update Statistics**. The pure builder is `org::update_statistics`.
+
+## Column view
+
+Org's [Column View](https://orgmode.org/manual/Column-View.html) (`C-c C-x
+C-c`) overlays the outline with a spreadsheet-like table: one row per
+headline, one column per requested property, with parent rows optionally
+showing a recursive summary rolled up from their direct children. The pure
+engine (parsing, scope resolution, table building, write-back, single-cell
+edits, and dynamic-block capture) lives in the unit-tested `vix-org::columns`
+module (re-exported at the crate root).
+
+The interactive overlay itself (`src/column_view.rs`, `App::column_view`) is a
+**write-through** live view on the same buffer, not a detached copy: every
+commit (a field edit, a cycled value, a checkbox toggle, a column or row
+move) applies straight to the real buffer text immediately, mirroring both
+Emacs's actual behavior and this crate's own `org.*` convention of "read
+whole buffer text → pure transform → splice back". Persisting to *disk*
+still goes through the normal save/dirty flow.
+
+| Key | Action |
+| --- | ------ |
+| `↑`/`↓`/`←`/`→` | Move the selected field. |
+| `1`-`9` / `0` | Jump the field to the 1st–9th / 10th allowed value. |
+| `n` / `S-→` | Cycle to the next allowed value (`TODO` falls back to the crate's fixed keyword list with no declared `TODO_ALL`). |
+| `p` / `S-←` | Cycle to the previous allowed value. |
+| `e` | Edit the field's raw value; `Enter` commits, `Esc` cancels. |
+| `C-c C-c` | Toggle a checkbox-shaped field (`[X]`/`[ ]`/`[-]`); otherwise closes the overlay. |
+| `v` | Show the field's full raw value on the status line. |
+| `a` | Edit the column's allowed-value (`PROPERTY_ALL`) list; writes it back into the owning `:COLUMNS:` headline's drawer, or a file-level drawer for a file-scoped spec. |
+| `<` / `>` | Narrow / widen the current column. |
+| `M-←` / `M-→` | Reorder the current column left/right. |
+| `S-M-→` | Insert a new column before the current one (prompts for a property name). |
+| `S-M-←` | Delete the current column. |
+| `M-↑` / `M-↓` | Move the current row's headline up/down in the outline. |
+| `r` / `g` | Force-recompute (mostly redundant given write-through). |
+| `q` / `Esc` | Close the overlay. |
+
+Not modeled: `SPC`'s transient cell peek (`v` covers the same need), and
+`C-c C-o` (open in another window — not applicable to a single-pane TUI).
+`e`'s free-text edit is not restricted to a column's allowed-value list,
+matching this codebase's general "trust the user" convention elsewhere.
+
+### Concepts
+
+- **Column spec**: an ordered list of columns, each naming a property to
+  display, parsed from a `#+COLUMNS:` keyword line or a `:COLUMNS:` entry
+  property (`columns::parse_columns_spec`).
+- **Scope resolution**: which spec applies at a given line — the nearest
+  enclosing headline's own `:COLUMNS:` property, else the file-level
+  `#+COLUMNS:` (or an equivalent `COLUMNS` property in a drawer before the
+  first headline), else the hardcoded default `%ITEM %TODO %PRIORITY %TAGS`
+  (`columns::resolve_columns_spec`, Emacs's own search-upward-then-file logic).
+- **Special properties**: `ITEM`, `TODO`, `PRIORITY`, `TAGS`, `ALLTAGS`,
+  `DEADLINE`, `SCHEDULED`, `CLOSED`, `CATEGORY`, `FILE`, `TIMESTAMP`,
+  `TIMESTAMP_IA`, `CLOCKSUM`, `CLOCKSUM_T`, `BLOCKED` — resolved from the
+  entry itself rather than looked up in its drawer (below). Any other name is
+  a general property: looked up case-insensitively in the headline's own
+  `:PROPERTIES:...:END:` drawer, `""` when absent, **not** inherited from
+  ancestors (`CATEGORY` is the one exception).
+- **Summary type**: an optional `{TOKEN}` suffix on a column definition that
+  recursively rolls a parent heading's cell up from its direct children's
+  values, deepest level first. Ignored for special properties.
+
+### `#+COLUMNS`/`:COLUMNS:` syntax
+
+```
+%[WIDTH]PROPERTY[(TITLE)][{SUMMARY-TYPE}]
+```
+
+Only `%` and `PROPERTY` are required. `WIDTH` is an integer column width
+(auto-width from content when omitted); `TITLE` is the column header
+(defaults to `PROPERTY`); `SUMMARY-TYPE` requests a recursive rollup (below).
+A worked example, straight from the Org manual:
+
+```
+:COLUMNS:  %25ITEM %9Approved(Approved?){X} %Owner %11Status %10Time_Estimate{:}
+:Owner_ALL:    Tammy Mark Karl Lisa Don
+:Status_ALL:   "In progress" "Not started yet" "Finished" ""
+:Approved_ALL: "[ ]" "[X]"
+```
+
+parses to five columns — `ITEM` (width 25), `Approved` (width 9, title
+"Approved?", summary `X`), `Owner` (auto width), `Status` (width 11),
+`Time_Estimate` (width 10, summary `:`) — plus three allowed-value lists from
+the `*_ALL` properties in the same drawer, for cycling a cell through a fixed
+set of choices (`columns::parse_all_values`): `Owner_ALL`'s five
+space-separated tokens, and `Status_ALL`/`Approved_ALL`'s
+quote-the-spaces-as-one-token values (`"In progress"` is one value, not two).
+
+`#+COLUMNS: %25ITEM %TAGS %PRIORITY %TODO` as a file keyword applies
+file-wide; a `COLUMNS` property in a drawer before the first headline is the
+same thing spelled as a property. A `COLUMNS` property in a headline's own
+drawer applies to that entry and its whole subtree, overriding whatever
+would otherwise apply to everything at or below it — the nearest enclosing
+`:COLUMNS:` always wins.
+
+### Summary types
+
+Computed recursively, deepest level first, from a parent's **direct**
+children only (a parent's own prior value for that column, if any, is
+discarded and overwritten by the rollup):
+
+| Token | Rolls up to |
+| ----- | ----------- |
+| `+` | Sum of numbers. |
+| `+;FORMAT` | Sum, formatted with a `%.<N>f`-style printf format (a pragmatic subset — only that shape is supported). |
+| `$` | Shorthand for `+;%.2f`. |
+| `min` / `max` / `mean` | Numeric reduction over children's values. |
+| `X` | `[X]` if every child's value for this column is itself `[X]`, else `[ ]` (a non-checkbox child value counts as unchecked). |
+| `X/` | `[n/m]` — done/total count. |
+| `X%` | `[n%]` — done/total percentage. |
+| `:` | Sum of `H:MM` time values (a bare integer is minutes). |
+| `:min` / `:max` / `:mean` | Time reduction, formatted back Org-duration style (`"1h 0min"` at/above an hour, `"Ymin"` under one — chosen over the terser `H:MM` clock format because it is the literal round-trip format the Org manual shows for a recursively summarized `EFFORT` property). |
+| `@min` / `@max` / `@mean` | "Age" reduction over duration tokens (`3d 1h`) or bare numbers (seconds); formatted back in the largest whole unit with a non-zero next-smaller remainder (`"3d 1h"`, `"1h"`, `"45m"`, `"30s"` — a pragmatic, explicitly documented choice, since Org itself does not prescribe an exact age-summary display). |
+| `est+` | Combine `LOW-HIGH` estimate ranges (e.g. `1-3`, meaning 1–3 days): each child's range becomes an approximate mean `(low+high)/2` and variance `((high-low)/4)^2` (a pragmatic ~95%-interval approximation, **not** Org's exact Calc statistics), summed across children, then reported as `mean − 2·√variance .. mean + 2·√variance` to one decimal. Ten `0.5-2`-day tasks combine to roughly `10.1-14.9`, not the naive `5-20`. |
+| *(anything else)* | Left blank for parent rows — never panics. |
+
+A worked nested-hierarchy example (`%ITEM %EFFORT{:mean}`), showing both the
+recursive rollup and the write-back below:
+
+```
+* Top level                     Top level      → 3h 0min  (mean of its children)
+** Intermediate 1                 Intermediate 1 → 1h 0min  (mean of Leaf 1/2/3)
+*** Leaf 1  :EFFORT: 1h
+*** Leaf 2  :EFFORT: 1h
+*** Leaf 3  :EFFORT: 1h
+** Intermediate 2  :EFFORT: 5h    Intermediate 2 → 5h       (no children: its own value)
+```
+
+`CLOCKSUM`/`CLOCKSUM_T` are **not** part of this deepest-first machinery —
+unlike `:`, which only rolls up already-computed per-level values, they scan
+every `CLOCK:` line anywhere in the whole subtree directly (including the
+entry's own), so a parent's total already includes its descendants' time
+without relying on intermediate rollups. `CLOCKSUM_T` restricts the scan to
+clock intervals whose start date is the `today` passed in (pure functions
+never read the system clock; the host supplies it).
+
+### Write-back
+
+Org "does not only overlay the computed value in the column view, but also
+overwrites the property value in the parent's property drawer" — so does
+`columns::build_column_table`: every parent row with children rewrites its
+computed summary value into its own `:PROPERTY:` drawer line in the returned
+buffer text (creating the drawer if it didn't have one). The one exception:
+**if more than one column definition names the same property, only the
+first definition triggers writing to the property drawer** — `%EFFORT{mean}
+%EFFORT(Sum){:}` writes only the mean; `%EFFORT %EFFORT{mean}` writes
+nothing at all, because the first (summary-less) definition wins the slot
+and it has nothing to write. `columns::apply_column_edit` performs the
+opposite direction — a single cell edit at its source location (the
+headline for `ITEM`/`TODO`/`PRIORITY`/`TAGS`, the planning line for
+`DEADLINE`/`SCHEDULED`/`CLOSED`, the drawer otherwise) — and then reruns the
+same rollup over the whole buffer so every ancestor summary that depended on
+the edited value is recomputed and rewritten too. The read-only special
+properties (`ALLTAGS`, `FILE`, `TIMESTAMP`, `TIMESTAMP_IA`, `CLOCKSUM`,
+`CLOCKSUM_T`, `BLOCKED`) cannot be edited this way.
+
+### Capturing column view (dynamic block)
+
+A `#+BEGIN: columnview ... \n ... \n#+END:` block captures a column view as a
+static table, refreshed on demand — Org's dynamic-block mechanism.
+`columns::parse_dblock_params` reads the `#+BEGIN:` line's parameters:
+
+| Parameter | Meaning |
+| --------- | ------- |
+| `:id local` / `:id global` / `:id file:NAME` / `:id LABEL` | Capture scope: the dblock's own subtree / the whole file / a named file (same-buffer only — see below) / the subtree whose entry carries a matching `:ID:` property. Defaults to `local`. |
+| `:hlines t` (or a count) | Insert a horizontal rule before each top-level captured row. |
+| `:vlines t` | No additional effect in this crate's plain pipe-table renderer — accepted and stored, but every cell is already bar-delimited. |
+| `:maxlevel N` | Only capture rows within `N` levels of the scope's root. |
+| `:skip-empty-rows t` | Drop rows whose non-`ITEM` cells are all blank. |
+| `:exclude-tags "tag1 tag2"` | Drop rows carrying any of the listed tags. |
+| `:indent t` | Indent the `ITEM` cell by level. |
+| `:link t` | Wrap the `ITEM` cell as an internal `[[*Headline]]` link. |
+| `:format "..."` | A `COLUMNS` spec string overriding whatever [scope resolution](#column-view) would otherwise find. |
+
+`file:NAME` is treated identically to `global`: this pure crate has no
+filesystem access, so cross-file capture is out of scope and left to a host
+layer. `columns::render_columnview_dblock` builds the block content (for
+fresh insertion); `columns::update_columnview_dblock` finds the block at a
+given `#+BEGIN:` line and replaces it in place;
+`columns::update_all_columnview_dblocks` does that for every `columnview`
+dblock in the buffer. The host wires these to `org.columns.insert_dblock`
+(prompts for `:id`, defaulting the rest of `DblockParams`),
+`org.columns.update_dblock` (cursor must be on the block's `#+BEGIN:` line),
+and `org.columns.update_all_dblocks` (unconditional, whole buffer) — see the
+action table above.
 
 ## Roam
 
@@ -378,7 +569,7 @@ scheme.
 
 Org *content* insertion (snippets, inline markers, blocks) lives under
 **Tools → Insert → Org / Markers / Begin-End** — see
-[`crates/vix-org/spec/insert-org.md`](../tools/insert/org.md).
+[`crates/vix-org/spec/insert-org.md`](insert-org.md).
 
 ## Export mapping (pragmatic)
 
@@ -387,3 +578,14 @@ Org *content* insertion (snippets, inline markers, blocks) lives under
   and `[[url][desc]]` / `[[url]]` links.
 - Bullet lists → Markdown `-` / HTML `<ul><li>`. Block delimiters (`#+BEGIN_…`)
   are dropped, their inner text kept.
+
+## Sub-specs
+
+- [org-babel](babel/index.md) — source blocks: languages, header arguments, and
+  what evaluating one does (and deliberately does not) do.
+- [org-priority](priority/index.md) — the `[#X]` priority cookie, its settings
+  (`org_priority_highest` / `lowest` / `default`), and the Org → Priority menu.
+- [Org capture](../../vix-org-capture/spec/index.md) — capture templates and
+  placeholder expansion (its own crate).
+- [Org tables](../../vix-org-table/spec/index.md) — the built-in table editor
+  and `TBLFM` formulas (its own crate).

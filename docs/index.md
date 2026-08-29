@@ -19,7 +19,7 @@ Highlights:
 - [Debugger](debugger/index.md) — Debug Adapter Protocol: breakpoints, stepping,
   call stack, variables, watches.
 - Panels & tools: [Command Palette](command-palette/index.md),
-  [File Explorer](file-explorer/index.md), [Find Panel](find-panel/index.md),
+  [File Explorer](file-explorer/index.md), [Find Panel](find/index.md),
   [Outline](outline-panel/index.md), [Git Panel](git-panel/index.md),
   [Calendar](calendar-panel/index.md),
   [Nerd Font Picker](nerd-font-picker/index.md),
@@ -51,32 +51,32 @@ Highlights:
 
 Specs are **per crate**: each member crate owns `crates/<crate>/spec/index.md`
 (multi-topic crates add `spec/<topic>/index.md` sub-specs). The repo-root
-[`spec/`](spec/) holds only cross-cutting / app-level and build/meta specs.
+[`spec/`](../spec/) holds only cross-cutting / app-level and build/meta specs.
 
-- Overview: [spec/index](spec/index/index.md) — goals, dependency crates,
+- Overview: [spec/index](../spec/index/index.md) — goals, dependency crates,
   build/run.
-- Core: [menus](crates/vix-menu/spec/index.md) · [keyboard](crates/vix-keyboard-shortcut-panel/spec/index.md) ·
-  [keymaps](crates/vix-keymap-model/spec/index.md) · [navigation](spec/navigation/index.md) ·
-  [command-palette](crates/vix-palette/spec/index.md) ·
-  [file-explorer](crates/vix-fileops/spec/index.md) · [editor](crates/vix-editor/spec/index.md) ·
-  [find-and-replace](crates/vix-query/spec/index.md) · [hover](crates/vix-lsp/spec/hover/index.md)
-- Features: [lsp](crates/vix-lsp/spec/index.md) ·
-  [git-integration](crates/vix-git/spec/git-integration/index.md) ·
-  [spellcheck](crates/vix-spellcheck/spec/index.md) · [case-change](crates/vix-case/spec/index.md) ·
-  [themes](crates/vix-theme/spec/index.md) · [localization](crates/vix-i18n/spec/index.md) ·
-  tools under [spec/tools/](spec/tools/) · [comparisons](spec/comparisons/index.md)
+- Core: [menus](../crates/vix-menu/spec/index.md) · [keyboard](../crates/vix-keyboard-shortcut-panel/spec/index.md) ·
+  [keymaps](../crates/vix-keymap-model/spec/index.md) · [navigation](../spec/navigation/index.md) ·
+  [command-palette](../crates/vix-palette/spec/index.md) ·
+  [file-explorer](../crates/vix-fileops/spec/index.md) · [editor](../crates/vix-editor/spec/index.md) ·
+  [find-and-replace](../crates/vix-query/spec/index.md) · [hover](../crates/vix-lsp/spec/hover/index.md)
+- Features: [lsp](../crates/vix-lsp/spec/index.md) ·
+  [git-integration](../crates/vix-git/spec/git-integration/index.md) ·
+  [spellcheck](../crates/vix-spellcheck/spec/index.md) · [case-change](../crates/vix-case/spec/index.md) ·
+  [themes](../crates/vix-theme/spec/index.md) · [localization](../crates/vix-i18n/spec/index.md) ·
+  tools under [spec/tools/](../spec/tools/) · [comparisons](../spec/comparisons/index.md)
 - Editor actions: one `spec/<action>/index.md` per action under
-  [`crates/vix-editor/spec/`](crates/vix-editor/spec/), catalogued in
-  [`crates/vix-editor-core/spec/index.md`](crates/vix-editor-core/spec/index.md).
+  [`crates/vix-editor/spec/`](../crates/vix-editor/spec/), catalogued in
+  [`crates/vix-editor-core/spec/index.md`](../crates/vix-editor-core/spec/index.md).
 
-## Contributor & agent guidance (`AGENTS/`)
+## Contributor & agent guidance (`agents/`)
 
-- [AGENTS.md](AGENTS.md) — entry point: build/test, hard rules, conventions.
-- [AGENTS/conventions.md](AGENTS/conventions.md) — coding style and patterns.
-- [AGENTS/workflow.md](AGENTS/workflow.md) — the spec-driven workflow and drift
+- [AGENTS.md](../AGENTS.md) — entry point: build/test, hard rules, conventions.
+- [agents/conventions.md](../agents/conventions.md) — coding style and patterns.
+- [agents/workflow.md](../agents/workflow.md) — the spec-driven workflow and drift
   audits.
-- [AGENTS/share/crate-map.md](AGENTS/share/crate-map.md) — every module and file.
-- [AGENTS/share/glossary.md](AGENTS/share/glossary.md) — shared terminology.
+- [agents/share/crate-map.md](../agents/share/crate-map.md) — every module and file.
+- [agents/share/glossary.md](../agents/share/glossary.md) — shared terminology.
 
 ## Code documentation
 

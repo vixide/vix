@@ -50,6 +50,7 @@ vix_i18n::surface!();
 
 pub mod app;
 pub use vix_case as case;
+pub use vix_clipboard as clipboard;
 pub use vix_editor::editor;
 /// The custom code-editor widget engine (buffer, Tree-sitter highlighting,
 /// history, selection, soft-wrap renderer). Reached through
@@ -138,6 +139,7 @@ pub use vix_media_type as media_type;
 pub use vix_nerd_font_picker as nerd_font_picker;
 pub use vix_org as org;
 pub use vix_org_contacts as org_contacts;
+pub use vix_org_table as org_table;
 pub use vix_outline_panel as outline_panel;
 pub use vix_pomodoro_tool as pomodoro_tool;
 pub use vix_right_dock as right_dock;
@@ -146,6 +148,7 @@ pub use vix_spellcheck as spellcheck;
 pub use vix_status_bar_panel as status_bar_panel;
 pub use vix_system_information_panel as system_information_panel;
 pub use vix_workspace as workspace;
+pub mod column_view;
 pub mod edit_outline;
 pub use vix_edit_sql as edit_sql;
 pub mod edit_table;

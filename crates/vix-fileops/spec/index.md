@@ -1,7 +1,7 @@
 # File Explorer
 
 The file explorer is the **left dock**; its tree state lives in the internal
-`left_dock` crate (see `left_dock/spec/index.md`), and the host renders it and runs
+`left_dock` crate (see `crates/vix-left-dock/spec/index.md`), and the host renders it and runs
 the file operations.
 
 When the tree is taller than the dock, a vertical **scrollbar** appears in a
@@ -39,7 +39,7 @@ Single-click opens a file in an ephemeral preview tab — the next single-click 
 
 Double-click opens the file in a permanent tab and focuses the editor.
 
-Preview tabs are enabled by default. Turn them off via the `preview_tabs` setting (see `docs/configuration.md`) if you prefer every click to open a permanent tab.
+Preview tabs are enabled by default. Turn them off via the `preview_tabs` setting (see `docs/configuration/index.md`) if you prefer every click to open a permanent tab.
 
 ## Cut / Copy / Paste and Multi-Selection
 

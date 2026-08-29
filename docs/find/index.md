@@ -17,6 +17,8 @@ occurrence of the selection without opening any box.
 | Alt+N                   | Find next occurrence of the selection             |
 | Alt+P                   | Find previous occurrence of the selection         |
 | Ctrl+Shift+F            | Workspace-wide search and replace                   |
+| Alt+H                   | In the find dialog: turn replace on or off          |
+| Alt+I                   | In the find dialog: where to look — buffer, files, workspace |
 
 **Find Next** and **Find Previous** repeat the last completed search, and keep
 working after the find box has closed — the last pattern is remembered. With
@@ -33,6 +35,22 @@ in replace mode the hint line reads `Tab / click: switch field`.
 - From the Find field, **Enter** finds the next match.
 - With the cursor in the Replace field, **Enter** replaces all matches.
 - **Alt+Enter** replaces all matches from either field.
+
+## One dialog, two options
+
+Finding somewhere else is not a different command. The find box carries two
+options, each a clickable button and each on an `Alt` key:
+
+- **Replace** (`Alt+H`) turns the find into a find-and-replace in place and puts
+  the cursor in the replacement field. Turning it off keeps the query.
+- **In:** (`Alt+I`) chooses where to look — **Buffer**, **Files**, or
+  **Workspace** — and hands the query, the replacement, and the toggles to
+  whichever surface shows that many results: the workspace panel for Files, the
+  bottom dock for Workspace. Nothing is retyped.
+
+This is why the Edit → Find submenu no longer lists **Find in Files…**,
+**Replace in Files…**, or **Find In Workspace…**; they were the same search with
+a different destination. `Ctrl+Shift+F` still opens the workspace panel directly.
 
 ## Search toolbar
 

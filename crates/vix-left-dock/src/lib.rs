@@ -196,9 +196,12 @@ impl Explorer {
             Ok(rd) => rd.flatten().collect(),
             Err(_) => return,
         };
-        entries.sort_by_key(|e| {
+        // Directories first, then case-insensitive name. Cached: the key stats
+        // the filesystem, and a plain `sort_by_key` would re-stat during the
+        // sort — an entry created or removed mid-sort would then answer
+        // differently for the same element and panic the comparator.
+        entries.sort_by_cached_key(|e| {
             let p = e.path();
-            // Directories first, then case-insensitive name.
             (!p.is_dir(), e.file_name().to_string_lossy().to_lowercase())
         });
         for entry in entries {

@@ -10,3 +10,6 @@ description = "Per-workspace editor session, persisted with `confy`."
 [dependencies]
 confy = { workspace = true }
 serde = { workspace = true }
+
+[dev-dependencies]
+toml = { workspace = true }

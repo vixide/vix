@@ -19,6 +19,9 @@ use vix_editor_core::actions::{
 use vix_editor_core::code::Code;
 pub use vix_editor_core::editor::Editor as CodeEditor;
 use vix_editor_core::utils::get_lang;
+// Sentence boundaries are shared with the Edit → Transpose → Sentences command,
+// so navigation and transposition split text the same way.
+use vix_textops::sentence_starts;
 
 use vix_theme as theme;
 
@@ -55,43 +58,6 @@ fn word_starts(text: &str) -> Vec<usize> {
         }
         prev_word = word;
     }
-    starts
-}
-
-/// Char offsets where each sentence begins: the first non-space char, then the
-/// first non-space char after any `.`/`!`/`?` (plus trailing quotes/brackets)
-/// followed by whitespace. Used by the Go → Sentence navigation.
-fn sentence_starts(text: &str) -> Vec<usize> {
-    let chars: Vec<char> = text.chars().collect();
-    let n = chars.len();
-    let mut starts = Vec::new();
-    let mut i = 0;
-    while i < n && chars[i].is_whitespace() {
-        i += 1;
-    }
-    if i < n {
-        starts.push(i);
-    }
-    while i < n {
-        if matches!(chars[i], '.' | '!' | '?') {
-            let mut j = i + 1;
-            while j < n && matches!(chars[j], '.' | '!' | '?' | '"' | '\'' | ')' | ']' | '}') {
-                j += 1;
-            }
-            if j < n && chars[j].is_whitespace() {
-                while j < n && chars[j].is_whitespace() {
-                    j += 1;
-                }
-                if j < n {
-                    starts.push(j);
-                }
-                i = j;
-                continue;
-            }
-        }
-        i += 1;
-    }
-    starts.dedup();
     starts
 }
 
@@ -1343,6 +1309,26 @@ impl Editor {
         false
     }
 
+    /// Paste `text` into the active buffer at the cursor as **one** edit — one
+    /// undo step — replacing the selection and re-indenting the block to the
+    /// cursor, exactly as pasting the clipboard does. Scrolls the cursor into
+    /// `area`. Returns whether the text was pasted (false when there is no
+    /// editable buffer: no tab, an image, or a read-only one). Used for the
+    /// terminal's bracketed paste.
+    pub fn paste_str(&mut self, text: &str, area: Rect) -> bool {
+        if let Some(t) = self.active_tab_mut() {
+            if t.is_image() || t.read_only {
+                return false;
+            }
+            t.editor.paste_text(text);
+            t.editor.focus(&area);
+            t.dirty = true;
+            t.preview = false;
+            return true;
+        }
+        false
+    }
+
     /// Select the entire active buffer.
     pub fn select_all(&mut self) {
         if let Some(t) = self.active_tab_mut() {
@@ -1478,8 +1464,18 @@ impl Editor {
     }
 
     /// Forward-delete (the `Delete` key): step right, then delete back.
+    ///
+    /// At the very end of the buffer there is nothing ahead to delete: the step
+    /// right would be a no-op and the delete would eat the character *behind*
+    /// the cursor, turning forward delete into a backspace. Guard against that,
+    /// unless a selection is pending — that is what gets deleted then.
     pub fn delete_forward(&mut self) {
         if let Some(t) = self.active_tab_mut() {
+            let at_end = t.editor.get_cursor() >= t.editor.code_ref().len_chars();
+            let selecting = t.editor.get_selection().is_some_and(|s| !s.is_empty());
+            if at_end && !selecting {
+                return;
+            }
             t.editor.apply(MoveRight { shift: false });
             t.editor.apply(Delete {});
         }

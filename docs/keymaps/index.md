@@ -27,6 +27,10 @@ Open **View → Keymap…** to pick the active keymap. The options are:
 
 Your selection is saved to the `keymap` setting, so it persists across sessions.
 
+On macOS the `Command` key drives whatever `Control` drives, in every keymap —
+Vix folds the modifier before dispatch. The terminal has to forward the
+shortcut for that to happen; see `../keybindings/index.md`.
+
 ## IntelliJ
 
 Two keymaps mirror IntelliJ's defaults (macOS uses `Control` in place of
@@ -82,7 +86,9 @@ and the function keys (`F1`, `F3`, `F10`, `F12`) work in **every** keymap.
 ### Apple (default)
 
 Modifier shortcuts in the style of macOS and Windows — for example, `Ctrl-C` for
-Copy. Apple is not modal. See `../../keybindings/index.md` for the full list.
+Copy, and `Ctrl-D` for forward delete (the character to the right of the
+cursor), as in every macOS text field. Apple is not modal. See
+`../keybindings/index.md` for the full list.
 
 ### VSCode macOS
 

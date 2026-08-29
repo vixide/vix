@@ -39,4 +39,4 @@ navigation state (`move_days`/`move_months`/`move_years`, `selected`,
 `selected_formatted`, `reset`, `title`), and `month_grid` (a `MonthGrid` of
 optional day numbers, with `today` set only for the current month). The host owns
 `show_calendar`, the `Calendar` state, the `tools.calendar` toggle, key/mouse
-routing, and `draw_calendar`. See `calendar_panel/spec/index.md`.
+routing, and `draw_calendar`. See `crates/vix-calendar-panel/spec/index.md`.

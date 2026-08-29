@@ -11,7 +11,7 @@ English automatically.
 
 Localization is built on the [`rust-i18n`](https://crates.io/crates/rust-i18n)
 crate (version 4.x). `rust_i18n::i18n!` embeds the whole translation table into
-whichever crate invokes it, so a naive per-crate `i18n!` call in a ~98-crate
+whichever crate invokes it, so a naive per-crate `i18n!` call in a 102-crate
 workspace would embed `locales/app.yml` once per crate. Instead, the `vix-i18n`
 crate invokes it exactly **once**:
 
@@ -193,7 +193,7 @@ text rather than an i18n key (the View → Theme/Locale/Time Zone submenus).
 - **`locale_model`** is the pure-data home of the language list: the `Locale`
   struct (`code` + `name` endonym), the `LOCALES` array in chooser order (English
   first as the fallback, constructed languages last), and the `by_code` lookup.
-  It has no UI dependencies. See `locale_model/src/lib.rs`.
+  It has no UI dependencies. See `crates/vix-locale-model/src/lib.rs`.
 - The **host** (`src/app.rs`) builds the View → Locale submenu from `LOCALES` and
   applies a chosen language by code (`set_locale_by_code`): it calls
   `rust_i18n::set_locale`, persists to `settings.locale`, and confirms via

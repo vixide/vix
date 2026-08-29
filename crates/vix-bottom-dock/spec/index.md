@@ -43,7 +43,7 @@ workspace root, with selection, multi-selection, and scroll state. Toggle it wit
 reveals that file. `Ctrl+E` switches focus between the explorer and the editor.
 
 The explorer is documented in full in
-[`crates/vix-fileops/spec/index.md`](../file-explorer/index.md) — including opening
+[`crates/vix-fileops/spec/index.md`](../../vix-left-dock/spec/index.md) — including opening
 files, preview tabs, cut/copy/paste, multi-selection, delete, and the
 include/exclude path filters. This page does not repeat that detail.
 
@@ -116,7 +116,7 @@ the View → Layout visibility toggle. It shows, left to right:
   **status message**.
 - On the right: the **git branch** (with a dot when the working tree is dirty) —
   clicking it opens the Git Panel (see
-  [`crates/vix-git/spec/git-panel/index.md`](../git-panel/index.md)) — the file's **language**,
+  [`crates/vix-git/spec/git-panel/index.md`](../../vix-git/spec/git-panel/index.md)) — the file's **language**,
   **line ending**, and **selection** info for text tabs, and the **cursor
   line and column**.
 
@@ -193,8 +193,8 @@ editor.
   and `draw_status_bar` (segments built by the `status_bar_panel` crate). Each
   dock reserves a one-column scrollbar gutter via the shared `draw_scrollbar`
   helper when its content overflows and `show_scrollbar` is on.
-- **Menu** entries are defined in `src/menu.rs` under `VIEW_LAYOUT`; labels are
+- **Menu** entries are defined in `crates/vix-menu/src/lib.rs` under `VIEW_LAYOUT`; labels are
   i18n keys translated from `locales/app.yml`.
-- **Defaults** (from `src/settings.rs`): left and right docks and the status bar
+- **Defaults** (from `crates/vix-settings/src/lib.rs`): left and right docks and the status bar
   start shown; the bottom dock starts hidden; `explorer_width = 30`,
   `messages_width = 32`, `bottom_dock_height = 9`.

@@ -1,4 +1,9 @@
-//! Project task runner: named shell commands loaded from `tasks.toml`.
+//! Project task running: named tasks loaded from `tasks.toml`, per-project-
+//! type lifecycle commands (configure/compile/test/install/package/run),
+//! tasks discovered from a project's own tooling (npm/yarn/pnpm/bun scripts,
+//! Deno tasks, Composer scripts, justfile recipes, go-task Taskfiles, Rake
+//! tasks, Make targets), subproject-scoped commands for monorepos, and
+//! running the test under the cursor.
 //!
 //! A workspace can define reusable build/test/run commands in a `tasks.toml` at
 //! its root (or in `.vix/tasks.toml`). Vix lists them in a chooser (Tools →
@@ -15,6 +20,52 @@
 //! name = "test"
 //! command = "cargo test"
 //! ```
+//!
+//! Beyond the `tasks.toml` list above, this crate also provides the pieces
+//! behind the project-wide Project menu: project-type detection, lifecycle
+//! command resolution, task discovery from build-tool manifests, monorepo
+//! subproject scoping, command history, and test-at-point. All of that is
+//! pure logic: it takes file contents, directory listings, and cursor
+//! positions as plain data and returns data, doing no filesystem or process
+//! I/O itself, so it can be unit-tested without a live editor or project. The
+//! host wires this into the app (menu, action ids, keybindings).
+//!
+//! ## The biggest documented deviation: test-at-point
+//!
+//! A syntax-tree-based test-at-point could cover many languages precisely via
+//! per-language query grammars. Adding a full parser dependency to this crate
+//! for that alone would be wildly disproportionate, so [`test_at_point`]
+//! instead uses line-based regex heuristics: scan upward from the cursor line
+//! for the nearest enclosing or preceding test-definition line. This is
+//! simpler and occasionally wrong (e.g. it does not understand real block
+//! nesting the way a parser would), but is cheap, dependency-light, and
+//! correct for the common case of a cursor placed inside or just below a
+//! single test body.
+//!
+//! ## Out of scope
+//!
+//! - **Per-directory configuration languages.** This crate's analog is the
+//!   `project_override` parameter to [`lifecycle::effective_lifecycle`]: a
+//!   plain [`lifecycle::LifecycleCommands`] the host builds however it likes
+//!   (e.g. from a `.vix/project.toml`), not a configuration *language*.
+//! - **Command history *scope*** (which history a given project root maps
+//!   to across worktrees/checkouts of the "same" repository). [`history`]
+//!   models only the push/dedup *policy*; scoping and persistence are a
+//!   host/storage-layer concern.
+//! - **Syntax-tree-based test-at-point** — see above.
+//! - **Java, Erlang, F#, and other test-at-point languages** not listed in
+//!   [`test_at_point`]'s doc comment — skipped for budget reasons; the
+//!   per-language dispatch inside that module is structured so more
+//!   languages can be added the same way.
+//! - **Running commands.** This crate only resolves *what* command string to
+//!   run; invoking a shell, streaming output, and reporting exit status are
+//!   host concerns.
+//! - **Caching command resolutions to disk**, prompting the user to edit a
+//!   resolved command before running it, and any other UI-level behavior —
+//!   this crate models the *data shapes* those features would read and write
+//!   ([`lifecycle::effective_lifecycle`]'s `cached` parameter,
+//!   [`history::push_history`]'s history list) but does not implement the UI
+//!   or persistence around them.
 
 #![warn(clippy::pedantic)]
 #![forbid(unsafe_code)]
@@ -23,6 +74,50 @@
 use std::path::Path;
 
 use serde::Deserialize;
+
+/// Recognized project types (cargo, npm, make, …), their marker files, and
+/// detection from a directory listing.
+pub mod project_type;
+
+/// Lifecycle command resolution: merging project-type defaults with
+/// per-project overrides and a resolved-command cache.
+pub mod lifecycle;
+
+/// Named tasks: the three-tier (user-configured / project-type / discovered)
+/// model and its merge precedence.
+pub mod task;
+
+/// Discovery of `npm`/`yarn`/`pnpm`/`bun` `package.json` scripts.
+pub mod discover_npm;
+
+/// Discovery of `deno.json`/`deno.jsonc` tasks.
+pub mod discover_deno;
+
+/// Discovery of `composer.json` scripts.
+pub mod discover_composer;
+
+/// Discovery of `justfile` recipes.
+pub mod discover_just;
+
+/// Discovery of go-task `Taskfile.yml` tasks.
+pub mod discover_taskfile;
+
+/// Discovery of Rake tasks from a `Rakefile` and `.rake` files.
+pub mod discover_rake;
+
+/// Discovery of plain named Make targets from a `Makefile`.
+pub mod discover_make;
+
+/// Monorepo subproject discovery: the nearest enclosing project-type marker
+/// file for any given path.
+pub mod subproject;
+
+/// Command run history: push-with-dedup policies.
+pub mod history;
+
+/// Test-at-point: locating the nearest enclosing/preceding test definition
+/// and its run command, per language.
+pub mod test_at_point;
 
 /// One named task: a label and the shell command it runs.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]

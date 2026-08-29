@@ -33,7 +33,8 @@ command-palette entries).
 | Esc                       | Close the Find box                                    |
 
 `Ctrl+G` / `F3` and their `Shift` variants are also on the **Edit → Find** menu
-along with **Find Selection** (`Alt+N`) and **Find In Workspace…**.
+along with **Find Selection** (`Alt+N`) and the find dialog's scope option
+(`Alt+I`), which widens the same search to files or the workspace dock.
 
 ## Opening Find
 
@@ -148,7 +149,8 @@ reports `Query replace: no matches`.
 
 ## Find In Workspace → Dock
 
-**Edit → Find → Find In Workspace…** (action `search.workspace_dock`, also on the
+**Find → In: Workspace** (the find dialog's scope option, `Alt+I`; action id
+`search.workspace_dock`, also on the
 command palette as **Search in Workspace → Dock**) searches across every file
 under the workspace root and lists the hits in the **bottom dock**.
 
@@ -160,7 +162,7 @@ their possibly-unsaved state), and pushes one line per match into the dock in
 `[N matches in M files]` summary. Matches are capped at 5,000.
 
 Each result line in the dock is **click-to-jump**: clicking it opens the file and
-moves the cursor to that line and column. See `bottom_dock/spec/index.md` for
+moves the cursor to that line and column. See `crates/vix-bottom-dock/spec/index.md` for
 the dock itself.
 
 ## Workspace-wide search & replace
@@ -182,7 +184,7 @@ path: **Include path** (only matching paths are searched) and **Exclude path**
 Exclude path. Empty filters impose no constraint, and an invalid (half-typed) regex
 is treated as empty rather than hiding every file — for example Include `\.rs$`
 limits to Rust files and Exclude `(^|/)target/` skips the build directory. See
-`find_panel/spec/index.md`.
+`crates/vix-find-panel/spec/index.md`.
 
 ## As implemented in Vix
 
@@ -210,5 +212,5 @@ offsets; the app renders the box, owns the buffer, and applies the returned text
   `edit.find_prev` (`Ctrl+Shift+G`), `edit.query_replace` (`Ctrl+Alt+R`),
   `search.next_selection` / `search.prev_selection` (`Alt+N` / `Alt+P`), and
   `search.workspace_dock`. The Edit → Find submenu is defined by `EDIT_FIND` in
-  `src/menu.rs`. The `search` field and `crate::search` re-export (`Field`,
+  `crates/vix-menu/src/lib.rs`. The `search` field and `crate::search` re-export (`Field`,
   `SearchBar`) connect the app to `find_panel`.

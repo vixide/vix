@@ -154,7 +154,7 @@ either can be omitted, as in the `j`/`c` examples above.)
 
 `org_anything_capture_template` / `org_todo_capture_template` were removed
 outright in favor of built-in entries seeded into `org_capture_templates`
-(see Decisions); see `vix-settings/spec/index.md` § Org-capture templates for
+(see Decisions); see `crates/vix-settings/spec/index.md` § Org-capture templates for
 the full field reference.
 
 ## Menu
@@ -209,7 +209,7 @@ template (`App::start_capture`):
    which already used it: `menu.item.org.capture.contact`/`.task`). A fourth
    built-in, `org.capture.babel` (`"b"` template, `EntryType::Plain`,
    `"#+begin_src %^{Language}\n%?\n#+end_src"`), retires the old
-   `spec/org/babel/index.md` proposal's bespoke two-step language +
+   `crates/vix-org/spec/babel/index.md` proposal's bespoke two-step language +
    header-args flow — the generalized capture engine already covers it with
    one field prompt and a review buffer, no new UI needed.
 8. **`org.capture.note` (a fifth built-in).** `"n"` template
@@ -220,7 +220,7 @@ template (`App::start_capture`):
 9. **Live template preview on field prompts.** The original wizard showed
    each `%^{}` field as an isolated prompt box (label + input, no context) —
    fine for one-field templates, disorienting for `"c"` Contact's five or the
-   `spec/org/capture/index.md` example template's seventeen. `Prompt` gained
+   `crates/vix-org-capture/spec/index.md` example template's seventeen. `Prompt` gained
    an optional `preview: Option<String>`; `vix_org_capture::preview` (mostly
    a thin wrapper around `expand`, reusing all its placeholder logic) renders
    the whole template with answered fields substituted, the current one

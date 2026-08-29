@@ -27,4 +27,4 @@ relaunching.
 The host owns `WorkspaceChooser`, `open_workspace_chooser`,
 `workspace_chooser_key`/`_mouse`, `switch_to_selected_workspace`, and
 `switch_workspace`; `ui::draw_workspace_chooser` renders it with the shared list
-chooser. Recent roots come from [session restore](../session-restore/index.md).
+chooser. Recent roots come from [session restore](../../vix-session/spec/index.md).

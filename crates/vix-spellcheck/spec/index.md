@@ -20,7 +20,7 @@ session dictionary, `i` ignores it for the session, `Esc` closes.
   `/opt/homebrew/share/hunspell`, `$XDG_DATA_HOME/hunspell`, …) plus whatever
   `hunspell -D` reports. The `dictionary_path` setting adds one more directory to
   search first; `./dictionaries` (the repo's bundled set) is also searched. See
-  `docs/configuration.md` and `dictionaries.md`.
+  `docs/configuration/index.md` and `dictionaries.md`.
 - The dictionary name is resolved from the UI locale, trying `en-GB`, `en_GB`,
   then the base `en`, and finally any `en_*` file (e.g. `en_US`).
 - The language follows the **UI locale** (View → Locale); changing locale reloads

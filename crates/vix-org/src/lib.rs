@@ -17,6 +17,14 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+mod columns;
+pub use columns::{
+    ColumnDef, ColumnRow, ColumnsSpec, DblockParams, apply_column_edit, build_column_table,
+    columns_spec_anchor, parse_all_values, parse_columns_spec, parse_dblock_params,
+    render_columnview_dblock, resolve_columns_spec, todo_keywords, update_all_columnview_dblocks,
+    update_columnview_dblock,
+};
+
 /// The TODO keywords Org cycles through (besides the empty state).
 const TODO: &str = "TODO";
 const DONE: &str = "DONE";

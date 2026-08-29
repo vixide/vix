@@ -13,7 +13,7 @@ Vix ships ten keymaps. **Apple** is the default and matches Vix's own bindings.
 
 | Keymap | Id | Philosophy |
 | ------ | -- | ---------- |
-| Apple | `apple` | Modifier-key shortcuts (the default), e.g. `Ctrl+O` to open, `Ctrl+S` to save. |
+| Apple | `apple` | Modifier-key shortcuts (the default), e.g. `Ctrl+O` to open, `Ctrl+S` to save, `Ctrl+D` forward delete (the macOS text-field binding: it removes the character to the right of the cursor, exactly like the `Delete` key). |
 | VSCode macOS | `vscode-macos` | VS Code's signature shortcuts, with `Ctrl` standing in for `Cmd` — `Ctrl+P` Quick Open, `Ctrl+Shift+P` Command Palette, `Ctrl+G` Go to Line. |
 | VSCode Windows | `vscode-windows` | VS Code (Windows) shortcuts; the same `Ctrl`-based bindings as VSCode macOS in the terminal. |
 | Emacs | `emacs` | Layered `Ctrl` chords and a `Ctrl+X` prefix, e.g. `Ctrl+X Ctrl+F` to open. |
@@ -28,7 +28,9 @@ Each keymap gets first chance to consume a key. Apple and VS Code dispatch their
 shortcuts directly; the others (Emacs, Vi, Spacemacs, both IntelliJ, Eclipse, Sublime Text) try
 their own handling and then fall back to a **shared** layer (menu-bar mnemonics
 like `Alt+F` and function keys like `F10`) before the focused pane handles the
-key. The IntelliJ, Eclipse, and Sublime Text keymaps let editing chords
+key. A mnemonic toggles its menu: pressing the open menu's own letter closes the
+dropdown, and another menu's letter switches to it, whether or not a dropdown is
+already open. The IntelliJ, Eclipse, and Sublime Text keymaps let editing chords
 (`Ctrl+Z/X/C/V/A`) fall through to the editor widget.
 
 ## Choosing a keymap
@@ -195,11 +197,11 @@ the modal handler is `App::spacemacs_key` / `spacemacs_leader_key`.
 ## As implemented in Vix
 
 The list of keymaps is pure data in the `keymap_model` module
-(`src/keymap_model.rs`): the `Keymap { id, name, tooltip }` struct, the `KEYMAPS`
+(`crates/vix-keymap-model/src/lib.rs`): the `Keymap { id, name, tooltip }` struct, the `KEYMAPS`
 slice (Apple, VSCode macOS, VSCode Windows, Emacs, Vi, Spacemacs, IntelliJ macOS,
 IntelliJ Windows, Eclipse — in menu order), and the `by_id` lookup.
 
-The View → Keymap submenu is `VIEW_KEYMAP` in `src/menu.rs`, one leaf per keymap
+The View → Keymap submenu is `VIEW_KEYMAP` in `crates/vix-menu/src/lib.rs`, one leaf per keymap
 with action `view.keymap:<id>`, kept in sync with `KEYMAPS` by the
 `keymap_submenu_matches_model` test.
 
@@ -221,4 +223,4 @@ The host wiring lives in `src/app.rs`:
 - `mode_indicator` — the status-bar string: Vi's `:`-line / Insert / Normal, or
   Emacs's pending `C-x-` prefix; `None` for keymaps with nothing to show.
 
-The default keymap is set in `src/settings.rs` (`keymap: "apple"`).
+The default keymap is set in `crates/vix-settings/src/lib.rs` (`keymap: "apple"`).

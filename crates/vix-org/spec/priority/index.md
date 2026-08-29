@@ -59,7 +59,7 @@ Emacs default cycle — clamping is simpler and was judged less surprising than
 a silent wrap.
 
 The `%^{Priority|0|0|1|2|3|4|5|6|7|8|9}` capture-template idiom above works
-via `vix-org-capture`'s `%^{Label|choices}` parsing (`spec/org/capture/index.md`):
+via `vix-org-capture`'s `%^{Label|choices}` parsing (`crates/vix-org-capture/spec/index.md`):
 the full `|`-delimited list is parsed (`FieldPrompt::choices`), and the first
 choice pre-fills the prompt. The rest of that example template — `%^g`
 tags, effort/category field prompts, `%a` annotation — all map onto

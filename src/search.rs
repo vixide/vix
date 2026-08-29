@@ -5,4 +5,4 @@
 
 #![warn(clippy::pedantic)]
 
-pub use crate::find_panel::{Field, SearchBar};
+pub use crate::find_panel::{Field, Scope, SearchBar};

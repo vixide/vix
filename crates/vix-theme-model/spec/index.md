@@ -3,7 +3,7 @@
 The Vix theme model.
 
 Every theme is a JSON [`CustomTheme`] with per-region colors and font
-attributes (see `spec/index.md`). There is always exactly one active theme;
+attributes (see `crates/vix-theme/spec/index.md`). There is always exactly one active theme;
 the bundled `Dark` and `Light` themes (from `themes/dark.json` /
 `themes/light.json`) are just ordinary themes the host ships. The style
 helpers ([`fg`], [`bg`], [`region_base`], …) read the active theme.

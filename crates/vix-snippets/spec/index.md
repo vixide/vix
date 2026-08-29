@@ -71,10 +71,10 @@ loaded (so `snippets.json`, `examples.json`, etc. all count), sorted by filename
 | Global | `<config>/global/snippets/*.json` | always |
 | Media-type (config) | `<config>/media-types/<type>/<subtype>/snippets/*.json` | buffers of that media type |
 | Media-type (project) | `<project root>/config/media-types/<type>/<subtype>/snippets/*.json` | buffers of that media type, in this project |
-| Project | `<project root>/<project_snippets>` (default `config/snippets/snippets.json`) | the open project |
+| Project | `<project root>/<project_snippets>` (default `<config>/snippets/snippets.json`) | the open project |
 
 `<config>` is Vix's config directory (e.g. `~/.config/vix/`). The media-type
-segment is the buffer's media type (see [media-types](../media-types/index.md)),
+segment is the buffer's media type (see [media-types](../../vix-media-type/spec/index.md)),
 written **without an `x-` subtype prefix** — for example a Rust source file
 (`text/rust`) resolves to `media-types/text/rust/snippets/`.
 

@@ -88,3 +88,8 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --workspace --no-deps
+
+      # The specs are living documentation, gated like code. Mirrors
+      # `scripts/check`; see spec/test/index.md.
+      - name: scripts/check-docs
+        run: python3 scripts/check-docs

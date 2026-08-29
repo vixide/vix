@@ -22,7 +22,8 @@ stages:
   - release
 
 # Pin to the toolchain floor from `Cargo.toml` (`workspace.package.rust-version`)
-# so GitLab CI fails the same way a user on the minimum toolchain would.
+# so GitLab CI fails the same way a user on the minimum toolchain would. The
+# floor is the current stable minus two — see spec/rust-msrv-n-minus-2.
 default:
   image: rust:1.96
   # Cache the registry and the build directory per branch. `target/` is large
@@ -108,6 +109,14 @@ doc:
     RUSTDOCFLAGS: "-D warnings"
   script:
     - cargo doc --workspace --no-deps
+
+# The specs are living documentation, gated like code: broken links, a crate
+# with no spec, a crate missing from the crate map, or a README.md that has
+# drifted from its index.md twin all fail here. Mirrors `scripts/check`.
+docs:
+  stage: check
+  script:
+    - python3 scripts/check-docs
 
 # ---------------------------------------------------------------------------
 # Release (tag pipelines only)

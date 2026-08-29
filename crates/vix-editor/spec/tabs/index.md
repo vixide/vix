@@ -135,7 +135,7 @@ instead of a text editor. Image tabs are view-only:
 
 ## As implemented in Vix
 
-- `src/editor.rs` defines the `Tab` struct (`path`, `dirty`, `preview`, optional
+- `crates/vix-editor/src/editor.rs` defines the `Tab` struct (`path`, `dirty`, `preview`, optional
   `image`, `title()`, `is_image()`) and the `Editor` tab stack (`tabs`,
   `active`, and the `new_tab`, `open`, `open_image`, `promote_active`,
   `close_active`, `close_all`, `next_tab`, `prev_tab` operations). `open` reuses
@@ -152,6 +152,6 @@ instead of a text editor. Image tabs are view-only:
 - `src/ui.rs` (`draw_tabs`) renders the strip: the active tab underlined,
   preview tabs dimmed, and a dim `│` divider; `draw_center` renders either the
   active buffer's editor or its image.
-- `src/menu.rs` lists the File-menu entries (New, Open, Close, Close All Tabs,
+- `crates/vix-menu/src/lib.rs` lists the File-menu entries (New, Open, Close, Close All Tabs,
   Reopen Closed Tab) and the View-menu Next Tab / Previous Tab entries.
-- `src/settings.rs` defines `preview_tabs` (default on).
+- `crates/vix-settings/src/lib.rs` defines `preview_tabs` (default on).

@@ -20,11 +20,21 @@ path is whatever `confy` resolves for the platform. The code exposes this path
 via `Settings::config_path()`, which returns `None` only when the config
 location cannot be determined.
 
-Settings load at startup (`Settings::load()`, called from `main`). Load is
-forgiving: a missing file, a parse failure, or any other error falls back to the
-built-in defaults rather than refusing to start. Because the schema is
-`#[serde(default)]`, an older config file still loads cleanly when new fields are
-added — each missing field takes its default.
+Settings load at startup (`Settings::load()`, called from `main`) and are written
+back with `Settings::save()` whenever Vix changes one itself — the welcome dialog
+turning `show_welcome_dialog` off, agenda-file edits, recent commands, database
+connections, and a final save on exit. Load is forgiving: a missing file, a parse
+failure, or any other error falls back to the built-in defaults rather than
+refusing to start.
+
+`Settings::load_from(path)` / `Settings::save_to(path)` are the same operations
+against an explicit file rather than the user's config directory. The host holds
+the choice in `App::settings_path` (`None` = the user's config file, set via
+`App::with_settings_path`) and routes every write through it, so a run pointed at
+another config file — a test, an embedder — never touches the user's.
+
+Because the schema is `#[serde(default)]`, an older config file still loads
+cleanly when new fields are added — each missing field takes its default.
 
 ## Editing settings
 
@@ -57,6 +67,7 @@ field is absent.
 | `ensure_final_newline` | boolean | `true` | On save, append a final newline if the file does not end with one. |
 | `indent_style` | string | `"spaces"` | Indentation inserted by Tab: `"spaces"` or `"tabs"`. |
 | `tab_width` | integer | `4` | Number of spaces per indent when `indent_style` is `"spaces"`. |
+| `wrap_column` | integer | `80` | Column that **Edit → Wrap** hard-wraps (fills) the selection or the paragraph at the cursor to. |
 | `theme` | string | `"dark"` | Color theme: `"dark"` or `"light"` (or a custom theme, see below). |
 | `locale` | string | `"en"` | UI language as a locale code (e.g. `"en"`, `"es"`, `"fr"`, `"de"`, `"cy"`). Used as the default; a `--locale` CLI flag overrides it for one run. |
 | `keymap` | string | `"apple"` | Keyboard navigation style id: `"apple"`, `"vscode"`, `"emacs"`, or `"vi"`. |
@@ -68,7 +79,7 @@ field is absent.
 | `dictionary_path` | string | `""` | Extra directory to search for Hunspell dictionaries, on top of the autodetected standard locations. Empty = autodetect only. |
 | `lsp_enabled` | boolean | `true` | Master switch for Language Server Protocol features (diagnostics, hover, go-to-definition, completion). When off, no servers are launched. |
 | `lsp_servers` | array of tables | `[]` | Configured language servers, matched to files by extension (see below). |
-| `welcomed` | boolean | `false` | Whether the first-run welcome screen has been shown. Set true after the welcome panel first appears, so it does not pop up on every launch. |
+| `show_welcome_dialog` | boolean | `true` | Show the welcome dialog on launch. Vix sets it to `false` and saves as soon as the dialog has been shown once, so it appears on the first run only; set it back to `true` to see it again. |
 | `contacts_dir` | string | `""` | Directory of vCard (`.vcf`) files for the contact browser (**Tools → Contacts…**). Empty = use the workspace root. |
 | `org_capture_templates` | array of tables | `Anything`/`Todo`/`Contact` (see below) | Named, placeholder-driven templates for the **Org → Capture** submenu (see below). |
 | `org_priority_highest` | char | `'0'` | Highest-priority character for a headline's `[#X]` cookie (**Org → Priority Up/Down**). "Highest" sorts first — Vix's default is numeric (`'0'` highest .. `'9'` lowest), unlike Emacs's default `'A'`..`'C'`. |
@@ -76,8 +87,8 @@ field is absent.
 | `org_priority_default` | char | `'0'` | Priority given to a headline that had no `[#X]` cookie yet, by **Org → Priority Up/Down**. |
 | `org_agenda_files` | array of strings | `[]` | The Org agenda's explicit file list (workspace-relative paths), managed by **Org → Agenda → File List**. Empty means every `.org` file in the project. |
 | `time_zone` | string | `"UTC"` | Active time zone as an IANA canonical name (e.g. `"UTC"`, `"America/New_York"`). Chosen via **Tools → Time Zone…**; used app-wide (e.g. the clock panel). |
-| `restore_session` | bool | `true` | Reopen the previous [session](../session-restore/index.md) (open files, focused tab, cursor positions) when launched in a workspace with no file argument. Saved per workspace in `session.toml`. |
-| `sticky_search_highlight` | bool | `true` | Keep [search-match highlights](../find-and-replace/index.md) visible after the Find box closes, until toggled off. When `false`, closing Find clears them. |
+| `restore_session` | bool | `true` | Reopen the previous [session](../../vix-session/spec/index.md) (open files, focused tab, cursor positions) when launched in a workspace with no file argument. Saved per workspace in `session.toml`. |
+| `sticky_search_highlight` | bool | `true` | Keep [search-match highlights](../../vix-find-panel/spec/index.md) visible after the Find box closes, until toggled off. When `false`, closing Find clears them. |
 
 ### Indentation
 
@@ -129,7 +140,7 @@ servers are launched regardless of what `lsp_servers` contains.
 `org_capture_templates` holds the entries for **Org → Capture**: each is a
 named template with placeholders and a filing target. See
 [`crates/vix-org/spec/index.md`](../../vix-org/spec/index.md) § Capture and
-[`spec/org/capture/index.md`](../../../spec/org/capture/index.md) for the
+[`crates/vix-org-capture/spec/index.md`](../../../crates/vix-org-capture/spec/index.md) for the
 placeholder syntax and target shapes. Each entry is a TOML table:
 
 | Field | Type | Meaning |
@@ -168,7 +179,7 @@ Settings…**.
 
 ## As implemented in Vix
 
-`src/settings.rs` defines the `Settings` struct (every field, its doc comment,
+`crates/vix-settings/src/lib.rs` defines the `Settings` struct (every field, its doc comment,
 and its default), the `LspServer` entry type, the `MAX_RECENT_FILES` cap (`15`),
 and the `load`/`save`/`config_path`/`themes_dir`/`indent_string` helpers, all
 backed by `confy` under the app name `vix` and config stem `config`.

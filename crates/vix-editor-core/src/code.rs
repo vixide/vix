@@ -22,12 +22,49 @@ use unicode_width::UnicodeWidthStr;
 #[folder = "langs/"]
 struct LangAssets;
 
+thread_local! {
+    /// Compiled Tree-sitter highlight queries, keyed by `(language, source hash)`.
+    ///
+    /// `Query::new` compiles a `.scm` query, which for a big grammar (Rust,
+    /// TypeScript) costs tens of milliseconds — and it used to run on *every*
+    /// [`Code::new`]: every file opened, every preview tab the explorer scans
+    /// past with an arrow key, every split, plus one more per injected language.
+    /// A compiled query is immutable and identical for a given language and
+    /// source, so it is built once and shared.
+    ///
+    /// Thread-local rather than global because `Code` is already single-threaded
+    /// (its injection parsers are `Rc`), which keeps the cache lock-free.
+    static QUERY_CACHE: RefCell<HashMap<(String, u64), Rc<Query>>> =
+        RefCell::new(HashMap::new());
+}
+
+/// The compiled highlight query for `lang`, from the cache when it is there.
+///
+/// Keyed by the query *source* as well as the language, so a custom-highlight
+/// override never collides with the bundled query.
+fn compiled_query(lang: &str, language: &Language, source: &str) -> Result<Rc<Query>> {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    source.hash(&mut hasher);
+    let key = (lang.to_string(), hasher.finish());
+
+    if let Some(cached) = QUERY_CACHE.with(|cache| cache.borrow().get(&key).cloned()) {
+        return Ok(cached);
+    }
+    let query = Rc::new(Query::new(language, source)?);
+    QUERY_CACHE.with(|cache| cache.borrow_mut().insert(key, Rc::clone(&query)));
+    Ok(query)
+}
+
 /// A change event reported to a change callback:
 /// `(start_line, start_col, end_line, end_col, text)`.
 pub(crate) type ChangeEvent = (usize, usize, usize, usize, String);
 
 /// Tree-sitter injection parsers and queries, each keyed by language name.
-type Injections = (HashMap<String, Rc<RefCell<Parser>>>, HashMap<String, Query>);
+type Injections = (
+    HashMap<String, Rc<RefCell<Parser>>>,
+    HashMap<String, Rc<Query>>,
+);
 
 /// The pieces of highlighting state that thread unchanged through the recursive
 /// [`Code::highlight`] walk: the theme map and the optional injection parser and
@@ -40,7 +77,7 @@ struct HighlightCtx<'a, T> {
     /// Per-language parsers for embedded (injected) languages, if any.
     injection_parsers: Option<&'a HashMap<String, Rc<RefCell<Parser>>>>,
     /// Per-language highlight queries for embedded languages, if any.
-    injection_queries: Option<&'a HashMap<String, Query>>,
+    injection_queries: Option<&'a HashMap<String, Rc<Query>>>,
 }
 
 impl<T> Clone for HighlightCtx<'_, T> {
@@ -193,12 +230,12 @@ pub struct Code {
     lang: String,
     tree: Option<Tree>,
     parser: Option<Parser>,
-    query: Option<Query>,
+    query: Option<Rc<Query>>,
     applying_history: bool,
     history: History,
     current_batch: EditBatch,
     injection_parsers: Option<HashMap<String, Rc<RefCell<Parser>>>>,
-    injection_queries: Option<HashMap<String, Query>>,
+    injection_queries: Option<HashMap<String, Rc<Query>>>,
     change_callback: Option<Box<dyn Fn(Vec<ChangeEvent>)>>,
     custom_highlights: Option<HashMap<String, String>>,
     /// Overrides the per-language indent string when set (host configuration).
@@ -250,7 +287,7 @@ impl Code {
             let mut parser = Parser::new();
             parser.set_language(&language)?;
             let tree = parser.parse(text, None);
-            let query = Query::new(&language, &highlights)?;
+            let query = compiled_query(lang, &language, &highlights)?;
             let (iparsers, iqueries) = code.init_injections(&query)?;
             code.tree = tree;
             code.parser = Some(parser);
@@ -329,7 +366,7 @@ impl Code {
                     let mut parser = Parser::new();
                     parser.set_language(&language)?;
                     let highlights = self.get_highlights(lang)?;
-                    let inj_query = Query::new(&language, &highlights)?;
+                    let inj_query = compiled_query(lang, &language, &highlights)?;
 
                     injection_parsers.insert(lang.to_string(), Rc::new(RefCell::new(parser)));
                     injection_queries.insert(lang.to_string(), inj_query);
@@ -1131,7 +1168,12 @@ impl Code {
             prev_line_level_in_block = line_levels[i];
         }
 
-        let to_insert = result.join("\n");
+        // `lines()` drops the block's trailing newline; put it back, so pasting a
+        // whole line stays a whole line instead of running into the next paste.
+        let mut to_insert = result.join("\n");
+        if text.ends_with('\n') {
+            to_insert.push('\n');
+        }
         self.insert(offset, &to_insert);
         to_insert.chars().count()
     }

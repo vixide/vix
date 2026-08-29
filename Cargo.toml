@@ -31,7 +31,7 @@ serde_json = "1"
 ratatui-image = { version = "11.0.6", default-features = false, features = ["image-defaults", "crossterm"] }
 image = "0.25"
 confy = "2.0.0"
-clap = { version = "4.6.5", features = ["derive"] }
+clap = { version = "4.6.6", features = ["derive"] }
 rust-i18n = "4.2.1"
 base64 = "0.22"
 # Held at 11.x deliberately: evalexpr 12.0.0 relicensed from MIT to
@@ -91,6 +91,9 @@ futures-util = { version = "0.3", default-features = false }
 mimalloc = "0.1"
 # Property-based ("fuzz") testing of parsers and converters (dev-only).
 proptest = "1"
+# Statistical benchmarking of the hot paths (dev-only). `harness = false` on each
+# [[bench]]; see benches/ and spec/test/index.md.
+criterion = { version = "0.7", default-features = false, features = ["cargo_bench_support"] }
 
 [package]
 name = "vix"
@@ -297,6 +300,8 @@ vix-org = { path = "crates/vix-org", version = "1.5.0" }
 vix-org-capture = { path = "crates/vix-org-capture", version = "1.5.0" }
 # Org-contacts: contact management over Org files.
 vix-org-contacts = { path = "crates/vix-org-contacts", version = "1.5.0" }
+# Org-mode pipe-table editing: parsing, alignment, structural edits, and TBLFM formulas.
+vix-org-table = { path = "crates/vix-org-table", version = "1.5.0" }
 # The code-outline list (symbol kind + name + line) and the panel's selection.
 vix-outline-panel = { path = "crates/vix-outline-panel", version = "1.5.0" }
 # Command palette (Ctrl+P) with prefix-driven modes.
@@ -323,7 +328,7 @@ vix-status-bar-panel = { path = "crates/vix-status-bar-panel", version = "1.5.0"
 vix-system-information-panel = { path = "crates/vix-system-information-panel", version = "1.5.0" }
 # Matching HTML/XML tag navigation.
 vix-tags = { path = "crates/vix-tags", version = "1.5.0" }
-# Project task runner: named shell commands loaded from `tasks.toml`.
+# Project task running: tasks.toml, per-project-type lifecycle commands, discovered tasks, subprojects, and test-at-point.
 vix-tasks = { path = "crates/vix-tasks", version = "1.5.0" }
 # Integrated terminal: a real PTY hosting a shell, parsed by `vt100`.
 vix-terminal = { path = "crates/vix-terminal", version = "1.5.0" }
@@ -445,6 +450,22 @@ sqlx = { workspace = true }
 # current-thread runtime on its own worker thread (src/db/session.rs).
 tokio = { workspace = true }
 futures-util = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+# Benchmarks run with Criterion's own harness, not libtest's.
+[[bench]]
+name = "text_ops"
+harness = false
+
+[[bench]]
+name = "editor_ops"
+harness = false
+
+[[bench]]
+name = "search_and_palette"
+harness = false
 
 # Faster allocator for the MUSL static target (glibc's allocator is fine, but
 # musl's is slow). Used as the global allocator in lib.rs/main.rs under the same

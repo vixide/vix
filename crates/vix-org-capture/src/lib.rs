@@ -6,7 +6,7 @@
 //! `org-capture-templates` — a template with `%^{Prompt}`-style placeholders,
 //! wrapped as a headline/item/checkbox/table-row, and filed at a target
 //! location (the cursor, a node by `:ID:`, a file, a headline within a file,
-//! or a date-tree). See `spec/org/capture/index.md` for the design.
+//! or a date-tree). See `crates/vix-org-capture/spec/index.md` for the design.
 //!
 //! This crate is pure: it has no notion of "now", the active editor, or the
 //! filesystem. The host collects prompt answers, builds a [`Context`], reads

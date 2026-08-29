@@ -1,9 +1,10 @@
 //! Small pure text transforms used by Edit/Tools actions.
 //!
 //! Two shapes live here: whole-text transforms (`&str -> String`: line-ending
-//! conversion, blank-line squeezing, ROT13) and cursor-relative rewrites
-//! (`(&str, usize) -> Option<(String, usize)>`: increment number, smart toggle,
-//! transpose). The host applies the former via
+//! conversion, blank-line squeezing, ROT13, hard wrap) and cursor-relative
+//! rewrites (`(&str, usize) -> Option<(String, usize)>`: increment number,
+//! smart toggle, transpose characters/words/lines/sentences/paragraphs/
+//! sections, wrap the paragraph at the cursor). The host applies the former via
 //! `App::transform_selection_or_buffer` and the latter via
 //! `App::rewrite_at_cursor`; everything here is unit-tested without a terminal.
 
@@ -166,6 +167,491 @@ pub fn transpose_words_at(text: &str, cursor: usize) -> Option<(String, usize)> 
     out.extend(chars[b_end..].iter());
     let new_cursor = a + word2.chars().count() + sep.chars().count() + word1.chars().count();
     Some((out, new_cursor))
+}
+
+/// Char offsets where each sentence begins: the first non-space char, then the
+/// first non-space char after any `.`/`!`/`?` (plus trailing quotes/brackets)
+/// followed by whitespace. Shared by the Go → Sentence navigation and
+/// [`transpose_sentences_at`], so both agree on where a sentence starts.
+#[must_use]
+pub fn sentence_starts(text: &str) -> Vec<usize> {
+    let chars: Vec<char> = text.chars().collect();
+    let n = chars.len();
+    let mut starts = Vec::new();
+    let mut i = 0;
+    while i < n && chars[i].is_whitespace() {
+        i += 1;
+    }
+    if i < n {
+        starts.push(i);
+    }
+    while i < n {
+        if matches!(chars[i], '.' | '!' | '?') {
+            let mut j = i + 1;
+            while j < n && matches!(chars[j], '.' | '!' | '?' | '"' | '\'' | ')' | ']' | '}') {
+                j += 1;
+            }
+            if j < n && chars[j].is_whitespace() {
+                while j < n && chars[j].is_whitespace() {
+                    j += 1;
+                }
+                if j < n {
+                    starts.push(j);
+                }
+                i = j;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    starts.dedup();
+    starts
+}
+
+/// Swap the two units around `cursor`, keeping the text between them (the
+/// separator) in place. `units` are sorted, non-overlapping `(start, end)` char
+/// ranges; the pair is the unit holding the cursor and its predecessor, or the
+/// last two when the cursor sits past every unit. Returns the rewritten text
+/// and the cursor just after the swapped pair, or `None` when there is no pair.
+fn transpose_units_at(
+    text: &str,
+    cursor: usize,
+    units: &[(usize, usize)],
+) -> Option<(String, usize)> {
+    let i = units
+        .iter()
+        .position(|&(s, e)| cursor >= s && cursor <= e)
+        .or_else(|| units.iter().position(|&(s, _)| s > cursor))
+        .unwrap_or(units.len().saturating_sub(1));
+    if i == 0 {
+        return None;
+    }
+    let (a, a_end) = units[i - 1];
+    let (b, b_end) = units[i];
+    let chars: Vec<char> = text.chars().collect();
+    let first: String = chars[a..a_end].iter().collect();
+    let sep: String = chars[a_end..b].iter().collect();
+    let second: String = chars[b..b_end].iter().collect();
+    let mut out: String = chars[..a].iter().collect();
+    out.push_str(&second);
+    out.push_str(&sep);
+    out.push_str(&first);
+    out.extend(chars[b_end..].iter());
+    Some((out, b_end))
+}
+
+/// The `(start, end)` char range of every line's content, the newline excluded.
+/// A trailing newline does not add an empty final line.
+fn line_ranges(chars: &[char]) -> Vec<(usize, usize)> {
+    let mut ranges = Vec::new();
+    let mut start = 0;
+    for (i, c) in chars.iter().enumerate() {
+        if *c == '\n' {
+            ranges.push((start, i));
+            start = i + 1;
+        }
+    }
+    if start < chars.len() || ranges.is_empty() {
+        ranges.push((start, chars.len()));
+    }
+    ranges
+}
+
+/// Whether the char range `r` is blank (empty or whitespace-only).
+fn range_is_blank(chars: &[char], r: (usize, usize)) -> bool {
+    chars[r.0..r.1].iter().all(|c| c.is_whitespace())
+}
+
+/// Group consecutive lines into units, starting a new unit after every line for
+/// which `is_break` holds; break lines and blank edges are left out of the units
+/// (so they stay put as separators when two units are swapped).
+fn line_group_units(
+    chars: &[char],
+    rows: &[(usize, usize)],
+    is_break: impl Fn(usize) -> bool,
+) -> Vec<(usize, usize)> {
+    let mut units: Vec<(usize, usize)> = Vec::new();
+    let mut group: Vec<(usize, usize)> = Vec::new();
+    let flush = |group: &mut Vec<(usize, usize)>, units: &mut Vec<(usize, usize)>| {
+        while group.last().is_some_and(|&r| range_is_blank(chars, r)) {
+            group.pop();
+        }
+        while group.first().is_some_and(|&r| range_is_blank(chars, r)) {
+            group.remove(0);
+        }
+        if let (Some(first), Some(last)) = (group.first(), group.last()) {
+            units.push((first.0, last.1));
+        }
+        group.clear();
+    };
+    for (row, &range) in rows.iter().enumerate() {
+        if is_break(row) {
+            flush(&mut group, &mut units);
+        } else {
+            group.push(range);
+        }
+    }
+    flush(&mut group, &mut units);
+    units
+}
+
+/// Transpose the line before the cursor's line with the cursor's line (Emacs
+/// `C-x C-t`), preserving the newline between them and leaving the cursor at the
+/// end of the pair. `None` on the first line of the buffer.
+#[must_use]
+pub fn transpose_lines_at(text: &str, cursor: usize) -> Option<(String, usize)> {
+    let chars: Vec<char> = text.chars().collect();
+    let units = line_ranges(&chars);
+    transpose_units_at(text, cursor, &units)
+}
+
+/// The `(start, end)` char range of every sentence, trailing whitespace
+/// excluded. Sentences begin where [`sentence_starts`] says they do, so the
+/// transpose and delete commands agree with the Go → Sentence navigation.
+fn sentence_units(text: &str, chars: &[char]) -> Vec<(usize, usize)> {
+    let starts = sentence_starts(text);
+    starts
+        .iter()
+        .enumerate()
+        .map(|(i, &start)| {
+            let mut end = starts.get(i + 1).copied().unwrap_or(chars.len());
+            while end > start && chars[end - 1].is_whitespace() {
+                end -= 1;
+            }
+            (start, end)
+        })
+        .collect()
+}
+
+/// The `(start, end)` char range of every paragraph: a run of non-blank lines,
+/// as in the Go → Paragraph navigation.
+fn paragraph_units(chars: &[char]) -> Vec<(usize, usize)> {
+    let rows = line_ranges(chars);
+    line_group_units(chars, &rows, |row| range_is_blank(chars, rows[row]))
+}
+
+/// The `(start, end)` char range of every section: a run of lines delimited by
+/// two or more blank lines, as in the Go → Section navigation.
+fn section_units(chars: &[char]) -> Vec<(usize, usize)> {
+    let rows = line_ranges(chars);
+    let blank = |row: usize| range_is_blank(chars, rows[row]);
+    line_group_units(chars, &rows, |row| {
+        blank(row) && ((row > 0 && blank(row - 1)) || (row + 1 < rows.len() && blank(row + 1)))
+    })
+}
+
+/// Transpose the sentence before the cursor with the sentence at/after it
+/// (Emacs `M-x transpose-sentences`), preserving the whitespace between them.
+/// Sentences are split as in the Go → Sentence navigation
+/// ([`sentence_starts`]). `None` when there is no pair.
+#[must_use]
+pub fn transpose_sentences_at(text: &str, cursor: usize) -> Option<(String, usize)> {
+    let chars: Vec<char> = text.chars().collect();
+    let units = sentence_units(text, &chars);
+    transpose_units_at(text, cursor, &units)
+}
+
+/// Transpose the paragraph before the cursor with the paragraph at/after it
+/// (Emacs `M-x transpose-paragraphs`), preserving the blank lines between them.
+/// Paragraphs are runs of non-blank lines, as in the Go → Paragraph navigation.
+/// `None` when there is no pair.
+#[must_use]
+pub fn transpose_paragraphs_at(text: &str, cursor: usize) -> Option<(String, usize)> {
+    let chars: Vec<char> = text.chars().collect();
+    let units = paragraph_units(&chars);
+    transpose_units_at(text, cursor, &units)
+}
+
+/// Transpose the section before the cursor with the section at/after it,
+/// preserving the break between them. Sections are delimited by a run of two or
+/// more blank lines, as in the Go → Section navigation. `None` when there is no
+/// pair.
+#[must_use]
+pub fn transpose_sections_at(text: &str, cursor: usize) -> Option<(String, usize)> {
+    let chars: Vec<char> = text.chars().collect();
+    let units = section_units(&chars);
+    transpose_units_at(text, cursor, &units)
+}
+
+/// The `(start, end)` char range of every word: a run of alphanumeric or `_`
+/// characters, as used by the word motions.
+fn word_units(chars: &[char]) -> Vec<(usize, usize)> {
+    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+    let mut units = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if is_word(chars[i]) {
+            let start = i;
+            while i < chars.len() && is_word(chars[i]) {
+                i += 1;
+            }
+            units.push((start, i));
+        } else {
+            i += 1;
+        }
+    }
+    units
+}
+
+/// Delete the unit holding `cursor` — or the next one, when the cursor sits
+/// between units — together with the separator that follows it, so the
+/// surrounding text closes up. The separator before the unit is taken instead
+/// when nothing follows (the last unit, or a line break `keep_lines` protects).
+/// `keep_lines` bars the separator from crossing a newline, so deleting a word
+/// or a sentence never joins two lines; line-based units (paragraphs, sections)
+/// pass `false` and swallow the blank lines between them. `units` are sorted,
+/// non-overlapping `(start, end)` char ranges. Returns the rewritten text and
+/// the cursor at the hole left behind, or `None` when there is no unit.
+fn delete_unit_at(
+    text: &str,
+    cursor: usize,
+    units: &[(usize, usize)],
+    keep_lines: bool,
+) -> Option<(String, usize)> {
+    let i = units
+        .iter()
+        .position(|&(s, e)| cursor >= s && cursor <= e)
+        .or_else(|| units.iter().position(|&(s, _)| s > cursor))
+        .unwrap_or(units.len().saturating_sub(1));
+    let &(start, end) = units.get(i)?;
+    let chars: Vec<char> = text.chars().collect();
+    let separator = |c: char| c.is_whitespace() && !(keep_lines && c == '\n');
+    let mut from = start;
+    let mut to = end;
+    if let Some(&(next, _)) = units.get(i + 1) {
+        while to < next && separator(chars[to]) {
+            to += 1;
+        }
+    }
+    if to == end {
+        let prev_end = if i == 0 { 0 } else { units[i - 1].1 };
+        while from > prev_end && separator(chars[from - 1]) {
+            from -= 1;
+        }
+    }
+    if from == start && to == end {
+        // A lone unit: take whatever whitespace trails it.
+        while to < chars.len() && separator(chars[to]) {
+            to += 1;
+        }
+    }
+    let mut out: String = chars[..from].iter().collect();
+    out.extend(chars[to..].iter());
+    Some((out, from))
+}
+
+/// Delete the character at char offset `cursor` (Emacs `C-d`), leaving the
+/// cursor where it was. `None` at the end of the buffer, where there is nothing
+/// to delete.
+#[must_use]
+pub fn delete_char_at(text: &str, cursor: usize) -> Option<(String, usize)> {
+    let chars: Vec<char> = text.chars().collect();
+    if cursor >= chars.len() {
+        return None;
+    }
+    let mut out: String = chars[..cursor].iter().collect();
+    out.extend(chars[cursor + 1..].iter());
+    Some((out, cursor))
+}
+
+/// Delete the word at the cursor (or the next one, when the cursor is between
+/// words) along with the spacing after it, staying on the line. `None` when the
+/// text holds no word.
+#[must_use]
+pub fn delete_word_at(text: &str, cursor: usize) -> Option<(String, usize)> {
+    let chars: Vec<char> = text.chars().collect();
+    let units = word_units(&chars);
+    delete_unit_at(text, cursor, &units, true)
+}
+
+/// Delete the sentence at the cursor along with the spacing after it, staying on
+/// the line. Sentences are split as in the Go → Sentence navigation
+/// ([`sentence_starts`]). `None` when the text holds no sentence.
+#[must_use]
+pub fn delete_sentence_at(text: &str, cursor: usize) -> Option<(String, usize)> {
+    let chars: Vec<char> = text.chars().collect();
+    let units = sentence_units(text, &chars);
+    delete_unit_at(text, cursor, &units, true)
+}
+
+/// Delete the paragraph at the cursor (a run of non-blank lines) along with the
+/// blank lines that separate it from the next one. `None` when the text holds no
+/// paragraph.
+#[must_use]
+pub fn delete_paragraph_at(text: &str, cursor: usize) -> Option<(String, usize)> {
+    let chars: Vec<char> = text.chars().collect();
+    let units = paragraph_units(&chars);
+    delete_unit_at(text, cursor, &units, false)
+}
+
+/// Delete the section at the cursor (lines delimited by two or more blank lines)
+/// along with the break that separates it from the next one. `None` when the
+/// text holds no section.
+#[must_use]
+pub fn delete_section_at(text: &str, cursor: usize) -> Option<(String, usize)> {
+    let chars: Vec<char> = text.chars().collect();
+    let units = section_units(&chars);
+    delete_unit_at(text, cursor, &units, false)
+}
+
+/// Line leaders a wrapped chunk may repeat on every line (comment and quote
+/// markers). Longest first, so `///` wins over `//`. Bullet markers are handled
+/// separately (see [`bullet_len`]) because each bullet is its own chunk.
+const WRAP_MARKERS: &[&str] = &["///", "//", "#", "--", ";;", ";", ">"];
+
+/// Length in chars of the list bullet starting `line` (after its indentation) —
+/// `-`, `*`, `+`, `1.`, `1)` — including the whitespace after it, or `None` when
+/// the line does not start a list item.
+fn bullet_len(line: &str) -> Option<usize> {
+    let body = line.trim_start();
+    let marker = if body.starts_with(['-', '*', '+']) {
+        1
+    } else {
+        let digits = body.chars().take_while(char::is_ascii_digit).count();
+        if digits == 0 || !matches!(body.chars().nth(digits), Some('.' | ')')) {
+            return None;
+        }
+        digits + 1
+    };
+    let spaces = body.chars().skip(marker).take_while(|c| *c == ' ').count();
+    if spaces == 0 {
+        return None;
+    }
+    Some(marker + spaces)
+}
+
+/// The prefix repeated on every wrapped line of a chunk, plus the marker it was
+/// built from (stripped from each line's words). Falls back to the first line's
+/// indentation when the lines share no marker.
+fn fill_prefix(lines: &[&str]) -> (String, Option<&'static str>) {
+    let first = lines[0];
+    let indent: String = first.chars().take_while(|c| c.is_whitespace()).collect();
+    let rest = &first[indent.len()..];
+    for marker in WRAP_MARKERS {
+        if let Some(after) = rest.strip_prefix(marker)
+            && lines.iter().all(|l| l.trim_start().starts_with(marker))
+        {
+            let spaces: String = after.chars().take_while(|c| *c == ' ').collect();
+            return (format!("{indent}{marker}{spaces}"), Some(marker));
+        }
+    }
+    (indent, None)
+}
+
+/// Greedily fill `lines` (one chunk: no blank lines, one list item at most) into
+/// lines of at most `width` chars, repeating the chunk's prefix. A word longer
+/// than the width still gets its own line rather than being split.
+fn wrap_chunk(lines: &[&str], width: usize) -> Vec<String> {
+    let bullet = bullet_len(lines[0]);
+    let (prefix, marker) = match bullet {
+        Some(_) => (String::new(), None),
+        None => fill_prefix(lines),
+    };
+    let mut words: Vec<&str> = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        let mut body = line.trim_start();
+        if let Some(m) = marker {
+            body = body.strip_prefix(m).unwrap_or(body);
+        }
+        if i == 0
+            && let Some(len) = bullet
+        {
+            body = &body[body
+                .char_indices()
+                .nth(len)
+                .map_or(body.len(), |(byte, _)| byte)..];
+        }
+        words.extend(body.split_whitespace());
+    }
+    if words.is_empty() {
+        return lines.iter().map(|l| (*l).to_string()).collect();
+    }
+    // A list item keeps its bullet on the first line and hangs the rest under it.
+    let indent: String = lines[0].chars().take_while(|c| c.is_whitespace()).collect();
+    let (first_prefix, cont_prefix) = match bullet {
+        Some(len) => {
+            let head: String = lines[0].trim_start().chars().take(len).collect();
+            let hang = " ".repeat(indent.chars().count() + len);
+            (format!("{indent}{head}"), hang)
+        }
+        None => (prefix.clone(), prefix),
+    };
+    let mut out: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    for word in words {
+        let lead = if out.is_empty() {
+            &first_prefix
+        } else {
+            &cont_prefix
+        };
+        let room = lead.chars().count() + cur.chars().count() + 1 + word.chars().count() <= width;
+        if cur.is_empty() {
+            cur.push_str(word);
+        } else if room {
+            cur.push(' ');
+            cur.push_str(word);
+        } else {
+            out.push(format!("{lead}{cur}"));
+            cur = word.to_string();
+        }
+    }
+    let lead = if out.is_empty() {
+        &first_prefix
+    } else {
+        &cont_prefix
+    };
+    out.push(format!("{lead}{cur}"));
+    out
+}
+
+/// Hard-wrap (fill) `text` to at most `width` chars per line. Blank lines and
+/// list items separate chunks, and each chunk is refilled on its own: its words
+/// are re-flowed greedily, keeping the chunk's indentation, any comment/quote
+/// marker shared by every line, and a hanging indent under a list bullet.
+/// Widths count chars, not terminal columns.
+#[must_use]
+pub fn wrap(text: &str, width: usize) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut chunk: Vec<&str> = Vec::new();
+    for line in text.split('\n') {
+        let blank = line.trim().is_empty();
+        if (blank || bullet_len(line).is_some()) && !chunk.is_empty() {
+            out.extend(wrap_chunk(&chunk, width));
+            chunk.clear();
+        }
+        if blank {
+            out.push(line.to_string());
+        } else {
+            chunk.push(line);
+        }
+    }
+    if !chunk.is_empty() {
+        out.extend(wrap_chunk(&chunk, width));
+    }
+    out.join("\n")
+}
+
+/// Hard-wrap the paragraph around the cursor (the run of non-blank lines holding
+/// it) to `width` chars, leaving the cursor at the end of the rewritten
+/// paragraph. `None` when the cursor is not in a paragraph or the paragraph is
+/// already wrapped.
+#[must_use]
+pub fn wrap_paragraph_at(text: &str, cursor: usize, width: usize) -> Option<(String, usize)> {
+    let chars: Vec<char> = text.chars().collect();
+    let rows = line_ranges(&chars);
+    let units = line_group_units(&chars, &rows, |row| range_is_blank(&chars, rows[row]));
+    let &(start, end) = units
+        .iter()
+        .find(|&&(s, e)| cursor >= s && cursor <= e)
+        .or_else(|| units.iter().find(|&&(s, _)| s > cursor))?;
+    let filled = wrap(&chars[start..end].iter().collect::<String>(), width);
+    if filled == chars[start..end].iter().collect::<String>() {
+        return None;
+    }
+    let mut out: String = chars[..start].iter().collect();
+    out.push_str(&filled);
+    out.extend(chars[end..].iter());
+    Some((out, start + filled.chars().count()))
 }
 
 /// Opposite-value pairs for [`smart_toggle_at`]. Word pairs are matched
@@ -335,6 +821,144 @@ mod tests {
     }
 
     #[test]
+    fn sentence_starts_splits_on_terminators() {
+        // Two sentences, then one after a newline; abbreviations without a
+        // following space do not split.
+        let text = "One. Two! Three?\nFour";
+        assert_eq!(sentence_starts(text), vec![0, 5, 10, 17]);
+        assert_eq!(sentence_starts("pi is 3.14 today"), vec![0]);
+    }
+
+    #[test]
+    fn transpose_lines_swaps_with_the_line_above() {
+        assert_eq!(transpose_lines_at("a\nb\nc", 2).unwrap().0, "b\na\nc");
+        // Cursor past the last line: the last two swap.
+        assert_eq!(transpose_lines_at("a\nb\n", 4).unwrap().0, "b\na\n");
+        // Nothing above the first line.
+        assert!(transpose_lines_at("a\nb", 0).is_none());
+        assert!(transpose_lines_at("solo", 2).is_none());
+    }
+
+    #[test]
+    fn transpose_sentences_swaps_around_the_cursor() {
+        let (out, pos) = transpose_sentences_at("One. Two. Three.", 5).unwrap();
+        assert_eq!(out, "Two. One. Three.");
+        assert_eq!(pos, 9, "cursor lands after the swapped pair");
+        // The separator (here a newline) stays where it was.
+        assert_eq!(
+            transpose_sentences_at("One.\nTwo.", 5).unwrap().0,
+            "Two.\nOne."
+        );
+        assert!(transpose_sentences_at("Only one.", 0).is_none());
+    }
+
+    #[test]
+    fn transpose_paragraphs_swaps_blank_line_delimited_blocks() {
+        let text = "a1\na2\n\nb1\nb2\n";
+        assert_eq!(
+            transpose_paragraphs_at(text, 6).unwrap().0,
+            "b1\nb2\n\na1\na2\n"
+        );
+        // Inside the first paragraph there is nothing to swap with.
+        assert!(transpose_paragraphs_at(text, 0).is_none());
+    }
+
+    #[test]
+    fn transpose_sections_swaps_across_double_blank_lines() {
+        // A single blank line stays inside a section; two or more break it.
+        let text = "a\n\nb\n\n\nc\n";
+        assert_eq!(transpose_sections_at(text, 9).unwrap().0, "c\n\n\na\n\nb\n");
+        assert!(transpose_sections_at("a\n\nb\n", 0).is_none());
+    }
+
+    #[test]
+    fn delete_char_removes_the_character_at_the_cursor() {
+        let (out, pos) = delete_char_at("abc", 1).unwrap();
+        assert_eq!(out, "ac");
+        assert_eq!(pos, 1, "cursor stays put");
+        // A newline is just another character.
+        assert_eq!(delete_char_at("a\nb", 1).unwrap().0, "ab");
+        // Nothing to delete at the end of the buffer.
+        assert!(delete_char_at("abc", 3).is_none());
+        assert!(delete_char_at("", 0).is_none());
+    }
+
+    #[test]
+    fn delete_word_removes_the_word_and_its_spacing() {
+        let (out, pos) = delete_word_at("one two three", 4).unwrap();
+        assert_eq!(out, "one three");
+        assert_eq!(pos, 4, "cursor lands where the word was");
+        // Between words: the next one goes.
+        assert_eq!(delete_word_at("one two", 3).unwrap().0, "two");
+        // The last word takes the space before it, never the newline after it.
+        assert_eq!(delete_word_at("one two\nthree", 5).unwrap().0, "one\nthree");
+        assert!(delete_word_at("   ", 0).is_none());
+    }
+
+    #[test]
+    fn delete_sentence_removes_the_sentence_at_the_cursor() {
+        assert_eq!(
+            delete_sentence_at("One. Two. Three.", 5).unwrap().0,
+            "One. Three."
+        );
+        // A sentence on its own line leaves the line break alone.
+        assert_eq!(
+            delete_sentence_at("One. Two.\nThree.", 5).unwrap().0,
+            "One.\nThree."
+        );
+        assert_eq!(delete_sentence_at("Only one.", 0).unwrap().0, "");
+        assert!(delete_sentence_at("", 0).is_none());
+    }
+
+    #[test]
+    fn delete_paragraph_removes_the_block_and_its_blank_lines() {
+        let text = "a1\na2\n\nb1\nb2\n";
+        assert_eq!(delete_paragraph_at(text, 0).unwrap().0, "b1\nb2\n");
+        // The last paragraph takes the blank lines before it.
+        assert_eq!(delete_paragraph_at(text, 8).unwrap().0, "a1\na2\n");
+        assert!(delete_paragraph_at("\n\n", 0).is_none());
+    }
+
+    #[test]
+    fn delete_section_removes_the_double_blank_delimited_block() {
+        // A single blank line stays inside a section; two or more break it.
+        let text = "a\n\nb\n\n\nc\n";
+        assert_eq!(delete_section_at(text, 0).unwrap().0, "c\n");
+        assert_eq!(delete_section_at(text, 9).unwrap().0, "a\n\nb\n");
+    }
+
+    #[test]
+    fn wrap_fills_paragraphs_and_keeps_blank_lines() {
+        assert_eq!(wrap("one two three four", 9), "one two\nthree\nfour");
+        // Blank lines separate chunks and are preserved verbatim.
+        assert_eq!(wrap("a b c\n\nd e f\n", 3), "a b\nc\n\nd e\nf\n");
+        // A word longer than the width still gets a line of its own.
+        assert_eq!(wrap("aaaaaa b", 3), "aaaaaa\nb");
+    }
+
+    #[test]
+    fn wrap_keeps_indentation_markers_and_bullets() {
+        // The first line's indentation is repeated on every wrapped line.
+        assert_eq!(wrap("    one two three", 10), "    one\n    two\n    three");
+        // A comment marker shared by every line is kept as the fill prefix.
+        assert_eq!(wrap("// one two\n// three", 9), "// one\n// two\n// three");
+        // Each list item is its own chunk, with a hanging indent.
+        assert_eq!(wrap("- one two\n- three", 7), "- one\n  two\n- three");
+    }
+
+    #[test]
+    fn wrap_paragraph_at_rewrites_only_the_cursor_paragraph() {
+        let text = "one two three\n\nkeep me\n";
+        let (out, pos) = wrap_paragraph_at(text, 0, 7).unwrap();
+        assert_eq!(out, "one two\nthree\n\nkeep me\n");
+        assert_eq!(pos, 13);
+        // Already wrapped → nothing to do.
+        assert!(wrap_paragraph_at(&out, 0, 7).is_none());
+        // No paragraph after the cursor.
+        assert!(wrap_paragraph_at("", 0, 40).is_none());
+    }
+
+    #[test]
     fn smart_toggle_flips_words_and_symbols() {
         // Word pair, case preserved.
         assert_eq!(
@@ -398,7 +1022,19 @@ mod tests {
             let _ = bump_number_at(&text, cursor, delta);
             let _ = transpose_chars_at(&text, cursor);
             let _ = transpose_words_at(&text, cursor);
+            let _ = transpose_lines_at(&text, cursor);
+            let _ = transpose_sentences_at(&text, cursor);
+            let _ = transpose_paragraphs_at(&text, cursor);
+            let _ = transpose_sections_at(&text, cursor);
+            let _ = delete_char_at(&text, cursor);
+            let _ = delete_word_at(&text, cursor);
+            let _ = delete_sentence_at(&text, cursor);
+            let _ = delete_paragraph_at(&text, cursor);
+            let _ = delete_section_at(&text, cursor);
             let _ = smart_toggle_at(&text, cursor);
+            let _ = wrap(&text, 0);
+            let _ = wrap(&text, 40);
+            let _ = wrap_paragraph_at(&text, cursor, 40);
             let _ = to_lf(&text);
             let _ = to_crlf(&text);
             let _ = squeeze_blank_lines(&text);
@@ -414,7 +1050,17 @@ mod tests {
                 bump_number_at(&text, cursor, 1),
                 transpose_chars_at(&text, cursor),
                 transpose_words_at(&text, cursor),
+                transpose_lines_at(&text, cursor),
+                transpose_sentences_at(&text, cursor),
+                transpose_paragraphs_at(&text, cursor),
+                transpose_sections_at(&text, cursor),
+                delete_char_at(&text, cursor),
+                delete_word_at(&text, cursor),
+                delete_sentence_at(&text, cursor),
+                delete_paragraph_at(&text, cursor),
+                delete_section_at(&text, cursor),
                 smart_toggle_at(&text, cursor),
+                wrap_paragraph_at(&text, cursor, 40),
             ];
             for (out, pos) in ops.into_iter().flatten() {
                 prop_assert!(

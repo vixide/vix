@@ -8,7 +8,7 @@ server for.
 
 **Status:** Shipped. The protocol core lives in the internal `lsp_core` crate
 (JSON-RPC framing, message builders, response/diagnostic parsers, and char↔UTF-16
-position maths — all pure and unit-tested). The host (`src/lsp.rs`) owns the IO:
+position maths — all pure and unit-tested). The host (`crates/vix-lsp/src/lib.rs`) owns the IO:
 it launches a server per language, reads its framed stdout on a background thread
 (an `mpsc` channel, like the run-command feature), writes requests to stdin, runs
 the `initialize`/`initialized` handshake, and keeps each open document in sync with
@@ -19,7 +19,7 @@ There is **no built-in server** — Vix launches only what you configure.
 
 ## Configuration
 
-LSP is controlled by two settings (see `docs/configuration.md`):
+LSP is controlled by two settings (see `docs/configuration/index.md`):
 
 - `lsp_enabled` (bool, default `true`) — master switch.
 - `lsp_servers` (list) — one entry per server, matched to files by extension:

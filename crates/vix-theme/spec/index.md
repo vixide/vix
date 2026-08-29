@@ -58,4 +58,4 @@ loading (`parse_theme`, `load_custom_themes`), the active-theme state
 sorted list for the View → Theme submenu). The host gathers bundled + user themes
 (`available_custom_themes`), feeds the names to the menu
 (`menu::set_theme_names`), and applies a chosen theme by name. See
-`theme_model/spec/index.md`.
+`crates/vix-theme-model/spec/index.md`.

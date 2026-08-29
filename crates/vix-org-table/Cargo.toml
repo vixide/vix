@@ -1,0 +1,14 @@
+[package]
+name = "vix-org-table"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Org-mode pipe-table editing: parsing, alignment, structural edits, and TBLFM formulas."
+
+[dependencies]
+evalexpr = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

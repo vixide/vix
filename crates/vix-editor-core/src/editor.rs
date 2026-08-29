@@ -650,6 +650,47 @@ impl Editor {
             .ok_or_else(|| anyhow!("cant get clipboard"))
     }
 
+    /// Insert `text` at the cursor as **one** edit — one undo step — replacing
+    /// the selection if there is one and re-indenting the pasted block to the
+    /// cursor's level (see [`Code::smart_paste`]).
+    ///
+    /// Shared by the [`Paste`](crate::actions::Paste) action, which pastes the
+    /// clipboard, and the host's bracketed-paste handler, which pastes the text
+    /// the terminal hands over. Going through one path is what keeps a terminal
+    /// paste undoable in a single step: replayed as individual key events it
+    /// would leave one undo entry per character.
+    pub fn paste_text(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        let mut cursor = self.get_cursor();
+        let mut selection = self.get_selection();
+        let code = self.code_mut();
+
+        code.tx();
+        code.set_state_before(cursor, selection);
+
+        // Replace the selection, if any.
+        if let Some(sel) = &selection
+            && !sel.is_empty()
+        {
+            let (start, end) = sel.sorted();
+            code.remove(start, end);
+            cursor = start;
+            selection = None;
+        }
+
+        let inserted = code.smart_paste(cursor, text);
+        cursor += inserted;
+
+        code.set_state_after(cursor, selection);
+        code.commit();
+
+        self.set_cursor(cursor);
+        self.set_selection(selection);
+        self.reset_highlight_cache();
+    }
+
     /// Set the highlight marks as `(start char, end char, hex color)` ranges.
     pub fn set_marks(&mut self, marks: Vec<(usize, usize, &str)>) {
         self.marks = Some(

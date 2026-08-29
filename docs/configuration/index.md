@@ -28,8 +28,10 @@ their defaults, so it is safe to delete or hand-edit.
 | `bottom_dock_height` | int | `9`   | Height (rows) of the bottom dock; drag its top edge to resize.       |
 | `scrollback`    | int    | `1000`   | Maximum lines kept in the bottom dock; the oldest are dropped past this. |
 | `preview_tabs`  | bool   | `true`   | Open single-clicked / arrow-scanned files in an ephemeral preview tab. |
+| `show_welcome_dialog` | bool | `true` | Show the welcome dialog on launch. Vix sets it to `false` and saves once the dialog has been shown, so it appears on the first run only; set it back to `true` to see it again. |
 | `indent_style`  | string | `"spaces"`| What Tab inserts: `"spaces"` or `"tabs"`.                           |
 | `tab_width`     | int    | `4`      | Number of spaces per indent when `indent_style = "spaces"`.          |
+| `wrap_column`   | int    | `80`     | Column that **Edit → Wrap** hard-wraps (fills) text at.              |
 | `trim_trailing_whitespace` | bool | `true` | On save, strip trailing spaces/tabs from every line. |
 | `ensure_final_newline`     | bool | `true` | On save, append a final newline if the file lacks one. |
 | `theme`         | string | `"dark"` | `"dark"`, `"light"`, or the `name` of a custom theme.                |
@@ -40,7 +42,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `recent_files`  | list   | `[]`     | Recently opened files (absolute paths), most-recent first, capped at 15. Updated automatically; surfaced by **File → Open Recent…**. |
 | `spellcheck`    | bool   | `false`  | Underline misspelled words in comments/strings (**View → Editor → Toggle Spellcheck**). |
 | `dictionary_path` | string | `""` | Extra directory to search for Hunspell dictionaries, on top of the autodetected standard locations (`/usr/share/hunspell`, `/Library/Spelling`, `~/.local/share/hunspell`, `hunspell -D`, …). Empty = autodetect only. Both `<dir>/<name>.{aff,dic}` and `<dir>/<name>/index.{aff,dic}` layouts work. The spellcheck language follows the UI `locale`. |
-| `lsp_enabled`   | bool   | `true`   | Master switch for Language Server Protocol features (diagnostics, hover, go-to-definition, completion). When off, no servers launch. See `crates/vix-lsp/spec.md`. |
+| `lsp_enabled`   | bool   | `true`   | Master switch for Language Server Protocol features (diagnostics, hover, go-to-definition, completion). When off, no servers launch. See `crates/vix-lsp/spec/index.md`. |
 | `lsp_servers`   | list   | `[]`     | Language servers, matched to files by extension. Each entry has `language_id`, `extensions`, and `command`. Empty by default — Vix ships no built-in server. |
 | `contacts_dir`  | string | `""`     | Directory of vCard (`.vcf`) files for **Tools → Contacts…**. Empty = the workspace root. |
 | `ai_command`    | string | `claude -p "{prompt}"` | Command template the **AI** menu runs. `{prompt}` is replaced with the action's instruction; the input text is fed on stdin (or substituted for `{file}` if the template contains it). Point this at any assistant CLI — `claude`, `codex`, `mistral`, `ollama run …`. |
@@ -54,7 +56,28 @@ their defaults, so it is safe to delete or hand-edit.
 | `debug_adapters`| list   | `[]`     | Debug adapters (DAP), matched to files by extension. Each entry has `adapter_id`, `extensions`, `command`, and an optional `launch` table. See `crates/vix-dap/spec/index.md`. |
 | `test_command`  | string | `cargo test` | Command run by **Tools → Run Tests**; its output is parsed into the test panel. |
 | `test_width`    | int    | `40`     | Width (columns) of the test-results panel. |
-| `project_snippets` | string | `config/snippets/snippets.json` | Project snippet file, relative to the project root. See `crates/vix-snippets/spec/index.md`. |
+| `project_snippets` | string | `<config>/snippets/snippets.json` | Project snippet file, relative to the project root. See `crates/vix-snippets/spec/index.md`. |
+| `relative_line_numbers` | bool | `false` | Number lines relative to the cursor line (the cursor's own line stays absolute). |
+| `show_breadcrumbs` | bool | `false` | Show the breadcrumb bar (`file ▸ enclosing symbol`) above the editor. |
+| `show_minimap`  | bool   | `false`  | Show the code-overview minimap column at the right of the editor. |
+| `sticky_scroll` | bool   | `true`   | Pin the enclosing scope's header line at the top while scrolling. |
+| `rainbow_brackets` | bool | `false` | Color matching brackets by nesting depth. |
+| `highlight_word` | bool  | `false`  | Passively highlight every occurrence of the word under the cursor. |
+| `sticky_search_highlight` | bool | `true` | Keep search-match highlights after the Find box closes, until toggled off. |
+| `show_menu_tooltips` | bool | `true` | Show hover tooltips on menu names and items. |
+| `format_on_save` | bool  | `false`  | On save, run the language server's formatter when the file has one. |
+| `auto_save`     | bool   | `false`  | Periodically save the active dirty, file-backed buffer. |
+| `persistent_undo` | bool | `true`   | Persist each file's undo tree across sessions, restored when the content still matches. |
+| `restore_session` | bool | `true`   | Reopen the previous session (files, focus, cursors) when launched in a workspace with no file argument. |
+| `recent_files_max` | int | `20`     | How many entries to keep in `recent_files`. |
+| `time_zone`     | string | `UTC`    | Active IANA time zone (e.g. `America/New_York`), chosen via **Tools → Time Zone…**. |
+| `org_agenda_files` | list of strings | `[]` | The Org agenda's explicit file list (workspace-relative). Empty means every `.org` file in the project. |
+| `org_capture_templates` | list of tables | `Anything`, `Todo`, `Contact` | Org-capture templates for **Org → Capture**. See `crates/vix-org-capture/spec/index.md`. |
+| `org_priority_highest` | char | `0`  | Highest `[#X]` priority cookie character (Vix defaults to numeric `0`..`9`, unlike Emacs's `A`..`C`). |
+| `org_priority_lowest` | char | `9`   | Lowest priority cookie character. |
+| `org_priority_default` | char | `0`  | Priority given to a headline that had no cookie yet. |
+| `command_recents` | list of strings | `[]` | Action ids recently run from the palette, surfaced at the top of the `>` list. Managed by Vix. |
+| `db_connections` | list of tables | `[]` | Saved database connections for the **DB** menu. Passwords are never stored; they are prompted per session. See `crates/vix-db/spec/index.md`. |
 
 Example `config.toml`:
 
@@ -70,6 +93,7 @@ bottom_dock_height = 9
 preview_tabs = true
 indent_style = "spaces"
 tab_width = 4
+wrap_column = 80
 trim_trailing_whitespace = true
 ensure_final_newline = true
 theme = "dark"
@@ -95,6 +119,10 @@ is saved (both default on). Note that trimming removes Markdown's trailing
 two-space hard line breaks — set `trim_trailing_whitespace = false` if you rely on
 them.
 
+Some keys are **managed by Vix rather than hand-edited** — `recent_files`,
+`command_recents`, `db_connections`, and the window/dock geometry are written
+back as you use the editor.
+
 Most settings are also changed from inside the app and saved on quit: toggling
 line numbers / visible whitespace / explorer / messages, resizing a dock (drag
 its inner edge), and
@@ -104,7 +132,7 @@ choosing a theme (**View → Theme…**), language (**View → Locale…**), or 
 ## Custom themes directory
 
 Custom JSON themes live next to the config file, in a `themes/` subdirectory
-(e.g. `~/.config/vix/themes/*.json` on Linux). See [themes.md](themes.md) for the
+(e.g. `~/.config/vix/themes/*.json` on Linux). See [themes.md](../themes/index.md) for the
 file format. Set `theme` to a custom theme's `name` to load it on startup.
 
 ## Command-line flags
@@ -120,8 +148,8 @@ vix [FILES]...        Open one or more files; the last is focused.
 
 ## See also
 
-- [themes.md](themes.md) — custom theme JSON format.
-- [i18n.md](i18n.md) — languages and how the `locale` value is used.
+- [themes.md](../themes/index.md) — custom theme JSON format.
+- [i18n.md](../internationalization/index.md) — languages and how the `locale` value is used.
 
 ---
 

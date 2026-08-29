@@ -8,7 +8,7 @@ Tutorial: [An Ode to Org Babel](https://donaldh.wtf/2025/11/an-ode-to-org-babel/
 `org.capture.babel` ships as a built-in `org_capture_templates` entry (key
 `"b"`): a single `%^{Language}` prompt, then a multiline review buffer around
 `#+begin_src <language>` / `#+end_src` (`vix-org-capture`'s generalized
-capture engine, `spec/org/capture/index.md` § Decisions #7) — no header-args
+capture engine, `crates/vix-org-capture/spec/index.md` § Decisions #7) — no header-args
 select box, no RESULTS-line handling, no remembered last-used language. The
 rest of this page is the original, fuller proposal below, kept as a design
 record for anyone who wants to build that out; none of the "Capture options"

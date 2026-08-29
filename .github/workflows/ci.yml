@@ -55,6 +55,12 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --workspace --no-deps
+      # The specs are living documentation, so they are gated like code: broken
+      # links, a crate with no spec, a crate missing from the crate map, or a
+      # README.md that has drifted from its index.md twin all fail here.
+      # Mirrors `scripts/check`. See spec/test/index.md.
+      - name: scripts/check-docs
+        run: python3 scripts/check-docs
 
   # Build and test on the platforms Vix ships on. Windows is covered by the
   # release workflow's cross-builds; adding it here would roughly double CI
@@ -87,6 +93,7 @@ jobs:
     strategy:
       matrix:
         # Keep in sync with `workspace.package.rust-version` in Cargo.toml.
+        # The floor is current stable minus two; see spec/rust-msrv-n-minus-2.
         rust: ["1.96"]
     steps:
       - uses: actions/checkout@v6

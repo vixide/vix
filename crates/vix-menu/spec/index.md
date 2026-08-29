@@ -4,11 +4,17 @@ Top menu bar.
 
 - Open with `F10`, or `Alt+<letter>` for a specific menu: File `Alt+F`, Edit
   `Alt+E`, View `Alt+I`, Go `Alt+N`, Run `Alt+R`, AI `Alt+A`, DB `Alt+D`, Git
-  `Alt+G`, Org `Alt+O`, Tools `Alt+T`, Help `Alt+H` (Vix `Alt+V`).
+  `Alt+G`, Org `Alt+O`, Tools `Alt+T`, Help `Alt+H` (Vix `Alt+V`). Project has
+  no mnemonic — `Alt+P` already means "previous selection match" in the editor.
+  Mnemonics **toggle**: they work from inside an open dropdown or submenu too,
+  where the open menu's own letter closes it and another menu's letter switches
+  to that menu.
 - Arrows navigate, `Enter` runs, `Esc` closes. In a dropdown, `Up` from the first
   item moves to the **menu title** (nothing highlighted); `Down` from there
   re-enters the first item.
-- A mouse click on a menu name opens it; a click on a dropdown item runs it.
+- A mouse click on a menu name opens it, and clicking that same name again closes
+  the dropdown (clicking a different name switches menus). A click on a dropdown
+  item runs it; a click anywhere else dismisses the menu.
 - While a menu is open, moving the pointer follows the selection: hovering a
   dropdown row highlights it, and hovering another top-level name switches menus.
 - Dropdowns may contain **separators** — non-selectable divider lines that group
@@ -29,7 +35,8 @@ Top menu bar.
   Save As. Works inside an open submenu too.
 
 The menus, left to right, are
-**Vix · File · Edit · View · Go · Run · AI · DB · Git · Org · Tools · Help**.
+**Vix · File · Edit · View · Go · Run · AI · DB · Git · Org · Project · Tools ·
+Help**.
 
 ## Vix menu
 
@@ -79,15 +86,27 @@ The menus, left to right, are
 | Mode ▸  | | Submenu of type-specific edit surfaces (Table/Outline/JSON/YAML/Bytes/SQL) |
 | *— separator —* | | |
 | Comment | `Ctrl+/` | Comment/uncomment the line or selection |
+| Delete ▸ | | Submenu of delete-a-unit commands (below) |
+| Transpose ▸ | | Submenu of swap-two-units commands (below) |
+| Wrap | | Hard-wrap the selection, or the paragraph at the cursor, at the `wrap_column` setting (`crates/vix-editor/spec/wrap/index.md`) |
 | Macro ▸ | | Submenu: Record / Play / Save… / Play Saved… |
 
-The **Select** submenu:
+The **Select** submenu, in menu order:
 
 | Item    | Shortcut | Action                       |
 | ------- | -------- | ---------------------------- |
-| Select All | `Ctrl+A` | Select the whole buffer    |
 | Select More | `Ctrl+Shift+→` | Extend the selection right by a word |
 | Select Less | `Ctrl+Shift+←` | Retract the selection left by a word |
+| *— separator —* | | |
+| Select Line | | Select the cursor's whole line |
+| Select Paragraph | | Select the paragraph around the cursor (blank-line delimited) |
+| Select Section | | Select the section around the cursor (two or more blank lines delimit) |
+| Select All Occurrences | | Put a caret on every occurrence of the selection, or of the word at the cursor |
+| Column Select Up | `Alt+Shift+↑` | Extend a rectangular block of carets upward |
+| Column Select Down | `Alt+Shift+↓` | Extend a rectangular block of carets downward |
+| Select All | `Ctrl+A` | Select the whole buffer |
+
+Up precedes Down, as the arrow keys do — the same order the Move submenu uses.
 
 The **Move** submenu:
 
@@ -112,19 +131,55 @@ The **Go** submenu:
 | File Start      | Move the cursor to the start of the file            |
 | File End        | Move the cursor to the end of the file              |
 
-The **Find** submenu:
+The **Delete** submenu (each item deletes the unit at the cursor, taking the
+separator after it — or, for the last unit, the one before it — so the text
+closes up; see `crates/vix-editor/spec/delete-units/index.md`):
+
+| Item       | Action                                                     |
+| ---------- | ---------------------------------------------------------- |
+| Character  | Delete the character at the cursor                         |
+| Word       | Delete the word at the cursor and the spacing after it     |
+| Sentence   | Delete the sentence at the cursor and the spacing after it |
+| Paragraph  | Delete the paragraph at the cursor and the blank lines after it |
+| Section    | Delete the section at the cursor and the break after it    |
+
+The **Transpose** submenu (each item swaps the unit before the cursor with the
+unit at it; see `crates/vix-editor/spec/transpose/index.md`):
+
+| Item       | Shortcut | Action                                     |
+| ---------- | -------- | ------------------------------------------ |
+| Characters | `Ctrl+T` | Swap the two characters around the cursor  |
+| Words      | `Alt+T`  | Swap the two neighboring words             |
+| Lines      |          | Swap the cursor's line with the line above |
+| Sentences  |          | Swap the two sentences around the cursor   |
+| Paragraphs |          | Swap the two paragraphs around the cursor  |
+| Sections   |          | Swap the two sections around the cursor    |
+
+The **Find** submenu — placed above **Select**, since finding is the more common
+errand:
 
 | Item    | Shortcut | Action                       |
 | ------- | -------- | ---------------------------- |
-| Find…   | `Ctrl+F` | Find in the current file     |
+| Find…   | `Ctrl+F` | Open the find dialog         |
 | Find Next | `Ctrl+G` | Repeat the last search forward (works after the box closes) |
 | Find Previous | `Ctrl+Shift+G` | Repeat the last search backward |
 | Find Selection | `Alt+N` | Jump to the next occurrence of the selection |
-| Find In Workspace… | | List workspace-wide hits in the bottom dock (click-to-jump) |
+| Toggle Search Highlights | | Keep or clear the match highlights |
 
-Replace lives inside the Find panel itself: `Ctrl+R` (or `Tab` to the Replace
-field in the find box) reveals it, so there is no separate menu item. See
-`find_panel/spec/index.md`.
+**Everything else about finding is an option inside the dialog, not another menu
+item.** The find box carries two, both clickable and both on an `Alt` key:
+
+| Option | Key | Effect |
+| ------ | --- | ------ |
+| **Replace** | `Alt+H` | Turns the find into a find-and-replace in place, focusing the replacement field. Toggling back keeps the query. |
+| **In:** | `Alt+I` | Where to look — **Buffer** → **Files** → **Workspace**. Widening carries the query, the replacement, and the case/regex toggles to the surface that can show that many results: the workspace panel for Files, the bottom dock for Workspace. |
+
+That is why there are no **Find in Files…**, **Replace in Files…**, or **Find In
+Workspace…** items any more: each was the same search with a different
+destination, and reaching them meant closing the box and retyping. The action ids
+(`search.workspace`, `search.workspace_replace`, `search.workspace_dock`) still
+exist for key bindings (`Ctrl+Shift+F`) and the command palette. See
+`crates/vix-find-panel/spec/index.md`.
 
 The **Case** submenu — now under **Tools → Convert** — (applies to the current
 selection):
@@ -141,16 +196,16 @@ selection):
 
 (Workspace-wide search/replace is `Ctrl+Shift+F`; interactive query-replace is
 `Ctrl+Alt+R`. Both are reachable from the command palette — see
-`find_panel/spec/index.md`.)
+`crates/vix-find-panel/spec/index.md`.)
 
 ## View menu
 
 | Item                             | Action                                        |
 | -------------------------------- | --------------------------------------------- |
-| Keymap ▸                         | Submenu of keyboard navigation styles (`keymap_model/spec/index.md`) |
-| Theme ▸                          | Submenu of available themes — bundled + user JSON (`theme_model/spec/index.md`); pick one to apply |
-| Locale ▸                         | Submenu of UI languages (`locale_model/spec/index.md`); pick one to apply |
-| Time Zone ▸                      | Submenu of IANA zones, sorted by UTC offset then name (`time_zone_model/spec/index.md`); pick one |
+| Keymap ▸                         | Submenu of keyboard navigation styles (`crates/vix-keymap-model/spec/index.md`) |
+| Theme ▸                          | Submenu of available themes — bundled + user JSON (`crates/vix-theme-model/spec/index.md`); pick one to apply |
+| Locale ▸                         | Submenu of UI languages (`crates/vix-locale-model/spec/index.md`); pick one to apply |
+| Time Zone ▸                      | Submenu of IANA zones, sorted by UTC offset then name (`crates/vix-time-zone-model/spec/index.md`); pick one |
 | *— separator —*                  |                                               |
 | Split ▸                          | Split the editor into two panes (`split-panes.md`): Vertical / Horizontal / Other Pane (F6) / Unsplit |
 | Layout ▸                         | Submenu of dock/status toggles (below)        |
@@ -197,7 +252,7 @@ jumps). Actions are `nav.*` / `lsp.*` / `git.*`.
 
 ## Run menu
 
-The debugger (Debug Adapter Protocol); see [`debugger/index.md`](../debugger/index.md).
+The debugger (Debug Adapter Protocol); see [`crates/vix-dap/spec/index.md`](../../vix-dap/spec/index.md).
 Actions are `run.*`.
 
 | Item              | Action                                                       |
@@ -214,18 +269,18 @@ Actions are `run.*`.
 | Item               | Action                                            |
 | ------------------ | ------------------------------------------------- |
 | Command Palette    | Open the palette (`Ctrl+P`)                       |
-| Workspace Dashboard… | Live folder/disk/file/commit metrics (`workspace_dashboard_panel/spec/index.md`) |
-| System Information… | Host OS/CPU/memory/disk snapshot (`system_information_panel/spec/index.md`) |
+| Workspace Dashboard… | Live folder/disk/file/commit metrics (`crates/vix-workspace-dashboard-panel/spec/index.md`) |
+| System Information… | Host OS/CPU/memory/disk snapshot (`crates/vix-system-information-panel/spec/index.md`) |
 | *— separator —*    |                                                   |
 | Run Command…       | Run a shell command into the bottom dock          |
 | Cancel Command     | Kill the running command                          |
 | *— separator —*    |                                                   |
 | Calendar…          | Toggle the calendar box                           |
-| Clock…             | Toggle the clock box: local/UTC/ISO week/active-zone times (`clock_panel/spec/index.md`) |
-| Nerd Font Characters… | Open the glyph picker (`nerd_font_picker/spec/index.md`) |
-| ASCII Characters…  | Open the ASCII reference table (`ascii_character_picker/spec/index.md`) |
-| X11 Colors…        | Open the X11 color picker; inserts the chosen hex (`x11_color_picker/spec/index.md`) |
-| HTML Characters…   | Open the HTML character picker; click a cell to insert it (`html_character_picker/spec/index.md`) |
+| Clock…             | Toggle the clock box: local/UTC/ISO week/active-zone times (`crates/vix-clock-panel/spec/index.md`) |
+| Nerd Font Characters… | Open the glyph picker (`crates/vix-nerd-font-picker/spec/index.md`) |
+| ASCII Characters…  | Open the ASCII reference table (`crates/vix-ascii-character-picker/spec/index.md`) |
+| X11 Colors…        | Open the X11 color picker; inserts the chosen hex (`crates/vix-x11-color-picker/spec/index.md`) |
+| HTML Characters…   | Open the HTML character picker; click a cell to insert it (`crates/vix-html-character-picker/spec/index.md`) |
 | *— separator —*    |                                                   |
 | Language Server ▸  | Submenu of LSP actions (below); see `lsp.md`      |
 
@@ -261,8 +316,8 @@ whole buffer.
 
 ## DB menu
 
-The database workbench; see [`db/index.md`](../db/index.md) and
-[`db/session.md`](../db/session.md). Actions are `db.*`.
+The database workbench; see [`crates/vix-db/spec/index.md`](../../vix-db/spec/index.md) and
+[`crates/vix-db/spec/session.md`](../../vix-db/spec/session.md). Actions are `db.*`.
 
 | Item                          | Action                                          |
 | ----------------------------- | ----------------------------------------------- |
@@ -305,20 +360,49 @@ The **Branch** submenu:
 
 ## Org menu
 
-Org-mode editing on the active buffer; see [`org/index.md`](../org/index.md).
+Org-mode editing on the active buffer; see [`crates/vix-org/spec/index.md`](../../vix-org/spec/index.md).
 Actions are `org.*`. Grouped after the Emacs Org menu: Capture ▸, Show/Hide ▸
 (cycle/fold-all/show-all, sparse TODO/match trees), New Heading, Navigate
 Headings ▸, Edit Structure ▸ (promote/demote, move/copy/cut/paste subtree,
-sort children, refile via a headline chooser), Editing ▸ (Emphasis ▸, Insert
+sort children, refile via a headline chooser), Table ▸ (the built-in pipe-table
+editor — see [`crates/vix-org-table/spec/index.md`](../../vix-org-table/spec/index.md) for the full
+key/action-id map: create from selection, export to TSV, row/column insert,
+delete, move, and hline commands, a Rectangle ▸ clipboard submenu (copy/cut/
+paste), align, recalculate, sum column, sort, transpose, and copy field from
+above), Editing ▸ (Emphasis ▸, Insert
 Block ▸, edit source block, footnotes), Archive ▸, Hyperlinks ▸
 (store/insert/follow, next/previous), Cycle TODO, Priority Up/Down, Mark Done
 with Note…, Toggle Checkbox, Update Statistics, Tags & Properties ▸ (set
-tags/property, column view), Dates & Scheduling ▸ (timestamps,
+tags/property, Column View ▸ — Turn On the interactive overlay, Quick Column
+Export (the old static-table capture), and the `#+BEGIN: columnview`
+dynamic-block commands Insert…/Update at Point/Update All, kept as flat
+leaves since menus nest at most three levels deep; see
+[`crates/vix-org/spec/index.md`](../../vix-org/spec/index.md#column-view) for the full key/action-id
+map), Dates & Scheduling ▸ (timestamps,
 schedule/deadline, ±1 day), Clock In / Out, Time Tracker, Agenda ▸, Roam ▸
 (nodes / backlinks / dailies), Node ▸, Contacts ▸, Export ▸
 (Markdown / HTML / LaTeX / iCalendar), and Refresh Context. Items bound in
 the Emacs keymap's `C-c` chord family display that chord in the shortcut
 column for reference.
+
+## Project menu
+
+Project task running — project lifecycle commands, named tasks, and
+subproject-scoped variants; see [`crates/vix-tasks/spec/index.md`](../../vix-tasks/spec/index.md)
+for the full behavior, keybinding, and persistence write-up. Actions are
+`project.*`. A top-level menu of its own (not folded into Tools) since the
+feature area is large enough to deserve one; it has no `Alt+<letter>`
+mnemonic — `Alt+P` already means "previous selection match" in the editor.
+
+Configure, Compile, Test, Test at Point, Install, Package, Run (the six
+lifecycle commands, each opening an editable confirm prompt pre-filled with
+the resolved command before running, except Test at Point which runs
+immediately), Run Task… (the merged user-configured + discovered task
+chooser), Repeat Last Task, Subproject ▸ (the same seven commands — plus
+Find File — resolved and run at the nearest enclosing subproject instead of
+the workspace root), and Discard Command Cache (no keybinding — it's a
+deliberately rare, palette/menu-only action). Every leaf's shortcut column
+shows its `C-c p c …` chord.
 
 ## Help menu
 

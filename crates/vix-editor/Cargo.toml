@@ -13,4 +13,5 @@ ratatui-core = { workspace = true }
 ratatui-image = { workspace = true }
 vix-editor-core = { path = "../vix-editor-core", version = "1.5.0", default-features = false }
 vix-fileops = { path = "../vix-fileops", version = "1.5.0" }
+vix-textops = { path = "../vix-textops", version = "1.5.0" }
 vix-theme = { path = "../vix-theme", version = "1.5.0" }

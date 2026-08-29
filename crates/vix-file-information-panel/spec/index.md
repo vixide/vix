@@ -42,7 +42,7 @@ The dashboard is read-only; `Esc` (or `Enter`) closes it. The crate
 (`Dashboard`) holds the four fields and exposes `is_complete()`; the host's
 `open_dashboard` spawns the three threads and wires up an `mpsc` channel, and
 `poll_dashboard` drains finished results into the open panel each frame. See
-[`workspace_dashboard_panel`](../../workspace_dashboard_panel/spec/index.md).
+[`workspace_dashboard_panel`](../../vix-workspace-dashboard-panel/spec/index.md).
 
 ## System Information
 
@@ -70,7 +70,7 @@ highlight; `Enter` or a left click inserts the highlighted row's **value** into
 the active editor (heading rows have no value and insert nothing); `Esc` closes.
 The crate (`Panel`) gathers the rows and tracks the highlighted row and scroll
 offset. See
-[`system_information_panel`](../../system_information_panel/spec/index.md).
+[`system_information_panel`](../../vix-system-information-panel/spec/index.md).
 
 ## File Information
 
@@ -100,7 +100,7 @@ Arrow keys (plus `PageUp`/`PageDown`/`Home`/`End`, and the mouse) move the
 highlight; `Enter` or a left click inserts the highlighted row's value into the
 editor; `Esc` closes. The crate (`Panel`) formats the rows from a `FileInfo` and
 tracks the selection. See
-[`file_information_panel`](../../file_information_panel/spec/index.md).
+[`file_information_panel`](../../vix-file-information-panel/spec/index.md).
 
 ## Outline
 
@@ -119,7 +119,7 @@ Arrow keys (plus `PageUp`/`PageDown`/`Home`/`End`, and the mouse) move the
 highlight; `Enter` or a click **jumps the cursor to that symbol's line** and
 closes the panel; `Esc` closes without jumping. The crate (`Outline`) holds the
 entries and the selection/scroll state and reports the selected line. See
-[`outline_panel`](../../outline_panel/spec/index.md).
+[`outline_panel`](../../vix-outline-panel/spec/index.md).
 
 ## Welcome
 
@@ -128,9 +128,11 @@ how to get started, what it can do, and how to send feedback. It appears
 automatically the **first time Vix runs**, and can be reopened any time from
 **Help → Welcome…** (action `help.welcome`).
 
-First-run behavior is gated by the `welcomed` setting (default `false`):
-`maybe_show_welcome` opens the panel once on first launch and then sets
-`welcomed` (persisted on exit) so it does not return on later launches.
+First-run behavior is gated by the `show_welcome_dialog` setting (default
+`true`): `maybe_show_welcome` opens the panel once, then sets
+`show_welcome_dialog` to `false` and saves the settings straight away — not on
+exit — so the panel does not return on later launches even if the run ends
+abruptly. Set the setting back to `true` to see it again.
 
 The panel is **scrollable** text. The content lives in the host's i18n catalog
 under the `welcome.body` locale key so it is translatable; the host splits it into
@@ -146,7 +148,7 @@ the scroll offset.
 | mouse wheel             | Scroll                   |
 | `Esc` / `Enter` / `q`   | Close the panel          |
 
-See [`welcome_panel`](../../welcome_panel/spec/index.md).
+See [`welcome_panel`](../../vix-welcome-panel/spec/index.md).
 
 ## As implemented in Vix
 
@@ -172,10 +174,10 @@ host glue in `src/app.rs` and `src/ui.rs`:
   builds entries from `palette::symbols` and calls `select_nearest`. `Enter`/click
   jumps to the symbol; `Esc` closes.
 - **Welcome** — `welcome_panel` (`Panel`). `maybe_show_welcome` shows it once
-  on first run (gated by the `welcomed` setting); `open_welcome` (action
+  on first run (gated by the `show_welcome_dialog` setting); `open_welcome` (action
   `help.welcome`, Help → Welcome…) reopens it from `welcome.body`. Scroll keys
   and the mouse wheel scroll; `Esc`/`Enter`/`q` closes.
 
 The Tools menu lists Workspace Dashboard, System Information, and File
-Information (`src/menu.rs`); the Outline panel is reached by keybinding or the
+Information (`crates/vix-menu/src/lib.rs`); the Outline panel is reached by keybinding or the
 command palette; the Welcome panel is reached on first run or from the Help menu.

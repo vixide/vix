@@ -17,7 +17,7 @@ cross-referenced rather than duplicated here.
 
 The editor is backed by the bundled `editor_core` crate. Each buffer is one
 `editor_core` editor instance with its own undo/redo history, selection, scroll
-offset, and highlight cache. The host (`src/editor.rs`) addresses the cursor as a
+offset, and highlight cache. The host (`crates/vix-editor/src/editor.rs`) addresses the cursor as a
 flat character offset internally and converts to/from 1-based line/column for the
 status bar and go-to-line.
 
@@ -27,7 +27,7 @@ Capabilities:
   extension. Unknown or extension-less files fall back to plain `text`. With a
   custom JSON theme active, tokens are colored per the theme's syntax palette;
   the default monochrome themes show foreground only (no token colors). See
-  [Themes](../themes/).
+  [Themes](../../vix-theme/spec/index.md).
 - **Undo / redo** — a per-buffer history of edits, with no fixed depth limit.
 - **Selection** — a single contiguous range with an anchor and an active end.
   Selections can span multiple lines and drive cut/copy, case transforms, and
@@ -51,7 +51,7 @@ Capabilities:
   it; Backspace inside an empty pair deletes both. Quotes are left alone next to a
   word character. Controlled by the host `auto_pair` flag
   (`Editor::set_auto_pair`); the implementation is `auto_pair` / `auto_pair_backspace`
-  in `editor_core/editor_crossterm.rs`. Off-by setting via **View → Editor →
+  in `crates/vix-editor-core/src/editor_crossterm.rs`. Off-by setting via **View → Editor →
   Auto-Pair Brackets** (`view.auto_pair`).
 - **Bracket / quote auto-pairing** — typing an opener `( [ { " ' ``` inserts the
   matching closer and leaves the cursor between them; with a non-empty selection
@@ -136,7 +136,7 @@ Additional cursor keys handled directly by the editor (not in the menu):
 
 For position history (`Alt+Left` / `Alt+Right`), go to definition (`F12`), go to
 symbol, and the `path:line[:col]` open syntax, see
-[Navigation](../navigation/).
+[Navigation](../../../spec/navigation/index.md).
 
 ## Selection commands — the Select submenu
 
@@ -193,12 +193,12 @@ transform applies to the current selection.
 | Camel | `edit.case_camel` | `fooBar` |
 | Pascal | `edit.case_pascal` | `FooBar` |
 
-See also [Case](../case-change/).
+See also [Case](../../vix-case/spec/index.md).
 
 ## Find — the Find submenu
 
 The **Edit → Find** submenu drives in-buffer search. It is summarized here and
-documented fully in [Find and replace](../find-and-replace/).
+documented fully in [Find and replace](../../vix-find-panel/spec/index.md).
 
 | Command | Action | Shortcut |
 |---|---|---|
@@ -217,9 +217,9 @@ toggle applies to every open buffer at once.
 |---|---|---|
 | Line Numbers | `view.line_numbers` | Show/hide the line-number gutter. |
 | Whitespace | `view.whitespace` | Show/hide visible-whitespace glyphs (spaces, tabs). |
-| Scroll Bar | `view.scrollbar` | Show/hide the editor scrollbar. See [Scrollbars](../scrollbars/). |
+| Scroll Bar | `view.scrollbar` | Show/hide the editor scrollbar. See [Scrollbars](scrollbars/index.md). |
 | Soft Wrap | `view.soft_wrap` | Wrap long lines to the viewport instead of scrolling horizontally. |
-| Spellcheck | `view.spellcheck` | Toggle the misspelling underline. See [Spellcheck](../spellcheck/). |
+| Spellcheck | `view.spellcheck` | Toggle the misspelling underline. See [Spellcheck](../../vix-spellcheck/spec/index.md). |
 
 The same submenu also holds tab navigation: **Next Tab** (`Ctrl+Tab`) and
 **Previous Tab** (`Ctrl+Shift+Tab`), which cycle through open buffers.
@@ -229,7 +229,7 @@ Line-number, whitespace, and soft-wrap settings are persisted in
 
 ## As implemented in Vix
 
-`src/editor.rs` is the host wrapper. It owns the tab strip (`Editor`, a `Vec<Tab>`
+`crates/vix-editor/src/editor.rs` is the host wrapper. It owns the tab strip (`Editor`, a `Vec<Tab>`
 plus the active index) and the global display settings (`line_numbers`,
 `show_whitespace`, `soft_wrap`, `indent`). Each `Tab` wraps one
 `editor_core::editor::Editor` (re-exported as `CodeEditor`), its file path, dirty
@@ -241,12 +241,12 @@ the cursor-jump and selection commands (`cursor_line_home`, `cursor_line_end`,
 `page_up`, `page_down`) on top of the `editor_core` primitives, and converts the
 flat character offset to 1-based line/column via `cursor_1based`.
 
-`src/menu.rs` defines the **Edit** menu and its `Select`, `Move`, `Go`, `Find`,
+`crates/vix-menu/src/lib.rs` defines the **Edit** menu and its `Select`, `Move`, `Go`, `Find`,
 and `Case` submenus, plus the **View → Editor** submenu, as static action tables.
 Each item carries an `action` string that `App::run_action` in `src/app.rs`
 dispatches; the command palette reuses the same action names.
 
-The `editor_core` crate (`editor_core/src/editor.rs`) provides the underlying
+The `editor_core` crate (`crates/vix-editor-core/src/editor.rs`) provides the underlying
 buffer, Tree-sitter highlighting and highlight cache, undo/redo, selection
 anchor/extend, the OS clipboard with in-process fallback, mouse hit-testing
 (`cursor_from_mouse`, `handle_mouse_down/drag`), soft wrap, and the separate mark

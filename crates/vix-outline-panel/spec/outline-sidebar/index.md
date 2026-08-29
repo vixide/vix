@@ -22,4 +22,4 @@ when the active tab or its revision changes (cached in `outline_dock_key`), then
 re-selects the nearest symbol. `ui::draw_outline_dock` renders the dock and records
 `layout.outline_dock`; clicks route through `App::outline_dock_click`. Reuses the
 `outline_panel::Outline`/`Entry` types from the modal
-[outline panel](../../docs/outline-panel/index.md).
+[outline panel](../../../../docs/outline-panel/index.md).

@@ -717,45 +717,10 @@ pub struct Paste;
 
 impl Action for Paste {
     fn apply(&mut self, editor: &mut Editor) {
-        // 1. Get clipboard contents
         let Ok(text) = editor.get_clipboard() else {
             return;
         };
-        if text.is_empty() {
-            return;
-        }
-
-        // 2. Extract current cursor and selection
-        let mut cursor = editor.get_cursor();
-        let mut selection = editor.get_selection();
-        let code = editor.code_mut();
-
-        // 3. Prepare transaction
-        code.tx();
-        code.set_state_before(cursor, selection);
-
-        // 4. Remove selection if present
-        if let Some(sel) = &selection
-            && !sel.is_empty()
-        {
-            let (start, end) = sel.sorted();
-            code.remove(start, end);
-            cursor = start;
-            selection = None;
-        }
-
-        // 5. Perform paste with smart indentation
-        let inserted = code.smart_paste(cursor, &text);
-        cursor += inserted;
-
-        // 6. Finalize transaction
-        code.set_state_after(cursor, selection);
-        code.commit();
-
-        // 7. Update editor state
-        editor.set_cursor(cursor);
-        editor.set_selection(selection);
-        editor.reset_highlight_cache();
+        editor.paste_text(&text);
     }
 }
 

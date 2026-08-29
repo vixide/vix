@@ -16,7 +16,7 @@ use crate::calendar;
 use crate::clock;
 use crate::menu::menus;
 use crate::messages::Level;
-use crate::search::Field;
+use crate::search::{Field, Scope};
 use crate::theme::{self, icon};
 
 /// The body's column rectangles: file explorer, center editor, message drawer,
@@ -265,6 +265,9 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     }
     if app.edit_table.is_some() {
         draw_edit_table(app, frame, area);
+    }
+    if app.column_view.is_some() {
+        draw_column_view(app, frame, area);
     }
     if app.edit_outline.is_some() {
         draw_edit_outline(app, frame, area);
@@ -3925,6 +3928,157 @@ fn draw_edit_table(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.edit_table = chunks[1];
 }
 
+// Per-column display width for the visible span, from `ColumnView::column_width`.
+fn column_view_widths(view: &crate::column_view::ColumnView) -> Vec<usize> {
+    (0..view.col_count())
+        .map(|c| view.column_width(c).min(40))
+        .collect()
+}
+
+// The column indices that fit in `avail` columns, keeping the selected column
+// in view (no persistent scroll memory — recomputed fresh each frame from the
+// current selection, since `ColumnView` does not track a horizontal offset).
+fn column_view_visible_cols(
+    view: &crate::column_view::ColumnView,
+    widths: &[usize],
+    avail: usize,
+) -> Vec<usize> {
+    let sel = view.col();
+    let mut first = 0usize;
+    loop {
+        let used: usize = (first..=sel)
+            .map(|c| widths.get(c).copied().unwrap_or(3) + 1)
+            .sum();
+        if used <= avail || first >= sel {
+            break;
+        }
+        first += 1;
+    }
+    let mut out = Vec::new();
+    let mut used = 0usize;
+    for c in first..view.col_count() {
+        let need = widths.get(c).copied().unwrap_or(3) + 1;
+        if used + need > avail && !out.is_empty() {
+            break;
+        }
+        used += need;
+        out.push(c);
+    }
+    out
+}
+
+// Build one rendered Column View line: the header row (`r`/`is_header` unused
+// for headers) or data row `r`, over the visible `cols`.
+fn column_view_row_line(
+    view: &crate::column_view::ColumnView,
+    is_header: bool,
+    r: usize,
+    cols: &[usize],
+    widths: &[usize],
+) -> Line<'static> {
+    let mut spans = Vec::with_capacity(cols.len() * 2);
+    for &c in cols {
+        let w = widths.get(c).copied().unwrap_or(3);
+        let selected = !is_header && r == view.row() && c == view.col();
+        let text = if is_header {
+            let def = &view.columns()[c];
+            def.title.clone().unwrap_or_else(|| def.property.clone())
+        } else if selected && view.is_editing() {
+            view.edit_buffer().to_string()
+        } else {
+            view.cell(r, c).to_string()
+        };
+        let style = if selected {
+            theme::selected()
+        } else if is_header {
+            theme::title(true)
+        } else {
+            theme::base()
+        };
+        spans.push(Span::styled(fit(&text, w), style));
+        spans.push(Span::raw(" "));
+    }
+    Line::from(spans)
+}
+
+// The bottom status/hint line: field position, plus the allowed-value edit
+// notice, the raw-value edit notice, or the key hint.
+fn column_view_status_line(view: &crate::column_view::ColumnView) -> Line<'static> {
+    let info = if view.is_editing() {
+        t!("ui.column_view_editing").to_string()
+    } else if view.is_editing_allowed() {
+        format!(
+            "{}: {}",
+            t!("ui.column_view_editing_allowed"),
+            view.edit_buffer()
+        )
+    } else {
+        t!("ui.column_view_hint").to_string()
+    };
+    let pos = format!(
+        " r{}/{} c{}/{}  ",
+        view.row() + 1,
+        view.row_count(),
+        view.col() + 1,
+        view.col_count(),
+    );
+    Line::from(vec![
+        Span::styled(pos, theme::dim()),
+        Span::styled(info, theme::dim()),
+    ])
+}
+
+// Render the interactive Column View overlay: a pinned header row, a
+// scrolling body with the selected field highlighted, and a status/hint line.
+fn draw_column_view(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.column_view.is_none() {
+        return;
+    }
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::TABLE, t!("ui.column_view")));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
+        .split(inner);
+
+    let view = app.column_view.as_ref().unwrap();
+    let widths = column_view_widths(view);
+    let avail = usize::from(chunks[1].width);
+    let cols = column_view_visible_cols(view, &widths, avail);
+    let body_h = usize::from(chunks[1].height);
+    if let Some(v) = app.column_view.as_mut() {
+        v.ensure_row_visible(body_h);
+    }
+
+    let view = app.column_view.as_ref().unwrap();
+    frame.render_widget(
+        Paragraph::new(column_view_row_line(view, true, 0, &cols, &widths)),
+        chunks[0],
+    );
+
+    let start = view.row_scroll();
+    let mut lines = Vec::with_capacity(body_h);
+    for r in start..(start + body_h).min(view.row_count()) {
+        lines.push(column_view_row_line(view, false, r, &cols, &widths));
+    }
+    frame.render_widget(Paragraph::new(lines), chunks[1]);
+    frame.render_widget(Paragraph::new(column_view_status_line(view)), chunks[2]);
+
+    app.layout.column_view = chunks[1];
+}
+
 // One rendered outline line: indentation, a fold marker (▾/▸/·), and the text.
 fn outline_line(tree: &crate::edit_outline::Tree, i: usize, selected: bool) -> Line<'static> {
     let marker = if tree.has_children(i) {
@@ -6520,6 +6674,7 @@ fn button_row(frame: &mut Frame, row: Rect, buttons: &[(String, Style)]) -> Vec<
     rects
 }
 
+#[allow(clippy::too_many_lines)]
 fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(s) = app.search.as_ref() else { return };
     let replacing = s.replacing;
@@ -6552,6 +6707,8 @@ fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.search_case = Rect::default();
     app.layout.search_word = Rect::default();
     app.layout.search_regex = Rect::default();
+    app.layout.search_replace_toggle = Rect::default();
+    app.layout.search_scope = Rect::default();
     app.layout.search_once = Rect::default();
     app.layout.search_ask = Rect::default();
     app.layout.search_all = Rect::default();
@@ -6573,32 +6730,33 @@ fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
         rows[0],
     );
 
-    // Case / Word / Regex toggle buttons (highlighted when on).
-    let toggle_style = |on: bool| if on { theme::selected() } else { theme::dim() };
-    let toggles = vec![
+    let options = vec![
+        (t!("ui.toggle_case").to_string(), s.case_sensitive),
+        (t!("ui.toggle_smartcase").to_string(), s.smart_case),
+        (t!("ui.toggle_word").to_string(), s.whole_word),
+        (t!("ui.toggle_regex").to_string(), s.regex),
+        // The two options that used to be separate menu items.
+        (t!("ui.toggle_replace").to_string(), s.replacing),
         (
-            t!("ui.toggle_case").to_string(),
-            toggle_style(s.case_sensitive),
+            t!(s.scope.label_key()).to_string(),
+            s.scope != Scope::Buffer,
         ),
-        (
-            t!("ui.toggle_smartcase").to_string(),
-            toggle_style(s.smart_case),
-        ),
-        (t!("ui.toggle_word").to_string(), toggle_style(s.whole_word)),
-        (t!("ui.toggle_regex").to_string(), toggle_style(s.regex)),
     ];
-    let trects = button_row(frame, rows[1], &toggles);
-    app.layout.search_case = trects[0];
-    app.layout.search_smartcase = trects[1];
-    app.layout.search_word = trects[2];
-    app.layout.search_regex = trects[3];
+    // Everything the rows below need, taken while the box is still borrowed.
+    let (replace_text, on_replace_field, status_text, interactive) = (
+        s.replace.clone(),
+        s.field == Field::Replace,
+        s.status.clone(),
+        s.interactive,
+    );
+    draw_search_options(app, frame, rows[1], &options);
 
     if replacing {
         frame.render_widget(
             Paragraph::new(field_line(
                 &t!("ui.field_replace"),
-                &s.replace,
-                s.field == Field::Replace,
+                &replace_text,
+                on_replace_field,
             )),
             rows[2],
         );
@@ -6614,19 +6772,46 @@ fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
         app.layout.search_all = arects[2];
     }
 
-    let status = if !s.status.is_empty() {
-        s.status.clone()
-    } else if s.interactive {
+    let status = if !status_text.is_empty() {
+        status_text
+    } else if interactive {
         t!("ui.search_hint_interactive").to_string()
     } else if replacing {
         t!("ui.search_hint_replace").to_string()
     } else {
-        t!("ui.search_hint").to_string()
+        format!(
+            "{}   {}",
+            t!("ui.search_hint"),
+            t!("ui.search_hint_options")
+        )
     };
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(status, theme::dim()))),
         rows[rows.len() - 1],
     );
+}
+
+/// Draw the find box's option row: the match toggles (Case / Smart case / Word /
+/// Regex) plus the two options that replaced separate menu items — **Replace**
+/// mode and the **In:** scope — and record each button's rectangle so a click can
+/// hit it. Split out of [`draw_search`] to keep that within the line limit.
+///
+/// `options` arrives as `(label, is_on)` pairs, already read from the box, so
+/// this can take `&mut App` to record the rectangles without holding a borrow of
+/// the box itself.
+fn draw_search_options(app: &mut App, frame: &mut Frame, row: Rect, options: &[(String, bool)]) {
+    let style = |on: bool| if on { theme::selected() } else { theme::dim() };
+    let buttons: Vec<(String, Style)> = options
+        .iter()
+        .map(|(label, on)| (label.clone(), style(*on)))
+        .collect();
+    let rects = button_row(frame, row, &buttons);
+    app.layout.search_case = rects[0];
+    app.layout.search_smartcase = rects[1];
+    app.layout.search_word = rects[2];
+    app.layout.search_regex = rects[3];
+    app.layout.search_replace_toggle = rects[4];
+    app.layout.search_scope = rects[5];
 }
 
 fn field_line(label: &str, value: &str, focused: bool) -> Line<'static> {

@@ -129,6 +129,43 @@ pub fn unescape(s: &str) -> String {
     out
 }
 
+/// Where a search looks. The find box carries this so one dialog covers what
+/// used to be three menu items: widening the scope hands the query, the
+/// replacement, and the toggles to the surface that can show that many results,
+/// instead of making the user close the box and start again somewhere else.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Scope {
+    /// The active buffer, matched in place (the find box's own hit stepping).
+    #[default]
+    Buffer,
+    /// Every file in the project, listed in the workspace search panel.
+    Files,
+    /// Every file in the project, listed as `path:line:col` in the bottom dock.
+    Workspace,
+}
+
+impl Scope {
+    /// The next scope in the cycle: buffer → files → workspace → buffer.
+    #[must_use]
+    pub fn next(self) -> Self {
+        match self {
+            Scope::Buffer => Scope::Files,
+            Scope::Files => Scope::Workspace,
+            Scope::Workspace => Scope::Buffer,
+        }
+    }
+
+    /// The i18n key naming this scope, for the box's scope indicator.
+    #[must_use]
+    pub fn label_key(self) -> &'static str {
+        match self {
+            Scope::Buffer => "ui.find_scope_buffer",
+            Scope::Files => "ui.find_scope_files",
+            Scope::Workspace => "ui.find_scope_workspace",
+        }
+    }
+}
+
 /// Which input field of the box has focus.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Field {
@@ -204,6 +241,9 @@ pub struct SearchBar {
     pub whole_word: bool,
     /// Treat the query as a regular expression.
     pub regex: bool,
+    /// Where the search looks: this buffer, all files, or the workspace dock.
+    /// The host acts on a change by handing this box's state to that surface.
+    pub scope: Scope,
     /// Last status, e.g. match count or "no matches".
     pub status: String,
 }
@@ -222,8 +262,36 @@ impl SearchBar {
             smart_case: true,
             whole_word: false,
             regex: false,
+            scope: Scope::Buffer,
             status: String::new(),
         }
+    }
+
+    /// Turn replace on or off without closing the box, so a find becomes a
+    /// find-and-replace in place — every "Find…" dialog can replace, rather than
+    /// replace being a separate command you reopen the box for.
+    ///
+    /// Enabling focuses the replacement field, since that is what the user just
+    /// asked for; disabling returns focus to the query and leaves the
+    /// replacement text alone, so toggling back is not lossy. Turning replace
+    /// off also ends interactive (step-through) mode, which has no meaning
+    /// without a replacement.
+    pub fn toggle_replace(&mut self) {
+        self.replacing = !self.replacing;
+        if self.replacing {
+            self.field = Field::Replace;
+        } else {
+            self.field = Field::Query;
+            self.interactive = false;
+        }
+    }
+
+    /// Move to the next search scope (buffer → files → workspace → buffer) and
+    /// return it. The host reads the new scope and, when it is not
+    /// [`Scope::Buffer`], opens the matching surface seeded with this box.
+    pub fn cycle_scope(&mut self) -> Scope {
+        self.scope = self.scope.next();
+        self.scope
     }
 
     /// Mutable access to the currently focused field's text. The box uses only

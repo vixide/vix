@@ -379,61 +379,77 @@ pub fn fuzzy_match(haystack: &str, query: &str) -> bool {
 /// "Sort Lines" above "Toggle Spell**l**check" and an exact/prefix hit wins.
 #[must_use]
 pub fn fuzzy_score(haystack: &str, query: &str) -> Option<i32> {
-    let hay: Vec<char> = haystack.to_lowercase().chars().collect();
+    // This runs for every candidate on every keystroke — 20,000 paths in a large
+    // workspace — so it allocates once (the lowercased haystack) and never per
+    // character. It used to also collect a `Vec<char>` and copy that back into a
+    // `String` for the exact/prefix test, which cost more than the matching did.
+    let hay = haystack.to_lowercase();
+    let hay_len = hay.chars().count();
     let mut total = 0;
     for term in query.split_whitespace() {
-        total += term_score(&hay, &term.to_lowercase())?;
+        total += term_score(&hay, hay_len, &term.to_lowercase())?;
     }
-    let q = query
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase();
+
+    // Bonus for matching the whole (whitespace-normalized) query.
+    let mut q = String::new();
+    for term in query.split_whitespace() {
+        if !q.is_empty() {
+            q.push(' ');
+        }
+        q.push_str(term);
+    }
+    let q = q.to_lowercase();
     if !q.is_empty() {
-        let hs: String = hay.iter().collect();
-        if hs == q {
+        if hay == q {
             total += 100; // exact match
-        } else if hs.starts_with(&q) {
+        } else if hay.starts_with(&q) {
             total += 40; // prefix match
         }
     }
     Some(total)
 }
 
-/// Score a single (already-lowercased) term against `hay`, or `None` if it is
-/// not a subsequence.
-fn term_score(hay: &[char], needle: &str) -> Option<i32> {
+/// Score a single (already-lowercased) term against the lowercased `hay`, whose
+/// length in `char`s the caller has already counted. `None` when the term is not
+/// a subsequence.
+///
+/// One forward pass, no indexing: the haystack is walked as characters while the
+/// character *before* the cursor is carried along, which is all the word-start
+/// bonus needs. Scores are positional in `char`s, not bytes, so the numbers match
+/// what a `Vec<char>` walk produced.
+fn term_score(hay: &str, hay_len: usize, needle: &str) -> Option<i32> {
     if needle.is_empty() {
         return Some(0);
     }
-    let mut hi = 0usize;
     let mut score = 0i32;
     let mut prev: Option<usize> = None;
     let mut first: Option<usize> = None;
+    let mut cursor = hay.chars().enumerate();
+    let mut before: Option<char> = None;
     for nc in needle.chars() {
         let mut found = None;
-        while hi < hay.len() {
-            let here = hi;
-            hi += 1;
-            if hay[here] == nc {
-                found = Some(here);
+        for (idx, hc) in cursor.by_ref() {
+            let preceding = before;
+            before = Some(hc);
+            if hc == nc {
+                found = Some((idx, preceding));
                 break;
             }
         }
-        let idx = found?;
+        let (idx, preceding) = found?;
         if first.is_none() {
             first = Some(idx);
         }
         if prev.is_some_and(|p| p + 1 == idx) {
             score += 15; // contiguous with the previous matched char
         }
-        if idx == 0 || !hay[idx - 1].is_alphanumeric() {
-            score += 10; // start of a word
+        if preceding.is_none_or(|c| !c.is_alphanumeric()) {
+            score += 10; // start of a word (or of the haystack)
         }
         prev = Some(idx);
     }
     score -= i32::try_from(first.unwrap_or(0)).unwrap_or(0); // earlier is better
-    score -= i32::try_from(hay.len()).unwrap_or(0) / 4; // shorter is slightly better
+    score -= i32::try_from(hay_len).unwrap_or(0) / 4; // shorter is slightly better
     Some(score)
 }
 
@@ -454,6 +470,112 @@ pub fn parse_path_target(input: &str) -> (String, Option<(usize, usize)>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The pre-optimization implementation, kept verbatim as the reference the
+    /// current one must agree with (see `fuzzy_score_matches_the_reference`).
+    fn reference_score(haystack: &str, query: &str) -> Option<i32> {
+        fn term(hay: &[char], needle: &str) -> Option<i32> {
+            if needle.is_empty() {
+                return Some(0);
+            }
+            let mut hi = 0usize;
+            let mut score = 0i32;
+            let mut prev: Option<usize> = None;
+            let mut first: Option<usize> = None;
+            for nc in needle.chars() {
+                let mut found = None;
+                while hi < hay.len() {
+                    let here = hi;
+                    hi += 1;
+                    if hay[here] == nc {
+                        found = Some(here);
+                        break;
+                    }
+                }
+                let idx = found?;
+                if first.is_none() {
+                    first = Some(idx);
+                }
+                if prev.is_some_and(|p| p + 1 == idx) {
+                    score += 15;
+                }
+                if idx == 0 || !hay[idx - 1].is_alphanumeric() {
+                    score += 10;
+                }
+                prev = Some(idx);
+            }
+            score -= i32::try_from(first.unwrap_or(0)).unwrap_or(0);
+            score -= i32::try_from(hay.len()).unwrap_or(0) / 4;
+            Some(score)
+        }
+
+        let hay: Vec<char> = haystack.to_lowercase().chars().collect();
+        let mut total = 0;
+        for t in query.split_whitespace() {
+            total += term(&hay, &t.to_lowercase())?;
+        }
+        let q = query
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase();
+        if !q.is_empty() {
+            let hs: String = hay.iter().collect();
+            if hs == q {
+                total += 100;
+            } else if hs.starts_with(&q) {
+                total += 40;
+            }
+        }
+        Some(total)
+    }
+
+    /// Fixed cases the reference and the current implementation must agree on,
+    /// including the ones that make the two walks differ if the rewrite is wrong:
+    /// non-ASCII (byte index != char index), a match at offset 0, punctuation
+    /// before a match, and a query that is the whole haystack.
+    #[test]
+    fn fuzzy_score_matches_the_reference() {
+        const CASES: &[(&str, &str)] = &[
+            ("Sort Lines", "sl"),
+            ("Toggle Spellcheck", "sl"),
+            ("crates/vix-editor/src/editor.rs", "edsrc"),
+            ("crates/vix-org-table/src/lib.rs", "org tab"),
+            ("Ünicode Ärger straße", "üä"),
+            ("日本語のファイル.rs", "本語"),
+            ("a", "a"),
+            ("a-b-c", "abc"),
+            ("", ""),
+            ("", "x"),
+            ("Sort Lines", ""),
+            ("Sort Lines", "   "),
+            ("sort lines", "sort lines"),
+            ("sort lines extra", "sort lines"),
+            ("no match here", "zzz"),
+        ];
+        for (haystack, query) in CASES {
+            assert_eq!(
+                fuzzy_score(haystack, query),
+                reference_score(haystack, query),
+                "diverged on ({haystack:?}, {query:?})"
+            );
+        }
+    }
+
+    proptest::proptest! {
+        /// Over arbitrary text, the rewrite scores exactly what the reference
+        /// scored — same ranking, same matches, same misses.
+        #[test]
+        fn fuzzy_score_matches_the_reference_for_any_input(
+            haystack in ".{0,64}",
+            query in ".{0,16}",
+        ) {
+            proptest::prop_assert_eq!(
+                fuzzy_score(&haystack, &query),
+                reference_score(&haystack, &query)
+            );
+        }
+    }
 
     #[test]
     fn from_input_distinguishes_at_and_double_at() {

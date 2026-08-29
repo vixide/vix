@@ -19,7 +19,7 @@ session: the open files, the focused tab, and each tab's cursor position.
 
 ## Storage
 
-The session lives next to the [configuration](../configuration/index.md) in the
+The session lives next to the [configuration](../../../docs/configuration/index.md) in the
 `confy` config directory as a separate `session.toml` file, so it can be cleared
 without touching preferences. It records one entry per workspace root, most
 recently used first, capped at 50 workspaces. The workspace key is the
@@ -55,6 +55,22 @@ indices still line up with the tab order.
 `restore_session` (default `true`) in `config.toml` turns the feature off. With
 it disabled, Vix always starts with a single empty buffer unless files are given
 on the command line.
+
+## Project task-runner state
+
+`WorkspaceSession` also carries the private, per-user half of the `project.*`
+action family's two-tier persistence (see `crates/vix-tasks/spec/index.md`
+for the full picture; the shareable half is the host's `.vix/project.toml`,
+outside this crate): six `project_cmd_*` fields (a resolved/edited lifecycle
+command cache, one per slot: configure/compile/test/install/package/run), six
+`project_history_*` fields (that slot's command run history, most-recent
+last), and `project_last_command` (the most recently run project command of
+any kind, for "repeat last task"). These are plain fields — not a
+`vix_tasks` struct — so this crate stays a dependency-free leaf; the host
+(`src/app.rs`) converts at the call site. `App` loads them lazily, only once a
+`project.*` action is first used in a run, and never overwrites them on exit
+without having loaded them first, so a run that never touches project features
+cannot silently wipe previously saved project state.
 
 ## Roadmap
 

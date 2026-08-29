@@ -15,11 +15,28 @@ cargo build --workspace --all-targets
 cargo clippy --workspace --all-targets -- -D warnings    # spec/rust-clippy-pedantic
 cargo test --workspace
 cargo doc --workspace --no-deps                          # RUSTDOCFLAGS=-D warnings
+python3 scripts/check-docs                               # documentation integrity
 ```
 
-Nothing merges that does not pass all five. Run `scripts/check` (or
+Nothing merges that does not pass all six. Run `scripts/check` (or
 `make check`) locally first; CI should only ever confirm what the local gate
 already said.
+
+GitHub additionally runs an **MSRV** job: `cargo check --workspace --all-targets`
+on the toolchain floor, which is the current stable release minus two (see
+[`spec/rust-msrv-n-minus-2/index.md`](../rust-msrv-n-minus-2/index.md)). GitLab
+gets the same signal for free by pinning its image to the floor.
+
+Two things are deliberately **not** in the gate:
+
+- **Fuzzing** needs nightly and a time budget, and it is a tool for the person
+  changing a parser rather than a pass/fail bar. A crash it finds becomes a unit
+  test, which *is* in the gate.
+- **Benchmarks** need a quiet machine to mean anything; a shared CI runner would
+  produce noise and false alarms. Run `cargo bench` locally, before and after,
+  when touching a hot path.
+
+See [`spec/test/index.md`](../test/index.md) for how the layers fit together.
 
 ## Files
 
@@ -44,9 +61,8 @@ Three jobs, so a formatting failure is visible without waiting for the tests:
   double wall time for little extra signal, because the editing logic is
   terminal-independent and tested without a TTY.
 - **msrv** — `cargo check` on the toolchain floor declared by
-  `workspace.package.rust-version` in `Cargo.toml` — current stable minus two,
-  see [`spec/rust-msrv-n-minus-2/index.md`](../rust-msrv-n-minus-2/index.md).
-  Bump the matrix entry when that floor moves.
+  `workspace.package.rust-version` in `Cargo.toml`. Bump the matrix entry when
+  that floor moves.
 
 Caching is `Swatinem/rust-cache`; runs are cancelled when superseded on the
 same ref.

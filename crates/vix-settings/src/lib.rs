@@ -88,6 +88,8 @@ pub struct Settings {
     pub indent_style: String,
     /// Number of spaces per indent when `indent_style` is `"spaces"`.
     pub tab_width: usize,
+    /// Column that Edit → Wrap hard-wraps (fills) text at.
+    pub wrap_column: usize,
     /// Color theme: `"dark"` (default) or `"light"`.
     pub theme: String,
     /// UI language as a locale code (e.g. `"en"`, `"es"`, `"fr"`, `"de"`, `"cy"`).
@@ -130,16 +132,17 @@ pub struct Settings {
     /// built-in server, so add the ones you have installed, e.g.
     /// `{ language_id = "rust", extensions = ["rs"], command = ["rust-analyzer"] }`.
     pub lsp_servers: Vec<LspServer>,
-    /// Whether the first-run welcome screen has been shown. Set true after the
-    /// welcome panel first appears, so it does not pop up on every launch.
-    pub welcomed: bool,
+    /// Show the welcome dialog on launch. Vix sets it to `false` and saves the
+    /// settings as soon as the dialog has been shown once, so it appears on the
+    /// first run only; set it back to `true` to see it again.
+    pub show_welcome_dialog: bool,
     /// Directory of vCard (`.vcf`) files for the contact browser (Tools →
     /// Contacts…). Empty = use the workspace root.
     pub contacts_dir: String,
     /// Org-capture templates for the **Org → Capture** submenu: named,
     /// placeholder-driven templates filed at a cursor/id/file/headline/
     /// datetree target. Seeded with `Anything`/`Todo`/`Contact` by default;
-    /// see the `vix-org-capture` crate and `spec/org/capture/index.md`.
+    /// see the `vix-org-capture` crate and `crates/vix-org-capture/spec/index.md`.
     pub org_capture_templates: Vec<vix_org_capture::CaptureTemplate>,
     /// Highest-priority character for a headline's `[#X]` priority cookie
     /// (**Org → Priority**). "Highest" sorts first — Vix's default is
@@ -245,6 +248,7 @@ impl Default for Settings {
             highlight_word: false,
             indent_style: "spaces".to_string(),
             tab_width: 4,
+            wrap_column: 80,
             theme: "dark".to_string(),
             locale: "en".to_string(),
             keymap: "apple".to_string(),
@@ -259,7 +263,7 @@ impl Default for Settings {
             dictionary_path: String::new(),
             lsp_enabled: true,
             lsp_servers: Vec::new(),
-            welcomed: false,
+            show_welcome_dialog: true,
             contacts_dir: String::new(),
             org_capture_templates: vix_org_capture::defaults(),
             org_priority_highest: '0',
@@ -292,6 +296,15 @@ impl Settings {
     #[must_use]
     pub fn load() -> Settings {
         confy::load(APP_NAME, Some(CONFIG_NAME)).unwrap_or_default()
+    }
+
+    /// Load settings from an explicit file, falling back to
+    /// [`Settings::default`] on any error (missing file, parse failure, …).
+    /// Used by tests and embedders that keep a config outside the user's config
+    /// directory; [`Settings::load`] is the normal entry point.
+    #[must_use]
+    pub fn load_from(path: &std::path::Path) -> Settings {
+        confy::load_path(path).unwrap_or_default()
     }
 
     /// The string Tab inserts: a tab character for `indent_style = "tabs"`, else
@@ -339,6 +352,17 @@ impl Settings {
     /// created or the file cannot be written/serialized.
     pub fn save(&self) -> Result<(), confy::ConfyError> {
         confy::store(APP_NAME, Some(CONFIG_NAME), self)
+    }
+
+    /// Persist settings to an explicit file (the counterpart of
+    /// [`Settings::load_from`]); parent directories are created as needed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`confy::ConfyError`] if the file cannot be written or
+    /// serialized.
+    pub fn save_to(&self, path: &std::path::Path) -> Result<(), confy::ConfyError> {
+        confy::store_path(path, self)
     }
 
     /// The on-disk settings file path (e.g. `~/.config/vix/config.toml`), or

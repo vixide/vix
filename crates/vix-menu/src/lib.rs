@@ -160,6 +160,13 @@ const FILE: &[Item] = &[
 ];
 
 /// Find-related items, grouped under Edit → Find.
+///
+/// Searching *files* and the *workspace* are not separate items: they are the
+/// find dialog's own scope option (`Alt+I`, or the "In:" button), which carries
+/// the query and toggles across instead of making the user retype them. Replace
+/// is likewise a mode of the same dialog (`Alt+P`), not a second command. The
+/// `search.workspace` / `search.workspace_replace` / `search.workspace_dock`
+/// action ids still exist for key bindings and the command palette.
 const EDIT_FIND: &[Item] = &[
     Item::leaf("menu.item.edit.find", "edit.find", "Ctrl F"),
     Item::leaf("menu.item.edit.find_next", "edit.find_next", "Ctrl G"),
@@ -172,22 +179,6 @@ const EDIT_FIND: &[Item] = &[
     Item::leaf(
         "menu.item.edit.toggle_highlight",
         "toggle_highlight_search",
-        "",
-    ),
-    SEP,
-    Item::leaf(
-        "menu.item.edit.find_in_files",
-        "search.workspace",
-        "Ctrl Shift F",
-    ),
-    Item::leaf(
-        "menu.item.edit.replace_in_files",
-        "search.workspace_replace",
-        "",
-    ),
-    Item::leaf(
-        "menu.item.edit.search_workspace_dock",
-        "search.workspace_dock",
         "",
     ),
 ];
@@ -228,6 +219,45 @@ const EDIT_SURROUND: &[Item] = &[
     ),
 ];
 
+/// Delete the text unit at the cursor, grouped under Edit → Delete.
+const EDIT_DELETE: &[Item] = &[
+    Item::leaf(
+        "menu.item.edit.delete.character",
+        "edit.delete.character",
+        "",
+    ),
+    Item::leaf("menu.item.edit.delete.word", "edit.delete.word", ""),
+    Item::leaf("menu.item.edit.delete.sentence", "edit.delete.sentence", ""),
+    Item::leaf(
+        "menu.item.edit.delete.paragraph",
+        "edit.delete.paragraph",
+        "",
+    ),
+    Item::leaf("menu.item.edit.delete.section", "edit.delete.section", ""),
+];
+
+/// Swap the two units around the cursor, grouped under Edit → Transpose.
+const EDIT_TRANSPOSE: &[Item] = &[
+    Item::leaf("menu.item.edit.transpose_chars", "edit.transpose_chars", ""),
+    Item::leaf("menu.item.edit.transpose_words", "edit.transpose_words", ""),
+    Item::leaf("menu.item.edit.transpose_lines", "edit.transpose_lines", ""),
+    Item::leaf(
+        "menu.item.edit.transpose_sentences",
+        "edit.transpose_sentences",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.edit.transpose_paragraphs",
+        "edit.transpose_paragraphs",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.edit.transpose_sections",
+        "edit.transpose_sections",
+        "",
+    ),
+];
+
 const EDIT: &[Item] = &[
     Item::leaf("menu.item.edit.undo", "edit.undo", "Ctrl Z"),
     Item::leaf("menu.item.edit.redo", "edit.redo", "Ctrl Shift Z"),
@@ -242,11 +272,11 @@ const EDIT: &[Item] = &[
         "",
     ),
     SEP,
+    Item::sub("menu.item.edit.find_menu", EDIT_FIND),
     Item::sub("menu.item.edit.select_menu", EDIT_SELECT),
     Item::sub("menu.item.edit.lines_menu", EDIT_MOVE),
     Item::sub("menu.item.edit.surround_menu", EDIT_SURROUND),
     Item::sub("menu.item.edit.align_menu", EDIT_ALIGN),
-    Item::sub("menu.item.edit.find_menu", EDIT_FIND),
     Item::sub("menu.item.edit.mode", EDIT_MODE),
     SEP,
     Item::leaf(
@@ -257,8 +287,9 @@ const EDIT: &[Item] = &[
     Item::leaf("menu.item.edit.comment_banner", "edit.comment_banner", ""),
     Item::leaf("menu.item.edit.emmet_expand", "edit.emmet_expand", ""),
     Item::leaf("menu.item.edit.toggle_value", "edit.toggle_value", ""),
-    Item::leaf("menu.item.edit.transpose_chars", "edit.transpose_chars", ""),
-    Item::leaf("menu.item.edit.transpose_words", "edit.transpose_words", ""),
+    Item::sub("menu.item.edit.delete_menu", EDIT_DELETE),
+    Item::sub("menu.item.edit.transpose_menu", EDIT_TRANSPOSE),
+    Item::leaf("menu.item.edit.wrap", "edit.wrap", ""),
     Item::leaf(
         "menu.item.edit.increment_number",
         "edit.increment_number",
@@ -429,14 +460,14 @@ const EDIT_SELECT: &[Item] = &[
         "",
     ),
     Item::leaf(
-        "menu.item.edit.column_select_down",
-        "edit.column_select_down",
-        "Alt Shift ↓",
-    ),
-    Item::leaf(
         "menu.item.edit.column_select_up",
         "edit.column_select_up",
         "Alt Shift ↑",
+    ),
+    Item::leaf(
+        "menu.item.edit.column_select_down",
+        "edit.column_select_down",
+        "Alt Shift ↓",
     ),
     Item::leaf("menu.item.edit.select_all", "edit.select_all", "Ctrl A"),
 ];
@@ -1499,16 +1530,47 @@ const ORG_LINKS: &[Item] = &[
     Item::leaf("menu.item.org.links.prev", "org.link.prev", ""),
 ];
 
-/// Tag and property drawer commands, grouped under Org → Tags & Properties.
-const ORG_TAGS_PROPS: &[Item] = &[
-    Item::leaf("menu.item.org.set_tags", "org.set_tags", "C-c C-q"),
-    Item::leaf("menu.item.org.set_property", "org.set_property", ""),
-    SEP,
+/// The interactive Column View overlay plus its `columnview` dynamic-block
+/// commands, grouped under Org → Tags & Properties → Column View. Menus are
+/// three levels deep ([`Menu::subsubmenu_items`] is the last), so
+/// the dynamic-block commands are flat leaves here (a fourth `Dynamic Block ▸`
+/// level would be structurally unreachable) rather than their own nested
+/// submenu.
+const ORG_COLUMN_VIEW: &[Item] = &[
     Item::leaf(
         "menu.item.org.column_view",
         "org.column_view",
         "C-c C-x C-c",
     ),
+    Item::leaf(
+        "menu.item.org.column_view_export",
+        "org.column_view_export",
+        "",
+    ),
+    SEP,
+    Item::leaf(
+        "menu.item.org.columns.insert_dblock",
+        "org.columns.insert_dblock",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.org.columns.update_dblock",
+        "org.columns.update_dblock",
+        "C-c C-x C-u",
+    ),
+    Item::leaf(
+        "menu.item.org.columns.update_all_dblocks",
+        "org.columns.update_all_dblocks",
+        "",
+    ),
+];
+
+/// Tag and property drawer commands, grouped under Org → Tags & Properties.
+const ORG_TAGS_PROPS: &[Item] = &[
+    Item::leaf("menu.item.org.set_tags", "org.set_tags", "C-c C-q"),
+    Item::leaf("menu.item.org.set_property", "org.set_property", ""),
+    SEP,
+    Item::sub("menu.item.org.column_view_menu", ORG_COLUMN_VIEW),
 ];
 
 /// Timestamp and planning commands, grouped under Org → Dates & Scheduling.
@@ -1698,6 +1760,124 @@ const ORG_CONTACTS: &[Item] = &[
     Item::leaf("menu.item.org.contacts.vcard", "org.contacts.vcard", ""),
 ];
 
+/// Rectangle clipboard commands, grouped under Org → Table → Rectangle
+/// (Org manual: "Regions"). These shadow the Emacs `C-c C-x M-w`/`C-w`/`C-y`
+/// chords contextually inside a pipe table — see `App::emacs_c_x_chord_key`.
+const ORG_TABLE_RECTANGLE: &[Item] = &[
+    Item::leaf(
+        "menu.item.org.table.rectangle.copy",
+        "org.table.copy_rectangle",
+        "C-c C-x M-w",
+    ),
+    Item::leaf(
+        "menu.item.org.table.rectangle.cut",
+        "org.table.cut_rectangle",
+        "C-c C-x C-w",
+    ),
+    Item::leaf(
+        "menu.item.org.table.rectangle.paste",
+        "org.table.paste_rectangle",
+        "C-c C-x C-y",
+    ),
+];
+
+/// Org's built-in pipe-table editor, grouped under Org → Table, following the
+/// manual's own "Built-in Table Editor" grouping: creation and conversion;
+/// column and row editing; regions (rectangle clipboard); calculations;
+/// miscellaneous. "Re-aligning and field motion" (`TAB`/`S-TAB`/`RET`) is
+/// skipped — those aren't menu-worthy actions — except `S-RET` copy-down,
+/// which does have its own action id and so is kept, under Misc.
+const ORG_TABLE: &[Item] = &[
+    Item::leaf(
+        "menu.item.org.table.create_from_region",
+        "org.table.create_from_region",
+        "C-c |",
+    ),
+    Item::leaf("menu.item.org.table.export_tsv", "org.table.export_tsv", ""),
+    SEP,
+    Item::leaf(
+        "menu.item.org.table.insert_row_above",
+        "org.table.insert_row_above",
+        "M-S-Down",
+    ),
+    Item::leaf(
+        "menu.item.org.table.insert_row_below",
+        "org.table.insert_row_below",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.org.table.kill_row",
+        "org.table.kill_row",
+        "M-S-Up",
+    ),
+    SEP,
+    Item::leaf(
+        "menu.item.org.table.move_row_up",
+        "org.table.move_row_up",
+        "M-Up",
+    ),
+    Item::leaf(
+        "menu.item.org.table.move_row_down",
+        "org.table.move_row_down",
+        "M-Down",
+    ),
+    SEP,
+    Item::leaf(
+        "menu.item.org.table.insert_hline",
+        "org.table.insert_hline",
+        "C-c -",
+    ),
+    Item::leaf(
+        "menu.item.org.table.hline_and_move",
+        "org.table.hline_and_move",
+        "C-c RET",
+    ),
+    SEP,
+    Item::leaf(
+        "menu.item.org.table.insert_column",
+        "org.table.insert_column",
+        "M-S-Right",
+    ),
+    Item::leaf(
+        "menu.item.org.table.delete_column",
+        "org.table.delete_column",
+        "M-S-Left",
+    ),
+    SEP,
+    Item::leaf(
+        "menu.item.org.table.move_column_left",
+        "org.table.move_column_left",
+        "M-Left",
+    ),
+    Item::leaf(
+        "menu.item.org.table.move_column_right",
+        "org.table.move_column_right",
+        "M-Right",
+    ),
+    SEP,
+    Item::sub("menu.item.org.table.rectangle", ORG_TABLE_RECTANGLE),
+    SEP,
+    Item::leaf("menu.item.org.table.align", "org.table.align", "C-c C-c"),
+    Item::leaf(
+        "menu.item.org.table.recalc",
+        "org.table.recalc",
+        "C-u C-c C-c",
+    ),
+    Item::leaf(
+        "menu.item.org.table.sum_column",
+        "org.table.sum_column",
+        "C-c +",
+    ),
+    Item::leaf("menu.item.org.table.sort", "org.table.sort", "C-c ^"),
+    SEP,
+    Item::leaf("menu.item.org.table.transpose", "org.table.transpose", ""),
+    Item::leaf(
+        "menu.item.org.table.copy_down",
+        "org.table.copy_down",
+        "S-RET",
+    ),
+];
+
 /// Capture helpers, grouped under Org → Capture.
 const ORG_CAPTURE: &[Item] = &[
     Item::leaf("menu.item.org.capture.anything", "org.capture", ""),
@@ -1718,6 +1898,7 @@ const ORG: &[Item] = &[
     Item::leaf("menu.item.org.new_heading", "org.new_heading", ""),
     Item::sub("menu.item.org.navigate", ORG_NAVIGATE),
     Item::sub("menu.item.org.headline", ORG_HEADLINE),
+    Item::sub("menu.item.org.table", ORG_TABLE),
     Item::sub("menu.item.org.editing", ORG_EDITING),
     Item::sub("menu.item.org.archive", ORG_ARCHIVE),
     SEP,
@@ -1747,6 +1928,91 @@ const ORG: &[Item] = &[
     Item::sub("menu.item.org.export", ORG_EXPORT),
     SEP,
     Item::leaf("menu.item.org.refresh", "org.ctrl_c_ctrl_c", "C-c C-c"),
+];
+
+/// Monorepo subproject commands, grouped under Project → Subproject
+/// (`vix-tasks`): same six lifecycle commands as the top-level Project
+/// menu plus Find File, all resolved at the nearest enclosing subproject
+/// (the nearest directory containing a project-type marker file between the
+/// active file and the workspace root) rather than the workspace root.
+const PROJECT_SUBPROJECT: &[Item] = &[
+    Item::leaf(
+        "menu.item.project.subproject.find_file",
+        "project.subproject.find_file",
+        "C-c p c m f",
+    ),
+    SEP,
+    Item::leaf(
+        "menu.item.project.subproject.configure",
+        "project.subproject.configure",
+        "C-c p c m o",
+    ),
+    Item::leaf(
+        "menu.item.project.subproject.compile",
+        "project.subproject.compile",
+        "C-c p c m c",
+    ),
+    Item::leaf(
+        "menu.item.project.subproject.test",
+        "project.subproject.test",
+        "C-c p c m t",
+    ),
+    Item::leaf(
+        "menu.item.project.subproject.install",
+        "project.subproject.install",
+        "C-c p c m i",
+    ),
+    Item::leaf(
+        "menu.item.project.subproject.package",
+        "project.subproject.package",
+        "C-c p c m p",
+    ),
+    Item::leaf(
+        "menu.item.project.subproject.run",
+        "project.subproject.run",
+        "C-c p c m r",
+    ),
+];
+
+/// Project task running (`vix-tasks`): lifecycle commands, task
+/// discovery/running, test-at-point, and monorepo subproject support. Its
+/// own top-level menu (rather than folded into Tools) since this is a large
+/// enough feature area to deserve one.
+const PROJECT: &[Item] = &[
+    Item::leaf(
+        "menu.item.project.configure",
+        "project.configure",
+        "C-c p c o",
+    ),
+    Item::leaf("menu.item.project.compile", "project.compile", "C-c p c c"),
+    Item::leaf("menu.item.project.test", "project.test", "C-c p c t"),
+    Item::leaf(
+        "menu.item.project.test_at_point",
+        "project.test_at_point",
+        "C-c p c .",
+    ),
+    Item::leaf("menu.item.project.install", "project.install", "C-c p c i"),
+    Item::leaf("menu.item.project.package", "project.package", "C-c p c p"),
+    Item::leaf("menu.item.project.run", "project.run", "C-c p c r"),
+    SEP,
+    Item::leaf(
+        "menu.item.project.run_task",
+        "project.run_task",
+        "C-c p c x",
+    ),
+    Item::leaf(
+        "menu.item.project.repeat_last_task",
+        "project.repeat_last_task",
+        "C-c p c X",
+    ),
+    SEP,
+    Item::sub("menu.item.project.subproject", PROJECT_SUBPROJECT),
+    SEP,
+    Item::leaf(
+        "menu.item.project.discard_command_cache",
+        "project.discard_command_cache",
+        "",
+    ),
 ];
 
 const HELP: &[Item] = &[
@@ -1918,6 +2184,10 @@ fn build_menus() -> Vec<MenuDef> {
         MenuDef {
             name: "menu.org",
             items: ORG,
+        },
+        MenuDef {
+            name: "menu.project",
+            items: PROJECT,
         },
         MenuDef {
             name: "menu.tools",

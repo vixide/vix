@@ -36,9 +36,9 @@ from **View → Split**:
 
 ## As implemented in Vix
 
-The pane tree lives in `src/pane_tree.rs` (`Pane::Leaf`/`Pane::Split`, with
+The pane tree lives in `crates/vix-editor/src/editor.rs` (`Pane::Leaf`/`Pane::Split`, with
 `layout`, `dividers`, `leaf_at`, `resize_at`, and tree surgery — unit tested).
-`Editor` (in `src/editor.rs`) holds `split_root: Option<Pane>` and a
+`Editor` (in `crates/vix-editor/src/editor.rs`) holds `split_root: Option<Pane>` and a
 `focused_leaf` index; `set_split`/`unsplit`/`focus_other_pane`/`focus_leaf` mutate
 it and `split_layout`/`split_dividers` drive rendering. `src/ui.rs`
 `draw_editor_region` lays out every pane and divider (`draw_pane` renders each
