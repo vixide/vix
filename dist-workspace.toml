@@ -12,8 +12,11 @@ installers = ["shell", "powershell", "npm", "homebrew", "msi"]
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl", "x86_64-pc-windows-msvc"]
 # A pre-`dist build` step injected into every build job — see
-# .github/workflows/dist-build-setup.yml.
-github-build-setup = "dist-build-setup.yml"
+# .github/dist/build-setup.yml. Deliberately NOT under .github/workflows/:
+# GitHub treats every .yml there as its own standalone workflow, and this
+# fragment has no `on:`/`jobs:` of its own (dist only splices its `steps:`
+# into release.yml) — it would run and fail on every push.
+github-build-setup = "../dist/build-setup.yml"
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"
 # Where to host releases
