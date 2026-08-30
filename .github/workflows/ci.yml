@@ -62,6 +62,44 @@ jobs:
       - name: scripts/check-docs
         run: python3 scripts/check-docs
 
+  # Broken-link gate for the docs (T002, spec/ci/index.md). The offline pass
+  # only walks local files (deterministic, no network) and is part of the
+  # gate; the external pass hits real URLs, which go stale independently of
+  # any change in this tree, so it reports without failing the build.
+  docs-links:
+    name: docs (lychee)
+    runs-on: ubuntu-latest
+    env:
+      LYCHEE_VERSION: "0.24.2"
+      LYCHEE_SHA256: "73657a111819a30c47c08352896796f23d64e4eb2b3ed39b6d32149241566fc5"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # Pinned and checksummed, like cargo-deny in security.yml: a docs gate
+      # should not itself install an unverified binary, and nothing here
+      # needs compiling.
+      - name: Install lychee (pinned, checksummed)
+        run: |
+          tarball="lychee-x86_64-unknown-linux-musl.tar.gz"
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$tarball" \
+            "https://github.com/lycheeverse/lychee/releases/download/lychee-v$LYCHEE_VERSION/$tarball"
+          echo "$LYCHEE_SHA256  $tarball" | sha256sum --check --strict
+          tar -xzf "$tarball" --strip-components=1 -C /usr/local/bin \
+            "lychee-x86_64-unknown-linux-musl/lychee"
+      - name: lychee (offline links)
+        run: |
+          lychee --offline --no-progress \
+            --exclude-path target --exclude-path CHANGELOG.md '**/*.md'
+      # CHANGELOG.md is included here (unlike the offline pass): its historical
+      # entries pin file paths that may no longer exist (fine, exempt above),
+      # but any external URL it names should still resolve.
+      - name: lychee (external links, advisory)
+        continue-on-error: true
+        run: |
+          lychee --no-progress --scheme https --scheme http \
+            --timeout 10 --max-retries 1 --exclude-path target '**/*.md'
+
   # Build and test on the platforms Vix ships on. Windows is covered by the
   # release workflow's cross-builds; adding it here would roughly double CI
   # wall time for little extra signal, since the logic is terminal-independent.

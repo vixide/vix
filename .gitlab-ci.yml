@@ -97,6 +97,37 @@ deny:
     # graph; `--workspace` so every `crates/vix-*` member is a root.
     - cargo deny --workspace --all-features check
 
+# Broken-link gate for the docs (T002, spec/ci/index.md). Offline: only local
+# files, deterministic, no network — part of the gate.
+docs-links:
+  stage: check
+  variables:
+    LYCHEE_VERSION: "0.24.2"
+    LYCHEE_SHA256: "73657a111819a30c47c08352896796f23d64e4eb2b3ed39b6d32149241566fc5"
+  script:
+    - tarball="lychee-x86_64-unknown-linux-musl.tar.gz"
+    - curl --proto '=https' --tlsv1.2 -sSfL -o "$tarball" "https://github.com/lycheeverse/lychee/releases/download/lychee-v$LYCHEE_VERSION/$tarball"
+    - echo "$LYCHEE_SHA256  $tarball" | sha256sum --check --strict
+    - tar -xzf "$tarball" --strip-components=1 -C /usr/local/bin "lychee-x86_64-unknown-linux-musl/lychee"
+    - lychee --offline --no-progress --exclude-path target --exclude-path CHANGELOG.md '**/*.md'
+
+# External URLs go stale independently of any change in this tree, so this
+# reports without failing the pipeline (`allow_failure`). CHANGELOG.md is
+# included here (unlike the offline job above): its historical entries pin
+# file paths that may no longer exist, but a URL it names should still resolve.
+docs-links-external:
+  stage: check
+  allow_failure: true
+  variables:
+    LYCHEE_VERSION: "0.24.2"
+    LYCHEE_SHA256: "73657a111819a30c47c08352896796f23d64e4eb2b3ed39b6d32149241566fc5"
+  script:
+    - tarball="lychee-x86_64-unknown-linux-musl.tar.gz"
+    - curl --proto '=https' --tlsv1.2 -sSfL -o "$tarball" "https://github.com/lycheeverse/lychee/releases/download/lychee-v$LYCHEE_VERSION/$tarball"
+    - echo "$LYCHEE_SHA256  $tarball" | sha256sum --check --strict
+    - tar -xzf "$tarball" --strip-components=1 -C /usr/local/bin "lychee-x86_64-unknown-linux-musl/lychee"
+    - lychee --no-progress --scheme https --scheme http --timeout 10 --max-retries 1 --exclude-path target '**/*.md'
+
 test:
   stage: test
   script:

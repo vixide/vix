@@ -157,6 +157,32 @@ relicensed to AGPL-3.0-only, and `RUSTSEC-2024-0436` (`paste`, unmaintained)
 is ignored with a dated note because it arrives through
 `ratatui-image → icy_sixel → quantette → image/avif → rav1e`.
 
+## Docs links
+
+`lychee` link-checks every `*.md` on every push and pull request, on all three
+forges, as two passes:
+
+- **Offline** — local file links only (`--offline`, no network calls), so it
+  is deterministic and part of the gate: a broken relative link fails the
+  build. `CHANGELOG.md` is excluded, matching `check-docs`'s exemption above —
+  its entries pin paths that were current when written and may not exist
+  today.
+- **External** (`--scheme https --scheme http`) — the `http(s)` links, which
+  go stale independently of any change in this tree, so it reports without
+  failing the build (`continue-on-error` on GitHub/Codeberg, `allow_failure`
+  on GitLab). `CHANGELOG.md` is included here: a URL it names should still
+  resolve even though a local path it names may not.
+
+Like `cargo-deny`, `lychee` is pinned and checksummed rather than installed
+from a marketplace action or `cargo install`ed, so a docs gate does not itself
+pull an unverified binary. Bump `LYCHEE_VERSION`/`LYCHEE_SHA256` together on
+all three forges when upgrading. It sits outside `scripts/check` — the offline
+pass is reproducible offline, but requires a tool `scripts/check` cannot
+assume every contributor has installed; run
+`lychee --offline --exclude-path target --exclude-path CHANGELOG.md '**/*.md'`
+locally for the same signal `cargo doc` and `check-docs` don't already give you
+(lychee also validates in-page anchors and the external check).
+
 ## Cross-toolchain note
 
 The musl release builds on GitLab and Codeberg override three variables:
@@ -177,9 +203,6 @@ so the three variables are enough. See `spec/rust-cargo-config-toml-musl`.
 
 ## Not yet wired
 
-Tracked in [`tasks.md`](../../tasks.md):
-
-- **T002** — markdown link checking (`lychee`) alongside the `cargo doc` job.
-
 Spell checking (CSpell, `cspell.json`) is not a CI job yet: the tree still has
-outstanding findings, so it would fail on day one.
+outstanding findings, so it would fail on day one. Tracked in
+[`tasks.md`](../../tasks.md).

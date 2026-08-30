@@ -36,6 +36,10 @@ env:
   RUST_BACKTRACE: 1
   # Keep in sync with `workspace.package.rust-version` in Cargo.toml.
   RUST_TOOLCHAIN: "1.96.1"
+  # Keep in sync with the same two variables in .github/workflows/ci.yml and
+  # .gitlab-ci.yml.
+  LYCHEE_VERSION: "0.24.2"
+  LYCHEE_SHA256: "73657a111819a30c47c08352896796f23d64e4eb2b3ed39b6d32149241566fc5"
 
 jobs:
   check:
@@ -93,3 +97,27 @@ jobs:
       # `scripts/check`; see spec/test/index.md.
       - name: scripts/check-docs
         run: python3 scripts/check-docs
+
+      # Broken-link gate for the docs (T002, spec/ci/index.md), pinned and
+      # checksummed like cargo-deny in security.yml.
+      - name: Install lychee ${{ env.LYCHEE_VERSION }}
+        run: |
+          tarball="lychee-x86_64-unknown-linux-musl.tar.gz"
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$tarball" \
+            "https://github.com/lycheeverse/lychee/releases/download/lychee-v$LYCHEE_VERSION/$tarball"
+          echo "$LYCHEE_SHA256  $tarball" | sha256sum --check --strict
+          tar -xzf "$tarball" --strip-components=1 -C /usr/local/bin \
+            "lychee-x86_64-unknown-linux-musl/lychee"
+      - name: lychee (offline links)
+        run: |
+          lychee --offline --no-progress \
+            --exclude-path target --exclude-path CHANGELOG.md '**/*.md'
+      # External URLs go stale independently of any change in this tree, so
+      # this reports without failing the job. CHANGELOG.md is included here
+      # (unlike the offline step): a URL it names should still resolve even
+      # though a local path it names may not (exempt above).
+      - name: lychee (external links, advisory)
+        continue-on-error: true
+        run: |
+          lychee --no-progress --scheme https --scheme http \
+            --timeout 10 --max-retries 1 --exclude-path target '**/*.md'

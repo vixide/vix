@@ -33,11 +33,16 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   Done — plus an MSRV job, and the same gate for the other two forges
   (`.gitlab-ci.yml`, `.forgejo/workflows/`) with their release pipelines.
   See `spec/ci/index.md`.
-- [ ] **T002 — Docs CI job.** In `ci.yml`, add a job that link-checks all
+- [x] **T002 — Docs CI job.** In `ci.yml`, add a job that link-checks all
   `*.md` (lychee, offline-links at minimum, external links non-blocking)
   and runs `cargo doc --workspace --no-deps` with warnings denied.
-  Partly done: the `cargo doc` half runs with `RUSTDOCFLAGS=-D warnings` on
-  all three forges; the lychee link check is still to do.
+  Done — the `cargo doc` half already ran with `RUSTDOCFLAGS=-D warnings` on
+  all three forges; added a `docs-links` job (`docs-links-external` on
+  GitLab) running pinned/checksummed `lychee` on all three forges: an offline
+  pass over local file links (blocking, `CHANGELOG.md` excluded — its
+  historical entries pin paths that may no longer exist) and an
+  `http`/`https` pass (non-blocking: `continue-on-error` on GitHub/Codeberg,
+  `allow_failure` on GitLab). See `spec/ci/index.md`.
 - [x] **T003 — cargo-deny.** Add `deny.toml` (licenses: Apache-2.0/MIT
   compatible; advisories; bans on duplicate major versions where feasible)
   and a CI job running `cargo deny check`.
