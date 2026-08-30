@@ -17,11 +17,16 @@ development — so they are checked like code. This script fails on:
    at `crates/<crate>/spec/index.md` (`AGENTS.md`, "Source of truth").
 4. **Crate-map drift.** Every crate appears in `agents/share/crate-map.md`, and
    the map names no crate that has been removed.
+5. **llms.txt / llms.json drift.** Both exist, stay under the 40 KB budget
+   `spec/llms-json-and-llms-txt/index.md` sets, and name the same set of
+   links — `llms.json` is the structured twin of `llms.txt`, not a second,
+   independently curated list.
 
 Run it directly, or as part of `scripts/check`. Exit status 0 when clean.
 """
 
 import fnmatch
+import json
 import os
 import re
 import sys
@@ -36,10 +41,14 @@ CODE_PATH = re.compile(r"`([A-Za-z0-9_./<>-]+\.(?:md|rs|toml|yml|yaml|json|txt))
 EXEMPT_PREFIX = ("~", ".vix/", "http", "mailto:", "target/")
 EXEMPT_EXACT = {"spec/index.md", "spec/<topic>/index.md", "index.md", "README.md"}
 
+# Budget from spec/llms-json-and-llms-txt/index.md: keep an LLM's first read of
+# either file cheap.
+LLMS_MAX_BYTES = 40_000
+
 
 def markdown_files():
     """Every markdown file that is documentation (not vendored, not built)."""
-    for base in ("AGENTS.md", "index.md", "README.md", "CLAUDE.md"):
+    for base in ("AGENTS.md", "index.md", "README.md", "CLAUDE.md", "llms.txt"):
         path = os.path.join(ROOT, base)
         if os.path.exists(path):
             yield path
@@ -140,6 +149,53 @@ def check_crate_map(crates):
     return missing, stale
 
 
+def check_llms_files():
+    """Report size overruns and link drift between `llms.txt` and `llms.json`.
+
+    `llms.json` is meant to be the structured twin of `llms.txt` (like a
+    `README.md`/`index.md` pair, just not byte-identical), so the two must
+    name the same set of links rather than drift into two independently
+    curated maps.
+    """
+    txt_path = os.path.join(ROOT, "llms.txt")
+    json_path = os.path.join(ROOT, "llms.json")
+    bad = []
+
+    for path in (txt_path, json_path):
+        if not os.path.exists(path):
+            bad.append(f"{os.path.relpath(path, ROOT)} is missing")
+    if bad:
+        return bad
+
+    for path in (txt_path, json_path):
+        size = os.path.getsize(path)
+        if size > LLMS_MAX_BYTES:
+            rel = os.path.relpath(path, ROOT)
+            bad.append(f"{rel} is {size} bytes, over the {LLMS_MAX_BYTES} budget")
+
+    txt_urls = {
+        m.group(1) for m in LINK.finditer(open(txt_path, encoding="utf-8").read())
+    }
+    try:
+        data = json.loads(open(json_path, encoding="utf-8").read())
+    except json.JSONDecodeError as exc:
+        bad.append(f"llms.json is not valid JSON: {exc}")
+        return bad
+    json_urls = {
+        link["url"]
+        for section in data.get("sections", [])
+        for link in section.get("links", [])
+    }
+
+    only_in_txt = txt_urls - json_urls
+    only_in_json = json_urls - txt_urls
+    if only_in_txt:
+        bad.append(f"in llms.txt but not llms.json: {sorted(only_in_txt)}")
+    if only_in_json:
+        bad.append(f"in llms.json but not llms.txt: {sorted(only_in_json)}")
+    return bad
+
+
 def main():
     failures = 0
 
@@ -181,6 +237,15 @@ def main():
             print(f"  named by the map but not a crate: {name}")
     else:
         print("OK: the crate map lists every crate")
+
+    llms_bad = check_llms_files()
+    if llms_bad:
+        failures += 1
+        print("FAIL: llms.txt / llms.json")
+        for msg in llms_bad:
+            print(f"  {msg}")
+    else:
+        print("OK: llms.txt and llms.json agree and are within budget")
 
     if failures:
         print(f"\n{failures} documentation check(s) failed")
