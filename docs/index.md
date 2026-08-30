@@ -78,6 +78,13 @@ Specs are **per crate**: each member crate owns `crates/<crate>/spec/index.md`
 - [agents/share/crate-map.md](../agents/share/crate-map.md) — every module and file.
 - [agents/share/glossary.md](../agents/share/glossary.md) — shared terminology.
 
+## For AI tools
+
+- [llms.txt](../llms.txt) / [llms.json](../llms.json): a curated map of the
+  repository's most important content, in the [llms.txt](https://llmstxt.org/)
+  convention, kept under 40 KB so an LLM can read it without getting bogged
+  down. See [`spec/llms-json-and-llms-txt/index.md`](../spec/llms-json-and-llms-txt/index.md).
+
 ## Code documentation
 
 The crates are documented inline (the build denies missing docs). Browse it with:

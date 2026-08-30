@@ -1,0 +1,66 @@
+# Vix
+
+> Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust
+> IDE") built on ratatui: a thin App shell over 102 focused `vix-*` member
+> crates in a Cargo workspace (edition 2024).
+
+Development is specification-driven: each crate owns a spec at
+`crates/<crate>/spec/index.md`; cross-cutting and app-level specs live under
+`spec/`. When behavior and spec disagree, decide which is correct and make
+them match. [AGENTS.md](AGENTS.md) is the canonical entry point for both
+human and AI contributors — read it first.
+
+## Start here
+
+- [AGENTS.md](AGENTS.md): entry point — what Vix is, build/test/lint, hard
+  rules, non-negotiable conventions, where things live, the change checklist
+- [index.md](index.md): user-facing overview — features, install & run,
+  configuration, license
+- [docs/index.md](docs/index.md): the full documentation map
+- [spec/index/index.md](spec/index/index.md): specification overview — goals,
+  dependency crates, build/run
+
+## User guides
+
+- [Architecture](docs/architecture/index.md): workspace layout (App shell +
+  `vix-*` member crates), event flow, rendering, theming, i18n, configuration,
+  testing
+- [Keybindings](docs/keybindings/index.md): every keyboard shortcut and mouse
+  gesture, including keymaps
+- [Configuration](docs/configuration/index.md): settings file, every key, CLI
+  flags
+- [Keymaps](docs/keymaps/index.md): Apple, VSCode, Emacs, Vi, Spacemacs,
+  IntelliJ, Eclipse, Sublime Text
+- [Menus](docs/menus/index.md), [Themes](docs/themes/index.md),
+  [Internationalization](docs/internationalization/index.md)
+- [Language Server Protocol](docs/language-server-protocol/index.md):
+  diagnostics, hover, go-to-definition, completion
+- [Debugger](docs/debugger/index.md): Debug Adapter Protocol — breakpoints,
+  stepping, call stack, variables, watches
+- [Database Workbench](docs/db/index.md): SQLite/PostgreSQL/MySQL —
+  connections, schema tree, query editor, transactions, history, export
+- [Org mode](docs/org/index.md): headlines, TODO cycling, table editor,
+  Org-roam, export
+- [Git Panel](docs/git-panel/index.md): status, diff, blame, stage/unstage/
+  revert per hunk
+
+## Specification (source of truth)
+
+- [CI/CD](spec/ci/index.md): GitHub, GitLab, and Codeberg pipelines; the local
+  parity gate (`scripts/check`)
+- [Navigation](spec/navigation/index.md), [Tools menu](spec/tools/index.md),
+  [Comparisons](spec/comparisons/index.md), [Test strategy](spec/test/index.md)
+- [agents/share/crate-map.md](agents/share/crate-map.md): every crate, module,
+  and file
+
+## Contributor guidance
+
+- [agents/conventions.md](agents/conventions.md): coding style and patterns
+- [agents/workflow.md](agents/workflow.md): the spec-driven workflow in detail
+- [agents/share/glossary.md](agents/share/glossary.md): shared terminology
+- [CHANGELOG.md](CHANGELOG.md): notable changes, newest release first
+
+## Optional
+
+- [tasks.md](tasks.md) / [plan.md](plan.md): the open improvement backlog
+- [LICENSE](LICENSE): Apache-2.0 or MIT, at your option

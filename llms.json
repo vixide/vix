@@ -1,0 +1,153 @@
+{
+  "$schema": "https://llmstxt.org/llms.json",
+  "name": "Vix",
+  "summary": "A keyboard-friendly terminal text editor (a \"Simple Terminal Rust IDE\") built on ratatui: a thin App shell over 102 focused vix-* member crates in a Cargo workspace (edition 2024).",
+  "description": "Development is specification-driven: each crate owns a spec at crates/<crate>/spec/index.md; cross-cutting and app-level specs live under spec/. When behavior and spec disagree, decide which is correct and make them match. AGENTS.md is the canonical entry point for both human and AI contributors.",
+  "repository": "https://github.com/vixide/vix",
+  "version": "1.6.0",
+  "license": "Apache-2.0 OR MIT",
+  "sections": [
+    {
+      "title": "Start here",
+      "links": [
+        {
+          "title": "AGENTS.md",
+          "url": "AGENTS.md",
+          "notes": "entry point — what Vix is, build/test/lint, hard rules, non-negotiable conventions, where things live, the change checklist"
+        },
+        {
+          "title": "index.md",
+          "url": "index.md",
+          "notes": "user-facing overview — features, install & run, configuration, license"
+        },
+        {
+          "title": "docs/index.md",
+          "url": "docs/index.md",
+          "notes": "the full documentation map"
+        },
+        {
+          "title": "spec/index/index.md",
+          "url": "spec/index/index.md",
+          "notes": "specification overview — goals, dependency crates, build/run"
+        }
+      ]
+    },
+    {
+      "title": "User guides",
+      "links": [
+        {
+          "title": "Architecture",
+          "url": "docs/architecture/index.md",
+          "notes": "workspace layout (App shell + vix-* member crates), event flow, rendering, theming, i18n, configuration, testing"
+        },
+        {
+          "title": "Keybindings",
+          "url": "docs/keybindings/index.md",
+          "notes": "every keyboard shortcut and mouse gesture, including keymaps"
+        },
+        {
+          "title": "Configuration",
+          "url": "docs/configuration/index.md",
+          "notes": "settings file, every key, CLI flags"
+        },
+        {
+          "title": "Keymaps",
+          "url": "docs/keymaps/index.md",
+          "notes": "Apple, VSCode, Emacs, Vi, Spacemacs, IntelliJ, Eclipse, Sublime Text"
+        },
+        { "title": "Menus", "url": "docs/menus/index.md" },
+        { "title": "Themes", "url": "docs/themes/index.md" },
+        { "title": "Internationalization", "url": "docs/internationalization/index.md" },
+        {
+          "title": "Language Server Protocol",
+          "url": "docs/language-server-protocol/index.md",
+          "notes": "diagnostics, hover, go-to-definition, completion"
+        },
+        {
+          "title": "Debugger",
+          "url": "docs/debugger/index.md",
+          "notes": "Debug Adapter Protocol — breakpoints, stepping, call stack, variables, watches"
+        },
+        {
+          "title": "Database Workbench",
+          "url": "docs/db/index.md",
+          "notes": "SQLite/PostgreSQL/MySQL — connections, schema tree, query editor, transactions, history, export"
+        },
+        {
+          "title": "Org mode",
+          "url": "docs/org/index.md",
+          "notes": "headlines, TODO cycling, table editor, Org-roam, export"
+        },
+        {
+          "title": "Git Panel",
+          "url": "docs/git-panel/index.md",
+          "notes": "status, diff, blame, stage/unstage/revert per hunk"
+        }
+      ]
+    },
+    {
+      "title": "Specification (source of truth)",
+      "links": [
+        {
+          "title": "CI/CD",
+          "url": "spec/ci/index.md",
+          "notes": "GitHub, GitLab, and Codeberg pipelines; the local parity gate (scripts/check)"
+        },
+        { "title": "Navigation", "url": "spec/navigation/index.md" },
+        { "title": "Tools menu", "url": "spec/tools/index.md" },
+        { "title": "Comparisons", "url": "spec/comparisons/index.md" },
+        { "title": "Test strategy", "url": "spec/test/index.md" },
+        {
+          "title": "agents/share/crate-map.md",
+          "url": "agents/share/crate-map.md",
+          "notes": "every crate, module, and file"
+        }
+      ]
+    },
+    {
+      "title": "Contributor guidance",
+      "links": [
+        {
+          "title": "agents/conventions.md",
+          "url": "agents/conventions.md",
+          "notes": "coding style and patterns"
+        },
+        {
+          "title": "agents/workflow.md",
+          "url": "agents/workflow.md",
+          "notes": "the spec-driven workflow in detail"
+        },
+        {
+          "title": "agents/share/glossary.md",
+          "url": "agents/share/glossary.md",
+          "notes": "shared terminology"
+        },
+        {
+          "title": "CHANGELOG.md",
+          "url": "CHANGELOG.md",
+          "notes": "notable changes, newest release first"
+        }
+      ]
+    },
+    {
+      "title": "Optional",
+      "links": [
+        {
+          "title": "tasks.md",
+          "url": "tasks.md",
+          "notes": "the open improvement backlog"
+        },
+        {
+          "title": "plan.md",
+          "url": "plan.md",
+          "notes": "the open improvement backlog"
+        },
+        {
+          "title": "LICENSE",
+          "url": "LICENSE",
+          "notes": "Apache-2.0 or MIT, at your option"
+        }
+      ]
+    }
+  ]
+}
