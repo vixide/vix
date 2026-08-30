@@ -28,6 +28,24 @@ Both are curated by hand, at the same altitude as [`docs/index.md`](../../docs/i
 repo root next to `README.md`/`AGENTS.md` so a crawler finds them without
 knowing Vix's internal layout.
 
+## Two copies, two link forms
+
+The workspace-root `llms.txt`/`llms.json` use links relative to this repo
+(e.g. `README.md`, a path like docs/architecture/index.md), which only
+resolve inside a git checkout — cloned locally, or browsed on a forge.
+Serving that exact text from vixide.github.io/llms.txt would ship links that
+404 there: the site's own domain has no path like /docs/architecture/index.md.
+
+vixide.github.io (a separate repo) therefore does not copy these files
+verbatim: its website-appropriate versions — the two files under its
+`static/` directory — rewrite each entry to point at wherever it actually
+resolves from the site's own domain, currently
+`https://github.com/vixide/vix/blob/main/...`, the same back-to-source
+pattern every other page on that site already uses. `scripts/check-docs`
+here gates only the workspace-root pair; when the curated map changes,
+update the website copies by hand (re-verify the rewritten links resolve)
+and push them separately.
+
 ## Keeping them in sync
 
 `scripts/check-docs` gates both, alongside the other documentation checks:
