@@ -1,0 +1,174 @@
+{
+  "$schema": "https://llmstxt.org/llms.json",
+  "name": "Vix",
+  "summary": "A keyboard-friendly terminal text editor (a \"Simple Terminal Rust IDE\") built on ratatui: a thin App shell over 102 focused vix-* member crates in a Cargo workspace (edition 2024).",
+  "description": "Development is specification-driven: each crate owns a spec at crates/<crate>/spec/index.md; cross-cutting and app-level specs live under spec/. When behavior and spec disagree, decide which is correct and make them match. AGENTS.md is the canonical entry point for both human and AI contributors.",
+  "repository": "https://github.com/vixide/vix",
+  "version": "1.6.0",
+  "license": "Apache-2.0 OR MIT",
+  "sections": [
+    {
+      "title": "Start here",
+      "links": [
+        {
+          "title": "AGENTS.md",
+          "url": "https://github.com/vixide/vix/blob/main/AGENTS.md",
+          "notes": "entry point \u2014 what Vix is, build/test/lint, hard rules, non-negotiable conventions, where things live, the change checklist"
+        },
+        {
+          "title": "index.md",
+          "url": "https://github.com/vixide/vix/blob/main/index.md",
+          "notes": "user-facing overview \u2014 features, install & run, configuration, license"
+        },
+        {
+          "title": "docs/index.md",
+          "url": "https://github.com/vixide/vix/blob/main/docs/index.md",
+          "notes": "the full documentation map"
+        },
+        {
+          "title": "spec/index/index.md",
+          "url": "https://github.com/vixide/vix/blob/main/spec/index/index.md",
+          "notes": "specification overview \u2014 goals, dependency crates, build/run"
+        }
+      ]
+    },
+    {
+      "title": "User guides",
+      "links": [
+        {
+          "title": "Architecture",
+          "url": "https://github.com/vixide/vix/blob/main/docs/architecture/index.md",
+          "notes": "workspace layout (App shell + vix-* member crates), event flow, rendering, theming, i18n, configuration, testing"
+        },
+        {
+          "title": "Keybindings",
+          "url": "https://github.com/vixide/vix/blob/main/docs/keybindings/index.md",
+          "notes": "every keyboard shortcut and mouse gesture, including keymaps"
+        },
+        {
+          "title": "Configuration",
+          "url": "https://github.com/vixide/vix/blob/main/docs/configuration/index.md",
+          "notes": "settings file, every key, CLI flags"
+        },
+        {
+          "title": "Keymaps",
+          "url": "https://github.com/vixide/vix/blob/main/docs/keymaps/index.md",
+          "notes": "Apple, VSCode, Emacs, Vi, Spacemacs, IntelliJ, Eclipse, Sublime Text"
+        },
+        {
+          "title": "Menus",
+          "url": "https://github.com/vixide/vix/blob/main/docs/menus/index.md"
+        },
+        {
+          "title": "Themes",
+          "url": "https://github.com/vixide/vix/blob/main/docs/themes/index.md"
+        },
+        {
+          "title": "Internationalization",
+          "url": "https://github.com/vixide/vix/blob/main/docs/internationalization/index.md"
+        },
+        {
+          "title": "Language Server Protocol",
+          "url": "https://github.com/vixide/vix/blob/main/docs/language-server-protocol/index.md",
+          "notes": "diagnostics, hover, go-to-definition, completion"
+        },
+        {
+          "title": "Debugger",
+          "url": "https://github.com/vixide/vix/blob/main/docs/debugger/index.md",
+          "notes": "Debug Adapter Protocol \u2014 breakpoints, stepping, call stack, variables, watches"
+        },
+        {
+          "title": "Database Workbench",
+          "url": "https://github.com/vixide/vix/blob/main/docs/db/index.md",
+          "notes": "SQLite/PostgreSQL/MySQL \u2014 connections, schema tree, query editor, transactions, history, export"
+        },
+        {
+          "title": "Org mode",
+          "url": "https://github.com/vixide/vix/blob/main/docs/org/index.md",
+          "notes": "headlines, TODO cycling, table editor, Org-roam, export"
+        },
+        {
+          "title": "Git Panel",
+          "url": "https://github.com/vixide/vix/blob/main/docs/git-panel/index.md",
+          "notes": "status, diff, blame, stage/unstage/revert per hunk"
+        }
+      ]
+    },
+    {
+      "title": "Specification (source of truth)",
+      "links": [
+        {
+          "title": "CI/CD",
+          "url": "https://github.com/vixide/vix/blob/main/spec/ci/index.md",
+          "notes": "GitHub, GitLab, and Codeberg pipelines; the local parity gate (scripts/check)"
+        },
+        {
+          "title": "Navigation",
+          "url": "https://github.com/vixide/vix/blob/main/spec/navigation/index.md"
+        },
+        {
+          "title": "Tools menu",
+          "url": "https://github.com/vixide/vix/blob/main/spec/tools/index.md"
+        },
+        {
+          "title": "Comparisons",
+          "url": "https://github.com/vixide/vix/blob/main/spec/comparisons/index.md"
+        },
+        {
+          "title": "Test strategy",
+          "url": "https://github.com/vixide/vix/blob/main/spec/test/index.md"
+        },
+        {
+          "title": "agents/share/crate-map.md",
+          "url": "https://github.com/vixide/vix/blob/main/agents/share/crate-map.md",
+          "notes": "every crate, module, and file"
+        }
+      ]
+    },
+    {
+      "title": "Contributor guidance",
+      "links": [
+        {
+          "title": "agents/conventions.md",
+          "url": "https://github.com/vixide/vix/blob/main/agents/conventions.md",
+          "notes": "coding style and patterns"
+        },
+        {
+          "title": "agents/workflow.md",
+          "url": "https://github.com/vixide/vix/blob/main/agents/workflow.md",
+          "notes": "the spec-driven workflow in detail"
+        },
+        {
+          "title": "agents/share/glossary.md",
+          "url": "https://github.com/vixide/vix/blob/main/agents/share/glossary.md",
+          "notes": "shared terminology"
+        },
+        {
+          "title": "CHANGELOG.md",
+          "url": "https://github.com/vixide/vix/blob/main/CHANGELOG.md",
+          "notes": "notable changes, newest release first"
+        }
+      ]
+    },
+    {
+      "title": "Optional",
+      "links": [
+        {
+          "title": "tasks.md",
+          "url": "https://github.com/vixide/vix/blob/main/tasks.md",
+          "notes": "the open improvement backlog"
+        },
+        {
+          "title": "plan.md",
+          "url": "https://github.com/vixide/vix/blob/main/plan.md",
+          "notes": "the open improvement backlog"
+        },
+        {
+          "title": "LICENSE",
+          "url": "https://github.com/vixide/vix/blob/main/LICENSE",
+          "notes": "Apache-2.0 or MIT, at your option"
+        }
+      ]
+    }
+  ]
+}

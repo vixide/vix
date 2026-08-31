@@ -1,0 +1,66 @@
+# Vix
+
+> Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust
+> IDE") built on ratatui: a thin App shell over 102 focused `vix-*` member
+> crates in a Cargo workspace (edition 2024).
+
+Development is specification-driven: each crate owns a spec at
+`crates/<crate>/spec/index.md`; cross-cutting and app-level specs live under
+`spec/`. When behavior and spec disagree, decide which is correct and make
+them match. [AGENTS.md](https://github.com/vixide/vix/blob/main/AGENTS.md) is the canonical entry point for both
+human and AI contributors — read it first.
+
+## Start here
+
+- [AGENTS.md](https://github.com/vixide/vix/blob/main/AGENTS.md): entry point — what Vix is, build/test/lint, hard
+  rules, non-negotiable conventions, where things live, the change checklist
+- [index.md](https://github.com/vixide/vix/blob/main/index.md): user-facing overview — features, install & run,
+  configuration, license
+- [docs/index.md](https://github.com/vixide/vix/blob/main/docs/index.md): the full documentation map
+- [spec/index/index.md](https://github.com/vixide/vix/blob/main/spec/index/index.md): specification overview — goals,
+  dependency crates, build/run
+
+## User guides
+
+- [Architecture](https://github.com/vixide/vix/blob/main/docs/architecture/index.md): workspace layout (App shell +
+  `vix-*` member crates), event flow, rendering, theming, i18n, configuration,
+  testing
+- [Keybindings](https://github.com/vixide/vix/blob/main/docs/keybindings/index.md): every keyboard shortcut and mouse
+  gesture, including keymaps
+- [Configuration](https://github.com/vixide/vix/blob/main/docs/configuration/index.md): settings file, every key, CLI
+  flags
+- [Keymaps](https://github.com/vixide/vix/blob/main/docs/keymaps/index.md): Apple, VSCode, Emacs, Vi, Spacemacs,
+  IntelliJ, Eclipse, Sublime Text
+- [Menus](https://github.com/vixide/vix/blob/main/docs/menus/index.md), [Themes](https://github.com/vixide/vix/blob/main/docs/themes/index.md),
+  [Internationalization](https://github.com/vixide/vix/blob/main/docs/internationalization/index.md)
+- [Language Server Protocol](https://github.com/vixide/vix/blob/main/docs/language-server-protocol/index.md):
+  diagnostics, hover, go-to-definition, completion
+- [Debugger](https://github.com/vixide/vix/blob/main/docs/debugger/index.md): Debug Adapter Protocol — breakpoints,
+  stepping, call stack, variables, watches
+- [Database Workbench](https://github.com/vixide/vix/blob/main/docs/db/index.md): SQLite/PostgreSQL/MySQL —
+  connections, schema tree, query editor, transactions, history, export
+- [Org mode](https://github.com/vixide/vix/blob/main/docs/org/index.md): headlines, TODO cycling, table editor,
+  Org-roam, export
+- [Git Panel](https://github.com/vixide/vix/blob/main/docs/git-panel/index.md): status, diff, blame, stage/unstage/
+  revert per hunk
+
+## Specification (source of truth)
+
+- [CI/CD](https://github.com/vixide/vix/blob/main/spec/ci/index.md): GitHub, GitLab, and Codeberg pipelines; the local
+  parity gate (`scripts/check`)
+- [Navigation](https://github.com/vixide/vix/blob/main/spec/navigation/index.md), [Tools menu](https://github.com/vixide/vix/blob/main/spec/tools/index.md),
+  [Comparisons](https://github.com/vixide/vix/blob/main/spec/comparisons/index.md), [Test strategy](https://github.com/vixide/vix/blob/main/spec/test/index.md)
+- [agents/share/crate-map.md](https://github.com/vixide/vix/blob/main/agents/share/crate-map.md): every crate, module,
+  and file
+
+## Contributor guidance
+
+- [agents/conventions.md](https://github.com/vixide/vix/blob/main/agents/conventions.md): coding style and patterns
+- [agents/workflow.md](https://github.com/vixide/vix/blob/main/agents/workflow.md): the spec-driven workflow in detail
+- [agents/share/glossary.md](https://github.com/vixide/vix/blob/main/agents/share/glossary.md): shared terminology
+- [CHANGELOG.md](https://github.com/vixide/vix/blob/main/CHANGELOG.md): notable changes, newest release first
+
+## Optional
+
+- [tasks.md](https://github.com/vixide/vix/blob/main/tasks.md) / [plan.md](https://github.com/vixide/vix/blob/main/plan.md): the open improvement backlog
+- [LICENSE](https://github.com/vixide/vix/blob/main/LICENSE): Apache-2.0 or MIT, at your option
