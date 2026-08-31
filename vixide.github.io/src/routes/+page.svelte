@@ -3,7 +3,6 @@
 </script>
 
 <svelte:head>
-  <title>Vix — a keyboard-friendly terminal text editor</title>
   <meta
     name="description"
     content="Vix is a keyboard-friendly terminal text editor built on ratatui, with a file explorer, LSP, Git integration, a database workbench, Org mode, and much more."

@@ -12,7 +12,9 @@ Styled with [Lily Design System](https://lilydesignsystem.github.io/)'s
 headless Svelte components (`lily-design-system-svelte-headless`) — semantic
 HTML and ARIA from the library, all CSS hand-written in
 [`static/assets/style.css`](static/assets/style.css) against Lily's class
-hooks.
+hooks. The header's light/dark toggle and share button are Lily's
+`svelte-theme-picker` and `svelte-share-picker` helpers, same pattern — see
+[AGENTS.md](AGENTS.md) for the theme-file and page-title conventions.
 
 ## Develop
 

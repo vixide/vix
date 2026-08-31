@@ -1,0 +1,36 @@
+/* Vix theme: light (default)
+ *
+ * Colour tokens only — layout, spacing, and type-scale variables live in
+ * ../style.css, which is loaded on every theme. ThemePicker swaps this file
+ * for another theme's stylesheet wholesale and sets `data-theme="light"` on
+ * <html>; only one theme stylesheet is ever loaded at a time, so these
+ * tokens are declared on a bare :root rather than scoped to [data-theme].
+ */
+
+:root {
+  color-scheme: light;
+
+  --vix-primary: #059669;
+  --vix-primary-hover: #047857;
+  --vix-on-primary: #ffffff;
+  --vix-accent: #22c55e;
+  --vix-danger: #dc2626;
+  --vix-warning: #f59e0b;
+  --vix-success: #16a34a;
+
+  --vix-page-bg: #f9fafb;
+  --vix-card-bg: #ffffff;
+  --vix-text: #111827;
+  --vix-text-muted: #4b5563;
+  --vix-text-subtle: #6b7280;
+  --vix-border: #e5e7eb;
+  --vix-border-strong: #d1d5db;
+
+  /* Soft primary-tinted surface: active nav item, secondary-button hover,
+     inline code background. */
+  --vix-tint-bg: #ecfdf5;
+  --vix-code-text: #065f46;
+
+  --vix-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --vix-shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+}

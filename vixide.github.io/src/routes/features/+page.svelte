@@ -1,5 +1,4 @@
 <svelte:head>
-  <title>Features — Vix</title>
   <meta name="description" content="The full feature list for the Vix terminal text editor." />
 </svelte:head>
 

@@ -1,0 +1,34 @@
+/* Vix theme: dark
+ *
+ * Colour tokens only — see light.css for the mechanism. Same variable set,
+ * dark palette; --vix-primary is lightened relative to light.css so it
+ * keeps AA-ish contrast as body text and a link colour against the dark
+ * page background, and --vix-on-primary darkens to compensate on filled
+ * buttons.
+ */
+
+:root {
+  color-scheme: dark;
+
+  --vix-primary: #34d399;
+  --vix-primary-hover: #6ee7b7;
+  --vix-on-primary: #052e21;
+  --vix-accent: #4ade80;
+  --vix-danger: #f87171;
+  --vix-warning: #fbbf24;
+  --vix-success: #4ade80;
+
+  --vix-page-bg: #0f172a;
+  --vix-card-bg: #1e293b;
+  --vix-text: #f1f5f9;
+  --vix-text-muted: #cbd5e1;
+  --vix-text-subtle: #94a3b8;
+  --vix-border: #334155;
+  --vix-border-strong: #475569;
+
+  --vix-tint-bg: rgba(52, 211, 153, 0.16);
+  --vix-code-text: #6ee7b7;
+
+  --vix-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --vix-shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+}

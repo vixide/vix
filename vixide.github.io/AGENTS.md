@@ -24,6 +24,28 @@ editor — see [index.md](index.md) for scope.
   against Lily's class hooks (`.button`, `.card`, `.header`, `.navigation-menu`,
   …). Keep new UI on this pattern rather than hand-rolled markup where a
   matching headless component exists.
+- Also uses three Lily Svelte helpers, same headless-plus-hand-written-CSS
+  pattern: `lily-design-system-svelte-theme-picker` (site light/dark toggle
+  in the header — attribute-based, swaps a managed `<link>` between
+  [`static/assets/themes/light.css`](static/assets/themes/light.css) and
+  [`dark.css`](static/assets/themes/dark.css) and sets `data-theme` on
+  `<html>`; `src/app.html` pre-renders the default `light` `<link>` so the
+  static build ships with real CSS in place rather than a picker-injected
+  one), `lily-design-system-svelte-share-picker` (header share button; see
+  the `page.data.title` convention below for how it gets its title), and
+  `lily-design-system-svelte-text-size-picker` (installed, not yet wired
+  into a page).
+- **`page.data.title` convention**: every route's `+page.ts` `load` returns
+  `{ title }`; `+layout.svelte` renders the one `<title>` from
+  `page.data.title` and passes the same string to SharePicker, so a shared
+  link always carries the title of the page it was shared from. A page's own
+  `<svelte:head>` should carry `<meta name="description">` only — never
+  `<title>`, or it fights the layout's.
+- All theme colours (`--vix-primary`, `--vix-page-bg`, etc.) live in
+  `static/assets/themes/{light,dark}.css`, not in `style.css` — `style.css`
+  keeps only the tokens that don't vary by theme (radius, spacing, fonts)
+  plus every rule that consumes theme tokens via `var()`. Adding a colour
+  means adding the same variable to both theme files.
 - Keep feature copy in sync with the `vix` repo's own `index.md` — this site
   paraphrases it, not the other way round; when `vix`'s feature list changes,
   update `src/routes/features/+page.svelte` and the home page's card grid to

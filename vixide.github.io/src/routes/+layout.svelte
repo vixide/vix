@@ -1,6 +1,8 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { Header, NavigationMenu } from 'lily-design-system-svelte-headless';
+  import { ThemePicker } from 'lily-design-system-svelte-theme-picker';
+  import { SharePicker, type ShareTarget } from 'lily-design-system-svelte-share-picker';
 
   let { children } = $props();
 
@@ -14,7 +16,45 @@
   function isCurrent(href: string): boolean {
     return page.url.pathname === href;
   }
+
+  // The `page.data.title` convention: every route's `+page.ts` load returns
+  // `{ title }`, this layout renders it as the one `<title>`, and SharePicker
+  // is handed the same string — so a shared link always carries the title of
+  // the page it was shared from, not a generic site name.
+  const pageTitle = $derived(page.data.title ?? 'Vix');
+
+  // Vix ships no third-party endpoints of its own — each `href` builds the
+  // destination URL from the shared page's own title, not a hardcoded one.
+  const shareTargets: ShareTarget[] = [
+    {
+      id: 'linkedin',
+      label: 'LinkedIn',
+      href: (url) => `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`
+    },
+    {
+      id: 'mastodon',
+      label: 'Mastodon',
+      href: (url, title) =>
+        `https://mastodon.social/share?text=${encodeURIComponent(`${title} ${url}`)}`
+    },
+    {
+      id: 'bluesky',
+      label: 'Bluesky',
+      href: (url, title) =>
+        `https://bsky.app/intent/compose?text=${encodeURIComponent(`${title} ${url}`)}`
+    },
+    {
+      id: 'reddit',
+      label: 'Reddit',
+      href: (url, title) =>
+        `https://www.reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`
+    }
+  ];
 </script>
+
+<svelte:head>
+  <title>{pageTitle}</title>
+</svelte:head>
 
 <a class="skip-link" href="#main">Skip to main content</a>
 
@@ -24,14 +64,34 @@
       <img class="site-brand-mark" src="/assets/favicon.svg" alt="" aria-hidden="true" />
       <span>Vix</span>
     </a>
-    <NavigationMenu class="site-nav" label="Main">
-      {#each navLinks as link (link.href)}
-        <a href={link.href} aria-current={isCurrent(link.href) ? 'page' : undefined}>
-          {link.label}
-        </a>
-      {/each}
-      <a href="https://github.com/vixide/vix">GitHub</a>
-    </NavigationMenu>
+    <div class="site-header-right">
+      <NavigationMenu class="site-nav" label="Main">
+        {#each navLinks as link (link.href)}
+          <a href={link.href} aria-current={isCurrent(link.href) ? 'page' : undefined}>
+            {link.label}
+          </a>
+        {/each}
+        <a href="https://github.com/vixide/vix">GitHub</a>
+      </NavigationMenu>
+      <div class="site-controls">
+        <ThemePicker
+          label="Theme"
+          themesUrl="/assets/themes/"
+          themes={['light', 'dark']}
+          defaultValue="light"
+          detectFromSystem
+          storageKey="vix:theme"
+        />
+        <SharePicker
+          label="Share this page"
+          title={pageTitle}
+          targets={shareTargets}
+          copyLabel="Copy link"
+          copiedLabel="Link copied"
+          copyFailedLabel="Could not copy — copy it from the address bar"
+        />
+      </div>
+    </div>
   </div>
 </Header>
 

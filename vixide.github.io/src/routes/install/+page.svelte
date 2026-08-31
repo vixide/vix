@@ -1,5 +1,4 @@
 <svelte:head>
-  <title>Install — Vix</title>
   <meta name="description" content="How to build and run Vix from source." />
 </svelte:head>
 

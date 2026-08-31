@@ -1,9 +1,19 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="utf-8" />
     <link rel="icon" type="image/svg+xml" href="%sveltekit.assets%/assets/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- ThemePicker's managed <link>, pre-rendered so the static build ships
+         with a real stylesheet already in place — see docs/ssr.md "Plain
+         Vite + Svelte recipe": hard-code the default theme's <link> rather
+         than let the picker inject one after hydration. It adopts this tag
+         (by `data-lily-theme-picker`) instead of creating a second one. -->
+    <link
+      rel="stylesheet"
+      href="%sveltekit.assets%/assets/themes/light.css"
+      data-lily-theme-picker="theme"
+    />
     <link rel="stylesheet" href="%sveltekit.assets%/assets/style.css" />
     %sveltekit.head%
   </head>
