@@ -19,6 +19,9 @@
 #   make build-macos / build-windows / build-linux
 #                   Build a single platform's release binary.
 #   make clean      Remove the target/ build directory.
+#   make github-pages
+#                   Publish vixide.github.io/ to the read-only GitHub Pages
+#                   export repo (spec/monorepo-github-pages/).
 #
 # ----------------------------------------------------------------------------
 # Output binaries
@@ -72,7 +75,7 @@ LINUX_TARGET   ?= x86_64-unknown-linux-musl
 # These targets are commands, not files, so declare them PHONY: make will run
 # their recipes unconditionally and never skip one because a same-named file
 # happens to exist or look "up to date".
-.PHONY: all test check release build-macos build-windows build-linux clean
+.PHONY: all test check release build-macos build-windows build-linux clean github-pages
 
 # Tests first, then the release builds. make evaluates prerequisites left to
 # right and aborts on the first failure, so `test` failing means no build runs.
@@ -111,3 +114,20 @@ build-linux:
 # Remove all build artifacts (the target/ directory).
 clean:
 	$(CARGO) clean
+
+# ----------------------------------------------------------------------------
+# GitHub Pages
+# ----------------------------------------------------------------------------
+
+# Publish vixide.github.io/ (a monorepo subtree, spec/monorepo-github-pages/)
+# to the standalone, read-only GitHub Pages export repo. This pushes a
+# subdirectory of the current repo out to a different branch (here `main`)
+# on the remote named `github-pages`, using git's subtree mechanism -- the
+# only way to publish that subtree; there is no other route to the live
+# site from a monorepo commit.
+#
+# The remote is created on first use if a fresh clone doesn't have it yet.
+github-pages:
+	git remote get-url github-pages >/dev/null 2>&1 || \
+		git remote add github-pages git@github.com:vixide/vixide.github.io.git
+	git subtree push --prefix=vixide.github.io github-pages main
