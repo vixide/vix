@@ -128,3 +128,4 @@ through the workspace dependency graph (e.g. `vix-editor`, `vix-menu`,
 | `fuzz/`         | `cargo-fuzz` targets over the pure text/parse cores.                |
 | `benches/`      | Criterion benchmarks (`cargo bench`).                               |
 | `scripts/`      | `check` (the CI-parity gate) and `check-docs` (documentation integrity). |
+| `vixide.github.io/` | The public GitHub Pages site (SvelteKit + Lily Design System), a monorepo subproject — see `spec/monorepo-github-pages/index.md`. Maintained here; published to the read-only sibling repo `git@github.com:vixide/vixide.github.io.git` via `git subtree push`, never edited there directly. |
