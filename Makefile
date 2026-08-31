@@ -120,14 +120,7 @@ clean:
 # ----------------------------------------------------------------------------
 
 # Publish vixide.github.io/ (a monorepo subtree, spec/monorepo-github-pages/)
-# to the standalone, read-only GitHub Pages export repo. This pushes a
-# subdirectory of the current repo out to a different branch (here `main`)
-# on the remote named `github-pages`, using git's subtree mechanism -- the
-# only way to publish that subtree; there is no other route to the live
-# site from a monorepo commit.
-#
-# The remote is created on first use if a fresh clone doesn't have it yet.
+# to the standalone, read-only GitHub Pages export repo. See
+# bin/make-github-pages for what this actually runs.
 github-pages:
-	git remote get-url github-pages >/dev/null 2>&1 || \
-		git remote add github-pages git@github.com:vixide/vixide.github.io.git
-	git subtree push --prefix=vixide.github.io github-pages main
+	bin/make-github-pages
