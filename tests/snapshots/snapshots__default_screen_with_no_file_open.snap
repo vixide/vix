@@ -4,23 +4,23 @@ expression: screen
 ---
  Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  Tools  Help                      
   Explorer ─────────────────╮  untitled                           ╭  Messages ───────────────────
- agents                    ●│──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
- benches                   ││    1                                ●│ Ctrl B toggles the file explo
- bin                       ││                                     ││
- config                    ││                                     ││
- crates                    ││                                     ││
- dictionaries              ││                                     ││
- docs                      ││                                     ││
- examples                  ││                                     ││
- fuzz                      ││                                     ││
- keymaps                   ││                                     ││
- locales                   ││                                     ││
- scripts                   ││                                     ││
- spec                      ││                                     ││
- src                       ││                                     ││
- target                    ││                                     ││
- test-data                 ││                                     ││
- tests                     ││                                     ││●──────────────────────────────
+ src                        │──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
+ Cargo.toml                 │    1                                ●│ Ctrl B toggles the file explo
+ README.md                  │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││●──────────────────────────────
   Output ──────────────────────────────────────────────────────────────────────────────────────────
 (no output yet)
 
