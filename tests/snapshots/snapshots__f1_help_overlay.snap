@@ -1,0 +1,34 @@
+---
+source: tests/snapshots.rs
+expression: screen
+---
+ Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  Tools  Help                      
+  Explorer ─────────────────╮  untitled                           ╭  Messages ───────────────────
+ src                        │──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
+ Cargo.toml                 │    1                                ●│ Ctrl B toggles the file explo
+ README.md                  │                                     ││
+                    ╭ Keyboard Shortcuts  (Esc to close) ──────────────────────╮
+                    │ █                                                       │
+                    │ Action                           Shortcut                │
+                    │ Command palette                  Ctrl P                  │
+                    │ Open file…                       Ctrl O                  │
+                    │ Save / Save As                   Ctrl S / Ctrl Shift S   │
+                    │ New / Close tab                  Ctrl N / Ctrl W         │
+                    │ Quit                             Ctrl Q                  │
+                    │ Undo / Redo                      Ctrl Z / Ctrl Shift Z   │
+                    │ Cut / Copy / Paste               Ctrl X / Ctrl C / Ctrl V│
+                    │ Select all                       Ctrl A                  │
+                    │ Find / Find & Replace            Ctrl F / Ctrl R         │
+                    │ Find next / previous             F3 / Shift F3           │
+                    │ Toggle / focus explorer          Ctrl B / Ctrl E         │────────────────────
+  Output ──────────│ Search across the workspace      Ctrl Shift F            │────────────────────
+(no output yet)     │ Go to definition of symbol und…  F12                     │
+                    │ Position history back / forward  Alt Left / Alt Right    │
+                    │ Menu bar                         F10 / Alt V,F,E,I,T,H   │
+                    │ This help                        F1                      │
+                    │type filter   click a header to sort   ↑↓ scroll   Esc clo│
+                    ╰──────────────────────────────────────────────────────────╯
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ untitled  —  Ready                                                text  LF  UTF-8   Ln 1:Col 1   

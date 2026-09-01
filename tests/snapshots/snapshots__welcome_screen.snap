@@ -1,0 +1,34 @@
+---
+source: tests/snapshots.rs
+expression: screen
+---
+ Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  Tools  Help                      
+  Explorer ─────────────────╮  untitled                           ╭  Messages ───────────────────
+ src                        │──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
+ Cargo.toml  ╭  Welcome to Vix ────────────────────────────────────────────────────╮the file explo
+ README.md   │Welcome to Vix!                                                      ●│
+              │                                                                     ││
+              │Vix is a simple, keyboard-friendly text editor and IDE that runs     ││
+              │right in your terminal. It is fast, mouse-aware, and works the same  ││
+              │on macOS, Linux, and Windows. This screen is here to help you get    ││
+              │started — press Esc to close it at any time, and reopen it later from││
+              │Help → Welcome.                                                      ││
+              │                                                                     ││
+              │Getting started                                                      ││
+              │───────────────                                                      ││
+              │• Open the menus with F10, or click a menu name. Arrow keys move,    ││
+              │Enter runs, Esc backs out. Each menu has an Alt shortcut too (Alt+F  ││
+              │for File).                                                           ││
+              │• Open a file with Ctrl+O, save with Ctrl+S, and close a tab with    ││
+              │Ctrl+W.                                                              ││──────────────
+  Output ────│• Toggle the file explorer (left dock) with Ctrl+B, and switch focus ││──────────────
+(no output yet│between the explorer and the editor with Ctrl+E.                     ││
+              │• Press Ctrl+P for the Command Palette — a searchable list of every  ││
+              │command. If you ever forget a shortcut, start there.                 ││
+              │• Press F1 for the full keyboard-shortcut reference.                 ││
+              │                                                                     ││
+              │↑↓ scroll   PgUp/PgDn page   Esc close                                │
+              ╰──────────────────────────────────────────────────────────────────────╯
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ untitled  —  Ready                                                text  LF  UTF-8   Ln 1:Col 1   

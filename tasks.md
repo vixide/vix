@@ -72,10 +72,28 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   fixed here (out of scope for the harness); the Files-mode scenario was
   swapped for Commands mode to keep the snapshot deterministic. Worth its
   own task before T005 seeds a Files-mode screen.
-- [ ] **T005 — Seed snapshots.** Using T004: welcome screen, editor with a
+- [x] **T005 — Seed snapshots.** Using T004: welcome screen, editor with a
   Rust file, File menu open, palette open with query, find bar with
   matches, git panel, table edit surface, F1 help overlay, zen mode, a
   theme other than default. ~10 snapshots.
+  Done — 9 new scenarios (12 total with T004's original 3, which already
+  covered "editor with a Rust file" and "palette open with query").
+  `git_panel_with_changes` roots a real `git init`-ed fixture with a forced
+  branch name (`git init -b`, not the machine's `init.defaultBranch`) and
+  `commit.gpgsign=false` (never invoke the developer's real signing key for
+  a throwaway fixture commit). Two scenarios that open a real file
+  (`editor_with_an_opened_rust_file`, `find_bar_with_matches`) hit a subtler
+  determinism trap: `Editor::open` always `canonicalize()`s the path, macOS
+  resolves it through `/private`, and the status bar embeds it *twice*
+  (`Tab::display_path` plus `t!("status.opened", path = ...)`) — at 100
+  columns one or both copies were truncated *before* the redaction step
+  ever saw them, at a cutoff that itself depended on the OS-specific root
+  length, so post-hoc string replacement couldn't undo it. Fixed by rooting
+  fixtures under `/tmp` (short on both Linux and macOS) instead of
+  `std::env::temp_dir()` (long, session-specific on macOS) and rendering
+  those two scenarios at 220 columns so neither copy ever truncates on the
+  worst case (macOS) — full-string redaction is then exact on every
+  machine. Verified stable across two fresh-PID re-runs before trusting it.
 - [ ] **T006 — Benchmarks.** Add criterion benches (root `benches/` or in
   `vix-editor-core`): open/parse 100 MB synthetic file, 10k random inserts
   and deletes, syntax-highlight a 5 MB Rust file, workspace search over a

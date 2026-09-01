@@ -1,0 +1,34 @@
+---
+source: tests/snapshots.rs
+expression: screen
+---
+ Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  Tools  Help                      
+  Explorer ─────────────────╮  untitled                           ╭  Messages ───────────────────
+ src                        │──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
+ Cargo.toml                 │    1                                ●│ Ctrl B toggles the file explo
+ README.md                  │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││●──────────────────────────────
+  Output ──────────────────────────────────────────────────────────────────────────────────────────
+(no output yet)
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ untitled  —  Theme: Nord                                          text  LF  UTF-8   Ln 1:Col 1   
