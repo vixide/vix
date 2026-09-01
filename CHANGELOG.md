@@ -6,6 +6,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **TUI snapshot test harness** (`tests/snapshots.rs`, improvement plan T004):
+  boots the real `App` against a ratatui `TestBackend`, drives it with
+  scripted key events, and compares the rendered frame to a golden text file
+  with `insta::assert_snapshot!`. New "Snapshot" test layer documented in
+  `spec/test/index.md` (writing + reviewing snapshots) and
+  `agents/conventions.md`.
+
 ## [1.6.0] - 2026-08-29
 
 ### Added

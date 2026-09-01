@@ -54,11 +54,24 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   (drops the unmaintained `serial`), and `anyhow`/`crossbeam-epoch`/`spin`
   updated off advisories. Duplicate majors are `warn`, not `deny`: 42 of them
   today, almost all `windows-*`. See `spec/ci/index.md`.
-- [ ] **T004 — TUI snapshot harness.** Add `tests/snapshots.rs` (or a
+- [x] **T004 — TUI snapshot harness.** Add `tests/snapshots.rs` (or a
   `vix-test-support` crate) that boots the App against ratatui
   `TestBackend` at 100×30, feeds scripted key events, and asserts golden
   text screens (insta `assert_snapshot!`). Document how to review/update
   snapshots in `agents/conventions.md`.
+  Done — `tests/snapshots.rs` with three scenarios (default screen, editor
+  with typed content, command palette in Commands mode), a "Snapshot" layer
+  in `spec/test/index.md` plus a "Snapshot testing" section on writing and
+  reviewing them, and a pointer from `agents/conventions.md`. Locale is
+  pinned to `en` per test (`rust_i18n::locale()` is process-global).
+  Discovered along the way: the palette's **Files** mode has no sort at
+  all — `build_file_index`/`palette_file_entries` in `src/app.rs` push
+  matches in raw `ignore::WalkBuilder` order (filesystem-traversal order,
+  not portable across ext4/APFS), unlike Commands mode which scores with
+  `palette::fuzzy_score` and ties-breaks on a stable catalog index. Not
+  fixed here (out of scope for the harness); the Files-mode scenario was
+  swapped for Commands mode to keep the snapshot deterministic. Worth its
+  own task before T005 seeds a Files-mode screen.
 - [ ] **T005 — Seed snapshots.** Using T004: welcome screen, editor with a
   Rust file, File menu open, palette open with query, find bar with
   matches, git panel, table edit surface, F1 help overlay, zen mode, a

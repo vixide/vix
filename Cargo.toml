@@ -94,6 +94,9 @@ proptest = "1"
 # Statistical benchmarking of the hot paths (dev-only). `harness = false` on each
 # [[bench]]; see benches/ and spec/test/index.md.
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+# Golden-file ("snapshot") testing for tests/snapshots.rs (dev-only); see
+# spec/test/index.md's "Snapshot" layer.
+insta = "1"
 
 [package]
 name = "vix"
@@ -453,6 +456,7 @@ futures-util = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+insta = { workspace = true }
 
 # Benchmarks run with Criterion's own harness, not libtest's.
 [[bench]]
