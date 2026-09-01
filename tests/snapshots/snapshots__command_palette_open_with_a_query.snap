@@ -1,0 +1,34 @@
+---
+source: tests/snapshots.rs
+expression: screen
+---
+ Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  Tools  Help                      
+  Explorer ─────────────────╮  untitled                           ╭  Messages ───────────────────
+ agents                    ●│──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
+ benches                   ││    1                                ●│ Ctrl B toggles the file explo
+ bin                       ││                                     ││
+ config       ╭  Command Palette [Commands] ──────────────────────────────────────╮
+ crates       │❯ >goto█                                                            │
+ dictionaries │> Go to Start                                                       │
+ docs         │> Go to End                                                         │
+ examples     │> Go to Line End                                                    │
+ fuzz         │> Go to Line Number                                                 │
+ keymaps      │> Go to Line Start                                                  │
+ locales      │> Go to Paragraph End                                               │
+ scripts      │> Go to Section Start                                               │
+ spec         │> Go to Section End                                                 │
+ src          │> Go to Definition                                                  │
+ target       │> Go to Paragraph Start                                             │
+ test-data    │> Go to Symbol in File                                              │
+ tests        │> Go to Symbol in Workspace                                         │───────────────
+  Output ─────│> LSP: Go to Implementation                                         │───────────────
+(no output yet)│> LSP: Go to Type Definition                                        │
+               │> Toggle Bottom Status                                              │
+               │> Toggle Overwrite Mode                                             │
+               │                                                                    │
+               │prefixes:  (none) files   > commands   # buffers   : line   @ symbol│
+               ╰────────────────────────────────────────────────────────────────────╯
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ untitled  —  Ready                                                text  LF  UTF-8   Ln 1:Col 1   

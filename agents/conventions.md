@@ -122,3 +122,12 @@ on top.
 - Pure parsers and text transforms get a fuzz target under `fuzz/fuzz_targets/`;
   anything on the per-keystroke or per-frame path gets a Criterion benchmark
   under `benches/`. See [`spec/test/index.md`](../spec/test/index.md).
+- When the *layout itself* is what's under test (a dialog's framing, a dock's
+  column widths, a long line truncating), add a golden-screen test to
+  `tests/snapshots.rs` instead of a state assertion — pin the locale to `en`
+  first, since `rust_i18n::locale()` is process-global. Reviewing a changed
+  snapshot: `INSTA_UPDATE=always cargo test --test snapshots`, then read every
+  line of `git diff tests/snapshots/` (or `cargo insta review` with
+  `cargo-insta` installed) before committing — a snapshot diff is a signal to
+  explain, not a formality to wave through. See
+  [`spec/test/index.md`](../spec/test/index.md)'s "Snapshot testing" section.

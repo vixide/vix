@@ -1,0 +1,34 @@
+---
+source: tests/snapshots.rs
+expression: screen
+---
+ Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  Tools  Help                      
+  Explorer ─────────────────╮  untitled                           ╭  Messages ───────────────────
+ agents                    ●│──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
+ benches                   ││    1                                ●│ Ctrl B toggles the file explo
+ bin                       ││                                     ││
+ config                    ││                                     ││
+ crates                    ││                                     ││
+ dictionaries              ││                                     ││
+ docs                      ││                                     ││
+ examples                  ││                                     ││
+ fuzz                      ││                                     ││
+ keymaps                   ││                                     ││
+ locales                   ││                                     ││
+ scripts                   ││                                     ││
+ spec                      ││                                     ││
+ src                       ││                                     ││
+ target                    ││                                     ││
+ test-data                 ││                                     ││
+ tests                     ││                                     ││●──────────────────────────────
+  Output ──────────────────────────────────────────────────────────────────────────────────────────
+(no output yet)
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ untitled  —  Ready                                                text  LF  UTF-8   Ln 1:Col 1   
