@@ -4,23 +4,23 @@ expression: screen
 ---
  Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  Tools  Help                      
   Explorer ─────────────────╮  untitled                           ╭  Messages ───────────────────
- agents                    ●│──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
- benches                   ││    1                                ●│ Ctrl B toggles the file explo
- bin                       ││                                     ││
- config       ╭  Command Palette [Commands] ──────────────────────────────────────╮
- crates       │❯ >goto█                                                            │
- dictionaries │> Go to Start                                                       │
- docs         │> Go to End                                                         │
- examples     │> Go to Line End                                                    │
- fuzz         │> Go to Line Number                                                 │
- keymaps      │> Go to Line Start                                                  │
- locales      │> Go to Paragraph End                                               │
- scripts      │> Go to Section Start                                               │
- spec         │> Go to Section End                                                 │
- src          │> Go to Definition                                                  │
- target       │> Go to Paragraph Start                                             │
- test-data    │> Go to Symbol in File                                              │
- tests        │> Go to Symbol in Workspace                                         │───────────────
+ src                        │──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
+ Cargo.toml                 │    1                                ●│ Ctrl B toggles the file explo
+ README.md                  │                                     ││
+               ╭  Command Palette [Commands] ──────────────────────────────────────╮
+               │❯ >goto█                                                            │
+               │> Go to Start                                                       │
+               │> Go to End                                                         │
+               │> Go to Line End                                                    │
+               │> Go to Line Number                                                 │
+               │> Go to Line Start                                                  │
+               │> Go to Paragraph End                                               │
+               │> Go to Section Start                                               │
+               │> Go to Section End                                                 │
+               │> Go to Definition                                                  │
+               │> Go to Paragraph Start                                             │
+               │> Go to Symbol in File                                              │
+               │> Go to Symbol in Workspace                                         │───────────────
   Output ─────│> LSP: Go to Implementation                                         │───────────────
 (no output yet)│> LSP: Go to Type Definition                                        │
                │> Toggle Bottom Status                                              │
