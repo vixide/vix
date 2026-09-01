@@ -14,6 +14,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   with `insta::assert_snapshot!`. New "Snapshot" test layer documented in
   `spec/test/index.md` (writing + reviewing snapshots) and
   `agents/conventions.md`.
+- **9 more TUI snapshot scenarios** (improvement plan T005): welcome screen,
+  an opened Rust file, File menu open, find bar with matches, the git
+  changes panel, the table editor, the F1 keyboard-shortcut overlay, zen
+  mode, and a non-default theme — 12 golden screens total.
 
 ## [1.6.0] - 2026-08-29
 

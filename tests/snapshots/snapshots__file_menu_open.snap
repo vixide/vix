@@ -1,0 +1,34 @@
+---
+source: tests/snapshots.rs
+expression: screen
+---
+ Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  Tools  Help                      
+  Ex╭────────────────────────────────╮╭──────────────────────────────────────────╮─────────────────
+ src│ New                     Ctrl N ││Open file, project, and workspace         │ix. Press Ctrl P
+ Car│ New Scratch Buffer             ││commands.                                 │es the file explo
+ REA│────────────────────────────────│╰──────────────────────────────────────────╯
+     │ Open…                   Ctrl O │                            ││
+     │ Open Recent…      Ctrl Shift O │                            ││
+     │ Switch Project…                │                            ││
+     │ Insert File…                   │                            ││
+     │────────────────────────────────│                            ││
+     │ Open Workspace from File…      │                            ││
+     │ Save Workspace into File…      │                            ││
+     │ Add Folder to Workspace…       │                            ││
+     │────────────────────────────────│                            ││
+     │ Save                    Ctrl S │                            ││
+     │ Save As…          Ctrl Shift S │                            ││
+     │ Rename…                        │                            ││
+     │ Revert                         │                            ││
+     │────────────────────────────────│                            ││●──────────────────────────────
+  Ou│ Close                   Ctrl W │─────────────────────────────────────────────────────────────
+(no o│ Close All Tabs    Ctrl Shift W │
+     │ Reopen Closed Tab Ctrl Shift T │
+     ╰────────────────────────────────╯
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ untitled  —  Ready                                                text  LF  UTF-8   Ln 1:Col 1   

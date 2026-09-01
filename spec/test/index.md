@@ -72,7 +72,40 @@ screen look like" is the actual question.
 Every snapshot test pins the locale to `en`
 (`rust_i18n::set_locale("en")`) before rendering — `rust_i18n::locale()` is
 process-global, so leaving it to chance would make a screen's golden text
-depend on test run order.
+depend on test run order. Each app also opens a small synthetic fixture
+tree under `/tmp` (keyed by a per-test tag plus the process id), never the
+real repo root — a live checkout carries local-only untracked entries
+(build output, downloaded dictionaries, …) that differ between a
+workstation and a fresh CI checkout.
+
+Two gotchas that cost real debugging time and are easy to reintroduce in a
+new scenario:
+
+- **A scenario that opens a real file embeds its full canonicalized path
+  in the status bar — twice** (`Tab::display_path` and
+  `t!("status.opened", path = ...)`, and `Editor::open` always
+  `path.canonicalize()`s, which macOS resolves through `/private`). At a
+  narrow viewport the renderer can truncate one or both copies *before* any
+  redaction step sees them, at a cutoff that itself depends on the OS's
+  path length — no find-and-replace after the fact can undo information
+  the renderer already clipped. Root fixtures under `/tmp` rather than
+  `std::env::temp_dir()` (long and session-specific via `TMPDIR` on macOS),
+  render such a scenario at a wide-enough viewport that neither copy ever
+  truncates on the worst case (macOS), and only then redact the whole path
+  to a fixed `<root>` token.
+- **A fixture that needs a real git repo** (e.g. to exercise the git
+  changes panel) must force the branch name explicitly (`git init -b
+  <name>`, not `init.defaultBranch`, which differs by machine —
+  `master`/`main`/a custom default) and set `commit.gpgsign false` locally,
+  so the fixture's commit never inherits the developer's real
+  `commit.gpgsign=true` and invokes their actual signing key just to build
+  a throwaway test fixture.
+
+After writing a new scenario, run the suite **twice** (a plain `cargo test
+--test snapshots` after the `INSTA_UPDATE=always` pass) — a fixture keyed
+by the process id will produce a *different* golden file on the second run
+if anything process-id-dependent leaked into the screen, which a single
+run can't catch.
 
 **Reviewing/updating snapshots**: a snapshot test compares against the
 committed `.snap` file, and it must be run and reviewed like a diff, not
