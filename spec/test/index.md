@@ -136,7 +136,8 @@ signal, not a formality — read *why* the screen changed before accepting it.
 `fuzz/` is a separate workspace (nightly + sanitizer instrumentation), so the
 root `cargo build` never touches it. Targets cover the code that parses input
 Vix did not write: `textops`, `org_table`, `lsp_frame`, `vcard`, `conflict`,
-`http_request`. See [`fuzz/README.md`](../../fuzz/README.md) for running them,
+`http_request`, `query_replace`, `tabular_convert`, `structured_convert`,
+`macro_tokens`. See [`fuzz/README.md`](../../fuzz/README.md) for running them,
 minimizing a crash, and adding a target.
 
 A fuzz target asserts **invariants**, not merely the absence of a panic — "a
@@ -144,7 +145,12 @@ returned cursor is a valid offset into the returned text", "render then parse
 keeps every row". Those assertions are what turn a fuzzer into a bug-finder
 rather than a crash-detector: the hline-only-table bug (`align` deleting a `|-`
 line instead of squaring it up) was caught by the round-trip assertion, not by a
-panic.
+panic. Get the invariant itself right, though — `tabular_convert`'s first run
+asserted CSV round-trips *exactly*, and immediately "failed" on the
+formula-injection guard deliberately rewriting `@`-leading fields; the
+fixed-point framing (`write(parse(write(rows))) == write(rows)`) it now uses
+survives that intentional rewrite. A fuzz target that's wrong about what the
+code is supposed to do is as much a false alarm as no invariant at all.
 
 When a target finds something: minimize it (`cargo +nightly fuzz tmin`), then
 write the minimized input as a **unit test in the crate that owns the code**.

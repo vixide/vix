@@ -44,6 +44,10 @@ function, where it runs on every `cargo test`.
 | `vcard` | `vix-vcard-parser` (RFC 6350) and the accessors on the parsed card | Parsing third-party `.vcf` files is total; reading fields from a malformed card is total too |
 | `conflict` | `vix-conflict-tool`'s marker finder and resolver | Returned offsets are ordered, in range, and on char boundaries — the resolver splices the buffer at them |
 | `http_request` | `vix-http-client::parse_request` on `.http` buffers | Parsing is total; a request that parses has a method and a URL |
+| `query_replace` | `vix-find-panel`: `matches`/`next_match`/`replace_all`/`replace_one`/`unescape`/`SearchBar::pattern`/`PathFilter` | No panic on any query/text/replacement-template triple, including multi-byte UTF-8; matches are ordered and in range; `replace_all`'s count agrees with `matches().len()` |
+| `tabular_convert` | `vix-convert-tabular` (CSV/TSV/JSON core shared by all six CSV/TSV/JSON `Tools → Convert` crates) | Writing then reparsing is a *fixed point* — `write_csv(parse_csv(write_csv(rows))) == write_csv(rows)` (not "reparses to the exact original rows": the formula-injection guard on `=`/`+`/`-`/`@`/tab/CR-leading fields intentionally changes them, but is itself idempotent) |
+| `structured_convert` | The four JSON⇄YAML/JSON⇄TOML `Tools → Convert` crates | Converting valid JSON to YAML/TOML and back reparses to an *equivalent* value (exact for strings/bools/null/structure; a tiny relative tolerance for numbers, since decimal-text float formatting isn't bit-exact — found on the first run: a 30-significant-digit float's last digit shifted) |
+| `macro_tokens` | `vix-macros`: `decode_key`/`decode`, the `macros.toml` token parser | No panic on any token text (a user can hand-edit the file); a token that decodes re-encodes to a non-empty token |
 
 ## Adding a target
 
@@ -64,3 +68,8 @@ function, where it runs on every `cargo test`.
   nightly). It is a tool for the person changing a parser.
 - See [`spec/test/index.md`](../spec/test/index.md) for how fuzzing fits with the
   unit, integration, property, and benchmark layers.
+- Improvement plan T007 also asked for a "modeline parsing" target
+  (vim/emacs-style `-*- mode: … -*-` / `vim:` per-file settings comments). Vix
+  has no such feature — no code parses a modeline anywhere in the workspace —
+  so there is nothing pure to fuzz. Adding one would be a feature first (with
+  its own spec), fuzzed after.

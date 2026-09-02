@@ -24,8 +24,14 @@ fuzz_target!(|data: &[u8]| {
         assert!(conflict.end <= lines, "conflict ends past the last line");
         // The two sides are made of whole lines taken from the text, so the
         // resolver can splice them back in verbatim.
-        assert!(text.contains(conflict.ours.as_str()), "ours is not from the text");
-        assert!(text.contains(conflict.theirs.as_str()), "theirs is not from the text");
+        assert!(
+            text.contains(conflict.ours.as_str()),
+            "ours is not from the text"
+        );
+        assert!(
+            text.contains(conflict.theirs.as_str()),
+            "theirs is not from the text"
+        );
         for how in [Resolution::Ours, Resolution::Theirs, Resolution::Both] {
             let _ = conflict.resolved(how);
         }

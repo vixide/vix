@@ -125,12 +125,37 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   `source()`'s line-count loop in `editor_ops.rs` also fixed from O(n²)
   (rescanning the whole accumulated string every append) to O(n) — needed
   to make the 2,500,000-line case tractable at all.
-- [ ] **T007 — Fuzz targets.** Add `fuzz/` (cargo-fuzz) with targets:
+- [x] **T007 — Fuzz targets.** Add `fuzz/` (cargo-fuzz) with targets:
   vcard parsing (`vix-vcard-parser`), query parsing (`vix-query`), each
   tabular/JSON/YAML/TOML converter round-trip, modeline parsing, macro
   token parsing (`vix-macros`). Run each locally ≥ 10 min; fix all crashes
   found; add regression tests for fixes. Fuzzing is not in CI (cost), but
   document the invocation in `agents/conventions.md`.
+  Done — `fuzz/` already had 6 targets (vcard among them); added 4:
+  `query_replace` (`vix-find-panel`, the crate that actually owns
+  search/replace parsing — `vix-query` itself is just the interactive-session
+  struct, 39 lines, no parsing logic of its own), `tabular_convert`
+  (`vix-convert-tabular`, the shared CSV/TSV/JSON core behind all six
+  CSV/TSV/JSON `Tools → Convert` crates), `structured_convert` (the four
+  JSON⇄YAML/JSON⇄TOML convert crates), `macro_tokens` (`vix-macros`).
+  **"Modeline parsing" has no corresponding code** — Vix has no vim/emacs
+  modeline feature, so there is nothing pure to fuzz; documented in
+  `fuzz/README.md` rather than fabricating one (that's a feature to design,
+  not a fuzz target to add). Each new target ran a full 10 minutes (up to 75M
+  executions on `macro_tokens`): zero real bugs found. Two initial "crashes"
+  turned out to be the fuzz target's own assertion being wrong, not a code
+  bug — fixed in the target itself, not the crate: (1) `tabular_convert`
+  asserted CSV round-trips exactly, missing that `write_csv` *intentionally*
+  rewrites `=`/`+`/`-`/`@`/tab/CR-leading fields (CSV/formula-injection
+  guard); switched to a fixed-point assertion
+  (`write(parse(write(rows))) == write(rows)`), which the guard's own
+  idempotence still satisfies. (2) `structured_convert` asserted exact
+  `serde_json::Value` equality after a JSON→YAML→JSON round trip; a
+  30-significant-digit float came back with its last digit changed — decimal
+  text isn't a bit-exact float representation, inherent to any such round
+  trip, not a `serde_yaml` or Vix bug; switched to a relative-tolerance
+  numeric comparison. Invocation documented in `agents/conventions.md` (the
+  actual `cargo +nightly fuzz run <target>` command, not just a pointer).
 - [ ] **T008 — Binary-size tracking.** CI step that builds
   `--release` (default features), records the stripped binary size, and
   comments/records it so growth is visible per PR.

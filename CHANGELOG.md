@@ -24,6 +24,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   10k-file tree — and published the numbers in a new
   `docs/performance/index.md`. New `[profile.bench]` so `cargo bench` no
   longer silently inherits the size-optimized, slow-to-link release profile.
+- **4 more fuzz targets** (improvement plan T007): `query_replace`
+  (`vix-find-panel` search/replace), `tabular_convert` (the shared CSV/TSV/JSON
+  core), `structured_convert` (JSON⇄YAML/TOML), `macro_tokens` (`vix-macros`
+  token decoding) — 10 targets total. Each ran a full 10 minutes clean, up to
+  75M executions; no bugs found in Vix's own code.
 
 ## [1.6.0] - 2026-08-29
 

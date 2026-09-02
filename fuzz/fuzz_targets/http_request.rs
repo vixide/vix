@@ -12,7 +12,10 @@ use libfuzzer_sys::fuzz_target;
 fuzz_target!(|text: &str| {
     if let Some(request) = vix_http_client::parse_request(text) {
         // A parsed request must be self-consistent enough to describe.
-        assert!(!request.method.is_empty(), "parsed a request with no method");
+        assert!(
+            !request.method.is_empty(),
+            "parsed a request with no method"
+        );
         assert!(!request.url.is_empty(), "parsed a request with no URL");
     }
 });
