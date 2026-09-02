@@ -18,6 +18,14 @@ ignore = [
     # are upstream (rav1e dropping paste) or dropping image preview. Revisit
     # when ratatui-image or rav1e moves.
     "RUSTSEC-2024-0436",
+    # 2026-09-02: `smartstring` is unmaintained (no vulnerability; repo
+    # archived 2026-05-03). It's a mandatory, non-optional dependency of
+    # `rhai` (crates/vix-script's scripting engine, tasks.md T102) — not
+    # behind any of rhai's 40 feature flags:
+    #   rhai -> smartstring
+    # The only ways out are upstream (rhai dropping/replacing smartstring)
+    # or dropping user scripting. Revisit when rhai moves off it.
+    "RUSTSEC-2026-0249",
 ]
 
 [licenses]

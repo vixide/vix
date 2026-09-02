@@ -59,6 +59,22 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   WORD motions). Design-only — the `vix-modal` crate itself is a
   documented no-op, added as a plain workspace dependency; the mode
   engine, motions, operators, and text objects land in T112–T115.
+- **`vix-script` engine core** (improvement plan T102): the Rhai engine
+  wrapper, `.rhai` script discovery, and the full API v1 surface
+  (`register_command`, `bind_key`, buffer/selection/cursor get/set,
+  `prompt`, `message`/`error`) — implemented, unit-tested against a mock
+  host, and host-agnostic (no `App`, no terminal). Resource limits (10M
+  operations, expression/statement depth 64, 1M-char strings, 100k-element
+  arrays/maps) catch a runaway script deterministically. **Not yet wired
+  to the App shell** — no palette entry, no startup load, no
+  `script.reload` action — that's T103.
+
+### Changed
+
+- `deny.toml`: added a dated advisory ignore for RUSTSEC-2026-0249
+  (`smartstring`, an unmaintained but mandatory transitive dependency of
+  the new `rhai` dependency), matching the existing `paste`/
+  RUSTSEC-2024-0436 precedent.
 
 ## [1.6.0] - 2026-08-29
 

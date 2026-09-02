@@ -6,3 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Rhai-based user scripting: load, sandbox, and run scripts against the active buffer."
+
+[dependencies]
+rhai = { workspace = true }
+vix-macros = { path = "../vix-macros", version = "1.6.0" }
