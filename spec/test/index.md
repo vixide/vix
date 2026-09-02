@@ -84,15 +84,24 @@ new scenario:
 - **A scenario that opens a real file embeds its full canonicalized path
   in the status bar — twice** (`Tab::display_path` and
   `t!("status.opened", path = ...)`, and `Editor::open` always
-  `path.canonicalize()`s, which macOS resolves through `/private`). At a
-  narrow viewport the renderer can truncate one or both copies *before* any
-  redaction step sees them, at a cutoff that itself depends on the OS's
-  path length — no find-and-replace after the fact can undo information
-  the renderer already clipped. Root fixtures under `/tmp` rather than
-  `std::env::temp_dir()` (long and session-specific via `TMPDIR` on macOS),
-  render such a scenario at a wide-enough viewport that neither copy ever
-  truncates on the worst case (macOS), and only then redact the whole path
-  to a fixed `<root>` token.
+  `path.canonicalize()`s, which macOS resolves through `/private`). Two
+  independent traps, both confirmed by CI failures (the second one *after*
+  the first was already fixed and had passed once on CI — it takes more
+  than one green run to trust a path-adjacent snapshot):
+  - At a narrow viewport the renderer can truncate one or both copies
+    *before* anything downstream sees them, at a cutoff that itself
+    depends on the OS's path length. Root fixtures under `/tmp` rather than
+    `std::env::temp_dir()` (long and session-specific via `TMPDIR` on
+    macOS), and render such a scenario at a wide-enough viewport that
+    neither copy ever truncates on the worst case (macOS).
+  - Even fully untruncated, the status bar right-aligns trailing fields
+    (language, line ending, cursor position) against the *real,
+    pre-redaction* path length — so swapping the path substring for a
+    same-length token still leaves behind a length-dependent amount of
+    padding, which differs across machines and even across runs on the
+    same machine (PID digit count alone shifts it). Don't try to
+    reconstruct the "correct" padding; replace the **whole row** with a
+    fixed placeholder whenever it contains the root path.
 - **A fixture that needs a real git repo** (e.g. to exercise the git
   changes panel) must force the branch name explicitly (`git init -b
   <name>`, not `init.defaultBranch`, which differs by machine —
