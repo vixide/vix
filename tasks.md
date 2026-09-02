@@ -238,10 +238,47 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   updated to reflect the engine core being done and T103+ still pending
   (no palette entry, no startup load, nothing called from `src/app.rs`
   yet).
-- [ ] **T103 — Host wiring.** App shell: load scripts at startup, surface
+- [x] **T103 — Host wiring.** App shell: load scripts at startup, surface
   registered commands in the palette (prefixed, e.g. `script:`), execute
   with the active editor, route errors to messages. Action ids
   `script.reload`, `script.run`; Tools → Scripts submenu (list + Reload).
+  Done — `Settings::scripts_dir()` (mirrors `themes_dir()`) plus
+  `App::load_scripts()` (global dir + `<root>/.vix/scripts/`) called once
+  at startup (`main.rs`, right after `refresh_git()` — the "load once,
+  before the first frame" precedent already used there, not the
+  lazy-on-open pattern tasks/macros/snippets use) and again by
+  `script.reload`. Palette: `script:<stem>:<id>`-namespaced entries mixed
+  into `PMode::Commands`' existing fuzzy/recency scoring
+  (`App::script_palette_entries`), labels shown verbatim per spec.
+  `run_action` dispatches any `script:`-prefixed action
+  (`App::run_script_command`) alongside the existing `view.theme:`-style
+  prefix arms. Tools → Scripts is two static leaves (`Run…`/`Reload`), not
+  a dynamic per-command menu — `vix-menu`'s submenu lists are fixed at
+  compile time (confirmed via the View → Theme submenu's `OnceLock`
+  apparatus, which doesn't support post-first-render changes anyway); `Run…`
+  opens a new `ScriptChooser` overlay instead, the same "chooser, not a
+  menu list" shape `tools.tasks`/`Play Saved Macro…` already use for their
+  own dynamic lists. Buffer/selection effects apply via
+  `Editor::set_content`/`paste_text` (the same path a real paste uses —
+  one undo step, selection-replace-or-insert-at-cursor semantics for free);
+  blocked on a read-only buffer (a bare cursor move still applies). A
+  script's `prompt()` opens a real `PromptKind::Script` prompt;
+  answering it re-invokes `on_submit` as a fresh call
+  (`App::pending_script_prompt` carries which script/handler, cleared on
+  submit or Esc). `message`/`error` route to `App::messages`.
+  **Packaging revision**: `vix-script` is now a **plain, non-optional**
+  dependency — T101's `scripting` Cargo feature (`dep:vix-script`,
+  default-on) is removed. Once genuinely wired into the App shell (struct
+  fields, `main.rs` startup, palette/menu/prompt integration), gating it
+  behind an opt-out feature would mean `--no-default-features` either
+  fails to build the App shell or needs `#[cfg(feature = "scripting")]`
+  sprinkled through several already-large files (`src/app.rs`, `src/ui.rs`)
+  — including inside two `macro_rules!` dispatch tables
+  (`try_panel_key`'s `panel!`, `overlay_capturing_keys`'s `any_open!`) that
+  don't support per-fragment `#[cfg]` at all. Same call T111 made for
+  `vix-modal`, for the same reason. 5 new `tests/integration.rs` cases
+  (command run via action + via palette, reload picks up a new script,
+  read-only blocks an edit, prompt round-trips to a fresh handler call).
 - [ ] **T104 — Script keybindings.** Allow scripts to bind keys via the
   existing keymap-model override layer; conflicts reported, never silently
   clobbered.

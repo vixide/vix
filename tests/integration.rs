@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 
-use vix::app::{App, Focus};
+use vix::app::{App, Focus, PromptKind};
 use vix::calendar;
 use vix::clock;
 use vix::fileops;
@@ -2011,6 +2011,156 @@ fn macro_records_and_replays_editor_keys() {
     assert_eq!(app.editor.active_tab().unwrap().text(), "ab");
     app.run_action("macro.play"); // replays "ab" at the cursor
     assert_eq!(app.editor.active_tab().unwrap().text(), "abab");
+}
+
+// ----- vix-script host wiring (improvement plan T103) ----------------------
+
+#[test]
+fn project_script_registers_and_runs_a_command() {
+    let dir = unique_dir("script-run");
+    fs::create_dir_all(dir.join(".vix/scripts")).unwrap();
+    fs::write(
+        dir.join(".vix/scripts/greet.rhai"),
+        r#"
+        register_command("greet", "Greet", "on_greet");
+        fn on_greet() { set_buffer_text("hello from script"); }
+        "#,
+    )
+    .unwrap();
+    let mut app = app_at(&dir);
+    app.load_scripts();
+
+    // Tools → Scripts → Run… lists every loaded script's commands.
+    app.run_action("script.run");
+    let chooser = app.script_chooser.as_ref().expect("chooser should open");
+    assert_eq!(chooser.commands.len(), 1);
+    assert_eq!(chooser.commands[0].0, "greet"); // script file stem
+    assert_eq!(chooser.commands[0].1.label, "Greet"); // shown verbatim
+
+    app.on_key(keycode(KeyCode::Enter)); // run the highlighted command
+    assert!(app.script_chooser.is_none());
+    assert_eq!(app.editor.active_tab().unwrap().text(), "hello from script");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn script_command_appears_in_the_command_palette() {
+    let dir = unique_dir("script-palette");
+    fs::create_dir_all(dir.join(".vix/scripts")).unwrap();
+    fs::write(
+        dir.join(".vix/scripts/upper.rhai"),
+        r#"
+        register_command("uppercase_selection", "Uppercase Selection", "on_up");
+        fn on_up() {}
+        "#,
+    )
+    .unwrap();
+    let mut app = app_at(&dir);
+    app.load_scripts();
+
+    app.run_action("tools.palette");
+    app.on_key(key('>')); // switch to Commands mode
+    let p = app.palette.as_ref().expect("palette open");
+    let found = p
+        .entries
+        .iter()
+        .find(|e| e.label.contains("Uppercase Selection"))
+        .expect("script command should appear in the command palette");
+    match &found.action {
+        vix::palette::Action::RunCommand(action) => {
+            assert_eq!(action, "script:upper:uppercase_selection");
+        }
+        _ => panic!("expected a RunCommand action"),
+    }
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn script_reload_picks_up_a_script_added_after_startup() {
+    let dir = unique_dir("script-reload");
+    fs::create_dir_all(dir.join(".vix/scripts")).unwrap();
+    let mut app = app_at(&dir);
+    app.load_scripts();
+    app.run_action("script.run");
+    assert!(
+        app.script_chooser.is_none(),
+        "no scripts yet: chooser shouldn't open"
+    );
+
+    fs::write(
+        dir.join(".vix/scripts/late.rhai"),
+        r#"register_command("late", "Late", "on_late"); fn on_late() {}"#,
+    )
+    .unwrap();
+    app.run_action("script.reload");
+    app.run_action("script.run");
+    let chooser = app
+        .script_chooser
+        .as_ref()
+        .expect("chooser should open now");
+    assert_eq!(chooser.commands[0].1.id, "late");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn script_edit_is_blocked_on_a_read_only_buffer() {
+    let dir = unique_dir("script-readonly");
+    fs::create_dir_all(dir.join(".vix/scripts")).unwrap();
+    fs::write(
+        dir.join(".vix/scripts/edit.rhai"),
+        r#"
+        register_command("edit", "Edit", "on_edit");
+        fn on_edit() { set_buffer_text("should not apply"); }
+        "#,
+    )
+    .unwrap();
+    let mut app = app_at(&dir);
+    app.load_scripts();
+    app.run_action("view.read_only");
+
+    app.run_action("script:edit:edit");
+    assert_eq!(app.editor.active_tab().unwrap().text(), "");
+    assert!(
+        app.messages
+            .items
+            .iter()
+            .any(|m| matches!(m.level, vix::messages::Level::Error)),
+        "blocked edit should report an error"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn script_prompt_round_trips_to_a_fresh_handler_call() {
+    let dir = unique_dir("script-prompt");
+    fs::create_dir_all(dir.join(".vix/scripts")).unwrap();
+    fs::write(
+        dir.join(".vix/scripts/rename.rhai"),
+        r#"
+        register_command("rename", "Rename", "on_rename");
+        fn on_rename() { prompt("New name:", "on_rename_answer"); }
+        fn on_rename_answer(answer) { set_buffer_text(answer); }
+        "#,
+    )
+    .unwrap();
+    let mut app = app_at(&dir);
+    app.load_scripts();
+
+    app.run_action("script:rename:rename");
+    let p = app
+        .prompt
+        .as_ref()
+        .expect("script's prompt() should open App::prompt");
+    assert_eq!(p.title, "New name:"); // the script's own message, shown verbatim
+    assert!(matches!(p.kind, PromptKind::Script));
+
+    for c in "picked".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter)); // submits -> a fresh call to on_rename_answer
+    assert!(app.prompt.is_none());
+    assert_eq!(app.editor.active_tab().unwrap().text(), "picked");
+    fs::remove_dir_all(&dir).ok();
 }
 
 #[test]

@@ -7,9 +7,10 @@
 //! [`Runtime`] (compile a script, run its handlers against a caller-supplied
 //! [`HostState`] snapshot). Loading scripts at startup from the real
 //! `Settings::scripts_dir()`/`<App::root>/.vix/scripts`, surfacing commands
-//! in the palette, and applying a handler's effects back to the real editor
-//! are host wiring (tasks.md T103+), built on top of this crate, not inside
-//! it.
+//! in the palette and the Tools → Scripts menu, and applying a handler's
+//! effects back to the real editor are host wiring (`src/app.rs`, built on
+//! top of this crate, not inside it) — done as of tasks.md T103. Wiring a
+//! script's `bind_key` requests into the real keymap is T104, still open.
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
@@ -23,6 +24,10 @@ pub use engine::{
     Command, HostMessage, HostState, InvokeOutcome, KeyBinding, LoadError, LoadedScript,
     PromptRequest, Runtime,
 };
+/// A dynamically-typed Rhai value — re-exported so a host passing arguments
+/// to [`Runtime::invoke`] (e.g. a `prompt` answer) never needs its own direct
+/// dependency on `rhai` just for this one type.
+pub use rhai::Dynamic;
 
 /// Discover `.rhai` scripts under `global_dir` and `project_dir` (§ Script
 /// discovery — both optional, both non-recursive, project shadows global by

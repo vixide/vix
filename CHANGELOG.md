@@ -65,12 +65,26 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `prompt`, `message`/`error`) — implemented, unit-tested against a mock
   host, and host-agnostic (no `App`, no terminal). Resource limits (10M
   operations, expression/statement depth 64, 1M-char strings, 100k-element
-  arrays/maps) catch a runaway script deterministically. **Not yet wired
-  to the App shell** — no palette entry, no startup load, no
-  `script.reload` action — that's T103.
+  arrays/maps) catch a runaway script deterministically.
+- **`vix-script` host wiring** (improvement plan T103): scripts under
+  `Settings::scripts_dir()` and `<workspace root>/.vix/scripts/` now load
+  at startup and on a new `script.reload` action; registered commands are
+  namespaced `script:<script-stem>:<id>` into the command palette
+  (verbatim labels) and listed by a new Tools → Scripts → Run… chooser
+  overlay (`script.run`); running one applies its effects to the active
+  buffer through the same `set_content`/`paste_text` paths a real edit or
+  paste uses (one undo step, blocked on a read-only buffer); a script's
+  `prompt()` opens a real single-line prompt and answering it re-invokes
+  the handler; `message`/`error` reach the message drawer, and a load or
+  runtime error is reported there too, never a crash.
 
 ### Changed
 
+- `vix-script` is now a **plain, non-optional** dependency of the root
+  `vix` package — T101's `scripting` Cargo feature (`dep:vix-script`,
+  default-on) is removed now that T103 has wired it into the App shell's
+  core (struct fields, startup, palette, menu, prompt system), the same
+  call T111 made for `vix-modal`.
 - `deny.toml`: added a dated advisory ignore for RUSTSEC-2026-0249
   (`smartstring`, an unmaintained but mandatory transitive dependency of
   the new `rhai` dependency), matching the existing `paste`/

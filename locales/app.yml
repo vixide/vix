@@ -4712,6 +4712,12 @@ menu.item.tools.snippets:
   bn: "স্নিপেট…"
   zh: "代码片段…"
   ja: "スニペット…"
+menu.item.tools.scripts:
+  en: "Scripts"
+menu.item.tools.scripts.run:
+  en: "Run…"
+menu.item.tools.scripts.reload:
+  en: "Reload"
 menu.item.tools.markdown_preview:
   en: "Markdown Preview…"
   es: "Vista previa de Markdown…"
@@ -9649,6 +9655,10 @@ ui.tasks_hint:
   bn: "↑↓ নির্বাচন   Enter চালান   Esc বাতিল"
   zh: "↑↓ 选择   Enter 运行   Esc 取消"
   ja: "↑↓ 選択   Enter 実行   Esc キャンセル"
+ui.scripts:
+  en: "Run Script Command"
+ui.scripts_hint:
+  en: "↑↓ select   Enter run   Esc cancel"
 ui.diff_view_hint:
   en: "↑↓ / PgUp PgDn scroll   Esc close"
   es: "↑↓ / RePág AvPág desplazar   Esc cerrar"
@@ -12143,6 +12153,8 @@ status.http_done:
   en: "HTTP response received"
 status.http_failed:
   en: "HTTP request failed"
+status.no_scripts:
+  en: "No script commands available (add .rhai scripts)"
 msg.http_error:
   en: "HTTP request failed: %{error}"
 status.todos_n:
@@ -14177,6 +14189,14 @@ status.qr_replaced:
   zh: "交互替换: 已替换 %{count}"
 
 # Errors and diagnostics
+msg.script_load_error:
+  en: "Script '%{stem}' failed to load: %{message}"
+msg.script_error:
+  en: "Script '%{stem}' error: %{message}"
+msg.script_command_unavailable:
+  en: "Script command '%{action}' is not available (script removed or renamed?)"
+msg.scripts_reloaded:
+  en: "Reloaded scripts: %{count} command(s) available"
 msg.unknown_action:
   en: "Unknown action: %{action}"
   es: "Acción desconocida: %{action}"

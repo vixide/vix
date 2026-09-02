@@ -1050,6 +1050,15 @@ const TOOLS_CHECKSUM: &[Item] = &[
     Item::leaf("menu.name.crc32", "tools.checksum.crc32", ""),
 ];
 
+/// User `.rhai` scripting (`crates/vix-script/spec/index.md`). Two static
+/// leaves, not a dynamic per-script list: `Run…` opens a chooser overlay
+/// (built fresh each time from whatever is currently loaded) rather than the
+/// menu itself growing an item per script command.
+const TOOLS_SCRIPTS: &[Item] = &[
+    Item::leaf("menu.item.tools.scripts.run", "script.run", ""),
+    Item::leaf("menu.item.tools.scripts.reload", "script.reload", ""),
+];
+
 // Tools → Convert: each entry converts the selection (or whole buffer). Format
 // names (CSV/TSV/JSON/…) route through shared `menu.name.*` keys that hold the
 // (locale-neutral) name; only Encode/Decode carry descriptive translations.
@@ -1224,6 +1233,7 @@ const TOOLS: &[Item] = &[
     ),
     Item::leaf("menu.item.tools.qrcode", "tools.qrcode", ""),
     Item::leaf("menu.item.tools.snippets", "tools.snippets", ""),
+    Item::sub("menu.item.tools.scripts", TOOLS_SCRIPTS),
     SEP,
     Item::leaf("menu.item.tools.contacts", "tools.contacts", ""),
     Item::leaf("menu.item.tools.calendar", "tools.calendar", ""),

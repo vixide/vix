@@ -128,15 +128,9 @@ eula = false
 #
 # The grammars actually live in the vix_editor_core crate; these features simply
 # forward to that crate's identically-named features.
-default = ["syntax-common", "scripting"]
+default = ["syntax-common"]
 syntax-common = ["vix-editor-core/syntax-common"]
 syntax-all = ["vix-editor-core/syntax-all"]
-
-# User `.rhai` scripting (crates/vix-script/spec/index.md). Its own feature,
-# default-on like the grammars above, rather than always-on: `--no-default-
-# features` (already how a user opts out of syntax highlighting entirely)
-# drops it too, with no separate toggle needed.
-scripting = ["dep:vix-script"]
 
 lang-bash = ["vix-editor-core/lang-bash"]
 lang-c = ["vix-editor-core/lang-c"]
@@ -197,10 +191,13 @@ vix-lsp = { path = "crates/vix-lsp", version = "1.6.0" }
 # Top menu bar with keyboard-navigable dropdowns (one level of submenus).
 vix-menu = { path = "crates/vix-menu", version = "1.6.0" }
 # User `.rhai` scripting: load, sandbox, and run scripts against the active
-# buffer (see crates/vix-script/spec/index.md). Optional, gated by the
-# `scripting` feature (default-on) above — design-only for now (T101); no
-# functional code or dependencies until T102.
-vix-script = { path = "crates/vix-script", version = "1.6.0", optional = true }
+# buffer (see crates/vix-script/spec/index.md). A plain dependency, not an
+# optional Cargo feature — T101 originally gated it behind a `scripting`
+# feature (mirroring the `lang-*`/`syntax-*` binary-size levers), but once
+# T103 wired it into the App shell (startup load, palette, menu, prompt
+# system) it became just as "always compiled in" as any other core feature,
+# the same call T111 made for `vix-modal`.
+vix-script = { path = "crates/vix-script", version = "1.6.0" }
 # Per-workspace editor session, persisted with `confy`.
 vix-session = { path = "crates/vix-session", version = "1.6.0" }
 # User settings, persisted with `confy`.
