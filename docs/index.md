@@ -72,6 +72,9 @@ Specs are **per crate**: each member crate owns `crates/<crate>/spec/index.md`
 ## Contributor & agent guidance (`agents/`)
 
 - [AGENTS.md](../AGENTS.md) — entry point: build/test, hard rules, conventions.
+- [AI_STATEMENT.md](../AI_STATEMENT.md) — how AI-authored work is disclosed,
+  what bar it clears, and what an AI agent is (and isn't) pre-authorized to
+  do here without asking first.
 - [agents/conventions.md](../agents/conventions.md) — coding style and patterns.
 - [agents/workflow.md](../agents/workflow.md) — the spec-driven workflow and drift
   audits.
