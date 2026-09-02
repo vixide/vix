@@ -179,7 +179,8 @@ Licensed under either of Apache-2.0 or MIT at your option.
 Vix is developed with substantial AI assistance. See
 [`AI_STATEMENT.md`](AI_STATEMENT.md) for what that means: how AI-authored
 work is disclosed, what bar it has to clear, and what an AI agent is (and
-isn't) authorized to do here without asking first.
+isn't) authorized to do here without asking first — currently `cargo
+publish` and judging that a specific release is ready, nothing beyond that.
 
 ---
 

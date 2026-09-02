@@ -10,7 +10,11 @@ Read [`AI_STATEMENT.md`](AI_STATEMENT.md) before doing anything outward-facing
 or hard to reverse (a force-push, publishing a release, publishing a package).
 It says what an AI agent is and isn't pre-authorized to do here without asking
 first — the default is to confirm; standing exceptions are listed there and
-nowhere else.
+nowhere else. Two exceptions stand today: `cargo publish`, and *judging* that
+a specific release is ready (version/`CHANGELOG.md` correct, `scripts/check`
+green, scope complete) — an agent may decide that on its own rather than
+asking first. Neither extends to cutting a tagged release or creating a
+GitHub/GitLab/Codeberg Release; that's still confirmed first.
 
 ## What Vix is
 
