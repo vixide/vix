@@ -1,0 +1,8 @@
+[package]
+name = "vix-keybindings"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "An exhaustive, queryable registry of every built-in keybinding across all 9 keymaps, plus the user/script override layer built on it."
