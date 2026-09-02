@@ -157,14 +157,19 @@ The corpus is not committed; the regression is.
 | Bench | Covers |
 | ----- | ------ |
 | `text_ops` | The pure transforms, at 100 and 2,000 lines — they rebuild their unit ranges from the whole buffer on every keystroke |
-| `editor_ops` | Opening a file (parse + highlight), typing, pasting, undo, whole-buffer line transforms |
-| `search_and_palette` | The two per-keystroke search paths: find-in-buffer and palette fuzzy filtering, at 1,000 and 20,000 items |
+| `editor_ops` | Opening a file (parse + highlight, up to a ~100 MB synthetic file), typing, a 10k-operation burst of random inserts/deletes, pasting, undo, whole-buffer line transforms |
+| `search_and_palette` | The three per-keystroke search paths: find-in-buffer, workspace search (up to a generated 10k-file tree), and palette fuzzy filtering |
 
 ```sh
 cargo bench                                  # everything
 cargo bench --bench editor_ops               # one file
 cargo bench -- editor/open                   # one group; Criterion compares to the last run
 ```
+
+`cargo bench` runs under `[profile.bench]` (speed-optimized, no LTO) rather
+than letting it inherit `[profile.release]` (`opt-level = "z"`, `lto = true`
+— tuned for a small shipped binary, not representative hot-path timing, and
+too slow to relink for a benchmark someone reruns often).
 
 Criterion stores each run under `target/criterion/` and reports the change from
 the previous one, so the workflow is: measure, change, measure again, and read
@@ -173,7 +178,9 @@ the percentage. That is how the query-compilation cost was found — opening a
 case. Caching the compiled Tree-sitter query took it to 0.6 ms.
 
 Benchmark what the user waits for: a keystroke, a frame, a file open. Do not
-benchmark what runs once at startup or what is dominated by I/O.
+benchmark what runs once at startup or what is dominated by I/O. See
+[`docs/performance/index.md`](../../docs/performance/index.md) for one
+machine's baseline numbers.
 
 ## Repository invariants
 

@@ -486,3 +486,12 @@ opt-level = "z"
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+# `cargo bench` otherwise inherits `[profile.release]`: `opt-level = "z"`
+# optimizes for binary size, not speed, so the numbers wouldn't represent real
+# hot-path performance, and workspace-wide `lto = true` makes the final link
+# painfully slow for a benchmark someone reruns often. Speed-optimize, skip LTO.
+[profile.bench]
+opt-level = 3
+lto = false
+strip = false
