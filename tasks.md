@@ -102,12 +102,29 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   fresh-PID re-runs before trusting it (still worth a real second machine
   or a CI dry-run before assuming any status-bar-adjacent snapshot is
   safe).
-- [ ] **T006 — Benchmarks.** Add criterion benches (root `benches/` or in
+- [x] **T006 — Benchmarks.** Add criterion benches (root `benches/` or in
   `vix-editor-core`): open/parse 100 MB synthetic file, 10k random inserts
   and deletes, syntax-highlight a 5 MB Rust file, workspace search over a
   generated 10k-file tree, palette fuzzy scoring over 10k candidates.
   `cargo bench` documented; record baseline numbers in a new
   `docs/performance/index.md`.
+  Done — `benches/` already existed (3 files, done in an earlier session
+  without checking this box) but at much smaller sizes than spec'd; widened
+  `editor_ops.rs`'s `bench_open` to 125,000 lines (~5 MB, the
+  syntax-highlight scenario) and 2,500,000 lines (~100 MB, the open/parse
+  scenario — 5.05 s), added `bench_random_edits` (10k random inserts/deletes
+  in one burst — 1.60 s) and `bench_workspace_search` in
+  `search_and_palette.rs` (a real 10k-file fixture, `App::run_action` +
+  `on_key` since `run_workspace_search` is private — 214 ms; `palette/fuzzy`
+  already covered 20,000 candidates). Also added `[profile.bench]`
+  (`opt-level = 3`, no LTO) — `cargo bench` was silently inheriting
+  `[profile.release]` (`opt-level = "z"`, `lto = true`), which is tuned for
+  binary size, not representative hot-path timing, and made the final link
+  of a 100+ crate workspace painfully slow to rerun. `docs/performance/index.md`
+  written with the full baseline table and pointers to T121's targets.
+  `source()`'s line-count loop in `editor_ops.rs` also fixed from O(n²)
+  (rescanning the whole accumulated string every append) to O(n) — needed
+  to make the 2,500,000-line case tractable at all.
 - [ ] **T007 — Fuzz targets.** Add `fuzz/` (cargo-fuzz) with targets:
   vcard parsing (`vix-vcard-parser`), query parsing (`vix-query`), each
   tabular/JSON/YAML/TOML converter round-trip, modeline parsing, macro

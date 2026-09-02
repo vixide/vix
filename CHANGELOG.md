@@ -18,6 +18,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   an opened Rust file, File menu open, find bar with matches, the git
   changes panel, the table editor, the F1 keyboard-shortcut overlay, zen
   mode, and a non-default theme — 12 golden screens total.
+- **Benchmark baselines** (improvement plan T006): widened `benches/` to the
+  plan's spec'd scenarios — opening/highlighting a ~100 MB and ~5 MB file, a
+  10k-operation random insert/delete burst, and workspace search over a
+  10k-file tree — and published the numbers in a new
+  `docs/performance/index.md`. New `[profile.bench]` so `cargo bench` no
+  longer silently inherits the size-optimized, slow-to-link release profile.
 
 ## [1.6.0] - 2026-08-29
 

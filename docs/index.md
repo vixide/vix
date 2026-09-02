@@ -77,6 +77,8 @@ Specs are **per crate**: each member crate owns `crates/<crate>/spec/index.md`
   audits.
 - [agents/share/crate-map.md](../agents/share/crate-map.md) — every module and file.
 - [agents/share/glossary.md](../agents/share/glossary.md) — shared terminology.
+- [Performance](performance/index.md) — `cargo bench` baselines for the
+  per-keystroke and per-frame hot paths.
 
 ## For AI tools
 
