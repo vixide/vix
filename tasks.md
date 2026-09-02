@@ -82,18 +82,26 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   branch name (`git init -b`, not the machine's `init.defaultBranch`) and
   `commit.gpgsign=false` (never invoke the developer's real signing key for
   a throwaway fixture commit). Two scenarios that open a real file
-  (`editor_with_an_opened_rust_file`, `find_bar_with_matches`) hit a subtler
-  determinism trap: `Editor::open` always `canonicalize()`s the path, macOS
-  resolves it through `/private`, and the status bar embeds it *twice*
-  (`Tab::display_path` plus `t!("status.opened", path = ...)`) — at 100
-  columns one or both copies were truncated *before* the redaction step
-  ever saw them, at a cutoff that itself depended on the OS-specific root
-  length, so post-hoc string replacement couldn't undo it. Fixed by rooting
-  fixtures under `/tmp` (short on both Linux and macOS) instead of
-  `std::env::temp_dir()` (long, session-specific on macOS) and rendering
-  those two scenarios at 220 columns so neither copy ever truncates on the
-  worst case (macOS) — full-string redaction is then exact on every
-  machine. Verified stable across two fresh-PID re-runs before trusting it.
+  (`editor_with_an_opened_rust_file`, `find_bar_with_matches`) hit a
+  determinism trap with two layers, both discovered the hard way (the first
+  passed locally *and* on GitHub CI, then broke on the very next CI run —
+  same OS as the machine that made the golden file, just a different PID):
+  `Editor::open` always `canonicalize()`s the path (macOS resolves it
+  through `/private`), and the status bar embeds it *twice*
+  (`Tab::display_path` plus `t!("status.opened", path = ...)`). (1) At 100
+  columns the path got truncated before a redaction step ever saw it, at a
+  cutoff depending on the OS-specific length — fixed by rooting fixtures
+  under `/tmp` (short on both Linux and macOS, unlike the long,
+  session-specific `std::env::temp_dir()` on macOS) and rendering at 220
+  columns so it never truncates. (2) Even untruncated, the status bar
+  right-aligns trailing fields against the *real* pre-redaction path
+  length, so a same-length substring replacement still leaves a
+  length-dependent amount of padding behind. Fixed by replacing the whole
+  row with a fixed placeholder whenever it contains the root path, instead
+  of swapping just the path substring. Verified stable across three
+  fresh-PID re-runs before trusting it (still worth a real second machine
+  or a CI dry-run before assuming any status-bar-adjacent snapshot is
+  safe).
 - [ ] **T006 — Benchmarks.** Add criterion benches (root `benches/` or in
   `vix-editor-core`): open/parse 100 MB synthetic file, 10k random inserts
   and deletes, syntax-highlight a 5 MB Rust file, workspace search over a

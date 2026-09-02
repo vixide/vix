@@ -128,44 +128,48 @@ fn app_at(tag: &str) -> App {
 
 /// Render one frame and flatten it to plain text: one line per row, each
 /// trimmed of trailing spaces so an unrelated cell-width fix elsewhere in
-/// the screen doesn't ripple through every row's diff. Any occurrence of the
-/// fixture root's absolute path (raw or canonicalized — e.g. macOS resolves
-/// `/var` to `/private/var`) is redacted to `<root>`: the status bar shows
-/// the full path for a file outside the workspace-relative case, and that
-/// path bakes in both the temp directory's OS-specific location *and* this
-/// process's id (the fixture is keyed by it), so without redaction the
-/// golden file would differ across machines and across runs on the same one.
+/// the screen doesn't ripple through every row's diff.
 ///
-/// The redaction only helps if the whole path survives in the rendered
-/// frame — a scenario that opens a real file also embeds its full path a
-/// second time in the status message (`t!("status.opened", path = ...)`),
-/// and macOS's canonicalized root is long enough that a 100-col line
-/// truncates one or both copies *before* redaction ever sees them, at a
-/// cutoff that itself depends on how long the OS-specific root happens to
-/// be — no post-hoc string replace can undo information the renderer
-/// already clipped. Such a scenario renders at a width wide enough that the
-/// worst case (macOS) never truncates either copy, so full-string
-/// redaction removes all OS/run dependence instead of just hiding most of
-/// it.
+/// Any row containing the fixture root's absolute path (raw or
+/// canonicalized — e.g. macOS resolves `/var` to `/private/var`) is
+/// replaced wholesale with a fixed placeholder line, not just had that
+/// substring swapped out: the status bar shows the full path for a file
+/// outside the workspace-relative case (and, for a freshly opened file,
+/// shows it a *second* time inside the status message, `t!("status.opened",
+/// path = ...)`), and that path bakes in both the temp directory's
+/// OS-specific location and this process's id (the fixture is keyed by
+/// it). A substring swap alone isn't enough — the status bar right-aligns
+/// trailing fields (language, line ending, cursor position) against the
+/// *real*, pre-redaction path length, so even a same-length replacement
+/// token leaves a residue: a different amount of padding survives
+/// depending on how long the real path happened to be, which still differs
+/// by PID digit count alone (confirmed: this broke CI even after fixing
+/// truncation — same OS as the machine that generated the golden file,
+/// just a different-length PID). Blanking the whole row sidesteps that
+/// layout dependency entirely instead of trying to out-think it.
 fn render_screen(app: &mut App, width: u16, height: u16) -> String {
     let mut term = Terminal::new(TestBackend::new(width, height)).unwrap();
     term.draw(|f| vix::ui::draw(app, f)).unwrap();
     let buf = term.backend().buffer();
-    let screen = (0..height)
-        .map(|y| {
-            (0..width)
-                .map(|x| buf[(x, y)].symbol())
-                .collect::<String>()
-                .trim_end()
-                .to_string()
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
     let raw = app.root.display().to_string();
     let canonical = fs::canonicalize(&app.root)
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| raw.clone());
-    screen.replace(&canonical, "<root>").replace(&raw, "<root>")
+    (0..height)
+        .map(|y| {
+            let line = (0..width)
+                .map(|x| buf[(x, y)].symbol())
+                .collect::<String>()
+                .trim_end()
+                .to_string();
+            if line.contains(&canonical) || line.contains(&raw) {
+                "<status bar redacted: shows the opened file's absolute path>".to_string()
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[test]
