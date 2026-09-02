@@ -11,7 +11,7 @@ English automatically.
 
 Localization is built on the [`rust-i18n`](https://crates.io/crates/rust-i18n)
 crate (version 4.x). `rust_i18n::i18n!` embeds the whole translation table into
-whichever crate invokes it, so a naive per-crate `i18n!` call in a 103-crate
+whichever crate invokes it, so a naive per-crate `i18n!` call in a 104-crate
 workspace would embed `locales/app.yml` once per crate. Instead, the `vix-i18n`
 crate invokes it exactly **once**:
 

@@ -221,11 +221,56 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
 
 ### Modal editing (epic — audit first)
 
-- [ ] **T111 — Modal audit + spec.** Audit what the Vi keymap actually
+- [x] **T111 — Modal audit + spec.** Audit what the Vi keymap actually
   does today vs a real modal engine. Write `crates/vix-modal/spec/index.md`:
   modes (normal/insert/visual/visual-line), operator × motion grammar,
   counts, registers, dot-repeat; explicit v1 cut line (no ex commands, no
   macros — Vix already has macros). Merge the spec.
+  Done — new `vix-modal` crate (design-only, same no-op-crate-plus-spec
+  shape as T101/`vix-script`). The audit in `spec/index.md` cites the
+  actual `src/app.rs` dispatch precisely: `vim_normal_key`'s `vim_pending`
+  supports only three hardcoded 2-key sequences (`gg`/`dd`/`yy` — `d`/`c`
+  plus any other motion is silently swallowed), no count state exists, no
+  named registers (everything goes through the single OS clipboard), no
+  Visual mode flag (though `MoveLeft/Right/Up/Down { shift }` selection-
+  extension already exists end-to-end and just isn't wired to a mode), no
+  dot-repeat, no text objects, and Spacemacs's Normal mode is confirmed to
+  delegate to this same function (not a second implementation). Also found
+  and flagged: three independent word-boundary implementations exist
+  (`vix-textops`, `vix-editor-core::named`, a third local one in
+  `vix-editor`) — the v1 design picks `vix-textops` as canonical rather
+  than adding a fourth. v1 design: `Mode` enum (Normal/Insert/Visual/
+  VisualLine — Visual Block cut); pure `fn(text, pos, count) -> usize`
+  motions (`h j k l w b e 0 ^ $ gg G { } ( ) f/t/F/T %`) reusing
+  `vix-textops` where it overlaps; `d c y` composing with any motion/text
+  object/Visual selection, `x` as sugar for `d` + one-char motion, `p`/`P`
+  as standalone register-paste commands (not operators); counts with the
+  `count1 * count2` multiplicative composition rule (`2d3w` = 6 words);
+  unnamed register mirrors the existing OS clipboard, named a–z is an
+  in-memory session-only map (explicit non-persistence call-out); dot-
+  repeat as keystroke replay of the last change (reusing the existing
+  macro-recorder's mechanics conceptually) with `{count}.` override; text
+  objects (`iw aw i( a( i" a"` + bracket/quote siblings) as their own
+  delimiter-scan functions, deliberately not reusing the Tree-sitter
+  `expand_to_node` structural-selection feature (different, syntax-aware
+  mechanism, noted as a possible future complement). Explicit v1 cut line:
+  no ex-command scripting, no macro-via-`q` (Vix's existing recorder is
+  untouched), no Visual Block, no WORD motions, no `;`/`,`/`*`/`#`, no
+  operators beyond `d c y (x) p P`, no register persistence/uppercase/
+  numbered/special registers, no sentence/paragraph/tag text objects.
+  Rollout: new `Settings::modal_engine: bool`, off at T112, flipped on once
+  T115 ships the full slice (T115's call); `docs/for-vim-users/index.md`'s
+  honest gap list updates incrementally as T112–T115 land, not all at once.
+  Root `Cargo.toml`: `vix-modal` added as a **plain** (non-optional)
+  dependency — unlike `vix-script`'s `scripting` feature, Vi/Spacemacs
+  keymaps are always compiled in today, so gating the engine behind a
+  Cargo feature would be inconsistent with how the keymaps already ship.
+  Registered in `agents/share/crate-map.md` (new "Modal editing" row);
+  bumped the "103 crates" count to 104 everywhere it's stated (`AGENTS.md`,
+  `CLAUDE.md`, `spec/index/index.md`, `docs/architecture/index.md`,
+  `crates/vix-i18n/spec/index.md`, `spec/llms-json-and-llms-txt/index.md`,
+  `agents/share/crate-map.md` ×2 — one more occurrence than T101 found,
+  since this file has two differently-worded "103" mentions).
 - [ ] **T112 — Mode engine.** `vix-modal` crate: mode state machine, key
   dispatch that intercepts before the normal keymap when the Vi keymap +
   modal setting are active, mode shown in the status bar.

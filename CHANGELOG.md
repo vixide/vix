@@ -48,6 +48,17 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   sandboxing. Design-only — the `vix-script` crate itself is a documented
   no-op behind a new default-on `scripting` feature; the engine and host
   wiring land in T102+.
+- **Modal-editing design spec** (improvement plan T111, `crates/vix-modal/spec/index.md`):
+  audits the current Vi/Spacemacs `vim_normal_key` binding table (only
+  `gg`/`dd`/`yy` compose; no counts, registers, Visual mode, dot-repeat, or
+  text objects) and designs the v1 replacement — a `Mode` enum, pure
+  motion functions, `d`/`c`/`y` composing with any motion/text
+  object/Visual selection, counts, unnamed + named a–z registers,
+  keystroke-replay dot-repeat, and delimiter-based text objects — with an
+  explicit cut line (no ex commands, no macro-via-`q`, no Visual Block, no
+  WORD motions). Design-only — the `vix-modal` crate itself is a
+  documented no-op, added as a plain workspace dependency; the mode
+  engine, motions, operators, and text objects land in T112–T115.
 
 ## [1.6.0] - 2026-08-29
 
