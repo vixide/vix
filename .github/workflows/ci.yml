@@ -145,3 +145,109 @@ jobs:
           key: msrv-${{ matrix.rust }}
       - name: cargo check --all-targets
         run: cargo check --workspace --all-targets
+
+  # T008 (tasks.md): track the shipped binary's size so growth is visible
+  # rather than discovered later. `--release` (default features) is what a
+  # user's `cargo install`/download actually gets — the whole reason
+  # `[profile.release]` sets `strip = true`.
+  #
+  # "Recorded": the size of every push to `main` is saved under a
+  # `binary-size-main-<sha>`-prefixed cache entry. A cache key can't be
+  # overwritten, so `restore-keys` prefix matching is used to fetch the most
+  # recent one instead — the same trick `Swatinem/rust-cache` uses internally.
+  # A PR run only *reads* that prefix (never writes under it), so a PR's
+  # speculative size can never become the next baseline.
+  #
+  # "Comments... per PR": a sticky comment (found and edited by its HTML
+  # marker, not reposted every push) with the current size and the delta
+  # against that baseline. Best-effort (`continue-on-error`): a PR from a
+  # fork gets a read-only `GITHUB_TOKEN` regardless of this job's declared
+  # permissions — a hard GitHub restriction, not a bug here — so the comment
+  # step simply no-ops rather than failing the job. `pull_request_target`
+  # would avoid that, but runs workflow code with base-repo permissions
+  # against the PR's own (untrusted) content, which is not a trade worth
+  # making just for a size comment.
+  binary-size:
+    name: binary size (release)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: binary-size
+      # Read-only: restores the newest `binary-size-main-*` entry (if any)
+      # into `previous-binary-size.txt`. The exact `key` here is never meant
+      # to hit — `restore-keys` is what does the work — so it is deliberately
+      # not a real cache entry's name.
+      - name: Restore the last recorded size from main
+        uses: actions/cache/restore@v4
+        with:
+          path: previous-binary-size.txt
+          key: binary-size-main-unused
+          restore-keys: |
+            binary-size-main-
+      - name: cargo build --release
+        run: cargo build --release
+      - name: Measure the stripped binary size
+        id: size
+        run: |
+          bytes=$(stat -c%s target/release/vix)
+          echo "bytes=$bytes" >> "$GITHUB_OUTPUT"
+      # Only main writes the next baseline — never a PR run, speculative or
+      # not, and never for a manual workflow_dispatch off some other branch.
+      - name: Save this size as the new main baseline
+        if: github.ref == 'refs/heads/main'
+        run: echo "${{ steps.size.outputs.bytes }}" > previous-binary-size.txt
+      - name: Record the new baseline
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: previous-binary-size.txt
+          key: binary-size-main-${{ github.sha }}
+      - name: Comment the size (and delta) on the PR
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const bytes = ${{ steps.size.outputs.bytes }};
+            const fmt = (n) => n.toLocaleString('en-US');
+            const mb = (n) => (n / (1024 * 1024)).toFixed(2);
+            let deltaLine = '_No baseline recorded yet from `main`._';
+            if (fs.existsSync('previous-binary-size.txt')) {
+              const prev = parseInt(fs.readFileSync('previous-binary-size.txt', 'utf8').trim(), 10);
+              const delta = bytes - prev;
+              const pct = ((delta / prev) * 100).toFixed(2);
+              const sign = delta >= 0 ? '+' : '';
+              deltaLine = `vs \`main\`: **${sign}${fmt(delta)} bytes** (${sign}${pct}%) — was ${fmt(prev)} bytes`;
+            }
+            const marker = '<!-- vix-binary-size-report -->';
+            const body = `${marker}\n### 📦 Binary size (release, default features)\n\n**${fmt(bytes)} bytes** (${mb(bytes)} MB)\n\n${deltaLine}`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

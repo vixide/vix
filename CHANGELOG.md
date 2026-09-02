@@ -29,6 +29,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   core), `structured_convert` (JSON⇄YAML/TOML), `macro_tokens` (`vix-macros`
   token decoding) — 10 targets total. Each ran a full 10 minutes clean, up to
   75M executions; no bugs found in Vix's own code.
+- **CI binary-size tracking** (improvement plan T008): GitHub gets a
+  `binary-size` job that measures the stripped release binary on every push,
+  caches `main`'s size for comparison, and posts a sticky PR comment with the
+  size and delta; GitLab logs the same measurement to the job output.
 
 ## [1.6.0] - 2026-08-29
 

@@ -201,6 +201,43 @@ environment win over its config `[env]` table — those entries are not
 `force = true` — and `CARGO_TARGET_*_LINKER` overrides the config's `linker`,
 so the three variables are enough. See `spec/rust-cargo-config-toml-musl`.
 
+## Binary size
+
+T008 (`tasks.md`): a `cargo build --release` (default features — what a
+user's build actually gets) that measures the stripped binary
+(`target/release/vix`; `[profile.release]` sets `strip = true`) and makes
+growth visible, so a regression is a number that moved rather than something
+discovered later. Deliberately asymmetric across forges, in proportion to
+what each one makes easy:
+
+- **GitHub** — the full version: a `binary-size` job saves every `main`
+  build's size under a `binary-size-main-<sha>`-prefixed cache entry (a cache
+  key can't be overwritten, so `restore-keys` prefix matching fetches the
+  most recent one — the same trick `Swatinem/rust-cache` uses internally). A
+  PR only *reads* that prefix, never writes under it, so a PR's speculative
+  size can never become the next baseline. A sticky comment (found and
+  edited by an HTML marker, not reposted every push) reports the size and the
+  delta against that baseline. Best-effort: a fork PR gets a read-only
+  `GITHUB_TOKEN` regardless of this job's declared permissions — a hard
+  GitHub restriction — so the comment step no-ops rather than failing the
+  job; `pull_request_target` would avoid that, but runs workflow code with
+  base-repo permissions against the PR's own untrusted content, not a trade
+  worth making for a size comment.
+- **GitLab** — a lighter `binary-size` job: same measurement, reported to the
+  job log rather than a merge-request note (posting one needs an API token
+  this pipeline is not given). Its `binary-size-main` cache entry always
+  saves — GitLab overwrites a cache key freely, so unlike GitHub's job this
+  needs no prefix trick, but it also means a merge-request pipeline can
+  transiently overwrite the baseline with its own speculative size until the
+  next `main` pipeline corrects it. Accepted deliberately for the
+  simplicity; the job log always shows the true delta at build time
+  regardless.
+- **Codeberg — not added.** Its runners are a donated, shared resource
+  (see above), already reduced to one job specifically to avoid recompiling
+  the workspace more than once; a second full `--release` build (LTO +
+  strip, the slowest profile in the tree) for an informational-only metric
+  GitHub already reports is not a cost this forge's CI should carry.
+
 ## Not yet wired
 
 Spell checking (CSpell, `cspell.json`) is not a CI job yet: the tree still has
