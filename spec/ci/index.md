@@ -75,6 +75,14 @@ step is why the `HOMEBREW_TAP_TOKEN` secret exists (see
 `spec/homebrew-tap-token`). `release.yml` is **generated**: edit
 `dist-workspace.toml` and re-run `dist init`, never the workflow by hand.
 
+Who's authorized to do what here is governed by
+[`AI_STATEMENT.md`](../../AI_STATEMENT.md), not by this file: an AI agent may
+publish a crate to crates.io, and may judge on its own that a specific
+release is ready to do that for, without asking first. Pushing the version
+tag that triggers the pipeline above — and so the GitHub Release, the
+installers, and the Homebrew tap push — is not covered by either grant and
+still gets confirmed first.
+
 ## GitLab
 
 Stages `check` → `test` → `release`, on the pinned `rust:1.96` image (the

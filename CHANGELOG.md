@@ -36,8 +36,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`AI_STATEMENT.md`**: how AI-authored work on this project is disclosed
   (commit trailers, session links), what bar it has to clear (the same
   spec-driven workflow and gate as anything else), and what an AI agent is —
-  and isn't — pre-authorized to do without asking first. Linked from
-  `README.md`, `AGENTS.md`, and `docs/index.md`.
+  and isn't — pre-authorized to do without asking first: `cargo publish`,
+  and (added the same day) judging on its own that a specific release is
+  ready to do that for — neither extends to cutting a version-tag release
+  or creating a GitHub/GitLab/Codeberg Release. Linked from `README.md`,
+  `AGENTS.md`, `docs/index.md`, and `spec/ci/index.md`.
 
 ## [1.6.0] - 2026-08-29
 

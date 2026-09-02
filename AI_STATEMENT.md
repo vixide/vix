@@ -59,15 +59,41 @@ By default, an AI agent working on this repo **confirms before** a
 hard-to-reverse or outward-facing action — a force-push, publishing a
 release, publishing a package — rather than acting alone. That default holds
 except where the maintainer has deliberately granted a standing exception,
-each revocable at any time:
+each revocable at any time.
 
-| Action | Status | Granted |
-| ------ | ------ | ------- |
-| `cargo publish` (crates.io) | **Standing authorization** — may run as part of a legitimate release step (version bumped, `CHANGELOG.md` updated, gate green), without asking first each time | 2026-09-02 |
+### Release readiness (§1–§5)
+
+A crates.io release of a workspace crate is ready when:
+
+1. **Version is correct** — bumped in `Cargo.toml` (`workspace.package.version`,
+   and any per-crate override) in a way that matches the actual change —
+   semver, not a rubber stamp.
+2. **`CHANGELOG.md` is updated** — the user-visible changes since the last
+   release are recorded under the right heading, not left in `[Unreleased]`.
+3. **The gate is green** — `scripts/check` clean locally, *and* CI confirmed
+   actually green (not assumed from a local pass) on the forge(s) the
+   release depends on.
+4. **Publish order is respected** — for the crate(s) being published, every
+   `path` dependency already has a matching version live on crates.io first;
+   nothing publishes ahead of what it depends on.
+5. **Publish** — `cargo publish`, for each crate in that order.
+
+An agent working in this repository may work through §§1–4 above, decide
+the release meets them, and carry out §5 itself — the maintainer no longer
+has to tick every box personally before `cargo publish` runs. That's the
+full extent of it: deciding *that* a release clears §§1–4, and then running
+§5. It does not, by itself, authorize cutting a version-tag release or
+creating a GitHub/GitLab/Codeberg Release — those trigger `dist`'s
+cross-platform builds and installers, push to the Homebrew tap, and publish
+public release pages, a materially bigger blast radius than a crates.io
+publish. That stays confirmed first, unless separately granted.
 
 Everything else outward-facing — force-pushing, deleting a branch on a
 forge, cutting a tagged release, editing repository settings — is **not**
 pre-authorized and still gets confirmed first, change by change.
+
+Both standing exceptions (`cargo publish`, and judging §§1–4 for yourself)
+were granted 2026-09-02.
 
 ## Licensing
 
