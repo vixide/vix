@@ -77,6 +77,18 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `prompt()` opens a real single-line prompt and answering it re-invokes
   the handler; `message`/`error` reach the message drawer, and a load or
   runtime error is reported there too, never a crash.
+- **Keybinding registry design spec** (improvement plan T104,
+  `crates/vix-keybindings/spec/index.md`): T104 set out to wire `vix-
+  script`'s already-recorded `bind_key` requests into "the existing
+  keymap-model override layer" — an audit found no such layer exists, so
+  this designs it instead: a `Binding{key_token, action_id}` schema
+  shared by every built-in binding (across all 10 keymap ids) and every
+  override (a new persisted `keybindings.toml`, plus scripts), one new
+  `on_key` choke point, and conflict handling (two overrides on the same
+  key are both rejected; an override shadowing a built-in is allowed but
+  reported once). Design-only — the `vix-keybindings` crate itself is a
+  documented no-op; the registry and every keymap's conversion land in
+  T104a–T104j, one keymap per task.
 
 ### Changed
 

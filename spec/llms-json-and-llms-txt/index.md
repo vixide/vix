@@ -24,7 +24,7 @@ repository, version, license, sections: [{title, links: [{title, url,
 notes}]}]}` — for tools that want to parse rather than scan markdown.
 
 Both are curated by hand, at the same altitude as [`docs/index.md`](../../docs/index.md)
-(highlights, not an exhaustive dump of all 104 crate specs), and live at the
+(highlights, not an exhaustive dump of all 105 crate specs), and live at the
 repo root next to `README.md`/`AGENTS.md` so a crawler finds them without
 knowing Vix's internal layout.
 

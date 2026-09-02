@@ -279,9 +279,68 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   `vix-modal`, for the same reason. 5 new `tests/integration.rs` cases
   (command run via action + via palette, reload picks up a new script,
   read-only blocks an edit, prompt round-trips to a fresh handler call).
-- [ ] **T104 — Script keybindings.** Allow scripts to bind keys via the
-  existing keymap-model override layer; conflicts reported, never silently
-  clobbered.
+- [x] **T104 — Script keybindings (audit + spec).** Allow scripts to bind
+  keys via the existing keymap-model override layer; conflicts reported,
+  never silently clobbered.
+  Done as an audit + spec, not an implementation — the premise didn't
+  hold. There is no existing "keymap-model override layer": `vix-keymap-
+  model` only covers *which* keymap is active, not user-rebindable keys,
+  and none of the 9 keymap dispatch functions in `src/app.rs` (`vim_
+  normal_key`, `emacs_key`, `vscode_key`, `intellij_key`, `eclipse_key`,
+  `sublime_key`, `global_key`/`apple_ctrl_key`, `global_shared_key`,
+  `spacemacs_key`) are backed by a queryable table — only Emacs/Spacemacs's
+  chord *continuations* are (`EMACS_CTRL_X` etc., `SPACEMACS_LEADER`); the
+  rest are hardcoded `match` arms, several of which call a bespoke method
+  directly (e.g. `apple_ctrl_key`'s `self.editor_motion(KeyCode::Delete)`)
+  with no action-id string to hang a `(token, action) ` table entry on.
+  Asked the user how to scope this given the gap; chose the largest of 3
+  options — build a real, exhaustive registry, not a best-effort or
+  script/config-only one. New `crates/vix-keybindings/spec/index.md`
+  designs it: a `Binding{key_token, action_id}` schema shared by every
+  built-in binding and every override; keyed on `vix-keymap-model`'s 10
+  string keymap ids (not `App`'s private 9-variant enum — `vscode-macos`/
+  `vscode-windows` share one dispatch path but get their own table rows);
+  one new `App::override_key` choke point in `on_key`, inserted between
+  `org_table_key` and the per-keymap `match` (the single place all 9
+  keymaps already funnel through); persisted user overrides via a new
+  `Settings::keybindings_path()`/`keybindings.toml`, exactly the
+  `macros.toml` pattern (`confy` for directory only, plain `toml`+`fs` for
+  the rest); conflict handling fixes `vix-script/spec/index.md`'s already-
+  shipped contract precisely — two overrides claiming the same token are
+  **both rejected** (never a silent winner), an override shadowing a
+  built-in is allowed but reported once informationally. Staged into
+  T104a (crate + convert Emacs, already partly table-driven) through
+  T104j (wire `LoadedScript::bindings`, T102/T103's already-recorded-but-
+  unchecked script key requests, into the choke point — the original ask).
+  New `vix-keybindings` crate is a documented no-op, plain dependency
+  (matching `vix-modal`/`vix-script`'s post-wiring precedent, not a Cargo
+  feature). Bumped the crate count 104→105 across the usual 7 files.
+
+### Keybinding registry (epic, opened by T104's audit — see
+### `crates/vix-keybindings/spec/index.md`)
+
+- [ ] **T104a — Registry crate + Emacs.** `vix-keybindings`: `Binding`/
+  `KeymapTable`/`lookup`/`shortcuts_for`. Convert the Emacs keymap first
+  (already partly table-driven — cheapest proof the schema fits);
+  `App::shortcut_rows` uses `shortcuts_for` for Emacs's contribution.
+- [ ] **T104b — Vim + Spacemacs.** Convert `vim_normal_key`'s table (shared
+  by both keymaps) and Spacemacs's own leader table.
+- [ ] **T104c — VS Code.**
+- [ ] **T104d — IntelliJ (macOS + Windows).**
+- [ ] **T104e — Eclipse.**
+- [ ] **T104f — Sublime Text.**
+- [ ] **T104g — Apple + `global_shared_key`.** The last two dispatch
+  functions; the registry now covers all 10 keymap ids exhaustively.
+- [ ] **T104h — Persisted overrides.** `Settings::keybindings_path()` +
+  `keybindings.toml` load/save (the `macros.toml` pattern).
+- [ ] **T104i — The override choke point.** `App::override_key`, inserted
+  in `on_key` between `org_table_key` and the per-keymap `match`;
+  conflict handling for `keybindings.toml` entries (two overrides on one
+  token: both rejected; shadowing a built-in: allowed, reported once).
+- [ ] **T104j — Wire scripts in.** `LoadedScript::bindings` (T102/T103,
+  already recorded, never checked) through the same choke point — the
+  task this epic was originally scoped as.
+
 - [ ] **T105 — Sample scripts + docs.** ~6 scripts in `examples/scripts/`
   (e.g. wrap-selection-in-markdown-link, insert-file-header,
   title-case-line, dedupe-selection, timestamp-signature, open-scratch-
@@ -522,7 +581,9 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
 
 1. **Run A (infrastructure):** T001–T008.
 2. **Run B (big rocks kickoff):** T101, T111 (specs only), then T102–T105
-   and T112–T115 as follow-on runs.
+   and T112–T115 as follow-on runs. T104 turned out to need its own spec
+   first (`crates/vix-keybindings/spec/index.md`) — its T104a–T104j are a
+   further follow-on chain, one keymap conversion per task.
 3. **Run C (features):** T201–T209 in any order, one branch each.
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
 5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last.

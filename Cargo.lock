@@ -5232,6 +5232,7 @@ dependencies = [
  "vix-http-client",
  "vix-i18n",
  "vix-jwt-tool",
+ "vix-keybindings",
  "vix-keyboard-shortcut-panel",
  "vix-keymap-model",
  "vix-left-dock",
@@ -5680,6 +5681,10 @@ dependencies = [
  "proptest",
  "serde_json",
 ]
+
+[[package]]
+name = "vix-keybindings"
+version = "1.6.0"
 
 [[package]]
 name = "vix-keyboard-shortcut-panel"
