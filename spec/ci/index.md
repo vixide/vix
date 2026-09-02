@@ -231,7 +231,14 @@ what each one makes easy:
   transiently overwrite the baseline with its own speculative size until the
   next `main` pipeline corrects it. Accepted deliberately for the
   simplicity; the job log always shows the true delta at build time
-  regardless.
+  regardless. Its dependency cache is its own key
+  (`binary-size-registry-$CI_COMMIT_REF_SLUG`), and it does not cache
+  `target/` at all — the first version shared the default
+  `$CI_COMMIT_REF_SLUG`/`target/` cache with every other job, so this job's
+  `--release` (LTO-heavy) artifacts were folding into the same blob
+  `fmt`/`clippy`/`test` restore, inflating what an already
+  disk-constrained shared runner has to pull for jobs that have nothing to
+  do with a release build.
 - **Codeberg — not added.** Its runners are a donated, shared resource
   (see above), already reduced to one job specifically to avoid recompiling
   the workspace more than once; a second full `--release` build (LTO +
