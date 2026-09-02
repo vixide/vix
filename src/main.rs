@@ -65,6 +65,7 @@ fn main() -> io::Result<()> {
     let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let mut app = App::new(root, settings);
     app.refresh_git();
+    app.load_scripts();
     // First-run welcome screen (no-op after it has been seen once).
     app.maybe_show_welcome();
 

@@ -399,6 +399,9 @@ fn draw_chooser_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.task_chooser.is_some() {
         draw_task_chooser(app, frame, area);
     }
+    if app.script_chooser.is_some() {
+        draw_script_chooser(app, frame, area);
+    }
     if app.diff_view.is_some() {
         draw_diff_view(app, frame, area);
     }
@@ -1412,6 +1415,22 @@ fn draw_task_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let hint = t!("ui.tasks_hint");
     app.layout.chooser =
         draw_list_chooser(frame, area, &t!("ui.tasks"), &hint, &labels, c.selected);
+}
+
+fn draw_script_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(c) = app.script_chooser.as_ref() else {
+        return;
+    };
+    // Script-authored label first (shown verbatim), the owning script's file
+    // stem second — two scripts can register the same label.
+    let labels: Vec<String> = c
+        .commands
+        .iter()
+        .map(|(stem, cmd)| format!("{} — {stem}", cmd.label))
+        .collect();
+    let hint = t!("ui.scripts_hint");
+    app.layout.chooser =
+        draw_list_chooser(frame, area, &t!("ui.scripts"), &hint, &labels, c.selected);
 }
 
 fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {

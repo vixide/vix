@@ -5,13 +5,16 @@ Vix is compiled-in only today — every command is Rust shipped in the binary.
 [Rhai](https://rhai.rs/) script on disk and get a new palette command, a new
 keybinding, or a one-off buffer transform, without a rebuild.
 
-**Status**: the engine core is implemented (improvement plan T102) — discovery,
-compiling, resource limits, and every API v1 function below, host-agnostic and
-unit-tested with a mock `HostState` (no real `App`, no terminal). T103 (host
-wiring) through T105 (samples + docs) are not done yet: nothing here is
-called from `src/app.rs`, there is no palette entry, no startup load, no
-`script.reload` action. Each remaining task should update this file if
-reality and design turn out to disagree, same as anywhere else.
+**Status**: the engine core (T102) and host wiring (T103) are both implemented.
+Scripts under `Settings::scripts_dir()` and `<App::root>/.vix/scripts/` load
+at startup and on `script.reload`; registered commands are namespaced into
+the command palette and Tools → Scripts → Run… lists them all; `prompt` opens
+a real single-line prompt (`PromptKind::Script`) and answering it re-invokes
+`on_submit`; `message`/`error` go to the message drawer; errors at load or
+invocation are reported, never a panic. T104 (script keybindings — wiring
+`bind_key`'s results into the real keymap) and T105 (sample scripts + docs)
+are not done yet. Each remaining task should update this file if reality and
+design turn out to disagree, same as anywhere else.
 
 ## Why Rhai
 
@@ -106,9 +109,18 @@ fn on_uppercase() {
   text is not routed through `t!`/`locales/app.yml`, the same as a saved
   macro's name or a file name isn't; `handler` names a `fn` in the same
   script, called with no arguments when the command runs.
-- The palette entry itself is namespaced `script:<script-stem>:<id>` (T103)
-  — collisions between two scripts' own `id`s can't happen even if they
-  pick the same one.
+- The palette entry itself is namespaced `script:<script-stem>:<id>` — as
+  implemented (T103), `App::run_action` dispatches any `script:`-prefixed
+  action to the matching script's handler; the id is also what
+  `App::command_recents` persists, so it survives a session restart and
+  keeps ranking that command by recency even after a `script.reload`.
+  Every loaded command is also listed by Tools → Scripts → Run… — a chooser
+  overlay, not a per-command menu item: `vix-menu`'s submenu lists are fixed
+  at compile time, so a runtime-sized, ever-changing command list lives in
+  a chooser instead (`App::script_chooser`), the same shape `tools.tasks`/
+  `Edit → Play Saved Macro…` already use for *their* dynamic lists. The
+  Tools → Scripts menu itself stays exactly two static leaves, `Run…`
+  (`script.run`, opens that chooser) and `Reload` (`script.reload`).
 
 ### Key bindings
 
@@ -145,6 +157,17 @@ transforms" (plan.md) means here: a script *implements* its own transform
 out of these primitives, rather than this crate exposing vix's internal
 `vix-textops` functions as a second, parallel API.
 
+**As wired (T103)**: `set_buffer_text` calls `Editor::set_content` (one undo
+step); `set_selection_text` calls `Editor::paste_text`, the same path a real
+paste uses — it replaces the selection if there is one, else inserts at the
+cursor, matching this table's "with no selection, insert at the cursor"
+exactly, and stays one undo step either way. Both are blocked on a
+read-only buffer (reported via the message drawer, § below); a bare
+`set_cursor_offset` with no text change still moves the cursor even then —
+moving the cursor isn't an edit. With no active tab (or an image tab, which
+has no text buffer), every getter returns empty/zero and every setter is a
+no-op; `message`/`error`/`prompt` still apply regardless.
+
 ### Prompting for input
 
 ```rhai
@@ -165,7 +188,11 @@ fn on_rename_answer(answer) {
   a resumed `on_rename`; whatever `on_rename` needs after the answer has to
   live in script-global state or be re-derived, since Rhai state is not
   captured across the two calls beyond the script's own global scope. Esc
-  cancels — `on_submit` is not called at all.
+  cancels — `on_submit` is not called at all. As implemented (T103), this is
+  a real `App::prompt` (`PromptKind::Script`) — the same single-line prompt
+  overlay every other host-driven prompt uses — showing `message` as its
+  title verbatim; `App::pending_script_prompt` carries which script and
+  which `on_submit` to re-invoke, and is cleared on both submit and Esc.
 - No richer prompt shapes (multi-field, a chooser list, a `y/n/!/q`
   step-through) in v1 — this is deliberately the same shape as a saved
   macro's rename prompt, not a UI toolkit.
@@ -190,8 +217,9 @@ opened is, and "never crash" is the literal bar (tasks.md T101):
   scripting down.
 - **At invocation** (a handler runs): a runtime error — a Rhai type error,
   an unhandled exception the script raised, a resource limit hit — aborts
-  just that call. The error (script name, handler name, the Rhai message)
-  goes to the message drawer. **This is not transactional**: whatever
+  just that call. The error (script stem plus the Rhai message, which
+  itself typically names the failing function) goes to the message drawer.
+  **This is not transactional**: whatever
   buffer mutations the handler already made before the error stay made:
   Rhai has no rollback, and this crate does not add one for v1. A script
   that must leave the buffer consistent on failure needs to structure its
@@ -200,15 +228,17 @@ opened is, and "never crash" is the literal bar (tasks.md T101):
   incrementally) — worth saying explicitly in the T105 sample-script docs,
   not just here.
 
-## Feature flag
+## Packaging: not a Cargo feature
 
-`scripting`, **default-on** (tasks.md T101). Mirrors the existing
-`lang-*`/`syntax-*` pattern for optional Tree-sitter grammars: the root
-`vix` package depends on `vix-script` as `optional = true`, and the
-`scripting` feature is exactly `["dep:vix-script"]`. Building with
-`--no-default-features` (already how a user opts out of syntax highlighting
-entirely) also drops scripting; there is no separate "everything but
-scripting" toggle beyond the standard Cargo default-features mechanism.
+T101 originally gated this behind a `scripting` Cargo feature (default-on,
+mirroring the `lang-*`/`syntax-*` optional-grammar pattern), on the
+reasoning that `--no-default-features` should be able to drop it the same
+way it drops syntax highlighting. T103 revised that once `vix-script`
+became genuinely wired into the App shell (startup load, palette, menu,
+prompt system) — at that point it's just as "always compiled in" as any
+other core feature, e.g. `vix-editor` or `vix-menu` are not optional
+either. `vix-script` is now a plain, non-optional dependency of the root
+`vix` package, the same call `vix-modal` made in T111 for the same reason.
 
 ## What's deliberately not in v1
 

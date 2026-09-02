@@ -381,6 +381,16 @@ impl Settings {
             .and_then(|p| p.parent().map(|d| d.join("themes")))
     }
 
+    /// Directory holding global user `.rhai` scripts (`<config dir>/scripts/`),
+    /// or `None` if the config location cannot be determined. See
+    /// `crates/vix-script/spec/index.md`, "Script discovery".
+    #[must_use]
+    pub fn scripts_dir() -> Option<std::path::PathBuf> {
+        confy::get_configuration_file_path(APP_NAME, Some(CONFIG_NAME))
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join("scripts")))
+    }
+
     /// File holding the user's personal spellcheck word list, one word per line
     /// (`<config dir>/user_dictionary.txt`), or `None` if the config location
     /// cannot be determined. Words added via the spell-suggest popup persist here.
