@@ -33,6 +33,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `binary-size` job that measures the stripped release binary on every push,
   caches `main`'s size for comparison, and posts a sticky PR comment with the
   size and delta; GitLab logs the same measurement to the job output.
+- **`AI_STATEMENT.md`**: how AI-authored work on this project is disclosed
+  (commit trailers, session links), what bar it has to clear (the same
+  spec-driven workflow and gate as anything else), and what an AI agent is —
+  and isn't — pre-authorized to do without asking first. Linked from
+  `README.md`, `AGENTS.md`, and `docs/index.md`.
 
 ## [1.6.0] - 2026-08-29
 

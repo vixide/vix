@@ -4,6 +4,14 @@ Guidance for AI agents and human contributors working in the Vix repository.
 This file is the entry point; see [`agents/`](agents/) for topic guides and
 [`index.md`](index.md) for the full documentation map.
 
+## Governance
+
+Read [`AI_STATEMENT.md`](AI_STATEMENT.md) before doing anything outward-facing
+or hard to reverse (a force-push, publishing a release, publishing a package).
+It says what an AI agent is and isn't pre-authorized to do here without asking
+first — the default is to confirm; standing exceptions are listed there and
+nowhere else.
+
 ## What Vix is
 
 Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust IDE"),
