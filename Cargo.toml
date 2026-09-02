@@ -306,6 +306,8 @@ vix-macros = { path = "crates/vix-macros", version = "1.6.0" }
 vix-markdown-preview = { path = "crates/vix-markdown-preview", version = "1.6.0" }
 # The IANA-style media-type (MIME) table and the picker's filter + selection.
 vix-media-type = { path = "crates/vix-media-type", version = "1.6.0" }
+# A real modal-editing engine for the Vi/Spacemacs keymaps (design-only for now).
+vix-modal = { path = "crates/vix-modal", version = "1.6.0" }
 # A curated set of Nerd Font glyphs and the character-picker grid state.
 vix-nerd-font-picker = { path = "crates/vix-nerd-font-picker", version = "1.6.0" }
 # Basic Org-mode operations: headline structure editing and lightweight export.

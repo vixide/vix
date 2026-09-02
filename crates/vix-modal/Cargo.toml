@@ -1,0 +1,8 @@
+[package]
+name = "vix-modal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A real modal-editing engine for the Vi/Spacemacs keymaps: modes, operator x motion composition, counts, registers, text objects, dot-repeat."

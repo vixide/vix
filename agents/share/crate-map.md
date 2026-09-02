@@ -2,7 +2,7 @@
 
 Vix is a **Cargo workspace** (`[workspace] members = ["crates/*"]`) on **edition
 2024**. The root package `vix` (`src/`) is the thin **App shell** — CLI, event
-loop, `App` state, rendering, and the explorer — and it depends on the 103
+loop, `App` state, rendering, and the explorer — and it depends on the 104
 `vix-*` **member crates** under `crates/` that hold every feature plus the custom
 editor widget (`vix-editor-core`). Shared reference for where things live.
 
@@ -91,6 +91,7 @@ through the workspace dependency graph (e.g. `vix-editor`, `vix-menu`,
 | Run / test  | `vix-tasks` (named `tasks.toml` tasks, project-type lifecycle commands, task discovery, monorepo subprojects, test-at-point — Project menu), `vix-test-runner` (parse test output into a pass/fail tree), `vix-terminal` (integrated shell), `vix-diff-view` (compare-with-file). |
 | Config      | `vix-editorconfig` (`.editorconfig` parsing), `vix-macros` (persisted keyboard macros), `vix-workspace` (`.toml` workspace: folders + files + split pane tree), `vix-settings` (confy-backed `Settings`), `vix-session` (save/restore). |
 | Scripting   | `vix-script` — Rhai user scripting (`crates/vix-script/spec/index.md`); optional `scripting` feature, default-on. **Design-only** as of T101: no functional code until T102. |
+| Modal editing | `vix-modal` — the real modal-editing engine for the Vi/Spacemacs keymaps: modes, operator × motion composition, counts, registers, text objects, dot-repeat (`crates/vix-modal/spec/index.md`); replaces `vim_normal_key`'s ad hoc binding table in `src/app.rs`. **Design-only** as of T111: no functional code until T112. |
 | AI          | `vix-ai-panel` (chat panel), `vix-ai-diff` (AI diff review).                  |
 | Database    | `vix-db` (the **DB** menu workbench, `crates/vix-db/spec`): a full-screen overlay over embedded sqlx `Any` drivers (bundled SQLite, pure-Rust Postgres/MySQL over rustls). Submodules: `session` (one persistent connection per workbench on a worker thread; blocking `run` + async `send`/`poll` streaming `Chunk`s + `restart`), `connect` (saved-connection model + URLs), `catalog` (schema tree + per-engine metadata/EXPLAIN/DDL SQL), `editor`/`highlight`/`complete`/`format` (SQL editor: statement split, write detection, JOIN-aware autocomplete, beautify), `results` (grid: filter/sort/select/append), `store` (history + saved queries + session query log), `export` (6 formats), `ai` (schema-only NL→SQL, `spawn_ai` bridge), `chart` (ASCII bars), `erd` (Mermaid ER diagram), `import` (CSV/TSV → table), `params` (`:name` binds), `secret` (credential waterfall: `password_command` + OS keyring), `tunnel` (SSH `-L` forward). |
 | Text tools  | `vix-format-tool`, `vix-jwt-tool`, `vix-base-tool`, `vix-base64-tool`, `vix-url-tool`, `vix-uuid-tool`, `vix-zid-tool`, `vix-checksum-tool`, `vix-regex-tool`, `vix-markdown-preview`, `vix-convert-tabular`, `vix-convert-from-*-into-*-tool` (12). |
@@ -117,7 +118,7 @@ through the workspace dependency graph (e.g. `vix-editor`, `vix-menu`,
 
 | Path            | Contents                                                            |
 | --------------- | ------------------------------------------------------------------- |
-| `crates/`       | The 103 `vix-*` workspace member crates (each with its own `spec/`).|
+| `crates/`       | The 104 `vix-*` workspace member crates (each with its own `spec/`).|
 | `langs/`        | Tree-sitter highlight queries (`<lang>/highlights.scm`), embedded.  |
 | `locales/`      | `app.yml` — rust-i18n translations (English fallback).              |
 | `dictionaries/` | Hunspell dictionaries — gitignored; see `crates/vix-spellcheck/spec/dictionaries`. |

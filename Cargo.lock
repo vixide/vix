@@ -5165,6 +5165,7 @@ dependencies = [
  "vix-markdown-preview",
  "vix-media-type",
  "vix-menu",
+ "vix-modal",
  "vix-nerd-font-picker",
  "vix-org",
  "vix-org-capture",
@@ -5674,6 +5675,10 @@ dependencies = [
  "vix-locale-model",
  "vix-time-zone-model",
 ]
+
+[[package]]
+name = "vix-modal"
+version = "1.6.0"
 
 [[package]]
 name = "vix-nerd-font-picker"
