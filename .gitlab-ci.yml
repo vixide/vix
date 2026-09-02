@@ -146,15 +146,22 @@ test:
 # speculative size until the next `main` pipeline corrects it. A narrow
 # window, accepted deliberately for the simplicity — the job log always shows
 # the true delta at build time regardless.
+#
+# Deliberately its own cache key (`binary-size-registry-$CI_COMMIT_REF_SLUG`),
+# not the shared `$CI_COMMIT_REF_SLUG` default every other job uses, and
+# `target/` is not cached at all here: this job's `--release` build would
+# otherwise fold its (large, LTO-heavy) artifacts into the same cache blob
+# `fmt`/`clippy`/`test` restore, inflating what every job on this
+# already disk-constrained shared runner has to pull. Caching just the
+# registry keeps repeat dependency downloads cheap without that risk.
 binary-size:
   stage: test
   cache:
-    - key: "$CI_COMMIT_REF_SLUG"
+    - key: "binary-size-registry-$CI_COMMIT_REF_SLUG"
       paths:
         - .cargo/registry/index/
         - .cargo/registry/cache/
         - .cargo/git/db/
-        - target/
     - key: binary-size-main
       paths:
         - previous-binary-size.txt
