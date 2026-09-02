@@ -134,6 +134,44 @@ test:
     - cargo build --workspace --all-targets
     - cargo test --workspace
 
+# T008 (tasks.md): binary-size visibility, at a fraction of the GitHub job's
+# complexity (see spec/ci/index.md) — posting a merge-request note needs an
+# API token this pipeline is not given, so this reports to the job log
+# instead. `--release` (default features) is what a user's build actually
+# gets — the whole reason `[profile.release]` sets `strip = true`.
+#
+# The `binary-size-main` cache entry always saves: GitLab overwrites a cache
+# key freely (no `restore-keys`-prefix trick needed, unlike GitHub), so a
+# merge-request pipeline can transiently overwrite the baseline with its own
+# speculative size until the next `main` pipeline corrects it. A narrow
+# window, accepted deliberately for the simplicity — the job log always shows
+# the true delta at build time regardless.
+binary-size:
+  stage: test
+  cache:
+    - key: "$CI_COMMIT_REF_SLUG"
+      paths:
+        - .cargo/registry/index/
+        - .cargo/registry/cache/
+        - .cargo/git/db/
+        - target/
+    - key: binary-size-main
+      paths:
+        - previous-binary-size.txt
+  script:
+    - cargo build --release
+    - BYTES=$(stat -c%s target/release/vix)
+    - echo "Binary size (release, default features) ${BYTES} bytes"
+    - |
+      if [ -f previous-binary-size.txt ]; then
+        PREV=$(cat previous-binary-size.txt)
+        DELTA=$((BYTES - PREV))
+        echo "vs last recorded size (${PREV} bytes): ${DELTA} bytes"
+      else
+        echo "No baseline recorded yet."
+      fi
+    - echo "$BYTES" > previous-binary-size.txt
+
 doc:
   stage: test
   variables:

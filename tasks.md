@@ -156,9 +156,19 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   trip, not a `serde_yaml` or Vix bug; switched to a relative-tolerance
   numeric comparison. Invocation documented in `agents/conventions.md` (the
   actual `cargo +nightly fuzz run <target>` command, not just a pointer).
-- [ ] **T008 — Binary-size tracking.** CI step that builds
+- [x] **T008 — Binary-size tracking.** CI step that builds
   `--release` (default features), records the stripped binary size, and
   comments/records it so growth is visible per PR.
+  Done — deliberately asymmetric across forges (see `spec/ci/index.md`'s
+  "Binary size" section for the full reasoning): GitHub gets a `binary-size`
+  job that caches every `main` build's size (via `restore-keys` prefix
+  matching — a cache key can't be overwritten) and posts a sticky PR comment
+  with the size and delta; GitLab gets the same measurement logged to the
+  job output (no API token for MR notes) with a simpler always-overwrite
+  cache; Codeberg gets neither — its runners are a donated, shared resource
+  already reduced to one job, and a second full `--release` (LTO + strip,
+  the slowest profile in the tree) for an informational-only metric GitHub
+  already reports isn't a cost that CI should carry.
 
 ## Phase 1 — Capabilities
 
