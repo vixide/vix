@@ -8,6 +8,8 @@ vix
 
 # Rust crates & ecosystem
 ratatui
+rhai
+sandboxing
 ropey
 crossterm
 walkdir

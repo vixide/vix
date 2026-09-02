@@ -41,6 +41,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ready to do that for — neither extends to cutting a version-tag release
   or creating a GitHub/GitLab/Codeberg Release. Linked from `README.md`,
   `AGENTS.md`, `docs/index.md`, and `spec/ci/index.md`.
+- **Scripting design spec** (improvement plan T101, `crates/vix-script/spec/index.md`):
+  Rhai as the engine, script discovery (`~/.config/vix/scripts/*.rhai` and
+  project `.vix/scripts/`), the API v1 surface (register command, bind key,
+  buffer/selection get/set, prompt, message), error handling, and
+  sandboxing. Design-only — the `vix-script` crate itself is a documented
+  no-op behind a new default-on `scripting` feature; the engine and host
+  wiring land in T102+.
 
 ## [1.6.0] - 2026-08-29
 

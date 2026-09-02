@@ -1,0 +1,8 @@
+[package]
+name = "vix-script"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Rhai-based user scripting: load, sandbox, and run scripts against the active buffer."

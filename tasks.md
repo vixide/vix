@@ -174,13 +174,35 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
 
 ### Scripting (epic — spec first, then slices)
 
-- [ ] **T101 — Scripting spec.** Write `crates/vix-script/spec/index.md`
+- [x] **T101 — Scripting spec.** Write `crates/vix-script/spec/index.md`
   before any code: Rhai as the engine (pure Rust, no unsafe); script
   discovery (`~/.config/vix/scripts/*.rhai`, project `.vix/scripts/`);
   API v1 surface (register command, bind key, buffer get/set text,
   selection get/set, prompt, message, apply-transform); error UX (script
   errors go to the message drawer, never crash); the `scripting` cargo
   feature (default on). Get the spec merged as its own branch.
+  Done — a real crate had to exist alongside the spec (`workspace_crates()`
+  in `scripts/check-docs` requires `crates/<name>/Cargo.toml`, and
+  `[workspace] members = ["crates/*"]` needs every member directory to be a
+  buildable package), so T101 also scaffolds `vix-script` as a documented
+  no-op: no dependencies, no public items beyond the crate-root doc pointing
+  to the spec. Root `Cargo.toml` gets `vix-script` as an `optional`
+  dependency and a `scripting` feature (`default = [..., "scripting"]`,
+  mirroring the `lang-*`/`syntax-*` pattern) — wired now per the task's
+  explicit "the `scripting` cargo feature (default on)" deliverable, even
+  though nothing uses it until T102. Settled two design questions the task
+  list left open: `prompt()`'s execution model (a script cannot suspend
+  mid-handler — the answer re-invokes a *named* function as a fresh call,
+  not a resumed one, since Rhai's embedding here is synchronous, no
+  coroutines) and what "run textops-style transforms" (plan.md) actually
+  means for the API (the buffer/selection get/set primitives *are* the
+  mechanism — a script implements its own transform out of them, rather
+  than `vix-textops`'s internal functions being exposed as a second API).
+  Registered in `agents/share/crate-map.md`; bumped the "102 crates" count
+  to 103 everywhere it's stated (`AGENTS.md`, `CLAUDE.md`,
+  `spec/index/index.md`, `docs/architecture/index.md`,
+  `crates/vix-i18n/spec/index.md`, `spec/llms-json-and-llms-txt/index.md`,
+  `agents/share/crate-map.md` ×2).
 - [ ] **T102 — `vix-script` core.** New crate: Rhai engine wrapper, script
   loading, the buffer/selection/message API bound to host callbacks, unit
   tests with a mock host.

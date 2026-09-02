@@ -5178,6 +5178,7 @@ dependencies = [
  "vix-regex-tool",
  "vix-right-dock",
  "vix-roam",
+ "vix-script",
  "vix-session",
  "vix-settings",
  "vix-snippet-tool",
@@ -5759,6 +5760,10 @@ version = "1.6.0"
 dependencies = [
  "regex",
 ]
+
+[[package]]
+name = "vix-script"
+version = "1.6.0"
 
 [[package]]
 name = "vix-session"
