@@ -121,7 +121,12 @@ on top.
   and still means something — on the CI that is not that platform.
 - Pure parsers and text transforms get a fuzz target under `fuzz/fuzz_targets/`;
   anything on the per-keystroke or per-frame path gets a Criterion benchmark
-  under `benches/`. See [`spec/test/index.md`](../spec/test/index.md).
+  under `benches/`. Run one with `cargo +nightly fuzz run <target>` (needs
+  `cargo install cargo-fuzz`; add `-- -max_total_time=600` for a fixed-length
+  run rather than fuzzing until Ctrl+C) — it's a separate workspace
+  (`fuzz/Cargo.toml`) so `cargo build`/`cargo check --workspace` at the repo
+  root never touch it. See [`fuzz/README.md`](../fuzz/README.md) (target list,
+  reproducing/minimizing a crash) and [`spec/test/index.md`](../spec/test/index.md).
 - When the *layout itself* is what's under test (a dialog's framing, a dock's
   column widths, a long line truncating), add a golden-screen test to
   `tests/snapshots.rs` instead of a state assertion — pin the locale to `en`

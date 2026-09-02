@@ -19,10 +19,19 @@ members = ["."]
 
 [dependencies]
 libfuzzer-sys = "0.4"
+regex = "1"
+serde_json = "1"
 
 vix-conflict-tool = { path = "../crates/vix-conflict-tool" }
+vix-convert-from-json-into-toml-tool = { path = "../crates/vix-convert-from-json-into-toml-tool" }
+vix-convert-from-json-into-yaml-tool = { path = "../crates/vix-convert-from-json-into-yaml-tool" }
+vix-convert-from-toml-into-json-tool = { path = "../crates/vix-convert-from-toml-into-json-tool" }
+vix-convert-from-yaml-into-json-tool = { path = "../crates/vix-convert-from-yaml-into-json-tool" }
+vix-convert-tabular = { path = "../crates/vix-convert-tabular" }
+vix-find-panel = { path = "../crates/vix-find-panel" }
 vix-http-client = { path = "../crates/vix-http-client" }
 vix-lsp-core = { path = "../crates/vix-lsp-core" }
+vix-macros = { path = "../crates/vix-macros" }
 vix-org-table = { path = "../crates/vix-org-table" }
 vix-textops = { path = "../crates/vix-textops" }
 vix-vcard-parser = { path = "../crates/vix-vcard-parser" }
@@ -65,6 +74,34 @@ bench = false
 [[bin]]
 name = "http_request"
 path = "fuzz_targets/http_request.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "query_replace"
+path = "fuzz_targets/query_replace.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "tabular_convert"
+path = "fuzz_targets/tabular_convert.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "structured_convert"
+path = "fuzz_targets/structured_convert.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "macro_tokens"
+path = "fuzz_targets/macro_tokens.rs"
 test = false
 doc = false
 bench = false
