@@ -7,7 +7,7 @@ Vix is a **Cargo workspace** (edition 2024). The root package `vix` is a thin
 top. The binary owns only the CLI, the terminal lifecycle, the event loop, and
 process suspend; the shell library holds the `App` state, event routing,
 rendering (`src/ui.rs`), and the explorer. Everything else is a **`vix-*` member
-crate** under `crates/` — 102 of them, each independently testable. This keeps
+crate** under `crates/` — 103 of them, each independently testable. This keeps
 the editing logic terminal-independent, so it can be unit-tested and driven from
 examples without a real TTY (see `tests/integration.rs` and `examples/`).
 
