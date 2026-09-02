@@ -5,13 +5,13 @@ Vix is compiled-in only today — every command is Rust shipped in the binary.
 [Rhai](https://rhai.rs/) script on disk and get a new palette command, a new
 keybinding, or a one-off buffer transform, without a rebuild.
 
-**Status**: design-only (improvement plan T101). This spec is written before
-any of `vix-script`'s functional code, so it describes intent, not
-already-built behavior — the opposite of most specs in this repo. T102
-(engine core) through T105 (samples + docs) implement it in slices; each
-should update this file if reality and design turn out to disagree, same as
-anywhere else. Today the crate is a documented no-op: no dependencies, no
-public items, just this spec and the crate-root doc comment pointing here.
+**Status**: the engine core is implemented (improvement plan T102) — discovery,
+compiling, resource limits, and every API v1 function below, host-agnostic and
+unit-tested with a mock `HostState` (no real `App`, no terminal). T103 (host
+wiring) through T105 (samples + docs) are not done yet: nothing here is
+called from `src/app.rs`, there is no palette entry, no startup load, no
+`script.reload` action. Each remaining task should update this file if
+reality and design turn out to disagree, same as anywhere else.
 
 ## Why Rhai
 
@@ -78,9 +78,10 @@ any script — a maximum operation count per invocation (so an infinite loop
 is caught deterministically, without a wall-clock timer or a second
 thread), plus caps on expression depth, string size, and array/map size.
 Hitting a cap ends the script the same way any other runtime error does
-(§ Error handling) — the message names which limit was hit. Exact numbers
-are a T102 implementation detail, not fixed here; they should be generous
-enough that no reasonable script notices them.
+(§ Error handling) — Rhai's own error message names which limit was hit.
+As implemented (T102): 10,000,000 operations, expression/statement depth 64,
+1,000,000-character strings, 100,000-element arrays/maps — generous enough
+that no reasonable script should ever notice them; revisit if one does.
 
 ## API v1
 
@@ -114,7 +115,11 @@ fn on_uppercase() {
 - `bind_key(key_token, command_id)` — binds a key to a command this same
   script already registered. `key_token` reuses `vix-macros`' token
   grammar exactly (`C-`/`A-`/`S-` modifier prefixes, e.g. `C-c`, `S-Tab`,
-  `Enter`, `a`) rather than inventing a second one.
+  `Enter`, `a`) rather than inventing a second one — as implemented (T102),
+  the token is validated with `vix_macros::decode_key` at registration
+  time, so a malformed token (typo'd modifier, unknown key name) is a load
+  error (§ Error handling) naming the bad token, not a binding that's
+  silently recorded and never fires.
 - Conflict handling is T104's job (binding against "the existing
   keymap-model override layer"), but the contract is fixed here: a
   conflicting `bind_key` is **reported, never silently clobbered** — either
@@ -226,23 +231,41 @@ needs to answer to unblock T102:
   operate on the *active* buffer only; a script cannot iterate open tabs or
   read another file.
 
-## Planned crate shape (T102+)
+## Crate shape (implemented, T102)
 
-Not binding — the actual module layout is T102's call — but a starting
-shape worth writing down so T102 doesn't start from a blank page:
+- `engine.rs` — the Rhai `Engine` construction (resource limits, § Execution
+  model) and every native function in § API v1; the types that cross the
+  host boundary: `Command`, `KeyBinding`, `LoadedScript`, `LoadError`,
+  `HostMessage`, `PromptRequest`, `HostState`, `InvokeOutcome`, and the
+  `Runtime` struct itself (`Runtime::new`, `Runtime::load`,
+  `Runtime::invoke`).
+- `discovery.rs` — `discover(global_dir, project_dir) -> Vec<DiscoveredScript>`:
+  non-recursive `.rhai` listing under each (both optional) with the
+  project-wins stem-shadowing rule. Takes plain `&Path`s — it does not call
+  `Settings::scripts_dir()` or know about `App::root` itself; resolving
+  *which* directories those are is T103's job (host wiring), kept out of
+  this crate so it stays host-agnostic.
+- `lib.rs` — the public surface: re-exports plus `load_all(runtime,
+  global_dir, project_dir) -> (Vec<LoadedScript>, Vec<LoadError>)`, which
+  combines `discover` + reading each file + `Runtime::load`, skipping a
+  script that fails to read or fails to load without aborting the rest.
 
-- `engine.rs` — the Rhai `Engine` construction: resource limits (§
-  Execution model), the native function registrations (§ API v1) bound to
-  host callbacks the App shell supplies.
-- `discovery.rs` — walking `Settings::scripts_dir()` and
-  `<root>/.vix/scripts/`, the stem-collision shadowing rule, `.rhai`
-  parsing.
-- `lib.rs` — the public surface `src/app.rs` calls: load scripts, list
-  registered commands, run one, reload.
+**`Runtime`'s design**: a snapshot-in/effects-out model rather than a host
+trait object or `unsafe` pointer games (`#![forbid(unsafe_code)]` is a hard
+rule here too). `Runtime::invoke` takes an owned [`HostState`] built by the
+caller from the real editor, seeds an `Rc<RefCell<HostState>>` the
+registered native functions close over, runs the handler, and hands the
+mutated `HostState` back — the host then applies whatever `*_written` flags
+came back true, shows any `messages`, and opens a `prompt` if requested.
+Nothing here holds a live reference into the real `App`; each `invoke` is a
+self-contained value round trip. `register_command`/`bind_key` use a
+separate `Rc<RefCell<Registry>>`, reset before each `Runtime::load`, since
+they're load-time-only and unrelated to a running handler's state.
 
-Unit tests drive this against a **mock host** — a small trait or closure
-set standing in for the real `App`'s buffer/selection/prompt/message
-methods — so `vix-script`'s own tests need no terminal, no `App`, and no
-real files on disk beyond a temp `.rhai` fixture, the same
-terminal-independent-testing principle as everywhere else in this repo
-(`spec/test/index.md`).
+Every `vix-script` test drives this directly — construct a `Runtime`, `load`
+an inline `.rhai` source string, `invoke` a handler with a hand-built
+`HostState`, assert on the `InvokeOutcome` — no real `App`, no terminal, and
+no files on disk beyond `discovery.rs`'s/`load_all`'s own filesystem tests
+(a `std::env::temp_dir()`-rooted scratch directory, same pattern as
+`vix-editorconfig`'s), the same terminal-independent-testing principle as
+everywhere else in this repo (`spec/test/index.md`).

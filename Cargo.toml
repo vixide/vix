@@ -62,6 +62,7 @@ portable-pty = "0.9"
 vt100 = "0.15"
 anyhow = "1.0"
 arboard = { version = "3.6", default-features = false }
+rhai = "1.26"
 ratatui-core = "0.1"
 ropey = "1.6"
 rust-embed = { version = "8.12", features = ["include-exclude"] }

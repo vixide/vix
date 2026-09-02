@@ -203,9 +203,41 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   `spec/index/index.md`, `docs/architecture/index.md`,
   `crates/vix-i18n/spec/index.md`, `spec/llms-json-and-llms-txt/index.md`,
   `agents/share/crate-map.md` ×2).
-- [ ] **T102 — `vix-script` core.** New crate: Rhai engine wrapper, script
+- [x] **T102 — `vix-script` core.** New crate: Rhai engine wrapper, script
   loading, the buffer/selection/message API bound to host callbacks, unit
   tests with a mock host.
+  Done — `vix-script` is now a real, host-agnostic crate (three modules:
+  `discovery.rs`, `engine.rs`, `lib.rs`), 14 unit tests, all against inline
+  `.rhai` source strings and a hand-built `HostState` — no real `App`, no
+  terminal. `Runtime` uses a snapshot-in/effects-out design rather than a
+  host trait object or any `unsafe`: `Runtime::invoke` takes an owned
+  `HostState`, seeds an `Rc<RefCell<HostState>>` the registered native
+  functions close over, runs the handler, and returns the mutated state —
+  the host applies whichever `*_written` flags came back true. Every v1
+  function from the spec is implemented: `register_command`, `bind_key`
+  (validates the token via `vix_macros::decode_key` at registration time —
+  a malformed token is a load error, not a binding that silently never
+  fires — a small spec addition this task made explicit), `buffer_text`/
+  `set_buffer_text`, `selection_text`/`set_selection_text`, `current_line`,
+  `cursor_offset`/`set_cursor_offset` (clamped to the buffer's character
+  length), `prompt`, `message`/`error`. Resource limits set as specced:
+  10M operations, 64/64 expression/statement depth, 1M-char strings,
+  100k-element arrays/maps — verified an infinite-loop script is actually
+  caught deterministically (a real unit test, not just a claim).
+  `discovery::discover(global_dir, project_dir)` takes plain `&Path`s and
+  knows nothing about `Settings`/`App::root` — resolving *which*
+  directories those are stays T103's job, keeping this crate host-agnostic.
+  New workspace dependency `rhai = "1.26"`, plus `vix-macros` as a sibling
+  crate dependency (for `decode_key`). `cargo deny` surfaced a real,
+  unavoidable finding: `rhai` pulls in `smartstring` as a **mandatory**
+  (non-optional, no feature to drop it) dependency, and `smartstring` is
+  now unmaintained (RUSTSEC-2026-0249, no vulnerability, repo archived
+  2026-05-03) — added a dated `deny.toml` ignore entry with the dependency
+  path and a revisit condition, same pattern as the pre-existing `paste`/
+  RUSTSEC-2024-0436 entry. `spec/index.md` and `agents/share/crate-map.md`
+  updated to reflect the engine core being done and T103+ still pending
+  (no palette entry, no startup load, nothing called from `src/app.rs`
+  yet).
 - [ ] **T103 — Host wiring.** App shell: load scripts at startup, surface
   registered commands in the palette (prefixed, e.g. `script:`), execute
   with the active editor, route errors to messages. Action ids
