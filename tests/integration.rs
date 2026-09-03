@@ -6766,6 +6766,70 @@ fn vim_keymap_operators_and_motions() {
     );
 }
 
+// ----- vix-keybindings registry conversion (improvement plan T104b) -------
+// vim_normal_key now dispatches through vix_keybindings::lookup instead of
+// its own hardcoded match; these cover the insert-mode-entry compound
+// actions (a/A/I/o/O -- each now its own "vim.*" action id, T104b) and
+// yy, none of which the existing Vim tests above happened to exercise.
+
+#[test]
+fn vim_keymap_insert_entry_variants_and_yank() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "vi".to_string();
+    app.on_key(key('i'));
+    type_str(&mut app, "abc");
+    app.on_key(esc());
+
+    // `A` (vim.append_end): enters Insert at the end of the line.
+    app.on_key(key('A'));
+    assert_eq!(app.mode_indicator().as_deref(), Some("-- INSERT --"));
+    app.on_key(key('!'));
+    app.on_key(esc());
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], "abc!");
+
+    // `0` back to column 1, `I` (vim.insert_line_start): enters Insert
+    // before the first character.
+    app.on_key(key('0'));
+    app.on_key(key('I'));
+    app.on_key(key('>'));
+    app.on_key(esc());
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], ">abc!");
+
+    // `a` (vim.append): enters Insert one char to the right of the cursor.
+    app.on_key(key('0'));
+    app.on_key(key('a'));
+    app.on_key(key('X'));
+    app.on_key(esc());
+    assert_eq!(app.editor.active_tab().unwrap().lines()[0], ">Xabc!");
+
+    // `o` (vim.open_below) / `O` (vim.open_above): open a new line and
+    // enter Insert on it.
+    app.on_key(key('o'));
+    app.on_key(key('2'));
+    app.on_key(esc());
+    app.on_key(key('O'));
+    app.on_key(key('1'));
+    app.on_key(esc());
+    let lines = app.editor.active_tab().unwrap().lines();
+    assert_eq!(
+        lines,
+        vec![">Xabc!".to_string(), "1".to_string(), "2".to_string()]
+    );
+
+    // `yy` copies the current line without changing the buffer — unlike
+    // `dd`, already covered above. (The paste round-trip isn't asserted
+    // here: the clipboard is process-shared, so parallel tests could race
+    // it, the same reason `emacs_keymap_meta_and_window_chords` skips it.)
+    let before = app.editor.active_tab().unwrap().text();
+    app.on_key(key('y'));
+    app.on_key(key('y'));
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        before,
+        "yy doesn't mutate"
+    );
+}
+
 #[test]
 fn vim_command_line_goes_to_line() {
     let mut app = app_at(Path::new("."));

@@ -9,15 +9,16 @@ layer" turned out not to exist: this document designs it, so scripts (and,
 built the same way, a user's own persisted overrides) have something real
 to plug into.
 
-**Status**: T104a done — the registry API is real and one keymap (Emacs) is
-fully converted; T104b onward implement the remaining slices (§ "Staged
-plan"). The rest of this spec otherwise still describes intent, not
-built behavior, for those slices — each should update this file if reality
-and design turn out to disagree, same as T104a already did once (§ "Schema
-refinement, made during T104a" below): the original flat `KeymapTable
-{keymap_id, bindings}` design turned out not to fit a chorded keymap at
-all, discovered only once Emacs's actual dispatch code was read closely
-enough to convert for real.
+**Status**: T104a (Emacs) and T104b (Vi + Spacemacs) done — three keymaps
+fully converted. T104c onward implement the remaining slices (§ "Staged
+plan"). The rest of this spec otherwise still describes intent, not built
+behavior, for those slices — each should update this file if reality and
+design turn out to disagree, same as T104a and T104b each already did once
+(§ "Schema refinement, made during T104a" and § "A second schema addition,
+made during T104b" below): a "design-only" spec for something not yet
+built is a best-effort guess, and the actual conversion is where its real
+shape gets found — worth expecting again for T104c–g, not treating as a
+surprise each time.
 
 ## The audit
 
@@ -219,7 +220,7 @@ enum this crate would otherwise need. `vscode-macos` and `vscode-windows`
 get identical binding tables (small, deliberate duplication) rather than
 inventing a second, coarser enum just to avoid it.
 
-### Registry API (as implemented, T104a — see "Schema refinement" below)
+### Registry API (as implemented, T104a/T104b — see the two schema-addition notes below)
 
 ```rust
 /// One dispatch depth within a keymap: the top level (`""`), or a specific
@@ -251,6 +252,20 @@ pub fn lookup(keymap_id: &str, context: &str, token: &str) -> Option<&'static st
 /// checkable at all (§ Override layer, § "Overrides never see a
 /// non-empty context").
 pub fn shortcuts_for(action_id: &str) -> Vec<(&'static str, &'static str, &'static str)>;
+
+/// (T104b) The result of matching a growing multi-character sequence — a
+/// `key_token` that's a whole typed sequence, not one keypress, the shape
+/// a leader-style accumulator needs (§ "A second schema addition, made
+/// during T104b").
+pub enum SequenceMatch {
+    Action(&'static str),
+    Prefix,
+    None,
+}
+
+/// (T104b) Match `seq` against `keymap_id`'s `context` the leader way:
+/// exact, valid-prefix, or neither.
+pub fn lookup_sequence(keymap_id: &str, context: &str, seq: &str) -> SequenceMatch;
 ```
 
 Each keymap's `App` dispatch function (`vim_normal_key`, `emacs_key`, …)
@@ -302,6 +317,37 @@ entirely. And since the F1 help overlay only ever read the five
 `EMACS_CTRL_*` consts (never the top-level Ctrl match or the Meta match),
 neither set of bindings had ever been shown there — the unified table
 fixes that too, as a side effect of having one true source instead of two.
+
+#### A second schema addition, made during T104b
+
+Converting Vim was routine — `vim_normal_key`'s single top-level `match`
+plus its `g`/`d`/`y` pending-operator continuations mapped onto
+`ChordContext` exactly the way Emacs's chords did (`""`, `"g"`, `"d"`,
+`"y"`, one context each). Spacemacs's own `SPC`-leader did not.
+`spacemacs_leader_lookup`'s actual algorithm — accumulate typed characters
+into a growing string, then check: exact match on some binding → run it;
+strict prefix of some binding → keep waiting; neither → abort — is a
+prefix search over **whole multi-character sequences**
+(`"ff"`, `"gs"`, …), not a series of fixed chord depths the way Emacs's
+`C-x`/`C-c` families are. There's no natural "context per depth" here: the
+character after `f` could continue into many different second characters,
+all under one `f`-prefixed umbrella, not a small fixed set of named
+depths.
+
+Rather than force this into `lookup`'s single-keypress-per-context shape,
+`vix-keybindings` gained one addition: [`SequenceMatch`] (`Action`/
+`Prefix`/`None`, exactly mirroring `App`'s own now-deleted `LeaderHit`
+enum) and `lookup_sequence(keymap_id, context, seq)`, reusing the *same*
+`Binding`/`ChordContext`/`KeymapTable` data — a `Binding`'s `key_token` is
+simply the whole sequence for this one context, `""` under keymap id
+`"spacemacs"` — just queried differently. No other keymap needs this yet;
+it's here for whichever future one does (a leader-style accumulator is a
+recognizable shape, not unique to Spacemacs).
+
+Spacemacs's shared Normal-mode vocabulary (motions, `i`/`a`/…) is **not**
+duplicated under `"spacemacs"` at all — `spacemacs_key` delegates to the
+very same `vim_normal_key` Vi uses, so `lookup("vi", ..., ...)` already
+covers it; `"spacemacs"`'s own table holds only the leader context.
 
 ### Override layer
 

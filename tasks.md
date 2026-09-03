@@ -356,8 +356,39 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   new `vix-keybindings` unit tests and 3 new `tests/integration.rs` cases
   covering previously-untested contexts (`C-c C-x`, `C-c p c`, and the
   Meta document-bounds bindings).
-- [ ] **T104b — Vim + Spacemacs.** Convert `vim_normal_key`'s table (shared
+- [x] **T104b — Vim + Spacemacs.** Convert `vim_normal_key`'s table (shared
   by both keymaps) and Spacemacs's own leader table.
+  Done — Vim converted cleanly onto the T104a shape: `vim_normal_key`'s
+  top-level `match` plus its `g`/`d`/`y` pending-operator continuations
+  became 4 contexts (`""`, `"g"`, `"d"`, `"y"`) under keymap id `"vi"`,
+  `g`/`d`/`y` prefix-entry staying host-side (mirrors Emacs's `C-x`/`C-c`
+  prefix-entry). Added 6 new `vim.*` action ids
+  (`vim.insert`/`append`/`append_end`/`insert_line_start`/`open_below`/
+  `open_above`, a new `run_vim_action` dispatcher) so `i`/`a`/`A`/`I`/`o`/
+  `O` — each a compound of `editor_motion` calls plus entering Insert —
+  are representable as table rows, same pattern as T104a's `motion.*`.
+  Spacemacs's `SPC`-leader did **not** fit the T104a schema — a second,
+  smaller spec revision was needed (`crates/vix-keybindings/spec/
+  index.md`, "A second schema addition, made during T104b"): the leader
+  is a prefix search over whole multi-character sequences (`"ff"`,
+  `"gs"`), not fixed chord depths, so a `Binding`'s `key_token` there is
+  the whole sequence and a new `SequenceMatch`/`lookup_sequence` query
+  (mirroring `App`'s now-deleted `LeaderHit` enum) was added alongside
+  `lookup`, reusing the same data shape. Spacemacs's shared Normal-mode
+  vocabulary is *not* duplicated under its own keymap id — `spacemacs_key`
+  delegates to the same `vim_normal_key`, so `lookup("vi", ...)` already
+  covers it; `"spacemacs"`'s table holds only the leader context.
+  **Process note, not a product issue**: started this task directly on
+  `main` without branching/stashing the pre-existing WIP first (a lapse
+  in the established workflow) — caught it when clippy failed on
+  unrelated `vix-db` code the pre-existing WIP had touched; recovered
+  cleanly by stashing just the pre-existing files (excluding my own
+  `crates/vix-keybindings` changes) and branching from a clean `main`
+  before continuing, no rework needed. Zero intended behavior change:
+  full 425-test suite green throughout, plus 5 new `vix-keybindings`
+  unit tests and 1 new `tests/integration.rs` case covering the insert-
+  entry variants (`a`/`A`/`I`/`o`/`O`) and `yy`, none of which the
+  existing Vim tests happened to exercise.
 - [ ] **T104c — VS Code.**
 - [ ] **T104d — IntelliJ (macOS + Windows).**
 - [ ] **T104e — Eclipse.**

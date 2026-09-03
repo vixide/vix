@@ -100,6 +100,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   accepted. The Emacs keymap's top-level Ctrl and Meta bindings now also
   appear in the F1 help overlay for the first time (previously only the
   chord tables did). Zero other intended behavior change.
+- **Keybinding registry: Vi and Spacemacs converted** (improvement plan
+  T104b): `vim_normal_key` (shared by both keymaps) now dispatches
+  through `vix-keybindings` instead of its own hardcoded `match`; 6 new
+  `vim.*` action ids (`vim.insert`/`append`/`append_end`/
+  `insert_line_start`/`open_below`/`open_above`) give the Insert-mode-
+  entry keys (`i`/`a`/`A`/`I`/`o`/`O`) real names. Spacemacs's own
+  `SPC`-leader is converted too, via a new `lookup_sequence` query for
+  leader-style multi-character sequences (its matching algorithm — exact/
+  prefix/neither over whole typed sequences — doesn't fit the chord-depth
+  shape Emacs's `C-x`/`C-c` families used). Zero intended behavior change.
 
 ### Changed
 

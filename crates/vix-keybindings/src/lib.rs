@@ -2,20 +2,25 @@
 //! T104h–T104j land) the user/script override layer built on top of it.
 //!
 //! See `spec/index.md` for the audit and design this implements. Status
-//! (T104a): the registry API is real — [`Binding`], [`ChordContext`],
-//! [`KeymapTable`], [`lookup`], [`shortcuts_for`] — and one keymap, Emacs
-//! (`emacs`), is fully converted: `emacs_key` and its five
-//! chord-continuation handlers now dispatch through [`TABLES`] instead of
-//! their own hardcoded `match`. The other nine keymap ids have an empty
-//! table each, filled in one per task (T104b–T104g). Nothing outside
-//! `emacs` is queryable yet — `lookup`/`shortcuts_for` simply return
-//! nothing for them, same as an unrecognized token would.
+//! (T104b): the registry API is real — [`Binding`], [`ChordContext`],
+//! [`KeymapTable`], [`lookup`], [`shortcuts_for`], plus (new in T104b)
+//! [`lookup_sequence`] for a leader-style multi-character sequence table —
+//! and three keymaps are fully converted: Emacs (`emacs`, T104a),
+//! Vi (`vi`) and Spacemacs (`spacemacs`, T104b). `vim_normal_key` and
+//! `spacemacs_leader_lookup` now dispatch through [`TABLES`] instead of
+//! their own hardcoded `match`/const. The other six keymap ids have an
+//! empty table each, filled in one per task (T104c–T104g). Nothing outside
+//! `emacs`/`vi`/`spacemacs` is queryable yet — `lookup`/`lookup_sequence`/
+//! `shortcuts_for` simply return nothing for them, same as an unrecognized
+//! token would.
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 #![warn(clippy::pedantic)]
 
 mod emacs;
+mod spacemacs;
+mod vim;
 
 /// One key binding within a single chord context: a
 /// [`vix-macros`](https://docs.rs/vix-macros) token (`C-`/`A-`/`S-`
@@ -76,11 +81,11 @@ pub const TABLES: &[KeymapTable] = &[
     },
     KeymapTable {
         keymap_id: "vi",
-        contexts: &[], // T104b
+        contexts: vim::CONTEXTS,
     },
     KeymapTable {
         keymap_id: "spacemacs",
-        contexts: &[], // T104b
+        contexts: spacemacs::CONTEXTS,
     },
     KeymapTable {
         keymap_id: "intellij-macos",
@@ -110,6 +115,45 @@ pub fn lookup(keymap_id: &str, context: &str, token: &str) -> Option<&'static st
         .and_then(|t| t.contexts.iter().find(|c| c.name == context))
         .and_then(|c| c.bindings.iter().find(|b| b.key_token == token))
         .map(|b| b.action_id)
+}
+
+/// The result of matching a growing, multi-character sequence against a
+/// context's bindings, for a keymap whose `key_token`s are whole typed
+/// sequences (e.g. Spacemacs's `SPC`-leader — `spacemacs.rs`) rather than
+/// one keypress each, so [`lookup`]'s exact match alone isn't the right
+/// shape: the caller needs to know whether to keep accumulating too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SequenceMatch {
+    /// `seq` exactly matches one binding's `key_token` — run this action.
+    Action(&'static str),
+    /// `seq` is a strict prefix of at least one binding's `key_token` —
+    /// not an action by itself, keep accumulating.
+    Prefix,
+    /// `seq` doesn't match or prefix anything in this context.
+    None,
+}
+
+/// Match `seq` against `keymap_id`'s `context` the leader way: exact,
+/// valid-prefix, or neither. Unlike [`lookup`], a miss on an unknown
+/// keymap/context is indistinguishable from `SequenceMatch::None` — both
+/// mean "nothing here", which is the right answer either way.
+#[must_use]
+pub fn lookup_sequence(keymap_id: &str, context: &str, seq: &str) -> SequenceMatch {
+    let Some(bindings) = TABLES
+        .iter()
+        .find(|t| t.keymap_id == keymap_id)
+        .and_then(|t| t.contexts.iter().find(|c| c.name == context))
+        .map(|c| c.bindings)
+    else {
+        return SequenceMatch::None;
+    };
+    if let Some(b) = bindings.iter().find(|b| b.key_token == seq) {
+        SequenceMatch::Action(b.action_id)
+    } else if bindings.iter().any(|b| b.key_token.starts_with(seq)) {
+        SequenceMatch::Prefix
+    } else {
+        SequenceMatch::None
+    }
 }
 
 /// Every `(keymap_id, context, key_token)` bound to `action_id`, across
@@ -179,9 +223,10 @@ mod tests {
 
     #[test]
     fn shortcuts_for_finds_every_binding_of_an_action() {
-        // file.quit is bound in the emacs "C-x" context (C-c) only.
-        let hits = shortcuts_for("file.quit");
-        assert_eq!(hits, vec![("emacs", "C-x", "C-c")]);
+        // org.timestamp is bound in the emacs "C-c" context (.) only — no
+        // Vim/Spacemacs binding does anything Org-specific.
+        let hits = shortcuts_for("org.timestamp");
+        assert_eq!(hits, vec![("emacs", "C-c", ".")]);
     }
 
     #[test]
@@ -191,11 +236,59 @@ mod tests {
 
     #[test]
     fn unpopulated_keymaps_return_nothing() {
-        assert_eq!(lookup("vi", "", "h"), None);
+        assert_eq!(lookup("sublime", "", "h"), None);
         assert!(
             shortcuts_for("edit.find")
                 .iter()
-                .all(|(id, ..)| *id != "vi")
+                .all(|(id, ..)| *id != "sublime")
+        );
+    }
+
+    #[test]
+    fn lookup_finds_a_vim_normal_mode_binding() {
+        assert_eq!(lookup("vi", "", "h"), Some("motion.char_left"));
+    }
+
+    #[test]
+    fn lookup_distinguishes_vim_pending_operator_contexts() {
+        // "g" alone (top level) starts a pending operator, handled host-side
+        // — not a table entry there — but the *second* "g" of "gg" is.
+        assert_eq!(lookup("vi", "", "g"), None);
+        assert_eq!(lookup("vi", "g", "g"), Some("edit.go_first"));
+        assert_eq!(lookup("vi", "d", "d"), Some("cut_line"));
+        assert_eq!(lookup("vi", "y", "y"), Some("copy_line"));
+        // A pending operator followed by anything else is simply not bound.
+        assert_eq!(lookup("vi", "d", "x"), None);
+    }
+
+    #[test]
+    fn spacemacs_has_no_normal_mode_table_of_its_own() {
+        // Spacemacs delegates to the same vim_normal_key dispatch as Vi, so
+        // its Normal-mode vocabulary lives under the "vi" id, not its own —
+        // "spacemacs" only ever has its leader context (verified separately
+        // by `lookup_sequence_matches_exactly_prefixes_or_neither`).
+        assert_eq!(lookup("spacemacs", "", "h"), None);
+    }
+
+    #[test]
+    fn lookup_sequence_matches_exactly_prefixes_or_neither() {
+        assert_eq!(
+            lookup_sequence("spacemacs", "", "ff"),
+            SequenceMatch::Action("file.open")
+        );
+        assert_eq!(lookup_sequence("spacemacs", "", "f"), SequenceMatch::Prefix);
+        assert_eq!(lookup_sequence("spacemacs", "", "zz"), SequenceMatch::None);
+    }
+
+    #[test]
+    fn lookup_sequence_on_an_unknown_keymap_or_context_is_none() {
+        assert_eq!(
+            lookup_sequence("does-not-exist", "", "ff"),
+            SequenceMatch::None
+        );
+        assert_eq!(
+            lookup_sequence("spacemacs", "no-such-context", "ff"),
+            SequenceMatch::None
         );
     }
 }
