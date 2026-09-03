@@ -2,22 +2,23 @@
 //! T104h–T104j land) the user/script override layer built on top of it.
 //!
 //! See `spec/index.md` for the audit and design this implements. Status
-//! (T104e): the registry API is real — [`Binding`], [`ChordContext`],
+//! (T104f): the registry API is real — [`Binding`], [`ChordContext`],
 //! [`KeymapTable`], [`lookup`], [`shortcuts_for`], [`lookup_sequence`]
-//! (T104b, for a leader-style multi-character sequence table) — and six
+//! (T104b, for a leader-style multi-character sequence table) — and seven
 //! keymaps are fully converted: Emacs (`emacs`, T104a), Vi (`vi`) and
 //! Spacemacs (`spacemacs`, T104b), VS Code (`vscode-macos`/
 //! `vscode-windows`, T104c — one shared table, since VS Code's bindings
 //! don't differ by host OS in a terminal), `IntelliJ` (`intellij-macos`/
 //! `intellij-windows`, T104d — two genuinely different tables this time,
-//! unlike VS Code's shared one), and Eclipse (`eclipse`, T104e). Their
-//! dispatch functions (`vim_normal_key`, `spacemacs_leader_lookup`,
-//! `vscode_ctrl_key`, `intellij_key`, `eclipse_key`) all now go through
-//! [`TABLES`] instead of their own hardcoded `match`/const. The remaining
-//! two keymap ids (`apple`, `sublime`) have an empty table each, filled in
-//! one per task (T104f–T104g). Nothing outside the six converted ids is
-//! queryable yet — `lookup`/`lookup_sequence`/`shortcuts_for` simply
-//! return nothing for them, same as an unrecognized token would.
+//! unlike VS Code's shared one), Eclipse (`eclipse`, T104e), and Sublime
+//! Text (`sublime`, T104f). Their dispatch functions (`vim_normal_key`,
+//! `spacemacs_leader_lookup`, `vscode_ctrl_key`, `intellij_key`,
+//! `eclipse_key`, `sublime_key`) all now go through [`TABLES`] instead of
+//! their own hardcoded `match`/const. The remaining keymap id (`apple`)
+//! has an empty table, filled in by its own task (T104g). Nothing outside
+//! the seven converted ids is queryable yet — `lookup`/`lookup_sequence`/
+//! `shortcuts_for` simply return nothing for it, same as an unrecognized
+//! token would.
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
@@ -27,6 +28,7 @@ mod eclipse;
 mod emacs;
 mod intellij;
 mod spacemacs;
+mod sublime;
 mod vim;
 mod vscode;
 
@@ -109,7 +111,7 @@ pub const TABLES: &[KeymapTable] = &[
     },
     KeymapTable {
         keymap_id: "sublime",
-        contexts: &[], // T104f
+        contexts: sublime::CONTEXTS,
     },
 ];
 
@@ -244,11 +246,13 @@ mod tests {
 
     #[test]
     fn unpopulated_keymaps_return_nothing() {
-        assert_eq!(lookup("sublime", "", "h"), None);
+        // "apple" is the one remaining empty table (T104g); every other id
+        // is now converted.
+        assert_eq!(lookup("apple", "", "h"), None);
         assert!(
             shortcuts_for("edit.find")
                 .iter()
-                .all(|(id, ..)| *id != "sublime")
+                .all(|(id, ..)| *id != "apple")
         );
     }
 
@@ -376,5 +380,26 @@ mod tests {
         // doc's note on Ctrl+Alt+/ falling through to the Ctrl branch).
         assert_eq!(lookup("eclipse", "", "A-/"), Some("autocomplete"));
         assert_eq!(lookup("eclipse", "", "C-/"), Some("edit.toggle_comment"));
+    }
+
+    #[test]
+    fn lookup_finds_a_sublime_ctrl_binding() {
+        assert_eq!(lookup("sublime", "", "C-p"), Some("file.open"));
+    }
+
+    #[test]
+    fn sublime_distinguishes_ctrl_from_ctrl_shift_explicitly() {
+        // "C-p" (Goto Anything) and "C-S-p" (Command Palette) must not
+        // collide, same Shift-bit-vs-char-case reasoning as VS Code/
+        // IntelliJ/Eclipse.
+        assert_eq!(lookup("sublime", "", "C-p"), Some("file.open"));
+        assert_eq!(lookup("sublime", "", "C-S-p"), Some("tools.palette"));
+    }
+
+    #[test]
+    fn sublime_backtick_token_is_the_literal_char() {
+        // Ctrl+` (console) is a non-alphanumeric char token, not a named
+        // key — confirms the token grammar handles it like any other char.
+        assert_eq!(lookup("sublime", "", "C-`"), Some("tools.terminal"));
     }
 }

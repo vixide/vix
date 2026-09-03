@@ -475,7 +475,25 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   fine) instead of a fifth near-duplicate arm. Zero intended behavior
   change: full 429-test suite green throughout (427 + 2 new), plus 3 new
   `vix-keybindings` unit tests.
-- [ ] **T104f — Sublime Text.**
+- [x] **T104f — Sublime Text.**
+  Done — no schema change (one flat `""` context, all-`Ctrl`), and
+  needed the same Shift-bit-explicit token approach as T104c/T104d/T104e
+  (a new `App::sublime_ctrl_token`). The first keymap in the chain to
+  find *nothing* new beyond that — no fourth subtlety subsection in the
+  spec, just a fourth confirmation the "check the Shift bit" rule holds.
+  Folded Sublime into the existing shared F1-help-overlay match arm
+  (VS Code/IntelliJ/Eclipse) rather than a fifth near-duplicate arm.
+  Two pre-existing tests (`sublime_keymap_signature_bindings`) already
+  exercised the exact lowercase-plus-Shift-bit case for real, same as
+  T104c's VS Code precedent — real regression coverage that didn't need
+  writing. Added one new test confirming plain `Ctrl+P` (Goto Anything —
+  opens the file browser) stays distinct from `Ctrl+Shift+P` (Command
+  Palette). Zero intended behavior change: full 430-test suite green
+  throughout (429 + 1 new), plus 3 new `vix-keybindings` unit tests
+  (crate total 20 → 23). Also fixed the `unpopulated_keymaps_return_
+  nothing` test's probe id, which had used `"sublime"` as the
+  still-empty example — switched to `"apple"`, the one keymap id still
+  unconverted after this task.
 - [ ] **T104g — Apple + `global_shared_key`.** The last two dispatch
   functions; the registry now covers all 10 keymap ids exhaustively.
 - [ ] **T104h — Persisted overrides.** `Settings::keybindings_path()` +

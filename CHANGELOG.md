@@ -145,6 +145,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   so `Ctrl+Alt+/` falls through to plain `Ctrl+/`'s action (toggle
   comment), preserved exactly rather than "fixed." Zero intended behavior
   change.
+- **Keybinding registry: Sublime Text converted** (improvement plan
+  T104f): `sublime_key` now dispatches through `vix-keybindings` too —
+  one flat table, no schema change needed, and no new subtlety beyond
+  the by-now-familiar Shift-modifier-bit token encoding VS Code/
+  `IntelliJ`/Eclipse already needed. Sublime's bindings also appear in
+  the F1 help overlay for the first time. Zero intended behavior change.
 
 ### Changed
 

@@ -2973,46 +2973,39 @@ impl App {
 
     // ----- keymap: Sublime Text -------------------------------------------
 
-    /// Sublime Text keymap dispatch (`Ctrl` stands in for `Cmd` on macOS).
-    /// Editing chords (undo/cut/copy/paste/select-all) fall through to the
-    /// editor widget. Returns true if consumed.
+    /// Sublime Text keymap dispatch (`Ctrl` stands in for `Cmd` on macOS),
+    /// looked up in `vix-keybindings`' `"sublime"` table (T104f — see
+    /// `crates/vix-keybindings/src/sublime.rs`). Editing chords (undo/cut/
+    /// copy/paste/select-all) fall through to the editor widget. Returns
+    /// true if consumed.
     fn sublime_key(&mut self, key: KeyEvent) -> bool {
-        if !Self::ctrl(&key) {
-            return false;
-        }
-        let KeyCode::Char(c) = key.code else {
+        let Some(token) = Self::sublime_ctrl_token(&key) else {
             return false;
         };
-        let shift = Self::shift(&key);
-        match c.to_ascii_lowercase() {
-            'p' if shift => self.run_action("tools.palette"), // Command Palette
-            'p' => self.run_action("file.open"),              // Goto Anything
-            'r' => self.run_action("nav.goto_symbol"),        // Goto Symbol
-            'g' => self.run_action("nav.goto_line"),          // Goto Line
-            'd' if shift => self.run_action("edit.duplicate_line"),
-            // Nearest to Sublime's add-next-occurrence: a caret on every match.
-            'd' => self.run_action("edit.select_all_occurrences"),
-            'l' => self.run_action("edit.select_line"), // Expand to Line
-            'j' => self.run_action("edit.join_lines"),
-            'm' => self.run_action("edit.match_bracket"),
-            'k' if shift => self.run_action("cut_line"), // Delete Line
-            'h' => self.run_action("edit.replace"),
-            'f' if shift => self.run_action("search.workspace"),
-            'f' => self.run_action("edit.find"),
-            'b' => self.run_action("tools.test"),     // Build
-            '`' => self.run_action("tools.terminal"), // console
-            'n' => self.run_action("file.new"),
-            'w' if shift => self.run_action("file.close_all"),
-            'w' => self.run_action("file.close"),
-            's' if shift => self.run_action("file.save_as"),
-            's' => self.run_action("file.save"),
-            't' if shift => self.run_action("file.reopen_closed"),
-            // Many terminals emit the same control byte (0x1F) for
-            // Ctrl+/, Ctrl+7, and Ctrl+_, so accept all three for Comment.
-            '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
-            _ => return false,
+        if let Some(action) = vix_keybindings::lookup("sublime", "", &token) {
+            self.run_action(action);
+            return true;
         }
-        true
+        false
+    }
+
+    /// The `vix-macros` token for a Sublime Text `Ctrl`-chord lookup, or
+    /// `None` if `key` isn't a `Ctrl`-held `Char` (every Sublime binding
+    /// is). Same Shift-bit-explicit reasoning as `vscode_ctrl_token`/
+    /// `intellij_ctrl_token`/`eclipse_token` (T104c–e).
+    fn sublime_ctrl_token(key: &KeyEvent) -> Option<String> {
+        if !Self::ctrl(key) {
+            return None;
+        }
+        let KeyCode::Char(c) = key.code else {
+            return None;
+        };
+        let mut token = String::from("C-");
+        if Self::shift(key) {
+            token.push_str("S-");
+        }
+        token.push(c.to_ascii_lowercase());
+        Some(token)
     }
 
     /// Keys shared by every keymap: menu-bar mnemonics and function keys. Returns
@@ -14972,12 +14965,12 @@ impl App {
                     }
                 }
             }
-            // VS Code's, IntelliJ's, and Eclipse's tables have only ever
-            // had one context each ("", T104c/T104d/T104e), but this still
+            // VS Code's, IntelliJ's, Eclipse's, and Sublime's tables have
+            // only ever had one context each ("", T104c–f), but this still
             // walks every context generically, matching the Emacs arm
             // above, for the same reason.
             id @ ("vscode-macos" | "vscode-windows" | "intellij-macos" | "intellij-windows"
-            | "eclipse") => {
+            | "eclipse" | "sublime") => {
                 for table in vix_keybindings::TABLES.iter().filter(|t| t.keymap_id == id) {
                     for ctx in table.contexts {
                         for b in ctx.bindings {
@@ -20899,13 +20892,13 @@ fn emacs_key_display(k: &str) -> String {
     }
 }
 
-/// Render a VS Code, `IntelliJ`, or Eclipse keymap token for display:
-/// strips `C-`/`S-`/`A-` prefixes in order, each rendered as a named
-/// modifier, then the remaining key uppercased (`"C-S-p"` → `"Ctrl Shift
-/// P"`). Unlike [`emacs_key_display`], these tokens can stack more than
-/// one modifier prefix (T104c's Shift-disambiguation, `IntelliJ`'s
-/// `Ctrl+Alt+…`, T104d), so this strips a loop of them rather than just
-/// one.
+/// Render a VS Code, `IntelliJ`, Eclipse, or Sublime Text keymap token for
+/// display: strips `C-`/`S-`/`A-` prefixes in order, each rendered as a
+/// named modifier, then the remaining key uppercased (`"C-S-p"` →
+/// `"Ctrl Shift P"`). Unlike [`emacs_key_display`], these tokens can stack
+/// more than one modifier prefix (T104c's Shift-disambiguation,
+/// `IntelliJ`'s `Ctrl+Alt+…`, T104d), so this strips a loop of them rather
+/// than just one.
 fn modifier_token_display(k: &str) -> String {
     let mut rest = k;
     let mut parts = Vec::new();
