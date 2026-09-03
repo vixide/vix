@@ -6590,13 +6590,83 @@ fn sublime_keymap_signature_bindings() {
 
 #[test]
 fn intellij_and_eclipse_keymaps_bind_find() {
-    // A representative binding works under each new keymap: Ctrl+F opens Find.
-    for id in ["intellij-mac", "intellij-win", "eclipse"] {
+    // A representative binding works under each new keymap: Ctrl+F opens
+    // Find. (These ids must be the real `vix-keymap-model` ones —
+    // "intellij-macos"/"intellij-windows", not "intellij-mac"/
+    // "intellij-win" — or `Keymap::from_id` silently falls back to
+    // `Keymap::Apple`, which happens to bind Ctrl+F to Find too, so a
+    // wrong id here would still pass without testing IntelliJ at all;
+    // found exactly that bug converting `intellij_key` for T104d.)
+    for id in ["intellij-macos", "intellij-windows", "eclipse"] {
         let mut app = app_at(Path::new("."));
         app.settings.keymap = id.to_string();
         app.on_key(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::CONTROL));
         assert!(app.search.is_some(), "Ctrl+F opens Find under {id}");
     }
+}
+
+// ----- vix-keybindings registry conversion (improvement plan T104d) -------
+// intellij_key now dispatches through vix_keybindings::lookup instead of
+// its own hardcoded match; these cover the platform divergence between
+// intellij-macos and intellij-windows (the "go to" family uses different
+// keys entirely) and the unguarded-Shift quirk faithfully preserved from
+// the original dispatch, neither exercised by the test above.
+
+#[test]
+fn intellij_go_to_family_differs_by_platform() {
+    // macOS: Ctrl+O goes to symbol, Ctrl+L goes to line.
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "intellij-macos".to_string();
+    app.on_key(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::CONTROL));
+    assert!(app.palette.is_some(), "macOS Ctrl+O opens Go to Symbol");
+    app.on_key(esc());
+    app.on_key(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::CONTROL));
+    assert!(app.palette.is_some(), "macOS Ctrl+L opens Go to Line");
+    app.on_key(esc());
+    // The same two keys do nothing IntelliJ-specific on Windows (no
+    // binding for either at all -- falls through, and the plain char
+    // still doesn't type since focus is Editor and it's Ctrl-held).
+    app.settings.keymap = "intellij-windows".to_string();
+    app.on_key(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::CONTROL));
+    assert!(app.palette.is_none(), "Windows Ctrl+O is not bound");
+
+    // Windows: Ctrl+N goes to symbol, Ctrl+G goes to line -- the mirror
+    // image of macOS's O/L.
+    app.on_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL));
+    assert!(app.palette.is_some(), "Windows Ctrl+N opens Go to Symbol");
+    app.on_key(esc());
+    app.on_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL));
+    assert!(app.palette.is_some(), "Windows Ctrl+G opens Go to Line");
+}
+
+#[test]
+fn intellij_unguarded_shift_quirk_is_preserved() {
+    // Neither the original macOS Ctrl+N arm nor the original Windows
+    // Ctrl+G arm checked Shift at all, so the Shift variant does the same
+    // thing as the plain one on each platform -- not a bug T104d's
+    // conversion introduced, a faithful transcription of it.
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "intellij-macos".to_string();
+    let tabs_before = app.editor.tabs.len();
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('n'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
+    assert_eq!(
+        app.editor.tabs.len(),
+        tabs_before + 1,
+        "Ctrl+Shift+N still resolves to file.new on macOS (a new tab), not Go to File"
+    );
+
+    app.settings.keymap = "intellij-windows".to_string();
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('g'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
+    assert!(
+        app.palette.is_some(),
+        "Ctrl+Shift+G still opens Go to Line on Windows, same as plain Ctrl+G"
+    );
 }
 
 #[test]

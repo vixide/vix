@@ -122,6 +122,19 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   — a new `vscode_ctrl_token` encodes that explicitly rather than relying
   on the shared token encoder's usual "Shift implicit in an uppercase
   char" assumption.
+- **Keybinding registry: `IntelliJ` converted** (improvement plan T104d):
+  `intellij_key` now dispatches through `vix-keybindings` too — but,
+  unlike VS Code, `intellij-macos` and `intellij-windows` are two
+  genuinely different tables (the "go to" family alone uses different
+  keys per platform). `IntelliJ`'s bindings also appear in the F1 help
+  overlay for the first time (the VS Code display helper is now shared,
+  renamed `modifier_token_display`). A real, pre-existing bug found and
+  fixed along the way: an integration test used the wrong IntelliJ
+  keymap ids and had silently been testing the Apple keymap's fallback
+  instead. Zero other intended behavior change — including a genuine
+  quirk in the original dispatch preserved on purpose: `Ctrl+Shift+N`
+  (macOS) and `Ctrl+Shift+G` (Windows) were never actually distinct from
+  their plain counterparts, and still aren't.
 
 ### Changed
 

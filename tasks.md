@@ -418,7 +418,43 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   (`vscode_keymap_quick_open_command_palette_and_goto_line`,
   `vscode_keymap_split_panel_and_delete_line`) — plus 3 new
   `vix-keybindings` unit tests and 1 new `vscode_key_display` unit test.
-- [ ] **T104d — IntelliJ (macOS + Windows).**
+- [x] **T104d — IntelliJ (macOS + Windows).**
+  Done — unlike VS Code (T104c, one shared table), `intellij-macos` and
+  `intellij-windows` turned out to be two genuinely different tables:
+  converting the actual dispatch (not the doc comment) showed the "go to"
+  family alone uses `Ctrl+O`/`Ctrl+Shift+O`/`Ctrl+L` on macOS vs
+  `Ctrl+N`/`Ctrl+Shift+N`/`Ctrl+G` on Windows, plus platform-only
+  bindings (`Ctrl+,` Settings macOS-only, `Ctrl+Y` delete-line
+  Windows-only). Two independently-written tables, ~13 shared bindings
+  duplicated plainly across them (spec: "`IntelliJ`'s own subtlety, found
+  during T104d"). Also needed the same Shift-bit-explicit token approach
+  T104c introduced (a new `App::intellij_ctrl_token`), plus one more
+  wrinkle VS Code didn't have: `Ctrl+Alt+L`/`Ctrl+Alt+O` are a single
+  keystroke's modifier combination, not a chord, so they're ordinary
+  `"C-A-…"` entries in the same `""` context as everything else.
+  **Found and preserved, not "fixed," a genuine quirk in the original
+  dispatch**: neither macOS's `Ctrl+N` arm nor Windows's `Ctrl+G` arm was
+  ever Shift-guarded, so `Ctrl+Shift+N`/`Ctrl+Shift+G` do the exact same
+  thing as their plain counterparts on each respective platform — each
+  table lists the Shift variant as an explicit duplicate row rather than
+  silently dropping it or "improving" it into a distinct binding.
+  **Found and fixed a real, pre-existing test bug** while looking for
+  IntelliJ coverage to extend: `tests/integration.rs`'s
+  `intellij_and_eclipse_keymaps_bind_find` used the keymap ids
+  `"intellij-mac"`/`"intellij-win"` (not the real `vix-keymap-model` ids,
+  `"intellij-macos"`/`"intellij-windows"`) — `Keymap::from_id` silently
+  falls back to `Keymap::Apple` on an unrecognized id, and Apple happens
+  to also bind `Ctrl+F` to find, so the test passed while testing nothing
+  IntelliJ-specific at all. Fixed the ids and added two new tests
+  exercising the platform divergence and the Shift quirk for real.
+  Renamed `vscode_key_display` → `modifier_token_display` and merged its
+  `shortcut_rows` match arm with VS Code's (same shape, now covers all 4
+  platform-variant ids) rather than duplicating the walk a second time —
+  IntelliJ's bindings now show up in the F1 help overlay for the first
+  time too, same bonus pattern as T104a/T104c. Zero intended behavior
+  change: full 427-test suite green throughout (425 + 2 new, on top of
+  fixing the pre-existing test's ids), plus 4 new `vix-keybindings` unit
+  tests and 1 updated `modifier_token_display` unit test.
 - [ ] **T104e — Eclipse.**
 - [ ] **T104f — Sublime Text.**
 - [ ] **T104g — Apple + `global_shared_key`.** The last two dispatch

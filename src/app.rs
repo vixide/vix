@@ -2880,60 +2880,52 @@ impl App {
 
     // ----- keymap: IntelliJ (macOS / Windows) -----------------------
 
-    /// `IntelliJ` IDEA keymap dispatch (`Ctrl` stands in for `Cmd` on macOS).
-    /// `win` selects the Windows/Linux go-to bindings (Ctrl+N / Ctrl+Shift+N /
-    /// Ctrl+G) vs the macOS ones (Ctrl+O / Ctrl+Shift+O / Ctrl+L). Editing chords
-    /// (undo/cut/copy/paste/select-all) fall through to the editor widget. Returns
-    /// true if consumed.
-    #[allow(clippy::too_many_lines)]
+    /// `IntelliJ` IDEA keymap dispatch (`Ctrl` stands in for `Cmd` on
+    /// macOS), looked up in `vix-keybindings`' `"intellij-macos"`/
+    /// `"intellij-windows"` tables (T104d — two genuinely different
+    /// tables this time, unlike VS Code's shared one; see
+    /// `crates/vix-keybindings/src/intellij.rs`). Editing chords (undo/
+    /// cut/copy/paste/select-all) fall through to the editor widget.
+    /// Returns true if consumed.
     fn intellij_key(&mut self, key: KeyEvent, win: bool) -> bool {
-        // `Ctrl+Alt+L`: reformat (Reformat Code).
-        if Self::ctrl(&key) && Self::alt(&key) {
-            if let KeyCode::Char(c) = key.code {
-                match c.to_ascii_lowercase() {
-                    'l' => self.run_action("lsp.format"),
-                    'o' => self.run_action("nav.goto_workspace_symbol"),
-                    _ => return false,
-                }
-                return true;
-            }
-            return false;
-        }
-        if !Self::ctrl(&key) {
-            return false;
-        }
-        let KeyCode::Char(c) = key.code else {
+        let Some(token) = Self::intellij_ctrl_token(&key) else {
             return false;
         };
-        let shift = Self::shift(&key);
-        match c.to_ascii_lowercase() {
-            'a' if shift => self.run_action("tools.palette"), // Find Action
-            's' if shift => self.run_action("file.save_as"),
-            's' => self.run_action("file.save"),
-            'w' if shift => self.run_action("file.close_all"),
-            'w' => self.run_action("file.close"),
-            'f' if shift => self.run_action("search.workspace"),
-            'f' => self.run_action("edit.find"),
-            'r' if shift => self.run_action("search.workspace_replace"),
-            'r' => self.run_action("edit.replace"),
-            'b' => self.run_action("nav.goto_definition"), // Go to Declaration
-            'd' => self.run_action("edit.duplicate_line"), // Duplicate
-            'y' if win => self.run_action("edit.delete_line"), // Win: delete line
-            '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
-            ',' if !win => self.run_action("vix.settings"), // macOS: Cmd+,
-            // Go to file / class, and Go to Line differ by platform.
-            'n' if win && shift => self.run_action("file.open"), // Go to File
-            'n' if win => self.run_action("nav.goto_symbol"),    // Go to Class
-            'n' if !win => self.run_action("file.new"),
-            'o' if !win && shift => self.run_action("file.open"), // Go to File
-            'o' if !win => self.run_action("nav.goto_symbol"),    // Go to Class
-            'l' if !win => self.run_action("nav.goto_line"),      // macOS: Cmd+L
-            'g' if win => self.run_action("nav.goto_line"),       // Win: Ctrl+G
-            'g' if shift => self.run_action("edit.find_prev"),
-            'g' => self.run_action("edit.find_next"), // macOS: Cmd+G
-            _ => return false,
+        let keymap_id = if win {
+            "intellij-windows"
+        } else {
+            "intellij-macos"
+        };
+        if let Some(action) = vix_keybindings::lookup(keymap_id, "", &token) {
+            self.run_action(action);
+            return true;
         }
-        true
+        false
+    }
+
+    /// The `vix-macros` token for an `IntelliJ` `Ctrl`-chord lookup
+    /// (`Ctrl` held, optionally `Alt` and/or `Shift` too — `Ctrl+Alt+L`/
+    /// `Ctrl+Alt+O` are a single keystroke's modifier combination, not a
+    /// chord prefix, so they share this same lookup), or `None` if `key`
+    /// isn't a `Ctrl`-held `Char` (every `IntelliJ` binding is). Same
+    /// reasoning as `vscode_ctrl_token` (T104c): `Shift` is encoded from
+    /// the modifier bit, not inferred from the char's case.
+    fn intellij_ctrl_token(key: &KeyEvent) -> Option<String> {
+        if !Self::ctrl(key) {
+            return None;
+        }
+        let KeyCode::Char(c) = key.code else {
+            return None;
+        };
+        let mut token = String::from("C-");
+        if Self::alt(key) {
+            token.push_str("A-");
+        }
+        if Self::shift(key) {
+            token.push_str("S-");
+        }
+        token.push(c.to_ascii_lowercase());
+        Some(token)
     }
 
     // ----- keymap: Eclipse ------------------------------------------------
@@ -14985,16 +14977,17 @@ impl App {
                     }
                 }
             }
-            // VS Code's table has only ever had one context ("", T104c),
-            // but this still walks every context generically, matching
-            // the Emacs arm above, for the same reason.
-            id @ ("vscode-macos" | "vscode-windows") => {
+            // VS Code's and IntelliJ's tables have only ever had one
+            // context each ("", T104c/T104d), but this still walks every
+            // context generically, matching the Emacs arm above, for the
+            // same reason.
+            id @ ("vscode-macos" | "vscode-windows" | "intellij-macos" | "intellij-windows") => {
                 for table in vix_keybindings::TABLES.iter().filter(|t| t.keymap_id == id) {
                     for ctx in table.contexts {
                         for b in ctx.bindings {
                             add(
                                 Self::action_title(b.action_id),
-                                vscode_key_display(b.key_token),
+                                modifier_token_display(b.key_token),
                             );
                         }
                     }
@@ -20910,13 +20903,14 @@ fn emacs_key_display(k: &str) -> String {
     }
 }
 
-/// Render a VS Code keymap token for display: strips `C-`/`S-`/`A-`
-/// prefixes in order, each rendered as a named modifier, then the
-/// remaining key uppercased (`"C-S-p"` → `"Ctrl Shift P"`). Unlike
-/// [`emacs_key_display`], a VS Code token can stack more than one
-/// modifier prefix (T104c's Shift-disambiguation), so this strips a loop
-/// of them rather than just one.
-fn vscode_key_display(k: &str) -> String {
+/// Render a VS Code or `IntelliJ` keymap token for display: strips
+/// `C-`/`S-`/`A-` prefixes in order, each rendered as a named modifier,
+/// then the remaining key uppercased (`"C-S-p"` → `"Ctrl Shift P"`).
+/// Unlike [`emacs_key_display`], these tokens can stack more than one
+/// modifier prefix (T104c's Shift-disambiguation, `IntelliJ`'s
+/// `Ctrl+Alt+…`, T104d), so this strips a loop of them rather than just
+/// one.
+fn modifier_token_display(k: &str) -> String {
     let mut rest = k;
     let mut parts = Vec::new();
     loop {
@@ -21210,13 +21204,16 @@ mod tests {
     use ratatui::backend::TestBackend;
 
     /// Stacked modifier prefixes render as separate named words, in order,
-    /// with the bare key uppercased (T104c's VS Code display helper).
+    /// with the bare key uppercased (T104c's VS Code/`IntelliJ` display
+    /// helper, shared as of T104d).
     #[test]
-    fn vscode_key_display_renders_stacked_modifiers() {
-        assert_eq!(vscode_key_display("C-p"), "Ctrl P");
-        assert_eq!(vscode_key_display("C-S-p"), "Ctrl Shift P");
+    fn modifier_token_display_renders_stacked_modifiers() {
+        assert_eq!(modifier_token_display("C-p"), "Ctrl P");
+        assert_eq!(modifier_token_display("C-S-p"), "Ctrl Shift P");
         // Non-alphabetic keys (backtick) are unaffected by uppercasing.
-        assert_eq!(vscode_key_display("C-`"), "Ctrl `");
+        assert_eq!(modifier_token_display("C-`"), "Ctrl `");
+        // IntelliJ's Ctrl+Alt combination, unlike anything VS Code needs.
+        assert_eq!(modifier_token_display("C-A-l"), "Ctrl Alt L");
     }
 
     /// macOS folds `Command` into `Control`; every other platform leaves the
