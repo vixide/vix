@@ -9,16 +9,20 @@ layer" turned out not to exist: this document designs it, so scripts (and,
 built the same way, a user's own persisted overrides) have something real
 to plug into.
 
-**Status**: T104a (Emacs) and T104b (Vi + Spacemacs) done — three keymaps
-fully converted. T104c onward implement the remaining slices (§ "Staged
-plan"). The rest of this spec otherwise still describes intent, not built
-behavior, for those slices — each should update this file if reality and
-design turn out to disagree, same as T104a and T104b each already did once
-(§ "Schema refinement, made during T104a" and § "A second schema addition,
-made during T104b" below): a "design-only" spec for something not yet
-built is a best-effort guess, and the actual conversion is where its real
-shape gets found — worth expecting again for T104c–g, not treating as a
-surprise each time.
+**Status**: T104a (Emacs), T104b (Vi + Spacemacs), and T104c (VS Code) done
+— four keymaps fully converted. T104d onward implement the remaining
+slices (§ "Staged plan"). The rest of this spec otherwise still describes
+intent, not built behavior, for those slices — each should update this
+file if reality and design turn out to disagree, same as T104a and T104b
+each already did once (§ "Schema refinement, made during T104a" and
+§ "A second schema addition, made during T104b" below) and T104c
+reconfirmed without needing a third: VS Code fit the existing schema
+exactly (one flat `""` context, no chords), but its own real subtlety —
+`Ctrl+Shift+<letter>` isn't always distinguishable from plain
+`Ctrl+<letter>` by character case alone — meant its tokens couldn't
+reuse `vix_macros::encode_key` unmodified either (§ "VS Code's own
+subtlety, found during T104c" below). Worth continuing to expect
+*something* real per keymap, even when the shape doesn't need to change.
 
 ## The audit
 
@@ -348,6 +352,31 @@ Spacemacs's shared Normal-mode vocabulary (motions, `i`/`a`/…) is **not**
 duplicated under `"spacemacs"` at all — `spacemacs_key` delegates to the
 very same `vim_normal_key` Vi uses, so `lookup("vi", ..., ...)` already
 covers it; `"spacemacs"`'s own table holds only the leader context.
+
+#### VS Code's own subtlety, found during T104c
+
+VS Code's `vscode_ctrl_key` needed no schema change — every binding is a
+plain `Ctrl`-held `Char`, no chords, so one `""` context sufficed exactly
+like Vim's. What it *did* need was its own token-building function
+instead of reusing `crate::macros::encode_key` (the way Emacs's and Vim's
+conversions safely could): `encode_key` treats `Shift` as implicit in an
+uppercase `Char` and never prefixes `S-` for one, on the assumption that
+a physically-shifted letter always arrives with its case already
+reflecting that. VS Code's original dispatch never made that assumption
+— it checked the `Shift` *modifier bit* explicitly (`Self::shift(&key)`)
+precisely because a terminal can report `Ctrl+Shift+p` as a **lowercase**
+`p` with the bit set, not an uppercase `P`. Reusing `encode_key` as-is
+would have silently collided `Ctrl+P` (Quick Open) and `Ctrl+Shift+P`
+(Command Palette) on exactly that class of terminal. The table's tokens
+therefore encode Shift explicitly (`"C-S-p"`, not the bare `"C-P"` a
+case-based scheme would produce) via a small dedicated
+`App::vscode_ctrl_token`, not `vix_macros::encode_key` — still valid
+`vix-macros` grammar (`decode_key` already strips `S-` in any prefix
+order), just not what `encode_key` itself would ever emit for a `Char`
+key. Whichever keymap converts next should check the same question
+before assuming `encode_key` is safe to reuse unmodified: does this
+keymap's own dispatch rely on the Shift bit, the char case, or (as here)
+both interchangeably in a way a naive token scheme could collide?
 
 ### Override layer
 

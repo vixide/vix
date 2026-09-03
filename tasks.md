@@ -389,7 +389,35 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   unit tests and 1 new `tests/integration.rs` case covering the insert-
   entry variants (`a`/`A`/`I`/`o`/`O`) and `yy`, none of which the
   existing Vim tests happened to exercise.
-- [ ] **T104c — VS Code.**
+- [x] **T104c — VS Code.**
+  Done — the simplest of the three conversions so far: `vscode_ctrl_key`
+  is all-Ctrl, no chords, so it needed no schema change (one flat `""`
+  context, exactly Vim's shape) and no new action ids (`nav.goto_line`
+  already existed and covers `Ctrl+G`; one new one, `view.
+  toggle_explorer_focus`, for `Ctrl+Shift+E`'s bespoke method call). One
+  shared table serves both `vscode-macos` and `vscode-windows` keymap
+  ids, per the spec's own "Why 10 keymap ids" rationale. Real subtlety
+  found anyway (spec updated, "VS Code's own subtlety, found during
+  T104c"): the original dispatch distinguishes `Ctrl+Shift+<letter>` from
+  plain `Ctrl+<letter>` via the Shift *modifier bit*, not char case —
+  terminals can report `Ctrl+Shift+p` as a lowercase `p` with the bit
+  set — so reusing `vix_macros::encode_key` unmodified (which treats
+  Shift as implicit in an uppercase char and drops it for `Char` keys)
+  would have silently collided `Ctrl+P`/`Ctrl+Shift+P`. Added a small
+  dedicated `App::vscode_ctrl_token` that encodes Shift explicitly
+  instead (`"C-S-p"`, still valid `vix-macros` grammar, just not what
+  `encode_key` itself emits). Bonus, not scope creep since the display
+  code needed the same treatment regardless: VS Code's bindings had
+  never appeared in the F1 help overlay at all (unlike Emacs's chord
+  tables, nothing ever fed `shortcut_rows` for it) — now they do, via a
+  new `vscode_key_display` (handles stacked `C-`/`S-`/`A-` prefixes,
+  unlike Emacs's single-prefix `emacs_key_display`). Zero intended
+  behavior change: full 425-test suite green throughout — including two
+  *pre-existing* tests that already exercised the exact lowercase-plus-
+  Shift-bit case my new token function had to get right
+  (`vscode_keymap_quick_open_command_palette_and_goto_line`,
+  `vscode_keymap_split_panel_and_delete_line`) — plus 3 new
+  `vix-keybindings` unit tests and 1 new `vscode_key_display` unit test.
 - [ ] **T104d — IntelliJ (macOS + Windows).**
 - [ ] **T104e — Eclipse.**
 - [ ] **T104f — Sublime Text.**

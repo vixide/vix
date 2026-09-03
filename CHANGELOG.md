@@ -110,6 +110,18 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   leader-style multi-character sequences (its matching algorithm — exact/
   prefix/neither over whole typed sequences — doesn't fit the chord-depth
   shape Emacs's `C-x`/`C-c` families used). Zero intended behavior change.
+- **Keybinding registry: VS Code converted** (improvement plan T104c):
+  `vscode_ctrl_key` now dispatches through `vix-keybindings` too — one
+  shared table for both `vscode-macos` and `vscode-windows`. VS Code's
+  bindings also appear in the F1 help overlay for the first time (a new
+  `vscode_key_display` renders stacked modifiers, e.g. `Ctrl Shift P`).
+  Zero intended behavior change, including for the one real subtlety
+  found converting it: `Ctrl+Shift+<letter>` is disambiguated from plain
+  `Ctrl+<letter>` via the Shift modifier bit (not letter case, since a
+  terminal can report the former as a lowercase letter with the bit set)
+  — a new `vscode_ctrl_token` encodes that explicitly rather than relying
+  on the shared token encoder's usual "Shift implicit in an uppercase
+  char" assumption.
 
 ### Changed
 
