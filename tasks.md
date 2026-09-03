@@ -542,8 +542,37 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   first draft asserted the wrong field, `app.query_replace` instead of
   `app.search.interactive`, caught and fixed before merging), plus 6 new
   `vix-keybindings` unit tests (crate total 23 → 29).
-- [ ] **T104h — Persisted overrides.** `Settings::keybindings_path()` +
+- [x] **T104h — Persisted overrides.** `Settings::keybindings_path()` +
   `keybindings.toml` load/save (the `macros.toml` pattern).
+  Done — `Settings::keybindings_path()` added right after `macros_path()`
+  in `vix-settings`, identical shape. New `vix-keybindings::user_bindings`
+  module: `UserBinding { key_token, action_id }` (owned `String`s, unlike
+  the built-in tables' `&'static str` `Binding` — these are loaded at
+  runtime, not compile-time constants), a private `KeyBindingsFile`
+  wrapper, `load`/`upsert` copying `vix-macros`' `macros.toml` pattern
+  verbatim (plain `toml`+`std::fs`, no `confy::load`/`.save()`), `upsert`
+  keyed on `key_token` (the natural unique key for a rebinding — you can
+  only have one override per token — mirroring how `macros.toml`'s own
+  `upsert` keys on `name`). `vix-keybindings` gained its first real
+  dependencies (`serde`, `toml`) — was a pure no-dep data/logic crate
+  until now. Also fixed a stale crate description ("9 keymaps") left
+  over from before T104g's 10-id completion, caught while touching
+  `Cargo.toml` for the new deps anyway.
+
+  Deliberately scoped narrow, per the staged plan: no `Override`/`Source`
+  enum, no conflict detection, nothing wired into `App` at all yet — this
+  task is the file format and round trip only. `App::run_action` and
+  every keymap dispatch function are completely untouched. That's T104i's
+  job (the `on_key` choke point) and T104j's (wiring `vix-script`'s
+  `LoadedScript::bindings` in) — both still pending. Zero risk of
+  behavior change since nothing new is called from anywhere yet: full
+  432-test suite green throughout (unchanged from T104g, since there's no
+  new App-level code path to exercise), plus 3 new `vix-keybindings` unit
+  tests (crate total 29 → 32, mirroring `vix-macros`' own
+  `upsert_writes_and_replaces_by_name` test almost verbatim, plus a
+  missing-file and an unparseable-content case). `cargo deny` re-checked
+  clean after adding the two new dependencies (both already vetted,
+  workspace-wide deps — no new advisory risk).
 - [ ] **T104i — The override choke point.** `App::override_key`, inserted
   in `on_key` between `org_table_key` and the per-keymap `match`;
   conflict handling for `keybindings.toml` entries (two overrides on one
