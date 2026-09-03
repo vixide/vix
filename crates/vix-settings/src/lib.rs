@@ -409,6 +409,17 @@ impl Settings {
             .ok()
             .and_then(|p| p.parent().map(|d| d.join("macros.toml")))
     }
+
+    /// File holding the user's persisted key binding overrides
+    /// (`<config dir>/keybindings.toml`), or `None` if the config location
+    /// cannot be determined. See `crates/vix-keybindings/spec/index.md`,
+    /// "Persisted user overrides".
+    #[must_use]
+    pub fn keybindings_path() -> Option<std::path::PathBuf> {
+        confy::get_configuration_file_path(APP_NAME, Some(CONFIG_NAME))
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join("keybindings.toml")))
+    }
 }
 
 /// Quote `s` as a single POSIX shell token using single quotes, escaping any

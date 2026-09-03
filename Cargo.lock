@@ -5685,6 +5685,10 @@ dependencies = [
 [[package]]
 name = "vix-keybindings"
 version = "1.6.0"
+dependencies = [
+ "serde",
+ "toml 1.1.4+spec-1.1.0",
+]
 
 [[package]]
 name = "vix-keyboard-shortcut-panel"

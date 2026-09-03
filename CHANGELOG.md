@@ -166,6 +166,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   also shows Apple's bindings and, for the first time, the shared
   bindings every keymap gets regardless of which one is active. Zero
   intended behavior change.
+- **Persisted key binding overrides: file format and round trip**
+  (improvement plan T104h): a new `Settings::keybindings_path()`
+  (`<config dir>/keybindings.toml`, mirroring `macros_path()`) and
+  `vix-keybindings::user_bindings` (`UserBinding`, `load`, `upsert`) —
+  the `macros.toml` pattern copied verbatim, `upsert` keyed on
+  `key_token`. Not wired into anything yet — no dispatch, no conflict
+  checking, no `App` changes at all — just the format and the round
+  trip; that wiring is T104i/T104j.
 
 ### Changed
 

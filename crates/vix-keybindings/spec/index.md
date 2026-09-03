@@ -23,10 +23,16 @@ during T104e"), T104f finding nothing new at all, and T104g finding the
 biggest departure yet (§ "Apple and `global_shared_key`'s own subtlety,
 found during T104g" below): a genuinely mixed Shift-guard pattern within
 one keymap, and a keymap-agnostic binding set (`global_shared_key`) the
-original schema had no notion of at all. Remaining work is T104h–j
-(§ "Staged plan") — the persisted-override layer this spec was
-originally written to design, now that every built-in binding is finally
-queryable.
+original schema had no notion of at all.
+
+**T104h done too**: `keybindings.toml` now round-trips for real —
+`Settings::keybindings_path()` and `user_bindings::{UserBinding, load,
+upsert}`, the `macros.toml` pattern copied verbatim (§ "Persisted-override
+precedent" below, now built rather than planned). Nothing checks a loaded
+override against a live `KeyEvent` yet — that's T104i (the `on_key` choke
+point + conflict handling) and T104j (wiring `vix-script`'s
+`LoadedScript::bindings` into it), the two remaining slices
+(§ "Staged plan") and the reason this whole epic started.
 
 ## The audit
 
@@ -563,12 +569,15 @@ pub struct Override {
   other than the top level; a script or user override simply can't shadow
   (or be shadowed by) an Emacs `C-x`-chord leaf, only a keymap's top-level
   bindings.
-- **Persisted user overrides**: a new `Settings::keybindings_path() ->
-  Option<PathBuf>` mirroring `macros_path()` exactly
-  (`<config dir>/keybindings.toml`); a `KeyBindingsFile { #[serde(default,
-  rename = "binding")] bindings: Vec<UserBinding> }` with a plain
-  `toml`+`fs` load/save, the `macros.toml` pattern verbatim — no `confy`
-  serialization involved beyond locating the directory.
+- **Persisted user overrides — done, T104h**: `Settings::keybindings_path()
+  -> Option<PathBuf>` mirrors `macros_path()` exactly
+  (`<config dir>/keybindings.toml`); `user_bindings::{UserBinding,
+  KeyBindingsFile, load, upsert}` (`crates/vix-keybindings/src/
+  user_bindings.rs`) is a plain `toml`+`fs` load/save, the `macros.toml`
+  pattern verbatim — no `confy` serialization involved beyond locating
+  the directory, `upsert` keyed on `key_token` (mirroring `macros.toml`'s
+  own upsert-by-name). Not yet wired into `App` at all — T104i's choke
+  point is the first thing that will actually call `load`/`upsert`.
 - **Script overrides**: exactly `LoadedScript::bindings` (`vix-script`,
   already implemented in T102/T103) — nothing new to build here, just
   something to finally check.

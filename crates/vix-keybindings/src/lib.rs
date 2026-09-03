@@ -1,8 +1,8 @@
 //! An exhaustive, queryable registry of every built-in keybinding, and (once
-//! T104h–T104j land) the user/script override layer built on top of it.
+//! T104i–T104j land) the user/script override layer built on top of it.
 //!
 //! See `spec/index.md` for the audit and design this implements. Status
-//! (T104g): the registry API is real — [`Binding`], [`ChordContext`],
+//! (T104h): the registry API is real — [`Binding`], [`ChordContext`],
 //! [`KeymapTable`], [`lookup`], [`shortcuts_for`], [`lookup_sequence`]
 //! (T104b, for a leader-style multi-character sequence table),
 //! [`lookup_shared`] (T104g, for the keymap-agnostic bindings every
@@ -20,6 +20,16 @@
 //! not itself keyed on one) is now backed by [`SHARED`]/[`lookup_shared`]
 //! for its unconditional bindings; see `shared.rs`'s module doc for which
 //! ones stay host-side and why.
+//!
+//! T104h adds the persisted half of the override layer:
+//! [`user_bindings::UserBinding`]/[`user_bindings::load`]/
+//! [`user_bindings::upsert`] round-trip `keybindings.toml` (via
+//! `vix_settings::Settings::keybindings_path`), mirroring
+//! `vix-macros`' `macros.toml` pattern exactly. Nothing yet checks a
+//! loaded override against a live `KeyEvent` or a script's own
+//! `bind_key` requests — that's T104i (the `on_key` choke point +
+//! conflict handling) and T104j (wiring `vix-script`'s
+//! `LoadedScript::bindings` into it), still to come.
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
@@ -32,10 +42,12 @@ mod intellij;
 mod shared;
 mod spacemacs;
 mod sublime;
+pub mod user_bindings;
 mod vim;
 mod vscode;
 
 pub use shared::{SHARED, lookup_shared};
+pub use user_bindings::UserBinding;
 
 /// One key binding within a single chord context: a
 /// [`vix-macros`](https://docs.rs/vix-macros) token (`C-`/`A-`/`S-`
