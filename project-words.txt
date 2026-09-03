@@ -77,6 +77,10 @@ tsv
 yaml
 jsonc
 sqlite
+lcov
+cobertura
+cyclonedx
+codeql
 
 # Themes / palettes / proper nouns
 monokai
@@ -104,6 +108,8 @@ ollama
 subcrate
 wooorm
 sysinfo
+sbom
+wgrep
 ancel
 undoable
 

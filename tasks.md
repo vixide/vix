@@ -505,6 +505,61 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   "Generate doc comment" for the symbol under the cursor. All
   explicit-invoke only.
 
+### Security & hardening
+
+The 2026-07-12 audit (see `AI_STATEMENT.md`-adjacent history / the
+`security` CI job) covered the surface that existed then and closed its
+findings except two deliberate risk-acceptances (HTTP-client SSRF — it's
+a local dev tool, blocking loopback breaks its purpose; `Session::run`
+stream misattribution — UI key-gating serializes it today). Everything
+below is new ground: gaps this plan's own later capabilities open up
+(scripting, keybinding overrides, AI), plus baseline hygiene the original
+audit didn't scope (a public vulnerability-reporting policy, persisted
+non-temp files). Audit-shaped tasks here follow the same "audit first,
+file real findings as follow-ups" pattern as T111/T123, rather than
+presupposing a specific vulnerability exists.
+
+- [ ] **T131 — `SECURITY.md`.** Repo-root policy: supported versions,
+  how to privately report a vulnerability (a maintainer contact — see
+  `AI_STATEMENT.md`'s "Questions" section for the existing pattern — not
+  a public issue), expected response time, and what's explicitly
+  out-of-scope (e.g. the HTTP client's intentional no-SSRF-guard
+  design, already documented in memory but not publicly). Link from
+  `README.md`/`index.md` and `AGENTS.md`, alongside `AI_STATEMENT.md`.
+  GitHub surfaces a root `SECURITY.md` in its Security tab automatically;
+  no extra config needed there. GitLab/Codeberg mirror the file as-is.
+- [ ] **T132 — Script trust prompt.** `vix-script` currently auto-loads
+  and runs every `.rhai` file under `<root>/.vix/scripts/` at startup
+  with no confirmation — cloning an untrusted repo and opening it in Vix
+  silently executes its scripts (sandboxed: no file/network access per
+  `crates/vix-script/spec/index.md`, but still able to read/rewrite the
+  open buffer, spam messages, or plant a fake `prompt()` on first open).
+  Add a one-time-per-workspace trust prompt before loading *project*
+  scripts specifically (global scripts under `Settings::scripts_dir()`
+  stay always-trusted — the user put them there directly), remembered in
+  the session store, mirroring VS Code's Workspace Trust model. Update
+  `crates/vix-script/spec/index.md`'s "Script discovery" section.
+- [ ] **T133 — Persisted-file permission audit.** The 2026-07 audit added
+  `write_private_temp` (0600) for temp files carrying secrets in transit
+  (AI/branch-description scratch files); it never extended to files that
+  persist long-term and may carry buffer content or history:
+  `<config>/undo/*` (full undo trees, potentially of sensitive files),
+  `session.toml` (recently-opened paths), and (once T104h lands)
+  `keybindings.toml`. Audit each for whether its content is ever
+  sensitive and, where it is, switch to `write_private_temp`'s 0600
+  pattern (or document why 0600 isn't warranted, e.g. it's genuinely
+  never sensitive).
+- [ ] **T134 — Post-scripting/AI security re-audit.** Once T105
+  (scripting samples + docs) and T124/T125 (AI provider abstraction +
+  features) ship, run a focused audit pass — same rigor as 2026-07-12,
+  scoped to the new surface only: confirm Rhai's sandboxing actually
+  holds under real usage (not just the spec's design intent), that AI
+  provider keys go through the keyring like the DB credential waterfall
+  (never a plaintext config value), and that T125's "redact file paths
+  on request" / explicit-invoke-only promises are actually implemented,
+  not just planned. File real findings as their own follow-up tasks
+  (T134a, T134b, …), same pattern as T123.
+
 ## Phase 2 — Functionality
 
 - [ ] **T201 — Structural search & replace.** New crate
@@ -523,6 +578,15 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   searchable table of effective bindings for the active keymap (reuse
   `vix-keyboard-shortcut-panel` data), conflict detection, rebind → saved
   to a user-overrides file layered over the keymap; Reset to default.
+  **Updated 2026-09-03**: the persisted-override half of this (a
+  user-overrides file, conflict detection, an `on_key` choke point) is
+  now `vix-keybindings`' job — see T104h–T104j
+  (`crates/vix-keybindings/spec/index.md`), opened by T104's audit after
+  this task was written. Once T104j ships, T204 narrows to *just* the
+  UI: a searchable table view over `vix_keybindings::TABLES` +
+  `Settings::keybindings_path()`'s live overrides, with rebind writing
+  through that already-built layer rather than inventing a second one.
+  Do this after T104j, not before.
 - [ ] **T205 — Snippet editor + tab stops.** Audit whether `$1`/`${2:def}`
   tab stops exist in snippet expansion; implement if not. Add a snippet
   create/edit dialog writing to the user snippets scope; New Snippet from
@@ -540,6 +604,22 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
 - [ ] **T209 — Trash on delete.** File-explorer Delete moves to the OS
   trash (`trash` crate) with setting `explorer.delete = "trash" | "hard"`
   (default trash); the confirm prompt says which will happen.
+- [ ] **T210 — Coverage gutter.** New crate `vix-coverage`: parse LCOV
+  and Cobertura XML into per-file line-hit data; a gutter overlay
+  (covered/uncovered/partial, reusing the diff-gutter's color-mark
+  mechanism) toggled from the Tools menu, pointed at a coverage file the
+  user generates (`cargo llvm-cov`, `pytest --cov`, …) via a settings
+  path or a palette "Load Coverage File…" command. No coverage
+  generation built in — Vix visualizes an existing report, doesn't run
+  one.
+- [ ] **T211 — Editable search results ("wgrep"-style).** Workspace
+  search results open as a real, editable buffer (one line per hit,
+  `path:line: text`) instead of a read-only list; editing a line and
+  saving applies that edit back to its source file at the recorded
+  position, deleting a line skips that hit. Builds on
+  `workspace_search.rs`'s existing results model; a new action
+  (`search.edit_results`) and a small apply-diff-back-to-sources step
+  with a confirm summary ("N files will change") before writing.
 
 ## Phase 3 — Documentation
 
@@ -641,6 +721,61 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
 
 ---
 
+## Ideas backlog (unscoped)
+
+Bigger or more speculative than the tasks above — not yet sized, not yet
+assigned a task id, and not yet agreed as worth doing. Promote one to a
+real `T6xx` task (write it up with the same rigor as the rest of this
+file) when someone actually wants to build it; don't start from this list
+directly. Recorded here so they aren't re-discovered and re-argued from
+scratch each time they come up.
+
+- **Remote/SSH editing.** Open a directory over SSH the way VS Code's
+  Remote-SSH does — a remote filesystem + remote process (LSP servers,
+  `Project → Compile`, terminal) with a thin local UI. Large: a real
+  remote-fs/remote-process protocol, not a small feature. Vix's
+  local-only model (direct `std::fs`, `Command::new` everywhere) would
+  need a real abstraction layer first.
+- **Collaborative editing.** Multiple people editing the same buffer
+  live (CRDT or OT-based). Large scope, a genuinely different product
+  direction (network sync, presence, conflict resolution beyond git) —
+  worth being explicit that this is *not* implied by anything already
+  planned.
+- **Interactive 3-way merge conflict resolver.** `vix-conflict-tool`
+  already parses merge markers; there's no overlay UI to resolve
+  conflicts interactively (accept ours/theirs/both per hunk, edit
+  inline). A real gap, moderate scope — the parser half already exists.
+- **`vix --doctor`.** A CLI subcommand (and Help menu entry) that checks
+  the environment for common friction: is `git` on PATH, are any
+  configured LSP servers actually installed and runnable, does the
+  active locale's spellcheck dictionary exist, is the terminal's
+  `TERM`/color support adequate. Prints a plain pass/fail report.
+- **Settings/profile export-import.** "Export my setup" bundles
+  `config.toml`, the active theme, custom snippets, `macros.toml`, and
+  (once T104h lands) `keybindings.toml` into one archive; "Import" the
+  reverse, onto a fresh machine or for sharing a team preset.
+- **Accessibility audit for screen readers.** T203 adds a WCAG-AA
+  high-contrast *theme* (visual only). A TUI's accessibility to a
+  screen reader is inherently constrained, but worth auditing whether
+  mode/state changes (Vim mode switches, a completed long-running
+  command, a modal opening) are ever announced somewhere a screen
+  reader's terminal integration could pick up, not just shown via color/
+  position — and documenting the honest limits where they aren't fixable.
+- **SBOM generation.** Emit a Software Bill of Materials (e.g.
+  `cargo-cyclonedx`) as a release artifact alongside the existing
+  binaries, for downstream consumers doing their own supply-chain
+  compliance. Lower urgency than T131–T134 — a nice-to-have for a
+  specific downstream audience, not a gap in Vix's own posture.
+- **CodeQL (or similar static analysis) in CI**, alongside the existing
+  `cargo-deny` advisory/license/bans/sources scan. Lower value than it
+  sounds here specifically: `#![forbid(unsafe_code)]` is already
+  workspace-wide, which is what most of CodeQL's Rust query set targets;
+  worth revisiting if that stops being true, or if CodeQL's logic-bug
+  queries (not just memory-safety ones) turn out to catch something
+  clippy pedantic doesn't.
+
+---
+
 ## Suggested execution order (batched for agent runs)
 
 1. **Run A (infrastructure):** T001–T008.
@@ -648,12 +783,17 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
    and T112–T115 as follow-on runs. T104 turned out to need its own spec
    first (`crates/vix-keybindings/spec/index.md`) — its T104a–T104j are a
    further follow-on chain, one keymap conversion per task.
-3. **Run C (features):** T201–T209 in any order, one branch each.
+3. **Run C (features):** T201–T211 in any order, one branch each — except
+   T204, which waits on T104j (§ T204's own updated note), and T210/T211,
+   which have no dependency and can go anytime.
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
 5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last.
 6. **Run F (examples):** T502–T505.
 7. **Deferred/audit-driven:** T121–T125 whenever their prerequisite data
    (benches, audits) exists.
+8. **Security:** T131 anytime (no dependency); T132 anytime (T102/T103
+   already shipped, so it's unblocked now); T133 anytime; T134 only after
+   T105 and T124/T125 ship.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.

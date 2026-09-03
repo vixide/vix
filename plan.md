@@ -117,6 +117,14 @@ The genuinely new powers, biggest first.
    inline "edit selection with instruction", commit-message generation in
    the Git panel, and doc-comment generation. Keep every AI action
    explicit-invoke (no background calls), redact file paths on request.
+6. **Security & hardening (added 2026-09-03).** The 2026-07-12 audit
+   covered the surface that existed then; the capabilities above open new
+   ground it never scoped. A public `SECURITY.md`/disclosure policy, a
+   trust prompt before auto-running a project's `.vix/scripts/*.rhai`
+   (real today — T102/T103 already ship without one), a permission audit
+   of persisted (not just temp) files, and a focused re-audit once
+   scripting and AI actually ship. See `tasks.md`'s "Security & hardening"
+   subsection (T131–T134) for the concrete list.
 
 ### Phase 2 — Functionality (user-facing features)
 
@@ -231,12 +239,21 @@ Smaller, high-value features; each follows the standard per-feature recipe.
   generate what is data (Phase 3.3), link-check in CI, and keep the
   spec-per-crate discipline as the deep source with docs as the friendly
   layer.
-- **Binary size.** Rhai, new grammars, and demos all add weight.
-  Mitigation: keep the tree-sitter feature-gating pattern; put Rhai behind
-  a default-on `scripting` feature; track binary size in CI.
+- **Binary size.** New grammars and demos add weight. Mitigation: keep
+  the tree-sitter feature-gating pattern; track binary size in CI.
+  (Rhai/scripting itself ended up a plain dependency, not a feature flag
+  — see `crates/vix-script/spec/index.md`'s "Packaging" section for why
+  the original default-on-feature plan changed once T103 actually wired
+  it into the App shell.)
 - **Locale fan-out cost.** Every string × 15 languages. Mitigation: batch
   locale updates per branch; machine-translate then flag for review, as
   established practice.
+- **New capabilities widen the attack surface.** Scripting and AI both
+  add ways for external input (a cloned repo's `.vix/scripts/`, an AI
+  provider's response) to reach the editor. Mitigation: the Security &
+  hardening tasks (T131–T134) — audit and harden each capability's real
+  surface once it ships, don't assume the design doc's intent already
+  covers it.
 
 ## Definition of done (per phase)
 
