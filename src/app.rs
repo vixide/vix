@@ -2930,50 +2930,45 @@ impl App {
 
     // ----- keymap: Eclipse ------------------------------------------------
 
-    /// Eclipse (Windows) keymap dispatch. Editing chords fall through to the
-    /// editor widget. Returns true if consumed.
-    #[allow(clippy::too_many_lines)]
+    /// Eclipse (Windows) keymap dispatch, looked up in `vix-keybindings`'
+    /// `"eclipse"` table (T104e — see `crates/vix-keybindings/src/
+    /// eclipse.rs`). Editing chords fall through to the editor widget.
+    /// Returns true if consumed.
     fn eclipse_key(&mut self, key: KeyEvent) -> bool {
-        // `Alt+/`: word completion.
-        if Self::alt(&key) && !Self::ctrl(&key) {
-            if matches!(key.code, KeyCode::Char('/')) {
-                self.run_action("autocomplete");
-                return true;
-            }
-            return false;
-        }
-        if !Self::ctrl(&key) {
-            return false;
-        }
-        let KeyCode::Char(c) = key.code else {
+        let Some(token) = Self::eclipse_token(&key) else {
             return false;
         };
-        let shift = Self::shift(&key);
-        match c.to_ascii_lowercase() {
-            'n' => self.run_action("file.new"),
-            'w' if shift => self.run_action("file.close_all"),
-            'w' => self.run_action("file.close"),
-            's' if shift => self.run_action("file.save_as"),
-            's' => self.run_action("file.save"),
-            'y' => self.run_action("edit.redo"), // Win redo
-            'f' if shift => self.run_action("lsp.format"), // Format
-            'f' => self.run_action("edit.find"),
-            'k' if shift => self.run_action("edit.find_prev"),
-            'k' => self.run_action("edit.find_next"),
-            'h' => self.run_action("search.workspace"), // Search
-            'l' => self.run_action("nav.goto_line"),
-            'd' => self.run_action("edit.delete_line"),
-            'o' => self.run_action("nav.goto_symbol"), // Quick Outline
-            'r' if shift => self.run_action("file.open"), // Open Resource
-            'r' => self.run_action("edit.replace"),
-            't' if shift => self.run_action("nav.goto_workspace_symbol"), // Open Type
-            'b' if shift => self.run_action("run.toggle_breakpoint"),
-            'b' => self.run_action("tools.test"), // Build All
-            '3' => self.run_action("tools.palette"), // Quick Access
-            '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
-            _ => return false,
+        if let Some(action) = vix_keybindings::lookup("eclipse", "", &token) {
+            self.run_action(action);
+            return true;
         }
-        true
+        false
+    }
+
+    /// The `vix-macros` token for an Eclipse lookup, or `None` if `key` is
+    /// neither a `Ctrl`-held nor an `Alt`-held `Char` (every Eclipse
+    /// binding is one or the other). `Ctrl` takes priority over `Alt` — a
+    /// `Ctrl`-held key builds a `Ctrl` token (with `Shift` encoded from the
+    /// modifier bit, matching T104c/T104d's subtlety) regardless of
+    /// whether `Alt` is also held, exactly mirroring the original
+    /// dispatch's `Self::alt(&key) && !Self::ctrl(&key)` guard on its one
+    /// `Alt`-only binding (word completion).
+    fn eclipse_token(key: &KeyEvent) -> Option<String> {
+        let KeyCode::Char(c) = key.code else {
+            return None;
+        };
+        if Self::ctrl(key) {
+            let mut token = String::from("C-");
+            if Self::shift(key) {
+                token.push_str("S-");
+            }
+            token.push(c.to_ascii_lowercase());
+            Some(token)
+        } else if Self::alt(key) {
+            Some(format!("A-{c}"))
+        } else {
+            None
+        }
     }
 
     // ----- keymap: Sublime Text -------------------------------------------
@@ -14977,11 +14972,12 @@ impl App {
                     }
                 }
             }
-            // VS Code's and IntelliJ's tables have only ever had one
-            // context each ("", T104c/T104d), but this still walks every
-            // context generically, matching the Emacs arm above, for the
-            // same reason.
-            id @ ("vscode-macos" | "vscode-windows" | "intellij-macos" | "intellij-windows") => {
+            // VS Code's, IntelliJ's, and Eclipse's tables have only ever
+            // had one context each ("", T104c/T104d/T104e), but this still
+            // walks every context generically, matching the Emacs arm
+            // above, for the same reason.
+            id @ ("vscode-macos" | "vscode-windows" | "intellij-macos" | "intellij-windows"
+            | "eclipse") => {
                 for table in vix_keybindings::TABLES.iter().filter(|t| t.keymap_id == id) {
                     for ctx in table.contexts {
                         for b in ctx.bindings {
@@ -20903,11 +20899,11 @@ fn emacs_key_display(k: &str) -> String {
     }
 }
 
-/// Render a VS Code or `IntelliJ` keymap token for display: strips
-/// `C-`/`S-`/`A-` prefixes in order, each rendered as a named modifier,
-/// then the remaining key uppercased (`"C-S-p"` → `"Ctrl Shift P"`).
-/// Unlike [`emacs_key_display`], these tokens can stack more than one
-/// modifier prefix (T104c's Shift-disambiguation, `IntelliJ`'s
+/// Render a VS Code, `IntelliJ`, or Eclipse keymap token for display:
+/// strips `C-`/`S-`/`A-` prefixes in order, each rendered as a named
+/// modifier, then the remaining key uppercased (`"C-S-p"` → `"Ctrl Shift
+/// P"`). Unlike [`emacs_key_display`], these tokens can stack more than
+/// one modifier prefix (T104c's Shift-disambiguation, `IntelliJ`'s
 /// `Ctrl+Alt+…`, T104d), so this strips a loop of them rather than just
 /// one.
 fn modifier_token_display(k: &str) -> String {

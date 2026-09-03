@@ -6669,6 +6669,57 @@ fn intellij_unguarded_shift_quirk_is_preserved() {
     );
 }
 
+// ----- vix-keybindings registry conversion (improvement plan T104e) -------
+// eclipse_key now dispatches through vix_keybindings::lookup instead of its
+// own hardcoded match; these cover the Shift-bit-vs-char-case
+// disambiguation (same subtlety as T104c/T104d) and the Alt-only word
+// completion binding, neither exercised by
+// `intellij_and_eclipse_keymaps_bind_find` above.
+
+#[test]
+fn eclipse_keymap_distinguishes_ctrl_from_ctrl_shift() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "eclipse".to_string();
+    // Plain Ctrl+W closes the active tab; Ctrl+Shift+W closes all tabs --
+    // a terminal reports Ctrl+Shift+w as a lowercase 'w' with the Shift
+    // bit set, not an uppercase 'W', so these must not collide.
+    app.run_action("file.new");
+    app.run_action("file.new");
+    let tabs_before = app.editor.tabs.len();
+    assert!(tabs_before >= 2);
+    app.on_key(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::CONTROL));
+    assert_eq!(
+        app.editor.tabs.len(),
+        tabs_before - 1,
+        "Ctrl+W closes just the active tab"
+    );
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('w'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
+    assert_eq!(
+        app.editor.tabs.len(),
+        1,
+        "Ctrl+Shift+W closes all tabs, leaving exactly the one empty buffer \
+         file.close_all always leaves behind"
+    );
+}
+
+#[test]
+fn eclipse_keymap_alt_slash_completes_a_word_distinct_from_ctrl_slash() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "eclipse".to_string();
+    // Alt+/ (word completion) is a distinct binding from Ctrl+/ (toggle
+    // comment) -- Alt is only examined once Ctrl is confirmed absent.
+    type_str(&mut app, "function\nfun");
+    app.on_key(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::ALT));
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "function\nfunction",
+        "Alt+/ completes the word, same as the autocomplete action"
+    );
+}
+
 #[test]
 fn emacs_keymap_ctrl_movement() {
     let mut app = app_at(Path::new("."));

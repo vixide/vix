@@ -455,7 +455,26 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   change: full 427-test suite green throughout (425 + 2 new, on top of
   fixing the pre-existing test's ids), plus 4 new `vix-keybindings` unit
   tests and 1 updated `modifier_token_display` unit test.
-- [ ] **T104e — Eclipse.**
+- [x] **T104e — Eclipse.**
+  Done — no schema change (one flat `""` context, all-`Ctrl` plus one
+  exception), and needed the same Shift-bit-explicit token approach
+  T104c/T104d introduced (a new `App::eclipse_token`). The one genuinely
+  new wrinkle (spec: "Eclipse's own subtlety, found during T104e"): the
+  original dispatch has a binding that isn't a `Ctrl` chord at all —
+  `Alt+/` (word completion) — matched only when `Ctrl` is *not* also held,
+  so `Ctrl+Alt+/` falls through to the `Ctrl` branch and resolves to
+  `edit.toggle_comment` (same as plain `Ctrl+/`) rather than word
+  completion; `Alt` is simply never examined once `Ctrl` is present.
+  `eclipse_token` preserves this exactly (`Ctrl` takes priority,
+  `Alt`-only builds an `"A-…"` token) and the table carries `"A-/"` as an
+  ordinary row alongside the `"C-…"` ones in the same context, rather than
+  adding a second context for one binding. Extended the F1-help-overlay's
+  generic `vscode-macos`/`vscode-windows`/`intellij-macos`/
+  `intellij-windows` match arm to also cover `"eclipse"` (same shape,
+  `modifier_token_display` already handles a stacked-or-single prefix
+  fine) instead of a fifth near-duplicate arm. Zero intended behavior
+  change: full 429-test suite green throughout (427 + 2 new), plus 3 new
+  `vix-keybindings` unit tests.
 - [ ] **T104f — Sublime Text.**
 - [ ] **T104g — Apple + `global_shared_key`.** The last two dispatch
   functions; the registry now covers all 10 keymap ids exhaustively.
