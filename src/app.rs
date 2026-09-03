@@ -2694,34 +2694,20 @@ impl App {
     pub fn which_key(&self) -> Option<(String, Vec<(String, String)>)> {
         match self.active_keymap() {
             Keymap::Emacs if self.emacs_prefix => {
-                let rows = EMACS_CTRL_X
-                    .iter()
-                    .map(|&(k, a)| (k.to_string(), a.to_string()))
-                    .collect();
-                Some(("C-x".to_string(), rows))
+                Some(("C-x".to_string(), Self::emacs_context_rows("C-x")))
             }
             Keymap::Emacs if self.emacs_c_x_prefix => {
-                let rows = EMACS_CTRL_C_X
-                    .iter()
-                    .map(|&(k, a)| (k.to_string(), a.to_string()))
-                    .collect();
-                Some(("C-c C-x".to_string(), rows))
+                Some(("C-c C-x".to_string(), Self::emacs_context_rows("C-c C-x")))
             }
-            Keymap::Emacs if self.emacs_c_p_c_m_prefix => {
-                let rows = EMACS_CTRL_C_P_C_M
-                    .iter()
-                    .map(|&(k, a)| (k.to_string(), a.to_string()))
-                    .collect();
-                Some(("C-c p c m".to_string(), rows))
-            }
+            Keymap::Emacs if self.emacs_c_p_c_m_prefix => Some((
+                "C-c p c m".to_string(),
+                Self::emacs_context_rows("C-c p c m"),
+            )),
             Keymap::Emacs if self.emacs_c_p_c_prefix => {
-                // `m` continues into the subproject family (see
-                // `EMACS_CTRL_C_P_C`'s doc comment); shown here as a hint row
-                // even though it is not itself a dispatchable action.
-                let mut rows: Vec<(String, String)> = EMACS_CTRL_C_P_C
-                    .iter()
-                    .map(|&(k, a)| (k.to_string(), a.to_string()))
-                    .collect();
+                // `m` continues into the subproject family; shown here as a
+                // hint row even though it is not itself a dispatchable
+                // action (so not itself in the "C-c p c" table).
+                let mut rows = Self::emacs_context_rows("C-c p c");
                 rows.push(("m".to_string(), "project.subproject.*".to_string()));
                 Some(("C-c p c".to_string(), rows))
             }
@@ -2730,11 +2716,7 @@ impl App {
                 vec![("c".to_string(), "project.*".to_string())],
             )),
             Keymap::Emacs if self.emacs_c_prefix => {
-                let rows = EMACS_CTRL_C
-                    .iter()
-                    .map(|&(k, a)| (k.to_string(), a.to_string()))
-                    .collect();
-                Some(("C-c".to_string(), rows))
+                Some(("C-c".to_string(), Self::emacs_context_rows("C-c")))
             }
             Keymap::Spacemacs => {
                 let seq = self.spacemacs_leader.as_ref()?;
@@ -2748,6 +2730,27 @@ impl App {
             }
             _ => None,
         }
+    }
+
+    /// Every `(key_token, action_id)` binding in Emacs's `context`
+    /// (`vix-keybindings`, T104a), as owned strings for display — feeds
+    /// [`App::which_key`] and (via [`App::shortcut_rows`]) the F1 help
+    /// overlay from the one registry instead of each walking its own copy
+    /// of the table.
+    fn emacs_context_rows(context: &str) -> Vec<(String, String)> {
+        vix_keybindings::TABLES
+            .iter()
+            .find(|t| t.keymap_id == "emacs")
+            .into_iter()
+            .flat_map(|t| t.contexts)
+            .find(|c| c.name == context)
+            .map(|c| {
+                c.bindings
+                    .iter()
+                    .map(|b| (b.key_token.to_string(), b.action_id.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     fn ctrl(key: &KeyEvent) -> bool {
@@ -3194,59 +3197,59 @@ impl App {
         if self.emacs_universal && !(Self::ctrl(&key) && matches!(key.code, KeyCode::Char('c'))) {
             self.emacs_universal = false;
         }
-        if Self::alt(&key) && !Self::ctrl(&key) {
-            return self.emacs_meta_key(key);
-        }
-        if Self::ctrl(&key)
-            && let KeyCode::Char(c) = key.code
-        {
-            match c.to_ascii_lowercase() {
-                'x' => self.emacs_prefix = true,
-                'c' => self.emacs_c_prefix = true,
-                'g' => self.status = t!("status.emacs_quit").to_string(),
-                's' => self.run_action("edit.find"),
-                'f' => self.editor_motion(KeyCode::Right),
-                'b' => self.editor_motion(KeyCode::Left),
-                'n' => self.editor_motion(KeyCode::Down),
-                'p' => self.editor_motion(KeyCode::Up),
-                'a' => self.editor_motion(KeyCode::Home),
-                'e' => self.editor_motion(KeyCode::End),
-                'v' => self.editor_motion(KeyCode::PageDown),
-                'd' => self.editor_motion(KeyCode::Delete),
-                'w' => self.run_action("edit.cut"), // kill-region
-                'y' => self.run_action("edit.paste"), // yank
-                'k' => self.run_action("cut_line"), // kill-line (whole line)
-                't' => self.run_action("edit.transpose_chars"),
-                '/' | '7' | '_' => self.run_action("edit.undo"),
-                _ => return false,
-            }
+        // `Ctrl+X`/`Ctrl+C` start a chord — a mode transition, not a
+        // dispatchable action, so these two stay special-cased rather than
+        // living in the table. Everything else at the top level (Ctrl
+        // chords and Meta/Alt bindings alike) is one registry lookup —
+        // see `crates/vix-keybindings/spec/index.md`.
+        if Self::ctrl(&key) && matches!(key.code, KeyCode::Char('x')) {
+            self.emacs_prefix = true;
             return true;
+        }
+        if Self::ctrl(&key) && matches!(key.code, KeyCode::Char('c')) {
+            self.emacs_c_prefix = true;
+            return true;
+        }
+        if Self::ctrl(&key) || Self::alt(&key) {
+            let token = Self::emacs_top_level_token(&key);
+            if let Some(action) = vix_keybindings::lookup("emacs", "", &token) {
+                self.run_action(action);
+                return true;
+            }
         }
         false
     }
 
-    /// The second key of an Emacs `Ctrl+X …` chord. Always consumes the key.
-    fn emacs_chord_key(&mut self, key: KeyEvent) -> bool {
-        if Self::ctrl(&key)
+    /// The `vix-macros` token for a top-level Emacs (Ctrl or Meta) binding
+    /// lookup. Ctrl-chord letters are matched case-insensitively (terminals
+    /// normally already send `Ctrl+<letter>` lowercase regardless of Shift,
+    /// and the dispatch this replaced defensively lowercased too); Meta
+    /// (Alt) bindings are case-sensitive, matching that same original
+    /// dispatch (`emacs_meta_key`, since folded into this one table).
+    fn emacs_top_level_token(key: &KeyEvent) -> String {
+        if Self::ctrl(key)
             && let KeyCode::Char(c) = key.code
         {
-            match c.to_ascii_lowercase() {
-                'f' => self.run_action("file.open"),
-                's' => self.run_action("file.save"),
-                'c' => self.run_action("file.quit"),
-                'b' => self.open_palette_seeded("#"), // list buffers
-                _ => self.status = t!("status.emacs_no_chord").to_string(),
-            }
-            return true;
+            crate::macros::encode_key(KeyEvent::new(
+                KeyCode::Char(c.to_ascii_lowercase()),
+                key.modifiers,
+            ))
+        } else {
+            crate::macros::encode_key(*key)
         }
-        match key.code {
-            KeyCode::Char('k') => self.run_action("file.close"),
-            KeyCode::Char('b') => self.open_palette_seeded("#"), // switch buffer
-            KeyCode::Char('o') => self.run_action("view.focus_other_pane"),
-            KeyCode::Char('2') => self.run_action("view.split_horizontal"),
-            KeyCode::Char('3') => self.run_action("view.split_vertical"),
-            KeyCode::Char('0' | '1') => self.run_action("view.unsplit"),
-            _ => self.status = t!("status.emacs_no_chord").to_string(),
+    }
+
+    /// The second key of an Emacs `Ctrl+X …` chord. Always consumes the key.
+    fn emacs_chord_key(&mut self, key: KeyEvent) -> bool {
+        let KeyCode::Char(c) = key.code else {
+            self.status = t!("status.emacs_no_chord").to_string();
+            return true;
+        };
+        let pressed = Self::chord_key_name(&key, c);
+        if let Some(action) = vix_keybindings::lookup("emacs", "C-x", &pressed) {
+            self.run_action(action);
+        } else {
+            self.status = t!("status.emacs_no_chord").to_string();
         }
         true
     }
@@ -3258,7 +3261,7 @@ impl App {
     fn emacs_c_chord_key(&mut self, key: KeyEvent) -> bool {
         let universal = std::mem::take(&mut self.emacs_universal);
         // `C-c RET` / `org-table-hline-and-move`: RET arrives as `KeyCode::Enter`,
-        // not a `Char`, so it cannot go through the `EMACS_CTRL_C` char table.
+        // not a `Char`, so it cannot go through the "C-c" context's table lookup.
         if key.code == KeyCode::Enter {
             self.run_action("org.table.hline_and_move");
             return true;
@@ -3273,8 +3276,9 @@ impl App {
             return true;
         }
         let pressed = Self::chord_key_name(&key, c);
-        // `C-c p` opens the `project.*` chord family (see
-        // `EMACS_CTRL_C_P_C`'s doc comment for why `p` is plain, not `C-p`).
+        // `C-c p` opens the `project.*` chord family (see the "C-c p c"
+        // context's doc comment, `crates/vix-keybindings/src/emacs.rs`, for
+        // why `p` is plain, not `C-p`).
         if pressed == "p" {
             self.emacs_c_p_prefix = true;
             return true;
@@ -3294,7 +3298,7 @@ impl App {
             self.run_action("org.table.recalc");
             return true;
         }
-        if let Some(&(_, action)) = EMACS_CTRL_C.iter().find(|&&(k, _)| k == pressed) {
+        if let Some(action) = vix_keybindings::lookup("emacs", "C-c", &pressed) {
             self.run_action(action);
         } else {
             self.status = t!("status.emacs_no_chord").to_string();
@@ -3331,7 +3335,7 @@ impl App {
             return true;
         };
         let pressed = Self::chord_key_name(&key, c);
-        if let Some(&(_, action)) = EMACS_CTRL_C_X.iter().find(|&&(k, _)| k == pressed) {
+        if let Some(action) = vix_keybindings::lookup("emacs", "C-c C-x", &pressed) {
             self.run_action(action);
         } else {
             self.status = t!("status.emacs_no_chord").to_string();
@@ -3352,10 +3356,10 @@ impl App {
         true
     }
 
-    /// Fourth key of an Emacs `Ctrl+C p c …` chord — the `project.*` family.
-    /// A plain `m` opens the fifth-key `project.subproject.*` family
-    /// ([`EMACS_CTRL_C_P_C_M`]); any other key is looked up in
-    /// [`EMACS_CTRL_C_P_C`].
+    /// Fourth key of an Emacs `Ctrl+C p c …` chord — the `project.*` family
+    /// (`vix_keybindings`'s `"C-c p c"` context). A plain `m` opens the
+    /// fifth-key `project.subproject.*` family (the `"C-c p c m"` context);
+    /// any other key is looked up in this one.
     fn emacs_c_p_c_chord_key(&mut self, key: KeyEvent) -> bool {
         if key.code == KeyCode::Char('m') && !Self::ctrl(&key) {
             self.emacs_c_p_c_m_prefix = true;
@@ -3366,7 +3370,7 @@ impl App {
             return true;
         };
         let pressed = Self::chord_key_name(&key, c);
-        if let Some(&(_, action)) = EMACS_CTRL_C_P_C.iter().find(|&&(k, _)| k == pressed) {
+        if let Some(action) = vix_keybindings::lookup("emacs", "C-c p c", &pressed) {
             self.run_action(action);
         } else {
             self.status = t!("status.emacs_no_chord").to_string();
@@ -3375,14 +3379,15 @@ impl App {
     }
 
     /// Fifth key of an Emacs `Ctrl+C p c m …` chord — the
-    /// `project.subproject.*` family ([`EMACS_CTRL_C_P_C_M`]).
+    /// `project.subproject.*` family (`vix_keybindings`'s `"C-c p c m"`
+    /// context).
     fn emacs_c_p_c_m_chord_key(&mut self, key: KeyEvent) -> bool {
         let KeyCode::Char(c) = key.code else {
             self.status = t!("status.emacs_no_chord").to_string();
             return true;
         };
         let pressed = Self::chord_key_name(&key, c);
-        if let Some(&(_, action)) = EMACS_CTRL_C_P_C_M.iter().find(|&&(k, _)| k == pressed) {
+        if let Some(action) = vix_keybindings::lookup("emacs", "C-c p c m", &pressed) {
             self.run_action(action);
         } else {
             self.status = t!("status.emacs_no_chord").to_string();
@@ -3398,23 +3403,6 @@ impl App {
         } else {
             c.to_string()
         }
-    }
-
-    /// Emacs `Meta` (Alt) bindings. Returns true if consumed; unbound Alt keys
-    /// fall through to the shared handler (menu mnemonics).
-    fn emacs_meta_key(&mut self, key: KeyEvent) -> bool {
-        match key.code {
-            KeyCode::Char('x') => self.run_action("tools.palette"), // M-x
-            KeyCode::Char('f') => self.run_action("nav.word_next"),
-            KeyCode::Char('b') => self.run_action("nav.word_prev"),
-            KeyCode::Char('v') => self.editor_motion(KeyCode::PageUp),
-            KeyCode::Char('w') => self.run_action("edit.copy"), // kill-ring-save
-            KeyCode::Char('t') => self.run_action("edit.transpose_words"),
-            KeyCode::Char('<') => self.run_action("edit.go_first"),
-            KeyCode::Char('>') => self.run_action("edit.go_last"),
-            _ => return false,
-        }
-        true
     }
 
     // ----- keymap: Vim ----------------------------------------------------
@@ -4450,7 +4438,23 @@ impl App {
             "nav.goto_line" => self.open_palette_seeded(":"),
             "nav.goto_symbol" => self.open_palette_seeded("@"),
             "nav.goto_workspace_symbol" => self.open_palette_seeded("@@"),
+            "nav.switch_buffer" => self.open_palette_seeded("#"),
             "nav.outline" => self.open_outline(),
+            // Named wrappers around `editor_motion` so a keybinding table
+            // (`vix-keybindings`) can reference them as plain action ids —
+            // added for the Emacs keymap's conversion (T104a); nothing here
+            // is Emacs-specific, so a later keymap's own conversion should
+            // reuse these rather than adding a second set.
+            "motion.char_right" => self.editor_motion(KeyCode::Right),
+            "motion.char_left" => self.editor_motion(KeyCode::Left),
+            "motion.line_down" => self.editor_motion(KeyCode::Down),
+            "motion.line_up" => self.editor_motion(KeyCode::Up),
+            "motion.home" => self.editor_motion(KeyCode::Home),
+            "motion.end" => self.editor_motion(KeyCode::End),
+            "motion.page_down" => self.editor_motion(KeyCode::PageDown),
+            "motion.page_up" => self.editor_motion(KeyCode::PageUp),
+            "motion.delete_forward" => self.editor_motion(KeyCode::Delete),
+            "edit.keyboard_quit" => self.status = t!("status.emacs_quit").to_string(),
             _ => return self.run_search_action(action),
         }
         true
@@ -14957,36 +14961,32 @@ impl App {
                     add(Self::action_title(action), keys);
                 }
             }
+            // Walks every context of every `emacs`-id table (today just
+            // one, T104a) generically, so a later context/binding needs no
+            // matching change here.
             "emacs" => {
-                for (k, action) in EMACS_CTRL_X {
-                    add(
-                        Self::action_title(action),
-                        format!("Ctrl X {}", emacs_key_display(k)),
-                    );
-                }
-                for (k, action) in EMACS_CTRL_C {
-                    add(
-                        Self::action_title(action),
-                        format!("Ctrl C {}", emacs_key_display(k)),
-                    );
-                }
-                for (k, action) in EMACS_CTRL_C_X {
-                    add(
-                        Self::action_title(action),
-                        format!("Ctrl C Ctrl X {}", emacs_key_display(k)),
-                    );
-                }
-                for (k, action) in EMACS_CTRL_C_P_C {
-                    add(
-                        Self::action_title(action),
-                        format!("Ctrl C P C {}", emacs_key_display(k)),
-                    );
-                }
-                for (k, action) in EMACS_CTRL_C_P_C_M {
-                    add(
-                        Self::action_title(action),
-                        format!("Ctrl C P C M {}", emacs_key_display(k)),
-                    );
+                for table in vix_keybindings::TABLES
+                    .iter()
+                    .filter(|t| t.keymap_id == "emacs")
+                {
+                    for ctx in table.contexts {
+                        let prefix: String = ctx
+                            .name
+                            .split(' ')
+                            .filter(|s| !s.is_empty())
+                            .map(emacs_key_display)
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        for b in ctx.bindings {
+                            let key_display = emacs_key_display(b.key_token);
+                            let keys = if prefix.is_empty() {
+                                key_display
+                            } else {
+                                format!("{prefix} {key_display}")
+                            };
+                            add(Self::action_title(b.action_id), keys);
+                        }
+                    }
                 }
             }
             _ => {}
@@ -20919,10 +20919,13 @@ fn collect_menu_shortcuts(items: &[crate::menu::Item], add: &mut impl FnMut(Stri
 /// Render an Emacs `Ctrl X`-map key for display: `"C-f"` → `"Ctrl F"`, a bare
 /// key unchanged.
 fn emacs_key_display(k: &str) -> String {
-    k.strip_prefix("C-").map_or_else(
-        || k.to_string(),
-        |rest| format!("Ctrl {}", rest.to_uppercase()),
-    )
+    if let Some(rest) = k.strip_prefix("C-") {
+        format!("Ctrl {}", rest.to_uppercase())
+    } else if let Some(rest) = k.strip_prefix("A-") {
+        format!("Alt {}", rest.to_uppercase())
+    } else {
+        k.to_string()
+    }
 }
 
 /// Render a leader key fragment for display (`" "` → `SPC`).
@@ -20933,90 +20936,6 @@ fn display_key(k: &str) -> String {
         k.to_string()
     }
 }
-
-/// The `Ctrl+X …` chords shown by the Emacs which-key popup: `(key, action-id)`.
-const EMACS_CTRL_X: &[(&str, &str)] = &[
-    ("C-f", "file.open"),
-    ("C-s", "file.save"),
-    ("C-c", "file.quit"),
-    ("k", "file.close"),
-    ("b", "buffers"),
-    ("o", "view.focus_other_pane"),
-    ("2", "view.split_horizontal"),
-    ("3", "view.split_vertical"),
-    ("1", "view.unsplit"),
-];
-
-/// The Emacs `Ctrl+C` chord table — the Org command family, matching the
-/// Emacs Org bindings. `C-u C-c C-t` (close with a note) is a
-/// universal-argument variant of `C-c C-t`, not a distinct chord, so it is not
-/// listed separately. `C-x` continues into [`EMACS_CTRL_C_X`].
-const EMACS_CTRL_C: &[(&str, &str)] = &[
-    ("C-t", "org.cycle_todo"),
-    ("C-c", "org.ctrl_c_ctrl_c"),
-    ("C-s", "org.schedule"),
-    ("C-d", "org.deadline"),
-    ("C-w", "org.refile"),
-    ("C-q", "org.set_tags"),
-    ("C-o", "org.link.follow"),
-    ("C-l", "org.link.insert"),
-    ("l", "org.link.store"),
-    ("a", "org.agenda"),
-    (".", "org.timestamp"),
-    ("!", "org.timestamp_inactive"),
-    ("'", "org.edit_src"),
-    ("/", "org.sparse.match"),
-    ("-", "org.table.insert_hline"),
-    ("^", "org.table.sort"),
-    ("+", "org.table.sum_column"),
-    ("|", "org.table.create_from_region"),
-];
-
-/// The Emacs `Ctrl+C Ctrl+X` chord table — the extended Org command family.
-/// (`C-i` arrives as Tab in some terminals; the menu covers those cases.)
-const EMACS_CTRL_C_X: &[(&str, &str)] = &[
-    ("f", "org.footnote"),
-    ("a", "org.archive.tag"),
-    ("<", "org.agenda.lock"),
-    (">", "org.agenda.unlock"),
-    ("C-s", "org.archive.subtree"),
-    ("C-c", "org.column_view"),
-    ("C-u", "org.columns.update_dblock"),
-    ("C-i", "org.clock_in"),
-    ("C-o", "org.clock_out"),
-    ("C-w", "org.subtree.cut"),
-    ("C-y", "org.subtree.paste"),
-];
-
-/// The Emacs `Ctrl+C p c` chord table — the `project.*` family, a classic
-/// terminal-friendly `C-c p` prefix (rather than a Super-key `s-p` prefix,
-/// which a terminal cannot always receive). None of these keys are
-/// Ctrl-modified: `p`, `c`, and each action letter are typed plain, after the
-/// one literal `Ctrl+C`. `m` continues into [`EMACS_CTRL_C_P_C_M`] (handled
-/// as a special case, like `C-x` in [`EMACS_CTRL_C`], so it is not listed
-/// here as a leaf action).
-const EMACS_CTRL_C_P_C: &[(&str, &str)] = &[
-    ("o", "project.configure"),
-    ("c", "project.compile"),
-    ("t", "project.test"),
-    (".", "project.test_at_point"),
-    ("i", "project.install"),
-    ("p", "project.package"),
-    ("r", "project.run"),
-    ("x", "project.run_task"),
-    ("X", "project.repeat_last_task"),
-];
-
-/// The Emacs `Ctrl+C p c m` chord table — the `project.subproject.*` family.
-const EMACS_CTRL_C_P_C_M: &[(&str, &str)] = &[
-    ("f", "project.subproject.find_file"),
-    ("o", "project.subproject.configure"),
-    ("c", "project.subproject.compile"),
-    ("t", "project.subproject.test"),
-    ("i", "project.subproject.install"),
-    ("p", "project.subproject.package"),
-    ("r", "project.subproject.run"),
-];
 
 /// A short jump label for index `i`: `a`..`z`, then `aa`, `ab`, … (base-26 over
 /// lowercase letters), so early lines get single-key labels.

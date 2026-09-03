@@ -9,12 +9,15 @@ layer" turned out not to exist: this document designs it, so scripts (and,
 built the same way, a user's own persisted overrides) have something real
 to plug into.
 
-**Status**: design-only. This spec is written before any of
-`vix-keybindings`' functional code — the audit below is what justifies the
-design, not a description of already-built behavior. Today the crate is a
-documented no-op, same shape as `vix-script` was after T101 and `vix-modal`
-after T111. T104a onward implement it in slices (§ "Staged plan"); each
-should update this file if reality and design turn out to disagree.
+**Status**: T104a done — the registry API is real and one keymap (Emacs) is
+fully converted; T104b onward implement the remaining slices (§ "Staged
+plan"). The rest of this spec otherwise still describes intent, not
+built behavior, for those slices — each should update this file if reality
+and design turn out to disagree, same as T104a already did once (§ "Schema
+refinement, made during T104a" below): the original flat `KeymapTable
+{keymap_id, bindings}` design turned out not to fit a chorded keymap at
+all, discovered only once Emacs's actual dispatch code was read closely
+enough to convert for real.
 
 ## The audit
 
@@ -216,27 +219,38 @@ enum this crate would otherwise need. `vscode-macos` and `vscode-windows`
 get identical binding tables (small, deliberate duplication) rather than
 inventing a second, coarser enum just to avoid it.
 
-### Registry API
+### Registry API (as implemented, T104a — see "Schema refinement" below)
 
 ```rust
+/// One dispatch depth within a keymap: the top level (`""`), or a specific
+/// chord prefix already typed, named by the key tokens typed to reach it,
+/// space-joined (e.g. `"C-x"`, `"C-c C-x"`). A non-chorded keymap has
+/// exactly one context, `""`.
+pub struct ChordContext {
+    pub name: &'static str,
+    pub bindings: &'static [Binding],
+}
+
 /// Every built-in binding for one keymap id.
 pub struct KeymapTable {
     pub keymap_id: &'static str,
-    pub bindings: &'static [Binding],
+    pub contexts: &'static [ChordContext],
 }
 
 /// All 10 keymaps' tables (built as `const` data, no runtime cost —
 /// the same "pure data crate" shape as `vix-menu`'s `Item`/`TOOLS`).
 pub const TABLES: &[KeymapTable] = &[ /* one entry per keymap id */ ];
 
-/// The action bound to `token` in `keymap_id`'s built-in bindings, if any.
-pub fn lookup(keymap_id: &str, token: &str) -> Option<&'static str>;
+/// The action bound to `token` in `keymap_id`'s `context` (top level =
+/// `""`), if any.
+pub fn lookup(keymap_id: &str, context: &str, token: &str) -> Option<&'static str>;
 
-/// Every `(keymap_id, token)` pair bound to `action_id` — feeds the F1
-/// help overlay in place of `collect_menu_shortcuts` + the six ad hoc
-/// chord-table walks, and is what makes "does this shadow a built-in"
-/// checkable at all (§ Override layer).
-pub fn shortcuts_for(action_id: &str) -> Vec<(&'static str, &'static str)>;
+/// Every `(keymap_id, context, token)` triple bound to `action_id` — feeds
+/// the F1 help overlay in place of `collect_menu_shortcuts` + the six ad
+/// hoc chord-table walks, and is what makes "does this shadow a built-in"
+/// checkable at all (§ Override layer, § "Overrides never see a
+/// non-empty context").
+pub fn shortcuts_for(action_id: &str) -> Vec<(&'static str, &'static str, &'static str)>;
 ```
 
 Each keymap's `App` dispatch function (`vim_normal_key`, `emacs_key`, …)
@@ -245,7 +259,49 @@ token via `vix_macros::encode_key`, call `vix_keybindings::lookup`, and
 `run_action` on a hit — replacing the hardcoded match body with a table
 lookup. Genuinely stateful behavior (Vim's operator-pending/count
 accumulation once `vix-modal` lands, Emacs/Spacemacs's chord-prefix flags)
-stays host-side control flow around the lookup, not inside it.
+stays host-side control flow around the lookup, not inside it — a chord's
+own *prefix-entry* keys (`C-x` starting a chord, not one of its leaves)
+are never table entries either, for the same reason: they're a mode
+transition, not a dispatchable action.
+
+#### Schema refinement, made during T104a
+
+The original design above this note used a flat `KeymapTable{keymap_id,
+bindings}` — one list per keymap, no notion of chord depth. Reading
+Emacs's actual dispatch (`emacs_key` plus five `*_chord_key` functions) to
+convert it for real showed that doesn't work: the same token means
+different things at different chord depths (`b` alone does nothing at the
+top level; inside the `C-x` chord it switches buffers), so a flat table
+can't represent a chorded keymap without collisions. `ChordContext` is the
+fix — one named sub-table per dispatch depth, `""` for the top level.
+Non-chorded keymaps (everything except Emacs and Spacemacs) will still
+only ever need the one `""` context each.
+
+**A real, unrelated bug found and fixed along the way**: the old
+`EMACS_CTRL_X` const (used only for the which-key popup and the F1 help
+overlay — never for actual dispatch, since the real `C-x` chord handler
+was a *second*, separate hardcoded `match`) had drifted from that handler:
+it claimed `b` ran a `"buffers"` action that didn't exist anywhere in
+`App::run_action`, and it was missing the `C-b`/`0` bindings the real
+handler accepted. Converting both into one shared `"C-x"` `ChordContext`
+fixed this — `nav.switch_buffer` (new) is the one real action id both
+`C-x b` and `C-x C-b` now run, in both the dispatch and the display. This
+is the exact "drift risk" the original audit (§ "None of the 9 keymaps
+are queryable today") predicted a hand-maintained shadow registry would
+eventually hit — except it had already happened, in code that shipped
+before this spec existed.
+
+Two more, smaller findings from the same pass: Emacs's Meta (Alt)
+bindings (`emacs_meta_key`, a sixth hardcoded match, entirely separate
+from the Ctrl-chord one) turned out to be single keystrokes, not a chord
+prefix — Meta+key is one physical key combination, unlike `C-x` (a full
+keystroke *used as* a prefix for a second one) — so they belong as
+ordinary entries in the `""` top-level context, not a context of their
+own; folding them in retired `emacs_meta_key` as a separate function
+entirely. And since the F1 help overlay only ever read the five
+`EMACS_CTRL_*` consts (never the top-level Ctrl match or the Meta match),
+neither set of bindings had ever been shown there — the unified table
+fixes that too, as a side effect of having one true source instead of two.
 
 ### Override layer
 
@@ -265,6 +321,14 @@ pub struct Override {
 }
 ```
 
+- **Overrides never see a non-empty context.** Neither `vix-script`'s
+  `bind_key(key_token, command_id)` nor the planned `keybindings.toml`
+  schema has any notion of a chord — both take one token, always
+  implicitly the `""` (top-level) context. So T104i's shadow check is
+  always `lookup(active_keymap_id, "", token)`, never a `ChordContext`
+  other than the top level; a script or user override simply can't shadow
+  (or be shadowed by) an Emacs `C-x`-chord leaf, only a keymap's top-level
+  bindings.
 - **Persisted user overrides**: a new `Settings::keybindings_path() ->
   Option<PathBuf>` mirroring `macros_path()` exactly
   (`<config dir>/keybindings.toml`); a `KeyBindingsFile { #[serde(default,

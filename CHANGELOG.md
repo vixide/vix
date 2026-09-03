@@ -89,6 +89,17 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reported once). Design-only — the `vix-keybindings` crate itself is a
   documented no-op; the registry and every keymap's conversion land in
   T104a–T104j, one keymap per task.
+- **Keybinding registry: Emacs converted** (improvement plan T104a):
+  `emacs_key` and its five chord-continuation handlers now dispatch
+  through the new `vix-keybindings` registry instead of hardcoded
+  `match`es and five ad hoc `EMACS_CTRL_*` consts. Fixed a real,
+  pre-existing bug found while converting: the old `EMACS_CTRL_X` const
+  (used only for the which-key popup and F1 help, never actual dispatch)
+  had drifted from the real `C-x` chord handler — it named a `"buffers"`
+  action that didn't exist, and was missing bindings the real handler
+  accepted. The Emacs keymap's top-level Ctrl and Meta bindings now also
+  appear in the F1 help overlay for the first time (previously only the
+  chord tables did). Zero other intended behavior change.
 
 ### Changed
 

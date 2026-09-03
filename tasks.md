@@ -319,10 +319,43 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
 ### Keybinding registry (epic, opened by T104's audit — see
 ### `crates/vix-keybindings/spec/index.md`)
 
-- [ ] **T104a — Registry crate + Emacs.** `vix-keybindings`: `Binding`/
+- [x] **T104a — Registry crate + Emacs.** `vix-keybindings`: `Binding`/
   `KeymapTable`/`lookup`/`shortcuts_for`. Convert the Emacs keymap first
   (already partly table-driven — cheapest proof the schema fits);
   `App::shortcut_rows` uses `shortcuts_for` for Emacs's contribution.
+  Done — schema turned out to need a third piece, `ChordContext` (one
+  named sub-table per chord depth: `""` top level, `"C-x"`, `"C-c"`,
+  `"C-c C-x"`, `"C-c p c"`, `"C-c p c m"`), since a flat `{keymap_id,
+  bindings}` table can't represent a chorded keymap — the same token
+  (e.g. `b`) means different things at different depths. `lookup`/
+  `shortcuts_for` both gained a `context` parameter accordingly; spec
+  updated (`crates/vix-keybindings/spec/index.md`, "Schema refinement,
+  made during T104a") to match. `emacs_key` and its five
+  `*_chord_key` handlers now dispatch through `vix_keybindings::lookup`
+  instead of hardcoded matches / the old `EMACS_CTRL_*` consts (chord
+  *prefix-entry* keys like `C-x`/`C-c` stay host-side — a mode
+  transition, not a dispatchable action); Meta (Alt) bindings, previously
+  a sixth hardcoded match (`emacs_meta_key`, now deleted), turned out to
+  be single keystrokes rather than a chord prefix, so folded into the
+  `""` top-level context alongside the Ctrl bindings.
+  **A real, pre-existing bug found and fixed along the way**: the old
+  `EMACS_CTRL_X` const (used only for the which-key popup/F1 help, never
+  actual dispatch — the real `C-x` chord handler was a second, separate
+  hardcoded match) had drifted from it: claimed `b` ran a `"buffers"`
+  action that didn't exist anywhere in `run_action`, and was missing the
+  `C-b`/`0` bindings the real handler accepted. Fixed by unifying both
+  into one `ChordContext` — `nav.switch_buffer` (new action id) is what
+  both `C-x b` and `C-x C-b` now really run, in dispatch and display
+  alike. Also added ~10 new small action ids (`motion.*` × 8,
+  `edit.keyboard_quit`, `nav.switch_buffer`) so every top-level Emacs
+  binding — including ones that used to call a bespoke method directly —
+  is representable as a table row. Bonus, not previously true: the
+  top-level Ctrl and Meta bindings now show up in the F1 help overlay too
+  (only the five chord tables ever did before). Zero intended behavior
+  change: full existing 421-test suite stayed green throughout, plus 7
+  new `vix-keybindings` unit tests and 3 new `tests/integration.rs` cases
+  covering previously-untested contexts (`C-c C-x`, `C-c p c`, and the
+  Meta document-bounds bindings).
 - [ ] **T104b — Vim + Spacemacs.** Convert `vim_normal_key`'s table (shared
   by both keymaps) and Spacemacs's own leader table.
 - [ ] **T104c — VS Code.**
