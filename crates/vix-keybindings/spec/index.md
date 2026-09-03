@@ -9,22 +9,23 @@ layer" turned out not to exist: this document designs it, so scripts (and,
 built the same way, a user's own persisted overrides) have something real
 to plug into.
 
-**Status**: T104a (Emacs), T104b (Vi + Spacemacs), T104c (VS Code), and
-T104d (`IntelliJ`) done — five keymaps fully converted. T104e onward
-implement the remaining slices (§ "Staged plan"). The rest of this spec
-otherwise still describes intent, not built behavior, for those slices —
-each should update this file if reality and design turn out to disagree,
-same as T104a and T104b each already did once (§ "Schema refinement, made
-during T104a" and § "A second schema addition, made during T104b" below)
-and T104c/T104d each reconfirmed without needing a third: both fit the
-existing schema exactly (one flat `""` context each — `IntelliJ`'s two
-platform tables genuinely differ in *content*, not shape), but each found
-its own real subtlety in the token grammar (§ "VS Code's own subtlety,
-found during T104c" and § "`IntelliJ`'s own subtlety, found during T104d"
-below). Worth continuing to expect *something* real per keymap, even when
-the shape doesn't need to change — three keymaps running in a row without
-needing a *schema* revision doesn't mean the token-encoding question is
-now safe to skip.
+**Status**: T104a (Emacs), T104b (Vi + Spacemacs), T104c (VS Code), T104d
+(`IntelliJ`), and T104e (Eclipse) done — six keymaps fully converted. T104f
+onward implement the remaining slices (§ "Staged plan"). The rest of this
+spec otherwise still describes intent, not built behavior, for those
+slices — each should update this file if reality and design turn out to
+disagree, same as T104a and T104b each already did once (§ "Schema
+refinement, made during T104a" and § "A second schema addition, made
+during T104b" below) and T104c/T104d/T104e each reconfirmed without
+needing a third: all three fit the existing schema exactly (one flat `""`
+context each — `IntelliJ`'s two platform tables genuinely differ in
+*content*, not shape), but each found its own real subtlety in the token
+grammar (§ "VS Code's own subtlety, found during T104c", § "`IntelliJ`'s
+own subtlety, found during T104d", § "Eclipse's own subtlety, found during
+T104e" below). Worth continuing to expect *something* real per keymap,
+even when the shape doesn't need to change — three keymaps running in a
+row without needing a *schema* revision doesn't mean the token-encoding
+question is now safe to skip.
 
 ## The audit
 
@@ -419,6 +420,27 @@ platform), and `Ctrl+Shift+G` does the same as `Ctrl+G` on Windows (both
 second row with the identical action id, rather than "helpfully"
 inferring it should be distinct — this is a faithful transcription of
 what the original code actually did, not a design choice made here.
+
+#### Eclipse's own subtlety, found during T104e
+
+No schema change again — Eclipse is all-`Ctrl` (plus one exception, see
+below), no chords, one `""` context. The now-expected Shift-bit-explicit
+token function was needed again (`App::eclipse_token`, same reasoning as
+VS Code's and `IntelliJ`'s). The one genuinely new wrinkle: Eclipse's
+original dispatch has a binding that **isn't** a `Ctrl` chord at all —
+`Alt+/` (word completion) — matched as its own leading case, entered only
+when `Ctrl` is *not* held (`Self::alt(&key) && !Self::ctrl(&key)`), before
+the function ever looks at `Ctrl`. Consequently `Ctrl+Alt+/` falls through
+to the `Ctrl` branch and resolves to `edit.toggle_comment` (plain `Ctrl+/`'s
+action) — `Alt` is simply never examined once `Ctrl` is present. Rather
+than adding a second context for this one binding, `eclipse_token` builds
+whichever single-prefix token applies (`"C-…"`, optionally `+"S-"`, when
+`Ctrl` is held — `Alt` ignored in that case, matching the original; `"A-…"`
+when only `Alt` is held), and the table carries `"A-/"` as an ordinary row
+alongside the `"C-…"` ones in the same `""` context. Confirms the general
+lesson again: a keymap not needing a schema change doesn't mean it has no
+real shape to get right, just that the *existing* shape (one flat context)
+happens to still fit.
 
 ### Override layer
 

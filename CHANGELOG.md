@@ -135,6 +135,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   quirk in the original dispatch preserved on purpose: `Ctrl+Shift+N`
   (macOS) and `Ctrl+Shift+G` (Windows) were never actually distinct from
   their plain counterparts, and still aren't.
+- **Keybinding registry: Eclipse converted** (improvement plan T104e):
+  `eclipse_key` now dispatches through `vix-keybindings` too — one flat
+  table, no schema change needed. Eclipse's bindings also appear in the
+  F1 help overlay for the first time (folded into the shared
+  `modifier_token_display` match arm). The one real subtlety: Eclipse's
+  original dispatch has a binding that isn't a `Ctrl` chord at all
+  (`Alt+/`, word completion), examined only when `Ctrl` is *not* held —
+  so `Ctrl+Alt+/` falls through to plain `Ctrl+/`'s action (toggle
+  comment), preserved exactly rather than "fixed." Zero intended behavior
+  change.
 
 ### Changed
 
