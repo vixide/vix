@@ -494,8 +494,54 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   nothing` test's probe id, which had used `"sublime"` as the
   still-empty example — switched to `"apple"`, the one keymap id still
   unconverted after this task.
-- [ ] **T104g — Apple + `global_shared_key`.** The last two dispatch
+- [x] **T104g — Apple + `global_shared_key`.** The last two dispatch
   functions; the registry now covers all 10 keymap ids exhaustively.
+  Done — the biggest single-task departure from the schema so far (spec:
+  "Apple and `global_shared_key`'s own subtlety, found during T104g"),
+  two distinct findings:
+  1. Apple's `apple_ctrl_key` genuinely mixes Shift-guarded letters
+     (`o`/`s`/`w`/`t`/`b`/`f`/`g`, a different action per Shift state,
+     same shape T104c–f already needed) with Shift-agnostic ones
+     (`q`/`n`/`p`/`e`/`r`/`/`/`7`/`_`/`]`/`;`, same action either way).
+     Kept one uniform Shift-bit-explicit `apple_ctrl_token` and gave every
+     Shift-agnostic letter an explicit duplicate `"C-S-…"` row — T104d's
+     "faithfully preserve an unguarded quirk" technique, just needed for
+     ten letters instead of two. `Ctrl+Alt+R` (query replace, the only
+     Alt-keyed binding here) and `Ctrl+D` (forward delete, focus-gated)
+     stay host-side pre-checks, neither fitting a static row.
+  2. `global_shared_key` isn't keyed on a keymap id at all — every one of
+     the 9 `App` dispatch functions falls back to it identically. Added a
+     genuinely new, keymap-agnostic `SHARED: &[Binding]` +
+     `lookup_shared()`, outside `TABLES` entirely (so the "one table per
+     real keymap id" invariant stays meaningful) — the actual schema
+     stretch this task turned out to need, bigger than any single
+     `ChordContext`/`SequenceMatch`-style addition. The menu-mnemonic
+     `Alt+<letter>` lookup (dynamic, not static data) and 6 focus-gated
+     arms (`Ctrl+Shift+Right`/`Left`, `Alt+Up`/`Down`, `Alt+n`/`p`) stay
+     host-side — `App::focus` is per-request runtime state a fixed table
+     can't express. **Caught a real ordering hazard by hand-tracing the
+     original `match`, not assuming order didn't matter**: `Ctrl+Shift+
+     Right`/`Left` (focus-gated) and `Alt+Right`/`Left` (now in `SHARED`)
+     share the same two keys, and the original's arm order gave the
+     Ctrl+Shift pair priority for the rare `Ctrl+Alt+Shift+Left`
+     combination — preserved by checking the focus-gated pair *before*
+     the `SHARED` lookup, not after.
+  Added 4 new action ids for bespoke calls that had none yet (`nav.back`,
+  `nav.forward`, `view.toggle_menu`) — same "give every bespoke call a
+  real id" pattern as T104a's `nav.switch_buffer`; reused 5 already-
+  existing ones (`view.toggle_explorer_focus`, `view.focus_other_pane`,
+  `edit.find_next`/`edit.find_prev`, `help.shortcuts`,
+  `motion.delete_forward`) rather than re-inventing them. Extended the F1
+  help overlay's shared match arm to also cover `"apple"`, and — new this
+  task — added an *unconditional* `SHARED` walk (every keymap dispatches
+  through `global_shared_key` identically, so its bindings show up
+  regardless of the active keymap, unlike the per-keymap arms). One
+  clippy fix needed (`format_push_string`: `token.push_str(&format!(...))`
+  → `write!(token, ...)` for the `F{n}` token). Zero intended behavior
+  change: full 432-test suite green throughout (430 + 2 new — one test's
+  first draft asserted the wrong field, `app.query_replace` instead of
+  `app.search.interactive`, caught and fixed before merging), plus 6 new
+  `vix-keybindings` unit tests (crate total 23 → 29).
 - [ ] **T104h — Persisted overrides.** `Settings::keybindings_path()` +
   `keybindings.toml` load/save (the `macros.toml` pattern).
 - [ ] **T104i — The override choke point.** `App::override_key`, inserted

@@ -8598,6 +8598,49 @@ fn apple_keymap_ctrl_d_deletes_the_character_ahead() {
     );
 }
 
+// ----- vix-keybindings registry conversion (improvement plan T104g) -------
+// apple_ctrl_key and global_shared_key now dispatch through
+// vix_keybindings::lookup/lookup_shared instead of their own hardcoded
+// match/if chains; these cover the two bindings that stay host-side
+// (Ctrl+Alt+R, the only Alt-keyed apple_ctrl_key binding) and a shared,
+// named-key token (Ctrl+BackTab) neither exercised elsewhere.
+
+#[test]
+fn apple_keymap_ctrl_alt_r_opens_query_replace() {
+    let mut app = app_at(Path::new("."));
+    assert_eq!(app.settings.keymap, "apple", "default keymap");
+    app.on_key(KeyEvent::new(
+        KeyCode::Char('r'),
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ));
+    // `edit.query_replace` opens the search bar in interactive mode --
+    // `app.query_replace` (the step-through session) only appears once the
+    // query/replace fields are submitted, so the field's `interactive` flag
+    // is the right signal here, same as `edit.replace`'s own coverage.
+    assert!(
+        app.search.as_ref().is_some_and(|s| s.interactive),
+        "Ctrl+Alt+R opens the search bar in interactive query-replace mode"
+    );
+}
+
+#[test]
+fn shared_ctrl_backtab_switches_to_the_previous_tab() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("file.new");
+    app.run_action("file.new");
+    let active = app.editor.active;
+    app.on_key(KeyEvent::new(KeyCode::BackTab, KeyModifiers::CONTROL));
+    assert_ne!(
+        app.editor.active, active,
+        "Ctrl+BackTab switches to the previous tab"
+    );
+    app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::CONTROL));
+    assert_eq!(
+        app.editor.active, active,
+        "Ctrl+Tab switches back to the next tab"
+    );
+}
+
 #[test]
 fn delete_submenu_actions_remove_the_unit_at_the_cursor() {
     let mut app = app_at(Path::new("."));
