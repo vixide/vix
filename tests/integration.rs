@@ -6813,6 +6813,64 @@ fn emacs_keymap_meta_and_window_chords() {
     assert!(app.palette.is_some(), "C-x b opens the buffer switcher");
 }
 
+// ----- vix-keybindings registry conversion (improvement plan T104a) -------
+// The Emacs keymap dispatch above this point now goes through
+// `vix_keybindings::lookup` instead of its own hardcoded matches; these
+// cover contexts/bindings the existing Emacs tests above didn't touch.
+
+#[test]
+fn emacs_keymap_meta_go_first_and_go_last() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "emacs".to_string();
+    type_str(&mut app, "one\ntwo\nthree");
+    // A-< (Meta <) goes to the document start; A-> (Meta >) to its end —
+    // folded into the same top-level table as the Ctrl bindings (T104a),
+    // no longer a separate hardcoded `emacs_meta_key` match.
+    app.on_key(alt(KeyCode::Char('<')));
+    assert_eq!(
+        app.editor.cursor_1based(),
+        (1, 1),
+        "A-< goes to document start"
+    );
+    app.on_key(alt(KeyCode::Char('>')));
+    assert_eq!(
+        app.editor.cursor_1based(),
+        (3, 6), // end of "three" (5 chars), 1-based column 6
+        "A-> goes to document end"
+    );
+}
+
+#[test]
+fn emacs_keymap_ctrl_c_ctrl_x_footnote_chord() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "emacs".to_string();
+    type_str(&mut app, "some text");
+    if let Some(t) = app.editor.active_tab_mut() {
+        t.editor.set_cursor(4);
+    }
+    // C-c C-x f (org.footnote) — the "C-c C-x" context, previously untested
+    // even via the raw action id.
+    app.on_key(ctrl('c'));
+    app.on_key(ctrl('x'));
+    app.on_key(key('f'));
+    let text = app.editor.active_tab().unwrap().text();
+    assert!(text.starts_with("some[fn:1] text"), "{text:?}");
+}
+
+#[test]
+fn emacs_keymap_ctrl_c_p_c_project_chord_resolves_to_the_real_action() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "emacs".to_string();
+    // C-c p c c (project.compile) — the "C-c p c" context. This repo is a
+    // real Cargo project, so the chord should resolve all the way to
+    // `open_project_command_prompt` and open a real prompt.
+    app.on_key(ctrl('c'));
+    app.on_key(key('p'));
+    app.on_key(key('c'));
+    app.on_key(key('c'));
+    assert!(app.prompt.is_some(), "project.compile should open a prompt");
+}
+
 #[test]
 fn vscode_keymap_split_panel_and_delete_line() {
     let mut app = app_at(Path::new("."));
