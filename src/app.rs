@@ -970,16 +970,6 @@ fn pane_to_node(
     }
 }
 
-/// Result of resolving a Spacemacs `SPC` leader sequence.
-enum LeaderHit {
-    /// The sequence maps to this action id; run it.
-    Action(&'static str),
-    /// The sequence is a prefix of a known one; keep accumulating keys.
-    Prefix,
-    /// No known sequence starts with this; abort the leader.
-    None,
-}
-
 /// An active buffer-word autocomplete cycle: the word start, the candidate list,
 /// the current index, and the cursor position right after the inserted candidate
 /// (used to detect that the cycle is still active on the next keystroke).
@@ -2721,10 +2711,17 @@ impl App {
             Keymap::Spacemacs => {
                 let seq = self.spacemacs_leader.as_ref()?;
                 // Candidates whose sequence extends what's typed; show the next key.
-                let rows = SPACEMACS_LEADER
+                let rows = Self::spacemacs_leader_bindings()
                     .iter()
-                    .filter(|&&(s, _)| s.starts_with(seq.as_str()) && s.len() > seq.len())
-                    .map(|&(s, a)| (display_key(&s[seq.len()..]), a.to_string()))
+                    .filter(|b| {
+                        b.key_token.starts_with(seq.as_str()) && b.key_token.len() > seq.len()
+                    })
+                    .map(|b| {
+                        (
+                            display_key(&b.key_token[seq.len()..]),
+                            b.action_id.to_string(),
+                        )
+                    })
                     .collect();
                 Some((format!("SPC {seq}"), rows))
             }
@@ -2751,6 +2748,18 @@ impl App {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// Every binding in Spacemacs's leader context (`vix-keybindings`,
+    /// T104b) — feeds [`App::which_key`] and [`App::shortcut_rows`].
+    fn spacemacs_leader_bindings() -> &'static [vix_keybindings::Binding] {
+        vix_keybindings::TABLES
+            .iter()
+            .find(|t| t.keymap_id == "spacemacs")
+            .into_iter()
+            .flat_map(|t| t.contexts)
+            .find(|c| c.name.is_empty())
+            .map_or(&[], |c| c.bindings)
     }
 
     fn ctrl(key: &KeyEvent) -> bool {
@@ -3442,74 +3451,75 @@ impl App {
         true
     }
 
-    /// One Normal-mode key for the Vi keymap (the editor is focused). Handles the
-    /// pending two-key operators (`gg`, `dd`, `yy`) first.
+    /// One Normal-mode key for the Vi keymap (the editor is focused).
+    /// Handles the pending two-key operators (`gg`, `dd`, `yy`) first, then
+    /// looks everything else up in `vix-keybindings`' `"vi"` table
+    /// (T104b) — shared with Spacemacs, which delegates its own
+    /// Normal-mode vocabulary to this same function.
     fn vim_normal_key(&mut self, key: KeyEvent) {
-        // Second key of a pending `g` / `d` / `y` operator.
+        // Second key of a pending `g` / `d` / `y` operator: a one-entry
+        // context per operator (only `gg`/`dd`/`yy` continue it; anything
+        // else silently cancels, matching the original dispatch, which had
+        // no fallback for a miss here either).
         if let Some(op) = self.vim_pending.take() {
-            if let KeyCode::Char(c) = key.code {
-                match (op, c) {
-                    ('g', 'g') => self.run_action("edit.go_first"),
-                    ('d', 'd') => self.run_action("cut_line"),
-                    ('y', 'y') => self.run_action("copy_line"),
-                    _ => {}
-                }
+            let token = crate::macros::encode_key(key);
+            if let Some(action) = vix_keybindings::lookup("vi", &op.to_string(), &token) {
+                self.run_action(action);
             }
             return;
         }
-        match key.code {
-            KeyCode::Char('h') | KeyCode::Left => self.editor_motion(KeyCode::Left),
-            KeyCode::Char('j') | KeyCode::Down => self.editor_motion(KeyCode::Down),
-            KeyCode::Char('k') | KeyCode::Up => self.editor_motion(KeyCode::Up),
-            KeyCode::Char('l') | KeyCode::Right => self.editor_motion(KeyCode::Right),
-            // `^` rides smart Home (first non-blank, then column 0).
-            KeyCode::Char('0' | '^') => self.editor_motion(KeyCode::Home),
-            KeyCode::Char('$') => self.editor_motion(KeyCode::End),
-            KeyCode::Char('w') => self.run_action("nav.word_next"),
-            KeyCode::Char('b') => self.run_action("nav.word_prev"),
-            KeyCode::Char('G') => self.run_action("edit.go_last"),
-            KeyCode::Char('g' | 'd' | 'y') => {
-                if let KeyCode::Char(c) = key.code {
-                    self.vim_pending = Some(c);
-                }
-            }
-            KeyCode::Char('x') => self.editor_motion(KeyCode::Delete),
-            KeyCode::Char('p') => self.run_action("edit.paste"),
-            KeyCode::Char('u') => self.run_action("edit.undo"),
-            KeyCode::Char('/') => self.run_action("edit.find"),
-            KeyCode::Char('n') => self.run_action("edit.find_next"),
-            KeyCode::Char('N') => self.run_action("edit.find_prev"),
-            KeyCode::Char('%') => self.run_action("edit.match_bracket"),
-            KeyCode::Char('i') => self.vim_enter_insert(),
-            KeyCode::Char('a') => {
-                self.editor_motion(KeyCode::Right);
-                self.vim_enter_insert();
-            }
-            KeyCode::Char('A') => {
-                self.editor_motion(KeyCode::End);
-                self.vim_enter_insert();
-            }
-            KeyCode::Char('I') => {
-                self.editor_motion(KeyCode::Home);
-                self.vim_enter_insert();
-            }
-            KeyCode::Char('o') => {
-                self.editor_motion(KeyCode::End);
-                self.editor_motion(KeyCode::Enter);
-                self.vim_enter_insert();
-            }
-            KeyCode::Char('O') => {
-                self.editor_motion(KeyCode::Home);
-                self.editor_motion(KeyCode::Enter);
-                self.editor_motion(KeyCode::Up);
-                self.vim_enter_insert();
-            }
-            _ => {}
+        // `g`/`d`/`y` start a pending operator — a mode transition, not a
+        // dispatchable action, so (like Emacs's `C-x`/`C-c` prefix-entry,
+        // T104a) stays special-cased rather than living in the table.
+        if let KeyCode::Char(c @ ('g' | 'd' | 'y')) = key.code {
+            self.vim_pending = Some(c);
+            return;
+        }
+        let token = crate::macros::encode_key(key);
+        if let Some(action) = vix_keybindings::lookup("vi", "", &token) {
+            self.run_action(action);
         }
     }
 
     fn vim_enter_insert(&mut self) {
         self.modal_insert = true;
+    }
+
+    /// Dispatch a `vim.*` action — the Vim/Spacemacs insert-mode-entry
+    /// commands (`i`/`a`/`A`/`I`/`o`/`O`), each a compound of an
+    /// `editor_motion` (or two) plus entering Insert mode. Added (T104b)
+    /// so `vim_normal_key`'s table lookup has a real action id for what
+    /// used to be a bespoke method call per key. Returns `true` if
+    /// `action` was handled.
+    fn run_vim_action(&mut self, action: &str) -> bool {
+        match action {
+            "vim.insert" => self.vim_enter_insert(),
+            "vim.append" => {
+                self.editor_motion(KeyCode::Right);
+                self.vim_enter_insert();
+            }
+            "vim.append_end" => {
+                self.editor_motion(KeyCode::End);
+                self.vim_enter_insert();
+            }
+            "vim.insert_line_start" => {
+                self.editor_motion(KeyCode::Home);
+                self.vim_enter_insert();
+            }
+            "vim.open_below" => {
+                self.editor_motion(KeyCode::End);
+                self.editor_motion(KeyCode::Enter);
+                self.vim_enter_insert();
+            }
+            "vim.open_above" => {
+                self.editor_motion(KeyCode::Home);
+                self.editor_motion(KeyCode::Enter);
+                self.editor_motion(KeyCode::Up);
+                self.vim_enter_insert();
+            }
+            _ => return false,
+        }
+        true
     }
 
     /// Handle a key while the Vim `:` command line is open. The in-progress text
@@ -3624,25 +3634,12 @@ impl App {
         let KeyCode::Char(c) = key.code else { return };
         let mut seq = self.spacemacs_leader.take().unwrap_or_default();
         seq.push(c);
-        match Self::spacemacs_leader_lookup(&seq) {
-            LeaderHit::Action(action) => self.run_action(action),
-            LeaderHit::Prefix => self.spacemacs_leader = Some(seq),
-            LeaderHit::None => {
+        match vix_keybindings::lookup_sequence("spacemacs", "", &seq) {
+            vix_keybindings::SequenceMatch::Action(action) => self.run_action(action),
+            vix_keybindings::SequenceMatch::Prefix => self.spacemacs_leader = Some(seq),
+            vix_keybindings::SequenceMatch::None => {
                 self.status = t!("status.spacemacs_no_leader", seq = seq).to_string();
             }
-        }
-    }
-
-    /// Resolve a Spacemacs leader sequence: an exact action, a longer-prefix match
-    /// (keep waiting), or nothing.
-    fn spacemacs_leader_lookup(seq: &str) -> LeaderHit {
-        let leader = SPACEMACS_LEADER;
-        if let Some(&(_, action)) = leader.iter().find(|&&(s, _)| s == seq) {
-            LeaderHit::Action(action)
-        } else if leader.iter().any(|&(s, _)| s.starts_with(seq)) {
-            LeaderHit::Prefix
-        } else {
-            LeaderHit::None
         }
     }
 
@@ -3777,6 +3774,7 @@ impl App {
             "tools.regex_tester" => self.open_regex_tester(),
             "tools.pomodoro" => self.open_pomodoro(),
             a if self.run_text_tool_action(a) => {}
+            a if self.run_vim_action(a) => {}
             other if self.run_view_action(other) => {}
             other if self.run_git_action(other) => {}
             other if self.run_project_action(other) => {}
@@ -14953,12 +14951,12 @@ impl App {
         }
         match self.settings.keymap.as_str() {
             "spacemacs" => {
-                for (seq, action) in SPACEMACS_LEADER {
+                for b in Self::spacemacs_leader_bindings() {
                     let keys = std::iter::once("SPC".to_string())
-                        .chain(seq.chars().map(|c| display_key(&c.to_string())))
+                        .chain(b.key_token.chars().map(|c| display_key(&c.to_string())))
                         .collect::<Vec<_>>()
                         .join(" ");
-                    add(Self::action_title(action), keys);
+                    add(Self::action_title(b.action_id), keys);
                 }
             }
             // Walks every context of every `emacs`-id table (today just
@@ -20846,35 +20844,6 @@ impl App {
 fn rect_contains(r: Rect, col: u16, row: u16) -> bool {
     col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height
 }
-
-/// `(sequence, action)` pairs for the Spacemacs `SPC` leader. Shared by the
-/// leader lookup and the which-key popup.
-const SPACEMACS_LEADER: &[(&str, &str)] = &[
-    (" ", "tools.palette"), // SPC SPC — M-x / command palette
-    ("ff", "file.open"),    // find file
-    ("fr", "file.open_recent"),
-    ("fs", "file.save"),
-    ("fp", "file.switch_project"),
-    ("bn", "tab.next"), // buffers
-    ("bp", "tab.prev"),
-    ("bd", "file.close"),
-    ("pf", "tools.palette"), // project: find/command
-    ("pp", "file.switch_project"),
-    ("pt", "view.explorer"), // project tree
-    ("gs", "git.changes"),   // git status
-    ("gg", "git.status"),
-    ("gb", "git.blame"),
-    ("w/", "view.split_vertical"),
-    ("w-", "view.split_horizontal"),
-    ("wd", "view.unsplit"),
-    ("ww", "view.focus_other_pane"),
-    ("ss", "edit.find"), // search
-    ("sp", "search.workspace"),
-    ("tn", "view.line_numbers"), // toggles
-    ("tw", "view.whitespace"),
-    ("qq", "file.quit"),
-    (";", "edit.toggle_comment"),
-];
 
 impl App {
     /// Whether an `edit.*` action handled by `run_edit_action` changes the buffer.
