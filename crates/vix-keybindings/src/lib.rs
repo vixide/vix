@@ -2,35 +2,40 @@
 //! T104h–T104j land) the user/script override layer built on top of it.
 //!
 //! See `spec/index.md` for the audit and design this implements. Status
-//! (T104f): the registry API is real — [`Binding`], [`ChordContext`],
+//! (T104g): the registry API is real — [`Binding`], [`ChordContext`],
 //! [`KeymapTable`], [`lookup`], [`shortcuts_for`], [`lookup_sequence`]
-//! (T104b, for a leader-style multi-character sequence table) — and seven
-//! keymaps are fully converted: Emacs (`emacs`, T104a), Vi (`vi`) and
-//! Spacemacs (`spacemacs`, T104b), VS Code (`vscode-macos`/
-//! `vscode-windows`, T104c — one shared table, since VS Code's bindings
-//! don't differ by host OS in a terminal), `IntelliJ` (`intellij-macos`/
-//! `intellij-windows`, T104d — two genuinely different tables this time,
-//! unlike VS Code's shared one), Eclipse (`eclipse`, T104e), and Sublime
-//! Text (`sublime`, T104f). Their dispatch functions (`vim_normal_key`,
-//! `spacemacs_leader_lookup`, `vscode_ctrl_key`, `intellij_key`,
-//! `eclipse_key`, `sublime_key`) all now go through [`TABLES`] instead of
-//! their own hardcoded `match`/const. The remaining keymap id (`apple`)
-//! has an empty table, filled in by its own task (T104g). Nothing outside
-//! the seven converted ids is queryable yet — `lookup`/`lookup_sequence`/
-//! `shortcuts_for` simply return nothing for it, same as an unrecognized
-//! token would.
+//! (T104b, for a leader-style multi-character sequence table),
+//! [`lookup_shared`] (T104g, for the keymap-agnostic bindings every
+//! keymap shares) — and all 10 keymap ids are fully converted: Emacs
+//! (`emacs`, T104a), Vi (`vi`) and Spacemacs (`spacemacs`, T104b), VS Code
+//! (`vscode-macos`/`vscode-windows`, T104c — one shared table, since VS
+//! Code's bindings don't differ by host OS in a terminal), `IntelliJ`
+//! (`intellij-macos`/`intellij-windows`, T104d — two genuinely different
+//! tables this time, unlike VS Code's shared one), Eclipse (`eclipse`,
+//! T104e), Sublime Text (`sublime`, T104f), and Apple (`apple`, T104g).
+//! Their dispatch functions (`vim_normal_key`, `spacemacs_leader_lookup`,
+//! `vscode_ctrl_key`, `intellij_key`, `eclipse_key`, `sublime_key`,
+//! `apple_ctrl_key`) all now go through [`TABLES`] instead of their own
+//! hardcoded `match`/const. `global_shared_key` (called by every keymap,
+//! not itself keyed on one) is now backed by [`SHARED`]/[`lookup_shared`]
+//! for its unconditional bindings; see `shared.rs`'s module doc for which
+//! ones stay host-side and why.
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 #![warn(clippy::pedantic)]
 
+mod apple;
 mod eclipse;
 mod emacs;
 mod intellij;
+mod shared;
 mod spacemacs;
 mod sublime;
 mod vim;
 mod vscode;
+
+pub use shared::{SHARED, lookup_shared};
 
 /// One key binding within a single chord context: a
 /// [`vix-macros`](https://docs.rs/vix-macros) token (`C-`/`A-`/`S-`
@@ -68,14 +73,12 @@ pub struct KeymapTable {
     pub contexts: &'static [ChordContext],
 }
 
-/// Every keymap's table. One entry per `vix_keymap_model::KEYMAPS` id;
-/// still-empty tables are filled in by their own task (see each variant's
-/// comment) and are simply never matched by [`lookup`]/[`shortcuts_for`]
-/// in the meantime.
+/// Every keymap's table, one entry per `vix_keymap_model::KEYMAPS` id, all
+/// populated (T104a–g).
 pub const TABLES: &[KeymapTable] = &[
     KeymapTable {
         keymap_id: "apple",
-        contexts: &[], // T104g
+        contexts: apple::CONTEXTS,
     },
     KeymapTable {
         keymap_id: "vscode-macos",
@@ -245,15 +248,16 @@ mod tests {
     }
 
     #[test]
-    fn unpopulated_keymaps_return_nothing() {
-        // "apple" is the one remaining empty table (T104g); every other id
-        // is now converted.
-        assert_eq!(lookup("apple", "", "h"), None);
-        assert!(
-            shortcuts_for("edit.find")
-                .iter()
-                .all(|(id, ..)| *id != "apple")
-        );
+    fn every_keymap_table_is_populated() {
+        // All 10 ids are converted as of T104g -- no more "still empty,
+        // filled in by a later task" tables left to probe.
+        for table in TABLES {
+            assert!(
+                table.contexts.iter().any(|c| !c.bindings.is_empty()),
+                "{} has no bindings in any context",
+                table.keymap_id
+            );
+        }
     }
 
     #[test]
@@ -401,5 +405,47 @@ mod tests {
         // Ctrl+` (console) is a non-alphanumeric char token, not a named
         // key — confirms the token grammar handles it like any other char.
         assert_eq!(lookup("sublime", "", "C-`"), Some("tools.terminal"));
+    }
+
+    #[test]
+    fn apple_shift_guarded_letters_differ_by_shift() {
+        assert_eq!(lookup("apple", "", "C-o"), Some("file.open"));
+        assert_eq!(lookup("apple", "", "C-S-o"), Some("file.open_recent"));
+    }
+
+    #[test]
+    fn apple_shift_agnostic_letters_are_the_same_action_either_way() {
+        // The original dispatch never checked Shift for these letters, so
+        // the Shift variant is a faithfully-preserved duplicate row, not a
+        // distinct binding -- same technique as IntelliJ's unguarded
+        // Ctrl+N/Ctrl+G quirk (T104d), just applied to more letters here.
+        assert_eq!(lookup("apple", "", "C-q"), Some("file.quit"));
+        assert_eq!(lookup("apple", "", "C-S-q"), Some("file.quit"));
+    }
+
+    #[test]
+    fn apple_table_has_no_row_for_ctrl_alt_r_or_plain_ctrl_d() {
+        // Both stay host-side in App::apple_ctrl_key (see apple.rs's
+        // module doc): Ctrl+Alt+R is the only Alt-keyed binding in this
+        // keymap, and Ctrl+D is focus-gated -- neither fits this table.
+        assert_eq!(lookup("apple", "", "C-A-r"), None);
+        assert_eq!(lookup("apple", "", "C-d"), None);
+    }
+
+    #[test]
+    fn lookup_shared_finds_a_binding_every_keymap_shares() {
+        assert_eq!(lookup_shared("F1"), Some("help.shortcuts"));
+        assert_eq!(lookup_shared("C-Space"), Some("lsp.complete"));
+    }
+
+    #[test]
+    fn lookup_shared_distinguishes_f3_from_shift_f3() {
+        assert_eq!(lookup_shared("F3"), Some("edit.find_next"));
+        assert_eq!(lookup_shared("S-F3"), Some("edit.find_prev"));
+    }
+
+    #[test]
+    fn lookup_shared_returns_none_for_an_unknown_token() {
+        assert_eq!(lookup_shared("C-does-not-exist"), None);
     }
 }

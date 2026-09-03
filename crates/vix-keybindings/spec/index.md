@@ -9,27 +9,24 @@ layer" turned out not to exist: this document designs it, so scripts (and,
 built the same way, a user's own persisted overrides) have something real
 to plug into.
 
-**Status**: T104a (Emacs), T104b (Vi + Spacemacs), T104c (VS Code), T104d
-(`IntelliJ`), T104e (Eclipse), and T104f (Sublime Text) done — seven
-keymaps fully converted. T104g implements the one remaining slice
-(§ "Staged plan"). The rest of this spec otherwise still describes
-intent, not built behavior, for that slice — it should update this file
-if reality and design turn out to disagree, same as T104a and T104b each
-already did once (§ "Schema refinement, made during T104a" and § "A
-second schema addition, made during T104b" below) and T104c/T104d/T104e
-each reconfirmed without needing a third: all three fit the existing
-schema exactly (one flat `""` context each — `IntelliJ`'s two platform
-tables genuinely differ in *content*, not shape), but each found its own
-real subtlety in the token grammar (§ "VS Code's own subtlety, found
-during T104c", § "`IntelliJ`'s own subtlety, found during T104d",
-§ "Eclipse's own subtlety, found during T104e" below). T104f (Sublime
-Text) is the first keymap in this chain to find *nothing* new at all —
-same shape, same Shift-bit-explicit token need as VS Code/`IntelliJ`/
-Eclipse, no fourth subtlety worth its own subsection. Worth recording
-that outcome too: not every keymap owes the spec a new finding: after
-three in a row establishing "check the Shift bit," a fourth keymap
-simply confirming it is itself useful evidence the pattern has
-stabilized, not a gap in the audit.
+**Status**: all 10 keymap ids are fully converted — T104a (Emacs), T104b
+(Vi + Spacemacs), T104c (VS Code), T104d (`IntelliJ`), T104e (Eclipse),
+T104f (Sublime Text), and T104g (Apple + `global_shared_key`, the last
+slice). This spec now describes built behavior throughout, not intent —
+each conversion updated this file if reality and design turned out to
+disagree, same as T104a and T104b each already did once (§ "Schema
+refinement, made during T104a" and § "A second schema addition, made
+during T104b" below), T104c/T104d/T104e each reconfirming without needing
+a third (§ "VS Code's own subtlety, found during T104c", § "`IntelliJ`'s
+own subtlety, found during T104d", § "Eclipse's own subtlety, found
+during T104e"), T104f finding nothing new at all, and T104g finding the
+biggest departure yet (§ "Apple and `global_shared_key`'s own subtlety,
+found during T104g" below): a genuinely mixed Shift-guard pattern within
+one keymap, and a keymap-agnostic binding set (`global_shared_key`) the
+original schema had no notion of at all. Remaining work is T104h–j
+(§ "Staged plan") — the persisted-override layer this spec was
+originally written to design, now that every built-in binding is finally
+queryable.
 
 ## The audit
 
@@ -445,6 +442,100 @@ alongside the `"C-…"` ones in the same `""` context. Confirms the general
 lesson again: a keymap not needing a schema change doesn't mean it has no
 real shape to get right, just that the *existing* shape (one flat context)
 happens to still fit.
+
+Sublime Text (T104f) reconfirmed the same shape and the same
+Shift-bit-explicit token need with no wrinkle of its own — the first
+keymap in the chain to find nothing new at all, itself worth recording as
+evidence the pattern had stabilized (not a gap in the audit).
+
+#### Apple and `global_shared_key`'s own subtlety, found during T104g
+
+The last slice, and the one that actually stretched the schema — two
+distinct findings, neither a `ChordContext`/`SequenceMatch`-style schema
+change, but both bigger than anything T104c–f needed.
+
+**First: Apple's `apple_ctrl_key` genuinely mixes two Shift conventions in
+one keymap**, unlike every prior conversion (which was uniformly one or
+the other). Several letters (`o`/`s`/`w`/`t`/`b`/`f`/`g`) have an explicit
+`if Self::shift(&key)` guard branching to a **different** action — the
+same shape VS Code/`IntelliJ`/Eclipse/Sublime already needed. The rest
+(`q`/`n`/`p`/`e`/`r`/`/`/`7`/`_`/`]`/`;`) never examine the Shift bit at
+all — the same action fires either way. Rather than special-casing the
+token function per letter, the table keeps one uniform Shift-bit-explicit
+`apple_ctrl_token` and gives every Shift-agnostic letter an explicit
+duplicate `"C-S-…"` row with the identical action id — the "faithfully
+preserve an unguarded quirk" technique T104d introduced for `IntelliJ`'s
+`Ctrl+Shift+N`/`Ctrl+Shift+G`, just needed far more broadly here (ten
+letters, not two).
+
+Two bindings still don't fit any table row, kept host-side in
+`apple_ctrl_key` exactly like Eclipse's `Alt+/`: `Ctrl+Alt+R` (query
+replace) is the only binding in this keymap that keys off `Alt` at all —
+encoding `Alt` into the uniform token would have meant every *other*
+letter also needing an Alt-agnostic duplicate row, so it stays a small
+pre-check instead. `Ctrl+D` (forward delete) is genuinely focus-gated —
+only claims the key while the editor pane is focused, left unclaimed
+elsewhere so other panes keep their own `Ctrl+D` — which a static,
+keymap-keyed table can't express at all (see the next finding, which hit
+this same wall six times over).
+
+**Second, and the actual scope surprise: `global_shared_key` isn't
+keyed on a keymap id — it's the same function every one of the 9 `App`
+dispatch functions falls back to, applying identically regardless of
+active keymap.** The original schema (`KeymapTable { keymap_id, contexts
+}`) has no way to represent "binds regardless of keymap" — forcing a
+choice: invent an 11th pseudo keymap id, or a genuinely separate,
+keymap-agnostic list. Picked the latter: a flat `SHARED: &[Binding]` plus
+`lookup_shared(token) -> Option<action_id>`, outside `TABLES` entirely,
+so the `every_keymap_id_has_exactly_one_table`-style invariant over the
+real 10 ids stays meaningful.
+
+Not everything in `global_shared_key`'s original dispatch fits even that
+looser shape. Splits three ways:
+- The `Alt+<letter>` menu-mnemonic branch is a dynamic lookup into the
+  live menu structure (`menu_index_for_alt`) — never static data, stays
+  host-side unconditionally, first in the function as before.
+- Six arms are focus-gated (`Ctrl+Shift+Right`/`Left`, `Alt+Up`/`Down`,
+  `Alt+n`/`p`) — same wall `Ctrl+D` hit above, `App::focus` is per-request
+  runtime state a fixed table can't express without changing behavior for
+  every other pane. Stay host-side, split into two residual `match`
+  blocks (one before the `SHARED` lookup, one after — see below).
+- Everything else — 13 bindings with no extra runtime condition — moved
+  into `SHARED` for real.
+
+**A genuine ordering hazard, caught by tracing the original top-to-bottom
+`match` by hand rather than assuming order doesn't matter**: `Ctrl+Shift+
+Right`/`Left` (focus-gated, in the original's first two arms) and
+`Alt+Right`/`Left` (unconditional, now in `SHARED`) share the same two
+physical keys. The original's arm order meant `Ctrl+Alt+Shift+Left` (an
+admittedly obscure combination, but a real one) resolved to
+`edit.select_less` while the editor was focused — the first matching
+arm — not `nav.back`. Moving the unconditional `SHARED` lookup ahead of
+the focus-gated check would have flipped that precedence for good, so the
+focus-gated `Ctrl+Shift+Right`/`Left` check runs **first** in the new
+`global_shared_key`, then falls to `SHARED`, then to the remaining
+focus-gated arms — the last group never shares a key with `SHARED`'s
+rows, so their relative order doesn't matter, only their position
+relative to the Right/Left check does.
+
+`SHARED`'s tokens also go slightly beyond the plain `Ctrl`-chord shape
+every table so far used: named keys (`Tab`, `BackTab`, `Left`, `Right`,
+`F1`–`F12`) and `Ctrl+Space`, built by a dedicated `App::shared_token`
+(not `apple_ctrl_token` — the shapes don't overlap enough to share one
+function). Only the `F`-key rows ever encode `Shift` (`F3` vs
+`Shift+F3`); everything else in `SHARED` ignores the Shift bit entirely,
+matching the original dispatch's own guards or lack of one — the same
+"don't assume Shift needs handling uniformly" lesson as Apple's own
+table, just for named keys instead of letters this time.
+
+Four bespoke method calls needed real action ids for the first time this
+task (mirroring T104a's `nav.switch_buffer`): `nav.back`/`nav.forward`
+(`App::nav_back`/`nav_forward`, Alt+Left/Right) and `view.toggle_menu`
+(`self.menu.toggle()`, F10). `view.toggle_explorer_focus` (Apple's
+`Ctrl+E`) and `view.focus_other_pane`/`edit.find_next`/`edit.find_prev`/
+`help.shortcuts`/`motion.delete_forward` (several `SHARED`/Apple rows)
+already existed from earlier work and were reused as-is, not
+re-invented.
 
 ### Override layer
 

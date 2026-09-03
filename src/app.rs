@@ -2780,51 +2780,62 @@ impl App {
         self.apple_ctrl_key(key) || self.global_shared_key(key)
     }
 
-    /// The Apple keymap's `Ctrl`-letter shortcuts. Returns true if consumed.
+    /// The Apple keymap's `Ctrl`-letter shortcuts, looked up in
+    /// `vix-keybindings`' `"apple"` table (T104g — see
+    /// `crates/vix-keybindings/src/apple.rs`). Two bindings are handled
+    /// before the table lookup, since neither fits a static
+    /// `(token, action_id)` row: `Ctrl+Alt+R` (query replace) is the only
+    /// binding here that keys off `Alt` (the table's token function is
+    /// otherwise Alt-agnostic, matching the original dispatch); `Ctrl+D`
+    /// (forward delete) only claims the key while the editor pane is
+    /// focused — macOS convention, removing the character to the right of
+    /// the cursor like the `Delete` key — so it never reaches
+    /// `editor_core`'s own `Ctrl+D` (add next occurrence, kept in the
+    /// keymaps modeled on VS Code and Sublime) while claiming nothing
+    /// outside the editor, letting other panes keep their own `Ctrl+D`.
+    /// Returns true if consumed.
     fn apple_ctrl_key(&mut self, key: KeyEvent) -> bool {
+        if Self::ctrl(&key) && Self::alt(&key) && matches!(key.code, KeyCode::Char('r' | 'R')) {
+            self.run_action("edit.query_replace");
+            return true;
+        }
         if Self::ctrl(&key)
-            && let KeyCode::Char(c) = key.code
+            && !Self::shift(&key)
+            && matches!(key.code, KeyCode::Char('d'))
+            && self.focus == Focus::Editor
         {
-            match c.to_ascii_lowercase() {
-                'q' => self.run_action("file.quit"),
-                'n' => self.run_action("file.new"),
-                'o' if Self::shift(&key) => self.run_action("file.open_recent"),
-                'o' => self.run_action("file.open"),
-                's' if Self::shift(&key) => self.run_action("file.save_as"),
-                's' => self.run_action("file.save"),
-                'w' if Self::shift(&key) => self.run_action("file.close_all"),
-                'w' => self.run_action("file.close"),
-                't' if Self::shift(&key) => self.run_action("file.reopen_closed"),
-                't' => self.run_action("nav.goto_workspace_symbol"),
-                'p' => self.run_action("tools.palette"),
-                'b' if Self::shift(&key) => self.run_action("nav.outline"),
-                'b' => self.run_action("view.explorer"),
-                'e' => self.toggle_focus_explorer_editor(),
-                'f' if Self::shift(&key) => self.run_action("search.workspace"),
-                'f' => self.run_action("edit.find"),
-                'g' if Self::shift(&key) => self.run_action("edit.find_prev"),
-                'g' => self.run_action("edit.find_next"),
-                'r' if Self::alt(&key) => self.run_action("edit.query_replace"),
-                'r' => self.run_action("edit.replace"),
-                // macOS convention: `Ctrl+D` is forward delete — it removes the
-                // character to the right of the cursor, exactly like the `Delete`
-                // key. It is claimed here so it never reaches `editor_core`,
-                // whose own `Ctrl+D` adds the next occurrence as a caret (that
-                // binding stays in the keymaps modeled on VS Code and Sublime).
-                // `Ctrl+Shift+D` still duplicates the line or selection.
-                'd' if !Self::shift(&key) && self.focus == Focus::Editor => {
-                    self.editor_motion(KeyCode::Delete);
-                }
-                // Many terminals emit the same control byte (0x1F) for
-                // Ctrl+/, Ctrl+7, and Ctrl+_, so accept all three for Comment.
-                '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
-                ']' => self.run_action("edit.match_bracket"),
-                ';' => self.run_action("spell.suggest"),
-                _ => return false,
-            }
+            self.run_action("motion.delete_forward");
+            return true;
+        }
+        let Some(token) = Self::apple_ctrl_token(&key) else {
+            return false;
+        };
+        if let Some(action) = vix_keybindings::lookup("apple", "", &token) {
+            self.run_action(action);
             return true;
         }
         false
+    }
+
+    /// The `vix-macros` token for an Apple `Ctrl`-chord lookup, or `None`
+    /// if `key` isn't a `Ctrl`-held `Char` (every Apple binding handled
+    /// here is). Same Shift-bit-explicit reasoning as `vscode_ctrl_token`/
+    /// `intellij_ctrl_token`/`eclipse_token`/`sublime_ctrl_token`
+    /// (T104c–f); never encodes `Alt` (see `apple_ctrl_key`'s doc comment
+    /// for the one binding that needs it).
+    fn apple_ctrl_token(key: &KeyEvent) -> Option<String> {
+        if !Self::ctrl(key) {
+            return None;
+        }
+        let KeyCode::Char(c) = key.code else {
+            return None;
+        };
+        let mut token = String::from("C-");
+        if Self::shift(key) {
+            token.push_str("S-");
+        }
+        token.push(c.to_ascii_lowercase());
+        Some(token)
     }
 
     // ----- keymap: VS Code (macOS) ----------------------------------------
@@ -3008,9 +3019,24 @@ impl App {
         Some(token)
     }
 
-    /// Keys shared by every keymap: menu-bar mnemonics and function keys. Returns
-    /// true if consumed. The menu-bar `Alt+letter` mnemonics live in
-    /// [`menu_index_for_alt`].
+    /// Keys shared by every keymap: menu-bar mnemonics and function keys,
+    /// looked up in `vix-keybindings`' keymap-agnostic `SHARED` table
+    /// (T104g — see `crates/vix-keybindings/src/shared.rs`) for the
+    /// bindings that don't need any extra runtime state. Three things stay
+    /// host-side, ahead of or around that lookup:
+    /// - The menu-bar `Alt+letter` mnemonics (live in
+    ///   [`menu_index_for_alt`]) — a dynamic lookup into the current menu
+    ///   structure, not static table data.
+    /// - `Ctrl+Shift+Right`/`Left` (extend/shrink selection) — focus-gated,
+    ///   checked before the table so the rare case of `Ctrl+Alt+Shift+
+    ///   Left`/`Right` (also matching the table's Alt-only `nav.back`/
+    ///   `nav.forward` rows) resolves in the same order the original
+    ///   dispatch did.
+    /// - `Alt+Up`/`Down` and `Alt+n`/`p` (line move/column-select,
+    ///   next/prev search selection) — also focus-gated, checked after the
+    ///   table since they never share a key with anything in it.
+    ///
+    /// Returns true if consumed.
     fn global_shared_key(&mut self, key: KeyEvent) -> bool {
         if Self::alt(&key)
             && let KeyCode::Char(c) = key.code
@@ -3019,100 +3045,90 @@ impl App {
             self.toggle_menu(i);
             return true;
         }
-        match key.code {
-            // Ctrl+Space triggers LSP completion (terminal support varies).
-            KeyCode::Char(' ') if Self::ctrl(&key) => {
-                self.run_action("lsp.complete");
-                true
+        if Self::ctrl(&key) && Self::shift(&key) && self.focus == Focus::Editor {
+            match key.code {
+                KeyCode::Right => {
+                    self.run_action("edit.select_more");
+                    return true;
+                }
+                KeyCode::Left => {
+                    self.run_action("edit.select_less");
+                    return true;
+                }
+                _ => {}
             }
-            KeyCode::Tab if Self::ctrl(&key) => {
-                self.run_action("tab.next");
-                true
-            }
-            KeyCode::BackTab if Self::ctrl(&key) => {
-                self.run_action("tab.prev");
-                true
-            }
-            KeyCode::Right
-                if Self::ctrl(&key) && Self::shift(&key) && self.focus == Focus::Editor =>
-            {
-                self.run_action("edit.select_more");
-                true
-            }
-            KeyCode::Left
-                if Self::ctrl(&key) && Self::shift(&key) && self.focus == Focus::Editor =>
-            {
-                self.run_action("edit.select_less");
-                true
-            }
-            KeyCode::Left if Self::alt(&key) => {
-                self.nav_back();
-                true
-            }
-            KeyCode::Right if Self::alt(&key) => {
-                self.nav_forward();
-                true
-            }
-            KeyCode::Up if Self::alt(&key) && self.focus == Focus::Editor => {
-                let a = if Self::shift(&key) {
-                    "edit.column_select_up"
-                } else {
-                    "edit.move_line_up"
-                };
-                self.run_action(a);
-                true
-            }
-            KeyCode::Down if Self::alt(&key) && self.focus == Focus::Editor => {
-                let a = if Self::shift(&key) {
-                    "edit.column_select_down"
-                } else {
-                    "edit.move_line_down"
-                };
-                self.run_action(a);
-                true
-            }
-            KeyCode::F(1) => {
-                self.open_help();
-                true
-            }
-            KeyCode::F(12) => {
-                self.run_action("nav.goto_definition");
-                true
-            }
-            KeyCode::F(2) => {
-                self.run_action("lsp.rename");
-                true
-            }
-            KeyCode::F(6) => {
-                self.editor.focus_other_pane();
-                true
-            }
-            KeyCode::F(10) => {
-                self.menu.toggle();
-                true
-            }
-            KeyCode::F(3) if Self::shift(&key) => {
-                self.find_step(false);
-                true
-            }
-            KeyCode::F(3) => {
-                self.find_step(true);
-                true
-            }
-            KeyCode::Char('n' | 'N') if Self::alt(&key) && self.focus == Focus::Editor => {
-                self.run_action("search.next_selection");
-                true
-            }
-            KeyCode::Char('p' | 'P') if Self::alt(&key) && self.focus == Focus::Editor => {
-                self.run_action("search.prev_selection");
-                true
-            }
-            KeyCode::Char('j' | 'J') if Self::alt(&key) => {
-                self.run_action("nav.recent_locations");
-                true
-            }
-            _ => false,
         }
+        if let Some(token) = Self::shared_token(&key)
+            && let Some(action) = vix_keybindings::lookup_shared(&token)
+        {
+            self.run_action(action);
+            return true;
+        }
+        if self.focus == Focus::Editor {
+            match key.code {
+                KeyCode::Up if Self::alt(&key) => {
+                    let a = if Self::shift(&key) {
+                        "edit.column_select_up"
+                    } else {
+                        "edit.move_line_up"
+                    };
+                    self.run_action(a);
+                    return true;
+                }
+                KeyCode::Down if Self::alt(&key) => {
+                    let a = if Self::shift(&key) {
+                        "edit.column_select_down"
+                    } else {
+                        "edit.move_line_down"
+                    };
+                    self.run_action(a);
+                    return true;
+                }
+                KeyCode::Char('n' | 'N') if Self::alt(&key) => {
+                    self.run_action("search.next_selection");
+                    return true;
+                }
+                KeyCode::Char('p' | 'P') if Self::alt(&key) => {
+                    self.run_action("search.prev_selection");
+                    return true;
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+
+    /// The `vix-macros`-flavored token for a [`vix_keybindings::SHARED`]
+    /// lookup, or `None` if `key` doesn't map to one of that table's key
+    /// shapes (`Ctrl+Space`, `Ctrl+Tab`/`BackTab`, `Alt+Left`/`Right`/`j`,
+    /// or an `F`-key). Only `F`-keys ever encode `Shift` (`F3` vs
+    /// `Shift+F3`) — every other shape ignores the Shift bit entirely,
+    /// matching the original dispatch's own guards (or lack of one).
+    fn shared_token(key: &KeyEvent) -> Option<String> {
+        let mut token = String::new();
+        if Self::ctrl(key) {
+            token.push_str("C-");
+        }
+        if Self::alt(key) {
+            token.push_str("A-");
+        }
+        if Self::shift(key) && matches!(key.code, KeyCode::F(_)) {
+            token.push_str("S-");
+        }
+        match key.code {
+            KeyCode::Char(' ') => token.push_str("Space"),
+            KeyCode::Char(c) => token.push(c.to_ascii_lowercase()),
+            KeyCode::Tab => token.push_str("Tab"),
+            KeyCode::BackTab => token.push_str("BackTab"),
+            KeyCode::Left => token.push_str("Left"),
+            KeyCode::Right => token.push_str("Right"),
+            KeyCode::F(n) => {
+                use std::fmt::Write as _;
+                let _ = write!(token, "F{n}");
+            }
+            _ => return None,
+        }
+        Some(token)
     }
 
     fn toggle_focus_explorer_editor(&mut self) {
@@ -3644,6 +3660,8 @@ impl App {
             "workspace.add_folder" => self.prompt_workspace(PromptKind::WorkspaceAddFolder),
             "nav.recent_locations" => self.open_location_chooser(),
             "nav.jump" => self.open_jump(),
+            "nav.back" => self.nav_back(),
+            "nav.forward" => self.nav_forward(),
             "bookmark.toggle" => self.toggle_bookmark(),
             "bookmark.next" => self.bookmark_goto(true),
             "bookmark.prev" => self.bookmark_goto(false),
@@ -3789,6 +3807,7 @@ impl App {
             "view.unsplit" => self.editor.unsplit(),
             "view.focus_other_pane" => self.editor.focus_other_pane(),
             "view.toggle_explorer_focus" => self.toggle_focus_explorer_editor(),
+            "view.toggle_menu" => self.menu.toggle(),
             "view.line_numbers" | "tools.line_numbers" => self.toggle_editor_line_numbers(),
             "view.relative_line_numbers" => self.toggle_relative_line_numbers(),
             "view.read_only" => self.toggle_read_only(),
@@ -14927,6 +14946,15 @@ impl App {
         for menu in crate::menu::menus() {
             collect_menu_shortcuts(menu.items, &mut add);
         }
+        // Every keymap dispatches through global_shared_key identically
+        // (T104g), so its bindings are shown regardless of the active
+        // keymap, unlike the per-keymap match below.
+        for b in vix_keybindings::SHARED {
+            add(
+                Self::action_title(b.action_id),
+                modifier_token_display(b.key_token),
+            );
+        }
         match self.settings.keymap.as_str() {
             "spacemacs" => {
                 for b in Self::spacemacs_leader_bindings() {
@@ -14965,12 +14993,12 @@ impl App {
                     }
                 }
             }
-            // VS Code's, IntelliJ's, Eclipse's, and Sublime's tables have
-            // only ever had one context each ("", T104c–f), but this still
-            // walks every context generically, matching the Emacs arm
-            // above, for the same reason.
+            // VS Code's, IntelliJ's, Eclipse's, Sublime's, and Apple's
+            // tables have only ever had one context each ("", T104c–g),
+            // but this still walks every context generically, matching
+            // the Emacs arm above, for the same reason.
             id @ ("vscode-macos" | "vscode-windows" | "intellij-macos" | "intellij-windows"
-            | "eclipse" | "sublime") => {
+            | "eclipse" | "sublime" | "apple") => {
                 for table in vix_keybindings::TABLES.iter().filter(|t| t.keymap_id == id) {
                     for ctx in table.contexts {
                         for b in ctx.bindings {

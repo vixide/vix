@@ -151,6 +151,21 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the by-now-familiar Shift-modifier-bit token encoding VS Code/
   `IntelliJ`/Eclipse already needed. Sublime's bindings also appear in
   the F1 help overlay for the first time. Zero intended behavior change.
+- **Keybinding registry: Apple converted, all 10 keymap ids now
+  exhaustive** (improvement plan T104g): `apple_ctrl_key` now dispatches
+  through `vix-keybindings` too, mixing Shift-guarded and Shift-agnostic
+  letters in one table for the first time (the Shift-agnostic ones get an
+  explicit duplicate row, same technique `IntelliJ`'s conversion used).
+  `global_shared_key` — called identically by every keymap, not itself
+  keyed on one — is now backed by a new keymap-agnostic `SHARED` binding
+  list for its unconditional bindings (`Ctrl+Space`, `Ctrl+Tab`/
+  `BackTab`, `Alt+Left`/`Right`/`j`, the F-keys); the menu-mnemonic lookup
+  and 6 focus-gated bindings (extend/shrink selection, move/column-select
+  lines, next/prev search selection) stay host-side, since `App::focus`
+  is runtime state a static table can't express. The F1 help overlay now
+  also shows Apple's bindings and, for the first time, the shared
+  bindings every keymap gets regardless of which one is active. Zero
+  intended behavior change.
 
 ### Changed
 
