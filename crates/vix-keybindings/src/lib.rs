@@ -2,17 +2,19 @@
 //! T104h–T104j land) the user/script override layer built on top of it.
 //!
 //! See `spec/index.md` for the audit and design this implements. Status
-//! (T104b): the registry API is real — [`Binding`], [`ChordContext`],
-//! [`KeymapTable`], [`lookup`], [`shortcuts_for`], plus (new in T104b)
-//! [`lookup_sequence`] for a leader-style multi-character sequence table —
-//! and three keymaps are fully converted: Emacs (`emacs`, T104a),
-//! Vi (`vi`) and Spacemacs (`spacemacs`, T104b). `vim_normal_key` and
-//! `spacemacs_leader_lookup` now dispatch through [`TABLES`] instead of
-//! their own hardcoded `match`/const. The other six keymap ids have an
-//! empty table each, filled in one per task (T104c–T104g). Nothing outside
-//! `emacs`/`vi`/`spacemacs` is queryable yet — `lookup`/`lookup_sequence`/
-//! `shortcuts_for` simply return nothing for them, same as an unrecognized
-//! token would.
+//! (T104c): the registry API is real — [`Binding`], [`ChordContext`],
+//! [`KeymapTable`], [`lookup`], [`shortcuts_for`], [`lookup_sequence`]
+//! (T104b, for a leader-style multi-character sequence table) — and four
+//! keymaps are fully converted: Emacs (`emacs`, T104a), Vi (`vi`) and
+//! Spacemacs (`spacemacs`, T104b), and VS Code (`vscode-macos`/
+//! `vscode-windows`, T104c — one shared table, since VS Code's bindings
+//! don't differ by host OS in a terminal). `vim_normal_key`,
+//! `spacemacs_leader_lookup`, and `vscode_ctrl_key` all now dispatch
+//! through [`TABLES`] instead of their own hardcoded `match`/const. The
+//! other five keymap ids have an empty table each, filled in one per task
+//! (T104d–T104g). Nothing outside the four converted ids is queryable yet
+//! — `lookup`/`lookup_sequence`/`shortcuts_for` simply return nothing for
+//! them, same as an unrecognized token would.
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
@@ -21,6 +23,7 @@
 mod emacs;
 mod spacemacs;
 mod vim;
+mod vscode;
 
 /// One key binding within a single chord context: a
 /// [`vix-macros`](https://docs.rs/vix-macros) token (`C-`/`A-`/`S-`
@@ -69,11 +72,11 @@ pub const TABLES: &[KeymapTable] = &[
     },
     KeymapTable {
         keymap_id: "vscode-macos",
-        contexts: &[], // T104c
+        contexts: vscode::CONTEXTS,
     },
     KeymapTable {
         keymap_id: "vscode-windows",
-        contexts: &[], // T104c
+        contexts: vscode::CONTEXTS,
     },
     KeymapTable {
         keymap_id: "emacs",
@@ -268,6 +271,31 @@ mod tests {
         // "spacemacs" only ever has its leader context (verified separately
         // by `lookup_sequence_matches_exactly_prefixes_or_neither`).
         assert_eq!(lookup("spacemacs", "", "h"), None);
+    }
+
+    #[test]
+    fn lookup_finds_a_vscode_binding() {
+        assert_eq!(lookup("vscode-macos", "", "C-p"), Some("file.open"));
+    }
+
+    #[test]
+    fn vscode_distinguishes_ctrl_from_ctrl_shift_explicitly() {
+        // "C-p" (Quick Open) and "C-S-p" (Command Palette) must not
+        // collide, even though a terminal can report Ctrl+Shift+p as a
+        // *lowercase* 'p' with the Shift bit set rather than an uppercase
+        // 'P' — the reason this table encodes Shift explicitly instead of
+        // relying on `vix_macros::encode_key`'s usual "implicit in an
+        // uppercase char" rule (see `vscode.rs`'s module doc).
+        assert_eq!(lookup("vscode-macos", "", "C-p"), Some("file.open"));
+        assert_eq!(lookup("vscode-macos", "", "C-S-p"), Some("tools.palette"));
+    }
+
+    #[test]
+    fn vscode_macos_and_windows_share_one_table() {
+        assert_eq!(
+            lookup("vscode-macos", "", "C-s"),
+            lookup("vscode-windows", "", "C-s")
+        );
     }
 
     #[test]

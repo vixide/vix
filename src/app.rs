@@ -2838,47 +2838,44 @@ impl App {
         self.vscode_ctrl_key(key) || self.global_shared_key(key)
     }
 
-    /// The VS Code keymap's `Ctrl`-key shortcuts (VS Code's `Cmd` bindings, with
-    /// `Ctrl` standing in for `Cmd`). Returns true if consumed.
+    /// The VS Code keymap's `Ctrl`-key shortcuts (VS Code's `Cmd` bindings,
+    /// with `Ctrl` standing in for `Cmd`), looked up in `vix-keybindings`'
+    /// `"vscode-macos"`/`"vscode-windows"` table (T104c — one shared table
+    /// underneath, see `crates/vix-keybindings/src/vscode.rs`). Returns
+    /// true if consumed.
     fn vscode_ctrl_key(&mut self, key: KeyEvent) -> bool {
-        if Self::ctrl(&key)
-            && let KeyCode::Char(c) = key.code
-        {
-            match c.to_ascii_lowercase() {
-                'q' => self.run_action("file.quit"),
-                'n' => self.run_action("file.new"),
-                's' if Self::shift(&key) => self.run_action("file.save_as"),
-                's' => self.run_action("file.save"),
-                'w' if Self::shift(&key) => self.run_action("file.close_all"),
-                'w' => self.run_action("file.close"),
-                't' if Self::shift(&key) => self.run_action("file.reopen_closed"),
-                't' => self.run_action("nav.goto_workspace_symbol"),
-                'p' if Self::shift(&key) => self.run_action("tools.palette"),
-                'p' => self.run_action("file.open"),
-                'o' if Self::shift(&key) => self.run_action("nav.goto_symbol"),
-                'g' if Self::shift(&key) => self.run_action("edit.find_prev"),
-                'g' => self.open_palette_seeded(":"),
-                'e' if Self::shift(&key) => self.toggle_focus_explorer_editor(),
-                'b' => self.run_action("view.explorer"),
-                'f' if Self::shift(&key) => self.run_action("search.workspace"),
-                'f' => self.run_action("edit.find"),
-                'r' => self.run_action("edit.replace"),
-                // Many terminals emit the same control byte (0x1F) for
-                // Ctrl+/, Ctrl+7, and Ctrl+_, so accept all three for Comment.
-                '/' | '7' | '_' => self.run_action("edit.toggle_comment"),
-                ']' => self.run_action("edit.match_bracket"),
-                'l' if Self::shift(&key) => self.run_action("edit.select_all_occurrences"),
-                'm' if Self::shift(&key) => self.run_action("lsp.diagnostics"),
-                'k' if Self::shift(&key) => self.run_action("cut_line"),
-                '\\' if Self::shift(&key) => self.run_action("edit.match_bracket"),
-                '\\' => self.run_action("view.split_vertical"),
-                'j' => self.run_action("view.bottom_dock"),
-                '`' => self.run_action("tools.terminal"),
-                _ => return false,
-            }
+        let Some(token) = Self::vscode_ctrl_token(&key) else {
+            return false;
+        };
+        if let Some(action) = vix_keybindings::lookup(&self.settings.keymap, "", &token) {
+            self.run_action(action);
             return true;
         }
         false
+    }
+
+    /// The `vix-macros` token for a VS Code `Ctrl`-chord lookup, or `None`
+    /// if `key` isn't a `Ctrl`-held `Char` (every VS Code binding is).
+    /// Unlike `crate::macros::encode_key` (Shift implicit in an uppercase
+    /// char, never prefixed for a `Char` key), this always lowercases the
+    /// char and prefixes `S-` from the Shift *modifier bit* alone, exactly
+    /// matching the original dispatch's own `Self::shift(&key)` check — a
+    /// terminal can report `Ctrl+Shift+p` as a lowercase `p` with the
+    /// Shift bit set rather than an uppercase `P`, and this must not
+    /// silently collide that with plain `Ctrl+p`.
+    fn vscode_ctrl_token(key: &KeyEvent) -> Option<String> {
+        if !Self::ctrl(key) {
+            return None;
+        }
+        let KeyCode::Char(c) = key.code else {
+            return None;
+        };
+        let mut token = String::from("C-");
+        if Self::shift(key) {
+            token.push_str("S-");
+        }
+        token.push(c.to_ascii_lowercase());
+        Some(token)
     }
 
     // ----- keymap: IntelliJ (macOS / Windows) -----------------------
@@ -3811,6 +3808,7 @@ impl App {
             "view.split_horizontal" => self.editor.set_split(SplitDir::Horizontal),
             "view.unsplit" => self.editor.unsplit(),
             "view.focus_other_pane" => self.editor.focus_other_pane(),
+            "view.toggle_explorer_focus" => self.toggle_focus_explorer_editor(),
             "view.line_numbers" | "tools.line_numbers" => self.toggle_editor_line_numbers(),
             "view.relative_line_numbers" => self.toggle_relative_line_numbers(),
             "view.read_only" => self.toggle_read_only(),
@@ -14987,6 +14985,21 @@ impl App {
                     }
                 }
             }
+            // VS Code's table has only ever had one context ("", T104c),
+            // but this still walks every context generically, matching
+            // the Emacs arm above, for the same reason.
+            id @ ("vscode-macos" | "vscode-windows") => {
+                for table in vix_keybindings::TABLES.iter().filter(|t| t.keymap_id == id) {
+                    for ctx in table.contexts {
+                        for b in ctx.bindings {
+                            add(
+                                Self::action_title(b.action_id),
+                                vscode_key_display(b.key_token),
+                            );
+                        }
+                    }
+                }
+            }
             _ => {}
         }
         out
@@ -20897,6 +20910,37 @@ fn emacs_key_display(k: &str) -> String {
     }
 }
 
+/// Render a VS Code keymap token for display: strips `C-`/`S-`/`A-`
+/// prefixes in order, each rendered as a named modifier, then the
+/// remaining key uppercased (`"C-S-p"` → `"Ctrl Shift P"`). Unlike
+/// [`emacs_key_display`], a VS Code token can stack more than one
+/// modifier prefix (T104c's Shift-disambiguation), so this strips a loop
+/// of them rather than just one.
+fn vscode_key_display(k: &str) -> String {
+    let mut rest = k;
+    let mut parts = Vec::new();
+    loop {
+        if let Some(r) = rest.strip_prefix("C-") {
+            parts.push("Ctrl");
+            rest = r;
+        } else if let Some(r) = rest.strip_prefix("S-") {
+            parts.push("Shift");
+            rest = r;
+        } else if let Some(r) = rest.strip_prefix("A-") {
+            parts.push("Alt");
+            rest = r;
+        } else {
+            break;
+        }
+    }
+    let key = rest.to_uppercase();
+    parts
+        .into_iter()
+        .chain(std::iter::once(key.as_str()))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Render a leader key fragment for display (`" "` → `SPC`).
 fn display_key(k: &str) -> String {
     if k == " " {
@@ -21164,6 +21208,16 @@ mod tests {
     use super::*;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+
+    /// Stacked modifier prefixes render as separate named words, in order,
+    /// with the bare key uppercased (T104c's VS Code display helper).
+    #[test]
+    fn vscode_key_display_renders_stacked_modifiers() {
+        assert_eq!(vscode_key_display("C-p"), "Ctrl P");
+        assert_eq!(vscode_key_display("C-S-p"), "Ctrl Shift P");
+        // Non-alphabetic keys (backtick) are unaffected by uppercasing.
+        assert_eq!(vscode_key_display("C-`"), "Ctrl `");
+    }
 
     /// macOS folds `Command` into `Control`; every other platform leaves the
     /// `Super` modifier alone, and a chord without `Command` is never touched.
