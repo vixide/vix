@@ -6588,6 +6588,28 @@ fn sublime_keymap_signature_bindings() {
     assert!(app.palette.is_some(), "Ctrl+Shift+P opens the palette");
 }
 
+// ----- vix-keybindings registry conversion (improvement plan T104f) -------
+// sublime_key now dispatches through vix_keybindings::lookup instead of its
+// own hardcoded match; this covers plain Ctrl+P (Goto Anything) staying
+// distinct from Ctrl+Shift+P (Command Palette, already covered above) --
+// the two must not collide even though a terminal can report Ctrl+Shift+p
+// as a lowercase 'p' with the Shift bit set.
+
+#[test]
+fn sublime_keymap_plain_ctrl_p_opens_the_file_browser_not_the_palette() {
+    let mut app = app_at(Path::new("."));
+    app.settings.keymap = "sublime".to_string();
+    app.on_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
+    assert!(
+        app.file_browser.is_some(),
+        "plain Ctrl+P opens Goto Anything (the file browser)"
+    );
+    assert!(
+        app.palette.is_none(),
+        "plain Ctrl+P must not also open the command palette"
+    );
+}
+
 #[test]
 fn intellij_and_eclipse_keymaps_bind_find() {
     // A representative binding works under each new keymap: Ctrl+F opens

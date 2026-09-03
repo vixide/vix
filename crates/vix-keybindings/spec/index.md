@@ -10,22 +10,26 @@ built the same way, a user's own persisted overrides) have something real
 to plug into.
 
 **Status**: T104a (Emacs), T104b (Vi + Spacemacs), T104c (VS Code), T104d
-(`IntelliJ`), and T104e (Eclipse) done — six keymaps fully converted. T104f
-onward implement the remaining slices (§ "Staged plan"). The rest of this
-spec otherwise still describes intent, not built behavior, for those
-slices — each should update this file if reality and design turn out to
-disagree, same as T104a and T104b each already did once (§ "Schema
-refinement, made during T104a" and § "A second schema addition, made
-during T104b" below) and T104c/T104d/T104e each reconfirmed without
-needing a third: all three fit the existing schema exactly (one flat `""`
-context each — `IntelliJ`'s two platform tables genuinely differ in
-*content*, not shape), but each found its own real subtlety in the token
-grammar (§ "VS Code's own subtlety, found during T104c", § "`IntelliJ`'s
-own subtlety, found during T104d", § "Eclipse's own subtlety, found during
-T104e" below). Worth continuing to expect *something* real per keymap,
-even when the shape doesn't need to change — three keymaps running in a
-row without needing a *schema* revision doesn't mean the token-encoding
-question is now safe to skip.
+(`IntelliJ`), T104e (Eclipse), and T104f (Sublime Text) done — seven
+keymaps fully converted. T104g implements the one remaining slice
+(§ "Staged plan"). The rest of this spec otherwise still describes
+intent, not built behavior, for that slice — it should update this file
+if reality and design turn out to disagree, same as T104a and T104b each
+already did once (§ "Schema refinement, made during T104a" and § "A
+second schema addition, made during T104b" below) and T104c/T104d/T104e
+each reconfirmed without needing a third: all three fit the existing
+schema exactly (one flat `""` context each — `IntelliJ`'s two platform
+tables genuinely differ in *content*, not shape), but each found its own
+real subtlety in the token grammar (§ "VS Code's own subtlety, found
+during T104c", § "`IntelliJ`'s own subtlety, found during T104d",
+§ "Eclipse's own subtlety, found during T104e" below). T104f (Sublime
+Text) is the first keymap in this chain to find *nothing* new at all —
+same shape, same Shift-bit-explicit token need as VS Code/`IntelliJ`/
+Eclipse, no fourth subtlety worth its own subsection. Worth recording
+that outcome too: not every keymap owes the spec a new finding: after
+three in a row establishing "check the Shift bit," a fourth keymap
+simply confirming it is itself useful evidence the pattern has
+stabilized, not a gap in the audit.
 
 ## The audit
 
