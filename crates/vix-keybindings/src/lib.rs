@@ -2,25 +2,29 @@
 //! T104h–T104j land) the user/script override layer built on top of it.
 //!
 //! See `spec/index.md` for the audit and design this implements. Status
-//! (T104c): the registry API is real — [`Binding`], [`ChordContext`],
+//! (T104d): the registry API is real — [`Binding`], [`ChordContext`],
 //! [`KeymapTable`], [`lookup`], [`shortcuts_for`], [`lookup_sequence`]
-//! (T104b, for a leader-style multi-character sequence table) — and four
+//! (T104b, for a leader-style multi-character sequence table) — and five
 //! keymaps are fully converted: Emacs (`emacs`, T104a), Vi (`vi`) and
-//! Spacemacs (`spacemacs`, T104b), and VS Code (`vscode-macos`/
+//! Spacemacs (`spacemacs`, T104b), VS Code (`vscode-macos`/
 //! `vscode-windows`, T104c — one shared table, since VS Code's bindings
-//! don't differ by host OS in a terminal). `vim_normal_key`,
-//! `spacemacs_leader_lookup`, and `vscode_ctrl_key` all now dispatch
-//! through [`TABLES`] instead of their own hardcoded `match`/const. The
-//! other five keymap ids have an empty table each, filled in one per task
-//! (T104d–T104g). Nothing outside the four converted ids is queryable yet
-//! — `lookup`/`lookup_sequence`/`shortcuts_for` simply return nothing for
-//! them, same as an unrecognized token would.
+//! don't differ by host OS in a terminal), and `IntelliJ`
+//! (`intellij-macos`/`intellij-windows`, T104d — two genuinely different
+//! tables this time, unlike VS Code's shared one). `vim_normal_key`,
+//! `spacemacs_leader_lookup`, `vscode_ctrl_key`, and `intellij_key` all
+//! now dispatch through [`TABLES`] instead of their own hardcoded
+//! `match`/const. The other three keymap ids have an empty table each,
+//! filled in one per task (T104e–T104g). Nothing outside the five
+//! converted ids is queryable yet — `lookup`/`lookup_sequence`/
+//! `shortcuts_for` simply return nothing for them, same as an
+//! unrecognized token would.
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 #![warn(clippy::pedantic)]
 
 mod emacs;
+mod intellij;
 mod spacemacs;
 mod vim;
 mod vscode;
@@ -92,11 +96,11 @@ pub const TABLES: &[KeymapTable] = &[
     },
     KeymapTable {
         keymap_id: "intellij-macos",
-        contexts: &[], // T104d
+        contexts: intellij::CONTEXTS_MACOS,
     },
     KeymapTable {
         keymap_id: "intellij-windows",
-        contexts: &[], // T104d
+        contexts: intellij::CONTEXTS_WINDOWS,
     },
     KeymapTable {
         keymap_id: "eclipse",
@@ -295,6 +299,39 @@ mod tests {
         assert_eq!(
             lookup("vscode-macos", "", "C-s"),
             lookup("vscode-windows", "", "C-s")
+        );
+    }
+
+    #[test]
+    fn intellij_macos_and_windows_are_genuinely_different_tables() {
+        // Unlike VS Code, IntelliJ's "go to" family really differs by
+        // platform: Ctrl+O/Ctrl+L on macOS, Ctrl+N/Ctrl+G on Windows.
+        assert_eq!(lookup("intellij-macos", "", "C-o"), Some("nav.goto_symbol"));
+        assert_eq!(lookup("intellij-windows", "", "C-o"), None);
+        assert_eq!(
+            lookup("intellij-windows", "", "C-n"),
+            Some("nav.goto_symbol")
+        );
+        assert_eq!(lookup("intellij-macos", "", "C-n"), Some("file.new"));
+        // But both share the platform-independent bindings.
+        assert_eq!(
+            lookup("intellij-macos", "", "C-A-l"),
+            lookup("intellij-windows", "", "C-A-l")
+        );
+    }
+
+    #[test]
+    fn intellij_preserves_the_original_unguarded_shift_quirk() {
+        // Neither the original macOS Ctrl+N arm nor the original Windows
+        // Ctrl+G arm was Shift-guarded, so the Shift variant does the same
+        // thing as the plain one on each platform (see `intellij.rs`'s
+        // module doc) — not a bug this conversion introduces.
+        assert_eq!(lookup("intellij-macos", "", "C-n"), Some("file.new"));
+        assert_eq!(lookup("intellij-macos", "", "C-S-n"), Some("file.new"));
+        assert_eq!(lookup("intellij-windows", "", "C-g"), Some("nav.goto_line"));
+        assert_eq!(
+            lookup("intellij-windows", "", "C-S-g"),
+            Some("nav.goto_line")
         );
     }
 

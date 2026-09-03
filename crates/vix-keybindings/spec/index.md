@@ -9,20 +9,22 @@ layer" turned out not to exist: this document designs it, so scripts (and,
 built the same way, a user's own persisted overrides) have something real
 to plug into.
 
-**Status**: T104a (Emacs), T104b (Vi + Spacemacs), and T104c (VS Code) done
-— four keymaps fully converted. T104d onward implement the remaining
-slices (§ "Staged plan"). The rest of this spec otherwise still describes
-intent, not built behavior, for those slices — each should update this
-file if reality and design turn out to disagree, same as T104a and T104b
-each already did once (§ "Schema refinement, made during T104a" and
-§ "A second schema addition, made during T104b" below) and T104c
-reconfirmed without needing a third: VS Code fit the existing schema
-exactly (one flat `""` context, no chords), but its own real subtlety —
-`Ctrl+Shift+<letter>` isn't always distinguishable from plain
-`Ctrl+<letter>` by character case alone — meant its tokens couldn't
-reuse `vix_macros::encode_key` unmodified either (§ "VS Code's own
-subtlety, found during T104c" below). Worth continuing to expect
-*something* real per keymap, even when the shape doesn't need to change.
+**Status**: T104a (Emacs), T104b (Vi + Spacemacs), T104c (VS Code), and
+T104d (`IntelliJ`) done — five keymaps fully converted. T104e onward
+implement the remaining slices (§ "Staged plan"). The rest of this spec
+otherwise still describes intent, not built behavior, for those slices —
+each should update this file if reality and design turn out to disagree,
+same as T104a and T104b each already did once (§ "Schema refinement, made
+during T104a" and § "A second schema addition, made during T104b" below)
+and T104c/T104d each reconfirmed without needing a third: both fit the
+existing schema exactly (one flat `""` context each — `IntelliJ`'s two
+platform tables genuinely differ in *content*, not shape), but each found
+its own real subtlety in the token grammar (§ "VS Code's own subtlety,
+found during T104c" and § "`IntelliJ`'s own subtlety, found during T104d"
+below). Worth continuing to expect *something* real per keymap, even when
+the shape doesn't need to change — three keymaps running in a row without
+needing a *schema* revision doesn't mean the token-encoding question is
+now safe to skip.
 
 ## The audit
 
@@ -377,6 +379,46 @@ key. Whichever keymap converts next should check the same question
 before assuming `encode_key` is safe to reuse unmodified: does this
 keymap's own dispatch rely on the Shift bit, the char case, or (as here)
 both interchangeably in a way a naive token scheme could collide?
+
+#### `IntelliJ`'s own subtlety, found during T104d
+
+Two findings, neither a schema change. First: `intellij_key`'s dispatch
+needed the same Shift-bit-explicit token function VS Code's did (renamed
+generically to `App::intellij_ctrl_token` isn't shared code with VS
+Code's — each keymap gets its own small token function, since what
+counts as "this keymap's dispatch" differs — but the *reasoning* is
+identical, restated here rather than assumed obvious). It also needed one
+more modifier than VS Code: `Ctrl+Alt+L`/`Ctrl+Alt+O` are a single
+keystroke's modifier combination (not a chord — nothing about them waits
+for a second key), so they live as ordinary `"C-A-…"` tokens in the same
+`""` context as everything else, the same reasoning T104a used to fold
+Emacs's Meta bindings into its top level rather than a separate context.
+
+Second, and more consequential: **`intellij-macos` and `intellij-windows`
+are not one shared table**, unlike VS Code's. Converting the actual
+dispatch (not just skimming its doc comment) showed the platforms
+genuinely diverge — the "go to" family alone uses `Ctrl+O`/`Ctrl+Shift+O`/
+`Ctrl+L` on macOS but `Ctrl+N`/`Ctrl+Shift+N`/`Ctrl+G` on Windows, plus
+macOS-only (`Ctrl+,` → Settings) and Windows-only (`Ctrl+Y` → delete
+line) bindings with no equivalent on the other platform at all. Two full,
+independently-written tables (`intellij.rs`'s `MACOS`/`WINDOWS` consts) —
+the ~13 genuinely shared bindings are duplicated across them rather than
+factored into a shared slice, since at this size plain, readable
+duplication beat a shared-slice indirection for two tables that might
+keep diverging further as more of `IntelliJ`'s real keymap gets added
+later.
+
+One more thing worth recording precisely, since it would otherwise look
+like a bug introduced by this conversion: **the original dispatch left
+two bindings genuinely unguarded by Shift** — macOS's plain `Ctrl+N`
+arm and Windows's `Ctrl+G` arm neither checked the Shift modifier at all,
+so `Ctrl+Shift+N` does the same thing as `Ctrl+N` on macOS (`file.new`,
+not a distinct "Go to File" the way `Ctrl+Shift+O` is on the same
+platform), and `Ctrl+Shift+G` does the same as `Ctrl+G` on Windows (both
+`nav.goto_line`). Each table lists the Shift variant as an explicit
+second row with the identical action id, rather than "helpfully"
+inferring it should be distinct — this is a faithful transcription of
+what the original code actually did, not a design choice made here.
 
 ### Override layer
 
