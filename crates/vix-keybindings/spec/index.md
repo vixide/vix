@@ -37,14 +37,25 @@ other and against a keymap's built-ins; `App::override_key` — inserted
 between `org_table_key` and every keymap's own `match`, exactly the one
 insertion point the audit identified — consults the resolved
 `self.key_overrides` map ahead of all 10 keymaps. `App::
-load_key_overrides` reads `keybindings.toml` and calls the new,
-separately-testable `App::apply_key_overrides(requests)`, which does the
-actual resolve/report/store — split out specifically so T104j can feed
-script `bind_key` requests into the very same call. Only user-sourced
-(`keybindings.toml`) requests feed it today; `vix-script`'s
-`LoadedScript::bindings` still isn't checked against anything — that's
-T104j, the last remaining slice (§ "Staged plan") and the reason this
-whole epic started.
+apply_key_overrides(requests)` does the actual resolve/report/store —
+split out specifically so T104j could feed script `bind_key` requests
+into the very same call.
+
+**T104j done — the epic is complete.** `App::resolve_key_overrides`
+(renamed from the narrower `load_key_overrides`) now builds one combined
+`Vec<Override>` from *both* sources — `keybindings.toml` (`Source::User`)
+and every currently-loaded script's `bindings` (`Source::Script(stem)`,
+action id `format!("script:{stem}:{command_id}")`, exactly what
+`App::run_script_command` already parses) — before the single
+`apply_key_overrides` call, so the "a token claimed twice is a conflict
+regardless of source" rule (§ "Conflict handling" below) finally holds
+for real: a script and a persisted override (or two scripts) claiming
+the same key really do both get rejected, not just in theory. Called at
+startup, and now also by `script.reload` (a reloaded script's bindings
+may have changed) alongside `keybindings.reload`. This closes the loop
+`crates/vix-script/spec/index.md`'s "Key bindings" section opened back
+at T102 — `bind_key`'s conflict-handling contract, written before this
+crate existed to enforce it, is now genuinely true.
 
 ## The audit
 
@@ -610,10 +621,11 @@ the crate's own unit tests something concrete to assert on (7 tests,
   (`<config dir>/keybindings.toml`); `user_bindings::{UserBinding,
   KeyBindingsFile, load, upsert}` is a plain `toml`+`fs` load/save, the
   `macros.toml` pattern verbatim.
-- **Script overrides**: still exactly `LoadedScript::bindings`
-  (`vix-script`, T102/T103) — nothing new built here yet; T104j feeds
-  these into the same `resolve()` call `App::apply_key_overrides` (below)
-  already accepts.
+- **Script overrides — done, T104j**: `LoadedScript::bindings`
+  (`vix-script`, T102/T103) now feed `resolve()` for real — one
+  `Override` per binding, `action_id: format!("script:{stem}:
+  {command_id}")` (exactly the shape `App::run_script_command` already
+  parses), `source: Source::Script(stem)`.
 - **The `on_key` choke point — done, T104i**: `App::override_key(&mut
   self, key: KeyEvent) -> bool`, inserted between `org_table_key` and
   `match self.active_keymap()` — the *only* new call site, covering all
@@ -624,22 +636,24 @@ the crate's own unit tests something concrete to assert on (7 tests,
   isn't scoped to one keymap) and looks it up in `self.key_overrides: HashMap<String, String>`
   (token → action id), populated by resolution.
 - **Resolution is split across two methods, deliberately**:
-  `App::load_key_overrides` reads `keybindings.toml` and builds
-  `Vec<Override>` (all `Source::User`); `App::apply_key_overrides(requests:
-  Vec<Override>)` does the actual `resolve()` call plus reporting plus
-  storing into `self.key_overrides` — pulled out specifically so T104j
-  can pass a combined `Vec<Override>` (persisted + script-sourced) into
-  the *same* method, and so integration tests can drive the choke point
-  directly without touching the real, global `keybindings.toml` path
-  (there's no project-scoped equivalent the way scripts have
-  `.vix/scripts/`, so a test can't seed the file the way
-  `script_reload_picks_up_a_script_added_after_startup` does — calling
-  `apply_key_overrides` directly is the test seam instead).
-- **Conflict handling — done, T104i, scoped to `keybindings.toml` alone
-  for now** (fixes `crates/vix-script/spec/index.md`'s already-shipped
-  contract — "a conflicting `bind_key` is reported, never silently
-  clobbered" — will apply for real once T104j feeds script requests into
-  the same `resolve()` call): `resolve()` groups every request by
+  `App::resolve_key_overrides` (renamed from T104i's narrower
+  `load_key_overrides` once T104j gave it a second source to combine)
+  reads `keybindings.toml` *and* walks every loaded script's `bindings`,
+  building one combined `Vec<Override>`; `App::apply_key_overrides
+  (requests: Vec<Override>)` does the actual `resolve()` call plus
+  reporting plus storing into `self.key_overrides` — pulled out
+  specifically so `resolve_key_overrides` could pass a combined
+  `Vec<Override>` into it, and so integration tests can drive the choke
+  point directly without touching the real, global `keybindings.toml`
+  path or a real loaded script (there's no project-scoped
+  `keybindings.toml` equivalent the way scripts have `.vix/scripts/`, so
+  a test can't seed *that* half on disk — calling `apply_key_overrides`
+  directly is the test seam for it; real script fixtures under
+  `.vix/scripts/` still exercise the script half end-to-end).
+- **Conflict handling — done, T104i/j, both sources together for real**
+  (fixes `crates/vix-script/spec/index.md`'s already-shipped contract —
+  "a conflicting `bind_key` is reported, never silently clobbered"):
+  `resolve()` groups every request by
   `key_token` in a `BTreeMap` (not a `HashMap` — deterministic grouping
   order, so the same input always produces the same message order, not
   just the same content). A token claimed by two or more requests is a
@@ -651,27 +665,37 @@ the crate's own unit tests something concrete to assert on (7 tests,
   wins outright — but is reported once via `msg.keybinding_shadows_builtin`
   (`self.messages.info`), naming the shadowed built-in action.
 - **The shadow check runs against whichever keymap is active when
-  resolution happens** (`self.settings.keymap` at the moment `apply_key_
-  overrides` is called — app startup, or `keybindings.reload`), not
-  continuously. Switching the active keymap afterward doesn't retroactively
-  surface (or retract) a shadow warning for a binding that only became
-  a shadow under the new keymap — documented limitation, not a bug: the
-  design's "reported once" already implies a point in time, and building
-  a live-updating check for every keymap switch wasn't worth it for a
-  feature whose v1 has no editing UI regardless.
+  resolution happens** (`self.settings.keymap` at the moment
+  `resolve_key_overrides` runs — app startup, `script.reload`, or
+  `keybindings.reload`), not continuously. Switching the active keymap
+  afterward doesn't retroactively surface (or retract) a shadow warning
+  for a binding that only became a shadow under the new keymap —
+  documented limitation, not a bug: the design's "reported once" already
+  implies a point in time, and building a live-updating check for every
+  keymap switch wasn't worth it for a feature whose v1 has no editing UI
+  regardless.
 - Nothing about *executing* the resolved action is new: an override that
   wins is just `self.run_action(&action_id)` — the same call every keymap
   handler and every `script:`-prefixed palette entry already funnel
   through.
-- **New this task**: `keybindings.reload` (mirrors `script.reload`,
-  including a Tools-menu leaf) re-runs `load_key_overrides` and reports
-  how many overrides ended up active — the natural way to pick up a
-  hand-edited `keybindings.toml` without restarting, matching the
+- **New in T104i**: `keybindings.reload` (mirrors `script.reload`,
+  including a Tools-menu leaf) re-runs `resolve_key_overrides` and
+  reports how many overrides ended up active — the natural way to pick
+  up a hand-edited `keybindings.toml` without restarting, matching the
   Conflict-handling bullet's own "at load time... `keybindings.toml`
-  load/save" trigger list. It's the only new action id this task added —
+  load/save" trigger list. It was the only new action id T104i added —
   `override_key`/`apply_key_overrides` themselves need none, since a
   resolved override's action already has a real id by construction (it
   came from a `keybindings.toml`/script request naming one).
+- **New in T104j**: `script.reload` now *also* re-runs
+  `resolve_key_overrides` (right after re-loading scripts, before
+  reporting its own command count) — the third and last of the
+  Conflict-handling bullet's own trigger list ("script load,
+  `script.reload`, and `keybindings.toml` load/save") to actually fire.
+  A reloaded script's `bind_key` requests genuinely can change between
+  reloads (that's the whole point of hand-editing and reloading a
+  script), so leaving them stale until the next full restart would have
+  been a real, if quiet, bug.
 
 ## What's deliberately not in scope here
 

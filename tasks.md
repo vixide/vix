@@ -632,9 +632,51 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   behavior change for every existing dispatch path: full 436-test suite
   green throughout (432 + 4 new), plus 7 new `vix-keybindings` unit
   tests (crate total 32 → 39).
-- [ ] **T104j — Wire scripts in.** `LoadedScript::bindings` (T102/T103,
+- [x] **T104j — Wire scripts in.** `LoadedScript::bindings` (T102/T103,
   already recorded, never checked) through the same choke point — the
   task this epic was originally scoped as.
+  Done — **the whole `vix-keybindings` epic (T104/T104a–j) is now
+  complete.** Renamed `load_key_overrides` → `App::resolve_key_overrides`
+  once it grew a second source to combine: it now builds one
+  `Vec<Override>` from *both* `keybindings.toml` (`Source::User`) and
+  every currently-loaded script's `bindings` (`Source::Script(stem)`,
+  action id `format!("script:{stem}:{command_id}")` — exactly the shape
+  `App::run_script_command` already parses for the palette) before the
+  single `apply_key_overrides` call T104i built specifically to receive
+  it. The "regardless of source" conflict rule finally holds for real: a
+  script and a persisted override (or two different scripts) claiming
+  the same key both get rejected, not just in a unit test pretending
+  they would. `script.reload` now also re-runs `resolve_key_overrides`
+  (a reloaded script's `bind_key` requests can genuinely change), the
+  third and last of the spec's own "at load time" trigger list
+  (script load, `script.reload`, `keybindings.toml` load/save) to
+  actually fire — script load itself and `keybindings.reload` already
+  did from T104i. Closes the loop `crates/vix-script/spec/index.md`'s
+  "Key bindings" section opened at T102: its conflict-handling contract
+  ("reported, never silently clobbered") is finally enforced, not just
+  promised; that spec's own status line and "Key bindings" section
+  updated to say so. 3 new integration tests, all against **real
+  discovery** (`.vix/scripts/*.rhai` fixtures + `load_scripts()`/
+  `resolve_key_overrides()`, not a hand-built `Vec<Override>`): a
+  script's `bind_key` actually fires through `on_key`; `script.reload`
+  picks up a binding added to a script after startup; two scripts
+  binding the same token both reject. **Found and worked around, not
+  fixed, a genuine pre-existing quirk while writing these**: `Ctrl+
+  <letter>` not claimed by any keymap/override/editor-shortcut falls all
+  the way through to `vix-editor-core`'s `Editor::input`, whose final
+  `KeyCode::Char(c) => insert` arm has no `!ctrl` guard — so an
+  "unbound" `Ctrl+J` doesn't no-op, it types a literal `j`. Pre-existing
+  (nothing to do with this task), out of scope to fix here; switched the
+  affected tests' probe token from `Ctrl+J` to `F9` (a code path that
+  genuinely no-ops when unclaimed) rather than either masking the quirk
+  or scope-creeping a fix into this task. Worth a task of its own later
+  (`vix-editor-core`'s `input` should ignore `Char` while `ctrl` is held
+  and unmatched, not insert it) — not filed as one yet, just recorded
+  here. Zero intended behavior change for every existing dispatch path:
+  full 439-test suite green throughout (436 + 3 new), no new
+  `vix-keybindings` unit tests needed (the crate-level `resolve()` logic
+  was already fully exercised by T104i's 7 tests; this task is pure
+  `App`-side wiring).
 
 - [ ] **T105 — Sample scripts + docs.** ~6 scripts in `examples/scripts/`
   (e.g. wrap-selection-in-markdown-link, insert-file-header,
@@ -957,15 +999,19 @@ and its own gate run, zero intended behavior change unless stated.
   searchable table of effective bindings for the active keymap (reuse
   `vix-keyboard-shortcut-panel` data), conflict detection, rebind → saved
   to a user-overrides file layered over the keymap; Reset to default.
-  **Updated 2026-09-03**: the persisted-override half of this (a
-  user-overrides file, conflict detection, an `on_key` choke point) is
-  now `vix-keybindings`' job — see T104h–T104j
-  (`crates/vix-keybindings/spec/index.md`), opened by T104's audit after
-  this task was written. Once T104j ships, T204 narrows to *just* the
-  UI: a searchable table view over `vix_keybindings::TABLES` +
-  `Settings::keybindings_path()`'s live overrides, with rebind writing
-  through that already-built layer rather than inventing a second one.
-  Do this after T104j, not before.
+  **Updated 2026-09-04**: T104h–T104j are all done — the persisted-
+  override file, conflict detection, and `on_key` choke point this task
+  originally scoped now all exist for real (`crates/vix-keybindings/
+  spec/index.md`; `App::override_key`/`resolve_key_overrides`/
+  `apply_key_overrides`). T204 narrows to *just* the UI now: a searchable
+  table view over `vix_keybindings::TABLES` (built-ins) +
+  `Settings::keybindings_path()`'s persisted overrides (via
+  `user_bindings::load`/`upsert`) + `self.key_overrides` (the live
+  resolved map, for showing what's actually in effect right now
+  including any shadow), with rebind writing through that already-built
+  layer (`user_bindings::upsert` + `App::resolve_key_overrides` to
+  re-apply) rather than inventing a second one. No longer blocked on
+  anything — ready to pick up whenever wanted.
 - [ ] **T205 — Snippet editor + tab stops.** Audit whether `$1`/`${2:def}`
   tab stops exist in snippet expansion; implement if not. Add a snippet
   create/edit dialog writing to the user snippets scope; New Snippet from
@@ -1162,9 +1208,9 @@ scratch each time they come up.
    and T112–T115 as follow-on runs. T104 turned out to need its own spec
    first (`crates/vix-keybindings/spec/index.md`) — its T104a–T104j are a
    further follow-on chain, one keymap conversion per task.
-3. **Run C (features):** T201–T211 in any order, one branch each — except
-   T204, which waits on T104j (§ T204's own updated note), and T210/T211,
-   which have no dependency and can go anytime.
+3. **Run C (features):** T201–T211 in any order, one branch each — T104j
+   shipped 2026-09-04, so T204 is unblocked too now (§ T204's own updated
+   note); T210/T211 never had a dependency either.
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
 5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last.
 6. **Run F (examples):** T502–T505.
@@ -1175,10 +1221,11 @@ scratch each time they come up.
    T105 and T124/T125 ship.
 9. **CI + code quality:** T009/T010 anytime (independent, small).
    T150, T153, T154, T146 anytime — each is a single short branch.
-   T145 only after T104j lands (it refactors code the epic is still
-   touching). T143 before T141, and T141 before T142 (each makes the next
-   reviewable). T144, T147, T148, T149, T151, T152 are independent of
-   each other and of the rest; T147 is worth doing before T204.
+   T145 is unblocked now that T104j has shipped (the epic it refactors
+   code from is done). T143 before T141, and T141 before T142 (each makes
+   the next reviewable). T144, T147, T148, T149, T151, T152 are
+   independent of each other and of the rest; T147 is worth doing before
+   T204.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.

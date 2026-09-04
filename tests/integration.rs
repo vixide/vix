@@ -8641,13 +8641,13 @@ fn shared_ctrl_backtab_switches_to_the_previous_tab() {
     );
 }
 
-// ----- vix-keybindings override choke point (improvement plan T104i) ------
+// ----- vix-keybindings override choke point (improvement plan T104i/j) ----
 // App::override_key, inserted in on_key right after org_table_key, now
 // intercepts every keymap's dispatch when self.key_overrides has a
 // matching entry. App::apply_key_overrides (the resolve/report/store half
-// of App::load_key_overrides, split out so it doesn't need the real
-// keybindings.toml path) is the test seam: it's exactly what T104j will
-// also feed script bind_key requests into.
+// of App::resolve_key_overrides, split out so it doesn't need the real
+// keybindings.toml path or a real loaded script) is the test seam --
+// T104j now also feeds script bind_key requests through the same call.
 
 #[test]
 fn key_override_wins_over_a_builtin_keymap_binding() {
@@ -8745,6 +8745,133 @@ fn keybindings_reload_action_reports_a_summary() {
         app.messages.items.len() > before,
         "keybindings.reload reports how many overrides ended up active"
     );
+}
+
+// ----- wiring vix-script's bind_key into the choke point (T104j) ----------
+// App::resolve_key_overrides now also builds an Override from every loaded
+// script's KeyBinding (action id "script:<stem>:<command_id>", exactly what
+// App::run_script_command already parses), merged with the persisted ones
+// into one App::apply_key_overrides call -- the *original* T104 ask.
+
+#[test]
+fn a_scripts_bind_key_request_actually_fires_through_on_key() {
+    let dir = unique_dir("script-bind-key");
+    fs::create_dir_all(dir.join(".vix/scripts")).unwrap();
+    fs::write(
+        dir.join(".vix/scripts/greet.rhai"),
+        r#"
+        register_command("greet", "Greet", "on_greet");
+        bind_key("C-j", "greet");
+        fn on_greet() { set_buffer_text("hello from script"); }
+        "#,
+    )
+    .unwrap();
+    let mut app = app_at(&dir);
+    app.load_scripts();
+    app.resolve_key_overrides();
+
+    // Ctrl+J is unbound in the built-in Apple table, so this can only run
+    // through the script's own bind_key request.
+    app.on_key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::CONTROL));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "hello from script");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn script_reload_re_resolves_key_overrides() {
+    let dir = unique_dir("script-bind-key-reload");
+    fs::create_dir_all(dir.join(".vix/scripts")).unwrap();
+    let script_path = dir.join(".vix/scripts/greet.rhai");
+    fs::write(
+        &script_path,
+        r#"
+        register_command("greet", "Greet", "on_greet");
+        fn on_greet() { set_buffer_text("v1"); }
+        "#,
+    )
+    .unwrap();
+    let mut app = app_at(&dir);
+    app.load_scripts();
+    app.resolve_key_overrides();
+    // F9: claimed by no built-in binding and never falls through to the
+    // editor's own literal-character insert when unclaimed, unlike a bare
+    // Ctrl+letter -- a clean no-op to assert against before the binding
+    // exists.
+    app.on_key(KeyEvent::new(KeyCode::F(9), KeyModifiers::NONE));
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "",
+        "not bound yet, so F9 is a no-op"
+    );
+
+    // Hand-edit the script to add the binding, then reload -- mirrors
+    // `script_reload_picks_up_a_script_added_after_startup`'s pattern.
+    fs::write(
+        &script_path,
+        r#"
+        register_command("greet", "Greet", "on_greet");
+        bind_key("F9", "greet");
+        fn on_greet() { set_buffer_text("v2"); }
+        "#,
+    )
+    .unwrap();
+    app.run_action("script.reload");
+    app.on_key(KeyEvent::new(KeyCode::F(9), KeyModifiers::NONE));
+    assert_eq!(app.editor.active_tab().unwrap().text(), "v2");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn two_scripts_binding_the_same_token_both_reject_via_real_discovery() {
+    let dir = unique_dir("script-bind-key-conflict");
+    fs::create_dir_all(dir.join(".vix/scripts")).unwrap();
+    // F9: claimed by no built-in binding and, unlike a bare Ctrl+letter,
+    // never falls through to the editor's own literal-character insert
+    // when unclaimed -- a clean no-op to assert against.
+    fs::write(
+        dir.join(".vix/scripts/alpha.rhai"),
+        r#"
+        register_command("go", "Go A", "on_go");
+        bind_key("F9", "go");
+        fn on_go() { set_buffer_text("from alpha"); }
+        "#,
+    )
+    .unwrap();
+    fs::write(
+        dir.join(".vix/scripts/beta.rhai"),
+        r#"
+        register_command("go", "Go B", "on_go");
+        bind_key("F9", "go");
+        fn on_go() { set_buffer_text("from beta"); }
+        "#,
+    )
+    .unwrap();
+    let mut app = app_at(&dir);
+    // Real discovery (not a hand-built Vec<Override>): two genuinely
+    // loaded scripts both requesting F9 through resolve_key_overrides,
+    // the actual assembly path -- not apply_key_overrides called directly.
+    app.load_scripts();
+    app.resolve_key_overrides();
+    assert!(
+        app.messages
+            .items
+            .iter()
+            .any(|m| matches!(m.level, vix::messages::Level::Error)
+                && (m.text.contains("alpha") || m.text.contains("beta"))),
+        "two scripts claiming the same token is reported, naming a source: {:?}",
+        app.messages
+            .items
+            .iter()
+            .map(|m| &m.text)
+            .collect::<Vec<_>>()
+    );
+    app.on_key(KeyEvent::new(KeyCode::F(9), KeyModifiers::NONE));
+    assert_eq!(
+        app.editor.active_tab().unwrap().text(),
+        "",
+        "neither script's handler ran -- the conflict rejected both"
+    );
+    fs::remove_dir_all(&dir).ok();
 }
 
 #[test]

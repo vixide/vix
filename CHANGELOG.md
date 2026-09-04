@@ -184,6 +184,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   happens to claim a key a built-in binding already owns still wins, but
   is reported once so the built-in's silence isn't a surprise. Script
   `bind_key` requests don't feed into this yet (T104j).
+- **Script key bindings now actually fire — the `vix-keybindings` epic
+  is complete** (improvement plan T104j): a loaded script's `bind_key`
+  requests are resolved into the very same choke point `keybindings.toml`
+  overrides use, so a script can genuinely rebind a key, and two
+  overrides claiming the same key are rejected together regardless of
+  whether they came from a script, `keybindings.toml`, or both.
+  `script.reload` now also refreshes key overrides, alongside the
+  existing `keybindings.reload`. This is the scripting engine's original
+  "wire key bindings into the real keymap" promise from `vix-script`'s
+  own spec, finally kept.
 
 ### Changed
 
