@@ -301,3 +301,4 @@ regex
 regexes
 config
 configs
+debuginfo
