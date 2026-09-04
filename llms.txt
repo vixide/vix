@@ -43,6 +43,8 @@ human and AI contributors — read it first.
   Org-roam, export
 - [Git Panel](docs/git-panel/index.md): status, diff, blame, stage/unstage/
   revert per hunk
+- [Scripting](docs/scripting/index.md): Rhai `.rhai` scripts — new palette
+  commands, key bindings, buffer transforms, no rebuild
 
 ## Specification (source of truth)
 

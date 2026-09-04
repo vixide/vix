@@ -10,7 +10,8 @@
 //! in the palette and the Tools → Scripts menu, and applying a handler's
 //! effects back to the real editor are host wiring (`src/app.rs`, built on
 //! top of this crate, not inside it) — done as of tasks.md T103. Wiring a
-//! script's `bind_key` requests into the real keymap is T104, still open.
+//! script's `bind_key` requests into the real keymap (`crates/
+//! vix-keybindings`, tasks.md T104a–j) is done too, as of T104j.
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
@@ -190,6 +191,25 @@ mod tests {
         // Raising an error is still just a message — the rest of the handler ran.
         assert!(state.buffer_text_written);
         assert_eq!(state.buffer_text, "done");
+    }
+
+    /// `now()` (§ API v1, "Clock", added T105) returns the local date as
+    /// `YYYY-MM-DD` — checked against the same `jiff` call the host makes,
+    /// not a hardcoded literal, so this doesn't rot on the next run.
+    #[test]
+    fn now_returns_todays_local_date() {
+        let runtime = Runtime::new();
+        let script = runtime
+            .load("clock", r"fn run() { set_buffer_text(now()); }")
+            .unwrap();
+        let outcome = runtime.invoke(&script, "run", vec![], HostState::default());
+        let InvokeOutcome::Ran(state) = outcome else {
+            panic!("expected Ran")
+        };
+        assert_eq!(
+            state.buffer_text,
+            jiff::Zoned::now().strftime("%Y-%m-%d").to_string()
+        );
     }
 
     /// A runtime error aborts just that call and is never a Rust panic; any

@@ -99,6 +99,7 @@ mindmap
 qrcode
 
 # Tools / crates / handles referenced in docs
+llms
 joelparkerhenderson
 bravoalfacharlie
 urxvt

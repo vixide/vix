@@ -5857,6 +5857,7 @@ dependencies = [
 name = "vix-script"
 version = "1.6.0"
 dependencies = [
+ "jiff",
  "rhai",
  "vix-macros",
 ]
