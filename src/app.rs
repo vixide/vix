@@ -1310,12 +1310,12 @@ pub struct App {
     /// in discovery order (global scripts, then project scripts, sorted by
     /// file stem within each — see `vix_script::discover`).
     scripts: Vec<vix_script::LoadedScript>,
-    /// Accepted persisted key binding overrides (T104i), keyed on the
-    /// `vix-macros` token, value the `App::run_action`-dispatchable id —
-    /// built by `App::load_key_overrides` from `keybindings.toml`, and
-    /// consulted by `App::override_key`, the `on_key` choke point every
-    /// keymap's own dispatch runs after. Script `bind_key` requests don't
-    /// contribute to this yet (T104j).
+    /// Accepted key binding overrides — persisted (`keybindings.toml`,
+    /// T104i) and every loaded script's `bind_key` requests (T104j) —
+    /// keyed on the `vix-macros` token, value the
+    /// `App::run_action`-dispatchable id. Built by
+    /// `App::resolve_key_overrides`, consulted by `App::override_key`,
+    /// the `on_key` choke point every keymap's own dispatch runs after.
     key_overrides: std::collections::HashMap<String, String>,
     /// Script-command chooser overlay (Tools → Scripts → Run…), when open.
     pub script_chooser: Option<ScriptChooser>,
@@ -10783,18 +10783,35 @@ impl App {
         }
     }
 
-    /// `script.reload` (Tools → Scripts → Reload): re-run discovery and
-    /// report how many commands ended up available.
+    /// `script.reload` (Tools → Scripts → Reload): re-run discovery,
+    /// re-resolve key overrides (a reloaded script's `bind_key` requests
+    /// may have changed — T104j), and report how many commands ended up
+    /// available.
     fn reload_scripts(&mut self) {
         self.load_scripts();
+        self.resolve_key_overrides();
         let count: usize = self.scripts.iter().map(|s| s.commands.len()).sum();
         self.messages
             .info(t!("msg.scripts_reloaded", count = count).to_string());
     }
 
-    /// Load `keybindings.toml` and resolve it via `apply_key_overrides`.
-    pub fn load_key_overrides(&mut self) {
-        let requests: Vec<vix_keybindings::Override> = Settings::keybindings_path()
+    /// Resolve every current override request — persisted
+    /// (`keybindings.toml`) and every currently-loaded script's
+    /// `bind_key` requests (T104j) — against the active keymap's
+    /// built-ins and against each other, in one combined batch, via
+    /// `apply_key_overrides`. Combining both sources into a single call
+    /// matters: the "a token claimed twice is a conflict, regardless of
+    /// source" rule (§ `crates/vix-keybindings/spec/index.md` "Conflict
+    /// handling") only holds if a persisted override and a script's
+    /// override are resolved together, not in two separate calls that
+    /// would each see the other's token as simply unclaimed. A script
+    /// binding's `command_id` isn't yet a dispatchable action id on its
+    /// own — it becomes one the same way the command palette's
+    /// `script:`-prefixed entries do, `format!("script:{stem}:{command_id}")`
+    /// (`App::run_script_command` already parses exactly that shape).
+    /// Called at startup, and by `script.reload`/`keybindings.reload`.
+    pub fn resolve_key_overrides(&mut self) {
+        let mut requests: Vec<vix_keybindings::Override> = Settings::keybindings_path()
             .map(|path| vix_keybindings::user_bindings::load(&path))
             .unwrap_or_default()
             .into_iter()
@@ -10804,20 +10821,28 @@ impl App {
                 source: vix_keybindings::Source::User,
             })
             .collect();
+        for script in &self.scripts {
+            for binding in &script.bindings {
+                requests.push(vix_keybindings::Override {
+                    key_token: binding.key_token.clone(),
+                    action_id: format!("script:{}:{}", script.stem, binding.command_id),
+                    source: vix_keybindings::Source::Script(script.stem.clone()),
+                });
+            }
+        }
         self.apply_key_overrides(requests);
     }
 
     /// Resolve `requests` against the active keymap's built-ins (T104i),
     /// replacing `self.key_overrides` with the winners. Split out from
-    /// `load_key_overrides` so a future T104j can feed script `bind_key`
-    /// requests into the very same resolution (merged with the persisted
-    /// ones into one `Vec<Override>` before calling this), and so tests
-    /// can drive the choke point without touching the real
-    /// `keybindings.toml` path. A token two or more requests claim is
-    /// rejected outright (all of them dropped) and reported as an error
-    /// naming every source; a request that wins but also claims a token
-    /// a built-in already owns is reported once, informationally — it
-    /// still wins, the built-in just won't fire for that key any more.
+    /// `resolve_key_overrides` so tests can drive the choke point
+    /// directly with hand-built requests, without touching the real
+    /// `keybindings.toml` path or a real loaded script. A token two or
+    /// more requests claim is rejected outright (all of them dropped)
+    /// and reported as an error naming every source; a request that wins
+    /// but also claims a token a built-in already owns is reported once,
+    /// informationally — it still wins, the built-in just won't fire for
+    /// that key any more.
     pub fn apply_key_overrides(&mut self, requests: Vec<vix_keybindings::Override>) {
         let resolved = vix_keybindings::resolve(requests, &self.settings.keymap);
         for conflict in &resolved.conflicts {
@@ -10853,11 +10878,11 @@ impl App {
             .collect();
     }
 
-    /// `keybindings.reload`: re-run `load_key_overrides` and report how
-    /// many ended up active, so a hand-edited `keybindings.toml` can be
-    /// picked up without restarting — mirrors `script.reload`'s shape.
+    /// `keybindings.reload`: re-run `resolve_key_overrides` and report
+    /// how many ended up active, so a hand-edited `keybindings.toml` can
+    /// be picked up without restarting — mirrors `script.reload`'s shape.
     fn reload_key_overrides(&mut self) {
-        self.load_key_overrides();
+        self.resolve_key_overrides();
         self.messages
             .info(t!("msg.keybindings_reloaded", count = self.key_overrides.len()).to_string());
     }

@@ -12,9 +12,14 @@ the command palette and Tools → Scripts → Run… lists them all; `prompt` op
 a real single-line prompt (`PromptKind::Script`) and answering it re-invokes
 `on_submit`; `message`/`error` go to the message drawer; errors at load or
 invocation are reported, never a panic. T104 (script keybindings — wiring
-`bind_key`'s results into the real keymap) and T105 (sample scripts + docs)
-are not done yet. Each remaining task should update this file if reality and
-design turn out to disagree, same as anywhere else.
+`bind_key`'s results into the real keymap) is now done too, via the
+`vix-keybindings` override layer (`crates/vix-keybindings/spec/index.md`,
+epic complete as of T104j) — a script's `bind_key` request actually fires
+through `App::on_key` now, resolved against `keybindings.toml` and every
+other script's requests together, with the conflict-handling contract
+below finally enforced for real. T105 (sample scripts + docs) is the one
+remaining piece, now fully unblocked. It should update this file if
+reality and design turn out to disagree, same as anywhere else.
 
 ## Why Rhai
 
@@ -132,12 +137,19 @@ fn on_uppercase() {
   time, so a malformed token (typo'd modifier, unknown key name) is a load
   error (§ Error handling) naming the bad token, not a binding that's
   silently recorded and never fires.
-- Conflict handling is T104's job (binding against "the existing
-  keymap-model override layer"), but the contract is fixed here: a
-  conflicting `bind_key` is **reported, never silently clobbered** — either
-  the script's bind loses and the user is told why, or both binds are
-  rejected with a message; either way, a script cannot silently steal a key
-  the built-in keymap or another script already owns.
+- Conflict handling — **done, T104j**: every loaded script's `bindings`
+  feed `App::resolve_key_overrides` (`crates/vix-keybindings/src/
+  overrides.rs`'s `resolve`) alongside `keybindings.toml`'s persisted
+  overrides, in one combined batch. The contract fixed here holds for
+  real now: a conflicting `bind_key` is **reported, never silently
+  clobbered** — two requests (from any mix of scripts and/or the user's
+  `keybindings.toml`) claiming the same token are **both rejected**, with
+  an error naming the token and every source; a script's binding that
+  simply claims a token a *built-in* keymap binding already owns is not a
+  conflict — the script wins outright, same as a user override — but is
+  reported once, informationally, so the built-in's silence isn't a
+  surprise. Either way, a script cannot silently steal a key the built-in
+  keymap or another script already owns.
 
 ### Buffer & selection
 

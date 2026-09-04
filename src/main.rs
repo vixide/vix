@@ -66,7 +66,7 @@ fn main() -> io::Result<()> {
     let mut app = App::new(root, settings);
     app.refresh_git();
     app.load_scripts();
-    app.load_key_overrides();
+    app.resolve_key_overrides();
     // First-run welcome screen (no-op after it has been seen once).
     app.maybe_show_welcome();
 
