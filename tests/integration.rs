@@ -3438,6 +3438,16 @@ fn help_overlay_includes_the_active_keymap_chords() {
         h.rows.iter().any(|s| s.keys == "Ctrl X Ctrl F"),
         "Emacs Ctrl X chords listed"
     );
+    // The chord's second key is a bare, unprefixed token ("b", not
+    // "C-b") -- it must display lowercase and unchanged, not uppercased
+    // to "B" (improvement plan T145: modifier_token_display now renders
+    // every keymap's chords, including Emacs's, and must only uppercase
+    // a key when a modifier prefix was actually found).
+    assert!(
+        h.rows.iter().any(|s| s.keys == "Ctrl X b"),
+        "Emacs C-x b chord shows its bare second key lowercase: {:?}",
+        h.rows.iter().map(|s| &s.keys).collect::<Vec<_>>()
+    );
 }
 
 #[test]
