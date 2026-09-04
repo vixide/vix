@@ -169,6 +169,35 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   already reduced to one job, and a second full `--release` (LTO + strip,
   the slowest profile in the tree) for an informational-only metric GitHub
   already reports isn't a cost that CI should carry.
+- [ ] **T009 — Fix the flaky `sqlite_connect_browse_query_and_filter`.**
+  `tests/db_smoke.rs:171` (`assertion left == right failed: the delete
+  really ran — left: [] right: [["2"]]`) has failed 4 times on GitHub's
+  `ubuntu-latest` between 2026-09-02 and 2026-09-03, every time on a diff
+  that touched nothing in `vix-db` (two pure-doc pushes, two
+  `vix-keybindings`-only pushes), and passed on a same-commit rerun every
+  time; never seen on `macos-latest` or locally. That is a real race in
+  the connect → browse → query → filter → delete flow under Linux
+  scheduling, not infra noise. Find and fix the root cause (likely an
+  async query result installed by `poll_db_query` after the assertion
+  reads state, or two connections seeing different transaction
+  snapshots) — not `#[ignore]`, not a retry loop. Acceptance: 20
+  consecutive green CI runs of `db_smoke` on `ubuntu-latest`.
+- [ ] **T010 — CI runner resilience.** Two pre-existing failure classes
+  that are neither code bugs nor fixable by rerunning forever: (1)
+  GitLab's shared runner runs out of disk mid-link on the `test` job
+  (`ld terminated with signal 7 [Bus error]` / "No space left on
+  device") building the 105-crate test binary — confirmed independent of
+  `binary-size` (T008 isolated that job's cache; `test` still failed).
+  Try, in order of cheapness: a `[profile.test]` with `debug = 1`/
+  `strip = "debuginfo"` (the link is dominated by debug info from
+  tokio/sqlx/tree-sitter/image), `cargo test --no-run` followed by
+  per-crate test runs so no single link holds everything, then a bigger
+  runner tier. (2) The GitHub `docs (lychee)` job downloads the pinned
+  lychee tarball from GitHub Releases on every run and once failed with
+  `curl: (35) Recv failure: Connection reset by peer` (2026-09-03) — wrap
+  the download in a 3-attempt retry (`curl --retry 3 --retry-all-errors`)
+  and cache the verified tarball with `actions/cache` keyed on
+  `LYCHEE_VERSION`+`LYCHEE_SHA256`. Document both in `spec/ci/index.md`.
 
 ## Phase 1 — Capabilities
 
@@ -736,6 +765,154 @@ presupposing a specific vulnerability exists.
   not just planned. File real findings as their own follow-up tasks
   (T134a, T134b, …), same pattern as T123.
 
+### Code quality & maintainability
+
+Grounded in a measured pass on 2026-09-04 (numbers below are from that
+run; re-measure before starting any task). The headline: the discipline
+is good — 8 non-test `unwrap()` + 2 `expect()` in all of `src/app.rs`, 6
+real `TODO`/`FIXME` comments workspace-wide, only 4 `too_many_lines`
+allows in 61k lines of crate code — so the debt is **structural**
+(size, duplication, drift between hand-maintained copies), not
+sloppiness. Tasks are ordered roughly by payoff; each is its own branch
+and its own gate run, zero intended behavior change unless stated.
+
+- [ ] **T141 — Carve up `src/app.rs`.** 22,449 lines, 808 `fn`s, 767
+  string-literal match arms; `AGENTS.md`/`CLAUDE.md` describe "a thin
+  App shell over ~105 focused crates" and this file is the opposite.
+  Staged, not one rewrite: (a) move `impl App` blocks into
+  `src/app/<feature>.rs` submodules by feature — keymap dispatch (the
+  ten `*_key`/`*_token` fns, `on_key`), org, git, lsp/dap, palette,
+  prompts/dialogs, scripts, tools, session/settings — pure moves, one
+  module per branch, the 432-test suite green after each; (b) split
+  `run_action`'s giant `match` into per-namespace dispatchers
+  (`run_file_action`, `run_view_action`, …) chained the way
+  `run_vim_action`/`run_edit_action` already are — "one action id, one
+  arm" still holds, the arm just lives next to its feature. Do T143
+  first so reviews of each slice aren't buried in an 8.8k-line test
+  file's diff noise.
+- [ ] **T142 — Same for `src/ui.rs`.** 7,109 lines; 3 of the workspace's
+  4 `too_many_lines` allows are here (`draw_ai_diff`, `draw_terminal`,
+  `draw_search` — the 4th is `app.rs`'s `draw_insert`). Move each
+  overlay/panel's `draw_*` next to its state (into the owning crate
+  where one exists, else `src/ui/<feature>.rs`), and split the three
+  100+-line drawers so the allows come out.
+- [ ] **T143 — Split `tests/integration.rs`.** 8,790 lines, 432 tests in
+  one file. Move to `tests/integration/main.rs` + `<area>.rs` modules
+  (keymaps, org, git, palette, panels, scripting, …) sharing a
+  `common.rs` for `app_at`/`key`/`ctrl`/`type_str`/`buffer_with`. Still
+  one test binary, so no compile-time regression; smaller diffs and
+  `cargo test --test integration keymaps::` targeting are the wins.
+- [ ] **T144 — One list-navigation state instead of eighteen.**
+  `ensure_visible` is defined in 18 crates, `up`/`down` in 18,
+  `page_up`/`page_down` in 14, `select_index` in 11 — every
+  panel/chooser reimplements the same `selected`/`scroll` bookkeeping
+  (spot-checked identical in `vix-file-browser-panel`, `vix-palette`,
+  `vix-git-panel`). Extract a `ListCursor { selected, scroll }` with
+  those methods (a new `vix-list-state` crate, or into whichever core
+  crate every panel already depends on) and migrate one panel per
+  commit. Removes several hundred lines and the class of "this panel's
+  page-down is off by one" bugs.
+- [ ] **T145 — Consolidate the T104 epic's own leftovers.** T104c–g each
+  added a near-identical key-token builder to `src/app.rs`:
+  `vscode_ctrl_token`, `intellij_ctrl_token`, `eclipse_token`,
+  `sublime_ctrl_token`, `apple_ctrl_token` (plus `shared_token` and
+  `emacs_top_level_token`, 7 total). They differ only in whether `Alt`
+  is encoded and whether Shift is read from the modifier bit — fold into
+  one `ctrl_token(key, ShiftRule, AltRule)` with the Shift-bit-vs-char-
+  case rationale documented once, not five times. Likewise
+  `emacs_key_display` and `modifier_token_display` are two renderers for
+  one token grammar — keep one. Do this *after* T104j lands so it
+  doesn't churn under the in-flight epic. (Honest note: this debt was
+  created deliberately during T104c–g — one small copy per slice kept
+  each conversion reviewable — and is now due.)
+- [ ] **T146 — No silent keymap fallback.** `Keymap::from_id`
+  (`src/app.rs`) maps any unrecognized id to `Keymap::Apple` silently;
+  it let an integration test pass for months while testing the wrong
+  keymap (found in T104d: `"intellij-mac"` ≠ `"intellij-macos"`). Make it
+  return `Option`, report an unknown persisted id via the messages panel
+  at settings load (then fall back), and add a `vix-keymap-model` test
+  that every `KEYMAPS` id round-trips and a typo is rejected. Then
+  consider retiring `App`'s private 9-variant `enum Keymap` in favor of
+  the model's 10 string ids everywhere — the granularity mismatch
+  `crates/vix-keybindings/spec/index.md` § "Why 10, not 9" already
+  documents.
+- [ ] **T147 — A real action catalog.** The command palette and
+  `App::action_title` learn action titles only by walking
+  `vix_menu::menus()`, so any action without a menu leaf is invisible to
+  the palette and shows its raw id in F1 help (`nav.back`,
+  `nav.forward`, `view.toggle_menu` from T104g; `keybindings.reload`
+  needed a Tools leaf purely to be findable). Separately,
+  `vix-keyboard-shortcut-panel::ROWS` is a hand-curated cosmetic list
+  that can now drift from the real `vix-keybindings` registry (its own
+  spec calls it "cosmetic, not data"). Build one `(action_id → i18n
+  title key)` catalog that menus, the palette, F1 help, and
+  `vix-keybindings`' `shortcuts_for` all read; derive `ROWS` from
+  `vix_keybindings::SHARED` + the active keymap's table instead of
+  hand-typing it; add a test that every `run_action` arm id has a
+  catalog entry (the 767 arms are grep-able). Unblocks T204's editor UI
+  too, which needs "every action, titled".
+- [ ] **T148 — i18n coverage, measured and gated.** `locales/app.yml` is
+  26,298 lines holding 2,240 keys, and 690 of them (31%) carry only
+  `en` — every `msg.*` added since scripting landed, most menu items
+  from 2026-07 on. (a) Extend `tests/i18n_keys.rs` to print a per-locale
+  coverage table and fail if any locale drops below its current floor
+  (ratchet, never regress); (b) backfill the 690 — a good first job for
+  the T124 AI provider with human review, or a per-locale contributor
+  call; (c) split the file per top-level namespace
+  (`locales/menu.yml`, `msg.yml`, `help.yml`, …) — `rust-i18n` loads a
+  directory — so a translation PR isn't a 26k-line diff context.
+- [ ] **T149 — Replace boolean clusters with types.** Six
+  `struct_excessive_bools` allows: `App`, `Settings`, `Editor` (both
+  `vix-editor` and `vix-editor-core`), `SearchBar`, `WorkspaceSearch`.
+  Where the bools are really one mode (e.g. an editor's
+  overwrite/read-only/soft-wrap set), an enum or a small `Flags` struct
+  with named methods; where they're independent persisted toggles
+  (`Settings`), group them into a nested `#[serde(flatten)]` struct so
+  they can be tested and documented as a unit. Each allow comes out with
+  its struct.
+- [ ] **T150 — Remove the two crate-level blanket allows.**
+  `crates/vix-editor-core/src/multicursor.rs` and `named.rs` each open
+  with `#![allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]`
+  for a whole file — the one place the "pedantic, no blanket allows"
+  hard rule is broken. Replace with `isize`-typed offset arithmetic or
+  `usize::try_from` at the few real cast sites, or at worst a
+  per-expression `#[allow]` with a one-line proof comment (the
+  `multicursor.rs` comment already states the invariant; make it local).
+  Sweep the 3 `cast_precision_loss` + 2 `cast_possible_truncation`
+  allows elsewhere the same way.
+- [ ] **T151 — Micro-crate audit.** 105 crates; `vix-query` is 37 lines,
+  `vix-theme` 66, and `vix-modal`/`vix-i18n`/`vix-query`/`vix-theme` have
+  no tests at all (`vix-modal` is a documented spec-only scaffold, fine;
+  `vix-theme` is not). Write a minimum-viable-crate guideline into
+  `AGENTS.md` (own spec, own tests, a consumer other than the App shell
+  *or* a clear reuse story), fold crates that fail it into their sole
+  consumer (precedent: `vix-projectile` was merged into `vix-tasks`
+  the day it was built), and add unit tests to `vix-theme`. Keep the
+  crate-map/spec/check-docs invariants green throughout.
+- [ ] **T152 — Root `src/` modules that should be crates.**
+  `column_view.rs` (966 lines), `edit_table.rs` (770), `edit_outline.rs`
+  (610), `explorer.rs`, `search.rs`, `workspace_search.rs`, `messages.rs`
+  live in `src/` with no spec and outside `scripts/check-docs`'s
+  "every crate owns a spec" gate — the 2026-07 "crates, not modules"
+  decision was applied everywhere except here. Move each to
+  `crates/vix-<name>` with a `spec/index.md`, one per branch; `src/`
+  should end up as `app.rs` (or `app/`, after T141), `ui.rs`, `lib.rs`,
+  `main.rs`.
+- [ ] **T153 — Sort the palette's Files mode.** Recorded as a finding in
+  T004 but never given a task id: `build_file_index`/
+  `palette_file_entries` (`src/app.rs`) push matches in raw
+  `ignore::WalkBuilder` order — filesystem-traversal order, not portable
+  (ext4 vs APFS) and not ranked. Score with `palette::fuzzy_score` and
+  tie-break on the path (stable), the way Commands mode already does.
+  Unblocks a Files-mode snapshot scenario for `tests/snapshots.rs`.
+- [ ] **T154 — Keep `Cargo.toml` descriptions honest.** `vix-keybindings`'
+  `description` said "9 keymaps" for a task after T104g made it 10;
+  caught only because T104h happened to edit the same file. Nothing
+  checks these. Add to `scripts/check-docs`: each crate's `description`
+  must equal (or be a prefix of) the first sentence under its
+  `spec/index.md` H1, so the spec is the single source and the manifest
+  can't drift; fix any current mismatches the check turns up.
+
 ## Phase 2 — Functionality
 
 - [ ] **T201 — Structural search & replace.** New crate
@@ -970,6 +1147,12 @@ scratch each time they come up.
 8. **Security:** T131 anytime (no dependency); T132 anytime (T102/T103
    already shipped, so it's unblocked now); T133 anytime; T134 only after
    T105 and T124/T125 ship.
+9. **CI + code quality:** T009/T010 anytime (independent, small).
+   T150, T153, T154, T146 anytime — each is a single short branch.
+   T145 only after T104j lands (it refactors code the epic is still
+   touching). T143 before T141, and T141 before T142 (each makes the next
+   reviewable). T144, T147, T148, T149, T151, T152 are independent of
+   each other and of the rest; T147 is worth doing before T204.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.
