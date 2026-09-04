@@ -557,6 +557,8 @@ menu.item.vix.email:
   bn: "ইমেল"
   zh: "电子邮件"
   ja: "メール"
+menu.item.vix.keybindings:
+  en: "Keybindings…"
 menu.item.vix.settings:
   en: "Settings…"
   es: "Configuración…"
@@ -9009,6 +9011,14 @@ ui.find:
   bn: "খুঁজুন"
   zh: "查找"
   ja: "検索"
+ui.keybinding_editor_title:
+  en: "Keybindings  (Esc to close)"
+ui.keybinding_editor_hint:
+  en: "type filter   click a header to sort   ↑↓ select   Enter rebind   Delete reset   Esc close"
+ui.keybinding_source_user:
+  en: "[user]"
+ui.keybinding_source_script:
+  en: "[script: %{stem}]"
 ui.keyboard_shortcuts:
   en: "Keyboard Shortcuts  (Esc to close)"
   es: "Atajos de teclado  (Esc para cerrar)"
@@ -10887,6 +10897,8 @@ prompt.roam_ref:
   en: "Add ref (URL or cite key)"
 prompt.node_transclusion:
   en: "Transclude node (title)"
+prompt.rebind_key:
+  en: "Rebind '%{action}' to (type the new key, e.g. C-S-k)"
 prompt.save_macro:
   en: "Save macro as"
   es: "Guardar macro como"
@@ -14205,6 +14217,14 @@ msg.keybinding_shadows_builtin:
   en: "Your override of '%{token}' replaces the built-in '%{action}'"
 msg.keybindings_reloaded:
   en: "Reloaded keybindings: %{count} override(s) active"
+msg.rebind_invalid_token:
+  en: "Not a valid key: '%{token}'"
+msg.keybinding_save_failed:
+  en: "Could not save keybindings.toml: %{error}"
+msg.keybinding_rebound:
+  en: "Rebound '%{token}'"
+msg.keybinding_reset:
+  en: "Reset '%{token}' to its default binding"
 msg.unknown_action:
   en: "Unknown action: %{action}"
   es: "Acción desconocida: %{action}"
@@ -20488,6 +20508,8 @@ menu.item.vix.email.help:
   bn: "Vix দলকে একটি নতুন ইমেল লিখুন।"
   zh: "撰写一封发给 Vix 团队的新邮件。"
   ja: "Vix チームへの新しいメールを作成します。"
+menu.item.vix.keybindings.help:
+  en: "Open the keybinding editor: search, rebind, and reset shortcuts."
 menu.item.vix.settings.help:
   en: "Open the Vix settings editor."
   es: "Abre el editor de configuración de Vix."

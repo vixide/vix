@@ -1113,23 +1113,32 @@ and its own gate run, zero intended behavior change unless stated.
 - [ ] **T203 — New bundled themes.** Solarized Dark, Solarized Light,
   Catppuccin Mocha, Tokyo Night, and one WCAG-AA high-contrast theme.
   Snapshot test each (T004 harness) so slots can't silently regress.
-- [ ] **T204 — Keybinding editor.** Help (or Settings) → Keybindings:
-  searchable table of effective bindings for the active keymap (reuse
-  `vix-keyboard-shortcut-panel` data), conflict detection, rebind → saved
-  to a user-overrides file layered over the keymap; Reset to default.
-  **Updated 2026-09-04**: T104h–T104j are all done — the persisted-
-  override file, conflict detection, and `on_key` choke point this task
-  originally scoped now all exist for real (`crates/vix-keybindings/
-  spec/index.md`; `App::override_key`/`resolve_key_overrides`/
-  `apply_key_overrides`). T204 narrows to *just* the UI now: a searchable
-  table view over `vix_keybindings::TABLES` (built-ins) +
-  `Settings::keybindings_path()`'s persisted overrides (via
-  `user_bindings::load`/`upsert`) + `self.key_overrides` (the live
-  resolved map, for showing what's actually in effect right now
-  including any shadow), with rebind writing through that already-built
-  layer (`user_bindings::upsert` + `App::resolve_key_overrides` to
-  re-apply) rather than inventing a second one. No longer blocked on
-  anything — ready to pick up whenever wanted.
+- [x] **T204 — Keybinding editor.** Done. **Vix → Keybindings…** opens a
+  new overlay (`crates/vix-keybinding-editor-panel/spec/index.md`): a
+  searchable, sortable, *selectable* table of the active keymap's
+  effective bindings (its top-level built-ins + `vix_keybindings::SHARED`
+  + anything already in `self.key_overrides`), each tagged `[user]` or
+  `[script: name]` when overridden. Enter opens a prompt to type the new
+  key as a `vix-macros` token (`PromptKind::RebindKey` +
+  `App::pending_rebind_action_id`, mirroring the established
+  extra-context-lives-in-its-own-field convention); Delete resets a user
+  override back to its default (new `vix_keybindings::user_bindings::
+  remove`). Both write through the already-built T104h–j layer
+  (`user_bindings::upsert`/`remove` + `App::resolve_key_overrides`) rather
+  than inventing a second one — conflict/shadow reporting on a rebind is
+  the same `keybindings.reload` machinery, not special-cased here. A real
+  dispatch-order hazard had to be respected, not just avoided by luck:
+  `try_panel_key`'s `panel!(keybinding_editor, …)` sits *after*
+  `panel!(prompt, …)`, so the rebind `Prompt` (open while
+  `keybinding_editor` stays `Some` underneath it) wins the keystroke
+  instead of the editor swallowing it as a filter character — tested
+  directly (`keybinding_editor_enter_opens_a_rebind_prompt_that_wins_over
+  _the_editor`). Menu placement was a user decision: **Vix → Keybindings…**
+  next to **Vix → Settings**, not Help (Help stays the read-only F1
+  panel). Tests avoid writing to the real `Settings::keybindings_path()`
+  (no test-only override exists for it) — everything up to but not
+  including a successful rebind/reset's disk write is covered; the
+  no-op/reset-on-a-built-in-row and validation-rejects paths are.
 - [ ] **T205 — Snippet editor + tab stops.** Audit whether `$1`/`${2:def}`
   tab stops exist in snippet expansion; implement if not. Add a snippet
   create/edit dialog writing to the user snippets scope; New Snippet from

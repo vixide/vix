@@ -41,10 +41,16 @@ Help**.
 ## Vix menu
 
 - About Vix — modal dialog showing `Vix <version>` and an **Ok** button.
+- License — modal dialog with the project license text.
 - Website — modal dialog with a selectable/copyable text field
   `https://github.com/vixide/vix` and an **Ok** button.
 - Email — modal dialog with a selectable/copyable text field
   `joel@joelparkerhenderson.com` and an **Ok** button.
+- *separator*
+- Keybindings… — open the editable keybinding overlay: search, rebind
+  (type the new key as text), and reset a user override to its built-in
+  default (T204, `crates/vix-keybinding-editor-panel/spec/index.md`).
+- Settings — open `settings.toml` directly in the editor.
 - *separator*
 - Quit (`Ctrl+Q`) — quit Vix.
 
