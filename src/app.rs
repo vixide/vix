@@ -1310,6 +1310,13 @@ pub struct App {
     /// in discovery order (global scripts, then project scripts, sorted by
     /// file stem within each — see `vix_script::discover`).
     scripts: Vec<vix_script::LoadedScript>,
+    /// Accepted persisted key binding overrides (T104i), keyed on the
+    /// `vix-macros` token, value the `App::run_action`-dispatchable id —
+    /// built by `App::load_key_overrides` from `keybindings.toml`, and
+    /// consulted by `App::override_key`, the `on_key` choke point every
+    /// keymap's own dispatch runs after. Script `bind_key` requests don't
+    /// contribute to this yet (T104j).
+    key_overrides: std::collections::HashMap<String, String>,
     /// Script-command chooser overlay (Tools → Scripts → Run…), when open.
     pub script_chooser: Option<ScriptChooser>,
     /// A script's `prompt(...)` request awaiting an answer, while
@@ -1788,6 +1795,7 @@ impl App {
             macro_chooser: None,
             script_runtime: vix_script::Runtime::new(),
             scripts: Vec::new(),
+            key_overrides: std::collections::HashMap::new(),
             script_chooser: None,
             pending_script_prompt: None,
             clipboard_ring: Vec::new(),
@@ -2539,6 +2547,12 @@ impl App {
         // claim first — but only while the cursor is actually inside a pipe
         // table; see `org_table_key`.
         if self.org_table_key(key) {
+            return;
+        }
+        // Persisted key binding overrides (T104i) take priority over every
+        // keymap's own dispatch below — that's what "override" means. See
+        // `override_key`.
+        if self.override_key(key) {
             return;
         }
         // Keymap-specific dispatch. Each keymap first gets a chance to consume the
@@ -3795,6 +3809,7 @@ impl App {
             "tools.tasks" => self.open_tasks(),
             "script.run" => self.open_script_chooser(),
             "script.reload" => self.reload_scripts(),
+            "keybindings.reload" => self.reload_key_overrides(),
             "tools.test" => self.run_tests(),
             "tools.test_panel" => self.show_test_panel = !self.show_test_panel,
             "tools.terminal" => self.toggle_terminal(),
@@ -10775,6 +10790,89 @@ impl App {
         let count: usize = self.scripts.iter().map(|s| s.commands.len()).sum();
         self.messages
             .info(t!("msg.scripts_reloaded", count = count).to_string());
+    }
+
+    /// Load `keybindings.toml` and resolve it against the active
+    /// keymap's built-ins (T104i; script `bind_key` requests join the
+    /// same resolution in T104j), replacing `self.key_overrides` with
+    /// the winners. A token two or more overrides claim is rejected
+    /// outright (all of them dropped) and reported as an error naming
+    /// every source; an override that wins but also claims a token a
+    /// built-in already owns is reported once, informationally — it
+    /// still wins, the built-in just won't fire for that key any more.
+    pub fn load_key_overrides(&mut self) {
+        let requests: Vec<vix_keybindings::Override> = Settings::keybindings_path()
+            .map(|path| vix_keybindings::user_bindings::load(&path))
+            .unwrap_or_default()
+            .into_iter()
+            .map(|b| vix_keybindings::Override {
+                key_token: b.key_token,
+                action_id: b.action_id,
+                source: vix_keybindings::Source::User,
+            })
+            .collect();
+        let resolved = vix_keybindings::resolve(requests, &self.settings.keymap);
+        for conflict in &resolved.conflicts {
+            let sources = conflict
+                .sources
+                .iter()
+                .map(vix_keybindings::Source::describe)
+                .collect::<Vec<_>>()
+                .join(", ");
+            self.messages.error(
+                t!(
+                    "msg.keybinding_conflict",
+                    token = conflict.key_token.clone(),
+                    sources = sources
+                )
+                .to_string(),
+            );
+        }
+        for shadow in &resolved.shadows {
+            self.messages.info(
+                t!(
+                    "msg.keybinding_shadows_builtin",
+                    token = shadow.key_token.clone(),
+                    action = shadow.shadowed_action_id
+                )
+                .to_string(),
+            );
+        }
+        self.key_overrides = resolved
+            .accepted
+            .into_iter()
+            .map(|o| (o.key_token, o.action_id))
+            .collect();
+    }
+
+    /// `keybindings.reload`: re-run `load_key_overrides` and report how
+    /// many ended up active, so a hand-edited `keybindings.toml` can be
+    /// picked up without restarting — mirrors `script.reload`'s shape.
+    fn reload_key_overrides(&mut self) {
+        self.load_key_overrides();
+        self.messages.info(
+            t!("msg.keybindings_reloaded", count = self.key_overrides.len()).to_string(),
+        );
+    }
+
+    /// The persisted/script key-binding override choke point (T104i),
+    /// run between `org_table_key` and every keymap's own dispatch — the
+    /// *only* new call site, covering all 10 keymaps at once (see
+    /// `crates/vix-keybindings/spec/index.md`'s "One choke point"/
+    /// "Override layer"). Builds the incoming key's plain `vix-macros`
+    /// token — the shared grammar every override source is authored in,
+    /// not any single keymap's own Shift-bit-explicit convention — and
+    /// looks it up in `self.key_overrides`. Returns true if consumed.
+    fn override_key(&mut self, key: KeyEvent) -> bool {
+        let token = crate::macros::encode_key(key);
+        if token.is_empty() {
+            return false;
+        }
+        if let Some(action) = self.key_overrides.get(&token).cloned() {
+            self.run_action(&action);
+            return true;
+        }
+        false
     }
 
     /// `script.run` (Tools → Scripts → Run…): open a chooser listing every

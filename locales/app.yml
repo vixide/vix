@@ -4718,6 +4718,8 @@ menu.item.tools.scripts.run:
   en: "Run…"
 menu.item.tools.scripts.reload:
   en: "Reload"
+menu.item.tools.reload_keybindings:
+  en: "Reload Keybindings"
 menu.item.tools.markdown_preview:
   en: "Markdown Preview…"
   es: "Vista previa de Markdown…"
@@ -14197,6 +14199,12 @@ msg.script_command_unavailable:
   en: "Script command '%{action}' is not available (script removed or renamed?)"
 msg.scripts_reloaded:
   en: "Reloaded scripts: %{count} command(s) available"
+msg.keybinding_conflict:
+  en: "Key binding conflict on '%{token}': claimed by %{sources} — none applied"
+msg.keybinding_shadows_builtin:
+  en: "Your override of '%{token}' replaces the built-in '%{action}'"
+msg.keybindings_reloaded:
+  en: "Reloaded keybindings: %{count} override(s) active"
 msg.unknown_action:
   en: "Unknown action: %{action}"
   es: "Acción desconocida: %{action}"

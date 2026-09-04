@@ -21,15 +21,24 @@
 //! for its unconditional bindings; see `shared.rs`'s module doc for which
 //! ones stay host-side and why.
 //!
-//! T104h adds the persisted half of the override layer:
+//! T104h added the persisted half of the override layer:
 //! [`user_bindings::UserBinding`]/[`user_bindings::load`]/
 //! [`user_bindings::upsert`] round-trip `keybindings.toml` (via
 //! `vix_settings::Settings::keybindings_path`), mirroring
-//! `vix-macros`' `macros.toml` pattern exactly. Nothing yet checks a
-//! loaded override against a live `KeyEvent` or a script's own
-//! `bind_key` requests — that's T104i (the `on_key` choke point +
-//! conflict handling) and T104j (wiring `vix-script`'s
-//! `LoadedScript::bindings` into it), still to come.
+//! `vix-macros`' `macros.toml` pattern exactly.
+//!
+//! T104i adds resolution: [`resolve`] takes a batch of
+//! [`overrides::Override`] requests (any [`overrides::Source`]) and,
+//! against a given keymap id, sorts them into
+//! [`overrides::Resolved::accepted`] (winners), `::conflicts` (two or
+//! more requests claimed the same token — all rejected), and `::shadows`
+//! (an accepted override that also happens to claim a token a built-in
+//! already owns — not a conflict, just reported). `App::override_key`
+//! (`src/app.rs`) is the `on_key` choke point that actually calls this
+//! with the loaded `keybindings.toml` contents, ahead of every keymap's
+//! own dispatch. Script `bind_key` requests don't feed into it yet —
+//! that's T104j, wiring `vix-script`'s `LoadedScript::bindings` in as a
+//! second batch of [`overrides::Override`]s alongside the persisted ones.
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
@@ -39,6 +48,7 @@ mod apple;
 mod eclipse;
 mod emacs;
 mod intellij;
+pub mod overrides;
 mod shared;
 mod spacemacs;
 mod sublime;
@@ -46,6 +56,7 @@ pub mod user_bindings;
 mod vim;
 mod vscode;
 
+pub use overrides::{Conflict, Override, Resolved, Shadow, Source, resolve};
 pub use shared::{SHARED, lookup_shared};
 pub use user_bindings::UserBinding;
 
