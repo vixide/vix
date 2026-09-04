@@ -2794,6 +2794,45 @@ impl App {
         self.apple_ctrl_key(key) || self.global_shared_key(key)
     }
 
+    /// The `vix-macros` token for a `Ctrl`-chord lookup shared by every
+    /// keymap whose dispatch is "just" `Ctrl` (+ optionally `Alt`) held
+    /// `Char` keys with `Shift` read from the modifier bit — Apple, VS
+    /// Code, `IntelliJ`, Sublime, and Eclipse's own `Ctrl` branch (T104c–g
+    /// each hand-wrote a near-identical copy of this; T145 consolidated
+    /// them once the epic settled, one copy per slice having been the
+    /// right call while each conversion was still being reviewed on its
+    /// own). Returns `None` if `key` isn't a `Ctrl`-held `Char`.
+    ///
+    /// `encode_alt` is the one axis that actually varies across callers —
+    /// `true` for `IntelliJ` (`Ctrl+Alt+L`/`Ctrl+Alt+O` are a single
+    /// keystroke's modifier combination, not a chord), `false` for every
+    /// other caller (Alt is either irrelevant to them, or — Apple's
+    /// `Ctrl+Alt+R`, Eclipse's `Alt+/` — genuinely handled host-side
+    /// instead, see each one's own dispatch function). There's no
+    /// equivalent `encode_shift` parameter: every caller here needs Shift
+    /// encoded from the modifier bit — a terminal can report
+    /// `Ctrl+Shift+p` as a lowercase `p` with the bit set, not an
+    /// uppercase `P` — so unlike `Alt`, that choice never actually
+    /// varies; adding a knob nothing exercises would just be
+    /// unexercised complexity.
+    fn ctrl_token(key: &KeyEvent, encode_alt: bool) -> Option<String> {
+        if !Self::ctrl(key) {
+            return None;
+        }
+        let KeyCode::Char(c) = key.code else {
+            return None;
+        };
+        let mut token = String::from("C-");
+        if encode_alt && Self::alt(key) {
+            token.push_str("A-");
+        }
+        if Self::shift(key) {
+            token.push_str("S-");
+        }
+        token.push(c.to_ascii_lowercase());
+        Some(token)
+    }
+
     /// The Apple keymap's `Ctrl`-letter shortcuts, looked up in
     /// `vix-keybindings`' `"apple"` table (T104g — see
     /// `crates/vix-keybindings/src/apple.rs`). Two bindings are handled
@@ -2821,7 +2860,7 @@ impl App {
             self.run_action("motion.delete_forward");
             return true;
         }
-        let Some(token) = Self::apple_ctrl_token(&key) else {
+        let Some(token) = Self::ctrl_token(&key, false) else {
             return false;
         };
         if let Some(action) = vix_keybindings::lookup("apple", "", &token) {
@@ -2829,27 +2868,6 @@ impl App {
             return true;
         }
         false
-    }
-
-    /// The `vix-macros` token for an Apple `Ctrl`-chord lookup, or `None`
-    /// if `key` isn't a `Ctrl`-held `Char` (every Apple binding handled
-    /// here is). Same Shift-bit-explicit reasoning as `vscode_ctrl_token`/
-    /// `intellij_ctrl_token`/`eclipse_token`/`sublime_ctrl_token`
-    /// (T104c–f); never encodes `Alt` (see `apple_ctrl_key`'s doc comment
-    /// for the one binding that needs it).
-    fn apple_ctrl_token(key: &KeyEvent) -> Option<String> {
-        if !Self::ctrl(key) {
-            return None;
-        }
-        let KeyCode::Char(c) = key.code else {
-            return None;
-        };
-        let mut token = String::from("C-");
-        if Self::shift(key) {
-            token.push_str("S-");
-        }
-        token.push(c.to_ascii_lowercase());
-        Some(token)
     }
 
     // ----- keymap: VS Code (macOS) ----------------------------------------
@@ -2869,7 +2887,7 @@ impl App {
     /// underneath, see `crates/vix-keybindings/src/vscode.rs`). Returns
     /// true if consumed.
     fn vscode_ctrl_key(&mut self, key: KeyEvent) -> bool {
-        let Some(token) = Self::vscode_ctrl_token(&key) else {
+        let Some(token) = Self::ctrl_token(&key, false) else {
             return false;
         };
         if let Some(action) = vix_keybindings::lookup(&self.settings.keymap, "", &token) {
@@ -2877,30 +2895,6 @@ impl App {
             return true;
         }
         false
-    }
-
-    /// The `vix-macros` token for a VS Code `Ctrl`-chord lookup, or `None`
-    /// if `key` isn't a `Ctrl`-held `Char` (every VS Code binding is).
-    /// Unlike `crate::macros::encode_key` (Shift implicit in an uppercase
-    /// char, never prefixed for a `Char` key), this always lowercases the
-    /// char and prefixes `S-` from the Shift *modifier bit* alone, exactly
-    /// matching the original dispatch's own `Self::shift(&key)` check — a
-    /// terminal can report `Ctrl+Shift+p` as a lowercase `p` with the
-    /// Shift bit set rather than an uppercase `P`, and this must not
-    /// silently collide that with plain `Ctrl+p`.
-    fn vscode_ctrl_token(key: &KeyEvent) -> Option<String> {
-        if !Self::ctrl(key) {
-            return None;
-        }
-        let KeyCode::Char(c) = key.code else {
-            return None;
-        };
-        let mut token = String::from("C-");
-        if Self::shift(key) {
-            token.push_str("S-");
-        }
-        token.push(c.to_ascii_lowercase());
-        Some(token)
     }
 
     // ----- keymap: IntelliJ (macOS / Windows) -----------------------
@@ -2913,7 +2907,10 @@ impl App {
     /// cut/copy/paste/select-all) fall through to the editor widget.
     /// Returns true if consumed.
     fn intellij_key(&mut self, key: KeyEvent, win: bool) -> bool {
-        let Some(token) = Self::intellij_ctrl_token(&key) else {
+        // `Ctrl+Alt+L`/`Ctrl+Alt+O` are a single keystroke's modifier
+        // combination, not a chord prefix, so `encode_alt: true` folds
+        // them into this same lookup rather than a separate context.
+        let Some(token) = Self::ctrl_token(&key, true) else {
             return false;
         };
         let keymap_id = if win {
@@ -2926,31 +2923,6 @@ impl App {
             return true;
         }
         false
-    }
-
-    /// The `vix-macros` token for an `IntelliJ` `Ctrl`-chord lookup
-    /// (`Ctrl` held, optionally `Alt` and/or `Shift` too — `Ctrl+Alt+L`/
-    /// `Ctrl+Alt+O` are a single keystroke's modifier combination, not a
-    /// chord prefix, so they share this same lookup), or `None` if `key`
-    /// isn't a `Ctrl`-held `Char` (every `IntelliJ` binding is). Same
-    /// reasoning as `vscode_ctrl_token` (T104c): `Shift` is encoded from
-    /// the modifier bit, not inferred from the char's case.
-    fn intellij_ctrl_token(key: &KeyEvent) -> Option<String> {
-        if !Self::ctrl(key) {
-            return None;
-        }
-        let KeyCode::Char(c) = key.code else {
-            return None;
-        };
-        let mut token = String::from("C-");
-        if Self::alt(key) {
-            token.push_str("A-");
-        }
-        if Self::shift(key) {
-            token.push_str("S-");
-        }
-        token.push(c.to_ascii_lowercase());
-        Some(token)
     }
 
     // ----- keymap: Eclipse ------------------------------------------------
@@ -2972,24 +2944,22 @@ impl App {
 
     /// The `vix-macros` token for an Eclipse lookup, or `None` if `key` is
     /// neither a `Ctrl`-held nor an `Alt`-held `Char` (every Eclipse
-    /// binding is one or the other). `Ctrl` takes priority over `Alt` — a
-    /// `Ctrl`-held key builds a `Ctrl` token (with `Shift` encoded from the
-    /// modifier bit, matching T104c/T104d's subtlety) regardless of
+    /// binding is one or the other). `Ctrl` takes priority over `Alt` —
+    /// a `Ctrl`-held key builds its token via [`Self::ctrl_token`]
+    /// (`encode_alt: false`, so `Alt` is ignored there too) regardless of
     /// whether `Alt` is also held, exactly mirroring the original
     /// dispatch's `Self::alt(&key) && !Self::ctrl(&key)` guard on its one
-    /// `Alt`-only binding (word completion).
+    /// `Alt`-only binding (word completion) — that one binding is the
+    /// reason this keymap needs its own small wrapper instead of calling
+    /// `ctrl_token` directly like every other simple `Ctrl`-only keymap.
     fn eclipse_token(key: &KeyEvent) -> Option<String> {
+        if let Some(token) = Self::ctrl_token(key, false) {
+            return Some(token);
+        }
         let KeyCode::Char(c) = key.code else {
             return None;
         };
-        if Self::ctrl(key) {
-            let mut token = String::from("C-");
-            if Self::shift(key) {
-                token.push_str("S-");
-            }
-            token.push(c.to_ascii_lowercase());
-            Some(token)
-        } else if Self::alt(key) {
+        if Self::alt(key) {
             Some(format!("A-{c}"))
         } else {
             None
@@ -3004,7 +2974,7 @@ impl App {
     /// copy/paste/select-all) fall through to the editor widget. Returns
     /// true if consumed.
     fn sublime_key(&mut self, key: KeyEvent) -> bool {
-        let Some(token) = Self::sublime_ctrl_token(&key) else {
+        let Some(token) = Self::ctrl_token(&key, false) else {
             return false;
         };
         if let Some(action) = vix_keybindings::lookup("sublime", "", &token) {
@@ -3012,25 +2982,6 @@ impl App {
             return true;
         }
         false
-    }
-
-    /// The `vix-macros` token for a Sublime Text `Ctrl`-chord lookup, or
-    /// `None` if `key` isn't a `Ctrl`-held `Char` (every Sublime binding
-    /// is). Same Shift-bit-explicit reasoning as `vscode_ctrl_token`/
-    /// `intellij_ctrl_token`/`eclipse_token` (T104c–e).
-    fn sublime_ctrl_token(key: &KeyEvent) -> Option<String> {
-        if !Self::ctrl(key) {
-            return None;
-        }
-        let KeyCode::Char(c) = key.code else {
-            return None;
-        };
-        let mut token = String::from("C-");
-        if Self::shift(key) {
-            token.push_str("S-");
-        }
-        token.push(c.to_ascii_lowercase());
-        Some(token)
     }
 
     /// Keys shared by every keymap: menu-bar mnemonics and function keys,
@@ -3118,6 +3069,14 @@ impl App {
     /// or an `F`-key). Only `F`-keys ever encode `Shift` (`F3` vs
     /// `Shift+F3`) — every other shape ignores the Shift bit entirely,
     /// matching the original dispatch's own guards (or lack of one).
+    ///
+    /// Deliberately **not** folded into [`Self::ctrl_token`] (T145): that
+    /// helper only ever builds `Ctrl`-held `Char` tokens; this one also
+    /// covers `Alt`-only bindings (no `Ctrl` required at all) and several
+    /// non-`Char` key codes (`Tab`, `BackTab`, `Left`, `Right`, `F`-keys),
+    /// with Shift gated on the key's *type* rather than a per-keymap
+    /// policy. A genuinely different shape, not a `ShiftRule`/`AltRule`
+    /// variation of the same one.
     fn shared_token(key: &KeyEvent) -> Option<String> {
         let mut token = String::new();
         if Self::ctrl(key) {
@@ -3242,6 +3201,15 @@ impl App {
     /// and the dispatch this replaced defensively lowercased too); Meta
     /// (Alt) bindings are case-sensitive, matching that same original
     /// dispatch (`emacs_meta_key`, since folded into this one table).
+    ///
+    /// Deliberately **not** folded into [`Self::ctrl_token`] (T145): Emacs
+    /// needs `Alt`-only bindings too (no `Ctrl` required), delegates to
+    /// `crate::macros::encode_key`'s general grammar rather than
+    /// hand-building a `"C-"`-prefixed string, and — unlike every
+    /// `ctrl_token` caller — never encodes `Shift` explicitly at all
+    /// (Emacs bindings don't need the Shift-bit-vs-char-case
+    /// disambiguation those keymaps do). A different problem, not a
+    /// parameter of the same one.
     fn emacs_top_level_token(key: &KeyEvent) -> String {
         if Self::ctrl(key)
             && let KeyCode::Char(c) = key.code
@@ -15095,47 +15063,33 @@ impl App {
                     add(Self::action_title(b.action_id), keys);
                 }
             }
-            // Walks every context of every `emacs`-id table (today just
-            // one, T104a) generically, so a later context/binding needs no
-            // matching change here.
-            "emacs" => {
-                for table in vix_keybindings::TABLES
-                    .iter()
-                    .filter(|t| t.keymap_id == "emacs")
-                {
+            // Walks every context of every id below generically — Emacs is
+            // the only one with more than one context (its chord tables,
+            // T104a); the rest have only ever had one ("", T104c–g) — so a
+            // later context/binding needs no matching change here. One
+            // arm since T145 merged what used to be Emacs's own (needing
+            // a chord-prefix string) with everyone else's: `ctx.name` is
+            // always `""` for the single-context keymaps, so building a
+            // prefix from it is a no-op for them, not special-cased away.
+            id @ ("emacs" | "vscode-macos" | "vscode-windows" | "intellij-macos"
+            | "intellij-windows" | "eclipse" | "sublime" | "apple") => {
+                for table in vix_keybindings::TABLES.iter().filter(|t| t.keymap_id == id) {
                     for ctx in table.contexts {
                         let prefix: String = ctx
                             .name
                             .split(' ')
                             .filter(|s| !s.is_empty())
-                            .map(emacs_key_display)
+                            .map(modifier_token_display)
                             .collect::<Vec<_>>()
                             .join(" ");
                         for b in ctx.bindings {
-                            let key_display = emacs_key_display(b.key_token);
+                            let key_display = modifier_token_display(b.key_token);
                             let keys = if prefix.is_empty() {
                                 key_display
                             } else {
                                 format!("{prefix} {key_display}")
                             };
                             add(Self::action_title(b.action_id), keys);
-                        }
-                    }
-                }
-            }
-            // VS Code's, IntelliJ's, Eclipse's, Sublime's, and Apple's
-            // tables have only ever had one context each ("", T104c–g),
-            // but this still walks every context generically, matching
-            // the Emacs arm above, for the same reason.
-            id @ ("vscode-macos" | "vscode-windows" | "intellij-macos" | "intellij-windows"
-            | "eclipse" | "sublime" | "apple") => {
-                for table in vix_keybindings::TABLES.iter().filter(|t| t.keymap_id == id) {
-                    for ctx in table.contexts {
-                        for b in ctx.bindings {
-                            add(
-                                Self::action_title(b.action_id),
-                                modifier_token_display(b.key_token),
-                            );
                         }
                     }
                 }
@@ -21038,25 +20992,22 @@ fn collect_menu_shortcuts(items: &[crate::menu::Item], add: &mut impl FnMut(Stri
     }
 }
 
-/// Render an Emacs `Ctrl X`-map key for display: `"C-f"` → `"Ctrl F"`, a bare
-/// key unchanged.
-fn emacs_key_display(k: &str) -> String {
-    if let Some(rest) = k.strip_prefix("C-") {
-        format!("Ctrl {}", rest.to_uppercase())
-    } else if let Some(rest) = k.strip_prefix("A-") {
-        format!("Alt {}", rest.to_uppercase())
-    } else {
-        k.to_string()
-    }
-}
-
-/// Render a VS Code, `IntelliJ`, Eclipse, or Sublime Text keymap token for
-/// display: strips `C-`/`S-`/`A-` prefixes in order, each rendered as a
-/// named modifier, then the remaining key uppercased (`"C-S-p"` →
-/// `"Ctrl Shift P"`). Unlike [`emacs_key_display`], these tokens can stack
-/// more than one modifier prefix (T104c's Shift-disambiguation,
-/// `IntelliJ`'s `Ctrl+Alt+…`, T104d), so this strips a loop of them rather
-/// than just one.
+/// Render any keymap's key token for display: strips `C-`/`S-`/`A-`
+/// prefixes in order, each rendered as a named modifier, then the
+/// remaining key uppercased (`"C-S-p"` → `"Ctrl Shift P"`; a bare `"C-f"`
+/// → `"Ctrl F"`) — **only when at least one prefix was actually found**;
+/// a token with none passes through completely unchanged, case included.
+/// Handles every already-converted keymap uniformly, Emacs included
+/// (T145 — a dedicated `emacs_key_display` used to exist, stripping only
+/// a single leading prefix and never uppercasing a bare token; retired
+/// once this loop's own "only uppercase after a real prefix" rule turned
+/// out to already match it exactly). That "only if prefixed" rule is
+/// load-bearing, not cosmetic: Emacs's chord-continuation bindings
+/// (`C-x b`'s second key is the bare token `"b"`, not `"C-b"`) are real,
+/// lowercase, unprefixed tokens — uppercasing them unconditionally would
+/// have been a genuine display regression, caught only by actually
+/// tracing what real Emacs tokens look like rather than assuming
+/// "uppercase the key" was always safe.
 fn modifier_token_display(k: &str) -> String {
     let mut rest = k;
     let mut parts = Vec::new();
@@ -21073,6 +21024,16 @@ fn modifier_token_display(k: &str) -> String {
         } else {
             break;
         }
+    }
+    // Only uppercase the trailing key when a modifier prefix was actually
+    // found — a bare token (no prefix at all) passes through verbatim,
+    // matching the retired `emacs_key_display`'s fallback exactly. This
+    // matters for real: Emacs's chord-continuation bindings (`C-x b`'s
+    // second key, `"b"`) are bare, lowercase tokens with no prefix, and
+    // every other keymap's tokens always carry at least a `C-` prefix, so
+    // this changes nothing for them.
+    if parts.is_empty() {
+        return rest.to_string();
     }
     let key = rest.to_uppercase();
     parts
@@ -21361,6 +21322,24 @@ mod tests {
         assert_eq!(modifier_token_display("C-`"), "Ctrl `");
         // IntelliJ's Ctrl+Alt combination, unlike anything VS Code needs.
         assert_eq!(modifier_token_display("C-A-l"), "Ctrl Alt L");
+    }
+
+    /// T145 retired the dedicated single-prefix `emacs_key_display` once
+    /// every real Emacs token turned out to render identically through
+    /// this one — Emacs bindings never stack more than one modifier
+    /// prefix on a single token, so the loop above finds nothing left to
+    /// strip after the first, same result a single-prefix check gave.
+    #[test]
+    fn modifier_token_display_matches_the_retired_emacs_only_renderer() {
+        assert_eq!(modifier_token_display("C-x"), "Ctrl X");
+        assert_eq!(modifier_token_display("C-c"), "Ctrl C");
+        assert_eq!(modifier_token_display("A-Left"), "Alt LEFT");
+        // A bare key (no modifier prefix) passes through verbatim, case
+        // and all -- real Emacs chord-continuation bindings are exactly
+        // this shape (`C-x b`'s second key is the bare token "b", not
+        // "C-b"), so uppercasing it here would have been a real display
+        // regression, not just a cosmetic risk.
+        assert_eq!(modifier_token_display("b"), "b");
     }
 
     /// macOS folds `Command` into `Control`; every other platform leaves the

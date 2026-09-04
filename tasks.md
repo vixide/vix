@@ -941,7 +941,7 @@ and its own gate run, zero intended behavior change unless stated.
   crate every panel already depends on) and migrate one panel per
   commit. Removes several hundred lines and the class of "this panel's
   page-down is off by one" bugs.
-- [ ] **T145 — Consolidate the T104 epic's own leftovers.** T104c–g each
+- [x] **T145 — Consolidate the T104 epic's own leftovers.** T104c–g each
   added a near-identical key-token builder to `src/app.rs`:
   `vscode_ctrl_token`, `intellij_ctrl_token`, `eclipse_token`,
   `sublime_ctrl_token`, `apple_ctrl_token` (plus `shared_token` and
@@ -954,6 +954,63 @@ and its own gate run, zero intended behavior change unless stated.
   doesn't churn under the in-flight epic. (Honest note: this debt was
   created deliberately during T104c–g — one small copy per slice kept
   each conversion reviewable — and is now due.)
+  Done — but the "fold all 7 into one" premise only held for 5 of them.
+  Actually reading `shared_token`/`emacs_top_level_token` (not just
+  trusting this task's own summary of them) found they solve genuinely
+  different problems: `shared_token` covers non-`Char` key codes
+  (`Tab`/`BackTab`/`Left`/`Right`/`F`-keys) and bindings needing no
+  `Ctrl` at all, with Shift gated by key *type* not a per-keymap policy;
+  `emacs_top_level_token` delegates to `crate::macros::encode_key`'s
+  general grammar rather than hand-building a `"C-"`-string, also needs
+  `Alt`-only (no `Ctrl`) bindings, and never encodes Shift explicitly at
+  all. Forcing either into `ctrl_token(key, ShiftRule, AltRule)` would
+  have meant stretching that signature past what it actually describes,
+  not simplifying anything — left both as their own functions, with a
+  doc-comment note on each explaining why, so this isn't mistaken for an
+  oversight later. The 5 that genuinely were "the same function, Alt
+  encoded or not" (apple/vscode/intellij/sublime/eclipse's `Ctrl`
+  branch) did fold into one `Self::ctrl_token(key, encode_alt: bool)` —
+  no `ShiftRule` parameter either, once it turned out **every** caller
+  needs Shift-bit-explicit encoding; only `Alt` ever actually varies, so
+  a knob nothing would exercise was left out rather than added for
+  symmetry with the task's own suggested signature.
+
+  Also merged `emacs_key_display` into `modifier_token_display` (now
+  handles every already-converted keymap's F1-help display, Emacs
+  included) and merged `shortcut_rows`' separate "emacs" match arm into
+  the generic one, since both now use the same display call.
+
+  **Found and fixed a real bug while doing this, not just moved code
+  around**: `modifier_token_display` unconditionally uppercased its
+  trailing key, which was fine for every existing caller (VS Code/
+  IntelliJ/Eclipse/Sublime/Apple/`SHARED` tokens always carry at least a
+  `C-` prefix) but would have **silently shown the wrong case** for
+  Emacs's real chord-continuation bindings once merged in — e.g.
+  `C-x b` (switch buffer)'s second key is the bare, unprefixed,
+  lowercase token `"b"`, which the old dedicated `emacs_key_display`
+  correctly left alone but the merged function would have shown as
+  `"B"`. Caught by actually
+  grepping `crates/vix-keybindings/src/emacs.rs` for real bare tokens
+  (found ~35: `b`, `k`, `o`, `f`, `c`, `t`, `.`, `!`, `'`, `/`, `-`, …)
+  rather than assuming "uppercase the key" was universally safe just
+  because it matched every case the existing test suite happened to
+  already cover. Fixed: only uppercase when a modifier prefix was
+  actually found; a bare token passes through completely unchanged.
+  Added a new integration test (`help_overlay_includes_the_active_
+  keymap_chords`, extended) asserting the real `"Ctrl X b"` display
+  specifically, not just the already-covered `"Ctrl X Ctrl F"` case —
+  the existing test suite had never actually exercised a bare
+  chord-continuation token's display before this.
+
+  Caught my own process lapse a *third* time this session (T104b, T105,
+  now this) — started on `main` again before stashing/branching. Caught
+  immediately this time (before any edits landed) by literally running
+  `git status --short` + `git branch --show-current` as the first tool
+  call, per the fix noted in T105's own entry — the fix worked. Zero
+  intended behavior change everywhere except the one real bug found and
+  fixed above: full 439-test suite green throughout (unchanged count —
+  one existing test extended, not a new one, plus 2 new `src/app.rs`
+  unit tests for `modifier_token_display`'s Emacs-equivalence).
 - [ ] **T146 — No silent keymap fallback.** `Keymap::from_id`
   (`src/app.rs`) maps any unrecognized id to `Keymap::Apple` silently;
   it let an integration test pass for months while testing the wrong
