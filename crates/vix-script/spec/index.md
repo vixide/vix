@@ -216,6 +216,18 @@ fn on_rename_answer(answer) {
 - `error(text)` — same drawer, error styling. Still just a message: raising
   it does not stop the script, and it never reaches the host as a panic.
 
+### Clock
+
+- `now() -> String` — the system's local date, `YYYY-MM-DD` (`jiff::Zoned::
+  now()`, `strftime("%Y-%m-%d")`). Added in **T105**: v1 originally had no
+  clock function at all, and a sample script (a timestamp signature)
+  needed one to genuinely auto-timestamp anything rather than asking the
+  user to type today's date by hand. Deliberately just the date, not a
+  full timestamp with time-of-day or time zone — the smallest addition
+  that unblocks the sample; a script wanting more precision has no way to
+  get it in v1, same "cut line, not an oversight" reasoning as everything
+  in § "What's deliberately not in v1".
+
 ## Error handling
 
 Two moments, two different failure shapes, neither ever reaches the host as

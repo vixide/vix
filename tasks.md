@@ -678,11 +678,72 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   was already fully exercised by T104i's 7 tests; this task is pure
   `App`-side wiring).
 
-- [ ] **T105 — Sample scripts + docs.** ~6 scripts in `examples/scripts/`
+- [x] **T105 — Sample scripts + docs.** ~6 scripts in `examples/scripts/`
   (e.g. wrap-selection-in-markdown-link, insert-file-header,
   title-case-line, dedupe-selection, timestamp-signature, open-scratch-
   with-template); write `docs/scripting/index.md` documenting the full
   API v1 with each sample explained.
+  Done — all 6 named samples, in `examples/scripts/*.rhai`, each verified
+  by actually running it through `vix_script::Runtime` (not just eyeballed
+  for plausible-looking Rhai — real interpreter probes caught two genuine
+  syntax traps along the way: Rhai's `.trim()` mutates in place and
+  returns `()`, so `x = x.trim()` silently empties `x`; a directory-only
+  Markdown link and a literal `` `[text](url)` `` demonstrating link
+  syntax both trip `scripts/check-docs`'s "does this resolve to a file"
+  check, the exact gotcha the `vix-spec-change` skill already warns
+  about). New `tests/example_scripts.rs` (7 tests) loads every sample via
+  real discovery and invokes each handler, so they can't silently rot —
+  the same "docs are checked like code" principle `scripts/check-docs`
+  already applies to links.
+
+  **Two named samples needed something the scripting API didn't have —
+  handled two different ways, on purpose:**
+  1. `timestamp-signature` needs the current date; v1 had **no clock
+     function at all**. Asked before adding surface to a shipped, spec'd
+     crate rather than deciding alone — user chose adding one. New
+     `now() -> String` (`YYYY-MM-DD`, via `jiff::Zoned::now()`, already a
+     workspace dependency elsewhere) registered in `vix-script`'s engine,
+     documented in its spec's API v1 as a small, dated addition, with its
+     own unit test (compares against a real `jiff` call, not a hardcoded
+     date literal, so it can't rot).
+  2. `open-scratch-with-template` implies opening a **new** buffer — v1
+     has no multi-buffer capability at all, and unlike the clock gap this
+     one is an **explicit, reasoned** cut line already in `vix-script`'s
+     own spec ("no workspace-search or multi-file API... a script cannot
+     iterate open tabs or read another file"). Adding tab-opening would
+     cut against a deliberate boundary, not fill an oversight, so this
+     one wasn't a case for asking again: reinterpreted as filling the
+     *already-open* active buffer with a template (guarded against
+     overwriting real content), documented honestly in the script's own
+     comment and the docs page about why, expecting the user to press
+     Ctrl+N first. Worth knowing which of the two this was next time a
+     sample needs something v1 doesn't have: an oversight is worth
+     asking about, a documented deliberate boundary usually isn't.
+
+  `docs/scripting/index.md` written from scratch (API reference, error
+  handling, "write once not incrementally" guidance, key-binding conflict
+  behavior, all 6 samples linked and explained), added to `docs/index.md`
+  and `llms.txt`/`llms.json`. Also added an "Overrides" section to the
+  previously-untouched `docs/keybindings/index.md` documenting
+  `keybindings.toml` — a real, user-facing gap the whole T104h–j epic
+  left behind (specs got updated throughout; no end-user doc ever
+  mentioned the override file existed until now). Fixed two doc comments
+  in `vix-script` (`lib.rs`, `engine.rs`) still describing key-binding
+  wiring as not yet done, stale since T104j shipped in the same session.
+
+  Caught my own process lapse partway through: started this task by
+  editing directly on `main` again (see T104b's memory note — same
+  mistake, second time this session) instead of stashing/branching
+  first. Caught it via `./scripts/check` failing on unrelated `vix-db`
+  code from the still-present stashed-should-have-been WIP. Recovered
+  cleanly: stashed only the ~22 pre-existing files by explicit path list
+  (not a bare `-- crates/`, which would have swept up
+  `crates/vix-script`'s own in-progress changes too), branched from
+  clean `main`, no rework needed. Zero intended behavior change for
+  every existing script/keybinding path: full 439-test suite green
+  throughout (unchanged from T104j) + `example_scripts.rs`'s 7 new
+  tests + 1 new `vix-script` unit test (`now_returns_todays_local_date`,
+  crate total 14 → 15).
 
 ### Modal editing (epic — audit first)
 

@@ -194,6 +194,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   existing `keybindings.reload`. This is the scripting engine's original
   "wire key bindings into the real keymap" promise from `vix-script`'s
   own spec, finally kept.
+- **6 sample scripts + a scripting guide** (improvement plan T105):
+  `examples/scripts/*.rhai` — wrap-selection-in-markdown-link,
+  insert-file-header, title-case-line, dedupe-selection,
+  timestamp-signature, open-scratch-with-template — each verified against
+  the real `vix-script` runtime, plus `docs/scripting/index.md`
+  documenting the full API. A new `now() -> String` script function
+  (today's date) — v1 had no clock at all, and the timestamp sample
+  needed one. `docs/keybindings/index.md` also gained an "Overrides"
+  section documenting `keybindings.toml`, previously undocumented outside
+  the specs.
 
 ### Changed
 

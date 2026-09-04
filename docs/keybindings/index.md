@@ -236,6 +236,31 @@ line. Press `Esc` to return to Normal mode.
 | Command | `:wq` / `:x`        | Save and close                      |
 | Command | `:Ex`               | Focus the file explorer             |
 
+## Overrides
+
+Rebind a key yourself by hand-editing `keybindings.toml` in Vix's config
+directory (next to `config.toml`):
+
+```toml
+[[binding]]
+key_token = "C-S-k"
+action_id = "edit.duplicate_line"
+```
+
+`key_token` uses the same grammar as a saved macro (`C-`/`A-`/`S-` prefixes
+plus the key, e.g. `C-c`, `S-Tab`, `C-S-k`); `action_id` is any action id —
+the same strings behind every menu item and shortcut on this page, or a
+[script](../scripting/index.md) command (`script:<stem>:<id>`). An override
+takes priority over whatever the active keymap normally does with that key.
+Changes apply on restart, or immediately via **Tools → Reload Keybindings**.
+
+Two overrides claiming the same key — from `keybindings.toml`, from a
+script, or one of each — are **both rejected**, reported in the message
+drawer so neither silently wins. An override that simply claims a key a
+built-in binding already used still wins outright, but is reported once so
+you're not surprised later when that built-in stops firing. There's no
+in-editor UI for this yet — hand-edit the file for now.
+
 ---
 
 Vix™ and Vix IDE™ are trademarks.

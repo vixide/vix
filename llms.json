@@ -82,6 +82,11 @@
           "title": "Git Panel",
           "url": "docs/git-panel/index.md",
           "notes": "status, diff, blame, stage/unstage/revert per hunk"
+        },
+        {
+          "title": "Scripting",
+          "url": "docs/scripting/index.md",
+          "notes": "Rhai .rhai scripts — new palette commands, key bindings, buffer transforms, no rebuild"
         }
       ]
     },

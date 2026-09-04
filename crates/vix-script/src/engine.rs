@@ -26,8 +26,9 @@ pub struct Command {
 /// One key binding a script requested via `bind_key` at load time, naming a
 /// command this same script already registered by [`Command::id`]. Whether
 /// it actually wins the key — conflict handling against the real keymap —
-/// is host wiring (tasks.md T104), not this crate's job; this only records
-/// what the script asked for.
+/// is host wiring (`crates/vix-keybindings`, tasks.md T104a–j, complete)
+/// built on `App::resolve_key_overrides`, not this crate's job; this only
+/// records what the script asked for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyBinding {
     /// Key token in `vix-macros`' grammar (`C-`/`A-`/`S-` prefixes, e.g.
@@ -258,6 +259,16 @@ fn register_prompt_and_message_fns(engine: &mut Engine, host: &Rc<RefCell<HostSt
     });
 }
 
+/// Register `now` (§ API v1, "Clock") — the one function here that reads
+/// neither `HostState` nor the registry: the system's local date, as
+/// `YYYY-MM-DD`. Added in T105 once a sample script (a timestamp
+/// signature) turned out to need it and v1 had no clock function at all.
+fn register_clock_fn(engine: &mut Engine) {
+    engine.register_fn("now", || {
+        jiff::Zoned::now().strftime("%Y-%m-%d").to_string()
+    });
+}
+
 /// The Rhai engine, with v1's API (§ API v1) registered and resource limits
 /// set (§ Execution model). Building the `Engine` — and registering every
 /// native function once — is the expensive part; one `Runtime` loads and
@@ -295,6 +306,7 @@ impl Runtime {
         register_registration_fns(&mut engine, &registry);
         register_buffer_fns(&mut engine, &host);
         register_prompt_and_message_fns(&mut engine, &host);
+        register_clock_fn(&mut engine);
 
         Self {
             engine,
