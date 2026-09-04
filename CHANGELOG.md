@@ -174,6 +174,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `key_token`. Not wired into anything yet — no dispatch, no conflict
   checking, no `App` changes at all — just the format and the round
   trip; that wiring is T104i/T104j.
+- **Key binding overrides now actually apply** (improvement plan T104i):
+  `keybindings.toml` entries are resolved against the active keymap's
+  built-ins and each other at startup (and via a new Tools → Reload
+  Keybindings / `keybindings.reload` action), then take priority over
+  every keymap's own dispatch through a single new `on_key` choke point.
+  Two overrides claiming the same key are both rejected with an error
+  message naming the token and every source; an override that also
+  happens to claim a key a built-in binding already owns still wins, but
+  is reported once so the built-in's silence isn't a surprise. Script
+  `bind_key` requests don't feed into this yet (T104j).
 
 ### Changed
 

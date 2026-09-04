@@ -106,8 +106,8 @@ pub fn resolve(requests: Vec<Override>, keymap_id: &str) -> Resolved {
         if group.len() > 1 {
             let sources = group.into_iter().map(|o| o.source).collect();
             conflicts.push(Conflict { key_token, sources });
-        } else {
-            accepted.push(group.pop().expect("group has exactly one entry"));
+        } else if let Some(only) = group.pop() {
+            accepted.push(only);
         }
     }
     let shadows = accepted

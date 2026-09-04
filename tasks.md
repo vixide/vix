@@ -573,10 +573,36 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   missing-file and an unparseable-content case). `cargo deny` re-checked
   clean after adding the two new dependencies (both already vetted,
   workspace-wide deps — no new advisory risk).
-- [ ] **T104i — The override choke point.** `App::override_key`, inserted
+- [x] **T104i — The override choke point.** `App::override_key`, inserted
   in `on_key` between `org_table_key` and the per-keymap `match`;
   conflict handling for `keybindings.toml` entries (two overrides on one
   token: both rejected; shadowing a built-in: allowed, reported once).
+  Done — new `vix-keybindings::overrides` module: `Source`/`Override`/
+  `Conflict`/`Shadow`/`Resolved`/`resolve()`, grouped in a `BTreeMap` (not
+  `HashMap`) so resolution — and every message built from it — is
+  deterministic regardless of request order, not just correct. 7 new
+  unit tests, including one that explicitly checks a rejected conflict
+  is never *also* reported as a shadow. `App::override_key` builds the
+  incoming key's token with `crate::macros::encode_key` (the shared
+  grammar every override source is authored in, deliberately not any
+  single keymap's Shift-bit-explicit convention) and consults a new
+  `self.key_overrides: HashMap<String, String>` map. Split
+  `load_key_overrides` (reads `keybindings.toml`) from a new, separately
+  public `App::apply_key_overrides(requests)` (does the actual resolve +
+  report + store) specifically so T104j can feed a combined
+  persisted+script `Vec<Override>` into the same call — and so
+  integration tests can drive the choke point directly, since (unlike
+  scripts' `.vix/scripts/`) `keybindings.toml` has no project-scoped
+  variant a test could seed on disk. New `keybindings.reload` action
+  (+ Tools-menu leaf, mirrors `script.reload`) and 3 new `msg.keybinding_
+  *`/`msg.keybindings_reloaded` locale keys (en only, matching
+  `msg.script_load_error`'s precedent). One clippy fix needed
+  (`missing_panics_doc` on a `.pop().expect(..)` that could never
+  actually panic — restructured as `if let Some(only) = group.pop()`
+  instead of documenting a panic that can't happen). Zero intended
+  behavior change for every existing dispatch path: full 436-test suite
+  green throughout (432 + 4 new), plus 7 new `vix-keybindings` unit
+  tests (crate total 32 → 39).
 - [ ] **T104j — Wire scripts in.** `LoadedScript::bindings` (T102/T103,
   already recorded, never checked) through the same choke point — the
   task this epic was originally scoped as.

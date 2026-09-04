@@ -10792,14 +10792,7 @@ impl App {
             .info(t!("msg.scripts_reloaded", count = count).to_string());
     }
 
-    /// Load `keybindings.toml` and resolve it against the active
-    /// keymap's built-ins (T104i; script `bind_key` requests join the
-    /// same resolution in T104j), replacing `self.key_overrides` with
-    /// the winners. A token two or more overrides claim is rejected
-    /// outright (all of them dropped) and reported as an error naming
-    /// every source; an override that wins but also claims a token a
-    /// built-in already owns is reported once, informationally — it
-    /// still wins, the built-in just won't fire for that key any more.
+    /// Load `keybindings.toml` and resolve it via `apply_key_overrides`.
     pub fn load_key_overrides(&mut self) {
         let requests: Vec<vix_keybindings::Override> = Settings::keybindings_path()
             .map(|path| vix_keybindings::user_bindings::load(&path))
@@ -10811,6 +10804,21 @@ impl App {
                 source: vix_keybindings::Source::User,
             })
             .collect();
+        self.apply_key_overrides(requests);
+    }
+
+    /// Resolve `requests` against the active keymap's built-ins (T104i),
+    /// replacing `self.key_overrides` with the winners. Split out from
+    /// `load_key_overrides` so a future T104j can feed script `bind_key`
+    /// requests into the very same resolution (merged with the persisted
+    /// ones into one `Vec<Override>` before calling this), and so tests
+    /// can drive the choke point without touching the real
+    /// `keybindings.toml` path. A token two or more requests claim is
+    /// rejected outright (all of them dropped) and reported as an error
+    /// naming every source; a request that wins but also claims a token
+    /// a built-in already owns is reported once, informationally — it
+    /// still wins, the built-in just won't fire for that key any more.
+    pub fn apply_key_overrides(&mut self, requests: Vec<vix_keybindings::Override>) {
         let resolved = vix_keybindings::resolve(requests, &self.settings.keymap);
         for conflict in &resolved.conflicts {
             let sources = conflict
@@ -10850,9 +10858,8 @@ impl App {
     /// picked up without restarting — mirrors `script.reload`'s shape.
     fn reload_key_overrides(&mut self) {
         self.load_key_overrides();
-        self.messages.info(
-            t!("msg.keybindings_reloaded", count = self.key_overrides.len()).to_string(),
-        );
+        self.messages
+            .info(t!("msg.keybindings_reloaded", count = self.key_overrides.len()).to_string());
     }
 
     /// The persisted/script key-binding override choke point (T104i),
