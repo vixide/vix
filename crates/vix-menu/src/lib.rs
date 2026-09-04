@@ -598,6 +598,7 @@ const VIX: &[Item] = &[
     Item::leaf("menu.item.vix.website", "vix.website", ""),
     Item::leaf("menu.item.vix.email", "vix.email", ""),
     SEP,
+    Item::leaf("menu.item.vix.keybindings", "keybindings.editor", ""),
     Item::leaf("menu.item.vix.settings", "vix.settings", ""),
     SEP,
     Item::leaf("menu.item.file.quit", "file.quit", "Ctrl Q"),

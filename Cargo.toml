@@ -286,10 +286,12 @@ vix-html-character-picker = { path = "crates/vix-html-character-picker", version
 vix-http-client = { path = "crates/vix-http-client", version = "1.6.0" }
 # Decode a JSON Web Token's header and payload into readable JSON.
 vix-jwt-tool = { path = "crates/vix-jwt-tool", version = "1.6.0" }
+# Data and table state for the keybinding editor overlay (rebind/reset).
+vix-keybinding-editor-panel = { path = "crates/vix-keybinding-editor-panel", version = "1.6.0" }
 # Data for the keyboard-shortcut help overlay.
 vix-keyboard-shortcut-panel = { path = "crates/vix-keyboard-shortcut-panel", version = "1.6.0" }
 # An exhaustive, queryable registry of every built-in keybinding, and the
-# user/script override layer built on it (design-only for now).
+# user/script override layer built on it.
 vix-keybindings = { path = "crates/vix-keybindings", version = "1.6.0" }
 # The available keyboard navigation styles ("keymaps"); the View → Keymap submenu.
 vix-keymap-model = { path = "crates/vix-keymap-model", version = "1.6.0" }

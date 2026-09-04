@@ -1,0 +1,10 @@
+[package]
+name = "vix-keybinding-editor-panel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Data and table state for the keybinding editor overlay (rebind/reset)."
+
+[dependencies]

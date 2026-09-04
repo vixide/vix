@@ -223,6 +223,10 @@ pub enum PromptKind {
     /// (`App::pending_script_prompt` carries which script and handler to
     /// re-invoke with the entered text; see `crates/vix-script/spec/index.md`).
     Script,
+    /// Enter the new key for the keybinding editor's selected row, as a
+    /// `vix-macros` token (e.g. `C-S-k`); `App::pending_rebind_action_id`
+    /// carries which action it should rebind to (T204).
+    RebindKey,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -1134,6 +1138,12 @@ pub struct Layout {
     /// Body (data-rows) rectangle of the keyboard-shortcut overlay, used to
     /// size paging and clamp the scroll.
     pub help_body: Rect,
+    /// Column-header rectangles (action, keys) of the keybinding editor
+    /// overlay (Vix → Keybindings…), so a click can sort by that column.
+    pub keybinding_editor_headers: [Rect; 2],
+    /// Body (data-rows) rectangle of the keybinding editor overlay, used to
+    /// size paging, clamp the scroll, and hit-test a row click.
+    pub keybinding_editor_body: Rect,
     /// Glyph-grid rectangle of the open Nerd Font palette, so a click can
     /// hit-test which cell was picked.
     pub nerd_palette: Rect,
@@ -1618,6 +1628,16 @@ pub struct App {
     /// Keyboard-shortcut overlay (Help → Keyboard Shortcuts…, F1), when open:
     /// a filterable, header-sortable action/shortcut table.
     pub help: Option<crate::keyboard_shortcut_panel::Panel>,
+    /// Keybinding editor overlay (Vix → Keybindings…), when open: a
+    /// filterable, header-sortable, *selectable* action/shortcut table
+    /// (T204) that also supports rebind and reset, unlike the read-only
+    /// [`App::help`] panel it's a sibling of.
+    pub keybinding_editor: Option<vix_keybinding_editor_panel::Panel>,
+    /// The `action_id` a `PromptKind::RebindKey` prompt (opened from the
+    /// keybinding editor) is currently rebinding, stashed while the prompt
+    /// is open — mirrors [`PendingScriptPrompt`]'s "extra context lives in
+    /// its own field" convention (`PromptKind` variants carry none).
+    pending_rebind_action_id: Option<String>,
     /// Status-bar text.
     pub status: String,
     /// Set to request application exit.
@@ -1923,6 +1943,8 @@ impl App {
             show_clock: false,
             clock: crate::clock::Clock::new(),
             help: None,
+            keybinding_editor: None,
+            pending_rebind_action_id: None,
             focus: Focus::Editor,
             status: t!("status.ready").to_string(),
             should_quit: false,
@@ -2255,6 +2277,7 @@ impl App {
             workspace_chooser,
             diff_view,
             prompt,
+            keybinding_editor,
             palette,
             search,
         ) || self.pomodoro_open
@@ -2482,6 +2505,10 @@ impl App {
             return true;
         }
         panel!(prompt, prompt_key);
+        // Must come after `prompt`: rebinding opens a `Prompt` while
+        // `keybinding_editor` stays `Some` underneath it, and `Prompt` has
+        // to win the key or the rebind prompt would be unreachable.
+        panel!(keybinding_editor, keybinding_editor_key);
         panel!(palette, palette_key);
         panel!(search, search_key);
         if self.menu.is_open() {
@@ -3778,6 +3805,7 @@ impl App {
             "script.run" => self.open_script_chooser(),
             "script.reload" => self.reload_scripts(),
             "keybindings.reload" => self.reload_key_overrides(),
+            "keybindings.editor" => self.open_keybinding_editor(),
             "tools.test" => self.run_tests(),
             "tools.test_panel" => self.show_test_panel = !self.show_test_panel,
             "tools.terminal" => self.toggle_terminal(),
@@ -10855,6 +10883,265 @@ impl App {
             .info(t!("msg.keybindings_reloaded", count = self.key_overrides.len()).to_string());
     }
 
+    // ----- keybinding editor (Vix → Keybindings…, T204) -------------------
+
+    /// `keybindings.editor`: open the editable keybinding overlay over the
+    /// active keymap's current bindings.
+    fn open_keybinding_editor(&mut self) {
+        self.keybinding_editor = Some(vix_keybinding_editor_panel::Panel::open(
+            self.build_keybinding_rows(),
+        ));
+    }
+
+    /// Assemble every rebindable row: the active keymap's *top-level*
+    /// bindings (chorded contexts are excluded — overrides never resolve
+    /// against them, see `crates/vix-keybinding-editor-panel/spec/index.md`
+    /// "Contents"), the keymap-agnostic [`vix_keybindings::SHARED`]
+    /// bindings, and any token already accepted into
+    /// [`App::key_overrides`] (covers a user/script token bound to a key
+    /// with no built-in at all). Each token's `Source` is `User` when
+    /// `keybindings.toml` names it, `Script` when a loaded script's
+    /// `bindings` do, else `BuiltIn`.
+    fn build_keybinding_rows(&self) -> Vec<vix_keybinding_editor_panel::Row> {
+        use vix_keybinding_editor_panel::{Row, Source};
+        let user_overrides = Settings::keybindings_path()
+            .map(|path| vix_keybindings::user_bindings::load(&path))
+            .unwrap_or_default();
+        let overridden_tokens: std::collections::HashSet<&str> = user_overrides
+            .iter()
+            .map(|b| b.key_token.as_str())
+            .collect();
+
+        let mut tokens: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for table in vix_keybindings::TABLES
+            .iter()
+            .filter(|t| t.keymap_id == self.settings.keymap)
+        {
+            for ctx in table.contexts.iter().filter(|c| c.name.is_empty()) {
+                for b in ctx.bindings {
+                    tokens.insert(b.key_token.to_string());
+                }
+            }
+        }
+        for b in vix_keybindings::SHARED {
+            tokens.insert(b.key_token.to_string());
+        }
+        tokens.extend(self.key_overrides.keys().cloned());
+
+        tokens
+            .into_iter()
+            .filter_map(|key_token| {
+                let action_id = self
+                    .key_overrides
+                    .get(&key_token)
+                    .cloned()
+                    .or_else(|| {
+                        vix_keybindings::lookup(&self.settings.keymap, "", &key_token)
+                            .map(str::to_string)
+                    })
+                    .or_else(|| vix_keybindings::lookup_shared(&key_token).map(str::to_string))?;
+                let source = if overridden_tokens.contains(key_token.as_str()) {
+                    Source::User
+                } else if let Some(script) = self
+                    .scripts
+                    .iter()
+                    .find(|s| s.bindings.iter().any(|b| b.key_token == key_token))
+                {
+                    Source::Script(script.stem.clone())
+                } else {
+                    Source::BuiltIn
+                };
+                Some(Row {
+                    key_display: modifier_token_display(&key_token),
+                    key_token,
+                    action_title: Self::action_title(&action_id),
+                    action_id,
+                    source,
+                })
+            })
+            .collect()
+    }
+
+    /// Rebuild the open keybinding editor's rows in place after a rebind or
+    /// a reset, keeping the query/sort/scroll and clamping the selection if
+    /// the row count shrank.
+    fn refresh_keybinding_editor(&mut self) {
+        let rows = self.build_keybinding_rows();
+        if let Some(p) = self.keybinding_editor.as_mut() {
+            p.rows = rows;
+            let len = p.len();
+            if p.selected >= len {
+                p.selected = len.saturating_sub(1);
+            }
+        }
+    }
+
+    /// Key handling for the keybinding editor overlay: mirrors the F1
+    /// keyboard-shortcut panel's filter/scroll keys, plus Enter to rebind
+    /// and Delete to reset the selected row.
+    fn keybinding_editor_key(&mut self, key: KeyEvent) {
+        if self.keybinding_editor.is_none() {
+            return;
+        }
+        let page = (self.layout.keybinding_editor_body.height as usize).max(1);
+        match key.code {
+            KeyCode::Esc => self.keybinding_editor = None,
+            KeyCode::Backspace => {
+                if let Some(p) = self.keybinding_editor.as_mut() {
+                    p.backspace();
+                }
+            }
+            KeyCode::Up => {
+                if let Some(p) = self.keybinding_editor.as_mut() {
+                    p.select_up(1);
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.keybinding_editor.as_mut() {
+                    p.select_down(1);
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(p) = self.keybinding_editor.as_mut() {
+                    p.select_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(p) = self.keybinding_editor.as_mut() {
+                    p.select_down(page);
+                }
+            }
+            KeyCode::Enter => self.begin_rebind_selected_keybinding(),
+            KeyCode::Delete => self.reset_selected_keybinding(),
+            KeyCode::Char(c) if !Self::ctrl(&key) && !Self::alt(&key) => {
+                if let Some(p) = self.keybinding_editor.as_mut() {
+                    p.push(c);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Mouse handling for the keybinding editor overlay: the wheel scrolls
+    /// the selection; a click on a column header sorts by it.
+    fn keybinding_editor_mouse(&mut self, mouse: MouseEvent) {
+        use vix_keybinding_editor_panel::Column;
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                if let Some(p) = self.keybinding_editor.as_mut() {
+                    p.select_up(3);
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                if let Some(p) = self.keybinding_editor.as_mut() {
+                    p.select_down(3);
+                }
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                let headers = self.layout.keybinding_editor_headers;
+                let col = if rect_contains(headers[0], mouse.column, mouse.row) {
+                    Some(Column::Action)
+                } else if rect_contains(headers[1], mouse.column, mouse.row) {
+                    Some(Column::Keys)
+                } else {
+                    None
+                };
+                if let (Some(col), Some(p)) = (col, self.keybinding_editor.as_mut()) {
+                    p.toggle_sort(col);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Enter (or a click, T204 roadmap) on the selected row: stash its
+    /// action id and open a prompt for the replacement key, typed as a
+    /// `vix-macros` token — see [`App::accept_rebind_key`].
+    fn begin_rebind_selected_keybinding(&mut self) {
+        let Some((action_id, action_title)) = self
+            .keybinding_editor
+            .as_ref()
+            .and_then(vix_keybinding_editor_panel::Panel::selected_row)
+            .map(|r| (r.action_id.clone(), r.action_title.clone()))
+        else {
+            return;
+        };
+        self.pending_rebind_action_id = Some(action_id);
+        self.prompt = Some(Prompt::new(
+            PromptKind::RebindKey,
+            t!("prompt.rebind_key", action = action_title).to_string(),
+        ));
+    }
+
+    /// `PromptKind::RebindKey`'s accept handler: validate the typed token
+    /// via `vix_macros::decode_key` (rejecting anything it can't parse),
+    /// then re-encode the decoded key through `vix_macros::encode_key` so
+    /// the persisted token is always in canonical form regardless of how
+    /// it was typed. Persists via `vix_keybindings::user_bindings::upsert`
+    /// and re-resolves — a rebind that collides with another override is
+    /// reported the same way `keybindings.reload` reports any conflict,
+    /// not specially here.
+    fn accept_rebind_key(&mut self, input: &str) {
+        let Some(action_id) = self.pending_rebind_action_id.take() else {
+            return;
+        };
+        if input.is_empty() {
+            return;
+        }
+        let Some(key_event) = vix_macros::decode_key(input) else {
+            self.messages
+                .error(t!("msg.rebind_invalid_token", token = input.to_string()).to_string());
+            return;
+        };
+        let key_token = vix_macros::encode_key(key_event);
+        let Some(path) = Settings::keybindings_path() else {
+            return;
+        };
+        if let Err(e) = vix_keybindings::user_bindings::upsert(
+            &path,
+            vix_keybindings::UserBinding {
+                key_token: key_token.clone(),
+                action_id,
+            },
+        ) {
+            self.messages
+                .error(t!("msg.keybinding_save_failed", error = e.to_string()).to_string());
+            return;
+        }
+        self.resolve_key_overrides();
+        self.refresh_keybinding_editor();
+        self.messages
+            .info(t!("msg.keybinding_rebound", token = key_token).to_string());
+    }
+
+    /// Delete on the selected row: only acts when it's resettable (a user
+    /// override — `Row::resettable`), removing it from `keybindings.toml`
+    /// and re-resolving so the built-in (or script) binding takes back
+    /// over.
+    fn reset_selected_keybinding(&mut self) {
+        let Some(key_token) = self
+            .keybinding_editor
+            .as_ref()
+            .and_then(vix_keybinding_editor_panel::Panel::selected_row)
+            .filter(|r| r.resettable())
+            .map(|r| r.key_token.clone())
+        else {
+            return;
+        };
+        let Some(path) = Settings::keybindings_path() else {
+            return;
+        };
+        if let Err(e) = vix_keybindings::user_bindings::remove(&path, &key_token) {
+            self.messages
+                .error(t!("msg.keybinding_save_failed", error = e.to_string()).to_string());
+            return;
+        }
+        self.resolve_key_overrides();
+        self.refresh_keybinding_editor();
+        self.messages
+            .info(t!("msg.keybinding_reset", token = key_token).to_string());
+    }
+
     /// The persisted/script key-binding override choke point (T104i),
     /// run between `org_table_key` and every keymap's own dispatch — the
     /// *only* new call site, covering all 10 keymaps at once (see
@@ -13889,6 +14176,7 @@ impl App {
             };
         }
         panel!(help, help_mouse);
+        panel!(keybinding_editor, keybinding_editor_mouse);
         panel!(file_browser, file_browser_mouse);
         panel!(recent_chooser, recent_mouse);
         panel!(location_chooser, location_mouse);
@@ -20390,6 +20678,7 @@ impl App {
             KeyCode::Esc => {
                 self.prompt = None;
                 self.pending_script_prompt = None;
+                self.pending_rebind_action_id = None;
             }
             // Alt+Enter inserts a newline in the multi-line git-commit prompt;
             // plain Enter still submits.
@@ -20433,6 +20722,10 @@ impl App {
         }
     }
 
+    /// Dispatch a submitted [`Prompt`] to its kind's handler — one match arm
+    /// (or grouped arms sharing a handler) per [`PromptKind`], so the line
+    /// count grows with the variant count, not with any one prompt's logic.
+    #[allow(clippy::too_many_lines)]
     fn accept_prompt(&mut self) {
         let Some(prompt) = self.prompt.take() else {
             return;
@@ -20444,6 +20737,7 @@ impl App {
             PromptKind::Rename => self.rename_file(&prompt.input),
             PromptKind::RunCommand => self.run_command(&prompt.input),
             PromptKind::Script => self.accept_script_prompt(&prompt.input),
+            PromptKind::RebindKey => self.accept_rebind_key(prompt.input.trim()),
             PromptKind::SearchToDock => {
                 self.search_workspace_to_dock(&prompt.input, prompt.case_sensitive, prompt.regex);
             }

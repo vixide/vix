@@ -204,6 +204,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   needed one. `docs/keybindings/index.md` also gained an "Overrides"
   section documenting `keybindings.toml`, previously undocumented outside
   the specs.
+- **Keybinding editor** (improvement plan T204): **Vix → Keybindings…**
+  opens a searchable, sortable table of the active keymap's effective
+  bindings, tagged `[user]`/`[script: name]` when overridden. Enter opens
+  a prompt to type the replacement key as text and rebind; Delete resets
+  a user override back to its default. New `vix-keybinding-editor-panel`
+  crate; `vix_keybindings::user_bindings::remove` (the reset primitive,
+  alongside the existing `load`/`upsert`).
 
 ### Changed
 
