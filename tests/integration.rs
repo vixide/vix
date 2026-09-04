@@ -8641,6 +8641,112 @@ fn shared_ctrl_backtab_switches_to_the_previous_tab() {
     );
 }
 
+// ----- vix-keybindings override choke point (improvement plan T104i) ------
+// App::override_key, inserted in on_key right after org_table_key, now
+// intercepts every keymap's dispatch when self.key_overrides has a
+// matching entry. App::apply_key_overrides (the resolve/report/store half
+// of App::load_key_overrides, split out so it doesn't need the real
+// keybindings.toml path) is the test seam: it's exactly what T104j will
+// also feed script bind_key requests into.
+
+#[test]
+fn key_override_wins_over_a_builtin_keymap_binding() {
+    let mut app = app_at(Path::new("."));
+    assert_eq!(app.settings.keymap, "apple", "default keymap");
+    // Apple's built-in Ctrl+E toggles explorer/editor focus; override it
+    // to open a new file instead.
+    app.apply_key_overrides(vec![vix_keybindings::Override {
+        key_token: "C-e".to_string(),
+        action_id: "file.new".to_string(),
+        source: vix_keybindings::Source::User,
+    }]);
+    let tabs_before = app.editor.tabs.len();
+    let focus_before = app.focus;
+    app.on_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL));
+    assert_eq!(
+        app.editor.tabs.len(),
+        tabs_before + 1,
+        "the override's file.new ran, not the built-in focus toggle"
+    );
+    assert_eq!(
+        app.focus, focus_before,
+        "the built-in view.toggle_explorer_focus never fired"
+    );
+    // The override also shadows a real built-in (Apple's Ctrl+E), so it's
+    // reported once, informationally.
+    assert!(
+        app.messages
+            .items
+            .iter()
+            .any(|m| matches!(m.level, vix::messages::Level::Info)),
+        "shadowing a built-in is reported informationally"
+    );
+}
+
+#[test]
+fn key_override_of_an_unbound_token_does_not_report_a_shadow() {
+    let mut app = app_at(Path::new("."));
+    let before = app.messages.items.len();
+    app.apply_key_overrides(vec![vix_keybindings::Override {
+        key_token: "C-j".to_string(),
+        action_id: "file.new".to_string(),
+        source: vix_keybindings::Source::User,
+    }]);
+    // Apple's built-in table has no Ctrl+J binding, so nothing is shadowed.
+    assert_eq!(
+        app.messages.items.len(),
+        before,
+        "no shadow (or conflict) to report for a single, unbound override"
+    );
+    let tabs_before = app.editor.tabs.len();
+    app.on_key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::CONTROL));
+    assert_eq!(app.editor.tabs.len(), tabs_before + 1, "the override ran");
+}
+
+#[test]
+fn two_key_overrides_on_the_same_token_are_both_rejected() {
+    let mut app = app_at(Path::new("."));
+    app.apply_key_overrides(vec![
+        vix_keybindings::Override {
+            key_token: "C-j".to_string(),
+            action_id: "file.new".to_string(),
+            source: vix_keybindings::Source::User,
+        },
+        vix_keybindings::Override {
+            key_token: "C-j".to_string(),
+            action_id: "file.close".to_string(),
+            source: vix_keybindings::Source::Script("demo".to_string()),
+        },
+    ]);
+    assert!(
+        app.messages
+            .items
+            .iter()
+            .any(|m| matches!(m.level, vix::messages::Level::Error)),
+        "a token claimed twice is reported as an error"
+    );
+    // Neither override applies -- Ctrl+J is simply unbound on Apple, so
+    // the key is left unclaimed (no tab created or closed).
+    let tabs_before = app.editor.tabs.len();
+    app.on_key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::CONTROL));
+    assert_eq!(
+        app.editor.tabs.len(),
+        tabs_before,
+        "a rejected conflict runs neither action"
+    );
+}
+
+#[test]
+fn keybindings_reload_action_reports_a_summary() {
+    let mut app = app_at(Path::new("."));
+    let before = app.messages.items.len();
+    app.run_action("keybindings.reload");
+    assert!(
+        app.messages.items.len() > before,
+        "keybindings.reload reports how many overrides ended up active"
+    );
+}
+
 #[test]
 fn delete_submenu_actions_remove_the_unit_at_the_cursor() {
     let mut app = app_at(Path::new("."));
