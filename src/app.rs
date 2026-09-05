@@ -10901,10 +10901,11 @@ impl App {
     /// once at startup (`main.rs`, right after [`App::load_scripts`]). A
     /// prior explicit decline is deliberately **not** re-asked here (that
     /// would defeat the point of persisting "no" at all, asking again every
-    /// single launch); see [`App::maybe_reprompt_script_trust`] for the
-    /// "ask again" path a manual `script.reload` uses instead. A no-op when
-    /// there's nothing to ask about (no project scripts) or the answer is
-    /// already on file (either way).
+    /// single launch) — a private `script.reload`-only path re-checks even
+    /// after a decline instead, so a user who changes their mind has a way
+    /// to be asked again without every ordinary startup re-asking too. A
+    /// no-op when there's nothing to ask about (no project scripts) or the
+    /// answer is already on file (either way).
     pub fn maybe_prompt_script_trust(&mut self) {
         let decided = self
             .load_session()
