@@ -134,7 +134,7 @@ pub fn remove_path(path: &Path) -> io::Result<()> {
 /// Returns an error only if both the atomic write and the in-place fallback
 /// fail (e.g. the file itself is not writable, or the disk is full).
 pub fn write_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
-    match write_atomic_inner(path, data) {
+    match write_atomic_inner(path, data, false) {
         Ok(()) => Ok(()),
         Err(atomic_err) => {
             // Fall back to a truncating in-place write, which needs write
@@ -145,10 +145,59 @@ pub fn write_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
     }
 }
 
+/// Same as [`write_atomic`], but a **newly created** file is always 0600
+/// (owner-only) regardless of umask, rather than the process default — for
+/// persisted files whose content is inherently sensitive (T133), e.g.
+/// `vix-undo-store`'s per-file undo histories (a full edit history can
+/// carry text that no longer appears in the current buffer at all). An
+/// *existing* file's own permissions are still preserved untouched, exactly
+/// like [`write_atomic`] — this only changes the very first write.
+///
+/// # Errors
+///
+/// Returns an error only if both the atomic write and the in-place fallback
+/// fail (e.g. the file itself is not writable, or the disk is full).
+pub fn write_atomic_private(path: &Path, data: &[u8]) -> io::Result<()> {
+    let existed = path.exists();
+    match write_atomic_inner(path, data, true) {
+        Ok(()) => Ok(()),
+        Err(atomic_err) => {
+            let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+            fs::write(&target, data).map_err(|_| atomic_err)?;
+            if !existed {
+                restrict_to_owner(&target);
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Best-effort: narrow `path` to owner-only (0600) on Unix, no-op elsewhere
+/// and no-op on any error (the file still exists and still holds whatever
+/// permissions creation gave it; failing to tighten them further is not
+/// worth surfacing to a caller that just wants "as private as we could
+/// manage"). For a file `confy` or another writer already created at the
+/// process's default (umask) mode — narrowing it after the fact is the only
+/// hook available, since neither exposes a way to choose the mode at
+/// creation time.
+pub fn restrict_to_owner(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path; // no equivalent notion of "owner-only" to apply here
+    }
+}
+
 /// The atomic write-temp-then-rename path. Returns an error (which
-/// [`write_atomic`] uses to trigger the in-place fallback) if the directory
-/// can't be written, the temp can't be created, or the rename fails.
-fn write_atomic_inner(path: &Path, data: &[u8]) -> io::Result<()> {
+/// [`write_atomic`]/[`write_atomic_private`] use to trigger the in-place
+/// fallback) if the directory can't be written, the temp can't be created,
+/// or the rename fails. `force_private_for_new` is what tells the two apart
+/// for a file that doesn't exist yet — see [`write_atomic_private`].
+fn write_atomic_inner(path: &Path, data: &[u8], force_private_for_new: bool) -> io::Result<()> {
     use std::io::Write as _;
 
     let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
@@ -160,12 +209,13 @@ fn write_atomic_inner(path: &Path, data: &[u8]) -> io::Result<()> {
     // An existing file's mode is known up front so the temp can be created with
     // it (no window where private content is world-readable); a new file is
     // created at the process default so umask is respected exactly like a plain
-    // create — creating at a fixed 0600 would make every new file owner-only.
+    // create — creating at a fixed 0600 would make every new file owner-only,
+    // unless the caller specifically asked for that via `force_private_for_new`.
     let existing = fs::metadata(&target).ok().map(|m| m.permissions());
     let mut opts = fs::OpenOptions::new();
     opts.write(true).create_new(true);
     #[cfg(unix)]
-    if existing.is_some() {
+    if existing.is_some() || force_private_for_new {
         use std::os::unix::fs::OpenOptionsExt as _;
         opts.mode(0o600);
     }
@@ -331,6 +381,65 @@ mod tests {
             "existing file's exact mode must be preserved"
         );
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn write_atomic_private_new_file_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = scratch("atomic-private-new");
+        let p = dir.join("secret.json");
+        write_atomic_private(&p, b"x").unwrap();
+        assert_eq!(fs::read(&p).unwrap(), b"x");
+        assert_eq!(
+            fs::metadata(&p).unwrap().permissions().mode() & 0o777,
+            0o600,
+            "a brand-new file must be owner-only, unlike write_atomic"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn write_atomic_private_preserves_an_existing_files_exact_mode() {
+        use std::os::unix::fs::PermissionsExt as _;
+        // Same "don't silently narrow an already-wider-open file" guarantee
+        // as write_atomic -- the "private" behavior only ever applies to a
+        // file's very first write.
+        let dir = scratch("atomic-private-preserve");
+        let p = dir.join("f.txt");
+        fs::write(&p, b"old").unwrap();
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o644)).unwrap();
+        write_atomic_private(&p, b"new").unwrap();
+        assert_eq!(
+            fs::metadata(&p).unwrap().permissions().mode() & 0o777,
+            0o644,
+            "an existing file's mode must be preserved, not forced private"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn restrict_to_owner_narrows_an_existing_file() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = scratch("restrict");
+        let p = dir.join("f.txt");
+        fs::write(&p, b"x").unwrap();
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o644)).unwrap();
+        restrict_to_owner(&p);
+        assert_eq!(
+            fs::metadata(&p).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn restrict_to_owner_is_a_silent_no_op_on_a_missing_path() {
+        // Best-effort: a caller that races a deletion (or just made a typo)
+        // gets no panic and no error to handle.
+        restrict_to_owner(Path::new("/does/not/exist/at/all"));
     }
 
     #[test]

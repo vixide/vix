@@ -136,14 +136,21 @@ pub fn load_history() -> History {
     confy::load(APP_NAME, Some(HISTORY_NAME)).unwrap_or_default()
 }
 
-/// Persist the query history.
+/// Persist the query history. `db_history.toml` can carry literal sensitive
+/// values (a query's own text, not just its bind parameters — those are
+/// already excluded, see the module-level history-vs-log distinction), so
+/// on Unix it's narrowed to owner-only after each save (T133) — best-effort,
+/// same caveat as `vix-settings`'s equivalent: `confy` gives no hook to
+/// choose the mode as the file is made, only after.
 ///
 /// # Errors
 ///
 /// Returns a [`confy::ConfyError`] if the config directory cannot be
 /// determined or the file cannot be written.
 pub fn save_history(history: &History) -> Result<(), confy::ConfyError> {
-    confy::store(APP_NAME, Some(HISTORY_NAME), history)
+    confy::store(APP_NAME, Some(HISTORY_NAME), history)?;
+    restrict_store_file(HISTORY_NAME);
+    Ok(())
 }
 
 /// Load the saved queries from the config directory (default when missing).
@@ -152,14 +159,26 @@ pub fn load_saved() -> Saved {
     confy::load(APP_NAME, Some(SAVED_NAME)).unwrap_or_default()
 }
 
-/// Persist the saved queries.
+/// Persist the saved queries. Same T133 owner-only narrowing as
+/// [`save_history`] — a named saved query can just as easily carry a
+/// literal sensitive value in its SQL text.
 ///
 /// # Errors
 ///
 /// Returns a [`confy::ConfyError`] if the config directory cannot be
 /// determined or the file cannot be written.
 pub fn save_saved(saved: &Saved) -> Result<(), confy::ConfyError> {
-    confy::store(APP_NAME, Some(SAVED_NAME), saved)
+    confy::store(APP_NAME, Some(SAVED_NAME), saved)?;
+    restrict_store_file(SAVED_NAME);
+    Ok(())
+}
+
+/// Narrow `<config>/<name>.toml` to owner-only on Unix, best-effort — the
+/// shared tail of [`save_history`]/[`save_saved`].
+fn restrict_store_file(name: &str) {
+    if let Ok(path) = confy::get_configuration_file_path(APP_NAME, Some(name)) {
+        vix_fileops::restrict_to_owner(&path);
+    }
 }
 
 #[cfg(test)]

@@ -5519,6 +5519,7 @@ dependencies = [
  "sqlx",
  "tokio",
  "vix-clipboard",
+ "vix-fileops",
  "vix-i18n",
  "vix-theme",
 ]
@@ -5741,6 +5742,7 @@ dependencies = [
  "crossterm",
  "serde",
  "toml 1.1.4+spec-1.1.0",
+ "vix-fileops",
 ]
 
 [[package]]
@@ -5874,6 +5876,7 @@ dependencies = [
  "confy",
  "serde",
  "toml 1.1.4+spec-1.1.0",
+ "vix-fileops",
 ]
 
 [[package]]
@@ -5884,6 +5887,7 @@ dependencies = [
  "serde",
  "vix-dap",
  "vix-db",
+ "vix-fileops",
  "vix-org-capture",
 ]
 
