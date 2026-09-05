@@ -1,6 +1,7 @@
 # Editor
 
-The center pane of Vix is the **editor**: the text-editing surface where every
+Editor host: the `CodeEditor` widget wrapper and the pane tree. The center pane
+of Vix is the **editor**: the text-editing surface where every
 open file lives. It is a full code editor with Tree-sitter syntax highlighting,
 unlimited undo/redo, multi-line selection, system-clipboard cut/copy/paste,
 mouse support, and optional soft wrap. Each open file is a **tab**; the active

@@ -1,6 +1,7 @@
 # Tasks
 
-Project task running, in three parts:
+Project task running: named tasks, per-project-type lifecycle commands,
+discovered tasks, subprojects, and test-at-point. It has three parts:
 
 - **Named tasks** (`tasks.toml`): user-configured commands, merged with
   project-type defaults and tasks discovered from the project's own build

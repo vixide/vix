@@ -1,6 +1,7 @@
 # Language Server Protocol (LSP)
 
-Vix speaks the Language Server Protocol to bring semantic features — **diagnostics**,
+LSP client: process management and document sync over `vix_lsp_core`. Vix
+speaks the Language Server Protocol to bring semantic features — **diagnostics**,
 **hover**, **go-to-definition**, and **completion** — to any language you have a
 server for.
 

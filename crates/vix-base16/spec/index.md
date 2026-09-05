@@ -1,7 +1,7 @@
 # Base16
 
-Themes generated from [base16](https://github.com/chriskempson/base16)
-palettes.
+base16-generated themes for the theme system. Themes generated from
+[base16](https://github.com/chriskempson/base16) palettes.
 
 A base16 scheme is 16 colors (`base00`–`base0F`): `base00`–`base07` run dark
 to light (backgrounds → foregrounds), `base08`–`base0F` are accents. From that

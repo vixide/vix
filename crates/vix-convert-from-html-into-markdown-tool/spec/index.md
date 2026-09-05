@@ -1,6 +1,6 @@
 # Convert from HTML into Markdown
 
-Module convert_from_html_into_markdown_tool
+Convert: HTML into Markdown. Module `convert_from_html_into_markdown_tool`
 
 - menu "Tools"
   - submenu "Convert"

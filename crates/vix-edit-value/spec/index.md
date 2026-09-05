@@ -1,6 +1,7 @@
 # Edit JSON / Edit YAML
 
-The **Edit JSON** and **Edit YAML** commands open a foldable tree over the active
+The structured-value editor: a foldable tree for JSON and YAML. The **Edit
+JSON** and **Edit YAML** commands open it over the active
 buffer's structured data — objects, arrays, and scalars — and let the user
 collapse/expand containers, navigate, and edit scalar values. It is code folding,
 but for structured data. Open them with **Edit → Mode → JSON…** / **Edit → Mode → YAML…**

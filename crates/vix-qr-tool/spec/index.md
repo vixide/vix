@@ -1,8 +1,9 @@
 # QR Code
 
-The **QR Code** command encodes text — the current selection, or the cursor's
-line when nothing is selected — into a QR code and shows it in a read-only
-overlay for scanning from the screen. Open it with **Tools → QR Code…** or the
+QR code generation (Tools → QR Code): the **QR Code** command encodes text —
+the current selection, or the cursor's line when nothing is selected — into a
+QR code and shows it in a read-only overlay for scanning from the screen. Open
+it with **Tools → QR Code…** or the
 command palette. The encoder lives in the `qr_tool` module (a thin wrapper over
 the `qrcode` crate); the host renders the result.
 

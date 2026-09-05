@@ -1,5 +1,8 @@
 # Docks and Layout
 
+Bottom dock: a scrollable line buffer for logs, output, and data views. It is
+one of three docks documented together below.
+
 Vix arranges its window as a central **editor** surrounded by three optional
 **docks** and a bottom **status bar**. Each dock is a self-contained pane with
 its own state, can be shown or hidden independently, and (for the side docks and

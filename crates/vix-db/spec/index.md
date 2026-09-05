@@ -1,5 +1,7 @@
 # DB
 
+DB workbench: connection management, schema browsing, and SQL queries.
+
 Menu "DB" after menu "AI".
 
 Database management, 

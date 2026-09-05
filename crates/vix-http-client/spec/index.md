@@ -1,6 +1,7 @@
 # HTTP / REST Client
 
-Editor action `tools.http_send`.
+A minimal HTTP client driven by a `.http`-style buffer. Editor action
+`tools.http_send`.
 
 Write a request in a `.http`-style buffer -- `METHOD url`, optional `Header: value` lines, a blank line, then the body (method defaults to GET; `#` and `//` are comments; an absolute URL is required) -- and send it. The response (status, headers, body) opens in a new tab.
 

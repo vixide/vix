@@ -1,7 +1,7 @@
 # Nerd Font Picker
 
 A curated set of [Nerd Font](https://www.nerdfonts.com/) glyphs and the
-character picker's grid-selection state.
+character-picker grid state.
 
 Vix's Tools menu offers a *Nerd Font Palette*: a small grid of icon glyphs
 the user can browse with the arrow keys (or the mouse) and insert into the

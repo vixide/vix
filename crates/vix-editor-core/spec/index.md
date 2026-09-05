@@ -1,5 +1,6 @@
 # Actions
 
+The fully-custom terminal code-editor widget (owns the Tree-sitter grammars).
 Vix's editor and host expose a flat catalog of named **actions** — the verbs a
 key binding, menu item, or command-palette entry can invoke. Each action has
 three spellings of one name:

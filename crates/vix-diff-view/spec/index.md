@@ -1,5 +1,6 @@
 # Diff View (Compare With File)
 
+Read-only side-by-side comparison: a unified diff between two texts.
 **Tools → Compare With File…** (action `tools.diff`) shows a read-only unified
 diff between the active buffer and another file.
 

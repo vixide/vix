@@ -1,6 +1,6 @@
 # Emmet Expansion
 
-Editor action `edit.emmet_expand`.
+A pragmatic subset of Emmet abbreviation expansion. Editor action `edit.emmet_expand`.
 
 Expand the Emmet abbreviation before the cursor into HTML -- child `>`, sibling `+`, multiply `*N`, `#id`, `.class`, `{text}`, and `$` numbering (e.g. `ul>li.item$*3`). Grouping `()` is unsupported.
 

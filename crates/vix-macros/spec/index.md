@@ -1,7 +1,8 @@
 # Macros
 
-Vix records and replays keyboard macros. Recordings can be **saved by name** to
-`macros.toml` and replayed in later sessions.
+Persisted keyboard macros: named recordings of editor key events. Vix records
+and replays them, and recordings can be **saved by name** to `macros.toml` and
+replayed in later sessions.
 
 ## Recording & playback
 

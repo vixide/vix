@@ -1,7 +1,7 @@
 # Vcard Panel
 
-Display one parsed vCard as a table of labelled fields, plus the panel's
-row-selection + scroll state.
+Display one parsed vCard as a table of labelled fields, plus panel state: the
+panel's row-selection and scroll state.
 
 [`Panel::open`] takes a parsed `vix_vcard_parser::Vcard` and turns
 its properties into friendly `(label, value)` [`Row`]s — mapping names to

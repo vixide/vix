@@ -1,5 +1,8 @@
 # Information Panels
 
+Information about the active editor file, plus the panel's row-selection
+state.
+
 Vix groups several read-only, at-a-glance overlays under the umbrella of
 *Information Panels*: the **Workspace Dashboard**, **System Information**, **File
 Information**, **Outline**, and **Welcome** panels. Each opens as a modal overlay

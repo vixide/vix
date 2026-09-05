@@ -1162,13 +1162,39 @@ and its own gate run, zero intended behavior change unless stated.
   no test coverage at all before this. Leaves T004's originally-flagged
   "unblocks a Files-mode snapshot scenario" as a follow-up, not done here
   (a `tests/snapshots.rs` scenario is its own small deliverable).
-- [ ] **T154 — Keep `Cargo.toml` descriptions honest.** `vix-keybindings`'
-  `description` said "9 keymaps" for a task after T104g made it 10;
-  caught only because T104h happened to edit the same file. Nothing
-  checks these. Add to `scripts/check-docs`: each crate's `description`
-  must equal (or be a prefix of) the first sentence under its
-  `spec/index.md` H1, so the spec is the single source and the manifest
-  can't drift; fix any current mismatches the check turns up.
+- [x] **T154 — Keep `Cargo.toml` descriptions honest.** Done. New
+  `scripts/check-docs` gate (`check_descriptions`): each crate's `description`
+  (markup-stripped, trailing period trimmed) must be a literal prefix of the
+  prose right after its `spec/index.md` H1 — the spec is the single source,
+  the manifest can't silently drift from it the way `vix-keybindings`'
+  description once did (said "9 keymaps" a full task after the spec said 10,
+  caught only because T104h happened to edit the same file).
+
+  **Investigating turned up 87 of 106 crates failing this check today** —
+  far more than this task's own sizing assumed (grouped with T146/T150/T153
+  as "each a single short branch"). Asked the user how to scope it given the
+  size surprise; **chose "fix all 87 now."** Real causes, roughly in order
+  of frequency: a thin stub opening ("Module foo_tool.", "Editor action
+  edit.foo.") that never carried a real summary at all; a spec whose real
+  first paragraph covers something else first (an action id, a menu
+  location, a documentation link) before ever summarizing the crate; and
+  plain wording drift where the spec's opening says essentially the same
+  thing as the description in different words. Fixed by editing each
+  crate's `spec/index.md` opening (never `Cargo.toml` — spec stays
+  authoritative) via **5 parallel general-purpose agents**, each handling a
+  disjoint ~17-crate batch, self-verifying against the real
+  `check_descriptions` gate before reporting back — all 87 confirmed fixed,
+  `scripts/check-docs` fully green. Two real, previously-latent bugs in the
+  check itself were found and fixed along the way, not just worked around:
+  a reference-style markdown link (`[RFC 6350]` with no trailing `(url)`,
+  `vix-vcard-parser`) wasn't stripped by the markup regex (only inline
+  `[text](url)` links are) — converted to inline; and the check's own
+  docstring claimed to join the spec's "first two paragraphs" when the
+  code only ever compares against one (paragraph 0, or the remainder after
+  a `**Status:**` lead sentence) — fixed the docstring to match the actual,
+  stricter behavior rather than loosening the check now that every crate
+  already passes under it. `agents/share/crate-map.md` untouched (no crate
+  added/removed/renamed, only spec prose).
 
 ## Phase 2 — Functionality
 

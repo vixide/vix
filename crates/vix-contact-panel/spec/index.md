@@ -1,6 +1,6 @@
 # Contacts
 
-The **Contacts** browser shows the vCard files in a directory and lets you read
+Browse a directory of vCard files as a table of contacts. It lets you read
 a chosen contact's fields — name, emails, phones, organization, notes, and more.
 Open it with **Tools → Contacts…**. It is a two-stage overlay: a list of
 contacts, and, on top of it, a single-contact view of one parsed vCard.

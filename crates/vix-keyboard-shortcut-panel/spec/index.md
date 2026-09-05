@@ -1,8 +1,8 @@
 # Keyboard Shortcuts
 
-**Status:** Shipped. The keyboard-shortcut overlay (**Help → Keyboard
-Shortcuts…**, `F1`) is a **searchable, sortable table of every active
-shortcut**, in two columns:
+**Status:** Shipped. Data for the keyboard-shortcut help overlay (**Help →
+Keyboard Shortcuts…**, `F1`): a **searchable, sortable table of every
+active shortcut**, in two columns:
 
 - **Action** — the translated action name (e.g. "Command Palette");
 - **Shortcut** — the key combo, shown verbatim (e.g. `Ctrl P`).

@@ -1,7 +1,8 @@
 # Find
 
-The find dialog: one box for every kind of search, opened with **Edit → Find →
-Find…** (`Ctrl+F`) or the action id `find` / `edit.find`.
+Find / find-and-replace for the editor: one box for every kind of search,
+opened with **Edit → Find → Find…** (`Ctrl+F`) or the action id `find` /
+`edit.find`.
 
 The box holds the query, the replacement, the match toggles, and — this is the
 part that used to be spread across three menu items — **what kind of search this

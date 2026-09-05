@@ -1,5 +1,7 @@
 # Find and Replace
 
+Interactive query-replace: step through matches one at a time.
+
 **Status:** Shipped — in-buffer `Ctrl+F` find with the Replace field revealed by
 `Ctrl+R` or `Tab`, `Find Next` / `Find Previous` (`Ctrl+G` / `Ctrl+Shift+G`, also
 `F3` / `Shift+F3` while the box is open), `Find Selection` (`Alt+N` / `Alt+P`),

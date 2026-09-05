@@ -1,7 +1,8 @@
 # Edit SQL
 
-A statement-oriented edit surface for `.sql` buffers (`vix-edit-sql` mode). Open
-it with **Edit → Mode → SQL…** (`tools.edit_sql`) or the command palette. The
+The SQL edit surface: a statement-oriented view of a `.sql` buffer
+(`vix-edit-sql` mode). Open it with **Edit → Mode → SQL…** (`tools.edit_sql`)
+or the command palette. The
 logic lives in the pure `crate::edit_sql` module; the host renders the overlay
 and saves back through the normal file-save flow.
 

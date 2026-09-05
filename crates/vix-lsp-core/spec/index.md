@@ -1,6 +1,7 @@
 # Lsp Core
 
-A pure Language Server Protocol (LSP) client core.
+A pure LSP client core: JSON-RPC framing, message builders, parsers,
+positions. LSP stands for Language Server Protocol.
 
 This crate owns the *protocol*, not the *process*: JSON-RPC 2.0 message
 framing ([`frame`]), request/notification builders and response parsers

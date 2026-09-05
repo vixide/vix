@@ -1,6 +1,7 @@
 # File Explorer
 
-The file explorer is the **left dock**; its tree state lives in the internal
+Filesystem helpers for the explorer's copy / cut / paste / delete. The file
+explorer is the **left dock**; its tree state lives in the internal
 `left_dock` crate (see `crates/vix-left-dock/spec/index.md`), and the host renders it and runs
 the file operations.
 

@@ -1,5 +1,7 @@
 # Keybinding registry & override layer
 
+An exhaustive, queryable registry of every built-in keybinding across all
+10 keymaps, plus the user/script override layer built on it.
 `vix-script`'s `bind_key(key_token, command_id)` (T102) already lets a
 script *ask* for a key; `LoadedScript::bindings` already *records* the
 request. Nothing checks it against a real key event yet — that was T104's

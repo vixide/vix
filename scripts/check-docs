@@ -124,6 +124,80 @@ def check_crate_specs(crates):
     ]
 
 
+DESCRIPTION = re.compile(r'^description = "((?:[^"\\]|\\.)*)"', re.M)
+MD_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+
+
+def strip_markup(text):
+    """Strip the markdown emphasis/link/code-span syntax a spec's prose uses,
+    so a comparison against a Cargo.toml `description` (plain text) is fair."""
+    text = MD_LINK.sub(r"\1", text)
+    return text.replace("**", "").replace("`", "")
+
+
+def crate_description(crate):
+    """The literal `description = "..."` value from `crate`'s `Cargo.toml`, or
+    `None` if it has none (every member has one today, T104h/T154)."""
+    path = os.path.join(ROOT, "crates", crate, "Cargo.toml")
+    m = DESCRIPTION.search(open(path, encoding="utf-8").read())
+    return m.group(1).replace('\\"', '"') if m else None
+
+
+def spec_opening(crate):
+    """The prose right after `crate`'s spec's H1, markup stripped, that a
+    `description` is compared against: its first paragraph — or, when that
+    paragraph opens with a `**Status:** ...` sentence, whatever follows that
+    sentence in the same paragraph, falling back to the second paragraph if
+    the `**Status:**` sentence was the whole thing. Only ever one paragraph
+    deep either way, never both joined — so a description must be satisfied
+    right at that landing point, not somewhere further into the file."""
+    path = os.path.join(ROOT, "crates", crate, "spec", "index.md")
+    lines = open(path, encoding="utf-8").read().splitlines()
+    i = 0
+    while i < len(lines) and not lines[i].startswith("# "):
+        i += 1
+    i += 1
+    paragraphs = []
+    para = []
+    while i < len(lines) and len(paragraphs) < 2:
+        line = lines[i].strip()
+        if line:
+            para.append(line)
+        elif para:
+            paragraphs.append(" ".join(para))
+            para = []
+        i += 1
+    if para:
+        paragraphs.append(" ".join(para))
+    if not paragraphs:
+        return ""
+    first = strip_markup(paragraphs[0])
+    if first.startswith("Status:"):
+        m = re.match(r"Status:\s*[^.!?]*[.!?]\s*(.*)$", first)
+        rest = m.group(1) if m else ""
+        return rest or (strip_markup(paragraphs[1]) if len(paragraphs) > 1 else "")
+    return first
+
+
+def check_descriptions(crates):
+    """Report every crate whose Cargo.toml `description` is not a prefix of
+    (or equal to) its spec's opening prose (T154) — the spec is the single
+    source, so the manifest can't silently drift from it (as
+    `vix-keybindings`' description once did, saying "9 keymaps" a full task
+    after the spec said 10 — caught only by coincidence)."""
+    bad = []
+    for c in crates:
+        desc = crate_description(c)
+        if desc is None:
+            bad.append((c, "no `description` in Cargo.toml"))
+            continue
+        desc_norm = strip_markup(desc).rstrip(".").strip()
+        opening = spec_opening(c)
+        if not opening.startswith(desc_norm):
+            bad.append((c, opening[:100]))
+    return bad
+
+
 def check_crate_map(crates):
     """Report crates missing from the crate map, and map entries with no crate."""
     path = os.path.join(ROOT, "agents", "share", "crate-map.md")
@@ -226,6 +300,15 @@ def main():
             print(f"  crates/{name}")
     else:
         print(f"OK: all {len(crates)} crates own a spec")
+
+    bad_desc = check_descriptions(crates)
+    if bad_desc:
+        failures += 1
+        print(f"FAIL: {len(bad_desc)} crate(s) whose description drifted from their spec")
+        for name, opening in bad_desc:
+            print(f"  crates/{name}: spec opens {opening!r}")
+    else:
+        print("OK: every crate's description matches its spec")
 
     missing, stale = check_crate_map(crates)
     if missing or stale:

@@ -1,6 +1,6 @@
 # Convert from YAML into JSON tool
 
-Module convert_from_yaml_into_json_tool.
+Convert: YAML into JSON. Module `convert_from_yaml_into_json_tool`.
 
 - menu "Tools"
   - submenu "Convert"

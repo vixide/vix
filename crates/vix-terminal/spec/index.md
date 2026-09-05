@@ -1,5 +1,6 @@
 # Integrated Terminal
 
+Integrated terminal: a real PTY hosting a shell, parsed by `vt100`.
 **Tools → Terminal** (action `tools.terminal`) opens a real interactive shell on a
 pseudo-terminal inside Vix. Running the action again, or pressing `Ctrl+]`, closes
 it.

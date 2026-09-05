@@ -1,5 +1,7 @@
 # Org Capture
 
+Org-capture: template-driven capture with placeholders and targets.
+
 Documentation: <https://orgmode.org/manual/Capture.html>
 
 Introduction: <https://howardism.org/Technical/Emacs/capturing-intro.html>

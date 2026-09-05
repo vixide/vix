@@ -1,6 +1,6 @@
 # Html Character Picker
 
-The HTML named-character table and the picker's row-selection + scroll state.
+HTML Characters panel (Tools menu): named-character table + picker state.
 
 Vix's Tools menu offers an *HTML Characters* panel: a scrollable table of the
 HTML named character references, each shown as its rendered glyph, its entity

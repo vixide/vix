@@ -1,6 +1,7 @@
 # URL
 
-Module url_tool.
+URL percent-encode and decode (Tools → Convert → URL). This is module
+`url_tool`.
 
 - menu "Tools"
   - submenu "Convert"

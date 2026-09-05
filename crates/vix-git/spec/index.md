@@ -1,6 +1,6 @@
 # Git
 
-Git integration for Vix.
+Git integration: status/diff/staging via the git CLI.
 
 Two layers:
 

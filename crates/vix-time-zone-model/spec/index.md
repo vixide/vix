@@ -1,5 +1,6 @@
 # Time Zone
 
+Time-zone modeling: the IANA canonical zone table + the app-wide active zone.
 Vix has one application-wide **active time zone**, used by features that show
 times (e.g. the clock box). It is chosen from a filterable list of IANA zones and
 persisted across sessions.

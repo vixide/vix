@@ -1,6 +1,6 @@
 # Locale Model
 
-Available UI languages for Vix.
+Available UI languages for Vix; the View → Locale submenu lists them.
 
 Pure data: each [`Locale`] pairs a code (used with `rust-i18n`) with its
 endonym (the language's name in itself, the convention for language pickers).

@@ -1,6 +1,7 @@
 # Keymaps
 
-A *keymap* is a whole-keyboard philosophy for driving Vix — the editor, the
+The available keyboard navigation styles ("keymaps"); the View → Keymap
+submenu. A *keymap* is a whole-keyboard philosophy for driving Vix — the editor, the
 menus, and the file explorer. Exactly one keymap is active at a time, and it
 decides how each raw key event is interpreted before the focused pane ever sees
 it. Switching keymaps changes the meaning of keys, not the available actions: the

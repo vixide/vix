@@ -1,6 +1,9 @@
 # Tools: Insert: Markdown
 
-Inserts small Markdown templates at the cursor (`App::insert_markdown`).
+Render Markdown to formatted plain-text lines for a read-only preview pane.
+
+Also, this crate inserts small Markdown templates at the cursor
+(`App::insert_markdown`).
 
 - menu "Tools"
   - submenu "Insert"

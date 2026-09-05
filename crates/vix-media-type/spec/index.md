@@ -1,6 +1,7 @@
 # Media Types
 
-A reference table of common **media types** (a.k.a. MIME / content types) with
+The IANA-style media-type (MIME) table and the picker's filter + selection: a
+reference table of common **media types** (a.k.a. MIME / content types) with
 their descriptions and file extensions, plus a searchable picker for inserting a
 media type into the active buffer.
 

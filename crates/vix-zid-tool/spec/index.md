@@ -1,6 +1,7 @@
 # Tools: Insert: ZID
 
-Module zid_tool.
+Generate a secure random ZID: a lowercase hexadecimal identifier. This is
+module `zid_tool`.
 
 - menu "Tools"
   - submenu "Insert"

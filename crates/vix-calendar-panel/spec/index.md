@@ -1,6 +1,6 @@
 # Calendar
 
-The **calendar box** shows a navigable month grid and inserts a chosen date into
+Calendar box: the navigable month grid. It inserts a chosen date into
 the editor. Open it with **Tools → Calendar…** (a toggle). Its logic lives in the
 `calendar_panel` crate; the host renders the box and routes input.
 

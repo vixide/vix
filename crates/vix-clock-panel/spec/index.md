@@ -1,7 +1,7 @@
 # Clock
 
-The **clock box** shows the current date and time in several forms and inserts
-any of them into the editor. Open it with **Tools → Clock…** (a toggle). Its logic
+Clock box: live date/time strings (local, UTC, ISO week, active zone) + rows.
+It inserts any of them into the editor. Open it with **Tools → Clock…** (a toggle). Its logic
 lives in the `clock_panel` crate; the host renders the box and routes input.
 
 ## Rows

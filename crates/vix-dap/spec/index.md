@@ -1,7 +1,7 @@
 # Debugger (DAP)
 
-Vix debugs via the **Debug Adapter Protocol**: it drives an external debug adapter
-over stdio, the same way the LSP client drives language servers. Configure
+Debug Adapter Protocol (DAP) client: drive a debug adapter over stdio, the same
+way the LSP client drives language servers. Configure
 adapters with the `debug_adapters` setting; the debugger commands live under the
 top-level **Run** menu (and `run.*` actions) and control a session.
 

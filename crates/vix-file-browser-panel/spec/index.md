@@ -1,9 +1,10 @@
 # File Browser
 
-A comprehensive **file browser** overlay behind **File → Open…** (`file.open`,
-`Ctrl O`): a recursive listing of the current root directory that supports
-live search (including fuzzy search), sorting, filtering, and directory
-navigation. Walking uses the `walkdir` crate.
+File browser panel (File → Open): recursive listing with fuzzy search,
+sorting, and filtering. This comprehensive overlay behind **File → Open…**
+(`file.open`, `Ctrl O`) offers live search (including fuzzy search) plus
+directory navigation over the current root directory. Walking uses the
+`walkdir` crate.
 
 ## Listing
 

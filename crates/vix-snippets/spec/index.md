@@ -1,5 +1,6 @@
 # Snippets
 
+JSON snippet files: loading, scope resolution, merging, and the picker.
 Reusable text templates inserted at the cursor, with **tabstops** for navigable
 fields. Vix's snippets draw on the TextMate
 (<https://macromates.com/textmate/manual/snippets>) and VS Code

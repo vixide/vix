@@ -1,6 +1,7 @@
 # Edit Bytes
 
-The **Edit Bytes** command shows the active buffer's bytes as a classic hex dump
+The byte editor: a hex/ASCII view for editing raw file bytes. The **Edit Bytes**
+command shows the active buffer's bytes as a classic hex dump
 — an offset column, sixteen hex byte pairs, and an ASCII gutter — and lets the
 user move a byte cursor and overwrite bytes by typing hex digits. Open it with
 **Edit → Mode → Bytes…** or the command palette. The logic lives in the

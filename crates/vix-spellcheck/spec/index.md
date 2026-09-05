@@ -1,6 +1,7 @@
 # spellcheck
 
-The `spellcheck` crate.
+Spell-checking for the Vix editor (Hunspell-backed, over comment/string
+ranges). This is the `spellcheck` crate.
 
 **Status:** Shipped — **View → Editor → Toggle Spellcheck** (or the command
 palette / `view.spellcheck`) underlines misspelled words **in comments and

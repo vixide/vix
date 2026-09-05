@@ -1,6 +1,8 @@
 # Org Table
 
-A pragmatic subset of [Org's built-in table editor](https://orgmode.org/manual/Tables.html)
+Org-mode pipe-table editing: parsing, alignment, structural edits, and TBLFM
+formulas — a pragmatic subset of
+[Org's built-in table editor](https://orgmode.org/manual/Tables.html)
 for pipe (`|`) tables: recognition, alignment, field/row/column navigation and
 structural edits, rectangle copy/cut/paste, sorting, and a `#+TBLFM:` formula
 layer. The logic lives in the pure `vix-org-table` crate (unit-tested); it is
