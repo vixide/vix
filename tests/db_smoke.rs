@@ -12,16 +12,42 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use vix::db::{Browser, Pages, Pane, View, connect, session::Session};
 
+/// Drain a query started with `F5`/`Enter` until it finishes, so a test can
+/// observe its result synchronously, as a real event loop would.
+///
+/// Bounded by wall-clock time, not a fixed iteration count (T009): a
+/// spin-count budget has no relationship to actual elapsed time — on a
+/// contended CI runner (many parallel `cargo test` threads competing for few
+/// cores), the worker thread backing `Session` can go unscheduled for longer
+/// than a fixed number of `yield_now()` spins take to burn through, and a
+/// count-bounded loop would give up (`query_running()` still true) while the
+/// grid holds only a half-applied result: the query's `Head` chunk already
+/// drained (resetting the grid to empty rows under the new headers), but its
+/// `Rows`/`Done` chunks not yet delivered. That is exactly this suite's
+/// recurring `sqlite_connect_browse_query_and_filter` flake (`ubuntu-latest`
+/// only, never `macos-latest` or locally — consistent with runner
+/// contention, not a database-level race: the worker thread serves one
+/// connection, one statement at a time, so there is no cross-statement
+/// visibility race to chase here). A generous real-time deadline fixes the
+/// harness's own wait, not `vix-db`'s non-blocking `poll()`/`poll_query()`,
+/// which are correctly `try_recv`-based for a real per-frame UI tick and
+/// need no change.
+fn drain_query(browser: &mut Browser) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while browser.query_running() {
+        browser.poll_query();
+        assert!(
+            std::time::Instant::now() < deadline,
+            "query did not finish within 30s — worker thread stalled or deadlocked"
+        );
+        std::thread::yield_now();
+    }
+}
+
 fn key(browser: &mut Browser, code: KeyCode) {
     browser.handle_key(KeyEvent::new(code, KeyModifiers::NONE), Pages::default());
-    // User statements (F5/EXPLAIN) now run asynchronously; drain the reply so
-    // tests observe the result synchronously, as a real event loop would.
-    let mut spins = 0;
-    while browser.query_running() && spins < 1_000_000 {
-        browser.poll_query();
-        std::thread::yield_now();
-        spins += 1;
-    }
+    // User statements (F5/EXPLAIN) now run asynchronously; see `drain_query`.
+    drain_query(browser);
 }
 
 fn type_str(browser: &mut Browser, text: &str) {
@@ -604,12 +630,7 @@ fn async_query_runs_off_the_event_loop_and_cancels() {
         b.query_running(),
         "the query is in flight, not applied synchronously"
     );
-    let mut spins = 0;
-    while b.query_running() && spins < 1_000_000 {
-        b.poll_query();
-        std::thread::yield_now();
-        spins += 1;
-    }
+    drain_query(&mut b);
     assert_eq!(
         b.grid.rows,
         vec![vec!["3".to_string()]],

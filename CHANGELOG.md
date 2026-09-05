@@ -224,6 +224,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the new `rhai` dependency), matching the existing `paste`/
   RUSTSEC-2024-0436 precedent.
 
+### Fixed
+
+- **Flaky `sqlite_connect_browse_query_and_filter`** (improvement plan
+  T009): the recurring `ubuntu-latest`-only CI flake was the test
+  harness's own wait for an async query, bounded by a fixed spin-count
+  budget with no relationship to actual wall-clock time, not a race in
+  `vix-db` itself. Replaced with a 30-second wall-clock deadline
+  (`tests/db_smoke.rs`'s `drain_query`).
+
 ## [1.6.0] - 2026-08-29
 
 ### Added
