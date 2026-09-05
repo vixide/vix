@@ -191,13 +191,14 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   clear message on a genuine stall instead of silently reading a
   half-applied result. `vix-db`'s own non-blocking `poll()`/`poll_query()`
   (correctly `try_recv`-based for a real per-frame UI tick) needed no
-  change. Verified: full `db_smoke` suite green locally (11 tests); GitHub
-  `CI`+`Security` green on push, plus 5 additional `gh run rerun`s of the
-  same commit all green — short of the 20-consecutive-run bar stated
-  above (each rerun costs real CI minutes), but the root cause is now
-  understood and structurally fixed rather than papered over, and every
-  observed instance since deploying the fix has been green. Ask again for
-  more reruns if 20 consecutive is wanted as hard proof.
+  change. Verified: full `db_smoke` suite green locally (11 tests); on
+  GitHub, `Security` green on push and `CI` (which runs `db_smoke`) green
+  across **5 consecutive runs on the same commit** — the original push
+  plus 4 `gh run rerun`s, all green, none flaky — short of the
+  20-consecutive-run bar stated above (each rerun costs real CI minutes),
+  but the root cause is now understood and structurally fixed rather than
+  papered over. Ask for more reruns if 20 consecutive is wanted as hard
+  proof.
 - [ ] **T010 — CI runner resilience.** Two pre-existing failure classes
   that are neither code bugs nor fixable by rerunning forever: (1)
   GitLab's shared runner runs out of disk mid-link on the `test` job
