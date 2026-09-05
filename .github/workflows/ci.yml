@@ -76,17 +76,32 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      # Cached by version+checksum (T010, tasks.md): once a given
+      # LYCHEE_VERSION/LYCHEE_SHA256 pair has been fetched and verified once,
+      # every later run restores the binary straight from the cache instead
+      # of hitting GitHub Releases again — a version or checksum bump changes
+      # the key, so a stale binary is never restored. The install step below
+      # still only runs on a cache miss.
+      - name: Cache lychee binary
+        id: lychee-cache
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/lychee
+          key: lychee-${{ env.LYCHEE_VERSION }}-${{ env.LYCHEE_SHA256 }}
       # Pinned and checksummed, like cargo-deny in security.yml: a docs gate
       # should not itself install an unverified binary, and nothing here
-      # needs compiling.
+      # needs compiling. `--retry` covers a transient connection reset from
+      # GitHub Releases (observed 2026-09-03) on a cache miss.
       - name: Install lychee (pinned, checksummed)
+        if: steps.lychee-cache.outputs.cache-hit != 'true'
         run: |
           tarball="lychee-x86_64-unknown-linux-musl.tar.gz"
-          curl --proto '=https' --tlsv1.2 -sSfL -o "$tarball" \
+          curl --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -sSfL -o "$tarball" \
             "https://github.com/lycheeverse/lychee/releases/download/lychee-v$LYCHEE_VERSION/$tarball"
           echo "$LYCHEE_SHA256  $tarball" | sha256sum --check --strict
           tar -xzf "$tarball" --strip-components=1 -C /usr/local/bin \
             "lychee-x86_64-unknown-linux-musl/lychee"
+          chmod +x /usr/local/bin/lychee
       - name: lychee (offline links)
         run: |
           lychee --offline --no-progress \

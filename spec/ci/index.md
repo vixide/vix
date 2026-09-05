@@ -91,6 +91,19 @@ MSRV — see [`spec/rust-msrv-n-minus-2/index.md`](../rust-msrv-n-minus-2/index.
 and tags, but never a duplicate branch pipeline beside an open merge request.
 Cargo's registry and `target/` are cached per ref.
 
+The `test` job's shared runner has, more than once, exhausted disk mid-link
+building the workspace's test binary (`ld terminated with signal 7 [Bus
+error]` / "No space left on device"; T010, `tasks.md`) — confirmed
+independent of the `binary-size` job (it has its own, isolated cache; `test`
+failed with `binary-size` untouched too). The link is dominated by *debug
+info* pulled in from a handful of heavy dependencies (tokio/sqlx/tree-sitter/
+image), not code size, so root `Cargo.toml`'s `[profile.test]` sets
+`debug = 1` (line tables only) workspace-wide — panic backtraces still
+resolve file/line under `RUST_BACKTRACE=1`, just without full variable/type
+info. If this alone isn't enough, the next cheapest steps are `cargo test
+--no-run` followed by per-crate test runs (so no single link holds the whole
+workspace) and then a bigger runner tier.
+
 The release stage runs only for tag pipelines and needs no secrets — GitLab's
 `CI_JOB_TOKEN` covers both steps:
 
@@ -190,6 +203,16 @@ assume every contributor has installed; run
 `lychee --offline --exclude-path target --exclude-path CHANGELOG.md '**/*.md'`
 locally for the same signal `cargo doc` and `check-docs` don't already give you
 (lychee also validates in-page anchors and the external check).
+
+GitHub's `docs (lychee)` job once failed downloading the pinned tarball from
+GitHub Releases (`curl: (35) Recv failure: Connection reset by peer`,
+2026-09-03; T010, `tasks.md`) — a transient network blip, not a code or repo
+problem, but avoidable: the job now caches the verified binary keyed on
+`LYCHEE_VERSION`+`LYCHEE_SHA256` (`actions/cache@v4`), so only the *first* run
+after a version/checksum bump ever hits the network at all; the download
+step itself also retries (`curl --retry 3 --retry-all-errors`) for that
+first-run case. GitLab's and Codeberg's equivalent downloads have not (yet)
+shown this failure, so they are unchanged — revisit if one does.
 
 ## Cross-toolchain note
 
