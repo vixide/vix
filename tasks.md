@@ -1096,16 +1096,36 @@ and its own gate run, zero intended behavior change unless stated.
   (`Settings`), group them into a nested `#[serde(flatten)]` struct so
   they can be tested and documented as a unit. Each allow comes out with
   its struct.
-- [ ] **T150 — Remove the two crate-level blanket allows.**
-  `crates/vix-editor-core/src/multicursor.rs` and `named.rs` each open
-  with `#![allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]`
-  for a whole file — the one place the "pedantic, no blanket allows"
-  hard rule is broken. Replace with `isize`-typed offset arithmetic or
-  `usize::try_from` at the few real cast sites, or at worst a
-  per-expression `#[allow]` with a one-line proof comment (the
-  `multicursor.rs` comment already states the invariant; make it local).
-  Sweep the 3 `cast_precision_loss` + 2 `cast_possible_truncation`
-  allows elsewhere the same way.
+- [x] **T150 — Remove the two crate-level blanket allows.** Done. Both
+  gone, no per-expression allow needed to replace either: `multicursor.rs`'s
+  `multi_insert`/`multi_delete` — the only cast sites in the file —
+  rewrote the `usize`-position-plus-signed-`isize`-shift arithmetic around
+  `usize::checked_add_signed` (a new private `shifted(pos, shift)` helper)
+  and `isize::try_from(...).expect(...)`, both proper type-safe
+  conversions with no `as` casts at all, so there was nothing left for
+  `cast_possible_wrap`/`cast_sign_loss` to flag. `named.rs`'s blanket
+  allow turned out to be **entirely stale** — grepping the file found
+  zero cast sites at all, so it was just deleted outright (whatever casts
+  it once covered were already refactored away in some earlier change
+  that never cleaned up the now-unused allow). Both functions gained a
+  `# Panics` doc section (the new `.expect()` calls are `pub fn`s'
+  responsibility to document, even though the panic is unreachable in
+  practice — `shift` only ever reflects edits already applied to the same
+  buffer). **4 new unit tests** in `multicursor.rs`'s own `caret_tests`
+  module (`multi_insert`/`multi_delete`, both the bare-caret and
+  selection-replace paths) — neither method had *any* test coverage
+  before this, in this crate or `tests/integration.rs` (the existing
+  multi-caret tests only ever check that carets were added, never that
+  typing/deleting with several active actually rewrites the buffer
+  correctly at every one). The 5 pre-existing per-expression allows
+  (3 `cast_precision_loss`, 2 `cast_possible_truncation`, in
+  `vix-file-browser-panel`/`vix-org-table`/`src/app.rs`) were swept and
+  found **already compliant** with the task's own "at worst" fallback —
+  each already carries a one-line proof comment, and each is a
+  `f64`-to-display-integer/size rounding where no `TryFrom` alternative
+  even exists (`f64 as i64`/`f64 as u64` casts saturate rather than wrap
+  or lose sign per Rust's own float-cast semantics, so a proof comment,
+  not code, is the correct final form here) — left unchanged.
 - [ ] **T151 — Micro-crate audit.** 105 crates; `vix-query` is 37 lines,
   `vix-theme` 66, and `vix-modal`/`vix-i18n`/`vix-query`/`vix-theme` have
   no tests at all (`vix-modal` is a documented spec-only scaffold, fine;
