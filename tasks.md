@@ -1033,17 +1033,35 @@ and its own gate run, zero intended behavior change unless stated.
   fixed above: full 439-test suite green throughout (unchanged count —
   one existing test extended, not a new one, plus 2 new `src/app.rs`
   unit tests for `modifier_token_display`'s Emacs-equivalence).
-- [ ] **T146 — No silent keymap fallback.** `Keymap::from_id`
-  (`src/app.rs`) maps any unrecognized id to `Keymap::Apple` silently;
-  it let an integration test pass for months while testing the wrong
-  keymap (found in T104d: `"intellij-mac"` ≠ `"intellij-macos"`). Make it
-  return `Option`, report an unknown persisted id via the messages panel
-  at settings load (then fall back), and add a `vix-keymap-model` test
-  that every `KEYMAPS` id round-trips and a typo is rejected. Then
-  consider retiring `App`'s private 9-variant `enum Keymap` in favor of
-  the model's 10 string ids everywhere — the granularity mismatch
-  `crates/vix-keybindings/spec/index.md` § "Why 10, not 9" already
-  documents.
+- [x] **T146 — No silent keymap fallback.** Done. `Keymap::from_id`
+  (`src/app.rs`) now returns `Option<Keymap>` (`None` for an unrecognized
+  id) instead of silently mapping it to `Keymap::Apple` — the exact defect
+  that let an integration test pass for months while testing the wrong
+  keymap (found in T104d: `"intellij-mac"` ≠ `"intellij-macos"`). The only
+  path that can ever see `None` in practice is `App::new`'s new
+  `validate_keymap`, called once at startup: `App::set_keymap` (the View →
+  Keymap submenu's `view.keymap:*` actions) only ever writes an id
+  `vix_keymap_model::by_id` already accepted, so a genuinely unrecognized
+  `settings.keymap` can only come from a hand-edited (or otherwise
+  corrupted) `settings.toml` loaded fresh. `validate_keymap` reports it via
+  the messages panel (new `msg.unknown_keymap`) and falls back to
+  `"apple"` in memory (deliberately **not** rewriting the user's file for
+  them — a bad on-disk value is worth surfacing, not silently erasing).
+  `active_keymap()` keeps an `.unwrap_or(Keymap::Apple)` purely as a
+  last-resort safety net for the same reason a `panic` there would be
+  wrong even though it should be unreachable after startup validation. The
+  "add a `vix-keymap-model` test" ask turned out **already satisfied**:
+  `ids_are_unique_and_lookups_work` already asserts every `KEYMAPS` id
+  round-trips through `by_id` *and* that `by_id("nope")` is `None` — found
+  by actually reading the crate before writing a redundant test, not
+  assumed missing. New integration test
+  (`an_unrecognized_persisted_keymap_id_is_reported_and_corrected_at_
+  startup`) covers the `App::new`-level behavior instead. Left "retiring
+  `App`'s private 9-variant `enum Keymap` in favor of the model's 10
+  string ids everywhere" as a genuinely separate, larger follow-up, not
+  done here — the task's own wording ("then *consider*") treats it as
+  optional, and it touches every keymap dispatch site in `src/app.rs`, not
+  a small fix.
 - [ ] **T147 — A real action catalog.** The command palette and
   `App::action_title` learn action titles only by walking
   `vix_menu::menus()`, so any action without a menu leaf is invisible to
