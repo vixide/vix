@@ -7583,6 +7583,12 @@ cmd.prev_tab:
 # ---------------------------------------------------------------------------
 # Panel and overlay titles
 # ---------------------------------------------------------------------------
+ui.script_trust_title:
+  en: "Trust Workspace Scripts?"
+ui.script_trust_message:
+  en: "This workspace has %{count} script(s) under .vix/scripts/ that will run with read/write access to the active buffer (no file or network access otherwise). Trust this workspace and run them?"
+ui.script_trust_hint:
+  en: "Y trust and run   N / Esc skip"
 ui.confirm:
   en: "Confirm"
   es: "Confirmar"
@@ -14211,6 +14217,10 @@ msg.script_command_unavailable:
   en: "Script command '%{action}' is not available (script removed or renamed?)"
 msg.scripts_reloaded:
   en: "Reloaded scripts: %{count} command(s) available"
+status.scripts_trusted:
+  en: "Workspace scripts trusted"
+status.scripts_not_trusted:
+  en: "Workspace scripts not trusted"
 msg.keybinding_conflict:
   en: "Key binding conflict on '%{token}': claimed by %{sources} — none applied"
 msg.keybinding_shadows_builtin:

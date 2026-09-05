@@ -73,6 +73,18 @@ any kind, for "repeat last task"). These are plain fields — not a
 without having loaded them first, so a run that never touches project features
 cannot silently wipe previously saved project state.
 
+## Script trust (T132)
+
+`WorkspaceSession::scripts_trusted: Option<bool>` records whether this
+workspace's project scripts (`.vix/scripts/*.rhai`, see
+`crates/vix-script/spec/index.md`'s "Script discovery") are trusted to
+load: `None` (not yet asked) is the safe default an older `session.toml`
+loads as too. `Session::set_scripts_trusted(root, trusted)` is the only
+way to change it — deliberately not `Session::set_workspace`, which also
+bumps `visits` (a script-trust decision isn't a workspace "open") and
+would otherwise require the caller to round-trip every other field on
+that workspace's session just to flip this one.
+
 ## Roadmap
 
 - Per-workspace "reopen last session" command for the disabled-by-default case.

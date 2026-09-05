@@ -54,8 +54,21 @@ fn click(col: u16, row: u16) -> MouseEvent {
 
 /// Build an app with a realistic editor viewport so the code editor's
 /// scroll-into-view logic has a sane area to work with.
+/// A private `session.toml` path, unique per call — so no test (run
+/// sequentially or, as `cargo test` does by default, in parallel with
+/// others) ever reads or writes the real developer's session file, and no
+/// two `App`s in the same test binary ever share one either (T132 was the
+/// first feature to make a normal `App` write to its session at all;
+/// before it, no existing test touched this).
+fn isolated_session_path() -> PathBuf {
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    std::env::temp_dir().join(format!("vix-test-session-{}-{n}.toml", std::process::id()))
+}
+
 fn app_at(root: &Path) -> App {
-    let mut app = App::new(root.to_path_buf(), Settings::default());
+    let mut app = App::new(root.to_path_buf(), Settings::default())
+        .with_session_path(isolated_session_path());
     app.layout.editor = Rect::new(0, 0, 80, 24);
     app
 }
@@ -68,9 +81,40 @@ fn unique_dir(tag: &str) -> PathBuf {
 
 /// Build an app with custom settings and a realistic editor viewport.
 fn app_with(settings: Settings) -> App {
-    let mut app = App::new(Path::new(".").to_path_buf(), settings);
+    let mut app =
+        App::new(Path::new(".").to_path_buf(), settings).with_session_path(isolated_session_path());
     app.layout.editor = Rect::new(0, 0, 80, 24);
     app
+}
+
+/// If a script-trust prompt (T132) is pending, answer "yes" -- the same
+/// flow a real user granting workspace trust goes through, via the real
+/// `on_key` dispatch. Safe to call even when nothing is pending (a fresh
+/// `.vix/scripts/` with no files yet queues no prompt at all).
+fn trust_scripts_if_prompted(app: &mut App) {
+    if app.script_trust.is_some() {
+        app.on_key(key('y'));
+    }
+}
+
+/// How many script-registered commands are currently loaded, via the real
+/// `script.run` chooser (`App::scripts` itself is private) -- closes the
+/// chooser it opens to check, so it doesn't leak into whatever the test
+/// does next.
+fn loaded_script_command_count(app: &mut App) -> usize {
+    app.run_action("script.run");
+    let n = app.script_chooser.as_ref().map_or(0, |c| c.commands.len());
+    app.script_chooser = None;
+    n
+}
+
+/// `load_scripts()` plus an immediate "yes" to this workspace's trust
+/// prompt (T132), for tests whose point is a script's own behavior, not
+/// the trust gate itself.
+fn load_scripts_trusted(app: &mut App) {
+    app.load_scripts();
+    app.maybe_prompt_script_trust();
+    trust_scripts_if_prompted(app);
 }
 
 fn alt(code: KeyCode) -> KeyEvent {
@@ -2028,7 +2072,7 @@ fn project_script_registers_and_runs_a_command() {
     )
     .unwrap();
     let mut app = app_at(&dir);
-    app.load_scripts();
+    load_scripts_trusted(&mut app);
 
     // Tools → Scripts → Run… lists every loaded script's commands.
     app.run_action("script.run");
@@ -2056,7 +2100,7 @@ fn script_command_appears_in_the_command_palette() {
     )
     .unwrap();
     let mut app = app_at(&dir);
-    app.load_scripts();
+    load_scripts_trusted(&mut app);
 
     app.run_action("tools.palette");
     app.on_key(key('>')); // switch to Commands mode
@@ -2080,7 +2124,7 @@ fn script_reload_picks_up_a_script_added_after_startup() {
     let dir = unique_dir("script-reload");
     fs::create_dir_all(dir.join(".vix/scripts")).unwrap();
     let mut app = app_at(&dir);
-    app.load_scripts();
+    load_scripts_trusted(&mut app); // no-op: no scripts exist yet
     app.run_action("script.run");
     assert!(
         app.script_chooser.is_none(),
@@ -2092,7 +2136,8 @@ fn script_reload_picks_up_a_script_added_after_startup() {
         r#"register_command("late", "Late", "on_late"); fn on_late() {}"#,
     )
     .unwrap();
-    app.run_action("script.reload");
+    app.run_action("script.reload"); // itself re-checks trust and queues the prompt
+    trust_scripts_if_prompted(&mut app);
     app.run_action("script.run");
     let chooser = app
         .script_chooser
@@ -2115,7 +2160,7 @@ fn script_edit_is_blocked_on_a_read_only_buffer() {
     )
     .unwrap();
     let mut app = app_at(&dir);
-    app.load_scripts();
+    load_scripts_trusted(&mut app);
     app.run_action("view.read_only");
 
     app.run_action("script:edit:edit");
@@ -2144,7 +2189,7 @@ fn script_prompt_round_trips_to_a_fresh_handler_call() {
     )
     .unwrap();
     let mut app = app_at(&dir);
-    app.load_scripts();
+    load_scripts_trusted(&mut app);
 
     app.run_action("script:rename:rename");
     let p = app
@@ -2160,6 +2205,136 @@ fn script_prompt_round_trips_to_a_fresh_handler_call() {
     app.on_key(keycode(KeyCode::Enter)); // submits -> a fresh call to on_rename_answer
     assert!(app.prompt.is_none());
     assert_eq!(app.editor.active_tab().unwrap().text(), "picked");
+    fs::remove_dir_all(&dir).ok();
+}
+
+// ----- script trust (T132) -------------------------------------------------
+
+#[test]
+fn script_trust_prompt_shows_the_count_and_defers_loading() {
+    let dir = unique_dir("script-trust-prompt");
+    fs::create_dir_all(dir.join(".vix/scripts")).unwrap();
+    fs::write(
+        dir.join(".vix/scripts/a.rhai"),
+        r#"register_command("a", "A", "h"); fn h() {}"#,
+    )
+    .unwrap();
+    fs::write(
+        dir.join(".vix/scripts/b.rhai"),
+        r#"register_command("b", "B", "h"); fn h() {}"#,
+    )
+    .unwrap();
+    let mut app = app_at(&dir);
+    app.load_scripts();
+    assert_eq!(
+        loaded_script_command_count(&mut app),
+        0,
+        "an untrusted workspace's project scripts stay unloaded"
+    );
+    app.maybe_prompt_script_trust();
+    assert_eq!(
+        app.script_trust.as_ref().map(|p| p.count),
+        Some(2),
+        "the prompt names how many scripts are waiting"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn no_project_scripts_means_no_trust_prompt() {
+    let dir = unique_dir("script-trust-empty");
+    fs::create_dir_all(dir.join(".vix/scripts")).unwrap(); // exists, but empty
+    let mut app = app_at(&dir);
+    app.load_scripts();
+    app.maybe_prompt_script_trust();
+    assert!(
+        app.script_trust.is_none(),
+        "nothing to trust, so nothing to ask about"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn accepting_trust_persists_and_loads_automatically_next_launch() {
+    let dir = unique_dir("script-trust-accept");
+    fs::create_dir_all(dir.join(".vix/scripts")).unwrap();
+    fs::write(
+        dir.join(".vix/scripts/greet.rhai"),
+        r#"register_command("greet", "Greet", "h"); fn h() {}"#,
+    )
+    .unwrap();
+    // Both "launches" share one session file, simulating a real restart --
+    // `app_at` deliberately gives every call its own isolated file instead.
+    let session_path = isolated_session_path();
+
+    let mut app1 =
+        App::new(dir.clone(), Settings::default()).with_session_path(session_path.clone());
+    app1.load_scripts();
+    app1.maybe_prompt_script_trust();
+    assert!(app1.script_trust.is_some(), "should be prompted");
+    app1.on_key(key('y'));
+    assert!(app1.script_trust.is_none(), "answered");
+    assert_eq!(
+        loaded_script_command_count(&mut app1),
+        1,
+        "trusted, so it loads immediately"
+    );
+
+    let mut app2 = App::new(dir.clone(), Settings::default()).with_session_path(session_path);
+    app2.load_scripts();
+    app2.maybe_prompt_script_trust();
+    assert!(
+        app2.script_trust.is_none(),
+        "already trusted -- no reprompt on a later launch"
+    );
+    assert_eq!(
+        loaded_script_command_count(&mut app2),
+        1,
+        "trust persisted across the \"restart\""
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn declining_trust_persists_but_a_manual_reload_asks_again() {
+    let dir = unique_dir("script-trust-decline");
+    fs::create_dir_all(dir.join(".vix/scripts")).unwrap();
+    fs::write(
+        dir.join(".vix/scripts/greet.rhai"),
+        r#"register_command("greet", "Greet", "h"); fn h() {}"#,
+    )
+    .unwrap();
+    let session_path = isolated_session_path();
+
+    let mut app1 =
+        App::new(dir.clone(), Settings::default()).with_session_path(session_path.clone());
+    app1.load_scripts();
+    app1.maybe_prompt_script_trust();
+    app1.on_key(key('n'));
+    assert_eq!(
+        loaded_script_command_count(&mut app1),
+        0,
+        "declined, so it stays unloaded"
+    );
+
+    let mut app2 = App::new(dir.clone(), Settings::default()).with_session_path(session_path);
+    app2.load_scripts();
+    app2.maybe_prompt_script_trust();
+    assert!(
+        app2.script_trust.is_none(),
+        "a plain launch respects an already-recorded \"no\" -- it does not \
+         ask every single time, which would defeat persisting the decision \
+         at all"
+    );
+    assert_eq!(loaded_script_command_count(&mut app2), 0);
+
+    // A manual reload, unlike a plain launch, re-asks -- the user's own way
+    // to reconsider a workspace they'd declined.
+    app2.run_action("script.reload");
+    assert!(
+        app2.script_trust.is_some(),
+        "script.reload re-prompts even after a decline"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -8996,7 +9171,7 @@ fn a_scripts_bind_key_request_actually_fires_through_on_key() {
     )
     .unwrap();
     let mut app = app_at(&dir);
-    app.load_scripts();
+    load_scripts_trusted(&mut app);
     app.resolve_key_overrides();
 
     // Ctrl+J is unbound in the built-in Apple table, so this can only run
@@ -9020,7 +9195,7 @@ fn script_reload_re_resolves_key_overrides() {
     )
     .unwrap();
     let mut app = app_at(&dir);
-    app.load_scripts();
+    load_scripts_trusted(&mut app);
     app.resolve_key_overrides();
     // F9: claimed by no built-in binding and never falls through to the
     // editor's own literal-character insert when unclaimed, unlike a bare
@@ -9079,7 +9254,7 @@ fn two_scripts_binding_the_same_token_both_reject_via_real_discovery() {
     // Real discovery (not a hand-built Vec<Override>): two genuinely
     // loaded scripts both requesting F9 through resolve_key_overrides,
     // the actual assembly path -- not apply_key_overrides called directly.
-    app.load_scripts();
+    load_scripts_trusted(&mut app);
     app.resolve_key_overrides();
     assert!(
         app.messages

@@ -126,6 +126,17 @@ pub struct WorkspaceSession {
     /// command or a named task), for "repeat last task".
     #[serde(default)]
     pub project_last_command: Option<String>,
+
+    // ----- vix-script workspace trust (T132) -------------------------------
+    /// Whether this workspace's `.vix/scripts/` project scripts are trusted
+    /// to load: `None` = not yet asked, `Some(true)` = trusted,
+    /// `Some(false)` = declined. Global scripts (`Settings::scripts_dir()`)
+    /// carry no such flag — they're always trusted, since the user put them
+    /// there directly rather than a repo's own author. `#[serde(default)]`
+    /// lets an older `session.toml` (predating this field) still load, as
+    /// `None` — the safe "not yet asked" state, not silently trusted.
+    #[serde(default)]
+    pub scripts_trusted: Option<bool>,
 }
 
 /// A restorable split layout: the pane tree plus the focused leaf (in-order).
@@ -170,6 +181,15 @@ impl Session {
         confy::load(APP_NAME, Some(SESSION_NAME)).unwrap_or_default()
     }
 
+    /// Load sessions from an explicit file, falling back to an empty set on
+    /// any error (missing file, parse failure, …). Used by tests and
+    /// embedders that keep a session file outside the user's config
+    /// directory (T132); [`Session::load`] is the normal entry point.
+    #[must_use]
+    pub fn load_from(path: &std::path::Path) -> Session {
+        confy::load_path(path).unwrap_or_default()
+    }
+
     /// Persist the sessions to the config directory.
     ///
     /// # Errors
@@ -178,10 +198,44 @@ impl Session {
         confy::store(APP_NAME, Some(SESSION_NAME), self)
     }
 
+    /// Persist sessions to an explicit file (the counterpart of
+    /// [`Session::load_from`]); parent directories are created as needed.
+    ///
+    /// # Errors
+    /// Returns a [`confy::ConfyError`] if the file cannot be written or
+    /// serialized.
+    pub fn save_to(&self, path: &std::path::Path) -> Result<(), confy::ConfyError> {
+        confy::store_path(path, self)
+    }
+
     /// The saved session for `root`, if any.
     #[must_use]
     pub fn workspace(&self, root: &str) -> Option<&WorkspaceSession> {
         self.workspaces.iter().find(|w| w.root == root)
+    }
+
+    /// Record `root`'s script-trust decision (T132) — `None` for "not yet
+    /// asked", `Some(true)`/`Some(false)` for trusted/declined — creating a
+    /// minimal entry if `root` has no saved session yet (the trust prompt
+    /// can fire before the first real `set_workspace` save, e.g. a brand
+    /// new workspace opened with a file argument). Deliberately **not**
+    /// [`Self::set_workspace`]: that also bumps `visits` (this isn't an
+    /// "open" event) and this narrow field-set shouldn't disturb anything
+    /// else already saved for `root` (open files, project history, …).
+    pub fn set_scripts_trusted(&mut self, root: &str, trusted: Option<bool>) {
+        if let Some(ws) = self.workspaces.iter_mut().find(|w| w.root == root) {
+            ws.scripts_trusted = trusted;
+        } else {
+            self.workspaces.insert(
+                0,
+                WorkspaceSession {
+                    root: root.to_string(),
+                    scripts_trusted: trusted,
+                    ..Default::default()
+                },
+            );
+            self.workspaces.truncate(MAX_WORKSPACES);
+        }
     }
 
     /// Insert or replace the session for its root, moving it to the front and
@@ -254,6 +308,40 @@ mod tests {
         assert_eq!(
             s.workspace("/a").unwrap().files,
             vec!["/a/x.rs".to_string()]
+        );
+    }
+
+    #[test]
+    fn set_scripts_trusted_creates_a_minimal_entry_for_a_new_root() {
+        let mut s = Session::default();
+        s.set_scripts_trusted("/new", Some(true));
+        assert_eq!(s.workspace("/new").unwrap().scripts_trusted, Some(true));
+        assert_eq!(
+            s.workspace("/new").unwrap().visits,
+            0,
+            "recording a trust decision is not an \"open\" event"
+        );
+    }
+
+    #[test]
+    fn set_scripts_trusted_updates_an_existing_entry_without_disturbing_it() {
+        let mut s = Session::default();
+        s.set_workspace(WorkspaceSession {
+            root: "/a".into(),
+            files: vec!["/a/x.rs".into()],
+            ..Default::default()
+        });
+        s.set_scripts_trusted("/a", Some(false));
+        let saved = s.workspace("/a").unwrap();
+        assert_eq!(saved.scripts_trusted, Some(false));
+        assert_eq!(
+            saved.files,
+            vec!["/a/x.rs".to_string()],
+            "other fields untouched"
+        );
+        assert_eq!(
+            saved.visits, 1,
+            "still just the one real open, not bumped again"
         );
     }
 

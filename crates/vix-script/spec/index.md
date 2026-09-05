@@ -56,6 +56,25 @@ without restarting: every currently-registered command and binding is
 dropped and discovery runs again from scratch, so a script that was deleted
 or renamed doesn't leave a stale command behind.
 
+**Project scripts require workspace trust (T132).** Global scripts always
+load — the user put them directly under `Settings::scripts_dir()`, not some
+repo's own author. A workspace's `.vix/scripts/` scripts are different:
+cloning an untrusted repo and opening it in Vix would otherwise run its
+scripts silently at startup (sandboxed — no file/network access — but still
+able to read/rewrite the open buffer, spam messages, or plant a fake
+`prompt()` on first open). The first time a workspace with at least one
+project script is opened, `App` shows a one-time trust prompt ("Trust this
+workspace and run them?") before loading them; the answer is persisted per
+workspace root in the session store (`vix_session::WorkspaceSession::
+scripts_trusted: Option<bool>` — `None` not yet asked, mirroring VS Code's
+Workspace Trust model but binary rather than a "restricted mode"). A
+decline isn't a permanent lockout: `script.reload` re-checks trust every
+time, so a user who changes their mind can just reload to be asked again.
+This crate's own `discover`/`load_all` know nothing about trust at all —
+gating which directories get passed in is host wiring (`App::load_scripts`),
+the same "resolving real paths is the host's job" split this section
+already draws for `Settings::scripts_dir()`/`<App::root>/.vix/scripts`.
+
 **Name collisions**: a script is identified by its file stem (`foo.rhai` →
 `foo`). If a project script and a global script share a stem, the project
 one shadows the global one entirely — the global script does not load, not
