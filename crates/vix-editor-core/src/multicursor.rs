@@ -9,13 +9,24 @@
 //! ascending order with a running offset so each edit stays valid.
 
 #![warn(clippy::pedantic)]
-// Offset bookkeeping mixes `usize` positions with a signed running shift; the
-// values are small in-buffer offsets, so these casts cannot realistically wrap.
-#![allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
 
 use crate::actions::{MoveDown, MoveLeft, MoveRight, MoveUp};
 use crate::editor::Editor;
 use crate::selection::Selection;
+
+/// Apply a running signed shift to a `usize` buffer offset (T150): earlier
+/// carets' edits can move a later caret's position forward (an insert) or
+/// backward (a delete), tracked as one `isize` accumulator per multi-caret
+/// operation. `usize::checked_add_signed` is the exact primitive for this —
+/// no `as isize`/`as usize` casts needed at all, so there is nothing here for
+/// `clippy::cast_possible_wrap`/`cast_sign_loss` to flag. The `expect` holds
+/// because `shift` only ever reflects edits already applied to this same
+/// buffer: a caret can't be shifted further out of bounds than the buffer
+/// actually grew or shrank.
+fn shifted(pos: usize, shift: isize) -> usize {
+    pos.checked_add_signed(shift)
+        .expect("caret offset stays within the buffer after a prior edit's shift")
+}
 
 /// An extra caret beyond the primary cursor.
 #[derive(Clone, Copy, Debug)]
@@ -103,8 +114,13 @@ impl Editor {
     /// Insert `text` at every caret (replacing each selection), as one undo step.
     /// Carets are processed in ascending order with a running offset `shift`, so
     /// each edit's coordinates stay valid in the live buffer.
+    ///
+    /// # Panics
+    /// Never in practice: the running shift only ever reflects `text`'s
+    /// length and prior carets' removed spans, both bounded by the buffer
+    /// this same call is editing, so the `isize` conversion cannot overflow.
     pub fn multi_insert(&mut self, text: &str) {
-        let added = text.chars().count() as isize;
+        let added = text.chars().count();
         let mut carets = self.gather();
         carets.sort_by_key(|&(p, _)| p);
         let primary = (self.cursor, self.selection);
@@ -118,23 +134,30 @@ impl Editor {
                 Some(a) => (a.min(pos), a.max(pos), a.min(pos)),
                 None => (pos, pos, pos),
             };
-            let at = (base as isize + shift) as usize;
+            let at = shifted(base, shift);
             if rend > rstart {
-                let rs = (rstart as isize + shift) as usize;
-                let re = (rend as isize + shift) as usize;
+                let rs = shifted(rstart, shift);
+                let re = shifted(rend, shift);
                 code.remove(rs, re);
             }
             code.insert(at, text);
-            shift += added - (rend - rstart) as isize;
-            result.push((at + added as usize, None));
+            let added_i = isize::try_from(added).expect("an inserted length fits in isize");
+            let removed_i = isize::try_from(rend - rstart).expect("a removed length fits in isize");
+            shift += added_i - removed_i;
+            result.push((at + added, None));
         }
         code.commit();
         self.scatter(result);
     }
 
     /// Delete at every caret (each selection, else one char), as one undo step.
+    ///
+    /// # Panics
+    /// Never in practice: same bound as [`Self::multi_insert`] — the running
+    /// shift only ever reflects removed spans within the buffer this same
+    /// call is editing, so the `isize` conversion cannot overflow.
     pub fn multi_delete(&mut self, forward: bool) {
-        let len = self.code_ref().len_chars() as isize;
+        let len = self.code_ref().len_chars();
         let mut carets = self.gather();
         carets.sort_by_key(|&(p, _)| p);
         let primary = (self.cursor, self.selection);
@@ -146,25 +169,25 @@ impl Editor {
         for (pos, anchor) in carets {
             if let Some(a) = anchor.filter(|&a| a != pos) {
                 let (s, e) = (a.min(pos), a.max(pos));
-                let rs = (s as isize + shift) as usize;
-                let re = (e as isize + shift) as usize;
+                let rs = shifted(s, shift);
+                let re = shifted(e, shift);
                 code.remove(rs, re);
-                shift -= (e - s) as isize;
+                shift -= isize::try_from(e - s).expect("a removed length fits in isize");
                 result.push((rs, None));
             } else if forward {
-                let p = (pos as isize + shift) as usize;
-                if (pos as isize) < len {
+                let p = shifted(pos, shift);
+                if pos < len {
                     code.remove(p, p + 1);
                     shift -= 1;
                 }
                 result.push((p, None));
             } else if pos > 0 {
-                let p = (pos as isize + shift) as usize;
+                let p = shifted(pos, shift);
                 code.remove(p - 1, p);
                 shift -= 1;
                 result.push((p - 1, None));
             } else {
-                result.push(((pos as isize + shift) as usize, None));
+                result.push((shifted(pos, shift), None));
             }
         }
         code.commit();
@@ -437,6 +460,45 @@ mod caret_tests {
         all.sort_unstable();
         // main caret at 2, new caret on line 1 col 2 = index 5+2 = 7.
         assert!(all.contains(&7), "carets: {all:?}");
+    }
+
+    // T150: exercises the `checked_add_signed`/`isize::try_from` arithmetic
+    // `multi_insert`/`multi_delete` were rewritten to (replacing the file's
+    // former blanket `#[allow(clippy::cast_possible_wrap,
+    // clippy::cast_sign_loss)]`) — no prior test in this crate or
+    // `tests/integration.rs` actually drove either method; the existing
+    // multi-caret tests only ever check that carets were *added*.
+
+    #[test]
+    fn multi_insert_types_at_every_bare_caret_with_correct_shift() {
+        let mut e = ed("abcd\nefgh\nij", 2); // col 2, line 0
+        e.add_caret_below(); // second caret at line 1 col 2 (offset 7)
+        e.multi_insert("X");
+        assert_eq!(e.code_ref().get_content(), "abXcd\nefXgh\nij");
+    }
+
+    #[test]
+    fn multi_insert_replaces_every_selected_occurrence() {
+        let mut e = ed("foo bar foo baz foo", 1); // cursor inside the first "foo"
+        e.add_all_occurrences(); // selects all three "foo" occurrences
+        e.multi_insert("X");
+        assert_eq!(e.code_ref().get_content(), "X bar X baz X");
+    }
+
+    #[test]
+    fn multi_delete_forward_removes_one_char_at_every_bare_caret() {
+        let mut e = ed("abcd\nefgh\nij", 2);
+        e.add_caret_below(); // second caret at offset 7
+        e.multi_delete(true);
+        assert_eq!(e.code_ref().get_content(), "abd\nefh\nij");
+    }
+
+    #[test]
+    fn multi_delete_removes_every_selected_occurrence() {
+        let mut e = ed("foo bar foo baz foo", 1);
+        e.add_all_occurrences();
+        e.multi_delete(true);
+        assert_eq!(e.code_ref().get_content(), " bar  baz ");
     }
 
     #[test]

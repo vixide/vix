@@ -8,7 +8,6 @@
 //! by the host, not here.
 
 #![warn(clippy::pedantic)]
-#![allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
 
 use crate::actions::{
     Copy, Cut, Delete, DeleteLine, Duplicate, Indent, InsertNewline, InsertText, MoveDown,
