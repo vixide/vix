@@ -15,7 +15,10 @@ implements it. Cross-cutting / app-level specs live at the repo-root `spec/`.
    `locales/app.yml` (English at minimum; other locales fall back to English)
    and render with `t!`.
 4. **Document** every new public item (the build denies missing docs).
-5. **Test**: extend `tests/integration.rs` or a module's unit tests. A pure
+5. **Test**: extend `tests/integration/main.rs` (its `mod`s: `common.rs` for
+   shared fixtures, plus one file per area — `catalog`, `db`, `editing`,
+   `find`, `git`, `keybindings`, `keymaps`, `lsp`, `menu`, `org`, `palette`,
+   `panels`, `scripting`, `workspace`) or a module's unit tests. A pure
    transform gets unit tests next to it; a fuzz target if it parses untrusted
    text; a Criterion benchmark if it runs per keystroke or per frame.
 6. **Verify**: `scripts/check` (fmt, build, clippy at pedantic with `-D
