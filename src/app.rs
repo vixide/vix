@@ -505,6 +505,14 @@ pub struct Confirm {
     pub paths: Vec<PathBuf>,
 }
 
+/// A pending "trust this workspace's scripts?" decision (T132), shown once
+/// per untrusted workspace that has at least one project script.
+pub struct ScriptTrustPrompt {
+    /// How many `.rhai` files are waiting under `.vix/scripts/`, unloaded
+    /// until this prompt is answered.
+    pub count: usize,
+}
+
 /// A previewed project-wide replace awaiting confirmation. Holds the computed
 /// per-file results so applying writes exactly what was previewed.
 pub struct ReplaceConfirm {
@@ -1305,6 +1313,8 @@ pub struct App {
     pub paste: Option<PasteOp>,
     /// Pending confirmation, when active.
     pub confirm: Option<Confirm>,
+    /// Pending "trust this workspace's scripts?" prompt (T132), when active.
+    pub script_trust: Option<ScriptTrustPrompt>,
     /// Project-wide replace preview awaiting confirmation, when open.
     pub replace_confirm: Option<ReplaceConfirm>,
     /// Pending unsaved-changes prompt (close tab / quit), when active.
@@ -1527,6 +1537,11 @@ pub struct App {
     /// user's config directory; set via [`App::with_settings_path`] to keep a
     /// run's settings out of it (tests, embedders).
     pub settings_path: Option<PathBuf>,
+    /// Session file this app persists to (open files, script trust, …).
+    /// `None` — the normal case — uses the user's config directory; set via
+    /// [`App::with_session_path`] to keep a run's session out of it (tests,
+    /// embedders) — same shape as [`App::settings_path`].
+    pub session_path: Option<PathBuf>,
     /// Which pane has focus.
     pub focus: Focus,
     /// Whether the explorer pane is shown.
@@ -1813,6 +1828,7 @@ impl App {
             prompt: None,
             paste: None,
             confirm: None,
+            script_trust: None,
             replace_confirm: None,
             unsaved: None,
             spell_suggest: None,
@@ -1959,6 +1975,7 @@ impl App {
             layout: Layout::default(),
             settings,
             settings_path: None,
+            session_path: None,
             file_index: Vec::new(),
             palette_origin: None,
             palette_file_scope: None,
@@ -2031,6 +2048,37 @@ impl App {
         self
     }
 
+    /// Load the session from [`App::session_path`] when one is set, else
+    /// from the user's config directory. Every in-app session read goes
+    /// through here so a run pointed at another session file never touches
+    /// the user's (same shape as [`App::store_settings`]).
+    fn load_session(&self) -> crate::session::Session {
+        match &self.session_path {
+            Some(path) => crate::session::Session::load_from(path),
+            None => crate::session::Session::load(),
+        }
+    }
+
+    /// Persist `session` to [`App::session_path`] when one is set, else to
+    /// the user's config directory.
+    fn store_session(&self, session: &crate::session::Session) -> Result<(), confy::ConfyError> {
+        match &self.session_path {
+            Some(path) => session.save_to(path),
+            None => session.save(),
+        }
+    }
+
+    /// Persist this app's session to `path` instead of the user's config
+    /// directory. Builder form of [`App::session_path`], for tests and
+    /// embedders that need an isolated session file (T132: this is what
+    /// keeps a script-trust decision made in a test from ever touching the
+    /// real developer's `session.toml`).
+    #[must_use]
+    pub fn with_session_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.session_path = Some(path.into());
+        self
+    }
+
     /// On first run, open the welcome screen, then turn the
     /// `show_welcome_dialog` setting off and save immediately so it does not
     /// reappear on the next launch — even if this run never exits cleanly.
@@ -2068,7 +2116,7 @@ impl App {
             return;
         }
         let key = self.session_key();
-        let session = crate::session::Session::load();
+        let session = self.load_session();
         let Some(ws) = session.workspace(&key).cloned() else {
             return;
         };
@@ -2192,7 +2240,7 @@ impl App {
     fn save_session(&self) {
         let mut ws = self.workspace_session();
         let key = self.session_key();
-        let mut session = crate::session::Session::load();
+        let mut session = self.load_session();
         if let Some(prior) = session.workspace(&key) {
             Self::carry_forward_project_fields(&mut ws, prior);
         }
@@ -2200,7 +2248,7 @@ impl App {
             self.fill_project_fields(&mut ws);
         }
         session.set_workspace(ws);
-        let _ = session.save();
+        let _ = self.store_session(&session);
     }
 
     // ----- top-level event entry -----------------------------------------
@@ -2290,6 +2338,7 @@ impl App {
             replace_confirm,
             workspace_search,
             confirm,
+            script_trust,
             unsaved,
             spell_suggest,
             context_menu,
@@ -2514,6 +2563,7 @@ impl App {
         panel!(replace_confirm, replace_confirm_key);
         panel!(workspace_search, ps_key);
         panel!(confirm, confirm_key);
+        panel!(script_trust, script_trust_key);
         panel!(unsaved, unsaved_key);
         panel!(spell_suggest, spell_suggest_key);
         panel!(context_menu, context_menu_key);
@@ -10784,17 +10834,20 @@ impl App {
     // bindings`) but not yet wired to real key dispatch — that's T104.
 
     /// (Re)load every `.rhai` script from the global scripts directory
-    /// (`Settings::scripts_dir()`) and this workspace's `.vix/scripts/`,
-    /// replacing `self.scripts` wholesale — a script that was deleted or
-    /// renamed since the last load leaves no stale command behind. Called
-    /// once at startup (`main.rs`, after `App::new`) and again by
-    /// `script.reload`. Any script that fails to read or load is skipped;
-    /// its error goes to the message drawer, every other script still loads.
+    /// (`Settings::scripts_dir()`) — always trusted, the user put them there
+    /// directly — and, only if this workspace's project scripts are trusted
+    /// (T132), this workspace's `.vix/scripts/`. Replaces `self.scripts`
+    /// wholesale — a script that was deleted or renamed since the last load
+    /// leaves no stale command behind. Called once at startup (`main.rs`,
+    /// after `App::new`) and again by `script.reload`. Any script that
+    /// fails to read or load is skipped; its error goes to the message
+    /// drawer, every other script still loads.
     pub fn load_scripts(&mut self) {
         let global = Settings::scripts_dir();
         let project = self.root.join(".vix").join("scripts");
+        let project = self.project_scripts_trusted().then_some(project.as_path());
         let (scripts, errors) =
-            vix_script::load_all(&self.script_runtime, global.as_deref(), Some(&project));
+            vix_script::load_all(&self.script_runtime, global.as_deref(), project);
         self.scripts = scripts;
         for err in errors {
             self.messages.error(
@@ -10811,13 +10864,120 @@ impl App {
     /// `script.reload` (Tools → Scripts → Reload): re-run discovery,
     /// re-resolve key overrides (a reloaded script's `bind_key` requests
     /// may have changed — T104j), and report how many commands ended up
-    /// available.
+    /// available. Also re-checks this workspace's script trust (T132), so a
+    /// prior decline isn't a permanent lockout — a manual reload is itself
+    /// the user asking to look again.
     fn reload_scripts(&mut self) {
         self.load_scripts();
+        self.maybe_reprompt_script_trust();
         self.resolve_key_overrides();
         let count: usize = self.scripts.iter().map(|s| s.commands.len()).sum();
         self.messages
             .info(t!("msg.scripts_reloaded", count = count).to_string());
+    }
+
+    // ----- script trust (T132) ---------------------------------------------
+    //
+    // vix-script auto-loads and runs every `.rhai` file under a workspace's
+    // `.vix/scripts/` at startup with no confirmation today — sandboxed (no
+    // file/network access, § crates/vix-script/spec/index.md), but still
+    // able to read/rewrite the open buffer, spam messages, or plant a fake
+    // `prompt()` on first open. Cloning an untrusted repo and opening it in
+    // Vix would otherwise run its scripts silently. Global scripts
+    // (`Settings::scripts_dir()`) need no such gate — the user put them
+    // there directly, not some repo's own author.
+
+    /// Whether this workspace's project scripts are trusted to load: the
+    /// persisted decision from a prior [`App::accept_script_trust`]/
+    /// [`App::decline_script_trust`], or `false` if never yet asked.
+    fn project_scripts_trusted(&self) -> bool {
+        self.load_session()
+            .workspace(&self.session_key())
+            .is_some_and(|w| w.scripts_trusted == Some(true))
+    }
+
+    /// Queue the trust prompt if this workspace's `.vix/scripts/` has at
+    /// least one script and it has never been decided either way — called
+    /// once at startup (`main.rs`, right after [`App::load_scripts`]). A
+    /// prior explicit decline is deliberately **not** re-asked here (that
+    /// would defeat the point of persisting "no" at all, asking again every
+    /// single launch); see [`App::maybe_reprompt_script_trust`] for the
+    /// "ask again" path a manual `script.reload` uses instead. A no-op when
+    /// there's nothing to ask about (no project scripts) or the answer is
+    /// already on file (either way).
+    pub fn maybe_prompt_script_trust(&mut self) {
+        let decided = self
+            .load_session()
+            .workspace(&self.session_key())
+            .is_some_and(|w| w.scripts_trusted.is_some());
+        if !decided {
+            self.queue_script_trust_prompt_if_any();
+        }
+    }
+
+    /// Re-check trust even after a prior explicit decline — called by
+    /// `script.reload`, so a user who changes their mind about an already-
+    /// declined workspace has a way to be asked again (just reload)
+    /// without every ordinary startup re-asking too.
+    fn maybe_reprompt_script_trust(&mut self) {
+        if !self.project_scripts_trusted() {
+            self.queue_script_trust_prompt_if_any();
+        }
+    }
+
+    /// Queue the trust prompt if `.vix/scripts/` has at least one script,
+    /// unconditionally — the shared tail of [`App::maybe_prompt_script_trust`]/
+    /// [`App::maybe_reprompt_script_trust`], which differ only in *when*
+    /// they're willing to call this.
+    fn queue_script_trust_prompt_if_any(&mut self) {
+        let project = self.root.join(".vix").join("scripts");
+        let count = vix_script::discover(None, Some(&project)).len();
+        if count > 0 {
+            self.script_trust = Some(ScriptTrustPrompt { count });
+        }
+    }
+
+    /// Trust this workspace's project scripts: persist the decision, then
+    /// actually load them (they were skipped by every `load_scripts()` call
+    /// so far, since [`App::project_scripts_trusted`] was false until now).
+    fn accept_script_trust(&mut self) {
+        if self.script_trust.take().is_none() {
+            return;
+        }
+        self.set_scripts_trusted(Some(true));
+        self.load_scripts();
+        self.resolve_key_overrides();
+        self.status = t!("status.scripts_trusted").to_string();
+    }
+
+    /// Decline this workspace's project scripts: persist the decision (so
+    /// startup doesn't ask again every launch) and leave them unloaded.
+    fn decline_script_trust(&mut self) {
+        if self.script_trust.take().is_none() {
+            return;
+        }
+        self.set_scripts_trusted(Some(false));
+        self.status = t!("status.scripts_not_trusted").to_string();
+    }
+
+    /// Persist this workspace's script-trust decision to the session store,
+    /// without disturbing anything else already saved for it (open files,
+    /// project command history, …) or counting as a workspace "open".
+    fn set_scripts_trusted(&mut self, trusted: Option<bool>) {
+        let key = self.session_key();
+        let mut session = self.load_session();
+        session.set_scripts_trusted(&key, trusted);
+        let _ = self.store_session(&session);
+    }
+
+    /// Keys for the script-trust prompt: `y`/`Enter` trusts and loads, `n`/
+    /// `Esc` declines.
+    fn script_trust_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('y' | 'Y') | KeyCode::Enter => self.accept_script_trust(),
+            KeyCode::Char('n' | 'N') | KeyCode::Esc => self.decline_script_trust(),
+            _ => {}
+        }
     }
 
     /// Resolve every current override request — persisted
@@ -11436,7 +11596,7 @@ impl App {
         }
         self.project_session_loaded = true;
         let key = self.session_key();
-        let Some(ws) = crate::session::Session::load().workspace(&key).cloned() else {
+        let Some(ws) = self.load_session().workspace(&key).cloned() else {
             return;
         };
         self.project_command_cache = crate::tasks::lifecycle::LifecycleCommands {
@@ -12476,7 +12636,8 @@ impl App {
     fn open_workspace_chooser(&mut self) {
         let current = self.session_key();
         let now = jiff::Zoned::now().timestamp().as_second();
-        let roots: Vec<String> = crate::session::Session::load()
+        let roots: Vec<String> = self
+            .load_session()
             .frecency_ordered(now)
             .into_iter()
             .filter(|r| *r != current)
@@ -12551,7 +12712,7 @@ impl App {
         self.editor.close_all();
         self.refresh_git();
         let key = self.session_key();
-        if let Some(ws) = crate::session::Session::load().workspace(&key).cloned() {
+        if let Some(ws) = self.load_session().workspace(&key).cloned() {
             self.apply_session(&ws);
         }
         self.focus = Focus::Editor;

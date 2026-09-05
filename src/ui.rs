@@ -244,6 +244,9 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.confirm.is_some() {
         draw_confirm(app, frame, area);
     }
+    if app.script_trust.is_some() {
+        draw_script_trust(app, frame, area);
+    }
     if app.replace_confirm.is_some() {
         draw_replace_confirm(app, frame, area);
     }
@@ -1187,6 +1190,42 @@ fn draw_confirm(app: &App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
     frame.render_widget(Paragraph::new(Line::from(c.message.clone())), inner);
+}
+
+/// The "trust this workspace's scripts?" prompt (T132).
+fn draw_script_trust(app: &App, frame: &mut Frame, area: Rect) {
+    let Some(p) = app.script_trust.as_ref() else {
+        return;
+    };
+    let width = (area.width * 3 / 5).clamp(40, 64).min(area.width);
+    let height = 6u16.min(area.height);
+    let rect = Rect {
+        x: area.x + (area.width.saturating_sub(width)) / 2,
+        y: area.y + area.height / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} ", t!("ui.script_trust_title")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+    let message = t!("ui.script_trust_message", count = p.count).to_string();
+    frame.render_widget(Paragraph::new(message).wrap(Wrap { trim: true }), chunks[0]);
+    let hint = Line::from(Span::styled(
+        t!("ui.script_trust_hint").to_string(),
+        theme::dim(),
+    ));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
 }
 
 fn draw_replace_confirm(app: &App, frame: &mut Frame, area: Rect) {

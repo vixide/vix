@@ -897,17 +897,46 @@ presupposing a specific vulnerability exists.
   gained a reciprocal pointer from its "Supply chain" section. GitHub
   surfaces a root `SECURITY.md` in its Security tab automatically, no
   extra config; GitLab/Codeberg mirror the file as-is.
-- [ ] **T132 — Script trust prompt.** `vix-script` currently auto-loads
-  and runs every `.rhai` file under `<root>/.vix/scripts/` at startup
-  with no confirmation — cloning an untrusted repo and opening it in Vix
-  silently executes its scripts (sandboxed: no file/network access per
-  `crates/vix-script/spec/index.md`, but still able to read/rewrite the
-  open buffer, spam messages, or plant a fake `prompt()` on first open).
-  Add a one-time-per-workspace trust prompt before loading *project*
-  scripts specifically (global scripts under `Settings::scripts_dir()`
-  stay always-trusted — the user put them there directly), remembered in
-  the session store, mirroring VS Code's Workspace Trust model. Update
-  `crates/vix-script/spec/index.md`'s "Script discovery" section.
+- [x] **T132 — Script trust prompt.** Done. `App::load_scripts` now skips a
+  workspace's `.vix/scripts/` entirely unless `App::project_scripts_trusted`
+  says so; global scripts (`Settings::scripts_dir()`) are unaffected —
+  always trusted, the user put them there directly. A new `ScriptTrustPrompt`
+  overlay ("Trust this workspace and run them?", showing the script count)
+  is queued once at startup when a workspace has project scripts and the
+  decision has never been made (`App::maybe_prompt_script_trust`); answering
+  `y`/`n` persists the decision via a new `vix_session::WorkspaceSession::
+  scripts_trusted: Option<bool>` field and a new `Session::
+  set_scripts_trusted(root, trusted)` method (deliberately not
+  `set_workspace`, which also bumps `visits` — a trust decision isn't a
+  workspace "open"). A decline is remembered too (not re-asked every plain
+  launch, which would defeat persisting "no" at all) but isn't a permanent
+  lockout: `script.reload` always re-checks (`App::maybe_reprompt_script_trust`),
+  so a user who changes their mind can just reload to be asked again.
+
+  **A real test-isolation gap had to be closed first**: `vix-session` had
+  no test-only override (unlike `vix-settings`' `settings_path`/
+  `with_settings_path`), and no existing test had ever exercised the real
+  session-persisting path — this task's own accept/decline flow was the
+  first to do so, which would otherwise have written every test run's
+  temp-directory trust decisions into the real developer's `session.toml`.
+  Added `Session::load_from`/`save_to` (mirroring `Settings::load_from`/
+  `save_to` exactly) and `App::session_path`/`with_session_path` (mirroring
+  `settings_path`), routed every `App` session read/write through new
+  `load_session`/`store_session` helpers, and gave the shared `app_at`/
+  `app_with` test builders a per-call isolated session file so this
+  extends to every test in the suite, not just the new script-trust ones.
+
+  8 existing script tests updated to grant trust before asserting a
+  project script's effects (a `load_scripts_trusted` test helper drives
+  the real `on_key('y')` flow, not a backdoor) — their own premise
+  (project scripts load unconditionally) was the exact behavior this task
+  intentionally changed. 4 new dedicated tests for the trust gate itself
+  (prompt count and deferred load; no scripts → no prompt; accept persists
+  and auto-loads across a simulated restart; decline persists but
+  `script.reload` re-asks) plus 2 new `vix-session` unit tests for
+  `set_scripts_trusted`. Updated `crates/vix-script/spec/index.md`'s
+  "Script discovery" section and `crates/vix-session/spec/index.md` (a new
+  "Script trust" section).
 - [ ] **T133 — Persisted-file permission audit.** The 2026-07 audit added
   `write_private_temp` (0600) for temp files carrying secrets in transit
   (AI/branch-description scratch files); it never extended to files that

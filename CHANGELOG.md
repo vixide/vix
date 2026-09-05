@@ -216,6 +216,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   scope (the HTTP client's intentional no-SSRF-guard design, and a known
   `vix-db` streaming-session edge case) — previously only in internal
   notes, now public. Linked from `README.md`/`index.md` and `AGENTS.md`.
+- **Script trust prompt** (improvement plan T132): a workspace's
+  `.vix/scripts/` scripts no longer run automatically the first time it's
+  opened — a one-time prompt asks to trust and run them, remembered per
+  workspace. Global scripts (`Settings::scripts_dir()`) are unaffected. A
+  declined workspace isn't locked out: `Tools → Scripts → Reload` always
+  re-asks.
 
 ### Changed
 
