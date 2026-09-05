@@ -14225,6 +14225,8 @@ msg.keybinding_rebound:
   en: "Rebound '%{token}'"
 msg.keybinding_reset:
   en: "Reset '%{token}' to its default binding"
+msg.unknown_keymap:
+  en: "Unknown keymap '%{id}' in settings.toml; falling back to Apple"
 msg.unknown_action:
   en: "Unknown action: %{action}"
   es: "Acción desconocida: %{action}"

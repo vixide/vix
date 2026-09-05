@@ -905,9 +905,17 @@ enum Keymap {
 }
 
 impl Keymap {
-    /// Parse a persisted keymap id; anything unrecognized is [`Keymap::Apple`].
-    fn from_id(id: &str) -> Self {
-        match id {
+    /// Parse a persisted keymap id, or `None` if it names none of
+    /// [`vix_keymap_model::KEYMAPS`] — `App::new` is the only caller that
+    /// ever sees `None` in practice (T146): [`App::set_keymap`] only ever
+    /// writes an id `vix_keymap_model::by_id` already accepted, so the only
+    /// way `settings.keymap` can hold an unrecognized id is a hand-edited
+    /// (or otherwise corrupted) `settings.toml` loaded fresh at startup,
+    /// which `App::new` reports and corrects once, there, rather than
+    /// silently falling back on every call here.
+    fn from_id(id: &str) -> Option<Self> {
+        Some(match id {
+            "apple" => Keymap::Apple,
             // macOS and Windows VS Code share the same Ctrl-based bindings here.
             "vscode-macos" | "vscode-windows" => Keymap::Vscode,
             "emacs" => Keymap::Emacs,
@@ -917,8 +925,8 @@ impl Keymap {
             "intellij-windows" => Keymap::IntelliJWindows,
             "eclipse" => Keymap::Eclipse,
             "sublime" => Keymap::Sublime,
-            _ => Keymap::Apple,
-        }
+            _ => return None,
+        })
     }
 }
 
@@ -1790,7 +1798,7 @@ impl App {
         let command_recents = settings.command_recents.clone();
         let (editor, messages, lsp) = Self::build_core(&root, &settings);
 
-        App {
+        let mut app = App {
             explorer: Explorer::new(root.clone()),
             workspace_folders: vec![root.clone()],
             root,
@@ -1984,6 +1992,23 @@ impl App {
             vim_cmd: None,
             vim_pending: None,
             spacemacs_leader: None,
+        };
+        app.validate_keymap();
+        app
+    }
+
+    /// Report and correct an unrecognized persisted `settings.keymap` once,
+    /// at startup (T146) — the only way it can happen at all is a
+    /// hand-edited (or otherwise corrupted) `settings.toml`, since
+    /// `App::set_keymap` only ever writes an id `vix_keymap_model::by_id`
+    /// already accepted. Falls back to Apple, the default keymap, and
+    /// leaves the correction unpersisted (a bad on-disk value is worth
+    /// reporting, not silently rewriting the user's file for them).
+    fn validate_keymap(&mut self) {
+        if Keymap::from_id(&self.settings.keymap).is_none() {
+            self.messages
+                .error(t!("msg.unknown_keymap", id = self.settings.keymap.clone()).to_string());
+            self.settings.keymap = "apple".to_string();
         }
     }
 
@@ -2683,9 +2708,13 @@ impl App {
         }
     }
 
-    /// The keyboard navigation style currently in effect.
+    /// The keyboard navigation style currently in effect. Falls back to
+    /// [`Keymap::Apple`] on an unrecognized `settings.keymap` purely as a
+    /// last-resort safety net — `App::new` already validates and corrects
+    /// that field once at startup (T146), so every real call here sees a
+    /// known id.
     fn active_keymap(&self) -> Keymap {
-        Keymap::from_id(&self.settings.keymap)
+        Keymap::from_id(&self.settings.keymap).unwrap_or(Keymap::Apple)
     }
 
     /// A short keymap-mode indicator for the status bar (Vim's mode / command

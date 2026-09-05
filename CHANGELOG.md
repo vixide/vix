@@ -236,6 +236,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   results are scored with the same fuzzy ranking Commands mode uses and
   sorted accordingly, instead of showing raw filesystem-walk order (not
   portable across filesystems, and not relevance-ranked).
+- **An unrecognized persisted keymap id no longer fails silently**
+  (improvement plan T146): a corrupted `settings.toml` naming an unknown
+  keymap is now reported in the messages panel at startup and falls back
+  to Apple, instead of silently mapping to Apple with no indication
+  anything was wrong.
 
 ## [1.6.0] - 2026-08-29
 

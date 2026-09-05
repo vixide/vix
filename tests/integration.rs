@@ -6616,6 +6616,31 @@ fn view_keymap_submenu_actions_set_the_keymap() {
 }
 
 #[test]
+fn an_unrecognized_persisted_keymap_id_is_reported_and_corrected_at_startup() {
+    // T146: `App::set_keymap` (the `view.keymap:*` path above) only ever
+    // writes an id `vix_keymap_model::by_id` already accepted, so the only
+    // way `settings.keymap` holds an unrecognized id at all is a
+    // hand-edited (or otherwise corrupted) `settings.toml` loaded fresh —
+    // simulated here by constructing `Settings` directly.
+    let settings = Settings {
+        keymap: "intellij-mac".to_string(), // a real, once-made typo (T104d)
+        ..Settings::default()
+    };
+    let app = app_with(settings);
+    assert_eq!(
+        app.settings.keymap, "apple",
+        "an unknown persisted keymap id falls back to the default"
+    );
+    assert!(
+        app.messages
+            .items
+            .iter()
+            .any(|m| matches!(m.level, vix::messages::Level::Error)),
+        "the unknown id is reported, not silently swallowed"
+    );
+}
+
+#[test]
 fn sublime_keymap_signature_bindings() {
     let mut app = app_at(Path::new("."));
     app.settings.keymap = "sublime".to_string();
