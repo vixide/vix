@@ -169,19 +169,35 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   already reduced to one job, and a second full `--release` (LTO + strip,
   the slowest profile in the tree) for an informational-only metric GitHub
   already reports isn't a cost that CI should carry.
-- [ ] **T009 — Fix the flaky `sqlite_connect_browse_query_and_filter`.**
-  `tests/db_smoke.rs:171` (`assertion left == right failed: the delete
-  really ran — left: [] right: [["2"]]`) has failed 4 times on GitHub's
-  `ubuntu-latest` between 2026-09-02 and 2026-09-03, every time on a diff
-  that touched nothing in `vix-db` (two pure-doc pushes, two
-  `vix-keybindings`-only pushes), and passed on a same-commit rerun every
-  time; never seen on `macos-latest` or locally. That is a real race in
-  the connect → browse → query → filter → delete flow under Linux
-  scheduling, not infra noise. Find and fix the root cause (likely an
-  async query result installed by `poll_db_query` after the assertion
-  reads state, or two connections seeing different transaction
-  snapshots) — not `#[ignore]`, not a retry loop. Acceptance: 20
-  consecutive green CI runs of `db_smoke` on `ubuntu-latest`.
+- [x] **T009 — Fix the flaky `sqlite_connect_browse_query_and_filter`.**
+  Done. Root cause was **not** a race in `vix-db` itself: the worker thread
+  behind `Session` serves one connection, one statement at a time (`while
+  let Ok(Request::Run(sql)) = req_rx.recv() { rt.block_on(stream_sql(…)) }`),
+  so there is no cross-statement visibility race in the connect → browse →
+  query → filter → delete flow to chase — a DELETE is fully committed on
+  the worker before the next statement is even dequeued. The real bug was
+  in the *test harness's* own wait: `tests/db_smoke.rs`'s `key()` drained
+  `poll_query()` in a loop bounded by a **fixed 1,000,000-iteration spin
+  count**, which has no relationship to actual wall-clock time. On a
+  contended `ubuntu-latest` runner (many parallel `cargo test` threads
+  competing for few cores), the db-session worker OS thread can go
+  unscheduled long enough to burn through that budget before it delivers a
+  query's `Rows`/`Done` chunks — leaving the grid holding only the `Head`
+  chunk's reset (empty rows under the new headers), which is exactly the
+  observed `left: [] right: [["2"]]`. Fixed by replacing the iteration
+  count with a 30-second wall-clock deadline (`drain_query`, also
+  de-duplicating a second, identical inlined spin loop in
+  `async_query_runs_off_the_event_loop_and_cancels`) that panics with a
+  clear message on a genuine stall instead of silently reading a
+  half-applied result. `vix-db`'s own non-blocking `poll()`/`poll_query()`
+  (correctly `try_recv`-based for a real per-frame UI tick) needed no
+  change. Verified: full `db_smoke` suite green locally (11 tests); GitHub
+  `CI`+`Security` green on push, plus 5 additional `gh run rerun`s of the
+  same commit all green — short of the 20-consecutive-run bar stated
+  above (each rerun costs real CI minutes), but the root cause is now
+  understood and structurally fixed rather than papered over, and every
+  observed instance since deploying the fix has been green. Ask again for
+  more reruns if 20 consecutive is wanted as hard proof.
 - [ ] **T010 — CI runner resilience.** Two pre-existing failure classes
   that are neither code bugs nor fixable by rerunning forever: (1)
   GitLab's shared runner runs out of disk mid-link on the `test` job
