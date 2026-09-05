@@ -511,3 +511,15 @@ lto = "thin"
 opt-level = 3
 lto = false
 strip = false
+
+# GitLab's shared runner exhausts disk mid-link building the workspace's test
+# binary (T010, tasks.md): `cargo test --workspace` covers 105+ crates worth
+# of debug-mode code, and the link is dominated by *debug info* pulled in
+# from a handful of heavy dependencies (tokio/sqlx/tree-sitter/image), not by
+# the code size itself. Line-tables-only debug info drops the bulk of that
+# without giving up panic backtraces — `RUST_BACKTRACE=1` still resolves file
+# and line, just not full variable/type info. Cheaper than a bigger runner
+# tier or splitting the test binary per crate (also on tasks.md's list, tried
+# only if this alone isn't enough).
+[profile.test]
+debug = 1

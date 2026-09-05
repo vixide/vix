@@ -199,22 +199,27 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   but the root cause is now understood and structurally fixed rather than
   papered over. Ask for more reruns if 20 consecutive is wanted as hard
   proof.
-- [ ] **T010 — CI runner resilience.** Two pre-existing failure classes
-  that are neither code bugs nor fixable by rerunning forever: (1)
-  GitLab's shared runner runs out of disk mid-link on the `test` job
-  (`ld terminated with signal 7 [Bus error]` / "No space left on
-  device") building the 105-crate test binary — confirmed independent of
-  `binary-size` (T008 isolated that job's cache; `test` still failed).
-  Try, in order of cheapness: a `[profile.test]` with `debug = 1`/
-  `strip = "debuginfo"` (the link is dominated by debug info from
-  tokio/sqlx/tree-sitter/image), `cargo test --no-run` followed by
-  per-crate test runs so no single link holds everything, then a bigger
-  runner tier. (2) The GitHub `docs (lychee)` job downloads the pinned
-  lychee tarball from GitHub Releases on every run and once failed with
-  `curl: (35) Recv failure: Connection reset by peer` (2026-09-03) — wrap
-  the download in a 3-attempt retry (`curl --retry 3 --retry-all-errors`)
-  and cache the verified tarball with `actions/cache` keyed on
-  `LYCHEE_VERSION`+`LYCHEE_SHA256`. Document both in `spec/ci/index.md`.
+- [x] **T010 — CI runner resilience.** Done, cheapest fix tried first for
+  each of the two failure classes:
+  (1) GitLab's shared runner running out of disk mid-link on the `test` job
+  — root `Cargo.toml` gained `[profile.test]` with `debug = 1` (line tables
+  only, workspace-wide), since the link is dominated by debug info from a
+  handful of heavy dependencies (tokio/sqlx/tree-sitter/image), not code
+  size; panic backtraces still resolve file/line under `RUST_BACKTRACE=1`.
+  Couldn't validate the size reduction locally on macOS (debug info there
+  lives out-of-line in the `.o` files, not embedded in the linked binary the
+  way Linux's ELF/DWARF does — a same-size local before/after binary is
+  expected, not a sign the fix did nothing); confidence has to come from
+  GitLab's own Linux runner. The next-cheapest steps if this alone isn't
+  enough — `cargo test --no-run` + per-crate test runs, then a bigger
+  runner tier — are left on this list rather than done pre-emptively.
+  (2) GitHub's `docs (lychee)` job's tarball download — added
+  `actions/cache@v4` keyed on `LYCHEE_VERSION`+`LYCHEE_SHA256` (so only the
+  first run after a version/checksum bump ever hits the network) plus
+  `curl --retry 3 --retry-all-errors` on that first-run download. GitLab's
+  and Codeberg's equivalent downloads are unchanged — they haven't shown
+  this failure, only GitHub has. Both documented in `spec/ci/index.md`'s
+  "GitLab" and "Docs links" sections.
 
 ## Phase 1 — Capabilities
 
