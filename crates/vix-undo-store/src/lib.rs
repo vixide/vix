@@ -70,7 +70,10 @@ pub fn save(file: &Path, content: &str, history: &History) {
         // Atomic write: two editor instances share the same hash-named store, so
         // a plain truncating write could let a reader observe a half-written file
         // (load then silently drops the history). Write-then-rename avoids the tear.
-        let _ = vix_fileops::write_atomic(&path, json.as_bytes());
+        // `_private`: a full undo tree can carry text that no longer appears in
+        // the current buffer at all (T133), so a brand-new store file is
+        // created owner-only rather than at the process's default mode.
+        let _ = vix_fileops::write_atomic_private(&path, json.as_bytes());
     }
 }
 

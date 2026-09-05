@@ -51,3 +51,39 @@ Cut-pending items are visually dimmed. Cancel a pending cut with Escape or by pa
 Shift+Up / Shift+Down extend a multi-select range from the current anchor; all clipboard operations (and delete) act on the whole selection.
 
 Buffers follow files — renaming or moving a file (via cut+paste) relocates any open buffers pointing at it; deleting a file closes its buffer. Renaming a directory relocates buffers for every file inside it.
+
+## Atomic and private writes
+
+Two crash-safe writers, both write-temp-then-rename (never a truncating
+in-place write a reader could observe half-done) and both written through a
+symlink rather than following it into some other file:
+
+- `write_atomic(path, data)` — the general-purpose saver used across the
+  app (editor save, workspace save, …). An *existing* file's permission
+  bits are preserved exactly; a brand-new one gets the process's normal
+  umask-default mode, same as a plain `fs::write` — silently narrowing
+  every new file to owner-only would be a surprise for a file meant to be
+  shared or version-controlled.
+- `write_atomic_private(path, data)` — same mechanics, but a **new** file
+  is always created owner-only (0600 on Unix) regardless of umask (T133).
+  For persisted files whose content is inherently sensitive even though
+  they're not secrets-in-transit the way `write_private_temp` below
+  covers: `vix-undo-store`'s per-file undo histories (a full edit history
+  can carry text no longer in the current buffer at all) and
+  `vix-macros`' `macros.toml` (a recorded macro can carry literally-typed
+  text). An existing file's mode is still left alone, exactly like
+  `write_atomic`.
+- `restrict_to_owner(path)` — best-effort, narrow an *already-written*
+  file to owner-only on Unix. For persisted files written through
+  [confy](https://docs.rs/confy) rather than this crate (`config.toml`,
+  `session.toml`, `db_history.toml`, `db_queries.toml`), which give no
+  hook to choose the mode as the file is created — only after. Not
+  perfectly race-free at creation time, but these are single-user local
+  desktop config files, not shared or network-exposed ones.
+- `write_private_temp(prefix, data)` — a one-off scratch file in the OS
+  temp directory (secrets briefly in transit, e.g. an AI-request payload),
+  0600 and `O_EXCL` from creation, unrelated to any of the above.
+
+`keybindings.toml` (`vix-keybindings::user_bindings`) is a deliberate
+non-fix: its content (a key token paired with an action id) is never
+sensitive, so it keeps its original plain, non-private write.

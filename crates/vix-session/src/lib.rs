@@ -190,22 +190,34 @@ impl Session {
         confy::load_path(path).unwrap_or_default()
     }
 
-    /// Persist the sessions to the config directory.
+    /// Persist the sessions to the config directory. `session.toml` can
+    /// carry mildly sensitive content (open-file paths reveal project
+    /// structure; a cached `project_cmd_*` could embed a secret in a custom
+    /// build command), so on Unix it's narrowed to owner-only after each
+    /// save (T133) — best-effort, same caveat as `Settings::save`: `confy`
+    /// gives no hook to choose the mode as the file is made, only after.
     ///
     /// # Errors
     /// Returns a [`confy::ConfyError`] if the file cannot be written/serialized.
     pub fn save(&self) -> Result<(), confy::ConfyError> {
-        confy::store(APP_NAME, Some(SESSION_NAME), self)
+        confy::store(APP_NAME, Some(SESSION_NAME), self)?;
+        if let Ok(path) = confy::get_configuration_file_path(APP_NAME, Some(SESSION_NAME)) {
+            vix_fileops::restrict_to_owner(&path);
+        }
+        Ok(())
     }
 
     /// Persist sessions to an explicit file (the counterpart of
     /// [`Session::load_from`]); parent directories are created as needed.
+    /// Narrowed to owner-only on Unix, same as [`Session::save`].
     ///
     /// # Errors
     /// Returns a [`confy::ConfyError`] if the file cannot be written or
     /// serialized.
     pub fn save_to(&self, path: &std::path::Path) -> Result<(), confy::ConfyError> {
-        confy::store_path(path, self)
+        confy::store_path(path, self)?;
+        vix_fileops::restrict_to_owner(path);
+        Ok(())
     }
 
     /// The saved session for `root`, if any.
@@ -438,5 +450,24 @@ mod tests {
         assert_eq!(ws.project_cmd_compile, None);
         assert!(ws.project_history_compile.is_empty());
         assert_eq!(ws.project_last_command, None);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn save_to_narrows_the_file_to_owner_only() {
+        // session.toml can carry mildly sensitive content -- open-file paths
+        // reveal project structure, a cached project_cmd_* could embed a
+        // secret (T133) -- an explicit-path save must come back owner-only
+        // regardless of umask.
+        use std::os::unix::fs::PermissionsExt as _;
+        let path =
+            std::env::temp_dir().join(format!("vix-session-mode-{}.toml", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        Session::default().save_to(&path).unwrap();
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        std::fs::remove_file(&path).ok();
     }
 }

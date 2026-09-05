@@ -180,7 +180,12 @@ pub fn upsert(path: &Path, mac: Macro) -> std::io::Result<()> {
     }
     let body = toml::to_string(&MacrosFile { macros })
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
-    std::fs::write(path, body)
+    // `_private`: a recorded macro can carry literally-typed text (T133) --
+    // a brand-new macros.toml is created owner-only rather than at the
+    // process's default mode. Also atomic (write-temp-then-rename), fixing
+    // a latent tear risk the plain `fs::write` this replaces never guarded
+    // against.
+    vix_fileops::write_atomic_private(path, body.as_bytes())
 }
 
 #[cfg(test)]
@@ -243,6 +248,31 @@ mod tests {
         assert_eq!(macros.len(), 2);
         let m = macros.iter().find(|m| m.name == "m").unwrap();
         assert_eq!(m.keys, vec!["x".to_string(), "y".to_string()]);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn upsert_creates_a_new_file_owner_only() {
+        use std::os::unix::fs::PermissionsExt as _;
+        // A recorded macro can carry literally-typed text (T133): a
+        // brand-new macros.toml must not be left at the process's default
+        // (umask) mode.
+        let path =
+            std::env::temp_dir().join(format!("vix-macros-mode-{}.toml", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        upsert(
+            &path,
+            Macro {
+                name: "m".into(),
+                keys: vec!["a".into()],
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         std::fs::remove_file(&path).ok();
     }
 

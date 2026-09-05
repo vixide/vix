@@ -11,3 +11,4 @@ description = "Persisted keyboard macros: named recordings of editor key events.
 crossterm = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
+vix-fileops = { path = "../vix-fileops", version = "1.6.0" }

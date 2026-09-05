@@ -937,16 +937,45 @@ presupposing a specific vulnerability exists.
   `set_scripts_trusted`. Updated `crates/vix-script/spec/index.md`'s
   "Script discovery" section and `crates/vix-session/spec/index.md` (a new
   "Script trust" section).
-- [ ] **T133 — Persisted-file permission audit.** The 2026-07 audit added
-  `write_private_temp` (0600) for temp files carrying secrets in transit
-  (AI/branch-description scratch files); it never extended to files that
-  persist long-term and may carry buffer content or history:
-  `<config>/undo/*` (full undo trees, potentially of sensitive files),
-  `session.toml` (recently-opened paths), and (once T104h lands)
-  `keybindings.toml`. Audit each for whether its content is ever
-  sensitive and, where it is, switch to `write_private_temp`'s 0600
-  pattern (or document why 0600 isn't warranted, e.g. it's genuinely
-  never sensitive).
+- [x] **T133 — Persisted-file permission audit.** Done. Audited every
+  persisted config-dir file, not just the 3 the task named as examples —
+  its own framing ("files that persist long-term") wasn't a closed list,
+  and the same investigation turned up two more real candidates
+  (`db_history.toml`/`db_queries.toml`) plus `macros.toml`. Two new
+  `vix-fileops` primitives, both landing in the same crate that already
+  owned `write_private_temp`/`write_atomic`:
+  - `write_atomic_private(path, data)` — same write-temp-then-rename
+    mechanics as `write_atomic`, but a **new** file is always created
+    0600 on Unix regardless of umask (an *existing* file's mode is still
+    preserved, unchanged). Wired into `vix-undo-store::save` (a full undo
+    tree can carry text no longer in the current buffer at all) and
+    `vix-macros::upsert` (a recorded macro can carry literally-typed
+    text) — the latter also gained atomicity it never had before
+    (was a plain `fs::write`).
+  - `restrict_to_owner(path)` — best-effort narrow-after-write, for the
+    files that go through `confy` rather than this crate's own writer
+    and so have no hook to choose the mode at creation time: wired into
+    `vix-settings::Settings::save`/`save_to` (`config.toml` — a custom
+    `ai_command` could embed a secret), `vix-session::Session::save`/
+    `save_to` (`session.toml` — open-file paths reveal project
+    structure, a cached `project_cmd_*` could embed one), and
+    `vix-db::store::save_history`/`save_saved` (`db_history.toml`/
+    `db_queries.toml` — a query's own literal text, not just its bind
+    parameters, can carry a sensitive value).
+
+  `keybindings.toml` (`vix-keybindings::user_bindings`) is a deliberate
+  non-fix, documented rather than silently skipped: a key token paired
+  with an action id is never sensitive. New tests for every fix (write
+  mode assertions in each of the 5 touched crates, plus 2 new
+  `vix-fileops` tests for `write_atomic_private` itself and 2 for
+  `restrict_to_owner`); `vix-undo-store`/`vix-db::store`'s own
+  confy-touching `save`/`load` paths still have no test-only path
+  override (a pre-existing gap this task didn't introduce, same as
+  T132's `vix-session` gap it *did* fix) — their new behavior is
+  covered indirectly, through `vix-fileops`'s own already-tested
+  primitives. New `vix-fileops/spec/index.md` "Atomic and private
+  writes" section (this crate's writers had no spec coverage at all
+  before this).
 - [ ] **T134 — Post-scripting/AI security re-audit.** Once T105
   (scripting samples + docs) and T124/T125 (AI provider abstraction +
   features) ship, run a focused audit pass — same rigor as 2026-07-12,

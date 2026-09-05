@@ -253,6 +253,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to Apple, instead of silently mapping to Apple with no indication
   anything was wrong.
 
+### Security
+
+- **Persisted files that can carry sensitive content are now owner-only**
+  (improvement plan T133): undo history, recorded macros, `config.toml`,
+  `session.toml`, and the DB workbench's query history/saved queries are
+  narrowed to 0600 on Unix. Previously these were left at the process's
+  default (umask) mode, same as any other new file.
+
 ## [1.6.0] - 2026-08-29
 
 ### Added

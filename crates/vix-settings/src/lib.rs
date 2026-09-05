@@ -344,25 +344,38 @@ impl Settings {
         }
     }
 
-    /// Persist settings to the user's config directory.
+    /// Persist settings to the user's config directory. `config.toml` can
+    /// carry sensitive content (e.g. a custom `ai_command` template with an
+    /// embedded API key), so on Unix it's narrowed to owner-only after each
+    /// save (T133) — best-effort, and not perfectly race-free at creation
+    /// time (`confy` gives no hook to choose the mode as the file is made,
+    /// only after), but this is a single-user local desktop config
+    /// directory, not a shared or network-exposed one.
     ///
     /// # Errors
     ///
     /// Returns a [`confy::ConfyError`] if the config directory cannot be
     /// created or the file cannot be written/serialized.
     pub fn save(&self) -> Result<(), confy::ConfyError> {
-        confy::store(APP_NAME, Some(CONFIG_NAME), self)
+        confy::store(APP_NAME, Some(CONFIG_NAME), self)?;
+        if let Some(path) = Self::config_path() {
+            vix_fileops::restrict_to_owner(&path);
+        }
+        Ok(())
     }
 
     /// Persist settings to an explicit file (the counterpart of
     /// [`Settings::load_from`]); parent directories are created as needed.
+    /// Narrowed to owner-only on Unix, same as [`Settings::save`].
     ///
     /// # Errors
     ///
     /// Returns a [`confy::ConfyError`] if the file cannot be written or
     /// serialized.
     pub fn save_to(&self, path: &std::path::Path) -> Result<(), confy::ConfyError> {
-        confy::store_path(path, self)
+        confy::store_path(path, self)?;
+        vix_fileops::restrict_to_owner(path);
+        Ok(())
     }
 
     /// The on-disk settings file path (e.g. `~/.config/vix/config.toml`), or
@@ -497,5 +510,23 @@ mod tests {
         assert_eq!(sh_single_quote("a'b"), "'a'\\''b'");
         assert_eq!(sh_single_quote("plain"), "'plain'");
         assert_eq!(sh_single_quote("$(x)`y`"), "'$(x)`y`'");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn save_to_narrows_the_file_to_owner_only() {
+        // config.toml can carry sensitive content (e.g. a custom ai_command
+        // template with an embedded API key, T133) -- an explicit-path save
+        // must come back owner-only regardless of umask.
+        use std::os::unix::fs::PermissionsExt as _;
+        let path =
+            std::env::temp_dir().join(format!("vix-settings-mode-{}.toml", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        Settings::default().save_to(&path).unwrap();
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        std::fs::remove_file(&path).ok();
     }
 }
