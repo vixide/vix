@@ -4835,6 +4835,55 @@ fn palette_command_fuzzy_ranks_best_match_first() {
 }
 
 #[test]
+fn palette_files_mode_ranks_by_fuzzy_score_not_walk_order() {
+    // T153: Files mode used to keep `ignore::WalkBuilder`'s raw traversal
+    // order — not portable across filesystems, and not ranked at all.
+    // "target.rs" is an exact match for the query; "abc_target_helper.rs"
+    // only contains it mid-string, so a relevance ranking must put the
+    // former first regardless of which the walk happens to visit first
+    // (and regardless of alphabetical order, which would rank the "abc_"
+    // file first too — the point is score, not path, breaks the tie here).
+    let dir = unique_dir("palette-files-score");
+    fs::write(dir.join("abc_target_helper.rs"), "").unwrap();
+    fs::write(dir.join("target.rs"), "").unwrap();
+    fs::write(dir.join("zzz_other.rs"), "").unwrap();
+    let mut app = app_at(&dir);
+    app.on_key(ctrl('p'));
+    for c in "target".chars() {
+        app.on_key(key(c));
+    }
+    let p = app.palette.as_ref().unwrap();
+    assert!(!p.entries.is_empty(), "fuzzy query matched files");
+    assert_eq!(
+        p.entries[0].label, "target.rs",
+        "the exact match ranks first by score, not by path or walk order"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn palette_files_mode_empty_query_lists_alphabetically() {
+    // Every candidate scores 0 against an empty query, so the path
+    // tie-break alone determines order (T153) -- deterministic and
+    // portable, unlike the raw filesystem-walk order it replaces.
+    let dir = unique_dir("palette-files-empty");
+    fs::write(dir.join("zeta.rs"), "").unwrap();
+    fs::write(dir.join("alpha.rs"), "").unwrap();
+    fs::write(dir.join("mid.rs"), "").unwrap();
+    let mut app = app_at(&dir);
+    app.on_key(ctrl('p'));
+    let p = app.palette.as_ref().unwrap();
+    let labels: Vec<&str> = p.entries.iter().map(|e| e.label.as_str()).collect();
+    let mut sorted = labels.clone();
+    sorted.sort_unstable();
+    assert_eq!(
+        labels, sorted,
+        "an empty query lists files alphabetically, not raw walk order"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn palette_recents_seed_from_persisted_settings() {
     let settings = Settings {
         command_recents: vec!["edit.select_all".to_string()],

@@ -18629,9 +18629,21 @@ impl App {
     /// `palette_file_scope` when set (`project.subproject.find_file`).
     /// Grouped out of [`App::recompute_palette`] to keep it within the line
     /// limit.
+    ///
+    /// Ranked with [`palette::fuzzy_score`], tie-broken on the path — the
+    /// same shape `recompute_palette`'s `PMode::Commands` arm uses (T153).
+    /// Before this, entries kept `self.file_index`'s raw `ignore::
+    /// WalkBuilder` traversal order: not portable across filesystems
+    /// (ext4 vs APFS order differently), not ranked by relevance, and
+    /// capped to the first 200 hits *in that arbitrary order* rather than
+    /// the 200 best — a large workspace could easily bury a strong match
+    /// behind 200 weaker ones the walk happened to visit first. An empty
+    /// query scores every candidate `0` (see `fuzzy_score`'s docs), so the
+    /// path tie-break alone puts the unfiltered list in alphabetical order,
+    /// which is also strictly better than raw walk order.
     fn palette_file_entries(&self, query: &str) -> Vec<Entry> {
         let (qpath, target) = palette::parse_path_target(query);
-        let mut entries = Vec::new();
+        let mut scored: Vec<(i32, String, Entry)> = Vec::new();
         for path in &self.file_index {
             let rel = path
                 .strip_prefix(&self.root)
@@ -18646,17 +18658,20 @@ impl App {
             {
                 continue;
             }
-            if qpath.is_empty() || palette::fuzzy_match(&rel, &qpath) {
-                entries.push(Entry {
+            let Some(score) = palette::fuzzy_score(&rel, &qpath) else {
+                continue;
+            };
+            scored.push((
+                score,
+                rel.clone(),
+                Entry {
                     label: rel,
                     action: PAction::OpenFile(path.clone(), target),
-                });
-            }
-            if entries.len() >= 200 {
-                break;
-            }
+                },
+            ));
         }
-        entries
+        scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+        scored.into_iter().take(200).map(|(_, _, e)| e).collect()
     }
 
     /// Score every script-registered command against `query`, continuing the

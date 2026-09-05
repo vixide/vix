@@ -232,6 +232,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   budget with no relationship to actual wall-clock time, not a race in
   `vix-db` itself. Replaced with a 30-second wall-clock deadline
   (`tests/db_smoke.rs`'s `drain_query`).
+- **Command palette's Files mode is now ranked** (improvement plan T153):
+  results are scored with the same fuzzy ranking Commands mode uses and
+  sorted accordingly, instead of showing raw filesystem-walk order (not
+  portable across filesystems, and not relevance-ranked).
 
 ## [1.6.0] - 2026-08-29
 
