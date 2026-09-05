@@ -1106,13 +1106,24 @@ and its own gate run, zero intended behavior change unless stated.
   `crates/vix-<name>` with a `spec/index.md`, one per branch; `src/`
   should end up as `app.rs` (or `app/`, after T141), `ui.rs`, `lib.rs`,
   `main.rs`.
-- [ ] **T153 — Sort the palette's Files mode.** Recorded as a finding in
-  T004 but never given a task id: `build_file_index`/
-  `palette_file_entries` (`src/app.rs`) push matches in raw
-  `ignore::WalkBuilder` order — filesystem-traversal order, not portable
-  (ext4 vs APFS) and not ranked. Score with `palette::fuzzy_score` and
-  tie-break on the path (stable), the way Commands mode already does.
-  Unblocks a Files-mode snapshot scenario for `tests/snapshots.rs`.
+- [x] **T153 — Sort the palette's Files mode.** Done. `palette_file_entries`
+  (`src/app.rs`) now scores every candidate with `palette::fuzzy_score` and
+  sorts by score descending, tie-broken on the path — the same
+  `(score, tiebreak, Entry)` shape `recompute_palette`'s `PMode::Commands`
+  arm already used. An empty query scores every candidate `0`
+  (`fuzzy_score`'s own documented behavior), so the path tie-break alone
+  puts the unfiltered list in alphabetical order — also strictly better
+  than the raw `ignore::WalkBuilder` traversal order it replaces (not
+  portable across filesystems, e.g. ext4 vs APFS order differently).
+  Scoring now happens over every indexed candidate before the 200-result
+  cap is applied (previously the cap truncated the *raw walk order* at
+  200, which could bury a strong match behind 200 weaker ones the walk
+  happened to visit first) — same cost, same 200-result ceiling, correct
+  ranking. 2 new integration tests (score beats both walk order and
+  alphabetical order; empty query lists alphabetically) — Files mode had
+  no test coverage at all before this. Leaves T004's originally-flagged
+  "unblocks a Files-mode snapshot scenario" as a follow-up, not done here
+  (a `tests/snapshots.rs` scenario is its own small deliverable).
 - [ ] **T154 — Keep `Cargo.toml` descriptions honest.** `vix-keybindings`'
   `description` said "9 keymaps" for a task after T104g made it 10;
   caught only because T104h happened to edit the same file. Nothing
