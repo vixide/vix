@@ -27,7 +27,7 @@ one to be sent to the app). Whatever the terminal does forward, Vix treats as
 `Control`.
 
 `App::command_as_control` is the fold; it is unit-tested on every platform, and
-`tests/integration.rs` drives `Cmd+F`, `Cmd+Z`, and `Cmd+Shift+Z` through
+`tests/integration/editing.rs` drives `Cmd+F`, `Cmd+Z`, and `Cmd+Shift+Z` through
 `on_key` on macOS.
 
 See `crates/vix-keymap-model/spec/index.md` for the keymaps themselves and

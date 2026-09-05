@@ -23,7 +23,7 @@ and that text landed on the macOS pasteboard, where the next paste in any app
 produced it. Tests that need the platform clipboard must call `use_system`
 themselves, and none do.
 
-`is_system` reports which clipboard is in effect; `tests/integration.rs` asserts
-it is `false` so the isolation cannot be lost by accident.
+`is_system` reports which clipboard is in effect; `tests/integration/editing.rs`
+asserts it is `false` so the isolation cannot be lost by accident.
 
 See `spec/index/index.md` for the project overview.

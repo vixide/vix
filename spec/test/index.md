@@ -11,7 +11,7 @@ no sleeps, no screen scraping.
 | ----- | ----- | -------------- | ------- |
 | **Unit** | `#[cfg(test)] mod tests` beside the code | One pure function: the transform, the parser, the boundary case | `cargo test` |
 | **Property** | Same, with `proptest` | Invariants over generated input — "the cursor a rewrite returns is always inside the text it returns" | `cargo test` |
-| **Integration** | `tests/integration.rs` | A real `App`: keys in, state out. Menus, actions, keymaps, overlays, files | `cargo test` |
+| **Integration** | `tests/integration/main.rs` | A real `App`: keys in, state out. Menus, actions, keymaps, overlays, files | `cargo test` |
 | **Snapshot** | `tests/snapshots.rs` | Golden text screens — the actual rendered frame, not just state, for scenarios where the layout itself is the thing being tested | `cargo test` |
 | **Repo invariants** | `tests/i18n_keys.rs` | Facts about the repository itself — every `t!` key exists, every call fills exactly the `%{name}` placeholders its string declares, every catalog entry has an `en` fallback | `cargo test` |
 | **Smoke** | `tests/db_smoke.rs`, `tests/lsp_smoke.rs` | Subsystems with an external dependency, skipped when it is absent | `cargo test` |
@@ -23,6 +23,16 @@ no sleeps, no screen scraping.
 with `-D warnings`, the test suite, `cargo doc` with `-D warnings`, and the
 documentation checks. Fuzzing and benchmarks are deliberately outside it — one
 needs nightly, the other needs a quiet machine.
+
+The integration layer is one test binary (`cargo test --test integration`)
+split across `tests/integration/` (T143): `common.rs` holds the shared
+fixtures/helpers (`app_at`, `key`/`ctrl`, `type_str`, `buffer_with`, …), and
+each area gets its own file — `catalog.rs`, `db.rs`, `editing.rs`, `find.rs`,
+`git.rs`, `keybindings.rs`, `keymaps.rs`, `lsp.rs`, `menu.rs`, `org.rs`,
+`palette.rs`, `panels.rs`, `scripting.rs`, `workspace.rs` — so a change stays a
+small diff and `cargo test --test integration <area>::` targets just that
+slice. The split is by rough topic, not a strict taxonomy; a test that doesn't
+obviously belong anywhere lands in `editing.rs`, the catch-all.
 
 ## Writing an integration test
 
@@ -66,7 +76,7 @@ insta::assert_snapshot!(screen);
 Reach for a snapshot when the *layout* is the thing under test — a dialog's
 framing, a dock's column widths, how a long line truncates — not when a plain
 state assertion already says it. Most behavior still belongs in
-`tests/integration.rs`; snapshots are for the cases where "what does the
+`tests/integration/main.rs`; snapshots are for the cases where "what does the
 screen look like" is the actual question.
 
 Every snapshot test pins the locale to `en`

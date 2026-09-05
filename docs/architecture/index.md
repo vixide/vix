@@ -9,7 +9,7 @@ process suspend; the shell library holds the `App` state, event routing,
 rendering (`src/ui.rs`), and the explorer. Everything else is a **`vix-*` member
 crate** under `crates/` — 105 of them, each independently testable. This keeps
 the editing logic terminal-independent, so it can be unit-tested and driven from
-examples without a real TTY (see `tests/integration.rs` and `examples/`).
+examples without a real TTY (see `tests/integration/main.rs` and `examples/`).
 
 `src/lib.rs` **re-exports** each member crate under a short module name
 (`pub use vix_git as git;`, `pub use vix_menu as menu;`, …), so the rest of the
@@ -170,7 +170,8 @@ handling and lifted the whole stack to 0.30.
 
 ## Testing strategy
 
-Because the logic is terminal-independent, `tests/integration.rs` constructs an
+Because the logic is terminal-independent, `tests/integration/main.rs` (split
+by topic into `tests/integration/*.rs`, see `spec/test/index.md`) constructs an
 `App`, feeds it synthetic `crossterm` `KeyEvent`s, and asserts on the resulting
 state — typing, open/save round trips, tab lifecycle, go-to-line, fuzzy matching,
 the search-pattern builder, end-to-end regex replace with capture groups,

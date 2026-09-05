@@ -150,7 +150,7 @@ See [`agents/share/crate-map.md`](agents/share/crate-map.md) for the full map.
 2. Implement in the owning crate; keep editing logic out of `src/ui.rs`.
 3. Internationalize any new text (YAML key + `t!`).
 4. Document every new public item (`deny(missing_docs)`).
-5. Add/extend tests (`tests/integration.rs` or a module's unit tests).
+5. Add/extend tests (`tests/integration/main.rs` or a module's unit tests).
 6. `cargo test` and `cargo clippy --workspace --all-targets -- -D warnings` clean
    (or run `scripts/check`, the local CI-parity gate), and `scripts/check-docs`
    clean if you touched documentation.

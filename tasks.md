@@ -1018,12 +1018,50 @@ and its own gate run, zero intended behavior change unless stated.
   overlay/panel's `draw_*` next to its state (into the owning crate
   where one exists, else `src/ui/<feature>.rs`), and split the three
   100+-line drawers so the allows come out.
-- [ ] **T143 — Split `tests/integration.rs`.** 8,790 lines, 432 tests in
-  one file. Move to `tests/integration/main.rs` + `<area>.rs` modules
-  (keymaps, org, git, palette, panels, scripting, …) sharing a
-  `common.rs` for `app_at`/`key`/`ctrl`/`type_str`/`buffer_with`. Still
-  one test binary, so no compile-time regression; smaller diffs and
-  `cargo test --test integration keymaps::` targeting are the wins.
+- [x] **T143 — Split `tests/integration.rs`.** Done. The file had grown to
+  9,427 lines / 481 top-level items (462 `#[test]` fns + 19 shared helpers)
+  by the time this ran. Moved to `tests/integration/main.rs` (crate doc +
+  `#![warn(clippy::pedantic)]`/`#![allow(...)]` + `mod` list) plus
+  `common.rs` (every non-`#[test]` item — `app_at`/`key`/`ctrl`/`type_str`/
+  `buffer_with`/etc., made `pub(crate)` so `use crate::common::*;` resolves
+  them, plus the header's `use` statements as `pub(crate) use`) and 14 area
+  files: `catalog.rs` (131 — the generated action-catalog smoke tests),
+  `editing.rs` (166 — the catch-all for tests matching no more specific
+  keyword), `keymaps.rs` (27), `menu.rs` (25), `workspace.rs` (21),
+  `find.rs` (18), `panels.rs` (16), `palette.rs` (13), `org.rs` (12),
+  `scripting.rs` (10), `lsp.rs` (8), `git.rs` (6), `keybindings.rs` (6),
+  `db.rs` (3). One test binary still (`cargo test --test integration`), so
+  no compile-time regression, confirmed clean on the first build.
+  Classification is a rustfmt-exploiting mechanical split (every top-level
+  item's closing brace sits at column 0, one-to-one with the item count —
+  verified by hand before writing the splitter script), not a hand audit of
+  all 462 tests, so it's an approximate topic grouping, not a strict
+  taxonomy; each `#[test]` item was bucketed by a keyword match on its name
+  in a fixed priority order, unmatched ones landing in `editing.rs`. Each
+  area file needed `#![allow(clippy::wildcard_imports)]` (pedantic) for its
+  `use crate::common::*;` — a deliberate, narrow, documented exception
+  (explicit-import lists for 14 files each pulling in a couple dozen
+  shared helpers/types would cost more than it buys), not a blanket allow.
+  **Found and fixed a real pre-existing test bug the split exposed**:
+  `edit_outline_opens_indents_and_saves` and
+  `outline_panel_lists_symbols_and_jumps` both called `unique_dir("outline")`
+  — `unique_dir` keys solely on tag + process id, so this was always a
+  same-path race under parallel test threads, just one the two tests being
+  3,626 lines apart in the old file apparently never triggered; landing in
+  the same new file changed registration order enough to make them race
+  reliably in this session's runs. Fixed by giving the outline*-editor*
+  test a distinct tag (`"edit-outline"`); reran the full suite 4× after,
+  clean every time. Grepped every other `unique_dir` call for the same
+  class of collision — none found. Updated every doc/spec that named
+  `tests/integration.rs` as a code-span path (`scripts/check-docs` checks
+  those, not just markdown links): `AGENTS.md`, `agents/workflow.md`,
+  `spec/test/index.md` (also gained a short paragraph naming the new area
+  files), `docs/architecture/index.md`, and the three crate specs whose
+  own tests moved to a specific area file rather than the generic entry
+  point (`vix-editor/spec/command-key`, `vix-editor-core/spec`,
+  `vix-clipboard/spec` → `tests/integration/editing.rs` ×2,
+  `tests/integration/catalog.rs`). No CHANGELOG entry: pure-internal,
+  zero product behavior change, matching T150/T154 precedent.
 - [ ] **T144 — One list-navigation state instead of eighteen.**
   `ensure_visible` is defined in 18 crates, `up`/`down` in 18,
   `page_up`/`page_down` in 14, `select_index` in 11 — every

@@ -39,7 +39,8 @@ leave the drift for later.
    with `t!`. Never hard-code a display string.
 4. **Document every new public item.** `#![deny(missing_docs)]` is on at
    every crate root; an undocumented `pub fn`/`struct`/field fails the build.
-5. **Add/extend tests** — `tests/integration.rs` or the module's own unit
+5. **Add/extend tests** — `tests/integration/main.rs` (split by topic into
+   `tests/integration/*.rs`; see `spec/test/index.md`) or the module's own unit
    tests. Prefer terminal-independent tests (build an `App`, feed
    `KeyEvent`s, assert on state); render checks use a sized `TestBackend`.
    Never assert on translated text (locale is process-global and can race) —

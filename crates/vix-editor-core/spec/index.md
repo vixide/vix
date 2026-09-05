@@ -27,7 +27,7 @@ The host routes a snake_case id through `App::run_named_action(id)`:
   autocomplete) are accepted and report a `status.action_todo` message rather
   than failing, so every catalog id is a no-surprise call.
 
-Every action has a smoke test in `tests/integration.rs`
+Every action has a smoke test in `tests/integration/catalog.rs`
 (`catalog_<snake>()`), and its own page under `spec/<kebab>/index.md`.
 
 ## Sub-specs
