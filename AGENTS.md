@@ -16,6 +16,9 @@ green, scope complete) — an agent may decide that on its own rather than
 asking first. Neither extends to cutting a tagged release or creating a
 GitHub/GitLab/Codeberg Release; that's still confirmed first.
 
+Found a security vulnerability? See [`SECURITY.md`](SECURITY.md) — report
+it privately, not as a public issue.
+
 ## What Vix is
 
 Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust IDE"),

@@ -174,6 +174,11 @@ cargo run --example list_commands   # print every command-palette command
 
 Licensed under either of Apache-2.0 or MIT at your option.
 
+## Security
+
+Found a vulnerability? See [`SECURITY.md`](SECURITY.md) for how to
+report it privately, rather than opening a public issue.
+
 ## AI Statement
 
 Vix is developed with substantial AI assistance. See
