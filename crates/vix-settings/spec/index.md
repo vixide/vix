@@ -1,9 +1,10 @@
 # Configuration
 
-Vix keeps all user preferences in a single configuration file, persisted with the
-[`confy`] crate. There is no separate preferences dialog: the file is plain
-[TOML], and **Vix → Settings…** opens it directly in the editor so you can edit
-it like any other file.
+User settings, persisted with `confy`. Vix keeps all user preferences in a
+single configuration file, persisted with the [`confy`] crate. There is no
+separate preferences dialog: the file is plain [TOML], and
+**Vix → Settings…** opens it directly in the editor so you can edit it like
+any other file.
 
 ## Where the config file lives
 

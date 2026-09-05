@@ -1,6 +1,7 @@
 # Localization
 
-Vix is fully localizable. Every piece of user-facing text — menu labels, status
+Shared i18n backend for the Vix workspace (single embedded locale table). Vix
+is fully localizable: every piece of user-facing text — menu labels, status
 messages, prompts, confirmations, the command palette, and help rows — is looked
 up by key at runtime rather than hard-coded, so the whole interface can switch
 languages on the fly. The translations live in one data file; the active language

@@ -1,7 +1,7 @@
 # System Information Panel
 
-A read-only snapshot of host system information and the panel's row-selection
-+ scroll state.
+A read-only snapshot of host system information, plus the panel's selection:
+the row-selection and scroll state.
 
 Vix's Tools menu offers a *System Information* panel: a scrollable table of
 facts about the host — operating system, CPU, memory, swap, disks, uptime,

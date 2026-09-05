@@ -1,5 +1,7 @@
 # Case
 
+Text case transforms applied to the editor selection (Edit → Case).
+
 - "Edit" menu
   - "Case" menuitem
     - "Upper (FOO BAR)" submenuitem

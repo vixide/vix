@@ -1,5 +1,6 @@
 # Test Runner
 
+Parse test-runner output into a pass/fail list with jump-to-failure.
 **Tools → Run Tests** (`tools.test`) runs the configured `test_command` through
 the async Run Command pipeline, captures its output, and parses it into a
 pass/fail list shown in the **Test panel** (toggle with `tools.test_panel`).

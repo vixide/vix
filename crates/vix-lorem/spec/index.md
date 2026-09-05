@@ -1,7 +1,8 @@
 # Tools: Insert: Lorem ipsum
 
-Inserts deterministic placeholder text at the cursor. Module `lorem` derives the
-output from a fixed canonical passage so it is stable and testable.
+Lorem ipsum placeholder text (Tools → Insert → Lorem ipsum): inserted
+deterministically at the cursor. Module `lorem` derives the output from a
+fixed canonical passage so it is stable and testable.
 
 - menu "Tools"
   - submenu "Insert"

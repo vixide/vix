@@ -1,6 +1,6 @@
 # Checksum tool
 
-Module checksum_tool.
+Compute SHA-256 and SHA-512 checksums of text, returned as lowercase hex. Module `checksum_tool`.
 
 - menu "Tools"
   - submenu "Checksum"

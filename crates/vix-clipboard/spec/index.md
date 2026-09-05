@@ -1,8 +1,8 @@
 # Clipboard
 
-Process-wide access to the clipboard, shared by every crate that copies or
-pastes (`vix-editor-core`'s Cut/Copy/Paste actions, the Org table rectangle
-clipboard, the DB result export, …).
+Process-wide serialized access to the system clipboard, shared by every crate
+that copies or pastes (`vix-editor-core`'s Cut/Copy/Paste actions, the Org
+table rectangle clipboard, the DB result export, …).
 
 Two guarantees:
 

@@ -1,6 +1,7 @@
 # Org
 
-A pragmatic subset of [Org mode](https://orgmode.org/) for editing `.org`-style
+Basic Org-mode operations: headline structure editing and lightweight export,
+a pragmatic subset of [Org mode](https://orgmode.org/) for editing `.org`-style
 outlines. The logic lives in the pure `crate::org` module (unit-tested); the
 top-level **Org** menu wires it to the active buffer at the cursor line.
 

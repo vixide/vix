@@ -1,5 +1,6 @@
 # Themes
 
+Nerd Font icons, plus a re-export of the `vix_theme_model` theme model.
 Vix's colors and font attributes come from a **theme**: a JSON file describing
 per-region colors. There is always exactly one active theme. The model and the
 ratatui styles derived from it live in the `theme_model` crate; the host

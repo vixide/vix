@@ -1,5 +1,8 @@
 # Character & Color Pickers
 
+ASCII panel (Tools menu): the ASCII reference table + row-selection state.
+This crate is one of four pickers documented together below.
+
 **Status:** Shipped — four overlay pickers in the **Tools** menu insert glyphs,
 characters, color values, and HTML references into the active editor.
 

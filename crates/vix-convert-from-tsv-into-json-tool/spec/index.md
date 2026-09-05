@@ -1,6 +1,6 @@
 # Convert from TSV into JSON
 
-Module convert_from_tsv_into_json_tool
+Convert: TSV text into a JSON array of objects. Module `convert_from_tsv_into_json_tool`.
 
 - menu "Tools"
   - submenu "Convert"

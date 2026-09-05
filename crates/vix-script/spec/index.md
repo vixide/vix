@@ -1,7 +1,8 @@
 # Scripting
 
-Vix is compiled-in only today — every command is Rust shipped in the binary.
-`vix-script` is the escape hatch: a user (or a project) can drop a small
+Rhai-based user scripting: load, sandbox, and run scripts against the active
+buffer. Vix is compiled-in only today — every command is Rust shipped in the
+binary. `vix-script` is the escape hatch: a user (or a project) can drop a small
 [Rhai](https://rhai.rs/) script on disk and get a new palette command, a new
 keybinding, or a one-off buffer transform, without a rebuild.
 

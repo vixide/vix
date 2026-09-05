@@ -1,6 +1,6 @@
 # Convert from CSV into JSON tool
 
-Module convert_from_csv_into_json_tool.
+Convert: CSV text into a JSON array of objects. Module `convert_from_csv_into_json_tool`.
 
 - menu "Tools"
   - submenu "Convert"

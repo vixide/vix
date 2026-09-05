@@ -1,6 +1,6 @@
 # Calculator
 
-Calculator tool
+Evaluate a typed formula, plus the Calculator dialog's editing state.
 
 In menu "Tools", add menuitem "Calculator...".
 

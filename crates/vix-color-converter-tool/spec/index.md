@@ -1,6 +1,6 @@
 # Color converter
 
-Module color_converter_tool
+Parse and convert colors between HEX, RGB, and HSL. Module `color_converter_tool`.
 
 In menu "Tools", add menuitem "Color Converter..."
 

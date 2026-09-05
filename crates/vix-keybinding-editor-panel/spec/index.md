@@ -1,11 +1,11 @@
 # Keybinding Editor
 
-**Status:** In progress (improvement plan T204). This crate owns the data
-and table state for the editable keybinding overlay — **Vix →
-Keybindings…** — a sibling of the read-only `vix-keyboard-shortcut-panel`
-(`F1`) that adds rebind and reset. The host (`src/app.rs`/`src/ui.rs`)
-builds the rows and wires them to `vix-keybindings::user_bindings`; this
-crate holds no knowledge of either.
+**Status:** In progress (improvement plan T204). Data and table state for
+the keybinding editor overlay (rebind/reset): **Vix → Keybindings…**, a
+sibling of the read-only `vix-keyboard-shortcut-panel` (`F1`) that adds
+rebind and reset. The host (`src/app.rs`/`src/ui.rs`) builds the rows and
+wires them to `vix-keybindings::user_bindings`; this crate holds no
+knowledge of either.
 
 ## Contents
 

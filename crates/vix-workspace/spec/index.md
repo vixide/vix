@@ -1,5 +1,6 @@
 # Switch Project
 
+A workspace: a named set of project folders plus the files to reopen.
 **File → Switch Project…** (action `file.switch_project`, also in the command
 palette) re-roots the running editor at another recently-used workspace without
 relaunching.

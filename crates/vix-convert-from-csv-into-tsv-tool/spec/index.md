@@ -1,6 +1,6 @@
 # Convert from CSV into TSV
 
-Module convert_from_csv_into_tsv_tool
+Convert: CSV text into TSV. Module `convert_from_csv_into_tsv_tool`
 
 - menu "Tools"
   - submenu "Convert"

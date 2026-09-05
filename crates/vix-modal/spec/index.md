@@ -1,6 +1,8 @@
 # Modal editing (`vix-modal`)
 
-The Vi keymap's Normal mode is a **binding table**, not a modal engine: a
+A real modal-editing engine for the Vi/Spacemacs keymaps: modes, operator x
+motion composition, counts, registers, text objects, dot-repeat. The Vi
+keymap's Normal mode today is a **binding table**, not that engine: a
 flat `match` of hardcoded key sequences in the App shell, not composable
 motions an operator can apply to. `vix-modal` is the real engine — this
 spec is the T111 audit (what exists today, precisely, so "the gap is real"

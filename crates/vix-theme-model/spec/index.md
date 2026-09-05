@@ -1,6 +1,6 @@
 # Theme Model
 
-The Vix theme model.
+The Vix theme model: the JSON theme model, ratatui styles, and theme loading.
 
 Every theme is a JSON [`CustomTheme`] with per-region colors and font
 attributes (see `crates/vix-theme/spec/index.md`). There is always exactly one active theme;

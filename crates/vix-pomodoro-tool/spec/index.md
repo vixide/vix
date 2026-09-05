@@ -1,6 +1,7 @@
 # Pomodoro
 
-Module pomodoro_tool.
+A Pomodoro work/break countdown as a small state machine. The module is
+`pomodoro_tool`.
 
 In menu "Tools", add menuitem "Pomodoro...".
 

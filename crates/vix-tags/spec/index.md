@@ -1,6 +1,6 @@
 # Matching Tag
 
-Navigation action `nav.matching_tag`.
+Matching HTML/XML tag navigation. Navigation action `nav.matching_tag`.
 
 Jump the cursor between an HTML/XML tag and its partner -- the closing tag for an opening one, or the opening tag for a closing one -- accounting for nested same-name tags. Self-closing and unmatched tags do nothing.
 

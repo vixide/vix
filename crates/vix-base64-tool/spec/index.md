@@ -1,6 +1,6 @@
 # Base64
 
-Module base64_tool.
+Base64 encode and decode (Tools → Convert → Base64). Module `base64_tool`.
 
 - menu "Tools"
   - submenu "Convert"

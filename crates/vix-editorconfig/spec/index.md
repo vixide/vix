@@ -1,6 +1,7 @@
 # EditorConfig
 
-Vix applies [EditorConfig](https://editorconfig.org/) rules per opened file,
+Minimal EditorConfig support: resolve the indent settings for a file. Vix
+applies [EditorConfig](https://editorconfig.org/) rules per opened file,
 overriding the global indent and on-save settings. Controlled by the
 `editorconfig` setting (default `true`).
 

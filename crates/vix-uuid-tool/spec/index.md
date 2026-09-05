@@ -1,6 +1,6 @@
 # Tools: Insert: UUID
 
-Module uuid_tool.
+Generate UUIDs of every version, v1 through v8. This is module `uuid_tool`.
 
 - menu "Tools"
   - submenu "Insert"

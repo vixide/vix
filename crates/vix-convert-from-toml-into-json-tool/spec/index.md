@@ -1,6 +1,6 @@
 # Convert from TOML into JSON tool
 
-Module convert_from_toml_into_json_tool.
+Convert: TOML into JSON. Module `convert_from_toml_into_json_tool`.
 
 - menu "Tools"
   - submenu "Convert"

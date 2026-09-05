@@ -1,6 +1,6 @@
 # Convert from JSON into TSV tool
 
-Module convert_from_json_into_tsv_tool
+Convert: a JSON array of objects into TSV. Module `convert_from_json_into_tsv_tool`.
 
 - menu "Tools"
   - submenu "Convert"

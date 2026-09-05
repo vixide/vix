@@ -1,5 +1,7 @@
 # Command Palette
 
+Command palette (Ctrl+P) with prefix-driven modes.
+
 **Status:** Shipped — all six prefix modes, space-separated fuzzy matching, Tab
 to accept, `path:line[:col]` jumping, and the live cursor *preview* while typing
 a `:` line number (the cursor follows the number; `Esc` reverts).

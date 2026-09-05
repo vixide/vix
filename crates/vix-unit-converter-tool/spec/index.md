@@ -1,6 +1,7 @@
 # Unit Converter
 
-Module unit_converter_tool.
+Convert a number between physical units, plus the Unit Converter dialog's
+state. This is module `unit_converter_tool`.
 
 - menu "Tools"
   - submenu "Convert"

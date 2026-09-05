@@ -1,8 +1,9 @@
 # Session restore
 
-Vix remembers what you had open per workspace. When you relaunch in the same
-directory **with no file given on the command line**, it reopens the previous
-session: the open files, the focused tab, and each tab's cursor position.
+Per-workspace editor session, persisted with `confy`. Vix remembers what you
+had open per workspace. When you relaunch in the same directory **with no file
+given on the command line**, it reopens the previous session: the open files,
+the focused tab, and each tab's cursor position.
 
 ## Behavior
 

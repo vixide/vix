@@ -1,6 +1,6 @@
 # Convert Tabular
 
-Shared CSV/TSV/JSON conversion helpers for Vix's Tools → Convert tools.
+Shared CSV/TSV/JSON conversion helpers for the Tools → Convert tools.
 
 Tabular text comes in two delimited flavors — CSV (comma-separated, with
 RFC 4180 quoting) and TSV (tab-separated, no quoting) — and one structured
