@@ -875,15 +875,28 @@ non-temp files). Audit-shaped tasks here follow the same "audit first,
 file real findings as follow-ups" pattern as T111/T123, rather than
 presupposing a specific vulnerability exists.
 
-- [ ] **T131 — `SECURITY.md`.** Repo-root policy: supported versions,
-  how to privately report a vulnerability (a maintainer contact — see
-  `AI_STATEMENT.md`'s "Questions" section for the existing pattern — not
-  a public issue), expected response time, and what's explicitly
-  out-of-scope (e.g. the HTTP client's intentional no-SSRF-guard
-  design, already documented in memory but not publicly). Link from
-  `README.md`/`index.md` and `AGENTS.md`, alongside `AI_STATEMENT.md`.
-  GitHub surfaces a root `SECURITY.md` in its Security tab automatically;
-  no extra config needed there. GitLab/Codeberg mirror the file as-is.
+- [x] **T131 — `SECURITY.md`.** Done. New repo-root `SECURITY.md`:
+  supported versions (latest release only, no LTS/backports), how to
+  report privately (the same maintainer contact `AI_STATEMENT.md`'s
+  "Questions" section already names — not a public issue; also points
+  at GitHub's private-vulnerability-reporting flow as an alternative),
+  what to expect (an acknowledgment within days, no formal SLA, priority
+  over other work, credit on disclosure), a pointer to the existing
+  `cargo-deny` supply-chain scan (`spec/ci/index.md`), what's
+  deliberately out of scope (the HTTP client's intentional no-SSRF-guard
+  design — a local dev tool, blocking loopback/private IPs would break
+  its main use — plus a second, less-obvious one pulled from the 2026-07
+  audit's own notes: `vix-db`'s streaming session could in principle
+  misattribute a result to the wrong in-flight request if its UI-level
+  serialization were ever bypassed; both previously only in memory, not
+  public), and a short note on the scripting sandbox (`vix-script` has no
+  file/network/process access by default — Rhai's stdlib exposes none).
+  Linked from `README.md`/`index.md` (a new "## Security" section
+  between License and AI Statement) and `AGENTS.md` (a line in
+  Governance, alongside the `AI_STATEMENT.md` pointer); `spec/ci/index.md`
+  gained a reciprocal pointer from its "Supply chain" section. GitHub
+  surfaces a root `SECURITY.md` in its Security tab automatically, no
+  extra config; GitLab/Codeberg mirror the file as-is.
 - [ ] **T132 — Script trust prompt.** `vix-script` currently auto-loads
   and runs every `.rhai` file under `<root>/.vix/scripts/` at startup
   with no confirmation — cloning an untrusted repo and opening it in Vix

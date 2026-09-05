@@ -211,6 +211,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a user override back to its default. New `vix-keybinding-editor-panel`
   crate; `vix_keybindings::user_bindings::remove` (the reset primitive,
   alongside the existing `load`/`upsert`).
+- **`SECURITY.md`** (improvement plan T131): how to report a vulnerability
+  privately, supported-version policy, and what's deliberately out of
+  scope (the HTTP client's intentional no-SSRF-guard design, and a known
+  `vix-db` streaming-session edge case) — previously only in internal
+  notes, now public. Linked from `README.md`/`index.md` and `AGENTS.md`.
 
 ### Changed
 

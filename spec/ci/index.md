@@ -145,6 +145,10 @@ codeberg.org/vixide/vix. Without it, the workflow files are inert.
 
 ## Supply chain
 
+See [`SECURITY.md`](../../SECURITY.md) for how to report a vulnerability
+privately, supported-version policy, and what's deliberately out of
+scope. This section covers only the automated supply-chain scan.
+
 `cargo deny --workspace --all-features check` enforces [`deny.toml`](../../deny.toml)
 on every push and pull request, and weekly on all three forges: RUSTSEC
 advisories, an allow-list of licenses, wildcard/duplicate bans, and registry
