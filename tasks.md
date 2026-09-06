@@ -1436,6 +1436,26 @@ and its own gate run, zero intended behavior change unless stated.
   green (221 result lines matching baseline exactly); snapshots 12/12
   re-verified directly (including `git_panel_with_changes`, the case
   most likely touched by this move); full `scripts/check` clean.
+  **Slice 6 (menu bar) done 2026-09-06.** Moved 8 functions —
+  `draw_menu_bar`, `item_right`, `dropdown_width`, `render_dropdown`,
+  `draw_menu_dropdown`, `menu_row_y`, `menu_tooltip_target`,
+  `draw_menu_tooltip` — into `src/ui/menu_bar.rs`: the top menu bar, up
+  to three nested dropdown levels, and the help tooltip. A genuinely
+  new case: `dock_toggle_cols`/`menu_dropdown_rect`/`dropdown_scroll`
+  sit in the same source range but stayed in `ui.rs` — `App`'s
+  mouse-click handling reaches them via the truly-public path
+  `crate::ui::dock_toggle_cols`/`crate::ui::dropdown_scroll` (`ui` is a
+  `pub mod` at the crate root), which moving them would have broken.
+  First build caught 2 real gaps: `dropdown_width` has a second caller
+  in `ui.rs`'s own `menu_dropdown_rect` (needed `pub(super)` + a
+  re-import), and `draw_menu_tooltip` turned out to have zero external
+  callers once its only caller (`draw_menu_dropdown`) moved with it —
+  should have stayed private, not `pub(super)`. Fixed by reading the
+  compiler's actual errors, not by assuming the first pass was
+  complete. `cargo build --all-targets` clean after the fix; `cargo
+  test --workspace` green (221 lines matching baseline); snapshots
+  12/12 re-verified directly (including `file_menu_open`, the case
+  this slice touches); full `scripts/check` clean.
 - [x] **T143 — Split `tests/integration.rs`.** Done. The file had grown to
   9,427 lines / 481 top-level items (462 `#[test]` fns + 19 shared helpers)
   by the time this ran. Moved to `tests/integration/main.rs` (crate doc +
