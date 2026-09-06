@@ -1364,6 +1364,18 @@ and its own gate run, zero intended behavior change unless stated.
   green, snapshot tests (`tests/snapshots.rs`, 12/12) re-verified
   directly since a rendering-path change deserves that scrutiny beyond
   the aggregate pass count. Pattern validated end-to-end.
+  **Slice 2 (picker panels) done 2026-09-06.** Moved `draw_nerd_palette`
+  and `draw_ascii_panel` (one contiguous pair) plus `draw_qrcode`,
+  `draw_x11_panel`, and `draw_media_type_panel` (a second contiguous
+  trio elsewhere in the file) — 5 functions across two non-contiguous
+  ranges, bundled into one `src/ui/picker_panels.rs` for symmetry with
+  the app-side `src/app/picker_panels.rs` state module from T141 slice
+  11. Needed `use super::{NERD_CELL_W, draw_scrollbar, trunc};` plus the
+  same `App`/`theme`/ratatui imports as slice 1. Functions made
+  `pub(super)`; `ui.rs` gets `mod picker_panels; use picker_panels::{...};`,
+  call sites unchanged. Full workspace `cargo test` green (lib 86,
+  integration 451, snapshots 12/12 re-verified directly by name), full
+  `scripts/check` clean.
 - [x] **T143 — Split `tests/integration.rs`.** Done. The file had grown to
   9,427 lines / 481 top-level items (462 `#[test]` fns + 19 shared helpers)
   by the time this ran. Moved to `tests/integration/main.rs` (crate doc +
