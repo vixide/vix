@@ -1230,8 +1230,25 @@ and its own gate run, zero intended behavior change unless stated.
   Full workspace `cargo test` green throughout, matching baseline
   exactly. **This closes out "org"** — roam (slice 7), table/column-view
   (slice 8), and core (this slice) between them cover the whole area.
-  **Remaining slices (tools, then the `run_action` split) are separate
-  future tasks.** Dropped
+  **Slice 10 (tools: insert snippets + converters) done 2026-09-06** —
+  the first "tools" sub-slice. Clean contiguous block: `insert_content`
+  through `regex_tester_key` — Markdown/HTML/SQL/LaTeX/Org snippets,
+  inline markers/blocks, dynamic UUID/ZID/date-time insertion, plus the
+  color/unit converters, calculator, and regex tester (all share the
+  "open an input overlay, insert its result" shape). Moved into new
+  `src/app/insert_tools.rs`, excluding two interlopers in the middle
+  (`surround`/`toggle_wrap` — general editing operations, not
+  tools-menu snippets). Needed `use super::{App, SQL_CREATE_EXTENSION,
+  SQL_CREATE_TABLE};` plus crossterm `KeyCode`/`KeyEvent`, and
+  `pub(super) fn` on 19 of the 21 methods. One real surprise: the
+  module-level `Focus` import came back genuinely unused — `calculator_key`
+  has its own `use crate::calculator_tool::Focus;` shadowing the
+  app-shell `Focus` within that one function, caught by the compiler's
+  own unused-import warning rather than missed silently. Full workspace
+  `cargo test` green throughout, matching baseline exactly.
+  **Remaining slices (more of tools — picker panels, media/file-info
+  panels, snippets — then the `run_action` split) are separate future
+  tasks.** Dropped
   "prompts/dialogs" as its own slice after surveying it: `PromptKind`'s
   accept-handlers (`accept_org_prompt`, `accept_debug_prompt`,
   `accept_file_prompt`, `accept_goto_number`, …) aren't one coherent
