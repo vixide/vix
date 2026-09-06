@@ -1395,6 +1395,30 @@ and its own gate run, zero intended behavior change unless stated.
   progressing), snapshots 12/12 re-verified directly by name, full
   `scripts/check` clean (clippy pedantic alone took ~21 minutes this
   run — its own full recompile, not a regression).
+  **Slice 4 (edit surfaces) done 2026-09-06.** Moved the structured-
+  editing overlay family — 6 table-drawing helpers (`fit`,
+  `column_widths`, `first_visible_col`, `visible_cols`,
+  `table_row_line`, `table_status_line`) plus `draw_edit_table`, the
+  Column View helpers plus `draw_column_view`, `outline_line` plus
+  `draw_edit_sql`/`draw_edit_outline`, `value_line` plus
+  `draw_edit_value`, `bytes_line` plus `draw_edit_bytes`,
+  `draw_html_panel`, and `draw_outline` (21 functions, fully
+  contiguous) — into `src/ui/edit_surfaces.rs`: the CSV/TSV table
+  editor, Org Column View, SQL snippet library, prose outline editor,
+  structured-value (JSON/YAML) editor, byte (hex) editor, HTML
+  character picker, and the document-outline panel. First pass missed
+  the 6 table-drawing helpers (they sit immediately before
+  `draw_edit_table` and are used only by it) — caught because they'd
+  have gone unused in `ui.rs` after the move; restored `ui.rs` and
+  reran the extraction with the corrected, still fully-contiguous
+  range, per the established "fix the TARGETS list and rerun, don't
+  hand-patch" recovery. The 8 top-level `draw_*` functions each have
+  exactly one other call site (`draw_overlays_aux`'s dispatcher) and
+  got `pub(super)`; the 13 helpers are used only within the new module
+  and stayed private. `cargo build --all-targets` clean on the first
+  attempt after the fix; `cargo test --workspace` green (221 result
+  lines, 0 failures); snapshots 12/12 re-verified directly; full
+  `scripts/check` clean.
 - [x] **T143 — Split `tests/integration.rs`.** Done. The file had grown to
   9,427 lines / 481 top-level items (462 `#[test]` fns + 19 shared helpers)
   by the time this ran. Moved to `tests/integration/main.rs` (crate doc +
