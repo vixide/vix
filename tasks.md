@@ -1075,9 +1075,37 @@ and its own gate run, zero intended behavior change unless stated.
   build-fix rounds needed this time despite the non-contiguous, larger
   extraction, versus slice 1's several. Full workspace `cargo test` green
   throughout, exactly matching the pre-move baseline.
-  **Remaining slices (org, lsp/dap, palette, prompts/dialogs, scripts,
-  tools, session/settings, then the `run_action` split) are separate
-  future tasks, not attempted yet.**
+  **Slice 3 (scripts) done 2026-09-06**: ~20 methods, non-contiguous
+  again — scattered across the file, interleaved this time with T204's
+  keybinding-editor code (`open_keybinding_editor`,
+  `build_keybinding_rows`, `keybinding_editor_key`, …), which stayed in
+  `app.rs` (not one of this epic's named slices). Moved into new
+  `src/app/scripts.rs` via the same cherry-pick-by-name script:
+  `load_scripts`/`reload_scripts`, the whole script-trust prompt flow
+  (T132: `project_scripts_trusted`, `maybe_prompt_script_trust`,
+  `maybe_reprompt_script_trust`, `queue_script_trust_prompt_if_any`,
+  `accept_script_trust`, `decline_script_trust`, `set_scripts_trusted`,
+  `script_trust_key`), the script chooser and its run/invoke/host-state
+  plumbing, and `script_palette_entries` (the command palette's `!`
+  script-search mode). Needed `use super::{App, PendingScriptPrompt,
+  Prompt, PromptKind, ScriptChooser, ScriptTrustPrompt,
+  script_current_line_text};` + direct `use crate::palette::{self,
+  Action as PAction, Entry}; use crate::settings::Settings;`, and
+  `pub(super) fn` on 8 methods (`reload_scripts`/`script_trust_key`/
+  `open_script_chooser`/`script_chooser_key`/`script_chooser_mouse`/
+  `run_script_command`/`accept_script_prompt`/`script_palette_entries`)
+  called from `app.rs`'s remaining `run_action`/`accept_prompt` or from
+  `src/app/keymap.rs`. Full workspace `cargo test` green throughout,
+  matching baseline exactly.
+  **Remaining slices (org, lsp/dap, palette, tools, session/settings,
+  then the `run_action` split) are separate future tasks.** Dropped
+  "prompts/dialogs" as its own slice after surveying it: `PromptKind`'s
+  accept-handlers (`accept_org_prompt`, `accept_debug_prompt`,
+  `accept_file_prompt`, `accept_goto_number`, …) aren't one coherent
+  area — each belongs with its own feature and should move alongside it
+  (org's prompt handlers with the org slice, debug's with lsp/dap, …),
+  not into a cross-cutting "prompts" module that would just recreate the
+  same scattering this epic is trying to remove.
 - [ ] **T142 — Same for `src/ui.rs`.** 7,109 lines; 3 of the workspace's
   4 `too_many_lines` allows are here (`draw_ai_diff`, `draw_terminal`,
   `draw_search` — the 4th is `app.rs`'s `draw_insert`). Move each
