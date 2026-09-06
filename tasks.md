@@ -1187,9 +1187,22 @@ and its own gate run, zero intended behavior change unless stated.
   `roam_write_and_open`/`roam_visit_or_create`/`roam_insert_link`/
   `node_insert_transclusion`/`roam_daily_capture`/`roam_open_daily`/
   `roam_rewrite_active`). Full workspace `cargo test` green throughout.
-  **Remaining slices (the rest of org — table/column-view, agenda,
-  capture, core headline/TODO/checkbox — plus tools, then the
-  `run_action` split) are separate future tasks.** Dropped
+  **Slice 8 (org table + column view) done 2026-09-06**: two clean
+  contiguous clusters bundled together (Column View renders interactive
+  `TBLFM` tables) — `org_table_cursor_pos` through `org_table_action`
+  (~20 methods incl. a `format_table_number` helper) and
+  `open_column_view` through `org_columns_update_all_dblocks` (~7
+  methods). Moved into new `src/app/org_table.rs`, deliberately *not*
+  named `column_view` — `app.rs` already has an unrelated top-level
+  `crate::column_view` module (a different, crate-root module, always
+  referenced fully qualified there, so no hard collision, but reusing
+  the name would leave two same-named modules confusingly coexisting at
+  different levels of the tree). Needed `use super::{App, Focus, Prompt,
+  PromptKind};` plus crossterm `KeyCode`/`KeyEvent`, and `pub(super) fn`
+  on 15 of the 28 methods. Full workspace `cargo test` green throughout.
+  **Remaining slices (the rest of org — agenda, capture, core
+  headline/TODO/checkbox — plus tools, then the `run_action` split) are
+  separate future tasks.** Dropped
   "prompts/dialogs" as its own slice after surveying it: `PromptKind`'s
   accept-handlers (`accept_org_prompt`, `accept_debug_prompt`,
   `accept_file_prompt`, `accept_goto_number`, …) aren't one coherent
