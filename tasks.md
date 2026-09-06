@@ -998,20 +998,52 @@ allows in 61k lines of crate code — so the debt is **structural**
 sloppiness. Tasks are ordered roughly by payoff; each is its own branch
 and its own gate run, zero intended behavior change unless stated.
 
-- [ ] **T141 — Carve up `src/app.rs`.** 22,449 lines, 808 `fn`s, 767
-  string-literal match arms; `AGENTS.md`/`CLAUDE.md` describe "a thin
-  App shell over ~105 focused crates" and this file is the opposite.
+- [ ] **T141 — Carve up `src/app.rs`.** In progress: slice 1 of many
+  (see below). Originally 22,449 lines, 808 `fn`s, 767 string-literal
+  match arms (grown to 23,058 lines/481 `#[test]`s-worth of scaffolding
+  by the time T143 ran); `AGENTS.md`/`CLAUDE.md` describe "a thin App
+  shell over ~105 focused crates" and this file is the opposite.
   Staged, not one rewrite: (a) move `impl App` blocks into
   `src/app/<feature>.rs` submodules by feature — keymap dispatch (the
   ten `*_key`/`*_token` fns, `on_key`), org, git, lsp/dap, palette,
   prompts/dialogs, scripts, tools, session/settings — pure moves, one
-  module per branch, the 432-test suite green after each; (b) split
+  module per branch, the test suite green after each; (b) split
   `run_action`'s giant `match` into per-namespace dispatchers
   (`run_file_action`, `run_view_action`, …) chained the way
   `run_vim_action`/`run_edit_action` already are — "one action id, one
-  arm" still holds, the arm just lives next to its feature. Do T143
-  first so reviews of each slice aren't buried in an 8.8k-line test
-  file's diff noise.
+  arm" still holds, the arm just lives next to its feature. T143 (done
+  first, as planned) is what made each slice's diff reviewable at all.
+  **Slice 1 (keymap dispatch) done 2026-09-06**: moved `on_key`, the
+  modal-overlay routing chain (`try_overlay_key`/`try_panel_key`/
+  `try_tool_dialog_key`/`overlay_capturing_keys`/`calendar_key`),
+  `on_paste`, `command_as_control`, the ten keymap-style dispatchers and
+  their `*_token` helpers, and the keymap-display helpers
+  (`active_keymap`/`mode_indicator`/`which_key`/`ctrl`/`alt`/`shift`)
+  into new `src/app/keymap.rs` (~1490 lines) as its own `impl App`
+  block — a plain `mod keymap;` in `app.rs`, no directory restructure
+  needed. Every other feature's own `_key` handler (`git_panel_key`,
+  `db_key`, …) stayed in `app.rs` and is called from `keymap.rs` exactly
+  as before; an inherent `impl App` block can live in any module of the
+  crate, so where a method is *defined* never has to move in lockstep
+  with everything it calls. Needed: `use super::{App, Focus, Keymap,
+  display_key, menu_index_for_alt};` (two free functions still in
+  `app.rs`, referenced unqualified); `pub(super) fn` on 13 methods
+  (`ctrl`/`alt`/`shift`/`spacemacs_leader_bindings`/
+  `toggle_focus_explorer_editor`/`editor_motion`/`run_vim_action`/
+  `command_as_control`/`emacs_c_chord_key`/`emacs_c_x_chord_key`/
+  `emacs_c_p_chord_key`/`emacs_c_p_c_chord_key`/`emacs_c_p_c_m_chord_key`)
+  called from `app.rs`'s own production code or its `#[cfg(test)]` unit
+  tests; and a `#[cfg(test)] use crossterm::event::KeyModifiers;` in
+  `app.rs` (its only remaining use of that type once the dispatch code
+  needing it crate-wide moved out). The last two rounds only surfaced
+  under `cargo build --all-targets` — a narrower `cargo build --lib --bin
+  vix` compiles clean but never activates `#[cfg(test)]` code, silently
+  missing a whole class of error; always build/test the wider way when
+  moving code unit tests touch. Full workspace `cargo test` green
+  throughout, matching the pre-move baseline exactly (lib unit 86/0,
+  integration 451/0/11 ignored). **Remaining slices (org, git, lsp/dap,
+  palette, prompts/dialogs, scripts, tools, session/settings, then the
+  `run_action` split) are separate future tasks, not attempted yet.**
 - [ ] **T142 — Same for `src/ui.rs`.** 7,109 lines; 3 of the workspace's
   4 `too_many_lines` allows are here (`draw_ai_diff`, `draw_terminal`,
   `draw_search` — the 4th is `app.rs`'s `draw_insert`). Move each
