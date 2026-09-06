@@ -1327,12 +1327,22 @@ and its own gate run, zero intended behavior change unless stated.
   whole class of `#[cfg(test)]`-only errors); and never trusting a gate
   result piped through `tail`/`head` (it silently reports the pipe's
   own exit code, not the command's).
-- [ ] **T142 — Same for `src/ui.rs`.** 7,109 lines; 3 of the workspace's
-  4 `too_many_lines` allows are here (`draw_ai_diff`, `draw_terminal`,
-  `draw_search` — the 4th is `app.rs`'s `draw_insert`). Move each
-  overlay/panel's `draw_*` next to its state (into the owning crate
-  where one exists, else `src/ui/<feature>.rs`), and split the three
-  100+-line drawers so the allows come out.
+- [ ] **T142 — Same for `src/ui.rs`.** 7,293 lines (112 `draw_*`
+  functions), 3 of the workspace's 4 `too_many_lines` allows are here
+  (`draw_ai_diff`, `draw_terminal`, `draw_search` — the 4th is
+  `app.rs`'s `draw_insert`). **Revised 2026-09-06** (after T141 landed
+  and this task's original wording — "move each `draw_*` next to its
+  state, into the owning crate where one exists" — turned out to
+  directly contradict `AGENTS.md`'s own non-negotiable hard rule,
+  "Rendering lives only in `src/ui.rs`", which several panel crates'
+  own doc comments independently restate, e.g. `vix-clock-panel`: "pure
+  logic... does no rendering, so the host draws it and the logic stays
+  unit-testable without a terminal." Checked with the user rather than
+  picking a side: **the hard rule stays, this task's wording changes**):
+  move each overlay/panel's `draw_*` into `src/ui/<feature>.rs`
+  submodules — same crate, same pattern T141 used for `src/app.rs`,
+  never into a panel's own crate — and split the three 100+-line
+  drawers so the `too_many_lines` allows come out.
 - [x] **T143 — Split `tests/integration.rs`.** Done. The file had grown to
   9,427 lines / 481 top-level items (462 `#[test]` fns + 19 shared helpers)
   by the time this ran. Moved to `tests/integration/main.rs` (crate doc +
