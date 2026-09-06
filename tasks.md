@@ -1041,9 +1041,43 @@ and its own gate run, zero intended behavior change unless stated.
   missing a whole class of error; always build/test the wider way when
   moving code unit tests touch. Full workspace `cargo test` green
   throughout, matching the pre-move baseline exactly (lib unit 86/0,
-  integration 451/0/11 ignored). **Remaining slices (org, git, lsp/dap,
-  palette, prompts/dialogs, scripts, tools, session/settings, then the
-  `run_action` split) are separate future tasks, not attempted yet.**
+  integration 451/0/11 ignored).
+  **Slice 2 (git/jj — version control) done 2026-09-06**: unlike slice 1,
+  these ~59 methods were *not* one contiguous block — scattered across
+  ~1500 lines, interleaved with the debugger, spellcheck, and
+  context-menu code that stayed behind. Moved via a small Python script
+  (find every method's exact span by name — a method's own closing brace
+  is the next `    }` line, since rustfmt always aligns a block's closer
+  with the line that opened it and nothing nested inside a method body
+  can produce a bare 4-space-indented `    }` of its own — then delete
+  bottom-up so earlier deletions never shift a not-yet-processed range's
+  line numbers) into new `src/app/git.rs`: `run_git_action` (the
+  `run_action` git-namespace dispatcher), the Git status/gutter/hunk/
+  diff/conflict-resolution plumbing, the Git panel and its commands
+  (stage/commit/branch/log/clone/blame/grep/remote), the branch chooser,
+  the generic diff view, and a full sibling Jujutsu (`jj_*`) dispatcher —
+  grouped in with git as "version control" since there was nowhere else
+  sensible for it to live. Needed `use super::{App, BranchChooser,
+  DiffViewState, GitPanel, Prompt, PromptKind, gutter_hex,
+  rect_contains};` + `use crate::editor::Tab;` (free functions/types
+  still in `app.rs`), and `pub(super) fn` on 15 methods (`run_git_action`/
+  `accept_jj_prompt`/`diff_goto`/`git_panel_key`/`git_panel_mouse`/
+  `git_commit`/`git_create_branch`/`git_clone`/`git_edit_description`/
+  `git_delete_branch`/`git_grep`/`branch_key`/`branch_mouse`/
+  `open_diff_with`/`diff_view_key`) called from `app.rs`'s remaining code
+  or from `src/app/keymap.rs` — a *sibling* module, not a parent, but
+  `pub(super)` still reaches it: visibility granted at the parent `app`
+  extends to every descendant of `app`, `keymap` included. **Found, not
+  fixed**: `run_git_action`'s match also dispatches the unrelated `run.*`
+  debugger actions (a pre-existing naming/scope mismatch predating this
+  move, out of scope for a pure relocation). Applying slice 1's
+  `--all-targets`-from-the-start lesson paid off immediately — only 2
+  build-fix rounds needed this time despite the non-contiguous, larger
+  extraction, versus slice 1's several. Full workspace `cargo test` green
+  throughout, exactly matching the pre-move baseline.
+  **Remaining slices (org, lsp/dap, palette, prompts/dialogs, scripts,
+  tools, session/settings, then the `run_action` split) are separate
+  future tasks, not attempted yet.**
 - [ ] **T142 — Same for `src/ui.rs`.** 7,109 lines; 3 of the workspace's
   4 `too_many_lines` allows are here (`draw_ai_diff`, `draw_terminal`,
   `draw_search` — the 4th is `app.rs`'s `draw_insert`). Move each
