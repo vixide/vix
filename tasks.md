@@ -1246,9 +1246,19 @@ and its own gate run, zero intended behavior change unless stated.
   app-shell `Focus` within that one function, caught by the compiler's
   own unused-import warning rather than missed silently. Full workspace
   `cargo test` green throughout, matching baseline exactly.
-  **Remaining slices (more of tools — picker panels, media/file-info
-  panels, snippets — then the `run_action` split) are separate future
-  tasks.** Dropped
+  **Slice 11 (tools: picker panels) done 2026-09-06** — the small
+  glyph/color/type picker panels: Nerd Font character picker, ASCII-art
+  character picker, X11 color picker, media type catalog, and the QR
+  code generator (each an "open, arrow/click to select, insert"
+  overlay). 17 methods, moved into new `src/app/picker_panels.rs`.
+  `active_media_type` sits right next to this cluster by line number
+  but stayed in `app.rs` — it's the snippet library's own media-type
+  detection, not part of the media-type *panel*, despite the similar
+  name. Needed `use super::{App, AsciiPanel, NerdPalette, X11Panel,
+  rect_contains};` plus crossterm mouse/key types, and `pub(super) fn`
+  on 13 of the 17 methods. Full workspace `cargo test` green throughout.
+  **Remaining slices (more of tools — snippets are next, then the
+  `run_action` split) are separate future tasks.** Dropped
   "prompts/dialogs" as its own slice after surveying it: `PromptKind`'s
   accept-handlers (`accept_org_prompt`, `accept_debug_prompt`,
   `accept_file_prompt`, `accept_goto_number`, …) aren't one coherent
