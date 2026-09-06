@@ -1257,8 +1257,22 @@ and its own gate run, zero intended behavior change unless stated.
   name. Needed `use super::{App, AsciiPanel, NerdPalette, X11Panel,
   rect_contains};` plus crossterm mouse/key types, and `pub(super) fn`
   on 13 of the 17 methods. Full workspace `cargo test` green throughout.
-  **Remaining slices (more of tools — snippets are next, then the
-  `run_action` split) are separate future tasks.** Dropped
+  **Slice 12 (tools: info panels) done 2026-09-06 — the last "tools"
+  sub-slice.** Another large genuinely contiguous block like org core
+  (~32 methods, no cherry-picking needed): the Contacts vCard view,
+  file-info and text-info panels, Markdown preview, the Snippets
+  picker (with its tabstop-expansion session and the active buffer's
+  media-type-scoped library), and the System Info panel. Moved into
+  new `src/app/info_panels.rs`. Needed `use super::{App, ContactPanel,
+  FileInfoPanel, MarkdownPreview, SnippetSession, SystemInfoPanel,
+  TextInfoPanel, VcardPanel, rect_contains}; use crate::editor::Tab;`
+  plus crossterm key/mouse types, and `pub(super) fn` on 21 of the 32
+  methods. Full workspace `cargo test` green throughout. **This closes
+  out "tools" entirely** — `insert_tools` (slice 10), `picker_panels`
+  (slice 11), and `info_panels` (this slice) between them cover the
+  whole area, same as roam/table-view/core did for "org".
+  **The only remaining piece of T141 is the `run_action` match split.**
+  Dropped
   "prompts/dialogs" as its own slice after surveying it: `PromptKind`'s
   accept-handlers (`accept_org_prompt`, `accept_debug_prompt`,
   `accept_file_prompt`, `accept_goto_number`, …) aren't one coherent
