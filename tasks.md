@@ -1376,6 +1376,25 @@ and its own gate run, zero intended behavior change unless stated.
   call sites unchanged. Full workspace `cargo test` green (lib 86,
   integration 451, snapshots 12/12 re-verified directly by name), full
   `scripts/check` clean.
+  **Slice 3 (DB workbench) done 2026-09-06** — the largest T142 slice so
+  far, ~800 lines. Moved the full DB overlay cluster — `draw_db` through
+  `db_result_rows` (21 functions: connections list, add/edit form,
+  password/save/ask/params prompts, cell/log/ERD/export views, and the
+  three-pane workbench itself — schema tree, SQL editor with
+  autocomplete popup, results grid) — into `src/ui/db.rs`, all fully
+  contiguous in the original file. Only `draw_db` is called from
+  `ui.rs` itself, so only it got `pub(super)`; the other 20 functions
+  are used solely within the new module and stayed private — a
+  different visibility shape than slices 1–2, where every moved
+  function was still called from `ui.rs`. Needed `use super::trunc;`
+  plus the same `App`/`theme`/ratatui imports as earlier slices. Full
+  workspace `cargo test` green (106+ crates, every suite and doctest,
+  confirmed via a real background-task block rather than assumed from a
+  redirected log — cargo's own stdout buffering makes a `tail` on a
+  redirected file look frozen mid-run even though the process is still
+  progressing), snapshots 12/12 re-verified directly by name, full
+  `scripts/check` clean (clippy pedantic alone took ~21 minutes this
+  run — its own full recompile, not a regression).
 - [x] **T143 — Split `tests/integration.rs`.** Done. The file had grown to
   9,427 lines / 481 top-level items (462 `#[test]` fns + 19 shared helpers)
   by the time this ran. Moved to `tests/integration/main.rs` (crate doc +
