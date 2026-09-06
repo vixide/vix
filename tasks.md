@@ -1144,8 +1144,35 @@ and its own gate run, zero intended behavior change unless stated.
   reference was already fully-qualified `crate::session::...`), so
   `mod session;` was safe with no rename needed, unlike slice 4. Full
   workspace `cargo test` green throughout, matching baseline exactly.
-  **Remaining slices (org, lsp/dap, tools, then the `run_action` split)
-  are separate future tasks.** Dropped
+  **Slice 6 (LSP + DAP) done 2026-09-06**: the largest and most
+  scattered slice yet — 32 methods, 49 errors on the first build
+  attempt (vs. single digits to ~20 for every prior slice), clean on
+  the second. Moved into new `src/app/lsp_dap.rs`, named `lsp_dap`
+  rather than a bare `lsp`/`dap` to stay unambiguous (no direct
+  collision found — `app.rs` only ever references `crate::lsp`/
+  `crate::dap` fully qualified or via function-body-local
+  `crate::lsp_core` imports — but a short generic name felt like
+  inviting a future one). What moved: inlay hints, document/selection-
+  range highlights, diagnostics, hover, completion (including two
+  non-LSP data sources that reuse the same completion popup — an
+  Org-roam `[[` node-title completer and an Org-contacts `mailto:`/link
+  completer), go-to-definition (`lsp_jump`), format-on-demand,
+  workspace edits, linked edit, signature help, and the whole DAP
+  debugger cluster (adapter lookup, breakpoints, start/stop, step
+  markers, `accept_debug_prompt`). `build_core` (constructs the LSP
+  client at startup) and `menu_hover` (an unrelated same-named function
+  — menu tooltips, not LSP hover) both deliberately stayed in `app.rs`.
+  Needed `use super::{App, CompletionPopup, Focus, Prompt, PromptKind,
+  apply_edits_to_text, char_to_lsp_pos, lsp_pos_to_char,
+  severity_color}; use crate::editor::SEARCH_MARK; use
+  crate::workspace_search::{Hit, WorkspaceSearch};` and `pub(super) fn`
+  on 27 of the 32 methods — nearly all of them, since diagnostics/hover/
+  completion/debugger events are wired from `App::on_key`,
+  `run_action`, and the LSP/DAP event-poll loops still in `app.rs`.
+  Full workspace `cargo test` green throughout, matching baseline
+  exactly.
+  **Remaining slices (the rest of org, tools, then the `run_action`
+  split) are separate future tasks.** Dropped
   "prompts/dialogs" as its own slice after surveying it: `PromptKind`'s
   accept-handlers (`accept_org_prompt`, `accept_debug_prompt`,
   `accept_file_prompt`, `accept_goto_number`, …) aren't one coherent
