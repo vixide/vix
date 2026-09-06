@@ -5,7 +5,7 @@ Vix IDE is a high-speed high-security text editor featuring an integrated develo
 Vix looks like this:
 
 ```txt
-Vix  File  Edit  View  Go  Run  AI  DB  Git  Org  Tools  Help
+Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  Tools  Help
 ╭─Explorer-──╮╭ main.rs ──────────────────╮╭Messages────────╮
 │ README.md  ││ 1  fn main() {            ││ Welcome to Vix │ 
 │ src        ││ 2      println!("hello"); ││ Ctrl+B toggles │
@@ -19,7 +19,7 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
 
 ## Features
 
-- **Menus** — Vix File Edit View Go Run AI DB Git Org Tools Help.
+- **Menus** — Vix File Edit View Go Run AI DB JJ Git Org Project Tools Help.
 - **Editor** - Tabs, Undo/Redo, tree-sitters, syntax highlighting, etc.
  **soft wrap**, **bracket matching**, absolute or **relative line numbers**,
   visible whitespace, **indent guides**, **rainbow brackets**, **sticky scroll**,
@@ -109,6 +109,15 @@ src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
   (select-all-occurrences), or a rectangular block (`Alt+Shift+↑/↓`).
 - **Git** — status / diff / blame, **stage / unstage / revert per hunk**, diff
   navigation, branch switch & merge, stash, amend, and a merge-conflict resolver.
+- **Jujutsu (JJ menu)** — a Git-compatible VCS: init/clone, status/diff/show,
+  log (summary / all / operation log), bookmarks (jj's named pointers), new /
+  describe / commit / edit, squash / abandon / restore / rebase, undo, and
+  `jj git push`/`fetch`.
+- **AI menu** — runs a configurable assistant CLI (`ai_command`, default
+  `claude -p "{prompt}"` — point it at Claude, Codex, Mistral, a local
+  `ollama` model, or any other CLI) on the selection or whole file: Summarize
+  / Explain / Define (open a new tab) and Annotate / Improve (replace the
+  text in place, undoable).
 - **Database workbench** (DB menu) — connect to SQLite / PostgreSQL / MySQL over
   embedded drivers (no client tools needed) and browse a schema tree, run
   queries in a syntax-highlighted editor with autocomplete, and read results in

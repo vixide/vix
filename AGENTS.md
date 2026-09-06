@@ -24,11 +24,15 @@ it privately, not as a public issue.
 Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust IDE"),
 built on `ratatui`. It is a **Cargo workspace** (edition 2024): a thin **App
 shell** (root package `vix`, `src/`) — CLI, event loop, `App` state, rendering,
-explorer — over **105 focused `vix-*` member crates** under `crates/`, including
+explorer — over **106 focused `vix-*` member crates** under `crates/`, including
 the custom editor widget `vix-editor-core`. `src/lib.rs` re-exports the member
 crates under short module names (`pub use vix_git as git;`), so `crate::git`,
-`crate::menu`, `crate::db` still name them. See
-[`docs/architecture/index.md`](docs/architecture/index.md).
+`crate::menu`, `crate::db` still name them. The App shell's two largest files
+are themselves split into submodules: `src/app.rs` delegates most of its logic
+to `src/app/*.rs` (`keymap.rs`, `git.rs`, `org.rs`, `lsp_dap.rs`, and others,
+one per feature area), and `src/ui.rs` delegates most of its drawing to
+`src/ui/*.rs` (`choosers.rs`, `db.rs`, `edit_surfaces.rs`, `menu_bar.rs`, and
+others). See [`docs/architecture/index.md`](docs/architecture/index.md).
 
 ## Source of truth
 
@@ -121,18 +125,18 @@ Every crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 
 | You want to…                         | Go to…                                                       |
 | ------------------------------------ | ------------------------------------------------------------ |
-| Add/route a command                  | `src/app.rs` (`run_action`), `crates/vix-menu/`, `crates/vix-palette/` |
-| Change rendering                     | `src/ui.rs`                                                  |
+| Add/route a command                  | `src/app.rs` (`run_action`, dispatching into `src/app/*.rs`), `crates/vix-menu/`, `crates/vix-palette/` |
+| Change rendering                     | `src/ui.rs`, usually via one of its `src/ui/*.rs` submodules |
 | Add/translate UI text                | `locales/app.yml` (+ `t!` at the call site)                  |
 | Add a setting                        | `crates/vix-settings/`                                       |
 | Change the editor widget             | `crates/vix-editor-core/` (engine reused; widget is Vix's)  |
 | Change soft-wrap / bracket rendering | `crates/vix-editor-core/src/wrap.rs`, `.../brackets.rs`     |
 | Change theme colors/model            | `crates/vix-theme/`, `crates/vix-theme-model/`             |
 | Change available UI languages        | `crates/vix-locale-model/`, `crates/vix-i18n/`             |
-| Change keyboard navigation styles    | `crates/vix-keymap-model/` + keymap dispatch in `src/app.rs` |
+| Change keyboard navigation styles    | `crates/vix-keymap-model/` + keymap dispatch in `src/app/keymap.rs` |
 | Change the calendar                  | `crates/vix-calendar-panel/`                               |
 | Change spell checking                | `crates/vix-spellcheck/` + wiring in `src/app.rs` / `src/ui.rs` |
-| Change git status/diff/staging       | `crates/vix-git/` + wiring in `src/app.rs` / `src/ui.rs`   |
+| Change git status/diff/staging       | `crates/vix-git/` + wiring in `src/app/git.rs` / `src/ui/choosers.rs` |
 | Change the find/replace engine       | `crates/vix-find-panel/` (matches/replace_all/unescape/PathFilter) |
 | Change LSP support                   | `crates/vix-lsp/` (host) + `crates/vix-lsp-core/` (protocol) |
 | Change the database workbench        | `crates/vix-db/` (module tree + `crates/vix-db/spec`)      |

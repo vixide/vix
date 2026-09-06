@@ -2,14 +2,18 @@
 
 The top menu bar groups every command into dropdown menus. From left to right
 the menus are
-**Vix™ · File · Edit · View · Go · Run · AI · DB · Git · Org · Tools · Help**.
+**Vix™ · File · Edit · View · Go · Run · AI · DB · JJ · Git · Org · Project ·
+Tools · Help**.
 
 ## Navigating the menus
 
 - Open the bar with **F10**, or jump straight to a menu with its Alt mnemonic:
   File **Alt+F**, Edit **Alt+E**, View **Alt+I**, Go **Alt+N**, Run **Alt+R**,
   AI **Alt+A**, DB **Alt+D**, Git **Alt+G**, Org **Alt+O**, Tools **Alt+T**,
-  Help **Alt+H**.
+  Help **Alt+H**. **JJ** and **Project** have no Alt mnemonic of their own —
+  `Alt+J` is already the recent-locations jump and `Alt+P` is already
+  find-selection-backward, so reach these two via **F10** plus the arrow keys,
+  or a mouse click.
 - **Arrows** navigate, **Enter** runs the highlighted item, **Esc** closes.
 - A mouse click on a menu name opens it; a click on a dropdown item runs it.
 - While a menu is open, moving the pointer follows the selection: hovering a
@@ -194,6 +198,31 @@ The database workbench (see [`../../crates/vix-db/spec/index.md`](../../crates/v
 default access, async/streamed execution, an AI SQL assistant, a query log, an
 ER diagram, CSV import, and more.
 
+## JJ menu
+
+Jujutsu (`jj`) — a Git-compatible VCS. Mirrors the Git menu's purpose using
+`jj` commands; output streams into the bottom dock.
+
+| Item          | Action                                                  |
+| ------------- | -------------------------------------------------------- |
+| Init          | `jj git init` (or plain `jj init`)                       |
+| Clone…        | Prompt for a URL and `jj git clone` it                    |
+| Bookmark ▸    | Submenu: Create… / Set… / Delete… / List (jj's named pointers, akin to git branches) |
+| Status        | `jj status`                                               |
+| Diff          | `jj diff`                                                 |
+| Show          | `jj show`                                                 |
+| Log ▸         | Submenu: Log / Log All / Op Log                           |
+| New           | `jj new` (start a new, empty change)                      |
+| Describe      | `jj describe` (edit the current change's description)     |
+| Commit        | `jj commit`                                                |
+| Edit          | `jj edit` (switch the working-copy commit)                 |
+| Squash        | `jj squash` (fold the current change into its parent)      |
+| Abandon       | `jj abandon`                                               |
+| Restore       | `jj restore`                                               |
+| Rebase        | `jj rebase`                                                |
+| Undo          | `jj undo` (undo the last `jj` operation)                    |
+| Git ▸         | Submenu: Push / Fetch (`jj git push` / `jj git fetch`)      |
+
 ## Git menu
 
 | Item           | Action                                                   |
@@ -226,6 +255,19 @@ Org-mode editing on the active buffer (see [`../../crates/vix-org/spec/index.md`
 Checkbox**, **Update Statistics**, **Clock In / Out**, **Agenda**, **Time
 Report**, **Roam ▸** (nodes / backlinks / dailies), **Node ▸**, **Contacts ▸**,
 and **Export ▸** (Markdown / HTML).
+
+## Project menu
+
+Project lifecycle commands (see [`../../crates/vix-tasks/spec/index.md`](../../crates/vix-tasks/spec/index.md)):
+**Configure** / **Compile** / **Test** / **Test At Point** / **Install** /
+**Package** / **Run** (each a Spacemacs-style `C-c p c …` chord — Configure
+`C-c p c o`, Compile `C-c p c c`, Test `C-c p c t`, Test At Point `C-c p c .`,
+Install `C-c p c i`, Package `C-c p c p`, Run `C-c p c r`), **Run Task…**
+(`C-c p c x`, discovered from the project's own build files) / **Repeat Last
+Task** (`C-c p c X`), a **Subproject ▸** submenu mirroring the same seven
+lifecycle commands plus **Find File** for a monorepo's nested projects
+(`C-c p c m …`), and **Discard Command Cache** (forget remembered task
+choices).
 
 ## Help menu
 
