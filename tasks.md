@@ -1200,9 +1200,38 @@ and its own gate run, zero intended behavior change unless stated.
   different levels of the tree). Needed `use super::{App, Focus, Prompt,
   PromptKind};` plus crossterm `KeyCode`/`KeyEvent`, and `pub(super) fn`
   on 15 of the 28 methods. Full workspace `cargo test` green throughout.
-  **Remaining slices (the rest of org — agenda, capture, core
-  headline/TODO/checkbox — plus tools, then the `run_action` split) are
-  separate future tasks.** Dropped
+  **Slice 9 (org core) done 2026-09-06 — the largest slice of the whole
+  epic, 83 methods/1656 lines.** Turned out to be one genuinely
+  contiguous block (unlike git/scripts/lsp_dap's scattering), closer in
+  shape to the keymap-dispatch slice despite the size: the `org.*`/
+  `org.edit.*` action dispatchers, headline/subtree editing (priority,
+  move, close-note, new heading, cut/copy/paste subtree, export),
+  refile, sparse trees, edit-src, footnotes, internal links (store/
+  insert/follow), archive, tags/properties, timestamps/planning
+  (SCHEDULED/DEADLINE), emphasis markup, capture end-to-end (chooser,
+  template fields, review, filing, clock), and the built-in agenda
+  (file scoping, view building, its own key handling). Moved into new
+  `src/app/org.rs`. Also fixed the slice-7 gap: `accept_roam_prompt`
+  moved here too (not to `roam.rs`) — despite its name it's really the
+  shared accept-handler for capture/roam/goto/workspace prompts, and
+  groups better next to its siblings `accept_org_prompt`/
+  `accept_org_agenda_prompt`. 7 generic editor transforms interleaved in
+  the original range (`new_scratch_buffer`, `rewrite_at_cursor`,
+  `bump_number`, `transpose`, `delete_unit`, `wrap_text`,
+  `smart_toggle`) aren't org-specific and stayed in `app.rs`. Needed
+  `use super::{AgendaKind, AgendaView, App, CaptureChooser, Focus,
+  PendingCapture, Prompt, PromptKind, RefileChooser, SrcEdit};` plus
+  crossterm/`std::path` types, and `pub(super) fn` on 16 methods —
+  clean in just 2 rounds despite the size (better than several smaller
+  slices). One clippy `doc_markdown` finding on the full-gate retry
+  (needed backticks around `` `git`/`scripts`/`lsp_dap` `` in the new
+  module's own doc comment) — a reminder that clippy pedantic only runs
+  inside the full `scripts/check`, not a bare `cargo build`/`cargo test`.
+  Full workspace `cargo test` green throughout, matching baseline
+  exactly. **This closes out "org"** — roam (slice 7), table/column-view
+  (slice 8), and core (this slice) between them cover the whole area.
+  **Remaining slices (tools, then the `run_action` split) are separate
+  future tasks.** Dropped
   "prompts/dialogs" as its own slice after surveying it: `PromptKind`'s
   accept-handlers (`accept_org_prompt`, `accept_debug_prompt`,
   `accept_file_prompt`, `accept_goto_number`, …) aren't one coherent
