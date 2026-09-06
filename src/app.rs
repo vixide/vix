@@ -2168,19 +2168,7 @@ impl App {
                     self.calendar.reset();
                 }
             }
-            "tools.nerd_palette" => self.open_nerd_palette(),
-            "tools.ascii" => self.open_ascii_panel(),
             a if self.open_edit_surface(a) => {}
-            "tools.qrcode" => self.open_qrcode(),
-            "tools.x11_colors" => self.open_x11_panel(),
-            "tools.media_types" => self.open_media_type_panel(),
-            "tools.html_chars" => self.open_html_panel(),
-            "tools.system_info" => self.open_system_info(),
-            "tools.file_info" => self.open_file_info(),
-            "tools.text_info" => self.open_text_info(),
-            "tools.markdown_preview" => self.open_markdown_preview(),
-            "tools.snippets" => self.open_snippets(),
-            "tools.contacts" => self.open_contacts(),
             "tools.clock" => {
                 self.show_clock = !self.show_clock;
                 if self.show_clock {
@@ -2190,11 +2178,7 @@ impl App {
             a if a.starts_with("view.time_zone:") => {
                 self.set_time_zone_by_name(&a["view.time_zone:".len()..]);
             }
-            "tools.dashboard" => self.open_dashboard(),
-            "tools.color_converter" => self.open_color_converter(),
-            "tools.calculator" => self.open_calculator(),
-            "tools.regex_tester" => self.open_regex_tester(),
-            "tools.pomodoro" => self.open_pomodoro(),
+            a if self.run_tools_action(a) => {}
             a if self.run_text_tool_action(a) => {}
             a if self.run_vim_action(a) => {}
             other if self.run_view_action(other) => {}
@@ -3854,7 +3838,7 @@ impl App {
 
     /// Open the Pomodoro dialog. Reveals an already-running timer if there is
     /// one; otherwise starts a fresh idle timer at the default 25 minutes.
-    fn open_pomodoro(&mut self) {
+    pub(super) fn open_pomodoro(&mut self) {
         if self.pomodoro.is_none() {
             self.pomodoro = Some(crate::pomodoro_tool::Timer::new());
             self.pomodoro_last_tick = None;
@@ -9091,7 +9075,7 @@ impl App {
 
     // ----- HTML character palette -----------------------------------------
 
-    fn open_html_panel(&mut self) {
+    pub(super) fn open_html_panel(&mut self) {
         self.html_panel = Some(HtmlPanel::open());
     }
 
@@ -9959,7 +9943,7 @@ impl App {
 
     /// Open the contact browser over the configured vCard directory (or the
     /// workspace root), parsing each `.vcf`'s display name.
-    fn open_contacts(&mut self) {
+    pub(super) fn open_contacts(&mut self) {
         let dir = if self.settings.contacts_dir.trim().is_empty() {
             self.root.clone()
         } else {
@@ -10009,7 +9993,7 @@ impl App {
 
     /// Open the Workspace Dashboard and kick off the background metric computations
     /// (disk usage via `du`, a recursive file count, and the git commit count).
-    fn open_dashboard(&mut self) {
+    pub(super) fn open_dashboard(&mut self) {
         // Idempotent while already open: re-invoking the action must not spawn
         // another batch of metric threads (and another `du` scan) on top of the
         // in-flight one. Reopening after a close (`dashboard_rx` cleared) does

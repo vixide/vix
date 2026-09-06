@@ -998,7 +998,7 @@ allows in 61k lines of crate code — so the debt is **structural**
 sloppiness. Tasks are ordered roughly by payoff; each is its own branch
 and its own gate run, zero intended behavior change unless stated.
 
-- [ ] **T141 — Carve up `src/app.rs`.** In progress: slice 1 of many
+- [x] **T141 — Carve up `src/app.rs`.** Done, all of it, in one session.
   (see below). Originally 22,449 lines, 808 `fn`s, 767 string-literal
   match arms (grown to 23,058 lines/481 `#[test]`s-worth of scaffolding
   by the time T143 ran); `AGENTS.md`/`CLAUDE.md` describe "a thin App
@@ -1280,6 +1280,53 @@ and its own gate run, zero intended behavior change unless stated.
   (org's prompt handlers with the org slice, debug's with lsp/dap, …),
   not into a cross-cutting "prompts" module that would just recreate the
   same scattering this epic is trying to remove.
+  **T141 is now fully complete — 12 slices plus the `run_action` split,
+  all in one session, `src/app.rs` down from 23,058 lines to 13,919
+  (~40% cut) into a thin(ner) shell plus 12 focused
+  `src/app/*.rs` submodules**: `keymap.rs` (on_key + the ten keymap
+  dispatchers), `git.rs` (git + jj version control), `scripts.rs`
+  (script loading/trust/chooser), `command_palette.rs` (the `Ctrl+P`
+  palette), `session.rs` (session/settings persistence),
+  `lsp_dap.rs` (LSP + DAP), `roam.rs` (Org-roam/node), `org_table.rs`
+  (org tables + Column View), `org.rs` (org core: headline/subtree,
+  refile, agenda, capture, links, tags, timestamps — the epic's
+  largest single file), `insert_tools.rs` (insert snippets +
+  converters + the final `run_tools_action` dispatcher),
+  `picker_panels.rs` (Nerd Font/ASCII/X11/media-type/QR pickers), and
+  `info_panels.rs` (vCard/file-info/text-info/Markdown-preview/
+  snippets/system-info). **Final piece (`run_action` split)**: most of
+  the per-namespace dispatching had already happened incrementally
+  across earlier (pre-this-session) tasks — `run_file_action`/
+  `run_edit_action`/`run_motion_action`/`run_text_tool_action`/
+  `run_vim_action`/`run_view_action`/`run_git_action`/
+  `run_project_action`/`run_named_action`/`go_action`/`contacts_action`
+  already existed — so only ~17 single-line `tools.*` "open this
+  overlay" arms remained undelegated; pulled into a new
+  `run_tools_action(&mut self, action: &str) -> bool` in
+  `insert_tools.rs`, chained as `a if self.run_tools_action(a) => {}`.
+  Bumped `open_html_panel`/`open_contacts`/`open_dashboard`/
+  `open_pomodoro` to `pub(super)` (now called cross-module). Genuinely
+  miscellaneous arms (`tools.calendar`/`tools.clock` toggles, the
+  `view.theme:`/`view.locale:`/`view.keymap:`/`view.time_zone:`/
+  `script:` prefix matches, `explorer.filter_include`/`_exclude`
+  prompts) stayed inline in `run_action` — they don't fit the "one
+  action id, one arm" delegation shape (prefix matches, or genuinely
+  one-off multi-statement toggles). Full workspace `cargo test` green
+  throughout every slice (lib unit 86/0, integration 451/0/11 ignored,
+  never once regressed), full `scripts/check` green on every merge.
+  Techniques established along the way, reusable for T142: a small
+  Python extractor script (`extract_app_module.py`) that exploits
+  rustfmt's guarantee that every top-level method's own closing brace
+  sits at the same indent as its `fn` line, for both contiguous ranges
+  and non-contiguous cherry-picks; checking a candidate module name for
+  collisions against `app.rs`'s existing `use crate::<name>` bindings
+  *before* generating any files (caught real collisions for
+  `command_palette` vs. `palette`, avoided for `org`/`session`/
+  `insert_tools` after checking); always building with
+  `cargo build --all-targets` (a narrower `--lib --bin` build misses a
+  whole class of `#[cfg(test)]`-only errors); and never trusting a gate
+  result piped through `tail`/`head` (it silently reports the pipe's
+  own exit code, not the command's).
 - [ ] **T142 — Same for `src/ui.rs`.** 7,109 lines; 3 of the workspace's
   4 `too_many_lines` allows are here (`draw_ai_diff`, `draw_terminal`,
   `draw_search` — the 4th is `app.rs`'s `draw_insert`). Move each
