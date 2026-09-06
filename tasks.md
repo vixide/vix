@@ -1419,6 +1419,23 @@ and its own gate run, zero intended behavior change unless stated.
   attempt after the fix; `cargo test --workspace` green (221 result
   lines, 0 failures); snapshots 12/12 re-verified directly; full
   `scripts/check` clean.
+  **Slice 5 (choosers) done 2026-09-06.** Moved 15 fully-contiguous
+  functions — the branch/workspace/macro/clipboard/task/script/
+  location/capture/refile list choosers (all built on the shared
+  `draw_list_chooser`), the diff viewer, the Git status panel, the
+  right-click context menu, and the spell-check suggestion popup —
+  into `src/ui/choosers.rs`. 14 of the 15 have exactly one other call
+  site (`draw_overlays_aux`/`draw_chooser_overlays`) and got
+  `pub(super)`; `draw_list_chooser` is used only by 9 siblings within
+  the new module and stayed private. Two shared helpers
+  (`git_change_color`, `unix_secs_label`) have OTHER callers still in
+  `ui.rs` (`explorer_rows`, `file_browser_row`) so they stayed put —
+  the new module reaches them via `use super::{...}`, same asymmetry
+  pattern as `trunc`/`draw_scrollbar` in earlier slices. `cargo build
+  --all-targets` clean on the first attempt; `cargo test --workspace`
+  green (221 result lines matching baseline exactly); snapshots 12/12
+  re-verified directly (including `git_panel_with_changes`, the case
+  most likely touched by this move); full `scripts/check` clean.
 - [x] **T143 — Split `tests/integration.rs`.** Done. The file had grown to
   9,427 lines / 481 top-level items (462 `#[test]` fns + 19 shared helpers)
   by the time this ran. Moved to `tests/integration/main.rs` (crate doc +
