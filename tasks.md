@@ -1002,7 +1002,7 @@ and its own gate run, zero intended behavior change unless stated.
   (see below). Originally 22,449 lines, 808 `fn`s, 767 string-literal
   match arms (grown to 23,058 lines/481 `#[test]`s-worth of scaffolding
   by the time T143 ran); `AGENTS.md`/`CLAUDE.md` describe "a thin App
-  shell over ~105 focused crates" and this file is the opposite.
+  shell over ~106 focused crates" and this file is the opposite.
   Staged, not one rewrite: (a) move `impl App` blocks into
   `src/app/<feature>.rs` submodules by feature — keymap dispatch (the
   ten `*_key`/`*_token` fns, `on_key`), org, git, lsp/dap, palette,
@@ -1974,29 +1974,38 @@ scratch each time they come up.
 
 ## Suggested execution order (batched for agent runs)
 
-1. **Run A (infrastructure):** T001–T008.
+**Status as of 2026-09-06**: Run A is fully done. Run B is done except
+T112–T115 (the modal-editing implementation; T111's audit/spec landed).
+Run C is done only for T204; T201–T203 and T205–T211 are still open. Runs
+D/E/F (docs, demo/tutorials, examples) haven't started. Of the
+deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/T145/
+T146/T150/T153/T154/T141/T204 are all done; what's left from those groups
+is listed explicitly.
+
+1. **Run A (infrastructure):** T001–T008. Done.
 2. **Run B (big rocks kickoff):** T101, T111 (specs only), then T102–T105
    and T112–T115 as follow-on runs. T104 turned out to need its own spec
    first (`crates/vix-keybindings/spec/index.md`) — its T104a–T104j are a
-   further follow-on chain, one keymap conversion per task.
+   further follow-on chain, one keymap conversion per task. T101–T105 and
+   T111 are done; **T112–T115 (modal-editing implementation) remain**.
 3. **Run C (features):** T201–T211 in any order, one branch each — T104j
-   shipped 2026-09-04, so T204 is unblocked too now (§ T204's own updated
-   note); T210/T211 never had a dependency either.
+   shipped 2026-09-04, so T204 was unblocked too (§ T204's own note);
+   T210/T211 never had a dependency either. **T204 is done; T201–T203 and
+   T205–T211 remain.**
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
-5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last.
-6. **Run F (examples):** T502–T505.
+   Not started.
+5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last. Not
+   started.
+6. **Run F (examples):** T502–T505. Not started.
 7. **Deferred/audit-driven:** T121–T125 whenever their prerequisite data
-   (benches, audits) exists.
-8. **Security:** T131 anytime (no dependency); T132 anytime (T102/T103
-   already shipped, so it's unblocked now); T133 anytime; T134 only after
-   T105 and T124/T125 ship.
-9. **CI + code quality:** T009/T010 anytime (independent, small).
-   T150, T153, T154, T146 anytime — each is a single short branch.
-   T145 is unblocked now that T104j has shipped (the epic it refactors
-   code from is done). T143 before T141, and T141 before T142 (each makes
-   the next reviewable). T144, T147, T148, T149, T151, T152 are
+   (benches, audits) exists. Not started.
+8. **Security:** T131/T132/T133 are done. **T134 remains**, blocked on
+   T105 and T124/T125 shipping.
+9. **CI + code quality:** T009/T010/T143/T145/T146/T150/T153/T154/T141 are
+   all done. **What's left**: T142 (in progress — see its own entry for
+   per-slice status); T144, T147, T148, T149, T151, T152 remain,
    independent of each other and of the rest; T147 is worth doing before
-   T204.
+   T201–T203/T205–T211 (the remaining Run C items).
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.

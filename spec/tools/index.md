@@ -16,6 +16,7 @@ right spec.
 | Group | Items | Owning crate(s) |
 | ----- | ----- | --------------- |
 | Run | Command Palette, Run Command, Cancel Command, Tasks, Run Tests, Test Panel, Terminal | `vix-palette`, `vix-tasks`, `vix-test-runner`, `vix-terminal` |
+| Scripts ▸ | Run Script…, Reload Script | `vix-script` |
 | Compare | Compare with File… | `vix-diff-view` |
 | Language | Language Server… | `vix-lsp` |
 | Insert ▸ | UUID/ZID, Lorem ipsum, Date/Time ([datetime](insert/datetime.md)), Markdown/HTML/SQL/[LaTeX](insert/latex.md)/Org fragments | `vix-uuid-tool`, `vix-zid-tool`, `vix-lorem`, `vix-clock-panel`, `vix-org` |
@@ -23,6 +24,7 @@ right spec.
 | Convert ▸ | CSV/TSV/JSON/TOML/YAML/Markdown/HTML converters, base and base64, URL, JWT, case | `vix-convert-from-*-into-*-tool`, `vix-convert-tabular`, `vix-base-tool`, `vix-base64-tool`, `vix-url-tool`, `vix-jwt-tool`, `vix-case` |
 | Checksum ▸ | MD5, SHA-1/256/512, CRC32 | `vix-checksum-tool` |
 | Format | Format Document | `vix-format-tool` |
+| Keybindings | Reload Keybindings | `vix-keybindings` |
 | Generate | QR Code, Markdown Preview | `vix-qr-tool`, `vix-markdown-preview` |
 | Inspect | Calculator, Regex Tester, Color Converter, Unit Converter, Pomodoro | `vix-calculator-tool`, `vix-regex-tool`, `vix-color-converter-tool`, `vix-unit-converter-tool`, `vix-pomodoro-tool` |
 | Find | TODO Finder | `vix-textops` (`tag_column`) + App shell |
@@ -43,6 +45,5 @@ right spec.
 
 ## Sub-specs
 
-- [Insert → Date/Time](insert/datetime.md)
-- [Insert → LaTeX](insert/latex.md)
+- [Insert](insert/index.md) (→ [Date/Time](insert/datetime.md), [LaTeX](insert/latex.md))
 - [Draw (ditaa)](draw/index.md)

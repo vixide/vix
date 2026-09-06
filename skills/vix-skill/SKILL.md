@@ -19,15 +19,17 @@ most.
 
 ## The menu bar
 
-Left to right: **Vix · File · Edit · View · Go · Run · AI · DB · Git · Org ·
-Tools · Help**. Open the bar with `F10`, or jump straight to a menu with its
-Alt mnemonic (`Alt+F` File, `Alt+E` Edit, `Alt+I` View, `Alt+N` Go, `Alt+R`
-Run, `Alt+A` AI, `Alt+D` DB, `Alt+G` Git, `Alt+O` Org, `Alt+T` Tools, `Alt+H`
-Help). Arrows navigate, Enter runs the highlighted item, Esc closes. Typing a
-letter jumps to the next item starting with it (type-ahead), and `▸` marks a
-submenu (Right/click opens it, Left/Esc backs out). `F1` opens a searchable
-keyboard-shortcut browser if someone just wants to type and filter instead of
-memorizing this list.
+Left to right: **Vix · File · Edit · View · Go · Run · AI · DB · JJ · Git ·
+Org · Project · Tools · Help**. Open the bar with `F10`, or jump straight to a
+menu with its Alt mnemonic (`Alt+F` File, `Alt+E` Edit, `Alt+I` View, `Alt+N`
+Go, `Alt+R` Run, `Alt+A` AI, `Alt+D` DB, `Alt+G` Git, `Alt+O` Org, `Alt+T`
+Tools, `Alt+H` Help — **JJ** and **Project** have no mnemonic of their own,
+since `Alt+J`/`Alt+P` are already taken elsewhere; reach them via `F10` plus
+the arrow keys, or a click). Arrows navigate, Enter runs the highlighted item,
+Esc closes. Typing a letter jumps to the next item starting with it
+(type-ahead), and `▸` marks a submenu (Right/click opens it, Left/Esc backs
+out). `F1` opens a searchable keyboard-shortcut browser if someone just wants
+to type and filter instead of memorizing this list.
 
 ## Keymaps — pick the navigation style you already know
 

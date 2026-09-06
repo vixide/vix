@@ -68,8 +68,9 @@ Caching is `Swatinem/rust-cache`; runs are cancelled when superseded on the
 same ref.
 
 Releases are produced by [`dist`](https://opensource.axo.dev/cargo-dist/)
-(config in `dist-workspace.toml`): pushing a version tag builds the seven
-target triples, the shell/PowerShell/npm/Homebrew/MSI installers, and the
+(config in `dist-workspace.toml`): pushing a version tag builds the six
+target triples (`aarch64`/`x86_64-apple-darwin`, `aarch64`/`x86_64-unknown-linux-gnu`,
+`x86_64-unknown-linux-musl`, `x86_64-pc-windows-msvc`), the shell/PowerShell/npm/Homebrew/MSI installers, and the
 GitHub Release, then pushes the formula to `vixide/homebrew-tap` — that last
 step is why the `HOMEBREW_TAP_TOKEN` secret exists (see
 `spec/homebrew-tap-token`). `release.yml` is **generated**: edit

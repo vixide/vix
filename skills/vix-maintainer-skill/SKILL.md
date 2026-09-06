@@ -15,10 +15,16 @@ shipping it.
 
 A keyboard-friendly terminal text editor (a "Simple Terminal Rust IDE") built
 on `ratatui`, organized as a **Cargo workspace** (edition 2024): a thin App
-shell (root package `vix`, `src/`) over ~105 focused `vix-*` member crates
+shell (root package `vix`, `src/`) over ~106 focused `vix-*` member crates
 under `crates/`. `src/lib.rs` re-exports each member crate under a short
 module name (`pub use vix_git as git;`), so `crate::git`, `crate::menu`, etc.
-still name them.
+still name them. The App shell itself is two large files with submodules:
+`src/app.rs` delegates most of its logic to `src/app/*.rs` (`keymap.rs`,
+`git.rs`, `org.rs`, `lsp_dap.rs`, and others — one per feature area), and
+`src/ui.rs` delegates most of its drawing to `src/ui/*.rs` (`choosers.rs`,
+`db.rs`, `edit_surfaces.rs`, `menu_bar.rs`, and others). Adding to an
+existing feature area usually means editing its submodule, not the root
+file.
 
 ## Part 1 — making a spec-driven change
 
@@ -109,15 +115,15 @@ leave the drift for later.
 
 | You want to… | Go to… |
 | --- | --- |
-| Add/route a command | `src/app.rs` (`run_action`), `crates/vix-menu/`, `crates/vix-palette/` |
-| Change rendering | `src/ui.rs` |
+| Add/route a command | `src/app.rs` (`run_action`, dispatching into `src/app/*.rs`), `crates/vix-menu/`, `crates/vix-palette/` |
+| Change rendering | `src/ui.rs`, usually via one of its `src/ui/*.rs` submodules |
 | Add/translate UI text | `locales/app.yml` (+ `t!` at the call site) |
 | Add a setting | `crates/vix-settings/` |
 | Change the editor widget | `crates/vix-editor-core/` |
 | Change theme colors/model | `crates/vix-theme/`, `crates/vix-theme-model/` |
 | Change available UI languages | `crates/vix-locale-model/`, `crates/vix-i18n/` |
-| Change keyboard navigation styles | `crates/vix-keymap-model/` + dispatch in `src/app.rs` |
-| Change git status/diff/staging | `crates/vix-git/` + wiring in `src/app.rs`/`src/ui.rs` |
+| Change keyboard navigation styles | `crates/vix-keymap-model/` + dispatch in `src/app/keymap.rs` |
+| Change git status/diff/staging | `crates/vix-git/` + wiring in `src/app/git.rs`/`src/ui/choosers.rs` |
 | Change find/replace | `crates/vix-find-panel/` |
 | Change LSP support | `crates/vix-lsp/` (host) + `crates/vix-lsp-core/` (protocol) |
 | Change the database workbench | `crates/vix-db/` |

@@ -1,7 +1,7 @@
 # Vix
 
 > Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust
-> IDE") built on ratatui: a thin App shell over 102 focused `vix-*` member
+> IDE") built on ratatui: a thin App shell over 106 focused `vix-*` member
 > crates in a Cargo workspace (edition 2024).
 
 Development is specification-driven: each crate owns a spec at
@@ -43,6 +43,8 @@ human and AI contributors — read it first.
   Org-roam, export
 - [Git Panel](https://github.com/vixide/vix/blob/main/docs/git-panel/index.md): status, diff, blame, stage/unstage/
   revert per hunk
+- [Scripting](https://github.com/vixide/vix/blob/main/docs/scripting/index.md): Rhai `.rhai` scripts — new palette
+  commands, key bindings, buffer transforms, no rebuild
 
 ## Specification (source of truth)
 

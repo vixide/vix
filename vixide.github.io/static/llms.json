@@ -1,7 +1,7 @@
 {
   "$schema": "https://llmstxt.org/llms.json",
   "name": "Vix",
-  "summary": "A keyboard-friendly terminal text editor (a \"Simple Terminal Rust IDE\") built on ratatui: a thin App shell over 102 focused vix-* member crates in a Cargo workspace (edition 2024).",
+  "summary": "A keyboard-friendly terminal text editor (a \"Simple Terminal Rust IDE\") built on ratatui: a thin App shell over 106 focused vix-* member crates in a Cargo workspace (edition 2024).",
   "description": "Development is specification-driven: each crate owns a spec at crates/<crate>/spec/index.md; cross-cutting and app-level specs live under spec/. When behavior and spec disagree, decide which is correct and make them match. AGENTS.md is the canonical entry point for both human and AI contributors.",
   "repository": "https://github.com/vixide/vix",
   "version": "1.6.0",
@@ -91,6 +91,11 @@
           "title": "Git Panel",
           "url": "https://github.com/vixide/vix/blob/main/docs/git-panel/index.md",
           "notes": "status, diff, blame, stage/unstage/revert per hunk"
+        },
+        {
+          "title": "Scripting",
+          "url": "https://github.com/vixide/vix/blob/main/docs/scripting/index.md",
+          "notes": "Rhai .rhai scripts — new palette commands, key bindings, buffer transforms, no rebuild"
         }
       ]
     },

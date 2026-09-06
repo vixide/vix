@@ -1,5 +1,8 @@
 # Debian packaging
 
+> Generic reference, not Vix's actual release process — see
+> [`index.md`](index.md).
+
 This tutorial shows the most basic way of packaging a simple already-compiled program.
 
 Decide on the name of your package. Standard debian notation is all lowercase in the following format:
@@ -24,7 +27,7 @@ Code:
 
 ```
 mkdir helloworld_1.0-1
-``
+```
 
 Pretend that the packaging directory is actually the root of the file system. Put the files of your program where they would be installed to on a system.
 

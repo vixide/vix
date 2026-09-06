@@ -14,7 +14,7 @@ make them match — edit the spec when intent changes, edit the code when it
 drifted.
 
 Specs are **per crate**. Vix is a Cargo workspace: a thin App shell (root package
-`vix`, `src/`) over 105 `vix-*` member crates under `crates/`. Each member crate
+`vix`, `src/`) over 106 `vix-*` member crates under `crates/`. Each member crate
 owns its spec at `crates/<crate>/spec/index.md` (multi-topic crates add
 `spec/<topic>/index.md` sub-specs), so a crate and its specification travel
 together. This repo-root `spec/` holds only the cross-cutting / app-level and
@@ -149,8 +149,8 @@ The App shell is deliberately small — everything that can be a crate is one:
 | --------------------- | ---------------------------------------------------------------- |
 | `main.rs`             | CLI (`clap`), locale resolution, terminal setup/teardown, the event loop, suspend/resume |
 | `lib.rs`              | Crate root: lint posture, `i18n!` catalog, and the `pub use vix_* as …` re-exports |
-| `app.rs`              | `App` state, `on_key` / `on_mouse` / `on_paste`, `run_action`, overlay routing, feature wiring |
-| `ui.rs`               | All rendering: frame layout and every pane/overlay draw function |
+| `app.rs`              | `App` state, `on_key` / `on_mouse` / `on_paste`, `run_action`, overlay routing, feature wiring — delegates most of this to `src/app/*.rs` submodules (one per feature area: `keymap.rs`, `git.rs`, `org.rs`, …) |
+| `ui.rs`               | All rendering: frame layout — delegates most per-pane/overlay draw functions to `src/ui/*.rs` submodules (`choosers.rs`, `db.rs`, `edit_surfaces.rs`, `menu_bar.rs`, …) |
 | `explorer.rs`         | The directory tree flattened into rows                          |
 | `messages.rs`         | The notification drawer model                                   |
 | `search.rs`, `workspace_search.rs` | Search bar helpers; workspace-wide search/replace state |
