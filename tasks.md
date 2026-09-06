@@ -1124,8 +1124,28 @@ and its own gate run, zero intended behavior change unless stated.
   script (`extract_app_module.py`, edit `TARGETS` + pass a module-name
   arg) rather than a one-off per slice, since the pattern was clearly
   going to keep repeating.
-  **Remaining slices (org, lsp/dap, tools, session/settings, then the
-  `run_action` split) are separate future tasks.** Dropped
+  **Slice 5 (session/settings) done 2026-09-06**: mostly contiguous —
+  `store_settings` through `save_session` is one clean run — plus 5
+  outliers scattered further down (`ensure_project_session_loaded`,
+  `fill_project_fields`, the workspace chooser's open/key/mouse trio,
+  `open_settings_file`). Moved into new `src/app/session.rs`; `App::new`
+  and its `build_core` helper deliberately stayed in `app.rs` — the
+  constructor itself is the entry point, not a feature to relocate.
+  Needed `use super::{App, Focus, ProjectHistory, WorkspaceChooser,
+  node_to_pane, pane_to_node}; use crate::explorer::Explorer;`, and
+  `pub(super) fn` on 11 methods (`store_settings`/`load_session`/
+  `store_session`/`session_key`/`save_session`/
+  `ensure_project_session_loaded`/`open_workspace_chooser`/
+  `workspace_chooser_key`/`workspace_chooser_mouse`/`switch_workspace`/
+  `open_settings_file`) — nearly everything in the file needed it, since
+  `run_action` and half the rest of `app.rs` call into session/settings
+  plumbing constantly. Checked for a name collision before starting
+  (`grep -n "use crate::session" src/app.rs` found nothing — every
+  reference was already fully-qualified `crate::session::...`), so
+  `mod session;` was safe with no rename needed, unlike slice 4. Full
+  workspace `cargo test` green throughout, matching baseline exactly.
+  **Remaining slices (org, lsp/dap, tools, then the `run_action` split)
+  are separate future tasks.** Dropped
   "prompts/dialogs" as its own slice after surveying it: `PromptKind`'s
   accept-handlers (`accept_org_prompt`, `accept_debug_prompt`,
   `accept_file_prompt`, `accept_goto_number`, …) aren't one coherent
