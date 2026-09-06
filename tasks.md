@@ -1343,6 +1343,27 @@ and its own gate run, zero intended behavior change unless stated.
   submodules — same crate, same pattern T141 used for `src/app.rs`,
   never into a panel's own crate — and split the three 100+-line
   drawers so the `too_many_lines` allows come out.
+  **Slice 1 (info panels) done 2026-09-06** — the first T142 slice.
+  Reused T141's extraction technique almost unchanged: a small Python
+  script (`extract_ui_module.py`) exploiting the same rustfmt
+  column-0-closing-brace guarantee, just applied to free `fn`s at
+  column 0 (verified first: 159 top-level `fn`s + 1 top-level `struct`
+  = 160 column-0 `}` lines, an exact match) instead of 4-space-indented
+  `impl App` methods. Moved a clean contiguous block — `draw_contacts`
+  through `draw_system_info` (7 functions: the Contacts vCard view,
+  file-info/text-info panels, Markdown preview, Snippets picker, System
+  Info panel) — into new `src/ui/info_panels.rs`. Needed
+  `use super::draw_scrollbar;` (a shared helper still in `ui.rs`) plus
+  `use crate::app::App; use crate::theme::{self, icon};` and the same
+  `ratatui::prelude::*`/`widgets::{...}` imports `ui.rs` itself already
+  used (the wildcard prelude import is clippy-exempt — `wildcard_imports`
+  special-cases any path ending `::prelude`); made the 7 functions
+  `pub(super)`, and added `mod info_panels; use info_panels::{...};` to
+  `ui.rs` so its many existing bare call sites (`draw_contacts(app,
+  frame, area)`, …) needed zero changes. Full workspace `cargo test`
+  green, snapshot tests (`tests/snapshots.rs`, 12/12) re-verified
+  directly since a rendering-path change deserves that scrutiny beyond
+  the aggregate pass count. Pattern validated end-to-end.
 - [x] **T143 — Split `tests/integration.rs`.** Done. The file had grown to
   9,427 lines / 481 top-level items (462 `#[test]` fns + 19 shared helpers)
   by the time this ran. Moved to `tests/integration/main.rs` (crate doc +
