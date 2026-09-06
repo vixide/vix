@@ -1171,8 +1171,25 @@ and its own gate run, zero intended behavior change unless stated.
   `run_action`, and the LSP/DAP event-poll loops still in `app.rs`.
   Full workspace `cargo test` green throughout, matching baseline
   exactly.
-  **Remaining slices (the rest of org, tools, then the `run_action`
-  split) are separate future tasks.** Dropped
+  **`org` and `tools` turned out far too big for one slice each** (~140
+  and ~86 name-matches respectively — 4–10× every module extracted so
+  far) — splitting both into natural sub-areas instead of forcing one
+  giant move.
+  **Slice 7 (org-roam) done 2026-09-06**: the first org sub-slice —
+  node lookup/creation, wiki-link insertion, random-node jump, live
+  backlinks, dailies (open/capture), the node graph, database sync, and
+  the `node.*` transforms (nodeify, extract subtree, insert
+  transclusion, rename by title, dead-links, reset). ~21 methods,
+  mostly contiguous, one outlier (`refresh_backlinks_follow`). Moved
+  into new `src/app/roam.rs`. Needed `use super::{App, Prompt,
+  PromptKind};` plus `std::path::{Path, PathBuf}`, and `pub(super) fn`
+  on 9 of the 21 methods (`roam_node_files`/`roam_action`/
+  `roam_write_and_open`/`roam_visit_or_create`/`roam_insert_link`/
+  `node_insert_transclusion`/`roam_daily_capture`/`roam_open_daily`/
+  `roam_rewrite_active`). Full workspace `cargo test` green throughout.
+  **Remaining slices (the rest of org — table/column-view, agenda,
+  capture, core headline/TODO/checkbox — plus tools, then the
+  `run_action` split) are separate future tasks.** Dropped
   "prompts/dialogs" as its own slice after surveying it: `PromptKind`'s
   accept-handlers (`accept_org_prompt`, `accept_debug_prompt`,
   `accept_file_prompt`, `accept_goto_number`, …) aren't one coherent
