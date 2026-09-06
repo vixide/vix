@@ -8,6 +8,16 @@
 //! contiguous block, minus two interlopers that stayed in `app.rs`:
 //! `surround`/`toggle_wrap` are general editing operations, not
 //! tools-menu snippets, despite sitting in the middle of this range.
+//!
+//! Also carries [`App::run_tools_action`] (T141, the epic's final piece:
+//! the `run_action` match split): every `tools.*` action that is a plain
+//! "open this overlay" call with no other logic, gathered into one
+//! dispatcher regardless of which sub-slice (`insert_tools`,
+//! `picker_panels`, `info_panels`) or `app.rs` itself now owns the method
+//! it calls -- `pub(super)` visibility makes the cross-module calls free.
+//! `tools.calendar`/`tools.clock` stayed inline in `run_action` (they toggle
+//! more than one field, not a single call) and so did the prefix-matched
+//! actions (`view.theme:`, `script:`, …).
 
 #![warn(clippy::pedantic)]
 
@@ -16,6 +26,35 @@ use crossterm::event::{KeyCode, KeyEvent};
 use super::{App, SQL_CREATE_EXTENSION, SQL_CREATE_TABLE};
 
 impl App {
+    /// Dispatch a plain "open this Tools overlay" action. Returns `true` if
+    /// `action` was handled. Extracted from [`App::run_action`] to keep that
+    /// function within the line limit -- the last piece of T141's `run_action`
+    /// split, gathering the `tools.*` arms left un-delegated after every
+    /// feature module already had its own dispatcher.
+    pub(super) fn run_tools_action(&mut self, action: &str) -> bool {
+        match action {
+            "tools.nerd_palette" => self.open_nerd_palette(),
+            "tools.ascii" => self.open_ascii_panel(),
+            "tools.qrcode" => self.open_qrcode(),
+            "tools.x11_colors" => self.open_x11_panel(),
+            "tools.media_types" => self.open_media_type_panel(),
+            "tools.html_chars" => self.open_html_panel(),
+            "tools.system_info" => self.open_system_info(),
+            "tools.file_info" => self.open_file_info(),
+            "tools.text_info" => self.open_text_info(),
+            "tools.markdown_preview" => self.open_markdown_preview(),
+            "tools.snippets" => self.open_snippets(),
+            "tools.contacts" => self.open_contacts(),
+            "tools.dashboard" => self.open_dashboard(),
+            "tools.color_converter" => self.open_color_converter(),
+            "tools.calculator" => self.open_calculator(),
+            "tools.regex_tester" => self.open_regex_tester(),
+            "tools.pomodoro" => self.open_pomodoro(),
+            _ => return false,
+        }
+        true
+    }
+
     /// Insert generator output (a UUID, ZID, …) at the cursor in the active
     /// editor, reporting it in the status line. No-op when no buffer is editable.
     pub(super) fn insert_content(&mut self, text: &str) {
