@@ -1097,8 +1097,35 @@ and its own gate run, zero intended behavior change unless stated.
   called from `app.rs`'s remaining `run_action`/`accept_prompt` or from
   `src/app/keymap.rs`. Full workspace `cargo test` green throughout,
   matching baseline exactly.
-  **Remaining slices (org, lsp/dap, palette, tools, session/settings,
-  then the `run_action` split) are separate future tasks.** Dropped
+  **Slice 4 (command palette) done 2026-09-06**: mostly contiguous
+  again, like slice 1 — `open_palette` through `accept_palette`, ~11
+  methods. Moved into new `src/app/command_palette.rs`, named
+  `command_palette` rather than `palette` because `app.rs` already
+  imports the top-level `vix-palette` crate under the local name
+  `palette` (`use crate::palette::{self, ...}`); a `mod palette;` here
+  would have collided with that `use` — checked and picked the different
+  name *before* generating any files, not by trial and error. What
+  moved: opening the palette (plain or seeded into a specific mode),
+  the ranked project file index (`build_file_index`, `ignore`-crate
+  walk) and its Files-mode entries, live recompute across all five modes
+  (files/commands/buffers/goto-line/symbols/workspace-symbols), the
+  live go-to-line preview, key handling, and accepting the highlighted
+  entry. Needed `use super::{App, Focus}; use crate::editor::
+  is_image_path; use crate::palette::{self, Action as PAction, Entry,
+  Mode as PMode, Palette};`, 4 `pub(super)` bumps (`open_palette`/
+  `open_palette_seeded`/`build_file_index`/`palette_key`), and —a new
+  wrinkle— trimming `app.rs`'s *own* `use crate::palette::{...}` down to
+  `use crate::palette::{self, Palette};` once `Action as PAction`/
+  `Entry`/`Mode as PMode` became unused there (only `Palette`, the
+  struct's own field type, and the `palette` module alias for a couple
+  of remaining `palette::parse_path_target` calls, are still needed in
+  `app.rs` itself). Full workspace `cargo test` green throughout,
+  matching baseline exactly. Wrote the extractor as a proper reusable
+  script (`extract_app_module.py`, edit `TARGETS` + pass a module-name
+  arg) rather than a one-off per slice, since the pattern was clearly
+  going to keep repeating.
+  **Remaining slices (org, lsp/dap, tools, session/settings, then the
+  `run_action` split) are separate future tasks.** Dropped
   "prompts/dialogs" as its own slice after surveying it: `PromptKind`'s
   accept-handlers (`accept_org_prompt`, `accept_debug_prompt`,
   `accept_file_prompt`, `accept_goto_number`, …) aren't one coherent
