@@ -27,7 +27,7 @@
 <section class="section">
   <div class="prose" style="margin: 0 auto;">
     <pre class="terminal-mock"><code
-      >{`Vix  File  Edit  View  Go  Run  AI  DB  Git  Org  Tools  Help
+      >{`Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  Tools  Help
 ╭─Explorer-──╮╭ main.rs ──────────────────╮╭Messages────────╮
 │ README.md  ││ 1  fn main() {            ││ Welcome to Vix │
 │ src        ││ 2      println!("hello"); ││ Ctrl+B toggles │

@@ -5,7 +5,7 @@
 <section class="section prose" style="margin: 0 auto;">
   <h1>Features</h1>
   <p>
-    Vix File Edit View Go Run AI DB Git Org Tools Help — everything below is
+    Vix File Edit View Go Run AI DB JJ Git Org Project Tools Help — everything below is
     reachable from the menu bar, the command palette (<code>Ctrl+P</code>),
     or a keybinding. See the
     <a href="https://github.com/vixide/vix/blob/main/index.md">full README</a>
