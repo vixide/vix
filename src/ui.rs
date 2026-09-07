@@ -4,10 +4,12 @@
 #![warn(clippy::pedantic)]
 
 mod ai_terminal;
+mod boxes;
 mod choosers;
 mod db;
 mod dialogs;
 mod edit_surfaces;
+mod explorer;
 mod file_browser;
 mod help;
 mod info_panels;
@@ -18,6 +20,7 @@ mod search;
 mod tool_panels;
 
 use ai_terminal::{draw_ai_diff, draw_ai_panel, draw_terminal};
+use boxes::{draw_calendar, draw_clock, draw_dashboard};
 use choosers::{
     draw_branch_chooser, draw_capture_chooser, draw_clipboard_chooser, draw_context_menu,
     draw_diff_view, draw_git_panel, draw_location_chooser, draw_macro_chooser, draw_recent_chooser,
@@ -33,6 +36,7 @@ use edit_surfaces::{
     draw_column_view, draw_edit_bytes, draw_edit_outline, draw_edit_sql, draw_edit_table,
     draw_edit_value, draw_html_panel, draw_outline,
 };
+use explorer::draw_explorer;
 use file_browser::draw_file_browser;
 use help::{draw_help, draw_keybinding_editor};
 use info_panels::{
@@ -58,8 +62,6 @@ use ratatui_image::StatefulImage;
 use ratatui_image::protocol::StatefulProtocol;
 
 use crate::app::{App, Focus};
-use crate::calendar;
-use crate::clock;
 use crate::menu::menus;
 use crate::messages::Level;
 use crate::theme::{self, icon};
@@ -545,132 +547,6 @@ fn git_change_color(change: crate::git::Change) -> Color {
         Change::Renamed => Color::Cyan,
         Change::Conflicted => Color::Magenta,
     }
-}
-
-/// Build the styled spans for explorer rows `top..end`: indent, type glyph,
-/// optional cut-dimming and mark dot, and a trailing git-change letter. Split
-/// out of [`draw_explorer`] to keep it within the line limit.
-fn explorer_rows(app: &App, top: usize, end: usize) -> Vec<Vec<Span<'static>>> {
-    app.explorer.nodes[top..end]
-        .iter()
-        .map(|n| {
-            let indent = "  ".repeat(n.depth);
-            let glyph = if n.is_symlink {
-                icon::LINK
-            } else if n.is_dir {
-                if n.expanded {
-                    icon::FOLDER_OPEN
-                } else {
-                    icon::FOLDER
-                }
-            } else {
-                theme::file_icon(&n.name)
-            };
-            let mut style = Style::default();
-            let cut_pending = app.clip_cut && app.clip.contains(&n.path);
-            if cut_pending {
-                style = style.add_modifier(Modifier::DIM);
-            }
-            let mark = if app.explorer.marked.contains(&n.path) {
-                "● "
-            } else {
-                ""
-            };
-            let mut spans = vec![
-                Span::raw(indent),
-                Span::styled(format!("{mark}{glyph} {}", n.name), style),
-            ];
-            if !n.is_dir
-                && let Some(change) = app.git_change_for(&n.path)
-            {
-                spans.push(Span::styled(
-                    format!("  {}", change.letter()),
-                    Style::default().fg(git_change_color(change)),
-                ));
-            }
-            spans
-        })
-        .collect()
-}
-
-fn draw_explorer(app: &mut App, frame: &mut Frame, area: Rect) {
-    let focused = app.focus == Focus::Explorer;
-    let block = Block::default()
-        .style(theme::region_base(theme::Region::LeftDock))
-        // The left dock keeps only its top and right borders.
-        .borders(Borders::TOP | Borders::RIGHT)
-        .border_type(BorderType::Rounded)
-        .border_style(theme::region_title(theme::Region::LeftDock, focused))
-        .title(if app.explorer.has_filter() {
-            format!(
-                " {} {}  {} ",
-                icon::FOLDER,
-                t!("ui.explorer"),
-                t!("ui.explorer_filtered")
-            )
-        } else {
-            format!(" {} {} ", icon::FOLDER, t!("ui.explorer"))
-        });
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let total = app.explorer.nodes.len();
-    let allow_bars = app.settings.show_scrollbar && inner.width > 1 && inner.height > 1;
-    let vbar = allow_bars && total > inner.height as usize;
-    let text_w = if vbar { inner.width - 1 } else { inner.width } as usize;
-
-    let top = app.explorer.top.min(total);
-    // Build the full (unsliced) styled rows for the visible window.
-    let win_h = inner.height as usize;
-    let end = (top + win_h).min(total);
-    let rows = explorer_rows(app, top, end);
-
-    let content_w = rows.iter().map(|s| span_line_width(s)).max().unwrap_or(0);
-    let hbar = allow_bars && content_w > text_w;
-    let body_h = if hbar { inner.height - 1 } else { inner.height } as usize;
-    let hmax = content_w.saturating_sub(text_w);
-    app.explorer_hmax = hmax;
-    app.explorer_hscroll = app.explorer_hscroll.min(hmax);
-    let off = app.explorer_hscroll;
-
-    let visible = body_h.min(rows.len());
-    let items: Vec<ListItem> = rows[..visible]
-        .iter()
-        .map(|spans| ListItem::new(Line::from(hslice_spans(spans, off, text_w))))
-        .collect();
-    let list_area = Rect {
-        width: u16::try_from(text_w).unwrap_or(u16::MAX),
-        height: u16::try_from(body_h).unwrap_or(u16::MAX),
-        ..inner
-    };
-    let list = List::new(items).highlight_style(theme::selected());
-    let mut state = ListState::default();
-    if app.explorer.selected >= top && app.explorer.selected < top + visible {
-        state.select(Some(app.explorer.selected - top));
-    }
-    frame.render_stateful_widget(list, list_area, &mut state);
-
-    if vbar {
-        let sb = Rect {
-            x: inner.x + inner.width - 1,
-            y: inner.y,
-            width: 1,
-            height: u16::try_from(body_h).unwrap_or(u16::MAX),
-        };
-        draw_scrollbar(frame, sb, app.explorer.selected, total.saturating_sub(1));
-    }
-    app.layout.explorer_hscrollbar = if hbar {
-        let hb = Rect {
-            x: inner.x,
-            y: inner.y + inner.height - 1,
-            width: u16::try_from(text_w).unwrap_or(u16::MAX),
-            height: 1,
-        };
-        draw_hscrollbar(frame, hb, off, hmax);
-        hb
-    } else {
-        Rect::default()
-    };
 }
 
 // Split the center column into the tab bar, an optional breadcrumb bar, and the
@@ -1624,108 +1500,6 @@ fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
     };
 }
 
-fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
-    // The month area follows the user's navigation (see `App::calendar`). Live
-    // date/time strings now live in the separate clock box (Tools → Clock…).
-    let width = 28u16.min(area.width);
-    let height = 11u16.min(area.height);
-    let rect = Rect {
-        x: area.x + area.width.saturating_sub(width + 1),
-        y: area.y + 2,
-        width,
-        height,
-    };
-    frame.render_widget(Clear, rect);
-    let block = Block::default()
-        .style(theme::base())
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(theme::title(true))
-        .title(format!(" {} {} ", icon::CALENDAR, t!("ui.calendar")));
-    let inner = block.inner(rect);
-    // Record the inner rect so a click can hit-test the month-nav arrows and day
-    // cells.
-    app.layout.calendar = inner;
-    frame.render_widget(block, rect);
-
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(1), // month header + nav arrows
-            Constraint::Min(6),    // weekday header + weeks
-            Constraint::Length(1), // help
-        ])
-        .split(inner);
-
-    // Month header: a left arrow, the centered month title, and a right arrow
-    // (`◀`/`▶`). The arrows are clickable (see `App::calendar_mouse`) and mirror
-    // the Left/Right keys.
-    let header = Line::from(format!("{CAL_PREV}{:^19}{CAL_NEXT}", app.calendar.title()));
-    frame.render_widget(Paragraph::new(header), rows[0]);
-    frame.render_widget(Paragraph::new(month_lines(&app.calendar)), rows[1]);
-
-    let help = Line::from(Span::styled(
-        t!("ui.calendar_hint").to_string(),
-        theme::dim(),
-    ));
-    frame.render_widget(Paragraph::new(help), rows[2]);
-}
-
-fn draw_clock(app: &mut App, frame: &mut Frame, area: Rect) {
-    let now = clock::now_local();
-    let rows_data = app.clock.rows(&now);
-    let zone = crate::time_zone_model::active_name();
-
-    let width = 38u16.min(area.width);
-    let height = (u16::try_from(rows_data.len()).unwrap_or(u16::MAX) + 3).min(area.height);
-    let rect = Rect {
-        x: area.x + area.width.saturating_sub(width + 1),
-        y: area.y + 2,
-        width,
-        height,
-    };
-    frame.render_widget(Clear, rect);
-    let block = Block::default()
-        .style(theme::base())
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(theme::title(true))
-        .title(format!(" {} {} ", icon::CLOCK, t!("ui.clock")));
-    let inner = block.inner(rect);
-    frame.render_widget(block, rect);
-
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
-        .split(inner);
-
-    let items: Vec<ListItem> = rows_data
-        .iter()
-        .map(|r| {
-            let label = match r.key {
-                "local" => t!("ui.clock_local").to_string(),
-                "utc" => t!("ui.clock_utc").to_string(),
-                "iso_week" => t!("ui.clock_iso_week").to_string(),
-                _ => t!("ui.clock_zone", zone = zone).to_string(),
-            };
-            ListItem::new(Line::from(format!(" {label:<10} {}", r.value)))
-        })
-        .collect();
-    let list = List::new(items).highlight_style(theme::selected());
-    let mut state = ListState::default();
-    state.select(Some(app.clock.selected));
-    frame.render_stateful_widget(list, rows[0], &mut state);
-    app.layout.clock = rows[0];
-
-    let help = Line::from(Span::styled(t!("ui.clock_hint").to_string(), theme::dim()));
-    frame.render_widget(Paragraph::new(help), rows[1]);
-}
-
-/// Previous-month arrow glyph, at column 0 of the calendar's month-header row.
-pub const CAL_PREV: char = '\u{25c0}';
-/// Next-month arrow glyph, at column 20 of the calendar's month-header row.
-pub const CAL_NEXT: char = '\u{25b6}';
-
 /// Columns each glyph cell occupies in the Nerd Font palette grid. The mouse
 /// hit-test in `App::nerd_mouse` (private) divides by this, so the renderer
 /// and the hit-test must agree on it.
@@ -1739,93 +1513,6 @@ fn trunc(s: &str, max: usize) -> String {
         let keep = max.saturating_sub(1);
         format!("{}…", s.chars().take(keep).collect::<String>())
     }
-}
-
-fn draw_dashboard(app: &App, frame: &mut Frame, area: Rect) {
-    let Some(d) = app.dashboard.as_ref() else {
-        return;
-    };
-    let pending = t!("ui.dashboard_computing");
-    let num = |n: Option<u64>| n.map_or_else(|| pending.to_string(), |v| v.to_string());
-    let rows = [
-        (t!("ui.dashboard_folder"), d.folder.clone()),
-        (
-            t!("ui.dashboard_disk"),
-            d.disk_usage.clone().unwrap_or_else(|| pending.to_string()),
-        ),
-        (t!("ui.dashboard_files"), num(d.file_count)),
-        (t!("ui.dashboard_commits"), num(d.commit_count)),
-    ];
-    let width = 52u16.min(area.width);
-    let height = (u16::try_from(rows.len()).unwrap_or(u16::MAX) + 4).min(area.height);
-    let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
-        width,
-        height,
-    };
-    frame.render_widget(Clear, rect);
-    let block = Block::default()
-        .style(theme::base())
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(theme::title(true))
-        .title(format!(" {} {} ", icon::INFO, t!("ui.dashboard")));
-    let inner = block.inner(rect);
-    frame.render_widget(block, rect);
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
-        .split(inner);
-
-    let lines: Vec<Line> = rows
-        .iter()
-        .map(|(label, value)| {
-            Line::from(vec![
-                Span::styled(format!("  {label:<14} "), theme::dim()),
-                Span::raw(value.clone()),
-            ])
-        })
-        .collect();
-    frame.render_widget(Paragraph::new(lines), chunks[0]);
-
-    let hint = Line::from(Span::styled(
-        t!("ui.dashboard_hint").to_string(),
-        theme::dim(),
-    ));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
-}
-
-fn month_lines(cal: &calendar::Calendar) -> Vec<Line<'static>> {
-    let grid = cal.grid();
-    let selected = cal.selected_day_in_shown();
-    let mut lines = vec![Line::from(Span::styled(t!("ui.weekdays"), theme::dim()))];
-    for week in &grid.weeks {
-        let mut spans = Vec::with_capacity(7);
-        for (i, cell) in week.iter().enumerate() {
-            if i > 0 {
-                spans.push(Span::raw(" "));
-            }
-            match cell {
-                // The selected day (keyboard cursor) is reverse-highlighted;
-                // today (when not selected) is underlined.
-                Some(d) if selected == Some(*d) => {
-                    spans.push(Span::styled(format!("{d:>2}"), theme::selected()));
-                }
-                Some(d) if grid.today == Some(*d) => {
-                    spans.push(Span::styled(
-                        format!("{d:>2}"),
-                        Style::default().add_modifier(Modifier::UNDERLINED),
-                    ));
-                }
-                Some(d) => spans.push(Span::raw(format!("{d:>2}"))),
-                None => spans.push(Span::raw("  ")),
-            }
-        }
-        lines.push(Line::from(spans));
-    }
-    lines
 }
 
 fn centered(area: Rect, pct_x: u16, pct_y: u16) -> Rect {
