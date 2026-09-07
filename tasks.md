@@ -1471,6 +1471,19 @@ and its own gate run, zero intended behavior change unless stated.
   build --all-targets` clean on the first attempt; `cargo test
   --workspace` green (221 lines); snapshots 12/12 re-verified directly;
   full `scripts/check` clean.
+  **Slice 8 (AI + terminal) done 2026-09-07.** Moved 5 fully-contiguous
+  functions — `draw_ai_diff` (one of the workspace's 3
+  `too_many_lines` allows), its `seg_line_count` helper, `vt_color`
+  (`vt100::Color` → `ratatui::Color`), `draw_terminal` (also
+  `too_many_lines`), `draw_ai_panel` — into `src/ui/ai_terminal.rs`:
+  the reviewable AI-diff hunk viewer, the PTY-backed terminal panel,
+  and the persistent AI chat panel. Fully self-contained, no shared-
+  helper dependency (confirmed `month_lines`/`centered`, sitting right
+  after this cluster, belong to `draw_palette`/`draw_search` instead —
+  correctly excluded). Both `too_many_lines` allows carried over with
+  their functions. `cargo build --all-targets` clean on the first
+  attempt; `cargo test --workspace` green (221 lines); snapshots 12/12
+  re-verified directly; full `scripts/check` clean.
 - [x] **T143 — Split `tests/integration.rs`.** Done. The file had grown to
   9,427 lines / 481 top-level items (462 `#[test]` fns + 19 shared helpers)
   by the time this ran. Moved to `tests/integration/main.rs` (crate doc +
