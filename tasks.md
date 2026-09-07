@@ -1541,6 +1541,24 @@ and its own gate run, zero intended behavior change unless stated.
   green (221 lines); snapshots 12/12 re-verified directly; full
   `scripts/check` clean. `ui.rs` now 1,535 lines, down from 7,293 at
   T142's start — a 79% cut.
+  **Slice 12 (tabs + hints + docks) done 2026-09-07.** Three clean
+  clusters, all with sole callers in `draw()` itself: `src/ui/tabs.rs`
+  (`center_split`, `draw_breadcrumb`, `draw_tabs`), `src/ui/hints.rs`
+  (`draw_which_key`, `draw_jump_labels`), `src/ui/docks.rs`
+  (`draw_test_panel`, `draw_debug_panel`, `draw_outline_dock`,
+  `draw_messages`, needing `use super::{draw_hscrollbar,
+  draw_scrollbar, hslice_spans, span_line_width};` since
+  `draw_bottom_dock` — still in `ui.rs` — needs the same four). First
+  build caught two real gaps in `docks.rs` (`Focus` and `Level`, both
+  used only within the moved functions) and four now-dead top-level
+  imports left behind in `ui.rs` (`Clear`/`List`/`ListItem`/`ListState`,
+  `Level`) — all fixed after checking via grep that nothing remaining
+  in `ui.rs` itself still used them. `cargo build --all-targets` clean
+  after the fixes; `cargo test --workspace` green (221 lines,
+  integration suite's own 451/0/11-ignored baseline re-confirmed
+  directly in the gate log); snapshots 12/12 re-verified directly;
+  full `scripts/check` clean. `ui.rs` now 1,173 lines, down from 7,293
+  at T142's start — an 84% cut.
 - [x] **T143 — Split `tests/integration.rs`.** Done. The file had grown to
   9,427 lines / 481 top-level items (462 `#[test]` fns + 19 shared helpers)
   by the time this ran. Moved to `tests/integration/main.rs` (crate doc +
