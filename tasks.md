@@ -1456,6 +1456,21 @@ and its own gate run, zero intended behavior change unless stated.
   test --workspace` green (221 lines matching baseline); snapshots
   12/12 re-verified directly (including `file_menu_open`, the case
   this slice touches); full `scripts/check` clean.
+  **Slice 7 (dialogs + file browser) done 2026-09-07.** Two thematically
+  distinct modules from one contiguous source range: `src/ui/dialogs.rs`
+  (6 small modal dialogs — `draw_confirm`, `draw_script_trust`,
+  `draw_replace_confirm`, `draw_unsaved`, `draw_paste_conflict`,
+  `draw_query_replace`, all self-contained, all `pub(super)`) and
+  `src/ui/file_browser.rs` (the File → Open… overlay —
+  `draw_file_browser` `pub(super)` plus 3 private helpers, needing
+  `use super::{draw_scrollbar, trunc, unix_secs_label};`). Confirmed
+  before extracting that `dock_toggle_cols`/`menu_dropdown_rect`/
+  `dropdown_scroll`/`git_change_color`/`menu_offsets` sit in the same
+  original range but stay in `ui.rs` (cross-module pub API surface or
+  needed by a staying function), same precedent as slice 6. `cargo
+  build --all-targets` clean on the first attempt; `cargo test
+  --workspace` green (221 lines); snapshots 12/12 re-verified directly;
+  full `scripts/check` clean.
 - [x] **T143 — Split `tests/integration.rs`.** Done. The file had grown to
   9,427 lines / 481 top-level items (462 `#[test]` fns + 19 shared helpers)
   by the time this ran. Moved to `tests/integration/main.rs` (crate doc +
