@@ -4,6 +4,7 @@
 #![warn(clippy::pedantic)]
 
 mod ai_terminal;
+mod bottom_dock;
 mod boxes;
 mod choosers;
 mod db;
@@ -17,12 +18,15 @@ mod hints;
 mod info_panels;
 mod lsp_popups;
 mod menu_bar;
+mod minimap;
 mod picker_panels;
 mod search;
+mod status_bar;
 mod tabs;
 mod tool_panels;
 
 use ai_terminal::{draw_ai_diff, draw_ai_panel, draw_terminal};
+use bottom_dock::draw_bottom_dock;
 use boxes::{draw_calendar, draw_clock, draw_dashboard};
 use choosers::{
     draw_branch_chooser, draw_capture_chooser, draw_clipboard_chooser, draw_context_menu,
@@ -50,12 +54,14 @@ use info_panels::{
 };
 use lsp_popups::{draw_code_actions, draw_code_lens, draw_completion, draw_hover};
 use menu_bar::{draw_menu_bar, draw_menu_dropdown, dropdown_width};
+use minimap::draw_minimap;
 use picker_panels::{
     draw_ascii_panel, draw_media_type_panel, draw_nerd_palette, draw_qrcode, draw_x11_panel,
 };
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 use search::{draw_palette, draw_prompt, draw_search, draw_workspace_search};
+use status_bar::draw_status_bar;
 use tabs::{center_split, draw_breadcrumb, draw_tabs};
 use tool_panels::{
     draw_calculator, draw_color_converter, draw_dialog, draw_pomodoro, draw_regex_tester,
@@ -67,7 +73,7 @@ use ratatui_image::protocol::StatefulProtocol;
 
 use crate::app::{App, Focus};
 use crate::menu::menus;
-use crate::theme::{self, icon};
+use crate::theme;
 
 /// The body's column rectangles: file explorer, center editor, message drawer,
 /// and outline sidebar. `None` for any dock that is hidden.
@@ -556,50 +562,6 @@ fn git_change_color(change: crate::git::Change) -> Color {
 /// Width (cells) of the code-overview minimap column.
 const MINIMAP_WIDTH: u16 = 16;
 
-/// Draw the code-overview minimap for the active buffer in `area`. Each row maps
-/// to a band of source lines, drawn as a dim bar whose length tracks the band's
-/// longest (trimmed) line — a rough "shape of the code". Rows overlapping the
-/// editor's current viewport (`editor_height` rows from the scroll offset) get a
-/// highlighted background so the visible region stands out.
-fn draw_minimap(app: &mut App, frame: &mut Frame, area: Rect, editor_height: usize) {
-    let Some(tab) = app.editor.active_tab() else {
-        return;
-    };
-    if tab.is_image() {
-        return;
-    }
-    let lines: Vec<String> = tab.text().lines().map(str::to_string).collect();
-    let total = lines.len().max(1);
-    let rows = area.height as usize;
-    let top = app.editor.top_visible_line();
-    let view_end = (top + editor_height).min(total);
-    let width = area.width as usize;
-    let dim = theme::dim();
-    let view_bg = theme::region_title(theme::Region::Editor, true);
-    let mut text = Vec::with_capacity(rows);
-    for r in 0..rows {
-        // The band of source lines this minimap row represents.
-        let start = r * total / rows;
-        let end = ((r + 1) * total / rows).max(start + 1).min(total);
-        let longest = lines[start..end]
-            .iter()
-            .map(|l| l.trim_end().chars().count())
-            .max()
-            .unwrap_or(0);
-        // Scale the longest line (~120 cols) to the minimap width.
-        let bar = (longest * width / 120).clamp(usize::from(longest > 0), width);
-        let in_view = start < view_end && end > top;
-        let style = if in_view { view_bg } else { dim };
-        let glyph = if in_view { '\u{2593}' } else { '\u{2592}' }; // ▓ vs ▒
-        let mut s: String = std::iter::repeat_n(glyph, bar).collect();
-        for _ in bar..width {
-            s.push(' ');
-        }
-        text.push(Line::from(Span::styled(s, style)));
-    }
-    frame.render_widget(Paragraph::new(text), area);
-}
-
 fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) {
     use crate::editor::SplitDir;
     app.layout.editor_region = inner;
@@ -930,16 +892,6 @@ pub fn scrollbar_pos_from_col(area: Rect, col: u16, max: usize) -> usize {
     pos.min(max)
 }
 
-/// The longest line width (in chars) among `lines`.
-fn max_line_width<'a>(lines: impl Iterator<Item = &'a str>) -> usize {
-    lines.map(|l| l.chars().count()).max().unwrap_or(0)
-}
-
-/// Slice `line` to the horizontal window `[offset, offset + width)` by character.
-fn hslice(line: &str, offset: usize, width: usize) -> String {
-    line.chars().skip(offset).take(width).collect()
-}
-
 /// Total display width (chars) of a styled line's spans.
 fn span_line_width(spans: &[Span]) -> usize {
     spans.iter().map(|s| s.content.chars().count()).sum()
@@ -969,173 +921,6 @@ fn hslice_spans(spans: &[Span], offset: usize, width: usize) -> Vec<Span<'static
         out.push(Span::styled(text, sp.style));
     }
     out
-}
-
-fn draw_bottom_dock(app: &mut App, frame: &mut Frame, area: Rect) {
-    let focused = app.focus == Focus::BottomDock;
-    let block = Block::default()
-        .style(theme::base())
-        .borders(Borders::TOP)
-        .border_type(BorderType::Rounded)
-        .border_style(theme::title(focused))
-        .title(format!(" {} {} ", icon::INFO, t!("ui.bottom_dock")));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    let total = app.bottom_dock.lines.len();
-    let h = inner.height as usize;
-    let allow_bars = app.settings.show_scrollbar && inner.width > 1 && inner.height > 1;
-    let vbar = allow_bars && total > h;
-
-    // The visible rows, and whether they overflow horizontally → a bottom hbar.
-    let view_h = if allow_bars {
-        inner.height.saturating_sub(1)
-    } else {
-        inner.height
-    } as usize;
-    let visible: Vec<String> = app.bottom_dock.visible(view_h).to_vec();
-    let content_w = max_line_width(visible.iter().map(String::as_str));
-    let text_w_full = if vbar { inner.width - 1 } else { inner.width } as usize;
-    let hbar = allow_bars && content_w > text_w_full;
-
-    let text_w = text_w_full;
-    let body_h = if hbar { inner.height - 1 } else { inner.height };
-    let text_area = Rect {
-        width: u16::try_from(text_w).unwrap_or(u16::MAX),
-        height: body_h,
-        ..inner
-    };
-
-    let hmax = content_w.saturating_sub(text_w);
-    app.bottom_hmax = hmax;
-    app.bottom_hscroll = app.bottom_hscroll.min(hmax);
-    let off = app.bottom_hscroll;
-
-    let lines: Vec<Line> = if app.bottom_dock.is_empty() {
-        vec![Line::from(Span::styled(
-            t!("ui.bottom_dock_empty").to_string(),
-            theme::dim(),
-        ))]
-    } else {
-        visible
-            .iter()
-            .map(|l| Line::from(hslice(l, off, text_w)))
-            .collect()
-    };
-    frame.render_widget(Paragraph::new(lines), text_area);
-
-    if vbar {
-        let sb = Rect {
-            x: inner.x + inner.width - 1,
-            y: inner.y,
-            width: 1,
-            height: body_h,
-        };
-        draw_scrollbar(
-            frame,
-            sb,
-            app.bottom_dock.scroll,
-            total.saturating_sub(view_h),
-        );
-    }
-    app.layout.bottom_hscrollbar = if hbar {
-        let hb = Rect {
-            x: inner.x,
-            y: inner.y + inner.height - 1,
-            width: u16::try_from(text_w).unwrap_or(u16::MAX),
-            height: 1,
-        };
-        draw_hscrollbar(frame, hb, off, hmax);
-        hb
-    } else {
-        Rect::default()
-    };
-}
-
-fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
-    let (line, col) = app.editor.cursor_1based();
-    let path = app
-        .editor
-        .active_tab()
-        .map(super::editor::Tab::display_path)
-        .unwrap_or_default();
-    let dirty = app.editor.active_tab().is_some_and(|t| t.dirty);
-    let dirty_flag = if dirty {
-        format!(" {}", icon::FILE_DIRTY)
-    } else {
-        String::new()
-    };
-
-    let mode = app
-        .mode_indicator()
-        .map(|m| format!("{m}   "))
-        .unwrap_or_default();
-    // Editor info (language · line ending · encoding · selection) for text tabs.
-    let info = app
-        .editor
-        .active_tab()
-        .filter(|t| !t.is_image())
-        .map(|t| {
-            let lang = match t.editor.language() {
-                "unknown" | "" => "text",
-                other => other,
-            };
-            let sel = t.editor.selection_span().map(|(s, e)| {
-                let code = t.editor.code_ref();
-                (e - s, code.char_to_line(e) - code.char_to_line(s) + 1)
-            });
-            crate::status_bar_panel::info_segment(Some(lang), t.editor.line_ending(), sel)
-        })
-        .unwrap_or_default();
-
-    let git = crate::status_bar_panel::git_segment(
-        app.git_branch.as_deref(),
-        icon::BRANCH,
-        app.git_dirty(),
-    );
-    let left = crate::status_bar_panel::left_segment(&mode, &path, &dirty_flag, &app.status);
-    let right =
-        crate::status_bar_panel::right_segment(&format!("{git}{info}"), line, col, icon::CALENDAR);
-
-    let bg = theme::region_base(theme::Region::StatusBar);
-    // A top border separates the status bar from the body above it.
-    let block = Block::default()
-        .style(bg)
-        .borders(Borders::TOP)
-        .border_style(theme::region_title(theme::Region::StatusBar, false));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let cols = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Min(1),
-            Constraint::Length(u16::try_from(right.chars().count()).unwrap_or(u16::MAX) + 1),
-        ])
-        .split(inner);
-
-    frame.render_widget(
-        Paragraph::new(left).style(bg).alignment(Alignment::Left),
-        cols[0],
-    );
-    frame.render_widget(
-        Paragraph::new(right).style(bg).alignment(Alignment::Right),
-        cols[1],
-    );
-
-    // Record the git/branch segment's rectangle (the leftmost part of the
-    // right-aligned right segment, after its 1-cell padding) so a click on the
-    // branch indicator opens the Git panel.
-    let git_w = u16::try_from(git.chars().count()).unwrap_or(u16::MAX);
-    app.layout.git_status_bar = if git_w > 0 {
-        Rect {
-            x: cols[1].x + 1,
-            y: cols[1].y,
-            width: git_w.min(cols[1].width),
-            height: 1,
-        }
-    } else {
-        Rect::default()
-    };
 }
 
 /// Columns each glyph cell occupies in the Nerd Font palette grid. The mouse
