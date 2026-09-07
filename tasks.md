@@ -1504,6 +1504,23 @@ and its own gate run, zero intended behavior change unless stated.
   `f1_help_overlay` and `command_palette_open_with_a_query`, the cases
   this slice touches); full `scripts/check` clean. `ui.rs` now 2,582
   lines, down from 7,293 at T142's start.
+  **Slice 10 (LSP popups + tool panels) done 2026-09-07.** Two
+  modules: `src/ui/lsp_popups.rs` (`cursor_screen_yx`, `draw_completion`,
+  `draw_hover`, `draw_code_actions`, `draw_code_lens`, and the shared
+  `draw_chooser` they both render through) and `src/ui/tool_panels.rs`
+  (`draw_pomodoro`, `draw_welcome`, `draw_dialog`, `draw_color_converter`,
+  `draw_regex_tester`, `draw_calculator`, `draw_unit_converter` — 7
+  small standalone overlays, needing `use super::draw_scrollbar;`).
+  Built `tool_panels.rs` (531 lines) via shell concatenation (header +
+  extracted body, `sed` to mark the 7 top-level functions
+  `pub(super)`) rather than hand-retyping, to avoid transcription risk
+  at that size — verified the result read back intact before wiring
+  it in. First build caught one over-speculative import (`Wrap`, never
+  actually used by any of the 7 functions) — removed. `cargo build
+  --all-targets` clean after that fix; `cargo test --workspace` green
+  (221 lines); snapshots 12/12 re-verified directly (including
+  `welcome_screen`); full `scripts/check` clean. `ui.rs` now 1,848
+  lines, down from 7,293 at T142's start — a 75% cut.
 - [x] **T143 — Split `tests/integration.rs`.** Done. The file had grown to
   9,427 lines / 481 top-level items (462 `#[test]` fns + 19 shared helpers)
   by the time this ran. Moved to `tests/integration/main.rs` (crate doc +
