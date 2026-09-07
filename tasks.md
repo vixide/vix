@@ -1521,6 +1521,26 @@ and its own gate run, zero intended behavior change unless stated.
   (221 lines); snapshots 12/12 re-verified directly (including
   `welcome_screen`); full `scripts/check` clean. `ui.rs` now 1,848
   lines, down from 7,293 at T142's start — a 75% cut.
+  **Slice 11 (explorer + boxes) done 2026-09-07 — first slice into
+  territory flagged as "not clean overlay-per-file anymore."** Two
+  modules, both actually clean once surveyed carefully:
+  `src/ui/explorer.rs` (`explorer_rows` + `draw_explorer`, needing
+  `use super::{draw_hscrollbar, draw_scrollbar, git_change_color,
+  hslice_spans, span_line_width};` — `git_change_color` stays since
+  `choosers.rs` also needs it) and `src/ui/boxes.rs` (`draw_calendar`,
+  `draw_clock`, `draw_dashboard`, `month_lines` — zero shared-helper
+  dependency; `CAL_PREV`/`CAL_NEXT`, `pub` but with no actual external
+  referrer anywhere in the crate, moved with their sole user). Also
+  removed two now-dead top-level imports (`use crate::calendar;`,
+  `use crate::clock;`). Confirmed before extracting that `centered`/
+  `trunc`/`draw_scrollbar`/`draw_hscrollbar` now have zero remaining
+  call sites *within* `ui.rs` itself — all their callers are in
+  already-moved children reaching them via `super::` — which is
+  exactly why they must stay. `cargo build --all-targets` clean (a
+  slow ~18-minute build this run, no errors); `cargo test --workspace`
+  green (221 lines); snapshots 12/12 re-verified directly; full
+  `scripts/check` clean. `ui.rs` now 1,535 lines, down from 7,293 at
+  T142's start — a 79% cut.
 - [x] **T143 — Split `tests/integration.rs`.** Done. The file had grown to
   9,427 lines / 481 top-level items (462 `#[test]` fns + 19 shared helpers)
   by the time this ran. Moved to `tests/integration/main.rs` (crate doc +
