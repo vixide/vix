@@ -1559,6 +1559,51 @@ and its own gate run, zero intended behavior change unless stated.
   directly in the gate log); snapshots 12/12 re-verified directly;
   full `scripts/check` clean. `ui.rs` now 1,173 lines, down from 7,293
   at T142's start — an 84% cut.
+  **Slice 13 (minimap + bottom_dock + status_bar) done 2026-09-08.**
+  Three more clean clusters: `src/ui/minimap.rs` (`draw_minimap`, sole
+  caller `draw_editor_region` staying in `ui.rs`), `src/ui/bottom_dock.rs`
+  (`hslice`, `max_line_width`, `draw_bottom_dock` — confirmed the two
+  helpers are used only by `draw_bottom_dock`, unlike
+  `span_line_width`/`hslice_spans` which stayed since `explorer.rs`/
+  `docks.rs` also need them), `src/ui/status_bar.rs` (`draw_status_bar`,
+  fully self-contained). One gotcha caught before it reached the
+  compiler: the body referenced `super::editor::Tab::display_path` —
+  in `ui.rs` that meant the crate root, but one level deeper it would
+  resolve to a nonexistent `ui::editor` — rewritten to the absolute
+  `crate::editor::Tab::display_path`. Also removed one more now-dead
+  top-level import (`icon`, after its three remaining users all moved
+  out). `cargo build --all-targets` clean after the fix; `cargo test
+  --workspace` green (221 lines, integration suite's 451/0/11-ignored
+  explicitly re-confirmed in the gate log); snapshots 12/12
+  re-verified directly (including `default_screen_with_no_file_open`
+  and `editor_with_an_opened_rust_file`); full `scripts/check` clean.
+  `ui.rs` now 958 lines, down from 7,293 at T142's start — an 87% cut.
+  **Slice 14 (core editor region) done 2026-09-08 — the slice flagged
+  as most likely where the pattern stops, surveyed carefully anyway
+  and it still held.** `src/ui/editor_region.rs`: `draw_editor_region`,
+  `draw_pane`, `tint_ruler`, `draw_center` — the actual core editor
+  rendering (single pane or a split tree, one pane's text + scrollbar
+  + ruler guide, the un-split "center" case with its optional minimap
+  and horizontal scrollbar). Only `draw_editor_region` needed
+  `pub(super)` (sole caller `draw()`, staying); the other three are
+  called only within this cluster's own chain and stayed private.
+  `MINIMAP_WIDTH` (no external referrers) moved with its sole user;
+  `RULER_COLUMN` stayed in `ui.rs` since `app.rs` has an intra-doc-link
+  reference to `crate::ui::RULER_COLUMN` a move would have broken —
+  reached via `use super::RULER_COLUMN;`. Same `super::editor::` →
+  `crate::editor::` path fix as slice 13 needed, applied to three
+  occurrences this time. The extraction script also left a stray
+  one-line leftover doc comment orphaned above the relocated consts
+  (its deletion-span boundary landed one line early) — cleaned up by
+  hand. Built via the shell-concatenation technique at 236 lines.
+  `cargo build --all-targets` clean after removing two more now-dead
+  top-level imports (`StatefulImage`/`StatefulProtocol`); `cargo test
+  --workspace` green (221 lines, lib/integration/lsp_smoke/snapshots
+  each individually re-confirmed in the gate log); snapshots 12/12
+  re-verified directly a second time given this touches core editor
+  rendering (including `editor_with_typed_rust_source` and
+  `editor_with_an_opened_rust_file`); full `scripts/check` clean.
+  `ui.rs` now 713 lines, down from 7,293 at T142's start — a 90% cut.
 - [x] **T143 — Split `tests/integration.rs`.** Done. The file had grown to
   9,427 lines / 481 top-level items (462 `#[test]` fns + 19 shared helpers)
   by the time this ran. Moved to `tests/integration/main.rs` (crate doc +
