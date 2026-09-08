@@ -56,20 +56,20 @@ pub use vix_editor::editor;
 /// history, selection, soft-wrap renderer). Reached through
 /// [`editor::CodeEditor`] and `crate::editor_core` paths.
 pub use vix_editor_core as editor_core;
-pub mod explorer;
 pub use vix_fileops as fileops;
 pub use vix_format_tool as format_tool;
 pub use vix_jwt_tool as jwt_tool;
+pub use vix_left_dock as explorer;
 pub use vix_lsp as lsp;
 pub use vix_markdown_preview as markdown_preview;
 pub use vix_menu as menu;
-pub mod messages;
 pub use vix_palette as palette;
+pub use vix_right_dock as messages;
 pub mod workspace_search;
+pub use vix_find_panel as search;
 pub use vix_qr_tool as qr_tool;
 pub use vix_query as query;
 pub use vix_regex_tool as regex_tool;
-pub mod search;
 pub use vix_session as session;
 pub use vix_settings as settings;
 pub use vix_snippet_tool as snippet_tool;
