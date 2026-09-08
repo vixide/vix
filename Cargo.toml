@@ -526,3 +526,15 @@ strip = false
 # only if this alone isn't enough).
 [profile.test]
 debug = 1
+
+# `vix-i18n`'s `i18n!` macro (T148(b), locales/*.yml at ~100% core-locale
+# coverage) expands to one function that sequentially `.insert()`s every
+# (key, locale) pair into a `HashMap` — tens of thousands of statements in a
+# single unoptimized frame overflows the default 8 MiB thread stack the
+# first time it runs (`cargo test`/a debug `cargo run`; a release build is
+# unaffected — LLVM's optimizer collapses the frame). Building just this one
+# crate at a real optimization level (still debug elsewhere, so iteration
+# stays fast) is enough headroom without raising `RUST_MIN_STACK` globally
+# or shrinking the catalog.
+[profile.dev.package.vix-i18n]
+opt-level = 2

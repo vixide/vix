@@ -1847,7 +1847,8 @@ and its own gate run, zero intended behavior change unless stated.
   granular per-menu-item rows the shrunk `ROWS` now produces — verified
   by eye before accepting, not just re-recorded blindly. Crate count
   106→107 everywhere it's cited. Full gate green; merged to `main`.
-- [ ] **T148 — i18n coverage, measured and gated.** `locales/app.yml` is
+- [x] **T148 — i18n coverage, measured and gated.** Done, all three
+  parts. `locales/app.yml` is
   26,298 lines holding 2,240 keys, and 690 of them (31%) carry only
   `en` — every `msg.*` added since scripting landed, most menu items
   from 2026-07 on. (a) Extend `tests/i18n_keys.rs` to print a per-locale
@@ -1858,7 +1859,7 @@ and its own gate run, zero intended behavior change unless stated.
   (`locales/menu.yml`, `msg.yml`, `help.yml`, …) — `rust-i18n` loads a
   directory — so a translation PR isn't a 26k-line diff context.
 
-  **(a) and (c) done; (b) remains.** (a): new `i18n_coverage_report_and_
+  **All three parts done.** (a): new `i18n_coverage_report_and_
   floor` test prints a per-locale table and ratchets against a hardcoded
   `LOCALE_FLOORS`, tuned to what T148 actually found: only 14 locales
   (es/fr/de/cy/ga/gd/pl/pt/ru/ar/hi/bn/zh/ja, ~70% coverage each) are a
@@ -1894,8 +1895,55 @@ and its own gate run, zero intended behavior change unless stated.
   flags any backtick-quoted `something.yml`-shaped span, historical
   mentions included, so a deliberately-historical "`locales/app.yml`,
   still the name..." sentence needed rewording to drop the backticks,
-  not just updating). (b) — backfilling the ~690 `en`-only keys with
-  real translations — remains open, tracked separately given its scale.
+  not just updating).
+
+  (b): 711 `en`-only keys (the "690" had grown by the time this ran)
+  translated into the 14 core locales — 12 parallel subagents, 60-row
+  chunks, the same glossary-reuse technique as T147's action-catalog
+  translations but with the glossary regenerated first (1,259 → 1,697
+  rows, since T147/T148(a)/(c) had already added more fully-covered
+  reference entries). Every block validated programmatically before
+  merging: exact 14-locale set and order (0/711 failures), and
+  `%{name}` placeholder preservation across all 60 placeholder-bearing
+  keys (0/60 mismatches) — merged via a block-scalar-aware script, same
+  technique as (c)'s split. The post-merge completeness check then
+  found **10 keys still partially uncovered** (outside the "en-only"
+  scope, so untouched by the backfill) — and two of them,
+  `msg.workspace_unsafe_root` and `ui.db_field_sslmode`, turned out to
+  hold a **pre-existing bug unrelated to this task**: each held the
+  *other* key's translations verbatim (`msg.open_failed`'s and
+  `ui.db_field_ssh_identity`'s respectively), missing exactly the
+  locales the other key had — a historical copy-paste mix-up between
+  two keys, found only because this pass checked for completeness this
+  thoroughly. Fixed by relocating each correct set to its real key and
+  writing fresh translations for the two real messages; the other 6
+  gaps were universal proper-noun/acronym entries (`Vix`, `UUID`,
+  `SHA-256`, …) nobody had filled in. End state: **100.00% core-14
+  coverage, all 2,418 entries, zero gaps** — `LOCALE_FLOORS` bumped
+  from ~1,548–1,705 (~70%) to 2,418 (100%) for all 14.
+
+  **A real, serious `rust_i18n` scale bug surfaced by the fuller
+  catalog, found and fixed in the same branch**: `cargo test --lib`
+  went from green to a 100%-reproducible stack overflow on bare
+  `App::new()` (isolated via three throwaway `diag_stepN` tests,
+  deleted after use, that bisected the failure down from the org-dblock
+  test that first surfaced it to nothing more than app construction).
+  Root-caused by reading `rust-i18n-macro` 4.2.1's actual generated
+  code: `i18n!` expands to one function with a flat, un-chunked
+  sequence of `map.insert(k, v)` — tens of thousands of statements once
+  core coverage hit 100% — whose unoptimized stack frame in a
+  `dev`/`test`-profile build crossed the default 8 MiB thread stack.
+  Confirmed debug-build-only (`RUST_MIN_STACK=100000000 cargo test`
+  passes; `cargo build --release` and the built binary are both fine).
+  This would have broken GitHub CI's own `cargo test --workspace` job
+  (confirmed by reading `.github/workflows/ci.yml`: that job runs
+  debug, not `--release`) had it shipped unfixed. Fixed with one
+  targeted `[profile.dev.package.vix-i18n] opt-level = 2` in the root
+  `Cargo.toml` — `test` inherits unspecified `dev` settings including
+  package overrides, so it covers both `cargo build` and `cargo test`
+  while only that one crate pays an optimization-vs-iteration-speed
+  cost, not the whole workspace. Full `scripts/check` gate green
+  end-to-end afterward, including the originally-failing test.
 - [ ] **T149 — Replace boolean clusters with types.** Six
   `struct_excessive_bools` allows: `App`, `Settings`, `Editor` (both
   `vix-editor` and `vix-editor-core`), `SearchBar`, `WorkspaceSearch`.
@@ -2263,11 +2311,9 @@ is listed explicitly.
    (benches, audits) exists. Not started.
 8. **Security:** T131/T132/T133 are done. **T134 remains**, blocked on
    T105 and T124/T125 shipping.
-9. **CI + code quality:** T009/T010/T143/T145/T146/T150/T153/T154/T141 are
-   all done. **What's left**: T142 (in progress — see its own entry for
-   per-slice status); T144, T147, T148, T149, T151, T152 remain,
-   independent of each other and of the rest; T147 is worth doing before
-   T201–T203/T205–T211 (the remaining Run C items).
+9. **CI + code quality:** T009/T010/T141/T142/T143/T145/T146/T147/T148/
+   T150/T153/T154 are all done. **What's left**: T144, T149, T151, T152
+   remain, independent of each other and of the rest.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.

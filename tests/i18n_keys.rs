@@ -299,9 +299,9 @@ fn every_call_site_fills_the_placeholders_its_string_declares() {
 /// floor` fails loudly on a real regression rather than shipping it
 /// silently (`rust_i18n` falls back to `en` with no build error at all).
 ///
-/// Only the 14 locales already near-universal as of T148 (`es`/`fr`/`de`/
-/// `cy`/`ga`/`gd`/`pl`/`pt`/`ru`/`ar`/`hi`/`bn`/`zh`/`ja`, ~75% of all
-/// entries each) get a real floor here. `tlh`/`sjn` (Klingon/Sindarin) and
+/// Only the 14 core locales (`es`/`fr`/`de`/`cy`/`ga`/`gd`/`pl`/`pt`/`ru`/
+/// `ar`/`hi`/`bn`/`zh`/`ja`, 100% covered as of T148(b)'s backfill) get a
+/// real floor here. `tlh`/`sjn` (Klingon/Sindarin) and
 /// `el`/`fa`/`id`/`it`/`ko`/`nl`/`th`/`tr`/`uk`/`vi` sit at single-digit
 /// entry counts — an easter egg and an experimental seed batch
 /// respectively, neither a real coverage commitment yet — so they're
@@ -309,32 +309,32 @@ fn every_call_site_fills_the_placeholders_its_string_declares() {
 /// from near-nothing, but not held to the 14-locale bar until a future
 /// task actually commits to them).
 const LOCALE_FLOORS: &[(&str, usize)] = &[
-    ("ar", 1705),
-    ("bn", 1705),
-    ("cy", 1699),
-    ("de", 1699),
+    ("ar", 2418),
+    ("bn", 2418),
+    ("cy", 2418),
+    ("de", 2418),
     ("el", 0),
-    ("es", 1699),
+    ("es", 2418),
     ("fa", 0),
-    ("fr", 1699),
-    ("ga", 1705),
-    ("gd", 1705),
-    ("hi", 1705),
+    ("fr", 2418),
+    ("ga", 2418),
+    ("gd", 2418),
+    ("hi", 2418),
     ("id", 0),
     ("it", 0),
-    ("ja", 1705),
+    ("ja", 2418),
     ("ko", 0),
     ("nl", 0),
-    ("pl", 1705),
-    ("pt", 1705),
-    ("ru", 1705),
+    ("pl", 2418),
+    ("pt", 2418),
+    ("ru", 2418),
     ("sjn", 0),
     ("th", 0),
     ("tlh", 0),
     ("tr", 0),
     ("uk", 0),
     ("vi", 0),
-    ("zh", 1705),
+    ("zh", 2418),
 ];
 
 /// Every catalog entry that's a real message (`load_catalog` already skips
