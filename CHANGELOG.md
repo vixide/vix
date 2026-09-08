@@ -222,6 +222,19 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   workspace. Global scripts (`Settings::scripts_dir()`) are unaffected. A
   declined workspace isn't locked out: `Tools → Scripts → Reload` always
   re-asks.
+- **A real action catalog for F1 help and the palette** (improvement plan
+  T147): 157 action ids titled nowhere at all (no menu item, no
+  `palette::COMMANDS` entry — bare editor primitives like `cursor_down`,
+  Org/roam/project/tools actions, …) previously showed their raw id in F1
+  help and were entirely unreachable from the command palette's `>`
+  Commands mode — now titled and searchable via a new `vix-action-catalog`
+  crate, translated into every core locale.
+  `vix-keyboard-shortcut-panel::ROWS` shrank from 17 hand-curated rows
+  (several of which could show the wrong binding — several keymaps don't
+  actually bind `Ctrl P` to the command palette, for instance) to 3
+  purely-informational rows nothing else can supply (`F10`/menu mnemonics,
+  `F1`, `Mouse`); every real binding now comes from the menu, `SHARED`, or
+  the active keymap's own tables.
 
 ### Changed
 

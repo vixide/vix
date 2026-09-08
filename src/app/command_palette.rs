@@ -154,6 +154,44 @@ impl App {
         scored.into_iter().take(200).map(|(_, _, e)| e).collect()
     }
 
+    /// Score every `vix_action_catalog::CATALOG` entry against `query`,
+    /// continuing the numbering from `start_idx` so catalog, static, and
+    /// script commands never collide as a stable-sort tiebreak (mirrors
+    /// [`App::script_palette_entries`]'s own pattern). These are the
+    /// actions titled nowhere else (T147) — `tests/action_catalog.rs`'s
+    /// `no_catalog_entry_duplicates_a_palette_commands_entry` keeps the
+    /// catalog itself free of any id `palette::COMMANDS` already has; the
+    /// `any` check below is a cheap second guard against the same action
+    /// ever appearing twice under two different labels, in case that
+    /// invariant ever drifts before a test run catches it.
+    fn catalog_palette_entries(&self, query: &str, start_idx: usize) -> Vec<(i32, usize, Entry)> {
+        let recent_rank = |action: &str| self.command_recents.iter().position(|a| a == action);
+        let mut scored = Vec::new();
+        for (i, a) in vix_action_catalog::CATALOG
+            .iter()
+            .filter(|a| !palette::COMMANDS.iter().any(|(_, action)| *action == a.id))
+            .enumerate()
+        {
+            let idx = start_idx + i;
+            let label = t!(a.title).to_string();
+            let entry = Entry {
+                label: format!("> {label}"),
+                action: PAction::RunCommand(a.id.to_string()),
+            };
+            if query.is_empty() {
+                let key = recent_rank(a.id).map_or(1000 + i32::try_from(idx).unwrap_or(0), |r| {
+                    i32::try_from(r).unwrap_or(0)
+                });
+                scored.push((-key, idx, entry));
+            } else if let Some(score) = palette::fuzzy_score(&label, query) {
+                let boost =
+                    recent_rank(a.id).map_or(0, |r| (12 - i32::try_from(r).unwrap_or(12)).max(0));
+                scored.push((score + boost, idx, entry));
+            }
+        }
+        scored
+    }
+
     fn recompute_palette(&mut self) {
         let Some(p) = self.palette.as_ref() else {
             return;
@@ -191,6 +229,9 @@ impl App {
                     }
                 }
                 scored.extend(self.script_palette_entries(&query));
+                let catalog_start = palette::COMMANDS.len()
+                    + self.scripts.iter().map(|s| s.commands.len()).sum::<usize>();
+                scored.extend(self.catalog_palette_entries(&query, catalog_start));
                 scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
                 entries = scored.into_iter().map(|(_, _, e)| e).collect();
             }

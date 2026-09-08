@@ -15,7 +15,7 @@ shipping it.
 
 A keyboard-friendly terminal text editor (a "Simple Terminal Rust IDE") built
 on `ratatui`, organized as a **Cargo workspace** (edition 2024): a thin App
-shell (root package `vix`, `src/`) over ~106 focused `vix-*` member crates
+shell (root package `vix`, `src/`) over ~107 focused `vix-*` member crates
 under `crates/`. `src/lib.rs` re-exports each member crate under a short
 module name (`pub use vix_git as git;`), so `crate::git`, `crate::menu`, etc.
 still name them. The App shell itself is two large files with submodules:
