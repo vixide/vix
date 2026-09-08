@@ -1327,7 +1327,47 @@ and its own gate run, zero intended behavior change unless stated.
   whole class of `#[cfg(test)]`-only errors); and never trusting a gate
   result piped through `tail`/`head` (it silently reports the pipe's
   own exit code, not the command's).
-- [ ] **T142 — Same for `src/ui.rs`.** 7,293 lines (112 `draw_*`
+- [x] **T142 — Same for `src/ui.rs`.** Done, 14 slices, 2026-09-06
+  through 2026-09-08. `ui.rs` went from 7,293 to 713 lines (a 90% cut)
+  across 21 new `src/ui/*.rs` submodules: `db.rs`, `info_panels.rs`,
+  `picker_panels.rs`, `edit_surfaces.rs`, `choosers.rs`, `menu_bar.rs`,
+  `dialogs.rs`, `file_browser.rs`, `ai_terminal.rs`, `search.rs`,
+  `help.rs`, `lsp_popups.rs`, `tool_panels.rs`, `explorer.rs`,
+  `boxes.rs`, `tabs.rs`, `hints.rs`, `docks.rs`, `minimap.rs`,
+  `bottom_dock.rs`, `status_bar.rs`, plus `editor_region.rs` (22
+  total). The final 713 lines are the irreducible remainder: the
+  top-level dispatch chain (`draw`, `draw_overlays`,
+  `draw_overlays_aux`, `draw_chooser_overlays`, `body_columns`) that
+  every extracted module's `pub(super)` function is called from, and
+  shared rendering primitives (`draw_scrollbar`/`draw_hscrollbar` +
+  their `scrollbar_pos_from_row`/`_col` mouse-hit-test siblings,
+  `trunc`, `centered`, `span_line_width`/`hslice_spans`,
+  `unix_secs_label`, `git_change_color`, `menu_offsets`,
+  `dock_toggle_cols`, `menu_dropdown_rect`, `dropdown_scroll`,
+  `RULER_COLUMN`, `NERD_CELL_W`) that 10+ of the already-moved sibling
+  modules — or `app.rs` directly, via genuinely-public paths and one
+  intra-doc-link — depend on via `super::`. Moving any of these further
+  would either relocate the top of the call graph without simplifying
+  it, or force an arbitrary "owner" onto a helper several unrelated
+  siblings share — confirmed by checking, not assumed, per each
+  slice's own findings (see the slice-by-slice history below and in
+  the topic memory file). Same technique as T141 throughout: the
+  rustfmt column-0-closing-brace extraction script
+  (`extract_ui_module.py`, adapted for free `fn`s instead of `impl`
+  methods), a `git checkout -- src/ui.rs` + corrected-TARGETS restart
+  on the one real miss (slice 4), a shell-concatenation build for
+  bodies too large to safely hand-retype (slices 10, 12, 13, 14), and
+  full `cargo build --all-targets` / `cargo test --workspace` /
+  `cargo test --test snapshots` (direct re-verification every slice,
+  not just the aggregate count) / `scripts/check` on every single
+  slice before merging. A genuine architecture conflict surfaced right
+  at the start (T142's original wording vs. `AGENTS.md`'s "rendering
+  lives only in `src/ui.rs`" hard rule) — resolved by keeping the hard
+  rule and revising this task's own wording, per the user's explicit
+  choice. Full slice-by-slice history below, starting from the
+  original opening note:
+
+  7,293 lines (112 `draw_*`
   functions), 3 of the workspace's 4 `too_many_lines` allows are here
   (`draw_ai_diff`, `draw_terminal`, `draw_search` — the 4th is
   `app.rs`'s `draw_insert`). **Revised 2026-09-06** (after T141 landed
