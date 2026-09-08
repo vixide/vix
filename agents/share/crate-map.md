@@ -2,7 +2,7 @@
 
 Vix is a **Cargo workspace** (`[workspace] members = ["crates/*"]`) on **edition
 2024**. The root package `vix` (`src/`) is the thin **App shell** — CLI, event
-loop, `App` state, rendering, and the explorer — and it depends on the 106
+loop, `App` state, rendering, and the explorer — and it depends on the 108
 `vix-*` **member crates** under `crates/` that hold every feature plus the custom
 editor widget (`vix-editor-core`). Shared reference for where things live.
 
@@ -64,10 +64,6 @@ features (`syntax-common` by default, `syntax-all` for everything).
 | `main.rs`             | clap CLI, locale resolution, terminal setup, event loop, suspend.   |
 | `lib.rs`              | Crate root; lint config; `i18n!` catalog init; module declarations. |
 | `app.rs`              | `App` state, `on_key`/`on_mouse`, `run_action`, overlays, behavior — dispatches most of its logic into `src/app/*.rs` (below). |
-| `explorer.rs`         | `Explorer`: directory tree flattened to rows.                       |
-| `messages.rs`         | `Messages`: notifications drawer model.                             |
-| `search.rs`           | Re-exports / shared search helpers.                                 |
-| `workspace_search.rs` | `WorkspaceSearch`: workspace-wide search/replace + static results.  |
 | `edit_table.rs`       | CSV/TSV spreadsheet overlay (`Grid`).                               |
 | `edit_outline.rs`     | Prose-hierarchy outline overlay (`Tree`).                           |
 | `column_view.rs`      | Org column-view overlay (spec-driven columns, editable in place).   |
@@ -77,15 +73,18 @@ features (`syntax-common` by default, `syntax-all` for everything).
 area: `keymap.rs` (`on_key` + the ten keymap dispatchers), `git.rs` (git/jj),
 `scripts.rs`, `command_palette.rs`, `session.rs`, `lsp_dap.rs`, `roam.rs`,
 `org_table.rs`, `org.rs`, `insert_tools.rs`, `picker_panels.rs`,
-`info_panels.rs`. `src/ui/*.rs` (T142, in progress) holds most of `ui.rs`'s
-actual draw functions, similarly one file per overlay/panel family so far:
-`info_panels.rs`, `picker_panels.rs`, `db.rs`, `edit_surfaces.rs`,
-`choosers.rs`, `menu_bar.rs`.
+`info_panels.rs`. `src/ui/*.rs` (T142, done) holds `ui.rs`'s draw functions,
+one file per overlay/panel family, across 22 submodules (`ui.rs` itself down
+to 713 lines: the dispatch chain plus shared rendering primitives).
 
 Everything else the shell used to own now lives in a member crate, reached
 through the workspace dependency graph (e.g. `vix-editor`, `vix-menu`,
 `vix-palette`, `vix-find-panel`, `vix-query`, `vix-session`, `vix-settings`,
-`vix-theme`, `vix-fileops`, `vix-case`).
+`vix-theme`, `vix-fileops`, `vix-case`). `explorer`/`messages`/`search` (T152)
+are now thin `pub use` aliases in `lib.rs` for `vix-left-dock`/
+`vix-right-dock`/`vix-find-panel` — no `src/*.rs` file of their own — and
+`workspace_search` likewise aliases the new `vix-workspace-search` crate
+(below).
 
 ## Feature crates (`crates/vix-*`)
 
@@ -115,7 +114,7 @@ through the workspace dependency graph (e.g. `vix-editor`, `vix-menu`,
 | Generators  | `vix-qr-tool` (QR code via the `qrcode` crate, Unicode renderer), `vix-lorem` (deterministic lorem-ipsum text). |
 | Tool dialogs| `vix-calculator-tool`, `vix-color-converter-tool`, `vix-unit-converter-tool`, `vix-pomodoro-tool`. |
 | Info panels | `vix-text-information-panel`, `vix-file-information-panel`, `vix-system-information-panel`, `vix-status-bar-panel`, `vix-workspace-dashboard-panel`, `vix-outline-panel`, `vix-welcome-panel`. |
-| Menu / find | `vix-menu` (3-level dropdown + command mode), `vix-palette` (command palette / fuzzy), `vix-find-panel` (find/replace state + engine), `vix-query` (interactive step-through replace). |
+| Menu / find | `vix-menu` (3-level dropdown + command mode), `vix-palette` (command palette / fuzzy), `vix-find-panel` (find/replace state + engine), `vix-query` (interactive step-through replace), `vix-workspace-search` (T152: workspace-wide search/replace panel state, across every file under the workspace root — `App` drives the actual scan). |
 | Pickers     | `vix-ascii-character-picker`, `vix-html-character-picker`, `vix-nerd-font-picker`, `vix-x11-color-picker`. |
 | Boxes       | `vix-calendar-panel`, `vix-clock-panel`.                                       |
 | Contacts    | `vix-vcard-parser` (RFC 6350), `vix-vcard-panel`, `vix-contact-panel`.         |
@@ -129,7 +128,7 @@ through the workspace dependency graph (e.g. `vix-editor`, `vix-menu`,
 
 | Path            | Contents                                                            |
 | --------------- | ------------------------------------------------------------------- |
-| `crates/`       | The 107 `vix-*` workspace member crates (each with its own `spec/`).|
+| `crates/`       | The 108 `vix-*` workspace member crates (each with its own `spec/`).|
 | `langs/`        | Tree-sitter highlight queries (`<lang>/highlights.scm`), embedded.  |
 | `locales/`      | `app.yml` — rust-i18n translations (English fallback).              |
 | `dictionaries/` | Hunspell dictionaries — gitignored; see `crates/vix-spellcheck/spec/dictionaries`. |

@@ -2,13 +2,20 @@
 //!
 //! Open buffers are searched in their current (possibly unsaved) state; other
 //! files are read from disk. `App` owns the buffers, so it drives the actual
-//! scanning; this module just holds the panel state.
+//! scanning; this crate just holds the panel state.
 
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 #![warn(clippy::pedantic)]
+
+// Shared workspace i18n (see the vix_i18n crate).
+#[macro_use]
+extern crate vix_i18n;
+vix_i18n::surface!();
 
 use std::path::PathBuf;
 
-use crate::search::Field;
+use vix_find_panel::Field;
 
 /// One matching line.
 pub struct Hit {
@@ -97,8 +104,8 @@ impl WorkspaceSearch {
 
     /// The compiled path filter from the include/exclude regexes.
     #[must_use]
-    pub fn path_filter(&self) -> crate::find_panel::PathFilter {
-        crate::find_panel::PathFilter::new(&self.include_path, &self.exclude_path)
+    pub fn path_filter(&self) -> vix_find_panel::PathFilter {
+        vix_find_panel::PathFilter::new(&self.include_path, &self.exclude_path)
     }
 
     /// Effective regex pattern from the query and toggles (no whole-word here).

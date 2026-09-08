@@ -5286,6 +5286,7 @@ dependencies = [
  "vix-welcome-panel",
  "vix-workspace",
  "vix-workspace-dashboard-panel",
+ "vix-workspace-search",
  "vix-x11-color-picker",
  "vix-zid-tool",
  "vt100",
@@ -6049,6 +6050,16 @@ dependencies = [
 [[package]]
 name = "vix-workspace-dashboard-panel"
 version = "1.6.0"
+
+[[package]]
+name = "vix-workspace-search"
+version = "1.6.0"
+dependencies = [
+ "regex",
+ "rust-i18n",
+ "vix-find-panel",
+ "vix-i18n",
+]
 
 [[package]]
 name = "vix-x11-color-picker"
