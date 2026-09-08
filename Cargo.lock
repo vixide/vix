@@ -5181,6 +5181,7 @@ dependencies = [
  "unicode-width 0.2.2",
  "ureq",
  "uuid",
+ "vix-action-catalog",
  "vix-affix",
  "vix-ai-diff",
  "vix-ai-panel",
@@ -5289,6 +5290,10 @@ dependencies = [
  "vix-zid-tool",
  "vt100",
 ]
+
+[[package]]
+name = "vix-action-catalog"
+version = "1.6.0"
 
 [[package]]
 name = "vix-affix"

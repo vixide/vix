@@ -24,64 +24,19 @@ pub struct Row {
     pub desc: &'static str,
 }
 
-/// All help rows, in display order.
+/// Purely informational rows with no action id of their own — nothing a
+/// real binding could stand for, so `vix_action_catalog::title_key`-style
+/// derivation can't produce them. Everything else (T147) comes from real
+/// bindings:
+/// menu-item accelerators, `vix_keybindings::SHARED`, and the active
+/// keymap's chord tables, assembled by the host (`App::shortcut_rows`).
+///
+/// Before T147 this list also hand-duplicated real bindings (e.g. a
+/// `"Ctrl P"` row for the command palette) — that duplication could drift
+/// from what a given keymap actually binds (several keymaps bind `C-p` to
+/// Quick Open, not the palette) and is why the crate's own spec called it
+/// "cosmetic, not data". It's now exactly the rows nothing else can supply.
 pub const ROWS: &[Row] = &[
-    Row {
-        keys: "Ctrl P",
-        desc: "help.command_palette",
-    },
-    Row {
-        keys: "Ctrl O",
-        desc: "help.open_file",
-    },
-    Row {
-        keys: "Ctrl S / Ctrl Shift S",
-        desc: "help.save",
-    },
-    Row {
-        keys: "Ctrl N / Ctrl W",
-        desc: "help.new_close",
-    },
-    Row {
-        keys: "Ctrl Q",
-        desc: "help.quit",
-    },
-    Row {
-        keys: "Ctrl Z / Ctrl Shift Z",
-        desc: "help.undo_redo",
-    },
-    Row {
-        keys: "Ctrl X / Ctrl C / Ctrl V",
-        desc: "help.cut_copy_paste",
-    },
-    Row {
-        keys: "Ctrl A",
-        desc: "help.select_all",
-    },
-    Row {
-        keys: "Ctrl F / Ctrl R",
-        desc: "help.find_replace",
-    },
-    Row {
-        keys: "F3 / Shift F3",
-        desc: "help.find_next_prev",
-    },
-    Row {
-        keys: "Ctrl B / Ctrl E",
-        desc: "help.toggle_focus_explorer",
-    },
-    Row {
-        keys: "Ctrl Shift F",
-        desc: "help.search_workspace",
-    },
-    Row {
-        keys: "F12",
-        desc: "help.goto_definition",
-    },
-    Row {
-        keys: "Alt Left / Alt Right",
-        desc: "help.position_history",
-    },
     Row {
         keys: "F10 / Alt V,F,E,I,T,H",
         desc: "help.menu_bar",

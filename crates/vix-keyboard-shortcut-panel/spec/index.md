@@ -12,13 +12,24 @@ active shortcut**, in two columns:
 The host assembles the rows from every active source, deduplicated on
 (action, keys) with the first source winning:
 
-1. the curated global rows (`ROWS` — key combo + i18n description);
+1. a few purely-informational rows with no action id of their own (`ROWS` —
+   key combo + i18n description; see below);
 2. **every menu-item accelerator**, walking all menus and submenus (the
    action name is the item's translated label);
 3. the **active keymap's chord tables** — the Spacemacs `SPC` leader map
    (shown as `SPC f f`, …) when the keymap is `spacemacs`, and the Emacs
-   `Ctrl X` map (shown as `Ctrl X Ctrl F`, …) when it is `emacs`. An action
-   with no menu item shows its action id, as the which-key popup does.
+   `Ctrl X` map (shown as `Ctrl X Ctrl F`, …) when it is `emacs`.
+
+An action name comes from the menu item that runs it when there is one,
+else from `vix-action-catalog`'s `(action id -> i18n title key)` entry for
+it (T147), else the raw action id itself, as the which-key popup does.
+
+Before T147, `ROWS` also hand-duplicated real bindings (e.g. a `"Ctrl P"`
+row for the command palette) as cosmetic, human-typed data — which could
+drift from what a keymap actually binds (several keymaps bind `C-p` to
+Quick Open, not the palette). `ROWS` is now only the rows nothing else can
+supply: the `F10`/menu-mnemonic hint, `F1`, and `Mouse` — none of which is
+a real dispatchable action a table entry could stand for.
 
 ## Interaction
 

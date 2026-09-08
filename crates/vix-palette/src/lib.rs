@@ -168,7 +168,9 @@ impl Palette {
 
 /// Commands offered in `>` mode: `(label_key, action)`, where `label_key` is an
 /// i18n key (translated at render time) and `action` is the same identifier the
-/// menu bar dispatches.
+/// menu bar dispatches. Hand-curated from the menu tree — the host
+/// (`App::recompute_palette`) appends every `vix_action_catalog::CATALOG`
+/// entry too (T147), so an action with no menu leaf is still reachable here.
 pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.new_file", "file.new"),
     ("cmd.open_file", "file.open"),

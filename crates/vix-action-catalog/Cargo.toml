@@ -1,0 +1,10 @@
+[package]
+name = "vix-action-catalog"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A single (action id -> i18n title key) catalog for every App::run_action id that has no vix-menu item of its own."
+
+[dependencies]

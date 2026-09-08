@@ -8258,9 +8258,12 @@ impl App {
         ));
     }
 
-    /// Every active keyboard shortcut as an action-name/key-combo row: the
-    /// curated global rows, every menu-item accelerator, and the active
-    /// keymap's chord tables (the Spacemacs leader, the Emacs `Ctrl X` map).
+    /// Every active keyboard shortcut as an action-name/key-combo row: a
+    /// few purely-informational rows with no action id of their own
+    /// (`ROWS`), every menu-item accelerator, and the active keymap's
+    /// chord tables (the Spacemacs leader, the Emacs `Ctrl X` map). Titles
+    /// come from [`Self::action_title`] — a menu label, else the
+    /// `vix_action_catalog` entry for ids with no menu leaf (T147).
     /// Deduplicated on (action, keys), first source wins.
     fn shortcut_rows(&self) -> Vec<crate::keyboard_shortcut_panel::Shortcut> {
         use crate::keyboard_shortcut_panel::Shortcut;
@@ -8332,8 +8335,9 @@ impl App {
         out
     }
 
-    /// The translated menu label for an action id, or the id itself when no
-    /// menu item runs that action (matching what the which-key popup shows).
+    /// The translated title for an action id: its menu label when a menu
+    /// item runs it, else its [`vix_action_catalog`] title (T147), else the
+    /// raw id itself (matching what the which-key popup shows).
     fn action_title(action: &str) -> String {
         fn find(items: &[crate::menu::Item], action: &str) -> Option<String> {
             for it in items {
@@ -8350,6 +8354,7 @@ impl App {
         crate::menu::menus()
             .iter()
             .find_map(|m| find(m.items, action))
+            .or_else(|| vix_action_catalog::title_key(action).map(|key| t!(key).to_string()))
             .unwrap_or_else(|| action.to_string())
     }
 

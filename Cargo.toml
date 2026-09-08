@@ -212,6 +212,9 @@ vix-undo-store = { path = "crates/vix-undo-store", version = "1.6.0" }
 vix-vcard-panel = { path = "crates/vix-vcard-panel", version = "1.6.0" }
 # A workspace: a named set of project folders plus the files to reopen.
 vix-workspace = { path = "crates/vix-workspace", version = "1.6.0" }
+# A single (action id -> i18n title key) catalog for every `App::run_action`
+# id that has no `vix-menu` item of its own.
+vix-action-catalog = { path = "crates/vix-action-catalog", version = "1.6.0" }
 # Add, drop, and toggle a prefix/suffix pair around text.
 vix-affix = { path = "crates/vix-affix", version = "1.6.0" }
 # Reviewable diff for AI text transforms (Annotate / Improve).
