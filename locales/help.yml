@@ -2,18 +2,88 @@ _version: 2
 
 help.license.field_license:
   en: "License"
+  es: "Licencia"
+  fr: "Licence"
+  de: "Lizenz"
+  cy: "Trwydded"
+  ga: "Ceadúnas"
+  gd: "Cead"
+  pl: "Licencja"
+  pt: "Licença"
+  ru: "Лицензия"
+  ar: "الترخيص"
+  hi: "लाइसेंस"
+  bn: "লাইসেন্স"
+  zh: "许可证"
+  ja: "ライセンス"
 help.license.field_repository:
   en: "Repository"
+  es: "Repositorio"
+  fr: "Dépôt"
+  de: "Repository"
+  cy: "Ystorfa"
+  ga: "Stór"
+  gd: "Stòr"
+  pl: "Repozytorium"
+  pt: "Repositório"
+  ru: "Репозиторий"
+  ar: "المستودع"
+  hi: "रिपॉज़िटरी"
+  bn: "রিপোজিটরি"
+  zh: "仓库"
+  ja: "リポジトリ"
 help.license.field_authors:
   en: "Authors"
+  es: "Autores"
+  fr: "Auteurs"
+  de: "Autoren"
+  cy: "Awduron"
+  ga: "Údair"
+  gd: "Ùghdaran"
+  pl: "Autorzy"
+  pt: "Autores"
+  ru: "Авторы"
+  ar: "المؤلفون"
+  hi: "लेखक"
+  bn: "লেখক"
+  zh: "作者"
+  ja: "作者"
 help.license.trademarks:
   en: "Vix™ and Vix IDE™ are trademarks."
+  es: "Vix™ y Vix IDE™ son marcas comerciales."
+  fr: "Vix™ et Vix IDE™ sont des marques déposées."
+  de: "Vix™ und Vix IDE™ sind Marken."
+  cy: "Mae Vix™ a Vix IDE™ yn nodau masnach."
+  ga: "Is trádmharcanna iad Vix™ agus Vix IDE™."
+  gd: "Tha Vix™ agus Vix IDE™ nan comharran-malairt."
+  pl: "Vix™ i Vix IDE™ są znakami towarowymi."
+  pt: "Vix™ e Vix IDE™ são marcas registradas."
+  ru: "Vix™ и Vix IDE™ являются товарными знаками."
+  ar: "‏Vix™ و Vix IDE™ علامتان تجاريتان."
+  hi: "Vix™ और Vix IDE™ ट्रेडमार्क हैं।"
+  bn: "Vix™ ও Vix IDE™ ট্রেডমার্ক।"
+  zh: "Vix™ 和 Vix IDE™ 是商标。"
+  ja: "Vix™ および Vix IDE™ は商標です。"
 help.report_issue.body:
   en: |
     Found a bug or have a feature request?
 
     Please open an issue on the Vix issue tracker. Include your Vix version
     (see Help → License), your OS, and clear steps to reproduce the problem.
+  es: "¿Encontraste un error o tienes una solicitud de función?\n\nAbre un issue en el rastreador de incidencias de Vix. Incluye tu versión de Vix\n(consulta Ayuda → Licencia), tu sistema operativo y pasos claros para reproducir el problema.\n"
+  fr: "Vous avez trouvé un bug ou avez une demande de fonctionnalité ?\n\nVeuillez ouvrir un ticket sur le suivi des problèmes de Vix. Indiquez votre version de Vix\n(voir Aide → Licence), votre système d'exploitation et des étapes claires pour reproduire le problème.\n"
+  de: "Einen Fehler gefunden oder einen Funktionswunsch?\n\nBitte eröffnen Sie ein Issue im Vix-Issue-Tracker. Geben Sie Ihre Vix-Version an\n(siehe Hilfe → Lizenz), Ihr Betriebssystem und klare Schritte zur Reproduktion des Problems.\n"
+  cy: "Wedi dod o hyd i wall neu gais am nodwedd?\n\nAgorwch fater ar dracwr materion Vix. Cynhwyswch eich fersiwn Vix\n(gweler Cymorth → Trwydded), eich system weithredu, a chamau clir i ailadrodd y broblem.\n"
+  ga: "An bhfuair tú fabht nó an bhfuil iarratas ar ghné agat?\n\nOscail ceist ar rianaire ceisteanna Vix. Cuir isteach do leagan Vix\n(féach Cabhair → Ceadúnas), do chóras oibriúcháin, agus céimeanna soiléire chun an fhadhb a atáirgeadh.\n"
+  gd: "An do lorg thu bug no a bheil iarrtas gleus agad?\n\nFosgail cùis air lorgaire chùisean Vix. Gabh a-steach an tionndadh Vix agad\n(faic Cobhair → Cead), an siostam-obrachaidh agad, agus ceumannan soilleir gus an duilgheadas ath-riochdachadh.\n"
+  pl: "Znalazłeś błąd lub masz propozycję funkcji?\n\nOtwórz zgłoszenie w systemie śledzenia błędów Vix. Podaj swoją wersję Vix\n(zobacz Pomoc → Licencja), swój system operacyjny i jasne kroki do odtworzenia problemu.\n"
+  pt: "Encontrou um erro ou tem uma solicitação de recurso?\n\nAbra uma issue no rastreador de problemas do Vix. Inclua a sua versão do Vix\n(veja Ajuda → Licença), o seu sistema operacional e passos claros para reproduzir o problema.\n"
+  ru: "Нашли ошибку или хотите предложить новую функцию?\n\nПожалуйста, откройте issue в трекере проблем Vix. Укажите вашу версию Vix\n(см. Справка → Лицензия), вашу ОС и чёткие шаги для воспроизведения проблемы.\n"
+  ar: "هل وجدت خطأ أو لديك طلب ميزة؟\n\nيُرجى فتح تذكرة (issue) في متتبع مشكلات Vix. أدرج إصدار Vix لديك\n(انظر مساعدة ← الترخيص)، ونظام التشغيل لديك، وخطوات واضحة لإعادة إنتاج المشكلة.\n"
+  hi: "कोई बग मिला या फ़ीचर का अनुरोध है?\n\nकृपया Vix इशू ट्रैकर पर एक इशू खोलें। अपना Vix संस्करण\n(देखें सहायता → लाइसेंस), अपना OS, और समस्या को दोहराने के स्पष्ट चरण शामिल करें।\n"
+  bn: "কোনো বাগ পেয়েছেন বা কোনো ফিচারের অনুরোধ আছে?\n\nঅনুগ্রহ করে Vix ইস্যু ট্র্যাকারে একটি ইস্যু খুলুন। আপনার Vix সংস্করণ\n(দেখুন সহায়তা → লাইসেন্স), আপনার OS এবং সমস্যাটি পুনরুৎপাদনের স্পষ্ট পদক্ষেপ অন্তর্ভুক্ত করুন।\n"
+  zh: "发现了错误或有功能请求？\n\n请在 Vix 问题跟踪器上提交一个 issue。请注明您的 Vix 版本\n（参见 帮助 → 许可证）、您的操作系统，以及重现问题的清晰步骤。\n"
+  ja: "バグを見つけましたか、または機能要望がありますか？\n\nVix の issue トラッカーで issue を開いてください。お使いの Vix のバージョン\n（ヘルプ → ライセンスを参照）、OS、問題を再現する明確な手順を記載してください。\n"
 help.privacy.body:
   en: |
     Privacy Statement
@@ -26,6 +96,20 @@ help.privacy.body:
     them and only with the endpoints you configure: language servers (LSP),
     git remotes, and any AI assistant you enable. Disable or omit these to
     keep Vix fully offline.
+  es: "Declaración de privacidad\n\nVix es un editor de terminal local y sin conexión por defecto. No recopila,\nalmacena ni transmite datos personales ni telemetría. Tus archivos y\npulsaciones de teclas nunca salen de tu máquina.\n\nLas funciones opcionales que contactan con la red solo lo hacen cuando las\ninvocas y solo con los puntos de conexión que configures: servidores de lenguaje (LSP),\nremotos de git y cualquier asistente de IA que actives. Desactiva u omite estas funciones para\nmantener Vix totalmente sin conexión.\n"
+  fr: "Déclaration de confidentialité\n\nVix est un éditeur de terminal local, conçu pour fonctionner hors ligne par défaut. Il ne collecte,\nne stocke ni ne transmet aucune donnée personnelle ni télémétrie. Vos fichiers et\nvos frappes ne quittent jamais votre machine.\n\nLes fonctionnalités facultatives qui contactent le réseau ne le font que lorsque vous les\ninvoquez, et uniquement avec les points d'accès que vous configurez : serveurs de langage (LSP),\ndépôts git distants et tout assistant IA que vous activez. Désactivez ou omettez-les pour\ngarder Vix entièrement hors ligne.\n"
+  de: "Datenschutzerklärung\n\nVix ist ein lokaler, standardmäßig offline arbeitender Terminal-Editor. Es sammelt,\nspeichert oder überträgt keine personenbezogenen Daten oder Telemetrie. Ihre Dateien und\nTastatureingaben verlassen niemals Ihren Rechner.\n\nOptionale Funktionen, die das Netzwerk kontaktieren, tun dies nur, wenn Sie sie\naufrufen, und nur mit den von Ihnen konfigurierten Endpunkten: Sprachserver (LSP),\nGit-Remotes und jeder von Ihnen aktivierte KI-Assistent. Deaktivieren oder weglassen Sie diese, um\nVix vollständig offline zu halten.\n"
+  cy: "Datganiad Preifatrwydd\n\nMae Vix yn olygydd terfynell lleol sy'n gweithio all-lein yn ddiofyn. Nid yw'n casglu,\nstorio na throsglwyddo unrhyw ddata personol na thelemetreg. Nid yw eich ffeiliau na'ch\ntrawiadau bysell byth yn gadael eich peiriant.\n\nMae nodweddion dewisol sy'n cysylltu â'r rhwydwaith yn gwneud hynny dim ond pan fyddwch chi'n eu\ngalw, a dim ond gyda'r pwyntiau terfyn rydych chi'n eu ffurfweddu: gweinyddion iaith (LSP),\nrhagosodiadau git pell, ac unrhyw gynorthwyydd AI rydych chi'n ei alluogi. Analluogwch neu hepgorwch y rhain i\nadw Vix yn gwbl all-lein.\n"
+  ga: "Ráiteas Príobháideachais\n\nIs eagarthóir teirminéil áitiúil é Vix, as líne de réir réamhshocraithe. Ní bhailíonn sé,\nní stórálann ná ní tharchuireann sé aon sonraí pearsanta ná teileiméadracht. Ní fhágann do chuid comhad ná\nbuillí méarchláir do mheaisín go deo.\n\nNí dhéanann gnéithe roghnacha a dhéanann teagmháil leis an líonra amhlaidh ach nuair a\nghlaonn tú orthu, agus ach amháin leis na críochphointí a chumraíonn tú: freastalaithe teanga (LSP),\ncianóstaigh git, agus aon chúntóir AI a chumasaíonn tú. Díchumasaigh nó fág ar lár iad seo chun\nVix a choinneáil go hiomlán as líne.\n"
+  gd: "Aithris Prìobhaideachd\n\n'S e deasaiche tèirmineil ionadail a th' ann an Vix, far loidhne mar bhun-roghainn. Cha chruinnich e,\ncha stòr agus cha chuir e a-null dàta pearsanta no telemeatraidh sam bith. Chan fhàg na faidhlichean agad no\nbuillean iuchrach do mhaisean gu bràth.\n\nCha bhith gleusan roghainneil a nì conaltradh ris an lìonra a' dèanamh sin ach nuair a\ngairmeas tu iad, agus a-mhàin leis na crìoch-phuingean a rèiticheas tu: frithealaichean cànain (LSP),\nfad-ionadan git, agus cuideachadh AI sam bith a chuireas tu an comas. Cuir à comas no fàg às iad seo gus\nVix a chumail gu tur far loidhne.\n"
+  pl: "Oświadczenie o prywatności\n\nVix to lokalny edytor terminalowy działający domyślnie w trybie offline. Nie zbiera,\nnie przechowuje ani nie przesyła żadnych danych osobowych ani telemetrii. Twoje pliki i\nnaciśnięcia klawiszy nigdy nie opuszczają Twojego komputera.\n\nOpcjonalne funkcje, które łączą się z siecią, robią to tylko wtedy, gdy je\nwywołasz, i tylko z punktami końcowymi, które skonfigurujesz: serwerami języka (LSP),\nzdalnymi repozytoriami git oraz dowolnym włączonym przez Ciebie asystentem AI. Wyłącz lub pomiń je, aby\nzachować Vix całkowicie offline.\n"
+  pt: "Declaração de Privacidade\n\nO Vix é um editor de terminal local, offline por padrão. Ele não coleta,\narmazena nem transmite dados pessoais ou telemetria. Seus arquivos e\nsuas teclas digitadas nunca saem da sua máquina.\n\nOs recursos opcionais que se conectam à rede só o fazem quando você os\ninvoca e apenas com os endpoints que você configurar: servidores de linguagem (LSP),\nremotos do git e qualquer assistente de IA que você ativar. Desative ou omita esses recursos para\nmanter o Vix totalmente offline.\n"
+  ru: "Заявление о конфиденциальности\n\nVix — это локальный терминальный редактор, по умолчанию работающий без подключения к сети. Он не собирает,\nне хранит и не передаёт никакие личные данные или телеметрию. Ваши файлы и\nнажатия клавиш никогда не покидают ваш компьютер.\n\nНеобязательные функции, обращающиеся к сети, делают это только когда вы их\nвызываете, и только с настроенными вами конечными точками: языковыми серверами (LSP),\nудалёнными репозиториями git и любым включённым вами ИИ-ассистентом. Отключите или не используйте их, чтобы\nVix оставался полностью автономным.\n"
+  ar: "بيان الخصوصية\n\nVix محرر طرفية محلي يعمل دون اتصال بالإنترنت افتراضيًا. لا يجمع\nولا يخزّن ولا ينقل أي بيانات شخصية أو بيانات قياس عن بُعد. لا تغادر ملفاتك\nولا ضغطات المفاتيح جهازك أبدًا.\n\nالميزات الاختيارية التي تتصل بالشبكة لا تفعل ذلك إلا عندما\nتستدعيها، وفقط مع نقاط النهاية التي تُهيّئها: خوادم اللغة (LSP)،\nومستودعات git البعيدة، وأي مساعد ذكاء اصطناعي تُفعّله. عطّل هذه الميزات أو تجاهلها لإبقاء\nVix دون اتصال بالكامل.\n"
+  hi: "गोपनीयता विवरण\n\nVix एक स्थानीय, डिफ़ॉल्ट रूप से ऑफ़लाइन टर्मिनल संपादक है। यह कोई व्यक्तिगत डेटा या टेलीमेट्री\nएकत्र, संग्रहीत या प्रसारित नहीं करता। आपकी फ़ाइलें और\nकीस्ट्रोक कभी भी आपकी मशीन नहीं छोड़ते।\n\nजो वैकल्पिक सुविधाएँ नेटवर्क से संपर्क करती हैं, वे केवल तभी ऐसा करती हैं जब आप उन्हें\nचलाते हैं, और केवल आपके द्वारा कॉन्फ़िगर किए गए एंडपॉइंट के साथ: भाषा सर्वर (LSP),\ngit रिमोट, और आपके द्वारा सक्षम किया गया कोई भी AI सहायक। Vix को पूरी तरह ऑफ़लाइन रखने के लिए\nइन्हें अक्षम करें या छोड़ दें।\n"
+  bn: "গোপনীয়তা বিবৃতি\n\nVix একটি স্থানীয়, ডিফল্টভাবে অফলাইন টার্মিনাল এডিটর। এটি কোনো ব্যক্তিগত ডেটা বা টেলিমেট্রি\nসংগ্রহ, সংরক্ষণ বা প্রেরণ করে না। আপনার ফাইল এবং\nকীস্ট্রোক কখনও আপনার মেশিন থেকে বেরোয় না।\n\nযে ঐচ্ছিক ফিচারগুলি নেটওয়ার্কের সাথে যোগাযোগ করে, তা কেবল তখনই করে যখন আপনি সেগুলি\nচালু করেন এবং কেবল আপনার কনফিগার করা এন্ডপয়েন্টের সাথে: ভাষা সার্ভার (LSP),\ngit রিমোট, এবং আপনি সক্রিয় করা যেকোনো AI সহকারী। Vix সম্পূর্ণ অফলাইন রাখতে\nএগুলি নিষ্ক্রিয় করুন বা বাদ দিন।\n"
+  zh: "隐私声明\n\nVix 是一款本地、默认离线优先的终端编辑器。它不会收集、\n存储或传输任何个人数据或遥测信息。您的文件和\n按键记录永远不会离开您的计算机。\n\n会联网的可选功能仅在您调用\n它们时才会联网，并且仅使用您配置的端点：语言服务器（LSP）、\ngit 远程仓库，以及您启用的任何 AI 助手。禁用或省略这些功能即可\n让 Vix 完全离线运行。\n"
+  ja: "プライバシーに関する声明\n\nVix はローカルで動作し、デフォルトでオフラインを前提とするターミナルエディタです。個人データや\nテレメトリを収集、保存、送信することはありません。ファイルや\nキー入力がお使いのマシンから外部へ送られることは決してありません。\n\nネットワークに接続するオプション機能は、あなたがそれらを\n呼び出したときにのみ、かつあなたが設定したエンドポイントに対してのみ通信します。言語サーバー（LSP）、\ngit のリモート、有効にした AI アシスタントなどです。これらを無効にするか使用しないことで、\nVix を完全にオフラインに保てます。\n"
 
 # ---------------------------------------------------------------------------
 # Keyboard-shortcut help rows (descriptions only; key names are not translated)

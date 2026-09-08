@@ -235,6 +235,20 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   purely-informational rows nothing else can supply (`F10`/menu mnemonics,
   `F1`, `Mouse`); every real binding now comes from the menu, `SHARED`, or
   the active keymap's own tables.
+- **Full i18n coverage for the 14 core locales** (improvement plan
+  T148): Spanish, French, German, Welsh, Irish, Scottish Gaelic, Polish,
+  Portuguese, Russian, Arabic, Hindi, Bengali, Chinese, and Japanese now
+  translate every one of the 2,418 entries in `locales/` (100%, up from
+  ~70%) — 711 previously `en`-only menu items, status messages, prompts,
+  and help text backfilled, plus two longstanding entries
+  (`msg.workspace_unsafe_root`, `ui.db_field_sslmode`) that had been
+  showing the *wrong* message's translations under their key, now
+  showing their own. `tests/i18n_keys.rs` gained a per-locale coverage
+  report and a regression-proof floor for all 14. `locales/app.yml`
+  also split into one file per key namespace (`menu.yml`, `status.yml`,
+  `ui.yml`, `action.yml`, `cmd.yml`, `msg.yml`, `prompt.yml`, `help.yml`,
+  `misc.yml`) so a translation change is a small, readable diff instead
+  of a multi-thousand-line one.
 
 ### Changed
 
@@ -250,6 +264,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`cargo build`/`cargo test` stack overflow on `App::new()`.** The
+  fuller `locales/` catalog above (T148) pushed `rust_i18n`'s generated
+  translation-table initializer — one very large function, unoptimized
+  in a debug build — past the default 8 MiB thread stack. A targeted
+  `[profile.dev.package.vix-i18n] opt-level = 2` in the root
+  `Cargo.toml` fixes it (a release build was never affected).
 - **Flaky `sqlite_connect_browse_query_and_filter`** (improvement plan
   T009): the recurring `ubuntu-latest`-only CI flake was the test
   harness's own wait for an async query, bounded by a fixed spin-count
