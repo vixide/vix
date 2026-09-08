@@ -1,0 +1,196 @@
+_version: 2
+
+
+# ---------------------------------------------------------------------------
+# Command palette — mode labels and command labels
+# ---------------------------------------------------------------------------
+palette.mode.files:
+  en: "Files"
+  es: "Archivos"
+  fr: "Fichiers"
+  de: "Dateien"
+  cy: "Ffeiliau"
+  ga: "Comhaid"
+  gd: "Faidhlichean"
+  pl: "Pliki"
+  pt: "Arquivos"
+  ru: "Файлы"
+  ar: "ملفات"
+  hi: "फ़ाइलें"
+  bn: "ফাইল"
+  zh: "文件"
+  ja: "ファイル"
+palette.mode.commands:
+  en: "Commands"
+  es: "Comandos"
+  fr: "Commandes"
+  de: "Befehle"
+  cy: "Gorchmynion"
+  ga: "Orduithe"
+  gd: "Àitheantan"
+  pl: "Polecenia"
+  pt: "Comandos"
+  ru: "Команды"
+  ar: "أوامر"
+  hi: "कमांड"
+  bn: "কমান্ড"
+  zh: "命令"
+  ja: "コマンド"
+palette.mode.buffers:
+  en: "Buffers"
+  es: "Búferes"
+  fr: "Tampons"
+  de: "Puffer"
+  cy: "Byfferi"
+  ga: "Maoláin"
+  gd: "Bufairean"
+  pl: "Bufory"
+  pt: "Buffers"
+  ru: "Буферы"
+  ar: "مخازن"
+  hi: "बफ़र"
+  bn: "বাফার"
+  zh: "缓冲区"
+  ja: "バッファ"
+palette.mode.goto_line:
+  en: "Go to line"
+  es: "Ir a la línea"
+  fr: "Aller à la ligne"
+  de: "Gehe zu Zeile"
+  cy: "Mynd i'r llinell"
+  ga: "Téigh go líne"
+  gd: "Rach gu loidhne"
+  pl: "Przejdź do wiersza"
+  pt: "Ir para a linha"
+  ru: "Перейти к строке"
+  ar: "الانتقال إلى السطر"
+  hi: "पंक्ति पर जाएँ"
+  bn: "লাইনে যান"
+  zh: "转到行"
+  ja: "行へ移動"
+palette.mode.symbols:
+  en: "Go to symbol"
+  es: "Ir al símbolo"
+  fr: "Aller au symbole"
+  de: "Gehe zu Symbol"
+  cy: "Mynd i'r symbol"
+  ga: "Téigh go siombail"
+  gd: "Rach gu samhla"
+  pl: "Przejdź do symbolu"
+  pt: "Ir para o símbolo"
+  ru: "Перейти к символу"
+  ar: "الانتقال إلى الرمز"
+  hi: "प्रतीक पर जाएँ"
+  bn: "প্রতীকে যান"
+  zh: "转到符号"
+  ja: "シンボルへ移動"
+palette.mode.workspace_symbols:
+  en: "Go to symbol in workspace"
+  es: "Ir al símbolo en el espacio de trabajo"
+  fr: "Aller au symbole dans l'espace de travail"
+  de: "Gehe zu Symbol im Arbeitsbereich"
+  cy: "Mynd i'r symbol yn y gweithle"
+  ga: "Téigh go siombail sa spás oibre"
+  gd: "Rach gu samhla san rum-obrach"
+  pl: "Przejdź do symbolu w przestrzeni roboczej"
+  pt: "Ir para o símbolo no espaço de trabalho"
+  ru: "Перейти к символу в рабочей области"
+  ar: "الانتقال إلى الرمز في مساحة العمل"
+  hi: "कार्यक्षेत्र में प्रतीक पर जाएँ"
+  bn: "ওয়ার্কস্পেসে প্রতীকে যান"
+  zh: "转到工作区中的符号"
+  ja: "ワークスペース内のシンボルへ移動"
+welcome.body:
+  en: |
+    Welcome to Vix!
+
+    Vix is a simple, keyboard-friendly text editor and IDE that runs right in your terminal. It is fast, mouse-aware, and works the same on macOS, Linux, and Windows. This screen is here to help you get started — press Esc to close it at any time, and reopen it later from Help → Welcome.
+
+    Getting started
+    ───────────────
+    • Open the menus with F10, or click a menu name. Arrow keys move, Enter runs, Esc backs out. Each menu has an Alt shortcut too (Alt+F for File).
+    • Open a file with Ctrl+O, save with Ctrl+S, and close a tab with Ctrl+W.
+    • Toggle the file explorer (left dock) with Ctrl+B, and switch focus between the explorer and the editor with Ctrl+E.
+    • Press Ctrl+P for the Command Palette — a searchable list of every command. If you ever forget a shortcut, start there.
+    • Press F1 for the full keyboard-shortcut reference.
+
+    What Vix can do
+    ───────────────
+    • Edit code with syntax highlighting, soft wrap, undo/redo, and tabs.
+    • Find and replace in the current file or across the whole workspace.
+    • Browse and edit files in the explorer, with cut/copy/paste and multi-select.
+    • Use Git: status and log, stage and commit, branches, pull/push/fetch, clone.
+    • Pick characters and colors from the Tools menu: Nerd Font glyphs, ASCII, HTML entities, and X11 colors.
+    • Turn on Language Server Protocol features (diagnostics, hover, go-to-definition, completion) by configuring a server for your language.
+    • Choose a color theme, a language, and a keymap (Apple, VS Code, Emacs, or Vim) from the View menu — Vix adapts to how you like to work.
+
+    Make it yours
+    ─────────────
+    Vix remembers your choices in a settings file, so the editor looks and behaves the way you set it up the next time you open it. Open it from Vix → Settings.
+
+    Feedback is welcome
+    ───────────────────
+    Vix is open source and we would love to hear from you — bug reports, ideas, and questions are all appreciated.
+
+    • Website: https://github.com/joelparkerhenderson/vix
+    • Email: joel@joelparkerhenderson.com
+
+    Happy editing!
+scratch.header:
+  en: "# Scratch buffer — not saved to disk unless you Save As."
+blame.inline:
+  en: "%{author}, %{date} · %{summary}"
+  es: "%{author}, %{date} · %{summary}"
+  fr: "%{author}, %{date} · %{summary}"
+  de: "%{author}, %{date} · %{summary}"
+  cy: "%{author}, %{date} · %{summary}"
+  ga: "%{author}, %{date} · %{summary}"
+  gd: "%{author}, %{date} · %{summary}"
+  pl: "%{author}, %{date} · %{summary}"
+  pt: "%{author}, %{date} · %{summary}"
+  ru: "%{author}, %{date} · %{summary}"
+  ar: "%{author}، %{date} · %{summary}"
+  hi: "%{author}, %{date} · %{summary}"
+  bn: "%{author}, %{date} · %{summary}"
+  zh: "%{author}，%{date} · %{summary}"
+  ja: "%{author}, %{date} · %{summary}"
+blame.uncommitted:
+  en: "Not committed yet"
+  es: "Aún no confirmado"
+  fr: "Pas encore validé"
+  de: "Noch nicht committet"
+  cy: "Heb ei ymrwymo eto"
+  ga: "Gan tiomnú fós"
+  gd: "Gun chur a-steach fhathast"
+  pl: "Jeszcze niezatwierdzone"
+  pt: "Ainda não confirmado"
+  ru: "Ещё не зафиксировано"
+  ar: "لم يُلتزم بعد"
+  hi: "अभी कमिट नहीं हुआ"
+  bn: "এখনও কমিট হয়নি"
+  zh: "尚未提交"
+  ja: "まだコミットされていません"
+agenda.todo.title:
+  en: "Global TODO List"
+agenda.stuck.title:
+  en: "Stuck Projects"
+agenda.match.title:
+  en: "Match: %{query}"
+agenda.search.title:
+  en: "Search: %{query}"
+confirm.delete:
+  en: "Delete %{n} item(s)?"
+  es: "¿Eliminar %{n} elemento(s)?"
+  fr: "Supprimer %{n} élément(s) ?"
+  de: "%{n} Element(e) löschen?"
+  cy: "Dileu %{n} eitem?"
+  ar: "هل تريد حذف %{n} عنصر؟"
+  bn: "%{n}টি আইটেম মুছবেন?"
+  ga: "%{n} mír a scriosadh?"
+  gd: "A bheil thu airson %{n} nì a sguabadh às?"
+  hi: "%{n} आइटम हटाएँ?"
+  ja: "%{n} 件を削除しますか？"
+  pl: "Usunąć %{n} elem.?"
+  pt: "Excluir %{n} item(ns)?"
+  ru: "Удалить элементов: %{n}?"
+  zh: "删除 %{n} 项？"

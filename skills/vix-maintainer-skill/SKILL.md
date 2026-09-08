@@ -40,9 +40,9 @@ leave the drift for later.
 2. **Implement in the owning crate.** Keep editing/state logic out of
    `src/ui.rs` (rendering only lives there). One action id, one
    `App::run_action` arm — never a second code path for the same command.
-3. **Internationalize new user-facing text.** Add the key to
-   `locales/app.yml` across every language the file already carries, render
-   with `t!`. Never hard-code a display string.
+3. **Internationalize new user-facing text.** Add the key to the right
+   `locales/*.yml` namespace file across every language it already carries,
+   render with `t!`. Never hard-code a display string.
 4. **Document every new public item.** `#![deny(missing_docs)]` is on at
    every crate root; an undocumented `pub fn`/`struct`/field fails the build.
 5. **Add/extend tests** — `tests/integration/main.rs` (split by topic into
@@ -117,7 +117,7 @@ leave the drift for later.
 | --- | --- |
 | Add/route a command | `src/app.rs` (`run_action`, dispatching into `src/app/*.rs`), `crates/vix-menu/`, `crates/vix-palette/` |
 | Change rendering | `src/ui.rs`, usually via one of its `src/ui/*.rs` submodules |
-| Add/translate UI text | `locales/app.yml` (+ `t!` at the call site) |
+| Add/translate UI text | `locales/*.yml` (+ `t!` at the call site) |
 | Add a setting | `crates/vix-settings/` |
 | Change the editor widget | `crates/vix-editor-core/` |
 | Change theme colors/model | `crates/vix-theme/`, `crates/vix-theme-model/` |

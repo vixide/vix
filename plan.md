@@ -39,7 +39,7 @@ These come from `AGENTS.md` / `CLAUDE.md` and are non-negotiable:
   `#![warn(clippy::pedantic)]` in every crate; clippy kept at zero warnings
   with `cargo clippy --workspace --all-targets -- -D warnings`. No blanket
   `allow`s.
-- Every user-facing string goes through `t!` with keys in `locales/app.yml`
+- Every user-facing string goes through `t!` with keys in `locales/`
   for all 15 languages (en es fr de cy ga gd pl pt ru ar hi bn zh ja).
 - One action id, one `run_action` arm; new features get a menu item, a
   palette command, and a keybinding when a free combo exists.

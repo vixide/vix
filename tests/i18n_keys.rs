@@ -2,7 +2,7 @@
 //! every call site fills exactly the placeholders its string declares.
 //!
 //! `rust_i18n` returns the key itself when a translation is missing, so a typo
-//! or a forgotten `locales/app.yml` entry does not fail the build — it ships,
+//! or a forgotten `locales/` entry does not fail the build — it ships,
 //! and the user sees `confirm.delete` where a sentence should be. (That exact
 //! bug reached the file explorer's delete dialog.) This test walks the
 //! workspace source, collects every `t!("…")` key, and asserts the catalog
@@ -77,12 +77,48 @@ fn keys_in(text: &str) -> BTreeSet<String> {
     keys
 }
 
-/// Every top-level key defined in `locales/app.yml`.
+/// Every `.yml` file under `locales/`, parsed and merged into one map — the
+/// same thing `rust_i18n::i18n!` does at macro-expansion time (T148 split
+/// the single `locales/app.yml` into one file per key namespace). Panics
+/// (naming the offending key) if two files define the same key: rust-i18n's
+/// own merge silently lets one win, which would hide a real mistake (a key
+/// copy-pasted into the wrong namespace file, or moved without deleting its
+/// old copy).
+fn load_catalog(root: &Path) -> BTreeMap<String, serde_yaml::Value> {
+    let dir = root.join("locales");
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(&dir)
+        .expect("locales/ directory")
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|e| e == "yml"))
+        .collect();
+    paths.sort();
+
+    let mut merged = BTreeMap::new();
+    for path in paths {
+        let yaml = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
+        let map: BTreeMap<String, serde_yaml::Value> = serde_yaml::from_str(&yaml)
+            .unwrap_or_else(|e| panic!("{} does not parse as YAML: {e}", path.display()));
+        for (key, value) in map {
+            if key == "_version" {
+                continue; // each file's own format marker, not a message
+            }
+            if merged.insert(key.clone(), value).is_some() {
+                panic!(
+                    "key `{key}` is defined in more than one locales/*.yml file \
+                     (also seen in {})",
+                    path.display()
+                );
+            }
+        }
+    }
+    merged
+}
+
+/// Every top-level key defined across `locales/*.yml`.
 fn catalog_keys(root: &Path) -> BTreeSet<String> {
-    let yaml = std::fs::read_to_string(root.join("locales/app.yml")).expect("locales/app.yml");
-    let map: BTreeMap<String, serde_yaml::Value> =
-        serde_yaml::from_str(&yaml).expect("locales/app.yml parses as YAML");
-    map.into_keys().collect()
+    load_catalog(root).into_keys().collect()
 }
 
 #[test]
@@ -111,7 +147,7 @@ fn every_translation_key_used_in_code_exists_in_the_catalog() {
     missing.dedup();
     assert!(
         missing.is_empty(),
-        "these `t!` keys are not in locales/app.yml, so the UI would show the \
+        "these `t!` keys are not in locales/, so the UI would show the \
          raw key: {missing:#?}"
     );
 }
@@ -221,9 +257,7 @@ fn every_call_site_fills_the_placeholders_its_string_declares() {
     // status line read `Language: %{locale}`; and `msg.git_failed` was handed an
     // `error` it had nowhere to put, so git failures lost their reason.
     let root = workspace_root();
-    let yaml = std::fs::read_to_string(root.join("locales/app.yml")).expect("locales/app.yml");
-    let catalog: BTreeMap<String, serde_yaml::Value> =
-        serde_yaml::from_str(&yaml).expect("locales/app.yml parses as YAML");
+    let catalog = load_catalog(&root);
 
     let mut problems: Vec<String> = Vec::new();
     for path in rust_sources(&root) {
@@ -259,7 +293,7 @@ fn every_call_site_fills_the_placeholders_its_string_declares() {
 }
 
 /// Every non-`en` locale code this branch guarantees a coverage floor for,
-/// mapped to the minimum number of `locales/app.yml` entries that must
+/// mapped to the minimum number of `locales/` entries that must
 /// carry it — a ratchet (T148): bump a number up when a backfill pass
 /// improves that locale's coverage, never down. `i18n_coverage_report_and_
 /// floor` fails loudly on a real regression rather than shipping it
@@ -303,18 +337,16 @@ const LOCALE_FLOORS: &[(&str, usize)] = &[
     ("zh", 1705),
 ];
 
-/// Every catalog entry that's a real message (skips `_version` and any
-/// other future underscore-prefixed metadata key, matching
-/// `catalog_entries_are_maps_of_locale_to_string`'s own exclusion).
+/// Every catalog entry that's a real message (`load_catalog` already skips
+/// `_version`; a malformed non-mapping entry is
+/// `catalog_entries_are_maps_of_locale_to_string`'s job to report, so it's
+/// just dropped here rather than double-reported).
 fn catalog_entries(root: &Path) -> BTreeMap<String, serde_yaml::Mapping> {
-    let yaml = std::fs::read_to_string(root.join("locales/app.yml")).expect("locales/app.yml");
-    let map: BTreeMap<String, serde_yaml::Value> =
-        serde_yaml::from_str(&yaml).expect("locales/app.yml parses as YAML");
-    map.into_iter()
-        .filter(|(k, _)| !k.starts_with('_'))
+    load_catalog(root)
+        .into_iter()
         .filter_map(|(k, v)| match v {
             serde_yaml::Value::Mapping(m) => Some((k, m)),
-            _ => None, // malformed shape is `catalog_entries_are_maps_of_locale_to_string`'s job
+            _ => None,
         })
         .collect()
 }
@@ -353,7 +385,7 @@ fn i18n_coverage_report_and_floor() {
             format!("  {locale:>4}  {n:>5} / {total} ({pct:5.1}%)\n")
         })
         .collect();
-    println!("locales/app.yml coverage ({total} entries):\n{table}");
+    println!("locales/ coverage ({total} entries):\n{table}");
 
     // Every locale actually present in the catalog must have a floor
     // entry — an untracked locale (a first key someone just added under a
@@ -369,7 +401,7 @@ fn i18n_coverage_report_and_floor() {
         .collect();
     assert!(
         untracked.is_empty(),
-        "these locale codes appear in locales/app.yml but have no LOCALE_FLOORS \
+        "these locale codes appear in locales/ but have no LOCALE_FLOORS \
          entry in tests/i18n_keys.rs: {untracked:#?}"
     );
 
@@ -393,15 +425,8 @@ fn catalog_entries_are_maps_of_locale_to_string() {
     // A key whose value is a bare string (rather than `locale: text`) silently
     // fails to translate; catch the shape here.
     let root = workspace_root();
-    let yaml = std::fs::read_to_string(root.join("locales/app.yml")).expect("locales/app.yml");
-    let map: BTreeMap<String, serde_yaml::Value> =
-        serde_yaml::from_str(&yaml).expect("locales/app.yml parses as YAML");
     let mut bad = Vec::new();
-    for (key, value) in map {
-        // `_version` is rust-i18n's own catalog-format marker, not a message.
-        if key.starts_with('_') {
-            continue;
-        }
+    for (key, value) in load_catalog(&root) {
         match value {
             serde_yaml::Value::Mapping(m) => {
                 if !m.contains_key(serde_yaml::Value::String("en".into())) {

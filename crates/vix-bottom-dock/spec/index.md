@@ -197,7 +197,7 @@ editor.
   dock reserves a one-column scrollbar gutter via the shared `draw_scrollbar`
   helper when its content overflows and `show_scrollbar` is on.
 - **Menu** entries are defined in `crates/vix-menu/src/lib.rs` under `VIEW_LAYOUT`; labels are
-  i18n keys translated from `locales/app.yml`.
+  i18n keys translated in `locales/menu.yml`.
 - **Defaults** (from `crates/vix-settings/src/lib.rs`): left and right docks and the status bar
   start shown; the bottom dock starts hidden; `explorer_width = 30`,
   `messages_width = 32`, `bottom_dock_height = 9`.

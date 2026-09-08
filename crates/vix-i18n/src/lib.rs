@@ -2,7 +2,8 @@
 //!
 //! `rust_i18n`'s `t!` macro expands to `crate::_rust_i18n_t!`, and the `i18n!`
 //! macro embeds the whole translation table into whichever crate invokes it.
-//! In a multi-crate workspace that would embed `locales/app.yml` once per crate.
+//! In a multi-crate workspace that would embed the `locales/` directory once
+//! per crate.
 //! To avoid that, this crate invokes `i18n!` exactly once and re-exposes a
 //! drop-in [`t!`] plus a [`surface!`] helper; consumer crates call
 //! `vix_i18n::surface!()` at their root and use `vix_i18n::t!` (or bring it in

@@ -41,9 +41,12 @@ welcome messages appear in the chosen language.
 
 ## How it works in the code
 
-- `src/lib.rs` initializes the catalog once: `i18n!("locales", fallback = "en")`.
-- All translation strings live in `locales/app.yml` (rust-i18n "version 2"
-  format: one file, every language under each dotted key).
+- `crates/vix-i18n/src/lib.rs` initializes the catalog once:
+  `i18n!("../../locales", fallback = "en")`.
+- All translation strings live under `locales/`, one file per key namespace
+  (`menu.yml`, `status.yml`, …, T148) — rust-i18n merges every file in the
+  directory into one table, each following its own "version 2" format (every
+  language under each dotted key).
 - Data-only crates (menus, command palette, theme names, keyboard help) store
   i18n **keys**, not translated text; the host calls `t!(key)` when rendering.
 - Interpolated values use `%{name}` placeholders, e.g.
@@ -53,7 +56,8 @@ welcome messages appear in the chosen language.
 
 No code changes are needed — edit YAML only.
 
-1. Open `locales/app.yml`.
+1. Open the `locales/*.yml` file for the key's namespace (see "Key namespace"
+   below) — `locales/menu.yml` for a menu label, and so on.
 2. For each key, add (or correct) your language line. Example:
 
    ```yaml
@@ -74,17 +78,20 @@ you have, and the rest stay in English until you fill them in.
 
 ## Key namespace
 
-| Prefix          | Used for                                          |
-| --------------- | ------------------------------------------------- |
-| `menu.*`        | Menu names and items (keyed by action).           |
-| `palette.*`     | Command-palette mode labels.                      |
-| `cmd.*`         | Command-palette command labels.                   |
-| `theme.*`       | Built-in theme names.                             |
-| `ui.*`          | Panel/overlay titles, hints, field labels, toggles. |
-| `help.*`        | Keyboard-shortcut descriptions.                   |
-| `prompt.*`      | Open/Save-as prompt titles.                       |
-| `msg.*`         | Welcome and message-drawer / error text.          |
-| `status.*`      | Status-bar messages.                              |
+Each namespace lives in the `locales/*.yml` file named for it, except a
+handful of low-volume ones grouped into `locales/misc.yml`.
+
+| Prefix          | File                 | Used for                                          |
+| --------------- | -------------------- | -------------------------------------------------- |
+| `menu.*`        | `menu.yml`           | Menu names and items (keyed by action).             |
+| `action.*`      | `action.yml`         | `vix-action-catalog` titles for menu-less actions.  |
+| `cmd.*`         | `cmd.yml`             | Command-palette command labels.                     |
+| `ui.*`          | `ui.yml`              | Panel/overlay titles, hints, field labels, toggles. |
+| `help.*`        | `help.yml`            | Keyboard-shortcut descriptions.                     |
+| `prompt.*`      | `prompt.yml`          | Open/Save-as prompt titles.                         |
+| `msg.*`         | `msg.yml`             | Welcome and message-drawer / error text.            |
+| `status.*`      | `status.yml`          | Status-bar messages.                                |
+| `palette.*`, `agenda.*`, `blame.*`, `welcome.*`, `scratch.*`, `confirm.*` | `misc.yml` | Command-palette chrome, Org agenda, git blame, first-run welcome, the scratch buffer, counted confirmations. |
 
 ## See also
 

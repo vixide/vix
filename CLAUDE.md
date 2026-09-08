@@ -19,7 +19,8 @@ Quick orientation:
   `cargo clippy --workspace --all-targets -- -D warnings` (kept clean).
 - **Hard rules**: `#![forbid(unsafe_code)]`, `#![deny(missing_docs)]`,
   `#![warn(clippy::pedantic)]` in every crate; internationalize all user-facing
-  text via `t!` + `locales/app.yml`; one action id, one `run_action` arm.
+  text via `t!` + the right `locales/*.yml` file; one action id, one
+  `run_action` arm.
 
 For everything else — conventions, the spec-driven workflow, the crate map, and
 the glossary — see [`AGENTS.md`](AGENTS.md) and the [`agents/`](agents/) topic

@@ -11,8 +11,9 @@ merged `--no-ff`, branch deleted.
   `spec/index.md`.
 - New user-facing feature → one action id + one `run_action` arm, a menu
   item, a palette command, a keybinding if a free combo exists.
-- All user-facing text via `t!` with keys added to `locales/app.yml` for all
-  15 languages: en es fr de cy ga gd pl pt ru ar hi bn zh ja.
+- All user-facing text via `t!` with keys added to the right `locales/*.yml`
+  namespace file (T148) for all 15 languages: en es fr de cy ga gd pl pt ru ar
+  hi bn zh ja.
 - Tests for the new behavior; `cargo build`, `cargo test`, and
   `cargo clippy --workspace --all-targets -- -D warnings` all clean.
 - Update the owning `spec/index.md` (and repo-root `spec/` if
@@ -1856,6 +1857,45 @@ and its own gate run, zero intended behavior change unless stated.
   call; (c) split the file per top-level namespace
   (`locales/menu.yml`, `msg.yml`, `help.yml`, …) — `rust-i18n` loads a
   directory — so a translation PR isn't a 26k-line diff context.
+
+  **(a) and (c) done; (b) remains.** (a): new `i18n_coverage_report_and_
+  floor` test prints a per-locale table and ratchets against a hardcoded
+  `LOCALE_FLOORS`, tuned to what T148 actually found: only 14 locales
+  (es/fr/de/cy/ga/gd/pl/pt/ru/ar/hi/bn/zh/ja, ~70% coverage each) are a
+  real commitment; `tlh`/`sjn` (Klingon/Sindarin) and 10 more codes
+  (el/fa/id/it/ko/nl/th/tr/uk/vi) sit at 5-10 keys each — an easter egg
+  and an experimental seed batch, floored at `0` rather than held to the
+  14-locale bar. (c): `locales/app.yml` (28,857 lines by the time this
+  ran, 2,418 keys — both had grown since this task was written, T147's
+  own 157 new keys included) split into 9 files by namespace
+  (`menu.yml` 1,374 keys down to a `misc.yml` catch-all for 6 low-volume
+  namespaces at 15 keys total) — a pure line-based Python script, every
+  key's content verified byte-identical before/after via a YAML diff
+  (`yaml.safe_load` both sides, zero missing/extra/mismatched keys)
+  before deleting the original file. `rust-i18n`'s own docs confirm
+  multi-file merging is supported (`i18n!` already pointed at the
+  `locales/` directory, not the file, so no macro-side change was
+  needed) — verified empirically too: the app itself compiles clean
+  against the split. `tests/i18n_keys.rs` gained a shared `load_catalog`
+  helper (merges every `locales/*.yml`, panics on a key defined in more
+  than one file — a new failure mode the split makes possible that
+  didn't exist with one file); `tests/action_catalog.rs` got its own
+  smaller equivalent (a separate test binary, can't share the helper).
+  `crates/vix-i18n/build.rs` rewritten to `rerun-if-changed` every file
+  in `locales/`, not just the one that no longer exists — a directory's
+  own mtime doesn't change when an existing file's content does, so
+  watching only the directory would have missed the common case (editing
+  a translation). All prose mentions of `locales/app.yml` repointed at
+  `locales/` or the specific namespace file across `AGENTS.md`,
+  `CLAUDE.md`, `crates/vix-i18n/spec/index.md` (substantially rewritten:
+  "How it works", "Key namespaces", "Rebuilds" sections), and a dozen
+  more docs/specs/skills — `scripts/check-docs`'s link checker caught
+  three that were missed on the first pass (its path-reference regex
+  flags any backtick-quoted `something.yml`-shaped span, historical
+  mentions included, so a deliberately-historical "`locales/app.yml`,
+  still the name..." sentence needed rewording to drop the backticks,
+  not just updating). (b) — backfilling the ~690 `en`-only keys with
+  real translations — remains open, tracked separately given its scale.
 - [ ] **T149 — Replace boolean clusters with types.** Six
   `struct_excessive_bools` allows: `App`, `Settings`, `Editor` (both
   `vix-editor` and `vix-editor-core`), `SearchBar`, `WorkspaceSearch`.

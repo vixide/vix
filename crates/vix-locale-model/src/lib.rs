@@ -22,7 +22,7 @@ pub struct Locale {
 /// All bundled locales, in chooser order. English is first (the fallback).
 ///
 /// Each language is selectable; translation coverage is filled in incrementally
-/// in `locales/app.yml`, with any untranslated key falling back to English.
+/// in `locales/`, with any untranslated key falling back to English.
 pub const LOCALES: &[Locale] = &[
     Locale {
         code: "en",

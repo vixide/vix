@@ -12,7 +12,7 @@ implements it. Cross-cutting / app-level specs live at the repo-root `spec/`.
 2. **Implement** in the smallest fitting module. Keep editing/state logic in the
    library; keep rendering in `src/ui.rs`.
 3. **Internationalize** any new user-facing text: add the key(s) to
-   `locales/app.yml` (English at minimum; other locales fall back to English)
+   the right `locales/*.yml` file (English at minimum; other locales fall back to English)
    and render with `t!`.
 4. **Document** every new public item (the build denies missing docs).
 5. **Test**: extend `tests/integration/main.rs` (its `mod`s: `common.rs` for
@@ -62,7 +62,7 @@ reading job:
 - Check that every action id used by a menu or the palette has a `run_action`
   arm and an i18n label key, and that no `run_action` arm is unreachable.
 - Check that user-facing strings go through `t!`, that every `t!` key exists in
-  `locales/app.yml`, and that each call fills exactly the `%{name}` placeholders
+  `locales/`, and that each call fills exactly the `%{name}` placeholders
   its string declares — `tests/i18n_keys.rs` now gates all three, because all
   three shipped broken at least once. (`locale` is reserved by `t!`: it selects
   the target locale, so it can never be a placeholder name.)
