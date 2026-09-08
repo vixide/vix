@@ -258,6 +258,136 @@ fn every_call_site_fills_the_placeholders_its_string_declares() {
     );
 }
 
+/// Every non-`en` locale code this branch guarantees a coverage floor for,
+/// mapped to the minimum number of `locales/app.yml` entries that must
+/// carry it — a ratchet (T148): bump a number up when a backfill pass
+/// improves that locale's coverage, never down. `i18n_coverage_report_and_
+/// floor` fails loudly on a real regression rather than shipping it
+/// silently (`rust_i18n` falls back to `en` with no build error at all).
+///
+/// Only the 14 locales already near-universal as of T148 (`es`/`fr`/`de`/
+/// `cy`/`ga`/`gd`/`pl`/`pt`/`ru`/`ar`/`hi`/`bn`/`zh`/`ja`, ~75% of all
+/// entries each) get a real floor here. `tlh`/`sjn` (Klingon/Sindarin) and
+/// `el`/`fa`/`id`/`it`/`ko`/`nl`/`th`/`tr`/`uk`/`vi` sit at single-digit
+/// entry counts — an easter egg and an experimental seed batch
+/// respectively, neither a real coverage commitment yet — so they're
+/// floored at `0` (tracked in the table, never allowed to regress even
+/// from near-nothing, but not held to the 14-locale bar until a future
+/// task actually commits to them).
+const LOCALE_FLOORS: &[(&str, usize)] = &[
+    ("ar", 1705),
+    ("bn", 1705),
+    ("cy", 1699),
+    ("de", 1699),
+    ("el", 0),
+    ("es", 1699),
+    ("fa", 0),
+    ("fr", 1699),
+    ("ga", 1705),
+    ("gd", 1705),
+    ("hi", 1705),
+    ("id", 0),
+    ("it", 0),
+    ("ja", 1705),
+    ("ko", 0),
+    ("nl", 0),
+    ("pl", 1705),
+    ("pt", 1705),
+    ("ru", 1705),
+    ("sjn", 0),
+    ("th", 0),
+    ("tlh", 0),
+    ("tr", 0),
+    ("uk", 0),
+    ("vi", 0),
+    ("zh", 1705),
+];
+
+/// Every catalog entry that's a real message (skips `_version` and any
+/// other future underscore-prefixed metadata key, matching
+/// `catalog_entries_are_maps_of_locale_to_string`'s own exclusion).
+fn catalog_entries(root: &Path) -> BTreeMap<String, serde_yaml::Mapping> {
+    let yaml = std::fs::read_to_string(root.join("locales/app.yml")).expect("locales/app.yml");
+    let map: BTreeMap<String, serde_yaml::Value> =
+        serde_yaml::from_str(&yaml).expect("locales/app.yml parses as YAML");
+    map.into_iter()
+        .filter(|(k, _)| !k.starts_with('_'))
+        .filter_map(|(k, v)| match v {
+            serde_yaml::Value::Mapping(m) => Some((k, m)),
+            _ => None, // malformed shape is `catalog_entries_are_maps_of_locale_to_string`'s job
+        })
+        .collect()
+}
+
+/// How many `entries` carry each locale code seen anywhere in the catalog.
+fn locale_coverage(entries: &BTreeMap<String, serde_yaml::Mapping>) -> BTreeMap<String, usize> {
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    for entry in entries.values() {
+        for key in entry.keys() {
+            if let Some(locale) = key.as_str() {
+                *counts.entry(locale.to_string()).or_insert(0) += 1;
+            }
+        }
+    }
+    counts
+}
+
+#[test]
+fn i18n_coverage_report_and_floor() {
+    let root = workspace_root();
+    let entries = catalog_entries(&root);
+    let total = entries.len();
+    assert!(total > 1000, "catalog looks truncated");
+    let counts = locale_coverage(&entries);
+
+    // A table locale-count/percentage table, most-covered first — visible
+    // with `cargo test i18n_coverage_report_and_floor -- --nocapture`, or
+    // in the failure output below if the ratchet catches a regression.
+    let mut report: Vec<(&str, usize)> = counts.iter().map(|(l, &n)| (l.as_str(), n)).collect();
+    report.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+    let table: String = report
+        .iter()
+        .map(|(locale, n)| {
+            let pct = 100.0 * f64::from(u32::try_from(*n).unwrap_or(u32::MAX))
+                / f64::from(u32::try_from(total).unwrap_or(1));
+            format!("  {locale:>4}  {n:>5} / {total} ({pct:5.1}%)\n")
+        })
+        .collect();
+    println!("locales/app.yml coverage ({total} entries):\n{table}");
+
+    // Every locale actually present in the catalog must have a floor
+    // entry — an untracked locale (a first key someone just added under a
+    // brand new code) can only silently regress later if nothing here
+    // ever asserts on it. `en` is exempt: it's the base language every
+    // entry already must carry (`catalog_entries_are_maps_of_locale_to_
+    // string` enforces that directly), not a coverage concern in the same
+    // sense as a translation.
+    let untracked: Vec<&str> = counts
+        .keys()
+        .map(String::as_str)
+        .filter(|l| *l != "en" && !LOCALE_FLOORS.iter().any(|(f, _)| f == l))
+        .collect();
+    assert!(
+        untracked.is_empty(),
+        "these locale codes appear in locales/app.yml but have no LOCALE_FLOORS \
+         entry in tests/i18n_keys.rs: {untracked:#?}"
+    );
+
+    let regressed: Vec<String> = LOCALE_FLOORS
+        .iter()
+        .filter_map(|(locale, floor)| {
+            let actual = counts.get(*locale).copied().unwrap_or(0);
+            (actual < *floor).then(|| format!("{locale}: {actual} < floor {floor}"))
+        })
+        .collect();
+    assert!(
+        regressed.is_empty(),
+        "locale coverage regressed below its floor in tests/i18n_keys.rs \
+         (lower LOCALE_FLOORS only if the drop is deliberate, e.g. a removed \
+         key, never to paper over a real regression): {regressed:#?}"
+    );
+}
+
 #[test]
 fn catalog_entries_are_maps_of_locale_to_string() {
     // A key whose value is a bare string (rather than `locale: text`) silently
