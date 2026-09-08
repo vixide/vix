@@ -34,8 +34,8 @@ Welsh are the fullest. Any key that is not translated for the active language
 
 ## Adding a Language
 
-Adding a language is a matter of filling in its column in `locales/app.yml` and
-listing it in `locale_model`. See also `../internationalization/index.md`.
+Adding a language is a matter of filling in its column across the `locales/*.yml`
+files and listing it in `locale_model`. See also `../internationalization/index.md`.
 
 ## Available Languages
 

@@ -17,7 +17,7 @@ pub struct Command {
     /// `script:<stem>:<id>`, tasks.md T103).
     pub id: String,
     /// Palette label, shown **verbatim**: script-authored text is not routed
-    /// through `t!`/`locales/app.yml`, the same as a saved macro's name.
+    /// through `t!`/`locales/`, the same as a saved macro's name.
     pub label: String,
     /// The script's `fn` name this command calls with no arguments when run.
     pub handler: String,

@@ -136,10 +136,11 @@ custom theme. See [themes.md](../themes/index.md).
 ## Internationalization
 
 User-facing text is looked up at render time with `rust_i18n`'s `t!` macro
-against `locales/app.yml` (one file, all languages, keyed by a dotted name).
-English is the fallback. The macro is initialized once in `src/lib.rs`. Data
-crates (menus, palette, theme, keyboard help) store i18n *keys*; the host
-translates. The active locale is a process-global set via `rust_i18n::set_locale`
+against `locales/` (one file per key namespace, all languages keyed by a
+dotted name within each — T148). English is the fallback. The macro is
+initialized once in `crates/vix-i18n/src/lib.rs`. Data crates (menus,
+palette, theme, keyboard help) store i18n *keys*; the host translates. The
+active locale is a process-global set via `rust_i18n::set_locale`
 — resolved at startup from `--locale` or the `locale` setting, and switchable
 live in **View → Locale…**. See [i18n.md](../internationalization/index.md).
 

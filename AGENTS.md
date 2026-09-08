@@ -101,7 +101,7 @@ Every crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 ## Non-negotiable conventions
 
 - **Internationalize all user-facing text.** Never hard-code a display string;
-  add a key to `locales/app.yml` and render it with `t!`. Data modules store i18n
+  add a key to the right `locales/*.yml` file and render it with `t!`. Data modules store i18n
   _keys_; the host translates. See [`docs/internationalization/`](docs/internationalization/).
 - **One action, one implementation.** Menu items, palette commands, and
   shortcuts all dispatch through `App::run_action` using string action ids
@@ -127,7 +127,7 @@ Every crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 | ------------------------------------ | ------------------------------------------------------------ |
 | Add/route a command                  | `src/app.rs` (`run_action`, dispatching into `src/app/*.rs`), `crates/vix-menu/`, `crates/vix-palette/` |
 | Change rendering                     | `src/ui.rs`, usually via one of its `src/ui/*.rs` submodules |
-| Add/translate UI text                | `locales/app.yml` (+ `t!` at the call site)                  |
+| Add/translate UI text                | `locales/*.yml` (+ `t!` at the call site)                  |
 | Add a setting                        | `crates/vix-settings/`                                       |
 | Change the editor widget             | `crates/vix-editor-core/` (engine reused; widget is Vix's)  |
 | Change soft-wrap / bracket rendering | `crates/vix-editor-core/src/wrap.rs`, `.../brackets.rs`     |

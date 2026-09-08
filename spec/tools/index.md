@@ -38,7 +38,7 @@ right spec.
 - One action id, one `run_action` arm — a Tools item never re-implements
   behavior that a crate already exposes.
 - Every item's label and hover help are i18n keys (`menu.item.tools.*` and
-  `menu.item.tools.*.help`) in `locales/app.yml`.
+  `menu.item.tools.*.help`) in `locales/menu.yml`.
 - A tool that transforms text is a pure function in its crate, driven through
   `App::transform_selection_or_buffer` or `App::rewrite_at_cursor`, so it is
   unit-testable without a terminal.

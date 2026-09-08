@@ -203,7 +203,7 @@ machine's baseline numbers.
 Some rules are about the repository rather than any one function, and they are
 tested like anything else:
 
-- **Every `t!` key exists in `locales/app.yml`.** A missing key does not fail the
+- **Every `t!` key exists in `locales/`.** A missing key does not fail the
   build — `rust_i18n` returns the key itself, and the UI shows `confirm.delete`
   where a sentence belongs.
 - **Every call fills the placeholders its string declares**, and passes no

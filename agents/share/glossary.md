@@ -22,7 +22,7 @@ Shared terms used across the code, specs, and docs.
   endonym (its name in itself).
 - **Endonym** — a language's name in that language (e.g. "Deutsch" for German).
 - **i18n key** — a dotted name (e.g. `status.saved`) resolved to translated text
-  by `t!` against `locales/app.yml`.
+  by `t!` against `locales/`.
 - **Fallback locale** — English (`en`); used for any key a language lacks.
 - **Modal / overlay** — a UI layer that consumes all input while open (help,
   prompt, palette, search, choosers, …), handled in priority order in `on_key`.

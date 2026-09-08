@@ -236,20 +236,43 @@ fn no_catalog_entry_duplicates_a_palette_commands_entry() {
     );
 }
 
+/// Every top-level key across `locales/*.yml`, merged (T148 split the single
+/// `locales/app.yml` into one file per key namespace — `tests/i18n_keys.rs`
+/// has the full merge-with-conflict-detection version of this; this test
+/// only needs key *presence*, so a plain union is enough).
+fn locale_catalog_keys(root: &Path) -> BTreeSet<String> {
+    let dir = root.join("locales");
+    let mut keys = BTreeSet::new();
+    for entry in std::fs::read_dir(&dir)
+        .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
+        .flatten()
+    {
+        let path = entry.path();
+        if path.extension().is_none_or(|e| e != "yml") {
+            continue;
+        }
+        let yaml =
+            std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let map: std::collections::BTreeMap<String, serde_yaml::Value> =
+            serde_yaml::from_str(&yaml)
+                .unwrap_or_else(|e| panic!("{} does not parse as YAML: {e}", path.display()));
+        keys.extend(map.into_keys());
+    }
+    keys
+}
+
 #[test]
 fn every_catalog_title_key_is_in_the_locale_catalog() {
     let root = workspace_root();
-    let yaml = std::fs::read_to_string(root.join("locales/app.yml")).expect("locales/app.yml");
-    let map: std::collections::BTreeMap<String, serde_yaml::Value> =
-        serde_yaml::from_str(&yaml).expect("locales/app.yml parses as YAML");
+    let keys = locale_catalog_keys(&root);
 
     let missing: Vec<&str> = vix_action_catalog::CATALOG
         .iter()
         .map(|a| a.title)
-        .filter(|key| !map.contains_key(*key))
+        .filter(|key| !keys.contains(*key))
         .collect();
     assert!(
         missing.is_empty(),
-        "these vix_action_catalog title keys are not in locales/app.yml: {missing:#?}"
+        "these vix_action_catalog title keys are not in locales/: {missing:#?}"
     );
 }

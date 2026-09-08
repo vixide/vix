@@ -2577,7 +2577,7 @@ mod tests {
     #[test]
     fn help_text_present_for_known_absent_for_bogus() {
         assert_eq!(help_text("menu.item.__no_such_item__"), None);
-        // `menu.file` / `menu.item.file.new` carry `.help` keys in locales/app.yml.
+        // `menu.file` / `menu.item.file.new` carry `.help` keys in locales/menu.yml.
         let file = menus()
             .iter()
             .find(|m| m.name == "menu.file")
@@ -2598,7 +2598,7 @@ mod tests {
     /// *as* the label (no `menu.` prefix), since there's nothing to translate;
     /// those are intentionally skipped here. rust-i18n returns the key itself
     /// for a missing translation, so a `menu.`-prefixed label coming back
-    /// unchanged means `locales/app.yml` has no entry for it — or, as happened
+    /// unchanged means `locales/menu.yml` has no entry for it — or, as happened
     /// once, the entry existed but `vix-i18n`'s embedded table was stale
     /// because Cargo didn't know a locale-only edit should trigger a rebuild
     /// (see `crates/vix-i18n/build.rs`).

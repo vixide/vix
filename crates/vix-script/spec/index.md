@@ -131,7 +131,7 @@ fn on_uppercase() {
 - `register_command(id, label, handler)` — `id` is this script's own
   identifier for the command (unique within the script, not globally);
   `label` is the palette entry text, shown **verbatim** — script-authored
-  text is not routed through `t!`/`locales/app.yml`, the same as a saved
+  text is not routed through `t!`/`locales/`, the same as a saved
   macro's name or a file name isn't; `handler` names a `fn` in the same
   script, called with no arguments when the command runs.
 - The palette entry itself is namespaced `script:<script-stem>:<id>` — as
