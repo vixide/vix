@@ -95,7 +95,7 @@ the repo-root `spec/`. Notable ones:
 | `crates/vix-palette/spec`               | Palette modes and behavior                    |
 | `crates/vix-editor/spec`                | The editor host: tabs, splits, per-action specs |
 | `crates/vix-editor-core/spec`           | The editor widget: buffer, wrap, brackets, history |
-| `crates/vix-query/spec`, `crates/vix-find-panel/spec` | Find/replace, workspace search, query-replace |
+| `spec/find-and-replace`, `crates/vix-find-panel/spec` | Find/replace, workspace search, query-replace |
 | `crates/vix-fileops/spec`, `crates/vix-left-dock/spec` | Explorer tree and file operations |
 | `crates/vix-lsp/spec`, `crates/vix-dap/spec` | Language Server Protocol; DAP debugger   |
 | `crates/vix-git/spec`                   | Git status/diff/staging/conflicts             |

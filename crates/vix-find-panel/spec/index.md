@@ -54,5 +54,5 @@ The matching itself is pure and testable: `matches` (regex → char ranges),
 and `PathFilter` (include/exclude path regexes for workspace search). The host
 owns the state (`SearchBar`), the keys, and the rendering.
 
-See `crates/vix-query/spec/index.md` for interactive query-replace and the
+See `spec/find-and-replace/index.md` for interactive query-replace and the
 workspace panel, and `crates/vix-menu/spec/index.md` for the menu around it.

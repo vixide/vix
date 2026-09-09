@@ -24,7 +24,7 @@ it privately, not as a public issue.
 Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust IDE"),
 built on `ratatui`. It is a **Cargo workspace** (edition 2024): a thin **App
 shell** (root package `vix`, `src/`) — CLI, event loop, `App` state, rendering,
-explorer — over **111 focused `vix-*` member crates** under `crates/`, including
+explorer — over **110 focused `vix-*` member crates** under `crates/`, including
 the custom editor widget `vix-editor-core`. `src/lib.rs` re-exports the member
 crates under short module names (`pub use vix_git as git;`), so `crate::git`,
 `crate::menu`, `crate::db` still name them. The App shell's two largest files
@@ -92,10 +92,13 @@ Every crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 - **`#![warn(clippy::pedantic)]`** is on at the crate root **and repeated in
   every module file**. There is no blanket `#![allow(clippy::pedantic)]` and no
   `#![allow(missing_docs)]`; fix findings in code. Sanctioned allows are only a
-  few **targeted** ones: `#[allow(clippy::struct_excessive_bools)]` on genuine
-  state structs (`App`, `Settings`, `SearchBar`, `WorkspaceSearch`, `editor_core`
-  `Editor`) and a handful of `#[allow(clippy::too_many_lines)]` /
-  `too_many_arguments` on specific functions that resist further extraction.
+  few **targeted** ones: `#[allow(clippy::struct_excessive_bools)]` on `App` and
+  `Settings` (T149 converted `SearchBar`, `WorkspaceSearch`, `DblockParams`, and
+  both `Editor`s to a `bitflags`-based `Flags` field instead, removing their
+  allows — prefer that over a new allow for a struct whose bools are
+  independent, freely-combinable toggles) and a handful of
+  `#[allow(clippy::too_many_lines)]` / `too_many_arguments` on specific
+  functions that resist further extraction.
 - Keep the tree clean: `cargo clippy --workspace --all-targets -- -D warnings`.
 
 ## Non-negotiable conventions
@@ -146,6 +149,35 @@ Every crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 | Add a benchmark or fuzz target       | `benches/`, `fuzz/fuzz_targets/` (see `spec/test/index.md`) |
 
 See [`agents/share/crate-map.md`](agents/share/crate-map.md) for the full map.
+
+## When to add a new crate (T151)
+
+Vix is deliberately "crates, not modules" — but that doesn't mean every new
+type earns its own crate. Before splitting something out (or leaving a
+recent split in place), it should clear a minimum-viable bar:
+
+- **Own spec.** `crates/<crate>/spec/index.md`, gated by `scripts/check-docs`.
+- **Own tests**, in some form. That can be `#[cfg(test)]` unit tests in the
+  crate itself, *or* — for a crate whose only job is holding state the App
+  shell drives via key/mouse events (a panel/dialog's fields plus a few
+  methods, no meaningful behavior outside that loop) — thorough coverage in
+  `tests/integration/*.rs` exercising the real `App`. The distinction is
+  whether the crate has any logic worth testing in isolation; a bag of
+  fields with no methods has none, no matter which layer tests it.
+- **A consumer other than the App shell, or a clear reuse story.** Either
+  another crate already depends on it, or it is host-agnostic by design
+  (no dependency on `App` or terminal I/O) even if only one host currently
+  uses it — the same bar T152's extractions were held to.
+
+A crate that fails all three — no logic to test, no spec of its own
+worth maintaining, and no plausible consumer beyond the one struct field
+that holds it — should fold into its sole consumer instead (precedent:
+`vix-projectile` merged into `vix-tasks` the same day it was built, and
+T151 folding `vix-query` into `src/app.rs`). A crate that's merely small
+(under ~100 lines) but has real tests and a real reuse story is fine as
+is — `vix-theme`'s icon set and the single-format `vix-convert-from-*-tool`
+family are size-appropriate for what they do, not micro-crates in the
+guideline's sense.
 
 ## Making a change (checklist)
 

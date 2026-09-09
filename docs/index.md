@@ -61,7 +61,7 @@ Specs are **per crate**: each member crate owns `crates/<crate>/spec/index.md`
   [keymaps](../crates/vix-keymap-model/spec/index.md) · [navigation](../spec/navigation/index.md) ·
   [command-palette](../crates/vix-palette/spec/index.md) ·
   [file-explorer](../crates/vix-fileops/spec/index.md) · [editor](../crates/vix-editor/spec/index.md) ·
-  [find-and-replace](../crates/vix-query/spec/index.md) · [hover](../crates/vix-lsp/spec/hover/index.md)
+  [find-and-replace](../spec/find-and-replace/index.md) · [hover](../crates/vix-lsp/spec/hover/index.md)
 - Features: [lsp](../crates/vix-lsp/spec/index.md) ·
   [git-integration](../crates/vix-git/spec/git-integration/index.md) ·
   [spellcheck](../crates/vix-spellcheck/spec/index.md) · [case-change](../crates/vix-case/spec/index.md) ·

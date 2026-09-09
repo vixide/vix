@@ -5259,7 +5259,6 @@ dependencies = [
  "vix-palette",
  "vix-pomodoro-tool",
  "vix-qr-tool",
- "vix-query",
  "vix-regex-tool",
  "vix-right-dock",
  "vix-roam",
@@ -5869,13 +5868,6 @@ version = "1.6.0"
 dependencies = [
  "proptest",
  "qrcode",
-]
-
-[[package]]
-name = "vix-query"
-version = "1.6.0"
-dependencies = [
- "regex",
 ]
 
 [[package]]

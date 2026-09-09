@@ -2,7 +2,7 @@
 
 Vix is a **Cargo workspace** (`[workspace] members = ["crates/*"]`) on **edition
 2024**. The root package `vix` (`src/`) is the thin **App shell** — CLI, event
-loop, `App` state, rendering, and the explorer — and it depends on the 111
+loop, `App` state, rendering, and the explorer — and it depends on the 110
 `vix-*` **member crates** under `crates/` that hold every feature plus the custom
 editor widget (`vix-editor-core`). Shared reference for where things live.
 
@@ -76,7 +76,7 @@ to 713 lines: the dispatch chain plus shared rendering primitives).
 
 Everything else the shell used to own now lives in a member crate, reached
 through the workspace dependency graph (e.g. `vix-editor`, `vix-menu`,
-`vix-palette`, `vix-find-panel`, `vix-query`, `vix-session`, `vix-settings`,
+`vix-palette`, `vix-find-panel`, `vix-session`, `vix-settings`,
 `vix-theme`, `vix-fileops`, `vix-case`) — `src/` is down to exactly
 `main.rs`/`lib.rs`/`app.rs`/`ui.rs` now (T152, done): `explorer`/
 `messages`/`search` are thin `pub use` aliases in `lib.rs` for
@@ -114,7 +114,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 | Generators  | `vix-qr-tool` (QR code via the `qrcode` crate, Unicode renderer), `vix-lorem` (deterministic lorem-ipsum text). |
 | Tool dialogs| `vix-calculator-tool`, `vix-color-converter-tool`, `vix-unit-converter-tool`, `vix-pomodoro-tool`. |
 | Info panels | `vix-text-information-panel`, `vix-file-information-panel`, `vix-system-information-panel`, `vix-status-bar-panel`, `vix-workspace-dashboard-panel`, `vix-outline-panel`, `vix-welcome-panel`. |
-| Menu / find | `vix-menu` (3-level dropdown + command mode), `vix-palette` (command palette / fuzzy), `vix-find-panel` (find/replace state + engine), `vix-query` (interactive step-through replace), `vix-workspace-search` (T152: workspace-wide search/replace panel state, across every file under the workspace root — `App` drives the actual scan). |
+| Menu / find | `vix-menu` (3-level dropdown + command mode), `vix-palette` (command palette / fuzzy), `vix-find-panel` (find/replace state + engine), `vix-workspace-search` (T152: workspace-wide search/replace panel state, across every file under the workspace root — `App` drives the actual scan). Interactive step-through query-replace (`Decision`, `QueryReplace`) lives directly in `src/app.rs` (T151: folded in from a former single-purpose crate whose sole consumer was always the App shell — see `spec/find-and-replace/index.md`). |
 | Pickers     | `vix-ascii-character-picker`, `vix-html-character-picker`, `vix-nerd-font-picker`, `vix-x11-color-picker`. |
 | Boxes       | `vix-calendar-panel`, `vix-clock-panel`.                                       |
 | Contacts    | `vix-vcard-parser` (RFC 6350), `vix-vcard-panel`, `vix-contact-panel`.         |
@@ -128,7 +128,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 
 | Path            | Contents                                                            |
 | --------------- | ------------------------------------------------------------------- |
-| `crates/`       | The 111 `vix-*` workspace member crates (each with its own `spec/`).|
+| `crates/`       | The 110 `vix-*` workspace member crates (each with its own `spec/`).|
 | `langs/`        | Tree-sitter highlight queries (`<lang>/highlights.scm`), embedded.  |
 | `locales/`      | `app.yml` — rust-i18n translations (English fallback).              |
 | `dictionaries/` | Hunspell dictionaries — gitignored; see `crates/vix-spellcheck/spec/dictionaries`. |

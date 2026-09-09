@@ -344,8 +344,6 @@ vix-palette = { path = "crates/vix-palette", version = "1.6.0" }
 vix-pomodoro-tool = { path = "crates/vix-pomodoro-tool", version = "1.6.0" }
 # QR code generation (Tools → QR Code).
 vix-qr-tool = { path = "crates/vix-qr-tool", version = "1.6.0" }
-# Interactive query-replace: step through matches one at a time.
-vix-query = { path = "crates/vix-query", version = "1.6.0" }
 # A live regular-expression tester, plus the dialog's editing state.
 vix-regex-tool = { path = "crates/vix-regex-tool", version = "1.6.0" }
 # Right dock: a message drawer of advice and notifications + selection.
