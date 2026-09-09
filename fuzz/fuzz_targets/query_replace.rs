@@ -12,7 +12,7 @@
 use libfuzzer_sys::fuzz_target;
 use regex::Regex;
 use vix_find_panel::{
-    PathFilter, SearchBar, matches, next_match, replace_all, replace_one, unescape,
+    Flags, PathFilter, SearchBar, matches, next_match, replace_all, replace_one, unescape,
 };
 
 fuzz_target!(|data: &[u8]| {
@@ -35,9 +35,9 @@ fuzz_target!(|data: &[u8]| {
 
     let mut bar = SearchBar::new(true);
     bar.query = query.to_string();
-    bar.regex = regex_mode;
-    bar.whole_word = whole_word;
-    bar.case_sensitive = case_sensitive;
+    bar.flags.set(Flags::REGEX, regex_mode);
+    bar.flags.set(Flags::WHOLE_WORD, whole_word);
+    bar.flags.set(Flags::CASE_SENSITIVE, case_sensitive);
     bar.replace = text.chars().take(64).collect(); // a plausible template too
 
     // `unescape` must be total over any string, and idempotent on a string

@@ -9,8 +9,9 @@ use ratatui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListSt
 
 use super::centered;
 use crate::app::App;
-use crate::search::{Field, Scope};
+use crate::search::{Field, Flags as SearchFlags, Scope};
 use crate::theme::{self, icon};
+use crate::workspace_search::Flags as WorkspaceFlags;
 
 pub(super) fn draw_palette(app: &App, frame: &mut Frame, area: Rect) {
     let Some(p) = app.palette.as_ref() else {
@@ -70,9 +71,10 @@ pub(super) fn draw_workspace_search(app: &App, frame: &mut Frame, area: Rect) {
     };
     let rect = centered(area, 80, 80);
     frame.render_widget(Clear, rect);
-    let title = if ps.static_results {
+    let replacing = ps.flags.contains(WorkspaceFlags::REPLACING);
+    let title = if ps.flags.contains(WorkspaceFlags::STATIC_RESULTS) {
         format!(" {} {} ", icon::SEARCH, t!("ui.goto_definition"))
-    } else if ps.replacing {
+    } else if replacing {
         format!(" {} {} ", icon::SEARCH, t!("ui.search_replace_workspace"))
     } else {
         format!(" {} {} ", icon::SEARCH, t!("ui.search_workspace"))
@@ -87,7 +89,7 @@ pub(super) fn draw_workspace_search(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(block, rect);
 
     // find (+ replace) + include-path + exclude-path + toggles + status.
-    let head = if ps.replacing { 6 } else { 5 };
+    let head = if replacing { 6 } else { 5 };
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -98,9 +100,9 @@ pub(super) fn draw_workspace_search(app: &App, frame: &mut Frame, area: Rect) {
         .split(inner);
 
     let mut header = Vec::new();
-    let q_focus = !ps.replacing || ps.field == Field::Query;
+    let q_focus = !replacing || ps.field == Field::Query;
     header.push(field_line(&t!("ui.field_find"), &ps.query, q_focus));
-    if ps.replacing {
+    if replacing {
         header.push(field_line(
             &t!("ui.field_replace"),
             &ps.replace,
@@ -122,9 +124,15 @@ pub(super) fn draw_workspace_search(app: &App, frame: &mut Frame, area: Rect) {
         Span::styled(format!(" {label} "), style)
     };
     header.push(Line::from(vec![
-        toggle(ps.case_sensitive, &t!("ui.toggle_case")),
+        toggle(
+            ps.flags.contains(WorkspaceFlags::CASE_SENSITIVE),
+            &t!("ui.toggle_case"),
+        ),
         Span::raw(" "),
-        toggle(ps.regex, &t!("ui.toggle_regex")),
+        toggle(
+            ps.flags.contains(WorkspaceFlags::REGEX),
+            &t!("ui.toggle_regex"),
+        ),
     ]));
     header.push(Line::from(Span::styled(ps.status.clone(), theme::dim())));
     frame.render_widget(Paragraph::new(header), rows[0]);
@@ -141,7 +149,7 @@ pub(super) fn draw_workspace_search(app: &App, frame: &mut Frame, area: Rect) {
     }
     frame.render_stateful_widget(list, rows[1], &mut state);
 
-    let hint = if ps.replacing {
+    let hint = if replacing {
         t!("ui.ps_hint_replace")
     } else {
         t!("ui.ps_hint")
@@ -182,7 +190,7 @@ fn button_row(frame: &mut Frame, row: Rect, buttons: &[(String, Style)]) -> Vec<
 #[allow(clippy::too_many_lines)]
 pub(super) fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(s) = app.search.as_ref() else { return };
-    let replacing = s.replacing;
+    let replacing = s.flags.contains(SearchFlags::REPLACING);
     let height = if replacing { 6 } else { 4 };
     let width = area.width * 7 / 10;
     let rect = Rect {
@@ -192,7 +200,7 @@ pub(super) fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
         height,
     };
     frame.render_widget(Clear, rect);
-    let title = if s.interactive {
+    let title = if s.flags.contains(SearchFlags::INTERACTIVE) {
         format!(" {} {} ", icon::SEARCH, t!("ui.query_replace"))
     } else if replacing {
         format!(" {} {} ", icon::SEARCH, t!("ui.find_replace"))
@@ -236,12 +244,24 @@ pub(super) fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     );
 
     let options = vec![
-        (t!("ui.toggle_case").to_string(), s.case_sensitive),
-        (t!("ui.toggle_smartcase").to_string(), s.smart_case),
-        (t!("ui.toggle_word").to_string(), s.whole_word),
-        (t!("ui.toggle_regex").to_string(), s.regex),
+        (
+            t!("ui.toggle_case").to_string(),
+            s.flags.contains(SearchFlags::CASE_SENSITIVE),
+        ),
+        (
+            t!("ui.toggle_smartcase").to_string(),
+            s.flags.contains(SearchFlags::SMART_CASE),
+        ),
+        (
+            t!("ui.toggle_word").to_string(),
+            s.flags.contains(SearchFlags::WHOLE_WORD),
+        ),
+        (
+            t!("ui.toggle_regex").to_string(),
+            s.flags.contains(SearchFlags::REGEX),
+        ),
         // The two options that used to be separate menu items.
-        (t!("ui.toggle_replace").to_string(), s.replacing),
+        (t!("ui.toggle_replace").to_string(), replacing),
         (
             t!(s.scope.label_key()).to_string(),
             s.scope != Scope::Buffer,
@@ -252,7 +272,7 @@ pub(super) fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
         s.replace.clone(),
         s.field == Field::Replace,
         s.status.clone(),
-        s.interactive,
+        s.flags.contains(SearchFlags::INTERACTIVE),
     );
     draw_search_options(app, frame, rows[1], &options);
 

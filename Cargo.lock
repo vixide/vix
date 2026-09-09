@@ -5591,6 +5591,7 @@ dependencies = [
 name = "vix-editor"
 version = "1.6.0"
 dependencies = [
+ "bitflags 2.13.1",
  "ratatui",
  "ratatui-core",
  "ratatui-image",
@@ -5605,6 +5606,7 @@ name = "vix-editor-core"
 version = "1.6.0"
 dependencies = [
  "anyhow",
+ "bitflags 2.13.1",
  "crossterm",
  "getrandom 0.2.17",
  "ratatui-core",
@@ -5669,6 +5671,7 @@ version = "1.6.0"
 name = "vix-find-panel"
 version = "1.6.0"
 dependencies = [
+ "bitflags 2.13.1",
  "regex",
 ]
 
@@ -5814,6 +5817,7 @@ version = "1.6.0"
 name = "vix-org"
 version = "1.6.0"
 dependencies = [
+ "bitflags 2.13.1",
  "proptest",
  "regex",
 ]
@@ -6081,6 +6085,7 @@ version = "1.6.0"
 name = "vix-workspace-search"
 version = "1.6.0"
 dependencies = [
+ "bitflags 2.13.1",
  "regex",
  "rust-i18n",
  "vix-find-panel",

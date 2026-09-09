@@ -687,13 +687,10 @@ impl App {
                 id.to_string()
             },
             hlines: None,
-            vlines: false,
             maxlevel: None,
-            skip_empty_rows: false,
             exclude_tags: Vec::new(),
-            indent: false,
-            link: false,
             format: None,
+            flags: crate::org::DblockFlags::empty(),
         };
         let rendered =
             crate::org::render_columnview_dblock(&text, line, &params, today, file_name.as_deref());

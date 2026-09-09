@@ -1,6 +1,6 @@
 #![warn(clippy::pedantic)]
 use crate::code::{RopeGraphemes, grapheme_width_and_bytes_len, grapheme_width_and_chars_len};
-use crate::editor::Editor;
+use crate::editor::{Editor, Flags};
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier, Style};
@@ -22,7 +22,7 @@ use ratatui_core::widgets::Widget;
 ///
 impl Widget for &Editor {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        if self.soft_wrap {
+        if self.flags.contains(Flags::SOFT_WRAP) {
             self.render_wrapped(area, buf);
         } else {
             self.render_nowrap(area, buf);
@@ -68,7 +68,7 @@ impl Editor {
         }
 
         // recolor brackets by nesting depth (over the syntax colors)
-        if self.rainbow_brackets {
+        if self.flags.contains(Flags::RAINBOW_BRACKETS) {
             self.draw_rainbow_brackets(area, buf, line_number_width_u16, total_lines);
         }
 
@@ -249,7 +249,7 @@ impl Editor {
         let line_number_style = self.line_number_style;
         let default_text_style = self.text_style;
         // For relative numbering, the cursor's line is the reference point.
-        let cursor_line = if self.relative_line_numbers {
+        let cursor_line = if self.flags.contains(Flags::RELATIVE_LINE_NUMBERS) {
             code.char_to_line(self.cursor)
         } else {
             0
@@ -265,10 +265,12 @@ impl Editor {
                 break;
             }
             row = row.saturating_add(1);
-            if self.show_line_numbers {
+            if self.flags.contains(Flags::SHOW_LINE_NUMBERS) {
                 // Hybrid relative: the cursor line shows its absolute number;
                 // others show their distance from it.
-                let value = if self.relative_line_numbers && line_idx != cursor_line {
+                let value = if self.flags.contains(Flags::RELATIVE_LINE_NUMBERS)
+                    && line_idx != cursor_line
+                {
                     line_idx.abs_diff(cursor_line)
                 } else {
                     line_idx + 1
@@ -278,7 +280,7 @@ impl Editor {
             }
             // Gutter sign column (just before the text, or column 0 when line
             // numbers are hidden).
-            let sign_x = if self.show_line_numbers {
+            let sign_x = if self.flags.contains(Flags::SHOW_LINE_NUMBERS) {
                 area.left() + u16::try_from(line_number_digits).unwrap_or(u16::MAX)
             } else {
                 area.left()
@@ -301,7 +303,7 @@ impl Editor {
 
             self.draw_fold_marker(buf, line_idx, area.left(), text_x, right_edge, draw_y);
 
-            if self.show_whitespace {
+            if self.flags.contains(Flags::SHOW_WHITESPACE) {
                 self.draw_whitespace_line(
                     buf,
                     &visible_chars,

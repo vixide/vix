@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Basic Org-mode operations: headline structure editing and lightweight export."
 
 [dependencies]
+bitflags = { workspace = true }
 regex = { workspace = true }
 
 [dev-dependencies]

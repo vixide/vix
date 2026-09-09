@@ -133,14 +133,7 @@ fn apply_theme(ed: &mut CodeEditor) {
     ed.set_cursor_style(Some(cursor));
 }
 
-fn make_editor(
-    path: Option<&Path>,
-    text: &str,
-    line_numbers: bool,
-    show_whitespace: bool,
-    soft_wrap: bool,
-    indent: &str,
-) -> CodeEditor {
+fn make_editor(path: Option<&Path>, text: &str, flags: Flags, indent: &str) -> CodeEditor {
     let name = path
         .and_then(|p| p.file_name())
         .map(|s| s.to_string_lossy().into_owned())
@@ -156,9 +149,9 @@ fn make_editor(
     let mut ed = CodeEditor::new(&lang, text, Vec::new())
         .or_else(|_| CodeEditor::new("text", text, Vec::new()))
         .expect("code editor init for plain text never fails");
-    ed.show_line_numbers(line_numbers);
-    ed.show_whitespace(show_whitespace);
-    ed.set_soft_wrap(soft_wrap);
+    ed.show_line_numbers(flags.contains(Flags::LINE_NUMBERS));
+    ed.show_whitespace(flags.contains(Flags::SHOW_WHITESPACE));
+    ed.set_soft_wrap(flags.contains(Flags::SOFT_WRAP));
     ed.set_indent(Some(indent.to_string()));
     apply_theme(&mut ed);
     ed
@@ -262,22 +255,35 @@ pub enum SplitDir {
     Horizontal,
 }
 
+bitflags::bitflags! {
+    /// [`Editor`]'s independent display toggles (T149): each bit is a
+    /// distinct, freely-combinable preference, not one of several
+    /// mutually-exclusive modes — a bitset with named accessors is what
+    /// actually satisfies `clippy::struct_excessive_bools` here (grouping
+    /// the same bools into a sub-struct would not: the lint counts `bool`
+    /// fields anywhere, not just on `Editor` itself).
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct Flags: u8 {
+        /// The line-number gutter is shown.
+        const LINE_NUMBERS = 1 << 0;
+        /// Line numbers are shown relative to the cursor line.
+        const RELATIVE_LINE_NUMBERS = 1 << 1;
+        /// Visible-whitespace glyphs are shown.
+        const SHOW_WHITESPACE = 1 << 2;
+        /// Long lines soft-wrap.
+        const SOFT_WRAP = 1 << 3;
+    }
+}
+
 /// The tab strip: a stack of open buffers and the active index.
-// Several independent display toggles; a flags struct would just relocate the lint.
-#[allow(clippy::struct_excessive_bools)]
 pub struct Editor {
     /// Open buffers, left to right.
     pub tabs: Vec<Tab>,
     /// Index of the active tab.
     pub active: usize,
-    /// Whether the line-number gutter is shown.
-    pub line_numbers: bool,
-    /// Whether line numbers are shown relative to the cursor line.
-    pub relative_line_numbers: bool,
-    /// Whether visible-whitespace glyphs are shown.
-    pub show_whitespace: bool,
-    /// Whether long lines soft-wrap.
-    pub soft_wrap: bool,
+    /// Display toggles (line numbers, relative line numbers, whitespace,
+    /// soft wrap) — see [`Flags`] for what each bit means.
+    pub flags: Flags,
     /// String Tab inserts in every buffer (spaces or a tab).
     pub indent: String,
     /// Split layout (a binary tree of panes), when the editor area is divided.
@@ -289,22 +295,19 @@ pub struct Editor {
 
 impl Default for Editor {
     fn default() -> Self {
-        Editor::new(true, false, false, "    ".to_string())
+        Editor::new(Flags::LINE_NUMBERS, "    ".to_string())
     }
 }
 
 impl Editor {
-    /// Create an editor with one empty buffer and the given gutter / whitespace /
-    /// soft-wrap / indentation settings.
+    /// Create an editor with one empty buffer and the given display /
+    /// indentation settings.
     #[must_use]
-    pub fn new(line_numbers: bool, show_whitespace: bool, soft_wrap: bool, indent: String) -> Self {
+    pub fn new(flags: Flags, indent: String) -> Self {
         let mut e = Editor {
             tabs: Vec::new(),
             active: 0,
-            line_numbers,
-            relative_line_numbers: false,
-            show_whitespace,
-            soft_wrap,
+            flags,
             indent,
             split_root: None,
             focused_leaf: 0,
@@ -467,14 +470,7 @@ impl Editor {
 
     /// Create an empty untitled buffer and focus it.
     pub fn new_tab(&mut self) {
-        let editor = make_editor(
-            None,
-            "",
-            self.line_numbers,
-            self.show_whitespace,
-            self.soft_wrap,
-            &self.indent,
-        );
+        let editor = make_editor(None, "", self.flags, &self.indent);
         self.tabs.push(Tab {
             editor,
             path: None,
@@ -489,14 +485,7 @@ impl Editor {
     /// Open a new untitled tab pre-filled with `content` (e.g. AI output), marked
     /// dirty so the user is reminded to save it. Becomes the active tab.
     pub fn new_tab_with_content(&mut self, content: &str) {
-        let editor = make_editor(
-            None,
-            content,
-            self.line_numbers,
-            self.show_whitespace,
-            self.soft_wrap,
-            &self.indent,
-        );
+        let editor = make_editor(None, content, self.flags, &self.indent);
         self.tabs.push(Tab {
             editor,
             path: None,
@@ -520,14 +509,7 @@ impl Editor {
             self.active = i;
             return;
         }
-        let editor = make_editor(
-            Some(&canon),
-            "",
-            self.line_numbers,
-            self.show_whitespace,
-            self.soft_wrap,
-            &self.indent,
-        );
+        let editor = make_editor(Some(&canon), "", self.flags, &self.indent);
         self.tabs.push(Tab {
             editor,
             path: Some(canon),
@@ -543,23 +525,26 @@ impl Editor {
     /// buffer.
     pub fn refresh_line_numbers(&mut self) {
         for tab in &mut self.tabs {
-            tab.editor.show_line_numbers(self.line_numbers);
             tab.editor
-                .set_relative_line_numbers(self.relative_line_numbers);
+                .show_line_numbers(self.flags.contains(Flags::LINE_NUMBERS));
+            tab.editor
+                .set_relative_line_numbers(self.flags.contains(Flags::RELATIVE_LINE_NUMBERS));
         }
     }
 
     /// Apply the current visible-whitespace setting to every buffer.
     pub fn refresh_whitespace(&mut self) {
         for tab in &mut self.tabs {
-            tab.editor.show_whitespace(self.show_whitespace);
+            tab.editor
+                .show_whitespace(self.flags.contains(Flags::SHOW_WHITESPACE));
         }
     }
 
     /// Apply the current soft-wrap setting to every buffer.
     pub fn refresh_soft_wrap(&mut self) {
         for tab in &mut self.tabs {
-            tab.editor.set_soft_wrap(self.soft_wrap);
+            tab.editor
+                .set_soft_wrap(self.flags.contains(Flags::SOFT_WRAP));
         }
     }
 
@@ -591,14 +576,7 @@ impl Editor {
         }
 
         let content = fs::read_to_string(&canon)?;
-        let editor = make_editor(
-            Some(&canon),
-            &content,
-            self.line_numbers,
-            self.show_whitespace,
-            self.soft_wrap,
-            &self.indent,
-        );
+        let editor = make_editor(Some(&canon), &content, self.flags, &self.indent);
         let tab = Tab {
             editor,
             path: Some(canon),

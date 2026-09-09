@@ -22,6 +22,7 @@ authors = ["Joel Parker Henderson <joel@joelparkerhenderson.com>"]
 [workspace.dependencies]
 ratatui = { version = "0.30", features = ["crossterm"] }
 crossterm = "0.29"
+bitflags = "2"
 ignore = "0.4"
 walkdir = "2"
 ureq = "2"

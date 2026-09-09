@@ -3,7 +3,7 @@ use crate::actions::{
     Copy, Cut, Delete, DeleteLine, Duplicate, Indent, InsertNewline, InsertText, MoveDown,
     MoveLeft, MoveRight, MoveUp, Paste, Redo, SelectAll, ToggleComment, UnIndent, Undo,
 };
-use crate::editor::Editor;
+use crate::editor::{Editor, Flags};
 use crate::multicursor::CaretMove;
 use crate::selection::SelectionSnap;
 use anyhow::Result;
@@ -84,7 +84,7 @@ impl Editor {
             ('\'', '\''),
             ('`', '`'),
         ];
-        if !self.auto_pair {
+        if !self.flags.contains(Flags::AUTO_PAIR) {
             return false;
         }
 
@@ -139,7 +139,7 @@ impl Editor {
             ('\'', '\''),
             ('`', '`'),
         ];
-        if !self.auto_pair {
+        if !self.flags.contains(Flags::AUTO_PAIR) {
             return false;
         }
         if self.get_selection().is_some_and(|s| !s.is_empty()) {

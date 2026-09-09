@@ -1944,15 +1944,39 @@ and its own gate run, zero intended behavior change unless stated.
   while only that one crate pays an optimization-vs-iteration-speed
   cost, not the whole workspace. Full `scripts/check` gate green
   end-to-end afterward, including the originally-failing test.
-- [ ] **T149 — Replace boolean clusters with types.** Six
-  `struct_excessive_bools` allows: `App`, `Settings`, `Editor` (both
-  `vix-editor` and `vix-editor-core`), `SearchBar`, `WorkspaceSearch`.
-  Where the bools are really one mode (e.g. an editor's
-  overwrite/read-only/soft-wrap set), an enum or a small `Flags` struct
-  with named methods; where they're independent persisted toggles
-  (`Settings`), group them into a nested `#[serde(flatten)]` struct so
-  they can be tested and documented as a unit. Each allow comes out with
-  its struct.
+- [ ] **T149 — Replace boolean clusters with types.** Seven
+  `struct_excessive_bools` allows found (one more than the task's own
+  count of six): `App`, `Settings`, `Editor` (both `vix-editor` and
+  `vix-editor-core`), `SearchBar`, `WorkspaceSearch`, and
+  `vix-org::DblockParams`. **Five of the seven now done** (2026-09-09):
+  `vix-editor-core::Editor` (6 bools → `editor::Flags`),
+  `vix-editor::Editor` (4 bools → `editor::Flags`, its own distinct
+  type from the core crate's), `vix-find-panel::SearchBar` (6 bools →
+  `Flags`), `vix-workspace-search::WorkspaceSearch` (4 bools →
+  `Flags`), and `vix-org::DblockParams` (4 bools → `DblockFlags`).
+  `App` and `Settings` — the two largest and riskiest — are deferred to
+  a separate pass, per an explicit user choice to start with the
+  smaller structs first.
+  A key finding changed the task's own prescription: grouping the bools
+  into a plain sub-struct (a "small `Flags` struct" read literally)
+  does **not** satisfy `clippy::struct_excessive_bools` — the lint
+  counts `bool` fields in any struct, so a nested plain struct just
+  relocates the lint to itself. Two of the five converted structs
+  (`WorkspaceSearch`, `vix-editor-core::Editor`) already carried
+  pre-existing code comments independently reasoning through and
+  rejecting the plain-sub-struct approach for exactly this reason. The
+  fix that actually works, used for all five: the `bitflags` crate (v2,
+  already a transitive dependency, MIT/Apache-2.0 — added as
+  `bitflags = "2"` to `[workspace.dependencies]`), one `bitflags!`
+  block per struct with a named `const` per former bool field, a single
+  `flags: Flags` field replacing them, reads via `.contains()`, writes
+  via `.set()`/`.toggle()`/`.insert()`/`.remove()`. Every call site
+  across `src/app.rs`, `src/app/lsp_dap.rs`, `src/app/org_table.rs`,
+  `src/ui/search.rs`, and the integration/fuzz test suites was updated
+  to match; full `scripts/check` gate green after each struct and again
+  for the combined change. Where the bools are really one mode, an enum
+  remains the right tool — none of the five converted structs needed
+  that; each pass unlocked a genuine independent-toggle bitset.
 - [x] **T150 — Remove the two crate-level blanket allows.** Done. Both
   gone, no per-expression allow needed to replace either: `multicursor.rs`'s
   `multi_insert`/`multi_delete` — the only cast sites in the file —

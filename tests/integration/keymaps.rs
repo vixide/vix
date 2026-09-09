@@ -719,7 +719,9 @@ fn apple_keymap_ctrl_alt_r_opens_query_replace() {
     // query/replace fields are submitted, so the field's `interactive` flag
     // is the right signal here, same as `edit.replace`'s own coverage.
     assert!(
-        app.search.as_ref().is_some_and(|s| s.interactive),
+        app.search
+            .as_ref()
+            .is_some_and(|s| s.flags.contains(SearchFlags::INTERACTIVE)),
         "Ctrl+Alt+R opens the search bar in interactive query-replace mode"
     );
 }

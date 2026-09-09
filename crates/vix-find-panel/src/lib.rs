@@ -217,30 +217,42 @@ impl PathFilter {
     }
 }
 
+bitflags::bitflags! {
+    /// [`SearchBar`]'s independent search toggles (T149): each bit is a
+    /// distinct, freely-combinable preference, not one of several
+    /// mutually-exclusive modes — grouping them into a plain sub-struct would
+    /// only relocate `clippy::struct_excessive_bools`, since the lint counts
+    /// `bool` fields anywhere, not just on `SearchBar` itself.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct Flags: u8 {
+        /// Replace mode shows and uses the replacement field.
+        const REPLACING = 1 << 0;
+        /// Interactive (query-replace) mode: Enter begins step-through y/n/!/q.
+        const INTERACTIVE = 1 << 1;
+        /// Match case exactly.
+        const CASE_SENSITIVE = 1 << 2;
+        /// Smart case: when `CASE_SENSITIVE` is off, match case-insensitively
+        /// only if the query has no uppercase letter; an uppercase letter
+        /// makes it sensitive.
+        const SMART_CASE = 1 << 3;
+        /// Match whole words only.
+        const WHOLE_WORD = 1 << 4;
+        /// Treat the query as a regular expression.
+        const REGEX = 1 << 5;
+    }
+}
+
 /// State of the find / find-and-replace box.
-// Independent search toggles (replacing/interactive/case/word/regex); grouping
-// them only relocates the lint and adds noise at every call site.
-#[allow(clippy::struct_excessive_bools)]
 pub struct SearchBar {
     /// Search-pattern text.
     pub query: String,
     /// Replacement text.
     pub replace: String,
-    /// Replace mode shows and uses the replacement field.
-    pub replacing: bool,
-    /// Interactive (query-replace) mode: Enter begins step-through y/n/!/q.
-    pub interactive: bool,
     /// Which input field has focus (only meaningful while replacing).
     pub field: Field,
-    /// Match case exactly.
-    pub case_sensitive: bool,
-    /// Smart case: when `case_sensitive` is off, match case-insensitively only if
-    /// the query has no uppercase letter; an uppercase letter makes it sensitive.
-    pub smart_case: bool,
-    /// Match whole words only.
-    pub whole_word: bool,
-    /// Treat the query as a regular expression.
-    pub regex: bool,
+    /// Independent display/mode toggles (replace/interactive/case/smart
+    /// case/whole word/regex).
+    pub flags: Flags,
     /// Where the search looks: this buffer, all files, or the workspace dock.
     /// The host acts on a change by handing this box's state to that surface.
     pub scope: Scope,
@@ -252,16 +264,13 @@ impl SearchBar {
     /// A fresh box; `replacing` selects find-and-replace mode.
     #[must_use]
     pub fn new(replacing: bool) -> Self {
+        let mut flags = Flags::SMART_CASE;
+        flags.set(Flags::REPLACING, replacing);
         SearchBar {
             query: String::new(),
             replace: String::new(),
-            replacing,
-            interactive: false,
             field: Field::Query,
-            case_sensitive: false,
-            smart_case: true,
-            whole_word: false,
-            regex: false,
+            flags,
             scope: Scope::Buffer,
             status: String::new(),
         }
@@ -277,12 +286,12 @@ impl SearchBar {
     /// off also ends interactive (step-through) mode, which has no meaning
     /// without a replacement.
     pub fn toggle_replace(&mut self) {
-        self.replacing = !self.replacing;
-        if self.replacing {
+        self.flags.toggle(Flags::REPLACING);
+        if self.flags.contains(Flags::REPLACING) {
             self.field = Field::Replace;
         } else {
             self.field = Field::Query;
-            self.interactive = false;
+            self.flags.remove(Flags::INTERACTIVE);
         }
     }
 
@@ -306,7 +315,7 @@ impl SearchBar {
 
     /// Switch focus between the query and replace fields (replace mode only).
     pub fn toggle_field(&mut self) {
-        if self.replacing {
+        if self.flags.contains(Flags::REPLACING) {
             self.field = match self.field {
                 Field::Query => Field::Replace,
                 _ => Field::Query,
@@ -321,18 +330,19 @@ impl SearchBar {
         if self.query.is_empty() {
             return None;
         }
-        let mut core = if self.regex {
+        let mut core = if self.flags.contains(Flags::REGEX) {
             self.query.clone()
         } else {
             regex::escape(&self.query)
         };
-        if self.whole_word {
+        if self.flags.contains(Flags::WHOLE_WORD) {
             core = format!(r"\b{core}\b");
         }
         // Case-insensitive unless the case toggle is on, or smart-case is enabled
         // and the query contains an uppercase letter.
         let has_upper = self.query.chars().any(char::is_uppercase);
-        let insensitive = !(self.case_sensitive || self.smart_case && has_upper);
+        let insensitive = !(self.flags.contains(Flags::CASE_SENSITIVE)
+            || self.flags.contains(Flags::SMART_CASE) && has_upper);
         if insensitive {
             core = format!("(?i){core}");
         }
@@ -348,7 +358,7 @@ mod tests {
     fn new_starts_on_the_query_field() {
         let s = SearchBar::new(true);
         assert_eq!(s.field, Field::Query);
-        assert!(s.replacing);
+        assert!(s.flags.contains(Flags::REPLACING));
     }
 
     #[test]
@@ -385,9 +395,8 @@ mod tests {
     fn pattern_respects_regex_word_and_case_toggles() {
         let mut s = SearchBar::new(false);
         s.query = "a.b".to_string();
-        s.regex = true;
-        s.case_sensitive = true;
-        s.whole_word = true;
+        s.flags
+            .insert(Flags::REGEX | Flags::CASE_SENSITIVE | Flags::WHOLE_WORD);
         assert_eq!(s.pattern().as_deref(), Some(r"\ba.b\b"));
     }
 
@@ -413,7 +422,7 @@ mod tests {
             "uppercase → case-sensitive"
         );
         // Turning smart-case off reverts to always-insensitive (unless case toggle).
-        s.smart_case = false;
+        s.flags.remove(Flags::SMART_CASE);
         assert_eq!(s.pattern().as_deref(), Some("(?i)Foo"));
     }
 

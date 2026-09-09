@@ -25,7 +25,7 @@ use super::{
     lsp_pos_to_char, severity_color,
 };
 use crate::editor::SEARCH_MARK;
-use crate::workspace_search::{Hit, WorkspaceSearch};
+use crate::workspace_search::{Flags as WorkspaceFlags, Hit, WorkspaceSearch};
 
 impl App {
     /// Request inlay hints for the whole document `path` (when display is on).
@@ -832,7 +832,7 @@ impl App {
         }
         hits.sort_by(|a, b| a.display.cmp(&b.display));
         let mut ps = WorkspaceSearch::new(false);
-        ps.static_results = true;
+        ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
         ps.status = t!("status.diagnostics_n", n = hits.len()).to_string();
         ps.hits = hits;
         self.workspace_search = Some(ps);

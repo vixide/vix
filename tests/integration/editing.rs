@@ -1552,22 +1552,39 @@ fn view_time_zone_action_sets_active_zone() {
 #[test]
 fn line_number_toggle() {
     let mut app = app_at(Path::new("."));
-    let before = app.editor.line_numbers;
+    let before = app.editor.flags.contains(vix::editor::Flags::LINE_NUMBERS);
     app.run_action("tools.line_numbers");
-    assert_ne!(before, app.editor.line_numbers);
+    assert_ne!(
+        before,
+        app.editor.flags.contains(vix::editor::Flags::LINE_NUMBERS)
+    );
 }
 
 #[test]
 fn visible_whitespace_toggle() {
     let mut app = app_at(Path::new("."));
     // Off by default; the action toggles it and persists the setting.
-    assert!(!app.editor.show_whitespace);
+    assert!(
+        !app.editor
+            .flags
+            .contains(vix::editor::Flags::SHOW_WHITESPACE)
+    );
     assert!(!app.settings.show_whitespace);
     app.run_action("view.whitespace");
-    assert!(app.editor.show_whitespace, "toggles visible whitespace on");
+    assert!(
+        app.editor
+            .flags
+            .contains(vix::editor::Flags::SHOW_WHITESPACE),
+        "toggles visible whitespace on"
+    );
     assert!(app.settings.show_whitespace, "persists the new setting");
     app.run_action("view.whitespace");
-    assert!(!app.editor.show_whitespace, "toggles back off");
+    assert!(
+        !app.editor
+            .flags
+            .contains(vix::editor::Flags::SHOW_WHITESPACE),
+        "toggles back off"
+    );
 }
 
 #[test]
@@ -1604,13 +1621,22 @@ fn line_ending_detects_crlf() {
 #[test]
 fn soft_wrap_toggle() {
     let mut app = app_at(Path::new("."));
-    assert!(!app.editor.soft_wrap, "off by default");
+    assert!(
+        !app.editor.flags.contains(vix::editor::Flags::SOFT_WRAP),
+        "off by default"
+    );
     assert!(!app.settings.soft_wrap);
     app.run_action("view.soft_wrap");
-    assert!(app.editor.soft_wrap, "toggles soft wrap on");
+    assert!(
+        app.editor.flags.contains(vix::editor::Flags::SOFT_WRAP),
+        "toggles soft wrap on"
+    );
     assert!(app.settings.soft_wrap, "persists the setting");
     app.run_action("view.soft_wrap");
-    assert!(!app.editor.soft_wrap, "toggles back off");
+    assert!(
+        !app.editor.flags.contains(vix::editor::Flags::SOFT_WRAP),
+        "toggles back off"
+    );
 }
 
 #[test]

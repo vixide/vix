@@ -40,9 +40,9 @@ use crate::menu::{Menu, menus};
 use crate::messages::{Level, Messages};
 use crate::palette::{self, Palette};
 use crate::query::{Decision, QueryReplace};
-use crate::search::{Field, Scope, SearchBar};
+use crate::search::{Field, Flags as SearchFlags, Scope, SearchBar};
 use crate::settings::Settings;
-use crate::workspace_search::{Hit, WorkspaceSearch};
+use crate::workspace_search::{Flags as WorkspaceFlags, Hit, WorkspaceSearch};
 
 /// The repo's `themes/` directory, embedded into the binary so its themes are
 /// available in the chooser without the user installing anything.
@@ -1788,13 +1788,18 @@ impl App {
         crate::menu::set_theme_names(theme_names);
         // Apply the saved time zone so the clock panel and status bar use it.
         crate::time_zone_model::set_active(&settings.time_zone);
-        let mut editor = Editor::new(
-            settings.line_numbers,
-            settings.show_whitespace,
-            settings.soft_wrap,
-            settings.indent_string(),
+        let mut flags = crate::editor::Flags::empty();
+        flags.set(crate::editor::Flags::LINE_NUMBERS, settings.line_numbers);
+        flags.set(
+            crate::editor::Flags::RELATIVE_LINE_NUMBERS,
+            settings.relative_line_numbers,
         );
-        editor.relative_line_numbers = settings.relative_line_numbers;
+        flags.set(
+            crate::editor::Flags::SHOW_WHITESPACE,
+            settings.show_whitespace,
+        );
+        flags.set(crate::editor::Flags::SOFT_WRAP, settings.soft_wrap);
+        let mut editor = Editor::new(flags, settings.indent_string());
         for tab in &mut editor.tabs {
             tab.editor.set_auto_pair(settings.auto_pair);
             tab.editor.set_rainbow_brackets(settings.rainbow_brackets);
@@ -2625,7 +2630,7 @@ impl App {
             "edit.query_replace" => {
                 self.start_search(true);
                 if let Some(s) = self.search.as_mut() {
-                    s.interactive = true;
+                    s.flags.insert(SearchFlags::INTERACTIVE);
                 }
             }
             "search.workspace" => self.open_workspace_search(false),
@@ -5374,12 +5379,17 @@ impl App {
     /// Toggle the editor's line-number gutter, driven by the editor panel's own
     /// `toggle_line_numbers`, then mirrored across every tab and persisted.
     fn toggle_editor_line_numbers(&mut self) {
-        let fallback = !self.editor.line_numbers;
+        let fallback = !self
+            .editor
+            .flags
+            .contains(crate::editor::Flags::LINE_NUMBERS);
         let on = self
             .editor
             .active_tab_mut()
             .map_or(fallback, |t| t.editor.toggle_line_numbers());
-        self.editor.line_numbers = on;
+        self.editor
+            .flags
+            .set(crate::editor::Flags::LINE_NUMBERS, on);
         self.editor.refresh_line_numbers();
         self.settings.line_numbers = on;
         self.status = if on {
@@ -5451,7 +5461,9 @@ impl App {
     fn toggle_relative_line_numbers(&mut self) {
         let on = !self.settings.relative_line_numbers;
         self.settings.relative_line_numbers = on;
-        self.editor.relative_line_numbers = on;
+        self.editor
+            .flags
+            .set(crate::editor::Flags::RELATIVE_LINE_NUMBERS, on);
         self.editor.refresh_line_numbers();
         self.status = t!("status.relative_line_numbers", on = on).to_string();
     }
@@ -5459,12 +5471,17 @@ impl App {
     /// Toggle the editor's visible-whitespace glyphs, mirrored across every tab
     /// and persisted.
     fn toggle_editor_whitespace(&mut self) {
-        let fallback = !self.editor.show_whitespace;
+        let fallback = !self
+            .editor
+            .flags
+            .contains(crate::editor::Flags::SHOW_WHITESPACE);
         let on = self
             .editor
             .active_tab_mut()
             .map_or(fallback, |t| t.editor.toggle_whitespace());
-        self.editor.show_whitespace = on;
+        self.editor
+            .flags
+            .set(crate::editor::Flags::SHOW_WHITESPACE, on);
         self.editor.refresh_whitespace();
         self.settings.show_whitespace = on;
         self.status = if on {
@@ -5478,12 +5495,12 @@ impl App {
     /// Toggle soft wrap (long lines wrap vs. scroll), mirrored across every tab
     /// and persisted.
     fn toggle_editor_soft_wrap(&mut self) {
-        let fallback = !self.editor.soft_wrap;
+        let fallback = !self.editor.flags.contains(crate::editor::Flags::SOFT_WRAP);
         let on = self
             .editor
             .active_tab_mut()
             .map_or(fallback, |t| t.editor.toggle_soft_wrap());
-        self.editor.soft_wrap = on;
+        self.editor.flags.set(crate::editor::Flags::SOFT_WRAP, on);
         self.editor.refresh_soft_wrap();
         self.settings.soft_wrap = on;
         self.status = if on {
@@ -10289,9 +10306,9 @@ impl App {
         let (query, replace, replacing, case_sensitive, regex) = (
             bar.query.clone(),
             bar.replace.clone(),
-            bar.replacing,
-            bar.case_sensitive,
-            bar.regex,
+            bar.flags.contains(SearchFlags::REPLACING),
+            bar.flags.contains(SearchFlags::CASE_SENSITIVE),
+            bar.flags.contains(SearchFlags::REGEX),
         );
         match scope {
             Scope::Buffer => {}
@@ -10301,8 +10318,10 @@ impl App {
                 let mut panel = WorkspaceSearch::new(replacing);
                 panel.query = query;
                 panel.replace = replace;
-                panel.case_sensitive = case_sensitive;
-                panel.regex = regex;
+                panel
+                    .flags
+                    .set(WorkspaceFlags::CASE_SENSITIVE, case_sensitive);
+                panel.flags.set(WorkspaceFlags::REGEX, regex);
                 self.workspace_search = Some(panel);
                 self.run_workspace_search();
             }
@@ -10327,7 +10346,7 @@ impl App {
     fn search_should_preview(&self) -> bool {
         self.search
             .as_ref()
-            .is_some_and(|s| !s.interactive && s.field == Field::Query)
+            .is_some_and(|s| !s.flags.contains(SearchFlags::INTERACTIVE) && s.field == Field::Query)
     }
 
     /// Recompute and apply search-highlight marks for the active buffer, then
@@ -10511,8 +10530,14 @@ impl App {
                 }
             }
             KeyCode::Enter => {
-                let interactive = self.search.as_ref().is_some_and(|s| s.interactive);
-                let replacing = self.search.as_ref().is_some_and(|s| s.replacing);
+                let interactive = self
+                    .search
+                    .as_ref()
+                    .is_some_and(|s| s.flags.contains(SearchFlags::INTERACTIVE));
+                let replacing = self
+                    .search
+                    .as_ref()
+                    .is_some_and(|s| s.flags.contains(SearchFlags::REPLACING));
                 let on_replace_field =
                     self.search.as_ref().map(|s| s.field) == Some(Field::Replace);
                 if interactive {
@@ -10538,10 +10563,10 @@ impl App {
             KeyCode::Char(c) if Self::alt(&key) => {
                 if let Some(s) = self.search.as_mut() {
                     match c.to_ascii_lowercase() {
-                        'c' => s.case_sensitive = !s.case_sensitive,
-                        's' => s.smart_case = !s.smart_case,
-                        'w' => s.whole_word = !s.whole_word,
-                        'r' => s.regex = !s.regex,
+                        'c' => s.flags.toggle(SearchFlags::CASE_SENSITIVE),
+                        's' => s.flags.toggle(SearchFlags::SMART_CASE),
+                        'w' => s.flags.toggle(SearchFlags::WHOLE_WORD),
+                        'r' => s.flags.toggle(SearchFlags::REGEX),
                         // Replace is a mode of this dialog, not a separate one.
                         // `h` as in the `Ctrl+H` every other editor uses; `Alt+P`
                         // is taken by `search.prev_selection`.
@@ -10550,7 +10575,11 @@ impl App {
                     }
                 }
                 // Toggles never move the cursor while in interactive mode.
-                if self.search.as_ref().is_some_and(|s| !s.interactive) {
+                if self
+                    .search
+                    .as_ref()
+                    .is_some_and(|s| !s.flags.contains(SearchFlags::INTERACTIVE))
+                {
                     self.find_step(true);
                 }
             }
@@ -10596,16 +10625,20 @@ impl App {
         {
             if let Some(s) = self.search.as_mut() {
                 if hit(self.layout.search_case) {
-                    s.case_sensitive = !s.case_sensitive;
+                    s.flags.toggle(SearchFlags::CASE_SENSITIVE);
                 } else if hit(self.layout.search_smartcase) {
-                    s.smart_case = !s.smart_case;
+                    s.flags.toggle(SearchFlags::SMART_CASE);
                 } else if hit(self.layout.search_word) {
-                    s.whole_word = !s.whole_word;
+                    s.flags.toggle(SearchFlags::WHOLE_WORD);
                 } else {
-                    s.regex = !s.regex;
+                    s.flags.toggle(SearchFlags::REGEX);
                 }
             }
-            if self.search.as_ref().is_some_and(|s| !s.interactive) {
+            if self
+                .search
+                .as_ref()
+                .is_some_and(|s| !s.flags.contains(SearchFlags::INTERACTIVE))
+            {
                 self.find_step(true);
             }
             return;
@@ -10633,7 +10666,7 @@ impl App {
         if let Some(s) = self.search.as_mut() {
             if rel == 0 {
                 s.field = Field::Query;
-            } else if s.replacing && rel == 2 {
+            } else if s.flags.contains(SearchFlags::REPLACING) && rel == 2 {
                 s.field = Field::Replace;
             }
         }
@@ -10657,7 +10690,7 @@ impl App {
                 return;
             }
         };
-        let regex = sb.regex;
+        let regex = sb.flags.contains(SearchFlags::REGEX);
         let template = if regex {
             crate::find_panel::unescape(&sb.replace)
         } else {
@@ -10787,7 +10820,7 @@ impl App {
                 return;
             }
         };
-        let use_regex = sb.regex;
+        let use_regex = sb.flags.contains(SearchFlags::REGEX);
         let replacement = sb.replace.clone();
         let Some(tab) = self.editor.active_tab_mut() else {
             return;
@@ -11067,7 +11100,7 @@ impl App {
         }
         hits.sort_by_key(|h| h.line);
         let mut ps = WorkspaceSearch::new(false);
-        ps.static_results = true;
+        ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
         ps.status = t!("status.symbols_n", n = hits.len()).to_string();
         ps.hits = hits;
         self.workspace_search = Some(ps);
@@ -11098,7 +11131,7 @@ impl App {
         }
         hits.sort_by(|a, b| a.display.cmp(&b.display));
         let mut ps = WorkspaceSearch::new(false);
-        ps.static_results = true;
+        ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
         ps.status = t!("status.symbols_n", n = hits.len()).to_string();
         ps.hits = hits;
         self.workspace_search = Some(ps);
@@ -11129,7 +11162,7 @@ impl App {
         }
         hits.sort_by(|a, b| a.display.cmp(&b.display));
         let mut ps = WorkspaceSearch::new(false);
-        ps.static_results = true;
+        ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
         ps.status = t!("status.references_n", n = hits.len()).to_string();
         ps.hits = hits;
         self.workspace_search = Some(ps);
@@ -11166,7 +11199,7 @@ impl App {
             n => {
                 let mut ps = WorkspaceSearch::new(false);
                 ps.query.clone_from(&symbol);
-                ps.static_results = true;
+                ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
                 ps.hits = hits;
                 ps.status = t!("status.definitions_n", n = n, symbol = symbol).to_string();
                 self.workspace_search = Some(ps);
@@ -11215,7 +11248,7 @@ impl App {
         }
         hits.sort_by(|a, b| a.display.cmp(&b.display));
         let mut ps = WorkspaceSearch::new(false);
-        ps.static_results = true;
+        ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
         ps.status = t!("status.todos_n", n = hits.len()).to_string();
         ps.hits = hits;
         self.workspace_search = Some(ps);
@@ -11319,7 +11352,7 @@ impl App {
         if self
             .workspace_search
             .as_ref()
-            .is_some_and(|p| p.static_results)
+            .is_some_and(|p| p.flags.contains(WorkspaceFlags::STATIC_RESULTS))
         {
             return;
         }
@@ -11397,7 +11430,7 @@ impl App {
         let Some(ps) = self.workspace_search.as_ref() else {
             return;
         };
-        if !ps.replacing {
+        if !ps.flags.contains(WorkspaceFlags::REPLACING) {
             return;
         }
         let Some(pat) = ps.pattern() else {
@@ -11412,7 +11445,7 @@ impl App {
                 return;
             }
         };
-        let use_regex = ps.regex;
+        let use_regex = ps.flags.contains(WorkspaceFlags::REGEX);
         let replacement = ps.replace.clone();
 
         // Unique set of files that currently have hits.
@@ -11528,7 +11561,10 @@ impl App {
                 }
             }
             KeyCode::Enter => {
-                let replacing = self.workspace_search.as_ref().is_some_and(|p| p.replacing);
+                let replacing = self
+                    .workspace_search
+                    .as_ref()
+                    .is_some_and(|p| p.flags.contains(WorkspaceFlags::REPLACING));
                 let on_replace =
                     self.workspace_search.as_ref().map(|p| p.field) == Some(Field::Replace);
                 if replacing && (Self::alt(&key) || on_replace) {
@@ -11543,7 +11579,11 @@ impl App {
                 let Some(p) = self.workspace_search.as_ref() else {
                     return;
                 };
-                let (query, case, regex) = (p.query.clone(), p.case_sensitive, p.regex);
+                let (query, case, regex) = (
+                    p.query.clone(),
+                    p.flags.contains(WorkspaceFlags::CASE_SENSITIVE),
+                    p.flags.contains(WorkspaceFlags::REGEX),
+                );
                 self.workspace_search = None;
                 if query.is_empty() {
                     self.prompt = Some(Prompt::new(
@@ -11557,13 +11597,13 @@ impl App {
             KeyCode::Char(c) if Self::alt(&key) => {
                 if let Some(p) = self.workspace_search.as_mut() {
                     match c.to_ascii_lowercase() {
-                        'c' => p.case_sensitive = !p.case_sensitive,
-                        'r' => p.regex = !p.regex,
+                        'c' => p.flags.toggle(WorkspaceFlags::CASE_SENSITIVE),
+                        'r' => p.flags.toggle(WorkspaceFlags::REGEX),
                         // Replace is a mode of this panel, so a search started
                         // as a find can become a replace without reopening.
                         'h' => {
-                            p.replacing = !p.replacing;
-                            p.field = if p.replacing {
+                            p.flags.toggle(WorkspaceFlags::REPLACING);
+                            p.field = if p.flags.contains(WorkspaceFlags::REPLACING) {
                                 Field::Replace
                             } else {
                                 Field::Query
@@ -11638,12 +11678,12 @@ impl App {
                 return;
             }
         };
-        let template = if sb.regex {
+        let template = if sb.flags.contains(SearchFlags::REGEX) {
             crate::find_panel::unescape(&sb.replace)
         } else {
             sb.replace.clone()
         };
-        let regex = sb.regex;
+        let regex = sb.flags.contains(SearchFlags::REGEX);
         let label = sb.query.clone();
         self.search = None;
 

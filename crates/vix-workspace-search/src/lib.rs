@@ -29,10 +29,27 @@ pub struct Hit {
     pub display: String,
 }
 
+bitflags::bitflags! {
+    /// [`WorkspaceSearch`]'s independent search toggles (T149): each bit is a
+    /// distinct, freely-combinable preference, not one of several
+    /// mutually-exclusive modes — grouping them into a plain sub-struct would
+    /// only relocate `clippy::struct_excessive_bools`, since the lint counts
+    /// `bool` fields anywhere, not just on `WorkspaceSearch` itself.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct Flags: u8 {
+        /// Whether the replacement field is shown and used.
+        const REPLACING = 1 << 0;
+        /// Match case exactly.
+        const CASE_SENSITIVE = 1 << 1;
+        /// Treat the query as a regular expression.
+        const REGEX = 1 << 2;
+        /// When set, the hit list is fixed (e.g. go-to-definition candidates)
+        /// and typing does not re-run the search.
+        const STATIC_RESULTS = 1 << 3;
+    }
+}
+
 /// State of the workspace-wide search/replace panel.
-// Independent search toggles (replacing/case/regex/static); grouping them only
-// relocates the lint and adds noise at every call site.
-#[allow(clippy::struct_excessive_bools)]
 pub struct WorkspaceSearch {
     /// Search-pattern text.
     pub query: String,
@@ -42,42 +59,35 @@ pub struct WorkspaceSearch {
     pub include_path: String,
     /// Regex excluding file paths that match it (empty = no exclusion).
     pub exclude_path: String,
-    /// Whether the replacement field is shown and used.
-    pub replacing: bool,
     /// Which input field has focus.
     pub field: Field,
-    /// Match case exactly.
-    pub case_sensitive: bool,
-    /// Treat the query as a regular expression.
-    pub regex: bool,
+    /// Independent toggles: replace mode, case sensitivity, regex mode, and
+    /// whether the hit list is static.
+    pub flags: Flags,
     /// Current matches.
     pub hits: Vec<Hit>,
     /// Index of the highlighted hit.
     pub selected: usize,
     /// Status/summary line shown under the inputs.
     pub status: String,
-    /// When set, the hit list is fixed (e.g. go-to-definition candidates) and
-    /// typing does not re-run the search.
-    pub static_results: bool,
 }
 
 impl WorkspaceSearch {
     /// A fresh panel; `replacing` selects search-and-replace mode.
     #[must_use]
     pub fn new(replacing: bool) -> Self {
+        let mut flags = Flags::empty();
+        flags.set(Flags::REPLACING, replacing);
         WorkspaceSearch {
             query: String::new(),
             replace: String::new(),
             include_path: String::new(),
             exclude_path: String::new(),
-            replacing,
             field: Field::Query,
-            case_sensitive: false,
-            regex: false,
+            flags,
             hits: Vec::new(),
             selected: 0,
             status: t!("status.workspace_search_prompt").to_string(),
-            static_results: false,
         }
     }
 
@@ -95,7 +105,7 @@ impl WorkspaceSearch {
     /// include-path → exclude-path → query.
     pub fn toggle_field(&mut self) {
         self.field = match self.field {
-            Field::Query if self.replacing => Field::Replace,
+            Field::Query if self.flags.contains(Flags::REPLACING) => Field::Replace,
             Field::Query | Field::Replace => Field::IncludePath,
             Field::IncludePath => Field::ExcludePath,
             Field::ExcludePath => Field::Query,
@@ -114,12 +124,12 @@ impl WorkspaceSearch {
         if self.query.len() < 2 {
             return None;
         }
-        let mut core = if self.regex {
+        let mut core = if self.flags.contains(Flags::REGEX) {
             self.query.clone()
         } else {
             regex::escape(&self.query)
         };
-        if !self.case_sensitive {
+        if !self.flags.contains(Flags::CASE_SENSITIVE) {
             core = format!("(?i){core}");
         }
         Some(core)

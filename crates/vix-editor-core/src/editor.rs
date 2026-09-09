@@ -21,11 +21,36 @@ type Hightlight = (usize, usize, Style);
 // start offset, end offset
 type HightlightCache = HashMap<(usize, usize), Vec<Hightlight>>;
 
+bitflags::bitflags! {
+    /// [`Editor`]'s independent display/editing toggles (T149): each bit is
+    /// a distinct, freely-combinable preference, not one of several
+    /// mutually-exclusive modes — a bitset with named accessors is what
+    /// actually satisfies `clippy::struct_excessive_bools` here (grouping
+    /// the same bools into a sub-struct would not: the lint counts `bool`
+    /// fields anywhere, not just on `Editor` itself).
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) struct Flags: u8 {
+        /// Show the line-number gutter.
+        const SHOW_LINE_NUMBERS = 1 << 0;
+        /// When line numbers are shown, non-current lines display their
+        /// distance from the cursor line; the cursor line shows its
+        /// absolute number.
+        const RELATIVE_LINE_NUMBERS = 1 << 1;
+        /// Render visible glyphs for whitespace (space, tab, line ending).
+        const SHOW_WHITESPACE = 1 << 2;
+        /// Wrap long logical lines across several screen rows instead of
+        /// scrolling horizontally.
+        const SOFT_WRAP = 1 << 3;
+        /// Auto-insert the matching closer when an opening bracket/quote is
+        /// typed (and delete both with Backspace inside an empty pair).
+        const AUTO_PAIR = 1 << 4;
+        /// Color matching brackets by nesting depth (rainbow brackets).
+        const RAINBOW_BRACKETS = 1 << 5;
+    }
+}
+
 /// Represents the text editor, which holds the code buffer, cursor, selection,
 /// theme, scroll offsets, highlight cache, clipboard, and user mark intervals.
-// Independent display/behavior flags (line numbers, whitespace, soft wrap,
-// auto-pair); each is a distinct toggle, so grouping them would not help.
-#[allow(clippy::struct_excessive_bools)]
 pub struct Editor {
     /// Code buffer and editing/highlighting logic for the current language
     pub(crate) code: Code,
@@ -89,26 +114,10 @@ pub struct Editor {
     /// Syntax highlight cache by intervals to speed up rendering
     pub(crate) highlights_cache: RefCell<HightlightCache>,
 
-    /// Controls when to show the line numbers
-    pub(crate) show_line_numbers: bool,
-
-    /// When true (and line numbers are shown), non-current lines display their
-    /// distance from the cursor line; the cursor line shows its absolute number.
-    pub(crate) relative_line_numbers: bool,
-
-    /// When true, render visible glyphs for whitespace (space, tab, line ending).
-    pub(crate) show_whitespace: bool,
-
-    /// When true, long logical lines wrap across several screen rows instead of
-    /// scrolling horizontally.
-    pub(crate) soft_wrap: bool,
-
-    /// When true, typing an opening bracket/quote auto-inserts its closer (and
-    /// Backspace between an empty pair deletes both). Host-configurable.
-    pub(crate) auto_pair: bool,
-
-    /// When true, color matching brackets by nesting depth (rainbow brackets).
-    pub(crate) rainbow_brackets: bool,
+    /// Independent display/editing toggles (line numbers, whitespace, soft
+    /// wrap, auto-pair, rainbow brackets) — see [`Flags`] for what each bit
+    /// means.
+    pub(crate) flags: Flags,
 
     /// Optional end-of-line virtual note `(line, text)` drawn dimmed after that
     /// line's content (e.g. inline git blame for the cursor line). Non-wrapped
@@ -204,12 +213,7 @@ impl Editor {
             folds: Vec::new(),
             inlay_hints: Vec::new(),
             highlights_cache,
-            show_line_numbers: true,
-            relative_line_numbers: false,
-            show_whitespace: false,
-            soft_wrap: false,
-            auto_pair: true,
-            rainbow_brackets: false,
+            flags: Flags::SHOW_LINE_NUMBERS | Flags::AUTO_PAIR,
             eol_note: None,
             breakpoints: Vec::new(),
             debug_line: None,
@@ -237,7 +241,7 @@ impl Editor {
 
     /// Enable or disable relative (hybrid) line numbering.
     pub fn set_relative_line_numbers(&mut self, on: bool) {
-        self.relative_line_numbers = on;
+        self.flags.set(Flags::RELATIVE_LINE_NUMBERS, on);
     }
 
     /// Set the block-cursor style. Pass `Some(style)` to draw a visible cursor
@@ -268,7 +272,7 @@ impl Editor {
     }
 
     pub(crate) fn get_line_number_width(&self) -> usize {
-        if self.show_line_numbers {
+        if self.flags.contains(Flags::SHOW_LINE_NUMBERS) {
             let total_lines = self.code.len_lines();
             let max_line_number = total_lines.max(1);
             let line_number_digits = max_line_number.to_string().len().max(5);
@@ -287,7 +291,7 @@ impl Editor {
         let line = self.code.char_to_line(self.cursor);
         let col = self.cursor - self.code.line_to_char(line);
 
-        if self.soft_wrap {
+        if self.flags.contains(Flags::SOFT_WRAP) {
             // No horizontal scroll; scroll vertically by logical line until the
             // cursor's visual row is within the viewport.
             self.offset_x = 0;
@@ -393,7 +397,7 @@ impl Editor {
             return None;
         }
 
-        if self.soft_wrap {
+        if self.flags.contains(Flags::SOFT_WRAP) {
             let screen_row = (mouse_y - area.top()) as usize;
             let text_width = (area.width as usize).saturating_sub(line_number_width as usize);
             let rows = self.visual_rows(text_width, screen_row + 1);
@@ -963,7 +967,7 @@ impl Editor {
     /// Whether soft wrap is on (no horizontal scrolling when it is).
     #[must_use]
     pub fn soft_wrap_enabled(&self) -> bool {
-        self.soft_wrap
+        self.flags.contains(Flags::SOFT_WRAP)
     }
 
     /// Width (columns) of the line-number gutter, so the host can compute the
@@ -1124,28 +1128,28 @@ impl Editor {
 
     /// Show or hide the line-number gutter.
     pub fn show_line_numbers(&mut self, show: bool) {
-        self.show_line_numbers = show;
+        self.flags.set(Flags::SHOW_LINE_NUMBERS, show);
     }
 
     /// Toggle the line-number gutter; returns the new visibility.
     pub fn toggle_line_numbers(&mut self) -> bool {
-        self.show_line_numbers = !self.show_line_numbers;
-        self.show_line_numbers
+        self.flags.toggle(Flags::SHOW_LINE_NUMBERS);
+        self.flags.contains(Flags::SHOW_LINE_NUMBERS)
     }
 
     /// Show or hide visible-whitespace glyphs (space, tab, line ending).
     pub fn show_whitespace(&mut self, show: bool) {
-        self.show_whitespace = show;
+        self.flags.set(Flags::SHOW_WHITESPACE, show);
     }
 
     /// Enable or disable bracket/quote auto-pairing.
     pub fn set_auto_pair(&mut self, on: bool) {
-        self.auto_pair = on;
+        self.flags.set(Flags::AUTO_PAIR, on);
     }
 
     /// Enable or disable rainbow (depth-colored) brackets.
     pub fn set_rainbow_brackets(&mut self, on: bool) {
-        self.rainbow_brackets = on;
+        self.flags.set(Flags::RAINBOW_BRACKETS, on);
     }
 
     /// Set (or clear with `None`) the end-of-line virtual note: `(line, text)`
@@ -1166,7 +1170,7 @@ impl Editor {
 
     /// Enable or disable soft wrap (long lines wrap instead of scrolling).
     pub fn set_soft_wrap(&mut self, on: bool) {
-        self.soft_wrap = on;
+        self.flags.set(Flags::SOFT_WRAP, on);
         if on {
             self.offset_x = 0;
         }
@@ -1174,8 +1178,8 @@ impl Editor {
 
     /// Toggle soft wrap; returns the new state.
     pub fn toggle_soft_wrap(&mut self) -> bool {
-        self.set_soft_wrap(!self.soft_wrap);
-        self.soft_wrap
+        self.set_soft_wrap(!self.flags.contains(Flags::SOFT_WRAP));
+        self.flags.contains(Flags::SOFT_WRAP)
     }
 
     /// Set the indent string inserted by Tab / the `Indent` action (spaces or a
@@ -1186,8 +1190,8 @@ impl Editor {
 
     /// Toggle visible-whitespace glyphs; returns the new visibility.
     pub fn toggle_whitespace(&mut self) -> bool {
-        self.show_whitespace = !self.show_whitespace;
-        self.show_whitespace
+        self.flags.toggle(Flags::SHOW_WHITESPACE);
+        self.flags.contains(Flags::SHOW_WHITESPACE)
     }
 
     /// Set the style used for visible-whitespace glyphs (typically dimmed).

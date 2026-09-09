@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Editor host: the `CodeEditor` widget wrapper and the pane tree."
 
 [dependencies]
+bitflags = { workspace = true }
 ratatui = { workspace = true }
 ratatui-core = { workspace = true }
 ratatui-image = { workspace = true }
