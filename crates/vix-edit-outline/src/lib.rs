@@ -7,11 +7,11 @@
 //! descendants, navigate item to item, re-indent items to change the hierarchy,
 //! and move items (with their subtrees) up and down.
 //!
-//! This module is self-contained and host-agnostic: it owns the items, the
+//! This crate is self-contained and host-agnostic: it owns the items, the
 //! cursor, the collapse state, and an undo/redo history, and it interprets key
 //! events itself (returning an [`Outcome`] telling the host when to close or
-//! save). The host ([`crate::app`]) renders the visible items, syncs the scroll
-//! window, and persists saves.
+//! save). The host (`App` in the root `vix` crate) renders the visible
+//! items, syncs the scroll window, and persists saves.
 //!
 //! Keys (the host routes them here):
 //! - **↑ / ↓** (or `k` / `j`): move to the previous / next visible item.

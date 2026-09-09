@@ -5217,6 +5217,7 @@ dependencies = [
  "vix-db",
  "vix-diff-view",
  "vix-edit-bytes",
+ "vix-edit-outline",
  "vix-edit-sql",
  "vix-edit-value",
  "vix-editor",
@@ -5539,6 +5540,13 @@ dependencies = [
 
 [[package]]
 name = "vix-edit-bytes"
+version = "1.6.0"
+dependencies = [
+ "crossterm",
+]
+
+[[package]]
+name = "vix-edit-outline"
 version = "1.6.0"
 dependencies = [
  "crossterm",
