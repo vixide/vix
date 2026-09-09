@@ -86,6 +86,9 @@ pub mod ui;
 // Folded-in modules (formerly separate `vix-*` subcrates). The custom
 // code-editor widget lives in `editor_core` (above); its Tree-sitter grammars
 // are gated behind this crate's `lang-*` features.
+/// The calendar box's month-grid logic; re-exported as `vix::calendar` so the
+/// app and tests share one path.
+pub use crate::calendar_panel as calendar;
 pub use vix_affix as affix;
 pub use vix_ai_diff as ai_diff;
 pub use vix_ai_panel as ai_panel;
@@ -100,6 +103,7 @@ pub use vix_calendar_panel as calendar_panel;
 pub use vix_checksum_tool as checksum_tool;
 pub use vix_clock_panel as clock_panel;
 pub use vix_color_converter_tool as color_converter_tool;
+pub use vix_column_view as column_view;
 pub use vix_conflict_tool as conflict_tool;
 pub use vix_contact_panel as contact_panel;
 pub use vix_convert_from_csv_into_json_tool as convert_from_csv_into_json_tool;
@@ -119,6 +123,10 @@ pub use vix_dap as dap;
 pub use vix_db as db;
 pub use vix_diff_view as diff_view;
 pub use vix_edit_bytes as edit_bytes;
+pub use vix_edit_outline as edit_outline;
+pub use vix_edit_sql as edit_sql;
+pub use vix_edit_table as edit_table;
+pub use vix_edit_value as edit_value;
 pub use vix_editor::pane_tree;
 pub use vix_editorconfig as editorconfig;
 pub use vix_emmet as emmet;
@@ -147,15 +155,6 @@ pub use vix_roam as roam;
 pub use vix_spellcheck as spellcheck;
 pub use vix_status_bar_panel as status_bar_panel;
 pub use vix_system_information_panel as system_information_panel;
-pub use vix_workspace as workspace;
-pub mod column_view;
-/// The calendar box's month-grid logic; re-exported as `vix::calendar` so the
-/// app and tests share one path.
-pub use crate::calendar_panel as calendar;
-pub use vix_edit_outline as edit_outline;
-pub use vix_edit_sql as edit_sql;
-pub use vix_edit_table as edit_table;
-pub use vix_edit_value as edit_value;
 pub use vix_text_information_panel as text_information_panel;
 pub use vix_theme_model as theme_model;
 pub use vix_time_zone_model as time_zone_model;
@@ -165,6 +164,7 @@ pub use vix_uuid_tool as uuid_tool;
 pub use vix_vcard_panel as vcard_panel;
 pub use vix_vcard_parser as vcard_parser;
 pub use vix_welcome_panel as welcome_panel;
+pub use vix_workspace as workspace;
 pub use vix_workspace_dashboard_panel as workspace_dashboard_panel;
 pub use vix_x11_color_picker as x11_color_picker;
 pub use vix_zid_tool as zid_tool;

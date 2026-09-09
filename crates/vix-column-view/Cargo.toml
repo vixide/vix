@@ -1,0 +1,12 @@
+[package]
+name = "vix-column-view"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The interactive Column View overlay (Org C-c C-x C-c): a live, write-through spreadsheet view onto the outline."
+
+[dependencies]
+crossterm = { workspace = true }
+vix-org = { path = "../vix-org", version = "1.6.0" }

@@ -244,6 +244,9 @@ vix-case = { path = "crates/vix-case", version = "1.6.0" }
 vix-checksum-tool = { path = "crates/vix-checksum-tool", version = "1.6.0" }
 # Parse and convert colors between HEX, RGB, and HSL.
 vix-color-converter-tool = { path = "crates/vix-color-converter-tool", version = "1.6.0" }
+# The interactive Column View overlay (Org C-c C-x C-c): a live,
+# write-through spreadsheet view onto the outline.
+vix-column-view = { path = "crates/vix-column-view", version = "1.6.0" }
 # Parse Git merge-conflict markers and resolve the conflict under the cursor.
 vix-conflict-tool = { path = "crates/vix-conflict-tool", version = "1.6.0" }
 # Browse a directory of vCard files as a table of contacts.
