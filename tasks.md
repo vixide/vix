@@ -1992,8 +1992,9 @@ and its own gate run, zero intended behavior change unless stated.
   consumer (precedent: `vix-projectile` was merged into `vix-tasks`
   the day it was built), and add unit tests to `vix-theme`. Keep the
   crate-map/spec/check-docs invariants green throughout.
-- [ ] **T152 — Root `src/` modules that should be crates.**
-  `column_view.rs` (966 lines), `edit_table.rs` (770), `edit_outline.rs`
+- [x] **T152 — Root `src/` modules that should be crates.** Done, 5
+  slices, 2026-09-08. `column_view.rs` (966 lines), `edit_table.rs`
+  (770), `edit_outline.rs`
   (610), `explorer.rs`, `search.rs`, `workspace_search.rs`, `messages.rs`
   live in `src/` with no spec and outside `scripts/check-docs`'s
   "every crate owns a spec" gate — the 2026-07 "crates, not modules"
@@ -2001,6 +2002,36 @@ and its own gate run, zero intended behavior change unless stated.
   `crates/vix-<name>` with a `spec/index.md`, one per branch; `src/`
   should end up as `app.rs` (or `app/`, after T141), `ui.rs`, `lib.rs`,
   `main.rs`.
+
+  Slice 1: `explorer.rs`/`search.rs`/`messages.rs` turned out to already
+  be thin re-export shims (their real logic had moved to `vix-left-dock`/
+  `vix-find-panel`/`vix-right-dock` in an earlier pass that never deleted
+  the now-redundant files) — `pub mod X;` in `src/lib.rs` became
+  `pub use vix_Y as X;` (the same pattern already used for `calendar`/
+  `clock`), files deleted, zero caller changes anywhere (same public
+  paths). Slices 2-5 were genuine extractions — `workspace_search.rs`
+  (needed `rust-i18n` as a *direct* dependency alongside `vix-i18n` for
+  `t!` to resolve, matching `vix-menu`'s own proven pattern),
+  `edit_outline.rs` and `edit_table.rs` (already fully self-contained
+  and host-agnostic — crossterm plus, for the latter, `vix-convert-
+  tabular`), and `column_view.rs` (depends on `vix-org`, already a real
+  crate). Every extraction needed its stray `[`crate::app`]`/
+  `[`crate::edit_table`]`-style intra-doc links reworded to plain prose
+  (nothing at the new crate's level can resolve `crate::` paths into the
+  root `vix` crate) — caught before `cargo doc -D warnings` ever ran,
+  by checking each copied file's own doc comments before wiring it in.
+  While drafting `vix-column-view`'s spec, caught a self-authored
+  mistake before it shipped: guessed `Outcome` had a `Save` variant by
+  pattern-matching the sibling crates' shape, but the real enum is
+  `Consumed`/`Close`/`NeedsColumnPrompt` — no `Save` at all, since
+  column-view edits are already live in the buffer by the time a key
+  returns. `crate-map.md`'s "App shell" file table lost a row per
+  slice and gained a closing note once `src/` reached exactly
+  `main.rs`/`lib.rs`/`app.rs`/`ui.rs` — this task's own literal target,
+  now true. Crate count 106→111 across the whole T147/T148/T152 run
+  this session (108→111 for T152's own 4 new crates); each slice's
+  crate-count bump swept every doc that cites it. Full `scripts/check`
+  gate green on every slice, merged to `main`.
 - [x] **T153 — Sort the palette's Files mode.** Done. `palette_file_entries`
   (`src/app.rs`) now scores every candidate with `palette::fuzzy_score` and
   sorts by score descending, tie-broken on the path — the same
@@ -2312,7 +2343,7 @@ is listed explicitly.
 8. **Security:** T131/T132/T133 are done. **T134 remains**, blocked on
    T105 and T124/T125 shipping.
 9. **CI + code quality:** T009/T010/T141/T142/T143/T145/T146/T147/T148/
-   T150/T153/T154 are all done. **What's left**: T144, T149, T151, T152
+   T150/T152/T153/T154 are all done. **What's left**: T144, T149, T151
    remain, independent of each other and of the rest.
 
 When a task is finished: check its box here, note the branch/merge commit,
