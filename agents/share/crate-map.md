@@ -2,7 +2,7 @@
 
 Vix is a **Cargo workspace** (`[workspace] members = ["crates/*"]`) on **edition
 2024**. The root package `vix` (`src/`) is the thin **App shell** — CLI, event
-loop, `App` state, rendering, and the explorer — and it depends on the 109
+loop, `App` state, rendering, and the explorer — and it depends on the 110
 `vix-*` **member crates** under `crates/` that hold every feature plus the custom
 editor widget (`vix-editor-core`). Shared reference for where things live.
 
@@ -64,7 +64,6 @@ features (`syntax-common` by default, `syntax-all` for everything).
 | `main.rs`             | clap CLI, locale resolution, terminal setup, event loop, suspend.   |
 | `lib.rs`              | Crate root; lint config; `i18n!` catalog init; module declarations. |
 | `app.rs`              | `App` state, `on_key`/`on_mouse`, `run_action`, overlays, behavior — dispatches most of its logic into `src/app/*.rs` (below). |
-| `edit_table.rs`       | CSV/TSV spreadsheet overlay (`Grid`).                               |
 | `column_view.rs`      | Org column-view overlay (spec-driven columns, editable in place).   |
 | `ui.rs`               | All rendering: frame layout — dispatches most per-pane/overlay draw functions into `src/ui/*.rs` (below). |
 
@@ -109,7 +108,7 @@ are now thin `pub use` aliases in `lib.rs` for `vix-left-dock`/
 | Undo store  | `vix-undo-store` (persist/restore the undo tree per file under `<config>/undo/`, content-hash guarded). |
 | Clipboard   | `vix-clipboard` (process-wide serialized clipboard access; the platform pasteboard is opt-in through `use_system`, so a test run never touches it). |
 | Themes      | `vix-theme` (Nerd Font icons + theme style helpers), `vix-base16` (bundled base16 color themes). |
-| Edit surfaces | `vix-edit-value` (JSON/YAML tree, `Tree` + `Format`), `vix-edit-bytes` (hex/ASCII byte editor, `Hex`), `vix-edit-sql` (SQL statement list, `Editor`), `vix-edit-outline` (T152: prose-hierarchy outline, `Tree` + `Outcome`). Overlay editors with their own `handle_key`/`Outcome`, under **Edit → Mode**. (`edit_table`/`column_view` overlays still live in the App shell.) |
+| Edit surfaces | `vix-edit-value` (JSON/YAML tree, `Tree` + `Format`), `vix-edit-bytes` (hex/ASCII byte editor, `Hex`), `vix-edit-sql` (SQL statement list, `Editor`), `vix-edit-outline` (T152: prose-hierarchy outline, `Tree` + `Outcome`), `vix-edit-table` (T152: CSV/TSV spreadsheet grid, `Grid` + `Outcome`). Overlay editors with their own `handle_key`/`Outcome`, under **Edit → Mode**. (`column_view` overlay still lives in the App shell.) |
 | Generators  | `vix-qr-tool` (QR code via the `qrcode` crate, Unicode renderer), `vix-lorem` (deterministic lorem-ipsum text). |
 | Tool dialogs| `vix-calculator-tool`, `vix-color-converter-tool`, `vix-unit-converter-tool`, `vix-pomodoro-tool`. |
 | Info panels | `vix-text-information-panel`, `vix-file-information-panel`, `vix-system-information-panel`, `vix-status-bar-panel`, `vix-workspace-dashboard-panel`, `vix-outline-panel`, `vix-welcome-panel`. |
@@ -127,7 +126,7 @@ are now thin `pub use` aliases in `lib.rs` for `vix-left-dock`/
 
 | Path            | Contents                                                            |
 | --------------- | ------------------------------------------------------------------- |
-| `crates/`       | The 109 `vix-*` workspace member crates (each with its own `spec/`).|
+| `crates/`       | The 110 `vix-*` workspace member crates (each with its own `spec/`).|
 | `langs/`        | Tree-sitter highlight queries (`<lang>/highlights.scm`), embedded.  |
 | `locales/`      | `app.yml` — rust-i18n translations (English fallback).              |
 | `dictionaries/` | Hunspell dictionaries — gitignored; see `crates/vix-spellcheck/spec/dictionaries`. |

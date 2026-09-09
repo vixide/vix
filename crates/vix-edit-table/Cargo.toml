@@ -1,0 +1,12 @@
+[package]
+name = "vix-edit-table"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The table editor: a spreadsheet-like grid for viewing and editing delimited data (CSV/TSV) as rows and columns."
+
+[dependencies]
+crossterm = { workspace = true }
+vix-convert-tabular = { path = "../vix-convert-tabular", version = "1.6.0" }

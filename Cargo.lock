@@ -5219,6 +5219,7 @@ dependencies = [
  "vix-edit-bytes",
  "vix-edit-outline",
  "vix-edit-sql",
+ "vix-edit-table",
  "vix-edit-value",
  "vix-editor",
  "vix-editor-core",
@@ -5557,6 +5558,14 @@ name = "vix-edit-sql"
 version = "1.6.0"
 dependencies = [
  "crossterm",
+]
+
+[[package]]
+name = "vix-edit-table"
+version = "1.6.0"
+dependencies = [
+ "crossterm",
+ "vix-convert-tabular",
 ]
 
 [[package]]

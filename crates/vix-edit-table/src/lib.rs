@@ -8,11 +8,12 @@
 //! columns, sorts by the current column, and searches across all cells. Saving
 //! serializes the grid back to delimited text.
 //!
-//! This module is self-contained and host-agnostic: it owns the grid data,
+//! This crate is self-contained and host-agnostic: it owns the grid data,
 //! the cursor, the edit/find buffers, and an undo/redo history, and it
-//! interprets key events itself (returning an [`Outcome`] telling the host when
-//! to close or save). The host ([`crate::app`]) only renders the grid, syncs
-//! the visible scroll window, and acts on the returned outcome.
+//! interprets key events itself (returning an [`Outcome`] telling the host
+//! when to close or save). The host (`App` in the root `vix` crate) only
+//! renders the grid, syncs the visible scroll window, and acts on the
+//! returned outcome.
 
 #![warn(clippy::pedantic)]
 #![forbid(unsafe_code)]
@@ -22,7 +23,7 @@ use std::cmp::Ordering;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::convert_tabular::{parse_csv, parse_tsv, write_csv, write_tsv};
+use vix_convert_tabular::{parse_csv, parse_tsv, write_csv, write_tsv};
 
 /// What the host should do after the grid handled a key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
