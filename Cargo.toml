@@ -266,6 +266,8 @@ vix-convert-tabular = { path = "crates/vix-convert-tabular", version = "1.6.0" }
 vix-diff-view = { path = "crates/vix-diff-view", version = "1.6.0" }
 # The byte editor: a hex/ASCII view for editing raw file bytes.
 vix-edit-bytes = { path = "crates/vix-edit-bytes", version = "1.6.0" }
+# The outline editor: hierarchical hide/show and restructuring for prose text.
+vix-edit-outline = { path = "crates/vix-edit-outline", version = "1.6.0" }
 # The SQL edit surface: a statement-oriented view of a `.sql` buffer.
 vix-edit-sql = { path = "crates/vix-edit-sql", version = "1.6.0" }
 # The structured-value editor: a foldable tree for JSON and YAML.

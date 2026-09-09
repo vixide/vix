@@ -149,7 +149,7 @@ pub use vix_status_bar_panel as status_bar_panel;
 pub use vix_system_information_panel as system_information_panel;
 pub use vix_workspace as workspace;
 pub mod column_view;
-pub mod edit_outline;
+pub use vix_edit_outline as edit_outline;
 pub use vix_edit_sql as edit_sql;
 pub mod edit_table;
 /// The calendar box's month-grid logic; re-exported as `vix::calendar` so the
