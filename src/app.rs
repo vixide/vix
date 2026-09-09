@@ -39,7 +39,6 @@ use crate::explorer::Explorer;
 use crate::menu::{Menu, menus};
 use crate::messages::{Level, Messages};
 use crate::palette::{self, Palette};
-use crate::query::{Decision, QueryReplace};
 use crate::search::{Field, Flags as SearchFlags, Scope, SearchBar};
 use crate::settings::Settings;
 use crate::workspace_search::{Flags as WorkspaceFlags, Hit, WorkspaceSearch};
@@ -287,6 +286,42 @@ impl Prompt {
         self.preview = Some(preview);
         self
     }
+}
+
+/// The user's choice for the current match in a query-replace session
+/// (T151: folded in from the former `vix-query` crate, whose sole consumer
+/// was always this file — see `spec/find-and-replace/index.md`).
+#[derive(Clone, Copy)]
+pub enum Decision {
+    /// Replace this match (`y`).
+    Replace,
+    /// Skip this match (`n`).
+    Skip,
+    /// Replace this and all remaining matches (`!`).
+    ReplaceRest,
+    /// End the session (`q`).
+    Quit,
+}
+
+/// State for an in-progress interactive query-replace session (`Ctrl+Alt+R`):
+/// step through matches one at a time, deciding [`Decision::Replace`] /
+/// [`Decision::Skip`] / [`Decision::ReplaceRest`] / [`Decision::Quit`] for
+/// each. `App` owns the buffer the matches live in and drives the session
+/// through its own private `begin_query_replace`/`qr_key`/`qr_apply` methods.
+pub struct QueryReplace {
+    /// Compiled search pattern.
+    pub re: Regex,
+    /// Replacement template — already un-escaped when in regex mode, so the
+    /// regex engine only has capture groups left to expand.
+    pub template: String,
+    /// Whether to expand `$1`/`${name}` capture references in the template.
+    pub regex: bool,
+    /// Character offsets `[start, end)` of the match currently highlighted.
+    pub current: (usize, usize),
+    /// How many replacements have been applied so far.
+    pub replaced: usize,
+    /// The original query text, for the prompt label.
+    pub label: String,
 }
 
 /// State for an in-progress Org-capture: which template, its unanswered

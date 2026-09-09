@@ -64,3 +64,35 @@ pub fn file_icon(name: &str) -> &'static str {
         _ => icon::FILE,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn file_icon_matches_known_extensions() {
+        assert_eq!(file_icon("main.rs"), icon::RUST);
+        assert_eq!(file_icon("README.md"), icon::MARKDOWN);
+        assert_eq!(file_icon("notes.markdown"), icon::MARKDOWN);
+    }
+
+    #[test]
+    fn file_icon_falls_back_to_generic_file() {
+        assert_eq!(file_icon("Cargo.toml"), icon::FILE, "unknown extension");
+        assert_eq!(file_icon("Makefile"), icon::FILE, "no extension at all");
+        assert_eq!(file_icon(""), icon::FILE, "empty name");
+    }
+
+    #[test]
+    fn file_icon_extension_match_is_case_sensitive() {
+        // Not necessarily desirable, but this documents current behavior so a
+        // future change to case-fold extensions is a deliberate decision, not
+        // an accidental regression this test would otherwise miss.
+        assert_eq!(file_icon("main.RS"), icon::FILE);
+    }
+
+    #[test]
+    fn file_icon_uses_the_last_extension_of_a_multi_dot_name() {
+        assert_eq!(file_icon("archive.tar.rs"), icon::RUST);
+    }
+}

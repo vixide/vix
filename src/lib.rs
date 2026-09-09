@@ -66,7 +66,6 @@ pub use vix_markdown_preview as markdown_preview;
 pub use vix_menu as menu;
 pub use vix_palette as palette;
 pub use vix_qr_tool as qr_tool;
-pub use vix_query as query;
 pub use vix_regex_tool as regex_tool;
 pub use vix_right_dock as messages;
 pub use vix_session as session;

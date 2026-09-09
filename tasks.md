@@ -2007,15 +2007,52 @@ and its own gate run, zero intended behavior change unless stated.
   even exists (`f64 as i64`/`f64 as u64` casts saturate rather than wrap
   or lose sign per Rust's own float-cast semantics, so a proof comment,
   not code, is the correct final form here) — left unchanged.
-- [ ] **T151 — Micro-crate audit.** 105 crates; `vix-query` is 37 lines,
-  `vix-theme` 66, and `vix-modal`/`vix-i18n`/`vix-query`/`vix-theme` have
-  no tests at all (`vix-modal` is a documented spec-only scaffold, fine;
-  `vix-theme` is not). Write a minimum-viable-crate guideline into
-  `AGENTS.md` (own spec, own tests, a consumer other than the App shell
-  *or* a clear reuse story), fold crates that fail it into their sole
-  consumer (precedent: `vix-projectile` was merged into `vix-tasks`
-  the day it was built), and add unit tests to `vix-theme`. Keep the
-  crate-map/spec/check-docs invariants green throughout.
+- [x] **T151 — Micro-crate audit.** Done. Added a "When to add a new
+  crate" section to `AGENTS.md` (own spec, own tests — in-crate or, for
+  a pure App-driven panel-state crate with no logic worth isolating,
+  thorough `tests/integration/*.rs` coverage — and a consumer other
+  than the App shell or a clear host-agnostic reuse story). Audited the
+  four named 0-test crates against it: `vix-modal` stays as documented
+  design scaffolding (explicitly out of scope per the task); `vix-i18n`
+  passes via its 5 real crate consumers plus the App shell; `vix-theme`
+  passes the reuse/consumer bar (3 crate consumers + the App shell) but
+  had a real gap — added 4 unit tests for `file_icon` (known
+  extensions, fallback, case sensitivity, multi-dot names); `vix-query`
+  (37 lines, a bare `Decision`/`QueryReplace` data holder with no
+  methods and no consumer beyond `src/app.rs`) failed on both counts
+  and was folded directly into `src/app.rs`, next to `Prompt` — same
+  precedent as `vix-projectile` → `vix-tasks`, just crate-into-shell
+  instead of crate-into-crate since the App shell was always its only
+  consumer. Crate count 111 → 110, bumped everywhere it's cited.
+  Also caught, while auditing, that `vix-workspace-search`
+  (T152) technically shares `vix-query`'s "sole consumer is the App
+  shell" profile but was deliberately left alone: it has real,
+  non-trivial logic (field cycling, pattern building, path filtering),
+  the same shape as `vix-find-panel`'s `SearchBar` (which *does* have a
+  sibling-crate consumer), and folding it back one session after T152
+  extracted it for good reasons would be pure churn, not an actual
+  quality fix — the guideline's wording was chosen to make this
+  judgment call explicit rather than mechanical.
+  `vix-query`'s spec (`crates/vix-query/spec/index.md`, a broad
+  "Find and Replace" feature doc, not really crate-scoped — it already
+  explains `vix-find-panel`'s box, the workspace panel, and interactive
+  query-replace together) moved to `spec/find-and-replace/index.md`
+  (a cross-cutting root spec, per `AGENTS.md`'s own convention) rather
+  than being deleted; its "As implemented in Vix" section was updated
+  for T149's bitflags `SearchBar`/`WorkspaceSearch` and this fold.
+  Fixed the 2 other files that linked to the old crate spec path
+  (`crates/vix-find-panel/spec/index.md`,
+  `crates/vix-find-panel/spec/smart-case-search/index.md`) plus
+  `docs/index.md`'s find-and-replace link, `agents/workflow.md`'s spec
+  table, and `agents/share/crate-map.md`'s crate list and Menu/find
+  row (worded to avoid literally repeating the retired crate's name,
+  since `scripts/check-docs`'s crate-map staleness check scans that
+  file for any `vix-*`-shaped token, not just ones inside backticks).
+  Also fixed a real drift the audit surfaced in passing: `AGENTS.md`'s
+  own "sanctioned `struct_excessive_bools` allows" list still named
+  `SearchBar`/`WorkspaceSearch`/`editor_core Editor` from before T149
+  converted them to `bitflags` and dropped the allow — corrected to
+  `App`/`Settings` only. Full `scripts/check` gate green throughout.
 - [x] **T152 — Root `src/` modules that should be crates.** Done, 5
   slices, 2026-09-08. `column_view.rs` (966 lines), `edit_table.rs`
   (770), `edit_outline.rs`
@@ -2367,8 +2404,10 @@ is listed explicitly.
 8. **Security:** T131/T132/T133 are done. **T134 remains**, blocked on
    T105 and T124/T125 shipping.
 9. **CI + code quality:** T009/T010/T141/T142/T143/T145/T146/T147/T148/
-   T150/T152/T153/T154 are all done. **What's left**: T144, T149, T151
-   remain, independent of each other and of the rest.
+   T150/T151/T152/T153/T154 are all done. **T149 is 5/7 done** (`App`/
+   `Settings` deferred to a separate pass by explicit user choice — see
+   T149's own entry). **What's left**: T144, and T149's `App`/`Settings`
+   remainder, independent of each other and of the rest.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.

@@ -190,20 +190,28 @@ limits to Rust files and Exclude `(^|/)target/` skips the build directory. See
 
 ## As implemented in Vix
 
-The internal **`find_panel`** crate owns both the box's **state** and the
+The **`vix-find-panel`** crate owns both the box's **state** and the
 **search/replace engine**, all pure functions over `&str` with **character**
 offsets; the app renders the box, owns the buffer, and applies the returned text.
 
-- `SearchBar` holds the `query`, `replace`, `replacing`, `interactive`, focused
-  `field`, the `case_sensitive` / `whole_word` / `regex` toggles, and `status`.
-  `SearchBar::pattern` builds the effective regex (escaping, `\b…\b`, `(?i)`);
-  `toggle_field` and `active_field_mut` drive `Tab` / typing; `Field` is one of
-  `Query`, `Replace`, `IncludePath`, `ExcludePath`.
+- `SearchBar` holds the `query`, `replace`, focused `field`, `scope`, `status`,
+  and a `flags: Flags` bitset (T149) covering the replace/interactive mode
+  toggles and the case-sensitive / smart-case / whole-word / regex match
+  toggles — `flags.contains(Flags::REPLACING)` etc. rather than individual
+  bool fields. `SearchBar::pattern` builds the effective regex (escaping,
+  `\b…\b`, `(?i)`); `toggle_field` and `active_field_mut` drive `Tab` / typing;
+  `Field` is one of `Query`, `Replace`, `IncludePath`, `ExcludePath`.
 - Engine functions: `matches` (all `(start, end)` char ranges), `next_match` (first
   match at/after an offset), `replace_all` (returns new text + count), `replace_one`
   (single match at an offset, returns resume offset), and `unescape` (`\n` `\t` `\r`
   `\\` in a replacement template). `PathFilter::new` / `allows` implement the
-  workspace include/exclude filters.
+  workspace include/exclude filters. `vix-workspace-search::WorkspaceSearch`
+  is the same shape for the workspace-wide panel, also converted to a `Flags`
+  bitset in T149.
+- `Decision` and `QueryReplace` (the interactive query-replace session state)
+  live directly in `src/app.rs` — folded there from a former standalone
+  `vix-query` crate in T151, whose sole consumer was always the App shell and
+  which had no logic of its own to test in isolation.
 - In `src/app.rs`: `start_search` opens the box; `find_step` and `find_with`
   implement Find Next / Previous with wrap-around and highlight marks;
   `find_selection` implements Find Selection; `replace_all` does in-buffer Replace
@@ -215,4 +223,4 @@ offsets; the app renders the box, owns the buffer, and applies the returned text
   `search.next_selection` / `search.prev_selection` (`Alt+N` / `Alt+P`), and
   `search.workspace_dock`. The Edit → Find submenu is defined by `EDIT_FIND` in
   `crates/vix-menu/src/lib.rs`. The `search` field and `crate::search` re-export (`Field`,
-  `SearchBar`) connect the app to `find_panel`.
+  `SearchBar`) connect the app to `vix-find-panel`.
