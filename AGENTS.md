@@ -24,7 +24,7 @@ it privately, not as a public issue.
 Vix is a keyboard-friendly terminal text editor (a "Simple Terminal Rust IDE"),
 built on `ratatui`. It is a **Cargo workspace** (edition 2024): a thin **App
 shell** (root package `vix`, `src/`) — CLI, event loop, `App` state, rendering,
-explorer — over **110 focused `vix-*` member crates** under `crates/`, including
+explorer — over **111 focused `vix-*` member crates** under `crates/`, including
 the custom editor widget `vix-editor-core`. `src/lib.rs` re-exports the member
 crates under short module names (`pub use vix_git as git;`), so `crate::git`,
 `crate::menu`, `crate::db` still name them. The App shell's two largest files
@@ -142,7 +142,7 @@ Every crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 | Change the database workbench        | `crates/vix-db/` (module tree + `crates/vix-db/spec`)      |
 | Change clipboard access              | `crates/vix-clipboard/` (opt-in platform pasteboard)       |
 | Change terminal input (paste, modifiers) | `src/main.rs` (terminal modes) + `App::on_paste` / `App::on_key` |
-| Change Org tables / column view      | `crates/vix-org-table/`, `crates/vix-org/src/columns.rs`, `src/column_view.rs` |
+| Change Org tables / column view      | `crates/vix-org-table/`, `crates/vix-org/src/columns.rs`, `crates/vix-column-view/` |
 | Add a benchmark or fuzz target       | `benches/`, `fuzz/fuzz_targets/` (see `spec/test/index.md`) |
 
 See [`agents/share/crate-map.md`](agents/share/crate-map.md) for the full map.

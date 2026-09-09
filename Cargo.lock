@@ -5198,6 +5198,7 @@ dependencies = [
  "vix-clipboard",
  "vix-clock-panel",
  "vix-color-converter-tool",
+ "vix-column-view",
  "vix-conflict-tool",
  "vix-contact-panel",
  "vix-convert-from-csv-into-json-tool",
@@ -5391,6 +5392,14 @@ dependencies = [
 [[package]]
 name = "vix-color-converter-tool"
 version = "1.6.0"
+
+[[package]]
+name = "vix-column-view"
+version = "1.6.0"
+dependencies = [
+ "crossterm",
+ "vix-org",
+]
 
 [[package]]
 name = "vix-conflict-tool"

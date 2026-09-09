@@ -2,17 +2,17 @@
 //! write-through spreadsheet view onto the outline, driven by the resolved
 //! [`vix_org::ColumnsSpec`] ([`vix_org::resolve_columns_spec`]).
 //!
-//! Unlike [`crate::edit_table`]'s detached-grid-then-explicit-save model,
-//! column view edits apply straight through to the real buffer text on every
+//! Unlike `vix-edit-table`'s detached-grid-then-explicit-save model, column
+//! view edits apply straight through to the real buffer text on every
 //! commit: this matches Emacs's actual semantics (column view is a live
 //! overlay on the *same* buffer, not a scratch copy — other Org commands see
 //! an edited property value immediately) and this codebase's own dominant
 //! Org convention ("read whole buffer text → pure transform → splice back").
-//! [`ColumnView`] does not own the buffer text; the host ([`crate::app`])
-//! passes the active tab's current text into [`ColumnView::handle_key`] as
-//! `&mut String` and splices any change back via `Tab::editor::set_content`
-//! (persisting to *disk* still goes through the normal save/dirty flow,
-//! unchanged).
+//! [`ColumnView`] does not own the buffer text; the host (`App` in the root
+//! `vix` crate) passes the active tab's current text into
+//! [`ColumnView::handle_key`] as `&mut String` and splices any change back
+//! via `Tab::editor::set_content` (persisting to *disk* still goes through
+//! the normal save/dirty flow, unchanged).
 //!
 //! Deliberately unimplemented subset of the Org manual's column-view keys
 //! (a pragmatic subset, matching this codebase's convention elsewhere):
@@ -31,7 +31,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::org::{
+use vix_org::{
     ColumnDef, ColumnRow, ColumnsSpec, apply_column_edit, build_column_table, columns_spec_anchor,
     governing_subtree, headline_level, move_subtree_down, move_subtree_up, set_property,
     todo_keywords,
@@ -106,7 +106,7 @@ impl ColumnView {
         today: (i32, u32, u32),
         file_name: Option<String>,
     ) -> Self {
-        let spec = crate::org::resolve_columns_spec(text, line);
+        let spec = vix_org::resolve_columns_spec(text, line);
         let (rows, _) = build_column_table(text, line, &spec, today, file_name.as_deref());
         // The headline that actually governs the view's scope (not
         // necessarily `line` itself, e.g. the cursor may sit on body text

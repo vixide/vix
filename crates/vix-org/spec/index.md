@@ -292,7 +292,7 @@ engine (parsing, scope resolution, table building, write-back, single-cell
 edits, and dynamic-block capture) lives in the unit-tested `vix-org::columns`
 module (re-exported at the crate root).
 
-The interactive overlay itself (`src/column_view.rs`, `App::column_view`) is a
+The interactive overlay itself (`crates/vix-column-view/`, `App::column_view`) is a
 **write-through** live view on the same buffer, not a detached copy: every
 commit (a field edit, a cycled value, a checkbox toggle, a column or row
 move) applies straight to the real buffer text immediately, mirroring both

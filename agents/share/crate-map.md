@@ -2,7 +2,7 @@
 
 Vix is a **Cargo workspace** (`[workspace] members = ["crates/*"]`) on **edition
 2024**. The root package `vix` (`src/`) is the thin **App shell** — CLI, event
-loop, `App` state, rendering, and the explorer — and it depends on the 110
+loop, `App` state, rendering, and the explorer — and it depends on the 111
 `vix-*` **member crates** under `crates/` that hold every feature plus the custom
 editor widget (`vix-editor-core`). Shared reference for where things live.
 
@@ -64,7 +64,6 @@ features (`syntax-common` by default, `syntax-all` for everything).
 | `main.rs`             | clap CLI, locale resolution, terminal setup, event loop, suspend.   |
 | `lib.rs`              | Crate root; lint config; `i18n!` catalog init; module declarations. |
 | `app.rs`              | `App` state, `on_key`/`on_mouse`, `run_action`, overlays, behavior — dispatches most of its logic into `src/app/*.rs` (below). |
-| `column_view.rs`      | Org column-view overlay (spec-driven columns, editable in place).   |
 | `ui.rs`               | All rendering: frame layout — dispatches most per-pane/overlay draw functions into `src/ui/*.rs` (below). |
 
 `src/app/*.rs` (T141) holds most of `App`'s actual logic, one file per feature
@@ -78,11 +77,14 @@ to 713 lines: the dispatch chain plus shared rendering primitives).
 Everything else the shell used to own now lives in a member crate, reached
 through the workspace dependency graph (e.g. `vix-editor`, `vix-menu`,
 `vix-palette`, `vix-find-panel`, `vix-query`, `vix-session`, `vix-settings`,
-`vix-theme`, `vix-fileops`, `vix-case`). `explorer`/`messages`/`search` (T152)
-are now thin `pub use` aliases in `lib.rs` for `vix-left-dock`/
-`vix-right-dock`/`vix-find-panel` — no `src/*.rs` file of their own — and
-`workspace_search` likewise aliases the new `vix-workspace-search` crate
-(below).
+`vix-theme`, `vix-fileops`, `vix-case`) — `src/` is down to exactly
+`main.rs`/`lib.rs`/`app.rs`/`ui.rs` now (T152, done): `explorer`/
+`messages`/`search` are thin `pub use` aliases in `lib.rs` for
+`vix-left-dock`/`vix-right-dock`/`vix-find-panel`, and
+`workspace_search`/`edit_outline`/`edit_table`/`column_view` alias four new
+crates the same way (`vix-workspace-search`, `vix-edit-outline`,
+`vix-edit-table`, `vix-column-view`, below) — none of the seven has a
+`src/*.rs` file of its own anymore.
 
 ## Feature crates (`crates/vix-*`)
 
@@ -94,7 +96,7 @@ are now thin `pub use` aliases in `lib.rs` for `vix-left-dock`/
 | Spellcheck  | `vix-spellcheck` (Hunspell via `spellbook`).                                  |
 | Snippets    | `vix-snippets` (JSON snippet files: scopes, parse, merge, picker), `vix-snippet-tool` (tabstop engine + bundled snippets). |
 | Media types | `vix-media-type` (the MIME catalog parsed from `crates/vix-media-type/spec/media-types.tsv`; text/binary base, extension lookup, picker). |
-| Org mode    | `vix-org` (headline structure, TODO/checkbox, column view, Markdown/HTML export), `vix-org-table` (the built-in table editor: structural edits + `TBLFM` formulas), `vix-org-capture` (capture templates + placeholder expansion), `vix-affix` (prefix/suffix add/drop/toggle helpers), `vix-roam` (Org-roam nodes/backlinks/dailies/transclusion), `vix-org-contacts` (contact parsing + vCard). |
+| Org mode    | `vix-org` (headline structure, TODO/checkbox, the column-view *spec* — format string, resolution, Markdown/HTML export), `vix-column-view` (T152: the interactive Column View *overlay* — cursor, edit modes, key handling — over `vix-org`'s resolved spec), `vix-org-table` (the built-in table editor: structural edits + `TBLFM` formulas), `vix-org-capture` (capture templates + placeholder expansion), `vix-affix` (prefix/suffix add/drop/toggle helpers), `vix-roam` (Org-roam nodes/backlinks/dailies/transclusion), `vix-org-contacts` (contact parsing + vCard). |
 | Run / test  | `vix-tasks` (named `tasks.toml` tasks, project-type lifecycle commands, task discovery, monorepo subprojects, test-at-point — Project menu), `vix-test-runner` (parse test output into a pass/fail tree), `vix-terminal` (integrated shell), `vix-diff-view` (compare-with-file). |
 | Config      | `vix-editorconfig` (`.editorconfig` parsing), `vix-macros` (persisted keyboard macros), `vix-workspace` (`.toml` workspace: folders + files + split pane tree), `vix-settings` (confy-backed `Settings`), `vix-session` (save/restore). |
 | Scripting   | `vix-script` — Rhai user scripting (`crates/vix-script/spec/index.md`); a plain (non-optional) dependency, wired into the App shell as of T103: scripts load at startup and on `script.reload`, registered commands appear in the command palette (`script:<stem>:<id>`) and Tools → Scripts → Run…, `prompt`/`message`/`error` use the real prompt overlay and message drawer. **T104** (wiring `bind_key` into the real keymap) is done as of T104j — see the Keybindings row below. Only **T105** (sample scripts + docs) remains open. |
@@ -108,7 +110,7 @@ are now thin `pub use` aliases in `lib.rs` for `vix-left-dock`/
 | Undo store  | `vix-undo-store` (persist/restore the undo tree per file under `<config>/undo/`, content-hash guarded). |
 | Clipboard   | `vix-clipboard` (process-wide serialized clipboard access; the platform pasteboard is opt-in through `use_system`, so a test run never touches it). |
 | Themes      | `vix-theme` (Nerd Font icons + theme style helpers), `vix-base16` (bundled base16 color themes). |
-| Edit surfaces | `vix-edit-value` (JSON/YAML tree, `Tree` + `Format`), `vix-edit-bytes` (hex/ASCII byte editor, `Hex`), `vix-edit-sql` (SQL statement list, `Editor`), `vix-edit-outline` (T152: prose-hierarchy outline, `Tree` + `Outcome`), `vix-edit-table` (T152: CSV/TSV spreadsheet grid, `Grid` + `Outcome`). Overlay editors with their own `handle_key`/`Outcome`, under **Edit → Mode**. (`column_view` overlay still lives in the App shell.) |
+| Edit surfaces | `vix-edit-value` (JSON/YAML tree, `Tree` + `Format`), `vix-edit-bytes` (hex/ASCII byte editor, `Hex`), `vix-edit-sql` (SQL statement list, `Editor`), `vix-edit-outline` (T152: prose-hierarchy outline, `Tree` + `Outcome`), `vix-edit-table` (T152: CSV/TSV spreadsheet grid, `Grid` + `Outcome`). Overlay editors with their own `handle_key`/`Outcome`, under **Edit → Mode**. (`vix-column-view`, above, is this family's Org-specific sibling.) |
 | Generators  | `vix-qr-tool` (QR code via the `qrcode` crate, Unicode renderer), `vix-lorem` (deterministic lorem-ipsum text). |
 | Tool dialogs| `vix-calculator-tool`, `vix-color-converter-tool`, `vix-unit-converter-tool`, `vix-pomodoro-tool`. |
 | Info panels | `vix-text-information-panel`, `vix-file-information-panel`, `vix-system-information-panel`, `vix-status-bar-panel`, `vix-workspace-dashboard-panel`, `vix-outline-panel`, `vix-welcome-panel`. |
@@ -126,7 +128,7 @@ are now thin `pub use` aliases in `lib.rs` for `vix-left-dock`/
 
 | Path            | Contents                                                            |
 | --------------- | ------------------------------------------------------------------- |
-| `crates/`       | The 110 `vix-*` workspace member crates (each with its own `spec/`).|
+| `crates/`       | The 111 `vix-*` workspace member crates (each with its own `spec/`).|
 | `langs/`        | Tree-sitter highlight queries (`<lang>/highlights.scm`), embedded.  |
 | `locales/`      | `app.yml` — rust-i18n translations (English fallback).              |
 | `dictionaries/` | Hunspell dictionaries — gitignored; see `crates/vix-spellcheck/spec/dictionaries`. |
