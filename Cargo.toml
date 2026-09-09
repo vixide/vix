@@ -270,6 +270,9 @@ vix-edit-bytes = { path = "crates/vix-edit-bytes", version = "1.6.0" }
 vix-edit-outline = { path = "crates/vix-edit-outline", version = "1.6.0" }
 # The SQL edit surface: a statement-oriented view of a `.sql` buffer.
 vix-edit-sql = { path = "crates/vix-edit-sql", version = "1.6.0" }
+# The table editor: a spreadsheet-like grid for viewing and editing
+# delimited data (CSV/TSV) as rows and columns.
+vix-edit-table = { path = "crates/vix-edit-table", version = "1.6.0" }
 # The structured-value editor: a foldable tree for JSON and YAML.
 vix-edit-value = { path = "crates/vix-edit-value", version = "1.6.0" }
 # Minimal EditorConfig support: resolve the indent settings for a file.
