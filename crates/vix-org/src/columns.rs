@@ -1226,11 +1226,26 @@ pub fn apply_column_edit(
 
 // ----- Dynamic-block capture -------------------------------------------------
 
+bitflags::bitflags! {
+    /// [`DblockParams`]'s independent on/off switches (T149), mirroring
+    /// Org's own `:vlines`/`:skip-empty-rows`/`:indent`/`:link` dblock
+    /// parameters — grouping them into a plain sub-struct would only
+    /// relocate `clippy::struct_excessive_bools`, not the shape of the
+    /// syntax being parsed.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct DblockFlags: u8 {
+        /// Whether `:vlines t` was given.
+        const VLINES = 1 << 0;
+        /// Whether `:skip-empty-rows t` was given.
+        const SKIP_EMPTY_ROWS = 1 << 1;
+        /// Whether `:indent t` was given (indent the `ITEM` cell by level).
+        const INDENT = 1 << 2;
+        /// Whether `:link t` was given (wrap the `ITEM` cell as an internal link).
+        const LINK = 1 << 3;
+    }
+}
+
 /// Parameters parsed from a `#+BEGIN: columnview ...` line.
-// Mirrors Org's own `:vlines`/`:skip-empty-rows`/`:indent`/`:link` dblock
-// parameters, each an independent on/off switch — grouping them would only
-// relocate the lint, not the shape of the syntax being parsed.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DblockParams {
     /// The capture scope: `"local"` (the dblock's own subtree), `"global"`
@@ -1240,21 +1255,15 @@ pub struct DblockParams {
     pub id: String,
     /// The raw `:hlines` value (`"t"` or a count), if given.
     pub hlines: Option<String>,
-    /// Whether `:vlines t` was given.
-    pub vlines: bool,
     /// The `:maxlevel` depth limit, if given.
     pub maxlevel: Option<usize>,
-    /// Whether `:skip-empty-rows t` was given.
-    pub skip_empty_rows: bool,
     /// Tags to exclude from `:exclude-tags`.
     pub exclude_tags: Vec<String>,
-    /// Whether `:indent t` was given (indent the `ITEM` cell by level).
-    pub indent: bool,
-    /// Whether `:link t` was given (wrap the `ITEM` cell as an internal link).
-    pub link: bool,
     /// The `:format` override, if given — a `COLUMNS` spec string used
     /// instead of the one [`resolve_columns_spec`] would find.
     pub format: Option<String>,
+    /// Independent on/off switches: `:vlines`/`:skip-empty-rows`/`:indent`/`:link`.
+    pub flags: DblockFlags,
 }
 
 /// Parse a `#+BEGIN: columnview :key value ...` line into its parameters.
@@ -1270,13 +1279,10 @@ pub fn parse_dblock_params(begin_line: &str) -> Option<DblockParams> {
 
     let mut id = String::new();
     let mut hlines = None;
-    let mut vlines = false;
     let mut maxlevel = None;
-    let mut skip_empty_rows = false;
     let mut exclude_tags = Vec::new();
-    let mut indent = false;
-    let mut link = false;
     let mut format = None;
+    let mut flags = DblockFlags::empty();
 
     let mut i = 0;
     while i < tokens.len() {
@@ -1285,17 +1291,19 @@ pub fn parse_dblock_params(begin_line: &str) -> Option<DblockParams> {
         match key.as_str() {
             ":id" => id = val.unwrap_or_default(),
             ":hlines" => hlines = val,
-            ":vlines" => vlines = val.as_deref() == Some("t"),
+            ":vlines" => flags.set(DblockFlags::VLINES, val.as_deref() == Some("t")),
             ":maxlevel" => maxlevel = val.as_deref().and_then(|s| s.parse().ok()),
-            ":skip-empty-rows" => skip_empty_rows = val.as_deref() == Some("t"),
+            ":skip-empty-rows" => {
+                flags.set(DblockFlags::SKIP_EMPTY_ROWS, val.as_deref() == Some("t"));
+            }
             ":exclude-tags" => {
                 exclude_tags = val
                     .as_deref()
                     .map(|s| s.split_whitespace().map(str::to_string).collect())
                     .unwrap_or_default();
             }
-            ":indent" => indent = val.as_deref() == Some("t"),
-            ":link" => link = val.as_deref() == Some("t"),
+            ":indent" => flags.set(DblockFlags::INDENT, val.as_deref() == Some("t")),
+            ":link" => flags.set(DblockFlags::LINK, val.as_deref() == Some("t")),
             ":format" => format = val,
             _ => {
                 i += 1;
@@ -1310,13 +1318,10 @@ pub fn parse_dblock_params(begin_line: &str) -> Option<DblockParams> {
     Some(DblockParams {
         id,
         hlines,
-        vlines,
         maxlevel,
-        skip_empty_rows,
         exclude_tags,
-        indent,
-        link,
         format,
+        flags,
     })
 }
 
@@ -1326,22 +1331,22 @@ fn render_begin_line(params: &DblockParams) -> String {
     if let Some(h) = &params.hlines {
         let _ = write!(out, " :hlines {h}");
     }
-    if params.vlines {
+    if params.flags.contains(DblockFlags::VLINES) {
         out.push_str(" :vlines t");
     }
     if let Some(m) = params.maxlevel {
         let _ = write!(out, " :maxlevel {m}");
     }
-    if params.skip_empty_rows {
+    if params.flags.contains(DblockFlags::SKIP_EMPTY_ROWS) {
         out.push_str(" :skip-empty-rows t");
     }
     if !params.exclude_tags.is_empty() {
         let _ = write!(out, " :exclude-tags \"{}\"", params.exclude_tags.join(" "));
     }
-    if params.indent {
+    if params.flags.contains(DblockFlags::INDENT) {
         out.push_str(" :indent t");
     }
-    if params.link {
+    if params.flags.contains(DblockFlags::LINK) {
         out.push_str(" :link t");
     }
     if let Some(f) = &params.format {
@@ -1409,7 +1414,7 @@ pub fn render_columnview_dblock(
     let _ = writeln!(body, "| {} |", header.join(" | "));
     let _ = writeln!(body, "|{}|", "---|".repeat(header.len()));
     for row in &rows {
-        if params.skip_empty_rows
+        if params.flags.contains(DblockFlags::SKIP_EMPTY_ROWS)
             && row
                 .values
                 .iter()
@@ -1438,14 +1443,14 @@ pub fn render_columnview_dblock(
         }
         let mut cells: Vec<String> = row.values.clone();
         if let Some(ii) = item_idx {
-            if params.indent {
+            if params.flags.contains(DblockFlags::INDENT) {
                 cells[ii] = format!(
                     "{}{}",
                     "  ".repeat(row.level.saturating_sub(root_level)),
                     cells[ii]
                 );
             }
-            if params.link {
+            if params.flags.contains(DblockFlags::LINK) {
                 cells[ii] = format!("[[*{}]]", cells[ii]);
             }
         }
@@ -1855,8 +1860,8 @@ mod tests {
         assert_eq!(params.id, "global");
         assert_eq!(params.hlines.as_deref(), Some("t"));
         assert_eq!(params.maxlevel, Some(2));
-        assert!(params.skip_empty_rows);
-        assert!(params.indent);
+        assert!(params.flags.contains(DblockFlags::SKIP_EMPTY_ROWS));
+        assert!(params.flags.contains(DblockFlags::INDENT));
         assert_eq!(params.format.as_deref(), Some("%ITEM %TODO"));
 
         let bare = parse_dblock_params("#+BEGIN: columnview").expect("parses with no params");

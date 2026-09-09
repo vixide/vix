@@ -121,7 +121,7 @@ fn goto_definition_multiple_opens_panel() {
 
     app.on_key(KeyEvent::new(KeyCode::F(12), KeyModifiers::NONE));
     let ps = app.workspace_search.as_ref().expect("panel of candidates");
-    assert!(ps.static_results);
+    assert!(ps.flags.contains(WorkspaceFlags::STATIC_RESULTS));
     assert_eq!(ps.hits.len(), 2, "two definitions of dup");
     fs::remove_dir_all(&dir).ok();
 }

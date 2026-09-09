@@ -63,17 +63,17 @@ fn find_selection_jumps_between_occurrences() {
 #[test]
 fn search_pattern_respects_toggles() {
     let mut sb = SearchBar::new(false);
-    sb.smart_case = false; // isolate the case/word/regex toggles from smart-case
+    sb.flags.remove(SearchFlags::SMART_CASE); // isolate the case/word/regex toggles from smart-case
     sb.query = "Foo.Bar".to_string();
     assert_eq!(sb.pattern().as_deref(), Some(r"(?i)Foo\.Bar"));
 
-    sb.case_sensitive = true;
-    sb.whole_word = true;
+    sb.flags
+        .insert(SearchFlags::CASE_SENSITIVE | SearchFlags::WHOLE_WORD);
     assert_eq!(sb.pattern().as_deref(), Some(r"\bFoo\.Bar\b"));
 
-    sb.regex = true;
-    sb.whole_word = false;
-    sb.case_sensitive = true;
+    sb.flags.insert(SearchFlags::REGEX);
+    sb.flags.remove(SearchFlags::WHOLE_WORD);
+    sb.flags.insert(SearchFlags::CASE_SENSITIVE);
     assert_eq!(sb.pattern().as_deref(), Some("Foo.Bar"));
 
     sb.query.clear();
@@ -268,7 +268,10 @@ fn ctrl_f_opens_find_and_esc_closes() {
     let mut app = app_at(Path::new("."));
     app.on_key(ctrl('f'));
     let s = app.search.as_ref().expect("Ctrl+F opens search");
-    assert!(!s.replacing, "Ctrl+F is find, not replace");
+    assert!(
+        !s.flags.contains(SearchFlags::REPLACING),
+        "Ctrl+F is find, not replace"
+    );
     app.on_key(esc());
     assert!(app.search.is_none(), "Esc closes the search bar");
 }
@@ -278,7 +281,9 @@ fn ctrl_r_opens_replace() {
     let mut app = app_at(Path::new("."));
     app.on_key(ctrl('r'));
     assert!(
-        app.search.as_ref().is_some_and(|s| s.replacing),
+        app.search
+            .as_ref()
+            .is_some_and(|s| s.flags.contains(SearchFlags::REPLACING)),
         "Ctrl+R opens replace"
     );
 }
@@ -340,12 +345,19 @@ fn find_dialog_offers_replace_as_a_mode() {
     // no closing the box and hunting for a separate Replace command.
     app.run_action("edit.find");
     assert!(
-        !app.search.as_ref().unwrap().replacing,
+        !app.search
+            .as_ref()
+            .unwrap()
+            .flags
+            .contains(SearchFlags::REPLACING),
         "Find opens as a find"
     );
     app.on_key(alt(KeyCode::Char('h')));
     let bar = app.search.as_ref().unwrap();
-    assert!(bar.replacing, "Alt+H turns on replace");
+    assert!(
+        bar.flags.contains(SearchFlags::REPLACING),
+        "Alt+H turns on replace"
+    );
     assert_eq!(
         bar.field,
         vix::search::Field::Replace,
@@ -356,7 +368,7 @@ fn find_dialog_offers_replace_as_a_mode() {
     app.search.as_mut().unwrap().query = "alpha".to_string();
     app.on_key(alt(KeyCode::Char('h')));
     let bar = app.search.as_ref().unwrap();
-    assert!(!bar.replacing);
+    assert!(!bar.flags.contains(SearchFlags::REPLACING));
     assert_eq!(bar.field, vix::search::Field::Query);
     assert_eq!(bar.query, "alpha", "the query survives the round trip");
 }
@@ -373,7 +385,11 @@ fn find_dialog_scope_option_widens_the_search() {
     app.on_key(alt(KeyCode::Char('h'))); // replace on, to check it carries too
     app.search.as_mut().unwrap().query = "needle".to_string();
     app.search.as_mut().unwrap().replace = "pin".to_string();
-    app.search.as_mut().unwrap().regex = true;
+    app.search
+        .as_mut()
+        .unwrap()
+        .flags
+        .insert(SearchFlags::REGEX);
     app.on_key(alt(KeyCode::Char('i')));
 
     assert!(app.search.is_none(), "the find box hands over");
@@ -383,8 +399,14 @@ fn find_dialog_scope_option_widens_the_search() {
         .expect("workspace panel opened");
     assert_eq!(panel.query, "needle", "the query came along");
     assert_eq!(panel.replace, "pin", "so did the replacement");
-    assert!(panel.replacing, "and the replace mode");
-    assert!(panel.regex, "and the toggles");
+    assert!(
+        panel.flags.contains(WorkspaceFlags::REPLACING),
+        "and the replace mode"
+    );
+    assert!(
+        panel.flags.contains(WorkspaceFlags::REGEX),
+        "and the toggles"
+    );
 
     // The panel is the "Files" stage; widening again lists into the dock.
     app.on_key(alt(KeyCode::Char('i')));

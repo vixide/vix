@@ -12,7 +12,7 @@ use ratatui_core::style::{Color, Modifier, Style};
 use ropey::RopeSlice;
 
 use crate::code::{RopeGraphemes, grapheme_width_and_bytes_len, grapheme_width_and_chars_len};
-use crate::editor::Editor;
+use crate::editor::{Editor, Flags};
 
 /// One on-screen row in soft-wrap mode: a `[start, end)` character-offset slice
 /// of a logical line (`line`).
@@ -107,7 +107,7 @@ impl Editor {
         let line_len = code.line_len(vr.line);
         let is_first = vr.start == line_start;
 
-        if self.show_line_numbers {
+        if self.flags.contains(Flags::SHOW_LINE_NUMBERS) {
             let s = if is_first {
                 format!("{:>line_number_digits$}", vr.line + 1)
             } else {
@@ -123,7 +123,7 @@ impl Editor {
             && let Some(ref gmarks) = self.gutter_marks
             && let Some(&(_, color)) = gmarks.iter().find(|&&(l, _)| l == vr.line)
         {
-            let sign_x = if self.show_line_numbers {
+            let sign_x = if self.flags.contains(Flags::SHOW_LINE_NUMBERS) {
                 area.left() + u16::try_from(line_number_digits).unwrap_or(u16::MAX)
             } else {
                 area.left()
@@ -137,7 +137,7 @@ impl Editor {
 
         // Base text for the segment (with whitespace glyphs if enabled).
         let seg = code.char_slice(vr.start, vr.end);
-        let displayed: String = if self.show_whitespace {
+        let displayed: String = if self.flags.contains(Flags::SHOW_WHITESPACE) {
             seg.chars()
                 .map(|c| match c {
                     '\t' => '\u{2192}',
@@ -215,7 +215,7 @@ impl Editor {
             };
             let cell_x = text_x0 + vx;
 
-            if self.show_whitespace
+            if self.flags.contains(Flags::SHOW_WHITESPACE)
                 && matches!(g.chars().next(), Some('\t' | ' ' | '\r'))
                 && cell_x < right
             {

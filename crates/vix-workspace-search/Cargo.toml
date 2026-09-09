@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Search (and replace) across every file under the workspace root, not just the active buffer."
 
 [dependencies]
+bitflags = { workspace = true }
 regex = { workspace = true }
 rust-i18n = { workspace = true }
 vix-find-panel = { path = "../vix-find-panel", version = "1.6.0" }
