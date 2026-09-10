@@ -100,52 +100,41 @@ impl Panel {
 
     /// Move the highlight up one row, stopping at the top.
     pub fn up(&mut self) {
-        if self.selected > 0 {
-            self.selected -= 1;
-        }
+        self.selected = vix_list_state::up(self.selected);
     }
 
     /// Move the highlight down one row, stopping at the bottom.
     pub fn down(&mut self) {
-        if self.selected + 1 < self.len() {
-            self.selected += 1;
-        }
+        self.selected = vix_list_state::down(self.selected, self.len());
     }
 
     /// Move the highlight up one page (`page` rows), stopping at the top.
     pub fn page_up(&mut self, page: usize) {
-        self.selected = self.selected.saturating_sub(page.max(1));
+        self.selected = vix_list_state::page_up(self.selected, page);
     }
 
     /// Move the highlight down one page (`page` rows), stopping at the bottom.
     pub fn page_down(&mut self, page: usize) {
-        self.selected = (self.selected + page.max(1)).min(self.len().saturating_sub(1));
+        self.selected = vix_list_state::page_down(self.selected, page, self.len());
     }
 
     /// Select a row directly (e.g. from a mouse click); returns whether `idx`
     /// landed on a real row.
     pub fn select_index(&mut self, idx: usize) -> bool {
-        if idx < self.len() {
-            self.selected = idx;
-            true
-        } else {
-            false
+        match vix_list_state::select_index(idx, self.len()) {
+            Some(i) => {
+                self.selected = i;
+                true
+            }
+            None => false,
         }
     }
 
     /// Adjust [`scroll`](Self::scroll) so the highlighted row stays within a
     /// window of `height` visible rows.
     pub fn ensure_visible(&mut self, height: usize) {
-        let height = height.max(1);
-        if self.selected < self.scroll {
-            self.scroll = self.selected;
-        } else if self.selected >= self.scroll + height {
-            self.scroll = self.selected + 1 - height;
-        }
-        let max_scroll = self.len().saturating_sub(height);
-        if self.scroll > max_scroll {
-            self.scroll = max_scroll;
-        }
+        self.scroll =
+            vix_list_state::ensure_visible(self.selected, self.scroll, height, self.len());
     }
 
     /// The highlighted entity.

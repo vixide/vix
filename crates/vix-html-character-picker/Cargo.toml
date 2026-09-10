@@ -8,3 +8,4 @@ repository.workspace = true
 description = "HTML Characters panel (Tools menu): named-character table + picker state."
 
 [dependencies]
+vix-list-state = { path = "../vix-list-state", version = "1.6.0" }
