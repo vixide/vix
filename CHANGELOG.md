@@ -254,6 +254,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   its pure-black background, well past the 4.5:1 minimum). Solarized Dark,
   Solarized Light, and Tokyo Night were already bundled; all five now have
   regression tests pinning their color values.
+- **Trash on delete** (improvement plan T209): the file explorer's `Delete`
+  now moves the selection to the OS trash / Recycle Bin by default,
+  undoable from there, instead of removing it outright. New
+  `explorer_delete` setting (`"trash"`, the default, or `"hard"` for the
+  previous no-undo behavior; an unrecognized value falls back to
+  `"trash"`). The confirmation prompt's wording says which will happen.
 
 ### Changed
 

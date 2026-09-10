@@ -6591,13 +6591,26 @@ impl App {
 
     // ----- explorer delete (with confirm) --------------------------------
 
+    /// Whether Delete should move to the OS trash rather than remove
+    /// outright (T209): the `explorer_delete` setting, defaulting to the
+    /// safer trash behavior for any value other than the literal `"hard"`
+    /// (including an old config file that predates this setting, or a typo).
+    fn explorer_delete_uses_trash(&self) -> bool {
+        self.settings.explorer_delete != "hard"
+    }
+
     fn explorer_delete_request(&mut self) {
         let paths = self.explorer.selected_paths();
         if paths.is_empty() {
             return;
         }
+        let key = if self.explorer_delete_uses_trash() {
+            "confirm.delete"
+        } else {
+            "confirm.delete_hard"
+        };
         self.confirm = Some(Confirm {
-            message: t!("confirm.delete", n = paths.len()).to_string(),
+            message: t!(key, n = paths.len()).to_string(),
             paths,
         });
     }
@@ -6606,11 +6619,17 @@ impl App {
         match key.code {
             KeyCode::Char('y' | 'Y') => {
                 if let Some(c) = self.confirm.take() {
+                    let use_trash = self.explorer_delete_uses_trash();
                     let mut removed = 0;
                     for path in &c.paths {
                         // Canonicalize before removing so buffer paths still match.
                         let canon = path.canonicalize().unwrap_or_else(|_| path.clone());
-                        match crate::fileops::remove_path(path) {
+                        let result = if use_trash {
+                            crate::fileops::trash_path(path)
+                        } else {
+                            crate::fileops::remove_path(path)
+                        };
+                        match result {
                             Ok(()) => {
                                 self.close_buffers_under(&canon);
                                 removed += 1;
