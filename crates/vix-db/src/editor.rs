@@ -132,22 +132,18 @@ impl Query {
 
     /// Move the cursor a page up or down.
     pub fn page(&mut self, up: bool, n: usize) {
-        if up {
-            self.row = self.row.saturating_sub(n.max(1));
+        self.row = if up {
+            vix_list_state::page_up(self.row, n)
         } else {
-            self.row = (self.row + n.max(1)).min(self.lines.len() - 1);
-        }
+            vix_list_state::page_down(self.row, n, self.lines.len())
+        };
         self.col = self.col.min(self.lines[self.row].chars().count());
     }
 
     /// Keep the cursor within a window of `height` visible lines.
     pub fn ensure_visible(&mut self, height: usize) {
-        let height = height.max(1);
-        if self.row < self.scroll {
-            self.scroll = self.row;
-        } else if self.row >= self.scroll + height {
-            self.scroll = self.row + 1 - height;
-        }
+        self.scroll =
+            vix_list_state::ensure_visible(self.row, self.scroll, height, self.lines.len());
     }
 
     /// The char offset of the cursor within [`Query::text`].

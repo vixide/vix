@@ -122,12 +122,11 @@ impl Grid {
 
     /// Move the selection `n` filtered rows up or down, clamped.
     pub fn step(&mut self, up: bool, n: usize) {
-        let len = self.filtered().len();
-        if up {
-            self.sel = self.sel.saturating_sub(n);
+        self.sel = if up {
+            vix_list_state::page_up(self.sel, n)
         } else {
-            self.sel = (self.sel + n).min(len.saturating_sub(1));
-        }
+            vix_list_state::page_down(self.sel, n, self.filtered().len())
+        };
     }
 
     /// Jump to the first or last filtered row.
@@ -152,16 +151,8 @@ impl Grid {
 
     /// Keep the selection within a window of `height` visible rows.
     pub fn ensure_visible(&mut self, height: usize) {
-        let height = height.max(1);
-        if self.sel < self.scroll {
-            self.scroll = self.sel;
-        } else if self.sel >= self.scroll + height {
-            self.scroll = self.sel + 1 - height;
-        }
-        let max_scroll = self.filtered().len().saturating_sub(height);
-        if self.scroll > max_scroll {
-            self.scroll = max_scroll;
-        }
+        self.scroll =
+            vix_list_state::ensure_visible(self.sel, self.scroll, height, self.filtered().len());
     }
 }
 

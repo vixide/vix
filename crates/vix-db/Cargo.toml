@@ -21,6 +21,7 @@ tokio = { workspace = true }
 vix-clipboard = { path = "../vix-clipboard", version = "1.5.0" }
 vix-fileops = { path = "../vix-fileops", version = "1.6.0" }
 vix-i18n = { path = "../vix-i18n", version = "1.5.0" }
+vix-list-state = { path = "../vix-list-state", version = "1.6.0" }
 vix-theme = { path = "../vix-theme", version = "1.5.0" }
 
 # macOS: store DB passwords through the native Security framework rather than
