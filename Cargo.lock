@@ -5544,6 +5544,7 @@ dependencies = [
  "vix-clipboard",
  "vix-fileops",
  "vix-i18n",
+ "vix-list-state",
  "vix-theme",
 ]
 
@@ -5559,6 +5560,7 @@ name = "vix-edit-bytes"
 version = "1.6.0"
 dependencies = [
  "crossterm",
+ "vix-list-state",
 ]
 
 [[package]]
@@ -5566,6 +5568,7 @@ name = "vix-edit-outline"
 version = "1.6.0"
 dependencies = [
  "crossterm",
+ "vix-list-state",
 ]
 
 [[package]]
@@ -5573,6 +5576,7 @@ name = "vix-edit-sql"
 version = "1.6.0"
 dependencies = [
  "crossterm",
+ "vix-list-state",
 ]
 
 [[package]]
@@ -5591,6 +5595,7 @@ dependencies = [
  "proptest",
  "serde_json",
  "serde_yaml",
+ "vix-list-state",
 ]
 
 [[package]]
@@ -5661,6 +5666,7 @@ dependencies = [
 name = "vix-file-browser-panel"
 version = "1.6.0"
 dependencies = [
+ "vix-list-state",
  "vix-palette",
  "walkdir",
 ]
@@ -5756,6 +5762,7 @@ name = "vix-left-dock"
 version = "1.6.0"
 dependencies = [
  "regex",
+ "vix-list-state",
 ]
 
 [[package]]
@@ -5949,6 +5956,7 @@ name = "vix-snippets"
 version = "1.6.0"
 dependencies = [
  "serde_json",
+ "vix-list-state",
  "vix-settings",
  "vix-snippet-tool",
 ]
