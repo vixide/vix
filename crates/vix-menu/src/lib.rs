@@ -2144,6 +2144,7 @@ fn build_menus() -> Vec<MenuDef> {
         vec![
             Item::sub("menu.item.view.keymap", VIEW_KEYMAP),
             Item::sub("menu.item.view.theme", theme_submenu()),
+            Item::leaf("menu.item.view.theme_edit", "view.theme_edit", ""),
             Item::sub("menu.item.view.locale", locale_submenu()),
             Item::sub("menu.item.view.time_zone", time_zone_submenu()),
             SEP,

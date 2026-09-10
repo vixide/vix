@@ -2208,9 +2208,43 @@ and its own gate run, zero intended behavior change unless stated.
   loaded, fall back to bracket-balanced text matching); scope
   selection/file/workspace; preview list with per-match accept, like
   query-replace. Edit menu + palette.
-- [ ] **T202 — Theme editor.** Tools (or View → Themes → Edit): list the
-  theme's color slots, edit with the existing color-picker machinery, live
-  preview on the real UI, save-as to `~/.config/vix/themes/<name>.json`.
+- [x] **T202 — Theme editor.** Done. **View → Edit Theme…** (a sibling
+  leaf next to the View → Theme submenu, not buried inside its fully
+  dynamic item list) opens a new `vix-theme-editor-panel` overlay: 15
+  rows, one per color slot (menu/status bar, left/right dock
+  foreground+background, editor foreground/background/cursor, 4
+  syntax colors). `Enter` reuses `vix-x11-color-picker` — the same
+  panel Tools → X11 Colors uses to insert a hex value into a buffer —
+  wired via a new `theme_editor_picking: bool` flag so its existing
+  `Enter` handler applies the chosen color to the theme editor's
+  highlighted slot and closes the picker instead, the same
+  "one overlay reused for two purposes via a flag" pattern
+  `WorkspaceSearch::static_results` already established for
+  go-to-definition. Every edit is applied live
+  (`vix_theme_model::apply`); `Esc` reverts to the committed theme if
+  nothing was saved. `Ctrl+S` prompts for a name and writes the draft
+  to `~/.config/vix/themes/<name>.json`
+  (new `vix_theme_model::to_json`, added `Serialize` to `CustomTheme`
+  and its nested color structs, which previously only derived
+  `Deserialize` — round-trip verified), then sets it as the active
+  theme via the same path `set_theme_by_name` already uses.
+  Found and fixed 2 unrelated stale-docs drifts while in the theme
+  code: `docs/themes/index.md` was missing `number` from its list of
+  recognized `syntax` slots (a real, already-wired slot, not a
+  future one), and `agents/share/crate-map.md`'s "sanctioned
+  `struct_excessive_bools` allows" list still named `SearchBar`/
+  `WorkspaceSearch`/`editor_core Editor` from before T149 converted
+  them to `bitflags` — `AGENTS.md`'s own copy of this same drift was
+  already caught and fixed during T151, but this second copy in
+  crate-map.md was missed at the time.
+  7 new integration tests, driven through `run_action`/`on_key` only
+  (like `keybinding_editor`'s own tests) since the panel's own methods
+  are `pub(super)`; none of them submits a non-empty Save As name, so
+  none writes to the real themes directory (`Settings::themes_dir()`
+  has no test-only override, same limitation T204's own tests
+  document). New crate's own 6 unit tests cover every slot's
+  get/set round trip and navigation. Crate count 111 → 112. Full
+  `scripts/check` gate green.
 - [x] **T203 — New bundled themes.** Done. Solarized Dark, Solarized
   Light, and Tokyo Night already existed in `themes/` (the task's own
   text didn't know that); added `catppuccin-mocha.json` (the real
@@ -2534,8 +2568,8 @@ is listed explicitly.
    T111 are done; **T112–T115 (modal-editing implementation) remain**.
 3. **Run C (features):** T201–T211 in any order, one branch each — T104j
    shipped 2026-09-04, so T204 was unblocked too (§ T204's own note);
-   T210/T211 never had a dependency either. **T204, T203, T209, and
-   T208 are done (2026-09-10); T201–T202, T205–T207, and T210–T211
+   T210/T211 never had a dependency either. **T204, T203, T209, T208,
+   and T202 are done (2026-09-10/11); T201, T205–T207, and T210–T211
    remain.**
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
    Not started.

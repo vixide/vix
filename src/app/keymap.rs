@@ -88,6 +88,7 @@ impl App {
             nerd_palette,
             ascii_panel,
             x11_panel,
+            theme_editor,
             media_type_panel,
             html_panel,
             system_info,
@@ -303,6 +304,7 @@ impl App {
         panel!(nerd_palette, nerd_key);
         panel!(ascii_panel, ascii_key);
         panel!(x11_panel, x11_key);
+        panel!(theme_editor, theme_editor_key);
         panel!(media_type_panel, media_type_key);
         panel!(html_panel, html_key);
         panel!(system_info, system_info_key);

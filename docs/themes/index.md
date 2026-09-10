@@ -82,8 +82,8 @@ Each region takes `foreground` and `background`, and optional font attributes:
 | `font-weight` | `"normal"` or `"bold"`          | `"normal"` |
 
 `editor` additionally takes a `cursor` color (drawn as the block-cursor cell).
-The optional `syntax` block colors Tree-sitter tokens — `keyword`, `string`, and
-`comment` are recognized.
+The optional `syntax` block colors Tree-sitter tokens — `keyword`, `string`,
+`comment`, and `number` are recognized.
 
 The bundled Dark/Light themes use no italic or bold; those effects appear only
 under a theme that opts in.
@@ -94,6 +94,21 @@ Drop a file in the themes directory and reopen **View → Theme…**: it appears
 the list after Dark and Light. Selecting it saves its `name` to the `theme`
 setting, so it is restored on the next launch. If a saved custom theme name can
 no longer be found, Vix falls back to Dark.
+
+## Theme editor
+
+**View → Edit Theme…** (T202) opens an in-app editor over a copy of the active
+theme: 15 rows, one per color slot, each showing its current `#RRGGBB` value.
+`↑`/`↓` (or the mouse) move the highlight; `Enter` opens the same X11 color
+picker Tools → X11 Colors uses, so choosing a slot's new color is browsing a
+named-color table, not typing hex by hand. Every change is applied live, so
+the real UI reflects the edit immediately. `Esc` closes the editor and reverts
+to the theme that was active before you opened it, if you haven't saved.
+`Ctrl+S` prompts for a name and writes the result to
+`~/.config/vix/themes/<name>.json`, then makes it the active theme — the same
+outcome as picking any other theme from **View → Theme…**.
+
+See `crates/vix-theme-editor-panel/spec/index.md` for the implementation.
 
 ## See also
 

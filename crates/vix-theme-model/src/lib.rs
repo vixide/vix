@@ -19,7 +19,7 @@ use std::path::Path;
 use std::sync::RwLock;
 
 use ratatui::style::{Color, Modifier, Style};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 // Ultimate fallbacks used only before a theme is loaded, or for a theme that
 // leaves the editor foreground/background unset. They match the bundled `Dark`.
@@ -123,53 +123,78 @@ pub enum Region {
 
 /// Foreground/background colors and font attributes for a region (each optional;
 /// a missing value falls back to the primary editor color).
-#[derive(Deserialize, Clone, Default)]
+#[derive(Deserialize, Serialize, Clone, Default)]
 pub struct RegionColors {
     /// Foreground color.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub foreground: Option<Rgb>,
     /// Background color.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub background: Option<Rgb>,
     /// `"normal"` (default) or `"italic"`.
-    #[serde(rename = "font-style", default)]
+    #[serde(
+        rename = "font-style",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub font_style: Option<String>,
     /// `"normal"` (default) or `"bold"`.
-    #[serde(rename = "font-weight", default)]
+    #[serde(
+        rename = "font-weight",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub font_weight: Option<String>,
 }
 
 /// Editor colors, including an optional cursor color and font attributes.
-#[derive(Deserialize, Clone, Default)]
+#[derive(Deserialize, Serialize, Clone, Default)]
 pub struct EditorColors {
     /// Text foreground.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub foreground: Option<Rgb>,
     /// Editor background.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub background: Option<Rgb>,
     /// Cursor color.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<Rgb>,
     /// `"normal"` (default) or `"italic"`.
-    #[serde(rename = "font-style", default)]
+    #[serde(
+        rename = "font-style",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub font_style: Option<String>,
     /// `"normal"` (default) or `"bold"`.
-    #[serde(rename = "font-weight", default)]
+    #[serde(
+        rename = "font-weight",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub font_weight: Option<String>,
 }
 
 /// Optional syntax-highlight colors.
-#[derive(Deserialize, Clone, Default)]
+#[derive(Deserialize, Serialize, Clone, Default)]
 pub struct SyntaxColors {
     /// Keywords.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub keyword: Option<Rgb>,
     /// String literals.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub string: Option<Rgb>,
     /// Comments.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<Rgb>,
     /// Numeric literals.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub number: Option<Rgb>,
 }
 
 /// A theme loaded from a JSON file (bundled in the binary or installed in
 /// `~/.config/vix/themes/`).
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct CustomTheme {
     /// Display name (also the value persisted in settings).
     pub name: String,
@@ -367,6 +392,19 @@ pub fn syntax_color(token: &str) -> Option<Color> {
 #[must_use]
 pub fn parse_theme(json: &str) -> Option<CustomTheme> {
     serde_json::from_str(json).ok()
+}
+
+/// Serialize `theme` back to the same JSON shape [`parse_theme`] reads
+/// (T202's theme editor Save As). Pretty-printed so a saved file is easy to
+/// hand-edit afterward, matching every bundled theme's own formatting.
+///
+/// # Panics
+/// Never, in practice: [`CustomTheme`] contains no type `serde_json` cannot
+/// represent (no floats, no non-string map keys). `serde_json::to_string`
+/// only fails for those cases, so this always succeeds for a real theme.
+#[must_use]
+pub fn to_json(theme: &CustomTheme) -> String {
+    serde_json::to_string_pretty(theme).unwrap_or_default()
 }
 
 /// Load all themes (`*.json`) from `dir`, sorted by name. Unreadable or malformed

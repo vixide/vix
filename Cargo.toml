@@ -373,6 +373,8 @@ vix-test-runner = { path = "crates/vix-test-runner", version = "1.6.0" }
 vix-text-information-panel = { path = "crates/vix-text-information-panel", version = "1.6.0" }
 # Small pure text transforms used by Edit/Tools actions.
 vix-textops = { path = "crates/vix-textops", version = "1.6.0" }
+# List a theme's color slots and edit each one, live-previewed as you go.
+vix-theme-editor-panel = { path = "crates/vix-theme-editor-panel", version = "1.6.0" }
 # The Vix theme model: the JSON theme model, ratatui styles, and theme loading.
 vix-theme-model = { path = "crates/vix-theme-model", version = "1.6.0" }
 # Time-zone modeling: the IANA canonical zone table + the app-wide active zone.

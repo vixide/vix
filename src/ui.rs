@@ -58,7 +58,8 @@ use lsp_popups::{draw_code_actions, draw_code_lens, draw_completion, draw_hover}
 use menu_bar::{draw_menu_bar, draw_menu_dropdown, dropdown_width};
 use minimap::draw_minimap;
 use picker_panels::{
-    draw_ascii_panel, draw_media_type_panel, draw_nerd_palette, draw_qrcode, draw_x11_panel,
+    draw_ascii_panel, draw_media_type_panel, draw_nerd_palette, draw_qrcode, draw_theme_editor,
+    draw_x11_panel,
 };
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
@@ -350,6 +351,9 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     }
     if app.ai_diff_review().is_some() {
         draw_ai_diff(app, frame, area);
+    }
+    if app.theme_editor.is_some() {
+        draw_theme_editor(app, frame, area);
     }
     if app.x11_panel.is_some() {
         draw_x11_panel(app, frame, area);

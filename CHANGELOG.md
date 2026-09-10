@@ -267,6 +267,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   --version --json` prints `{"name","version"}` for tooling. `git
   mergetool` needs no new flag — Vix's existing conflict tool already
   resolves conflict markers in a normally-opened file.
+- **Theme editor** (improvement plan T202): **View → Edit Theme…** lists a
+  theme's 15 color slots, reuses the existing X11 color picker to choose
+  each one's new color, applies every change live, and Save As
+  (`Ctrl+S`) writes the result to `~/.config/vix/themes/<name>.json` and
+  makes it the active theme. `Esc` without saving reverts to the theme
+  that was active before you opened the editor.
 
 ### Changed
 

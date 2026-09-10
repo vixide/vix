@@ -5346,6 +5346,7 @@ dependencies = [
  "vix-text-information-panel",
  "vix-textops",
  "vix-theme",
+ "vix-theme-editor-panel",
  "vix-theme-model",
  "vix-time-zone-model",
  "vix-undo-store",
@@ -6096,6 +6097,14 @@ dependencies = [
 name = "vix-theme"
 version = "1.6.0"
 dependencies = [
+ "vix-theme-model",
+]
+
+[[package]]
+name = "vix-theme-editor-panel"
+version = "1.6.0"
+dependencies = [
+ "vix-list-state",
  "vix-theme-model",
 ]
 
