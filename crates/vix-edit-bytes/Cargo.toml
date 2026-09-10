@@ -9,3 +9,4 @@ description = "The byte editor: a hex/ASCII view for editing raw file bytes."
 
 [dependencies]
 crossterm = { workspace = true }
+vix-list-state = { path = "../vix-list-state", version = "1.6.0" }
