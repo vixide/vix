@@ -16,4 +16,5 @@ mod org;
 mod palette;
 mod panels;
 mod scripting;
+mod themes;
 mod workspace;

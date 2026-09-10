@@ -24,9 +24,12 @@ Themes are JSON files in the themes directory:
 
 A set of themes is **bundled into the binary** (from the repo's `themes/`
 directory) and appears in **View → Theme…** automatically — no installation
-needed: `Dark`, `Light`, `Darker`, `Darkest`, `Lighter`, `Lightest`, `Matrix`,
+needed: `Dark`, `Light`, `Darker`, `Darkest`, `Lighter`, `Lightest`,
 `Turbo`, `Solarized Dark`, `Solarized Light`, `Dracula`, `Nord`, `Gruvbox Dark`,
-`Monokai`, `One Dark`, and `Tokyo Night`.
+`Monokai`, `One Dark`, `Tokyo Night`, `Catppuccin Mocha`, `High Contrast`
+(WCAG AA, 11:1 or better on every text color), `Phosphor Amber`,
+`Phosphor Green`, and `Safelight Red` — plus every theme generated from a
+bundled base16 palette (View → Base16…).
 
 A theme you install in your own themes directory **overrides** a bundled one of
 the same name, so you can customize any of them by dropping an edited copy there.
