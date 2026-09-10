@@ -228,14 +228,8 @@ impl Tree {
 
     /// Adjust the scroll so the selected row stays within a `height`-row window.
     pub fn ensure_visible(&mut self, height: usize) {
-        let height = height.max(1);
-        if self.sel < self.scroll {
-            self.scroll = self.sel;
-        } else if self.sel >= self.scroll + height {
-            self.scroll = self.sel + 1 - height;
-        }
-        let max = self.rows.len().saturating_sub(height);
-        self.scroll = self.scroll.min(max);
+        self.scroll =
+            vix_list_state::ensure_visible(self.sel, self.scroll, height, self.rows.len());
     }
 
     /// Interpret a key event and report what the host should do next.
