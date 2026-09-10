@@ -5241,6 +5241,7 @@ dependencies = [
  "vix-keyboard-shortcut-panel",
  "vix-keymap-model",
  "vix-left-dock",
+ "vix-list-state",
  "vix-locale-model",
  "vix-lorem",
  "vix-lsp",
@@ -5744,6 +5745,10 @@ version = "1.6.0"
 dependencies = [
  "regex",
 ]
+
+[[package]]
+name = "vix-list-state"
+version = "1.6.0"
 
 [[package]]
 name = "vix-locale-model"

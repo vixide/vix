@@ -1,0 +1,10 @@
+[package]
+name = "vix-list-state"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared arithmetic for a scrollable, single-selection list — up/down (one row or one page), select-by-index, and keeping a scroll offset following the highlight within a fixed-height viewport."
+
+[dependencies]

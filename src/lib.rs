@@ -138,6 +138,7 @@ pub use vix_http_client as http_client;
 pub use vix_keyboard_shortcut_panel as keyboard_shortcut_panel;
 pub use vix_keymap_model as keymap_model;
 pub use vix_left_dock as left_dock;
+pub use vix_list_state as list_state;
 pub use vix_locale_model as locale_model;
 pub use vix_lorem as lorem;
 pub use vix_lsp_core as lsp_core;
