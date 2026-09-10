@@ -5668,6 +5668,9 @@ dependencies = [
 [[package]]
 name = "vix-file-information-panel"
 version = "1.6.0"
+dependencies = [
+ "vix-list-state",
+]
 
 [[package]]
 name = "vix-fileops"

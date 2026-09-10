@@ -204,50 +204,39 @@ impl Panel {
 
     /// Move the highlight up one row.
     pub fn up(&mut self) {
-        self.selected = self.selected.saturating_sub(1);
+        self.selected = vix_list_state::up(self.selected);
     }
 
     /// Move the highlight down one row.
     pub fn down(&mut self) {
-        if self.selected + 1 < self.rows.len() {
-            self.selected += 1;
-        }
+        self.selected = vix_list_state::down(self.selected, self.rows.len());
     }
 
     /// Move up one page.
     pub fn page_up(&mut self, page: usize) {
-        self.selected = self.selected.saturating_sub(page.max(1));
+        self.selected = vix_list_state::page_up(self.selected, page);
     }
 
     /// Move down one page.
     pub fn page_down(&mut self, page: usize) {
-        if !self.rows.is_empty() {
-            self.selected = (self.selected + page.max(1)).min(self.rows.len() - 1);
-        }
+        self.selected = vix_list_state::page_down(self.selected, page, self.rows.len());
     }
 
     /// Select a row directly (e.g. from a click); returns whether `idx` was real.
     pub fn select_index(&mut self, idx: usize) -> bool {
-        if idx < self.rows.len() {
-            self.selected = idx;
-            true
-        } else {
-            false
+        match vix_list_state::select_index(idx, self.rows.len()) {
+            Some(i) => {
+                self.selected = i;
+                true
+            }
+            None => false,
         }
     }
 
     /// Keep the highlighted row within a window of `height` visible rows.
     pub fn ensure_visible(&mut self, height: usize) {
-        let height = height.max(1);
-        if self.selected < self.scroll {
-            self.scroll = self.selected;
-        } else if self.selected >= self.scroll + height {
-            self.scroll = self.selected + 1 - height;
-        }
-        let max_scroll = self.rows.len().saturating_sub(height);
-        if self.scroll > max_scroll {
-            self.scroll = max_scroll;
-        }
+        self.scroll =
+            vix_list_state::ensure_visible(self.selected, self.scroll, height, self.rows.len());
     }
 
     /// The highlighted row's value (what insertion uses).
