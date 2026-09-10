@@ -8,3 +8,4 @@ repository.workspace = true
 description = "The code-outline list (symbol kind + name + line) and the panel's selection."
 
 [dependencies]
+vix-list-state = { path = "../vix-list-state", version = "1.6.0" }
