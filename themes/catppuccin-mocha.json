@@ -1,0 +1,40 @@
+{
+  "name": "Catppuccin Mocha",
+  "menu-bar": {
+    "foreground": [205, 214, 244],
+    "background": [30, 30, 46],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "status-bar": {
+    "foreground": [205, 214, 244],
+    "background": [30, 30, 46],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "left-dock": {
+    "foreground": [205, 214, 244],
+    "background": [30, 30, 46],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "right-dock": {
+    "foreground": [205, 214, 244],
+    "background": [30, 30, 46],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "editor": {
+    "foreground": [205, 214, 244],
+    "background": [30, 30, 46],
+    "font-style": "normal",
+    "font-weight": "normal",
+    "cursor": [137, 180, 250]
+  },
+  "syntax": {
+    "keyword": [203, 166, 247],
+    "string": [166, 227, 161],
+    "comment": [108, 112, 134],
+    "number": [250, 179, 135]
+  }
+}

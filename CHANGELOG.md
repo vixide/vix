@@ -249,6 +249,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `ui.yml`, `action.yml`, `cmd.yml`, `msg.yml`, `prompt.yml`, `help.yml`,
   `misc.yml`) so a translation change is a small, readable diff instead
   of a multi-thousand-line one.
+- **2 new bundled themes** (improvement plan T203): Catppuccin Mocha, and
+  High Contrast — a WCAG AA theme (every text color at least 11:1 against
+  its pure-black background, well past the 4.5:1 minimum). Solarized Dark,
+  Solarized Light, and Tokyo Night were already bundled; all five now have
+  regression tests pinning their color values.
 
 ### Changed
 
@@ -264,6 +269,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Two bundled themes shared one name.** `themes/safelight-red.json`
+  declared `"name": "Phosphor Amber"` — the same name as the real
+  `phosphor-amber.json` — so **View → Theme…** only ever offered one of
+  the two (a red-on-black theme, unreachable under its own name). Found
+  while adding regression tests for T203; renamed to `Safelight Red`.
 - **`cargo build`/`cargo test` stack overflow on `App::new()`.** The
   fuller `locales/` catalog above (T148) pushed `rust_i18n`'s generated
   translation-table initializer — one very large function, unoptimized

@@ -2211,9 +2211,44 @@ and its own gate run, zero intended behavior change unless stated.
 - [ ] **T202 — Theme editor.** Tools (or View → Themes → Edit): list the
   theme's color slots, edit with the existing color-picker machinery, live
   preview on the real UI, save-as to `~/.config/vix/themes/<name>.json`.
-- [ ] **T203 — New bundled themes.** Solarized Dark, Solarized Light,
-  Catppuccin Mocha, Tokyo Night, and one WCAG-AA high-contrast theme.
-  Snapshot test each (T004 harness) so slots can't silently regress.
+- [x] **T203 — New bundled themes.** Done. Solarized Dark, Solarized
+  Light, and Tokyo Night already existed in `themes/` (the task's own
+  text didn't know that); added `catppuccin-mocha.json` (the real
+  published Catppuccin Mocha palette) and `high-contrast.json` (pure
+  white on pure black, bright saturated syntax colors — every text
+  color verified at 11:1 contrast or better against its background,
+  well past WCAG AA's 4.5:1 minimum; computed with the standard
+  relative-luminance formula, not eyeballed).
+  "Snapshot test each" turned out not to give the regression protection
+  the task's own wording implies: `tests/snapshots.rs`'s harness
+  flattens a rendered frame to **plain text** (`buf[(x,y)].symbol()`
+  only) — it never reads `.style()`, so a color-only regression is
+  invisible to it, and five near-identical text-only goldens (same
+  glyphs, different pinned theme) would have added corpus size for no
+  real coverage. Used two other layers instead: a new
+  `tests/integration/themes.rs` that parses each of the 5 themes'
+  JSON directly and asserts pinned RGB values per slot (the actual
+  "so slots can't silently regress" goal), and one new
+  `tests/snapshots.rs` test that applies **every** bundled theme
+  (reading `themes/*.json` directly, not via `vix::menu::menus()` —
+  that menu is built once and cached process-wide, so which themes its
+  Theme submenu lists depends on test run order within the binary, not
+  a reliable enumeration) and asserts the render doesn't panic and
+  isn't blank — cheaper and more comprehensive than one golden per
+  theme, and it's the actual failure mode "so a malformed theme is
+  caught" cares about.
+  Found and fixed a real, unrelated bug while writing the name-
+  uniqueness test: `themes/safelight-red.json` (a red-on-black theme)
+  declared `"name": "Phosphor Amber"` — copy-paste from the *real*
+  `phosphor-amber.json` — so the picker only ever offered one of the
+  two. Also fixed `docs/themes/index.md`'s "Ready-made themes" list,
+  stale in both directions: missing `Phosphor Amber`/`Phosphor Green`/
+  `Safelight Red` and the base16-derived themes entirely, while naming
+  a `Matrix` theme that doesn't exist under that name (a leftover from
+  before `phosphor-green.json` existed, going by feel — never
+  confirmed further, not worth chasing down). `CHANGELOG.md` entries
+  added (Added: the 2 new themes; Fixed: the duplicate name). Full
+  `scripts/check` gate green.
 - [x] **T204 — Keybinding editor.** Done. **Vix → Keybindings…** opens a
   new overlay (`crates/vix-keybinding-editor-panel/spec/index.md`): a
   searchable, sortable, *selectable* table of the active keymap's
@@ -2447,8 +2482,8 @@ is listed explicitly.
    T111 are done; **T112–T115 (modal-editing implementation) remain**.
 3. **Run C (features):** T201–T211 in any order, one branch each — T104j
    shipped 2026-09-04, so T204 was unblocked too (§ T204's own note);
-   T210/T211 never had a dependency either. **T204 is done; T201–T203 and
-   T205–T211 remain.**
+   T210/T211 never had a dependency either. **T204 and T203 are done
+   (2026-09-10); T201–T202 and T205–T211 remain.**
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
    Not started.
 5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last. Not

@@ -1,40 +1,40 @@
 {
-  "name": "Safelight Red",
+  "name": "High Contrast",
   "menu-bar": {
-    "foreground": [255, 0, 0],
+    "foreground": [255, 255, 255],
     "background": [0, 0, 0],
     "font-style": "normal",
     "font-weight": "normal"
   },
   "status-bar": {
-    "foreground": [255, 0, 0],
+    "foreground": [255, 255, 255],
     "background": [0, 0, 0],
     "font-style": "normal",
     "font-weight": "normal"
   },
   "left-dock": {
-    "foreground": [255, 0, 0],
+    "foreground": [255, 255, 255],
     "background": [0, 0, 0],
     "font-style": "normal",
     "font-weight": "normal"
   },
   "right-dock": {
-    "foreground": [255, 0, 0],
+    "foreground": [255, 255, 255],
     "background": [0, 0, 0],
     "font-style": "normal",
     "font-weight": "normal"
   },
   "editor": {
-    "foreground": [255, 0, 0],
+    "foreground": [255, 255, 255],
     "background": [0, 0, 0],
     "font-style": "normal",
     "font-weight": "normal",
-    "cursor": [82, 139, 255]
+    "cursor": [255, 165, 0]
   },
   "syntax": {
-    "keyword": [86, 156, 214],
-    "string": [206, 145, 120],
-    "comment": [106, 153, 85],
-    "number": [181, 206, 168]
+    "keyword": [255, 255, 0],
+    "string": [0, 255, 0],
+    "comment": [190, 190, 190],
+    "number": [0, 255, 255]
   }
 }

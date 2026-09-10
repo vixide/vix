@@ -297,3 +297,44 @@ fn theme_other_than_default() {
     let screen = render_screen(&mut app, 100, 30);
     insta::assert_snapshot!(screen);
 }
+
+#[test]
+fn every_bundled_theme_renders_without_panicking() {
+    // T203: a smoke test over *every* bundled `themes/*.json` file (not just
+    // the five named ones `tests/integration/themes.rs` pins exact colors
+    // for), so a malformed or incomplete theme JSON is caught regardless of
+    // which theme it is — `insta`'s plain-text screen flattening can't tell
+    // one theme's colors from another's (it captures only glyphs), so one
+    // golden snapshot per theme would mostly duplicate `theme_other_than_
+    // default` for no real coverage; actually applying each and rendering
+    // it is what catches a `render` panic, the failure mode that matters
+    // here.
+    //
+    // Read the files directly rather than going through `vix::menu::menus()`
+    // (as `view_theme_submenu_lists_bundled_themes` does for just Dark/
+    // Light): that menu is built once and cached process-wide, so which
+    // themes its Theme submenu lists depends on test run order within this
+    // binary — not a reliable way to enumerate "every bundled theme". The
+    // `view.theme:<name>` action itself re-reads the bundled files fresh
+    // each time regardless, so this doesn't need the menu at all.
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/themes");
+    let names: Vec<String> = fs::read_dir(dir)
+        .expect("themes/ exists")
+        .filter_map(Result::ok)
+        .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
+        .filter_map(|e| fs::read_to_string(e.path()).ok())
+        .filter_map(|json| vix::theme_model::parse_theme(&json))
+        .map(|t| t.name)
+        .collect();
+    assert!(
+        names.len() > 5,
+        "expected at least the themes.rs-pinned five, got {}",
+        names.len()
+    );
+    for name in names {
+        let mut app = app_at("theme-smoke");
+        app.run_action(&format!("view.theme:{name}"));
+        let screen = render_screen(&mut app, 100, 30);
+        assert!(!screen.trim().is_empty(), "{name} rendered a blank screen");
+    }
+}
