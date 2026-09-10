@@ -5865,6 +5865,9 @@ dependencies = [
 [[package]]
 name = "vix-outline-panel"
 version = "1.6.0"
+dependencies = [
+ "vix-list-state",
+]
 
 [[package]]
 name = "vix-palette"
