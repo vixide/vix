@@ -8,3 +8,4 @@ repository.workspace = true
 description = "Browse a directory of vCard files as a table of contacts."
 
 [dependencies]
+vix-list-state = { path = "../vix-list-state", version = "1.6.0" }

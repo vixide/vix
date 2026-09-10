@@ -5411,6 +5411,9 @@ version = "1.6.0"
 [[package]]
 name = "vix-contact-panel"
 version = "1.6.0"
+dependencies = [
+ "vix-list-state",
+]
 
 [[package]]
 name = "vix-convert-from-csv-into-json-tool"
