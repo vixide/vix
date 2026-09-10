@@ -65,7 +65,10 @@ by pasting it back into the same directory.
 ## Deleting
 
 - **`Delete`** removes the selection. Deletion always asks for confirmation
-  first.
+  first, and the prompt says which will happen.
+- By default, deleted items go to the OS trash / Recycle Bin — undoable from
+  there. Set `explorer_delete = "hard"` in `config.toml` to remove outright
+  instead (no undo). See `docs/configuration/index.md`.
 
 ## Buffers Follow Files
 
@@ -78,8 +81,7 @@ Open buffers stay in sync with file operations:
 
 ## Roadmap
 
-Drag-and-drop and a trash option (as an alternative to permanent delete) are
-planned nice-to-haves, not yet built.
+Drag-and-drop is a planned nice-to-have, not yet built.
 
 ---
 

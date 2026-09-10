@@ -2289,9 +2289,35 @@ and its own gate run, zero intended behavior change unless stated.
   directly; `vix -` reads stdin into a scratch buffer; `vix --version
   --json` for tooling. Update `--help`, README, and add
   `docs/cli/index.md` including git difftool/mergetool config snippets.
-- [ ] **T209 — Trash on delete.** File-explorer Delete moves to the OS
-  trash (`trash` crate) with setting `explorer.delete = "trash" | "hard"`
-  (default trash); the confirm prompt says which will happen.
+- [x] **T209 — Trash on delete.** Done. File-explorer `Delete` moves to
+  the OS trash by default via the `trash` crate
+  (`vix_fileops::trash_path`); new `Settings::explorer_delete: String`
+  (`"trash"`/`"hard"`, matching the flat-`String` convention every
+  other enum-like Settings field already uses — `keymap`/`theme`/
+  `time_zone` — rather than a real Rust enum or a nested `[explorer]`
+  TOML table the task's own `explorer.delete` dotted notation
+  suggested; a value other than `"hard"` falls back to `"trash"`, the
+  safer default, rather than silently hard-deleting on a typo). The
+  confirm prompt now uses one of two full messages (`confirm.delete` /
+  `confirm.delete_hard`, translated into all 14 core locales) rather
+  than one template with an inserted word, since "which will happen"
+  reads more naturally as a full sentence in every language than a
+  mid-sentence substitution would. No new menu/settings-UI toggle —
+  matches several other enum-like Settings fields (`preview_tabs` among
+  them) that are config-file-only with no menu affordance, so this
+  isn't a gap relative to the existing pattern. Deliberately forced the
+  one *pre-existing* delete test (`explorer_delete_closes_buffer`,
+  about buffer-closing, not trash) to `"hard"` explicitly, so it keeps
+  testing what it always tested without picking up a new dependency on
+  the OS trash mechanism being available in CI — added two *new* tests
+  instead for the trash-vs-hard prompt wording, plus a
+  `vix-fileops` unit test that exercises real trash I/O (verified
+  passing locally on macOS; `cargo deny check` clean for the new
+  dependency). Docs updated: `crates/vix-fileops/spec/index.md` (new
+  "Delete and trash" section, replacing its stale "trash… nice to have"
+  roadmap line), `docs/file-explorer/index.md`, and
+  `docs/configuration/index.md`'s settings table. `CHANGELOG.md` entry
+  added.
 - [ ] **T210 — Coverage gutter.** New crate `vix-coverage`: parse LCOV
   and Cobertura XML into per-file line-hit data; a gutter overlay
   (covered/uncovered/partial, reusing the diff-gutter's color-mark
@@ -2482,8 +2508,8 @@ is listed explicitly.
    T111 are done; **T112–T115 (modal-editing implementation) remain**.
 3. **Run C (features):** T201–T211 in any order, one branch each — T104j
    shipped 2026-09-04, so T204 was unblocked too (§ T204's own note);
-   T210/T211 never had a dependency either. **T204 and T203 are done
-   (2026-09-10); T201–T202 and T205–T211 remain.**
+   T210/T211 never had a dependency either. **T204, T203, and T209 are
+   done (2026-09-10); T201–T202 and T205–T208, T210–T211 remain.**
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
    Not started.
 5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last. Not

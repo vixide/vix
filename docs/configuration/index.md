@@ -21,6 +21,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `show_whitespace`| bool  | `false`  | Show visible glyphs for space (`·`), tab (`→`), and line ending (`¶`). |
 | `soft_wrap`     | bool   | `false`  | Wrap long lines across screen rows instead of scrolling horizontally. |
 | `show_explorer` | bool   | `true`   | Show the file-explorer drawer on startup.                            |
+| `explorer_delete` | string | `"trash"` | How the explorer's Delete acts: `"trash"` (move to the OS trash/Recycle Bin, undoable there) or `"hard"` (remove outright, no undo). Any other value falls back to `"trash"`. |
 | `show_messages` | bool   | `true`   | Show the message drawer on startup.                                  |
 | `show_status_bar` | bool | `true`   | Show the bottom status bar.                                          |
 | `show_scrollbar` | bool  | `true`   | Show the editor's right-side scroll bar.                             |
@@ -85,6 +86,7 @@ Example `config.toml`:
 line_numbers = true
 show_whitespace = false
 show_explorer = true
+explorer_delete = "trash"
 show_messages = true
 show_status_bar = true
 show_scrollbar = true

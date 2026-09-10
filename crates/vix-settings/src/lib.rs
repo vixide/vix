@@ -44,6 +44,12 @@ pub struct Settings {
     pub soft_wrap: bool,
     /// Show the file explorer on startup.
     pub show_explorer: bool,
+    /// How the file explorer's Delete acts: `"trash"` (default — move to the
+    /// OS trash/Recycle Bin, undoable from there) or `"hard"` (remove
+    /// outright, `fs::remove_file`/`remove_dir_all`, no undo). Any other
+    /// value falls back to `"trash"`, the safer default, rather than
+    /// silently hard-deleting on a typo.
+    pub explorer_delete: String,
     /// Show the message drawer on startup.
     pub show_messages: bool,
     /// Show the bottom status bar.
@@ -227,6 +233,7 @@ impl Default for Settings {
             show_whitespace: false,
             soft_wrap: false,
             show_explorer: true,
+            explorer_delete: "trash".to_string(),
             show_messages: true,
             show_status_bar: true,
             show_breadcrumbs: false,

@@ -17,10 +17,27 @@ focus switching, mouse support (wheel to move the selection; click a file to
 preview it and click again to open it permanently; click a directory to
 expand/collapse), the file clipboard (`Ctrl+C`/`Ctrl+X`/`Ctrl+V` with same-dir
 copy suffixing, cut dimming, and an (o)verwrite/(s)kip/(c)ancel conflict prompt),
-`Shift+Up`/`Shift+Down` multi-selection, `Delete` (with confirmation), and
-buffers that follow files on move and close on delete. Roadmap: per-file
-buffers-follow on directory rename is covered; remaining nice-to-haves are
-drag-and-drop and trash (vs. permanent delete).
+`Shift+Up`/`Shift+Down` multi-selection, `Delete` (with confirmation, moving to
+the OS trash by default — see "Delete and trash" below), and buffers that
+follow files on move and close on delete. Roadmap: per-file buffers-follow on
+directory rename is covered; drag-and-drop remains a nice-to-have.
+
+## Delete and trash
+
+`Delete` on a selected explorer entry (or entries, with multi-selection)
+prompts for confirmation, then acts per the `explorer_delete` setting:
+
+- `"trash"` (the default) moves each path to the OS trash / Recycle Bin
+  (`vix_fileops::trash_path`, the [`trash`](https://docs.rs/trash) crate) —
+  undoable from the platform's own trash/recycle view.
+- `"hard"` removes each path outright (`vix_fileops::remove_path`:
+  `fs::remove_file`/`remove_dir_all`) — not undoable.
+
+Any other value (including an older config file that predates this setting)
+falls back to `"trash"`, the safer default, rather than silently hard-deleting
+on a typo. The confirmation prompt's wording differs by mode (`confirm.delete`
+vs. `confirm.delete_hard`) so it always says which will happen. Open buffers
+under a deleted path are closed either way (`App::close_buffers_under`).
 
 Built-in file explorer.
 

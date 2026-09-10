@@ -168,6 +168,11 @@ fn explorer_delete_closes_buffer() {
     let dir = unique_dir("del");
     fs::write(dir.join("a.txt"), "bye\n").unwrap();
     let mut app = app_at(&dir);
+    // T209: this test is about the buffer-closes-on-delete behavior, not
+    // trash routing (that's its own test below) - force "hard" so it
+    // doesn't pick up a dependency on the OS trash mechanism being
+    // available, which a plain fs::remove_file never needed.
+    app.settings.explorer_delete = "hard".to_string();
     app.open_initial(&dir.join("a.txt"));
     assert_eq!(app.editor.tabs.len(), 2); // initial empty buffer + a.txt
     app.focus = Focus::Explorer;
@@ -179,6 +184,56 @@ fn explorer_delete_closes_buffer() {
     // The file's buffer closed; only the empty buffer remains.
     assert_eq!(app.editor.tabs.len(), 1);
     assert!(app.editor.active_tab().unwrap().path.is_none());
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn explorer_delete_defaults_to_trash_and_the_prompt_says_so() {
+    let dir = unique_dir("del-trash-prompt");
+    fs::write(dir.join("a.txt"), "bye\n").unwrap();
+    let mut app = app_at(&dir);
+    assert_eq!(
+        app.settings.explorer_delete, "trash",
+        "trash is the default"
+    );
+    app.focus = Focus::Explorer;
+    app.explorer.selected = node_index(&app, "a.txt");
+    app.on_key(KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE));
+    let msg = &app.confirm.as_ref().expect("confirm prompt open").message;
+    assert!(
+        msg.contains("trash"),
+        "prompt should say it will move to trash, got: {msg:?}"
+    );
+
+    // An unrecognized value (a typo, or an older config file) falls back to
+    // the safer trash behavior rather than silently hard-deleting.
+    app.settings.explorer_delete = "bogus".to_string();
+    app.on_key(key('n')); // cancel the first prompt
+    app.on_key(KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE));
+    let msg = &app.confirm.as_ref().expect("confirm prompt open").message;
+    assert!(
+        msg.contains("trash"),
+        "an unrecognized explorer_delete value should still say trash, got: {msg:?}"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn explorer_delete_hard_mode_says_permanently_and_does_not_trash() {
+    let dir = unique_dir("del-hard-prompt");
+    fs::write(dir.join("a.txt"), "bye\n").unwrap();
+    let mut app = app_at(&dir);
+    app.settings.explorer_delete = "hard".to_string();
+    app.focus = Focus::Explorer;
+    app.explorer.selected = node_index(&app, "a.txt");
+    app.on_key(KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE));
+    let msg = &app.confirm.as_ref().expect("confirm prompt open").message;
+    assert!(
+        msg.to_lowercase().contains("permanent"),
+        "hard mode's prompt should say it's permanent, got: {msg:?}"
+    );
+    app.on_key(key('y'));
+    assert!(!dir.join("a.txt").exists());
     fs::remove_dir_all(&dir).ok();
 }
 

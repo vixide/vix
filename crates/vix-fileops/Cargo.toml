@@ -8,3 +8,4 @@ repository.workspace = true
 description = "Filesystem helpers for the explorer's copy / cut / paste / delete."
 
 [dependencies]
+trash = { workspace = true }

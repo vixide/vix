@@ -106,6 +106,18 @@ pub fn remove_path(path: &Path) -> io::Result<()> {
     }
 }
 
+/// Move a file or directory tree to the OS trash (Recycle Bin / Trash / etc.)
+/// instead of deleting it outright (T209). Unlike [`remove_path`], this can
+/// be undone by the user through their file manager's trash/recycle view.
+///
+/// # Errors
+///
+/// Returns an error if the platform's trash mechanism rejects the move (no
+/// trash available, permission denied, the path doesn't exist, …).
+pub fn trash_path(path: &Path) -> io::Result<()> {
+    trash::delete(path).map_err(io::Error::other)
+}
+
 /// Atomically write `data` to `path`: write a sibling temp file, flush it to
 /// disk, then rename it over the target. A crash or full disk mid-write leaves
 /// the original intact rather than a truncated file, and the rename is atomic so
@@ -546,5 +558,24 @@ mod tests {
         let mode = fs::metadata(&p).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600, "temp file must not be group/world readable");
         let _ = fs::remove_file(&p);
+    }
+
+    #[test]
+    fn trash_path_moves_a_file_out_of_its_original_location() {
+        // A unique name so a re-run (or a parallel test) never collides with
+        // a leftover from a previous pass; nothing here cleans the trash
+        // itself back up, matching what a real "move to trash" should do.
+        let base = std::env::temp_dir();
+        let target = base.join(format!(
+            "vix-trash-test-{}-{}",
+            std::process::id(),
+            TMP_SEQ.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::write(&target, b"trash me").unwrap();
+        trash_path(&target).expect("the OS trash mechanism is available");
+        assert!(
+            !target.exists(),
+            "file should be gone from its original location"
+        );
     }
 }
