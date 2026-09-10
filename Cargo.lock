@@ -5808,6 +5808,7 @@ name = "vix-media-type"
 version = "1.6.0"
 dependencies = [
  "proptest",
+ "vix-list-state",
 ]
 
 [[package]]
@@ -5965,6 +5966,7 @@ name = "vix-system-information-panel"
 version = "1.6.0"
 dependencies = [
  "sysinfo",
+ "vix-list-state",
 ]
 
 [[package]]
