@@ -114,3 +114,124 @@ fn bundled_theme_names_are_unique() {
          only ever offer one of them"
     );
 }
+
+// ----- Theme editor (T202) -------------------------------------------------
+//
+// Driven through `run_action`/`on_key` only, like every other overlay's own
+// tests (see `keybinding_editor_*` in `tests/integration/keybindings.rs`) —
+// `open_theme_editor`/`theme_editor_key`/`save_theme_as` are `pub(super)`,
+// internal to the `app` module, not part of the public API these tests (a
+// separate crate) can call directly.
+//
+// `save_theme_as`'s actual disk write goes through `Settings::themes_dir()`,
+// which (like `Settings::keybindings_path()`, see T204's own tests) has no
+// test-only override — these tests cover everything up to but not including
+// a successful save, so none of them submits a non-empty name.
+
+#[test]
+fn open_theme_editor_starts_from_the_active_default_theme() {
+    let mut app = app_at(Path::new("."));
+    assert_eq!(app.settings.theme, "dark", "the default");
+    app.run_action("view.theme_edit");
+    let editor = app.theme_editor.as_ref().expect("editor opened");
+    // themes/dark.json's own documented values.
+    assert_eq!(editor.theme.editor.foreground, Some([215, 215, 215]));
+    assert_eq!(editor.theme.editor.background, Some([40, 40, 40]));
+    assert_eq!(editor.selected, 0);
+    assert!(!editor.dirty);
+}
+
+#[test]
+fn theme_editor_navigation_moves_the_highlight() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.theme_edit");
+    app.on_key(keycode(KeyCode::Down));
+    assert_eq!(app.theme_editor.as_ref().unwrap().selected, 1);
+    app.on_key(keycode(KeyCode::Up));
+    assert_eq!(app.theme_editor.as_ref().unwrap().selected, 0);
+}
+
+#[test]
+fn enter_opens_the_x11_picker_over_the_theme_editor() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.theme_edit");
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.x11_panel.is_some(), "picker opened");
+    assert!(
+        app.theme_editor.is_some(),
+        "editor stays open underneath the picker"
+    );
+}
+
+#[test]
+fn picking_a_color_applies_it_to_the_selected_slot_and_returns_to_the_editor() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.theme_edit");
+    app.on_key(keycode(KeyCode::Enter)); // open the picker
+    assert!(app.x11_panel.is_some());
+    // Pick whatever the picker's own default selection is - this is about
+    // the theme editor's slot actually changing, not which color it is.
+    let picked = {
+        let c = app.x11_panel.as_ref().unwrap().selected_color();
+        [c.r, c.g, c.b]
+    };
+    app.on_key(keycode(KeyCode::Enter)); // choose it (routes to x11_key)
+    assert!(
+        app.x11_panel.is_none(),
+        "the picker closes once a color is chosen"
+    );
+    let editor = app.theme_editor.as_ref().expect("back at the editor");
+    assert_eq!(
+        editor.theme.menu_bar.foreground,
+        Some(picked),
+        "the highlighted slot (row 0: Menu Bar Foreground) now holds the picked color"
+    );
+    assert!(editor.dirty);
+}
+
+#[test]
+fn esc_closes_the_theme_editor_and_reverts_the_live_preview() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.theme_edit");
+    // Edit a slot (via the same real picker flow the UI uses) so the live
+    // preview genuinely differs from the committed theme, then cancel.
+    app.on_key(keycode(KeyCode::Enter));
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.theme_editor.as_ref().unwrap().dirty, "an edit was made");
+    app.on_key(esc());
+    assert!(app.theme_editor.is_none());
+    assert_eq!(
+        app.settings.theme, "dark",
+        "cancelling never touches the committed setting"
+    );
+    // The live-active theme model reverted too, not just the closed panel's
+    // own draft - Dark's real menu-bar foreground, [215, 215, 215].
+    assert_eq!(
+        vix::theme::region_fg(vix::theme::Region::MenuBar),
+        ratatui::style::Color::Rgb(215, 215, 215)
+    );
+}
+
+#[test]
+fn ctrl_s_opens_the_save_as_prompt() {
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.theme_edit");
+    app.on_key(ctrl('s'));
+    let prompt = app.prompt.as_ref().expect("save-as prompt open");
+    assert!(matches!(prompt.kind, vix::app::PromptKind::ThemeSaveAs));
+}
+
+#[test]
+fn save_theme_as_with_an_empty_name_is_a_no_op() {
+    // Submitting the prompt empty never reaches `Settings::themes_dir()`
+    // (checked first, before any disk access), so this is safe to run for
+    // real rather than needing a test-only override.
+    let mut app = app_at(Path::new("."));
+    app.run_action("view.theme_edit");
+    app.on_key(ctrl('s'));
+    app.on_key(keycode(KeyCode::Enter)); // submit the empty prompt
+    assert!(
+        app.theme_editor.is_some(),
+        "an empty name leaves the editor open, nothing saved"
+    );
+}

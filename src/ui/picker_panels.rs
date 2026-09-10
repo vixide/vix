@@ -303,6 +303,106 @@ pub(super) fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     };
 }
 
+/// Draw the theme editor overlay (T202): one row per color slot, a swatch
+/// plus its `#RRGGBB` value (or a placeholder for an unset slot, which falls
+/// back to the primary editor color like everywhere else the theme model
+/// reads a region color). Mirrors `draw_x11_panel`'s layout.
+pub(super) fn draw_theme_editor(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(editor) = app.theme_editor.as_ref() else {
+        return;
+    };
+    let total = editor.len();
+    let width = 40u16.min(area.width);
+    let max_rows = area.height.saturating_sub(4).max(1);
+    let rows = u16::try_from(total).unwrap_or(u16::MAX).min(max_rows);
+    let height = (rows + 4).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(
+            " {} {} ",
+            icon::PALETTE,
+            t!("ui.theme_editor_title")
+        ));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let view_h = chunks[0].height as usize;
+    if let Some(p) = app.theme_editor.as_mut() {
+        p.ensure_visible(view_h);
+    }
+    let editor = app.theme_editor.as_ref().unwrap();
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for (i, slot) in vix_theme_editor_panel::Slot::ALL
+        .iter()
+        .enumerate()
+        .skip(editor.scroll)
+        .take(view_h)
+    {
+        let rgb = slot.get(&editor.theme);
+        let (swatch, hex) = match rgb {
+            Some([r, g, b]) => (
+                Span::styled("██", Style::default().fg(Color::Rgb(r, g, b))),
+                format!("#{r:02X}{g:02X}{b:02X}"),
+            ),
+            None => (Span::raw("··"), "—".to_string()),
+        };
+        let text = format!(" {:7} {}", hex, t!(slot.label_key()));
+        let label = if i == editor.selected {
+            Span::styled(text, theme::selected())
+        } else {
+            Span::raw(text)
+        };
+        lines.push(Line::from(vec![Span::raw(" "), swatch, label]));
+    }
+    let show_bar = total > view_h && chunks[0].width > 1;
+    let row_area = if show_bar {
+        Rect {
+            width: chunks[0].width - 1,
+            ..chunks[0]
+        }
+    } else {
+        chunks[0]
+    };
+    frame.render_widget(Paragraph::new(lines), row_area);
+    if show_bar {
+        let sb_area = Rect {
+            x: chunks[0].x + chunks[0].width - 1,
+            ..chunks[0]
+        };
+        draw_scrollbar(frame, sb_area, editor.selected, total.saturating_sub(1));
+    }
+
+    let hint = Line::from(Span::styled(
+        t!("ui.theme_editor_hint").to_string(),
+        theme::dim(),
+    ));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
+
+    app.layout.theme_editor = Rect {
+        x: chunks[0].x,
+        y: chunks[0].y,
+        width: row_area.width,
+        height: u16::try_from(view_h)
+            .unwrap_or(u16::MAX)
+            .min(chunks[0].height),
+    };
+}
+
 pub(super) fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.media_type_panel.is_none() {
         return;

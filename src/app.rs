@@ -242,6 +242,9 @@ pub enum PromptKind {
     /// `vix-macros` token (e.g. `C-S-k`); `App::pending_rebind_action_id`
     /// carries which action it should rebind to (T204).
     RebindKey,
+    /// Enter a name to save the theme editor's draft under (T202); the
+    /// draft itself lives in `App::theme_editor`.
+    ThemeSaveAs,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -1241,6 +1244,8 @@ pub struct Layout {
     /// Row-list rectangle of the open X11 color palette, so a click can hit-test
     /// which row was picked.
     pub x11_panel: Rect,
+    /// Row-list rectangle of the open theme editor, for click-to-select.
+    pub theme_editor: Rect,
     /// Row-list rectangle of the media-type picker, for click-to-select.
     pub media_type_panel: Rect,
     /// Row-list rectangle of the open HTML character palette, so a click can
@@ -1446,6 +1451,15 @@ pub struct App {
     pub db: Option<crate::db::Browser>,
     /// X11 color palette overlay, when open.
     pub x11_panel: Option<X11Panel>,
+    /// Theme editor overlay (T202), when open.
+    pub theme_editor: Option<vix_theme_editor_panel::Panel>,
+    /// Whether [`App::x11_panel`] was opened *from* the theme editor to pick
+    /// a slot's color, rather than from Tools → X11 Colors to insert a hex
+    /// value into a buffer — its `Enter` handler branches on this.
+    theme_editor_picking: bool,
+    /// The theme editor's committed baseline, to revert to if the editor is
+    /// closed (`Esc`) without saving. `None` when the editor is closed.
+    theme_editor_baseline: Option<String>,
     /// Media-type (MIME) picker overlay, when open.
     pub media_type_panel: Option<crate::media_type::Panel>,
     /// Receiver for an in-flight HTTP request's response (background `curl`).
@@ -1920,6 +1934,9 @@ impl App {
             db: None,
             qrcode: None,
             x11_panel: None,
+            theme_editor: None,
+            theme_editor_picking: false,
+            theme_editor_baseline: None,
             media_type_panel: None,
             http_rx: None,
             html_panel: None,
@@ -2243,6 +2260,7 @@ impl App {
                 );
             }
             a if a.starts_with("view.theme:") => self.set_theme_by_name(&a["view.theme:".len()..]),
+            "view.theme_edit" => self.open_theme_editor(),
             a if a.starts_with("view.locale:") => {
                 self.set_locale_by_code(&a["view.locale:".len()..]);
             }
@@ -7248,6 +7266,7 @@ impl App {
         panel!(nerd_palette, nerd_mouse);
         panel!(ascii_panel, ascii_mouse);
         panel!(x11_panel, x11_mouse);
+        panel!(theme_editor, theme_editor_mouse);
         panel!(media_type_panel, media_type_mouse);
         panel!(html_panel, html_mouse);
         panel!(system_info, system_info_mouse);
@@ -11968,6 +11987,7 @@ impl App {
             PromptKind::RunCommand => self.run_command(&prompt.input),
             PromptKind::Script => self.accept_script_prompt(&prompt.input),
             PromptKind::RebindKey => self.accept_rebind_key(prompt.input.trim()),
+            PromptKind::ThemeSaveAs => self.save_theme_as(prompt.input.trim()),
             PromptKind::SearchToDock => {
                 self.search_workspace_to_dock(&prompt.input, prompt.case_sensitive, prompt.regex);
             }

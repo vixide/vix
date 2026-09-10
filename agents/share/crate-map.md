@@ -2,7 +2,7 @@
 
 Vix is a **Cargo workspace** (`[workspace] members = ["crates/*"]`) on **edition
 2024**. The root package `vix` (`src/`) is the thin **App shell** — CLI, event
-loop, `App` state, rendering, and the explorer — and it depends on the 111
+loop, `App` state, rendering, and the explorer — and it depends on the 112
 `vix-*` **member crates** under `crates/` that hold every feature plus the custom
 editor widget (`vix-editor-core`). Shared reference for where things live.
 
@@ -20,9 +20,12 @@ Every crate root sets `#![forbid(unsafe_code)]`, `#![deny(missing_docs)]`, and
 `#![warn(clippy::pedantic)]`. There is **no** blanket `#![allow(clippy::pedantic)]`
 or `#![allow(missing_docs)]` anywhere — findings are fixed in code. Sanctioned
 allows are only a few **targeted** ones: `#[allow(clippy::struct_excessive_bools)]`
-on genuine state structs (`App`, `Settings`, `SearchBar`, `WorkspaceSearch`, and
-`vix-editor-core`'s `Editor`) and a handful of `#[allow(clippy::too_many_lines)]` /
-`too_many_arguments` on specific functions that resist further extraction.
+on `App` and `Settings` (T149 converted `SearchBar`/`WorkspaceSearch`/
+`DblockParams`/both `Editor`s to a `bitflags`-based `Flags` field instead,
+removing their allows — prefer that over a new allow for a struct whose
+bools are independent, freely-combinable toggles) and a handful of
+`#[allow(clippy::too_many_lines)]` / `too_many_arguments` on specific
+functions that resist further extraction.
 `cargo clippy --all-targets -- -D warnings` is clean. See
 [[rust-clippy-pedantic]] / `spec/rust-clippy-pedantic`.
 
@@ -110,7 +113,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 | Networking  | `vix-http-client` (`.http`-buffer parser + blocking `ureq` send; response into a tab). |
 | Undo store  | `vix-undo-store` (persist/restore the undo tree per file under `<config>/undo/`, content-hash guarded). |
 | Clipboard   | `vix-clipboard` (process-wide serialized clipboard access; the platform pasteboard is opt-in through `use_system`, so a test run never touches it). |
-| Themes      | `vix-theme` (Nerd Font icons + theme style helpers), `vix-base16` (bundled base16 color themes). |
+| Themes      | `vix-theme` (Nerd Font icons + theme style helpers), `vix-theme-model` (the JSON theme model + serialization), `vix-base16` (bundled base16 color themes), `vix-theme-editor-panel` (T202: **Vix → Theme → Edit Theme…** — list a theme's 15 color slots, edit each via the existing X11 color picker, live preview, Save As). |
 | Edit surfaces | `vix-edit-value` (JSON/YAML tree, `Tree` + `Format`), `vix-edit-bytes` (hex/ASCII byte editor, `Hex`), `vix-edit-sql` (SQL statement list, `Editor`), `vix-edit-outline` (T152: prose-hierarchy outline, `Tree` + `Outcome`), `vix-edit-table` (T152: CSV/TSV spreadsheet grid, `Grid` + `Outcome`). Overlay editors with their own `handle_key`/`Outcome`, under **Edit → Mode**. (`vix-column-view`, above, is this family's Org-specific sibling.) |
 | Generators  | `vix-qr-tool` (QR code via the `qrcode` crate, Unicode renderer), `vix-lorem` (deterministic lorem-ipsum text). |
 | Tool dialogs| `vix-calculator-tool`, `vix-color-converter-tool`, `vix-unit-converter-tool`, `vix-pomodoro-tool`. |
@@ -129,7 +132,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 
 | Path            | Contents                                                            |
 | --------------- | ------------------------------------------------------------------- |
-| `crates/`       | The 111 `vix-*` workspace member crates (each with its own `spec/`).|
+| `crates/`       | The 112 `vix-*` workspace member crates (each with its own `spec/`).|
 | `langs/`        | Tree-sitter highlight queries (`<lang>/highlights.scm`), embedded.  |
 | `locales/`      | `app.yml` — rust-i18n translations (English fallback).              |
 | `dictionaries/` | Hunspell dictionaries — gitignored; see `crates/vix-spellcheck/spec/dictionaries`. |
