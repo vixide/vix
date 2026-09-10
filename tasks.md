@@ -2011,6 +2011,27 @@ and its own gate run, zero intended behavior change unless stated.
   for the combined change. Where the bools are really one mode, an enum
   remains the right tool — none of the five converted structs needed
   that; each pass unlocked a genuine independent-toggle bitset.
+  **`App`/`Settings` scoped and explicitly deferred indefinitely
+  (2026-09-10)**, not just "later" — user chose to stop at 5/7 rather
+  than proceed once real scope was measured. Findings, for whoever
+  picks this up: `Settings` (31 bools) has a clean, *verified* fix —
+  not bitflags (a packed integer is a poor fit for a config file users
+  hand-edit) but grouping into small `#[serde(default)]` sub-structs,
+  `#[serde(flatten)]`'d back onto `Settings` so the on-disk
+  `config.toml` format is byte-for-byte unchanged (confirmed with a
+  standalone round-trip test: flatten + old-format-missing-fields both
+  work correctly with `toml`/`serde`) — but every `settings.<field>`
+  read site still needs updating to `settings.<group>.<field>`, and
+  there are **~200+** of those across `src/`. `App` (19 bools) is a
+  poorer fit for any single unifying scheme — its bools are
+  semantically scattered (panel visibility, one-shot signals like
+  `should_quit`, editor modes, workspace facts like `git_repo`), so
+  grouping needs real per-field judgment calls, not a mechanical pass,
+  and its bools are read at **~150+** call sites. Combined, this is a
+  ~350-450 call-site refactor, categorically larger than any of the
+  five structs already converted (each was ~20-30 call sites) — that's
+  *why* it was worth measuring and checking in on rather than starting
+  on the strength of the other five going smoothly.
 - [x] **T150 — Remove the two crate-level blanket allows.** Done. Both
   gone, no per-expression allow needed to replace either: `multicursor.rs`'s
   `multi_insert`/`multi_delete` — the only cast sites in the file —
@@ -2438,10 +2459,12 @@ is listed explicitly.
 8. **Security:** T131/T132/T133 are done. **T134 remains**, blocked on
    T105 and T124/T125 shipping.
 9. **CI + code quality:** T009/T010/T141/T142/T143/T144/T145/T146/T147/
-   T148/T150/T151/T152/T153/T154 are all done. **T149 is 5/7 done**
-   (`App`/`Settings` deferred to a separate pass by explicit user
-   choice — see T149's own entry). **What's left**: T149's `App`/
-   `Settings` remainder is the only thing still open in this run.
+   T148/T150/T151/T152/T153/T154 are all done. **T149 is 5/7 done, and
+   that's where it stops** — `App`/`Settings` (measured at ~350-450
+   call sites combined) were explicitly deferred indefinitely by the
+   user once real scope was in hand, not just pushed to "later" (see
+   T149's own entry for the concrete findings). This run has nothing
+   else open.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.
