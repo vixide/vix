@@ -1689,16 +1689,50 @@ and its own gate run, zero intended behavior change unless stated.
   `vix-clipboard/spec` → `tests/integration/editing.rs` ×2,
   `tests/integration/catalog.rs`). No CHANGELOG entry: pure-internal,
   zero product behavior change, matching T150/T154 precedent.
-- [ ] **T144 — One list-navigation state instead of eighteen.**
-  `ensure_visible` is defined in 18 crates, `up`/`down` in 18,
-  `page_up`/`page_down` in 14, `select_index` in 11 — every
-  panel/chooser reimplements the same `selected`/`scroll` bookkeeping
-  (spot-checked identical in `vix-file-browser-panel`, `vix-palette`,
-  `vix-git-panel`). Extract a `ListCursor { selected, scroll }` with
-  those methods (a new `vix-list-state` crate, or into whichever core
-  crate every panel already depends on) and migrate one panel per
-  commit. Removes several hundred lines and the class of "this panel's
-  page-down is off by one" bugs.
+- [x] **T144 — One list-navigation state instead of eighteen.** Done.
+  New `vix-list-state` crate: 6 pure functions (`up`, `down`,
+  `page_up`, `page_down`, `select_index`, `ensure_visible`), then one
+  commit per panel migrating its method bodies to delegate to them —
+  18 commits total (the crate + 17 panel crates; `vix-db` counted as
+  one commit covering 3 separate scrolling lists — catalog, statement
+  editor, results grid — each with its own field names).
+  Verified against real code, not the task's own count: `ensure_visible`
+  was in 17 crates (not quite 18 — `vix-db`'s 3 files pushed the
+  file-count to 19, but that's 17 distinct crates), and only 11 of
+  those also had standalone `up`/`down`/`page_up`/`page_down`/
+  `select_index` methods (the rest — `vix-db`'s 3 lists,
+  `vix-edit-bytes`, `vix-edit-outline`, `vix-edit-sql`, `vix-edit-value`
+  — inline their movement directly in a `handle_key`, sometimes under a
+  combined `step(up: bool, n: usize)` rather than four separate
+  methods). `vix-palette`'s `up`/`down` (named as a third "spot-checked
+  identical" example) turned out to have no `scroll`/`page`/
+  `select_index` concept at all — a much smaller, weaker instance of
+  the pattern, left alone rather than chased for scope's sake.
+  `vix-git-panel` (the task's other named example) doesn't exist as a
+  crate at all; git's own navigation lives ad hoc in `src/app/git.rs`.
+  A `ListCursor { selected, scroll }` struct (the task's own literal
+  suggestion) was tried first and rejected: panel fields aren't
+  uniformly named (`selected`/`sel`/`row`/`top`), several panels don't
+  store a plain index at all (`vix-edit-bytes` derives a row from a
+  byte cursor, `vix-edit-outline` derives a position from a computed
+  visible-node list), and dozens of external call sites across
+  `src/app.rs`/`src/ui/*.rs` read a panel's `.selected`/`.scroll`
+  fields directly — a shared struct would force renaming every panel's
+  public fields for a purely internal deduplication. Plain functions
+  over `usize`s fit every panel with zero public API change: every
+  method's signature stayed exactly the same, only bodies changed to
+  one-line delegations.
+  Two real, if minor, behavior fixes fell out of the unification:
+  `vix-file-browser-panel`'s `ensure_visible` never clamped scroll
+  against the list's own length at all (the one panel out of 17
+  missing that clamp), and `vix-db`'s SQL statement editor had the
+  same gap. Both now get the same "never scroll past the end" behavior
+  every other panel already had. Crate count 110 → 111. Full
+  `scripts/check` gate run once at the end (not per-commit — see the
+  commit log on `feat/t144-list-cursor` for the per-panel history)
+  before the single merge to `main`, consistent with "gate before
+  merge" (one merge, one gate) while keeping "one commit per panel"
+  for bisectable history.
 - [x] **T145 — Consolidate the T104 epic's own leftovers.** T104c–g each
   added a near-identical key-token builder to `src/app.rs`:
   `vscode_ctrl_token`, `intellij_ctrl_token`, `eclipse_token`,
@@ -2403,11 +2437,11 @@ is listed explicitly.
    (benches, audits) exists. Not started.
 8. **Security:** T131/T132/T133 are done. **T134 remains**, blocked on
    T105 and T124/T125 shipping.
-9. **CI + code quality:** T009/T010/T141/T142/T143/T145/T146/T147/T148/
-   T150/T151/T152/T153/T154 are all done. **T149 is 5/7 done** (`App`/
-   `Settings` deferred to a separate pass by explicit user choice — see
-   T149's own entry). **What's left**: T144, and T149's `App`/`Settings`
-   remainder, independent of each other and of the rest.
+9. **CI + code quality:** T009/T010/T141/T142/T143/T144/T145/T146/T147/
+   T148/T150/T151/T152/T153/T154 are all done. **T149 is 5/7 done**
+   (`App`/`Settings` deferred to a separate pass by explicit user
+   choice — see T149's own entry). **What's left**: T149's `App`/
+   `Settings` remainder is the only thing still open in this run.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.
