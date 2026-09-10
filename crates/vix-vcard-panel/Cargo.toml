@@ -8,4 +8,5 @@ repository.workspace = true
 description = "Display one parsed vCard as a table of labelled fields, plus panel state."
 
 [dependencies]
+vix-list-state = { path = "../vix-list-state", version = "1.6.0" }
 vix-vcard-parser = { path = "../vix-vcard-parser", version = "1.5.0" }
