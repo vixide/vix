@@ -131,15 +131,8 @@ impl Hex {
 
     /// Adjust the scroll so the cursor's row stays within a `height`-row window.
     pub fn ensure_visible(&mut self, height: usize) {
-        let height = height.max(1);
         let row = self.cursor / COLS;
-        if row < self.scroll {
-            self.scroll = row;
-        } else if row >= self.scroll + height {
-            self.scroll = row + 1 - height;
-        }
-        let max = self.rows().saturating_sub(height);
-        self.scroll = self.scroll.min(max);
+        self.scroll = vix_list_state::ensure_visible(row, self.scroll, height, self.rows());
     }
 
     /// Interpret a key event and report what the host should do next.

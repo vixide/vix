@@ -9,3 +9,4 @@ description = "The SQL edit surface: a statement-oriented view of a `.sql` buffe
 
 [dependencies]
 crossterm = { workspace = true }
+vix-list-state = { path = "../vix-list-state", version = "1.6.0" }

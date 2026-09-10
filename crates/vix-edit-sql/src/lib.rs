@@ -217,16 +217,7 @@ impl Editor {
 
     /// Keep the selection within a window of `height` visible rows.
     pub fn ensure_visible(&mut self, height: usize) {
-        let height = height.max(1);
-        if self.sel < self.scroll {
-            self.scroll = self.sel;
-        } else if self.sel >= self.scroll + height {
-            self.scroll = self.sel + 1 - height;
-        }
-        let max_scroll = self.len().saturating_sub(height);
-        if self.scroll > max_scroll {
-            self.scroll = max_scroll;
-        }
+        self.scroll = vix_list_state::ensure_visible(self.sel, self.scroll, height, self.len());
     }
 
     /// Handle a key, returning what the host should do.

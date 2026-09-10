@@ -9,3 +9,4 @@ description = "Left dock: the file explorer's lazily-expanded directory tree + s
 
 [dependencies]
 regex = { workspace = true }
+vix-list-state = { path = "../vix-list-state", version = "1.6.0" }

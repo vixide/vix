@@ -305,37 +305,29 @@ impl Picker {
 
     /// Move the highlight up `n`, clamped.
     pub fn up(&mut self, n: usize) {
-        self.selected = self.selected.saturating_sub(n.max(1));
+        self.selected = vix_list_state::page_up(self.selected, n);
     }
 
     /// Move the highlight down `n`, clamped to the filtered length.
     pub fn down(&mut self, n: usize, library: &[Snippet]) {
-        let last = self.len(library).saturating_sub(1);
-        self.selected = (self.selected + n.max(1)).min(last);
+        self.selected = vix_list_state::page_down(self.selected, n, self.len(library));
     }
 
     /// Select a filtered row directly; returns whether it was real.
     pub fn select_index(&mut self, idx: usize, library: &[Snippet]) -> bool {
-        if idx < self.len(library) {
-            self.selected = idx;
-            true
-        } else {
-            false
+        match vix_list_state::select_index(idx, self.len(library)) {
+            Some(i) => {
+                self.selected = i;
+                true
+            }
+            None => false,
         }
     }
 
     /// Keep the highlight within a window of `height` rows.
     pub fn ensure_visible(&mut self, height: usize, library: &[Snippet]) {
-        let height = height.max(1);
-        if self.selected < self.scroll {
-            self.scroll = self.selected;
-        } else if self.selected >= self.scroll + height {
-            self.scroll = self.selected + 1 - height;
-        }
-        let max_scroll = self.len(library).saturating_sub(height);
-        if self.scroll > max_scroll {
-            self.scroll = max_scroll;
-        }
+        self.scroll =
+            vix_list_state::ensure_visible(self.selected, self.scroll, height, self.len(library));
     }
 
     /// The library index of the highlighted row, if any.

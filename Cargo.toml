@@ -312,6 +312,8 @@ vix-keybindings = { path = "crates/vix-keybindings", version = "1.6.0" }
 vix-keymap-model = { path = "crates/vix-keymap-model", version = "1.6.0" }
 # Left dock: the file explorer's lazily-expanded directory tree + selection.
 vix-left-dock = { path = "crates/vix-left-dock", version = "1.6.0" }
+# Shared selected/scroll arithmetic for a scrollable single-selection list.
+vix-list-state = { path = "crates/vix-list-state", version = "1.6.0" }
 # Available UI languages for Vix; the View → Locale submenu.
 vix-locale-model = { path = "crates/vix-locale-model", version = "1.6.0" }
 # Lorem ipsum placeholder text (Tools → Insert → Lorem ipsum).

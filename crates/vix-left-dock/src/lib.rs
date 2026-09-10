@@ -124,16 +124,8 @@ impl Explorer {
     /// Adjust the scroll offset so the selection stays within a `height`-row
     /// viewport. Returns the first visible index.
     pub fn ensure_visible(&mut self, height: usize) -> usize {
-        let height = height.max(1);
-        if self.selected < self.top {
-            self.top = self.selected;
-        } else if self.selected >= self.top + height {
-            self.top = self.selected + 1 - height;
-        }
-        let max_top = self.nodes.len().saturating_sub(height);
-        if self.top > max_top {
-            self.top = max_top;
-        }
+        self.top =
+            vix_list_state::ensure_visible(self.selected, self.top, height, self.nodes.len());
         self.top
     }
 
@@ -242,24 +234,22 @@ impl Explorer {
 
     /// Move the selection up one row.
     pub fn up(&mut self) {
-        self.selected = self.selected.saturating_sub(1);
+        self.selected = vix_list_state::up(self.selected);
     }
 
     /// Move the selection down one row.
     pub fn down(&mut self) {
-        if self.selected + 1 < self.nodes.len() {
-            self.selected += 1;
-        }
+        self.selected = vix_list_state::down(self.selected, self.nodes.len());
     }
 
     /// Move the selection up by `n` rows.
     pub fn page_up(&mut self, n: usize) {
-        self.selected = self.selected.saturating_sub(n);
+        self.selected = vix_list_state::page_up(self.selected, n);
     }
 
     /// Move the selection down by `n` rows.
     pub fn page_down(&mut self, n: usize) {
-        self.selected = (self.selected + n).min(self.nodes.len().saturating_sub(1));
+        self.selected = vix_list_state::page_down(self.selected, n, self.nodes.len());
     }
 
     /// Select the first row.

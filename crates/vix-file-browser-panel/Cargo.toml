@@ -9,4 +9,5 @@ description = "File browser panel (File → Open): recursive listing with fuzzy 
 
 [dependencies]
 walkdir = { workspace = true }
+vix-list-state = { path = "../vix-list-state", version = "1.6.0" }
 vix-palette = { path = "../vix-palette", version = "1.5.0" }

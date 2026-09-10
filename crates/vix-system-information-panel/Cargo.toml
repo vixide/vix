@@ -9,3 +9,4 @@ description = "A read-only snapshot of host system information, plus the panel's
 
 [dependencies]
 sysinfo = { workspace = true }
+vix-list-state = { path = "../vix-list-state", version = "1.6.0" }

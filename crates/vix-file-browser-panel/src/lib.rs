@@ -250,34 +250,31 @@ impl Panel {
 
     /// Move the highlight up one row, stopping at the top.
     pub fn up(&mut self) {
-        self.selected = self.selected.saturating_sub(1);
+        self.selected = vix_list_state::up(self.selected);
     }
 
     /// Move the highlight down one row, stopping at the bottom.
     pub fn down(&mut self) {
-        if self.selected + 1 < self.len() {
-            self.selected += 1;
-        }
+        self.selected = vix_list_state::down(self.selected, self.len());
     }
 
     /// Move the highlight up one page, stopping at the top.
     pub fn page_up(&mut self, page: usize) {
-        self.selected = self.selected.saturating_sub(page.max(1));
+        self.selected = vix_list_state::page_up(self.selected, page);
     }
 
     /// Move the highlight down one page, stopping at the bottom.
     pub fn page_down(&mut self, page: usize) {
-        self.selected = (self.selected + page.max(1)).min(self.len().saturating_sub(1));
+        self.selected = vix_list_state::page_down(self.selected, page, self.len());
     }
 
-    /// Scroll just enough to keep the highlight inside a `view_h`-row viewport.
+    /// Scroll just enough to keep the highlight inside a `view_h`-row
+    /// viewport, never past the end of the list (T144: this panel used to be
+    /// the one exception that didn't clamp scroll against its own length —
+    /// unifying onto the shared function fixed that).
     pub fn ensure_visible(&mut self, view_h: usize) {
-        let h = view_h.max(1);
-        if self.selected < self.scroll {
-            self.scroll = self.selected;
-        } else if self.selected >= self.scroll + h {
-            self.scroll = self.selected + 1 - h;
-        }
+        self.scroll =
+            vix_list_state::ensure_visible(self.selected, self.scroll, view_h, self.len());
     }
 
     /// Advance to the next sort column (name → size → created → modified),

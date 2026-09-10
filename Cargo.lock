@@ -5241,6 +5241,7 @@ dependencies = [
  "vix-keyboard-shortcut-panel",
  "vix-keymap-model",
  "vix-left-dock",
+ "vix-list-state",
  "vix-locale-model",
  "vix-lorem",
  "vix-lsp",
@@ -5320,6 +5321,9 @@ version = "1.6.0"
 [[package]]
 name = "vix-ascii-character-picker"
 version = "1.6.0"
+dependencies = [
+ "vix-list-state",
+]
 
 [[package]]
 name = "vix-base-tool"
@@ -5407,6 +5411,9 @@ version = "1.6.0"
 [[package]]
 name = "vix-contact-panel"
 version = "1.6.0"
+dependencies = [
+ "vix-list-state",
+]
 
 [[package]]
 name = "vix-convert-from-csv-into-json-tool"
@@ -5537,6 +5544,7 @@ dependencies = [
  "vix-clipboard",
  "vix-fileops",
  "vix-i18n",
+ "vix-list-state",
  "vix-theme",
 ]
 
@@ -5552,6 +5560,7 @@ name = "vix-edit-bytes"
 version = "1.6.0"
 dependencies = [
  "crossterm",
+ "vix-list-state",
 ]
 
 [[package]]
@@ -5559,6 +5568,7 @@ name = "vix-edit-outline"
 version = "1.6.0"
 dependencies = [
  "crossterm",
+ "vix-list-state",
 ]
 
 [[package]]
@@ -5566,6 +5576,7 @@ name = "vix-edit-sql"
 version = "1.6.0"
 dependencies = [
  "crossterm",
+ "vix-list-state",
 ]
 
 [[package]]
@@ -5584,6 +5595,7 @@ dependencies = [
  "proptest",
  "serde_json",
  "serde_yaml",
+ "vix-list-state",
 ]
 
 [[package]]
@@ -5654,6 +5666,7 @@ dependencies = [
 name = "vix-file-browser-panel"
 version = "1.6.0"
 dependencies = [
+ "vix-list-state",
  "vix-palette",
  "walkdir",
 ]
@@ -5661,6 +5674,9 @@ dependencies = [
 [[package]]
 name = "vix-file-information-panel"
 version = "1.6.0"
+dependencies = [
+ "vix-list-state",
+]
 
 [[package]]
 name = "vix-fileops"
@@ -5693,6 +5709,9 @@ dependencies = [
 [[package]]
 name = "vix-html-character-picker"
 version = "1.6.0"
+dependencies = [
+ "vix-list-state",
+]
 
 [[package]]
 name = "vix-http-client"
@@ -5743,7 +5762,12 @@ name = "vix-left-dock"
 version = "1.6.0"
 dependencies = [
  "regex",
+ "vix-list-state",
 ]
+
+[[package]]
+name = "vix-list-state"
+version = "1.6.0"
 
 [[package]]
 name = "vix-locale-model"
@@ -5791,6 +5815,7 @@ name = "vix-media-type"
 version = "1.6.0"
 dependencies = [
  "proptest",
+ "vix-list-state",
 ]
 
 [[package]]
@@ -5847,6 +5872,9 @@ dependencies = [
 [[package]]
 name = "vix-outline-panel"
 version = "1.6.0"
+dependencies = [
+ "vix-list-state",
+]
 
 [[package]]
 name = "vix-palette"
@@ -5928,6 +5956,7 @@ name = "vix-snippets"
 version = "1.6.0"
 dependencies = [
  "serde_json",
+ "vix-list-state",
  "vix-settings",
  "vix-snippet-tool",
 ]
@@ -5948,6 +5977,7 @@ name = "vix-system-information-panel"
 version = "1.6.0"
 dependencies = [
  "sysinfo",
+ "vix-list-state",
 ]
 
 [[package]]
@@ -6046,6 +6076,7 @@ dependencies = [
 name = "vix-vcard-panel"
 version = "1.6.0"
 dependencies = [
+ "vix-list-state",
  "vix-vcard-parser",
 ]
 
@@ -6087,6 +6118,9 @@ dependencies = [
 [[package]]
 name = "vix-x11-color-picker"
 version = "1.6.0"
+dependencies = [
+ "vix-list-state",
+]
 
 [[package]]
 name = "vix-zid-tool"
