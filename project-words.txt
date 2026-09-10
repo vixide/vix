@@ -287,6 +287,10 @@ lychee
 retarget
 tlsv
 
+# git CLI (docs/cli, difftool/mergetool config snippets)
+difftool
+mergetool
+
 # Common code tokens that appear in prose/comments
 struct
 structs

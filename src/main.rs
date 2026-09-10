@@ -32,27 +32,68 @@ use vix::app::App;
 use vix::settings::Settings;
 use vix::ui;
 
+// `--version` is hand-rolled (`disable_version_flag`) rather than left to
+// clap's automatic short-circuiting handler, so `--version --json` can be
+// told apart from plain `--version` before anything exits (T208). A plain
+// comment, not a doc comment: clap's derive would otherwise show this
+// implementation rationale as the command's own `--help` text.
 /// Command-line interface for Vix.
 #[derive(Parser, Debug)]
-#[command(name = "vix", version, about = "Vix: Simple Terminal Rust IDE")]
+#[command(
+    name = "vix",
+    about = "Vix: Simple Terminal Rust IDE",
+    disable_version_flag = true
+)]
 struct Cli {
-    /// File(s) to open on startup; the last one is focused.
+    /// File(s) to open on startup; the last one is focused. A single `-`
+    /// reads standard input into an unsaved scratch buffer instead of
+    /// opening a file (e.g. `git show HEAD:path | vix -`).
     files: Vec<PathBuf>,
 
     /// UI language as a locale code (e.g. en, es, fr, de, cy). Overrides the
     /// saved `locale` setting for this run only.
     #[arg(short, long)]
     locale: Option<String>,
+
+    /// Open a read-only unified-diff overlay comparing two files directly,
+    /// bypassing the active buffer — the shape a `git difftool` driver
+    /// invokes with (`$LOCAL $REMOTE`). See `docs/cli/index.md` for the git
+    /// config snippet.
+    #[arg(long, num_args = 2, value_names = ["OLD", "NEW"])]
+    diff: Option<Vec<PathBuf>>,
+
+    /// Print the version and exit. Combine with `--json` for a
+    /// machine-readable form.
+    #[arg(long)]
+    version: bool,
+
+    /// With `--version`, print `{"name", "version"}` as JSON instead of
+    /// plain text.
+    #[arg(long, requires = "version")]
+    json: bool,
 }
 
 fn main() -> io::Result<()> {
+    let cli = Cli::parse();
+
+    if cli.version {
+        if cli.json {
+            println!(
+                r#"{{"name":"vix","version":"{}"}}"#,
+                env!("CARGO_PKG_VERSION")
+            );
+        } else {
+            println!("vix {}", env!("CARGO_PKG_VERSION"));
+        }
+        return Ok(());
+    }
+
     // Opt this process into the real system clipboard. Everything that does not
     // call this — the test suite above all — copies and pastes through an
     // in-memory clipboard instead, so running the tests cannot overwrite what
     // the user had on their pasteboard.
     vix::clipboard::use_system();
 
-    let cli = Cli::parse();
     let settings = Settings::load();
 
     // A `--locale` flag wins over the persisted setting, but is not saved back.
@@ -71,14 +112,27 @@ fn main() -> io::Result<()> {
     // First-run welcome screen (no-op after it has been seen once).
     app.maybe_show_welcome();
 
-    // Optional file argument(s): open each, focusing the last. With no file
-    // given, reopen the previous session for this workspace (if enabled).
+    // Optional file argument(s): open each, focusing the last. A single `-`
+    // reads stdin into a scratch buffer instead of opening a file named
+    // "-". With no file given, reopen the previous session for this
+    // workspace (if enabled).
     if cli.files.is_empty() {
         app.restore_session();
+    } else if cli.files == [PathBuf::from("-")] {
+        let mut content = String::new();
+        io::Read::read_to_string(&mut io::stdin(), &mut content)?;
+        app.open_stdin_buffer(&content);
     } else {
         for path in cli.files {
             app.open_initial(&path);
         }
+    }
+
+    // `--diff OLD NEW`: a read-only comparison overlay, independent of
+    // whatever else just opened — the shape a `git difftool` driver invokes
+    // with. `num_args = 2` on the arg guarantees exactly two paths here.
+    if let Some(paths) = cli.diff {
+        app.open_diff_files(&paths[0], &paths[1]);
     }
 
     let mut terminal = ratatui::init();

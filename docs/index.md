@@ -10,8 +10,10 @@ Highlights:
   member crates), event flow, rendering, theming, i18n, configuration, testing.
 - [Keybindings](keybindings/index.md) — every keyboard shortcut and mouse
   gesture, including keymaps.
-- [Configuration](configuration/index.md) — settings file, every key, CLI
-  flags. · [EditorConfig](editorconfig/index.md) — per-project `.editorconfig`.
+- [Configuration](configuration/index.md) — settings file, every key.
+  · [Command line](cli/index.md) — flags, stdin, `--diff`, `git difftool`/
+  `mergetool` integration. · [EditorConfig](editorconfig/index.md) —
+  per-project `.editorconfig`.
 - [Themes](themes/index.md) · [Internationalization](internationalization/index.md)
   · [Keymaps](keymaps/index.md) · [Menus](menus/index.md)
 - [Language Server Protocol](language-server-protocol/index.md) — diagnostics,

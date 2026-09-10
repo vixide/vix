@@ -3564,3 +3564,61 @@ fn welcome_dialog_shows_on_the_first_launch_only() {
 
     fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn open_stdin_buffer_loads_the_exact_piped_content() {
+    // T208's `vix -`: no header line injected, unlike the plain New Scratch
+    // Buffer action - the caller may want to save or otherwise act on
+    // precisely what it piped in.
+    let mut app = app_at(Path::new("."));
+    app.open_stdin_buffer("piped\ncontent\n");
+    let tab = app.editor.active_tab().unwrap();
+    assert_eq!(tab.text(), "piped\ncontent\n");
+    assert!(tab.path.is_none(), "unsaved, like any other new buffer");
+}
+
+#[test]
+fn open_diff_files_compares_two_files_directly() {
+    // T208's `--diff OLD NEW`: independent of any open buffer, unlike
+    // Tools -> Compare With File...
+    let dir = unique_dir("cli-diff");
+    let old = dir.join("old.txt");
+    let new = dir.join("new.txt");
+    fs::write(&old, "one\ntwo\nthree\n").unwrap();
+    fs::write(&new, "one\nTWO\nthree\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_diff_files(&old, &new);
+    let view = app.diff_view.as_ref().expect("diff overlay opened");
+    assert!(view.title.contains("old.txt"));
+    assert!(view.title.contains("new.txt"));
+    assert!(!view.lines.is_empty(), "one line differs");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn open_diff_files_reports_identical_files_without_opening_the_overlay() {
+    let dir = unique_dir("cli-diff-same");
+    let old = dir.join("old.txt");
+    let new = dir.join("new.txt");
+    fs::write(&old, "same\n").unwrap();
+    fs::write(&new, "same\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_diff_files(&old, &new);
+    assert!(app.diff_view.is_none());
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn open_diff_files_reports_a_missing_file_without_panicking() {
+    let dir = unique_dir("cli-diff-missing");
+    let old = dir.join("missing.txt");
+    let new = dir.join("new.txt");
+    fs::write(&new, "here\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_diff_files(&old, &new);
+    assert!(
+        app.diff_view.is_none(),
+        "should not open an overlay for a failed read"
+    );
+    fs::remove_dir_all(&dir).ok();
+}

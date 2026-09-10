@@ -2285,10 +2285,36 @@ and its own gate run, zero intended behavior change unless stated.
 - [ ] **T207 — Git history.** Git menu: Log (commit list panel → select
   shows the commit diff in a tab), File History for the active file, and
   Open File at Revision (read-only tab titled `file @ abbrev-sha`).
-- [ ] **T208 — CLI surface.** `vix --diff a b` opens the diff view
-  directly; `vix -` reads stdin into a scratch buffer; `vix --version
-  --json` for tooling. Update `--help`, README, and add
-  `docs/cli/index.md` including git difftool/mergetool config snippets.
+- [x] **T208 — CLI surface.** Done. `vix --diff OLD NEW` opens a
+  read-only diff overlay comparing the two files directly (new
+  `App::open_diff_files`, independent of any open buffer — unlike
+  Tools → Compare With File…, which diffs the active buffer); `vix -`
+  reads stdin into an unsaved scratch buffer (new
+  `App::open_stdin_buffer`, no header line unlike the plain New Scratch
+  Buffer action, since the caller may want to act on exactly what it
+  piped); `vix --version --json` prints `{"name","version"}` for
+  tooling. `--version` had to become hand-rolled
+  (`disable_version_flag`) rather than clap's automatic one, which
+  exits before `--json` could ever be inspected.
+  Self-caught mistake: the struct-level rationale for
+  `disable_version_flag` was first written as a `///` doc comment,
+  which clap's derive surfaces as the command's own `--help` long text
+  — an implementation detail is not what a CLI user asked for. Fixed
+  by moving it to a plain `//` comment before publishing.
+  Mergetool needed no new flag at all: Vix's existing conflict tool
+  (`crates/vix-conflict-tool/spec/index.md`) already resolves
+  `<<<<<<<`/`=======`/`>>>>>>>` markers in a normally-opened file, so
+  `git mergetool` just points at `vix "$MERGED"` — that's the one
+  "new capability" in the task's four-item list that turned out to
+  already exist, once actually checked rather than assumed missing.
+  New `docs/cli/index.md` (the full flag reference, plus the
+  `difftool`/`mergetool` git config snippets — `trustExitCode = false`
+  is deliberate, since a TUI editor's exit code reflects whether it
+  ran, not whether a merge was resolved); `--help` and `README.md`
+  point at it. 4 new tests (`open_stdin_buffer`/`open_diff_files` ×
+  found/identical/missing-file), verified `--version`/`--version
+  --json`/`--help` by hand against the built binary. Full
+  `scripts/check` gate green.
 - [x] **T209 — Trash on delete.** Done. File-explorer `Delete` moves to
   the OS trash by default via the `trash` crate
   (`vix_fileops::trash_path`); new `Settings::explorer_delete: String`
@@ -2508,8 +2534,9 @@ is listed explicitly.
    T111 are done; **T112–T115 (modal-editing implementation) remain**.
 3. **Run C (features):** T201–T211 in any order, one branch each — T104j
    shipped 2026-09-04, so T204 was unblocked too (§ T204's own note);
-   T210/T211 never had a dependency either. **T204, T203, and T209 are
-   done (2026-09-10); T201–T202 and T205–T208, T210–T211 remain.**
+   T210/T211 never had a dependency either. **T204, T203, T209, and
+   T208 are done (2026-09-10); T201–T202, T205–T207, and T210–T211
+   remain.**
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
    Not started.
 5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last. Not

@@ -2103,6 +2103,53 @@ impl App {
         self.open_path(path, false);
     }
 
+    /// Open `content` (piped in on stdin) as an unsaved scratch buffer
+    /// (T208's `vix -`) — the exact bytes given, no header line, since the
+    /// caller may want to save or otherwise act on precisely what it piped.
+    pub fn open_stdin_buffer(&mut self, content: &str) {
+        self.editor.new_tab_with_content(content);
+        self.focus = Focus::Editor;
+        self.status = t!("status.stdin_buffer").into();
+    }
+
+    /// Open a read-only unified-diff overlay comparing `old` and `new`
+    /// directly (T208's `--diff` CLI flag) — unlike the Tools → Compare
+    /// With File… overlay (which diffs the active buffer against another
+    /// file), this never touches the active buffer, so it works the moment
+    /// the app starts, with nothing open yet. This is the shape a `git
+    /// difftool` driver invokes with (`$LOCAL $REMOTE`); see
+    /// `docs/cli/index.md`.
+    pub fn open_diff_files(&mut self, old: &Path, new: &Path) {
+        let read = |p: &Path| {
+            std::fs::read_to_string(p).map_err(|e| t!("msg.open_failed", error = e).to_string())
+        };
+        let (old_text, new_text) = match (read(old), read(new)) {
+            (Ok(o), Ok(n)) => (o, n),
+            (Err(e), _) | (_, Err(e)) => {
+                self.messages.error(e);
+                return;
+            }
+        };
+        let old_name = old.file_name().map_or_else(
+            || old.display().to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
+        let new_name = new.file_name().map_or_else(
+            || new.display().to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
+        let lines = crate::diff_view::build(&old_text, &new_text);
+        if lines.is_empty() {
+            self.status = t!("status.diff_identical").to_string();
+            return;
+        }
+        self.diff_view = Some(DiffViewState {
+            title: format!("{old_name} ↔ {new_name}"),
+            lines,
+            scroll: 0,
+        });
+    }
+
     // ----- action dispatch (menu + palette + shortcuts) ------------------
 
     /// Dispatch a file / workspace / bookmark action. Returns `true` if `action`

@@ -260,6 +260,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `explorer_delete` setting (`"trash"`, the default, or `"hard"` for the
   previous no-undo behavior; an unrecognized value falls back to
   `"trash"`). The confirmation prompt's wording says which will happen.
+- **CLI surface** (improvement plan T208): `vix --diff OLD NEW` opens a
+  read-only diff of two files directly — the shape a `git difftool`
+  driver invokes with (`docs/cli/index.md` has the config snippet);
+  `vix -` reads standard input into an unsaved scratch buffer; `vix
+  --version --json` prints `{"name","version"}` for tooling. `git
+  mergetool` needs no new flag — Vix's existing conflict tool already
+  resolves conflict markers in a normally-opened file.
 
 ### Changed
 
