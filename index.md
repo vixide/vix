@@ -149,7 +149,13 @@ cargo run -- file.rs:42:7  # open and jump straight to line 42, column 7
 cargo run -- --locale fr   # start in French (overrides the saved language)
 cargo build --release      # optimized binary at target/release/vix
 vix --help                 # full CLI usage
+vix -                      # read stdin into a scratch buffer
+vix --diff old.rs new.rs   # open a read-only diff of two files directly
+vix --version --json       # machine-readable version, for tooling
 ```
+
+See [`docs/cli/index.md`](docs/cli/index.md) for the full flag reference,
+including `git difftool`/`mergetool` config snippets.
 
 For best results use a [Nerd Font] so the file/folder/clock glyphs render.
 
