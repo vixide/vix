@@ -8,3 +8,4 @@ repository.workspace = true
 description = "ASCII panel (Tools menu): the ASCII reference table + row-selection state."
 
 [dependencies]
+vix-list-state = { path = "../vix-list-state", version = "1.6.0" }

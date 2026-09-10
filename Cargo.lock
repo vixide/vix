@@ -5321,6 +5321,9 @@ version = "1.6.0"
 [[package]]
 name = "vix-ascii-character-picker"
 version = "1.6.0"
+dependencies = [
+ "vix-list-state",
+]
 
 [[package]]
 name = "vix-base-tool"
