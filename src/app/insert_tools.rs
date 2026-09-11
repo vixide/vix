@@ -44,6 +44,7 @@ impl App {
             "tools.text_info" => self.open_text_info(),
             "tools.markdown_preview" => self.open_markdown_preview(),
             "tools.snippets" => self.open_snippets(),
+            "tools.snippet_new_from_selection" => self.new_snippet_from_selection(),
             "tools.contacts" => self.open_contacts(),
             "tools.dashboard" => self.open_dashboard(),
             "tools.color_converter" => self.open_color_converter(),

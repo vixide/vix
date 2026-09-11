@@ -13,8 +13,8 @@
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 
 use super::{
-    App, ContactPanel, FileInfoPanel, MarkdownPreview, SnippetSession, SystemInfoPanel,
-    TextInfoPanel, VcardPanel, rect_contains,
+    App, ContactPanel, FileInfoPanel, MarkdownPreview, Prompt, PromptKind, SnippetSession,
+    SystemInfoPanel, TextInfoPanel, VcardPanel, rect_contains,
 };
 use crate::editor::Tab;
 
@@ -388,7 +388,7 @@ impl App {
 
     /// Rebuild the in-scope snippet library (bundled + file scopes) for the active
     /// buffer's media type. Cached by media type; `force` rebuilds regardless.
-    fn refresh_snippet_library(&mut self, force: bool) {
+    pub(super) fn refresh_snippet_library(&mut self, force: bool) {
         let media = self.active_media_type();
         let key = media.clone().unwrap_or_default();
         if !force && self.snippet_library_key.as_deref() == Some(key.as_str()) {
@@ -407,6 +407,62 @@ impl App {
     pub(super) fn open_snippets(&mut self) {
         self.refresh_snippet_library(true);
         self.snippets = Some(crate::snippets::Picker::new());
+    }
+
+    /// Tools → New Snippet from Selection (T205): capture the active
+    /// selection's text and prompt for an expansion prefix, which also
+    /// becomes the saved snippet's name. No-op with a status message when
+    /// there's no selection.
+    pub(super) fn new_snippet_from_selection(&mut self) {
+        let selection = self
+            .editor
+            .active_tab_mut()
+            .and_then(|t| t.editor.get_selection_text());
+        match selection {
+            Some(text) if !text.trim().is_empty() => {
+                self.pending_snippet_body = Some(text);
+                self.prompt = Some(Prompt::new(
+                    PromptKind::SnippetPrefixFromSelection,
+                    t!("prompt.snippet_prefix").to_string(),
+                ));
+            }
+            _ => self.status = t!("status.no_selection").to_string(),
+        }
+    }
+
+    /// `PromptKind::SnippetPrefixFromSelection`'s accept handler: save the
+    /// captured selection to the global snippets file under `prefix`, used as
+    /// both the snippet's name and its expansion prefix. An empty prefix is a
+    /// no-op (matches `save_theme_as`'s empty-name precedent); a prefix that
+    /// collides with an existing global snippet overwrites it.
+    pub(super) fn save_snippet_from_selection(&mut self, prefix: &str) {
+        let Some(body) = self.pending_snippet_body.take() else {
+            return;
+        };
+        if prefix.is_empty() {
+            return;
+        }
+        let Some(path) = crate::snippets::global_dir().map(|d| d.join("snippets.json")) else {
+            self.messages
+                .error(t!("msg.snippet_save_failed", error = "no config directory").to_string());
+            return;
+        };
+        let mut snippets = crate::snippets::load_file(&path, &crate::snippets::Scope::Global);
+        snippets.retain(|s| s.name != prefix);
+        snippets.push(crate::snippets::Snippet {
+            name: prefix.to_string(),
+            prefixes: vec![prefix.to_string()],
+            body,
+            description: String::new(),
+            scope: crate::snippets::Scope::Global,
+        });
+        if let Err(e) = crate::snippets::save_file(&path, &snippets) {
+            self.messages
+                .error(t!("msg.snippet_save_failed", error = e).to_string());
+            return;
+        }
+        self.refresh_snippet_library(true);
+        self.status = t!("status.snippet_saved", name = prefix).to_string();
     }
 
     pub(super) fn snippets_key(&mut self, key: KeyEvent) {

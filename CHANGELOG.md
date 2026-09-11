@@ -273,6 +273,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`Ctrl+S`) writes the result to `~/.config/vix/themes/<name>.json` and
   makes it the active theme. `Esc` without saving reverts to the theme
   that was active before you opened the editor.
+- **New Snippet from Selection** (improvement plan T205): **Tools → New
+  Snippet from Selection…** captures the active selection and prompts for
+  a prefix, saved to `~/.config/vix/global/snippets/snippets.json` as a
+  snippet with that prefix as both its name and its expansion prefix (an
+  existing prefix is overwritten). No-op with a status message when
+  there's no selection. Snippet tabstops (`$1`/`${2:placeholder}`) were
+  already fully implemented; T205's scope narrowed to this one
+  create-from-selection flow rather than a full editor for existing
+  snippets, whose fields still take a JSON-file edit.
 
 ### Changed
 

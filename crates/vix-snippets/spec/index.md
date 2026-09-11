@@ -15,6 +15,18 @@ There are two ways to use a snippet:
 2. **Prefix expansion** — type a snippet's **prefix** then press **Tab**; the word
    is replaced by the snippet body (and a tabstop session begins).
 
+And one way to create one from existing text:
+
+- **New Snippet from Selection** — **Tools → New Snippet from Selection…**
+  (`tools.snippet_new_from_selection`) captures the active selection as a
+  snippet body and prompts for a **prefix**, which becomes both the saved
+  snippet's name and its expansion prefix. With no selection, this is a no-op
+  (a status message says so). Saved snippets go to the **global** scope
+  (`<config>/global/snippets/snippets.json`), created if it doesn't exist yet;
+  a prefix that collides with an existing global snippet overwrites it. This
+  covers the common "turn this block into a reusable snippet" case; editing an
+  existing snippet's fields still means editing its JSON file directly.
+
 ## File format (JSON)
 
 A snippet file is a JSON object whose **keys are snippet names** and whose values
@@ -94,8 +106,9 @@ relative to the project root).
 
 - `crate::snippets` loads and merges the JSON files (`parse_json`, scope/path
   resolution, `load_scoped`) into `Snippet { name, prefixes, body, description,
-  scope }`, and provides the picker's filter state. Pure parsing/merging is unit
-  tested.
+  scope }`, and provides the picker's filter state. `to_json`/`save_file` write
+  the same shape back out (New Snippet from Selection). Pure parsing/merging
+  and the round trip are unit tested.
 - `crate::snippet_tool::parse` turns a body into `Parsed { text, stops }` (the
   tabstop engine), shared by both the picker and prefix expansion.
 - The host (`App`) builds the in-scope library for the active buffer's media
