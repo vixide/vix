@@ -95,6 +95,7 @@ impl App {
             file_info,
             text_info,
             markdown_preview,
+            markdown_toc,
             snippets,
             vcard,
             contacts,
@@ -310,6 +311,7 @@ impl App {
         panel!(system_info, system_info_key);
         panel!(file_info, file_info_key);
         panel!(text_info, text_info_key);
+        panel!(markdown_toc, markdown_toc_key);
         panel!(markdown_preview, markdown_preview_key);
         panel!(snippets, snippets_key);
         panel!(vcard, vcard_key);

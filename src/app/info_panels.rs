@@ -13,7 +13,7 @@
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 
 use super::{
-    App, ContactPanel, FileInfoPanel, MarkdownPreview, Prompt, PromptKind, SnippetSession,
+    App, ContactPanel, FileInfoPanel, MarkdownPreview, Outline, Prompt, PromptKind, SnippetSession,
     SystemInfoPanel, TextInfoPanel, VcardPanel, rect_contains,
 };
 use crate::editor::Tab;
@@ -330,8 +330,10 @@ impl App {
         }
     }
 
-    /// Open a read-only Markdown preview of the active buffer.
+    /// Open a read-only Markdown preview of the active buffer, scroll-synced
+    /// (T206) to whichever preview line came from the cursor's source line.
     pub(super) fn open_markdown_preview(&mut self) {
+        let cursor_line = self.editor.cursor_1based().0;
         let Some(text) = self
             .editor
             .active_tab()
@@ -340,7 +342,9 @@ impl App {
         else {
             return;
         };
-        self.markdown_preview = Some(MarkdownPreview::open(&text));
+        let mut panel = MarkdownPreview::open(&text);
+        panel.sync_to_source_line(cursor_line);
+        self.markdown_preview = Some(panel);
     }
 
     pub(super) fn markdown_preview_key(&mut self, key: KeyEvent) {
@@ -368,8 +372,74 @@ impl App {
                     p.down(page);
                 }
             }
+            // T206: table of contents, an overlay-over-the-overlay like the
+            // theme editor's own Enter-opens-the-X11-picker.
+            KeyCode::Char('t' | 'T') => self.open_markdown_toc(),
             KeyCode::Esc | KeyCode::Char('q') => self.markdown_preview = None,
             _ => {}
+        }
+    }
+
+    /// Open the Markdown preview's table of contents (T206): every heading,
+    /// jump-to on Enter. No-op with a status message when the document has
+    /// no headings.
+    pub(super) fn open_markdown_toc(&mut self) {
+        let Some(entries) = self.markdown_preview.as_ref().map(|p| p.toc.clone()) else {
+            return;
+        };
+        if entries.is_empty() {
+            self.status = t!("status.markdown_toc_empty").into();
+            return;
+        }
+        let mut toc = Outline::new(entries);
+        if let Some(scroll) = self.markdown_preview.as_ref().map(|p| p.scroll) {
+            // 0-based scroll -> 1-based "current line" for select_nearest.
+            toc.select_nearest(scroll + 1);
+        }
+        self.markdown_toc = Some(toc);
+    }
+
+    pub(super) fn markdown_toc_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.editor.height as usize)
+            .max(1)
+            .saturating_sub(2);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(o) = self.markdown_toc.as_mut() {
+                    o.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(o) = self.markdown_toc.as_mut() {
+                    o.down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(o) = self.markdown_toc.as_mut() {
+                    o.page_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(o) = self.markdown_toc.as_mut() {
+                    o.page_down(page);
+                }
+            }
+            KeyCode::Enter => self.jump_to_markdown_toc(),
+            KeyCode::Esc => self.markdown_toc = None,
+            _ => {}
+        }
+    }
+
+    /// Scroll the preview to the highlighted TOC heading and close the TOC,
+    /// back to the preview (not the source buffer -- unlike the source-file
+    /// outline's `jump_to_outline`, this stays inside the preview overlay).
+    fn jump_to_markdown_toc(&mut self) {
+        let Some(line) = self.markdown_toc.as_ref().and_then(Outline::selected_line) else {
+            return;
+        };
+        self.markdown_toc = None;
+        if let Some(p) = self.markdown_preview.as_mut() {
+            p.scroll_to_line(line);
         }
     }
 

@@ -51,8 +51,8 @@ use file_browser::draw_file_browser;
 use help::{draw_help, draw_keybinding_editor};
 use hints::{draw_jump_labels, draw_which_key};
 use info_panels::{
-    draw_contacts, draw_file_info, draw_markdown_preview, draw_snippets, draw_system_info,
-    draw_text_info, draw_vcard,
+    draw_contacts, draw_file_info, draw_markdown_preview, draw_markdown_toc, draw_snippets,
+    draw_system_info, draw_text_info, draw_vcard,
 };
 use lsp_popups::{draw_code_actions, draw_code_lens, draw_completion, draw_hover};
 use menu_bar::{draw_menu_bar, draw_menu_dropdown, dropdown_width};
@@ -400,6 +400,9 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     if app.markdown_preview.is_some() {
         draw_markdown_preview(app, frame, area);
+    }
+    if app.markdown_toc.is_some() {
+        draw_markdown_toc(app, frame, area);
     }
     if app.snippets.is_some() {
         draw_snippets(app, frame, area);

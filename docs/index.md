@@ -26,8 +26,9 @@ Highlights:
   [Calendar](calendar-panel/index.md),
   [Nerd Font Picker](nerd-font-picker/index.md),
   [ASCII Picker](ascii-code-picker/index.md),
-  [System Information](system-information-panel/index.md), and more under
-  `docs/`.
+  [System Information](system-information-panel/index.md),
+  [Markdown Preview](markdown-preview/index.md) (scroll-synced, with a
+  table of contents), and more under `docs/`.
 - Edit surfaces (Edit → Mode): [Edit SQL](edit-sql/index.md) · [Edit Table](edit-table/index.md) ·
   [Edit Outline](edit-outline/index.md) · [Edit JSON](edit-json/index.md) ·
   [Edit YAML](edit-yaml/index.md) · [Edit Bytes](edit-bytes/index.md).

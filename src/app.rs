@@ -1504,6 +1504,10 @@ pub struct App {
     pub text_info: Option<TextInfoPanel>,
     /// Markdown preview overlay, when open.
     pub markdown_preview: Option<MarkdownPreview>,
+    /// The preview's table-of-contents jump list (T206), when open over it --
+    /// built from `markdown_preview`'s own `toc`, so it only ever opens while
+    /// the preview is also open.
+    pub markdown_toc: Option<Outline>,
     /// Snippets picker overlay, when open.
     pub snippets: Option<crate::snippets::Picker>,
     /// The in-scope snippet library (bundled + global + media-type + project),
@@ -1968,6 +1972,7 @@ impl App {
             file_info: None,
             text_info: None,
             markdown_preview: None,
+            markdown_toc: None,
             snippets: None,
             snippet_library: Vec::new(),
             snippet_library_key: None,

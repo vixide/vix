@@ -9,3 +9,4 @@ description = "Render Markdown to formatted plain-text lines for a read-only pre
 
 [dependencies]
 pulldown-cmark = { workspace = true }
+vix-outline-panel = { path = "../vix-outline-panel", version = "1.6.0" }
