@@ -282,6 +282,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   already fully implemented; T205's scope narrowed to this one
   create-from-selection flow rather than a full editor for existing
   snippets, whose fields still take a JSON-file edit.
+- **Coverage gutter** (improvement plan T210): **Tools → Load Coverage
+  File…** parses an LCOV or Cobertura XML report (new `vix-coverage`
+  crate) and colors the gutter green/red/yellow for covered/uncovered/
+  partially-covered lines, reusing the git diff gutter's mark mechanism —
+  the two share that one gutter column, so only one shows per buffer at a
+  time. **Tools → Toggle Coverage Gutter** shows/hides the loaded report
+  without re-parsing. New `coverage_path` setting pre-fills the Load
+  Coverage File… prompt. Vix visualizes an existing report; it doesn't
+  generate one.
 
 ### Changed
 

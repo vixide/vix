@@ -4,6 +4,7 @@
 
 mod catalog;
 mod common;
+mod coverage;
 mod db;
 mod editing;
 mod find;

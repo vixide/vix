@@ -3,6 +3,7 @@
 #![warn(clippy::pedantic)]
 
 mod command_palette;
+mod coverage;
 mod git;
 mod info_panels;
 mod insert_tools;
@@ -134,6 +135,9 @@ pub enum PromptKind {
     CompareFile,
     /// Enter a file path whose contents to insert at the cursor.
     InsertFile,
+    /// Enter a coverage report (LCOV or Cobertura XML) path to load for the
+    /// coverage gutter (T210). Pre-filled from the `coverage_path` setting.
+    LoadCoverageFile,
     /// Confirm/edit a resolved `project.*` lifecycle command before running
     /// it (`App::pending_project_command` carries which slot and, for the
     /// subproject family, which directory).
@@ -1686,6 +1690,13 @@ pub struct App {
     /// Cached HEAD blob text per file path, for the editor diff gutter. Cleared
     /// on save / git actions so it refetches.
     git_head_cache: std::collections::HashMap<PathBuf, String>,
+    /// Parsed coverage report (T210: **Tools → Load Coverage File…**), if one
+    /// has been loaded. Stays cached across a Toggle Coverage Gutter off/on.
+    coverage: Option<vix_coverage::Report>,
+    /// Whether the coverage gutter is currently shown. While it is, the git
+    /// diff gutter is skipped for the active tab -- both use the same
+    /// gutter-sign column, so only one shows at a time.
+    coverage_visible: bool,
     /// Whether spell-checking (red underline in comments/strings) is enabled.
     pub spellcheck: bool,
     /// Loaded spell checker for the active locale, when spell-checking is on and
@@ -2034,6 +2045,8 @@ impl App {
             git_branch: None,
             git_status: Vec::new(),
             git_head_cache: std::collections::HashMap::new(),
+            coverage: None,
+            coverage_visible: false,
             spellcheck: settings.spellcheck,
             speller: None,
             speller_locale: None,
@@ -12045,6 +12058,7 @@ impl App {
             }
             PromptKind::CompareFile => self.open_diff_with(prompt.input.trim()),
             PromptKind::InsertFile => self.insert_file_at_cursor(prompt.input.trim()),
+            PromptKind::LoadCoverageFile => self.load_coverage_file(prompt.input.trim()),
             PromptKind::ProjectCommand => self.accept_project_command_prompt(&prompt.input),
             PromptKind::OrgSchedule
             | PromptKind::OrgDeadline

@@ -204,6 +204,11 @@ pub struct Settings {
     /// Project snippet file, relative to the project root. Loaded alongside the
     /// global and media-type snippet files. See the `vix-snippets` crate spec.
     pub project_snippets: String,
+    /// Default path to a coverage report (LCOV or Cobertura XML), pre-filled
+    /// in the **Tools → Load Coverage File…** prompt. Empty means no
+    /// default; Vix never generates a coverage report itself. See the
+    /// `vix-coverage` crate spec.
+    pub coverage_path: String,
     /// Width (columns) of the test-results panel.
     pub test_width: u16,
     /// Saved database connections for the **DB** menu (the `vix-db` crate spec). Passwords
@@ -292,6 +297,7 @@ impl Default for Settings {
             test_command: "cargo test".to_string(),
             test_width: 40,
             project_snippets: "config/snippets/snippets.json".to_string(),
+            coverage_path: String::new(),
             db_connections: Vec::new(),
         }
     }

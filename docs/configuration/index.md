@@ -58,6 +58,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `test_command`  | string | `cargo test` | Command run by **Tools → Run Tests**; its output is parsed into the test panel. |
 | `test_width`    | int    | `40`     | Width (columns) of the test-results panel. |
 | `project_snippets` | string | `<config>/snippets/snippets.json` | Project snippet file, relative to the project root. See `crates/vix-snippets/spec/index.md`. |
+| `coverage_path` | string | `""` (unset) | Default path pre-filled in **Tools → Load Coverage File…**'s prompt (an LCOV or Cobertura XML report). See `crates/vix-coverage/spec/index.md`. |
 | `relative_line_numbers` | bool | `false` | Number lines relative to the cursor line (the cursor's own line stays absolute). |
 | `show_breadcrumbs` | bool | `false` | Show the breadcrumb bar (`file ▸ enclosing symbol`) above the editor. |
 | `show_minimap`  | bool   | `false`  | Show the code-overview minimap column at the right of the editor. |

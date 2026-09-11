@@ -1,0 +1,11 @@
+[package]
+name = "vix-coverage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Parse LCOV and Cobertura XML coverage reports into per-file, per-line hit data for the coverage gutter."
+
+[dependencies]
+regex.workspace = true
