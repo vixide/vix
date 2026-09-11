@@ -1234,6 +1234,11 @@ const TOOLS: &[Item] = &[
     ),
     Item::leaf("menu.item.tools.qrcode", "tools.qrcode", ""),
     Item::leaf("menu.item.tools.snippets", "tools.snippets", ""),
+    Item::leaf(
+        "menu.item.tools.snippet_new_from_selection",
+        "tools.snippet_new_from_selection",
+        "",
+    ),
     Item::sub("menu.item.tools.scripts", TOOLS_SCRIPTS),
     Item::leaf(
         "menu.item.tools.reload_keybindings",

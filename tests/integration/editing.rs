@@ -2321,6 +2321,68 @@ fn snippet_expands_with_navigable_tabstops() {
 }
 
 #[test]
+fn new_snippet_from_selection_opens_a_prefix_prompt() {
+    let dir = unique_dir("snippet-from-selection-prompt");
+    fs::create_dir_all(&dir).unwrap();
+    let mut app = app_at(&dir);
+
+    buffer_with(&mut app, "console.log(x);\n", 0);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_selection_range(0, 16);
+    app.run_action("tools.snippet_new_from_selection");
+
+    let prompt = app.prompt.as_ref().expect("prompt opened");
+    assert!(matches!(
+        prompt.kind,
+        vix::app::PromptKind::SnippetPrefixFromSelection
+    ));
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn new_snippet_from_selection_with_no_selection_is_a_no_op() {
+    let dir = unique_dir("snippet-from-selection-no-op");
+    fs::create_dir_all(&dir).unwrap();
+    let mut app = app_at(&dir);
+
+    buffer_with(&mut app, "console.log(x);\n", 0);
+    app.status.clear();
+    app.run_action("tools.snippet_new_from_selection");
+
+    assert!(app.prompt.is_none(), "no selection means no prompt");
+    assert!(!app.status.is_empty(), "reports there was nothing selected");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn save_snippet_from_selection_with_an_empty_prefix_is_a_no_op() {
+    let dir = unique_dir("snippet-from-selection-empty-prefix");
+    fs::create_dir_all(&dir).unwrap();
+    let mut app = app_at(&dir);
+
+    buffer_with(&mut app, "console.log(x);\n", 0);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_selection_range(0, 16);
+    app.run_action("tools.snippet_new_from_selection");
+    // Accept the prefix prompt with an empty answer: no real save, so this
+    // never touches the real user's config directory (matches
+    // `save_theme_as`'s empty-name precedent -- see AGENTS.md).
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert!(app.prompt.is_none(), "the prompt closes either way");
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn detects_image_extensions() {
     use vix::editor::is_image_path;
     assert!(is_image_path(Path::new("photos/a.PNG")));

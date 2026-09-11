@@ -9,6 +9,14 @@ Insert reusable boilerplate two ways:
 
 Snippets can carry **tabstops** — fields you fill in and jump between with Tab.
 
+## Creating a snippet from a selection
+
+Select some text, then **Tools → New Snippet from Selection…**. Type a prefix
+at the prompt — it becomes both the new snippet's name and its expansion
+prefix — and the selection is saved to your global snippets file. Reusing an
+existing prefix overwrites that snippet. With nothing selected, this is a
+no-op.
+
 ## Your own snippets (JSON files)
 
 Beyond the bundled set, Vix™ loads snippet files from three places (modeled on VS

@@ -245,6 +245,10 @@ pub enum PromptKind {
     /// Enter a name to save the theme editor's draft under (T202); the
     /// draft itself lives in `App::theme_editor`.
     ThemeSaveAs,
+    /// Enter the expansion prefix for a new snippet captured from the
+    /// current selection (T205); the captured body lives in
+    /// `App::pending_snippet_body`.
+    SnippetPrefixFromSelection,
 }
 
 /// A single-line input prompt (open / save-as).
@@ -1505,6 +1509,9 @@ pub struct App {
     snippet_library_key: Option<String>,
     /// Active snippet tabstop session (Tab navigates the fields), when expanding.
     snippet_session: Option<SnippetSession>,
+    /// The selection text captured for `PromptKind::SnippetPrefixFromSelection`
+    /// (T205), waiting on the prefix prompt's answer.
+    pending_snippet_body: Option<String>,
     /// Contact-browser overlay, when open.
     pub contacts: Option<ContactPanel>,
     /// Single-vCard view overlay, when open (above the contact browser).
@@ -1954,6 +1961,7 @@ impl App {
             snippet_library: Vec::new(),
             snippet_library_key: None,
             snippet_session: None,
+            pending_snippet_body: None,
             contacts: None,
             vcard: None,
             lsp,
@@ -11988,6 +11996,9 @@ impl App {
             PromptKind::Script => self.accept_script_prompt(&prompt.input),
             PromptKind::RebindKey => self.accept_rebind_key(prompt.input.trim()),
             PromptKind::ThemeSaveAs => self.save_theme_as(prompt.input.trim()),
+            PromptKind::SnippetPrefixFromSelection => {
+                self.save_snippet_from_selection(prompt.input.trim());
+            }
             PromptKind::SearchToDock => {
                 self.search_workspace_to_dock(&prompt.input, prompt.case_sensitive, prompt.regex);
             }

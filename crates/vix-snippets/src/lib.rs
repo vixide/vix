@@ -88,6 +88,43 @@ pub fn parse_json(json: &str, scope: &Scope) -> Vec<Snippet> {
     out
 }
 
+/// Serialize `snippets` back to the same JSON shape [`parse_json`] reads:
+/// `{"Name": {"prefix": ..., "body": [...], "description": "..."}}` (T205).
+/// `scope`/`name` collisions aren't resolved here — the caller decides
+/// whether a later entry overwrites an earlier one before calling this.
+#[must_use]
+pub fn to_json(snippets: &[Snippet]) -> String {
+    let mut map = serde_json::Map::new();
+    for s in snippets {
+        let prefix = match s.prefixes.as_slice() {
+            [one] => serde_json::Value::String(one.clone()),
+            many => serde_json::Value::Array(
+                many.iter()
+                    .cloned()
+                    .map(serde_json::Value::String)
+                    .collect(),
+            ),
+        };
+        let body = serde_json::Value::Array(
+            s.body
+                .split('\n')
+                .map(|line| serde_json::Value::String(line.to_string()))
+                .collect(),
+        );
+        let mut entry = serde_json::Map::new();
+        entry.insert("prefix".to_string(), prefix);
+        entry.insert("body".to_string(), body);
+        if !s.description.is_empty() {
+            entry.insert(
+                "description".to_string(),
+                serde_json::Value::String(s.description.clone()),
+            );
+        }
+        map.insert(s.name.clone(), serde_json::Value::Object(entry));
+    }
+    serde_json::to_string_pretty(&serde_json::Value::Object(map)).unwrap_or_default()
+}
+
 /// A JSON string, or an array of strings joined with newlines.
 fn json_string_or_lines(v: &serde_json::Value) -> Option<String> {
     match v {
@@ -169,6 +206,21 @@ pub fn load_file(path: &Path, scope: &Scope) -> Vec<Snippet> {
         Ok(text) => parse_json(&text, scope),
         Err(_) => Vec::new(),
     }
+}
+
+/// Write `snippets` to `path` as JSON (T205: New Snippet from Selection),
+/// creating the parent directory if it doesn't exist yet — the global
+/// snippets directory has no reason to pre-exist before the first save.
+///
+/// # Errors
+///
+/// Returns an error if the parent directory can't be created or the file
+/// can't be written.
+pub fn save_file(path: &Path, snippets: &[Snippet]) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, to_json(snippets))
 }
 
 /// Load every `*.json` file in `dir` (sorted by name), parsing each with `scope`.
@@ -430,5 +482,39 @@ mod tests {
             p.selected_library_index(&lib).map(|i| lib[i].name.clone()),
             Some("Alpha".to_string())
         );
+    }
+
+    #[test]
+    fn to_json_round_trips_through_parse_json() {
+        let original = parse_json(
+            r#"{
+                "Multi": {"prefix": ["a", "b"], "body": "one\ntwo", "description": "d"},
+                "Single": {"prefix": "s", "body": "line"}
+            }"#,
+            &Scope::Global,
+        );
+        let json = to_json(&original);
+        let mut round_tripped = parse_json(&json, &Scope::Global);
+        round_tripped.sort_by(|a, b| a.name.cmp(&b.name));
+        let mut expected = original;
+        expected.sort_by(|a, b| a.name.cmp(&b.name));
+        for (a, b) in expected.iter().zip(round_tripped.iter()) {
+            assert_eq!(a.name, b.name);
+            assert_eq!(a.prefixes, b.prefixes);
+            assert_eq!(a.body, b.body);
+            assert_eq!(a.description, b.description);
+        }
+    }
+
+    #[test]
+    fn to_json_drops_an_empty_description_rather_than_writing_an_empty_string() {
+        let json = to_json(&[Snippet {
+            name: "N".to_string(),
+            prefixes: vec!["n".to_string()],
+            body: "b".to_string(),
+            description: String::new(),
+            scope: Scope::Global,
+        }]);
+        assert!(!json.contains("description"));
     }
 }
