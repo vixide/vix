@@ -820,9 +820,11 @@ impl App {
                     .collect();
                 hits.push(Hit {
                     path: path.clone(),
+                    rel: rel.clone(),
                     line,
                     col: d.range.start.character as usize + 1,
                     display: format!("{rel}:{line}: [{sev}] {msg}"),
+                    text: msg,
                 });
             }
         }

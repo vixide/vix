@@ -221,6 +221,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.search_workspace", "search.workspace"),
     ("cmd.search_workspace_dock", "search.workspace_dock"),
     ("cmd.search_replace_workspace", "search.workspace_replace"),
+    ("cmd.search_edit_results", "search.edit_results"),
     ("cmd.goto_definition", "nav.goto_definition"),
     ("cmd.lsp_hover", "lsp.hover"),
     ("cmd.lsp_complete", "lsp.complete"),

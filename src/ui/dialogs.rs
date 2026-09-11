@@ -122,6 +122,61 @@ pub(super) fn draw_replace_confirm(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(hint), chunks[1]);
 }
 
+/// The T211 apply-diff-back-to-sources confirm step, mirroring
+/// `draw_replace_confirm`'s layout exactly (they share `ReplaceConfirm`'s
+/// shape) but over `app.wgrep_confirm` and with edit-specific wording.
+pub(super) fn draw_wgrep_confirm(app: &App, frame: &mut Frame, area: Rect) {
+    let Some(wc) = app.wgrep_confirm.as_ref() else {
+        return;
+    };
+    let width = (area.width * 7 / 10).clamp(30, area.width);
+    let height = (area.height * 6 / 10).clamp(8, area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let title = format!(
+        " {} {} ",
+        icon::SEARCH,
+        t!(
+            "ui.wgrep_confirm_title",
+            edited = wc.replaced,
+            files = wc.plan.len()
+        )
+    );
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(title);
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+    let view_h = chunks[0].height as usize;
+    let start = wc.scroll.min(wc.lines.len().saturating_sub(1));
+    let lines: Vec<Line> = wc
+        .lines
+        .iter()
+        .skip(start)
+        .take(view_h)
+        .map(|l| Line::from(Span::raw(l.clone())))
+        .collect();
+    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    let hint = Line::from(Span::styled(
+        t!("ui.wgrep_confirm_hint").to_string(),
+        theme::dim(),
+    ));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
+}
+
 pub(super) fn draw_unsaved(app: &App, frame: &mut Frame, area: Rect) {
     let Some(u) = app.unsaved.as_ref() else {
         return;

@@ -42,7 +42,7 @@ use crate::messages::{Level, Messages};
 use crate::palette::{self, Palette};
 use crate::search::{Field, Flags as SearchFlags, Scope, SearchBar};
 use crate::settings::Settings;
-use crate::workspace_search::{Flags as WorkspaceFlags, Hit, WorkspaceSearch};
+use crate::workspace_search::{Flags as WorkspaceFlags, Hit, WgrepBaseline, WorkspaceSearch};
 
 /// The repo's `themes/` directory, embedded into the binary so its themes are
 /// available in the chooser without the user installing anything.
@@ -1381,6 +1381,21 @@ pub struct App {
     pub script_trust: Option<ScriptTrustPrompt>,
     /// Project-wide replace preview awaiting confirmation, when open.
     pub replace_confirm: Option<ReplaceConfirm>,
+    /// Baseline for the T211 editable search-results buffer (**Alt+E** from
+    /// workspace search, or `search.edit_results`), if one is open: one row
+    /// per line the buffer started with, diffed against the buffer's current
+    /// lines on save. `None` when no such buffer is open.
+    wgrep_baseline: Option<Vec<WgrepBaseline>>,
+    /// The apply-diff-back-to-sources preview for the editable search-results
+    /// buffer, awaiting confirmation (reuses `ReplaceConfirm`'s shape --
+    /// per-file new contents, a summary line per file, a scroll offset --
+    /// but is a distinct field from `replace_confirm` since the two confirms
+    /// have different wording and are never open at the same time).
+    pub wgrep_confirm: Option<ReplaceConfirm>,
+    /// `(path, 1-based line, new text)` for each line the pending
+    /// `wgrep_confirm` will write, so applying it can re-baseline those
+    /// exact lines afterward without re-reading anything back off disk.
+    wgrep_pending_edits: Vec<(PathBuf, usize, String)>,
     /// Pending unsaved-changes prompt (close tab / quit), when active.
     pub unsaved: Option<UnsavedPrompt>,
     /// Spell-suggestion popup (Ctrl+;), when open.
@@ -1922,6 +1937,9 @@ impl App {
             confirm: None,
             script_trust: None,
             replace_confirm: None,
+            wgrep_baseline: None,
+            wgrep_confirm: None,
+            wgrep_pending_edits: Vec::new(),
             unsaved: None,
             spell_suggest: None,
             context_menu: None,
@@ -2761,6 +2779,7 @@ impl App {
             }
             "search.workspace" => self.open_workspace_search(false),
             "search.workspace_replace" => self.open_workspace_search(true),
+            "search.edit_results" => self.open_wgrep_results(),
             "search.workspace_dock" => {
                 self.prompt = Some(Prompt::new(
                     PromptKind::SearchToDock,
@@ -3243,6 +3262,10 @@ impl App {
     }
 
     fn save(&mut self) {
+        if self.active_tab_is_wgrep_results() {
+            self.prepare_wgrep_confirm();
+            return;
+        }
         if self.editor.active_tab().is_some_and(Tab::is_image) {
             self.status = t!("status.image_readonly").into();
             return;
@@ -11231,12 +11254,19 @@ impl App {
         let mut hits: Vec<Hit> = syms
             .iter()
             .map(|(line, character, name)| {
+                let rel = path
+                    .strip_prefix(&self.root)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .into_owned();
                 let line1 = *line as usize + 1;
                 Hit {
                     path: path.clone(),
+                    rel,
                     line: line1,
                     col: *character as usize + 1,
                     display: format!("{name}  :{line1}"),
+                    text: name.clone(),
                 }
             })
             .collect();
@@ -11265,9 +11295,11 @@ impl App {
                 let line1 = *line as usize + 1;
                 Hit {
                     path: path.clone(),
+                    rel: rel.clone(),
                     line: line1,
                     col: *character as usize + 1,
                     display: format!("{name}  {rel}:{line1}"),
+                    text: name.clone(),
                 }
             })
             .collect();
@@ -11296,9 +11328,11 @@ impl App {
                 let line1 = *line as usize + 1;
                 Hit {
                     path: path.clone(),
+                    rel: rel.clone(),
                     line: line1,
                     col: *character as usize + 1,
                     display: format!("{rel}:{line1}"),
+                    text: String::new(),
                 }
             })
             .collect();
@@ -11378,9 +11412,11 @@ impl App {
                     let text: String = raw.trim().chars().take(120).collect();
                     hits.push(Hit {
                         path: path.clone(),
+                        rel: rel.clone(),
                         line,
                         col: col + 1,
                         display: format!("{rel}:{line}: {text}"),
+                        text,
                     });
                     if hits.len() >= 2000 {
                         break 'files;
@@ -11455,9 +11491,11 @@ impl App {
                     let clipped: String = line.trim_start().chars().take(120).collect();
                     hits.push(Hit {
                         path: path.clone(),
+                        rel: rel.clone(),
                         line: i + 1,
                         col,
                         display: format!("{rel}:{}: {clipped}", i + 1),
+                        text: clipped,
                     });
                     if hits.len() >= 200 {
                         return hits;
@@ -11545,9 +11583,11 @@ impl App {
                     let clipped: String = line.trim_start().chars().take(120).collect();
                     hits.push(Hit {
                         path: path.clone(),
+                        rel: rel.clone(),
                         line: i + 1,
                         col: m.start() + 1,
                         display: format!("{rel}:{}: {clipped}", i + 1),
+                        text: clipped,
                     });
                     if hits.len() >= 5000 {
                         break 'outer;
@@ -11688,6 +11728,201 @@ impl App {
         }
     }
 
+    // ----- T211: editable search results ("wgrep"-style) ------------------
+
+    /// The synthetic `path` a T211 editable search-results buffer carries --
+    /// never a real file, so [`App::save`] can recognize the buffer by it
+    /// and reroute to [`App::prepare_wgrep_confirm`] instead of trying to
+    /// write a file literally named this.
+    const WGREP_RESULTS_PATH: &str = "*search results*";
+
+    /// **Alt+E** / `search.edit_results`: open the current workspace search's
+    /// hits as a real, editable buffer (one line per hit, `rel:line: text`),
+    /// closing the search panel itself so its keys stop capturing input.
+    /// Saving the buffer (`Ctrl+S`) diffs it back against this baseline --
+    /// see [`App::prepare_wgrep_confirm`]. A no-op when there's no search
+    /// open, it has no hits, or the hits are a static list (go-to-definition,
+    /// diagnostics, …) rather than a real text search.
+    fn open_wgrep_results(&mut self) {
+        let Some(ps) = self.workspace_search.as_ref() else {
+            return;
+        };
+        if ps.hits.is_empty() || ps.flags.contains(WorkspaceFlags::STATIC_RESULTS) {
+            return;
+        }
+        let baseline: Vec<WgrepBaseline> = ps
+            .hits
+            .iter()
+            .map(|h| WgrepBaseline {
+                rel: h.rel.clone(),
+                path: h.path.clone(),
+                line: h.line,
+                text: h.text.clone(),
+            })
+            .collect();
+        let content = ps.hits.iter().fold(String::new(), |mut acc, h| {
+            acc.push_str(&h.display);
+            acc.push('\n');
+            acc
+        });
+        let count = ps.hits.len();
+        self.workspace_search = None;
+        self.editor.new_tab_with_content(&content);
+        if let Some(t) = self.editor.active_tab_mut() {
+            t.path = Some(PathBuf::from(Self::WGREP_RESULTS_PATH));
+        }
+        self.focus = Focus::Editor;
+        self.wgrep_baseline = Some(baseline);
+        self.status = t!("status.wgrep_opened", count = count).to_string();
+    }
+
+    /// Whether the active tab is the open T211 editable search-results buffer.
+    fn active_tab_is_wgrep_results(&self) -> bool {
+        self.wgrep_baseline.is_some()
+            && self.editor.active_tab().and_then(|t| t.path.as_deref())
+                == Some(Path::new(Self::WGREP_RESULTS_PATH))
+    }
+
+    /// `Ctrl+S` on the editable search-results buffer: diff its current
+    /// lines against `wgrep_baseline` and, if anything changed, open the
+    /// same apply-and-confirm step `Tools → Search and Replace` uses (a
+    /// summary of which files will change, `y`/Enter to write them,
+    /// `n`/Esc to cancel). Each surviving buffer line is looked up by its
+    /// own `rel:line:` prefix, not by position, so deleting a line simply
+    /// skips that hit -- no bookkeeping needed -- and a line the user typed
+    /// from scratch (not matching that shape at all) is ignored rather than
+    /// misread. No-op with a status message when nothing changed.
+    fn prepare_wgrep_confirm(&mut self) {
+        let Some(baseline) = self.wgrep_baseline.as_ref() else {
+            return;
+        };
+        let Some(text) = self.editor.active_tab().map(Tab::text) else {
+            return;
+        };
+        let index: std::collections::HashMap<(&str, usize), &WgrepBaseline> = baseline
+            .iter()
+            .map(|b| ((b.rel.as_str(), b.line), b))
+            .collect();
+        // Group surviving, actually-changed lines by the file they belong to.
+        let mut by_path: std::collections::BTreeMap<PathBuf, Vec<(usize, String)>> =
+            std::collections::BTreeMap::new();
+        for line in text.lines() {
+            let Some((rel, n, new_text)) = crate::workspace_search::parse_result_line(line) else {
+                continue;
+            };
+            let Some(b) = index.get(&(rel, n)) else {
+                continue;
+            };
+            if new_text != b.text {
+                by_path
+                    .entry(b.path.clone())
+                    .or_default()
+                    .push((n, new_text.to_string()));
+            }
+        }
+        let mut plan: Vec<(PathBuf, String)> = Vec::new();
+        let mut lines: Vec<String> = Vec::new();
+        let mut pending_edits: Vec<(PathBuf, usize, String)> = Vec::new();
+        let mut edited = 0usize;
+        for (path, changes) in by_path {
+            let Some(content) = self.current_text(&path) else {
+                continue;
+            };
+            let mut file_lines: Vec<String> = content.lines().map(str::to_string).collect();
+            let mut applied = 0usize;
+            for (n, new_text) in &changes {
+                if let Some(slot) = n.checked_sub(1).and_then(|i| file_lines.get_mut(i)) {
+                    slot.clone_from(new_text);
+                    applied += 1;
+                    pending_edits.push((path.clone(), *n, new_text.clone()));
+                }
+            }
+            if applied == 0 {
+                continue;
+            }
+            let mut new_content = file_lines.join("\n");
+            if content.ends_with('\n') {
+                new_content.push('\n');
+            }
+            let rel = path.strip_prefix(&self.root).unwrap_or(&path);
+            lines.push(format!("{} ({applied})", rel.display()));
+            plan.push((path, new_content));
+            edited += applied;
+        }
+        if plan.is_empty() {
+            self.status = t!("status.wgrep_no_changes").into();
+            return;
+        }
+        self.wgrep_pending_edits = pending_edits;
+        self.wgrep_confirm = Some(ReplaceConfirm {
+            plan,
+            replaced: edited,
+            lines,
+            scroll: 0,
+        });
+    }
+
+    /// Write a confirmed `wgrep_confirm` plan to disk, sync any open tabs on
+    /// those paths, and re-baseline the edited lines so saving again without
+    /// further edits does nothing.
+    fn apply_wgrep_confirm(&mut self) {
+        let Some(wc) = self.wgrep_confirm.take() else {
+            return;
+        };
+        let edited = wc.replaced;
+        let mut files = 0usize;
+        for (path, new) in &wc.plan {
+            if let Err(e) = std::fs::write(path, new) {
+                self.messages
+                    .error(t!("msg.write_failed", path = path.display(), error = e).to_string());
+                continue;
+            }
+            let canon = path.canonicalize().unwrap_or_else(|_| path.clone());
+            for tab in &mut self.editor.tabs {
+                if tab.path.as_deref() == Some(canon.as_path()) {
+                    tab.editor.set_content(new);
+                    tab.dirty = false;
+                }
+            }
+            files += 1;
+        }
+        let pending = std::mem::take(&mut self.wgrep_pending_edits);
+        if let Some(baseline) = self.wgrep_baseline.as_mut() {
+            for (path, line, text) in &pending {
+                if let Some(b) = baseline
+                    .iter_mut()
+                    .find(|b| &b.path == path && b.line == *line)
+                {
+                    b.text.clone_from(text);
+                }
+            }
+        }
+        let note = t!("status.wgrep_applied", edited = edited, files = files).to_string();
+        self.status.clone_from(&note);
+        self.messages.info(note);
+    }
+
+    /// Handle a key in the wgrep apply-and-confirm step: `y`/Enter applies,
+    /// `n`/Esc cancels, arrows scroll the file list. Mirrors
+    /// [`App::replace_confirm_key`] exactly, over the sibling field.
+    fn wgrep_confirm_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('y' | 'Y') | KeyCode::Enter => self.apply_wgrep_confirm(),
+            KeyCode::Char('n' | 'N') | KeyCode::Esc => self.wgrep_confirm = None,
+            KeyCode::Up => {
+                if let Some(wc) = self.wgrep_confirm.as_mut() {
+                    wc.scroll = wc.scroll.saturating_sub(1);
+                }
+            }
+            KeyCode::Down => {
+                if let Some(wc) = self.wgrep_confirm.as_mut() {
+                    wc.scroll = (wc.scroll + 1).min(wc.lines.len().saturating_sub(1));
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn ps_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc => self.workspace_search = None,
@@ -11757,6 +11992,13 @@ impl App {
                         }
                         _ => {}
                     }
+                }
+                // T211: Alt+E opens the results as a real editable buffer, closing
+                // this panel -- `open_wgrep_results` handles that itself, so the
+                // `run_workspace_search` below (harmless either way) becomes a
+                // no-op once it does.
+                if c.eq_ignore_ascii_case(&'e') {
+                    self.open_wgrep_results();
                 }
                 self.run_workspace_search();
             }
