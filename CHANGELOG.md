@@ -296,6 +296,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   cursor was in the source buffer instead of always at the top; pressing
   `t` inside the preview opens a table of contents of the document's
   headings (`Enter` jumps the preview there, `Esc` closes just the TOC).
+- **Editable workspace search results ("wgrep"-style)** (improvement plan
+  T211): **Alt+E** in workspace search turns the hit list into a real,
+  editable buffer (one line per hit, `path:line: text`) instead of a
+  read-only list. Editing a line and saving (`Ctrl+S`) writes that edit
+  back to its source file at the recorded position; deleting a line skips
+  that hit. Saving previews a summary ("N edits in M files") before
+  writing — the same confirm step search-and-replace already uses. Not
+  available for a static results list (go-to-definition, diagnostics, …).
 
 ### Changed
 

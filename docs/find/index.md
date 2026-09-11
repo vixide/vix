@@ -19,6 +19,7 @@ occurrence of the selection without opening any box.
 | Ctrl+Shift+F            | Workspace-wide search and replace                   |
 | Alt+H                   | In the find dialog: turn replace on or off          |
 | Alt+I                   | In the find dialog: where to look — buffer, files, workspace |
+| Alt+E                   | In workspace search: edit the results as a real buffer |
 
 **Find Next** and **Find Previous** repeat the last completed search, and keep
 working after the find box has closed — the last pattern is remembered. With
@@ -113,6 +114,17 @@ empty rather than hiding every file.
 
 For example, Include `\.rs$` searches only Rust files; Exclude `(^|/)target/`
 skips the build directory.
+
+### Editing results directly ("wgrep"-style)
+
+**Alt+E** turns the current hit list into a real, editable buffer — one line
+per hit, in the same `path:line: text` shape — instead of a read-only list.
+Edit a line's text and **Ctrl+S** writes that edit back to its source file
+at the recorded position; delete a line to skip that hit entirely, leaving
+its source untouched. Saving previews a summary ("N edits in M files")
+before writing, the same confirm step search-and-replace uses. Not
+available for a static results list (go-to-definition, diagnostics, …) —
+only a real text search's hits.
 
 ## Search in Workspace → Dock
 

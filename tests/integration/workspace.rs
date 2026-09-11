@@ -534,6 +534,174 @@ fn workspace_replace_rewrites_files() {
 }
 
 #[test]
+fn wgrep_alt_e_opens_results_as_an_editable_buffer() {
+    let dir = unique_dir("wgrep-open");
+    fs::write(dir.join("a.txt"), "needle here\n").unwrap();
+    let mut app = app_at(&dir);
+
+    app.run_action("search.workspace");
+    for c in "needle".chars() {
+        app.on_key(key(c));
+    }
+    assert_eq!(app.workspace_search.as_ref().unwrap().hits.len(), 1);
+
+    app.on_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::ALT));
+
+    assert!(
+        app.workspace_search.is_none(),
+        "the search panel closes when the results buffer opens"
+    );
+    let content = app.editor.active_tab().unwrap().text();
+    assert!(
+        content.contains("a.txt:1: needle here"),
+        "buffer content: {content:?}"
+    );
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn wgrep_editing_a_line_and_saving_rewrites_only_that_line() {
+    let dir = unique_dir("wgrep-edit");
+    fs::write(dir.join("a.txt"), "keep this\nneedle line\nkeep this too\n").unwrap();
+    let mut app = app_at(&dir);
+
+    app.run_action("search.workspace");
+    for c in "needle".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::ALT));
+    let content = app.editor.active_tab().unwrap().text();
+
+    // Move the cursor to the end of the buffer's (only) line and append text.
+    let end = content.trim_end().len();
+    app.editor.active_tab_mut().unwrap().editor.set_cursor(end);
+    for c in " EDITED".chars() {
+        app.on_key(key(c));
+    }
+
+    app.run_action("file.save");
+    let wc = app.wgrep_confirm.as_ref().expect("apply-confirm opened");
+    assert_eq!(wc.replaced, 1);
+    assert_eq!(wc.plan.len(), 1);
+    // Nothing is written until the preview is confirmed.
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "keep this\nneedle line\nkeep this too\n"
+    );
+
+    app.on_key(key('y'));
+
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "keep this\nneedle line EDITED\nkeep this too\n"
+    );
+    assert!(app.wgrep_confirm.is_none());
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn wgrep_deleting_a_line_skips_that_hit_entirely() {
+    let dir = unique_dir("wgrep-delete");
+    fs::write(dir.join("a.txt"), "needle one\n").unwrap();
+    fs::write(dir.join("b.txt"), "needle two\n").unwrap();
+    let mut app = app_at(&dir);
+
+    app.run_action("search.workspace");
+    for c in "needle".chars() {
+        app.on_key(key(c));
+    }
+    assert_eq!(app.workspace_search.as_ref().unwrap().hits.len(), 2);
+    app.on_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::ALT));
+
+    // "Delete a line" by retyping the buffer with only one of the two
+    // surviving, verbatim (not edited).
+    let content = app.editor.active_tab().unwrap().text();
+    let surviving = content
+        .lines()
+        .find(|l| l.contains("a.txt"))
+        .unwrap()
+        .to_string();
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_content(&surviving);
+
+    app.run_action("file.save");
+
+    // The kept line was never *edited*, so nothing needs writing at all --
+    // neither file changes, including the one whose hit was dropped.
+    assert!(
+        app.wgrep_confirm.is_none(),
+        "no textual edits were made to any surviving line"
+    );
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "needle one\n"
+    );
+    assert_eq!(
+        fs::read_to_string(dir.join("b.txt")).unwrap(),
+        "needle two\n"
+    );
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn wgrep_saving_with_no_edits_is_a_no_op() {
+    let dir = unique_dir("wgrep-noop");
+    fs::write(dir.join("a.txt"), "needle here\n").unwrap();
+    let mut app = app_at(&dir);
+
+    app.run_action("search.workspace");
+    for c in "needle".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::ALT));
+    app.status.clear();
+
+    app.run_action("file.save");
+
+    assert!(app.wgrep_confirm.is_none());
+    assert!(!app.status.is_empty(), "reports there's nothing to apply");
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "needle here\n"
+    );
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn wgrep_alt_e_is_a_no_op_for_static_results() {
+    let dir = unique_dir("wgrep-static");
+    fs::write(dir.join("a.txt"), "// TODO: fix this\n").unwrap();
+    let mut app = app_at(&dir);
+
+    // Warm the file index as a side effect of a normal workspace search,
+    // then close it before the actual (static-results) panel under test.
+    app.run_action("search.workspace");
+    app.workspace_search = None;
+    app.run_action("tools.todo_finder");
+    assert!(
+        app.workspace_search
+            .as_ref()
+            .is_some_and(|p| !p.hits.is_empty())
+    );
+
+    app.on_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::ALT));
+
+    assert!(
+        app.workspace_search.is_some(),
+        "Alt+E is a no-op on a static-results list (go-to-definition, TODOs, …)"
+    );
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn ctrl_shift_f_opens_workspace_search() {
     let mut app = app_at(Path::new("."));
     app.on_key(KeyEvent::new(

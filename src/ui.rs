@@ -38,7 +38,7 @@ use choosers::{
 use db::draw_db;
 use dialogs::{
     draw_confirm, draw_paste_conflict, draw_query_replace, draw_replace_confirm, draw_script_trust,
-    draw_unsaved,
+    draw_unsaved, draw_wgrep_confirm,
 };
 use docks::{draw_debug_panel, draw_messages, draw_outline_dock, draw_test_panel};
 use edit_surfaces::{
@@ -371,6 +371,9 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
 fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     // Which-key popup for a pending key prefix (drawn under other modals).
     draw_which_key(app, frame, area);
+    if app.wgrep_confirm.is_some() {
+        draw_wgrep_confirm(app, frame, area);
+    }
     if app.edit_sql.is_some() {
         draw_edit_sql(app, frame, area);
     }

@@ -2466,14 +2466,55 @@ and its own gate run, zero intended behavior change unless stated.
   locales. New `docs/coverage/index.md`, `crates/vix-coverage/spec/
   index.md`, `docs/configuration/index.md` and `docs/git-panel/index.md`
   cross-link updated. Full `scripts/check` gate green.
-- [ ] **T211 — Editable search results ("wgrep"-style).** Workspace
-  search results open as a real, editable buffer (one line per hit,
-  `path:line: text`) instead of a read-only list; editing a line and
-  saving applies that edit back to its source file at the recorded
-  position, deleting a line skips that hit. Builds on
-  `workspace_search.rs`'s existing results model; a new action
-  (`search.edit_results`) and a small apply-diff-back-to-sources step
-  with a confirm summary ("N files will change") before writing.
+- [x] **T211 — Editable search results ("wgrep"-style).** Done. **Alt+E**
+  in workspace search (also `search.edit_results`, in `palette::COMMANDS`)
+  opens the hit list as a genuine, editable `Tab` — not an overlay, closing
+  the search panel so normal editing keys reach it directly, exactly as
+  the task asked ("a real, editable buffer"). The buffer carries a
+  synthetic `path` (`App::WGREP_RESULTS_PATH`, never a real file) purely so
+  `App::save` can recognize it and reroute `Ctrl+S` to a diff step instead
+  of trying to write a file literally named that.
+
+  The diff re-identifies each **surviving** line by parsing its own
+  `rel:line:` prefix (new `vix_workspace_search::parse_result_line`, the
+  inverse of `Hit::display`'s own format) and comparing the text after it
+  to a recorded baseline (new `WgrepBaseline`, one per hit, captured when
+  the buffer opened) — deliberately **not** by buffer position, so
+  deleting a line just removes it from what gets parsed (no bookkeeping:
+  it's simply excluded from the diff, i.e. skipped) and a line typed from
+  scratch (not matching the shape at all) is ignored rather than misread.
+  `Hit` gained two fields (`rel`, `text`) to carry the pieces `WgrepBaseline`
+  needs — the 6 other `Hit`-constructing call sites (symbols, references,
+  diagnostics, TODO finder, go-to-definition candidates) got them filled in
+  too, mostly with a sensible existing value (rarely used since
+  `open_wgrep_results` gates on `!STATIC_RESULTS`, which covers all of
+  them except the TODO finder — excluded anyway since T211 is scoped to a
+  live text search, not every `rel:line: text`-shaped static list).
+
+  The confirm-before-write step **reuses `ReplaceConfirm`'s exact shape**
+  (per-file new contents, a `rel (count)` summary line, a scroll offset)
+  and its `y`/Enter-apply, `n`/Esc-cancel key handling, matching the task's
+  own "confirm summary" ask almost line for line — as a sibling
+  `wgrep_confirm` field (not the same field as search-and-replace's own
+  `replace_confirm`, since "N edits written" and "N replaced" are different
+  claims deserving different wording) with its own draw function
+  (`draw_wgrep_confirm`, a near-mirror of `draw_replace_confirm`) and its
+  own `panel!`/`any_open!` entries (T202's now-familiar dispatch pattern).
+  Applying writes each affected file whole and re-baselines exactly the
+  lines that changed, so saving again with no further edits is a no-op.
+  4 new status/UI i18n keys, plus 2 more (`cmd.search_edit_results`,
+  `menu`-adjacent) for palette discoverability — all × 15 locales, none
+  delegated (small enough to translate directly).
+
+  5 new integration tests (open, edit-and-write, delete-skips-the-hit,
+  no-op-with-no-edits, static-results-gate — all driven through
+  `run_action`/`on_key`, asserting on real on-disk file contents since a
+  wgrep report is user data in a temp dir, not app config, so — like
+  T210 — nothing here needs to dodge a real-config-dir write) plus 3 new
+  crate unit tests for `parse_result_line`. `crates/vix-workspace-search/
+  spec/index.md` gained a full T211 section; `docs/find/index.md` updated
+  (new Alt+E keybinding row + an "Editing results directly" subsection).
+  Full `scripts/check` gate green.
 
 ## Phase 3 — Documentation
 
@@ -2634,7 +2675,7 @@ scratch each time they come up.
 
 **Status as of 2026-09-11**: Run A is fully done. Run B is done except
 T112–T115 (the modal-editing implementation; T111's audit/spec landed).
-Run C is done for T202–T206, T208–T210; T201, T207, and T211 are
+Run C is done for T202–T206, T208–T211; T201 and T207 are
 still open. Runs D/E/F (docs, demo/tutorials, examples) haven't started. Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
@@ -2649,8 +2690,8 @@ groups is listed explicitly.
 3. **Run C (features):** T201–T211 in any order, one branch each — T104j
    shipped 2026-09-04, so T204 was unblocked too (§ T204's own note);
    T210/T211 never had a dependency either. **T204, T203, T209, T208,
-   T202, T205, T210, and T206 are done (2026-09-10/11); T201, T207, and
-   T211 remain.**
+   T202, T205, T210, T206, and T211 are done (2026-09-10/11); T201 and
+   T207 remain.**
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
    Not started.
 5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last. Not

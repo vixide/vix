@@ -106,6 +106,7 @@ impl App {
             outline,
             query_replace,
             replace_confirm,
+            wgrep_confirm,
             workspace_search,
             confirm,
             script_trust,
@@ -333,6 +334,7 @@ impl App {
         panel!(outline, outline_key);
         panel!(query_replace, qr_key);
         panel!(replace_confirm, replace_confirm_key);
+        panel!(wgrep_confirm, wgrep_confirm_key);
         panel!(workspace_search, ps_key);
         panel!(confirm, confirm_key);
         panel!(script_trust, script_trust_key);
