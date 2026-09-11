@@ -5888,6 +5888,7 @@ name = "vix-markdown-preview"
 version = "1.6.0"
 dependencies = [
  "pulldown-cmark",
+ "vix-outline-panel",
 ]
 
 [[package]]

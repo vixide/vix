@@ -291,6 +291,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   without re-parsing. New `coverage_path` setting pre-fills the Load
   Coverage File… prompt. Vix visualizes an existing report; it doesn't
   generate one.
+- **Markdown preview scroll-sync + table of contents** (improvement plan
+  T206): **Tools → Markdown Preview** now opens scrolled to wherever the
+  cursor was in the source buffer instead of always at the top; pressing
+  `t` inside the preview opens a table of contents of the document's
+  headings (`Enter` jumps the preview there, `Esc` closes just the TOC).
 
 ### Changed
 

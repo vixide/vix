@@ -550,6 +550,81 @@ fn markdown_preview_renders_active_buffer() {
 }
 
 #[test]
+fn markdown_preview_opens_scrolled_to_the_cursors_line() {
+    let mut app = app_at(Path::new("."));
+    let text = "# Title\n\npara one\n\npara two\n\npara three\n";
+    let cursor = text.find("para two").unwrap();
+    buffer_with(&mut app, text, cursor);
+
+    app.run_action("tools.markdown_preview");
+
+    let p = app.markdown_preview.as_ref().expect("preview open");
+    assert_eq!(
+        p.lines[p.scroll], "para two",
+        "opens scrolled to the cursor's paragraph: {:?}",
+        p.lines
+    );
+}
+
+#[test]
+fn markdown_toc_lists_headings_and_jumps_the_preview() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "# Title\n\nintro\n\n## Section\n\nbody\n");
+    app.run_action("tools.markdown_preview");
+
+    app.on_key(key('t'));
+    assert!(app.markdown_toc.is_some(), "t opens the table of contents");
+    let toc = app.markdown_toc.as_ref().unwrap();
+    assert_eq!(toc.entries.len(), 2);
+    assert_eq!(toc.entries[0].name, "Title");
+    assert_eq!(toc.entries[1].name, "Section");
+
+    app.on_key(keycode(KeyCode::Down)); // highlight "Section"
+    app.on_key(keycode(KeyCode::Enter));
+
+    assert!(
+        app.markdown_toc.is_none(),
+        "Enter closes the TOC, back to the preview"
+    );
+    assert!(
+        app.markdown_preview.is_some(),
+        "the preview itself stays open"
+    );
+    let p = app.markdown_preview.as_ref().unwrap();
+    assert_eq!(p.lines[p.scroll], "Section", "scrolled to the heading");
+}
+
+#[test]
+fn markdown_toc_esc_closes_only_the_toc_not_the_preview() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "# Title\n\nbody\n");
+    app.run_action("tools.markdown_preview");
+    app.on_key(key('t'));
+    assert!(app.markdown_toc.is_some());
+
+    app.on_key(keycode(KeyCode::Esc));
+
+    assert!(app.markdown_toc.is_none(), "Esc closes the TOC");
+    assert!(
+        app.markdown_preview.is_some(),
+        "the preview stays open underneath"
+    );
+}
+
+#[test]
+fn markdown_toc_with_no_headings_is_a_no_op() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, "just a paragraph, no headings\n");
+    app.run_action("tools.markdown_preview");
+    app.status.clear();
+
+    app.on_key(key('t'));
+
+    assert!(app.markdown_toc.is_none());
+    assert!(!app.status.is_empty(), "reports there are no headings");
+}
+
+#[test]
 fn text_information_reports_counts() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "Hello world.\nHow are you?");

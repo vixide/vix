@@ -334,6 +334,64 @@ pub(super) fn draw_markdown_preview(app: &mut App, frame: &mut Frame, area: Rect
     }
 }
 
+/// The Markdown preview's table of contents (T206), drawn over the preview
+/// the same way `draw_outline` draws over the editor -- see that function
+/// for the shared layout shape.
+pub(super) fn draw_markdown_toc(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(n) = app.markdown_toc.as_ref().map(crate::app::Outline::len) else {
+        return;
+    };
+    let width = 48u16.min(area.width);
+    let max_rows = area.height.saturating_sub(3).max(1);
+    let rows = u16::try_from(n).unwrap_or(u16::MAX).min(max_rows);
+    let height = (rows + 3).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 4,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::LIST, t!("ui.markdown_toc")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let view_h = chunks[0].height as usize;
+    if let Some(o) = app.markdown_toc.as_mut() {
+        o.ensure_visible(view_h);
+    }
+    let o = app.markdown_toc.as_ref().unwrap();
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for idx in o.scroll..(o.scroll + view_h).min(o.len()) {
+        let e = &o.entries[idx];
+        // `kind` is the heading's `#`-run; indent nested levels under it.
+        let indent = "  ".repeat(e.kind.len().saturating_sub(1));
+        let text = format!("  {indent}{}", e.name);
+        if idx == o.selected {
+            lines.push(Line::from(Span::styled(text, theme::selected())));
+        } else {
+            lines.push(Line::from(text));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines), chunks[0]);
+
+    let hint = Line::from(Span::styled(
+        t!("ui.markdown_toc_hint").to_string(),
+        theme::dim(),
+    ));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
+}
+
 pub(super) fn draw_text_info(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(n) = app
         .text_info

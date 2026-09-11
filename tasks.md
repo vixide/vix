@@ -2340,9 +2340,36 @@ and its own gate run, zero intended behavior change unless stated.
   `keybindings_path()`). 4 new i18n keys (menu item, prompt, success status,
   failure message) translated directly across all 15 locales rather than
   delegated, given the small count. Full `scripts/check` gate green.
-- [ ] **T206 — Markdown preview sync + TOC.** Scroll-sync preview to the
-  source cursor line; TOC jump list over the headings (reuse outline
-  machinery if possible).
+- [x] **T206 — Markdown preview sync + TOC.** Done. **Scope note**: the
+  preview overlay captures all keys exclusively while open (same as every
+  other Tools overlay in Vix — the editor isn't reachable underneath it),
+  so "scroll-sync" is sync-**on-open** (the cursor can't move again until
+  the preview closes), not continuous two-way sync; that's the complete,
+  correct reading given the architecture, not a narrowing. `vix_markdown_
+  preview::render_full` (the version `Panel::open` calls; the plain
+  `render` most callers/tests use is now a thin wrapper) walks
+  `pulldown-cmark`'s `into_offset_iter()` to tag every display line with
+  its originating 1-based source line, and collects headings into a TOC —
+  **reusing `vix_outline_panel::Entry`/`Outline` exactly as the task
+  suggested**, just pointed at *preview* lines (`Entry.line`) instead of
+  source lines. `Panel::sync_to_source_line` (cursor line → nearest
+  preview line; a real bug found and fixed here: several display lines
+  — a heading's text, underline, and trailing blank — can share one
+  source line, and naively taking the *last* match landed one line past
+  the heading, on its blank separator, not the heading itself; fixed to
+  take the *first* line at the greatest qualifying source line) drives
+  sync-on-open; `Panel::scroll_to_line` (a direct preview-line jump)
+  drives the TOC. In the host, opening the preview captures the cursor's
+  source line first, then syncs; `t`/`T` opens the TOC as a second overlay
+  over the preview (same "overlay over an overlay" shape as the theme
+  editor's X11 picker, dispatched via the same `panel!`-chain-ordering
+  and `any_open!` pattern T202 established), `Enter` jumps the preview
+  and closes just the TOC (back to the preview, not the source buffer),
+  `Esc` closes just the TOC, empty-TOC is a no-op with a status message.
+  5 new integration tests plus 4 new crate unit tests (source-line
+  mapping, TOC extraction, both scroll helpers). 3 new i18n keys ×
+  15 locales. New `docs/markdown-preview/index.md`; spec updated. Full
+  `scripts/check` gate green.
 - [ ] **T207 — Git history.** Git menu: Log (commit list panel → select
   shows the commit diff in a tab), File History for the active file, and
   Open File at Revision (read-only tab titled `file @ abbrev-sha`).
@@ -2607,7 +2634,7 @@ scratch each time they come up.
 
 **Status as of 2026-09-11**: Run A is fully done. Run B is done except
 T112–T115 (the modal-editing implementation; T111's audit/spec landed).
-Run C is done for T202–T205, T208–T210; T201, T206–T207, and T211 are
+Run C is done for T202–T206, T208–T210; T201, T207, and T211 are
 still open. Runs D/E/F (docs, demo/tutorials, examples) haven't started. Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
@@ -2622,7 +2649,7 @@ groups is listed explicitly.
 3. **Run C (features):** T201–T211 in any order, one branch each — T104j
    shipped 2026-09-04, so T204 was unblocked too (§ T204's own note);
    T210/T211 never had a dependency either. **T204, T203, T209, T208,
-   T202, T205, and T210 are done (2026-09-10/11); T201, T206–T207, and
+   T202, T205, T210, and T206 are done (2026-09-10/11); T201, T207, and
    T211 remain.**
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
    Not started.
