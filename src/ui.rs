@@ -152,7 +152,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app.spellcheck {
         app.refresh_spellcheck();
     }
-    if app.git_repo {
+    if app.coverage_gutter_active() {
+        app.refresh_coverage_gutter();
+    } else if app.git_repo {
         app.refresh_git_gutter();
     }
     let area = frame.area();

@@ -47,6 +47,10 @@ The gutter is computed by diffing the current buffer against its cached HEAD
 contents, and is drawn in both the normal and the **soft-wrap** view (in soft-wrap,
 a changed logical line shows its bar on its first visual row).
 
+The [coverage gutter](../coverage/index.md) uses this same column to show
+test coverage instead; the two share it, so only one shows per buffer at a
+time.
+
 ## The Git menu
 
 The **Git** menu gathers the git actions:

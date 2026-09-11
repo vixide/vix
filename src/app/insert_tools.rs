@@ -45,6 +45,8 @@ impl App {
             "tools.markdown_preview" => self.open_markdown_preview(),
             "tools.snippets" => self.open_snippets(),
             "tools.snippet_new_from_selection" => self.new_snippet_from_selection(),
+            "tools.load_coverage_file" => self.open_load_coverage_prompt(),
+            "tools.toggle_coverage_gutter" => self.toggle_coverage_gutter(),
             "tools.contacts" => self.open_contacts(),
             "tools.dashboard" => self.open_dashboard(),
             "tools.color_converter" => self.open_color_converter(),

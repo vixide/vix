@@ -5282,6 +5282,7 @@ dependencies = [
  "vix-convert-from-tsv-into-json-tool",
  "vix-convert-from-yaml-into-json-tool",
  "vix-convert-tabular",
+ "vix-coverage",
  "vix-dap",
  "vix-db",
  "vix-diff-view",
@@ -5584,6 +5585,13 @@ version = "1.6.0"
 dependencies = [
  "proptest",
  "serde_json",
+]
+
+[[package]]
+name = "vix-coverage"
+version = "1.6.0"
+dependencies = [
+ "regex",
 ]
 
 [[package]]

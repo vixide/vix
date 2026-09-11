@@ -47,7 +47,8 @@ Highlights:
   [Compare With File](diff-view/index.md) (diff against another file) ·
   [Integrated Terminal](terminal/index.md) (a shell in a panel) ·
   [Switch Project](switch-project/index.md) (re-root at a recent workspace) ·
-  [Test Runner](test-runner/index.md) (pass/fail panel).
+  [Test Runner](test-runner/index.md) (pass/fail panel) ·
+  [Coverage Gutter](coverage/index.md) (visualize an LCOV/Cobertura report).
 - Markup: [Org](org/index.md) (Org-mode basics — headlines, TODO, export).
 - Reference: [Media Types](media-types/index.md) (MIME picker by type/extension).
 

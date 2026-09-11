@@ -1239,6 +1239,16 @@ const TOOLS: &[Item] = &[
         "tools.snippet_new_from_selection",
         "",
     ),
+    Item::leaf(
+        "menu.item.tools.load_coverage_file",
+        "tools.load_coverage_file",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.tools.toggle_coverage_gutter",
+        "tools.toggle_coverage_gutter",
+        "",
+    ),
     Item::sub("menu.item.tools.scripts", TOOLS_SCRIPTS),
     Item::leaf(
         "menu.item.tools.reload_keybindings",

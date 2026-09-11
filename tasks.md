@@ -2405,14 +2405,40 @@ and its own gate run, zero intended behavior change unless stated.
   roadmap line), `docs/file-explorer/index.md`, and
   `docs/configuration/index.md`'s settings table. `CHANGELOG.md` entry
   added.
-- [ ] **T210 — Coverage gutter.** New crate `vix-coverage`: parse LCOV
-  and Cobertura XML into per-file line-hit data; a gutter overlay
-  (covered/uncovered/partial, reusing the diff-gutter's color-mark
-  mechanism) toggled from the Tools menu, pointed at a coverage file the
-  user generates (`cargo llvm-cov`, `pytest --cov`, …) via a settings
-  path or a palette "Load Coverage File…" command. No coverage
-  generation built in — Vix visualizes an existing report, doesn't run
-  one.
+- [x] **T210 — Coverage gutter.** Done. New crate `vix-coverage`: pure
+  parsing, no `App`/I/O dependency. `parse` auto-detects LCOV (`SF:`/
+  `DA:`/`BRDA:`/`end_of_record`) vs. Cobertura XML (`<class filename="…">`/
+  `<line number="…" hits="…">`) from the text; the Cobertura reader is a
+  tolerant single-pass regex token scan in document order (tracking the
+  enclosing class's `filename`), not a validating XML parser — narrow
+  enough that pulling in an XML dependency wasn't worth it. A line with an
+  untaken LCOV branch (`BRDA:` `taken` of `-`/`0`) or a Cobertura
+  `condition-coverage="…% (a/b)"` with `a < b` is reported `Partial`;
+  otherwise a nonzero hit count is `Covered`, zero is `Uncovered`.
+  `Report::lines_for` matches a buffer's path against however the report
+  recorded it (exact match, then a suffix-match fallback either
+  direction) since reports name files inconsistently across machines/CI.
+  9 unit tests, including the partial-branch and suffix-matching cases.
+  **Tools → Load Coverage File…** (prompt pre-filled from the new
+  `coverage_path` setting) reads and parses the file, then paints the
+  gutter via the *existing* diff-gutter mechanism
+  (`Editor::set_gutter_marks`, the same green/red/yellow hex values the
+  git diff gutter uses for added/deleted/modified) — reused exactly as
+  the task asked, no new rendering code in `vix-editor-core`. The
+  coverage and git diff gutters share that one gutter-sign column, so
+  only one shows per buffer: `src/ui.rs`'s per-frame refresh calls
+  `refresh_coverage_gutter` instead of `refresh_git_gutter` while
+  `App::coverage_gutter_active()` is true. **Tools → Toggle Coverage
+  Gutter** shows/hides without re-parsing (the loaded `Report` stays
+  cached on `App`). No coverage generation built in — Vix visualizes an
+  existing report, doesn't run one. 6 new integration tests (real LCOV
+  fixture files in a temp dir, driven through `run_action`/`on_key`,
+  asserting on `Editor::gutter_marks()` directly — no real-config-dir
+  writes involved here, unlike T202/T205, so these cover the full
+  load/toggle/error path end to end). 8 new i18n keys across all 15
+  locales. New `docs/coverage/index.md`, `crates/vix-coverage/spec/
+  index.md`, `docs/configuration/index.md` and `docs/git-panel/index.md`
+  cross-link updated. Full `scripts/check` gate green.
 - [ ] **T211 — Editable search results ("wgrep"-style).** Workspace
   search results open as a real, editable buffer (one line per hit,
   `path:line: text`) instead of a read-only list; editing a line and
@@ -2581,7 +2607,7 @@ scratch each time they come up.
 
 **Status as of 2026-09-11**: Run A is fully done. Run B is done except
 T112–T115 (the modal-editing implementation; T111's audit/spec landed).
-Run C is done for T202–T205, T208, T209; T201, T206–T207, and T210–T211 are
+Run C is done for T202–T205, T208–T210; T201, T206–T207, and T211 are
 still open. Runs D/E/F (docs, demo/tutorials, examples) haven't started. Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
@@ -2596,8 +2622,8 @@ groups is listed explicitly.
 3. **Run C (features):** T201–T211 in any order, one branch each — T104j
    shipped 2026-09-04, so T204 was unblocked too (§ T204's own note);
    T210/T211 never had a dependency either. **T204, T203, T209, T208,
-   T202, and T205 are done (2026-09-10/11); T201, T206–T207, and
-   T210–T211 remain.**
+   T202, T205, and T210 are done (2026-09-10/11); T201, T206–T207, and
+   T211 remain.**
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
    Not started.
 5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last. Not
