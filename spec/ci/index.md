@@ -219,6 +219,38 @@ step itself also retries (`curl --retry 3 --retry-all-errors`) for that
 first-run case. GitLab's and Codeberg's equivalent downloads have not (yet)
 shown this failure, so they are unchanged — revisit if one does.
 
+## Docs site (mdBook)
+
+T301 (`tasks.md`): `book.toml` (`src = "docs"`) plus `docs/SUMMARY.md`
+organize the existing `docs/*/index.md` pages — and a handful of
+repo-root files reached via `../` links (`AGENTS.md`, `agents/*`,
+`AI_STATEMENT.md`, `SECURITY.md`, `CHANGELOG.md`) — into an mdBook site:
+Getting Started / Guides / Features / Reference / Contributing.
+Deliberately no file moves: `SUMMARY.md` links into the layout as it
+already exists, per this task's own instruction.
+
+GitHub-only — GitLab Pages and Codeberg Pages are separate products this
+repo does not publish through, so there is no GitLab/Codeberg equivalent
+(unlike the gate above, which all three forges mirror):
+
+- **`docs-build`** — installs `mdbook` (pinned + checksummed, same
+  pattern as `cargo-deny`/`lychee`), runs `mdbook build` on every push and
+  pull request (a broken `SUMMARY.md` should fail the same way a broken
+  link does), and uploads the built `book/` as a Pages artifact when the
+  push is to `main`.
+- **`docs-deploy`** — `needs: docs-build`, gated to `main`; deploys the
+  artifact with `actions/deploy-pages@v4` under the `github-pages`
+  environment (`pages: write`, `id-token: write` — the only job in this
+  file with either permission).
+
+Publishing requires **Settings → Pages → Source: GitHub Actions** enabled
+once on `github.com/vixide/vix` — a repository setting, not something a
+workflow file can turn on. Until that is set, both jobs still run (so
+`mdbook build` stays part of the gate), but `docs-deploy` fails at the
+deploy step rather than silently no-op-ing.
+
+`book/` (the build output) is gitignored, same as `target/`.
+
 ## Cross-toolchain note
 
 The musl release builds on GitLab and Codeberg override three variables:

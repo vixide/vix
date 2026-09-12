@@ -2634,11 +2634,56 @@ and its own gate run, zero intended behavior change unless stated.
 
 ## Phase 3 — Documentation
 
-- [ ] **T301 — mdBook site.** Add `book.toml` + `docs/SUMMARY.md`
-  organizing existing pages into: Getting Started / Guides / Features /
-  Reference / Contributing. `mdbook build` clean; CI job builds and
-  deploys to GitHub Pages on `main`. Do not move files unless mdBook
-  forces it — prefer SUMMARY links into the existing layout.
+- [x] **T301 — mdBook site.** `book.toml` (`src = "docs"`) + new
+  `docs/SUMMARY.md` organize all 68 existing `docs/*/index.md` pages —
+  no files moved — into Getting Started (10) / Guides (18, including the
+  7 `for-*-users` migration pages) / Features (34 panels & tools) /
+  Reference (architecture, comparison, performance, plus 3 more below) /
+  Contributing (6 more below). `docs/index.md` itself is the unlisted
+  `[Introduction]` prefix chapter. Found (empirically, not assumed) a
+  real mdBook footgun: a `SUMMARY.md` chapter *can* point outside `src`
+  via `../`, and `mdbook build` doesn't error — but it also writes that
+  chapter's HTML output next to its *source* file rather than under
+  `book/` (with `src = "docs"`, a `../AGENTS.md` chapter's destination
+  becomes `book/../AGENTS.html`, i.e. a stray file at the repo root),
+  scattering generated files straight into the tracked tree. Worked
+  around with 9 thin wrapper pages living inside `docs/`
+  (`spec-overview.md`, `crate-map.md`, `glossary.md`,
+  `contributing-agents.md`, `contributing-conventions.md`,
+  `contributing-workflow.md`, `contributing-ai-statement.md`,
+  `contributing-security.md`, `changelog.md`) — each just an
+  explanatory comment plus one `{{#include ../<path>}}` transcluding
+  the real repo-root/`agents/`/`spec/` file, since mdBook's include
+  directive doesn't create a second chapter and so can't escape `src`.
+  Confirmed by diffing `git status` before/after `mdbook build`: zero
+  new files outside `book/`. One directory deliberately NOT in the
+  book: `docs/licenses/` (bundled third-party license `.txt` files, no
+  `index.md`, not referenced anywhere else either — an orphan
+  predating this task, left alone rather than fixed as a drive-by).
+  **Known limitation, documented rather than silently shipped**: prose
+  *inside* the existing `docs/*.md` pages that links further outside
+  `docs/` (a crate's spec via `../../crates/X/spec/index.md`, say) will
+  404 once the book is served standalone from GitHub Pages — those
+  links only resolve when the page is browsed as part of a full
+  repository checkout (a forge's own file viewer, or a local clone),
+  which is how the whole `docs/` tree has been written all along; fixing
+  every such link is a much bigger undertaking than "organize existing
+  pages" and is out of scope here — a future task if it matters once the
+  site is live. New GitHub-only CI jobs `docs-build` (installs `mdbook`,
+  pinned+checksummed like `cargo-deny`/`lychee`; builds on every
+  push/PR; uploads the Pages artifact on `main`) and `docs-deploy`
+  (`needs: docs-build`, deploys via `actions/deploy-pages@v4`, gated to
+  `main`) in `.github/workflows/ci.yml` — no GitLab/Codeberg equivalent
+  since neither publishes through this repo's Pages. `spec/ci/index.md`
+  gained a "Docs site (mdBook)" section documenting both jobs, and that
+  **actually publishing still needs a one-time manual step**: enabling
+  Settings → Pages → Source: GitHub Actions on `github.com/vixide/vix`
+  — not something a workflow file can do. `book/` (build output)
+  gitignored. While surveying `docs/` for this task, noticed
+  `docs/contacts/index.md`, `docs/hunspell/index.md`, and
+  `docs/workspace-information-panel/index.md` are near-empty stub pages
+  (just the trademark footer) — they exist so T302's audit didn't flag
+  them, but have no real content; worth a look during T303/T304.
 - [x] **T302 — Docs coverage audit.** `scripts/docs-coverage` (Python):
   combines two signals — (1) a `docs/*.md` page linking a crate's
   `crates/<crate>/spec/` (the existing convention, strong signal), (2) a
@@ -2813,9 +2858,10 @@ scratch each time they come up.
 
 **Status as of 2026-09-12**: Run A is fully done. Run B is done except
 T112–T115 (the modal-editing implementation; T111's audit/spec landed).
-**Run C (T201–T211) is fully done.** Run D (docs) has started: T302 is
-done (`scripts/docs-coverage` + `docs/coverage.md`, 38 gaps found).
-T301/T305/T303/T304/T306–T309 remain. Runs E/F (demo/tutorials, examples)
+**Run C (T201–T211) is fully done.** Run D (docs) has started: T302 and
+T301 are done (`scripts/docs-coverage` + `docs/coverage.md`, 38 gaps
+found; `book.toml`/`docs/SUMMARY.md` + GitHub Pages CI jobs).
+T305/T303/T304/T306–T309 remain. Runs E/F (demo/tutorials, examples)
 haven't started. Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those

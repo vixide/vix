@@ -266,3 +266,61 @@ jobs:
                 body,
               });
             }
+
+  # mdBook site (T301, tasks.md): builds docs/ (via book.toml's `src`) into
+  # a static site and deploys it to GitHub Pages. GitHub-only — GitLab Pages
+  # and Codeberg Pages are separate products with their own config, and this
+  # repo doesn't publish through them, so there is no GitLab/Codeberg
+  # equivalent of this job (unlike the gate above, which all three mirror).
+  # Runs on every push/PR (`mdbook build` catching a broken SUMMARY.md early
+  # matters more than saving CI minutes here); deploy is gated to `main`.
+  docs-build:
+    name: docs (mdbook build)
+    runs-on: ubuntu-latest
+    env:
+      MDBOOK_VERSION: "0.5.3"
+      MDBOOK_SHA256: "dfb86d8e20a3fed91bf549aa450b9d7f46a275b700292e050cdfd3171732e7fd"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # Same pinned-version-plus-checksum pattern as lychee (docs-links, this
+      # file) and cargo-deny (security.yml): a docs gate should not itself
+      # install an unverified binary.
+      - name: Cache mdbook binary
+        id: mdbook-cache
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/mdbook
+          key: mdbook-${{ env.MDBOOK_VERSION }}-${{ env.MDBOOK_SHA256 }}
+      - name: Install mdbook (pinned, checksummed)
+        if: steps.mdbook-cache.outputs.cache-hit != 'true'
+        run: |
+          tarball="mdbook-v$MDBOOK_VERSION-x86_64-unknown-linux-musl.tar.gz"
+          curl --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -sSfL -o "$tarball" \
+            "https://github.com/rust-lang/mdBook/releases/download/v$MDBOOK_VERSION/$tarball"
+          echo "$MDBOOK_SHA256  $tarball" | sha256sum --check --strict
+          tar -xzf "$tarball" -C /usr/local/bin mdbook
+          chmod +x /usr/local/bin/mdbook
+      - name: mdbook build
+        run: mdbook build
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        with:
+          path: book
+
+  docs-deploy:
+    name: docs (deploy to GitHub Pages)
+    needs: docs-build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
