@@ -55,6 +55,14 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --workspace --no-deps
+      # T305 (tasks.md): docs/reference/ (actions, settings, keybindings) is
+      # generated from the real data, not hand-maintained — regenerate and
+      # diff, so a stale reference page fails the same way a broken link
+      # does. Mirrors `scripts/check`.
+      - name: generated reference docs current? (T305)
+        run: |
+          cargo run --example list_commands -- --write >/dev/null
+          git diff --exit-code -- docs/reference/
       # The specs are living documentation, so they are gated like code: broken
       # links, a crate with no spec, a crate missing from the crate map, or a
       # README.md that has drifted from its index.md twin all fail here.

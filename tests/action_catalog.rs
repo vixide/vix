@@ -4,133 +4,24 @@
 //!
 //! `App::run_action` fans out through a fixed chain of private dispatcher
 //! methods (`run_file_action`, `run_edit_action`, …, each trying the next on
-//! a `bool` miss); this test walks that same chain by name, brace-balancing
-//! each function's body out of its source file, and collects every `"id" =>`
-//! match-arm pattern it finds. A new dispatcher earns its own entry in
-//! [`DISPATCHERS`] below — the list is deliberately explicit (not a blanket
-//! source-wide grep) so an arm added to a `match` that *isn't* part of this
-//! chain (a keymap id, a vim command char, …) never gets mistaken for an
-//! action id.
+//! a `bool` miss); [`vix_action_catalog::dispatch_scan`] walks that same
+//! chain by name, brace-balancing each function's body out of its source
+//! file, and collects every `"id" =>` match-arm pattern it finds — shared
+//! with `examples/list_commands.rs`'s `--write` mode (T305, `tasks.md`), so
+//! this test's notion of "every action id" and the generated
+//! `docs/reference/actions.md` can never drift apart. A new dispatcher
+//! earns its own entry in [`vix_action_catalog::dispatch_scan::DISPATCHERS`]
+//! — the list is deliberately explicit (not a blanket source-wide grep) so
+//! an arm added to a `match` that *isn't* part of this chain (a keymap id, a
+//! vim command char, …) never gets mistaken for an action id.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-
-/// `(file relative to the workspace root, function name)`. Kept in the same
-/// order `App::run_action` tries them, so a diff here reads like the
-/// dispatch chain itself.
-const DISPATCHERS: &[(&str, &str)] = &[
-    ("src/app.rs", "run_action"),
-    ("src/app.rs", "run_file_action"),
-    ("src/app.rs", "run_edit_action"),
-    ("src/app.rs", "run_motion_action"),
-    ("src/app.rs", "run_text_tool_action"),
-    ("src/app.rs", "run_convert_action"),
-    ("src/app.rs", "run_format_action"),
-    ("src/app.rs", "run_lsp_action"),
-    ("src/app.rs", "run_search_action"),
-    ("src/app.rs", "run_named_action"),
-    ("src/app.rs", "run_cursor_action"),
-    ("src/app.rs", "run_app_action"),
-    ("src/app.rs", "run_help_action"),
-    ("src/app.rs", "run_view_action"),
-    ("src/app.rs", "run_project_action"),
-    ("src/app.rs", "db_action"),
-    ("src/app.rs", "open_edit_surface"),
-    ("src/app.rs", "contacts_action"),
-    ("src/app.rs", "go_action"),
-    ("src/app/insert_tools.rs", "run_tools_action"),
-    ("src/app/keymap.rs", "run_vim_action"),
-    ("src/app/git.rs", "run_git_action"),
-    ("src/app/git.rs", "run_jj_action"),
-    ("src/app/org.rs", "org_action"),
-    ("src/app/org.rs", "org_edit_action"),
-    ("src/app/org_table.rs", "org_table_action"),
-    ("src/app/roam.rs", "roam_action"),
-];
+use vix_action_catalog::dispatch_scan::{DYNAMIC_PREFIXES, every_dispatchable_action_id};
 
 /// The workspace root (this test's package is the root package).
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-}
-
-/// Brace-balance `fn fn_name(...) ... { ... }` out of `text`, from its first
-/// `fn fn_name(` to the matching close brace.
-fn function_body<'a>(text: &'a str, fn_name: &str) -> &'a str {
-    let needle = format!("fn {fn_name}(");
-    let start = text
-        .find(&needle)
-        .unwrap_or_else(|| panic!("`fn {fn_name}` not found"));
-    let bytes = text.as_bytes();
-    let body_start = text[start..]
-        .find('{')
-        .map(|i| start + i)
-        .unwrap_or_else(|| panic!("no open brace after `fn {fn_name}`"));
-    let mut depth = 0i32;
-    let mut i = body_start;
-    loop {
-        match bytes[i] {
-            b'{' => depth += 1,
-            b'}' => {
-                depth -= 1;
-                if depth == 0 {
-                    return &text[start..=i];
-                }
-            }
-            _ => {}
-        }
-        i += 1;
-        assert!(i < bytes.len(), "unbalanced braces in `fn {fn_name}`");
-    }
-}
-
-/// Every quoted string literal in `s`, in order. A plain scan (no escaped-
-/// quote handling) — none of these action-id match patterns need it.
-fn quoted_strings(s: &str) -> Vec<&str> {
-    let mut out = Vec::new();
-    let mut rest = s;
-    while let Some(open) = rest.find('"') {
-        rest = &rest[open + 1..];
-        let Some(close) = rest.find('"') else {
-            break;
-        };
-        out.push(&rest[..close]);
-        rest = &rest[close + 1..];
-    }
-    out
-}
-
-/// The literal action ids matched by `"id"` (or `"a" | "b" | …`) match arms
-/// in `body`. Only lines whose *pattern* side starts with a quote count —
-/// this is what excludes guard arms like `a if a.starts_with("edit.") => …`
-/// (pattern starts with the binding `a`, not a literal) from being read as
-/// naming an action id.
-fn arm_ids_in(body: &str) -> BTreeSet<String> {
-    let mut ids = BTreeSet::new();
-    for line in body.lines() {
-        let trimmed = line.trim_start();
-        if !trimmed.starts_with('"') {
-            continue;
-        }
-        let Some(arrow) = trimmed.find("=>") else {
-            continue;
-        };
-        for id in quoted_strings(&trimmed[..arrow]) {
-            ids.insert(id.to_string());
-        }
-    }
-    ids
-}
-
-/// Every action id the dispatch chain in [`DISPATCHERS`] can actually match.
-fn every_dispatchable_action_id(root: &Path) -> BTreeSet<String> {
-    let mut ids = BTreeSet::new();
-    for (file, func) in DISPATCHERS {
-        let text = std::fs::read_to_string(root.join(file))
-            .unwrap_or_else(|e| panic!("reading {file}: {e}"));
-        let body = function_body(&text, func);
-        ids.extend(arm_ids_in(body));
-    }
-    ids
 }
 
 /// Every action id a `vix_menu::Item` leaf runs.
@@ -169,25 +60,13 @@ fn every_dispatchable_action_is_titled_by_the_menu_the_catalog_or_the_palette() 
     // keeps them from ever being cataloged twice).
     let palette_ids: BTreeSet<&str> = vix_palette::COMMANDS.iter().map(|(_, id)| *id).collect();
 
-    // Three `starts_with` prefix guards match a dynamically-suffixed id
-    // (`view.theme:Dark`, `script:my_script`, …), never a literal one — a
-    // menu leaf or catalog entry for the bare prefix itself isn't
-    // meaningful, so these are exempted rather than cataloged.
-    let dynamic_prefixes = [
-        "view.theme:",
-        "view.locale:",
-        "view.keymap:",
-        "script:",
-        "view.time_zone:",
-    ];
-
     let uncovered: Vec<&str> = dispatchable
         .iter()
         .map(String::as_str)
         .filter(|id| {
             !menu_ids.contains(*id) && !catalog_ids.contains(id) && !palette_ids.contains(id)
         })
-        .filter(|id| !dynamic_prefixes.iter().any(|p| id.starts_with(p)))
+        .filter(|id| !DYNAMIC_PREFIXES.iter().any(|p| id.starts_with(p)))
         .collect();
     assert!(
         uncovered.is_empty(),

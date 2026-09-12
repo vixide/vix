@@ -683,6 +683,167 @@ pub fn title_key(action_id: &str) -> Option<&'static str> {
     CATALOG.iter().find(|a| a.id == action_id).map(|a| a.title)
 }
 
+/// Enumerates every action id `App::run_action` can dispatch, by reading
+/// `src/app.rs`'s own dispatch chain out of the source tree.
+///
+/// Shared by `tests/action_catalog.rs` (which asserts every id found here is
+/// titled by a menu leaf, this crate, or `vix_palette::COMMANDS`) and
+/// `examples/list_commands.rs`'s `--write` mode (T305, `tasks.md`), which
+/// generates `docs/reference/actions.md` from the same list — one scanner,
+/// so the test's notion of "every action id" and the generated reference's
+/// can never drift apart.
+pub mod dispatch_scan {
+    use std::collections::BTreeSet;
+    use std::path::{Path, PathBuf};
+
+    /// `action_id` prefixes matched by a `starts_with` guard rather than a
+    /// literal `"id" =>` arm (`view.theme:Dark`, `script:my_script`, …) —
+    /// [`every_dispatchable_action_id`] finds the bare prefix (`"view.theme:"`),
+    /// never a real, individually titleable action id, so both
+    /// `tests/action_catalog.rs` and `examples/list_commands.rs` exempt any id
+    /// starting with one of these from needing its own menu leaf, catalog
+    /// entry, or `docs/reference/actions.md` row.
+    pub const DYNAMIC_PREFIXES: &[&str] = &[
+        "view.theme:",
+        "view.locale:",
+        "view.keymap:",
+        "script:",
+        "view.time_zone:",
+    ];
+
+    /// `(file relative to the workspace root, function name)`, in the same
+    /// order `App::run_action` tries them, so a diff here reads like the
+    /// dispatch chain itself. A new dispatcher earns its own entry — this
+    /// list is deliberately explicit (not a blanket source-wide grep) so an
+    /// arm added to a `match` that *isn't* part of this chain (a keymap id,
+    /// a vim command char, …) never gets mistaken for an action id.
+    pub const DISPATCHERS: &[(&str, &str)] = &[
+        ("src/app.rs", "run_action"),
+        ("src/app.rs", "run_file_action"),
+        ("src/app.rs", "run_edit_action"),
+        ("src/app.rs", "run_motion_action"),
+        ("src/app.rs", "run_text_tool_action"),
+        ("src/app.rs", "run_convert_action"),
+        ("src/app.rs", "run_format_action"),
+        ("src/app.rs", "run_lsp_action"),
+        ("src/app.rs", "run_search_action"),
+        ("src/app.rs", "run_named_action"),
+        ("src/app.rs", "run_cursor_action"),
+        ("src/app.rs", "run_app_action"),
+        ("src/app.rs", "run_help_action"),
+        ("src/app.rs", "run_view_action"),
+        ("src/app.rs", "run_project_action"),
+        ("src/app.rs", "db_action"),
+        ("src/app.rs", "open_edit_surface"),
+        ("src/app.rs", "contacts_action"),
+        ("src/app.rs", "go_action"),
+        ("src/app/insert_tools.rs", "run_tools_action"),
+        ("src/app/keymap.rs", "run_vim_action"),
+        ("src/app/git.rs", "run_git_action"),
+        ("src/app/git.rs", "run_jj_action"),
+        ("src/app/org.rs", "org_action"),
+        ("src/app/org.rs", "org_edit_action"),
+        ("src/app/org_table.rs", "org_table_action"),
+        ("src/app/roam.rs", "roam_action"),
+    ];
+
+    /// Brace-balance `fn fn_name(...) ... { ... }` out of `text`, from its
+    /// first `fn fn_name(` to the matching close brace.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `fn_name` isn't found in `text`, or its body's braces don't
+    /// balance — both mean [`DISPATCHERS`] has drifted from the real source
+    /// and needs a human to look, not a silently wrong scan.
+    #[must_use]
+    fn function_body<'a>(text: &'a str, fn_name: &str) -> &'a str {
+        let needle = format!("fn {fn_name}(");
+        let start = text
+            .find(&needle)
+            .unwrap_or_else(|| panic!("`fn {fn_name}` not found"));
+        let bytes = text.as_bytes();
+        let body_start = text[start..].find('{').map_or_else(
+            || panic!("no open brace after `fn {fn_name}`"),
+            |i| start + i,
+        );
+        let mut depth = 0i32;
+        let mut i = body_start;
+        loop {
+            match bytes[i] {
+                b'{' => depth += 1,
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return &text[start..=i];
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+            assert!(i < bytes.len(), "unbalanced braces in `fn {fn_name}`");
+        }
+    }
+
+    /// Every quoted string literal in `s`, in order. A plain scan (no
+    /// escaped-quote handling) — none of these action-id match patterns
+    /// need it.
+    fn quoted_strings(s: &str) -> Vec<&str> {
+        let mut out = Vec::new();
+        let mut rest = s;
+        while let Some(open) = rest.find('"') {
+            rest = &rest[open + 1..];
+            let Some(close) = rest.find('"') else {
+                break;
+            };
+            out.push(&rest[..close]);
+            rest = &rest[close + 1..];
+        }
+        out
+    }
+
+    /// The literal action ids matched by `"id"` (or `"a" | "b" | …`) match
+    /// arms in `body`. Only lines whose *pattern* side starts with a quote
+    /// count — this is what excludes guard arms like
+    /// `a if a.starts_with("edit.") => …` (pattern starts with the binding
+    /// `a`, not a literal) from being read as naming an action id.
+    fn arm_ids_in(body: &str) -> BTreeSet<String> {
+        let mut ids = BTreeSet::new();
+        for line in body.lines() {
+            let trimmed = line.trim_start();
+            if !trimmed.starts_with('"') {
+                continue;
+            }
+            let Some(arrow) = trimmed.find("=>") else {
+                continue;
+            };
+            for id in quoted_strings(&trimmed[..arrow]) {
+                ids.insert(id.to_string());
+            }
+        }
+        ids
+    }
+
+    /// Every action id [`DISPATCHERS`] can actually match, read out of
+    /// `workspace_root`'s own source files.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a `DISPATCHERS` file can't be read, or a listed function
+    /// isn't found in it (brace-balanced out of the file's own text).
+    #[must_use]
+    pub fn every_dispatchable_action_id(workspace_root: &Path) -> BTreeSet<String> {
+        let mut ids = BTreeSet::new();
+        for (file, func) in DISPATCHERS {
+            let path: PathBuf = workspace_root.join(file);
+            let text = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
+            let body = function_body(&text, func);
+            ids.extend(arm_ids_in(body));
+        }
+        ids
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

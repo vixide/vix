@@ -83,6 +83,19 @@
 - [Specification Index](spec-overview.md)
 - [Crate Map](crate-map.md)
 - [Glossary](glossary.md)
+- [Action Reference](reference/actions.md)
+- [Settings Reference](reference/settings.md)
+- [Shared Keybindings](reference/keybindings-shared.md)
+- [Apple Keybindings](reference/keybindings-apple.md)
+- [VSCode macOS Keybindings](reference/keybindings-vscode-macos.md)
+- [VSCode Windows Keybindings](reference/keybindings-vscode-windows.md)
+- [Emacs Keybindings](reference/keybindings-emacs.md)
+- [Vi Keybindings](reference/keybindings-vi.md)
+- [Spacemacs Keybindings](reference/keybindings-spacemacs.md)
+- [IntelliJ macOS Keybindings](reference/keybindings-intellij-macos.md)
+- [IntelliJ Windows Keybindings](reference/keybindings-intellij-windows.md)
+- [Eclipse Keybindings](reference/keybindings-eclipse.md)
+- [Sublime Text Keybindings](reference/keybindings-sublime.md)
 
 # Contributing
 

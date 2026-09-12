@@ -2717,12 +2717,43 @@ and its own gate run, zero intended behavior change unless stated.
 - [ ] **T304 — Fill missing docs pages (batch 2: everything else).**
   Remainder of T302's list, same template. Target: coverage.md shows zero
   gaps.
-- [ ] **T305 — Generated reference.** Grow `examples/list_commands.rs`
-  into an `xtask` (or `scripts/`) generator that emits
-  `docs/reference/actions.md` (all action ids + descriptions),
-  `docs/reference/settings.md` (every settings key, type, default), and
-  `docs/reference/keybindings-<keymap>.md` per keymap from the keymap
-  data. CI check: regenerate and `git diff --exit-code`.
+- [x] **T305 — Generated reference.** `examples/list_commands.rs` grown:
+  plain `cargo run --example list_commands` keeps its original,
+  side-effect-free behavior (print the palette's `>` commands to stdout);
+  `-- --write` (re)generates `docs/reference/actions.md` (all 655
+  non-dynamic dispatchable action ids, each with its resolved title and
+  whether that came from a **Menu** leaf, this workspace's
+  `vix-action-catalog` **Catalog**, or a `palette::COMMANDS` **Palette**
+  entry — mirrors `App::action_title`'s own resolution order exactly),
+  `docs/reference/settings.md` (all 63 `Settings` fields: key, literal
+  Rust type, default from a live `Settings::default()`, and doc comment
+  parsed out of the struct's own source), and one
+  `docs/reference/keybindings-<keymap>.md` per keymap (10 files) plus a
+  `keybindings-shared.md` for `vix_keybindings::SHARED` — from
+  `vix_menu::menus()`, `vix_palette::COMMANDS`, `vix_action_catalog::CATALOG`,
+  `vix_settings::Settings`, and `vix_keybindings::TABLES`/`SHARED`
+  directly, so none of it can drift from the real data. Locale fixed to
+  `"en"` before writing (`vix_i18n::set_locale`) so output is
+  byte-identical run to run — verified by diffing two successive
+  `--write` runs. Extracted the action-id dispatch-chain scanner
+  (`DISPATCHERS`, `every_dispatchable_action_id`, `DYNAMIC_PREFIXES`) out
+  of `tests/action_catalog.rs`'s own private copy into a new
+  `vix_action_catalog::dispatch_scan` public module, so the test's
+  definition of "every action id" and the generator's are the same code,
+  never two copies to keep in sync by hand — `tests/action_catalog.rs`
+  updated to call the shared version, still green. Found one real bug
+  during generation, not assumed away: two `Settings` field doc comments
+  use rustdoc intra-doc links (`` [`recent_files_max`](Self::recent_files_max) ``)
+  that `scripts/check-docs` correctly flagged as broken once copied
+  verbatim into a generated markdown page (`Self::x` means nothing outside
+  rustdoc) — fixed with a small `strip_intradoc_links` transform that
+  keeps the link's label, drops the wrapper. CI check added to all three
+  forges (`ci.yml`/`.gitlab-ci.yml`/`.forgejo/workflows/ci.yml`) and to
+  `scripts/check` itself, right after `cargo doc`: regenerate with
+  `--write`, then `git diff --exit-code -- docs/reference/`.
+  `docs/SUMMARY.md` (T301) gained entries for all 14 new pages under
+  Reference. `spec/ci/index.md` documents the new gate step; the gate is
+  now seven checks, not six.
 - [ ] **T306 — Getting-started guide.** `docs/getting-started/index.md`:
   install (source, and the debian/homebrew paths per `spec/debian`,
   `spec/homebrew-tap-token` once real), first launch, the 10 essentials
@@ -2858,11 +2889,12 @@ scratch each time they come up.
 
 **Status as of 2026-09-12**: Run A is fully done. Run B is done except
 T112–T115 (the modal-editing implementation; T111's audit/spec landed).
-**Run C (T201–T211) is fully done.** Run D (docs) has started: T302 and
-T301 are done (`scripts/docs-coverage` + `docs/coverage.md`, 38 gaps
-found; `book.toml`/`docs/SUMMARY.md` + GitHub Pages CI jobs).
-T305/T303/T304/T306–T309 remain. Runs E/F (demo/tutorials, examples)
-haven't started. Of
+**Run C (T201–T211) is fully done.** Run D (docs) has started: T302,
+T301, and T305 are done (`scripts/docs-coverage` + `docs/coverage.md`,
+38 gaps found; `book.toml`/`docs/SUMMARY.md` + GitHub Pages CI jobs;
+`docs/reference/` generated from real data, regenerate-and-diff gated
+on all three forges). T303/T304/T306–T309 remain. Runs E/F
+(demo/tutorials, examples) haven't started. Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
 groups is listed explicitly.
