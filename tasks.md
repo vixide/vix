@@ -2639,9 +2639,31 @@ and its own gate run, zero intended behavior change unless stated.
   Reference / Contributing. `mdbook build` clean; CI job builds and
   deploys to GitHub Pages on `main`. Do not move files unless mdBook
   forces it — prefer SUMMARY links into the existing layout.
-- [ ] **T302 — Docs coverage audit.** Script (in `scripts/`) that lists
-  user-facing crates/features lacking a `docs/<topic>/index.md`; check its
-  output into `docs/coverage.md`. Merge the audit before writing pages.
+- [x] **T302 — Docs coverage audit.** `scripts/docs-coverage` (Python):
+  combines two signals — (1) a `docs/*.md` page linking a crate's
+  `crates/<crate>/spec/` (the existing convention, strong signal), (2) a
+  crate name and a `docs/` directory name sharing a 4+ letter word after
+  stripping generic suffixes (`-tool`/`-panel`/`-picker`/`-model`/`-parser`)
+  and substring-matching so plurals don't cause false gaps
+  (`contact`/`contacts`). Signal 2 is skipped for the
+  `vix-convert-from-*-into-*-tool` family: their format-name words
+  (`json`/`yaml`/`markdown`/…) collide with unrelated *editor* pages
+  (`edit-json`, `edit-yaml`, `markdown-preview`), which would otherwise
+  misread as coverage for a different feature — confirmed by checking
+  `docs/menus/index.md` is the ONLY place any of that family is mentioned,
+  i.e. no dedicated conversion-tools page exists at all. A short,
+  individually-commented `EXCLUDE` set covers crates confirmed (by reading
+  their actual doc coverage) to be pure internal infrastructure or already
+  covered under a differently-named feature page
+  (`vix-action-catalog`/`vix-list-state`/`vix-lsp-core`/`vix-textops`/
+  `vix-lorem`/`vix-vcard-parser`/`vix-vcard-panel`/`vix-modal`/
+  `vix-time-zone-model`). Writes `docs/coverage.md` and exits non-zero
+  while gaps remain, so it's re-runnable after T303/T304 to watch the
+  count shrink. First run found 38 real gaps (spot-checked several by
+  hand — e.g. `vix-clock-panel`/`vix-tags`/`vix-roam`/`vix-x11-color-picker`/
+  `vix-undo-store` are each mentioned only incidentally or in the generic
+  menu listing, never on a dedicated feature page), listed in
+  `docs/coverage.md` for T303/T304 to consume.
 - [ ] **T303 — Fill missing docs pages (batch 1: panels & tools).** From
   T302's list, write pages for the undocumented panels and Tools-menu
   tools. Template per page: what it is, how to open (menu, palette,
@@ -2791,8 +2813,10 @@ scratch each time they come up.
 
 **Status as of 2026-09-12**: Run A is fully done. Run B is done except
 T112–T115 (the modal-editing implementation; T111's audit/spec landed).
-**Run C (T201–T211) is fully done.** Runs D/E/F (docs, demo/tutorials,
-examples) haven't started. Of
+**Run C (T201–T211) is fully done.** Run D (docs) has started: T302 is
+done (`scripts/docs-coverage` + `docs/coverage.md`, 38 gaps found).
+T301/T305/T303/T304/T306–T309 remain. Runs E/F (demo/tutorials, examples)
+haven't started. Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
 groups is listed explicitly.

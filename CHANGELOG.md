@@ -324,6 +324,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   same confirm step workspace search-and-replace already uses. New
   `vix-structural-replace` crate: a token/bracket-based matcher, not
   tree-sitter (see its spec for why).
+- **Docs coverage audit** (improvement plan T302): `scripts/docs-coverage`
+  lists crates with no detected `docs/` coverage into `docs/coverage.md`
+  (currently 38), for the next docs passes (T303/T304) to work through.
+  Dev tooling only — no user-facing change.
 
 ### Changed
 

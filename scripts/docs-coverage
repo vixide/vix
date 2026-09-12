@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+"""Docs coverage audit for Vix (improvement plan T302).
+
+Lists every workspace crate that looks user-facing but has no docs/
+coverage, so T303/T304 (fill missing docs pages) have a concrete list to
+work from. Writes the result to `docs/coverage.md` and exits non-zero
+when the list isn't empty, so it can be re-run after each doc-writing
+pass to watch the count shrink.
+
+**This is a heuristic audit, not an oracle.** A crate counts as covered
+if either:
+
+1. Some `docs/*/index.md` links its spec (`crates/<crate>/spec/index.md`)
+   -- the convention this codebase already follows at the bottom of most
+   docs pages, so it's a strong, low-noise signal.
+2. The crate's name and some `docs/` directory's name share a
+   significant (4+ letter) word, after stripping generic
+   crate-name suffixes (`-tool`, `-panel`, `-picker`, `-model`, `-parser`)
+   and substring-matching so pluralization doesn't cause a false gap
+   (`contact` vs `contacts`).
+
+Signal 2 is skipped for the `vix-convert-from-*-into-*-tool` family: their
+names share format words (`json`, `yaml`, `markdown`, …) with unrelated
+*editor* pages (`edit-json`, `edit-yaml`, `markdown-preview`, …), which
+would otherwise be misread as coverage for a totally different feature.
+
+A short, explicitly-reasoned EXCLUDE set below covers crates confirmed
+(by reading their actual doc coverage, not just matching words) to be
+pure internal infrastructure or already covered under a differently-named
+page -- see each entry's own comment.
+"""
+
+import os
+import re
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Crates confirmed covered elsewhere or not independently user-facing.
+# Each entry names *why*, so this list stays a deliberate decision, not a
+# silently growing ignore-list.
+EXCLUDE = {
+    "vix-action-catalog": "internal dev/audit tooling (T147), not a user feature",
+    "vix-list-state": "pure list-navigation arithmetic, no independent UI",
+    "vix-lsp-core": "JSON-RPC plumbing behind vix-lsp; docs/language-server-protocol covers the feature",
+    "vix-textops": "internal text-transform helpers used by several features, no menu entry of its own",
+    "vix-lorem": "Tools -> Insert -> Lorem ipsum, covered by docs/insert's own round-up",
+    "vix-vcard-parser": "parsing engine behind the Contacts/vCard panels; docs/contacts covers the feature",
+    "vix-vcard-panel": "the single-vCard view opened from Contacts; docs/contacts covers the feature",
+    "vix-modal": "design-only per its own spec (T111); no shipped feature yet (tracked as T112-T115)",
+    "vix-time-zone-model": "backing data for the Calendar/Clock panels' timezone lists, not a feature itself",
+}
+
+STOP_WORDS = {"tool", "panel", "picker", "model", "vix", "from", "into", "convert", "parser"}
+
+
+def workspace_crates():
+    """Every directory under `crates/` that is a workspace member."""
+    crates_dir = os.path.join(ROOT, "crates")
+    return sorted(
+        name
+        for name in os.listdir(crates_dir)
+        if os.path.exists(os.path.join(crates_dir, name, "Cargo.toml"))
+    )
+
+
+def docs_dirs():
+    """Every directory directly under `docs/`."""
+    docs_root = os.path.join(ROOT, "docs")
+    return sorted(
+        name
+        for name in os.listdir(docs_root)
+        if os.path.isdir(os.path.join(docs_root, name))
+    )
+
+
+def spec_linked_crates():
+    """Every crate some docs page links via `crates/<crate>/spec/...`."""
+    linked = set()
+    docs_root = os.path.join(ROOT, "docs")
+    for dirpath, _dirnames, filenames in os.walk(docs_root):
+        for name in filenames:
+            if not name.endswith(".md"):
+                continue
+            text = open(os.path.join(dirpath, name), encoding="utf-8").read()
+            linked.update(re.findall(r"crates/(vix-[a-z0-9-]+)/spec", text))
+    return linked
+
+
+def significant_words(name):
+    """`name`'s meaningful words: split on `-`, drop generic suffixes and
+    anything under 4 letters (too short to mean much on its own -- `csv`,
+    `tsv`)."""
+    parts = name.replace("vix-", "").replace("-", " ").split()
+    return {p for p in parts if len(p) >= 4 and p not in STOP_WORDS}
+
+
+def shares_a_word(crate_words, doc_words):
+    """Whether any word in `crate_words` is a substring of (or contains) any
+    word in `doc_words` -- catches `contact`/`contacts`-style plurals."""
+    return any(a in b or b in a for a in crate_words for b in doc_words)
+
+
+def find_gaps():
+    crates = workspace_crates()
+    linked = spec_linked_crates()
+    doc_word_sets = [significant_words(d) for d in docs_dirs()]
+
+    gaps = []
+    for crate in crates:
+        if crate in linked or crate in EXCLUDE:
+            continue
+        # The convert-from-*-into-*-tool family's format-name words collide
+        # with unrelated editor pages (edit-json, edit-yaml, ...) -- see the
+        # module doc. Skip the word-overlap signal for them; only a direct
+        # spec link (checked above) counts as coverage.
+        if not crate.startswith("vix-convert-from-"):
+            crate_words = significant_words(crate)
+            if any(shares_a_word(crate_words, dw) for dw in doc_word_sets):
+                continue
+        gaps.append(crate)
+    return gaps
+
+
+def write_report(gaps):
+    path = os.path.join(ROOT, "docs", "coverage.md")
+    lines = [
+        "# Docs coverage audit",
+        "",
+        "Generated by `scripts/docs-coverage` (improvement plan T302) -- see that",
+        "script's own module doc for exactly what counts as \"covered\" and why.",
+        "Re-run it after writing pages (T303/T304) to watch this list shrink.",
+        "",
+    ]
+    if gaps:
+        lines.append(f"**{len(gaps)} crate(s) with no detected docs coverage:**")
+        lines.append("")
+        for c in gaps:
+            lines.append(f"- `{c}`")
+    else:
+        lines.append("**No gaps detected.** Every crate has detected docs coverage.")
+    lines.append("")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    return path
+
+
+def main():
+    gaps = find_gaps()
+    path = write_report(gaps)
+    rel = os.path.relpath(path, ROOT)
+    if gaps:
+        print(f"{len(gaps)} crate(s) with no detected docs coverage (see {rel}):")
+        for c in gaps:
+            print(f"  {c}")
+        return 1
+    print(f"OK: no docs coverage gaps detected (see {rel})")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
