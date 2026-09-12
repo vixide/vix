@@ -304,6 +304,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   that hit. Saving previews a summary ("N edits in M files") before
   writing — the same confirm step search-and-replace already uses. Not
   available for a static results list (go-to-definition, diagnostics, …).
+- **Git history browsing** (improvement plan T207): **Git → Log** gains
+  three interactive views alongside the existing streamed-to-the-dock ones
+  — **Browse Log…** (a commit list, `Enter` opens the highlighted commit's
+  diff in a read-only tab), **File History** (the same list scoped to the
+  active file via `git log --follow`), and **Open File at Revision…**
+  (prompts for a branch/tag/commit and opens the active file's content
+  there, read-only, titled `file @ abbrev`). All three are read-only —
+  none of them write anything.
 
 ### Changed
 

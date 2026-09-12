@@ -252,6 +252,82 @@ pub(super) fn draw_git_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     };
 }
 
+/// The T207 interactive commit-list panel (**Git → Log → Browse Log…** /
+/// **File History**): abbrev hash, date, author, subject, one commit per
+/// row. Wider than `draw_list_chooser`'s fixed 34 columns can fit, so this
+/// mirrors `draw_outline`'s own manual scroll/`ensure_visible` layout
+/// instead.
+pub(super) fn draw_git_log(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.git_log.is_none() {
+        return;
+    }
+    let n = app.git_log.as_ref().unwrap().entries.len();
+    let width = 100u16.min(area.width);
+    let max_rows = area.height.saturating_sub(4).max(1);
+    let rows = u16::try_from(n).unwrap_or(u16::MAX).min(max_rows);
+    let height = (rows + 4).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let title = match &app.git_log.as_ref().unwrap().scope {
+        crate::git::LogScope::Repo => format!(" {} {} ", icon::BRANCH, t!("ui.git_log")),
+        crate::git::LogScope::File(p) => {
+            let name = std::path::Path::new(p)
+                .file_name()
+                .map_or_else(|| p.clone(), |n| n.to_string_lossy().into_owned());
+            format!(" {} {} — {name} ", icon::BRANCH, t!("ui.git_file_history"))
+        }
+    };
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(title);
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let view_h = chunks[0].height as usize;
+    if let Some(p) = app.git_log.as_mut() {
+        p.ensure_visible(view_h);
+    }
+    let p = app.git_log.as_ref().unwrap();
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for idx in p.scroll..(p.scroll + view_h).min(p.entries.len()) {
+        let e = &p.entries[idx];
+        let text = format!(
+            "  {:<8} {:<10} {:<20} {}",
+            e.abbrev,
+            e.date,
+            trunc(&e.author, 20),
+            e.subject
+        );
+        if idx == p.selected {
+            lines.push(Line::from(Span::styled(text, theme::selected())));
+        } else {
+            lines.push(Line::from(text));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines), chunks[0]);
+
+    let hint = Line::from(Span::styled(
+        t!("ui.git_log_hint").to_string(),
+        theme::dim(),
+    ));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
+
+    app.layout.git_log = chunks[0];
+}
+
 pub(super) fn draw_context_menu(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::app::CONTEXT_ITEMS;
     let Some(cm) = app.context_menu.as_ref() else {

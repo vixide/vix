@@ -44,6 +44,9 @@ impl App {
             "git.log_since_1_day_ago" => self.git_log_since(Some("1-day-ago")),
             "git.log_since_1_week_ago" => self.git_log_since(Some("1-week-ago")),
             "git.log_since_1_month_ago" => self.git_log_since(Some("1-month-ago")),
+            "git.browse_log" => self.open_git_log(),
+            "git.file_history" => self.open_git_file_history(),
+            "git.open_at_revision" => self.open_git_at_revision_prompt(),
             "git.status" => self.git_status_to_dock(),
             "git.clone" => self.git_begin_clone(),
             "git.edit_description" => {
@@ -840,6 +843,190 @@ impl App {
              --no-abbrev-commit --decorate --all --boundary \
              --pretty=format:'%ad %h -%d %s [%aN <%aE>] %G?'",
         );
+    }
+
+    // ----- T207: interactive log / file history / open-at-revision --------
+
+    /// **Git → Log → Browse Log…**: an interactive commit-list panel over
+    /// the whole repository's history, distinct from the plain
+    /// streamed-to-the-dock views above. `Enter` opens the highlighted
+    /// commit's diff in a read-only tab.
+    fn open_git_log(&mut self) {
+        if !crate::git::is_repo(&self.root) {
+            self.status = t!("status.git_not_repo").into();
+            return;
+        }
+        let entries = crate::git::log(&self.root, 200);
+        if entries.is_empty() {
+            self.status = t!("status.git_no_commits").into();
+            return;
+        }
+        self.git_log = Some(crate::git::LogPanel::new(
+            entries,
+            crate::git::LogScope::Repo,
+        ));
+    }
+
+    /// **Git → Log → File History**: the active file's own commit history
+    /// (`git log --follow`). `Enter` opens the highlighted commit's diff for
+    /// just this file. No-op (with a status message) without an active file
+    /// or one with no history yet.
+    fn open_git_file_history(&mut self) {
+        if !crate::git::is_repo(&self.root) {
+            self.status = t!("status.git_not_repo").into();
+            return;
+        }
+        let Some(path) = self.active_path() else {
+            return;
+        };
+        let rel = path
+            .strip_prefix(&self.root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .into_owned();
+        let entries = crate::git::file_log(&self.root, &rel, 200);
+        if entries.is_empty() {
+            self.status = t!("status.git_no_file_history").into();
+            return;
+        }
+        self.git_log = Some(crate::git::LogPanel::new(
+            entries,
+            crate::git::LogScope::File(rel),
+        ));
+    }
+
+    pub(super) fn git_log_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.editor.height as usize)
+            .max(1)
+            .saturating_sub(2);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(p) = self.git_log.as_mut() {
+                    p.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(p) = self.git_log.as_mut() {
+                    p.down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(p) = self.git_log.as_mut() {
+                    p.page_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(p) = self.git_log.as_mut() {
+                    p.page_down(page);
+                }
+            }
+            KeyCode::Enter => self.open_selected_commit_diff(),
+            KeyCode::Esc => self.git_log = None,
+            _ => {}
+        }
+    }
+
+    /// Open the highlighted commit's diff (scoped to the file alone, for
+    /// File History) in a read-only tab titled `<abbrev> log` or
+    /// `<abbrev> <filename>`, and close the log panel.
+    fn open_selected_commit_diff(&mut self) {
+        let Some(panel) = self.git_log.as_ref() else {
+            return;
+        };
+        let Some(sha) = panel.selected_sha().map(str::to_string) else {
+            return;
+        };
+        let abbrev = panel.selected_abbrev().unwrap_or(&sha).to_string();
+        let rel_path = match &panel.scope {
+            crate::git::LogScope::File(p) => Some(p.clone()),
+            crate::git::LogScope::Repo => None,
+        };
+        let Some(patch) = crate::git::show_commit(&self.root, &sha, rel_path.as_deref()) else {
+            self.messages
+                .error(t!("msg.git_show_failed", sha = abbrev).to_string());
+            return;
+        };
+        self.git_log = None;
+        let title = rel_path.as_deref().map_or_else(
+            || format!("{abbrev} log"),
+            |p| {
+                let name = Path::new(p)
+                    .file_name()
+                    .map_or_else(|| p.to_string(), |n| n.to_string_lossy().into_owned());
+                format!("{abbrev} {name}")
+            },
+        );
+        self.open_readonly_text_tab(&title, &patch);
+    }
+
+    /// **Git → Log → Open File at Revision…**: prompt for a revision, then
+    /// open the active file's content at it. No-op without an active file.
+    fn open_git_at_revision_prompt(&mut self) {
+        if !crate::git::is_repo(&self.root) {
+            self.status = t!("status.git_not_repo").into();
+            return;
+        }
+        if self.active_path().is_none() {
+            return;
+        }
+        self.prompt = Some(Prompt::new(
+            PromptKind::GitOpenAtRevision,
+            t!("prompt.git_open_at_revision").to_string(),
+        ));
+    }
+
+    /// `PromptKind::GitOpenAtRevision`'s accept handler: open the active
+    /// file's content at `revision` in a read-only tab titled
+    /// `<filename> @ <abbrev>`. Empty input is a no-op; an unresolvable
+    /// revision (or a path not present in it) reports an error.
+    pub(super) fn git_open_at_revision(&mut self, revision: &str) {
+        if revision.is_empty() {
+            return;
+        }
+        let Some(path) = self.active_path() else {
+            return;
+        };
+        let rel = path
+            .strip_prefix(&self.root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .into_owned();
+        let Some(content) = crate::git::show_file_at(&self.root, revision, &rel) else {
+            self.messages
+                .error(t!("msg.git_revision_not_found", revision = revision).to_string());
+            return;
+        };
+        let abbrev = crate::git::resolve_short_sha(&self.root, revision)
+            .unwrap_or_else(|| revision.to_string());
+        let name = path
+            .file_name()
+            .map_or_else(|| rel.clone(), |n| n.to_string_lossy().into_owned());
+        self.open_readonly_text_tab(&format!("{name} @ {abbrev}"), &content);
+    }
+
+    /// Handle a click in the T207 commit-list panel: hit-test the row under
+    /// the cursor, select it, and open its diff -- matches `outline_mouse`'s
+    /// own click-selects-and-jumps convention.
+    pub(super) fn git_log_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.git_log;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row = (mouse.row - r.y) as usize;
+        let hit = self.git_log.as_mut().is_some_and(|p| {
+            let idx = p.scroll + row;
+            let ok = idx < p.entries.len();
+            if ok {
+                p.selected = idx;
+            }
+            ok
+        });
+        if hit {
+            self.open_selected_commit_diff();
+        }
     }
 
     /// Show the working-tree status, streaming `git status` into the bottom dock.

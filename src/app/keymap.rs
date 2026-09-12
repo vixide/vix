@@ -115,6 +115,7 @@ impl App {
             context_menu,
             git_panel,
             branch_chooser,
+            git_log,
             task_chooser,
             macro_chooser,
             script_chooser,
@@ -343,6 +344,7 @@ impl App {
         panel!(context_menu, context_menu_key);
         panel!(git_panel, git_panel_key);
         panel!(branch_chooser, branch_key);
+        panel!(git_log, git_log_key);
         panel!(task_chooser, tasks_key);
         panel!(macro_chooser, macro_key);
         panel!(script_chooser, script_chooser_key);

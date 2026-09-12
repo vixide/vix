@@ -1354,6 +1354,13 @@ const GIT_LOG: &[Item] = &[
     Item::leaf("menu.item.git.log_1_week", "git.log_since_1_week_ago", ""),
     Item::leaf("menu.item.git.log_1_month", "git.log_since_1_month_ago", ""),
     Item::leaf("menu.item.git.log_all", "git.log", ""),
+    SEP,
+    // T207: an interactive commit-list panel (select a row to see that
+    // commit's diff in a tab), distinct from the plain streamed-to-the-dock
+    // views above.
+    Item::leaf("menu.item.git.browse_log", "git.browse_log", ""),
+    Item::leaf("menu.item.git.file_history", "git.file_history", ""),
+    Item::leaf("menu.item.git.open_at_revision", "git.open_at_revision", ""),
 ];
 
 /// Branch commands, grouped under Git → Branch.

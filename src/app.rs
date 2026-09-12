@@ -121,6 +121,9 @@ pub enum PromptKind {
     GitDeleteBranch,
     /// Enter a regex to search the repository with `git grep`.
     GitGrep,
+    /// Enter a revision (branch, tag, or commit-ish) to open the active
+    /// file's content at, in a read-only tab (T207).
+    GitOpenAtRevision,
     /// Enter a query to search symbols across the project (LSP workspace/symbol).
     WorkspaceSymbol,
     /// Enter the new name for the symbol under the cursor (LSP rename).
@@ -1288,6 +1291,9 @@ pub struct Layout {
     pub git_panel: Rect,
     /// Status-bar git/branch segment rectangle, so a click opens the Git panel.
     pub git_status_bar: Rect,
+    /// Row-list rectangle of the open T207 commit-list panel, so a click can
+    /// hit-test a row.
+    pub git_log: Rect,
     /// Row-list rectangle of the open outline panel, so a click can hit-test a row.
     pub outline: Rect,
     /// Row-list rectangle of the outline sidebar dock, for click-to-jump.
@@ -1406,6 +1412,9 @@ pub struct App {
     pub git_panel: Option<GitPanel>,
     /// Git branch switcher, when open.
     pub branch_chooser: Option<BranchChooser>,
+    /// Interactive commit-list panel (T207: **Git → Log → Browse Log…** /
+    /// **File History**), when open.
+    pub git_log: Option<crate::git::LogPanel>,
     /// Task chooser overlay (Tools → Tasks…), when open.
     pub task_chooser: Option<TaskChooser>,
     /// Saved-macro chooser overlay (Edit → Play Saved Macro…), when open.
@@ -1945,6 +1954,7 @@ impl App {
             context_menu: None,
             git_panel: None,
             branch_chooser: None,
+            git_log: None,
             task_chooser: None,
             macro_chooser: None,
             script_runtime: vix_script::Runtime::new(),
@@ -2171,6 +2181,21 @@ impl App {
         self.editor.new_tab_with_content(content);
         self.focus = Focus::Editor;
         self.status = t!("status.stdin_buffer").into();
+    }
+
+    /// Open `content` as a read-only tab titled exactly `title` (T207: a
+    /// commit's diff, or a file's content at some revision) -- a synthetic
+    /// `path` (never a real file) is how `Tab::title()` shows arbitrary text;
+    /// `read_only` plus `App::save`'s own guard on it keeps `Ctrl+S` from
+    /// ever trying to write to that path.
+    fn open_readonly_text_tab(&mut self, title: &str, content: &str) {
+        self.editor.new_tab_with_content(content);
+        if let Some(t) = self.editor.active_tab_mut() {
+            t.path = Some(PathBuf::from(title));
+            t.dirty = false;
+            t.read_only = true;
+        }
+        self.focus = Focus::Editor;
     }
 
     /// Open a read-only unified-diff overlay comparing `old` and `new`
@@ -3268,6 +3293,14 @@ impl App {
         }
         if self.editor.active_tab().is_some_and(Tab::is_image) {
             self.status = t!("status.image_readonly").into();
+            return;
+        }
+        // T207's commit-diff / file-at-revision tabs (and any buffer the
+        // user toggled read-only) carry a real `path` -- possibly a
+        // synthetic one that isn't a real file -- so this must be checked
+        // before the "no path" branch below, not folded into it.
+        if self.active_read_only() {
+            self.status = t!("status.read_only_blocked").into();
             return;
         }
         if self
@@ -7337,6 +7370,7 @@ impl App {
         panel!(spell_suggest, spell_suggest_mouse);
         panel!(git_panel, git_panel_mouse);
         panel!(branch_chooser, branch_mouse);
+        panel!(git_log, git_log_mouse);
         panel!(task_chooser, tasks_mouse);
         panel!(macro_chooser, macro_mouse);
         panel!(script_chooser, script_chooser_mouse);
@@ -12278,6 +12312,7 @@ impl App {
             PromptKind::GitEditDescription => self.git_edit_description(&prompt.input),
             PromptKind::GitDeleteBranch => self.git_delete_branch(&prompt.input),
             PromptKind::GitGrep => self.git_grep(&prompt.input),
+            PromptKind::GitOpenAtRevision => self.git_open_at_revision(prompt.input.trim()),
             PromptKind::WorkspaceSymbol => {
                 if let Some(path) = self.active_path()
                     && self.lsp.handles(&path)
