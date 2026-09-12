@@ -151,6 +151,24 @@ annotation for the cursor's line (`author, date · summary`) that follows the
 cursor as it moves between lines; it persists in the `inline_blame` setting (off
 by default) and is shown in the normal, non-wrapped view.
 
+## History
+
+Beyond the plain streamed-to-the-dock **Log** views (**All**, **Graph**,
+**Since…**), **Git → Log** has three interactive ones:
+
+- **Browse Log…** lists recent commits (hash, date, author, subject);
+  `↑`/`↓` navigate, `Enter` (or a click) opens the highlighted commit's
+  diff in a read-only tab.
+- **File History** is the same list, scoped to the active file
+  (`git log --follow`, so renames are tracked) — `Enter` opens that
+  commit's diff for just this file.
+- **Open File at Revision…** prompts for a revision (a branch, tag, or any
+  commit-ish) and opens the active file's content there, read-only, titled
+  `file @ abbrev`.
+
+None of these three write anything — they're all read-only views for
+looking at history, not editing it.
+
 ## Roadmap
 
 The core Git features are in place. Remaining ideas:

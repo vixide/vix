@@ -660,6 +660,226 @@ pub fn stash_push(dir: &Path) -> Result<(), String> {
     run_ok(dir, &["stash", "push"])
 }
 
+// ----- Log / history (T207) --------------------------------------------
+
+/// One `git log` row.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LogEntry {
+    /// Full commit hash.
+    pub sha: String,
+    /// Abbreviated commit hash, as git itself would print it.
+    pub abbrev: String,
+    /// Author name.
+    pub author: String,
+    /// Commit date (`YYYY-MM-DD`, the author date).
+    pub date: String,
+    /// The commit message's first line.
+    pub subject: String,
+}
+
+/// Where a [`LogPanel`]'s entries came from, and what its Enter should diff
+/// against.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LogScope {
+    /// The whole repository's history (**Git → Log**).
+    Repo,
+    /// One file's history (**Git → File History**), by its
+    /// workspace-relative path -- so Enter can pass it to [`show_commit`]
+    /// and diff just that file, not the whole commit.
+    File(String),
+}
+
+/// A commit-list overlay: [`log`]/[`file_log`] entries, a highlighted row,
+/// and a scroll offset.
+pub struct LogPanel {
+    /// Commit rows, most recent first (as `git log` orders them).
+    pub entries: Vec<LogEntry>,
+    /// Where these entries came from.
+    pub scope: LogScope,
+    /// Index of the highlighted row.
+    pub selected: usize,
+    /// First visible row.
+    pub scroll: usize,
+}
+
+impl LogPanel {
+    /// A fresh panel over `entries`, selecting the first (most recent) row.
+    #[must_use]
+    pub fn new(entries: Vec<LogEntry>, scope: LogScope) -> Self {
+        LogPanel {
+            entries,
+            scope,
+            selected: 0,
+            scroll: 0,
+        }
+    }
+
+    /// Move the highlight up one row, stopping at the top.
+    pub fn up(&mut self) {
+        self.selected = vix_list_state::up(self.selected);
+    }
+
+    /// Move the highlight down one row, stopping at the bottom.
+    pub fn down(&mut self) {
+        self.selected = vix_list_state::down(self.selected, self.entries.len());
+    }
+
+    /// Move the highlight up one page, stopping at the top.
+    pub fn page_up(&mut self, page: usize) {
+        self.selected = vix_list_state::page_up(self.selected, page);
+    }
+
+    /// Move the highlight down one page, stopping at the bottom.
+    pub fn page_down(&mut self, page: usize) {
+        self.selected = vix_list_state::page_down(self.selected, page, self.entries.len());
+    }
+
+    /// Keep the highlighted row within a window of `height` visible rows.
+    pub fn ensure_visible(&mut self, height: usize) {
+        self.scroll =
+            vix_list_state::ensure_visible(self.selected, self.scroll, height, self.entries.len());
+    }
+
+    /// The highlighted commit's full hash, if any.
+    #[must_use]
+    pub fn selected_sha(&self) -> Option<&str> {
+        self.entries.get(self.selected).map(|e| e.sha.as_str())
+    }
+
+    /// The highlighted commit's abbreviated hash, if any.
+    #[must_use]
+    pub fn selected_abbrev(&self) -> Option<&str> {
+        self.entries.get(self.selected).map(|e| e.abbrev.as_str())
+    }
+}
+
+/// Delimiters for [`parse_log`]'s custom `git log --format`: ASCII unit
+/// separator between fields, record separator between commits. Neither can
+/// appear in ordinary commit metadata, so no escaping is needed.
+const LOG_FIELD_SEP: &str = "\u{1f}";
+const LOG_RECORD_SEP: &str = "\u{1e}";
+
+/// Parse [`log`]/[`file_log`]'s `git log` output (the `LOG_FORMAT` shape)
+/// into rows. Malformed records (the wrong number of fields) are skipped
+/// rather than panicking.
+fn parse_log(output: &str) -> Vec<LogEntry> {
+    output
+        .split(LOG_RECORD_SEP)
+        .filter_map(|record| {
+            let record = record.trim_start_matches('\n');
+            let mut fields = record.split(LOG_FIELD_SEP);
+            let sha = fields.next()?.to_string();
+            let abbrev = fields.next()?.to_string();
+            let author = fields.next()?.to_string();
+            let date = fields.next()?.to_string();
+            let subject = fields.next()?.to_string();
+            if sha.is_empty() {
+                return None;
+            }
+            Some(LogEntry {
+                sha,
+                abbrev,
+                author,
+                date,
+                subject,
+            })
+        })
+        .collect()
+}
+
+/// `git log --format=<LOG_FORMAT>`'s format string: full/abbreviated hash,
+/// author name, author date, subject, then the record separator.
+fn log_format_arg() -> String {
+    format!(
+        "--format=%H{LOG_FIELD_SEP}%h{LOG_FIELD_SEP}%an{LOG_FIELD_SEP}%ad{LOG_FIELD_SEP}%s{LOG_RECORD_SEP}"
+    )
+}
+
+/// The repository's `max` most recent commits on `HEAD` (**Git → Log**).
+#[must_use]
+pub fn log(dir: &Path, max: usize) -> Vec<LogEntry> {
+    let n = max.to_string();
+    let fmt = log_format_arg();
+    git_stdout(dir, &["log", &fmt, "--date=short", "-n", &n])
+        .map(|s| parse_log(&s))
+        .unwrap_or_default()
+}
+
+/// The `max` most recent commits touching `rel_path`, following renames
+/// (**Git → File History**).
+#[must_use]
+pub fn file_log(dir: &Path, rel_path: &str, max: usize) -> Vec<LogEntry> {
+    let n = max.to_string();
+    let fmt = log_format_arg();
+    git_stdout(
+        dir,
+        &[
+            "log",
+            &fmt,
+            "--date=short",
+            "--follow",
+            "-n",
+            &n,
+            "--",
+            rel_path,
+        ],
+    )
+    .map(|s| parse_log(&s))
+    .unwrap_or_default()
+}
+
+/// A commit's own unified diff (`git show <sha>`), or just the part touching
+/// `rel_path` when given. `None` on any failure, including an invalid `sha`
+/// (rejected before shelling out, the same guard [`checkout`] uses).
+#[must_use]
+pub fn show_commit(dir: &Path, sha: &str, rel_path: Option<&str>) -> Option<String> {
+    if !valid_ref_name(sha) {
+        return None;
+    }
+    // `--end-of-options` guarantees `sha` can never be read as a flag, even
+    // if it slipped past `valid_ref_name` (the same defense `checkout` uses).
+    let mut args = vec!["show", "--end-of-options", sha];
+    if let Some(p) = rel_path {
+        args.push("--");
+        args.push(p);
+    }
+    git_stdout(dir, &args)
+}
+
+/// `rel_path`'s content at `revision` (`git show <revision>:<rel_path>`, e.g.
+/// **Git → Open File at Revision…**). `None` when `revision` doesn't resolve,
+/// the path isn't in that tree, or `revision` fails the same validation
+/// [`checkout`] applies to a ref name.
+#[must_use]
+pub fn show_file_at(dir: &Path, revision: &str, rel_path: &str) -> Option<String> {
+    if !valid_ref_name(revision) {
+        return None;
+    }
+    let out = git(
+        dir,
+        &[
+            "show",
+            "--end-of-options",
+            &format!("{revision}:{rel_path}"),
+        ],
+    )
+    .ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Resolve `revision` (a branch, tag, or any commit-ish) to its abbreviated
+/// hash (`git rev-parse --short`), for titling an Open File at Revision tab.
+/// `None` when it doesn't resolve or fails the ref-name validation.
+#[must_use]
+pub fn resolve_short_sha(dir: &Path, revision: &str) -> Option<String> {
+    if !valid_ref_name(revision) {
+        return None;
+    }
+    git_stdout(dir, &["rev-parse", "--short", "--end-of-options", revision])
+}
+
 /// Restore the most recent stash (`git stash pop`).
 ///
 /// # Errors
@@ -702,6 +922,81 @@ mod tests {
         assert!(checkout(&dir, "--detach").is_err());
         assert!(create_branch(&dir, "-c").is_err());
         assert!(create_branch(&dir, "--orphan").is_err());
+    }
+
+    #[test]
+    fn show_commit_and_show_file_at_refuse_option_shaped_revisions() {
+        // No git process is spawned: validation fails first, so any temp dir works.
+        let dir = std::env::temp_dir();
+        assert!(show_commit(&dir, "--upload-pack=evil", None).is_none());
+        assert!(show_file_at(&dir, "--upload-pack=evil", "a.rs").is_none());
+        assert!(resolve_short_sha(&dir, "--upload-pack=evil").is_none());
+    }
+
+    #[test]
+    fn parse_log_splits_records_and_fields() {
+        let output = format!(
+            "abc123{LOG_FIELD_SEP}abc{LOG_FIELD_SEP}Ada Lovelace{LOG_FIELD_SEP}2026-01-02\
+             {LOG_FIELD_SEP}Add the analytical engine{LOG_RECORD_SEP}\
+             def456{LOG_FIELD_SEP}def{LOG_FIELD_SEP}Grace Hopper{LOG_FIELD_SEP}2026-01-01\
+             {LOG_FIELD_SEP}Initial commit{LOG_RECORD_SEP}"
+        );
+        let entries = parse_log(&output);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].sha, "abc123");
+        assert_eq!(entries[0].abbrev, "abc");
+        assert_eq!(entries[0].author, "Ada Lovelace");
+        assert_eq!(entries[0].date, "2026-01-02");
+        assert_eq!(entries[0].subject, "Add the analytical engine");
+        assert_eq!(entries[1].author, "Grace Hopper");
+    }
+
+    #[test]
+    fn parse_log_skips_a_trailing_empty_record() {
+        // git log's own trailing record-separator leaves one empty record at
+        // the end; it must not become a bogus all-empty-field entry.
+        let output = format!(
+            "abc123{LOG_FIELD_SEP}abc{LOG_FIELD_SEP}Ada Lovelace{LOG_FIELD_SEP}2026-01-02\
+             {LOG_FIELD_SEP}subject{LOG_RECORD_SEP}"
+        );
+        assert_eq!(parse_log(&output).len(), 1);
+    }
+
+    #[test]
+    fn parse_log_ignores_a_truncated_record() {
+        let output = format!("abc123{LOG_FIELD_SEP}abc{LOG_FIELD_SEP}only three fields");
+        assert!(parse_log(&output).is_empty());
+    }
+
+    #[test]
+    fn log_panel_navigation_reports_the_selected_hashes() {
+        let mut p = LogPanel::new(
+            vec![
+                LogEntry {
+                    sha: "aaa111".into(),
+                    abbrev: "aaa".into(),
+                    author: "A".into(),
+                    date: "2026-01-01".into(),
+                    subject: "first".into(),
+                },
+                LogEntry {
+                    sha: "bbb222".into(),
+                    abbrev: "bbb".into(),
+                    author: "B".into(),
+                    date: "2026-01-02".into(),
+                    subject: "second".into(),
+                },
+            ],
+            LogScope::Repo,
+        );
+        assert_eq!(p.selected_sha(), Some("aaa111"));
+        assert_eq!(p.selected_abbrev(), Some("aaa"));
+        p.down();
+        assert_eq!(p.selected_sha(), Some("bbb222"));
+        p.down(); // stays clamped at the last row
+        assert_eq!(p.selected_sha(), Some("bbb222"));
+        p.up();
+        assert_eq!(p.selected_sha(), Some("aaa111"));
     }
 
     #[test]

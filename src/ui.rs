@@ -31,9 +31,9 @@ use bottom_dock::draw_bottom_dock;
 use boxes::{draw_calendar, draw_clock, draw_dashboard};
 use choosers::{
     draw_branch_chooser, draw_capture_chooser, draw_clipboard_chooser, draw_context_menu,
-    draw_diff_view, draw_git_panel, draw_location_chooser, draw_macro_chooser, draw_recent_chooser,
-    draw_refile_chooser, draw_script_chooser, draw_spell_suggest, draw_task_chooser,
-    draw_workspace_chooser,
+    draw_diff_view, draw_git_log, draw_git_panel, draw_location_chooser, draw_macro_chooser,
+    draw_recent_chooser, draw_refile_chooser, draw_script_chooser, draw_spell_suggest,
+    draw_task_chooser, draw_workspace_chooser,
 };
 use db::draw_db;
 use dialogs::{
@@ -373,6 +373,9 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     draw_which_key(app, frame, area);
     if app.wgrep_confirm.is_some() {
         draw_wgrep_confirm(app, frame, area);
+    }
+    if app.git_log.is_some() {
+        draw_git_log(app, frame, area);
     }
     if app.edit_sql.is_some() {
         draw_edit_sql(app, frame, area);

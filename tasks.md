@@ -2370,9 +2370,52 @@ and its own gate run, zero intended behavior change unless stated.
   mapping, TOC extraction, both scroll helpers). 3 new i18n keys ×
   15 locales. New `docs/markdown-preview/index.md`; spec updated. Full
   `scripts/check` gate green.
-- [ ] **T207 — Git history.** Git menu: Log (commit list panel → select
-  shows the commit diff in a tab), File History for the active file, and
-  Open File at Revision (read-only tab titled `file @ abbrev-sha`).
+- [x] **T207 — Git history.** Done. **Naming note**: `git.log` (Git → Log
+  → **All**) already existed — a plain `git --no-pager log`, streamed to
+  the bottom dock, no interactivity. That's a different feature from what
+  this task asks for (a selectable commit *list*), so the three new items
+  are new siblings (**Browse Log…**, **File History**, **Open File at
+  Revision…**) inside the same Git → Log submenu, not a replacement.
+
+  New `vix-git` pieces, all pure/unit-tested except the two that shell out:
+  `log`/`file_log` (`git log` with a custom `\x1f`/`\x1e`-delimited
+  `--format`, parsed by `parse_log` — verified against real `git log`
+  output captured from this repo's own history, not guessed) into
+  `LogEntry` rows, held by a `LogPanel` (built on `vix_list_state`, same
+  as every other list panel this session); `show_commit`/`show_file_at`/
+  `resolve_short_sha` (shell out to `git show`/`rev-parse`, validated with
+  the same `valid_ref_name` + `--end-of-options` defense `checkout`
+  already uses).
+
+  Both "Log" and "File History" open a commit's diff via the **same**
+  mechanism — `git show <sha>` (whole commit) or `git show <sha> --
+  <path>` (just the file) — as raw unified-diff text in a **read-only
+  tab**, not the structured `diff_view` overlay Compare-With-File uses:
+  the task explicitly says "in a tab" for both this and Open File at
+  Revision, and a commit can touch many files, which doesn't fit
+  `diff_view`'s one-old-text/one-new-text model. New shared
+  `App::open_readonly_text_tab(title, content)`: a synthetic `path`
+  (never a real file, same technique T211's wgrep buffer and T210's
+  coverage-file-picker use elsewhere this session) gives the tab an
+  arbitrary title through `Tab::title()`'s ordinary filename rendering.
+
+  **Real gap found and fixed**: `App::save` had no guard at all for
+  `Tab::read_only` — only images were special-cased — so `Ctrl+S` on any
+  of these new read-only tabs would have tried to `fs::write` to their
+  synthetic, nonexistent path. Added a general `active_read_only()` check
+  (reusing the existing `status.read_only_blocked` message, already used
+  for edit-blocking) rather than a one-off for just these tabs.
+
+  9 new integration tests (5 in `tests/integration/workspace.rs`'s
+  sibling `tests/integration/git.rs`, `#[ignore]`d like every other test
+  in that file needing a real throwaway repo — run manually with
+  `--ignored` and verified passing, same as the file's pre-existing
+  tests) plus 5 new `vix-git` unit tests (`parse_log`, `LogPanel`
+  navigation, ref-name validation on the three new runners). 8 new i18n
+  keys (3 menu items, log-panel title/hint, the revision prompt, two
+  status/msg pairs) × 15 locales. New `crates/vix-git/spec/git-history/
+  index.md`; `docs/git-panel/index.md` gained a "History" section. Full
+  `scripts/check` gate green.
 - [x] **T208 — CLI surface.** Done. `vix --diff OLD NEW` opens a
   read-only diff overlay comparing the two files directly (new
   `App::open_diff_files`, independent of any open buffer — unlike
@@ -2673,10 +2716,11 @@ scratch each time they come up.
 
 ## Suggested execution order (batched for agent runs)
 
-**Status as of 2026-09-11**: Run A is fully done. Run B is done except
+**Status as of 2026-09-12**: Run A is fully done. Run B is done except
 T112–T115 (the modal-editing implementation; T111's audit/spec landed).
-Run C is done for T202–T206, T208–T211; T201 and T207 are
-still open. Runs D/E/F (docs, demo/tutorials, examples) haven't started. Of
+Run C is done except **T201** (structural search & replace — the last
+task standing in the entire run). Runs D/E/F (docs, demo/tutorials,
+examples) haven't started. Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
 groups is listed explicitly.
@@ -2690,8 +2734,8 @@ groups is listed explicitly.
 3. **Run C (features):** T201–T211 in any order, one branch each — T104j
    shipped 2026-09-04, so T204 was unblocked too (§ T204's own note);
    T210/T211 never had a dependency either. **T204, T203, T209, T208,
-   T202, T205, T210, T206, and T211 are done (2026-09-10/11); T201 and
-   T207 remain.**
+   T202, T205, T210, T206, T211, and T207 are done (2026-09-10/12); only
+   T201 remains in the whole run.**
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
    Not started.
 5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last. Not
