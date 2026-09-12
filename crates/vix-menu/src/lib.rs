@@ -273,6 +273,16 @@ const EDIT: &[Item] = &[
     ),
     SEP,
     Item::sub("menu.item.edit.find_menu", EDIT_FIND),
+    Item::leaf(
+        "menu.item.edit.structural_replace",
+        "edit.structural_replace",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.edit.structural_replace_workspace",
+        "edit.structural_replace_workspace",
+        "",
+    ),
     Item::sub("menu.item.edit.select_menu", EDIT_SELECT),
     Item::sub("menu.item.edit.lines_menu", EDIT_MOVE),
     Item::sub("menu.item.edit.surround_menu", EDIT_SURROUND),

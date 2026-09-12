@@ -1,0 +1,10 @@
+[package]
+name = "vix-structural-replace"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Structural search & replace: a pattern language with metavariable holes, matched against source text token-by-token."
+
+[dependencies]

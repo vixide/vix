@@ -361,6 +361,8 @@ vix-snippet-tool = { path = "crates/vix-snippet-tool", version = "1.6.0" }
 vix-spellcheck = { path = "crates/vix-spellcheck", version = "1.6.0" }
 # Formatting for the bottom status bar's two segments.
 vix-status-bar-panel = { path = "crates/vix-status-bar-panel", version = "1.6.0" }
+# Structural search & replace: metavariable-hole patterns matched token-by-token.
+vix-structural-replace = { path = "crates/vix-structural-replace", version = "1.6.0" }
 # A read-only snapshot of host system information, plus the panel's selection.
 vix-system-information-panel = { path = "crates/vix-system-information-panel", version = "1.6.0" }
 # Matching HTML/XML tag navigation.

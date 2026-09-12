@@ -5339,6 +5339,7 @@ dependencies = [
  "vix-snippets",
  "vix-spellcheck",
  "vix-status-bar-panel",
+ "vix-structural-replace",
  "vix-system-information-panel",
  "vix-tags",
  "vix-tasks",
@@ -6052,6 +6053,10 @@ dependencies = [
 
 [[package]]
 name = "vix-status-bar-panel"
+version = "1.6.0"
+
+[[package]]
+name = "vix-structural-replace"
 version = "1.6.0"
 
 [[package]]

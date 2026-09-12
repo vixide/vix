@@ -15,6 +15,7 @@ mod picker_panels;
 mod roam;
 mod scripts;
 mod session;
+mod structural_replace;
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -141,6 +142,11 @@ pub enum PromptKind {
     /// Enter a coverage report (LCOV or Cobertura XML) path to load for the
     /// coverage gutter (T210). Pre-filled from the `coverage_path` setting.
     LoadCoverageFile,
+    /// Enter a structural search pattern (T201: `$X`/`$$X` holes).
+    StructuralPattern,
+    /// Enter the replacement template for a structural search pattern
+    /// already compiled and waiting in `App::pending_structural` (T201).
+    StructuralReplacement,
     /// Confirm/edit a resolved `project.*` lifecycle command before running
     /// it (`App::pending_project_command` carries which slot and, for the
     /// subproject family, which directory).
@@ -335,6 +341,30 @@ pub struct QueryReplace {
     /// How many replacements have been applied so far.
     pub replaced: usize,
     /// The original query text, for the prompt label.
+    pub label: String,
+}
+
+/// State for an in-progress structural (T201) query-replace session,
+/// stepped through exactly like [`QueryReplace`] (`y`/`n`/`!`/`q` per
+/// match) but matched by a [`vix_structural_replace::Pattern`] instead of a
+/// `Regex` -- a sibling struct/session rather than folding this into
+/// `QueryReplace` itself, since the two matchers don't share a common shape
+/// (byte-span captures vs. regex capture groups).
+pub struct StructuralReplace {
+    /// Compiled structural pattern.
+    pub pattern: vix_structural_replace::Pattern,
+    /// Replacement template (`$NAME`/`$$NAME` placeholders).
+    pub template: String,
+    /// Char offsets `[start, end)` of the match currently highlighted.
+    pub current: (usize, usize),
+    /// When set, matches outside this char range (the selection active
+    /// when the session began) are never offered; its end is adjusted by
+    /// each replacement's length delta so it still tracks the selection's
+    /// grown/shrunk extent.
+    pub bounds: Option<(usize, usize)>,
+    /// How many replacements have been applied so far.
+    pub replaced: usize,
+    /// The original pattern text, for the prompt label.
     pub label: String,
 }
 
@@ -1372,6 +1402,13 @@ pub struct App {
     pub search: Option<SearchBar>,
     /// Interactive query-replace session, when active.
     pub query_replace: Option<QueryReplace>,
+    /// Interactive structural (T201) query-replace session, when active.
+    pub structural_replace: Option<StructuralReplace>,
+    /// The in-progress structural-replace prompt sequence: whether it's
+    /// for the workspace-wide flow rather than buffer/selection, and (once
+    /// the pattern prompt is answered) the compiled pattern plus its
+    /// original text, awaiting the replacement-template prompt.
+    pending_structural: (bool, Option<(vix_structural_replace::Pattern, String)>),
     /// Workspace-wide search panel, when open.
     pub workspace_search: Option<WorkspaceSearch>,
     /// Active jump-to-line labels: `(label, 0-based line)` for each visible line,
@@ -1939,6 +1976,8 @@ impl App {
             palette: None,
             search: None,
             query_replace: None,
+            structural_replace: None,
+            pending_structural: (false, None),
             workspace_search: None,
             jump: None,
             prompt: None,
@@ -2805,6 +2844,8 @@ impl App {
             "search.workspace" => self.open_workspace_search(false),
             "search.workspace_replace" => self.open_workspace_search(true),
             "search.edit_results" => self.open_wgrep_results(),
+            "edit.structural_replace" => self.open_structural_pattern_prompt(false),
+            "edit.structural_replace_workspace" => self.open_structural_pattern_prompt(true),
             "search.workspace_dock" => {
                 self.prompt = Some(Prompt::new(
                     PromptKind::SearchToDock,
@@ -12341,6 +12382,8 @@ impl App {
             PromptKind::CompareFile => self.open_diff_with(prompt.input.trim()),
             PromptKind::InsertFile => self.insert_file_at_cursor(prompt.input.trim()),
             PromptKind::LoadCoverageFile => self.load_coverage_file(prompt.input.trim()),
+            PromptKind::StructuralPattern => self.accept_structural_pattern(&prompt.input),
+            PromptKind::StructuralReplacement => self.accept_structural_replacement(&prompt.input),
             PromptKind::ProjectCommand => self.accept_project_command_prompt(&prompt.input),
             PromptKind::OrgSchedule
             | PromptKind::OrgDeadline
