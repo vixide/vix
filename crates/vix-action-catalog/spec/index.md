@@ -32,9 +32,18 @@ workaround this catalog removes the need for.
   tests below).
 - `title_key(action_id) -> Option<&'static str>` — the lookup `App::
   action_title` falls back to when no menu item runs `action_id`.
+- `dispatch_scan` module (T305) — the source-scanning logic that finds
+  every action id `App::run_action`'s dispatch chain can actually match
+  (`DISPATCHERS`, `every_dispatchable_action_id`), plus the dynamically-
+  suffixed id prefixes that are exempt from needing their own title
+  (`DYNAMIC_PREFIXES`). Moved here (out of `tests/action_catalog.rs`, which
+  used to define its own private copy) so `tests/action_catalog.rs` and
+  `examples/list_commands.rs`'s `--write` mode (which generates
+  `docs/reference/actions.md`) share one scanner and can never disagree on
+  what "every action id" means.
 
-Pure data, like `vix-keyboard-shortcut-panel`: no dependencies, the host
-(`src/app.rs`) owns rendering and translation (`t!`).
+Pure data plus that one scanner, like `vix-keyboard-shortcut-panel`: no
+dependencies, the host (`src/app.rs`) owns rendering and translation (`t!`).
 
 ## How the host reads it
 

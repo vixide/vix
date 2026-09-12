@@ -334,6 +334,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   New GitHub CI jobs build the book on every push and deploy it to
   GitHub Pages from `main` (enabling Pages itself is a one-time repo
   setting, done separately from this change).
+- **Generated reference docs** (improvement plan T305): `cargo run
+  --example list_commands -- --write` (re)generates
+  `docs/reference/actions.md` (every dispatchable action id, resolved
+  title, and source), `docs/reference/settings.md` (every `Settings`
+  field: key, type, default, description), and one
+  `docs/reference/keybindings-<keymap>.md` per keymap plus a shared-
+  bindings page — all read straight from the real menu/palette/catalog/
+  settings/keybindings data, so they can't drift. All three forges (and
+  `scripts/check`) now regenerate and `git diff --exit-code` these pages
+  as part of the gate.
 
 ### Changed
 

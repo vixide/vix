@@ -88,6 +88,7 @@ pub mod ui;
 /// The calendar box's month-grid logic; re-exported as `vix::calendar` so the
 /// app and tests share one path.
 pub use crate::calendar_panel as calendar;
+pub use vix_action_catalog as action_catalog;
 pub use vix_affix as affix;
 pub use vix_ai_diff as ai_diff;
 pub use vix_ai_panel as ai_panel;
@@ -135,6 +136,7 @@ pub use vix_find_panel as find_panel;
 pub use vix_git as git;
 pub use vix_html_character_picker as html_character_picker;
 pub use vix_http_client as http_client;
+pub use vix_keybindings as keybindings;
 pub use vix_keyboard_shortcut_panel as keyboard_shortcut_panel;
 pub use vix_keymap_model as keymap_model;
 pub use vix_left_dock as left_dock;

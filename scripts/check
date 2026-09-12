@@ -24,6 +24,13 @@ cargo test
 echo "==> cargo doc (warnings denied)"
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 
+echo "==> generated reference docs current? (T305)"
+cargo run --example list_commands -- --write >/dev/null
+git diff --exit-code -- docs/reference/ || {
+	echo "FAIL: docs/reference/ is stale — run 'cargo run --example list_commands -- --write' and commit the result" >&2
+	exit 1
+}
+
 echo "==> scripts/check-docs"
 python3 "$(dirname "$0")/check-docs"
 

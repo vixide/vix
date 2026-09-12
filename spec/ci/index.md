@@ -15,10 +15,11 @@ cargo build --workspace --all-targets
 cargo clippy --workspace --all-targets -- -D warnings    # spec/rust-clippy-pedantic
 cargo test --workspace
 cargo doc --workspace --no-deps                          # RUSTDOCFLAGS=-D warnings
+cargo run --example list_commands -- --write && git diff --exit-code -- docs/reference/  # T305: generated reference current?
 python3 scripts/check-docs                               # documentation integrity
 ```
 
-Nothing merges that does not pass all six. Run `scripts/check` (or
+Nothing merges that does not pass all seven. Run `scripts/check` (or
 `make check`) locally first; CI should only ever confirm what the local gate
 already said.
 
@@ -182,6 +183,29 @@ are already recorded in the tree: `evalexpr` is pinned to 11.x because 12.0.0
 relicensed to AGPL-3.0-only, and `RUSTSEC-2024-0436` (`paste`, unmaintained)
 is ignored with a dated note because it arrives through
 `ratatui-image → icy_sixel → quantette → image/avif → rav1e`.
+
+## Generated reference (T305)
+
+`docs/reference/actions.md`, `docs/reference/settings.md`,
+`docs/reference/keybindings-shared.md`, and one
+`docs/reference/keybindings-<keymap>.md` per keymap are generated, not
+hand-maintained: `cargo run --example list_commands -- --write`
+(`examples/list_commands.rs`, grown from a plain command lister into this
+generator) reads the real data — `vix_menu::menus()`, `vix_palette::COMMANDS`,
+`vix_action_catalog::CATALOG` (and its
+`dispatch_scan::every_dispatchable_action_id`, shared with
+`tests/action_catalog.rs` so both tools' notion of "every action id" can
+never drift apart), `vix_settings::Settings::default()` plus a parse of its
+own struct's doc comments, and `vix_keybindings::TABLES`/`SHARED` — and
+writes the pages fresh every time. All three forges regenerate and
+`git diff --exit-code -- docs/reference/`: a stale page (someone edited the
+generated file directly, or changed the underlying data without
+regenerating) fails the same way a broken link does. The generator fixes its
+own locale (`vix_i18n::set_locale("en")`) before writing, so the output is
+byte-identical run to run regardless of the environment's locale — required
+for the diff check to be meaningful. Plain `cargo run --example
+list_commands` (no `--write`) keeps its original, side-effect-free behavior:
+print the command-palette list to stdout.
 
 ## Docs links
 

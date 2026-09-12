@@ -181,8 +181,9 @@ alongside in `~/.config/vix/themes/*.json`. See
 ## Examples
 
 ```sh
-cargo run --example headless_edit   # open, edit, and save a file with no TUI
-cargo run --example list_commands   # print every command-palette command
+cargo run --example headless_edit             # open, edit, and save a file with no TUI
+cargo run --example list_commands             # print every command-palette command
+cargo run --example list_commands -- --write  # regenerate docs/reference/ (actions, settings, keybindings)
 ```
 
 ## License
