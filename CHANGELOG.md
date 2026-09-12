@@ -328,6 +328,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   lists crates with no detected `docs/` coverage into `docs/coverage.md`
   (currently 38), for the next docs passes (T303/T304) to work through.
   Dev tooling only — no user-facing change.
+- **mdBook documentation site** (improvement plan T301): `book.toml` +
+  `docs/SUMMARY.md` organize the existing `docs/` pages (no files moved)
+  into Getting Started / Guides / Features / Reference / Contributing.
+  New GitHub CI jobs build the book on every push and deploy it to
+  GitHub Pages from `main` (enabling Pages itself is a one-time repo
+  setting, done separately from this change).
 
 ### Changed
 

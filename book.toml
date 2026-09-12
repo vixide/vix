@@ -1,0 +1,14 @@
+[book]
+title = "Vix Documentation"
+description = "User and contributor documentation for Vix, a keyboard-friendly terminal text editor."
+authors = ["Vix contributors"]
+src = "docs"
+language = "en"
+
+[output.html]
+git-repository-url = "https://github.com/vixide/vix"
+edit-url-template = "https://github.com/vixide/vix/edit/main/{path}"
+
+[output.html.fold]
+enable = true
+level = 1
