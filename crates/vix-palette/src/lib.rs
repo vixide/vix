@@ -215,6 +215,11 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.find_prev", "edit.find_prev"),
     ("cmd.replace", "edit.replace"),
     ("cmd.query_replace", "edit.query_replace"),
+    ("cmd.structural_replace", "edit.structural_replace"),
+    (
+        "cmd.structural_replace_workspace",
+        "edit.structural_replace_workspace",
+    ),
     ("cmd.find_next_selection", "search.next_selection"),
     ("cmd.find_prev_selection", "search.prev_selection"),
     ("cmd.toggle_highlight", "toggle_highlight_search"),

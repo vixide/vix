@@ -312,6 +312,18 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (prompts for a branch/tag/commit and opens the active file's content
   there, read-only, titled `file @ abbrev`). All three are read-only —
   none of them write anything.
+- **Structural search & replace** (improvement plan T201): **Edit →
+  Structural Replace…** matches by structure instead of regex — a pattern
+  like `if $COND { $$BODY }` matches any `if` statement regardless of
+  formatting, with `$X` capturing one token (or a whole bracketed group)
+  and `$$X` capturing a run of tokens (a whole argument list, a whole
+  block's body). Step through matches exactly like interactive
+  query-replace (`y`/`n`/`!`/`q`), scoped to the active selection when one
+  exists. **Edit → Structural Replace in Workspace…** does the same search
+  across every file and previews a summary before writing, reusing the
+  same confirm step workspace search-and-replace already uses. New
+  `vix-structural-replace` crate: a token/bracket-based matcher, not
+  tree-sitter (see its spec for why).
 
 ### Changed
 

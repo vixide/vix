@@ -271,3 +271,36 @@ pub(super) fn draw_query_replace(app: &App, frame: &mut Frame, area: Rect) {
     ]);
     frame.render_widget(Paragraph::new(line).style(theme::base()), bar);
 }
+
+/// The T201 structural-replace session bar, mirroring `draw_query_replace`
+/// exactly (same `y`/`n`/`!`/`q` legend) but over `app.structural_replace`.
+pub(super) fn draw_structural_replace(app: &App, frame: &mut Frame, area: Rect) {
+    let Some(sr) = app.structural_replace.as_ref() else {
+        return;
+    };
+    let bar = Rect {
+        x: area.x,
+        y: area.y + area.height.saturating_sub(2),
+        width: area.width,
+        height: 1,
+    };
+    frame.render_widget(Clear, bar);
+    let line = Line::from(vec![
+        Span::styled(
+            format!(" {} {} ", icon::SEARCH, t!("ui.sr_label")),
+            Style::default(),
+        ),
+        Span::styled(format!(" «{}» ", sr.label), Style::default()),
+        Span::raw("  "),
+        Span::styled("y", theme::title(true)),
+        Span::raw(format!(" {}  ", t!("ui.qr_replace"))),
+        Span::styled("n", theme::title(true)),
+        Span::raw(format!(" {}  ", t!("ui.qr_skip"))),
+        Span::styled("!", theme::title(true)),
+        Span::raw(format!(" {}  ", t!("ui.qr_rest"))),
+        Span::styled("q", theme::title(true)),
+        Span::raw(format!(" {}   ", t!("ui.qr_quit"))),
+        Span::styled(t!("ui.qr_replaced", count = sr.replaced), theme::dim()),
+    ]);
+    frame.render_widget(Paragraph::new(line).style(theme::base()), bar);
+}

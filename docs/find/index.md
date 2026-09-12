@@ -85,6 +85,34 @@ step through matches one at a time. At each prompt:
 - `!` — replace this and all remaining matches
 - `q` — quit
 
+## Structural search & replace
+
+**Edit → Structural Replace…** (or **Structural Replace** from the command
+palette) matches by *structure*, not regex: a pattern like
+`if $COND { $$BODY }` matches any `if` statement regardless of how its
+condition or body are formatted, ignoring whitespace differences between
+the pattern and the source entirely.
+
+- `$NAME` — a hole matching exactly one token, or one whole bracketed
+  group (`(...)`, `[...]`, `{...}`) when the next token opens one.
+- `$$NAME` — a hole matching a run of zero or more tokens (e.g. a whole
+  argument list, or a block's whole body).
+
+Type the pattern, then the replacement (using the same `$NAME`/`$$NAME`
+syntax — each placeholder becomes the *original* text that hole matched,
+formatting included), and step through matches exactly like interactive
+query-replace above (`y`/`n`/`!`/`q`). With an active **selection**, only
+matches inside it are offered; otherwise the whole buffer is searched.
+
+**Edit → Structural Replace in Workspace…** does the same search across
+every file under the workspace root and previews a summary ("N replaced in
+M files") before writing anything — the same confirm step workspace
+search-and-replace uses.
+
+See the specification at `crates/vix-structural-replace/spec/index.md` for
+the full pattern syntax (including its documented limitations — matching
+is token/bracket-based, not a full language parser).
+
 ## Workspace-wide search and replace
 
 Open with **Ctrl+Shift+F**, or **Search in Workspace** / **Search and Replace in

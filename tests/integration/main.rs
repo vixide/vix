@@ -17,5 +17,6 @@ mod org;
 mod palette;
 mod panels;
 mod scripting;
+mod structural_replace;
 mod themes;
 mod workspace;

@@ -38,7 +38,7 @@ use choosers::{
 use db::draw_db;
 use dialogs::{
     draw_confirm, draw_paste_conflict, draw_query_replace, draw_replace_confirm, draw_script_trust,
-    draw_unsaved, draw_wgrep_confirm,
+    draw_structural_replace, draw_unsaved, draw_wgrep_confirm,
 };
 use docks::{draw_debug_panel, draw_messages, draw_outline_dock, draw_test_panel};
 use edit_surfaces::{
@@ -376,6 +376,9 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     if app.git_log.is_some() {
         draw_git_log(app, frame, area);
+    }
+    if app.structural_replace.is_some() {
+        draw_structural_replace(app, frame, area);
     }
     if app.edit_sql.is_some() {
         draw_edit_sql(app, frame, area);
