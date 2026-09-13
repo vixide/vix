@@ -374,6 +374,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and X11 Color Picker. `docs/calendar-panel/index.md` was also
   corrected — it had gone stale describing date/time strings that moved
   to the new Clock box.
+- **Demo workspace** (improvement plan T501): `examples/demo-workspace/`,
+  a small realistic project (Rust + Python + Markdown sources with real
+  TODO/FIXME bugs, `tasks.toml`, an `.http` file against httpbin.org,
+  three linked Org-roam notes plus a dailies entry, `data/*.csv|tsv`, and
+  a seeded `demo.sqlite` with its seed SQL and a regenerate script) for
+  the written tutorials and VHS demo tapes (T404–T406) to open and run
+  against. Excluded from the workspace build via a root `Cargo.toml`
+  entry; ~76 KB total.
 
 ### Changed
 
