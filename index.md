@@ -17,6 +17,10 @@ Vix  File  Edit  View  Go  Run  AI  DB  JJ  Git  Org  Project  Tools  Help
 src/main.rs — Ready              main • text UTF-8 Ln 2:Col 5
 ```
 
+**New to Vix?** Start with
+[`docs/getting-started/index.md`](docs/getting-started/index.md) — install,
+first launch, and the 10 things to learn first.
+
 ## Features
 
 - **Menus** — Vix File Edit View Go Run AI DB JJ Git Org Project Tools Help.

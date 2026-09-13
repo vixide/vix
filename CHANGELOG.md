@@ -344,6 +344,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   settings/keybindings data, so they can't drift. All three forges (and
   `scripts/check`) now regenerate and `git diff --exit-code` these pages
   as part of the gate.
+- **Getting-started guide** (improvement plan T306): new
+  `docs/getting-started/index.md` — every real install path (Homebrew,
+  the shell/PowerShell installer scripts, npm, direct GitHub Release
+  downloads, and building from source; none of the first four had any
+  end-user-facing documentation before this), first launch, and "the 10
+  things to learn first." Linked from `index.md`'s top.
 - **Docs coverage filled** (improvement plan T303/T304): all 38 crates
   `docs-coverage` (T302) found lacking a docs page now have one —
   `scripts/docs-coverage` reports zero gaps. New pages: Surround

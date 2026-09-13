@@ -4,6 +4,7 @@
 
 # Getting Started
 
+- [Getting Started](getting-started/index.md)
 - [Command Line](cli/index.md)
 - [Configuration](configuration/index.md)
 - [Settings](settings/index.md)
