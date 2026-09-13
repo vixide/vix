@@ -395,6 +395,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   keymap is now reported in the messages panel at startup and falls back
   to Apple, instead of silently mapping to Apple with no indication
   anything was wrong.
+- **File Explorer and the DB workbench's SQL statement editor could
+  scroll past the end of their own list** (improvement plan T144): the
+  new shared `vix-list-state` crate's `ensure_visible` clamps scroll
+  against the list length for every migrated panel, and these two were
+  the only ones (of 17) that had never done so — found while
+  unifying 17 panels' near-identical scroll-cursor logic into one crate,
+  not chased for its own sake.
 
 ### Security
 
