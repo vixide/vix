@@ -34,9 +34,8 @@ With the VS Code keymap active (`Ctrl` stands in for `Cmd` on macOS):
 | `Ctrl+S` / `Ctrl+W` / `Ctrl+Shift+T` | Save / close / reopen closed |
 | `Ctrl+F` / `Ctrl+R` / `Ctrl+Shift+F` | Find / replace / find in files |
 | `Ctrl+/` | Toggle comment |
-| `Ctrl+Shift+K` | Delete line |
+| `Ctrl+Shift+K` | Cut line (cuts to clipboard, not a bare delete) |
 | `Ctrl+Shift+L` | Select all occurrences (multi-cursor) |
-| `Alt+Up` / `Alt+Down` | Move line up / down |
 | `Ctrl+\` | Split editor |
 | `Ctrl+]` / `Ctrl+Shift+\` | Match bracket |
 | `Ctrl+Shift+M` | Problems (diagnostics) |
@@ -70,6 +69,13 @@ colorization; word-occurrence highlighting; format-on-save and auto-save.
 
 Credit where due:
 
+- **`Ctrl+D`-style incremental multi-select.** Vix has multiple cursors and
+  **Select All Occurrences** (`Ctrl+Shift+L`), but not VS Code's
+  add-one-more-occurrence-at-a-time `Ctrl+D` flow.
+- **One-key run/debug (`F5`).** The debugger itself is real (breakpoints,
+  stepping, watches, a REPL), but there's no `F5` binding yet — start it
+  from the **Run** menu or the palette. **Move Line Up/Down** is likewise
+  menu-only (**Edit**) for now, with no keybinding in any keymap.
 - **The extension marketplace.** Fifty thousand extensions cover long-tail
   needs Vix never will. If your workflow depends on a specific extension
   (Jupyter, remote containers, a proprietary language pack), VS Code keeps it.

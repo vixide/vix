@@ -344,6 +344,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   settings/keybindings data, so they can't drift. All three forges (and
   `scripts/check`) now regenerate and `git diff --exit-code` these pages
   as part of the gate.
+- **Migration guides and comparison matrix** (improvement plan T308): new
+  `docs/for-helix-users/index.md`, honest about what genuinely differs
+  (Vix has no Helix-style selection-first modal). Corrected two real
+  inaccuracies in the existing `docs/for-visual-studio-code-users/index.md`
+  (a claimed `Alt+Up`/`Alt+Down` move-line binding that doesn't exist;
+  `Ctrl+Shift+K` cuts a line rather than deleting it) and added the
+  honest gaps it was missing (no `Ctrl+D` incremental multi-select, no
+  `F5` one-key debug start). `docs/comparison/index.md` rewritten into a
+  13-row feature-parity matrix against Vim, Helix, Micro, and Zed.
 - **Man page** (improvement plan T307): `man vix` works wherever Vix was
   installed via a package manager. Generated from the real CLI flag
   definitions (`cargo run --example generate_man`, `clap_mangen`), so it
