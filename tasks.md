@@ -2709,14 +2709,87 @@ and its own gate run, zero intended behavior change unless stated.
   `vix-undo-store` are each mentioned only incidentally or in the generic
   menu listing, never on a dedicated feature page), listed in
   `docs/coverage.md` for T303/T304 to consume.
-- [ ] **T303 — Fill missing docs pages (batch 1: panels & tools).** From
-  T302's list, write pages for the undocumented panels and Tools-menu
-  tools. Template per page: what it is, how to open (menu, palette,
-  keybinding per major keymap), settings, a text-mockup screenshot, links
-  to the crate spec.
-- [ ] **T304 — Fill missing docs pages (batch 2: everything else).**
-  Remainder of T302's list, same template. Target: coverage.md shows zero
-  gaps.
+- [x] **T303/T304 — Fill missing docs pages (both batches, done together).**
+  All 38 crates from T302's `docs/coverage.md` closed in one pass, split
+  across 4 parallel drafting agents plus 3 direct fixes, each required to
+  read the crate's own spec (and, for "how to open", `crates/vix-menu`,
+  `src/app.rs`, and the T305-generated `docs/reference/actions.md`/
+  `keybindings-*.md`) rather than write from the name alone — several
+  crate names turned out to mean something different than they sound
+  like, only caught by actually reading the source:
+  - `vix-affix` → **Surround** (Edit → Surround, wrap/unwrap a selection
+    in a bracket/quote pair) — new `docs/affix/index.md`.
+  - `vix-align` → align lines on a delimiter (confirmed as guessed) — new
+    `docs/align/index.md`.
+  - `vix-tags` → **matching HTML/XML tag navigation** (Go → Matching
+    Tag), not Org tags and not ctags/etags — new `docs/tags/index.md`.
+  - `vix-clipboard` → internal plumbing (a process-wide, mutex-serialized
+    system-clipboard access point every Cut/Copy/Paste goes through,
+    opt-in to the real OS clipboard so the test suite never touches it —
+    a real incident once let a test overwrite the developer's actual
+    clipboard), **not** the separate clipboard-*history* ring
+    (`crates/vix-editor/spec/clipboard-history/index.md`, cross-linked
+    instead of duplicated) — new `docs/clipboard/index.md`.
+  - `vix-undo-store` → **persistent undo** (saves each file's undo tree
+    to `<config>/undo/` on save, restores on reopen only if the content
+    hash still matches), a real user-facing feature gated by
+    `Settings::persistent_undo`, not just internal plumbing — new
+    `docs/undo-store/index.md`.
+  - `vix-roam` → confirmed as guessed: Org-roam-style backlinks/
+    zettelkasten note-linking under Org → Roam / Org → Node — new
+    `docs/roam/index.md`, cross-linking `docs/org/index.md` rather than
+    duplicating it.
+  - The 12 `vix-convert-from-*-into-*-tool` crates + `vix-convert-tabular`
+    (the shared CSV/TSV/JSON engine underneath 6 of them) → one
+    consolidated `docs/convert/index.md` rather than 13 near-duplicate
+    pages, grouped by format family (CSV/TSV/JSON, JSON/YAML, JSON/TOML,
+    Markdown/HTML) with real behavior from each engine (RFC 4180 CSV
+    quoting, TSV's no-quoting limitation, formula-injection neutralizing
+    on write, JSON↔TOML's top-level-must-be-an-object constraint, plain
+    CommonMark not GFM for Markdown↔HTML).
+  - 11 single-purpose Tools-menu utilities (`vix-base-tool`,
+    `vix-base16`, `vix-base64-tool`, `vix-calculator-tool`,
+    `vix-checksum-tool`, `vix-color-converter-tool`, `vix-jwt-tool`,
+    `vix-pomodoro-tool`, `vix-regex-tool`, `vix-unit-converter-tool`,
+    `vix-url-tool`) → one consolidated `docs/tools/index.md`. Found a
+    real spec-drift bug while writing it: `vix-checksum-tool`'s own spec
+    documented only SHA-256/SHA-512, but the real menu and code also
+    wire up MD5 and CRC-32 — fixed the crate's spec, Cargo.toml
+    description, and module doc to match (not just the new docs page).
+  - 5 more individual small features, each its own page:
+    `docs/emmet/index.md` (Emmet abbreviation expansion, 100,000-node
+    cap), `docs/html-character-picker/index.md`, `docs/http-client/index.md`
+    (absolute URL required, `http`/`https` only, response opens as a new
+    tab), `docs/x11-color-picker/index.md` (also reused, dual-purpose,
+    by the theme editor's color-slot picker), `docs/welcome-panel/index.md`
+    (shown once automatically via `Settings::show_welcome_dialog`,
+    flipped off after first show; the same overlay type also backs
+    Help → License/Report Issue/Privacy).
+  - `vix-clock-panel` → found this one was **already substantively
+    documented in the wrong place**: `docs/insert/index.md`'s Date/Time
+    section and `docs/calendar-panel/index.md`'s old "Date and time area"
+    section both covered clock-panel content, but the calendar page had
+    gone **stale** — `vix-calendar-panel`'s own spec says the date/time
+    strings moved OUT of the calendar box into a separate Clock box
+    (**Tools → Clock…**) so "each box does one thing," but
+    `docs/calendar-panel/index.md` still described them as part of the
+    calendar, and its keybinding table was also wrong (said `←`/`→` page
+    the month; the real bindings move the day, `Ctrl`+arrows page the
+    month). Rewrote `docs/calendar-panel/index.md` to match current
+    behavior and wrote a new `docs/clock/index.md` for the Clock box
+    itself, cross-linked from both `docs/insert/index.md` and
+    `docs/calendar-panel/index.md`.
+  - `vix-uuid-tool`/`vix-zid-tool` → already fully covered in
+    `docs/insert/index.md`'s UUID/ZID sections; just added the missing
+    crate-spec mentions rather than duplicating content in new pages.
+
+  `scripts/docs-coverage` now reports **zero gaps**. `docs/SUMMARY.md`
+  gained all 14 new pages under Reference→Features (re-sorted
+  alphabetically while adding them, since the list was already more than
+  half new entries). Two check-docs-caught link bugs fixed along the way
+  (`docs/roam/index.md` and `docs/undo-store/index.md` each cited a
+  sub-spec by its bare filename instead of the real
+  `crates/<crate>/spec/<sub>/index.md` path).
 - [x] **T305 — Generated reference.** `examples/list_commands.rs` grown:
   plain `cargo run --example list_commands` keeps its original,
   side-effect-free behavior (print the palette's `>` commands to stdout);
@@ -2890,11 +2963,12 @@ scratch each time they come up.
 **Status as of 2026-09-12**: Run A is fully done. Run B is done except
 T112–T115 (the modal-editing implementation; T111's audit/spec landed).
 **Run C (T201–T211) is fully done.** Run D (docs) has started: T302,
-T301, and T305 are done (`scripts/docs-coverage` + `docs/coverage.md`,
-38 gaps found; `book.toml`/`docs/SUMMARY.md` + GitHub Pages CI jobs;
-`docs/reference/` generated from real data, regenerate-and-diff gated
-on all three forges). T303/T304/T306–T309 remain. Runs E/F
-(demo/tutorials, examples) haven't started. Of
+T301, T305, and T303/T304 are all done (`scripts/docs-coverage` now
+reports zero gaps; `book.toml`/`docs/SUMMARY.md` + GitHub Pages CI
+jobs; `docs/reference/` generated from real data, regenerate-and-diff
+gated on all three forges; all 38 missing docs pages written). Only
+T306–T309 remain in Run D. Runs E/F (demo/tutorials, examples) haven't
+started. Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
 groups is listed explicitly.

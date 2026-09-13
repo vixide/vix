@@ -1,9 +1,12 @@
-//! Compute SHA-256 and SHA-512 checksums of text, returned as lowercase hex.
+//! Compute SHA-256, SHA-512, MD5, and CRC-32 checksums of text, returned as
+//! lowercase hex.
 //!
 //! Vix's Tools → Checksum submenu hashes the selection (or, with no selection,
 //! the whole buffer) and replaces it with the digest. The functions here take
 //! the text as UTF-8 bytes and return the digest as a lowercase hexadecimal
-//! string — 64 characters for SHA-256, 128 for SHA-512.
+//! string — 64 characters for SHA-256, 128 for SHA-512, 32 for MD5, 8 for
+//! CRC-32. MD5 and CRC-32 are here for compatibility with legacy tooling that
+//! still expects them, not because either is cryptographically sound.
 
 #![warn(clippy::pedantic)]
 #![forbid(unsafe_code)]
