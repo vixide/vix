@@ -92,7 +92,7 @@ jobs:
       # still only runs on a cache miss.
       - name: Cache lychee binary
         id: lychee-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /usr/local/bin/lychee
           key: lychee-${{ env.LYCHEE_VERSION }}-${{ env.LYCHEE_SHA256 }}
@@ -209,7 +209,7 @@ jobs:
       # to hit — `restore-keys` is what does the work — so it is deliberately
       # not a real cache entry's name.
       - name: Restore the last recorded size from main
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: previous-binary-size.txt
           key: binary-size-main-unused
@@ -229,7 +229,7 @@ jobs:
         run: echo "${{ steps.size.outputs.bytes }}" > previous-binary-size.txt
       - name: Record the new baseline
         if: github.ref == 'refs/heads/main'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: previous-binary-size.txt
           key: binary-size-main-${{ github.sha }}
@@ -297,7 +297,7 @@ jobs:
       # install an unverified binary.
       - name: Cache mdbook binary
         id: mdbook-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /usr/local/bin/mdbook
           key: mdbook-${{ env.MDBOOK_VERSION }}-${{ env.MDBOOK_SHA256 }}
