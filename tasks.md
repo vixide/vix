@@ -2827,11 +2827,32 @@ and its own gate run, zero intended behavior change unless stated.
   `docs/SUMMARY.md` (T301) gained entries for all 14 new pages under
   Reference. `spec/ci/index.md` documents the new gate step; the gate is
   now seven checks, not six.
-- [ ] **T306 — Getting-started guide.** `docs/getting-started/index.md`:
-  install (source, and the debian/homebrew paths per `spec/debian`,
-  `spec/homebrew-tap-token` once real), first launch, the 10 essentials
-  (palette, explorer, find, save, splits, git, help). Link from README
-  top.
+- [x] **T306 — Getting-started guide.** New `docs/getting-started/index.md`:
+  Install, First Launch, "The 10 things to learn first", Where to go next.
+  Verified every install method against the real, already-published
+  `1.6.0` GitHub Release rather than guessing at `dist`'s conventions —
+  downloaded `vix.rb` (Homebrew formula — `brew install
+  vixide/homebrew-tap/vix`), `vix-npm-package.tar.gz` (its
+  `package.json` names `@vixide/vix`, confirming `npm install -g
+  @vixide/vix`), and confirmed the `vix-installer.sh`/`.ps1` asset names
+  match `dist`'s standard `releases/latest/download/` URL convention.
+  Found a real, previously-undocumented gap: `index.md`'s "Install & run"
+  only ever documented building from source — Homebrew/npm/shell/
+  PowerShell installers and the GitHub Release binaries (all real,
+  already shipping via `dist`, per `spec/ci/index.md`) had no end-user-
+  facing mention anywhere in the repo. `spec/debian/index.md` confirms
+  there genuinely is no `.deb` package yet, so that's correctly noted as
+  not-yet-available rather than documented as if it existed. "The 10
+  things to learn first" cross-checked every keybinding claimed against
+  the real, generated `docs/reference/keybindings-apple.md`/
+  `keybindings-shared.md` (T305) rather than assumed defaults — caught
+  one non-obvious real fact worth calling out: Undo/Redo (`Ctrl+Z`/
+  `Ctrl+Shift+Z`) isn't in `vix_keybindings::TABLES`/`SHARED` at all —
+  it's wired directly into `vix-editor-core`'s own crossterm handler
+  (`editor_crossterm.rs`), so it's the one binding in the list that's
+  identical across every keymap rather than Apple-specific. Linked from
+  `index.md`'s top (a "New to Vix?" line right after the ASCII
+  screenshot) and added to `docs/SUMMARY.md`'s Getting Started section.
 - [ ] **T307 — Man page.** Generate `vix.1` with `clap_mangen` at build
   or via xtask; include in release artifacts (`release.yml`); document.
 - [ ] **T308 — Migration guides.** Add `docs/for-vscode-users/` and
