@@ -31,6 +31,7 @@
 - [Bottom Dock](bottom-dock/index.md)
 - [Coming from Eclipse](for-eclipse-users/index.md)
 - [Coming from Emacs](for-emacs-users/index.md)
+- [Coming from Helix](for-helix-users/index.md)
 - [Coming from IntelliJ](for-intellij-users/index.md)
 - [Coming from Spacemacs](for-spacemacs-users/index.md)
 - [Coming from Sublime Text](for-sublime-users/index.md)

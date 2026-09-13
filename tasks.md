@@ -2868,10 +2868,33 @@ and its own gate run, zero intended behavior change unless stated.
   choice as `docs/reference/`), regenerate-and-diff gated on all three
   forges plus `scripts/check`. `docs/cli/index.md` gained a "Man page"
   section; `spec/ci/index.md` gained a "Man page (T307)" section.
-- [ ] **T308 — Migration guides.** Add `docs/for-vscode-users/` and
-  `docs/for-helix-users/` in the style of the existing for-vim/for-emacs
-  pages; refresh `docs/comparison/` into a feature-parity matrix
-  (Vix / Vim / Helix / Micro / Zed-ish columns, honest ✓/✗).
+- [x] **T308 — Migration guides.** New `docs/for-helix-users/index.md`,
+  in the style of the existing for-vim/for-emacs pages — honest about
+  what's genuinely different (Vix has no Helix-style selection-first
+  modal; the closest options are the traditional **Vi** keymap or
+  **Spacemacs**'s leader-key layer) rather than overselling a keymap
+  match that doesn't exist. Verified real Helix facts (built-in LSP/
+  DAP/Tree-sitter/multi-cursor, no built-in git client or terminal by
+  Helix's own stated design, its Steel/Scheme plugin layer still not a
+  stable public API as of 2026) via web search rather than assumed from
+  memory. **`docs/for-vscode-users/` turned out to already exist** —
+  under `docs/for-visual-studio-code-users/`, a name this task's own
+  text didn't anticipate — so instead of shipping a duplicate page,
+  fact-checked and corrected the existing one against the real,
+  T305-generated `docs/reference/keybindings-vscode-macos.md`: it
+  claimed `Alt+Up`/`Alt+Down` move a line (no such binding exists in
+  any keymap — Move Up/Down is menu-only), and `Ctrl+Shift+K` "deletes"
+  a line (it cuts to clipboard, matching `edit.cut_line`, not a bare
+  delete); added the honest gaps it was missing (no `Ctrl+D` incremental
+  multi-select, no `F5` one-key debug start). `docs/comparison/index.md`
+  rewritten into the requested feature-parity matrix (Vix / Vim / Helix
+  / Micro / Zed, 13 rows, footnoted where a flat ✓/✗ would be dishonest
+  — e.g. Vim's `undofile` gives real persistence and branches, just no
+  browsing UI without a plugin) — every non-Vix fact checked via web
+  search against each project's own current documentation/repo rather
+  than assumed, including the Helix design philosophy quote ("does not
+  try to be … a git client") that justifies its `~` row for Git.
+  `docs/SUMMARY.md` gained "Coming from Helix".
 - [x] **T309 — CHANGELOG discipline.** Backfilled by actually diffing git
   history against `CHANGELOG.md`, not assuming: extracted every task
   number from the 124 merge-commit subjects since the `1.6.0` release
@@ -3013,13 +3036,15 @@ scratch each time they come up.
 
 **Status as of 2026-09-12**: Run A is fully done. Run B is done except
 T112–T115 (the modal-editing implementation; T111's audit/spec landed).
-**Run C (T201–T211) is fully done.** Run D (docs) has started: T302,
-T301, T305, and T303/T304 are all done (`scripts/docs-coverage` now
-reports zero gaps; `book.toml`/`docs/SUMMARY.md` + GitHub Pages CI
-jobs; `docs/reference/` generated from real data, regenerate-and-diff
-gated on all three forges; all 38 missing docs pages written). Only
-T306–T309 remain in Run D. Runs E/F (demo/tutorials, examples) haven't
-started. Of
+**Run C (T201–T211) is fully done.** **Run D (docs) is now fully done
+too — T301–T309, all nine tasks.** `scripts/docs-coverage` reports
+zero gaps; `book.toml`/`docs/SUMMARY.md` + GitHub Pages CI jobs;
+`docs/reference/` and `man/vix.1` generated from real data,
+regenerate-and-diff gated on all three forges (now 8 gate steps); all
+38 missing docs pages written; a getting-started guide; migration
+guides for VS Code (an existing page, corrected) and Helix (new); a
+refreshed feature-parity comparison matrix. Runs E/F (demo/tutorials,
+examples) haven't started. Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
 groups is listed explicitly.
