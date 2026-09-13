@@ -9,6 +9,15 @@ on top.
   with `///`; module headers use `//!`.
 - Doc comments say *what and why*, briefly. Implementation details that would
   surprise a reader get an inline `//` comment explaining the *why*.
+- **One `CHANGELOG.md` entry per user-visible change**, added to
+  `## [Unreleased]` in the same change that makes it (T309, `tasks.md`) —
+  not batched up for later. "User-visible" means anything a person running
+  Vix could notice: a new feature, a changed default, a fixed bug, a
+  removed capability. A change with no such effect — an internal refactor,
+  a crate split, a test reorganization, a CI/tooling fix, a lint cleanup —
+  does not get one; padding the changelog with those buries the entries
+  that matter. When in doubt, ask whether a user reading the changelog
+  would care; if the honest answer is no, leave it out.
 
 ## Lints
 

@@ -2838,10 +2838,27 @@ and its own gate run, zero intended behavior change unless stated.
   `docs/for-helix-users/` in the style of the existing for-vim/for-emacs
   pages; refresh `docs/comparison/` into a feature-parity matrix
   (Vix / Vim / Helix / Micro / Zed-ish columns, honest ✓/✗).
-- [ ] **T309 — CHANGELOG discipline.** Backfill `CHANGELOG.md` top section
-  from git history since the last entry; add the "changelog entry per
-  user-visible change" rule to `agents/conventions.md` (already implied by
-  this file — make it explicit there).
+- [x] **T309 — CHANGELOG discipline.** Backfilled by actually diffing git
+  history against `CHANGELOG.md`, not assuming: extracted every task
+  number from the 124 merge-commit subjects since the `1.6.0` release
+  and cross-checked each against `## [Unreleased]`'s text. 12 came back
+  as "missing" on a naive check, but 11 of those are genuine internal-
+  only work with zero user-visible effect (T002/T010 CI-only,
+  T141/T142/T143 pure code/test reorganization, T145/T149/T150/T151/
+  T152/T154 refactors and lint/tooling hygiene) — correctly absent per
+  the new rule below, not backfilled. The 12th, **T144, had a real
+  gap**: unifying 17 panels' scroll-cursor logic into `vix-list-state`
+  fixed a genuine bug (File Explorer and the DB workbench's SQL
+  statement editor could scroll past the end of their own list — the
+  only 2 of 17 missing that clamp) that had never made it into
+  `CHANGELOG.md`; added it under `### Fixed`. Also checked the two
+  commits with no task number at all (a docs harmonization pass, the
+  new `skills/vix-skill`/`vix-maintainer-skill` Claude Skills) — both
+  pure repo-maintenance/AI-tooling, correctly absent. Added an explicit
+  "one entry per user-visible change" rule to `agents/conventions.md`'s
+  Documentation section, with the same "internal refactor vs. user-
+  visible" line this backfill pass itself had to draw, so the next
+  person (or agent) doesn't have to rediscover it from scratch.
 
 ## Phase 4 — Tutorials
 
