@@ -3,6 +3,11 @@
 # whole tree shares one lockfile and target directory.
 [workspace]
 members = ["crates/*"]
+# The demo workspace's own toy Rust project (T501, tasks.md) is fixture
+# content — a project a tutorial opens *inside* Vix, not a crate Vix itself
+# builds — so it's excluded rather than swept in by a workspace glob or left
+# to error as an orphaned nested manifest.
+exclude = ["examples/demo-workspace/rust-app"]
 
 # Metadata shared by the root `vix` package and every `crates/vix-*` member, so
 # version/edition/license/etc. are declared once and inherited with

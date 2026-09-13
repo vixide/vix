@@ -1,0 +1,13 @@
+# Demo request for Tools -> Send HTTP Request (see docs/http-client/index.md).
+# Vix reads one request per send: METHOD url, then Header: value lines up to
+# the first blank line, then a body (if any). httpbin.org echoes back
+# whatever you send it, so this is safe to fire repeatedly.
+
+GET https://httpbin.org/get?workspace=demo
+Accept: application/json
+
+# Try a POST instead: comment out the GET above, uncomment this, and send it.
+# POST https://httpbin.org/post
+# Content-Type: application/json
+#
+# {"hello": "from the demo workspace"}

@@ -1,0 +1,14 @@
+:PROPERTIES:
+:ID:       8827afdb-b023-4f53-b632-38349daa065c
+:END:
+#+title: 2026-09-13
+
+* 09:00 Start the demo workspace tour
+
+Opened [[id:9c1a1e2e-3b4f-4a9d-8b1c-1f2e3a4b5c6d][Project Overview]] and worked through the checklist in
+[[id:eaf9904b-ef0b-4078-9dd4-a7557375ea56][Getting Started]].
+
+* 10:30 Notes
+
+Fixed the =word_counts= lowercasing bug in =rust-app/src/main.rs= -- one of
+the action items from [[id:3d8e5f6a-7b8c-4d9e-af01-2b3c4d5e6f70][Kickoff Meeting, 2026-09-01]].

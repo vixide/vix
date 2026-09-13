@@ -1,0 +1,15 @@
+:PROPERTIES:
+:ID:       9c1a1e2e-3b4f-4a9d-8b1c-1f2e3a4b5c6d
+:END:
+#+title: Project Overview
+#+filetags: :demo:project:
+
+This is the anchor node for the demo workspace tour. It links out to the two
+notes below -- put the cursor on either link and try Org -> Roam -> Node ->
+Open at Point to jump straight there.
+
+- [[id:eaf9904b-ef0b-4078-9dd4-a7557375ea56][Getting Started]] -- what to try first.
+- [[id:3d8e5f6a-7b8c-4d9e-af01-2b3c4d5e6f70][Kickoff Meeting, 2026-09-01]] -- where the action items below came from.
+
+From either linked note, Org -> Roam -> Backlinks lists this page. Org ->
+Roam -> Graph draws the whole node graph as Mermaid.

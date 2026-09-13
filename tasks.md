@@ -2948,7 +2948,7 @@ and its own gate run, zero intended behavior change unless stated.
 
 ## Phase 5 — Examples
 
-- [ ] **T501 — Demo workspace.** `examples/demo-workspace/`: a small
+- [x] **T501 — Demo workspace.** `examples/demo-workspace/`: a small
   realistic project — Rust + Python + Markdown sources with intentional
   TODO/FIXME tags, `tasks.toml`, an `.http` file against
   httpbin-style endpoints, `org/` with a few roam-linked notes and a
@@ -3034,17 +3034,18 @@ scratch each time they come up.
 
 ## Suggested execution order (batched for agent runs)
 
-**Status as of 2026-09-12**: Run A is fully done. Run B is done except
+**Status as of 2026-09-13**: Run A is fully done. Run B is done except
 T112–T115 (the modal-editing implementation; T111's audit/spec landed).
-**Run C (T201–T211) is fully done.** **Run D (docs) is now fully done
-too — T301–T309, all nine tasks.** `scripts/docs-coverage` reports
+**Run C (T201–T211) is fully done.** **Run D (docs) is fully done —
+T301–T309, all nine tasks.** `scripts/docs-coverage` reports
 zero gaps; `book.toml`/`docs/SUMMARY.md` + GitHub Pages CI jobs;
 `docs/reference/` and `man/vix.1` generated from real data,
 regenerate-and-diff gated on all three forges (now 8 gate steps); all
 38 missing docs pages written; a getting-started guide; migration
 guides for VS Code (an existing page, corrected) and Helix (new); a
-refreshed feature-parity comparison matrix. Runs E/F (demo/tutorials,
-examples) haven't started. Of
+refreshed feature-parity comparison matrix. **Run E has started: T501
+(demo workspace) is done**, T401–T406 remain. Run F (examples) hasn't
+started. Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
 groups is listed explicitly.
@@ -3060,9 +3061,9 @@ groups is listed explicitly.
    T210/T211 never had a dependency either. **All of T201–T211 are done
    (2026-09-10/12) — Run C is complete.**
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
-   Not started.
-5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last. Not
-   started.
+   **All nine done (2026-09-13) — Run D is complete.**
+5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last.
+   **T501 done (2026-09-13); T401–T406 remain.**
 6. **Run F (examples):** T502–T505. Not started.
 7. **Deferred/audit-driven:** T121–T125 whenever their prerequisite data
    (benches, audits) exists. Not started.

@@ -1,0 +1,18 @@
+# Named tasks for Tools -> Tasks... (see crates/vix-tasks/spec/index.md).
+# These sit alongside the tasks Vix auto-detects from rust-app/Cargo.toml.
+
+[[task]]
+name = "build"
+command = "cargo build --manifest-path rust-app/Cargo.toml"
+
+[[task]]
+name = "test"
+command = "cargo test --manifest-path rust-app/Cargo.toml"
+
+[[task]]
+name = "run"
+command = "cargo run --manifest-path rust-app/Cargo.toml"
+
+[[task]]
+name = "report"
+command = "python3 scripts/hello.py"

@@ -1,0 +1,15 @@
+:PROPERTIES:
+:ID:       eaf9904b-ef0b-4078-9dd4-a7557375ea56
+:END:
+#+title: Getting Started
+#+filetags: :demo:
+
+Linked from [[id:9c1a1e2e-3b4f-4a9d-8b1c-1f2e3a4b5c6d][Project Overview]].
+
+A short checklist for a first pass through the demo workspace:
+
+- [ ] Open =rust-app/src/main.rs= and resolve the TODO/FIXME comments.
+- [ ] Open =scripts/hello.py= and do the same.
+- [ ] Send the request in =api.http= and read the response tab.
+- [ ] Open =db/demo.sqlite= in the DB workbench and run a query against it.
+- [ ] Run the "test" task from Tools -> Tasks... (defined in =tasks.toml=).
