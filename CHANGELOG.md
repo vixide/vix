@@ -344,6 +344,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   settings/keybindings data, so they can't drift. All three forges (and
   `scripts/check`) now regenerate and `git diff --exit-code` these pages
   as part of the gate.
+- **Docs coverage filled** (improvement plan T303/T304): all 38 crates
+  `docs-coverage` (T302) found lacking a docs page now have one —
+  `scripts/docs-coverage` reports zero gaps. New pages: Surround
+  (`docs/affix`), Align, Clipboard, Clock, Convert (the whole
+  Tools → Convert family), Emmet, HTML Character Picker, HTTP Client,
+  Matching Tag (`docs/tags`), Persistent Undo (`docs/undo-store`), Roam,
+  Tools (the small single-purpose Tools-menu utilities), Welcome Panel,
+  and X11 Color Picker. `docs/calendar-panel/index.md` was also
+  corrected — it had gone stale describing date/time strings that moved
+  to the new Clock box.
 
 ### Changed
 

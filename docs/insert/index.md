@@ -8,12 +8,14 @@ by snippet and date helpers.)
 
 **Insert → UUID** offers RFC 4122 / RFC 9562 versions 1–8, labeled by what each
 encodes (e.g. *4 = Random*, *7 = Time + Random*). Choosing one inserts a fresh
-UUID string.
+UUID string. Implemented by `vix-uuid-tool`; see
+`crates/vix-uuid-tool/spec/index.md`.
 
 ## ZID
 
 **Insert → ZID** inserts a secure random lowercase-hex string of the chosen width:
-128-bit (32 hex), 256-bit (64 hex), or 512-bit (128 hex).
+128-bit (32 hex), 256-bit (64 hex), or 512-bit (128 hex). Implemented by
+`vix-zid-tool`; see `crates/vix-zid-tool/spec/index.md`.
 
 ## Markdown
 
@@ -64,7 +66,10 @@ Paragraph — derived deterministically from a fixed passage.
 
 **Insert → Date/Time** inserts the current local time formatted as **ISO 8601**
 (`YYYY-MM-DDTHH:MM:SS`), **RFC 3339** (with the UTC offset), or **Epoch** (Unix
-seconds). For a navigable date picker, use **Tools → Calendar** instead.
+seconds), using the same formatting logic as **Tools → Clock**'s live box (see
+[`docs/clock/index.md`](../clock/index.md); implemented by `vix-clock-panel`).
+For a navigable date picker instead, use **Tools → Calendar**
+([`docs/calendar-panel/index.md`](../calendar-panel/index.md)).
 
 See the specifications under [`spec/tools/insert/`](../../spec/tools/insert/).
 
