@@ -29,3 +29,9 @@ tap = "vixide/homebrew-tap"
 publish-jobs = ["homebrew"]
 # A namespace to use when publishing this package to the npm registry
 npm-scope = "@vixide"
+# The man page (T307, tasks.md), generated from the real `Cli` definition by
+# `cargo run --example generate_man` and committed at man/vix.1 -- CI
+# regenerates and diffs it on every push, so the committed copy in a tagged
+# release is always current. Bundled into every archive/installer, Windows
+# included, same as the auto-included README/CHANGELOG/LICENSE.
+include = ["man/vix.1"]

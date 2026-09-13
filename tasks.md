@@ -2853,8 +2853,21 @@ and its own gate run, zero intended behavior change unless stated.
   identical across every keymap rather than Apple-specific. Linked from
   `index.md`'s top (a "New to Vix?" line right after the ASCII
   screenshot) and added to `docs/SUMMARY.md`'s Getting Started section.
-- [ ] **T307 — Man page.** Generate `vix.1` with `clap_mangen` at build
-  or via xtask; include in release artifacts (`release.yml`); document.
+- [x] **T307 — Man page.** New `examples/generate_man.rs` (`cargo run
+  --example generate_man`) builds `man/vix.1` with `clap_mangen` from
+  the real `Cli` clap definition. Moved `Cli` out of `src/main.rs` into
+  a new `src/cli.rs` library module (`vix::cli::Cli`, `pub` fields) so
+  the binary and the generator share one definition — they cannot drift
+  apart the way a second, hand-copied `Cli` for the generator alone
+  could. `dist-workspace.toml` gained `include = ["man/vix.1"]`,
+  verified (not assumed) with `dist generate --mode ci --check` that
+  this doesn't itself change the generated `release.yml` — confirmed by
+  actually running `dist` 0.32.0 locally (the same version pinned in
+  `cargo-dist-version`), not just reading its docs. `man/vix.1` is
+  committed (generated content the release pipeline reads as-is, same
+  choice as `docs/reference/`), regenerate-and-diff gated on all three
+  forges plus `scripts/check`. `docs/cli/index.md` gained a "Man page"
+  section; `spec/ci/index.md` gained a "Man page (T307)" section.
 - [ ] **T308 — Migration guides.** Add `docs/for-vscode-users/` and
   `docs/for-helix-users/` in the style of the existing for-vim/for-emacs
   pages; refresh `docs/comparison/` into a feature-parity matrix

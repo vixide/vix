@@ -49,6 +49,7 @@ vix_i18n::surface!();
 // here too would conflict (two `#[global_allocator]` in one binary).
 
 pub mod app;
+pub mod cli;
 pub use vix_case as case;
 pub use vix_clipboard as clipboard;
 pub use vix_editor::editor;

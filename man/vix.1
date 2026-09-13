@@ -1,0 +1,28 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH vix 1  "vix " 
+.SH NAME
+vix \- Vix: Simple Terminal Rust IDE
+.SH SYNOPSIS
+\fBvix\fR [\fB\-l\fR|\fB\-\-locale\fR] [\fB\-\-diff\fR] [\fB\-\-version\fR] [\fB\-\-json\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
+.SH DESCRIPTION
+Vix: Simple Terminal Rust IDE
+.SH OPTIONS
+.TP
+\fB\-l\fR, \fB\-\-locale\fR \fI<LOCALE>\fR
+UI language as a locale code (e.g. en, es, fr, de, cy). Overrides the saved `locale` setting for this run only
+.TP
+\fB\-\-diff\fR \fI<OLD>\fR\fI \fR\fI<NEW>\fR
+Open a read\-only unified\-diff overlay comparing two files directly, bypassing the active buffer — the shape a `git difftool` driver invokes with (`$LOCAL $REMOTE`). See `docs/cli/index.md` for the git config snippet
+.TP
+\fB\-\-version\fR
+Print the version and exit. Combine with `\-\-json` for a machine\-readable form
+.TP
+\fB\-\-json\fR
+With `\-\-version`, print `{"name", "version"}` as JSON instead of plain text
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+[\fIFILES\fR]
+File(s) to open on startup; the last one is focused. A single `\-` reads standard input into an unsaved scratch buffer instead of opening a file (e.g. `git show HEAD:path | vix \-`)
