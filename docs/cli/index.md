@@ -70,3 +70,16 @@ unresolved outcome via its exit code (a TUI editor's exit code reflects
 whether it launched and ran, not whether the user finished resolving
 anything), so `git` should ask whether the merge succeeded rather than
 trust the process result — its normal behavior for `trustExitCode = false`.
+
+## Man page
+
+```sh
+man vix
+```
+
+is available wherever Vix was installed via a package manager (Homebrew,
+the shell/PowerShell installers) — see
+[`docs/getting-started/index.md`](../getting-started/index.md#install).
+It's generated from this same flag set (`cargo run --example
+generate_man`, see `spec/ci/index.md`), so it never drifts from what
+`--help` above actually shows.

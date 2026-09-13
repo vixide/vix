@@ -344,6 +344,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   settings/keybindings data, so they can't drift. All three forges (and
   `scripts/check`) now regenerate and `git diff --exit-code` these pages
   as part of the gate.
+- **Man page** (improvement plan T307): `man vix` works wherever Vix was
+  installed via a package manager. Generated from the real CLI flag
+  definitions (`cargo run --example generate_man`, `clap_mangen`), so it
+  can't drift from `--help`; bundled into every release archive and
+  installer.
 - **Getting-started guide** (improvement plan T306): new
   `docs/getting-started/index.md` — every real install path (Homebrew,
   the shell/PowerShell installer scripts, npm, direct GitHub Release

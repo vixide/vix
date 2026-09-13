@@ -102,6 +102,14 @@ jobs:
           cargo run --example list_commands -- --write >/dev/null
           git diff --exit-code -- docs/reference/
 
+      # T307 (tasks.md): man/vix.1 is generated from the real Cli definition
+      # (vix::cli::Cli, shared with src/main.rs) -- regenerate and diff, same
+      # pattern as docs/reference/ above.
+      - name: man page current? (T307)
+        run: |
+          cargo run --example generate_man >/dev/null
+          git diff --exit-code -- man/
+
       # The specs are living documentation, gated like code. Mirrors
       # `scripts/check`; see spec/test/index.md.
       - name: scripts/check-docs

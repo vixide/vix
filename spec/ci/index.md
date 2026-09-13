@@ -207,6 +207,21 @@ for the diff check to be meaningful. Plain `cargo run --example
 list_commands` (no `--write`) keeps its original, side-effect-free behavior:
 print the command-palette list to stdout.
 
+## Man page (T307)
+
+`man/vix.1` is generated too: `cargo run --example generate_man`
+(`examples/generate_man.rs`) builds it with `clap_mangen` from
+`vix::cli::Cli` — the same `Cli` `src/main.rs` parses, moved into the
+library crate (`src/cli.rs`) specifically so the two can't drift apart.
+All three forges (and `scripts/check`) regenerate and
+`git diff --exit-code -- man/`, same pattern as `docs/reference/`
+above. `dist-workspace.toml`'s `include = ["man/vix.1"]` bundles the
+committed (and therefore always-current, by the gate above) file into
+every release archive and installer, alongside the auto-included
+README/CHANGELOG/LICENSE — confirmed with `dist generate --mode ci
+--check` that adding `include` doesn't itself change the generated
+`release.yml`.
+
 ## Docs links
 
 `lychee` link-checks every `*.md` on every push and pull request, on all three

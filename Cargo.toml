@@ -100,6 +100,9 @@ criterion = { version = "0.8", default-features = false, features = ["cargo_benc
 # Golden-file ("snapshot") testing for tests/snapshots.rs (dev-only); see
 # spec/test/index.md's "Snapshot" layer.
 insta = "1"
+# Generates the man page from the real `Cli` clap definition (T307,
+# tasks.md), via examples/generate_man.rs (dev-only).
+clap_mangen = "0.3.3"
 
 [package]
 name = "vix"
@@ -493,6 +496,7 @@ tokio = { workspace = true }
 futures-util = { workspace = true }
 
 [dev-dependencies]
+clap_mangen = { workspace = true }
 criterion = { workspace = true }
 insta = { workspace = true }
 
