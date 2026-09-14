@@ -2944,7 +2944,21 @@ and its own gate run, zero intended behavior change unless stated.
   marquee features: overview tour, palette, multi-cursor, git hunks, DB
   workbench, org-roam, edit surfaces, themes. A `scripts/render-demos.sh`
   regenerates GIFs; embed the overview GIF in README. Tapes run against
-  the demo workspace.
+  the demo workspace. **Partially done 2026-09-14: all 8 tapes written**
+  (every command/menu path grounded against the real repo — `vhs
+  validate` confirms all 8 parse) **and `scripts/render-demos.sh` written,
+  plus a `## Demos` README section** describing them and how to
+  regenerate. **Not done: the GIFs themselves are not rendered/committed**
+  — this session's environment can build and run `vhs`/`ttyd` (both built
+  from source here, working, real binaries — Homebrew itself was
+  write-protected in this sandbox) but its headless Chrome/Chromium is
+  killed outright (SIGKILL) under whatever restricts this session's own
+  process execution, which VHS's screenshot-based capture pipeline needs
+  and has no fallback for. Confirmed with a bare `chromium --headless
+  --no-sandbox --screenshot=...` reproducing the same kill, so it's not
+  VHS-specific. Needs someone running `scripts/render-demos.sh` on a
+  machine (or CI runner) with a working headless browser, then adding
+  the resulting GIF(s) and the README embed in a follow-up commit.
 
 ## Phase 5 — Examples
 
@@ -3043,10 +3057,13 @@ zero gaps; `book.toml`/`docs/SUMMARY.md` + GitHub Pages CI jobs;
 regenerate-and-diff gated on all three forges (now 8 gate steps); all
 38 missing docs pages written; a getting-started guide; migration
 guides for VS Code (an existing page, corrected) and Helix (new); a
-refreshed feature-parity comparison matrix. **Run E is in progress: T501,
+refreshed feature-parity comparison matrix. **Run E is nearly done: T501,
 T401–T403, T404, and T405 are all done** — the vixtutor (all six chapters)
-and all ten written tutorials (`docs/tutorials/01`–`10`) are real; only
-T406 (VHS demo tapes) remains. Run F (examples) hasn't started. Of
+and all ten written tutorials (`docs/tutorials/01`–`10`) are real; **T406
+is partially done** (all 8 demo tapes + the render script written and
+validated; the actual GIF rendering is blocked by this session's sandbox
+having no working headless browser — see T406's own entry). Run F
+(examples) hasn't started. Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
 groups is listed explicitly.
@@ -3064,8 +3081,9 @@ groups is listed explicitly.
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
    **All nine done (2026-09-13) — Run D is complete.**
 5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last.
-   **T501, T401–T403, T404, T405 done (2026-09-13/14); only T406
-   (VHS demo tapes) remains.**
+   **T501, T401–T403, T404, T405 done (2026-09-13/14); T406 partially
+   done (tapes + render script written 2026-09-14; GIF rendering
+   blocked, see T406's own entry).**
 6. **Run F (examples):** T502–T505. Not started.
 7. **Deferred/audit-driven:** T121–T125 whenever their prerequisite data
    (benches, audits) exists. Not started.
