@@ -428,6 +428,17 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `cargo test` runs every test as a thread within one process (identical
   `std::process::id()` across all of them) — now disambiguated with a
   per-session counter, `vix-tutor-<pid>-<n>`.
+- **VHS demo tapes, partial** (improvement plan T406): new
+  `docs/demos/*.tape` — 8 [VHS](https://github.com/charmbracelet/vhs)
+  scripts (overview tour, command palette, multi-cursor, git hunk
+  staging, the DB workbench, Org-roam, the table editor, themes), every
+  command/menu path grounded against the real repo and confirmed with
+  `vhs validate`, plus `scripts/render-demos.sh` to regenerate the GIFs
+  and a new README `## Demos` section. The GIFs themselves are not
+  rendered/committed yet — VHS's screenshot-based capture needs a working
+  headless Chrome/Chromium, which is not available in every environment;
+  see the tape files and `scripts/render-demos.sh` for what's needed to
+  finish this once run somewhere that has one.
 
 ### Changed
 
