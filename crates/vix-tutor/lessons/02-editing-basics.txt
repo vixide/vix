@@ -1,0 +1,13 @@
+Chapter 2: Editing Basics
+=========================
+
+This working copy is yours to edit freely. Two tasks below; your progress
+shows in the status bar.
+
+Task 1: Type your name right after the greeting on the line below.
+Hello,
+
+Task 2: The word REDUNDANT below shouldn't be there. Delete it (and the
+        extra space it leaves behind), keeping the rest of the sentence
+        intact.
+This sentence has one REDUNDANT word that needs to go.

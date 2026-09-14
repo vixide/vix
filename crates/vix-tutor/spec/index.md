@@ -5,10 +5,14 @@ real Vix buffers the learner edits with their own hands, not a scripted
 walkthrough. This spec is the v1 design (improvement plan T401); T402
 implements the engine and chapter 1, T403 fills in chapters 2–6.
 
-**Status**: T402 done — chapter 1 ("Moving Around") is real: bundled body,
-three checks, launch (`vix --tutor` / **Help → Tutorial**), navigation,
-restart, and the live status-bar indicator all work end to end. Chapters
-2–6 (T403) remain — `CHAPTERS` has one entry today.
+**Status**: T402 and T403 both done — all six chapters are real. Launch
+(`vix --tutor` / **Help → Tutorial**), navigation, restart, and the live
+status-bar indicator all work end to end. Chapters 2–6's checks lean more
+on `some_line_has_more_than_prefix`-style "report back in prose" tasks
+than chapter 1's — see § Chapters and lessons for why, and a real class of
+bug (a check's target word/phrase also appearing in that same chapter's
+own instructions, so a bare `text.contains(...)` check could never pass)
+that every chapter's tests now guard against.
 
 ## Launch
 
@@ -69,6 +73,17 @@ instruction pane alongside the buffer. Where a step needs the learner to
 do something checkable, the lesson text says so in place (e.g. "Task 1:
 delete this line.") and the buffer's own content is the thing the check
 below inspects.
+
+**This has one sharp edge, found the hard way in T403's own tests**: since
+the instructions and the content share one buffer, a task that says
+"delete the word REDUNDANT" necessarily puts the word `REDUNDANT` in the
+buffer *twice* — once in the instruction, once in the content to edit — so
+a check written as a bare `!text.contains("REDUNDANT")` can never pass; the
+instruction's own copy keeps it true forever. Every check below either
+matches the *exact* original content line/block (so only that line's edit
+counts) or, for "type something here" tasks, checks a specific line
+*starts with* or *extends past* a label rather than searching the whole
+buffer for a word the instructions also happen to use.
 
 ## Progress checks
 

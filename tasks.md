@@ -2928,7 +2928,7 @@ and its own gate run, zero intended behavior change unless stated.
   files — decide in the spec. Merge spec first.
 - [x] **T402 — vixtutor engine + chapter 1.** `vix-tutor` crate + host
   wiring per the recipe; chapter 1 "Moving around" complete with checks.
-- [ ] **T403 — vixtutor chapters 2–6.** Editing basics; find & replace;
+- [x] **T403 — vixtutor chapters 2–6.** Editing basics; find & replace;
   multi-cursor & selection; files, tabs & palette; git basics. Each
   chapter is a small self-contained lesson file.
 - [ ] **T404 — Written tutorials 01–05.** `docs/tutorials/`: 01 your first
@@ -3043,9 +3043,11 @@ zero gaps; `book.toml`/`docs/SUMMARY.md` + GitHub Pages CI jobs;
 regenerate-and-diff gated on all three forges (now 8 gate steps); all
 38 missing docs pages written; a getting-started guide; migration
 guides for VS Code (an existing page, corrected) and Helix (new); a
-refreshed feature-parity comparison matrix. **Run E has started: T501
-(demo workspace) is done**, T401–T406 remain. Run F (examples) hasn't
-started. Of
+refreshed feature-parity comparison matrix. **Run E is in progress: T501
+(demo workspace), T401 (vixtutor spec), T402 (vixtutor engine + chapter
+1), and T403 (chapters 2–6) are all done** — all six vixtutor chapters
+are real; T404–T406 (written tutorials, VHS demo tapes) remain. Run F
+(examples) hasn't started. Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
 groups is listed explicitly.
@@ -3063,7 +3065,7 @@ groups is listed explicitly.
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
    **All nine done (2026-09-13) — Run D is complete.**
 5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last.
-   **T501 done (2026-09-13); T401–T406 remain.**
+   **T501/T401/T402/T403 done (2026-09-13/14); T404–T406 remain.**
 6. **Run F (examples):** T502–T505. Not started.
 7. **Deferred/audit-driven:** T121–T125 whenever their prerequisite data
    (benches, audits) exists. Not started.

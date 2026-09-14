@@ -20,8 +20,37 @@ pub struct Progress {
 pub fn progress(chapter_id: &str, text: &str, cursor: usize) -> Progress {
     match chapter_id {
         "moving-around" => moving_around(text, cursor),
+        "editing-basics" => editing_basics(text, cursor),
+        "find-and-replace" => find_and_replace(text, cursor),
+        "multi-cursor-and-selection" => multi_cursor_and_selection(text, cursor),
+        "files-tabs-and-palette" => files_tabs_and_palette(text, cursor),
+        "git-basics" => git_basics(text, cursor),
         _ => Progress::default(),
     }
+}
+
+/// Whether some line starts with `prefix` and has more, once trimmed, than
+/// `prefix` alone — the shared shape behind every "write something after
+/// this label" task below (T403's files/palette and git chapters, both
+/// asking the learner to report back in prose rather than a check that
+/// could observe file/tab/git state, which no chapter's `text`-only check
+/// can see).
+fn some_line_has_more_than_prefix(text: &str, prefix: &str) -> bool {
+    text.lines().any(|l| {
+        let l = l.trim_start();
+        l.starts_with(prefix) && l.trim() != prefix.trim()
+    })
+}
+
+/// Whether some line contains `marker` but doesn't end at it — i.e.
+/// something was typed right after it. The complement of
+/// [`some_line_has_more_than_prefix`] for a task that asks the learner to
+/// extend a line ending in `marker`, rather than one starting with a label.
+fn some_line_extends_past_marker(text: &str, marker: &str) -> bool {
+    text.lines().any(|l| {
+        let l = l.trim_end();
+        l.contains(marker) && !l.ends_with(marker)
+    })
 }
 
 /// Chapter 1 checks (`crates/vix-tutor/lessons/01-moving-around.txt`): all
@@ -54,6 +83,119 @@ fn moving_around(text: &str, _cursor: usize) -> Progress {
         if last.starts_with("LAST LINE:") && last.trim() != "LAST LINE:" {
             done += 1;
         }
+    }
+
+    Progress { total, done }
+}
+
+/// Chapter 2 checks (`02-editing-basics.txt`).
+fn editing_basics(text: &str, _cursor: usize) -> Progress {
+    let total = 2;
+    let mut done = 0;
+
+    // Task 1: the greeting line has more on it than just "Hello,".
+    if some_line_has_more_than_prefix(text, "Hello,") {
+        done += 1;
+    }
+
+    // Task 2: the original content line (word and all) is gone. Checking
+    // for that exact original line rather than a bare `!contains("REDUNDANT")`
+    // matters here: this chapter's own instructions spell the word out too
+    // ("The word REDUNDANT below..."), so a bare substring check could never
+    // pass — a real bug T403 caught via its own tests, not eyeballing.
+    if !text.contains("This sentence has one REDUNDANT word that needs to go.") {
+        done += 1;
+    }
+
+    Progress { total, done }
+}
+
+/// Chapter 3 checks (`03-find-and-replace.txt`).
+fn find_and_replace(text: &str, _cursor: usize) -> Progress {
+    let total = 2;
+    let mut done = 0;
+
+    // Task 1: the original all-"cat" sentence is gone, and "dog" showed up
+    // somewhere — checking the exact original line (not a bare
+    // `!text.contains("cat")`) for the same reason as chapter 2's task 2
+    // above: the instructions themselves say `"cat"` too.
+    if !text.contains("The cat sat on the cat mat, next to another cat entirely.")
+        && text.contains("dog")
+    {
+        done += 1;
+    }
+
+    // Task 2: the "teh" typo is fixed (word-bounded, so a legitimate "teh"
+    // substring elsewhere — there isn't one in this lesson — wouldn't
+    // false-negative the check).
+    if !text.contains(" teh ") {
+        done += 1;
+    }
+
+    Progress { total, done }
+}
+
+/// Chapter 4 checks (`04-multi-cursor-and-selection.txt`).
+fn multi_cursor_and_selection(text: &str, _cursor: usize) -> Progress {
+    let total = 2;
+    let mut done = 0;
+
+    // Task 1: all three lines got " OK" appended, in one multi-cursor pass
+    // or three separate edits — the check can't tell which, and doesn't
+    // need to.
+    if ["first line OK", "second line OK", "third line OK"]
+        .iter()
+        .all(|marker| text.contains(marker))
+    {
+        done += 1;
+    }
+
+    // Task 2: the whole three-line REMOVE block is gone. Checking that exact
+    // three-in-a-row block, not a bare `!text.contains("REMOVE")`, for the
+    // same instructions-leak reason as chapter 2/3 above (this chapter's own
+    // instructions say "the whole block of REMOVE lines").
+    if !text.contains("REMOVE\nREMOVE\nREMOVE") {
+        done += 1;
+    }
+
+    Progress { total, done }
+}
+
+/// Chapter 5 checks (`05-files-tabs-and-palette.txt`). Both tasks ask the
+/// learner to report back in prose (§ `some_line_has_more_than_prefix`) —
+/// this chapter's real subject (the palette, other open tabs) isn't
+/// something a single buffer's text can observe.
+fn files_tabs_and_palette(text: &str, _cursor: usize) -> Progress {
+    let total = 2;
+    let mut done = 0;
+
+    // Task 1: the ">>>" marker has more after it than the pristine body did
+    // — not a bare `text.contains("CHECKED")`, since this chapter's own
+    // instructions say "type CHECKED" too (same leak as above).
+    if some_line_extends_past_marker(text, ">>>") {
+        done += 1;
+    }
+    if some_line_has_more_than_prefix(text, "Another file I opened:") {
+        done += 1;
+    }
+
+    Progress { total, done }
+}
+
+/// Chapter 6 checks (`06-git-basics.txt`). Same reporting-in-prose shape as
+/// chapter 5, for the same reason (git state isn't visible from `text`
+/// alone).
+fn git_basics(text: &str, _cursor: usize) -> Progress {
+    let total = 2;
+    let mut done = 0;
+
+    if some_line_has_more_than_prefix(text, "What the git status panel showed me:") {
+        done += 1;
+    }
+    // Not a bare `text.to_ascii_lowercase().contains("staged")` — this
+    // chapter's own instructions say `"staged"` too (same leak as above).
+    if some_line_has_more_than_prefix(text, "Practiced staging a hunk:") {
+        done += 1;
     }
 
     Progress { total, done }
@@ -114,5 +256,76 @@ mod tests {
             progress("moving-around", &all, 0),
             Progress { total: 3, done: 3 }
         );
+    }
+
+    #[test]
+    fn every_chapters_fresh_working_copy_is_zero_done() {
+        for c in chapter::CHAPTERS {
+            let p = progress(c.id, c.body(), 0);
+            assert_eq!(p.done, 0, "{} should start at 0 done", c.id);
+            assert!(p.total > 0, "{} should have at least one task", c.id);
+        }
+    }
+
+    #[test]
+    fn editing_basics_tasks() {
+        let base = chapter::chapter("editing-basics").unwrap().body();
+        let t1 = base.replacen("Hello,\n", "Hello, Ada\n", 1);
+        assert_eq!(progress("editing-basics", &t1, 0).done, 1);
+        let t2 = base.replacen("one REDUNDANT word", "one word", 1);
+        assert_eq!(progress("editing-basics", &t2, 0).done, 1);
+    }
+
+    #[test]
+    fn find_and_replace_tasks() {
+        let base = chapter::chapter("find-and-replace").unwrap().body();
+        let t1 = base.replace("cat", "dog");
+        assert_eq!(progress("find-and-replace", &t1, 0).done, 1);
+        let t2 = base.replacen(" teh ", " the ", 1);
+        assert_eq!(progress("find-and-replace", &t2, 0).done, 1);
+    }
+
+    #[test]
+    fn multi_cursor_and_selection_tasks() {
+        let base = chapter::chapter("multi-cursor-and-selection")
+            .unwrap()
+            .body();
+        let t1 = base
+            .replacen("first line\n", "first line OK\n", 1)
+            .replacen("second line\n", "second line OK\n", 1)
+            .replacen("third line\n", "third line OK\n", 1);
+        assert_eq!(progress("multi-cursor-and-selection", &t1, 0).done, 1);
+        let t2 = base.replacen("REMOVE\nREMOVE\nREMOVE\n", "", 1);
+        assert_eq!(progress("multi-cursor-and-selection", &t2, 0).done, 1);
+    }
+
+    #[test]
+    fn files_tabs_and_palette_tasks() {
+        let base = chapter::chapter("files-tabs-and-palette").unwrap().body();
+        let t1 = base.replacen(">>>", ">>> CHECKED", 1);
+        assert_eq!(progress("files-tabs-and-palette", &t1, 0).done, 1);
+        let t2 = base.replacen(
+            "Another file I opened:\n",
+            "Another file I opened: notes.md\n",
+            1,
+        );
+        assert_eq!(progress("files-tabs-and-palette", &t2, 0).done, 1);
+    }
+
+    #[test]
+    fn git_basics_tasks() {
+        let base = chapter::chapter("git-basics").unwrap().body();
+        let t1 = base.replacen(
+            "What the git status panel showed me:\n",
+            "What the git status panel showed me: one modified file\n",
+            1,
+        );
+        assert_eq!(progress("git-basics", &t1, 0).done, 1);
+        let t2 = base.replacen(
+            "Practiced staging a hunk:\n",
+            "Practiced staging a hunk: yes\n",
+            1,
+        );
+        assert_eq!(progress("git-basics", &t2, 0).done, 1);
     }
 }

@@ -21,6 +21,13 @@ impl Chapter {
     pub fn body(&self) -> &'static str {
         match self.id {
             "moving-around" => include_str!("../lessons/01-moving-around.txt"),
+            "editing-basics" => include_str!("../lessons/02-editing-basics.txt"),
+            "find-and-replace" => include_str!("../lessons/03-find-and-replace.txt"),
+            "multi-cursor-and-selection" => {
+                include_str!("../lessons/04-multi-cursor-and-selection.txt")
+            }
+            "files-tabs-and-palette" => include_str!("../lessons/05-files-tabs-and-palette.txt"),
+            "git-basics" => include_str!("../lessons/06-git-basics.txt"),
             _ => "",
         }
     }
@@ -33,13 +40,40 @@ impl Chapter {
     }
 }
 
-/// Every tutorial chapter, in order. Chapter 1 (T402) is the only one with a
-/// real body and check today; T403 fills in the rest (`spec/index.md`).
-pub const CHAPTERS: &[Chapter] = &[Chapter {
-    id: "moving-around",
-    title: "tutor.chapter.moving_around",
-    ordinal: 0,
-}];
+/// Every tutorial chapter, in order (`spec/index.md`, § Chapters and
+/// lessons).
+pub const CHAPTERS: &[Chapter] = &[
+    Chapter {
+        id: "moving-around",
+        title: "tutor.chapter.moving_around",
+        ordinal: 0,
+    },
+    Chapter {
+        id: "editing-basics",
+        title: "tutor.chapter.editing_basics",
+        ordinal: 1,
+    },
+    Chapter {
+        id: "find-and-replace",
+        title: "tutor.chapter.find_and_replace",
+        ordinal: 2,
+    },
+    Chapter {
+        id: "multi-cursor-and-selection",
+        title: "tutor.chapter.multi_cursor_and_selection",
+        ordinal: 3,
+    },
+    Chapter {
+        id: "files-tabs-and-palette",
+        title: "tutor.chapter.files_tabs_and_palette",
+        ordinal: 4,
+    },
+    Chapter {
+        id: "git-basics",
+        title: "tutor.chapter.git_basics",
+        ordinal: 5,
+    },
+];
 
 /// The chapter with this `id`, if any.
 #[must_use]

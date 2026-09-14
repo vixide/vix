@@ -1,0 +1,15 @@
+Chapter 4: Multi-Cursor & Selection
+===================================
+
+Task 1: Place a cursor at the end of each of the three lines below (try
+        Alt+Click on each, or your keymap's add-cursor shortcut) and type
+        " OK" at the end of all three at once.
+first line
+second line
+third line
+
+Task 2: Select the whole block of REMOVE lines below in one go (click and
+        drag, or Shift+Down three times) and delete the entire selection.
+REMOVE
+REMOVE
+REMOVE

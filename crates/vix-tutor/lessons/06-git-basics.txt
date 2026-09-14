@@ -1,0 +1,14 @@
+Chapter 6: Git Basics
+=====================
+
+The Git menu (and the git dock) cover status, staging, committing, and
+diffing without leaving Vix. Try them out, then finish both tasks below.
+
+Task 1: Open View -> Git Changes (or your keymap's shortcut) to see this
+        repository's status, then summarize what you saw in one line.
+What the git status panel showed me:
+
+Task 2: Stage a hunk from the git dock at least once (even if you unstage
+        it right after -- this is just a working copy). Once you have,
+        write "staged" below.
+Practiced staging a hunk:
