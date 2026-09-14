@@ -2976,11 +2976,25 @@ and its own gate run, zero intended behavior change unless stated.
   `textops_pipeline` (sort/dedupe/case a file from the CLI),
   `macro_replay` (parse a macros.toml and replay onto a buffer). Each
   ≤ ~100 lines, heavily commented, listed in README.
-- [ ] **T503 — Cargo examples batch 2 (services & formats).**
+- [x] **T503 — Cargo examples batch 2 (services & formats).**
   `query_search` (vix-query over a directory), `org_export` (org →
   Markdown/HTML), `vcard_parse`, `lsp_headless` (spawn a server via
   vix-lsp-core, open a doc, print diagnostics), `i18n_lookup` (one key in
-  all 15 locales), `calculator_eval`.
+  all 15 locales), `calculator_eval`. **Done 2026-09-14.** Two real
+  drifts found and corrected against this entry's own wording: `vix-query`
+  (T151 folded it into `src/app.rs`) was never "a directory search" at
+  all — it's `Decision`, the query-*replace* confirm choice — so
+  `query_search` instead drives `App::search_workspace_to_dock` (the real
+  directory-search engine, `crates/vix-workspace-search`) through
+  `run_action`/`on_key`, the same path the real UI uses; and
+  `vcard_parse` parses *Org* contacts and exports *to* vCard, not the
+  other way — there's no vCard-file parser in `vix-org-contacts` to run
+  in reverse. Both corrections are documented in the examples' own doc
+  comments. `lsp_headless` reuses `tests/lsp_smoke.rs`'s mock-server
+  technique (spawn, `initialize`, `didOpen`, `publishDiagnostics`) so it
+  needs only Python 3, no real language server. All 6 verified by
+  actually running them, not just compiling; `cargo clippy --all-targets
+  -- -D warnings` clean.
 - [ ] **T504 — Config examples.** `examples/config/`: fully-annotated
   `config.toml` covering every settings key (cross-check against T305's
   generated settings reference), a custom theme JSON, custom user
@@ -3062,8 +3076,9 @@ T401–T403, T404, and T405 are all done** — the vixtutor (all six chapters)
 and all ten written tutorials (`docs/tutorials/01`–`10`) are real; **T406
 is partially done** (all 8 demo tapes + the render script written and
 validated; the actual GIF rendering is blocked by this session's sandbox
-having no working headless browser — see T406's own entry). **Run F has
-started: T502 (4 library examples) is done**, T503–T505 remain. Of
+having no working headless browser — see T406's own entry). **Run F is
+in progress: T502 and T503 (10 library examples total) are done**,
+T504/T505 remain. Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
 groups is listed explicitly.
@@ -3084,8 +3099,8 @@ groups is listed explicitly.
    **T501, T401–T403, T404, T405 done (2026-09-13/14); T406 partially
    done (tapes + render script written 2026-09-14; GIF rendering
    blocked, see T406's own entry).**
-6. **Run F (examples):** T502–T505. **T502 done (2026-09-14); T503–T505
-   remain.**
+6. **Run F (examples):** T502–T505. **T502/T503 done (2026-09-14);
+   T504/T505 remain.**
 7. **Deferred/audit-driven:** T121–T125 whenever their prerequisite data
    (benches, audits) exists. Not started.
 8. **Security:** T131/T132/T133 are done. **T134 remains**, blocked on
