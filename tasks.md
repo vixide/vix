@@ -2995,10 +2995,24 @@ and its own gate run, zero intended behavior change unless stated.
   needs only Python 3, no real language server. All 6 verified by
   actually running them, not just compiling; `cargo clippy --all-targets
   -- -D warnings` clean.
-- [ ] **T504 — Config examples.** `examples/config/`: fully-annotated
+- [x] **T504 — Config examples.** `examples/config/`: fully-annotated
   `config.toml` covering every settings key (cross-check against T305's
   generated settings reference), a custom theme JSON, custom user
-  snippets, a `macros.toml`, and sample Rhai scripts (after T105).
+  snippets, a `macros.toml`, and sample Rhai scripts (after T105). **Done
+  2026-09-14.** Sample Rhai scripts already existed at `examples/scripts/`
+  (T105) — nothing to duplicate. `config.toml`'s 63 keys, values, and doc
+  comments were generated from the real `Settings::default()` (via
+  `toml::to_string_pretty`) and `docs/reference/settings.md` rather than
+  hand-typed, then the whole file verified by actually round-tripping it
+  through `Settings::load_from` (a throwaway verifier example, run then
+  deleted — not committed). Caught a real TOML-ordering mistake this way:
+  `lsp_servers`/`debug_adapters` array-of-tables sections had scalar keys
+  after them, which TOML silently reparents into the array item instead
+  of the root document — fixed by moving all three `Vec<Struct>` settings
+  (`lsp_servers`, `debug_adapters`, `org_capture_templates`) to the end,
+  after every scalar key. `theme.json` and `snippets.json` were each
+  verified the same way (parsed with the real `CustomTheme`/
+  `snippets::parse_json` code, not just eyeballed).
 - [ ] **T505 — Examples in CI.** Extend `ci.yml`: `cargo build --examples`
   and execute the headless examples (`render_frame`, `textops_pipeline`,
   `query_search`, `list_commands`, `headless_edit`) so examples can't rot.
@@ -3077,8 +3091,8 @@ and all ten written tutorials (`docs/tutorials/01`–`10`) are real; **T406
 is partially done** (all 8 demo tapes + the render script written and
 validated; the actual GIF rendering is blocked by this session's sandbox
 having no working headless browser — see T406's own entry). **Run F is
-in progress: T502 and T503 (10 library examples total) are done**,
-T504/T505 remain. Of
+nearly done: T502, T503 (10 library examples), and T504 (config
+examples) are all done**, only T505 remains. Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
 groups is listed explicitly.
@@ -3099,8 +3113,8 @@ groups is listed explicitly.
    **T501, T401–T403, T404, T405 done (2026-09-13/14); T406 partially
    done (tapes + render script written 2026-09-14; GIF rendering
    blocked, see T406's own entry).**
-6. **Run F (examples):** T502–T505. **T502/T503 done (2026-09-14);
-   T504/T505 remain.**
+6. **Run F (examples):** T502–T505. **T502/T503/T504 done (2026-09-14);
+   only T505 remains.**
 7. **Deferred/audit-driven:** T121–T125 whenever their prerequisite data
    (benches, audits) exists. Not started.
 8. **Security:** T131/T132/T133 are done. **T134 remains**, blocked on

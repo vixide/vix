@@ -1,0 +1,22 @@
+{
+  "Rust test function": {
+    "prefix": "rtest",
+    "body": [
+      "#[test]",
+      "fn ${1:name}() {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "A #[test] fn skeleton, cursor left in the body."
+  },
+  "TODO comment": {
+    "prefix": ["todo", "fixme"],
+    "body": "// TODO: ${0:description}",
+    "description": "A single-prefix or multi-prefix snippet -- \"prefix\" accepts either a string or an array of strings."
+  },
+  "Markdown link": {
+    "prefix": "mdlink",
+    "body": "[${1:text}](${2:url})",
+    "description": "Two tabstops, $0 implied at the end."
+  }
+}

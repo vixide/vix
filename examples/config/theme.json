@@ -1,0 +1,40 @@
+{
+  "name": "Example Amber",
+  "menu-bar": {
+    "foreground": [230, 218, 200],
+    "background": [30, 24, 18],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "status-bar": {
+    "foreground": [230, 218, 200],
+    "background": [30, 24, 18],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "left-dock": {
+    "foreground": [214, 198, 176],
+    "background": [24, 19, 14],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "right-dock": {
+    "foreground": [214, 198, 176],
+    "background": [24, 19, 14],
+    "font-style": "normal",
+    "font-weight": "normal"
+  },
+  "editor": {
+    "foreground": [235, 225, 210],
+    "background": [20, 16, 12],
+    "font-style": "normal",
+    "font-weight": "normal",
+    "cursor": [255, 176, 59]
+  },
+  "syntax": {
+    "keyword": [255, 176, 59],
+    "string": [180, 210, 115],
+    "comment": [120, 105, 90],
+    "number": [220, 150, 90]
+  }
+}

@@ -1,0 +1,15 @@
+# Example macros.toml (improvement plan T504, tasks.md) -- the format
+# `crates/vix-macros/spec/index.md` documents: one [[macro]] table per
+# saved macro, a display `name` plus its tokenized `keys` (see
+# `examples/macro_replay.rs` for how a token round-trips to a real
+# `KeyEvent`). Real macros are normally recorded with Edit -> Start
+# Recording Macro rather than hand-written, but the format is plain
+# enough to write directly, as these two are.
+
+[[macro]]
+name = "comment-line"
+keys = ["Home", "/", "/", "Space"]
+
+[[macro]]
+name = "save-and-close"
+keys = ["C-s", "C-w"]

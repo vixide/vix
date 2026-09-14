@@ -468,6 +468,21 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   no reverse direction, so `vcard_parse` demonstrates that real direction
   rather than a "vCard parser" that doesn't exist. Listed in the README
   `## Examples` section alongside T502's four.
+- **Config examples** (improvement plan T504): new `examples/config/` —
+  a fully-annotated `config.toml` covering all 63 settings (each with
+  its real default value and its own doc comment, cross-checked against
+  `docs/reference/settings.md`), a custom `theme.json`, a
+  `snippets.json`, and a `macros.toml`. Every file is verified by
+  actually round-tripping it through the real loader
+  (`Settings::load_from`, `CustomTheme` via `serde_json`,
+  `snippets::parse_json`, `vix_macros::load`/`decode`), not just
+  hand-typed. Caught a real TOML gotcha while verifying `config.toml`:
+  a `[[array-of-tables]]` section silently reparents any scalar `key =
+  value` line that follows it into the array item instead of the root
+  document, so all three `Vec<Struct>` settings (`lsp_servers`,
+  `debug_adapters`, `org_capture_templates`) have to come after every
+  plain key, not interleaved in `docs/reference/settings.md`'s own
+  field order.
 
 ### Changed
 
