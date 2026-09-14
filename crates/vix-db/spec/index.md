@@ -131,12 +131,11 @@ TUI), fitted to Vix's persistent sqlx session (`db::session`):
   `e` exports the filtered+sorted view as CSV, TSV, JSON, NDJSON, Markdown,
   or SQL `INSERT`s to a file or the clipboard (module `db::export`).
 
-Not yet ported: SSH tunnels, keyring credential waterfalls, streaming
-pagination, query cancellation, and staged cell edits. The persistent-session
-prerequisite they share is now in place (`db::session`, sqlx) — so
-transactions and savepoints already work by simply executing `BEGIN` /
-`SAVEPOINT` / `COMMIT` / `ROLLBACK` from the query editor. The remaining
-milestones are sketched in [session.md](session.md).
+SSH tunnels, keyring credential waterfalls, streaming pagination, query
+cancellation, and staged cell edits (M2–M7) are all done too — transactions
+and savepoints work by simply executing `BEGIN` / `SAVEPOINT` / `COMMIT` /
+`ROLLBACK` from the query editor. See [session.md](session.md) for the
+milestone-by-milestone detail.
 
 ## surus-inspired: the AI SQL assistant
 

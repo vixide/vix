@@ -2931,12 +2931,12 @@ and its own gate run, zero intended behavior change unless stated.
 - [x] **T403 — vixtutor chapters 2–6.** Editing basics; find & replace;
   multi-cursor & selection; files, tabs & palette; git basics. Each
   chapter is a small self-contained lesson file.
-- [ ] **T404 — Written tutorials 01–05.** `docs/tutorials/`: 01 your first
+- [x] **T404 — Written tutorials 01–05.** `docs/tutorials/`: 01 your first
   session, 02 editing power techniques, 03 find/replace & multi-cursor,
   04 the git workflow, 05 setting up LSP (rust-analyzer, pyright,
   typescript-language-server with real config). Each runs against the
   demo workspace (T501 — do that first).
-- [ ] **T405 — Written tutorials 06–10.** 06 Org mode & roam, 07 the DB
+- [x] **T405 — Written tutorials 06–10.** 06 Org mode & roam, 07 the DB
   workbench (uses the seeded SQLite db), 08 HTTP client & Tools suite,
   09 make Vix yours (themes/keymaps/snippets/settings), 10 debugging with
   DAP (real debugpy or codelldb walkthrough).
@@ -3043,11 +3043,10 @@ zero gaps; `book.toml`/`docs/SUMMARY.md` + GitHub Pages CI jobs;
 regenerate-and-diff gated on all three forges (now 8 gate steps); all
 38 missing docs pages written; a getting-started guide; migration
 guides for VS Code (an existing page, corrected) and Helix (new); a
-refreshed feature-parity comparison matrix. **Run E is in progress: T501
-(demo workspace), T401 (vixtutor spec), T402 (vixtutor engine + chapter
-1), and T403 (chapters 2–6) are all done** — all six vixtutor chapters
-are real; T404–T406 (written tutorials, VHS demo tapes) remain. Run F
-(examples) hasn't started. Of
+refreshed feature-parity comparison matrix. **Run E is in progress: T501,
+T401–T403, T404, and T405 are all done** — the vixtutor (all six chapters)
+and all ten written tutorials (`docs/tutorials/01`–`10`) are real; only
+T406 (VHS demo tapes) remains. Run F (examples) hasn't started. Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
 groups is listed explicitly.
@@ -3065,7 +3064,8 @@ groups is listed explicitly.
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
    **All nine done (2026-09-13) — Run D is complete.**
 5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last.
-   **T501/T401/T402/T403 done (2026-09-13/14); T404–T406 remain.**
+   **T501, T401–T403, T404, T405 done (2026-09-13/14); only T406
+   (VHS demo tapes) remains.**
 6. **Run F (examples):** T502–T505. Not started.
 7. **Deferred/audit-driven:** T121–T125 whenever their prerequisite data
    (benches, audits) exists. Not started.

@@ -31,8 +31,11 @@ Org outlines are built from headlines: lines starting with one or more `*`.
 
 ## Capture, agenda & time tracking
 
-- **Capture…** pops a quick prompt; whatever you type is dropped in as a
-  `* TODO …` headline at the cursor — a fast way to jot an idea or task.
+- **Capture** (`Org → Capture`) is a template-driven system: **Anything…**,
+  **Task…**, **Note…**, **Babel…**, and **Contact…** each run a built-in
+  template with a quick prompt; **Choose Template…** opens every configured
+  template (built-ins plus any you add to `org_capture_templates`) in a
+  chooser. See [`crates/vix-org-capture/spec/index.md`](../../crates/vix-org-capture/spec/index.md).
 - **Agenda Tracker** scans every `.org` file in the project and compiles their
   `DEADLINE:`/`SCHEDULED:` items and `TODO` headlines into one dated agenda
   buffer.

@@ -16,6 +16,19 @@
 - [Locales](locales/index.md)
 - [Switch Project](switch-project/index.md)
 
+# Tutorials
+
+- [1. Your First Session](tutorials/01-your-first-session/index.md)
+- [2. Editing Power Techniques](tutorials/02-editing-power-techniques/index.md)
+- [3. Find & Replace and Multi-Cursor](tutorials/03-find-replace-and-multi-cursor/index.md)
+- [4. The Git Workflow](tutorials/04-the-git-workflow/index.md)
+- [5. Setting Up LSP](tutorials/05-setting-up-lsp/index.md)
+- [6. Org Mode & Roam](tutorials/06-org-mode-and-roam/index.md)
+- [7. The DB Workbench](tutorials/07-the-db-workbench/index.md)
+- [8. HTTP Client & Tools Suite](tutorials/08-http-client-and-tools-suite/index.md)
+- [9. Make Vix Yours](tutorials/09-make-vix-yours/index.md)
+- [10. Debugging with DAP](tutorials/10-debugging-with-dap/index.md)
+
 # Guides
 
 - [Command Palette](command-palette/index.md)

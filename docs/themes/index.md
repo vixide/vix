@@ -29,7 +29,8 @@ needed: `Dark`, `Light`, `Darker`, `Darkest`, `Lighter`, `Lightest`,
 `Monokai`, `One Dark`, `Tokyo Night`, `Catppuccin Mocha`, `High Contrast`
 (WCAG AA, 11:1 or better on every text color), `Phosphor Amber`,
 `Phosphor Green`, and `Safelight Red` — plus every theme generated from a
-bundled base16 palette (View → Base16…).
+bundled base16 palette, prefixed `Base16 …` in the same **View → Theme…** list
+(see `crates/vix-base16/spec/index.md`).
 
 A theme you install in your own themes directory **overrides** a bundled one of
 the same name, so you can customize any of them by dropping an edited copy there.
