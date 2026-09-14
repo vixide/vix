@@ -19,4 +19,5 @@ mod panels;
 mod scripting;
 mod structural_replace;
 mod themes;
+mod tutor;
 mod workspace;

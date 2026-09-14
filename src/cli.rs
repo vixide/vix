@@ -42,4 +42,10 @@ pub struct Cli {
     /// plain text.
     #[arg(long, requires = "version")]
     pub json: bool,
+
+    /// Launch straight into the interactive tutorial (also reachable from a
+    /// running session via **Help → Tutorial**), in place of any files also
+    /// passed. See `crates/vix-tutor/spec/index.md`.
+    #[arg(long)]
+    pub tutor: bool,
 }

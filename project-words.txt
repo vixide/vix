@@ -256,6 +256,7 @@ gedit
 # Vim / Emacs / VS Code ecosystem terms (docs/for-*-users)
 vimrc
 vimscript
+vimtutor
 netrw
 undofile
 gitsigns

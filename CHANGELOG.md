@@ -389,6 +389,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   walkthrough. Launches via `vix --tutor` or **Help → Tutorial** (both
   land in T402). Design-only for now, matching `vix-modal`'s T111
   precedent: an empty crate plus this spec, no functional code yet.
+- **`vix-tutor` engine + chapter 1** (improvement plan T402): `vix --tutor`
+  and **Help → Tutorial** now really work. Every chapter's starter text is
+  copied into a fresh `vix-tutor-<pid>` working directory and opened as an
+  ordinary, freely-editable tab; **Tutorial: Next/Previous/Restart
+  Chapter** navigate and reset it. Chapter 1, "Moving Around," has three
+  text-only progress checks (deliberately not cursor-position checks — see
+  the spec for why) that re-run after every keystroke and show live as
+  `N/3` in the status bar. Chapters 2–6 are T403.
 
 ### Changed
 

@@ -1,0 +1,22 @@
+Welcome to the Vix Tutor!
+=========================
+
+Chapter 1: Moving Around
+
+This file is your own working copy -- edit it freely. Nothing you do here
+can break anything else. Your progress on the three tasks below shows in
+the status bar as you go; move to the next chapter whenever you're ready,
+finished or not.
+
+Task 1: Move the cursor down to the line below that starts with ">>>",
+        move to the end of that line, and type the word DONE right after
+        it.
+>>> Move to the end of this line, then type DONE right after it.
+
+Task 2: The line below doesn't belong here. Move the cursor onto it and
+        delete the whole line.
+DELETE THIS ENTIRE LINE
+
+Task 3: Move the cursor all the way down to the very last line of this
+        file and add a word or two of your own after the colon.
+LAST LINE:

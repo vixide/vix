@@ -391,6 +391,8 @@ vix-theme-editor-panel = { path = "crates/vix-theme-editor-panel", version = "1.
 vix-theme-model = { path = "crates/vix-theme-model", version = "1.6.0" }
 # Time-zone modeling: the IANA canonical zone table + the app-wide active zone.
 vix-time-zone-model = { path = "crates/vix-time-zone-model", version = "1.6.0" }
+# An interactive, in-editor tutorial: chapter metadata, bundled lesson text, progress checks.
+vix-tutor = { path = "crates/vix-tutor", version = "1.6.0" }
 # Convert a number between physical units, plus the Unit Converter dialog's state.
 vix-unit-converter-tool = { path = "crates/vix-unit-converter-tool", version = "1.6.0" }
 # URL percent-encode and decode (Tools → Convert → URL).

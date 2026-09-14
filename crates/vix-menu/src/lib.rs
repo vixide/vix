@@ -2066,6 +2066,7 @@ const PROJECT: &[Item] = &[
 const HELP: &[Item] = &[
     Item::leaf("menu.item.help.welcome", "help.welcome", ""),
     Item::leaf("menu.item.help.shortcuts", "help.shortcuts", "F1"),
+    Item::leaf("menu.item.help.tutorial", "help.tutorial", ""),
     SEP,
     Item::leaf("menu.item.help.license", "help.license", ""),
     Item::leaf("menu.item.help.report_issue", "help.report_issue", ""),

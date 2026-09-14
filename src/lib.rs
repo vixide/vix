@@ -161,6 +161,7 @@ pub use vix_system_information_panel as system_information_panel;
 pub use vix_text_information_panel as text_information_panel;
 pub use vix_theme_model as theme_model;
 pub use vix_time_zone_model as time_zone_model;
+pub use vix_tutor as tutor;
 pub use vix_unit_converter_tool as unit_converter_tool;
 pub use vix_url_tool as url_tool;
 pub use vix_uuid_tool as uuid_tool;

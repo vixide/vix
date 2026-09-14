@@ -5368,6 +5368,7 @@ dependencies = [
  "vix-theme-editor-panel",
  "vix-theme-model",
  "vix-time-zone-model",
+ "vix-tutor",
  "vix-undo-store",
  "vix-unit-converter-tool",
  "vix-url-tool",

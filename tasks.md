@@ -2926,7 +2926,7 @@ and its own gate run, zero intended behavior change unless stated.
   ("delete this line", "change this word" verified against the buffer);
   content localized via the standard `t!` pipeline or per-locale lesson
   files — decide in the spec. Merge spec first.
-- [ ] **T402 — vixtutor engine + chapter 1.** `vix-tutor` crate + host
+- [x] **T402 — vixtutor engine + chapter 1.** `vix-tutor` crate + host
   wiring per the recipe; chapter 1 "Moving around" complete with checks.
 - [ ] **T403 — vixtutor chapters 2–6.** Editing basics; find & replace;
   multi-cursor & selection; files, tabs & palette; git basics. Each
