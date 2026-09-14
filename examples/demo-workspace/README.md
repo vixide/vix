@@ -19,9 +19,9 @@ builds (see the `exclude` entry in the repo-root `Cargo.toml`).
 
 ## Suggested first pass
 
-1. Open `org/roam/project-overview.org` and follow its links (Org -> Roam ->
-   Node -> Open at Point) to `getting-started.org` and
-   `meeting-2026-09-01.org`.
+1. Open `org/roam/project-overview.org` and follow its links (cursor on a
+   `[[id:...]]` link, then Org -> Hyperlinks -> Follow Link) to
+   `getting-started.org` and `meeting-2026-09-01.org`.
 2. Work through the checklist in `getting-started.org` -- it points back at
    every file in this table.
 3. Run the `test` task from Tools -> Tasks... to see `rust-app`'s existing

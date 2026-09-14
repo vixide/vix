@@ -3,7 +3,7 @@
 List a theme's color slots and edit each one, live-previewed on the real UI
 as you go, then save the result as a new custom theme.
 
-**Status:** Shipped (T202). **Vix → Theme → Edit Theme…** (also reachable
+**Status:** Shipped (T202). **View → Edit Theme…** (also reachable
 from the command palette) opens the editor over a copy of the active theme:
 15 rows, one per color slot (menu bar / status bar / left dock / right dock
 foreground+background, editor foreground/background/cursor, and the 4

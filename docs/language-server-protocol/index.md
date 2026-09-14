@@ -16,7 +16,7 @@ and editor wiring live in the `vix-lsp` crate. The authoritative method list is
 
 Two settings (see [configuration](../configuration/index.md)):
 
-- `lsp_enabled` — master on/off switch (off by default).
+- `lsp_enabled` — master on/off switch (on by default).
 - `lsp_servers` — a list mapping language ids / file extensions to a server
   command. Each entry names the command to spawn and the extensions it handles.
 

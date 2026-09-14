@@ -27,7 +27,7 @@ The `[debug_adapters.launch]` table is merged into the adapter's launch request;
 
 ## Debugging
 
-From the **Debug** menu (or the command palette):
+From the **Run** menu (or the command palette):
 
 - **Toggle Breakpoint** marks the cursor line with a red `●` in the gutter.
 - **Start** launches the adapter for the active file. Execution runs until it hits

@@ -405,6 +405,29 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   instructions use the same word (they usually do, describing the task) —
   every check now matches an exact original line/block, or checks a
   specific line's start/end, instead (see the spec's new note on this).
+- **Written tutorials, all ten** (improvement plan T404/T405): new
+  `docs/tutorials/01`–`10`, a full guided series — Your First Session,
+  Editing Power Techniques, Find & Replace and Multi-Cursor, The Git
+  Workflow, Setting Up LSP, Org Mode & Roam, The DB Workbench, HTTP
+  Client & Tools Suite, Make Vix Yours, and Debugging with DAP — each
+  grounded in the real crate specs/menu source and worked against the new
+  demo workspace's real files (T501). Written independently by ten
+  parallel passes, each required to verify every command/menu
+  path/keybinding against the real repo rather than assume; between them
+  they found and fixed nine small pre-existing doc/spec drifts along the
+  way (stale menu paths in `docs/menus/index.md`, `docs/git-panel/index.md`,
+  `crates/vix-case/spec/index.md`, `crates/vix-theme-editor-panel/spec/
+  index.md`, and this repo's own new `examples/demo-workspace/README.md`;
+  a wrong default in `docs/language-server-protocol/index.md`; a
+  self-contradicting "not yet ported" paragraph in `crates/vix-db/spec/
+  index.md`; a stale single-prompt description of Org Capture in
+  `docs/org/index.md`; and a stale "Base16…" submenu claim in
+  `docs/themes/index.md`). New `# Tutorials` section in `docs/SUMMARY.md`.
+  Also fixes a real, reproducible test flake found in the process: every
+  `vix --tutor` session shared one `vix-tutor-<pid>` temp directory, since
+  `cargo test` runs every test as a thread within one process (identical
+  `std::process::id()` across all of them) — now disambiguated with a
+  per-session counter, `vix-tutor-<pid>-<n>`.
 
 ### Changed
 

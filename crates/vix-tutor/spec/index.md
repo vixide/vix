@@ -35,11 +35,16 @@ an ordinary `Tab`, so leaving is just closing it like any other file.
 `crates/vix-tutor/lessons/<NN>-<slug>.txt`, pulled into the crate via
 `include_str!` (not `t!` — see § Content and localization) and exposed as
 `Chapter::body`. On first launch this session, the host copies every
-chapter's body into a fresh temp directory — `vix-tutor-<pid>`, matching
-the `vix-<feature>-<pid>` convention every other temp-dir feature already
-uses (session/roam/contacts/… tests in `src/app.rs`) — one file per
-chapter, then opens the active chapter's copy as a normal, freely-editable
-`Tab`. The bundled originals under `crates/vix-tutor/lessons/` are never
+chapter's body into a fresh temp directory — `vix-tutor-<pid>-<n>`, `<n>`
+a per-session counter on top of the `vix-<feature>-<pid>` convention every
+other temp-dir feature already uses (session/roam/contacts/… tests in
+`src/app.rs`): `<pid>` alone isn't enough here, since `cargo test` runs
+every test as a thread *within one process* (identical `std::process::id()`
+for all of them), and every `open_tutor` call used the same fixed tag —
+found via a real, reproducible test failure, not a hypothetical. One file
+per chapter, then opens the active chapter's copy as a normal,
+freely-editable `Tab`. The bundled originals under `crates/vix-tutor/lessons/`
+are never
 touched; **Restart Chapter** (§ Navigation) re-copies one chapter's
 original body over its working copy, discarding whatever the learner did
 to it.

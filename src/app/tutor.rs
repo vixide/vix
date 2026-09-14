@@ -5,6 +5,7 @@
 #![warn(clippy::pedantic)]
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::App;
 
@@ -12,13 +13,24 @@ use super::App;
 /// chapter is current. Not persisted across restarts (`spec/index.md`, §
 /// Session state) — a fresh `App` always starts a fresh session.
 pub(super) struct TutorSession {
-    /// The `vix-tutor-<pid>` working directory holding every chapter's
+    /// The `vix-tutor-<pid>-<n>` working directory holding every chapter's
     /// working copy, canonicalized (matching how `vix_editor::Editor::open`
     /// stores every `Tab::path`, so the two can be compared directly).
     dir: PathBuf,
     /// 0-based index into `vix_tutor::CHAPTERS`.
     active: usize,
 }
+
+/// Disambiguates concurrent tutor sessions that would otherwise share one
+/// `vix-tutor-<pid>` directory — every other `vix-<feature>-<pid>` temp dir
+/// in this codebase is unique per test *call* (a distinct tag per test), but
+/// every `open_tutor` call used the same tag, so two `App`s opening the
+/// tutorial around the same time raced on one shared directory. Real,
+/// separate OS processes almost never share a pid, but `cargo test` runs
+/// every test as a thread *within one process* — `std::process::id()` is
+/// identical across all of them — which is exactly how
+/// `tests/integration/tutor.rs`'s own test suite caught this.
+static SESSION_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 impl App {
     /// Open (or resume) the interactive tutorial: on first call this
@@ -28,7 +40,8 @@ impl App {
     /// re-opens whichever chapter was last active.
     pub fn open_tutor(&mut self) {
         if self.tutor.is_none() {
-            let dir = std::env::temp_dir().join(format!("vix-tutor-{}", std::process::id()));
+            let n = SESSION_COUNTER.fetch_add(1, Ordering::Relaxed);
+            let dir = std::env::temp_dir().join(format!("vix-tutor-{}-{n}", std::process::id()));
             if let Err(e) = std::fs::create_dir_all(&dir) {
                 self.messages
                     .error(t!("msg.open_failed", error = e).to_string());
