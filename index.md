@@ -192,6 +192,12 @@ cargo run --example render_frame -- [file]    # render a real frame to a TestBac
 cargo run --example theme_roundtrip           # load a bundled theme, tweak it, save, reload
 cargo run --example textops_pipeline -- file  # sort/dedupe/uppercase a file's lines to stdout
 cargo run --example macro_replay              # parse macros.toml, replay a macro onto a buffer
+cargo run --example query_search -- dir pat   # search a directory of files for a pattern
+cargo run --example vcard_parse               # parse Org-contacts, export as vCard 3.0
+cargo run --example lsp_headless              # spawn a language server, print its diagnostics
+cargo run --example org_export -- [file.org]  # export an Org document to Markdown and HTML
+cargo run --example i18n_lookup -- [key]      # look up a translation key in all 15 locales
+cargo run --example calculator_eval -- "expr" # evaluate a math expression
 ```
 
 See `examples/scripts/` for sample Rhai scripts.

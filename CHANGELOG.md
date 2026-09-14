@@ -450,6 +450,24 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   real `App::on_key` — the exact path the real macro player uses, not a
   separate one). Each ≤ 60 lines; listed in the README `## Examples`
   section.
+- **6 more library examples, Cargo examples batch 2** (improvement plan
+  T503): `query_search` (searches a directory of files for a pattern via
+  `App::search_workspace_to_dock`, the same engine the real UI uses),
+  `org_export` (Org → Markdown/HTML via `vix_org::to_markdown`/`to_html`),
+  `vcard_parse` (parses Org-contacts, exports to vCard 3.0),
+  `lsp_headless` (spawns a language server — a tiny mock, reusing
+  `tests/lsp_smoke.rs`'s technique — opens a document, prints its
+  diagnostics), `i18n_lookup` (one translation key resolved against all
+  15 locales via `t!(key, locale = ...)`), and `calculator_eval`
+  (evaluates expressions with the same engine Tools → Calculator uses).
+  Found and corrected two real drifts from this task's own description
+  in `tasks.md`: `vix-query` (folded into `src/app.rs` by T151) was never
+  a directory-search tool — it's the query-*replace* confirm-choice enum
+  — so `query_search` targets the real search engine instead; and
+  `vix-org-contacts` parses *Org* contacts and exports *to* vCard, with
+  no reverse direction, so `vcard_parse` demonstrates that real direction
+  rather than a "vCard parser" that doesn't exist. Listed in the README
+  `## Examples` section alongside T502's four.
 
 ### Changed
 
