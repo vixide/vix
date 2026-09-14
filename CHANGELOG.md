@@ -439,6 +439,17 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   headless Chrome/Chromium, which is not available in every environment;
   see the tape files and `scripts/render-demos.sh` for what's needed to
   finish this once run somewhere that has one.
+- **4 library examples, Cargo examples batch 1** (improvement plan T502):
+  `render_frame` (a real frame rendered to a ratatui `TestBackend`,
+  printed as plain text — the same technique `tests/snapshots.rs` uses),
+  `theme_roundtrip` (load a bundled theme, tweak a color, save, reload,
+  and confirm the tweak survived), `textops_pipeline` (sort, dedupe, and
+  uppercase a real file's lines from the CLI, chaining a real `Editor`
+  method pipeline into a pure `vix_case` function), and `macro_replay`
+  (parse a `macros.toml`, decode its tokens, and replay them through a
+  real `App::on_key` — the exact path the real macro player uses, not a
+  separate one). Each ≤ 60 lines; listed in the README `## Examples`
+  section.
 
 ### Changed
 
