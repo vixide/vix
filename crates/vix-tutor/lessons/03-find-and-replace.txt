@@ -1,0 +1,11 @@
+Chapter 3: Find & Replace
+=========================
+
+Open Find & Replace (Edit -> Find & Replace, or your keymap's shortcut)
+for both tasks below.
+
+Task 1: Replace every "cat" with "dog" in the line below.
+The cat sat on the cat mat, next to another cat entirely.
+
+Task 2: Fix the typo "teh" so it reads "the" in the line below.
+Please give teh document one more read before sending it out.

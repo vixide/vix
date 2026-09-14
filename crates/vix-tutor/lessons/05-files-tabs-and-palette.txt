@@ -1,0 +1,15 @@
+Chapter 5: Files, Tabs & Palette
+================================
+
+This chapter's working copy is 05-files-tabs-and-palette.txt -- check the
+tab bar above the editor to see its name there right now, alongside any
+other files you have open.
+
+Task 1: Open the command palette (your keymap's shortcut, or search for
+        "Command Palette" in the menu) and use it to jump straight back to
+        this line -- then type CHECKED at the end of it: >>>
+
+Task 2: Every open file gets its own tab. Open one more file of your
+        choosing (File -> Open…, or Ctrl+O), switch back to this tab, and
+        note its name below.
+Another file I opened:

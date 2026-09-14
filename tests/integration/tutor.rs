@@ -28,16 +28,47 @@ fn help_tutorial_opens_chapter_one_as_an_editable_tab() {
 }
 
 #[test]
-fn tutor_next_and_prev_chapter_clamp_at_the_only_chapter() {
+fn tutor_next_chapter_advances_through_all_six_chapters_then_clamps() {
     let mut app = app_with(Settings::default());
     app.run_action("help.tutorial");
 
-    // v1 ships exactly one chapter (T402); both directions must clamp, not
-    // panic or wrap, matching `spec/index.md`'s "no wraparound".
-    app.run_action("tutor.next_chapter");
-    assert_eq!(active_tab_filename(&app), "01-moving-around.txt");
+    let expected = [
+        "01-moving-around.txt",
+        "02-editing-basics.txt",
+        "03-find-and-replace.txt",
+        "04-multi-cursor-and-selection.txt",
+        "05-files-tabs-and-palette.txt",
+        "06-git-basics.txt",
+    ];
+    for filename in expected {
+        assert_eq!(active_tab_filename(&app), filename);
+        app.run_action("tutor.next_chapter");
+    }
+    // One `next` past the last chapter clamps rather than wrapping back to
+    // chapter 1 (`spec/index.md`'s "no wraparound").
+    assert_eq!(active_tab_filename(&app), "06-git-basics.txt");
+}
+
+#[test]
+fn tutor_prev_chapter_clamps_at_the_first_chapter() {
+    let mut app = app_with(Settings::default());
+    app.run_action("help.tutorial");
     app.run_action("tutor.prev_chapter");
     assert_eq!(active_tab_filename(&app), "01-moving-around.txt");
+}
+
+#[test]
+fn every_chapters_working_copy_opens_with_a_non_empty_body() {
+    let mut app = app_with(Settings::default());
+    app.run_action("help.tutorial");
+    for _ in 0..vix::tutor::CHAPTERS.len() {
+        assert!(
+            !app.editor.active_tab().unwrap().text().is_empty(),
+            "{} opened empty",
+            active_tab_filename(&app)
+        );
+        app.run_action("tutor.next_chapter");
+    }
 }
 
 #[test]

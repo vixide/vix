@@ -397,6 +397,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   text-only progress checks (deliberately not cursor-position checks — see
   the spec for why) that re-run after every keystroke and show live as
   `N/3` in the status bar. Chapters 2–6 are T403.
+- **`vix-tutor` chapters 2–6** (improvement plan T403): Editing Basics,
+  Find & Replace, Multi-Cursor & Selection, Files/Tabs/Palette, and Git
+  Basics — all six chapters in `tasks.md`'s T402/T403 list are real now.
+  Found and fixed a real class of bug along the way: a check written as a
+  bare `!text.contains("word")` can never pass when that chapter's own
+  instructions use the same word (they usually do, describing the task) —
+  every check now matches an exact original line/block, or checks a
+  specific line's start/end, instead (see the spec's new note on this).
 
 ### Changed
 
