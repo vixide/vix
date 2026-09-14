@@ -2919,7 +2919,7 @@ and its own gate run, zero intended behavior change unless stated.
 
 ## Phase 4 — Tutorials
 
-- [ ] **T401 — vixtutor spec.** `crates/vix-tutor/spec/index.md`: launch
+- [x] **T401 — vixtutor spec.** `crates/vix-tutor/spec/index.md`: launch
   via `vix --tutor` and Help → Tutorial; opens a working copy (temp dir)
   of lesson buffers so the user edits freely; chapter navigation
   (next/prev lesson actions); cheap progress checks where possible

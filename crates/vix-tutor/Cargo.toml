@@ -1,0 +1,8 @@
+[package]
+name = "vix-tutor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "An interactive, in-editor tutorial — the vimtutor idea, but its lessons are real Vix buffers the learner edits with their own hands, not a scripted walkthrough."
