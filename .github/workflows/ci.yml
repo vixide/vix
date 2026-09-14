@@ -152,6 +152,18 @@ jobs:
         run: cargo build --workspace --all-targets
       - name: cargo test
         run: cargo test --workspace
+      # T505 (tasks.md): every example must keep running, not just compiling
+      # (--all-targets above already builds them all, examples included).
+      # Only the headless ones -- no real terminal, no external service, no
+      # language server/vhs/etc. to install -- run here; each is given real
+      # arguments against files already in this checkout.
+      - name: run headless examples (T505)
+        run: |
+          cargo run --example list_commands >/dev/null
+          cargo run --example headless_edit >/dev/null
+          cargo run --example render_frame -- index.md >/dev/null
+          cargo run --example textops_pipeline -- index.md >/dev/null
+          cargo run --example query_search -- examples/demo-workspace TODO >/dev/null
 
   # The toolchain floor promised by `rust-version` in Cargo.toml. A `check` is
   # enough: if the crate graph compiles on the floor, the claim holds.

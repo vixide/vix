@@ -483,6 +483,17 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `debug_adapters`, `org_capture_templates`) have to come after every
   plain key, not interleaved in `docs/reference/settings.md`'s own
   field order.
+- **Examples run in CI** (improvement plan T505, closes Run F): all
+  three forges (`.github/workflows/ci.yml`, `.gitlab-ci.yml`,
+  `.forgejo/workflows/ci.yml`) and `scripts/check` now actually *run*
+  five headless examples (`list_commands`, `headless_edit`,
+  `render_frame`, `textops_pipeline`, `query_search`) after `cargo
+  test`, not just compile them (`cargo build --workspace --all-targets`
+  already did that). Found and fixed a real pre-existing drift while
+  touching it: `spec/ci/index.md`'s gate list said "seven" steps but
+  `scripts/check` already ran eight — T307's man-page-current? check
+  had never been added to the spec. Now nine, with this task's own
+  addition.
 
 ### Changed
 

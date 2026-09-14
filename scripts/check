@@ -21,6 +21,13 @@ cargo clippy --all-targets -- -D warnings
 echo "==> cargo test"
 cargo test
 
+echo "==> run headless examples (T505)"
+cargo run --example list_commands >/dev/null
+cargo run --example headless_edit >/dev/null
+cargo run --example render_frame -- index.md >/dev/null
+cargo run --example textops_pipeline -- index.md >/dev/null
+cargo run --example query_search -- examples/demo-workspace TODO >/dev/null
+
 echo "==> cargo doc (warnings denied)"
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 

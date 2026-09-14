@@ -3013,9 +3013,23 @@ and its own gate run, zero intended behavior change unless stated.
   after every scalar key. `theme.json` and `snippets.json` were each
   verified the same way (parsed with the real `CustomTheme`/
   `snippets::parse_json` code, not just eyeballed).
-- [ ] **T505 — Examples in CI.** Extend `ci.yml`: `cargo build --examples`
+- [x] **T505 — Examples in CI.** Extend `ci.yml`: `cargo build --examples`
   and execute the headless examples (`render_frame`, `textops_pipeline`,
   `query_search`, `list_commands`, `headless_edit`) so examples can't rot.
+  **Done 2026-09-14 — closes Run F entirely (T502–T505 all done).** No
+  separate `cargo build --examples` step needed: the `test` job's
+  existing `cargo build --workspace --all-targets` already builds every
+  example (`--all-targets` covers examples too). Added the real missing
+  half — actually *running* the five headless examples — as a new step
+  in all three forges' CI (`.github/workflows/ci.yml`'s `test` job,
+  `.gitlab-ci.yml`'s `test:` job, `.forgejo/workflows/ci.yml`), plus
+  `scripts/check` itself, so local and CI stay in parity (verified: ran
+  the exact same 5 commands locally first, all exit 0). Found and fixed
+  a real pre-existing drift in `spec/ci/index.md` while touching it: its
+  gate list said "seven" steps but `scripts/check` already had eight
+  (T307's man-page-current? check was never added to the spec's list) —
+  fixed both the missing step and the count, now nine with this task's
+  addition.
 
 ---
 
@@ -3076,7 +3090,7 @@ scratch each time they come up.
 
 ## Suggested execution order (batched for agent runs)
 
-**Status as of 2026-09-13**: Run A is fully done. Run B is done except
+**Status as of 2026-09-14**: Run A is fully done. Run B is done except
 T112–T115 (the modal-editing implementation; T111's audit/spec landed).
 **Run C (T201–T211) is fully done.** **Run D (docs) is fully done —
 T301–T309, all nine tasks.** `scripts/docs-coverage` reports
@@ -3091,8 +3105,7 @@ and all ten written tutorials (`docs/tutorials/01`–`10`) are real; **T406
 is partially done** (all 8 demo tapes + the render script written and
 validated; the actual GIF rendering is blocked by this session's sandbox
 having no working headless browser — see T406's own entry). **Run F is
-nearly done: T502, T503 (10 library examples), and T504 (config
-examples) are all done**, only T505 remains. Of
+fully done: T502–T505, all four tasks.** Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
 groups is listed explicitly.
@@ -3113,8 +3126,8 @@ groups is listed explicitly.
    **T501, T401–T403, T404, T405 done (2026-09-13/14); T406 partially
    done (tapes + render script written 2026-09-14; GIF rendering
    blocked, see T406's own entry).**
-6. **Run F (examples):** T502–T505. **T502/T503/T504 done (2026-09-14);
-   only T505 remains.**
+6. **Run F (examples):** T502–T505. **All four done (2026-09-14) — Run F
+   is complete.**
 7. **Deferred/audit-driven:** T121–T125 whenever their prerequisite data
    (benches, audits) exists. Not started.
 8. **Security:** T131/T132/T133 are done. **T134 remains**, blocked on

@@ -14,12 +14,17 @@ cargo fmt --all --check                                  # spec/rust-cargo-fmt
 cargo build --workspace --all-targets
 cargo clippy --workspace --all-targets -- -D warnings    # spec/rust-clippy-pedantic
 cargo test --workspace
+# T505: the headless examples must keep running, not just compiling
+cargo run --example list_commands && cargo run --example headless_edit \
+  && cargo run --example render_frame -- <file> && cargo run --example textops_pipeline -- <file> \
+  && cargo run --example query_search -- <dir> <pattern>
 cargo doc --workspace --no-deps                          # RUSTDOCFLAGS=-D warnings
 cargo run --example list_commands -- --write && git diff --exit-code -- docs/reference/  # T305: generated reference current?
+cargo run --example generate_man && git diff --exit-code -- man/          # T307: man page current?
 python3 scripts/check-docs                               # documentation integrity
 ```
 
-Nothing merges that does not pass all seven. Run `scripts/check` (or
+Nothing merges that does not pass all nine. Run `scripts/check` (or
 `make check`) locally first; CI should only ever confirm what the local gate
 already said.
 

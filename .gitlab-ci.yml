@@ -133,6 +133,14 @@ test:
   script:
     - cargo build --workspace --all-targets
     - cargo test --workspace
+    # T505 (tasks.md): every example must keep running, not just compiling
+    # (--all-targets above already builds them all). Only the headless ones
+    # run here, each given real arguments against files in this checkout.
+    - cargo run --example list_commands >/dev/null
+    - cargo run --example headless_edit >/dev/null
+    - cargo run --example render_frame -- index.md >/dev/null
+    - cargo run --example textops_pipeline -- index.md >/dev/null
+    - cargo run --example query_search -- examples/demo-workspace TODO >/dev/null
 
 # T008 (tasks.md): binary-size visibility, at a fraction of the GitHub job's
 # complexity (see spec/ci/index.md) — posting a merge-request note needs an

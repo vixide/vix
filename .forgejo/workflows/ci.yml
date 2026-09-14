@@ -88,6 +88,18 @@ jobs:
       - name: cargo test
         run: cargo test --workspace
 
+      # T505 (tasks.md): every example must keep running, not just compiling
+      # (--all-targets above already builds them all). Only the headless
+      # ones run here, each given real arguments against files in this
+      # checkout.
+      - name: run headless examples (T505)
+        run: |
+          cargo run --example list_commands >/dev/null
+          cargo run --example headless_edit >/dev/null
+          cargo run --example render_frame -- index.md >/dev/null
+          cargo run --example textops_pipeline -- index.md >/dev/null
+          cargo run --example query_search -- examples/demo-workspace TODO >/dev/null
+
       - name: cargo doc (warnings denied)
         env:
           RUSTDOCFLAGS: -D warnings
