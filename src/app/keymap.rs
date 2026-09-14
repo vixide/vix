@@ -395,6 +395,16 @@ impl App {
 
     /// Handle a key event, routing it to the active modal layer or focused pane.
     pub fn on_key(&mut self, key: KeyEvent) {
+        self.dispatch_key(key);
+        // Keeps the tutorial's status-bar progress indicator live as the
+        // learner types (`crates/vix-tutor/spec/index.md`, § Progress
+        // checks) -- a cheap no-op whenever no tutorial tab is active, so
+        // this costs nothing for every other keystroke in the app.
+        self.update_tutor_status();
+    }
+
+    /// The real key dispatch chain, wrapped by [`Self::on_key`] above.
+    fn dispatch_key(&mut self, key: KeyEvent) {
         if key.kind == KeyEventKind::Release {
             return;
         }

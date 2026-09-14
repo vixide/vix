@@ -76,7 +76,9 @@ fn main() -> io::Result<()> {
     // reads stdin into a scratch buffer instead of opening a file named
     // "-". With no file given, reopen the previous session for this
     // workspace (if enabled).
-    if cli.files.is_empty() {
+    if cli.tutor {
+        app.open_tutor();
+    } else if cli.files.is_empty() {
         app.restore_session();
     } else if cli.files == [PathBuf::from("-")] {
         let mut content = String::new();

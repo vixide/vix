@@ -16,6 +16,7 @@ mod roam;
 mod scripts;
 mod session;
 mod structural_replace;
+mod tutor;
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -1903,6 +1904,9 @@ pub struct App {
     /// Spacemacs keymap: the in-progress `Space` leader key sequence (after `SPC`
     /// in Normal mode), or `None` when no leader is pending.
     spacemacs_leader: Option<String>,
+    /// The active interactive-tutorial session, if `vix --tutor` or **Help →
+    /// Tutorial** has opened one this run (`crates/vix-tutor/spec/index.md`).
+    tutor: Option<tutor::TutorSession>,
 }
 
 impl App {
@@ -2175,6 +2179,7 @@ impl App {
             vim_cmd: None,
             vim_pending: None,
             spacemacs_leader: None,
+            tutor: None,
         };
         app.validate_keymap();
         app
@@ -2511,6 +2516,10 @@ impl App {
         match action {
             "help.shortcuts" => self.open_help(),
             "help.welcome" => self.open_welcome(),
+            "help.tutorial" => self.open_tutor(),
+            "tutor.next_chapter" => self.tutor_next_chapter(),
+            "tutor.prev_chapter" => self.tutor_prev_chapter(),
+            "tutor.restart_chapter" => self.tutor_restart_chapter(),
             "help.license" | "vix.license" => {
                 self.welcome = Some(WelcomePanel::open(Self::license_lines()));
             }

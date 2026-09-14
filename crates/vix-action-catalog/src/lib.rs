@@ -608,6 +608,18 @@ pub const CATALOG: &[Action] = &[
         title: "action.trim_trailing_whitespace",
     },
     Action {
+        id: "tutor.next_chapter",
+        title: "action.tutor.next_chapter",
+    },
+    Action {
+        id: "tutor.prev_chapter",
+        title: "action.tutor.prev_chapter",
+    },
+    Action {
+        id: "tutor.restart_chapter",
+        title: "action.tutor.restart_chapter",
+    },
+    Action {
         id: "undo",
         title: "action.undo",
     },

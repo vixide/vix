@@ -5,9 +5,10 @@ real Vix buffers the learner edits with their own hands, not a scripted
 walkthrough. This spec is the v1 design (improvement plan T401); T402
 implements the engine and chapter 1, T403 fills in chapters 2–6.
 
-**Status**: design-only. Today the crate is a documented no-op: no
-dependencies, no public items, just this spec and the crate-root doc
-comment pointing here.
+**Status**: T402 done — chapter 1 ("Moving Around") is real: bundled body,
+three checks, launch (`vix --tutor` / **Help → Tutorial**), navigation,
+restart, and the live status-bar indicator all work end to end. Chapters
+2–6 (T403) remain — `CHAPTERS` has one entry today.
 
 ## Launch
 
@@ -80,15 +81,27 @@ pub struct Progress {
     pub done: usize,   // how many currently verify as complete
 }
 
-pub fn progress(chapter_id: &str, text: &str, cursor: (usize, usize)) -> Progress
+pub fn progress(chapter_id: &str, text: &str, cursor: usize) -> Progress
 ```
 
+`cursor` is a character offset, not a `(line, col)` pair — matching
+`vix-modal`'s own motion-function convention (`fn(text: &str, pos: usize,
+…)`), not editor-core's `(line, col)` cursor display. T402 settled this in
+the implementation; the host passes `Tab::editor::get_cursor()` straight
+through.
+
 One hand-written check function per chapter (`check::moving_around`, …,
-matching `CHAPTERS`), each a plain `fn(&str, (usize, usize)) -> Progress` —
-there is no generic checker DSL; six bespoke functions is simpler than a
+matching `CHAPTERS`), each a plain `fn(&str, usize) -> Progress` — there
+is no generic checker DSL; six bespoke functions is simpler than a
 framework for six cases and keeps every check auditable at a glance. A
 check may use `text` alone ("does the string `DELETE ME` still appear?"),
-`cursor` alone ("is the cursor on line 10?"), or both. `progress` re-runs
+`cursor` alone ("is the cursor past character 200?"), or both — though
+T402's own chapter 1 uses `text` alone throughout: a check that is only
+true while the cursor happens to sit in one place would stop being true
+the instant the learner moves to the next task, undoing its own progress,
+so a persistently-true text mutation is the safer default whenever a task
+can be phrased that way (T402's chapter 1 tasks all can — see § Chapters
+and lessons). `progress` re-runs
 on every keystroke inside a tutor tab (cheap: pure string scans over a
 lesson-sized buffer, well under editor-core's existing per-keystroke
 budget) and the host renders `done/total` in the status bar (`status.yml`)

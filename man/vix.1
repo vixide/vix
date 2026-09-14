@@ -4,7 +4,7 @@
 .SH NAME
 vix \- Vix: Simple Terminal Rust IDE
 .SH SYNOPSIS
-\fBvix\fR [\fB\-l\fR|\fB\-\-locale\fR] [\fB\-\-diff\fR] [\fB\-\-version\fR] [\fB\-\-json\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
+\fBvix\fR [\fB\-l\fR|\fB\-\-locale\fR] [\fB\-\-diff\fR] [\fB\-\-version\fR] [\fB\-\-json\fR] [\fB\-\-tutor\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
 .SH DESCRIPTION
 Vix: Simple Terminal Rust IDE
 .SH OPTIONS
@@ -20,6 +20,9 @@ Print the version and exit. Combine with `\-\-json` for a machine\-readable form
 .TP
 \fB\-\-json\fR
 With `\-\-version`, print `{"name", "version"}` as JSON instead of plain text
+.TP
+\fB\-\-tutor\fR
+Launch straight into the interactive tutorial (also reachable from a running session via **Help → Tutorial**), in place of any files also passed. See `crates/vix\-tutor/spec/index.md`
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

@@ -196,6 +196,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `help.privacy` | Privacy Statement | Menu |
 | `help.report_issue` | Report an Issue… | Menu |
 | `help.shortcuts` | Keyboard Shortcuts | Menu |
+| `help.tutorial` | Tutorial… | Menu |
 | `help.welcome` | Welcome… | Menu |
 | `hsplit` | Split Horizontally | Catalog |
 | `indent_line` | Indent Line | Catalog |
@@ -604,6 +605,9 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `tools.toggle_coverage_gutter` | Toggle Coverage Gutter | Menu |
 | `tools.x11_colors` | X11 Colors… | Menu |
 | `trim_trailing_whitespace` | Trim Trailing Whitespace | Catalog |
+| `tutor.next_chapter` | Tutorial: Next Chapter | Catalog |
+| `tutor.prev_chapter` | Tutorial: Previous Chapter | Catalog |
+| `tutor.restart_chapter` | Tutorial: Restart Chapter | Catalog |
 | `undo` | Undo | Catalog |
 | `unhighlight_search` | Clear Search Highlight | Catalog |
 | `unsplit` | Unsplit | Catalog |
@@ -662,4 +666,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**655 actions.**
+**659 actions.**
