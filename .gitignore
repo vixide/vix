@@ -11,8 +11,12 @@ target/
 vix-*/Cargo.lock
 
 # Hunspell spell-check dictionaries (~287 MB); fetched separately, not vendored.
-# See crates/vix-spellcheck/spec/dictionaries/index.md.
-dictionaries/
+# See crates/vix-spellcheck/spec/dictionaries/index.md. Root-anchored: an
+# unanchored `dictionaries/` also matched `docs/dictionaries/` (the real docs
+# page for this feature), silently keeping it out of every commit — found via
+# a CI-only `check-docs`/lychee failure invisible locally, where the
+# untracked files still sat on disk.
+/dictionaries/
 
 # Fuzzing: the generated corpus and any crash inputs. A crash worth keeping
 # becomes a unit test in the crate that owns the code, not a committed blob.
