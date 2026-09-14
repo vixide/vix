@@ -2970,7 +2970,7 @@ and its own gate run, zero intended behavior change unless stated.
   SQL checked in and a script to regenerate), and a README explaining the
   tour. Keep it a few hundred KB max; exclude from the workspace build.
   **Do this before T404–T406.**
-- [ ] **T502 — Cargo examples batch 1 (editor as a library).**
+- [x] **T502 — Cargo examples batch 1 (editor as a library).**
   `render_frame` (TestBackend → print the screen as text),
   `theme_roundtrip` (load bundled theme, tweak, save, reload),
   `textops_pipeline` (sort/dedupe/case a file from the CLI),
@@ -3062,8 +3062,8 @@ T401–T403, T404, and T405 are all done** — the vixtutor (all six chapters)
 and all ten written tutorials (`docs/tutorials/01`–`10`) are real; **T406
 is partially done** (all 8 demo tapes + the render script written and
 validated; the actual GIF rendering is blocked by this session's sandbox
-having no working headless browser — see T406's own entry). Run F
-(examples) hasn't started. Of
+having no working headless browser — see T406's own entry). **Run F has
+started: T502 (4 library examples) is done**, T503–T505 remain. Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
 groups is listed explicitly.
@@ -3084,7 +3084,8 @@ groups is listed explicitly.
    **T501, T401–T403, T404, T405 done (2026-09-13/14); T406 partially
    done (tapes + render script written 2026-09-14; GIF rendering
    blocked, see T406's own entry).**
-6. **Run F (examples):** T502–T505. Not started.
+6. **Run F (examples):** T502–T505. **T502 done (2026-09-14); T503–T505
+   remain.**
 7. **Deferred/audit-driven:** T121–T125 whenever their prerequisite data
    (benches, audits) exists. Not started.
 8. **Security:** T131/T132/T133 are done. **T134 remains**, blocked on

@@ -188,7 +188,13 @@ alongside in `~/.config/vix/themes/*.json`. See
 cargo run --example headless_edit             # open, edit, and save a file with no TUI
 cargo run --example list_commands             # print every command-palette command
 cargo run --example list_commands -- --write  # regenerate docs/reference/ (actions, settings, keybindings)
+cargo run --example render_frame -- [file]    # render a real frame to a TestBackend, print as text
+cargo run --example theme_roundtrip           # load a bundled theme, tweak it, save, reload
+cargo run --example textops_pipeline -- file  # sort/dedupe/uppercase a file's lines to stdout
+cargo run --example macro_replay              # parse macros.toml, replay a macro onto a buffer
 ```
+
+See `examples/scripts/` for sample Rhai scripts.
 
 ## Demos
 
