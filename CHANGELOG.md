@@ -513,6 +513,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
+- **`rustls` updated 0.23.43 → 0.23.45**, fixing RUSTSEC-2026-0285 (a
+  TLS 1.3 handshake message could be accepted across an encryption-level
+  boundary it shouldn't cross; the handshake transcript stays
+  authenticated either way, so this couldn't be used to alter or
+  complete a handshake — see the advisory for the full detail). Pulled
+  in transitively via `sqlx`/`ureq`; `cargo update -p rustls`, no code
+  changes needed.
 - **Persisted files that can carry sensitive content are now owner-only**
   (improvement plan T133): undo history, recorded macros, `config.toml`,
   `session.toml`, and the DB workbench's query history/saved queries are
