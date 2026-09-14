@@ -16,5 +16,5 @@ TODO: write a short paragraph here about what this project actually does.
 FIXME: the numbers in `data/sample.csv` are made up — replace with real data
 before anyone reads this for real.
 
-See also [`../org/roam/project-overview.org`](../org/roam/project-overview.org)
+See also [`org/roam/project-overview.org`](org/roam/project-overview.org)
 for the longer-form project notes.
