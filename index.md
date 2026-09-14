@@ -200,7 +200,10 @@ cargo run --example i18n_lookup -- [key]      # look up a translation key in all
 cargo run --example calculator_eval -- "expr" # evaluate a math expression
 ```
 
-See `examples/scripts/` for sample Rhai scripts.
+See `examples/scripts/` for sample Rhai scripts, and `examples/config/`
+for a fully-annotated `config.toml` (every setting), plus a custom theme,
+snippets file, and `macros.toml` -- each verified by actually loading it
+with the real code that reads it.
 
 ## Demos
 

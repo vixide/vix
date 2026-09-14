@@ -1,0 +1,285 @@
+# Fully-annotated Vix config.toml (improvement plan T504, tasks.md).
+#
+# Every key here is real -- generated from `Settings::default()` via
+# `toml::to_string_pretty`, then annotated with each field's own doc
+# comment from `docs/reference/settings.md` (itself generated from the
+# same struct by `cargo run --example list_commands -- --write`, T305).
+# Every value shown is the real default; this file round-trips through
+# `Settings::load_from` unchanged -- see `crates/vix-settings/spec/index.md`
+# for where the real file lives per platform, and `docs/configuration/
+# index.md` for the general format.
+#
+# TOML rule this file has to respect: every plain `key = value` line must
+# come before the first `[[array-of-tables]]` section -- once one opens,
+# subsequent bare keys belong to *it*, not the root document. That's why
+# `lsp_servers`/`debug_adapters`/`org_capture_templates` (the only three
+# `Vec<Struct>` settings) are all grouped at the end, in that order, even
+# though their scalar siblings are introduced in the same order
+# `docs/reference/settings.md` lists them.
+#
+# `lsp_servers` and `debug_adapters` are shown with one real worked entry
+# each instead of their empty default, since an empty array wouldn't show
+# their shape; `db_connections` gets a commented-out worked example for the
+# same reason (a real one would need a password, which never belongs in
+# this file -- see that key's own comment below).
+
+# Show the line-number gutter.
+line_numbers = true
+# Show line numbers relative to the cursor line (hybrid: cursor line
+# absolute).
+relative_line_numbers = false
+# Render visible glyphs for whitespace (space, tab, line ending).
+show_whitespace = false
+# Wrap long lines across screen rows instead of scrolling horizontally.
+soft_wrap = false
+# Show the file explorer on startup.
+show_explorer = true
+# How the file explorer's Delete acts: "trash" (default -- move to the OS
+# trash/Recycle Bin, undoable from there) or "hard" (remove outright, no
+# undo). Any other value falls back to "trash".
+explorer_delete = "trash"
+# Show the message drawer on startup.
+show_messages = true
+# Show the bottom status bar.
+show_status_bar = true
+# Show the breadcrumb bar (file > enclosing symbol) above the editor.
+show_breadcrumbs = false
+# Show the code-outline sidebar (symbol list that follows the cursor).
+show_outline_dock = false
+# Show the editor's right-side scroll bar.
+show_scrollbar = true
+# Show the bottom dock (log/output/data panel).
+show_bottom_dock = true
+# Height (rows) of the bottom dock; drag its top edge to resize.
+bottom_dock_height = 9
+# Maximum lines retained in the bottom dock (scrollback); oldest dropped
+# past this.
+scrollback = 1000
+# Open single-clicked / arrow-scanned files in an ephemeral preview tab.
+preview_tabs = true
+# On save, strip trailing spaces/tabs from every line.
+trim_trailing_whitespace = true
+# On save, append a final newline if the file does not end with one.
+ensure_final_newline = true
+# On save, run the language server's formatter (when the file has one).
+format_on_save = false
+# Periodically save the active dirty file-backed buffer (every few
+# seconds).
+auto_save = false
+# Pin the enclosing scope's header line at the top of the editor while
+# scrolling (sticky scroll).
+sticky_scroll = true
+# Color matching brackets by nesting depth (rainbow brackets).
+rainbow_brackets = false
+# Persist each file's undo tree across sessions (restored on reopen when
+# the file content still matches).
+persistent_undo = true
+# Show a code-overview minimap column at the right of the editor.
+show_minimap = false
+# Show hover tooltips (help text) on the menu bar's menus and items.
+show_menu_tooltips = true
+# Passively highlight every occurrence of the word under the cursor.
+highlight_word = false
+# Indentation inserted by Tab: "spaces" (default) or "tabs".
+indent_style = "spaces"
+# Number of spaces per indent when indent_style is "spaces".
+tab_width = 4
+# Column that Edit -> Wrap hard-wraps (fills) text at.
+wrap_column = 80
+# Color theme: "dark" (default) or "light" -- or a custom theme's name
+# from ~/.config/vix/themes/, see examples/config/theme.json.
+theme = "dark"
+# UI language as a locale code (e.g. "en", "es", "fr", "de", "cy"). A
+# --locale CLI flag overrides it for one run.
+locale = "en"
+# Keyboard navigation style id: "apple" (default), "vscode", "emacs",
+# "vi", and more -- see docs/keymaps/index.md for the full list.
+keymap = "apple"
+# Width (columns) of the left dock (file explorer); drag its right edge
+# to resize.
+explorer_width = 30
+# Width (columns) of the right dock (message drawer); drag its left edge
+# to resize.
+messages_width = 32
+# Width (columns) of the code-outline sidebar.
+outline_width = 28
+# Width (columns) of the debugger panel (call stack / variables / watch).
+debug_width = 36
+# Recently opened files, most-recent first (absolute paths). Capped to
+# recent_files_max; surfaced by File -> Open Recent....
+recent_files = []
+# How many entries to keep in recent_files.
+recent_files_max = 15
+# Action ids of commands recently run from the command palette,
+# most-recent first; surfaced at the top of the `>` command list.
+command_recents = []
+# Underline misspelled words in comments and strings.
+spellcheck = false
+# Extra directory to search for Hunspell dictionaries, on top of the
+# autodetected standard locations. Empty = autodetect only.
+dictionary_path = ""
+# Master switch for Language Server Protocol features (diagnostics,
+# hover, go-to-definition, completion). When off, no servers are
+# launched.
+lsp_enabled = true
+# Show the welcome dialog on launch. Vix sets this false and saves the
+# settings as soon as the dialog has been shown once, so it appears on
+# the first run only; set it back to true to see it again.
+show_welcome_dialog = true
+# Directory of vCard (.vcf) files for the contact browser (Tools ->
+# Contacts...). Empty = use the workspace root.
+contacts_dir = ""
+# Highest-priority character for a headline's [#X] priority cookie (Org
+# -> Priority). Vix's default is numeric ('0' highest .. '9' lowest),
+# unlike Emacs's default 'A'..'C'.
+org_priority_highest = "0"
+# Lowest-priority character; see org_priority_highest.
+org_priority_lowest = "9"
+# Priority given to a headline that had no cookie yet, by Org ->
+# Priority -> Increase/Decrease.
+org_priority_default = "0"
+# The Org agenda's explicit file list (workspace-relative paths), managed
+# by Org -> Agenda -> File List. Empty (the default) means every .org
+# file in the project.
+org_agenda_files = []
+# Active time zone as an IANA canonical name (e.g. "UTC",
+# "America/New_York"). Chosen via Tools -> Time Zone....
+time_zone = "UTC"
+# Reopen the previous session (open files, focused tab, cursor positions)
+# when Vix is launched in a workspace with no file given on the command
+# line. Saved per workspace root in session.toml.
+restore_session = true
+# Keep search-match highlights visible after the Find box closes
+# ("sticky" highlights), until explicitly toggled off.
+sticky_search_highlight = true
+# Command template the AI menu runs over editor text. {prompt} is
+# replaced with the action's instruction; {file}, if present, is
+# replaced with a temp file path (otherwise stdin carries the text).
+ai_command = "claude -p {prompt}"
+# Review AI replace transforms (Annotate / Improve) as an accept/reject
+# diff before applying, instead of overwriting the text immediately.
+ai_diff_review = true
+# Apply .editorconfig rules (indent style/size, trim/final-newline on
+# save) for opened files, overriding the global settings per file.
+editorconfig = true
+# Auto-insert the matching closer when an opening bracket/quote is typed
+# (and delete both with Backspace inside an empty pair).
+auto_pair = true
+# Show the git blame for the cursor's line inline (dimmed, end of line).
+# Toggle via Git -> Toggle Inline Blame.
+inline_blame = false
+# Command run by Tools -> Run Tests, whose output is parsed into a
+# pass/fail tree (e.g. "cargo test", "pytest -v", "npm test").
+test_command = "cargo test"
+# Project snippet file, relative to the project root. Loaded alongside
+# the global and media-type snippet files -- see examples/config/
+# snippets.json.
+project_snippets = "config/snippets/snippets.json"
+# Default path to a coverage report (LCOV or Cobertura XML), pre-filled
+# in the Tools -> Load Coverage File... prompt. Empty means no default.
+coverage_path = ""
+# Width (columns) of the test-results panel.
+test_width = 40
+
+# Configured language servers, matched to files by extension. Empty by
+# default -- Vix ships no built-in server. Shown here with one real
+# worked entry; see docs/tutorials/05-setting-up-lsp/index.md.
+[[lsp_servers]]
+language_id = "rust"
+extensions = ["rs"]
+command = ["rust-analyzer"]
+
+# Configured debug adapters (DAP), matched to files by extension. Empty
+# by default. Shown here with one real worked entry; see
+# docs/tutorials/10-debugging-with-dap/index.md.
+[[debug_adapters]]
+adapter_id = "debugpy"
+extensions = ["py"]
+command = ["python3", "-m", "debugpy.adapter"]
+
+# Saved database connections for the DB menu. Passwords are never stored
+# here; they are prompted for per session (or resolved through
+# password_command / the OS keyring -- see docs/tutorials/
+# 07-the-db-workbench/index.md). Real default is empty ([]); a worked
+# example, commented out:
+#
+# [[db_connections]]
+# name = "demo"
+# kind = "sqlite"
+# file = "db/demo.sqlite"
+# host = ""
+# port = ""
+# user = ""
+# database = ""
+# writable = false
+
+# Org-capture templates for the Org -> Capture submenu: named,
+# placeholder-driven templates filed at a cursor/id/file/headline/
+# datetree target. This is the real seeded default (Anything/Task/Babel/
+# Note/Contact) -- see crates/vix-org-capture/spec/index.md.
+[[org_capture_templates]]
+key = "a"
+description = "Anything"
+entry_type = "entry"
+target = "cursor"
+template = "* TODO %^{Task}"
+prepend = false
+empty_lines = 0
+immediate_finish = true
+clock_in = false
+
+[[org_capture_templates]]
+key = "t"
+description = "Task"
+entry_type = "entry"
+target = "cursor"
+template = "* TODO "
+prepend = false
+empty_lines = 0
+immediate_finish = false
+clock_in = false
+
+[[org_capture_templates]]
+key = "b"
+description = "Babel"
+entry_type = "plain"
+target = "cursor"
+template = """
+#+begin_src %^{Language}
+%?
+#+end_src"""
+prepend = false
+empty_lines = 0
+immediate_finish = false
+clock_in = false
+
+[[org_capture_templates]]
+key = "n"
+description = "Note"
+entry_type = "entry"
+target = "cursor"
+template = """
+* %^{Note}
+  %U"""
+prepend = false
+empty_lines = 0
+immediate_finish = true
+clock_in = false
+
+[[org_capture_templates]]
+key = "c"
+description = "Contact"
+entry_type = "entry"
+target = "cursor"
+template = """
+* %^{Name}
+  :PROPERTIES:
+  :EMAIL: %^{Email}
+  :PHONE: %^{Phone}
+  :ADDRESS: %^{Address}
+  :BIRTHDAY: %^{Birthday}
+  :END:"""
+prepend = false
+empty_lines = 0
+immediate_finish = true
+clock_in = false
