@@ -9,6 +9,7 @@ mod info_panels;
 mod insert_tools;
 mod keymap;
 mod lsp_dap;
+mod modal;
 mod org;
 mod org_table;
 mod picker_panels;
@@ -1907,6 +1908,12 @@ pub struct App {
     /// The active interactive-tutorial session, if `vix --tutor` or **Help →
     /// Tutorial** has opened one this run (`crates/vix-tutor/spec/index.md`).
     tutor: Option<tutor::TutorSession>,
+    /// Vi/Spacemacs keymaps, when `Settings::modal_engine` is on: the current
+    /// mode (`crates/vix-modal/spec/index.md`). Meaningless and unread when
+    /// the setting is off — `modal_insert` alone still drives Insert-mode
+    /// text passthrough either way, so this field only tracks Visual /
+    /// Visual Line on top of that (T112; T113+ migrate more onto it).
+    modal_mode: vix_modal::Mode,
 }
 
 impl App {
@@ -2180,6 +2187,7 @@ impl App {
             vim_pending: None,
             spacemacs_leader: None,
             tutor: None,
+            modal_mode: vix_modal::Mode::default(),
         };
         app.validate_keymap();
         app
@@ -8511,6 +8519,7 @@ impl App {
     fn reset_keymap_modes(&mut self) {
         self.emacs_prefix = false;
         self.modal_insert = false;
+        self.modal_mode = vix_modal::Mode::Normal;
         self.vim_cmd = None;
         self.spacemacs_leader = None;
         self.vim_pending = None;

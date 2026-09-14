@@ -214,6 +214,13 @@ pub struct Settings {
     /// Saved database connections for the **DB** menu (the `vix-db` crate spec). Passwords
     /// are never stored here; they are prompted for per session.
     pub db_connections: Vec<vix_db::connect::Connection>,
+    /// Use `vix-modal`'s real mode engine (Normal/Insert/Visual/Visual Line,
+    /// composable operators, counts, registers, text objects, dot-repeat) for
+    /// the Vi and Spacemacs keymaps' Normal-mode vocabulary, instead of the
+    /// original flat binding table. Off by default while the engine is still
+    /// landing in slices (improvement plan T112–T115); see
+    /// `crates/vix-modal/spec/index.md`.
+    pub modal_engine: bool,
 }
 
 /// One configured language server (a `lsp_servers` entry).
@@ -299,6 +306,7 @@ impl Default for Settings {
             project_snippets: "config/snippets/snippets.json".to_string(),
             coverage_path: String::new(),
             db_connections: Vec::new(),
+            modal_engine: false,
         }
     }
 }

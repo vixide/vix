@@ -494,6 +494,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `scripts/check` already ran eight — T307's man-page-current? check
   had never been added to the spec. Now nine, with this task's own
   addition.
+- **Modal-editing engine, first slice** (improvement plan T112): new
+  `vix_modal::Mode` (Normal/Insert/Visual/Visual Line) and a new
+  `Settings::modal_engine` flag (default off). With the flag on, the Vi and
+  Spacemacs keymaps gain real `v`/`V` Visual/Visual Line entry, `h j k l`/
+  arrow-key selection extending, and `Esc` to return to Normal, shown live
+  in the status bar — reusing the editor's existing native shift-selection
+  mechanism rather than hand-tracking an anchor. Everything else keeps
+  running through the existing `vim_normal_key` table unchanged; T113–T115
+  progressively move more of it onto the new engine. See
+  `crates/vix-modal/spec/index.md` for the full v1 design.
 
 ### Changed
 

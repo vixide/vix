@@ -13,6 +13,7 @@ mod keybindings;
 mod keymaps;
 mod lsp;
 mod menu;
+mod modal;
 mod org;
 mod palette;
 mod panels;

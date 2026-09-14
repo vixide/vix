@@ -820,9 +820,35 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   `crates/vix-i18n/spec/index.md`, `spec/llms-json-and-llms-txt/index.md`,
   `agents/share/crate-map.md` ×2 — one more occurrence than T101 found,
   since this file has two differently-worded "103" mentions).
-- [ ] **T112 — Mode engine.** `vix-modal` crate: mode state machine, key
-  dispatch that intercepts before the normal keymap when the Vi keymap +
-  modal setting are active, mode shown in the status bar.
+- [x] **T112 — Mode engine.** Done 2026-09-14. `vix-modal` crate gained the
+  `Mode` enum (`Normal`/`Insert`/`Visual`/`VisualLine`, `status_label()` for
+  the status bar) plus a new `Settings::modal_engine: bool` (default off).
+  Host wiring lives in a new `src/app/modal.rs`: `App::modal_key` is tried
+  first from `vim_key`/`spacemacs_key`, before `vim_normal_key`'s existing
+  table — a no-op whenever the setting is off, so today's Vi/Spacemacs
+  behavior is unchanged by default. This slice: `v`/`V` enter Visual/Visual
+  Line from Normal, `h j k l`/arrows extend the selection, `Esc` returns to
+  Normal. Deliberately reused the editor's own native shift-extend
+  mechanism (`MoveLeft/Right/Up/Down { shift: bool }`, the same plumbing
+  `Ctrl+Shift+Right/Left` already relies on) rather than having the modal
+  engine track its own anchor — an earlier draft that hand-tracked a
+  `modal_visual_anchor` field produced a wrong selection range, since
+  unshifted motion over an active selection collapses/normalizes it instead
+  of doing a pure cursor step. Visual Line re-snaps to whole lines after
+  each extend, keeping the cursor on the growing end (reading the raw,
+  unsorted cursor position, since `get_selection()` always returns a sorted
+  `start<=end` pair that loses which end is growing). Status bar shows
+  `status.vim_visual`/`status.vim_visual_line` (2 new locale keys, all 15
+  locales) alongside the existing Insert/Normal indicators. Found and fixed
+  a real regression during the full gate run: switching keymaps (View →
+  Keymap) reset `modal_insert` but not the new `modal_mode`, so a Vi→Vi
+  reswitch while in Visual mode left the status bar stuck; fixed in
+  `reset_keymap_modes`. 5 new integration tests
+  (`tests/integration/modal.rs`) — one caught a test-file-path race
+  (`unique_dir` tags shared across parallel tests), one caught the
+  anchor-tracking bug above. `vim_normal_key`'s table still owns everything
+  else unchanged; T113+ narrows that fallback as real motions/operators
+  land.
 - [ ] **T113 — Motions + counts.** `h j k l w b e 0 $ ^ gg G { } f/t/F/T`
   with counts, as pure functions over editor-core positions; heavy unit
   tests.
