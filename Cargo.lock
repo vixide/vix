@@ -6154,6 +6154,10 @@ name = "vix-time-zone-model"
 version = "1.6.0"
 
 [[package]]
+name = "vix-tutor"
+version = "1.6.0"
+
+[[package]]
 name = "vix-undo-store"
 version = "1.6.0"
 dependencies = [

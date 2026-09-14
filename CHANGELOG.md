@@ -382,6 +382,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the written tutorials and VHS demo tapes (T404–T406) to open and run
   against. Excluded from the workspace build via a root `Cargo.toml`
   entry; ~76 KB total.
+- **`vix-tutor` spec** (improvement plan T401): the design for an
+  interactive, in-editor tutorial — `vimtutor`-style, but each chapter's
+  lesson is a real, freely-editable Vix buffer, with cheap textual
+  progress checks against what the learner typed rather than a scripted
+  walkthrough. Launches via `vix --tutor` or **Help → Tutorial** (both
+  land in T402). Design-only for now, matching `vix-modal`'s T111
+  precedent: an empty crate plus this spec, no functional code yet.
 
 ### Changed
 
@@ -397,6 +404,18 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`docs/dictionaries/` and `crates/vix-spellcheck/spec/dictionaries/`
+  were silently uncommitted.** `.gitignore`'s `dictionaries/` pattern
+  (meant only for the ~287 MB Hunspell cache fetched separately at the
+  repo root) was unanchored, so it also matched these two real, small
+  documentation directories and kept them out of every commit —
+  invisible locally (the untracked files still sat on disk) but breaking
+  `scripts/check-docs` and CI's `lychee` link check in a fresh clone
+  (`docs/SUMMARY.md`'s link to `dictionaries/index.md` had nothing to
+  resolve to). Root-anchored to `/dictionaries/`; both directories are
+  now tracked. Also fixes a bad relative link in the new
+  `examples/demo-workspace/notes.md` (T501, above) caught by the same
+  `lychee` run.
 - **Two bundled themes shared one name.** `themes/safelight-red.json`
   declared `"name": "Phosphor Amber"` — the same name as the real
   `phosphor-amber.json` — so **View → Theme…** only ever offered one of
