@@ -65,6 +65,7 @@ pub use vix_left_dock as explorer;
 pub use vix_lsp as lsp;
 pub use vix_markdown_preview as markdown_preview;
 pub use vix_menu as menu;
+pub use vix_modal as modal;
 pub use vix_palette as palette;
 pub use vix_qr_tool as qr_tool;
 pub use vix_regex_tool as regex_tool;

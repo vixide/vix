@@ -563,10 +563,8 @@ impl App {
         match self.active_keymap() {
             Keymap::Vi => Some(if let Some(cmd) = &self.vim_cmd {
                 format!(":{cmd}")
-            } else if self.modal_insert {
-                t!("status.vim_insert").to_string()
             } else {
-                t!("status.vim_normal").to_string()
+                self.modal_mode_indicator()
             }),
             Keymap::Emacs if self.emacs_prefix => Some("C-x-".to_string()),
             Keymap::Emacs if self.emacs_c_x_prefix => Some("C-c C-x-".to_string()),
@@ -576,12 +574,23 @@ impl App {
             Keymap::Emacs if self.emacs_c_prefix => Some("C-c-".to_string()),
             Keymap::Spacemacs => Some(if let Some(seq) = &self.spacemacs_leader {
                 format!("SPC {seq}")
-            } else if self.modal_insert {
-                t!("status.vim_insert").to_string()
             } else {
-                t!("status.vim_normal").to_string()
+                self.modal_mode_indicator()
             }),
             _ => None,
+        }
+    }
+
+    /// The Vi/Spacemacs mode text `mode_indicator` shows once there's no `:`
+    /// command line or Spacemacs leader in progress -- every
+    /// [`vix_modal::Mode`], not just Insert/Normal, so this stays correct
+    /// once `Settings::modal_engine` starts producing Visual states too.
+    fn modal_mode_indicator(&self) -> String {
+        match self.modal_mode {
+            vix_modal::Mode::Insert => t!("status.vim_insert").to_string(),
+            vix_modal::Mode::Visual => t!("status.vim_visual").to_string(),
+            vix_modal::Mode::VisualLine => t!("status.vim_visual_line").to_string(),
+            vix_modal::Mode::Normal => t!("status.vim_normal").to_string(),
         }
     }
 
@@ -1295,6 +1304,7 @@ impl App {
         if self.modal_insert {
             if key.code == KeyCode::Esc {
                 self.modal_insert = false;
+                self.modal_mode = vix_modal::Mode::Normal;
                 return true;
             }
             // Let typing and shared keys flow through to the editor.
@@ -1314,6 +1324,13 @@ impl App {
         // focused pane keep its own navigation.
         if self.focus != Focus::Editor {
             return false;
+        }
+        // The modal engine (Settings::modal_engine) gets first refusal on
+        // Visual/Visual Line entry and movement; everything it doesn't
+        // recognize falls through to the table below unchanged (T112;
+        // T113+ narrow this fallback as real motions/operators land).
+        if self.modal_key(key) {
+            return true;
         }
         self.vim_normal_key(key);
         // Swallow every other Normal-mode key so it never types into the buffer.
@@ -1352,6 +1369,7 @@ impl App {
 
     fn vim_enter_insert(&mut self) {
         self.modal_insert = true;
+        self.modal_mode = vix_modal::Mode::Insert;
     }
 
     /// Dispatch a `vim.*` action — the Vim/Spacemacs insert-mode-entry
@@ -1468,6 +1486,7 @@ impl App {
         if self.modal_insert {
             if key.code == KeyCode::Esc {
                 self.modal_insert = false;
+                self.modal_mode = vix_modal::Mode::Normal;
                 return true;
             }
             return false;
@@ -1486,6 +1505,10 @@ impl App {
         }
         if self.focus != Focus::Editor {
             return false;
+        }
+        // The modal engine gets first refusal (see vim_key's own comment).
+        if self.modal_key(key) {
+            return true;
         }
         // Shared Vi Normal-mode vocabulary (motions, operators, insert entry).
         self.vim_normal_key(key);
