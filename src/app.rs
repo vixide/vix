@@ -1985,11 +1985,14 @@ impl App {
     fn build_core(root: &Path, settings: &Settings) -> (Editor, Messages, crate::lsp::Lsp) {
         // Apply the saved theme before building any editor so the first buffer is
         // styled correctly. A theme value that is not a built-in mode is treated
-        // as the name of a custom JSON theme.
-        Self::apply_saved_theme(&settings.theme);
+        // as the name of a custom JSON theme. Scanned once (T122: the themes
+        // directory scan is real filesystem I/O) and reused for the View →
+        // Theme submenu below, rather than scanning twice on the startup path.
+        let available_themes = Self::available_custom_themes();
+        Self::apply_saved_theme_from(&settings.theme, &available_themes);
         // Populate the View → Theme submenu with the available theme names before
         // the menu bar is first rendered.
-        let theme_names = crate::theme_model::theme_names(&Self::available_custom_themes());
+        let theme_names = crate::theme_model::theme_names(&available_themes);
         crate::menu::set_theme_names(theme_names);
         // Apply the saved time zone so the clock panel and status bar use it.
         crate::time_zone_model::set_active(&settings.time_zone);
@@ -8501,7 +8504,14 @@ impl App {
     /// `"dark"` matches the bundled `Dark`). Falls back to `Dark`, then to the
     /// first available theme.
     fn apply_saved_theme(value: &str) {
-        let themes = Self::available_custom_themes();
+        Self::apply_saved_theme_from(value, &Self::available_custom_themes());
+    }
+
+    /// Like [`Self::apply_saved_theme`], given an already-scanned theme list —
+    /// `build_core` (startup) needs the same list right afterward to populate
+    /// the View → Theme submenu, and scanning the themes directory (real
+    /// filesystem I/O, T122) is wasted work to do twice on the startup path.
+    fn apply_saved_theme_from(value: &str, themes: &[crate::theme::CustomTheme]) {
         let chosen = themes
             .iter()
             .find(|t| t.name.eq_ignore_ascii_case(value))

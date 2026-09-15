@@ -65,7 +65,12 @@ fn main() -> io::Result<()> {
 
     let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let mut app = App::new(root, settings);
-    app.refresh_git();
+    // `refresh_git` shells out to `git` (repo?/branch/status, each its own
+    // subprocess) -- moved below the first frame (T122; it alone measured
+    // ~82ms of a ~96ms cold start, `App::new` itself only ~10ms). `App`'s
+    // git fields default to "no repo" either way, the same state opening
+    // Vix outside a repo already renders correctly, so the first frame is
+    // simply one beat behind on the branch/status indicator, not wrong.
     app.load_scripts();
     app.maybe_prompt_script_trust();
     app.resolve_key_overrides();
@@ -130,6 +135,13 @@ fn main() -> io::Result<()> {
         ..Default::default()
     };
     app.picker = ratatui_image::picker::Picker::from_query_stdio_with_options(query).ok();
+    // Draw once before the (comparatively expensive, git-subprocess-based)
+    // initial refresh, so the terminal shows real content immediately
+    // rather than sitting on whatever was on screen before Vix started for
+    // however long that refresh takes (T122). `run`'s own loop redraws with
+    // the real git state on its first iteration.
+    let _ = terminal.draw(|frame| ui::draw(&mut app, frame));
+    app.refresh_git();
     let result = run(&mut terminal, &mut app);
     let _ = write!(io::stdout(), "\x1b[?1003l");
     #[cfg(target_os = "macos")]

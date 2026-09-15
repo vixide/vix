@@ -173,8 +173,9 @@ The corpus is not committed; the regression is.
 | Bench | Covers |
 | ----- | ------ |
 | `text_ops` | The pure transforms, at 100 and 2,000 lines — they rebuild their unit ranges from the whole buffer on every keystroke |
-| `editor_ops` | Opening a file (parse + highlight, up to a ~100 MB synthetic file), typing, a 10k-operation burst of random inserts/deletes, pasting, undo, whole-buffer line transforms |
+| `editor_ops` | Opening a file (parsing it, up to a ~100 MB synthetic file — highlighting is a separate, always-lazy, per-viewport cost this doesn't measure), typing, a 10k-operation burst of random inserts/deletes, pasting, undo, whole-buffer line transforms |
 | `search_and_palette` | The three per-keystroke search paths: find-in-buffer, workspace search (up to a generated 10k-file tree), and palette fuzzy filtering |
+| `startup` | Cold-start cost: `App::new` (theme scan, editor/menu/LSP-client setup) and `refresh_git` (the three `git` subprocesses a real workspace's cold start pays), benchmarked separately |
 
 ```sh
 cargo bench                                  # everything
