@@ -1962,6 +1962,20 @@ pub struct App {
     /// register was used instead, which carries its own
     /// [`vix_modal::register::RegisterKind`].
     modal_unnamed_kind: vix_modal::register::RegisterKind,
+    /// The modal engine is waiting for the object-selector second key of a
+    /// pending `i`/`a` (T115), holding which of the two it was.
+    modal_pending_text_object: Option<char>,
+    /// Dot-repeat (T115): the raw keys of the command currently in
+    /// progress, rebuilt from scratch every time the engine is in a neutral
+    /// (nothing pending) state — see `src/app/modal.rs`'s own doc comment
+    /// on `App::modal_normal_key` for the exact rule. Not itself what `.`
+    /// replays; [`App::modal_last_change`] is.
+    modal_recording: Vec<KeyEvent>,
+    /// Dot-repeat (T115): the raw keys of the last command that actually
+    /// changed the buffer (`d{motion}`, a text object, or `p`/`P`) —
+    /// exactly what `.` replays, `{count}.` overriding its recorded count.
+    /// Empty until the first such change happens.
+    modal_last_change: Vec<KeyEvent>,
 }
 
 impl App {
@@ -2245,6 +2259,9 @@ impl App {
             modal_active_register: None,
             modal_registers: vix_modal::register::Registers::default(),
             modal_unnamed_kind: vix_modal::register::RegisterKind::Char,
+            modal_pending_text_object: None,
+            modal_recording: Vec::new(),
+            modal_last_change: Vec::new(),
         };
         app.validate_keymap();
         app
@@ -8584,6 +8601,9 @@ impl App {
         self.modal_operator_count = 1;
         self.modal_pending_register_select = false;
         self.modal_active_register = None;
+        self.modal_pending_text_object = None;
+        self.modal_recording.clear();
+        self.modal_last_change.clear();
         self.vim_cmd = None;
         self.spacemacs_leader = None;
         self.vim_pending = None;

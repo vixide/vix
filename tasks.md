@@ -907,10 +907,41 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   are per-`App` state; the unnamed one mirrors the real, process-global,
   in-memory-in-tests `vix_clipboard` — every other test avoids it so
   parallel test execution can't make them flaky).
-- [ ] **T115 — Text objects + repeat.** `iw aw i( a( i" a"` etc. via
-  editor-core's structural selection where possible; dot-repeat of the
-  last change. Update `docs/for-vim-users/` to state exactly what is and
-  isn't supported.
+- [x] **T115 — Text objects + repeat.** Done 2026-09-15, closing the
+  T112–T115 modal-editing arc. New `vix-modal` modules: `text_object.rs`
+  (pure `fn(text, pos, count) -> Option<(usize, usize)>` for `iw`/`aw`, a
+  parameterized `inner_pair`/`around_pair` covering `(`/`)`/`b`,
+  `{`/`}`/`B`, `[`/`]`, `<`/`>`, and a parameterized `inner_quote`/
+  `around_quote` covering `"`/`'`/`` ` `` — a character/bracket-matching
+  scan per the spec, deliberately not editor-core's Tree-sitter structural
+  selection, which is a different, syntax-aware mechanism). `i`/`a` +
+  object compose with `d`/`c`/`y` the same way a T113 motion does (always a
+  plain character-wise range — there's no before/after-cursor pair to
+  sort). Dot-repeat: `.` replays the exact keys of the last real change
+  (`d{motion}`, a text object, or `p`/`P` — `y` is excluded, matching real
+  Vim's own "yank was never dot-repeatable either"; `c` and a plain
+  Insert-mode session are excluded too, a deliberately scoped-out follow-on
+  — replaying typed Insert-mode text needs a recording hook outside
+  `src/app/modal.rs`, since those keys never reach `App::modal_key` at all
+  under T112's Insert-mode-passthrough design). `{count}.` overrides the
+  recorded change's count by splicing the new count in wherever the first
+  digit run in the recorded keys was (after a register prefix if any),
+  rather than just prepending it; a command recorded with two separate
+  counts (`2d3w`) only has the first one replaced this way — documented,
+  narrow, not silent corruption. **`Settings::modal_engine` flipped to
+  `true` by default** — the full v1 slice is done, per the spec's own
+  "flip is whoever ships T115's call." Real-Vim nuances still deliberately
+  unimplemented (none of them in the spec's own cut list, all newly
+  documented in its Status section and in `docs/for-vim-users/index.md`'s
+  "Where Vim still wins"): `cw`'s "acts like `ce`" special case, `cc`'s
+  indentation preservation, operators composing with a Visual selection,
+  and the dot-repeat gaps above. Updated `docs/for-vim-users/index.md`'s
+  gap list to say exactly what v1 now covers, per this task's own
+  instruction. 18 new unit tests (73 total in `vix-modal`) plus 11 new
+  integration tests (37 total in `tests/integration/modal.rs`), and a full
+  `cargo test --test integration` run (542 tests, 0 failures) confirming
+  the default flip doesn't regress any pre-existing Vi/Spacemacs-keymap
+  test.
 
 ### Performance & depth
 

@@ -75,10 +75,21 @@ keys while you hesitate. Many Vim users find it the best of both worlds.
 
 Honesty is the best advocacy:
 
-- **The full Vi language.** Vix's Normal mode is a practical subset. There are
-  no counts (`3w`), no text objects (`ciw`, `da"`), no registers, no visual
-  mode, no macros-via-`q` (Vix has recorded macros, but in the Edit menu). If
-  your hands speak fluent `d2f)`, you will notice.
+- **The full Vi language.** Vix's Normal mode ships a real modal-editing
+  engine now (`vix-modal`, on by default): counts (`3w`, `2d3w`), operators
+  composing with any motion (`dw`, `de`, `d}`, `dgg`, `df.`), text objects
+  (`diw`, `daw`, `di(`/`di{`/`di[`/`di<`, `da"`/`da'`/`` da` ``), named
+  registers (`"ayy`, `"ap`) alongside the unnamed one, Visual/Visual Line
+  selection, and `.` dot-repeat for `d{motion}`, a text object, or `p`/`P`.
+  It is still a practical subset, not the full language: no Visual Block, no
+  WORD motions (`W`/`B`/`E`), no `;`/`,`/`*`/`#`, no `>`/`<`/`~` operators, no
+  uppercase/numbered/special registers, `cw`'s "acts like `ce`" special case
+  and `cc`'s indentation preservation are both unimplemented, operators don't
+  yet compose with a Visual selection, dot-repeat doesn't cover `c`+motion or
+  a plain Insert-mode session, and there's still no ex-command scripting or
+  macro-via-`q`/`@` (Vix has recorded macros, but in the Edit menu). See
+  `crates/vix-modal/spec/index.md` for the exact, current line. If your hands
+  speak the deepest corners of fluent Vim, you will still notice.
 - **Extensibility.** No Vimscript, no Lua, no plugin ecosystem. Vix's answer is
   to build the common 90% in — but if your workflow depends on a niche plugin,
   Vix cannot replace it today.

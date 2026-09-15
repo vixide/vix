@@ -422,3 +422,134 @@ fn operators_still_fall_through_to_the_old_table_for_unbound_starts() {
     let text = app.editor.active_tab().unwrap().text();
     assert_eq!(text, "hello\n", "undo on an unmodified buffer is a no-op");
 }
+
+// ----- T115: text objects + dot-repeat -----------------------------------
+
+#[test]
+fn diw_deletes_the_inner_word() {
+    let mut app = vi_app("modal-diw", "foo bar\n", true);
+    type_str(&mut app, "\"adiw");
+    assert_eq!(buffer_text(&app), " bar\n");
+    assert_eq!(cursor(&mut app), 0);
+}
+
+#[test]
+fn daw_deletes_the_word_plus_its_trailing_space() {
+    let mut app = vi_app("modal-daw", "foo bar\n", true);
+    type_str(&mut app, "\"adaw");
+    assert_eq!(buffer_text(&app), "bar\n");
+}
+
+#[test]
+fn di_paren_deletes_inside_the_pair_delimiters_excluded() {
+    let mut app = vi_app("modal-di-paren", "(bar)\n", true);
+    type_str(&mut app, "\"adi(");
+    assert_eq!(buffer_text(&app), "()\n");
+    assert_eq!(cursor(&mut app), 1);
+}
+
+#[test]
+fn da_quote_deletes_the_quoted_text_and_the_quotes() {
+    let mut app = vi_app("modal-da-quote", "say \"hi\" now\n", true);
+    type_str(&mut app, "\"bda\"");
+    assert_eq!(buffer_text(&app), "say  now\n");
+}
+
+#[test]
+fn c_i_paren_deletes_inside_and_enters_insert_mode() {
+    let mut app = vi_app("modal-ci-paren", "(bar)\n", true);
+    type_str(&mut app, "\"aci(");
+    assert_eq!(buffer_text(&app), "()\n");
+    assert!(
+        matches!(app.mode_indicator().as_deref(), Some("-- INSERT --")),
+        "c enters Insert mode, same as with an ordinary motion"
+    );
+    type_str(&mut app, "X");
+    assert_eq!(buffer_text(&app), "(X)\n");
+}
+
+#[test]
+fn an_unmatched_text_object_cancels_the_operator_cleanly() {
+    let mut app = vi_app("modal-textobj-miss", "abc\n", true);
+    type_str(&mut app, "\"adi("); // no parens anywhere in the buffer
+    assert_eq!(buffer_text(&app), "abc\n", "nothing was deleted");
+    app.on_key(key('l'));
+    assert_eq!(
+        cursor(&mut app),
+        1,
+        "'l' moves the cursor -- not stuck pending"
+    );
+}
+
+#[test]
+fn dot_repeats_the_last_delete_operator_motion() {
+    let mut app = vi_app("modal-dot-dw", "one two three\n", true);
+    type_str(&mut app, "dw");
+    assert_eq!(buffer_text(&app), "two three\n");
+    app.on_key(key('.'));
+    assert_eq!(
+        buffer_text(&app),
+        "three\n",
+        ". repeats dw from the current cursor"
+    );
+}
+
+#[test]
+fn dot_repeats_the_last_text_object_delete() {
+    let mut app = vi_app("modal-dot-textobj", "(a)(b)(c)\n", true);
+    type_str(&mut app, "di(");
+    assert_eq!(buffer_text(&app), "()(b)(c)\n");
+    app.on_key(key('l'));
+    app.on_key(key('l'));
+    app.on_key(key('.'));
+    assert_eq!(
+        buffer_text(&app),
+        "()()(c)\n",
+        ". repeats di( at the new cursor position"
+    );
+}
+
+#[test]
+fn dot_repeats_a_named_register_paste() {
+    let mut app = vi_app("modal-dot-paste", "a\nb\nc\n", true);
+    type_str(&mut app, "\"ayy");
+    app.on_key(key('j'));
+    app.on_key(key('j'));
+    type_str(&mut app, "\"ap");
+    assert_eq!(buffer_text(&app), "a\nb\nc\na\n");
+    app.on_key(key('.'));
+    assert_eq!(
+        buffer_text(&app),
+        "a\nb\nc\na\na\n",
+        ". repeats the \"ap paste (register 'a' still holds 'a\\n')"
+    );
+}
+
+#[test]
+fn a_count_before_dot_overrides_the_recorded_leading_count() {
+    let mut app = vi_app("modal-dot-count-override", "a b c d e f\n", true);
+    type_str(&mut app, "\"a2dw");
+    assert_eq!(buffer_text(&app), "c d e f\n", "2dw deleted 2 words");
+    type_str(&mut app, "3.");
+    assert_eq!(
+        buffer_text(&app),
+        "f\n",
+        "3. replaces the recorded count of 2 with 3, not 2*3"
+    );
+}
+
+#[test]
+fn yank_never_updates_what_dot_repeats() {
+    // Matches real Vim: y never modifies the buffer, so it was never
+    // dot-repeatable there either.
+    let mut app = vi_app("modal-dot-yank-noop", "one two\n", true);
+    type_str(&mut app, "dw"); // establish a real recorded change first
+    assert_eq!(buffer_text(&app), "two\n");
+    type_str(&mut app, "yy"); // yank -- must NOT become the new dot target
+    app.on_key(key('.'));
+    assert_eq!(
+        buffer_text(&app),
+        "",
+        ". still repeats the earlier dw (deleting the rest of the buffer), not a no-op from yy"
+    );
+}
