@@ -8,8 +8,10 @@ motions an operator can apply to. `vix-modal` is the real engine — this
 spec is the T111 audit (what exists today, precisely, so "the gap is real"
 is a finding and not an assumption) plus the v1 design it justifies.
 
-**Status**: landing in slices (improvement plan T112–T115); each should
-update this file if reality and the design disagree, same as anywhere else.
+**Status**: v1 shipped in slices (improvement plan T112–T115, all done) and
+`Settings::modal_engine` is now **on by default** for the Vi and Spacemacs
+keymaps — each slice updated this file if reality and the design disagreed,
+same as anywhere else, and still should as any of the gaps below close.
 **T112** (done): the `Mode` enum, `Settings::modal_engine`, and host wiring
 for Visual/Visual Line entry, exit, and cursor-extending movement. **T113**
 (done): `count.rs`'s numeric-prefix accumulator and `motion.rs`'s pure
@@ -31,8 +33,25 @@ special case, and `cc`'s indentation preservation. Operators composing
 with a **Visual** selection (this section's own "any motion/text
 object/Visual selection") isn't wired yet either — Visual mode's own
 motion vocabulary is still just T112's `h j k l`, so there's nothing
-richer to compose with until text objects (T115) exist. **T115**: not
-started.
+richer to compose with until text objects (T115) exist. **T115** (done):
+`text_object.rs` — `iw`/`aw`, a parameterized `inner_pair`/`around_pair`
+(`(`/`)`/`b`, `{`/`}`/`B`, `[`/`]`, `<`/`>`) and `inner_quote`/
+`around_quote` (`"`/`'`/`` ` ``), composing with `d`/`c`/`y` exactly like a
+motion (always a plain character-wise range). Dot-repeat: `.` replays the
+last real change (`d{motion}`, a text object, or `p`/`P` — not `y`,
+matching real Vim's own rule) as host-side keystroke replay
+(`src/app/modal.rs`, not this crate — there's no pure function to write for
+it); `c` and a plain Insert-mode session are excluded too, a deliberately
+scoped-out follow-on (replaying typed Insert-mode text needs a recording
+hook outside this crate's host wiring, since those keys never reach
+`App::modal_key` at all under T112's own Insert-mode-passthrough design).
+Operators composing with a Visual selection, per the paragraph above, is
+still open — T115 didn't touch Visual mode's own vocabulary. `cw`'s "acts
+like `ce`" special case and `cc`'s indentation preservation remain
+deliberately unimplemented too. None of the open items above are in this
+spec's own cut list; they're documented gaps, not silent omissions —
+`docs/for-vim-users/index.md`'s "Where Vim still wins" states the same list
+in user-facing terms.
 
 ## The audit
 

@@ -1,16 +1,21 @@
 //! `Settings::modal_engine`'s host wiring (`crates/vix-modal/spec/index.md`).
 //! T112: Visual / Visual Line entry, exit, and cursor-extending movement.
 //! T113: the numeric-count prefix and every pure motion in
-//! `vix_modal::motion`, driving Normal-mode movement. T114 (this slice):
-//! `d`/`c`/`y` composing with any T113 motion (via
+//! `vix_modal::motion`, driving Normal-mode movement. T114: `d`/`c`/`y`
+//! composing with any T113 motion (via
 //! [`vix_modal::motion::MotionKind`]'s exclusive/inclusive/linewise
 //! classification), `x` as sugar for `d` + one right motion, `dd`/`cc`/`yy`
 //! as sugar for the whole current line, `p`/`P` reading a register, and
-//! `"{a-z}` selecting a named register for the next operator or paste.
+//! `"{a-z}` selecting a named register for the next operator or paste. T115
+//! (this slice): `i`/`a` + `w`/a delimiter pair/a quote composing with
+//! `d`/`c`/`y` the same way a motion does (`vix_modal::text_object`), and
+//! `.` dot-repeat — keystroke replay of the last real change (`d{motion}`,
+//! a text object, or `p`/`P`; `y` and `c` are excluded, see
+//! [`App::apply_operator_to_range`]'s own doc for why `c` specifically).
 //! `vim_key`/`spacemacs_key` call [`App::modal_key`] before falling through
 //! to `vim_normal_key`'s existing table — everything this doesn't recognize
 //! (Visual mode's own motion vocabulary, still just `h j k l` per T112) keeps
-//! working exactly as it did before the engine existed. T115 is what's left.
+//! working exactly as it did before the engine existed.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use vix_modal::motion::MotionKind::{self, Exclusive, Inclusive, Linewise};
@@ -41,6 +46,30 @@ impl App {
     /// T113 motions (via [`Self::modal_try_motion_key`]), and `v`/`V`
     /// (T112). Everything else falls through to `vim_normal_key`.
     fn modal_normal_key(&mut self, key: KeyEvent) -> bool {
+        // Dot-repeat (T115): keystroke replay, not semantic replay -- every
+        // key seen while nothing is pending starts a fresh recording (the
+        // previous one, if it never became a real change, is simply
+        // discarded); every key seen with something already pending
+        // extends the current one. `Self::apply_operator_to_range` commits
+        // the recording to `modal_last_change` at the one point that
+        // actually defines "a change" happened; nothing else needs to
+        // touch `modal_last_change` -- including replay itself, which runs
+        // back through this very function and so naturally re-records
+        // whatever it just repeated as the new last change, matching real
+        // Vim's own "`.` after `.`" behavior with no special-casing.
+        if !self.modal_pending_g
+            && self.modal_pending_find.is_none()
+            && self.modal_pending_text_object.is_none()
+            && self.modal_pending_operator.is_none()
+            && !self.modal_pending_register_select
+            && self.modal_active_register.is_none()
+            && self.modal_count.is_empty()
+            && self.modal_operator_count == 1
+        {
+            self.modal_recording.clear();
+        }
+        self.modal_recording.push(key);
+
         if self.modal_pending_register_select {
             self.modal_pending_register_select = false;
             if let KeyCode::Char(c @ 'a'..='z') = key.code {
@@ -59,6 +88,10 @@ impl App {
             self.modal_resolve_pending(key);
             return true;
         }
+        if let Some(ia) = self.modal_pending_text_object {
+            self.modal_resolve_text_object(ia, key);
+            return true;
+        }
         if let Some(op) = self.modal_pending_operator {
             return self.modal_operator_key(op, key);
         }
@@ -75,6 +108,16 @@ impl App {
         if let KeyCode::Char(c) = key.code
             && self.modal_count.push_digit(c)
         {
+            return true;
+        }
+        if key.code == KeyCode::Char('.') {
+            let override_count = if self.modal_count.is_empty() {
+                None
+            } else {
+                Some(self.modal_count.value())
+            };
+            self.modal_reset_counts();
+            self.modal_dot_repeat(override_count);
             return true;
         }
         if let KeyCode::Char(c @ ('d' | 'c' | 'y')) = key.code {
@@ -148,6 +191,12 @@ impl App {
             });
             return true;
         }
+        // `i`/`a` (T115): a text object is coming, not a motion -- wait for
+        // its second key (`w`, `(`, `"`, …) instead of trying it as one.
+        if let KeyCode::Char(c @ ('i' | 'a')) = key.code {
+            self.modal_pending_text_object = Some(c);
+            return true;
+        }
         let count = self.modal_effective_count();
         if self.modal_try_motion_key(key, count) {
             return true;
@@ -155,6 +204,82 @@ impl App {
         self.modal_pending_operator = None;
         self.modal_reset_counts();
         true
+    }
+
+    /// Resolve a pending text object (T115: `modal_pending_text_object` is
+    /// `i` or `a`) now that its second key has arrived. A miss (an
+    /// unrecognized `i`/`a` + key combination, or no active tab) cancels
+    /// cleanly, same convention as every other pending-key miss.
+    fn modal_resolve_text_object(&mut self, ia: char, key: KeyEvent) {
+        self.modal_pending_text_object = None;
+        let count = self.modal_effective_count();
+        self.modal_reset_counts();
+        let range = self.modal_text_object_range(ia, key.code, count);
+        let Some((start, end)) = range else {
+            self.modal_pending_operator = None;
+            return;
+        };
+        let Some(op) = self.modal_pending_operator.take() else {
+            return;
+        };
+        let Some(text) = self.editor.active_tab_mut().map(|t| t.editor.get_content()) else {
+            return;
+        };
+        // Text objects are always a plain character-wise range -- there's
+        // no "before/after the cursor" pair to sort or extend the way a
+        // motion's landing position needs (`vix_modal::motion::MotionKind`
+        // doesn't apply here).
+        self.apply_operator_to_range(
+            op,
+            &text,
+            start,
+            end,
+            vix_modal::register::RegisterKind::Char,
+        );
+    }
+
+    /// The actual `i`/`a` + object dispatch, kept separate from
+    /// [`Self::modal_resolve_text_object`] so that function's borrow of
+    /// `self.editor` (for the operator that follows) doesn't overlap this
+    /// one's.
+    fn modal_text_object_range(
+        &self,
+        ia: char,
+        code: KeyCode,
+        count: usize,
+    ) -> Option<(usize, usize)> {
+        let KeyCode::Char(obj) = code else {
+            return None;
+        };
+        let tab = self.editor.active_tab()?;
+        let pos = tab.editor.get_cursor();
+        let text = tab.editor.get_content();
+        let pair = |open, close| {
+            if ia == 'i' {
+                vix_modal::text_object::inner_pair(&text, pos, count, open, close)
+            } else {
+                vix_modal::text_object::around_pair(&text, pos, count, open, close)
+            }
+        };
+        let quote = |q| {
+            if ia == 'i' {
+                vix_modal::text_object::inner_quote(&text, pos, q)
+            } else {
+                vix_modal::text_object::around_quote(&text, pos, q)
+            }
+        };
+        match obj {
+            'w' if ia == 'i' => vix_modal::text_object::inner_word(&text, pos, count),
+            'w' => vix_modal::text_object::around_word(&text, pos, count),
+            '(' | ')' | 'b' => pair('(', ')'),
+            '{' | '}' | 'B' => pair('{', '}'),
+            '[' | ']' => pair('[', ']'),
+            '<' | '>' => pair('<', '>'),
+            '"' => quote('"'),
+            '\'' => quote('\''),
+            '`' => quote('`'),
+            _ => None,
+        }
     }
 
     /// The T113 motions, tried by both fresh Normal-mode dispatch and
@@ -305,6 +430,21 @@ impl App {
         kind: MotionKind,
     ) {
         let (start, end, reg_kind) = vix_modal::operator::operator_range(text, before, after, kind);
+        self.apply_operator_to_range(op, text, start, end, reg_kind);
+    }
+
+    /// The part of applying an operator that doesn't care where `(start,
+    /// end)` came from — a T113 motion (via [`Self::run_modal_operator`]) or
+    /// a T115 text object (via [`Self::modal_resolve_text_object`]), both of
+    /// which only differ in how they compute the range in the first place.
+    fn apply_operator_to_range(
+        &mut self,
+        op: char,
+        text: &str,
+        start: usize,
+        end: usize,
+        reg_kind: vix_modal::register::RegisterKind,
+    ) {
         let (_, removed) = vix_modal::operator::delete_range(text, (start, end));
         match op {
             'y' => {
@@ -342,6 +482,17 @@ impl App {
                 }
             }
             _ => {}
+        }
+        // Dot-repeat (T115): only a real buffer mutation is a "change" --
+        // `y` never touches the buffer, matching real Vim's own `.` (yank
+        // was never dot-repeatable there either). `c` is excluded too, for
+        // now: replaying it would need to replay the Insert-mode session
+        // that follows, which needs its own recording hook outside this
+        // file (the typed keys never reach `App::modal_key` at all, per
+        // T112's own Insert-mode-passthrough design) -- a deliberately
+        // scoped-out follow-on, not in the spec's own cut list.
+        if op == 'd' {
+            self.modal_last_change = self.modal_recording.clone();
         }
     }
 
@@ -391,6 +542,55 @@ impl App {
         tab.editor.set_cursor(at);
         tab.editor.apply(InsertText { text: content });
         tab.editor.set_cursor(cursor);
+        // Dot-repeat (T115): p/P is one of the three change kinds the spec
+        // names outright.
+        self.modal_last_change = self.modal_recording.clone();
+    }
+
+    /// `.` (T115): replay the last recorded change (`modal_last_change`) —
+    /// an operator+motion/text-object that actually mutated the buffer, or
+    /// `p`/`P` — a no-op when nothing has been recorded yet.
+    /// `override_count`, when given (`{count}.`), replaces whatever count
+    /// the change was originally recorded with, real Vim's own rule;
+    /// `None` replays it exactly as it happened, count included.
+    fn modal_dot_repeat(&mut self, override_count: Option<usize>) {
+        if self.modal_last_change.is_empty() {
+            return;
+        }
+        let recorded = self.modal_last_change.clone();
+        let keys = if let Some(n) = override_count {
+            // Splice the override in where the *first* run of digit keys
+            // was (after any register prefix, before the operator, or
+            // between the operator and the motion — wherever it actually
+            // fell), rather than just prepending it — a register prefix
+            // must stay first, or replay re-selects the wrong thing. A
+            // command recorded with two separate counts (`2d3w`) only has
+            // its first one replaced this way; a documented, narrow limit,
+            // not silent corruption (an f/t/F/T target can itself be a
+            // digit, but always comes after the motion key that starts it,
+            // so it can never be mistaken for this first run).
+            let is_digit = |k: &KeyEvent| matches!(k.code, KeyCode::Char(c) if c.is_ascii_digit());
+            let (before, after) = match recorded.iter().position(is_digit) {
+                Some(start) => {
+                    let len = recorded[start..].iter().take_while(|k| is_digit(k)).count();
+                    (recorded[..start].to_vec(), recorded[start + len..].to_vec())
+                }
+                None => (recorded.clone(), Vec::new()),
+            };
+            let mut keys = before;
+            keys.extend(
+                n.to_string()
+                    .chars()
+                    .map(|c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)),
+            );
+            keys.extend(after);
+            keys
+        } else {
+            recorded
+        };
+        for key in keys {
+            self.modal_key(key);
+        }
     }
 
     /// `gg`/`G`: see [`vix_modal::motion::goto_line`] for what `line` means.

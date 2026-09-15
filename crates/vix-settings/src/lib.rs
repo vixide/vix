@@ -217,9 +217,12 @@ pub struct Settings {
     /// Use `vix-modal`'s real mode engine (Normal/Insert/Visual/Visual Line,
     /// composable operators, counts, registers, text objects, dot-repeat) for
     /// the Vi and Spacemacs keymaps' Normal-mode vocabulary, instead of the
-    /// original flat binding table. Off by default while the engine is still
-    /// landing in slices (improvement plan T112–T115); see
-    /// `crates/vix-modal/spec/index.md`.
+    /// original flat binding table. On by default since T115 shipped the
+    /// full v1 slice (improvement plan T112–T115); a few real-Vim nuances
+    /// are still deliberately unimplemented (see
+    /// `crates/vix-modal/spec/index.md`'s own § Rollout and its T112–T115
+    /// status notes) — turn this off to fall back to the original table if
+    /// one of them matters to you.
     pub modal_engine: bool,
 }
 
@@ -306,7 +309,7 @@ impl Default for Settings {
             project_snippets: "config/snippets/snippets.json".to_string(),
             coverage_path: String::new(),
             db_connections: Vec::new(),
-            modal_engine: false,
+            modal_engine: true,
         }
     }
 }

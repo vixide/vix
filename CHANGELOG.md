@@ -521,6 +521,18 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `vix_clipboard` every other keymap's Cut/Copy/Paste already uses. `2d3w`
   deletes 6 words — a count before the operator and before the motion
   multiply.
+- **Modal-editing engine, text objects + dot-repeat, on by default**
+  (improvement plan T115, closing the T112–T115 arc): `i`/`a` + `w`, a
+  bracket pair (`(`/`)`/`b`, `{`/`}`/`B`, `[`/`]`, `<`/`>`), or a quote
+  (`"`/`'`/`` ` ``) now compose with `d`/`c`/`y` (`diw`, `daw`, `di(`,
+  `da"`, …). `.` repeats the last real change — `d{motion}`, a text object,
+  or `p`/`P` — with `{count}.` overriding its recorded count.
+  **`Settings::modal_engine` is now on by default** for the Vi and
+  Spacemacs keymaps (previously opt-in while the engine was still landing
+  in slices); turn it off in Settings to fall back to the original binding
+  table. See `docs/for-vim-users/index.md`'s updated "Where Vim still wins"
+  for exactly what's still not implemented (Visual Block, WORD motions,
+  `cw`'s "acts like `ce`" quirk, and a few others).
 
 ### Changed
 
