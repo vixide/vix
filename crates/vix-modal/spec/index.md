@@ -19,8 +19,20 @@ mode — one small, deliberate drift from § Design: motions' framing below:
 without `( )` or `%`; T113 implemented `( )` anyway (near-zero extra cost
 once `{`/`}` existed) but left `%` for a small follow-on (a different kind
 of scan — delimiter matching, not char/word/line position — and the
-existing `edit.match_bracket` action already covers it). **T114–T115**:
-not started.
+existing `edit.match_bracket` action already covers it). **T114** (done):
+`operator.rs` (`operator_range`/`delete_range`/`insert_at`/`paste_plan`,
+all pure — no buffer mutation, the host applies the result through its own
+selection + `InsertText` action) and `register.rs` (`Registers`, the named
+`a`-`z` map). `d`/`c`/`y` compose with every T113 motion, `x` is real sugar
+for `d` + one right motion, `dd`/`cc`/`yy` act on the whole line, `p`/`P`
+read a register, `"{a-z}` selects one. Two deliberately deferred real-Vim
+nuances, neither in the spec's own cut list: `cw`'s "acts like `ce`"
+special case, and `cc`'s indentation preservation. Operators composing
+with a **Visual** selection (this section's own "any motion/text
+object/Visual selection") isn't wired yet either — Visual mode's own
+motion vocabulary is still just T112's `h j k l`, so there's nothing
+richer to compose with until text objects (T115) exist. **T115**: not
+started.
 
 ## The audit
 

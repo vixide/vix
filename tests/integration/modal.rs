@@ -34,6 +34,10 @@ fn cursor(app: &mut App) -> usize {
         .map_or(0, |t| t.editor.get_cursor())
 }
 
+fn buffer_text(app: &App) -> String {
+    app.editor.active_tab().unwrap().text()
+}
+
 #[test]
 fn modal_engine_off_leaves_v_as_a_no_op() {
     // Matches vix-modal/spec/index.md's own audit: "no v/V/Ctrl-V binding"
@@ -266,12 +270,155 @@ fn paragraph_and_sentence_motions_move_by_block() {
     );
 }
 
+// ----- T114: operators, registers, x, p/P -------------------------------
+//
+// Every test below selects a named register ("a) before an operator or
+// paste, *except* the one dedicated to the unnamed register -- named
+// registers are per-`App` state, but the unnamed register mirrors the real
+// (process-global, in-memory-in-tests) `vix_clipboard`, which parallel
+// tests could in principle race on. Routing everything else through "a
+// keeps every other test's outcome fully deterministic regardless of test
+// execution order.
+
 #[test]
-fn operators_still_fall_through_to_the_old_table_untouched() {
-    // T114's job, not T113's -- 'd'/'y'/'x'/'p' must keep working exactly as
-    // they did before the engine existed.
+fn d_w_deletes_the_exclusive_range_up_to_the_next_word() {
+    let mut app = vi_app("modal-dw", "foo bar\n", true);
+    type_str(&mut app, "\"adw");
+    assert_eq!(buffer_text(&app), "bar\n");
+    assert_eq!(cursor(&mut app), 0);
+}
+
+#[test]
+fn d_e_deletes_the_inclusive_range_through_the_word_end() {
+    let mut app = vi_app("modal-de", "foo bar\n", true);
+    type_str(&mut app, "\"ade");
+    assert_eq!(
+        buffer_text(&app),
+        " bar\n",
+        "'foo' is gone, the space stays"
+    );
+    assert_eq!(cursor(&mut app), 0);
+}
+
+#[test]
+fn dd_deletes_the_whole_line_and_lands_on_the_first_non_blank() {
+    let mut app = vi_app("modal-dd", "one\n  two\nthree\n", true);
+    type_str(&mut app, "\"add");
+    assert_eq!(buffer_text(&app), "  two\nthree\n");
+    assert_eq!(cursor(&mut app), 2, "on the 't' of 'two', not column 0");
+}
+
+#[test]
+fn a_count_before_dd_deletes_that_many_lines() {
+    let mut app = vi_app("modal-dd-count", "one\ntwo\nthree\nfour\n", true);
+    type_str(&mut app, "\"a2dd");
+    assert_eq!(buffer_text(&app), "three\nfour\n");
+    assert_eq!(cursor(&mut app), 0);
+}
+
+#[test]
+fn c_w_deletes_and_enters_insert_mode() {
+    let mut app = vi_app("modal-cw", "foo bar\n", true);
+    type_str(&mut app, "\"acw");
+    assert_eq!(buffer_text(&app), "bar\n");
+    assert!(
+        matches!(app.mode_indicator().as_deref(), Some("-- INSERT --")),
+        "c enters Insert mode"
+    );
+    type_str(&mut app, "XYZ");
+    assert_eq!(buffer_text(&app), "XYZbar\n", "typed text lands at the cut");
+}
+
+#[test]
+fn x_is_sugar_for_d_plus_one_char_right() {
+    let mut app = vi_app("modal-x-sugar", "hello\n", true);
+    type_str(&mut app, "\"ax");
+    assert_eq!(buffer_text(&app), "ello\n");
+    assert_eq!(cursor(&mut app), 0);
+}
+
+#[test]
+fn yy_copies_the_line_without_changing_the_buffer_then_p_pastes_it_below() {
+    let mut app = vi_app("modal-yy-p", "one\ntwo\nthree\n", true);
+    type_str(&mut app, "\"ayy");
+    assert_eq!(
+        buffer_text(&app),
+        "one\ntwo\nthree\n",
+        "y never touches the buffer"
+    );
+    app.on_key(key('j')); // onto "two"
+    type_str(&mut app, "\"ap");
+    assert_eq!(buffer_text(&app), "one\ntwo\none\nthree\n");
+    assert_eq!(cursor(&mut app), 8, "the 'o' of the pasted 'one'");
+}
+
+#[test]
+fn p_and_capital_p_paste_a_char_wise_register_after_and_before_the_cursor() {
+    let mut app = vi_app("modal-p-char", "abc\n", true);
+    type_str(&mut app, "\"ayl"); // yank 'a' (exclusive char-wise)
+    assert_eq!(buffer_text(&app), "abc\n", "y never touches the buffer");
+    type_str(&mut app, "\"aP");
+    assert_eq!(buffer_text(&app), "aabc\n", "P inserts right at the cursor");
+    assert_eq!(cursor(&mut app), 0);
+    type_str(&mut app, "\"ap");
+    assert_eq!(
+        buffer_text(&app),
+        "aaabc\n",
+        "p inserts right after the cursor"
+    );
+    assert_eq!(cursor(&mut app), 1);
+}
+
+#[test]
+fn an_operator_composes_with_a_pending_find_motion() {
+    let mut app = vi_app("modal-d-find", "a.b.c\n", true);
+    type_str(&mut app, "\"adf.");
+    assert_eq!(buffer_text(&app), "b.c\n", "d f . deletes through the '.'");
+    assert_eq!(cursor(&mut app), 0);
+}
+
+#[test]
+fn a_count_before_the_operator_and_before_the_motion_multiply() {
+    let mut app = vi_app("modal-count-multiply", "a b c d e f g h\n", true);
+    type_str(&mut app, "\"a2d3w");
+    assert_eq!(
+        buffer_text(&app),
+        "g h\n",
+        "2d3w deletes 6 words, matching real Vim's count1*count2 rule"
+    );
+    assert_eq!(cursor(&mut app), 0);
+}
+
+#[test]
+fn an_unrecognized_key_cancels_the_pending_operator() {
+    let mut app = vi_app("modal-operator-cancel", "hello\n", true);
+    type_str(&mut app, "\"adz"); // 'z' isn't a motion
+    assert_eq!(buffer_text(&app), "hello\n", "nothing was deleted");
+    app.on_key(key('l'));
+    assert_eq!(
+        cursor(&mut app),
+        1,
+        "'l' moves the cursor -- d wasn't stuck pending"
+    );
+}
+
+#[test]
+fn y_and_p_with_no_register_prefix_use_the_unnamed_clipboard_register() {
+    let mut app = vi_app("modal-unnamed-register", "hi\n", true);
+    type_str(&mut app, "yy");
+    type_str(&mut app, "p");
+    assert_eq!(buffer_text(&app), "hi\nhi\n");
+    assert_eq!(cursor(&mut app), 3);
+}
+
+#[test]
+fn operators_still_fall_through_to_the_old_table_for_unbound_starts() {
+    // Nothing here claims 'g'/'d' etc. as bare keys outside T113/T114's
+    // vocabulary -- anything truly unrecognized still reaches
+    // `vim_normal_key` untouched, matching every earlier slice's own
+    // fallthrough test.
     let mut app = vi_app("modal-operators-fallthrough", "hello\n", true);
-    app.on_key(key('x'));
+    app.on_key(key('u')); // undo -- still the old table, not a modal-engine key
     let text = app.editor.active_tab().unwrap().text();
-    assert_eq!(text, "ello\n", "the old hardcoded 'x' still runs");
+    assert_eq!(text, "hello\n", "undo on an unmodified buffer is a no-op");
 }

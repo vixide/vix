@@ -511,6 +511,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   at all, `0`/`^` conflated into one toggle, `h`/`l` crossing line
   boundaries). `d`/`c`/`y`/`x`/`p` are unaffected, still the old table's
   (T114's job).
+- **Modal-editing engine, operators + registers** (improvement plan T114):
+  with `Settings::modal_engine` on, `d`/`c`/`y` now compose with any T113
+  motion (`dw`, `de`, `d}`, `dgg`, `df.`, …), `x` is real sugar for `d` +
+  one right motion, `dd`/`cc`/`yy` act on the whole current line, and
+  `p`/`P` paste a register — inline or as a whole line depending on how it
+  was written. `"{a-z}` selects a named register for the next operator or
+  paste; otherwise it's the unnamed register, still the same
+  `vix_clipboard` every other keymap's Cut/Copy/Paste already uses. `2d3w`
+  deletes 6 words — a count before the operator and before the motion
+  multiply.
 
 ### Changed
 

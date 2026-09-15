@@ -1918,13 +1918,50 @@ pub struct App {
     /// motion). Reset after every motion fires or a pending key resolves.
     modal_count: vix_modal::Count,
     /// The modal engine is waiting for the second `g` of `gg` (T113). Distinct
-    /// from the old table's own `vim_pending`, which still separately owns
-    /// `d`/`y`'s pending second key (not migrated yet).
+    /// from the old table's own `vim_pending`, which still owns `d`/`y`'s
+    /// pending second key when `Settings::modal_engine` is off — once it's
+    /// on, `d`/`c`/`y` are the modal engine's own (T114;
+    /// `modal_pending_operator` below), and `vim_pending`'s `d`/`y` arms
+    /// never run.
     modal_pending_g: bool,
     /// The modal engine is waiting for the target character of a pending
     /// `f`/`t`/`F`/`T` (T113), holding that key itself so the handler knows
     /// which of the four to run once the target arrives.
     modal_pending_find: Option<char>,
+    /// An operator (`d`/`c`/`y`, T114) waiting for its motion, text object,
+    /// or a doubled repeat of itself (`dd`/`cc`/`yy` — the whole current
+    /// line). Any of `modal_pending_g`/`modal_pending_find` above can still
+    /// be reached while this is set (`d3fx`, `dgg`, …) — they resolve to a
+    /// motion the same way either way, per
+    /// [`App::apply_modal_motion_fallible`].
+    modal_pending_operator: Option<char>,
+    /// The numeric count that was in progress when `modal_pending_operator`
+    /// was set (`2` in `2dw`), captured so the motion typed after the
+    /// operator can accumulate its own, separate count (`2d3w`) — the two
+    /// multiply per the spec's own `{count1}{operator}{count2}{motion}`
+    /// rule. `1` (not `modal_count`'s own "no digits yet" `None` state) when
+    /// no operator is pending, so it's always safe to multiply into a
+    /// motion's count unconditionally.
+    modal_operator_count: usize,
+    /// The modal engine is waiting for the register-name letter after `"`
+    /// (T114), e.g. `"a` before `dw`/`p`.
+    modal_pending_register_select: bool,
+    /// The register `"{letter}` selected for the *next* operator or
+    /// `p`/`P` (T114), consumed and cleared the moment that command runs.
+    /// `None` means the unnamed register — real `vix_clipboard`, which
+    /// every other keymap's Cut/Copy/Paste also reads and writes, so `""`
+    /// stays exactly as interoperable as before the engine existed.
+    modal_active_register: Option<char>,
+    /// The named `a`-`z` registers (T114, § Design: registers) — session-only,
+    /// never persisted, by design.
+    modal_registers: vix_modal::register::Registers,
+    /// Whether the unnamed register's last write was line-wise or
+    /// character-wise (T114). `vix_clipboard` only stores text, not this
+    /// classification, so the modal engine tracks it here for `p`/`P` to
+    /// read back — meaningless (and never read) whenever the *named*
+    /// register was used instead, which carries its own
+    /// [`vix_modal::register::RegisterKind`].
+    modal_unnamed_kind: vix_modal::register::RegisterKind,
 }
 
 impl App {
@@ -2202,6 +2239,12 @@ impl App {
             modal_count: vix_modal::Count::default(),
             modal_pending_g: false,
             modal_pending_find: None,
+            modal_pending_operator: None,
+            modal_operator_count: 1,
+            modal_pending_register_select: false,
+            modal_active_register: None,
+            modal_registers: vix_modal::register::Registers::default(),
+            modal_unnamed_kind: vix_modal::register::RegisterKind::Char,
         };
         app.validate_keymap();
         app
@@ -8537,6 +8580,10 @@ impl App {
         self.modal_count.reset();
         self.modal_pending_g = false;
         self.modal_pending_find = None;
+        self.modal_pending_operator = None;
+        self.modal_operator_count = 1;
+        self.modal_pending_register_select = false;
+        self.modal_active_register = None;
         self.vim_cmd = None;
         self.spacemacs_leader = None;
         self.vim_pending = None;
