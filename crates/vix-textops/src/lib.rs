@@ -240,9 +240,12 @@ fn transpose_units_at(
     Some((out, b_end))
 }
 
-/// The `(start, end)` char range of every line's content, the newline excluded.
-/// A trailing newline does not add an empty final line.
-fn line_ranges(chars: &[char]) -> Vec<(usize, usize)> {
+/// The `(start, end)` char range of every line's content, the newline
+/// excluded. A trailing newline does not add an empty final line. Public for
+/// `vix-modal`'s line-based motions (`j`/`k`/`0`/`^`/`$`/`gg`/`G`), which need
+/// the same line boundaries the transpose commands already use.
+#[must_use]
+pub fn line_ranges(chars: &[char]) -> Vec<(usize, usize)> {
     let mut ranges = Vec::new();
     let mut start = 0;
     for (i, c) in chars.iter().enumerate() {
@@ -308,7 +311,10 @@ pub fn transpose_lines_at(text: &str, cursor: usize) -> Option<(String, usize)> 
 /// The `(start, end)` char range of every sentence, trailing whitespace
 /// excluded. Sentences begin where [`sentence_starts`] says they do, so the
 /// transpose and delete commands agree with the Go → Sentence navigation.
-fn sentence_units(text: &str, chars: &[char]) -> Vec<(usize, usize)> {
+/// Public for `vix-modal`'s `(`/`)` sentence motions
+/// (`crates/vix-modal/spec/index.md`).
+#[must_use]
+pub fn sentence_units(text: &str, chars: &[char]) -> Vec<(usize, usize)> {
     let starts = sentence_starts(text);
     starts
         .iter()
@@ -324,8 +330,10 @@ fn sentence_units(text: &str, chars: &[char]) -> Vec<(usize, usize)> {
 }
 
 /// The `(start, end)` char range of every paragraph: a run of non-blank lines,
-/// as in the Go → Paragraph navigation.
-fn paragraph_units(chars: &[char]) -> Vec<(usize, usize)> {
+/// as in the Go → Paragraph navigation. Public for `vix-modal`'s `{`/`}`
+/// paragraph motions (`crates/vix-modal/spec/index.md`).
+#[must_use]
+pub fn paragraph_units(chars: &[char]) -> Vec<(usize, usize)> {
     let rows = line_ranges(chars);
     line_group_units(chars, &rows, |row| range_is_blank(chars, rows[row]))
 }
@@ -374,8 +382,13 @@ pub fn transpose_sections_at(text: &str, cursor: usize) -> Option<(String, usize
 }
 
 /// The `(start, end)` char range of every word: a run of alphanumeric or `_`
-/// characters, as used by the word motions.
-fn word_units(chars: &[char]) -> Vec<(usize, usize)> {
+/// characters, as used by the word motions. Public for `vix-modal`'s
+/// `w`/`b`/`e` word motions (`crates/vix-modal/spec/index.md`) — same
+/// lowercase-only `word` definition the spec's v1 explicitly picks (no `WORD`
+/// distinction), so punctuation is a separator, not its own word, unlike real
+/// Vim's `word`; documented there as a deliberate v1 scope decision.
+#[must_use]
+pub fn word_units(chars: &[char]) -> Vec<(usize, usize)> {
     let is_word = |c: char| c.is_alphanumeric() || c == '_';
     let mut units = Vec::new();
     let mut i = 0;

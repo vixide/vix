@@ -504,6 +504,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   running through the existing `vim_normal_key` table unchanged; T113–T115
   progressively move more of it onto the new engine. See
   `crates/vix-modal/spec/index.md` for the full v1 design.
+- **Modal-editing engine, motions + counts** (improvement plan T113): with
+  `Settings::modal_engine` on, Normal mode in the Vi/Spacemacs keymaps now
+  has real `h j k l w b e 0 ^ $ gg G { } ( ) f t F T` motions and a numeric
+  count prefix (`3w`, `5j`, `2gg`, …) — the old table had neither (no counts
+  at all, `0`/`^` conflated into one toggle, `h`/`l` crossing line
+  boundaries). `d`/`c`/`y`/`x`/`p` are unaffected, still the old table's
+  (T114's job).
 
 ### Changed
 

@@ -849,9 +849,28 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   anchor-tracking bug above. `vim_normal_key`'s table still owns everything
   else unchanged; T113+ narrows that fallback as real motions/operators
   land.
-- [ ] **T113 — Motions + counts.** `h j k l w b e 0 $ ^ gg G { } f/t/F/T`
-  with counts, as pure functions over editor-core positions; heavy unit
-  tests.
+- [x] **T113 — Motions + counts.** Done 2026-09-15. `vix-modal` gained
+  `count.rs` (a `Count` accumulator implementing the real
+  `{count1}{operator}{count2}{motion}` → `count1 * count2` composition rule)
+  and `motion.rs`: pure `fn(text, pos, count) -> usize` functions for
+  `h j k l w b e 0 ^ $ gg G { }`, plus `( )` (sentence motions — a small,
+  documented addition beyond this bullet's own literal list, since the
+  fuller spec design pairs them with `{`/`}` at near-zero extra cost); `%`
+  deferred (a different kind of scan, and the existing `edit.match_bracket`
+  action already covers it — not a gap this slice needed to close). Reused
+  `vix-textops`'s `word_units`/`sentence_units`/`paragraph_units`/
+  `line_ranges` (newly made `pub`) rather than a fourth word-boundary
+  scanner, per the spec's own audit finding. `h`/`l` deliberately don't
+  cross line boundaries and `0`/`^` are real, distinct motions — both actual
+  fixes for gaps the T111 audit found in the old table (which crossed lines
+  and conflated `0`/`^` into one "smart Home" toggle). 37 unit tests on the
+  pure functions ("heavy unit tests" per this task) plus 12 new integration
+  tests wiring them into Normal mode behind `Settings::modal_engine`
+  (`App::modal_normal_key` tries a pending `gg`/`f`/`t`/`F`/`T` resolution,
+  then digit accumulation, then the motion table; `d`/`c`/`y`/`x`/`p` still
+  fall through to the old table unchanged — T114's job). `f`/`t`/`F`/`T`
+  search only the current line, matching real Vim; a miss leaves the cursor
+  untouched.
 - [ ] **T114 — Operators.** `d c y p x` composing with T113 motions and
   visual selections; registers (unnamed + named a–z); tests per
   operator×motion pair for a representative grid.
