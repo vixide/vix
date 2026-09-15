@@ -990,10 +990,31 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   updated for the new (correct) behavior; full `cargo test --test
   integration` and `scripts/check` both green — this crate is a dependency
   of nearly everything else in the app.
-- [ ] **T122 — Startup budget.** Measure cold start; defer non-critical
-  init (locale table build, theme scan, snippet load) off the first-frame
-  path if measurement says it matters. Record before/after in
-  `docs/performance/index.md`.
+- [x] **T122 — Startup budget.** Done 2026-09-15. Measured first (a
+  throwaway instrumented build timing each `main.rs` step opening this
+  repository itself, a real ~115-crate workspace, not a synthetic
+  fixture) before touching anything: `Settings::load` ~1 ms, `App::new`
+  ~10 ms, `load_scripts`/`maybe_prompt_script_trust`/
+  `resolve_key_overrides`/`maybe_show_welcome`/`restore_session` combined
+  under 1 ms, `refresh_git` **75–82 ms** — by far the dominant cost, all
+  of it before `ratatui::init()` had even taken over the terminal. None of
+  this task's own suspected culprits (locale table build, theme scan,
+  snippet load) turned out to be the real bottleneck; `refresh_git`
+  (three separate `git` subprocesses: repo?/branch/status) wasn't even on
+  the suspect list — exactly the outcome "measure first" is for. Fixed by
+  moving `refresh_git` in `main.rs` to run *after* the first
+  `terminal.draw()` instead of before it: `App`'s git fields already
+  default to "not a repo" (the same state opening Vix outside a repo
+  renders correctly today), so the first frame draws immediately and the
+  branch/status indicator catches up one frame later instead of blocking
+  everything after it. A smaller, unconditional fix landed alongside it:
+  `App::new` scanned the custom-themes directory twice (once in
+  `apply_saved_theme`, once again immediately after for the View → Theme
+  submenu); now scanned once, reused for both. New `benches/startup.rs`
+  (`startup/app_new`, `startup/refresh_git`) gives this a lasting
+  regression guard, the same way every other perf task in this run has.
+  Full before/after story and numbers in `docs/performance/index.md`'s
+  new "Cold start (T122)" section.
 - [ ] **T123 — LSP depth audit.** Diff `vix-lsp`/`vix-lsp-core` against
   LSP 3.17: check semantic tokens, document formatting/range formatting,
   signature help, workspace diagnostics, multiple servers per buffer.

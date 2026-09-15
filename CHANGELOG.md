@@ -551,6 +551,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `remove` would have silently dropped such an edit from the tree
   machinery entirely (see `crates/vix-editor-core/spec/syntax-highlighting/
   index.md` for the detail).
+- **Startup no longer waits on `git` before showing the editor**
+  (improvement plan T122): measuring cold start (opening this repository
+  itself) found `refresh_git` — three `git` subprocesses (repo?/branch/
+  status) — was 75–82 ms of it, all spent before the terminal even took
+  over the screen; every other startup step was already sub-millisecond.
+  `main` now draws the first frame before calling `refresh_git` rather
+  than after, so the editor appears immediately and the branch/status
+  indicator fills in one frame later instead of blocking everything else.
+  Also fixed in passing: `App::new` scanned the custom-themes directory
+  twice; now once.
 
 - `vix-script` is now a **plain, non-optional** dependency of the root
   `vix` package — T101's `scripting` Cargo feature (`dep:vix-script`,

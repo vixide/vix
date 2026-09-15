@@ -20,7 +20,7 @@ run would otherwise inherit — the release profile is tuned for a small
 shipped binary, not for representative hot-path timing, and workspace-wide
 LTO makes the final link too slow to rerun casually.
 
-## Baseline (measured 2026-09-15, `editor/open` re-measured after T121)
+## Baseline (measured 2026-09-15, `editor/open` re-measured after T121, `startup/*` added for T122)
 
 Apple M4 Max, macOS (Darwin 25.6.0), `rustc 1.98.0`, `cargo bench` (release,
 no LTO). These are **one machine's numbers, not a promise** — the point is
@@ -71,6 +71,8 @@ does opening this file cost", not "how long does it block the user".
 | `textops/cursor_rewrites` | transpose_words / transpose_sentences / delete_word / delete_paragraph / smart_toggle, 100 lines | 4.1–18.7 µs |
 | `textops/cursor_rewrites` | same, 2,000 lines | 66.3–336 µs |
 | `textops/whole_text` | wrap_80, to_crlf, squeeze_blank_lines, sentence_starts | 34.3–873 µs |
+| `startup/app_new` | `App::new` — theme scan, editor/menu/LSP-client setup, no `git` involved | 134 µs |
+| `startup/refresh_git` | `refresh_git` (3 `git` subprocesses: repo?/branch/status) against an empty fixture repo | 12.2 ms |
 
 T121's three explicit budgets — open 100 MB < 1 s, keypress-to-frame < 16 ms
 at 10 MB, workspace search 10k files < 500 ms — are now **all met**, two of
@@ -107,6 +109,38 @@ typing at one spot) is disproportionately expensive — the incremental-parse
 machinery amortizes a single edit well, but a *burst* of scattered ones
 still adds up; a candidate for a future task, not something T121's parse/
 highlight work touches.
+
+## Cold start (T122)
+
+`main.rs` timed step by step opening this repository itself (`~/git/vixide/
+vix`, a real, large, ~115-crate workspace — not a synthetic fixture) with a
+throwaway instrumented build: `Settings::load` 0.6–1.0 ms, `App::new`
+10.1 ms, `load_scripts`/`maybe_prompt_script_trust`/`resolve_key_overrides`/
+`maybe_show_welcome`/`restore_session` combined under 1 ms — and
+`refresh_git` **75–82 ms**, by far the largest single cost, all of it before
+`ratatui::init()` had even taken over the terminal. `refresh_git` shells out
+to `git` three times (repo?, branch, status); on a small/empty repo that's
+cheap (`startup/refresh_git`'s own 12.2 ms, above, against a fixture repo
+with no files or history) but real subprocess spawn overhead, `git status`
+included, scales with repository size — this one just happens to be a large
+one, which is exactly the realistic case worth fixing for.
+
+The fix: `main` no longer calls `refresh_git` before the first frame draws.
+`App`'s git-related fields (`git_repo`, `git_branch`, `git_status`) already
+default to "not a repo" — the same state opening Vix outside a repo renders
+correctly today — so drawing before that first `refresh_git` call is safe;
+the terminal now shows the real editor almost immediately (`Settings::load`
++ `App::new`, ~11 ms in the instrumented run above, before terminal setup's
+own small cost), with the branch/status indicator catching up one frame
+later rather than blocking everything that comes after it. Nothing else
+measured mattered enough to move: every other pre-first-frame step was
+already sub-millisecond, so — per this task's own "defer *if* measurement
+says it matters" — none of them needed to move.
+
+A smaller, unconditional fix landed alongside it: `App::new` scanned the
+custom-themes directory (real filesystem I/O) **twice** — once inside
+`apply_saved_theme`, once again immediately after for the View → Theme
+submenu's name list — now scanned once and reused for both.
 
 ## Reading the numbers
 

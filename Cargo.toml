@@ -520,6 +520,10 @@ harness = false
 name = "search_and_palette"
 harness = false
 
+[[bench]]
+name = "startup"
+harness = false
+
 # Faster allocator for the MUSL static target (glibc's allocator is fine, but
 # musl's is slow). Used as the global allocator in lib.rs/main.rs under the same
 # cfg, so it is only pulled in — and its C code only compiled — for musl builds.
