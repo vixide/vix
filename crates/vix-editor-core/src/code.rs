@@ -1504,6 +1504,7 @@ mod tests {
     #[cfg(feature = "lang-rust")]
     #[test]
     fn parse_pending_clears_after_a_sync_reparse_supersedes_an_async_one() {
+        use std::time::{Duration, Instant};
         // Start over the async threshold so the initial parse itself is async.
         let big = "fn f() { let x = 1; }\n".repeat(3000);
         assert!(big.len() > ASYNC_PARSE_THRESHOLD);
@@ -1521,7 +1522,6 @@ mod tests {
 
         // Drain any late async result (there may be more than one still in
         // flight); the flag must settle to false promptly either way.
-        use std::time::{Duration, Instant};
         let deadline = Instant::now() + Duration::from_secs(5);
         while code.parse_pending() && Instant::now() < deadline {
             code.poll_parse();
