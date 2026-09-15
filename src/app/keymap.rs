@@ -1367,7 +1367,10 @@ impl App {
         }
     }
 
-    fn vim_enter_insert(&mut self) {
+    /// Enter Insert mode from Vim/Spacemacs Normal mode — `i`/`a`/`o`/…
+    /// (`run_vim_action`, this file), and `c{motion}` (T114,
+    /// `src/app/modal.rs`, once the deleted range is gone).
+    pub(super) fn vim_enter_insert(&mut self) {
         self.modal_insert = true;
         self.modal_mode = vix_modal::Mode::Insert;
     }

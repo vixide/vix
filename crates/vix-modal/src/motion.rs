@@ -17,6 +17,34 @@
 
 use vix_textops::{line_ranges, paragraph_units, sentence_units, word_units};
 
+/// How an operator (T114: `d`/`c`/`y`) turns a motion's landing position
+/// into the actual range it acts on — real Vim's own three categories
+/// (`:help motion.txt`), since "`d{motion}` deletes the range" (§ Design:
+/// operators) only reads right once each motion says which kind it is:
+///
+/// - [`MotionKind::Exclusive`]: the range is `[start, end)` — the landing
+///   character itself is not included. Most motions.
+/// - [`MotionKind::Inclusive`]: the range is `[start, end]` — the landing
+///   character *is* included. `e`, `$`, `f`/`t`/`F`/`T`.
+/// - [`MotionKind::Linewise`]: the range expands to cover every whole line
+///   it touches, regardless of either endpoint's column. `j`, `k`, `gg`,
+///   `G`.
+///
+/// A pure motion function itself has no opinion on this (`fn(text, pos,
+/// count) -> usize` only ever returns a position) — classification is a
+/// property of *which* motion was used, so callers (T114's operator
+/// dispatch) pair a motion's result with the right variant from this list,
+/// matched to the exact same key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MotionKind {
+    /// `[start, end)`.
+    Exclusive,
+    /// `[start, end]`.
+    Inclusive,
+    /// Every whole line either endpoint touches.
+    Linewise,
+}
+
 fn chars_of(text: &str) -> Vec<char> {
     text.chars().collect()
 }

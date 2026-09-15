@@ -871,9 +871,42 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   fall through to the old table unchanged — T114's job). `f`/`t`/`F`/`T`
   search only the current line, matching real Vim; a miss leaves the cursor
   untouched.
-- [ ] **T114 — Operators.** `d c y p x` composing with T113 motions and
-  visual selections; registers (unnamed + named a–z); tests per
-  operator×motion pair for a representative grid.
+- [x] **T114 — Operators.** Done 2026-09-15. New `vix-modal` modules:
+  `operator.rs` (pure `operator_range` — turns a motion's landing position
+  into the real half-open/closed/whole-line range per
+  `motion::MotionKind`'s exclusive/inclusive/linewise classification, real
+  Vim's own `:help motion.txt` categories; `delete_range`/`insert_at`/
+  `paste_plan`, all pure position/text computations, no buffer mutation)
+  and `register.rs` (`Registers`, the named a–z map — session-only, per the
+  spec). `d`/`c`/`y` compose with **every** T113 motion (including through
+  a pending `gg`/`f`/`t`/`F`/`T`'s second key — `dgg`, `df.` both work);
+  `x` is real sugar for `d` + one right motion, not its own code path;
+  `dd`/`cc`/`yy` are sugar for the linewise `j`-with-`count - 1` motion,
+  reusing the exact same range math as every other pair; `p`/`P` read a
+  register and paste char-wise inline or line-wise as a whole line
+  (landing on the first non-blank), per how the register was written;
+  `"{a-z}` selects a named register for the next operator or paste, else
+  the unnamed register — real `vix_clipboard`, exactly as before. Buffer
+  mutation goes through the editor's own selection + `InsertText` action
+  (same path as ordinary typing), not a raw rewrite, so undo/highlighting
+  stay consistent. `2d3w` deletes 6 words (the spec's own
+  `count1 * count2` rule) — a count can be typed before the operator, the
+  motion, or both. Deliberately deferred, none in the spec's own cut list:
+  `cw`'s famous "acts like `ce`" special case, and `cc`'s indentation
+  preservation (both documented, narrow real-Vim polish nuances, not core
+  to "operators compose"); operators composing with a **Visual** selection
+  (spec's own "any motion/text object/Visual selection" — Visual's own
+  motion vocabulary is still just T112's `h j k l`, so there's nothing
+  richer to select with yet; a natural T115+ follow-on once text objects
+  land). 26 tests total (was 12 after T113) — a representative
+  operator×motion grid (`dw`/`de` exclusive vs. inclusive, `dd`/`2dd`
+  linewise, `cw` entering Insert, `x`, `yy`+`p`, named-register `P`/`p`,
+  `df.` composing with a pending motion, the `2d3w` count-multiply rule,
+  an unrecognized key cleanly cancelling a pending operator) plus one
+  deliberately isolated unnamed-register round-trip test (named registers
+  are per-`App` state; the unnamed one mirrors the real, process-global,
+  in-memory-in-tests `vix_clipboard` — every other test avoids it so
+  parallel test execution can't make them flaky).
 - [ ] **T115 — Text objects + repeat.** `iw aw i( a( i" a"` etc. via
   editor-core's structural selection where possible; dot-repeat of the
   last change. Update `docs/for-vim-users/` to state exactly what is and
