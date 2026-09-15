@@ -286,7 +286,20 @@ impl Code {
             let highlights = code.get_highlights(lang)?;
             let mut parser = Parser::new();
             parser.set_language(&language)?;
-            let tree = parser.parse(text, None);
+            // The *first* parse of a large buffer is exactly as expensive as any
+            // other parse of the same size, so it gets the same background-worker
+            // treatment `edit_tree` already gives a reparse (T121, plan
+            // `docs/performance/index.md`'s "opening 100 MB (5.05s) is the
+            // clearest incremental/lazy-highlighting candidate") — skip the
+            // synchronous parse and request an async one instead, leaving `tree`
+            // `None` (every tree-dependent method already handles that
+            // gracefully, returning no highlights/ranges) until `poll_parse`
+            // installs the result. Below the threshold, behavior is unchanged.
+            let tree = if text.len() < ASYNC_PARSE_THRESHOLD {
+                parser.parse(text, None)
+            } else {
+                None
+            };
             let query = compiled_query(lang, &language, &highlights)?;
             let (iparsers, iqueries) = code.init_injections(&query)?;
             code.tree = tree;
@@ -294,6 +307,26 @@ impl Code {
             code.query = Some(query);
             code.injection_parsers = Some(iparsers);
             code.injection_queries = Some(iqueries);
+            if code.tree.is_none() && text.len() >= ASYNC_PARSE_THRESHOLD {
+                // `request_async_parse` uses `self.edit_gen` as the request's
+                // generation, and a freshly created worker's own `installed`
+                // field also starts at 0 -- without this bump, generation 0's
+                // request and "nothing installed yet" are indistinguishable,
+                // so `parse_pending()` (`requested > installed`) would read
+                // `0 > 0` = false even while this very request is in flight.
+                // `edit_tree` already sidesteps the same trap by bumping
+                // `edit_gen` *before* its own `request_async_parse` call; this
+                // mirrors it for the initial parse instead of special-casing
+                // generation 0 in `ParseWorker`/`poll_parse`/`parse_pending`.
+                code.edit_gen = code.edit_gen.wrapping_add(1);
+                if !code.request_async_parse() {
+                    // The background worker failed to start (e.g. thread
+                    // spawn failed) -- fall back to a synchronous parse
+                    // rather than leaving this buffer permanently
+                    // unhighlighted.
+                    code.tree = code.parser.as_mut().and_then(|p| p.parse(text, None));
+                }
+            }
         }
 
         Ok(code)
@@ -568,7 +601,13 @@ impl Code {
             });
         }
 
-        if self.tree.is_some() {
+        // `self.parser`, not `self.tree` -- the latter can be `None` while a
+        // grammar still applies, when the initial async parse (T121) hasn't
+        // landed yet; an edit in that window must still bump the generation
+        // and kick a fresh parse (`edit_tree` handles a `None` tree itself),
+        // or the eventually-arriving stale, pre-edit result would still
+        // match the unchanged generation and get installed as if current.
+        if self.parser.is_some() {
             self.edit_tree(InputEdit {
                 start_byte: byte_idx,
                 old_end_byte: byte_idx,
@@ -598,7 +637,8 @@ impl Code {
             });
         }
 
-        if self.tree.is_some() {
+        // See the matching comment in `insert` -- `self.parser`, not `self.tree`.
+        if self.parser.is_some() {
             self.edit_tree(InputEdit {
                 start_byte: from_byte,
                 old_end_byte: to_byte,
@@ -611,23 +651,29 @@ impl Code {
     }
 
     fn edit_tree(&mut self, edit: InputEdit) {
+        // Apply the edit to the current tree, if one exists, so its byte
+        // offsets stay aligned for any consumer reading it before the
+        // reparse completes. `self.tree` can be `None` here even though a
+        // grammar applies (`insert`/`remove` gate on `self.parser`, not
+        // `self.tree`) when the *initial* async parse (T121) hasn't landed
+        // yet -- there's nothing to `.edit()` in that case (there's no old
+        // tree to keep aligned), but the generation still needs to move and
+        // a fresh parse still needs to happen, exactly as below.
         if let Some(tree) = self.tree.as_mut() {
-            // Apply the edit to the current tree so its byte offsets stay aligned
-            // for any consumer reading it before the reparse completes.
             tree.edit(&edit);
-            self.edit_gen = self.edit_gen.wrapping_add(1);
-            // Small/medium buffers reparse synchronously (identical to the original
-            // behavior); large buffers reparse on the background worker so typing
-            // stays responsive.
-            if self.content.len_bytes() < ASYNC_PARSE_THRESHOLD || !self.request_async_parse() {
-                self.reparse();
-                // The buffer is now current via a synchronous reparse, so any
-                // earlier in-flight async request is superseded. Clear the stale
-                // pending flag so `parse_pending` can't latch true and make the
-                // host fast-poll forever.
-                if let Some(worker) = self.parse_worker.as_mut() {
-                    worker.requested = worker.installed;
-                }
+        }
+        self.edit_gen = self.edit_gen.wrapping_add(1);
+        // Small/medium buffers reparse synchronously (identical to the original
+        // behavior); large buffers reparse on the background worker so typing
+        // stays responsive.
+        if self.content.len_bytes() < ASYNC_PARSE_THRESHOLD || !self.request_async_parse() {
+            self.reparse();
+            // The buffer is now current via a synchronous reparse, so any
+            // earlier in-flight async request is superseded. Clear the stale
+            // pending flag so `parse_pending` can't latch true and make the
+            // host fast-poll forever.
+            if let Some(worker) = self.parse_worker.as_mut() {
+                worker.requested = worker.installed;
             }
         }
     }
@@ -1361,18 +1407,54 @@ mod tests {
         assert_eq!(code.content.to_string(), "Hello World");
     }
 
+    /// Poll `code` until a parse installs (or a generous deadline passes),
+    /// returning whether one did. Shared by every test below that needs the
+    /// background worker to actually finish before asserting on `code.tree`.
+    #[cfg(feature = "lang-rust")]
+    fn wait_for_parse(code: &mut Code) -> bool {
+        use std::time::{Duration, Instant};
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if code.poll_parse() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        false
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn a_large_buffers_initial_parse_is_async_too() {
+        // T121: opening a buffer over the threshold must not block on a
+        // synchronous whole-buffer parse -- `Code::new` itself returns with
+        // no tree yet, exactly like a post-edit async reparse in flight.
+        let big = "fn f() { let x = 1; }\n".repeat(3000);
+        assert!(
+            big.len() > ASYNC_PARSE_THRESHOLD,
+            "fixture exceeds the threshold"
+        );
+        let code = Code::new(&big, "rust", None).unwrap();
+        assert!(code.tree.is_none(), "the initial parse hasn't landed yet");
+        assert!(
+            code.parse_pending(),
+            "the initial parse was requested async, not run synchronously"
+        );
+    }
+
     #[cfg(feature = "lang-rust")]
     #[test]
     fn large_buffer_reparses_on_background_thread() {
-        use std::time::Duration;
-        // A buffer over the async threshold reparses off-thread after edits.
+        // A buffer over the async threshold reparses off-thread after edits,
+        // same as its own initial parse (previous test).
         let big = "fn f() { let x = 1; }\n".repeat(3000);
         assert!(
             big.len() > ASYNC_PARSE_THRESHOLD,
             "fixture exceeds the threshold"
         );
         let mut code = Code::new(&big, "rust", None).unwrap();
-        assert!(code.tree.is_some(), "initial parse is synchronous");
+        assert!(wait_for_parse(&mut code), "the initial parse landed");
+        assert!(code.tree.is_some());
 
         code.insert(0, "// edit\n");
         // The edited tree stays available (highlighting isn't lost) while the
@@ -1383,15 +1465,10 @@ mod tests {
         );
         assert!(code.parse_pending(), "a background reparse was requested");
 
-        let mut installed = false;
-        for _ in 0..3000 {
-            if code.poll_parse() {
-                installed = true;
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(1));
-        }
-        assert!(installed, "the background reparse completed and installed");
+        assert!(
+            wait_for_parse(&mut code),
+            "the background reparse completed and installed"
+        );
         assert!(
             !code.parse_pending(),
             "nothing pending once the latest result lands"
@@ -1401,15 +1478,40 @@ mod tests {
 
     #[cfg(feature = "lang-rust")]
     #[test]
+    fn an_edit_during_the_initial_async_parse_is_not_silently_dropped() {
+        // T121 regression coverage: making an edit *before* the initial
+        // parse has landed (`code.tree` still `None`) must still bump the
+        // generation and re-request a parse of the *current* content --
+        // otherwise the stale, pre-edit parse the initial request already
+        // has in flight would land, match the unchanged generation, and get
+        // installed as if it reflected the buffer's real (edited) content.
+        let big = "fn f() { let x = 1; }\n".repeat(3000);
+        let mut code = Code::new(&big, "rust", None).unwrap();
+        assert!(code.tree.is_none(), "initial parse still in flight");
+
+        code.insert(0, "// edit\n");
+        assert!(wait_for_parse(&mut code), "a parse landed");
+        assert!(code.tree.is_some());
+        // If the edit had been dropped, this would be the *original* buffer
+        // (no leading comment) rather than the edited one.
+        assert_eq!(
+            code.content.char(0),
+            '/',
+            "the edit is part of what was parsed"
+        );
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
     fn parse_pending_clears_after_a_sync_reparse_supersedes_an_async_one() {
-        use std::time::{Duration, Instant};
-        // Start over the async threshold so an edit issues a background parse.
+        // Start over the async threshold so the initial parse itself is async.
         let big = "fn f() { let x = 1; }\n".repeat(3000);
         assert!(big.len() > ASYNC_PARSE_THRESHOLD);
         let mut code = Code::new(&big, "rust", None).unwrap();
-
-        code.insert(0, "// edit\n"); // async parse requested (requested != installed)
-        assert!(code.parse_pending(), "async reparse requested");
+        assert!(
+            code.parse_pending(),
+            "the initial parse was requested async"
+        );
 
         // Shrink the buffer below the threshold: the next edit reparses
         // synchronously and must NOT leave the pending flag latched forever.
@@ -1417,7 +1519,9 @@ mod tests {
         code.remove(0, len - 10);
         assert!(code.content.len_bytes() < ASYNC_PARSE_THRESHOLD);
 
-        // Drain any late async result; the flag must settle to false promptly.
+        // Drain any late async result (there may be more than one still in
+        // flight); the flag must settle to false promptly either way.
+        use std::time::{Duration, Instant};
         let deadline = Instant::now() + Duration::from_secs(5);
         while code.parse_pending() && Instant::now() < deadline {
             code.poll_parse();
