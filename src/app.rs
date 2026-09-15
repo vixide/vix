@@ -1914,6 +1914,17 @@ pub struct App {
     /// text passthrough either way, so this field only tracks Visual /
     /// Visual Line on top of that (T112; T113+ migrate more onto it).
     modal_mode: vix_modal::Mode,
+    /// The modal engine's in-progress numeric count prefix (`3` before a
+    /// motion). Reset after every motion fires or a pending key resolves.
+    modal_count: vix_modal::Count,
+    /// The modal engine is waiting for the second `g` of `gg` (T113). Distinct
+    /// from the old table's own `vim_pending`, which still separately owns
+    /// `d`/`y`'s pending second key (not migrated yet).
+    modal_pending_g: bool,
+    /// The modal engine is waiting for the target character of a pending
+    /// `f`/`t`/`F`/`T` (T113), holding that key itself so the handler knows
+    /// which of the four to run once the target arrives.
+    modal_pending_find: Option<char>,
 }
 
 impl App {
@@ -2188,6 +2199,9 @@ impl App {
             spacemacs_leader: None,
             tutor: None,
             modal_mode: vix_modal::Mode::default(),
+            modal_count: vix_modal::Count::default(),
+            modal_pending_g: false,
+            modal_pending_find: None,
         };
         app.validate_keymap();
         app
@@ -8520,6 +8534,9 @@ impl App {
         self.emacs_prefix = false;
         self.modal_insert = false;
         self.modal_mode = vix_modal::Mode::Normal;
+        self.modal_count.reset();
+        self.modal_pending_g = false;
+        self.modal_pending_find = None;
         self.vim_cmd = None;
         self.spacemacs_leader = None;
         self.vim_pending = None;

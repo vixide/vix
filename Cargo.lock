@@ -5933,6 +5933,9 @@ dependencies = [
 [[package]]
 name = "vix-modal"
 version = "1.6.0"
+dependencies = [
+ "vix-textops",
+]
 
 [[package]]
 name = "vix-nerd-font-picker"

@@ -8,11 +8,19 @@ motions an operator can apply to. `vix-modal` is the real engine — this
 spec is the T111 audit (what exists today, precisely, so "the gap is real"
 is a finding and not an assumption) plus the v1 design it justifies.
 
-**Status**: design-only (improvement plan T111). T112 (mode engine) through
-T115 (text objects + dot-repeat) implement it in slices; each should update
-this file if reality and the design disagree, same as anywhere else. Today
-the crate is a documented no-op: no dependencies, no public items, just
-this spec and the crate-root doc comment pointing here.
+**Status**: landing in slices (improvement plan T112–T115); each should
+update this file if reality and the design disagree, same as anywhere else.
+**T112** (done): the `Mode` enum, `Settings::modal_engine`, and host wiring
+for Visual/Visual Line entry, exit, and cursor-extending movement. **T113**
+(done): `count.rs`'s numeric-prefix accumulator and `motion.rs`'s pure
+`h j k l w b e 0 ^ $ gg G { } ( ) f t F T` functions, wired into Normal
+mode — one small, deliberate drift from § Design: motions' framing below:
+`tasks.md`'s own T113 bullet lists `h j k l w b e 0 $ ^ gg G { } f/t/F/T`
+without `( )` or `%`; T113 implemented `( )` anyway (near-zero extra cost
+once `{`/`}` existed) but left `%` for a small follow-on (a different kind
+of scan — delimiter matching, not char/word/line position — and the
+existing `edit.match_bracket` action already covers it). **T114–T115**:
+not started.
 
 ## The audit
 
