@@ -945,12 +945,51 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
 
 ### Performance & depth
 
-- [ ] **T121 — Perf: highlight and search.** Driven by T006 baselines:
-  make syntax highlighting incremental/lazy for buffers past a size
-  threshold, and parallelize workspace search. Set explicit targets in the
-  relevant specs (e.g. open 100 MB < 1 s; keypress-to-frame < 16 ms at
-  10 MB; workspace search 10k files < 500 ms) and prove them with the
-  benches.
+- [x] **T121 — Perf: highlight and search.** Done 2026-09-15. Investigated
+  first (a full audit of the highlight pipeline, `crates/vix-editor-core/
+  spec/syntax-highlighting/index.md`) before changing anything: highlight-
+  query *execution* was already lazy and viewport-scoped
+  (`Code::highlight_interval`, called only by the render path, only for the
+  visible rows' byte range) — the 5.05 s `editor/open` baseline for a
+  100 MB file wasn't a highlighting cost at all, it was one synchronous,
+  unconditional, whole-buffer Tree-sitter *parse* in `Code::new`, the one
+  piece of the pipeline that never went through the background-worker
+  machinery a post-edit reparse already used. Routed the initial parse
+  through that same worker for buffers at/above `ASYNC_PARSE_THRESHOLD`
+  (50 KB) instead of adding a new mechanism. Found and fixed two real
+  correctness bugs the change exposed (both were latent, exercised for the
+  first time by an edit made before the initial parse lands, which couldn't
+  happen before since the initial parse was always already finished by
+  then): (1) a freshly created `ParseWorker`'s `installed` counter starts
+  at `0`, indistinguishable from "generation 0 requested, not yet
+  installed" — fixed by bumping `edit_gen` to `1` before the initial
+  request, mirroring what `edit_tree` already does before its own request;
+  (2) `insert`/`remove` gated the whole tree-update path on
+  `self.tree.is_some()`, which is `None` during the async-initial-parse
+  window even though a grammar applies — an edit made in that window was
+  silently invisible to the tree machinery, so the stale pre-edit parse
+  would land and install as if current; fixed by gating on
+  `self.parser.is_some()` instead, with `edit_tree` itself now tolerating a
+  `None` tree (skips `.edit()`, still bumps the generation and requests a
+  fresh parse). All three of T121's explicit targets now met, two by a wide
+  margin (`docs/performance/index.md`, re-measured 2026-09-15): open 100 MB
+  **5.05 s → 14.1 ms** (350×, budget was < 1 s); keypress-to-frame at 10 MB
+  **3.35 µs** (budget < 16 ms — already true before this task, since typing
+  already used the async-reparse worker; this task just added the 10 MB
+  benchmark point to prove it instead of inferring from smaller ones);
+  workspace search 10k files **214 ms**, unchanged (a separate subsystem;
+  already well under its 500 ms budget in the original baseline, so
+  parallelizing it was judged unnecessary — a real target already met
+  without it beats an optimization with no demonstrated need). New
+  `editor/open_until_highlighted` benchmark group keeps the *old*
+  `editor/open` quantity ("fully parsed", not just "returned") visible for
+  the two sizes where it now differs, using `iter_custom` to avoid
+  triggering runaway concurrent 100 MB background parses once the
+  construction itself became cheap enough for criterion's own calibration
+  to want hundreds of iterations. 2 new unit tests plus 2 existing ones
+  updated for the new (correct) behavior; full `cargo test --test
+  integration` and `scripts/check` both green — this crate is a dependency
+  of nearly everything else in the app.
 - [ ] **T122 — Startup budget.** Measure cold start; defer non-critical
   init (locale table build, theme scan, snippet load) off the first-frame
   path if measurement says it matters. Record before/after in

@@ -50,6 +50,44 @@ Tree-sitter reuses the untouched subtrees. Buffers at or above
 result when it arrives, with stale results rejected by an edit generation
 counter, so typing in a large file never blocks on a parse.
 
+## The initial parse is async too (T121)
+
+Opening a buffer at or above `ASYNC_PARSE_THRESHOLD` no longer blocks
+`Code::new` on a synchronous whole-buffer `Parser::parse` — it requests the
+same background-worker parse a post-edit reparse already used, and returns
+immediately with `tree: None`. Every tree-dependent method already handled a
+missing tree gracefully (returns no highlights/ranges rather than panicking),
+so a freshly opened large file is simply unhighlighted — plain text — until
+the host's next `poll_parse` call installs the result, typically one or two
+frames later. This closed the actual gap plan T006/T121 found: opening a
+100 MB file (`editor/open`, `2,500,000` lines) took **5.05 s** because the
+*parse* was synchronous and unconditional, not because highlighting itself
+was slow — highlight-query execution was already lazy and viewport-scoped
+(`Code::highlight_interval`, called only by the render path, only for the
+visible rows' byte range, via a range-scoped `QueryCursor`); nothing about
+that layer needed to change.
+
+Two correctness details this reuses/preserves rather than reinvents:
+
+- **Generation-zero requests are real requests.** `Code::new` bumps
+  `edit_gen` to `1` before requesting the initial async parse — mirroring
+  what `edit_tree` already does before *its* `request_async_parse` call —
+  because a freshly created `ParseWorker`'s own `installed` counter also
+  starts at `0`; without the bump, `parse_pending`'s `requested > installed`
+  check couldn't tell "generation 0 requested, not yet installed" apart from
+  "nothing requested yet", and would read `0 > 0` = false while a real parse
+  was genuinely in flight.
+- **An edit made before the initial parse lands is not lost.** `insert`/
+  `remove` gate on `self.parser.is_some()` (a grammar applies at all), not
+  `self.tree.is_some()` (a tree exists yet) — the latter can be `None`
+  during this window even though a grammar applies. `edit_tree` itself
+  tolerates a `None` tree (there's nothing to call `.edit()` on, so it
+  skips that step) but still bumps the generation and requests a fresh
+  parse of the *current*, post-edit content either way. Without this, an
+  edit made during the async-initial-parse window would go untracked: the
+  in-flight parse (of the pre-edit text) would still match the unchanged
+  generation and get installed as if it reflected the buffer's real content.
+
 See [`crates/vix-editor-core/spec/index.md`](../index.md) for the action catalog
 and [`spec/test/index.md`](../../../../spec/test/index.md) for how the benchmark
 that found the query cost is run.

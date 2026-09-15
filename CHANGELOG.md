@@ -536,6 +536,22 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Opening a large file no longer blocks on a synchronous parse**
+  (improvement plan T121): buffers at or above the existing 50 KB
+  async-reparse threshold now route their *initial* Tree-sitter parse
+  through the same background worker a post-edit reparse already used,
+  instead of parsing synchronously inside `Editor::new`/`Code::new`.
+  Opening a 100 MB file dropped from 5.05 s to 14.1 ms
+  (`docs/performance/index.md`) — the file is simply plain, unhighlighted
+  text for the one or two frames until the background parse lands, exactly
+  like the brief window during a large-file edit already worked. Two real,
+  previously-latent bugs an edit made *during* that window would have hit
+  are fixed as part of this: the pending-parse flag couldn't distinguish
+  "generation 0 requested" from "nothing requested yet", and `insert`/
+  `remove` would have silently dropped such an edit from the tree
+  machinery entirely (see `crates/vix-editor-core/spec/syntax-highlighting/
+  index.md` for the detail).
+
 - `vix-script` is now a **plain, non-optional** dependency of the root
   `vix` package — T101's `scripting` Cargo feature (`dep:vix-script`,
   default-on) is removed now that T103 has wired it into the App shell's
