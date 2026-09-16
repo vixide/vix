@@ -8,6 +8,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Three new AI features** (improvement plan T125), all explicit-invoke
+  only: **Edit Selection with Instruction…** (AI menu) prompts for
+  free-text and applies it to the selection, always as a reviewable diff
+  regardless of `ai_diff_review`; **Generate Doc Comment** (AI menu)
+  writes a doc comment for the symbol under the cursor and inserts it just
+  above; **Generate Commit Message** (Git panel, `g`) runs the staged diff
+  through the AI and pre-fills the commit prompt with the reply — it only
+  fills the message box, it never commits on its own. All work on either
+  AI path (the CLI default or T124's HTTP providers).
 - **Direct HTTP AI providers** (improvement plan T124): a new `vix-ai-core`
   crate adds Anthropic, OpenAI-compatible, and Ollama clients as an
   opt-in alternative to the CLI shell-out every AI feature (the chat

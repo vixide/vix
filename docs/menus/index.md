@@ -173,20 +173,30 @@ Panel**.
 
 ## AI menu
 
-Each item runs a configurable assistant CLI on the selection, or the whole file
-when nothing is selected. The command comes from the `ai_command` setting
-(default `claude -p "{prompt}"`), so you can point it at Claude, Codex, Mistral,
-a local `ollama` model, or any other CLI. Summarize, Explain, and Define open the
-result in a new tab; Annotate and Improve run in the background and **replace** the
-text with the result (undoable).
+Each item runs a configurable assistant on the selection, or the whole file
+when nothing is selected: a CLI by default (`ai_command`, default `claude -p
+"{prompt}"` — point it at Claude, Codex, Mistral, a local `ollama` model, or
+any other CLI), or a provider's HTTP API called directly when `ai_provider`
+is set to `"anthropic"`/`"openai"`/`"ollama"` (see
+[`../../crates/vix-ai-core/spec/index.md`](../../crates/vix-ai-core/spec/index.md)).
+Summarize, Explain, and Define open the result in a new tab; Annotate and
+Improve run in the background and **replace** the text with the result
+(undoable, and reviewable as a diff first when `ai_diff_review` is on, the
+default).
 
-| Item      | Action                                                                 |
-| --------- | --------------------------------------------------------------------- |
-| Summarize | Summarize the selection (or the whole file); to a new tab |
-| Explain   | Explain the selection (or the whole file); to a new tab |
-| Define    | Define the selection (or the word at/after the cursor); to a new tab |
-| Annotate  | Annotate the selection (or the whole file); replaces it |
-| Improve   | Improve the selection (or the whole file); replaces it |
+| Item                          | Action                                                                 |
+| ------------------------------ | --------------------------------------------------------------------- |
+| Summarize                      | Summarize the selection (or the whole file); to a new tab |
+| Explain                        | Explain the selection (or the whole file); to a new tab |
+| Define                         | Define the selection (or the word at/after the cursor); to a new tab |
+| Annotate                       | Annotate the selection (or the whole file); replaces it |
+| Improve                        | Improve the selection (or the whole file); replaces it |
+| Edit Selection with Instruction… | Prompts for a free-text instruction, applies it to the selection; always opens as a reviewable diff (T125) |
+| Generate Doc Comment           | Writes a doc comment for the symbol under the cursor, inserted just above it (T125) |
+
+The Git panel has one more: pressing `g` there generates a commit message
+from the staged diff and opens the commit prompt pre-filled with it — it
+only fills the message box, it never commits on its own (T125).
 
 ## DB menu
 

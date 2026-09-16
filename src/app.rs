@@ -129,6 +129,10 @@ pub enum PromptKind {
     GitOpenAtRevision,
     /// Enter a query to search symbols across the project (LSP workspace/symbol).
     WorkspaceSymbol,
+    /// Enter a free-text instruction for the AI to apply to the selection
+    /// (T125's "Edit selection with instruction") — the target range was
+    /// captured in `ai_instruction_target` when this prompt was opened.
+    AiInstruction,
     /// Enter the new name for the symbol under the cursor (LSP rename).
     LspRename,
     /// Enter replacement text for the cursor's linked-editing ranges (LSP).
@@ -559,6 +563,18 @@ enum AiDest {
     /// Apply the reply to the DB workbench's SQL editor (see
     /// [`crate::db::Browser::apply_ai_reply`]).
     Db,
+    /// Open the git commit prompt pre-filled with the reply (T125's
+    /// "Generate Commit Message") — fills the message box, never commits on
+    /// its own; the user still reviews and presses Enter.
+    GitCommitMessage,
+    /// Insert the reply as its own line immediately before position `at` in
+    /// tab `tab` (T125's "Generate Doc Comment"). Unlike `Replace`/`Diff`,
+    /// which use the reply's text exactly as `poll_ai_replace` trimmed it
+    /// (right for every other dest, where a stray trailing blank line would
+    /// look wrong), this guarantees exactly one trailing newline is restored
+    /// before applying — otherwise the comment would run directly into the
+    /// code it documents with nothing separating them.
+    InsertBeforeLine { tab: usize, at: usize },
 }
 
 /// An open AI diff review: the proposed change plus where it applies.
@@ -1718,6 +1734,10 @@ pub struct App {
     /// Cursor position captured when an LSP rename prompt was opened, used to
     /// send the rename request on submit: `(file, 0-based line, character)`.
     rename_at: Option<(PathBuf, u32, u32)>,
+    /// Selection captured when the "Edit selection with instruction" prompt
+    /// was opened (T125), used to run the AI edit on submit: the tab and the
+    /// exact range to replace.
+    ai_instruction_target: Option<(usize, AiTarget)>,
     /// The last Org link stored with **Org → Hyperlinks → Store Link** (seeds
     /// the Insert Link… prompt).
     stored_org_link: Option<String>,
@@ -2182,6 +2202,7 @@ impl App {
             macro_playing: false,
             complete_session: None,
             rename_at: None,
+            ai_instruction_target: None,
             stored_org_link: None,
             agenda_restriction: None,
             src_edit: None,
@@ -2592,6 +2613,8 @@ impl App {
             "ai.define" => self.ai_define(),
             "ai.annotate" => self.ai_annotate(),
             "ai.improve" => self.ai_improve(),
+            "ai.edit_with_instruction" => self.ai_begin_edit_with_instruction(),
+            "ai.generate_doc_comment" => self.ai_generate_doc_comment(),
             a if self.db_action(a) => {}
             "view.bottom_dock" => self.toggle_bottom_dock(),
             "tab.next" => self.editor.next_tab(),
@@ -9789,22 +9812,141 @@ impl App {
                 _ => (tab.editor.get_content(), AiTarget::Whole),
             }
         };
-        let dest = if self.settings.ai_diff_review {
-            AiDest::Diff {
-                tab: tab_idx,
-                target,
-            }
-        } else {
-            AiDest::Replace {
-                tab: tab_idx,
-                target,
-            }
-        };
+        let dest = self.ai_replace_or_diff_dest(tab_idx, target);
         if let Some(rx) = self.spawn_ai(prompt, &text) {
             self.ai_replace = Some(AiReplace {
                 rx,
                 dest,
                 label: label.to_string(),
+            });
+            self.status = t!("status.ai_running", action = label).to_string();
+        }
+    }
+
+    /// `AiDest::Diff` when `Settings::ai_diff_review` is on (the default),
+    /// else `AiDest::Replace` — the choice every fixed-instruction AI text
+    /// transform (Annotate/Improve/generate-doc-comment) makes the same way.
+    fn ai_replace_or_diff_dest(&self, tab: usize, target: AiTarget) -> AiDest {
+        if self.settings.ai_diff_review {
+            AiDest::Diff { tab, target }
+        } else {
+            AiDest::Replace { tab, target }
+        }
+    }
+
+    /// Begin "Edit selection with instruction" (T125): prompts for a
+    /// free-text instruction to apply to the current selection. Requires an
+    /// actual selection (unlike Annotate/Improve, this never silently
+    /// widens to the whole buffer -- a user-authored instruction is
+    /// unpredictable enough without also guessing the target). The result
+    /// always opens as a reviewable diff, regardless of `ai_diff_review`:
+    /// free-text instructions carry more risk than the fixed prompts the
+    /// setting was designed to let power users skip past.
+    fn ai_begin_edit_with_instruction(&mut self) {
+        if self.ai_replace.is_some() {
+            self.status = t!("status.ai_busy").to_string();
+            return;
+        }
+        let tab_idx = self.editor.active;
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        if tab.is_image() {
+            self.status = t!("status.ai_no_input").to_string();
+            return;
+        }
+        let Some(sel) = tab.editor.get_selection().filter(|s| !s.is_empty()) else {
+            self.status = t!("status.ai_selection_required").to_string();
+            return;
+        };
+        self.ai_instruction_target = Some((tab_idx, AiTarget::Range(sel.start, sel.end)));
+        self.prompt = Some(Prompt::new(
+            PromptKind::AiInstruction,
+            t!("prompt.ai_instruction").to_string(),
+        ));
+    }
+
+    /// Run the instruction typed into the `AiInstruction` prompt over the
+    /// selection captured by [`Self::ai_begin_edit_with_instruction`].
+    fn submit_ai_instruction(&mut self, instruction: &str) {
+        let Some((tab_idx, target)) = self.ai_instruction_target.take() else {
+            return;
+        };
+        let instruction = instruction.trim();
+        if instruction.is_empty() {
+            self.status = t!("status.ai_no_input").to_string();
+            return;
+        }
+        let Some(tab) = self.editor.tabs.get_mut(tab_idx) else {
+            return;
+        };
+        let text = match target {
+            AiTarget::Whole => tab.editor.get_content(),
+            AiTarget::Range(start, end) => tab.editor.get_content_slice(start, end),
+        };
+        let label = t!("menu.item.ai.edit_with_instruction").to_string();
+        if let Some(rx) = self.spawn_ai(instruction, &text) {
+            self.ai_replace = Some(AiReplace {
+                rx,
+                dest: AiDest::Diff {
+                    tab: tab_idx,
+                    target,
+                },
+                label: label.clone(),
+            });
+            self.status = t!("status.ai_running", action = label).to_string();
+        }
+    }
+
+    /// Generate a doc comment for the symbol under the cursor (T125): sends
+    /// the cursor's line plus a following window of context (enough for the
+    /// assistant to see the signature/body without sending the whole file),
+    /// and proposes the reply as a *pure insertion* right before that line
+    /// (`AiDest::InsertBeforeLine`) -- it never touches existing text, it
+    /// only adds a new one above it. Requires no selection; explicit-invoke
+    /// only, same as every other AI menu action.
+    fn ai_generate_doc_comment(&mut self) {
+        // A generous but bounded context window -- enough for a typical
+        // function/type/impl block without risking sending the whole file.
+        const CONTEXT_LINES: usize = 40;
+        if self.ai_replace.is_some() {
+            self.status = t!("status.ai_busy").to_string();
+            return;
+        }
+        let tab_idx = self.editor.active;
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        if tab.is_image() {
+            self.status = t!("status.ai_no_input").to_string();
+            return;
+        }
+        let code = tab.editor.code_ref();
+        let cursor = tab.editor.get_cursor();
+        let line = code.char_to_line(cursor);
+        let line_start = code.line_to_char(line);
+        let context_end_line = (line + CONTEXT_LINES).min(code.len_lines().saturating_sub(1));
+        let context_end = code.line_to_char(context_end_line);
+        let context = code.slice(line_start, context_end);
+        if context.trim().is_empty() {
+            self.status = t!("status.ai_no_input").to_string();
+            return;
+        }
+        let dest = AiDest::InsertBeforeLine {
+            tab: tab_idx,
+            at: line_start,
+        };
+        let instruction = "Write a documentation comment for the symbol (function, type, \
+             or similar) that begins on the first line below, in the idiomatic comment \
+             style for this code's language, matching the indentation of that first line. \
+             Output only the comment block, with a trailing newline -- no explanation, no \
+             code fence, and none of the code itself.";
+        let label = t!("menu.item.ai.generate_doc_comment").to_string();
+        if let Some(rx) = self.spawn_ai(instruction, &context) {
+            self.ai_replace = Some(AiReplace {
+                rx,
+                dest,
+                label: label.clone(),
             });
             self.status = t!("status.ai_running", action = label).to_string();
         }
@@ -10058,6 +10200,23 @@ impl App {
                     AiDest::Db => {
                         if let Some(b) = self.db.as_mut() {
                             b.apply_ai_reply(text);
+                        }
+                    }
+                    AiDest::GitCommitMessage => {
+                        self.git_panel = None;
+                        self.prompt = Some(
+                            Prompt::new(PromptKind::GitCommit, t!("prompt.git_commit").to_string())
+                                .with_input(text.trim().to_string()),
+                        );
+                    }
+                    AiDest::InsertBeforeLine { tab, at } => {
+                        let mut insert = text.to_string();
+                        insert.push('\n');
+                        let target = AiTarget::Range(at, at);
+                        if self.settings.ai_diff_review {
+                            self.open_ai_diff(tab, target, &insert);
+                        } else {
+                            self.apply_ai_replace(tab, target, &insert);
                         }
                     }
                 }
@@ -12583,6 +12742,7 @@ impl App {
                 }
             }
             PromptKind::LinkedEdit => self.apply_linked_edit(&prompt.input),
+            PromptKind::AiInstruction => self.submit_ai_instruction(&prompt.input),
             PromptKind::ExplorerInclude => {
                 let exclude = self.explorer.exclude_filter.clone();
                 self.explorer.set_filter(prompt.input.trim(), &exclude);

@@ -2,6 +2,7 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::cast_possible_truncation, clippy::format_collect)]
 
+mod ai;
 mod catalog;
 mod common;
 mod coverage;

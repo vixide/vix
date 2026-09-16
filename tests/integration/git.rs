@@ -4,6 +4,8 @@
 // handful of them, so a glob import earns its keep over a long explicit list.
 #![allow(clippy::wildcard_imports)]
 
+use std::time::{Duration, Instant};
+
 use crate::common::*;
 
 #[test]
@@ -61,6 +63,70 @@ fn git_panel_stages_and_commits() {
 
     app.refresh_git();
     assert!(app.git_status.is_empty(), "after commit the tree is clean");
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// T125: the Git panel's `g` key generates a commit message from the staged
+/// diff and opens the commit prompt pre-filled with it -- it only fills the
+/// message box, it never commits on its own.
+#[test]
+#[ignore = "needs git; creates a throwaway repo and commits in it"]
+fn git_panel_generates_a_commit_message_from_the_staged_diff() {
+    let dir = unique_dir("gitpanel-ai-commit");
+    fs::create_dir_all(&dir).unwrap();
+    let run = |args: &[&str]| {
+        std::process::Command::new("git")
+            .current_dir(&dir)
+            .args(args)
+            .output()
+            .unwrap();
+    };
+    run(&["init", "-q"]);
+    run(&["config", "user.email", "t@example.com"]);
+    run(&["config", "user.name", "Test"]);
+    fs::write(dir.join("a.txt"), "hello\n").unwrap();
+
+    // Deterministic `ai_command`: ignores its input, always prints the same
+    // message -- no real assistant needed to exercise the wiring.
+    let settings = Settings {
+        ai_command: "printf '%s' 'Add a.txt with a greeting'".to_string(),
+        ..Settings::default()
+    };
+    let mut app = App::new(dir.clone(), settings).with_session_path(isolated_session_path());
+    app.layout.editor = Rect::new(0, 0, 80, 24);
+
+    app.run_action("git.changes");
+    assert!(app.git_panel.is_some(), "panel opens in a repo");
+    app.on_key(keycode(KeyCode::Char(' '))); // stage the file
+    assert!(app.git_status[0].is_staged(), "file is staged");
+
+    app.on_key(keycode(KeyCode::Char('g'))); // generate a commit message
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline && app.prompt.is_none() {
+        app.poll_ai_replace();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let prompt = app
+        .prompt
+        .as_ref()
+        .expect("commit prompt opened with the generated message");
+    assert!(matches!(prompt.kind, vix::app::PromptKind::GitCommit));
+    assert_eq!(prompt.input, "Add a.txt with a greeting");
+
+    // Generating a message never commits on its own -- the user still has to
+    // confirm.
+    app.refresh_git();
+    assert!(
+        !app.git_status.is_empty(),
+        "nothing was committed yet, only the prompt was filled"
+    );
+
+    app.on_key(keycode(KeyCode::Enter)); // accept the generated message
+    app.refresh_git();
+    assert!(
+        app.git_status.is_empty(),
+        "after confirming the generated message, the tree is clean"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 

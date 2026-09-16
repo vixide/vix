@@ -18,7 +18,8 @@ use std::path::Path;
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 
 use super::{
-    App, BranchChooser, DiffViewState, GitPanel, Prompt, PromptKind, gutter_hex, rect_contains,
+    AiDest, AiReplace, App, BranchChooser, DiffViewState, GitPanel, Prompt, PromptKind, gutter_hex,
+    rect_contains,
 };
 use crate::editor::Tab;
 
@@ -681,6 +682,7 @@ impl App {
             KeyCode::Char('s' | 'S') => self.git_stage_selected(true),
             KeyCode::Char('u' | 'U') => self.git_stage_selected(false),
             KeyCode::Char('c' | 'C') => self.git_begin_commit(),
+            KeyCode::Char('g' | 'G') => self.git_generate_commit_message(),
             KeyCode::Char('r' | 'R') => {
                 self.refresh_git();
                 self.clamp_git_selection();
@@ -762,6 +764,43 @@ impl App {
             PromptKind::GitCommit,
             t!("prompt.git_commit").to_string(),
         ));
+    }
+
+    /// Generate a commit message from the staged diff with the configured AI
+    /// backend (T125), opening the commit prompt pre-filled with the reply
+    /// once it arrives (`AiDest::GitCommitMessage` in `poll_ai_replace`) --
+    /// this only fills the message box, it never commits on its own; the
+    /// user still reviews the text and presses Enter (or Esc to discard).
+    fn git_generate_commit_message(&mut self) {
+        if self.ai_replace.is_some() {
+            self.status = t!("status.ai_busy").to_string();
+            return;
+        }
+        let any_staged = self
+            .git_status
+            .iter()
+            .any(crate::git::FileStatus::is_staged);
+        if !any_staged {
+            self.status = t!("status.git_nothing_staged").into();
+            return;
+        }
+        let Some(diff) = crate::git::staged_diff(&self.root) else {
+            self.status = t!("status.ai_no_input").to_string();
+            return;
+        };
+        let instruction = "Write a concise git commit message for this staged diff: a short \
+             summary line (50 characters or fewer, imperative mood), optionally a blank line \
+             then a longer body explaining what changed and why. Output only the commit \
+             message text -- no explanation, no code fence, no surrounding quotes.";
+        let label = t!("menu.item.git.generate_commit_message").to_string();
+        if let Some(rx) = self.spawn_ai(instruction, &diff) {
+            self.ai_replace = Some(AiReplace {
+                rx,
+                dest: AiDest::GitCommitMessage,
+                label: label.clone(),
+            });
+            self.status = t!("status.ai_running", action = label).to_string();
+        }
     }
 
     /// Run `git commit -m <message>` and report the outcome.

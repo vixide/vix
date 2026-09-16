@@ -1330,6 +1330,17 @@ const AI: &[Item] = &[
     SEP,
     Item::leaf("menu.item.ai.annotate", "ai.annotate", ""),
     Item::leaf("menu.item.ai.improve", "ai.improve", ""),
+    Item::leaf(
+        "menu.item.ai.edit_with_instruction",
+        "ai.edit_with_instruction",
+        "",
+    ),
+    SEP,
+    Item::leaf(
+        "menu.item.ai.generate_doc_comment",
+        "ai.generate_doc_comment",
+        "",
+    ),
 ];
 
 /// Database workbench (the `vix-db` crate spec): connection management, schema browsing,

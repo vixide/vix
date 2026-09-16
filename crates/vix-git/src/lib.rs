@@ -571,6 +571,15 @@ pub fn unstage(dir: &Path, rel_path: &str) -> bool {
     git(dir, &["restore", "--staged", "--", rel_path]).is_ok_and(|o| o.status.success())
 }
 
+/// The staged diff (`git diff --staged`), for feeding to an AI commit-message
+/// generator (T125) — `None` on any failure, or when nothing is staged
+/// (an empty diff is not useful context and would only prompt a generic
+/// reply).
+#[must_use]
+pub fn staged_diff(dir: &Path) -> Option<String> {
+    git_stdout(dir, &["diff", "--staged"]).filter(|d| !d.is_empty())
+}
+
 /// The number of commits reachable from HEAD (`git rev-list --count HEAD`), or
 /// `None` when not a repo or there are no commits yet.
 #[must_use]

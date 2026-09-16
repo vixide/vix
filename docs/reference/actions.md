@@ -10,7 +10,9 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `ai.annotate` | Annotate | Menu |
 | `ai.chat` | Chat… | Menu |
 | `ai.define` | Define | Menu |
+| `ai.edit_with_instruction` | Edit Selection with Instruction… | Menu |
 | `ai.explain` | Explain | Menu |
+| `ai.generate_doc_comment` | Generate Doc Comment | Menu |
 | `ai.improve` | Improve | Menu |
 | `ai.summarize` | Summarize | Menu |
 | `autocomplete` | Autocomplete Word | Palette |
@@ -666,4 +668,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**659 actions.**
+**661 actions.**
