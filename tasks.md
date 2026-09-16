@@ -1015,11 +1015,84 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   regression guard, the same way every other perf task in this run has.
   Full before/after story and numbers in `docs/performance/index.md`'s
   new "Cold start (T122)" section.
-- [ ] **T123 — LSP depth audit.** Diff `vix-lsp`/`vix-lsp-core` against
-  LSP 3.17: check semantic tokens, document formatting/range formatting,
-  signature help, workspace diagnostics, multiple servers per buffer.
-  Produce the gap list as a spec update, then file one follow-up task per
-  real gap (append them to this file under T123a, T123b, …) and implement.
+- [x] **T123 — LSP depth audit.** Done 2026-09-16. A full method-by-method
+  diff of `vix-lsp`/`vix-lsp-core` against LSP 3.17 found the real feature
+  set is much larger than the stale spec table previously showed (~28
+  methods wired end-to-end, not the 4 the table listed) and turned up gaps
+  in three shapes: one the task's own suspect list named that turned out
+  *not* to be a gap (document formatting/range formatting — already fully
+  wired, unrelated to `vix-format-tool`'s data-format normalization); three
+  small, safe, no-new-protocol-surface bugs fixed as part of this same
+  task; and eight real, larger gaps filed as follow-ups below rather than
+  implemented now, per the task's own "file real findings as follow-ups"
+  instruction. The three fixes: (1) the `initialize` request's advertised
+  `capabilities` didn't match reality — it claimed `"didSave": false` while
+  `textDocument/didSave` is actually sent, and declared no support at all
+  for most already-implemented features (rename, code actions,
+  document/workspace symbols, signature help, references, code lens, inlay
+  hints, folding/selection ranges, document highlight, linked editing,
+  call hierarchy, `workspace/applyEdit`, `workspace/executeCommand`) — a
+  spec-correct server could reasonably withhold behavior for capabilities a
+  client never declared, so every one of those is now declared, matching
+  what's actually requested/handled (`crates/vix-lsp-core/src/message.rs`);
+  (2) a JSON-RPC `error` response (as opposed to a `result`) was silently
+  dropped — a failed rename/code-action/format/… just appeared to do
+  nothing, with no feedback — now surfaced via a new `LspEvent::RequestFailed`
+  to the status line (`status.lsp_request_failed`, all 15 locales); (3)
+  signature help existed but was manual-invoke-only; it now also
+  auto-triggers right after typing `(`/`,` inside a call
+  (`App::maybe_auto_signature_help`), matching every other editor's
+  convention for the feature. New tests at all three layers: `vix-lsp-core`
+  unit tests for the capability JSON, a `vix-lsp` mock-server integration
+  test proving a JSON-RPC error surfaces as `RequestFailed`
+  (`tests/lsp_smoke.rs`), and an `App`-level end-to-end test driving a real
+  `on_key('(')` through to a populated `App::hover` via a mock server.
+  `crates/vix-lsp/spec/index.md`'s Features table rewritten and fact-checked
+  against real action-id strings (caught and fixed one invented-wrong name,
+  `lsp.workspace_symbol` → `lsp.workspace_symbols`, while doing so), plus a
+  new "Known gaps against LSP 3.17" section. `scripts/check` green
+  throughout.
+- [ ] **T123a — Semantic tokens.** Implement
+  `textDocument/semanticTokens/full` (+ `/delta` if a server offers it) as a
+  second highlight layer over Tree-sitter's purely syntactic one — genuinely
+  additive for things structurally unknowable without type/binding
+  resolution (mutable vs. immutable binding, trait-default vs. inherent
+  method, unused variable/parameter). Not started.
+- [ ] **T123b — Multiple servers per buffer.** `Lsp`'s server registry is
+  `HashMap<String, Server>` keyed by `language_id`, and `config_for` takes
+  the *first* matching config by extension; there is no path for two
+  servers to both run against the same file (a common real-world setup: a
+  type-checker LSP + a separate linter LSP on the same buffer). Requires
+  re-keying the registry and fanning out per-document requests/events
+  across every server that handles a given file. Not started.
+- [ ] **T123c — Server crash recovery.** The reader thread detects a dead
+  server and reaps the process, but nothing respawns it — every LSP
+  feature for files that were already open goes silently dead until the
+  user closes and reopens them (`ensure_server` only fires again on the
+  next `did_open`). Respawn + replay `didOpen` for every document still
+  open against that `language_id`. Not started.
+- [ ] **T123d — Pull-based `workspace/diagnostic` and `$/progress`.** Vix
+  relies entirely on push (`publishDiagnostics`), so the Problems panel
+  only ever shows diagnostics for files that have actually been
+  opened/synced at least once, not a server's whole-project analysis; add
+  a pull request on workspace open/refresh. Bundle in `$/progress` handling
+  (a long-running server operation, e.g. an initial index build, currently
+  gives no percentage/message feedback beyond the busy-poll rate speeding
+  up) since both are "give the user visibility into server-side work not
+  tied to one open document." Not started.
+- [ ] **T123e — `prepareRename` and `relatedInformation`.** Two small,
+  independent protocol-completeness gaps bundled for one follow-up slice:
+  `prepareRename` is never sent before a rename prompt, so the exact
+  renameable range/symbol is never validated or pre-filled; `relatedInformation`
+  is declared unsupported and not parsed, so a diagnostic with secondary
+  locations (e.g. "conflicting definition here") loses them entirely. Not
+  started.
+- [ ] **T123f — Multi-root workspace propagation.** `initialize` sends one
+  `rootUri`, no `workspaceFolders` array; Vix's own editor-level multi-root
+  concept (`App::workspace_folders`) isn't propagated to LSP servers at
+  all. Requires deciding how a multi-root `App` maps onto a single spawned
+  server per `language_id` (T123b's per-buffer work may be a prerequisite
+  rather than orthogonal to this). Not started.
 - [ ] **T124 — AI provider abstraction.** Factor `vix-ai-core`: provider
   trait + Anthropic, OpenAI-compatible, and Ollama implementations;
   config keys for endpoint/model/key (keyring-backed like the DB

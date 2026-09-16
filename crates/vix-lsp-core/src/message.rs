@@ -42,16 +42,42 @@ pub fn initialize_params(process_id: Option<u32>, root_uri: Option<&str>) -> Val
         "capabilities": {
             "general": { "positionEncodings": ["utf-16", "utf-8"] },
             "textDocument": {
-                "synchronization": { "dynamicRegistration": false, "didSave": false },
+                // `didSave` really is sent (`Lsp::did_save`) -- this used to
+                // (wrongly) claim otherwise (T123 audit).
+                "synchronization": { "dynamicRegistration": false, "didSave": true },
                 "hover": { "contentFormat": ["markdown", "plaintext"] },
                 "definition": { "linkSupport": true },
+                "declaration": { "linkSupport": true },
+                "typeDefinition": { "linkSupport": true },
+                "implementation": { "linkSupport": true },
+                "references": {},
+                "documentHighlight": {},
+                // The document-symbol parser already keeps a response's
+                // nested `children`, so this is accurate, not aspirational.
+                "documentSymbol": { "hierarchicalDocumentSymbolSupport": true },
                 "completion": {
                     "completionItem": {
                         "snippetSupport": false,
                         "documentationFormat": ["plaintext"]
                     }
                 },
+                "signatureHelp": {},
+                "codeAction": {},
+                "codeLens": {},
+                "formatting": {},
+                "rangeFormatting": {},
+                "rename": {},
+                "foldingRange": {},
+                "selectionRange": {},
+                "linkedEditingRange": {},
+                "callHierarchy": {},
+                "inlayHint": {},
                 "publishDiagnostics": { "relatedInformation": false }
+            },
+            "workspace": {
+                "applyEdit": true,
+                "symbol": {},
+                "executeCommand": {}
             }
         }
     })
