@@ -6554,6 +6554,16 @@ impl App {
                 crate::lsp::LspEvent::RequestFailed(message) => {
                     self.status = t!("status.lsp_request_failed", message = message).to_string();
                 }
+                crate::lsp::LspEvent::RenamePrepared(outcome) => match outcome {
+                    crate::lsp::RenamePrepared::Placeholder(text) => {
+                        self.open_lsp_rename_prompt(Some(text));
+                    }
+                    crate::lsp::RenamePrepared::Default => self.open_lsp_rename_prompt(None),
+                    crate::lsp::RenamePrepared::NotRenameable => {
+                        self.rename_at = None;
+                        self.status = t!("status.lsp_not_renameable").to_string();
+                    }
+                },
             }
         }
         // Rebuild the active editor's diagnostic underlines every tick so they
@@ -11623,8 +11633,11 @@ impl App {
         }
     }
 
-    /// Begin an LSP rename: capture the cursor position and prompt for the new
-    /// name (seeded with the symbol under the cursor).
+    /// Begin an LSP rename: capture the cursor position and ask the server
+    /// whether this position can be renamed at all (`prepareRename`, T134
+    /// audit) before opening the prompt — [`Self::open_lsp_rename_prompt`]
+    /// actually shows it, once [`crate::lsp::LspEvent::RenamePrepared`]
+    /// answers.
     fn begin_lsp_rename(&mut self) {
         let Some(path) = self.active_path() else {
             self.status = t!("status.lsp_inactive").to_string();
@@ -11635,8 +11648,17 @@ impl App {
             return;
         }
         let (line, character) = self.cursor_lsp_position(&path);
-        self.rename_at = Some((path, line, character));
-        let seed = self.symbol_under_cursor().unwrap_or_default();
+        self.rename_at = Some((path.clone(), line, character));
+        self.lsp.request_prepare_rename(&path, line, character);
+    }
+
+    /// Open the rename prompt, seeded with `seed` — the server's own
+    /// `prepareRename` placeholder when it gave one, else the host's
+    /// word-under-cursor guess. Called from [`Self::poll_lsp`] once
+    /// [`crate::lsp::LspEvent::RenamePrepared`] confirms the position is
+    /// renameable.
+    fn open_lsp_rename_prompt(&mut self, seed: Option<String>) {
+        let seed = seed.unwrap_or_else(|| self.symbol_under_cursor().unwrap_or_default());
         self.prompt = Some(
             Prompt::new(PromptKind::LspRename, t!("prompt.lsp_rename").to_string())
                 .with_input(seed),

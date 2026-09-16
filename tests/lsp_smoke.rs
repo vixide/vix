@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use vix::app::App;
-use vix::lsp::{Lsp, LspEvent};
+use vix::lsp::{Lsp, LspEvent, RenamePrepared};
 use vix::settings::{LspServer, Settings};
 
 fn tool_available(program: &str) -> bool {
@@ -72,6 +72,13 @@ while True:
         send({'jsonrpc':'2.0','id':mid,'result':{'contents':{'kind':'plaintext','value':'mock hover'}}})
     elif method == 'textDocument/signatureHelp':
         send({'jsonrpc':'2.0','id':mid,'error':{'code':-32603,'message':'mock signature help failure'}})
+    elif method == 'textDocument/prepareRename':
+        pos = msg['params']['position']
+        if pos['character'] == 0:
+            send({'jsonrpc':'2.0','id':mid,'result':{
+                'range':{'start':pos,'end':pos},'placeholder':'mock_symbol'}})
+        else:
+            send({'jsonrpc':'2.0','id':mid,'result':None})
     elif method == 'shutdown':
         send({'jsonrpc':'2.0','id':mid,'result':None})
     elif method == 'exit':
@@ -234,6 +241,100 @@ fn mock_server_error_response_surfaces_as_a_request_failed_event() {
         Some("mock signature help failure"),
         "the server's JSON-RPC error message should reach the client as a RequestFailed event"
     );
+}
+
+/// T134 audit: `prepareRename` at a renameable position surfaces the
+/// server's own placeholder text, not just a bare "go ahead".
+#[test]
+fn mock_server_prepare_rename_surfaces_the_servers_placeholder() {
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("vix-lsp-mock-rename-ok-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER).unwrap();
+    let file = root.join("a.rs");
+    std::fs::write(&file, "abc\n").unwrap();
+
+    let cfg = LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
+    };
+    let mut lsp = Lsp::new(true, vec![cfg], &root);
+    lsp.did_open(&file, "abc\n");
+
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let mut outcome: Option<RenamePrepared> = None;
+    let mut asked = false;
+    while Instant::now() < deadline && outcome.is_none() {
+        for ev in lsp.poll() {
+            if let LspEvent::RenamePrepared(o) = ev {
+                outcome = Some(o);
+            }
+        }
+        if !asked && !lsp.diagnostics_for(&file).is_empty() {
+            // character 0 -- the mock replies with an explicit placeholder.
+            lsp.request_prepare_rename(&file, 0, 0);
+            asked = true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    lsp.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(
+        outcome,
+        Some(RenamePrepared::Placeholder("mock_symbol".to_string()))
+    );
+}
+
+/// T134 audit: `prepareRename` at a non-renameable position (a bare `null`
+/// result) surfaces as `NotRenameable`, not silently nothing.
+#[test]
+fn mock_server_prepare_rename_null_surfaces_as_not_renameable() {
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root =
+        std::env::temp_dir().join(format!("vix-lsp-mock-rename-null-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER).unwrap();
+    let file = root.join("a.rs");
+    std::fs::write(&file, "abc\n").unwrap();
+
+    let cfg = LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
+    };
+    let mut lsp = Lsp::new(true, vec![cfg], &root);
+    lsp.did_open(&file, "abc\n");
+
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let mut outcome: Option<RenamePrepared> = None;
+    let mut asked = false;
+    while Instant::now() < deadline && outcome.is_none() {
+        for ev in lsp.poll() {
+            if let LspEvent::RenamePrepared(o) = ev {
+                outcome = Some(o);
+            }
+        }
+        if !asked && !lsp.diagnostics_for(&file).is_empty() {
+            // character 1 -- the mock replies with a bare `null`.
+            lsp.request_prepare_rename(&file, 0, 1);
+            asked = true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    lsp.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(outcome, Some(RenamePrepared::NotRenameable));
 }
 
 /// T123: typing `(` inside a call should auto-trigger signature help (no

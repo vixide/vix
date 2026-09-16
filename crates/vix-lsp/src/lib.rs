@@ -51,6 +51,7 @@ enum Pending {
     CodeLens,
     PrepareCallHierarchy,
     IncomingCalls,
+    PrepareRename,
 }
 
 /// A message handed back from a server's stdout reader thread.
@@ -124,6 +125,26 @@ pub enum LspEvent {
     /// rename/code-action/format/… just appeared to do nothing) — the
     /// error's own `message` text, for the host to surface.
     RequestFailed(String),
+    /// A `textDocument/prepareRename` result (T134 audit): whether the
+    /// cursor's position can be renamed at all, and if so, what to seed the
+    /// rename prompt with.
+    RenamePrepared(RenamePrepared),
+}
+
+/// Outcome of `textDocument/prepareRename`, sent before the rename prompt
+/// opens so it can be seeded (or skipped) with server-validated information
+/// instead of only the host's own word-under-cursor guess.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RenamePrepared {
+    /// Renameable; the server supplied its own placeholder text.
+    Placeholder(String),
+    /// Renameable; the server left the placeholder to the client's own
+    /// default (or a server that doesn't implement `prepareRename` at all —
+    /// its absence is not treated as "not renameable", since most servers
+    /// support plain `rename` without ever implementing this refinement).
+    Default,
+    /// The server said this exact position cannot be renamed.
+    NotRenameable,
 }
 
 /// One running language server.
@@ -599,6 +620,20 @@ impl Lsp {
         });
     }
 
+    /// Ask whether `(line, character)` can be renamed at all, and for a
+    /// server-supplied placeholder to seed the rename prompt with (T134
+    /// audit) — send before [`Lsp::request_rename`], not instead of it; the
+    /// [`LspEvent::RenamePrepared`] response tells the host whether to open
+    /// the prompt, and with what.
+    pub fn request_prepare_rename(&mut self, path: &Path, line: u32, character: u32) {
+        self.send_request(
+            path,
+            "textDocument/prepareRename",
+            Pending::PrepareRename,
+            |uri| message::position_params(uri, line, character),
+        );
+    }
+
     /// Request code actions for the range `[start, end)`, with `diagnostics`
     /// (raw LSP objects overlapping the range) in the request context.
     pub fn request_code_action(
@@ -787,7 +822,16 @@ impl Lsp {
             // T123 audit: a JSON-RPC `error` object here used to be
             // silently dropped -- a failed rename/code-action/format/…
             // just appeared to do nothing. Surface the server's own
-            // message instead.
+            // message instead. `PrepareRename` is a deliberate exception
+            // (T134 audit): most servers implement plain `rename` without
+            // ever implementing this refinement, and an unrelated "method
+            // not found" error there shouldn't read to the user as "you
+            // can't rename this" -- fall back to the client's own default
+            // seed instead of surfacing a scary error for an optional step.
+            if matches!(kind, Pending::PrepareRename) {
+                events.push(LspEvent::RenamePrepared(RenamePrepared::Default));
+                return;
+            }
             if let Some(error) = msg.get("error") {
                 let text = error
                     .get("message")
@@ -798,6 +842,18 @@ impl Lsp {
             }
             return;
         };
+        // `null` here is meaningful for `PrepareRename` (T134 audit): the
+        // server is explicitly saying this position cannot be renamed, not
+        // "no reply" -- handle it before the blanket null-is-nothing below.
+        if matches!(kind, Pending::PrepareRename) {
+            let outcome = match message::parse_prepare_rename(result) {
+                Some(Some(text)) => RenamePrepared::Placeholder(text),
+                Some(None) => RenamePrepared::Default,
+                None => RenamePrepared::NotRenameable,
+            };
+            events.push(LspEvent::RenamePrepared(outcome));
+            return;
+        }
         if result.is_null() {
             return;
         }

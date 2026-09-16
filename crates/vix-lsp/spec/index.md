@@ -50,13 +50,13 @@ a keybinding, or an automatic trigger), not just present unused in
 
 | Feature | How to use | Notes |
 | ------- | ---------- | ----- |
-| Diagnostics | automatic | Colored underlines (red error, yellow warning, cyan info, blue hint), separate channel from spellcheck. Push-based (`textDocument/publishDiagnostics`) only — see § Known gaps. Aggregated across every opened file into a workspace Problems panel (`lsp.diagnostics`). |
+| Diagnostics | automatic | Colored underlines (red error, yellow warning, cyan info, blue hint), separate channel from spellcheck. Push-based (`textDocument/publishDiagnostics`) only — see § Known gaps. Aggregated across every opened file into a workspace Problems panel (`lsp.diagnostics`); a diagnostic's `relatedInformation` (T134) — secondary locations like "previous definition here" — appears as indented, separately navigable rows right after it. |
 | Go to Definition / Declaration / Type Definition / Implementation | Tools → Language Server | Falls back to the heuristic cross-workspace search when no server handles the file. |
 | Hover | Tools → Language Server → Hover | Tooltip with type/doc text for the symbol under the cursor; dismissed by the next keypress. |
 | Completion | `Ctrl+Space` | A list anchored at the cursor; `↑`/`↓` move, `Enter`/`Tab` accept, `Esc` cancels. `completionItem/resolve` fills in fuller detail/documentation lazily, once an item is selected. |
 | Signature Help | `lsp.signature_help`, or automatically right after typing `(`/`,` inside a call | Popup with the active parameter highlighted. |
 | Find References | `lsp.references` (Tools → Language Server) | Every reference across the workspace, not just the current file. |
-| Rename | `lsp.rename` | Prompts for the new name, applies the resulting `workspace/applyEdit` across every affected file. No `prepareRename` yet — see § Known gaps. |
+| Rename | `lsp.rename` | Sends `textDocument/prepareRename` first (T134): a server-validated "not renameable here" shows a status message instead of opening a prompt that would only fail, and a server-supplied placeholder seeds the prompt when one is given. A server with no `prepareRename` support falls back to the pre-T134 behavior (host's own word-under-cursor guess) rather than erroring. Applies the resulting `workspace/applyEdit` across every affected file. |
 | Code Actions | `lsp.code_action` | Quick-fixes and refactors offered at the cursor/selection; a command-only action executes via `workspace/executeCommand`. |
 | Code Lens | automatic, per visible line | Inline invokable annotations (e.g. "▶ Run test") a server attaches to a line. |
 | Formatting / Range Formatting | `lsp.format`, and format-on-save | Whole-document when there's no selection, `textDocument/rangeFormatting` when there is. Unrelated to `vix-format-tool` (that's data-format normalization — JSON/YAML/TOML — not source-code style). |
@@ -121,17 +121,16 @@ prior cut list):
   push (`publishDiagnostics`), so the Problems panel only ever shows
   diagnostics for files that have actually been opened/synced at least
   once, not a server's whole-project analysis.
-- **`prepareRename`**: not sent before a rename prompt, so the exact
-  renameable range/symbol is never validated or pre-filled.
-- **`relatedInformation`**: declared unsupported and not parsed — a
-  diagnostic with secondary locations (e.g. "conflicting definition here")
-  loses them entirely.
 - **No `$/progress`**: a long-running server operation (e.g. an initial
   index build) gives no percentage/message feedback beyond the busy-poll
   rate speeding up.
 - **Single-root only**: `initialize` sends one `rootUri`, no
   `workspaceFolders` array; Vix's own editor-level multi-root concept
   (`App::workspace_folders`) isn't propagated to LSP servers at all.
+
+**Closed since the audit above**: `prepareRename` (§ Features, "Rename")
+and `relatedInformation` (§ Features, "Diagnostics") — both were T123e,
+done as part of the T134 security/depth re-audit rather than deferred.
 
 See `tasks.md`'s T123a–T123f for the implementation status of each open
 item above.

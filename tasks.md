@@ -1080,13 +1080,28 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   gives no percentage/message feedback beyond the busy-poll rate speeding
   up) since both are "give the user visibility into server-side work not
   tied to one open document." Not started.
-- [ ] **T123e — `prepareRename` and `relatedInformation`.** Two small,
-  independent protocol-completeness gaps bundled for one follow-up slice:
-  `prepareRename` is never sent before a rename prompt, so the exact
-  renameable range/symbol is never validated or pre-filled; `relatedInformation`
-  is declared unsupported and not parsed, so a diagnostic with secondary
-  locations (e.g. "conflicting definition here") loses them entirely. Not
-  started.
+- [x] **T123e — `prepareRename` and `relatedInformation`.** Done
+  2026-09-16, picked up as part of T134's security/depth re-audit rather
+  than deferred further. `prepareRename`: `begin_lsp_rename` now sends
+  `textDocument/prepareRename` before opening the prompt at all
+  (`App::open_lsp_rename_prompt`, gated on a new `LspEvent::RenamePrepared`/
+  `RenamePrepared` 3-way outcome: `Placeholder(text)`/`Default`/
+  `NotRenameable`); a server that doesn't implement it at all (most
+  servers implement plain `rename` without ever adding this refinement)
+  falls back to the pre-existing word-under-cursor guess rather than
+  surfacing a scary error for an optional step — verified via a mock
+  server returning both a real placeholder and a bare `null`
+  (`tests/lsp_smoke.rs`, 2 new tests). `relatedInformation`: `Diagnostic`
+  gained a `related: Vec<(Location, String)>` field
+  (`vix_lsp_core::message::parse_related_information`, unit-tested), and
+  `App::open_diagnostics_panel` shows each related location as its own
+  indented, separately navigable row right after the diagnostic it
+  belongs to — grouped through the panel's own sort so a diagnostic's
+  notes never scatter away from it. Both capabilities corrected in the
+  `initialize` request (`"rename": {"prepareSupport": true}`,
+  `"publishDiagnostics": {"relatedInformation": true}`, both previously
+  wrong). `crates/vix-lsp/spec/index.md` updated (Features table +
+  "Known gaps" § now shows both closed).
 - [ ] **T123f — Multi-root workspace propagation.** `initialize` sends one
   `rootUri`, no `workspaceFolders` array; Vix's own editor-level multi-root
   concept (`App::workspace_folders`) isn't propagated to LSP servers at
