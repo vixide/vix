@@ -562,6 +562,19 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Also fixed in passing: `App::new` scanned the custom-themes directory
   twice; now once.
 
+- **LSP depth audit against LSP 3.17** (improvement plan T123): a full
+  method-by-method diff found `vix-lsp`/`vix-lsp-core` already implement
+  ~28 request/notification methods end-to-end (the spec's own Features
+  table had gone stale and listed only 4); document/range formatting, one
+  of the task's own suspected gaps, turned out to already be fully wired.
+  `crates/vix-lsp/spec/index.md` rewritten and fact-checked against real
+  action-id strings, with a new "Known gaps against LSP 3.17" section
+  covering eight real, larger gaps filed as follow-up tasks (T123a–T123f)
+  rather than implemented now: semantic tokens, one server per
+  `language_id` instead of per-buffer, no crash recovery for an
+  already-open buffer, pull-based `workspace/diagnostic`, `$/progress`,
+  `prepareRename`, `relatedInformation` parsing, and multi-root workspace
+  propagation.
 - `vix-script` is now a **plain, non-optional** dependency of the root
   `vix` package — T101's `scripting` Cargo feature (`dep:vix-script`,
   default-on) is removed now that T103 has wired it into the App shell's
@@ -574,6 +587,21 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Three real LSP bugs found by the T123 audit** (above): the
+  `initialize` request's advertised `capabilities` didn't match reality —
+  it claimed `"didSave": false` while `textDocument/didSave` is actually
+  sent, and declared no support for most already-implemented features
+  (rename, code actions, document/workspace symbols, signature help,
+  references, code lens, inlay hints, folding/selection ranges, document
+  highlight, linked editing, call hierarchy, `workspace/applyEdit`,
+  `workspace/executeCommand`) — a spec-correct server could reasonably
+  withhold behavior for capabilities a client never declared. A JSON-RPC
+  `error` response was silently dropped instead of being surfaced — a
+  failed rename/code-action/format/… just appeared to do nothing, with no
+  feedback; now shown on the status line as `LspEvent::RequestFailed`
+  (`status.lsp_request_failed`). Signature help was manual-invoke-only; it
+  now also auto-triggers right after typing `(`/`,` inside a call, matching
+  every other editor's convention.
 - **`docs/dictionaries/` and `crates/vix-spellcheck/spec/dictionaries/`
   were silently uncommitted.** `.gitignore`'s `dictionaries/` pattern
   (meant only for the ~287 MB Hunspell cache fetched separately at the

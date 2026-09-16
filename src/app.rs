@@ -5841,6 +5841,16 @@ impl App {
         }
     }
 
+    /// The shared low-level key handler every keymap's plain-typing/navigation
+    /// falls through to. Already a wide dispatch of small, largely
+    /// independent early-return guards before the actual key reaches the
+    /// editor widget; splitting it would mean threading several of `self`'s
+    /// fields through new helper signatures for no real clarity gain. One
+    /// line over budget as of the T123 signature-help auto-trigger.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "wide, largely-independent early-return guards"
+    )]
     fn editor_key(&mut self, key: KeyEvent) {
         // Image tabs are view-only.
         if self.editor.active_tab().is_some_and(Tab::is_image) {
@@ -5956,6 +5966,23 @@ impl App {
                 t.dirty = true;
                 t.preview = false;
             }
+        }
+        self.maybe_auto_signature_help(key.code);
+    }
+
+    /// Auto-trigger signature help right after typing `(` or `,` inside a
+    /// call -- LSP servers document these as the conventional trigger
+    /// characters. Silent when no server handles the file (unlike the
+    /// explicit `lsp.signature_help` action, this is best-effort, not a
+    /// deliberate request) -- see `crates/vix-lsp/spec/index.md`'s T123
+    /// audit, which found signature help otherwise manual-invoke-only.
+    fn maybe_auto_signature_help(&mut self, code: KeyCode) {
+        if let KeyCode::Char('(' | ',') = code
+            && let Some(path) = self.active_path()
+            && self.lsp.handles(&path)
+        {
+            let (line, character) = self.cursor_lsp_position(&path);
+            self.lsp.request_signature_help(&path, line, character);
         }
     }
 
@@ -6494,6 +6521,9 @@ impl App {
                     if let Some(t) = self.editor.active_tab_mut() {
                         t.editor.set_fold_ranges(ranges);
                     }
+                }
+                crate::lsp::LspEvent::RequestFailed(message) => {
+                    self.status = t!("status.lsp_request_failed", message = message).to_string();
                 }
             }
         }

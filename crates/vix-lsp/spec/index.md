@@ -42,12 +42,99 @@ handles, and shut down (`shutdown` + `exit`) when Vix exits.
 
 ## Features
 
-| Feature         | How to use                          | Notes                                                        |
-| --------------- | ----------------------------------- | ------------------------------------------------------------ |
-| Diagnostics     | automatic                           | Colored underlines (red error, yellow warning, cyan info, blue hint) on a channel separate from spellcheck. |
-| Go to Definition | `F12` / Tools → Language Server     | Uses `textDocument/definition`; falls back to the heuristic cross-workspace search when no server handles the file. |
-| Hover           | Tools → Language Server → Hover     | Tooltip with type/doc text for the symbol under the cursor; dismissed by the next keypress. |
-| Completion      | `Ctrl+Space`                        | A list anchored at the cursor; `↑`/`↓` move, `Enter`/`Tab` accept, `Esc` cancels. The accepted text extends the already-typed prefix. |
+This table was, until the T123 audit (below), badly stale — it listed 4
+features when ~28 request/notification methods were already wired
+end-to-end. Every method listed here is reachable from the UI (an action,
+a keybinding, or an automatic trigger), not just present unused in
+`vix-lsp-core`.
+
+| Feature | How to use | Notes |
+| ------- | ---------- | ----- |
+| Diagnostics | automatic | Colored underlines (red error, yellow warning, cyan info, blue hint), separate channel from spellcheck. Push-based (`textDocument/publishDiagnostics`) only — see § Known gaps. Aggregated across every opened file into a workspace Problems panel (`lsp.diagnostics`). |
+| Go to Definition / Declaration / Type Definition / Implementation | Tools → Language Server | Falls back to the heuristic cross-workspace search when no server handles the file. |
+| Hover | Tools → Language Server → Hover | Tooltip with type/doc text for the symbol under the cursor; dismissed by the next keypress. |
+| Completion | `Ctrl+Space` | A list anchored at the cursor; `↑`/`↓` move, `Enter`/`Tab` accept, `Esc` cancels. `completionItem/resolve` fills in fuller detail/documentation lazily, once an item is selected. |
+| Signature Help | `lsp.signature_help`, or automatically right after typing `(`/`,` inside a call | Popup with the active parameter highlighted. |
+| Find References | `lsp.references` (Tools → Language Server) | Every reference across the workspace, not just the current file. |
+| Rename | `lsp.rename` | Prompts for the new name, applies the resulting `workspace/applyEdit` across every affected file. No `prepareRename` yet — see § Known gaps. |
+| Code Actions | `lsp.code_action` | Quick-fixes and refactors offered at the cursor/selection; a command-only action executes via `workspace/executeCommand`. |
+| Code Lens | automatic, per visible line | Inline invokable annotations (e.g. "▶ Run test") a server attaches to a line. |
+| Formatting / Range Formatting | `lsp.format`, and format-on-save | Whole-document when there's no selection, `textDocument/rangeFormatting` when there is. Unrelated to `vix-format-tool` (that's data-format normalization — JSON/YAML/TOML — not source-code style). |
+| Document Symbols / Workspace Symbols | `lsp.document_symbols` / `lsp.workspace_symbols` | Hierarchical (nested `children`) document symbols. Distinct from `vix-outline-panel`'s own Tree-sitter-based outline — the two are independent sources, not merged. |
+| Document Highlight | automatic, cursor-follow | Highlights every occurrence of the symbol under the cursor in the active file. |
+| Inlay Hints | automatic, toggled by `show_inlay_hints` | Inline type/parameter-name annotations. |
+| Folding Ranges | automatic, on open | Feeds the editor's own code-folding. |
+| Selection Range | expand/shrink selection | Walks the server's `parent` chain of enclosing ranges around the cursor. |
+| Linked Editing Range | automatic | Ranges (e.g. an open/close tag pair) that should be edited together. |
+| Call Hierarchy | `lsp.call_hierarchy` | `prepareCallHierarchy` + `callHierarchy/incomingCalls` (outgoing calls not wired). |
+
+## Known gaps against LSP 3.17 (T123 audit, 2026-09-16)
+
+A full method-by-method diff against LSP 3.17 (not just the features this
+task's own suspect list named) found the real feature set is much larger
+than the stale table above previously showed, and turned up gaps in three
+different shapes — some already fixed as part of this audit, some real and
+still open, and some the task suspected that turned out not to be gaps at
+all:
+
+**Not a gap** (task suspected, audit found already implemented):
+document formatting / range formatting (above) — fully wired, unrelated to
+`vix-format-tool`.
+
+**Fixed as part of this audit** (small, safe, no new protocol surface):
+- The `initialize` request's advertised `capabilities` didn't match reality
+  — it claimed `"didSave": false` while `textDocument/didSave` is actually
+  sent, and declared no support at all for most already-implemented
+  features (rename, code actions, document/workspace symbols, signature
+  help, references, code lens, inlay hints, folding/selection ranges,
+  document highlight, linked editing, call hierarchy, `workspace/applyEdit`,
+  `workspace/executeCommand`) — a spec-correct server could reasonably
+  withhold behavior for capabilities a client never declared. Every one of
+  those is now declared, matching what's actually requested/handled.
+- A JSON-RPC `error` response (as opposed to a `result`) was silently
+  dropped — a failed rename/code-action/format/… just appeared to do
+  nothing, with no feedback. Now surfaced to the status line
+  (`LspEvent::RequestFailed`, `status.lsp_request_failed`).
+- Signature help existed but was manual-invoke-only; it now also
+  auto-triggers right after typing `(`/`,` inside a call, matching every
+  other editor's convention for the feature.
+
+**Still open** (real gaps, each its own follow-up task below, none in any
+prior cut list):
+- **Semantic tokens** (`textDocument/semanticTokens/*`): zero
+  implementation. Genuinely additive to Tree-sitter's purely syntactic
+  highlighting — things requiring type/binding resolution (mutable vs.
+  immutable binding, trait-default vs. inherent method, unused
+  variable/parameter) that Tree-sitter structurally cannot know.
+- **One server per `language_id`, never per-buffer**: `Lsp`'s server
+  registry is `HashMap<String, Server>` keyed by `language_id`, and
+  `config_for` takes the *first* matching config by extension — there is no
+  path for two servers to both run against the same file (a common
+  real-world setup: a type-checker LSP + a separate linter LSP on the same
+  buffer).
+- **No server crash recovery for an already-open buffer**: the reader
+  thread detects a dead server and reaps the process, but nothing respawns
+  it — every LSP feature for files that were already open goes silently
+  dead until the user closes and reopens them (`ensure_server` only fires
+  again on the next `did_open`).
+- **Pull-based `workspace/diagnostic`**: not used — Vix relies entirely on
+  push (`publishDiagnostics`), so the Problems panel only ever shows
+  diagnostics for files that have actually been opened/synced at least
+  once, not a server's whole-project analysis.
+- **`prepareRename`**: not sent before a rename prompt, so the exact
+  renameable range/symbol is never validated or pre-filled.
+- **`relatedInformation`**: declared unsupported and not parsed — a
+  diagnostic with secondary locations (e.g. "conflicting definition here")
+  loses them entirely.
+- **No `$/progress`**: a long-running server operation (e.g. an initial
+  index build) gives no percentage/message feedback beyond the busy-poll
+  rate speeding up.
+- **Single-root only**: `initialize` sends one `rootUri`, no
+  `workspaceFolders` array; Vix's own editor-level multi-root concept
+  (`App::workspace_folders`) isn't propagated to LSP servers at all.
+
+See `tasks.md`'s T123a–T123f for the implementation status of each open
+item above.
 
 ## Position encoding
 

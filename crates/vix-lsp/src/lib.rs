@@ -119,6 +119,11 @@ pub enum LspEvent {
     LinkedRanges(Vec<vix_lsp_core::Range>),
     /// A code-lens response: invokable lenses `(line, title, command, arguments)`.
     CodeLenses(Vec<vix_lsp_core::message::CodeLens>),
+    /// The server replied to a request with a JSON-RPC `error` object instead
+    /// of a `result` (T123 audit: previously silently dropped, so a failed
+    /// rename/code-action/format/… just appeared to do nothing) — the
+    /// error's own `message` text, for the host to surface.
+    RequestFailed(String),
 }
 
 /// One running language server.
@@ -779,6 +784,18 @@ impl Lsp {
             return;
         };
         let Some(result) = msg.get("result") else {
+            // T123 audit: a JSON-RPC `error` object here used to be
+            // silently dropped -- a failed rename/code-action/format/…
+            // just appeared to do nothing. Surface the server's own
+            // message instead.
+            if let Some(error) = msg.get("error") {
+                let text = error
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .unwrap_or("the server returned an error")
+                    .to_string();
+                events.push(LspEvent::RequestFailed(text));
+            }
             return;
         };
         if result.is_null() {
