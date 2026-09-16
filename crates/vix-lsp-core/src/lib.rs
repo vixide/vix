@@ -73,6 +73,12 @@ pub struct Diagnostic {
     pub message: String,
     /// Optional source (e.g. `"rustc"`, `"clippy"`).
     pub source: Option<String>,
+    /// Secondary locations the server attached (e.g. "previous definition
+    /// here" for a duplicate-symbol error) — T134 audit finding: declared
+    /// unsupported and never parsed before this, so these were silently
+    /// dropped. `(location, message)` pairs, in the order the server sent
+    /// them.
+    pub related: Vec<(Location, String)>,
 }
 
 /// One completion candidate.

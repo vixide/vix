@@ -8,6 +8,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **LSP `prepareRename` and `relatedInformation`** (improvement plan
+  T123e): renaming now confirms with the server first — a position it
+  says can't be renamed shows a status message instead of opening a
+  prompt that would only fail, and a server-supplied placeholder seeds
+  the prompt when one is given (falls back to the previous word-under-
+  cursor guess for servers with no `prepareRename` support). A
+  diagnostic's secondary locations (`relatedInformation`, e.g. "previous
+  definition here") now show as their own navigable rows in the Problems
+  panel, right after the diagnostic they belong to, instead of being
+  silently dropped.
 - **Three new AI features** (improvement plan T125), all explicit-invoke
   only: **Edit Selection with Instruction…** (AI menu) prompts for
   free-text and applies it to the selection, always as a reviewable diff

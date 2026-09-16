@@ -795,7 +795,11 @@ impl App {
     /// Enter on a row jumps to it. Reuses the static-results search overlay.
     pub(super) fn open_diagnostics_panel(&mut self) {
         use crate::lsp_core::Severity;
-        let mut hits: Vec<Hit> = Vec::new();
+        // Each diagnostic's own `Hit` paired with its (possibly empty)
+        // `relatedInformation` rows (T134 audit: parsed but never shown
+        // before this) -- kept grouped so sorting reorders diagnostics
+        // without scattering a diagnostic's notes away from it.
+        let mut groups: Vec<(Hit, Vec<Hit>)> = Vec::new();
         for (path, diags) in self.lsp.all_diagnostics() {
             let rel = path
                 .strip_prefix(&self.root)
@@ -818,24 +822,52 @@ impl App {
                     .chars()
                     .take(100)
                     .collect();
-                hits.push(Hit {
+                let parent = Hit {
                     path: path.clone(),
                     rel: rel.clone(),
                     line,
                     col: d.range.start.character as usize + 1,
                     display: format!("{rel}:{line}: [{sev}] {msg}"),
                     text: msg,
-                });
+                };
+                let related = d
+                    .related
+                    .iter()
+                    .map(|(related_loc, related_msg)| {
+                        let related_path = crate::lsp::uri_to_path(&related_loc.uri);
+                        let related_rel = related_path
+                            .strip_prefix(&self.root)
+                            .unwrap_or(&related_path)
+                            .to_string_lossy()
+                            .into_owned();
+                        let related_line = related_loc.range.start.line as usize + 1;
+                        let text: String = related_msg.chars().take(100).collect();
+                        Hit {
+                            path: related_path,
+                            rel: related_rel.clone(),
+                            line: related_line,
+                            col: related_loc.range.start.character as usize + 1,
+                            display: format!("    ↳ {related_rel}:{related_line}: {text}"),
+                            text,
+                        }
+                    })
+                    .collect();
+                groups.push((parent, related));
             }
         }
-        if hits.is_empty() {
+        if groups.is_empty() {
             self.status = t!("status.no_diagnostics").to_string();
             return;
         }
-        hits.sort_by(|a, b| a.display.cmp(&b.display));
+        groups.sort_by(|a, b| a.0.display.cmp(&b.0.display));
+        let count = groups.len();
+        let hits: Vec<Hit> = groups
+            .into_iter()
+            .flat_map(|(parent, related)| std::iter::once(parent).chain(related))
+            .collect();
         let mut ps = WorkspaceSearch::new(false);
         ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
-        ps.status = t!("status.diagnostics_n", n = hits.len()).to_string();
+        ps.status = t!("status.diagnostics_n", n = count).to_string();
         ps.hits = hits;
         self.workspace_search = Some(ps);
     }

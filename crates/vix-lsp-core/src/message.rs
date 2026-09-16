@@ -66,13 +66,13 @@ pub fn initialize_params(process_id: Option<u32>, root_uri: Option<&str>) -> Val
                 "codeLens": {},
                 "formatting": {},
                 "rangeFormatting": {},
-                "rename": {},
+                "rename": { "prepareSupport": true },
                 "foldingRange": {},
                 "selectionRange": {},
                 "linkedEditingRange": {},
                 "callHierarchy": {},
                 "inlayHint": {},
-                "publishDiagnostics": { "relatedInformation": false }
+                "publishDiagnostics": { "relatedInformation": true }
             },
             "workspace": {
                 "applyEdit": true,
@@ -276,7 +276,54 @@ fn parse_one_diagnostic(v: &Value) -> Option<Diagnostic> {
             .unwrap_or("")
             .to_string(),
         source: v.get("source").and_then(Value::as_str).map(str::to_string),
+        related: parse_related_information(v),
     })
+}
+
+/// A diagnostic's `relatedInformation`: secondary `(location, message)`
+/// pairs (e.g. "previous definition here" for a duplicate-symbol error).
+/// Empty when the field is absent, not an array, or every entry fails to
+/// parse.
+fn parse_related_information(diagnostic: &Value) -> Vec<(Location, String)> {
+    diagnostic
+        .get("relatedInformation")
+        .and_then(Value::as_array)
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(|entry| {
+                    let location = parse_location(entry.get("location")?)?;
+                    let message = entry.get("message").and_then(Value::as_str)?.to_string();
+                    Some((location, message))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Parse a `textDocument/prepareRename` result into a placeholder decision.
+///
+/// - `None` — the server says this position cannot be renamed (a bare
+///   `null` response, or `{"defaultBehavior": false}`).
+/// - `Some(None)` — renameable, but the server left the placeholder text to
+///   the client's own default (a bare `Range`, or
+///   `{"defaultBehavior": true}`).
+/// - `Some(Some(text))` — renameable, with the server's own placeholder
+///   text (a `{"range": ..., "placeholder": "..."}` response).
+#[must_use]
+pub fn parse_prepare_rename(result: &Value) -> Option<Option<String>> {
+    if result.is_null() {
+        return None;
+    }
+    if let Some(default_behavior) = result.get("defaultBehavior").and_then(Value::as_bool) {
+        return default_behavior.then_some(None);
+    }
+    if let Some(placeholder) = result.get("placeholder").and_then(Value::as_str) {
+        return Some(Some(placeholder.to_string()));
+    }
+    // A bare `Range` (just `start`/`end`, no placeholder) -- still
+    // renameable, no explicit placeholder text.
+    Some(None)
 }
 
 /// Extract the plain text of a `textDocument/hover` result, or `None` when empty.
@@ -784,6 +831,75 @@ mod tests {
         assert_eq!(diags[0].message, "boom");
         assert_eq!(diags[0].range.start.line, 1);
         assert_eq!(diags[1].severity, Severity::Warning);
+        assert!(diags[0].related.is_empty());
+        assert!(diags[1].related.is_empty());
+    }
+
+    #[test]
+    fn diagnostics_carry_related_information() {
+        let params = json!({
+            "uri": "file:///x.rs",
+            "diagnostics": [{
+                "range": {"start": {"line": 1, "character": 2}, "end": {"line": 1, "character": 5}},
+                "severity": 1, "message": "duplicate definition",
+                "relatedInformation": [
+                    { "location": { "uri": "file:///y.rs",
+                        "range": {"start": {"line": 4, "character": 0}, "end": {"line": 4, "character": 3}} },
+                      "message": "previous definition here" },
+                    // A malformed entry (no `message`) is skipped, not fatal to the rest.
+                    { "location": { "uri": "file:///z.rs",
+                        "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 1}} } }
+                ]
+            }]
+        });
+        let (_, diags) = parse_diagnostics(&params).unwrap();
+        assert_eq!(diags[0].related.len(), 1);
+        assert_eq!(diags[0].related[0].0.uri, "file:///y.rs");
+        assert_eq!(diags[0].related[0].0.range.start.line, 4);
+        assert_eq!(diags[0].related[0].1, "previous definition here");
+    }
+
+    #[test]
+    fn prepare_rename_distinguishes_the_three_outcomes() {
+        assert_eq!(
+            parse_prepare_rename(&Value::Null),
+            None,
+            "null: not renameable"
+        );
+        assert_eq!(
+            parse_prepare_rename(&json!({"defaultBehavior": false})),
+            None
+        );
+        assert_eq!(
+            parse_prepare_rename(&json!({"defaultBehavior": true})),
+            Some(None),
+            "renameable, client picks its own placeholder"
+        );
+        assert_eq!(
+            parse_prepare_rename(
+                &json!({"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 3}})
+            ),
+            Some(None),
+            "a bare Range: still renameable, no explicit placeholder"
+        );
+        assert_eq!(
+            parse_prepare_rename(&json!({
+                "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 3}},
+                "placeholder": "foo"
+            })),
+            Some(Some("foo".to_string()))
+        );
+    }
+
+    #[test]
+    fn capabilities_declare_prepare_rename_and_related_information() {
+        let params = initialize_params(None, None);
+        let text_document = &params["capabilities"]["textDocument"];
+        assert_eq!(text_document["rename"]["prepareSupport"], true);
+        assert_eq!(
+            text_document["publishDiagnostics"]["relatedInformation"],
+            true
+        );
     }
 
     #[test]
