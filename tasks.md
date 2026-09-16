@@ -1139,11 +1139,39 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   new `App`-level test driving the real `ai.summarize` action end-to-end
   through `spawn_ai_http` against a mock server, landing in a new editor
   tab. `scripts/check` green throughout.
-- [ ] **T125 — AI features.** On T124: "Edit selection with instruction"
-  (AI menu; result as a reviewable diff via `vix-ai-diff`), commit-message
-  generation in the Git panel (fills the message box, never commits), and
-  "Generate doc comment" for the symbol under the cursor. All
-  explicit-invoke only.
+- [x] **T125 — AI features.** Done 2026-09-16. All three, explicit-invoke
+  only, on either AI path (CLI or T124's HTTP providers — `spawn_ai_cmd`
+  already dispatches on `ai_provider`, so nothing here had to care which):
+  (1) **Edit Selection with Instruction…** (AI menu) prompts for free-text
+  (a new `PromptKind::AiInstruction`, seeded by nothing — this one always
+  starts empty) and applies it to the selection; requires an actual
+  selection (never silently widens to the whole buffer, unlike Annotate/
+  Improve — a user-authored instruction is unpredictable enough without
+  also guessing the target) and *always* opens as a reviewable diff via
+  `vix-ai-diff`, regardless of `ai_diff_review` — free-text instructions
+  carry more risk than the fixed prompts that setting was designed to let
+  power users skip past. (2) **Generate Doc Comment** (AI menu): sends the
+  cursor's line plus a bounded 40-line window of following context, and
+  proposes the reply as a *pure insertion* right before that line. Found
+  and fixed a real bug here: `poll_ai_replace`'s shared trim
+  (`trim_end_matches('\n')`, correct for every other AI dest, where a
+  stray trailing blank line looks wrong) was stripping the newline that
+  keeps an inserted comment on its own line, gluing it directly onto the
+  code that follows (caught by the test, not just eyeballed) — fixed with
+  a new `AiDest::InsertBeforeLine` variant that restores exactly one
+  trailing newline before applying, instead of reusing `Replace`/`Diff`'s
+  raw-text semantics. (3) **Generate Commit Message** (Git panel, `g` key
+  — no menu item, since committing itself has none either): runs
+  `git diff --staged` (new `vix_git::staged_diff`) through the AI and
+  opens the commit prompt pre-filled with the reply via a new
+  `AiDest::GitCommitMessage` — fills the message box, never commits on its
+  own; the user still reviews and presses Enter. New tests at both layers
+  that matter: `tests/integration/ai.rs` (new module — the *first* real
+  test coverage `spawn_ai_cmd`/`AiReplace`/`poll_ai_replace` have ever had,
+  Annotate/Improve/Summarize/Explain/Define included, all driven through a
+  deterministic `printf`-based `ai_command` rather than a real assistant)
+  and a new throwaway-repo test in `tests/integration/git.rs` for the
+  commit-message flow. `scripts/check` green throughout.
 
 ### Security & hardening
 
