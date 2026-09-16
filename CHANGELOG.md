@@ -669,6 +669,19 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
+- **A trusted project script could silently import and run a second,
+  unreviewed script** (improvement plan T134, a post-scripting/AI
+  re-audit): `Engine::new()`'s default Rhai module resolver made
+  `import "some_file";` actually load and execute a real `.rhai` file
+  resolved against the process's current working directory — undermining
+  the T132 workspace-trust prompt, which shows the user one script file
+  and asks them to trust *it*. Verified empirically (a throwaway script
+  really did load and print a value from an unrelated temp file) before
+  fixing it with `engine.set_module_resolver(DummyModuleResolver::new())`;
+  `import` now fails unconditionally (`crates/vix-script/tests/sandbox.rs`).
+  The rest of the audit (AI provider keys go through the keyring, never a
+  plaintext config value; every T125 feature is genuinely explicit-invoke
+  only) found nothing else to fix.
 - **`rustls` updated 0.23.43 → 0.23.45**, fixing RUSTSEC-2026-0285 (a
   TLS 1.3 handshake message could be accepted across an encryption-level
   boundary it shouldn't cross; the handshake transcript stays

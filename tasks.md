@@ -1288,16 +1288,58 @@ presupposing a specific vulnerability exists.
   primitives. New `vix-fileops/spec/index.md` "Atomic and private
   writes" section (this crate's writers had no spec coverage at all
   before this).
-- [ ] **T134 — Post-scripting/AI security re-audit.** Once T105
-  (scripting samples + docs) and T124/T125 (AI provider abstraction +
-  features) ship, run a focused audit pass — same rigor as 2026-07-12,
-  scoped to the new surface only: confirm Rhai's sandboxing actually
-  holds under real usage (not just the spec's design intent), that AI
-  provider keys go through the keyring like the DB credential waterfall
-  (never a plaintext config value), and that T125's "redact file paths
-  on request" / explicit-invoke-only promises are actually implemented,
-  not just planned. File real findings as their own follow-up tasks
-  (T134a, T134b, …), same pattern as T123.
+- [x] **T134 — Post-scripting/AI security re-audit.** Done 2026-09-16.
+  All three checklist items investigated empirically, not by reading the
+  specs' own claims and trusting them:
+  - **Rhai sandboxing under real usage**: found and fixed a real gap.
+    `crates/vix-script/spec/index.md`'s "closed by default" claim ("no
+    file, network, or process API... nothing unregistered exists to
+    call") is true for *registered functions*, but `import` is a
+    language-level statement, not a registered function — and
+    `Engine::new()`'s default `FileModuleResolver` turned out to be live.
+    Proved it empirically before touching any code: wrote a throwaway
+    script that imported a real `.rhai` file from a temp directory via a
+    CWD-relative path and printed a value it defined — it worked,
+    printing the value, meaning a reviewed-and-trusted project script
+    (T132's whole workspace-trust premise: the user reviews *the one
+    file* they're trusting) could silently pull in and execute a second
+    file the user never saw at all. Fixed with
+    `engine.set_module_resolver(DummyModuleResolver::new())` — `import`
+    now fails unconditionally. `eval` was also probed and found to
+    execute (a working Rhai feature, not a bug — it stays inside the same
+    `Engine`/sandbox, reaching nothing a direct call couldn't already
+    reach), documented rather than disabled. New
+    `crates/vix-script/tests/sandbox.rs` (3 tests) is a permanent
+    regression guard for both findings; all 15 pre-existing `vix-script`
+    tests still pass unchanged.
+  - **AI provider keys via the keyring waterfall**: confirmed already
+    correct, no fix needed. `Settings` has exactly one AI-key-adjacent
+    field, `ai_api_key_command` — a *command* (mirroring `vix-db`'s
+    `password_command`), never a raw key. `vix_ai_core::secret::resolve`
+    tries that command's stdout, then the OS keyring; there is no code
+    path anywhere that writes a plaintext key into `config.toml`.
+  - **T125's promises**: explicit-invoke-only confirmed for all three
+    T125 features (no auto-trigger anywhere in `ai_begin_edit_with_
+    instruction`/`ai_generate_doc_comment`/`git_generate_commit_message`).
+    "Redact file paths on request" (plan.md's original wording — dropped
+    somewhere before it reached `tasks.md`'s own trimmed T125 entry, a
+    real drift between the two files, though not one that changed what
+    got built) turned out to be moot for the surface actually shipped:
+    audited every AI request-building path (all 5 AI-menu actions, the
+    chat panel, DB's NL→SQL, T125's 3 new features) and found none send a
+    real filesystem path at all — buffer content and selections only,
+    except the commit-message generator's `git diff --staged` input,
+    which necessarily carries *workspace-relative* paths (`src/app.rs`,
+    never `/Users/name/...`) because a commit message is meaningless
+    without knowing which files changed. Redacting just those paths while
+    still sending the full diff *content* of those same files would be
+    security theater, not real protection — the honest conclusion is
+    "not applicable to what shipped," not silently dropped or
+    token-implemented.
+  - **Zero follow-up tasks filed** (no T134a/T134b/…): every item
+    resolved to fixed, already-correct, or not-applicable-with-reasoning
+    — unlike T123's audit, this one found no gap large enough to defer.
+  `scripts/check` green throughout.
 
 ### Code quality & maintainability
 

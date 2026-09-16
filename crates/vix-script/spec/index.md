@@ -33,7 +33,13 @@ reality and design turn out to disagree, same as anywhere else.
 - **Closed by default** — Rhai's standard library has no file, network, or
   process API. A script's *only* capabilities are the Rust functions this
   crate registers (§ Execution model, "Sandboxing"); there is nothing to
-  explicitly disable, because nothing unregistered exists to call.
+  explicitly disable, because nothing unregistered exists to call. One real
+  exception, found by a T134 audit and now fixed rather than just
+  documented as a gap: `import` is a *language-level* statement, not a
+  registered function, and `Engine::new()`'s default module resolver could
+  load and run a second `.rhai` file from disk that the user never
+  reviewed — closed by installing a `DummyModuleResolver` (§ Execution
+  model, "Sandboxing").
 - **Familiar syntax** — C-like expressions, `fn`, `let`; closer to Rust than
   Lua, without asking a scripter to learn a new language family.
 
@@ -100,6 +106,21 @@ those things. If a later version wants to grant one of those deliberately
 (e.g. an opt-in `read_file` for a project script that ships its own data),
 that is a new, separately-specified capability, not a relaxation of this
 default.
+
+`Runtime::new` also installs a `rhai::module_resolvers::DummyModuleResolver`,
+so `import` always fails — verified empirically (a T134 audit, 2026-09-16):
+before this, `Engine::new()`'s default `FileModuleResolver` let `import
+"some_file";` load and execute a real `.rhai` file resolved against the
+process's *current working directory*, printing a value that file defined.
+That mattered specifically because of the workspace-trust model (T132): the
+trust prompt shows the user one script file and asks them to trust *it* —
+`import` would have let that one reviewed file silently pull in and run a
+second file the user never saw at all. `eval` is deliberately left enabled:
+it only runs more Rhai code inside the same `Engine`, so it reaches nothing
+`import` or a direct call couldn't already — see
+`crates/vix-script/tests/sandbox.rs` for the regression tests proving both
+(`import` refused unconditionally; `eval` still can't reach an unregistered
+function).
 
 **Resource limits**: the `Engine` sets Rhai's built-in caps before running
 any script — a maximum operation count per invocation (so an infinite loop
