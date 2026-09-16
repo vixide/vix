@@ -7,6 +7,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use rhai::module_resolvers::DummyModuleResolver;
 use rhai::{AST, Dynamic, Engine, Scope};
 
 /// One command a script registered via `register_command` at load time.
@@ -302,6 +303,16 @@ impl Runtime {
         engine.set_max_string_size(1_000_000);
         engine.set_max_array_size(100_000);
         engine.set_max_map_size(100_000);
+        // T134 audit finding: `Engine::new()` installs a working
+        // `FileModuleResolver` by default, so `import "foo";` actually
+        // loads and runs a real `.rhai` file resolved against the
+        // process's current working directory -- undermining the
+        // workspace-trust boundary (T132), which only asks the user to
+        // review the *one* script file being trusted, not every file it
+        // might reach via `import`. `DummyModuleResolver` makes every
+        // `import` fail, matching § "Why Rhai"'s "closed by default" claim
+        // for real (see `crates/vix-script/tests/sandbox.rs`).
+        engine.set_module_resolver(DummyModuleResolver::new());
 
         register_registration_fns(&mut engine, &registry);
         register_buffer_fns(&mut engine, &host);
