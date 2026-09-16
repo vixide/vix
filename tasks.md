@@ -1093,11 +1093,52 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   all. Requires deciding how a multi-root `App` maps onto a single spawned
   server per `language_id` (T123b's per-buffer work may be a prerequisite
   rather than orthogonal to this). Not started.
-- [ ] **T124 — AI provider abstraction.** Factor `vix-ai-core`: provider
-  trait + Anthropic, OpenAI-compatible, and Ollama implementations;
-  config keys for endpoint/model/key (keyring-backed like the DB
-  credential waterfall). Migrate `vix-ai-panel`, `vix-ai-diff`, and DB
-  NL→SQL onto it with zero behavior change.
+- [x] **T124 — AI provider abstraction.** Done 2026-09-16. Investigated
+  first, and the investigation reframed the task: `vix-ai-panel`/
+  `vix-ai-diff`/DB NL→SQL don't call any AI provider directly today — every
+  one of them shells out to whatever CLI `Settings::ai_command` names
+  (`claude -p {prompt}` by default, also `codex`/`ollama run`/anything
+  installed), a deliberate existing design with no API key for Vix to hold.
+  So "migrate onto a provider trait with zero behavior change" as
+  literally written would mean replacing a working, key-free design with
+  one that needs credentials — asked the user before proceeding; chosen
+  direction: add direct HTTP providers as a genuinely new, opt-in path
+  alongside the CLI one (still the default), not a replacement. New
+  `vix-ai-core` crate: an `enum Provider { Anthropic, OpenAi, Ollama }`,
+  each a pure request-builder/response-parser pair (`anthropic`/`openai`/
+  `ollama` modules, unit-tested against fixture JSON, no network I/O) plus
+  one function, `complete`, that performs the actual blocking `ureq` call —
+  same "pure core + one IO boundary" split as `vix-lsp-core`/`vix-lsp` and
+  `vix-http-client::send`. Every provider's response parser checks for a
+  JSON `error` field before the expected reply shape, so a non-2xx status
+  still surfaces a real message instead of a bare code (`complete` treats
+  `Err(ureq::Error::Status(_, resp))` the same as `Ok(resp)` for this
+  reason). `secret::resolve` mirrors `vix-db/src/secret.rs`'s credential
+  waterfall exactly (a configured command's stdout, then the OS keyring —
+  service `vix-ai`, account = provider name), generalized from one saved
+  connection to one provider name; `keyring` hoisted from `vix-db`'s
+  crate-local dependency into a workspace one now that two crates need it.
+  Four new `Settings` fields (`ai_provider` — `"cli"` default, or
+  `"anthropic"`/`"openai"`/`"ollama"`; `ai_endpoint`; `ai_model`;
+  `ai_api_key_command`), documented in `docs/configuration/index.md`. In
+  `app.rs`, `spawn_ai_cmd` (the one function every AI call site already
+  funneled through — the chat panel, the AI menu's Summarize/Explain/
+  Define/Annotate/Improve, and the DB workbench's assistant) now dispatches
+  on `ai_provider`: `spawn_ai_cli` (renamed, otherwise byte-for-byte the
+  original code) for the default, or the new `spawn_ai_http` for a
+  configured provider — every call site needed zero changes. `AiMsg::Failed`
+  gained an `Option<String>` reason (`None` for the CLI path, whose stderr
+  is discarded so there is nothing more specific to show than before;
+  `Some` for an HTTP failure's real error text) surfaced via a new
+  `status.ai_failed_detail` key, all 15 locales — the CLI path's exact
+  wording is unchanged. Tests at three layers: `vix-ai-core`'s own unit
+  tests (request/response shape per provider, `secret::resolve`'s command
+  path), a new `crates/vix-ai-core/tests/http_smoke.rs` proving `complete`
+  against a real local socket (a success, a non-2xx error body, and that
+  the resolved API key actually reaches the `Authorization` header), and a
+  new `App`-level test driving the real `ai.summarize` action end-to-end
+  through `spawn_ai_http` against a mock server, landing in a new editor
+  tab. `scripts/check` green throughout.
 - [ ] **T125 — AI features.** On T124: "Edit selection with instruction"
   (AI menu; result as a reviewable diff via `vix-ai-diff`), commit-message
   generation in the Git panel (fills the message box, never commits), and

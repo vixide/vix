@@ -8,6 +8,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Direct HTTP AI providers** (improvement plan T124): a new `vix-ai-core`
+  crate adds Anthropic, OpenAI-compatible, and Ollama clients as an
+  opt-in alternative to the CLI shell-out every AI feature (the chat
+  panel, the AI menu's Summarize/Explain/Define/Annotate/Improve, and the
+  DB workbench's assistant) has always used — set `ai_provider` to
+  `"anthropic"`/`"openai"`/`"ollama"` (new settings, alongside `ai_endpoint`/
+  `ai_model`/`ai_api_key_command`); `"cli"` (unchanged) stays the default,
+  so nobody's existing setup changes. The API key resolves through the
+  same command-then-keyring waterfall the DB workbench already uses for
+  database passwords. See `crates/vix-ai-core/spec/index.md`.
 - **TUI snapshot test harness** (`tests/snapshots.rs`, improvement plan T004):
   boots the real `App` against a ratatui `TestBackend`, drives it with
   scripted key events, and compares the rendered frame to a golden text file

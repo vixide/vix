@@ -30,4 +30,4 @@ vix-theme = { path = "../vix-theme", version = "1.5.0" }
 # macOS so Linux/Windows builds don't pull in the backend; Linux keeps the
 # already-secure `secret-tool` CLI (secret on stdin).
 [target.'cfg(target_os = "macos")'.dependencies]
-keyring = { version = "3", features = ["apple-native"] }
+keyring = { workspace = true }
