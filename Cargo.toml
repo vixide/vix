@@ -33,6 +33,12 @@ trash = "5"
 walkdir = "2"
 ureq = "2"
 regex = "1"
+# macOS: store secrets (DB passwords, T124's AI provider API keys) through the
+# native Security framework rather than shelling out to a CLI that exposes the
+# plaintext as a process argument. Linux instead uses the already-secure
+# `secret-tool` CLI (secret on stdin), so this dependency is scoped per-crate
+# to `cfg(target_os = "macos")` rather than pulled in everywhere.
+keyring = { version = "3", features = ["apple-native"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ratatui-image = { version = "11.0.6", default-features = false, features = ["image-defaults", "crossterm"] }
@@ -230,6 +236,9 @@ vix-workspace-search = { path = "crates/vix-workspace-search", version = "1.6.0"
 vix-action-catalog = { path = "crates/vix-action-catalog", version = "1.6.0" }
 # Add, drop, and toggle a prefix/suffix pair around text.
 vix-affix = { path = "crates/vix-affix", version = "1.6.0" }
+# Direct HTTP clients for AI providers (Anthropic, OpenAI-compatible, Ollama)
+# plus keyring-backed API-key resolution.
+vix-ai-core = { path = "crates/vix-ai-core", version = "1.6.0" }
 # Reviewable diff for AI text transforms (Annotate / Improve).
 vix-ai-diff = { path = "crates/vix-ai-diff", version = "1.6.0" }
 # AI chat panel: a persistent conversation surface for the configured assistant.

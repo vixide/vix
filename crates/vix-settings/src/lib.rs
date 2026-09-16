@@ -183,6 +183,29 @@ pub struct Settings {
     /// lets you point the AI menu at any CLI assistant — `claude` (default),
     /// `codex`, `mistral`, `ollama run …`, etc. See [`Settings::ai_command_line`].
     pub ai_command: String,
+    /// Which backend the AI menu, chat panel, and DB workbench assistant use.
+    /// `"cli"` (default) shells out to [`ai_command`](Self::ai_command),
+    /// unchanged since the AI features first shipped — no API key for Vix to
+    /// hold. `"anthropic"`, `"openai"`, or `"ollama"` instead call that
+    /// provider's HTTP API directly via the `vix-ai-core` crate, using
+    /// `ai_endpoint`/`ai_model` and a keyring-backed API key (see
+    /// `ai_api_key_command` and `crates/vix-ai-core/spec/index.md`). An
+    /// unrecognized value falls back to `"cli"`.
+    pub ai_provider: String,
+    /// HTTP provider endpoint override (T124); empty uses the provider's own
+    /// default (e.g. Anthropic's public Messages API, or
+    /// `http://localhost:11434` for Ollama). Ignored when `ai_provider` is
+    /// `"cli"`.
+    pub ai_endpoint: String,
+    /// HTTP provider model id override (T124); empty uses the provider's own
+    /// default. Ignored when `ai_provider` is `"cli"`.
+    pub ai_model: String,
+    /// Command whose stdout is the HTTP provider's API key (T124), tried
+    /// before the OS keyring — the same shape as `vix-db`'s
+    /// `password_command` (e.g. `"pass show anthropic-api-key"`). Ignored
+    /// for `ai_provider = "cli"`; optional for `"ollama"` (a local server
+    /// needs no key by default).
+    pub ai_api_key_command: String,
     /// Review AI replace transforms (Annotate / Improve) as an accept/reject diff
     /// before applying, instead of overwriting the text immediately. On by default.
     pub ai_diff_review: bool,
@@ -299,6 +322,10 @@ impl Default for Settings {
             // template must NOT add quotes of its own (doing so would let chat
             // text break out and inject shell commands).
             ai_command: "claude -p {prompt}".to_string(),
+            ai_provider: "cli".to_string(),
+            ai_endpoint: String::new(),
+            ai_model: String::new(),
+            ai_api_key_command: String::new(),
             ai_diff_review: true,
             editorconfig: true,
             auto_pair: true,
@@ -480,6 +507,15 @@ fn sh_single_quote(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{Settings, sh_single_quote};
+
+    #[test]
+    fn t124_ai_provider_defaults_to_cli_with_no_http_config() {
+        let s = Settings::default();
+        assert_eq!(s.ai_provider, "cli");
+        assert_eq!(s.ai_endpoint, "");
+        assert_eq!(s.ai_model, "");
+        assert_eq!(s.ai_api_key_command, "");
+    }
 
     #[test]
     fn default_ai_command_single_quotes_prompt_and_stdin_file() {

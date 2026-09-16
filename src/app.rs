@@ -523,10 +523,16 @@ struct RunningCommand {
 
 /// Result of a background AI text transform whose output replaces editor text.
 enum AiMsg {
-    /// The CLI finished successfully, carrying its full stdout.
+    /// The AI backend finished successfully, carrying its full reply text.
     Done(String),
-    /// The CLI failed (non-zero exit, or it died before producing output).
-    Failed,
+    /// The AI backend failed: a CLI's non-zero exit (or dying before
+    /// producing output, carrying no reason -- its stderr is discarded, so
+    /// there is nothing more specific to show, matching this message's
+    /// original CLI-only behavior), or an HTTP provider's error reason
+    /// (T124 -- always `Some`, since an HTTP failure always has a message
+    /// worth showing: a transport error, a non-JSON body, or the
+    /// provider's own JSON `error` field).
+    Failed(Option<String>),
 }
 
 /// Which part of a buffer an AI transform replaces.
@@ -9834,11 +9840,31 @@ impl App {
         self.spawn_ai_cmd(prompt, text)
     }
 
-    /// The spawn core shared by [`Self::spawn_ai`] and the chat panel: write `text`
-    /// to a temp file, expand the `ai_command` template, and run it in the
-    /// background. Unlike `spawn_ai` it does **not** reject empty input — a chat
+    /// The spawn core shared by [`Self::spawn_ai`] and the chat panel: dispatch
+    /// on [`Settings::ai_provider`] (T124) to either the original CLI shell-out
+    /// ([`Self::spawn_ai_cli`], the `"cli"` default — every existing call site
+    /// is unaffected) or a direct HTTP provider ([`Self::spawn_ai_http`]).
+    /// Unlike [`Self::spawn_ai`] this does **not** reject empty input — a chat
     /// turn may carry no editor context — so callers must guard that themselves.
     fn spawn_ai_cmd(
+        &mut self,
+        prompt: &str,
+        text: &str,
+    ) -> Option<std::sync::mpsc::Receiver<AiMsg>> {
+        match vix_ai_core::Provider::parse(&self.settings.ai_provider) {
+            Some(provider) => self.spawn_ai_http(provider, prompt, text),
+            None => self.spawn_ai_cli(prompt, text),
+        }
+    }
+
+    /// Run the configured CLI (see [`Settings::ai_command`]) over `text`,
+    /// returning a receiver for its captured stdout (or `None` after reporting a
+    /// spawn failure). The reader thread sends one [`AiMsg`] when the CLI exits.
+    /// The command is built from the `ai_command` template so the AI menu can
+    /// drive any assistant CLI, not just `claude`. This is the original AI
+    /// spawn path (predates T124's HTTP providers) and its behavior is
+    /// unchanged — it is still what `ai_provider = "cli"` (the default) uses.
+    fn spawn_ai_cli(
         &mut self,
         prompt: &str,
         text: &str,
@@ -9888,7 +9914,52 @@ impl App {
             let _ = tx.send(if success {
                 AiMsg::Done(out)
             } else {
-                AiMsg::Failed
+                AiMsg::Failed(None)
+            });
+        });
+        Some(rx)
+    }
+
+    /// Call `provider`'s HTTP API directly (T124) over `instruction`/`input`,
+    /// returning a receiver for its reply. Resolves the endpoint/model
+    /// (`Settings::ai_endpoint`/`ai_model`, falling back to the provider's own
+    /// defaults) and the API key (`vix_ai_core::secret::resolve`), then runs
+    /// the blocking request on a background thread — same shape as
+    /// [`Self::spawn_ai_cli`], so every downstream caller (`poll_ai_replace`)
+    /// handles both paths identically.
+    fn spawn_ai_http(
+        &mut self,
+        provider: vix_ai_core::Provider,
+        instruction: &str,
+        input: &str,
+    ) -> Option<std::sync::mpsc::Receiver<AiMsg>> {
+        let endpoint = if self.settings.ai_endpoint.trim().is_empty() {
+            provider.default_endpoint().to_string()
+        } else {
+            self.settings.ai_endpoint.clone()
+        };
+        let model = if self.settings.ai_model.trim().is_empty() {
+            provider.default_model().to_string()
+        } else {
+            self.settings.ai_model.clone()
+        };
+        let api_key =
+            vix_ai_core::secret::resolve(provider.name(), &self.settings.ai_api_key_command)
+                .unwrap_or_default();
+        if provider.requires_api_key() && api_key.is_empty() {
+            self.messages
+                .error(t!("msg.ai_no_api_key", provider = provider.name()).to_string());
+            return None;
+        }
+        let instruction = instruction.to_string();
+        let input = input.to_string();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let result =
+                vix_ai_core::complete(provider, &endpoint, &model, &api_key, &instruction, &input);
+            let _ = tx.send(match result {
+                Ok(text) => AiMsg::Done(text),
+                Err(reason) => AiMsg::Failed(Some(reason)),
             });
         });
         Some(rx)
@@ -9958,7 +10029,7 @@ impl App {
             match ar.rx.try_recv() {
                 Ok(m) => m,
                 Err(std::sync::mpsc::TryRecvError::Empty) => return,
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => AiMsg::Failed,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => AiMsg::Failed(None),
             }
         };
         let Some(ar) = self.ai_replace.take() else {
@@ -9968,21 +10039,7 @@ impl App {
             AiMsg::Done(out) => {
                 let text = out.trim_end_matches('\n');
                 if text.is_empty() {
-                    if let (AiDest::Panel, Some(panel)) = (ar.dest, self.ai_panel.as_mut()) {
-                        panel.busy = false;
-                        panel.push(
-                            crate::ai_panel::Role::Error,
-                            t!("status.ai_failed", action = &ar.label),
-                        );
-                    }
-                    if let (AiDest::Db, Some(b)) = (ar.dest, self.db.as_mut()) {
-                        b.ai_failed();
-                    }
-                    self.status = t!("status.ai_failed", action = &ar.label).to_string();
-                    if !matches!(ar.dest, AiDest::Panel | AiDest::Db) {
-                        self.messages
-                            .error(t!("status.ai_failed", action = ar.label));
-                    }
+                    self.report_ai_failure(&ar, None);
                     return;
                 }
                 match ar.dest {
@@ -10009,23 +10066,36 @@ impl App {
                     self.messages.info(t!("status.ai_done", action = ar.label));
                 }
             }
-            AiMsg::Failed => {
-                if let (AiDest::Panel, Some(panel)) = (ar.dest, self.ai_panel.as_mut()) {
-                    panel.busy = false;
-                    panel.push(
-                        crate::ai_panel::Role::Error,
-                        t!("status.ai_failed", action = &ar.label),
-                    );
-                }
-                if let (AiDest::Db, Some(b)) = (ar.dest, self.db.as_mut()) {
-                    b.ai_failed();
-                }
-                self.status = t!("status.ai_failed", action = &ar.label).to_string();
-                if !matches!(ar.dest, AiDest::Panel | AiDest::Db) {
-                    self.messages
-                        .error(t!("status.ai_failed", action = ar.label));
-                }
-            }
+            AiMsg::Failed(reason) => self.report_ai_failure(&ar, reason.as_deref()),
+        }
+    }
+
+    /// Tell every surface an AI task can report through that it failed:
+    /// the chat panel and DB workbench get an inline message, everything
+    /// else gets the status line plus a `Messages` entry. `reason` (T124)
+    /// is an HTTP provider's error text when there is one -- `None` for the
+    /// original CLI path (its stderr is discarded, so there is nothing more
+    /// specific than "failed" to show, matching its behavior before T124).
+    fn report_ai_failure(&mut self, ar: &AiReplace, reason: Option<&str>) {
+        let message = match reason {
+            Some(reason) => t!(
+                "status.ai_failed_detail",
+                action = &ar.label,
+                reason = reason
+            )
+            .to_string(),
+            None => t!("status.ai_failed", action = &ar.label).to_string(),
+        };
+        if let (AiDest::Panel, Some(panel)) = (ar.dest, self.ai_panel.as_mut()) {
+            panel.busy = false;
+            panel.push(crate::ai_panel::Role::Error, message.clone());
+        }
+        if let (AiDest::Db, Some(b)) = (ar.dest, self.db.as_mut()) {
+            b.ai_failed();
+        }
+        self.status.clone_from(&message);
+        if !matches!(ar.dest, AiDest::Panel | AiDest::Db) {
+            self.messages.error(message);
         }
     }
 

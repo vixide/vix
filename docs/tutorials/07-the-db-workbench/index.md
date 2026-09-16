@@ -207,7 +207,9 @@ The workbench can turn a question into SQL, using whatever CLI the
 `ai_command` setting names (default `claude -p "{prompt}"` — see
 [`docs/configuration/index.md`](../../configuration/index.md#settings) and
 [`docs/agent-panel/index.md`](../../agent-panel/index.md); any assistant CLI
-works). It's schema-only: the model sees table/column names, types, and
+works), or a provider's HTTP API directly when `ai_provider` is set — same
+choice as the AI chat panel and menu. It's schema-only: the model sees
+table/column names, types, and
 foreign keys, but is **never shown a row of data** — the connection's
 read-only default plus the client-side write guard both still apply to
 whatever SQL comes back.

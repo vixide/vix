@@ -46,7 +46,11 @@ their defaults, so it is safe to delete or hand-edit.
 | `lsp_enabled`   | bool   | `true`   | Master switch for Language Server Protocol features (diagnostics, hover, go-to-definition, completion). When off, no servers launch. See `crates/vix-lsp/spec/index.md`. |
 | `lsp_servers`   | list   | `[]`     | Language servers, matched to files by extension. Each entry has `language_id`, `extensions`, and `command`. Empty by default — Vix ships no built-in server. |
 | `contacts_dir`  | string | `""`     | Directory of vCard (`.vcf`) files for **Tools → Contacts…**. Empty = the workspace root. |
-| `ai_command`    | string | `claude -p "{prompt}"` | Command template the **AI** menu runs. `{prompt}` is replaced with the action's instruction; the input text is fed on stdin (or substituted for `{file}` if the template contains it). Point this at any assistant CLI — `claude`, `codex`, `mistral`, `ollama run …`. |
+| `ai_command`    | string | `claude -p "{prompt}"` | Command template the **AI** menu runs. `{prompt}` is replaced with the action's instruction; the input text is fed on stdin (or substituted for `{file}` if the template contains it). Point this at any assistant CLI — `claude`, `codex`, `mistral`, `ollama run …`. Ignored unless `ai_provider` is `"cli"` (the default). |
+| `ai_provider`   | string | `"cli"`  | Which backend the AI menu, chat panel, and DB assistant use: `"cli"` (shells out to `ai_command`, no API key needed) or `"anthropic"`/`"openai"`/`"ollama"` (calls that provider's HTTP API directly — see `crates/vix-ai-core/spec/index.md`). An unrecognized value falls back to `"cli"`. |
+| `ai_endpoint`   | string | `""`     | HTTP provider endpoint override; empty uses the provider's own default. Ignored when `ai_provider` is `"cli"`. |
+| `ai_model`      | string | `""`     | HTTP provider model id override; empty uses the provider's own default. Ignored when `ai_provider` is `"cli"`. |
+| `ai_api_key_command` | string | `""` | Command whose stdout is the HTTP provider's API key, tried before the OS keyring (same shape as the DB workbench's `password_command`). Ignored when `ai_provider` is `"cli"`. |
 | `ai_diff_review`| bool   | `true`   | Review AI replace transforms (Annotate / Improve) as an accept/reject diff before applying, instead of overwriting immediately. |
 | `editorconfig`  | bool   | `true`   | Apply `.editorconfig` rules (indent style/size, trim trailing whitespace, final newline) per opened file, overriding the global settings. |
 | `auto_pair`     | bool   | `true`   | Auto-insert the matching closer when typing `(` `[` `{` `"` `'` `` ` `` (wrap a selection; step over a closer; Backspace deletes an empty pair). Toggle via **View → Editor → Auto-Pair Brackets**. |
@@ -109,6 +113,14 @@ lsp_enabled = true
 # The AI menu shells out to this command (text is piped on stdin). Swap in any
 # assistant CLI, e.g. ai_command = "codex exec \"{prompt}\""
 ai_command = "claude -p \"{prompt}\""
+
+# Or skip the CLI and call a provider's HTTP API directly (see
+# crates/vix-ai-core/spec/index.md). The key comes from ai_api_key_command's
+# stdout, or the OS keyring (service "vix-ai", account "anthropic") if that's
+# empty -- never written here.
+# ai_provider = "anthropic"
+# ai_model = "claude-sonnet-5"
+# ai_api_key_command = "pass show anthropic-api-key"
 
 # One [[lsp_servers]] block per language server you have installed:
 [[lsp_servers]]
