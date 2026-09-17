@@ -726,7 +726,7 @@ impl App {
             .lsp
             .all_diagnostics()
             .filter(|(p, _)| **p == path)
-            .flat_map(|(_, d)| d.iter().map(|x| x.range.start.line))
+            .flat_map(|(_, d)| d.into_iter().map(|x| x.range.start.line))
             .collect();
         if lines.is_empty() {
             self.status = t!("status.no_diagnostics").to_string();

@@ -38,7 +38,11 @@ command = ["pylsp"]
 ```
 
 A server is spawned lazily the first time you open a file whose extension it
-handles, and shut down (`shutdown` + `exit`) when Vix exits.
+handles, and shut down (`shutdown` + `exit`) when Vix exits. More than one
+entry can list the same extension (T123b) — e.g. a type-checker plus a
+separate linter both configured for `.rs` — and both run against every
+matching file at once; see "Closed since the audit" below for exactly
+which features fan out across them and which don't.
 
 ## Features
 
@@ -103,20 +107,46 @@ document formatting / range formatting (above) — fully wired, unrelated to
 
 **Still open** (real gaps, each its own follow-up task below, none in any
 prior cut list):
-- **One server per `language_id`, never per-buffer**: `Lsp`'s server
-  registry is `HashMap<String, Server>` keyed by `language_id`, and
-  `config_for` takes the *first* matching config by extension — there is no
-  path for two servers to both run against the same file (a common
-  real-world setup: a type-checker LSP + a separate linter LSP on the same
-  buffer).
 - **Single-root only**: `initialize` sends one `rootUri`, no
   `workspaceFolders` array; Vix's own editor-level multi-root concept
   (`App::workspace_folders`) isn't propagated to LSP servers at all.
 
 **Closed since the audit above**: `prepareRename` (§ Features, "Rename")
 and `relatedInformation` (§ Features, "Diagnostics") — both T123e; **server
-crash recovery** — T123c; **pull diagnostics / `$/progress`** — T123d; and
-**semantic tokens** (§ Features, "Semantic Tokens") — T123a.
+crash recovery** — T123c; **pull diagnostics / `$/progress`** — T123d;
+**semantic tokens** (§ Features, "Semantic Tokens") — T123a; and
+**multiple servers per buffer** — T123b. A file can now be handled by more
+than one configured server at once (a common real-world setup: a
+type-checker LSP + a separate linter LSP both watching the same
+extension) — `configs_for` returns every matching config, not just the
+first, and document sync (`didOpen`/`didChange`/`didClose`/`didSave`) and
+every per-document read request (hover, definition family, references,
+completion, document/workspace symbols, code actions, formatting, rename,
+signature help, code lens, inlay hints, folding/selection ranges, document
+highlight, linked editing, semantic tokens, call-hierarchy preparation)
+fan out to all of them — each server's response arrives as its own event,
+same as always, so two servers answering the same hover request simply
+produce two `LspEvent::Hover`s in sequence rather than one merged one.
+Diagnostics are the one case that needed real internal restructuring
+rather than just fan-out: they're now tracked per (file, server) pair
+internally so a second server publishing for a file no longer clobbers
+the first's report — `diagnostics_for`/`all_diagnostics` merge across
+servers at read time, same external shape as before (just `Diagnostic`
+instead of `&Diagnostic`, since a flattened merge can't be borrowed).
+**Deliberately not fanned out**, documented in each method's own doc
+comment as a real, narrow limitation rather than silently applied:
+`request_completion_resolve`, `execute_command`, and
+`request_incoming_calls` — each continues a response one *specific*
+earlier-answering server gave (a completion item's opaque resolve
+payload, a code action/lens's own command, a call-hierarchy item), and
+nothing tracks *which* server that was once more than one is active for
+the same file, so these three still target only the first matching
+config. Correct whenever only one server handles a file (still the
+common case); when more than one does *and* the feature in question is
+one of these three, no worse than before T123b. Properly fixing this
+would mean tagging completion items / code lenses / call-hierarchy items
+with their originating server through `LspEvent`, `CompletionItem`, and
+`CodeLens` — a real follow-up, not attempted here.
 A crashed server (the reader thread detects the dead process via EOF) is
 now respawned automatically, up to 3 consecutive attempts since it last
 stayed up for 30 seconds (a genuine crash loop — a bad command, a real bug
