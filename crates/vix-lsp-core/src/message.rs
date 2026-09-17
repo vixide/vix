@@ -33,11 +33,29 @@ pub fn notification(method: &str, params: &Value) -> Value {
 // ----- parameter builders -------------------------------------------------
 
 /// `initialize` params, advertising the capabilities Vix supports.
+///
+/// `folders` is every workspace folder open at spawn time, as `(uri, name)`
+/// pairs (T123f) -- `rootUri` (kept for servers that predate `workspaceFolders`,
+/// LSP 3.6) is the first folder's URI, or `null` when there are none;
+/// `workspaceFolders` carries the full list, or `null` when empty (per spec, not
+/// an empty array).
 #[must_use]
-pub fn initialize_params(process_id: Option<u32>, root_uri: Option<&str>) -> Value {
+pub fn initialize_params(process_id: Option<u32>, folders: &[(String, String)]) -> Value {
+    let root_uri = folders.first().map(|(uri, _)| uri.as_str());
+    let workspace_folders = if folders.is_empty() {
+        Value::Null
+    } else {
+        Value::Array(
+            folders
+                .iter()
+                .map(|(uri, name)| json!({ "uri": uri, "name": name }))
+                .collect(),
+        )
+    };
     json!({
         "processId": process_id,
         "rootUri": root_uri,
+        "workspaceFolders": workspace_folders,
         "clientInfo": { "name": "vix" },
         "capabilities": {
             "general": { "positionEncodings": ["utf-16", "utf-8"] },
@@ -110,7 +128,11 @@ pub fn initialize_params(process_id: Option<u32>, root_uri: Option<&str>) -> Val
                 // T123d: no `previousResultIds` tracking in v1, so the
                 // server never needs to ask the client to discard cached
                 // reports.
-                "diagnostics": { "refreshSupport": false }
+                "diagnostics": { "refreshSupport": false },
+                // T123f: Vix understands `workspaceFolders` and will send
+                // `workspace/didChangeWorkspaceFolders` when the server's own
+                // response asks for it (`changeNotifications`).
+                "workspaceFolders": true
             },
             // T123d: `$/progress` (e.g. an initial index build) is only
             // sent to clients that declare support for it.
@@ -232,6 +254,25 @@ pub fn workspace_diagnostic_params() -> Value {
     json!({ "previousResultIds": [] })
 }
 
+/// A `DidChangeWorkspaceFoldersParams` body (T123f): the folders newly added
+/// and/or removed, as `(uri, name)` pairs -- sent only to a server whose own
+/// `initialize` response asked for it (`parse_workspace_folders_change_support`).
+#[must_use]
+pub fn did_change_workspace_folders_params(
+    added: &[(String, String)],
+    removed: &[(String, String)],
+) -> Value {
+    let to_json = |folders: &[(String, String)]| -> Value {
+        Value::Array(
+            folders
+                .iter()
+                .map(|(uri, name)| json!({ "uri": uri, "name": name }))
+                .collect(),
+        )
+    };
+    json!({ "event": { "added": to_json(added), "removed": to_json(removed) } })
+}
+
 /// A `DidSaveTextDocumentParams` body including the full saved text.
 #[must_use]
 pub fn did_save_params(uri: &str, text: &str) -> Value {
@@ -314,6 +355,26 @@ pub fn parse_semantic_tokens_legend(result: &Value) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Whether the server's `initialize` response asked to be told about
+/// workspace-folder changes (T123f): `capabilities.workspace.
+/// workspaceFolders.changeNotifications`, truthy as either `true` or a
+/// (dynamic-registration id) string -- both mean "yes, send me
+/// `workspace/didChangeWorkspaceFolders`". A server that omits the whole
+/// `workspaceFolders` object, or sets `changeNotifications` to `false` or
+/// leaves it unset, gets none.
+#[must_use]
+pub fn parse_workspace_folders_change_support(result: &Value) -> bool {
+    let Some(notifications) = result
+        .get("capabilities")
+        .and_then(|c| c.get("workspace"))
+        .and_then(|w| w.get("workspaceFolders"))
+        .and_then(|wf| wf.get("changeNotifications"))
+    else {
+        return false;
+    };
+    notifications.as_bool() == Some(true) || notifications.is_string()
 }
 
 /// Parse a `textDocument/publishDiagnostics` notification into `(uri, diagnostics)`.
@@ -1058,7 +1119,7 @@ mod tests {
 
     #[test]
     fn capabilities_declare_prepare_rename_and_related_information() {
-        let params = initialize_params(None, None);
+        let params = initialize_params(None, &[]);
         let text_document = &params["capabilities"]["textDocument"];
         assert_eq!(text_document["rename"]["prepareSupport"], true);
         assert_eq!(
@@ -1069,12 +1130,86 @@ mod tests {
 
     #[test]
     fn capabilities_declare_pull_diagnostics_and_progress() {
-        let params = initialize_params(None, None);
+        let params = initialize_params(None, &[]);
         assert_eq!(
             params["capabilities"]["textDocument"]["diagnostic"],
             json!({})
         );
         assert_eq!(params["capabilities"]["window"]["workDoneProgress"], true);
+    }
+
+    #[test]
+    fn initialize_params_with_no_folders_sends_null_root_and_folders() {
+        let params = initialize_params(None, &[]);
+        assert_eq!(params["rootUri"], Value::Null);
+        assert_eq!(params["workspaceFolders"], Value::Null);
+        assert_eq!(
+            params["capabilities"]["workspace"]["workspaceFolders"],
+            true
+        );
+    }
+
+    #[test]
+    fn initialize_params_sends_every_folder_and_the_first_as_root() {
+        let folders = vec![
+            ("file:///a".to_string(), "a".to_string()),
+            ("file:///b".to_string(), "b".to_string()),
+        ];
+        let params = initialize_params(None, &folders);
+        assert_eq!(params["rootUri"], "file:///a");
+        assert_eq!(
+            params["workspaceFolders"],
+            json!([
+                {"uri": "file:///a", "name": "a"},
+                {"uri": "file:///b", "name": "b"}
+            ])
+        );
+    }
+
+    #[test]
+    fn workspace_folders_change_support_reads_change_notifications() {
+        assert!(!parse_workspace_folders_change_support(&json!({})));
+        assert!(!parse_workspace_folders_change_support(&json!({
+            "capabilities": {}
+        })));
+        assert!(!parse_workspace_folders_change_support(&json!({
+            "capabilities": {"workspace": {"workspaceFolders": {"supported": true}}}
+        })));
+        assert!(!parse_workspace_folders_change_support(&json!({
+            "capabilities": {"workspace": {"workspaceFolders": {
+                "supported": true, "changeNotifications": false
+            }}}
+        })));
+        assert!(parse_workspace_folders_change_support(&json!({
+            "capabilities": {"workspace": {"workspaceFolders": {
+                "supported": true, "changeNotifications": true
+            }}}
+        })));
+        assert!(
+            parse_workspace_folders_change_support(&json!({
+                "capabilities": {"workspace": {"workspaceFolders": {
+                    "supported": true, "changeNotifications": "some-registration-id"
+                }}}
+            })),
+            "a registration-id string also means yes, per spec"
+        );
+    }
+
+    #[test]
+    fn did_change_workspace_folders_params_names_added_and_removed() {
+        let params = did_change_workspace_folders_params(
+            &[("file:///new".to_string(), "new".to_string())],
+            &[("file:///old".to_string(), "old".to_string())],
+        );
+        assert_eq!(
+            params,
+            json!({
+                "event": {
+                    "added": [{"uri": "file:///new", "name": "new"}],
+                    "removed": [{"uri": "file:///old", "name": "old"}]
+                }
+            })
+        );
     }
 
     #[test]
@@ -1188,7 +1323,7 @@ mod tests {
 
     #[test]
     fn capabilities_declare_semantic_tokens_full_requests() {
-        let params = initialize_params(None, None);
+        let params = initialize_params(None, &[]);
         let semantic = &params["capabilities"]["textDocument"]["semanticTokens"];
         assert_eq!(semantic["requests"]["full"], true);
         assert!(

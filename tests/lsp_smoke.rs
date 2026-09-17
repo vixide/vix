@@ -248,6 +248,66 @@ while True:
         break
 "#;
 
+/// T123f: logs every message with a `method` (as one JSON line each) to the
+/// log file path given as `argv[1]`, so the Rust test can inspect exactly
+/// what `initialize` and later notifications actually carried -- opts into
+/// `workspace/didChangeWorkspaceFolders` via `changeNotifications: true` so
+/// the client should send one when a folder is added after startup.
+const MOCK_SERVER_LOGS_WORKSPACE_FOLDERS: &str = r#"
+import sys, json
+
+LOG = sys.argv[1]
+
+def log(entry):
+    with open(LOG, 'a') as f:
+        f.write(json.dumps(entry) + '\n')
+
+def read_msg():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        line = line.decode('ascii').strip()
+        if line == '':
+            break
+        k, _, v = line.partition(':')
+        headers[k.strip().lower()] = v.strip()
+    n = int(headers.get('content-length', '0'))
+    return json.loads(sys.stdin.buffer.read(n))
+
+def send(obj):
+    data = json.dumps(obj).encode('utf-8')
+    sys.stdout.buffer.write(b'Content-Length: %d\r\n\r\n' % len(data))
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+while True:
+    msg = read_msg()
+    if msg is None:
+        break
+    method = msg.get('method')
+    mid = msg.get('id')
+    if method:
+        log(msg)
+    if method == 'initialize':
+        send({'jsonrpc':'2.0','id':mid,'result':{'capabilities':{
+            'positionEncoding':'utf-16',
+            'workspace': {'workspaceFolders': {'supported': True, 'changeNotifications': True}}
+        }}})
+    elif method == 'textDocument/didOpen':
+        uri = msg['params']['textDocument']['uri']
+        send({'jsonrpc':'2.0','method':'textDocument/publishDiagnostics','params':{
+            'uri': uri,
+            'diagnostics': [{'range':{'start':{'line':0,'character':0},
+                                      'end':{'line':0,'character':1}},
+                             'severity':1,'message':'mock'}]}})
+    elif method == 'shutdown':
+        send({'jsonrpc':'2.0','id':mid,'result':None})
+    elif method == 'exit':
+        break
+"#;
+
 #[test]
 fn mock_server_round_trips_diagnostics_and_hover() {
     if !tool_available("python3") {
@@ -267,7 +327,7 @@ fn mock_server_round_trips_diagnostics_and_hover() {
         extensions: vec!["rs".into()],
         command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
     };
-    let mut lsp = Lsp::new(true, vec![cfg], &root);
+    let mut lsp = Lsp::new(true, vec![cfg], std::slice::from_ref(&root));
     lsp.did_open(&file, "abc\n");
 
     let deadline = Instant::now() + Duration::from_secs(15);
@@ -324,7 +384,7 @@ fn mock_server_error_response_surfaces_as_a_request_failed_event() {
         extensions: vec!["rs".into()],
         command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
     };
-    let mut lsp = Lsp::new(true, vec![cfg], &root);
+    let mut lsp = Lsp::new(true, vec![cfg], std::slice::from_ref(&root));
     lsp.did_open(&file, "abc\n");
 
     let deadline = Instant::now() + Duration::from_secs(15);
@@ -374,7 +434,7 @@ fn mock_server_prepare_rename_surfaces_the_servers_placeholder() {
         extensions: vec!["rs".into()],
         command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
     };
-    let mut lsp = Lsp::new(true, vec![cfg], &root);
+    let mut lsp = Lsp::new(true, vec![cfg], std::slice::from_ref(&root));
     lsp.did_open(&file, "abc\n");
 
     let deadline = Instant::now() + Duration::from_secs(15);
@@ -423,7 +483,7 @@ fn mock_server_prepare_rename_null_surfaces_as_not_renameable() {
         extensions: vec!["rs".into()],
         command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
     };
-    let mut lsp = Lsp::new(true, vec![cfg], &root);
+    let mut lsp = Lsp::new(true, vec![cfg], std::slice::from_ref(&root));
     lsp.did_open(&file, "abc\n");
 
     let deadline = Instant::now() + Duration::from_secs(15);
@@ -472,7 +532,7 @@ fn mock_server_progress_and_pull_diagnostics_round_trip() {
         extensions: vec!["rs".into()],
         command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
     };
-    let mut lsp = Lsp::new(true, vec![cfg], &root);
+    let mut lsp = Lsp::new(true, vec![cfg], std::slice::from_ref(&root));
     lsp.did_open(&file, "abc\n");
 
     // The mock hardcodes this as a bare absolute path, not root-relative --
@@ -529,7 +589,7 @@ fn mock_server_semantic_tokens_resolve_against_the_initialize_legend() {
         extensions: vec!["rs".into()],
         command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
     };
-    let mut lsp = Lsp::new(true, vec![cfg], &root);
+    let mut lsp = Lsp::new(true, vec![cfg], std::slice::from_ref(&root));
     lsp.did_open(&file, "abc\n");
 
     let deadline = Instant::now() + Duration::from_secs(15);
@@ -584,7 +644,7 @@ fn mock_server_crash_respawns_then_gives_up_after_max_attempts() {
         extensions: vec!["rs".into()],
         command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
     };
-    let mut lsp = Lsp::new(true, vec![cfg], &root);
+    let mut lsp = Lsp::new(true, vec![cfg], std::slice::from_ref(&root));
     lsp.did_open(&file, "abc\n");
 
     let deadline = Instant::now() + Duration::from_secs(30);
@@ -659,7 +719,7 @@ fn mock_server_two_servers_on_one_file_publish_independently() {
             command: vec!["python3".into(), linter.to_string_lossy().into_owned()],
         },
     ];
-    let mut lsp = Lsp::new(true, cfgs, &root);
+    let mut lsp = Lsp::new(true, cfgs, std::slice::from_ref(&root));
     lsp.did_open(&file, "abc\n");
 
     let deadline = Instant::now() + Duration::from_secs(15);
@@ -685,6 +745,102 @@ fn mock_server_two_servers_on_one_file_publish_independently() {
     assert!(
         messages.contains(&"mock lint warning"),
         "the linter's diagnostic should also be present: {messages:?}"
+    );
+}
+
+/// T123f: `initialize` carries every open workspace folder (not just a
+/// single `rootUri`), and adding a folder later sends
+/// `workspace/didChangeWorkspaceFolders` to a server whose own `initialize`
+/// response asked for it.
+#[test]
+fn mock_server_gets_every_folder_at_initialize_and_a_change_notification_when_one_is_added() {
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("vix-lsp-mock-wsfolders-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let extra = std::env::temp_dir().join(format!(
+        "vix-lsp-mock-wsfolders-extra-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&extra).unwrap();
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER_LOGS_WORKSPACE_FOLDERS).unwrap();
+    let log = root.join("received.jsonl");
+    let file = root.join("a.rs");
+    std::fs::write(&file, "abc\n").unwrap();
+
+    let cfg = LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec![
+            "python3".into(),
+            mock.to_string_lossy().into_owned(),
+            log.to_string_lossy().into_owned(),
+        ],
+    };
+    let mut lsp = Lsp::new(true, vec![cfg], std::slice::from_ref(&root));
+    lsp.did_open(&file, "abc\n");
+
+    // Wait for the didOpen diagnostic -- proof initialize/initialized (and
+    // so the logged initialize params) already completed.
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < deadline && lsp.diagnostics_for(&file).is_empty() {
+        for _ in lsp.poll() {}
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        !lsp.diagnostics_for(&file).is_empty(),
+        "server should be ready before checking the logged initialize params"
+    );
+
+    lsp.add_workspace_folder(&extra);
+    // Give the notification a moment to actually reach the mock server and
+    // get flushed to the log file before shutdown tears the pipe down.
+    let flush_deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < flush_deadline
+        && !std::fs::read_to_string(&log)
+            .unwrap_or_default()
+            .contains("didChangeWorkspaceFolders")
+    {
+        for _ in lsp.poll() {}
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    lsp.shutdown();
+
+    let log_text = std::fs::read_to_string(&log).unwrap_or_default();
+    let messages: Vec<serde_json::Value> = log_text
+        .lines()
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect();
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&extra);
+
+    let init = messages
+        .iter()
+        .find(|m| m["method"] == "initialize")
+        .expect("initialize should have been logged");
+    let root_uri = vix::lsp::path_to_uri(&root);
+    assert_eq!(
+        init["params"]["workspaceFolders"].as_array().unwrap().len(),
+        1,
+        "only the one folder open at spawn time: {init}"
+    );
+    assert_eq!(init["params"]["workspaceFolders"][0]["uri"], root_uri);
+    assert_eq!(init["params"]["rootUri"], root_uri);
+
+    let change = messages
+        .iter()
+        .find(|m| m["method"] == "workspace/didChangeWorkspaceFolders")
+        .expect("didChangeWorkspaceFolders should have been sent and logged");
+    let added = change["params"]["event"]["added"].as_array().unwrap();
+    assert_eq!(added.len(), 1, "exactly the one added folder: {change}");
+    assert_eq!(added[0]["uri"], vix::lsp::path_to_uri(&extra));
+    assert_eq!(
+        change["params"]["event"]["removed"],
+        serde_json::json!([]),
+        "nothing was removed"
     );
 }
 
@@ -771,7 +927,7 @@ fn rust_analyzer_publishes_diagnostics_for_a_broken_file() {
         extensions: vec!["rs".into()],
         command: vec!["rust-analyzer".into()],
     };
-    let mut lsp = Lsp::new(true, vec![cfg], &root);
+    let mut lsp = Lsp::new(true, vec![cfg], std::slice::from_ref(&root));
     let text = std::fs::read_to_string(&main_rs).unwrap();
     lsp.did_open(&main_rs, &text);
 

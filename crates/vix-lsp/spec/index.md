@@ -105,17 +105,14 @@ document formatting / range formatting (above) — fully wired, unrelated to
   auto-triggers right after typing `(`/`,` inside a call, matching every
   other editor's convention for the feature.
 
-**Still open** (real gaps, each its own follow-up task below, none in any
-prior cut list):
-- **Single-root only**: `initialize` sends one `rootUri`, no
-  `workspaceFolders` array; Vix's own editor-level multi-root concept
-  (`App::workspace_folders`) isn't propagated to LSP servers at all.
+**Still open**: none — the T123 audit's whole list is closed (see below).
 
 **Closed since the audit above**: `prepareRename` (§ Features, "Rename")
 and `relatedInformation` (§ Features, "Diagnostics") — both T123e; **server
 crash recovery** — T123c; **pull diagnostics / `$/progress`** — T123d;
-**semantic tokens** (§ Features, "Semantic Tokens") — T123a; and
-**multiple servers per buffer** — T123b. A file can now be handled by more
+**semantic tokens** (§ Features, "Semantic Tokens") — T123a;
+**multiple servers per buffer** — T123b; and **multi-root workspace
+propagation** — T123f. A file can now be handled by more
 than one configured server at once (a common real-world setup: a
 type-checker LSP + a separate linter LSP both watching the same
 extension) — `configs_for` returns every matching config, not just the
@@ -163,9 +160,22 @@ fresh `workspace/diagnostic` report from every running server (§ Features,
 status message (`"Indexing: 3/10 crates (30%)"`) instead of nothing. All
 four were done as part of the T134 security/depth re-audit rather than
 deferred.
+`initialize` now sends every open workspace folder, not just one
+`rootUri` — `workspaceFolders: [{uri, name}, ...]` (`rootUri` stays the
+first folder, kept for servers predating LSP 3.6), and a server that
+asks for it (`capabilities.workspace.workspaceFolders.
+changeNotifications`) is sent `workspace/didChangeWorkspaceFolders`
+whenever a folder is added after startup — see "Add folder to workspace".
+Each running `Server` (one per `language_id`, unchanged by T123b) simply
+receives the whole folder set rather than one root; there is deliberately
+no "spawn a server per root" architecture — T123b's fan-out mechanism
+already lets one server answer for every folder it's told about. There
+is also no "remove folder from workspace" action in the app yet, so only
+the `added` half of `didChangeWorkspaceFolders` has a caller; `Lsp`'s
+notification builder supports `removed` too, for whenever that action
+exists.
 
-See `tasks.md`'s T123a–T123f for the implementation status of each open
-item above.
+Every item T123's own audit found is now closed.
 
 ## Position encoding
 

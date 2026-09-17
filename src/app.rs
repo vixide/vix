@@ -2044,7 +2044,11 @@ impl App {
         messages.advice(t!("msg.welcome").to_string());
         messages.info(t!("msg.welcome_hint").to_string());
 
-        let lsp = crate::lsp::Lsp::new(settings.lsp_enabled, settings.lsp_servers.clone(), root);
+        let lsp = crate::lsp::Lsp::new(
+            settings.lsp_enabled,
+            settings.lsp_servers.clone(),
+            &[root.to_path_buf()],
+        );
         (editor, messages, lsp)
     }
 
@@ -6203,7 +6207,7 @@ impl App {
             self.status = t!("status.project_missing", path = root).to_string();
             return;
         }
-        self.switch_workspace(&path);
+        self.switch_workspace(&path, &[]);
     }
 
     // ----- Workspaces (multi-folder, saved to a file) ----------------------
@@ -6277,15 +6281,13 @@ impl App {
         }
         let folders: Vec<PathBuf> = ws.folders.iter().map(PathBuf::from).collect();
         if let Some(primary) = folders.first() {
-            self.switch_workspace(&primary.clone());
-        }
-        // switch_workspace reset workspace_folders to just the primary; register
-        // the full set so the finder/search span them all.
-        self.workspace_folders = if folders.is_empty() {
-            vec![self.root.clone()]
+            // Passes the whole set so the fresh Lsp's own `initialize`
+            // already names every folder (T123f), and `workspace_folders`
+            // ends up holding all of them, not just the primary.
+            self.switch_workspace(&primary.clone(), &folders);
         } else {
-            folders
-        };
+            self.workspace_folders = vec![self.root.clone()];
+        }
         self.build_file_index();
         // Only auto-open files contained within the workspace's own folders, so a
         // crafted workspace can't silently open arbitrary system paths (e.g.
@@ -6312,7 +6314,11 @@ impl App {
         };
     }
 
-    /// Add a folder to the current workspace so the finder/search span it too.
+    /// Add a folder to the current workspace so the finder/search span it too,
+    /// and tell every running LSP server that asked to hear about
+    /// workspace-folder changes (T123f) — a server that only just now spawns
+    /// gets the full, current folder list from its own `initialize` instead,
+    /// so it needs no separate notification.
     fn workspace_add_folder(&mut self, path: &str) {
         let folder = self.resolve(path.trim());
         if !folder.is_dir() {
@@ -6321,6 +6327,7 @@ impl App {
         }
         if !self.workspace_folders.contains(&folder) {
             self.workspace_folders.push(folder.clone());
+            self.lsp.add_workspace_folder(&folder);
             self.build_file_index();
         }
         self.status = t!("status.workspace_folder_added", path = folder.display()).to_string();

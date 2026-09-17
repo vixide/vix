@@ -339,17 +339,27 @@ impl App {
     /// Re-root the app at `new_root`: persist the current session, restart the
     /// LSP, rebuild the explorer, reset the tabs, refresh git, and restore the new
     /// workspace's saved session.
-    pub(super) fn switch_workspace(&mut self, new_root: &Path) {
+    ///
+    /// `folders` is the full workspace-folder set to reopen with (T123f) —
+    /// pass `&[]` for a plain single-root switch (just `new_root`), or the
+    /// whole list from a multi-folder workspace file, so every folder is in
+    /// the fresh `Lsp`'s own `initialize` from the start rather than added
+    /// one at a time after the fact.
+    pub(super) fn switch_workspace(&mut self, new_root: &Path, folders: &[PathBuf]) {
         self.save_session();
         self.lsp.shutdown();
         self.lsp_synced.clear();
         self.root = new_root.to_path_buf();
-        self.workspace_folders = vec![new_root.to_path_buf()];
+        self.workspace_folders = if folders.is_empty() {
+            vec![new_root.to_path_buf()]
+        } else {
+            folders.to_vec()
+        };
         self.explorer = Explorer::new(new_root.to_path_buf());
         self.lsp = crate::lsp::Lsp::new(
             self.settings.lsp_enabled,
             self.settings.lsp_servers.clone(),
-            new_root,
+            &self.workspace_folders,
         );
         self.editor.close_all();
         self.refresh_git();

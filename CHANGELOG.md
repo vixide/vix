@@ -8,6 +8,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Multi-root LSP workspaces** (improvement plan T123f): `initialize` now
+  sends every open workspace folder (`workspaceFolders`), not just one
+  `rootUri` — a server sees the whole workspace, not only its first
+  folder. Adding a folder to the workspace after startup now notifies any
+  already-running server that asked to hear about it
+  (`workspace/didChangeWorkspaceFolders`). Closes the last open item from
+  the T123 LSP audit. See `crates/vix-lsp/spec/index.md`.
 - **Multiple LSP servers per file** (improvement plan T123b): a file can
   now be handled by more than one configured server at once — e.g. a
   type-checker plus a separate linter both watching `.rs`. Document sync
