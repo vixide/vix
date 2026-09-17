@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Card } from 'lily-design-system-svelte-headless';
+  import { Card } from '@lilydesignsystem/svelte-headless';
 </script>
 
 <svelte:head>
