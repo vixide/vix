@@ -113,6 +113,7 @@ sbom
 wgrep
 ancel
 undoable
+lilydesignsystem
 
 # Language endonyms (localization spec lists languages in their own script)
 bahasa

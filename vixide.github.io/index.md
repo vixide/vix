@@ -9,7 +9,7 @@ the editor itself; it's the landing page, feature tour, and install
 instructions.
 
 Styled with [Lily Design System](https://lilydesignsystem.github.io/)'s
-headless Svelte components (`lily-design-system-svelte-headless`) — semantic
+headless Svelte components (`@lilydesignsystem/svelte-headless`) — semantic
 HTML and ARIA from the library, all CSS hand-written in
 [`static/assets/style.css`](static/assets/style.css) against Lily's class
 hooks. The header's light/dark toggle and share button are Lily's
