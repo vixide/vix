@@ -54,6 +54,7 @@ enum Pending {
     IncomingCalls,
     PrepareRename,
     WorkspaceDiagnostics,
+    SemanticTokens,
 }
 
 /// A message handed back from a server's stdout reader thread.
@@ -149,6 +150,13 @@ pub enum LspEvent {
     /// (the host's status line is ambient/best-effort already, same as
     /// every other transient status message).
     Progress(String),
+    /// A `textDocument/semanticTokens/full` response for the active file
+    /// (T123a): every token, already decoded to absolute positions and
+    /// resolved against the server's legend. Like `Hover`/`InlayHints`/…,
+    /// this carries no path — the host applies it to whichever file was
+    /// active when the response arrives, same established limitation those
+    /// already have under rapid tab switching.
+    SemanticTokens(Vec<vix_lsp_core::SemanticToken>),
 }
 
 /// Outcome of `textDocument/prepareRename`, sent before the rename prompt
@@ -182,6 +190,11 @@ struct Server {
     docs: HashMap<String, i64>,
     /// Position encoding negotiated at `initialize` (default UTF-16).
     encoding: Encoding,
+    /// This server's semantic-token type legend, negotiated at `initialize`
+    /// (T123a) — empty when it doesn't advertise semantic tokens support at
+    /// all. `parse_semantic_tokens` resolves a response's numeric type
+    /// indices against this.
+    semantic_tokens_legend: Vec<String>,
     /// Whether `initialize` has completed and `initialized` been sent.
     ready: bool,
     /// Messages deferred until the server is `ready`.
@@ -701,6 +714,33 @@ impl Lsp {
         }
     }
 
+    /// Request `textDocument/semanticTokens/full` for `path` (T123a) — a
+    /// second, LSP-driven highlight layer over Tree-sitter's purely
+    /// syntactic one, for distinctions Tree-sitter structurally cannot make
+    /// (mutable vs. immutable binding, trait-default vs. inherent method,
+    /// unused variable/parameter). Only sent to servers that actually
+    /// advertised support (a non-empty legend at `initialize`) — a server
+    /// with none never gets asked, since `handle_response`'s decode would
+    /// have nothing to resolve type indices against anyway.
+    pub fn request_semantic_tokens(&mut self, path: &Path) {
+        let Some(config) = self.config_for(path) else {
+            return;
+        };
+        if self
+            .servers
+            .get(&config.language_id)
+            .is_none_or(|s| s.semantic_tokens_legend.is_empty())
+        {
+            return;
+        }
+        self.send_request(
+            path,
+            "textDocument/semanticTokens/full",
+            Pending::SemanticTokens,
+            message::text_document_params,
+        );
+    }
+
     /// Request code actions for the range `[start, end)`, with `diagnostics`
     /// (raw LSP objects overlapping the range) in the request context.
     pub fn request_code_action(
@@ -941,6 +981,11 @@ impl Lsp {
         let Some(kind) = server.pending.remove(&id) else {
             return;
         };
+        // Grabbed now, while `server` is still borrowed -- `Pending::
+        // SemanticTokens` below needs it, but only after `self.diagnostics`
+        // (a different field) is free to borrow too, past `server`'s own
+        // last use.
+        let semantic_tokens_legend = server.semantic_tokens_legend.clone();
         let Some(result) = msg.get("result") else {
             // T123 audit: a JSON-RPC `error` object here used to be
             // silently dropped -- a failed rename/code-action/format/…
@@ -960,7 +1005,14 @@ impl Lsp {
             // not found" here is expected and silent, not a user-visible
             // failure -- push (`publishDiagnostics`) already covers the
             // baseline experience regardless.
-            if matches!(kind, Pending::WorkspaceDiagnostics) {
+            // T123a: semantic tokens is likewise a newer, optional LSP 3.17
+            // capability -- Tree-sitter's own highlighting already covers
+            // the baseline, so a server without support (or a transient
+            // failure) shouldn't interrupt the user with an error.
+            if matches!(
+                kind,
+                Pending::WorkspaceDiagnostics | Pending::SemanticTokens
+            ) {
                 return;
             }
             if let Some(error) = msg.get("error") {
@@ -998,6 +1050,15 @@ impl Lsp {
                     self.diagnostics.insert(path.clone(), diags);
                 }
                 events.push(LspEvent::Diagnostics(path));
+            }
+            return;
+        }
+        // T123a: needs the legend captured above (per-server state,
+        // unavailable to the self-less `response_to_events`).
+        if matches!(kind, Pending::SemanticTokens) {
+            let tokens = message::parse_semantic_tokens(result, &semantic_tokens_legend);
+            if !tokens.is_empty() {
+                events.push(LspEvent::SemanticTokens(tokens));
             }
             return;
         }
@@ -1187,6 +1248,7 @@ impl Lsp {
         };
         if let Some(result) = msg.get("result") {
             server.encoding = message::parse_position_encoding(result);
+            server.semantic_tokens_legend = message::parse_semantic_tokens_legend(result);
         }
         server.ready = true;
         server.ready_since = Some(Instant::now());
@@ -1252,6 +1314,7 @@ fn spawn(config: &ServerConfig, root_uri: Option<&str>) -> Option<Server> {
         pending: HashMap::new(),
         docs: HashMap::new(),
         encoding: Encoding::Utf16,
+        semantic_tokens_legend: Vec::new(),
         ready: false,
         queue: Vec::new(),
         ready_since: None,

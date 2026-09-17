@@ -72,6 +72,44 @@ impl App {
         t.editor.set_inlay_hints(converted);
     }
 
+    /// Store LSP semantic tokens on the active buffer as a second highlight
+    /// layer over Tree-sitter's purely syntactic one (T123a): each token's
+    /// `(line, character, length)` converts to an absolute `(start char, end
+    /// char)` span, and its server-reported type name maps onto one of the
+    /// theme's existing syntax capture names (`semantic_token_capture`) --
+    /// v1 deliberately only covers the types the bundled themes actually
+    /// define a color for (`comment`/`keyword`/`number`/`string`); richer
+    /// distinctions Tree-sitter truly cannot make (mutable vs. immutable
+    /// binding, deprecated, unused) need new theme slots first, filed as
+    /// T123a's own follow-up rather than done here (see `crates/vix-lsp/
+    /// spec/index.md`).
+    pub(super) fn apply_semantic_tokens(&mut self, tokens: &[crate::lsp_core::SemanticToken]) {
+        let Some(path) = self.active_path() else {
+            return;
+        };
+        let enc = self.lsp.encoding_for(&path);
+        let Some(t) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let converted: Vec<(usize, usize, String)> = {
+            let code = t.editor.code_ref();
+            tokens
+                .iter()
+                .filter_map(|tok| {
+                    let capture = semantic_token_capture(&tok.token_type)?;
+                    let line_idx = tok.line as usize;
+                    if line_idx >= code.len_lines() {
+                        return None;
+                    }
+                    let start = lsp_pos_to_char(code, tok.line, tok.character, enc);
+                    let end = lsp_pos_to_char(code, tok.line, tok.character + tok.length, enc);
+                    (start < end).then_some((start, end, capture.to_string()))
+                })
+                .collect()
+        };
+        t.editor.set_semantic_tokens(converted);
+    }
+
     /// Toggle inlay-hint display: clear them when turning off, refetch when on.
     pub(super) fn toggle_inlay_hints(&mut self) {
         self.show_inlay_hints = !self.show_inlay_hints;
@@ -310,6 +348,11 @@ impl App {
         } else {
             self.lsp.did_change(&path, &text);
         }
+        // T123a: re-requested after every change, not just on open -- a
+        // token's classification (e.g. "unused") can change as the user
+        // types. `Lsp::request_semantic_tokens` itself no-ops for a server
+        // that never advertised support.
+        self.lsp.request_semantic_tokens(&path);
         self.lsp_synced.insert(path, rev);
     }
 
@@ -895,5 +938,25 @@ impl App {
             }
             _ => {}
         }
+    }
+}
+
+/// Map an LSP semantic-token type name onto the closest existing theme
+/// syntax capture name (T123a), or `None` when there is no reasonable match
+/// yet — every bundled theme (`themes/*.json`) currently defines exactly
+/// four syntax colors (`comment`/`keyword`/`number`/`string`), a real
+/// finding from implementing this task, not an assumption going in. Richer
+/// LSP distinctions (`function`, `type`, `variable`, and the modifier-driven
+/// ones like mutable/deprecated/unused this task's own description named as
+/// the headline motivation) have nowhere to render yet without a theme
+/// schema change — see `crates/vix-lsp/spec/index.md`'s T123a note for the
+/// follow-up this was scoped down to avoid rushing.
+fn semantic_token_capture(lsp_token_type: &str) -> Option<&'static str> {
+    match lsp_token_type {
+        "comment" => Some("comment"),
+        "keyword" | "modifier" => Some("keyword"),
+        "number" => Some("number"),
+        "string" | "regexp" => Some("string"),
+        _ => None,
     }
 }

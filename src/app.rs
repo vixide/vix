@@ -6579,6 +6579,9 @@ impl App {
                         .error(t!("msg.lsp_server_crashed", language = language_id).to_string());
                 }
                 crate::lsp::LspEvent::Progress(text) => self.status = text,
+                crate::lsp::LspEvent::SemanticTokens(tokens) => {
+                    self.apply_semantic_tokens(&tokens);
+                }
             }
         }
         // Rebuild the active editor's diagnostic underlines every tick so they

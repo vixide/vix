@@ -8,6 +8,17 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **LSP semantic tokens** (improvement plan T123a): a server's
+  `textDocument/semanticTokens/full` response now feeds the syntax
+  highlighting layer alongside (and on top of, where they overlap)
+  Tree-sitter highlighting — including for grammars with no bundled
+  Tree-sitter query at all, where semantic tokens are now the only
+  source of highlighting. Mapped onto the 4 syntax color slots every
+  theme already defines (`comment`/`keyword`/`number`/`string`); a token
+  type with no mapping is silently skipped rather than shown unstyled or
+  erroring. Requested once a server's `initialize` response advertises
+  `semanticTokensProvider`, and re-requested whenever the active buffer's
+  content changes.
 - **LSP pull diagnostics and `$/progress`** (improvement plan T123d):
   opening the Problems panel now also pulls a fresh `workspace/diagnostic`
   report from every running server, so it reflects a server's whole-project

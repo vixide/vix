@@ -60,7 +60,11 @@ while True:
     method = msg.get('method')
     mid = msg.get('id')
     if method == 'initialize':
-        send({'jsonrpc':'2.0','id':mid,'result':{'capabilities':{'positionEncoding':'utf-16'}}})
+        send({'jsonrpc':'2.0','id':mid,'result':{'capabilities':{
+            'positionEncoding':'utf-16',
+            'semanticTokensProvider':{'legend':{
+                'tokenTypes':['keyword','variable'],'tokenModifiers':[]},
+                'full':True}}}})
         send({'jsonrpc':'2.0','method':'$/progress','params':{
             'token':'t1','value':{'kind':'begin','title':'Indexing','percentage':0}}})
     elif method == 'workspace/diagnostic':
@@ -68,6 +72,9 @@ while True:
             {'uri':'file:///other.rs','kind':'full','items':[
                 {'range':{'start':{'line':2,'character':0},'end':{'line':2,'character':5}},
                  'severity':1,'message':'workspace-wide finding'}]}]}})
+    elif method == 'textDocument/semanticTokens/full':
+        # One token: line 0, char 0, length 3, type 0 ("keyword"), no modifiers.
+        send({'jsonrpc':'2.0','id':mid,'result':{'data':[0, 0, 3, 0, 0]}})
     elif method == 'textDocument/didOpen':
         uri = msg['params']['textDocument']['uri']
         send({'jsonrpc':'2.0','method':'textDocument/publishDiagnostics','params':{
@@ -447,6 +454,57 @@ fn mock_server_progress_and_pull_diagnostics_round_trip() {
         lsp.diagnostics_for(&other)[0].message,
         "workspace-wide finding"
     );
+}
+
+/// T123a: `textDocument/semanticTokens/full` round-trips through a real
+/// server -- the legend captured at `initialize` resolves the response's
+/// numeric type index back into the name (`"keyword"`) the rest of the
+/// pipeline understands.
+#[test]
+fn mock_server_semantic_tokens_resolve_against_the_initialize_legend() {
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("vix-lsp-mock-semtok-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER).unwrap();
+    let file = root.join("a.rs");
+    std::fs::write(&file, "abc\n").unwrap();
+
+    let cfg = LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
+    };
+    let mut lsp = Lsp::new(true, vec![cfg], &root);
+    lsp.did_open(&file, "abc\n");
+
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let mut tokens: Option<Vec<vix::lsp_core::SemanticToken>> = None;
+    let mut asked = false;
+    while Instant::now() < deadline && tokens.is_none() {
+        for ev in lsp.poll() {
+            if let LspEvent::SemanticTokens(t) = ev {
+                tokens = Some(t);
+            }
+        }
+        if !asked && !lsp.diagnostics_for(&file).is_empty() {
+            lsp.request_semantic_tokens(&file);
+            asked = true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    lsp.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
+
+    let tokens = tokens.expect("a SemanticTokens event should have arrived");
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].line, 0);
+    assert_eq!(tokens[0].character, 0);
+    assert_eq!(tokens[0].length, 3);
+    assert_eq!(tokens[0].token_type, "keyword");
 }
 
 /// T134 audit: a crashed server for an already-open file used to just

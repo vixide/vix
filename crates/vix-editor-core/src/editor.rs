@@ -111,6 +111,15 @@ pub struct Editor {
     /// inline (dimmed), shifting the real glyphs at/after the column to the right.
     pub(crate) inlay_hints: Vec<(usize, usize, String)>,
 
+    /// LSP semantic tokens (T123a): `(start char, end char, theme capture
+    /// name)`, a second highlight layer over Tree-sitter's purely syntactic
+    /// one. Like `inlay_hints`, computed once against the buffer state at
+    /// the moment the response arrived — an edit before a token can leave
+    /// it stale until the next request/response round trip replaces the
+    /// whole list, the same accepted risk `inlay_hints`/`fold_ranges`
+    /// already carry.
+    pub(crate) semantic_tokens: Vec<(usize, usize, String)>,
+
     /// Syntax highlight cache by intervals to speed up rendering
     pub(crate) highlights_cache: RefCell<HightlightCache>,
 
@@ -212,6 +221,7 @@ impl Editor {
             fold_ranges: Vec::new(),
             folds: Vec::new(),
             inlay_hints: Vec::new(),
+            semantic_tokens: Vec::new(),
             highlights_cache,
             flags: Flags::SHOW_LINE_NUMBERS | Flags::AUTO_PAIR,
             eol_note: None,
@@ -797,6 +807,13 @@ impl Editor {
     /// Set the inline hints to display: `(line, char column within line, label)`.
     pub fn set_inlay_hints(&mut self, hints: Vec<(usize, usize, String)>) {
         self.inlay_hints = hints;
+    }
+
+    /// Replace the LSP semantic-token overlay (T123a): `(start char, end
+    /// char, theme capture name)` spans, merged into Tree-sitter's own
+    /// highlighting at render time (`draw_syntax_layer`).
+    pub fn set_semantic_tokens(&mut self, tokens: Vec<(usize, usize, String)>) {
+        self.semantic_tokens = tokens;
     }
 
     /// Whether any inline hints are set.

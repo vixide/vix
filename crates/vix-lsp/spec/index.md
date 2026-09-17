@@ -68,6 +68,7 @@ a keybinding, or an automatic trigger), not just present unused in
 | Selection Range | expand/shrink selection | Walks the server's `parent` chain of enclosing ranges around the cursor. |
 | Linked Editing Range | automatic | Ranges (e.g. an open/close tag pair) that should be edited together. |
 | Call Hierarchy | `lsp.call_hierarchy` | `prepareCallHierarchy` + `callHierarchy/incomingCalls` (outgoing calls not wired). |
+| Semantic Tokens | automatic, re-requested on content change (T123a) | `textDocument/semanticTokens/full`, decoded against the `initialize`-time legend and merged into the syntax highlighting layer alongside (winning ties over) Tree-sitter highlighting — including for grammars with no Tree-sitter query at all, where this becomes the only highlighting source. Mapped onto the 4 syntax color slots every theme defines (`comment`/`keyword`/`number`/`string`); an unmapped token type is silently skipped rather than left unstyled-but-logged or erroring. Modifiers and additional theme slots are a possible follow-up, not done here. |
 
 ## Known gaps against LSP 3.17 (T123 audit, 2026-09-16)
 
@@ -102,11 +103,6 @@ document formatting / range formatting (above) — fully wired, unrelated to
 
 **Still open** (real gaps, each its own follow-up task below, none in any
 prior cut list):
-- **Semantic tokens** (`textDocument/semanticTokens/*`): zero
-  implementation. Genuinely additive to Tree-sitter's purely syntactic
-  highlighting — things requiring type/binding resolution (mutable vs.
-  immutable binding, trait-default vs. inherent method, unused
-  variable/parameter) that Tree-sitter structurally cannot know.
 - **One server per `language_id`, never per-buffer**: `Lsp`'s server
   registry is `HashMap<String, Server>` keyed by `language_id`, and
   `config_for` takes the *first* matching config by extension — there is no
@@ -119,7 +115,8 @@ prior cut list):
 
 **Closed since the audit above**: `prepareRename` (§ Features, "Rename")
 and `relatedInformation` (§ Features, "Diagnostics") — both T123e; **server
-crash recovery** — T123c; and **pull diagnostics / `$/progress`** — T123d.
+crash recovery** — T123c; **pull diagnostics / `$/progress`** — T123d; and
+**semantic tokens** (§ Features, "Semantic Tokens") — T123a.
 A crashed server (the reader thread detects the dead process via EOF) is
 now respawned automatically, up to 3 consecutive attempts since it last
 stayed up for 30 seconds (a genuine crash loop — a bad command, a real bug

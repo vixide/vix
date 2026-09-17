@@ -103,3 +103,24 @@ pub struct Location {
     /// Range within the document.
     pub range: Range,
 }
+
+/// One decoded `textDocument/semanticTokens/full` token (T123a): an
+/// absolute LSP position (already resolved from the response's
+/// delta-encoded form), a code-unit length in the server's negotiated
+/// [`Encoding`], and the server's own token-type name (resolved against its
+/// `initialize`-time legend — see
+/// [`crate::message::parse_semantic_tokens_legend`]). Token *modifiers*
+/// (`readonly`, `deprecated`, …) are deliberately not decoded in v1 — see
+/// `crates/vix-lsp/spec/index.md`'s T123a note.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SemanticToken {
+    /// Zero-based line.
+    pub line: u32,
+    /// Zero-based column, in the negotiated encoding's units.
+    pub character: u32,
+    /// Token length, in the negotiated encoding's units.
+    pub length: u32,
+    /// The server's own name for this token's type (e.g. `"variable"`,
+    /// `"function"`), already resolved against the legend.
+    pub token_type: String,
+}
