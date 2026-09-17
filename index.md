@@ -8,22 +8,24 @@ by GitHub Actions to GitHub Pages. It doesn't implement or ship any part of
 the editor itself; it's the landing page, feature tour, and install
 instructions.
 
-Styled with [Lily Design System](https://lilydesignsystem.github.io/)'s
+Styled with [Lily Design System](https://lilydesignsystem.com/)'s
 headless Svelte components (`@lilydesignsystem/svelte-headless`) — semantic
 HTML and ARIA from the library, all CSS hand-written in
 [`static/assets/style.css`](static/assets/style.css) against Lily's class
-hooks. The header's light/dark toggle and share button are Lily's
-`svelte-theme-picker` and `svelte-share-picker` helpers, same pattern — see
-[AGENTS.md](AGENTS.md) for the theme-file and page-title conventions.
+hooks. The header's theme, language, text-size, and share controls are one
+`@lilydesignsystem/svelte-picker-bar` `PickerBar`, offering all 45 Lily
+reference themes and the 15 languages the Vix editor itself ships
+translations for — see [AGENTS.md](AGENTS.md) for the theme-file and
+page-title conventions.
 
 ## Develop
 
 ```sh
-npm install
-npm run dev       # http://localhost:5173
-npm run build     # prerenders to build/
-npm run preview   # serve the prerendered build locally
-npm run check     # svelte-check
+pnpm install
+pnpm run dev       # http://localhost:5173
+pnpm run build     # prerenders to build/
+pnpm run preview   # serve the prerendered build locally
+pnpm run check     # svelte-check
 ```
 
 ## Routes

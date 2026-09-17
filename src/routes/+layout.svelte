@@ -1,10 +1,19 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { Header, NavigationMenu } from '@lilydesignsystem/svelte-headless';
-  import { ThemePicker } from '@lilydesignsystem/svelte-theme-picker';
-  import { SharePicker, type ShareTarget } from '@lilydesignsystem/svelte-share-picker';
+  import PickerBar from '@lilydesignsystem/svelte-picker-bar';
+  import type { ShareTarget } from '@lilydesignsystem/svelte-share-picker';
 
   let { children } = $props();
+
+  // The site's own locale set — the same 15 languages the Vix editor itself
+  // ships translations for (locales/*.yml), so the language switcher here
+  // never offers a choice the product doesn't actually have. LocalePicker
+  // only sets `lang`/`dir` on <html>; there is no page-content translation
+  // wired up yet — see AGENTS.md.
+  const siteLocales = [
+    'ar', 'bn', 'cy', 'de', 'en', 'es', 'fr', 'ga', 'gd', 'hi', 'ja', 'pl', 'pt', 'ru', 'zh'
+  ];
 
   type NavLink = { href: string; label: string };
   const navLinks: NavLink[] = [
@@ -25,29 +34,38 @@
 
   // Vix ships no third-party endpoints of its own — each `href` builds the
   // destination URL from the shared page's own title, not a hardcoded one.
+  // Order and labels follow lily-design-system-svelte-with-picker-bar/index.md;
+  // "Copy Link" isn't in this list — it's SharePicker's own built-in
+  // copy-to-clipboard button, wired via `copyLabel` below.
   const shareTargets: ShareTarget[] = [
     {
+      id: 'email',
+      label: 'Email Link',
+      href: (url, title) =>
+        `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(url)}`
+    },
+    {
       id: 'linkedin',
-      label: 'LinkedIn',
+      label: 'Share on LinkedIn',
       href: (url) => `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`
     },
     {
-      id: 'mastodon',
-      label: 'Mastodon',
+      id: 'reddit',
+      label: 'Share on Reddit',
       href: (url, title) =>
-        `https://mastodon.social/share?text=${encodeURIComponent(`${title} ${url}`)}`
+        `https://www.reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`
     },
     {
       id: 'bluesky',
-      label: 'Bluesky',
+      label: 'Share on Bluesky',
       href: (url, title) =>
         `https://bsky.app/intent/compose?text=${encodeURIComponent(`${title} ${url}`)}`
     },
     {
-      id: 'reddit',
-      label: 'Reddit',
+      id: 'mastodon',
+      label: 'Share on Mastodon',
       href: (url, title) =>
-        `https://www.reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`
+        `https://mastodonshare.com/?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`
     }
   ];
 </script>
@@ -73,24 +91,33 @@
         {/each}
         <a href="https://github.com/vixide/vix">GitHub</a>
       </NavigationMenu>
-      <div class="site-controls">
-        <ThemePicker
-          label="Theme"
-          themesUrl="/assets/themes/"
-          themes={['light', 'dark']}
-          defaultValue="light"
-          detectFromSystem
-          storageKey="vix:theme"
-        />
-        <SharePicker
-          label="Share this page"
-          title={pageTitle}
-          targets={shareTargets}
-          copyLabel="Copy link"
-          copiedLabel="Link copied"
-          copyFailedLabel="Could not copy — copy it from the address bar"
-        />
-      </div>
+      <!--
+        themes/sizes are deliberately not passed — PickerBar defaults to
+        DEFAULT_THEMES (all 45 Lily reference themes, alphabetical, UK/US
+        government themes grouped last) and DEFAULT_SIZES (the 7-step text
+        size scale), which is exactly the "Lily default themes/sizes, not
+        any application-specific custom set" this header is required to use.
+      -->
+      <PickerBar
+        labels={{
+          theme: 'Theme',
+          locale: 'Language',
+          textSize: 'Text size',
+          share: 'Share this page'
+        }}
+        themesUrl="/assets/themes/"
+        locales={siteLocales}
+        shareTargets={shareTargets}
+        themeProps={{ defaultValue: 'light', detectFromSystem: true, storageKey: 'vix:theme' }}
+        localeProps={{ defaultValue: 'en', detectFromNavigator: true, storageKey: 'vix:locale' }}
+        textSizeProps={{ storageKey: 'vix:text-size' }}
+        shareProps={{
+          title: pageTitle,
+          copyLabel: 'Copy Link',
+          copiedLabel: 'Link copied',
+          copyFailedLabel: 'Could not copy — copy it from the address bar'
+        }}
+      />
     </div>
   </div>
 </Header>
