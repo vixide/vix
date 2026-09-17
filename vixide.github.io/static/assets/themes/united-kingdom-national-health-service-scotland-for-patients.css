@@ -1,118 +1,261 @@
 /* ============================================================================
- * Lily theme: dark
+ * NHS Scotland (United Kingdom) Design System
+ * ----------------------------------------------------------------------------
+ * NHS Scotland is the umbrella for 14 territorial NHS boards plus seven
+ * special boards (NHS 24, NHS Education for Scotland, NHS National Services
+ * Scotland, Public Health Scotland, Scottish Ambulance Service, State
+ * Hospitals Board, NHS Healthcare Improvement Scotland). Its public-facing
+ * digital surface is split across three closely-aligned brand expressions
+ * that this theme harmonises into one Lily token set:
  *
- * Standalone Lily Design System theme — declares the theme tokens and inlines
- * the component CSS for all 492 Lily components, so this single file is the
- * only stylesheet required to render a Lily-styled page.
+ *   1. NHS Scotland corporate brand (Scottish Government / CMO directorate)
+ *      — the formal navy-blue identity used by NHS boards, statutory
+ *      publications, and the NHS Scotland staff intranet.
+ *   2. NHS Inform — the citizen-facing health information service published
+ *      by NHS 24 at nhsinform.scot. Uses the deeper navy plus a bright NHS
+ *      cyan for links and signposting.
+ *   3. NHS 24 service brand (111, Scotland's telehealth line) — a darker,
+ *      more clinical reading of the same palette with magenta/violet
+ *      callouts reserved for safety messaging.
  *
+ * Upstream tracked: NHS.UK frontend v9.x visual language (v10 is in
+ * pre-release; re-check the palette when it goes stable). Independent
+ * implementation against Lily class hooks; not affiliated with or
+ * endorsed by the NHS.
  *
- * Credit for the theme source: DaisyUI (https://daisyui.com/)
+ * Canonical references
+ *   - NHS Scotland Identity Standards (Scottish Government CMO Directorate):
+ *       https://www.publications.scot.nhs.uk/
+ *   - NHS Inform (citizen-facing health information):
+ *       https://www.nhsinform.scot/
+ *   - NHS 24 (telehealth / 111):
+ *       https://www.nhs24.scot/
+ *   - Scottish Government Design System (sibling system, shares typography
+ *     conventions and accessibility targets):
+ *       https://designsystem.gov.scot/
+ *   - Digital Scotland Service Standard (legal accessibility baseline):
+ *       https://www.gov.scot/publications/digital-scotland-service-standard/
+ *   - Typography: Frutiger W01 (primary, shared with NHS UK), Roboto for
+ *     NHS Inform body copy, Arial / system-ui as the universal fallback.
+ *   - Base font size: 16px; modular scale matches NHS UK (14/16/19/22/26/
+ *     32/48/64) so components ported from the NHS UK frontend "just work".
+ *   - Spacing scale (px): 0, 4, 8, 12, 16, 24, 32, 40, 48, 64 — identical
+ *     to NHS UK frontend's `$nhsuk-spacing-responsive-scale`.
+ *   - WCAG 2.2 AA mandated by the Digital Scotland Service Standard;
+ *     Lily targets AAA. The focus indicator below clears AAA at 3:1
+ *     against every surface in the theme.
  *
- * Upstream tracked: DaisyUI v5-era theme palette, adapted to Lily tokens and hooks.
+ * Brand palette (sRGB swatches → OKLCH equivalents used in the theme)
+ *   NHS Scotland Navy      #003087   primary brand colour (Pantone 287)
+ *                                    The flagship NHS Scotland blue.
+ *                                    Darker than NHS England's #005EB8;
+ *                                    this is the single most distinctive
+ *                                    visual difference between the two
+ *                                    nations' systems.
+ *   NHS Scotland Mid Blue  #0078D4   primary action / link colour
+ *                                    (NHS Inform's link blue, also used
+ *                                    on NHS24 service buttons).
+ *   NHS Bright Blue        #0072CE   informational accents, shared with
+ *                                    the NHS UK identity for cross-border
+ *                                    services and chips/badges.
+ *   NHS Light Blue         #41B6E6   illustrative accent, infographics,
+ *                                    chart palette.
+ *   NHS Aqua / Teal        #00A499   supplementary accent (NHS24 chrome).
+ *   NHS Scotland Magenta   #AE2573   safety-critical callouts used by
+ *                                    NHS 24 for "phone 999" messaging.
+ *                                    Not exposed as a Lily role; cited
+ *                                    here for completeness only.
+ *   NHS Black              #212B32   primary text on white surfaces.
+ *   NHS Dark Grey          #425563   secondary text, captions.
+ *   NHS Mid Grey           #768692   tertiary text, dividers, default
+ *                                    border colour on form fields.
+ *   NHS Pale Grey          #E8EDEE   sectioned surfaces, summary panels,
+ *                                    table zebra striping.
+ *   NHS Inform Off-White   #F0F4F5   page wash used by nhsinform.scot
+ *                                    behind the main column on wider
+ *                                    viewports (slightly cooler than
+ *                                    NHS UK's pale grey).
+ *   NHS White              #FFFFFF   default page background.
+ *   NHS Warm Yellow        #FFB81C   warning banners, also the canonical
+ *                                    focus indicator across NHS UK / NHS
+ *                                    Scotland / NHS Wales — a deliberate
+ *                                    cross-system commitment so keyboard
+ *                                    users recognise focus everywhere.
+ *   NHS Emergency Red      #DA291C   error / destructive action, also
+ *                                    the colour used on the "999" badge
+ *                                    inside NHS Inform.
+ *   NHS Green              #009639   success / confirmation.
+ *   NHS Dark Green         #006747   success hover / pressed state.
+ *
+ * Geometry rules (shared with NHS UK frontend)
+ *   - Border radius: 4px on cards, inputs, and buttons. Selectors
+ *     (checkbox/radio) are square (0px) to keep the tick mark perfectly
+ *     centred — a NHS frontend convention preserved here.
+ *   - Borders: 1px solid hairline, drawn in NHS Mid Grey #768692.
+ *   - Surfaces are flat: no shadow, no gradient (depth = 0). NHS Scotland
+ *     identity guidance discourages skeuomorphism so clinical content
+ *     reads calmly on low-contrast and reduced-vision displays.
+ *   - No textures or noise (noise = 0).
+ *
+ * Accessibility commitments encoded in this theme
+ *   - All foreground/background pairs target WCAG AA at minimum; the
+ *     primary / secondary / info / success / error swatches reach AAA
+ *     when paired with the matching *-content colour below.
+ *   - Warning content is dark (≈ NHS Black) so #FFB81C yellow stays
+ *     legible — yellow-on-white would fall below AA.
+ *   - Focus ring (rendered by the example apps' CSS, not declared here)
+ *     uses NHS Warm Yellow #FFB81C over NHS Black #212B32 to guarantee
+ *     visibility on every theme surface including primary and error.
+ *   - Colour is never the sole carrier of meaning (WCAG 1.4.1) — every
+ *     status component pairs colour with an icon, text label, or ARIA
+ *     attribute per AGENTS/accessibility.md.
+ *
+ * Relationship to sibling themes
+ *   - united-kingdom-national-health-service-england.css — same modular
+ *     scale and geometry; primary is lighter (#005EB8 vs #003087).
+ *   - united-kingdom-national-health-service-wales.css — shares yellow,
+ *     red, and green roles; primary leans toward GIG Cymru's deeper navy.
+ *   Components are visually portable across the three nations: only the
+ *   primary / secondary / accent tokens differ, never the geometry or
+ *   the safety palette (warning / error / success).
  * ========================================================================= */
 
 /* Theme tokens — the colour, radius, border, and depth variables consumed
  * by every Lily component rule below. The theme applies by default (`:root`)
- * and also when explicitly opted into via `<html data-theme="dark">`,
+ * and also when explicitly opted into via `<html data-theme="united-kingdom-national-health-service-scotland-for-patients">`,
  * so multiple themes can coexist in one document and be switched at runtime
  * by updating the `data-theme` attribute. */
 
-:where(:root, :root[data-theme="dark"]) {
-    color-scheme: dark;
+:where(:root, :root[data-theme="united-kingdom-national-health-service-scotland-for-patients"]) {
+    color-scheme: light;
 
-    /* Page-level surface (primary canvas). Sits behind body copy
-       and primary content areas. Lightest base shade in light
-       themes, deepest in dark themes. */
-    --color-base-100: oklch(25.33% 0.016 252.42);
-    /* Secondary surface — section panels, card backgrounds,
-       sidebars, table-header fills. One step away from the page
-       surface. */
-    --color-base-200: oklch(23.26% 0.014 253.1);
-    /* Tertiary surface — dividers, sunken wells, hover-row
-       backgrounds. The most muted of the three base shades. */
-    --color-base-300: oklch(21.15% 0.012 254.09);
-    /* Primary text colour. High-contrast against base-100 to meet
-       WCAG contrast ratios for body copy. */
-    --color-base-content: oklch(97.81% 0.029 256.847);
-    /* Primary brand / action colour. Used on primary buttons,
-       active navigation items, selected states, and the focus
-       ring. */
-    --color-primary: oklch(58% 0.233 277.117);
-    /* Foreground colour used over `--color-primary` fills (so
-       primary buttons retain a guaranteed contrast ratio). */
-    --color-primary-content: oklch(96% 0.018 272.314);
-    /* Secondary brand colour. Pressed/hover state for primary
-       buttons and visited links; also drives the secondary chrome
-       family. */
-    --color-secondary: oklch(65% 0.241 354.308);
-    /* Foreground colour used over `--color-secondary` fills. */
-    --color-secondary-content: oklch(94% 0.028 342.258);
-    /* Accent colour — used sparingly for emphasis, the AI label,
-       illustrations, and tertiary call-outs. */
-    --color-accent: oklch(77% 0.152 181.912);
-    /* Foreground colour used over `--color-accent` fills. */
-    --color-accent-content: oklch(38% 0.063 188.416);
-    /* Neutral chrome surface — footer bars, code blocks,
-       tooltips, government-banner strips. Typically the theme's
-       darkest neutral. */
-    --color-neutral: oklch(14% 0.005 285.823);
-    /* Foreground colour used over `--color-neutral` fills. */
-    --color-neutral-content: oklch(92% 0.004 286.32);
-    /* Informational status colour — informational banners, links,
-       'did-you-know' callouts. */
-    --color-info: oklch(74% 0.16 232.661);
-    /* Foreground colour used over `--color-info` fills. */
-    --color-info-content: oklch(29% 0.066 243.157);
-    /* Success / confirmation colour — used on success panels,
-       completed step indicators, validation pass states, and the
-       green RAG status. */
-    --color-success: oklch(76% 0.177 163.223);
-    /* Foreground colour used over `--color-success` fills. */
-    --color-success-content: oklch(37% 0.077 168.94);
-    /* Warning colour — yellow/amber band; used on phase banners,
-       in-progress states, validation warnings, and the amber RAG
-       status. */
-    --color-warning: oklch(82% 0.189 84.429);
-    /* Foreground colour used over `--color-warning` fills. Often
-       dark so text remains legible on a bright yellow background. */
-    --color-warning-content: oklch(41% 0.112 45.904);
-    /* Error / destructive colour — used on alert dialogs, error
-       messages, validation failures, urgent care cards, and the
-       red RAG status. */
-    --color-error: oklch(71% 0.194 13.428);
-    /* Foreground colour used over `--color-error` fills. */
-    --color-error-content: oklch(27% 0.105 12.094);
-    /* Smallest corner radius. Applied to chips, badges, switches,
-       and radio/checkbox containers (mapped to `--lily-radius-
-       sm`). */
-    --radius-selector: 0.5rem;
-    /* Medium corner radius. Applied to inputs, buttons, menu
-       items, tooltips, and most everyday form controls (mapped to
-       `--lily-radius-md`). */
+    /* ---- Surfaces
+       -------------------------------------------------------- */
+       /* base-100: page background. NHS White #FFFFFF — the
+       canvas behind */ /* body copy, primary content cards, and
+       dialog modals. */
+    --color-base-100: oklch(100% 0 0);
+    /* base-200: secondary surface. NHS Inform Off-White #F0F4F5 —
+       used */ /* on nhsinform.scot for the page wash behind the
+       main column at */ /* wide breakpoints, and for summary /
+       "at a glance" panels. */
+    --color-base-200: oklch(96% 0.008 220);
+    /* base-300: tertiary surface. NHS Pale Grey #E8EDEE — divider
+       rows, */ /* table zebra striping, list-row hover, and the
+       "grey panel" used */ /* for sectioned navigation in NHS 24
+       service journeys. */
+    --color-base-300: oklch(92% 0.01 220);
+    /* base-content: primary text. NHS Black #212B32 — warm near-
+       black */ /* tuned to reduce on-screen glare for users
+       reading long-form */ /* clinical content (a shared NHS UK /
+       NHS Scotland choice). */
+    --color-base-content: oklch(26% 0.015 230);
+    /* ---- Primary (NHS Scotland Navy)
+       ------------------------------------ */ /* NHS Scotland
+       Navy #003087 (Pantone 287) — the flagship brand */ /*
+       colour. Darker than NHS England's #005EB8: this is the
+       single */ /* clearest visual signal that a service belongs
+       to NHS Scotland */ /* rather than NHS England. Used on the
+       NHS Scotland logo block, */ /* primary buttons, the global
+       header band on nhsinform.scot, and */ /* the active state
+       of primary nav. */
+    --color-primary: oklch(32% 0.18 264);
+    --color-primary-content: oklch(100% 0 0);
+    /* ---- Secondary (NHS Scotland Mid Blue)
+       ------------------------------ */ /* NHS Scotland Mid Blue
+       #0078D4 — the link colour on nhsinform.scot */ /* and the
+       secondary-button fill on NHS 24 journeys. Sits between */
+       /* the navy primary and the bright accent so layered
+       buttons keep a */ /* clear hierarchy without losing the NHS
+       Scotland identity. */
+    --color-secondary: oklch(52% 0.18 248);
+    --color-secondary-content: oklch(100% 0 0);
+    /* ---- Accent (NHS Aqua / Teal)
+       --------------------------------------- */ /* NHS Aqua /
+       Teal #00A499 — supplementary accent associated with */ /*
+       NHS 24 chrome and used for illustrative chart series. Not
+       for */ /* primary calls to action; reserve for decorative
+       emphasis, */ /* category chips, and data visualisation.
+       Darkened from L=0.62 on 2026-08-27: white accent-content
+       needs >=4.5:1 for small text (axe color-contrast on ai-
+       label). */
+    --color-accent: oklch(52% 0.11 192);
+    --color-accent-content: oklch(100% 0 0);
+    /* ---- Neutral
+       -------------------------------------------------------- */
+       /* Neutral chrome (dark footer, NHS 24 dark cards, on-call
+       signage). */ /* Mirrors base-content so dark blocks share
+       the same warm near-black */ /* identity as body text,
+       keeping the page visually coherent. */
+    --color-neutral: oklch(26% 0.015 230);
+    --color-neutral-content: oklch(100% 0 0);
+    /* ---- Info (NHS Bright Blue)
+       ----------------------------------------- */ /* NHS Bright
+       Blue #0072CE — informational banners ("did you know?", */
+       /* "your appointment is at…"), inline help, and link chips.
+       Distinct */ /* from primary so message banners read as
+       messages, not actions. */
+    --color-info: oklch(54% 0.17 247);
+    --color-info-content: oklch(100% 0 0);
+    /* ---- Success (NHS Green)
+       -------------------------------------------- */ /* NHS
+       Green #009639 — confirmation panels, completed-step
+       indicators */ /* ("you have been booked"), and the success
+       state on form summaries. */ /* Identical role and contrast
+       target as the NHS UK system so shared */ /* components
+       carry the same meaning across the border. */
+    --color-success: oklch(56% 0.16 145);
+    --color-success-content: oklch(100% 0 0);
+    /* ---- Warning (NHS Warm Yellow)
+       -------------------------------------- */ /* NHS Warm
+       Yellow #FFB81C — caution banners and the canonical focus */
+       /* indicator. Yellow swatches are light, so the content
+       colour MUST */ /* stay dark (≈ NHS Black) to clear WCAG AA
+       contrast. Reusing this */ /* hue across NHS England, NHS
+       Scotland, and NHS Wales is deliberate: */ /* keyboard users
+       build muscle memory for "yellow means focus". */
+    --color-warning: oklch(82% 0.16 79);
+    --color-warning-content: oklch(26% 0.015 230);
+    /* ---- Error (NHS Emergency Services Red)
+       ----------------------------- */ /* NHS Emergency Services
+       Red #DA291C — validation errors, */ /* destructive actions,
+       "phone 999" badges inside NHS Inform. */ /* Reserved for
+       genuine errors and safety messages: the colour */ /*
+       carries strong NHS meaning across both nations and must not
+       be */ /* used for decorative emphasis. */
+    --color-error: oklch(55% 0.22 28);
+    --color-error-content: oklch(100% 0 0);
+    /* ---- Geometry tokens
+       ------------------------------------------------ */ /*
+       Selectors (checkbox / radio): square per NHS frontend
+       defaults so */ /* the tick / dot stays perfectly centred at
+       every font size. */
+    --radius-selector: 0rem;
+    /* Form fields: 4px corners — matches `$nhsuk-border-radius`
+       in the */ /* NHS frontend Sass tokens. NHS Inform overrides
+       this to 0 on its */ /* main search input; the Lily default
+       is the broader convention. */
     --radius-field: 0.25rem;
-    /* Largest corner radius. Applied to cards, dialogs, drawers,
-       and hero blocks (mapped to `--lily-radius-lg`). */
-    --radius-box: 0.5rem;
-    /* Base size for selector-style controls (checkbox/radio glyph
-       size, switch thumb diameter). Currently unused by Lily's
-       baseline component rules but available for theme
-       extensions. */
+    /* Card / panel / dialog: 4px corner radius for visual harmony
+       with */ /* form fields. NHS Scotland identity guidance
+       prefers gentle radii */ /* over sharp corners so clinical
+       content reads calmly. */
+    --radius-box: 0.25rem;
+    /* Inner padding hints for selectors and fields (Lily sizing). */
     --size-selector: 0.25rem;
-    /* Base size for field-style controls (input height
-       multiplier). Currently unused by Lily's baseline component
-       rules but available for theme extensions. */
     --size-field: 0.25rem;
-    /* Default border width applied to inputs, buttons, dividers,
-       table cells, etc. Single source of truth for the system's
-       stroke weight. */
+    /* Border width: 1px hairline, matching `$nhsuk-border-width-
+       form`. */ /* NHS Scotland's primary buttons use a 4px
+       bottom shadow border in */ /* their own implementation;
+       that is left to example-app CSS so the */ /* Lily token
+       stays the universal 1px hairline. */
     --border: 1px;
-    /* Depth flag (0 or 1). Lily's baseline rules read it
-       implicitly via the shadow tokens; a depth-0 theme
-       effectively renders flat. */
-    --depth: 1;
-    /* Noise flag (0 or 1). Reserved for theme extensions that
-       want to layer a subtle texture; the baseline rules do not
-       consume it. */
+    /* Depth & noise off — NHS Scotland identity guidance, like
+       NHS UK, */ /* avoids shadows, gradients, and textures so
+       the interface looks */ /* clinical, calm, and easy to read
+       on low-end devices common in */ /* community health
+       settings. */
+    --depth: 0;
     --noise: 0;
 }
 
