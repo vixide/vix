@@ -1052,12 +1052,44 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   `lsp.workspace_symbol` → `lsp.workspace_symbols`, while doing so), plus a
   new "Known gaps against LSP 3.17" section. `scripts/check` green
   throughout.
-- [ ] **T123a — Semantic tokens.** Implement
-  `textDocument/semanticTokens/full` (+ `/delta` if a server offers it) as a
-  second highlight layer over Tree-sitter's purely syntactic one — genuinely
-  additive for things structurally unknowable without type/binding
-  resolution (mutable vs. immutable binding, trait-default vs. inherent
-  method, unused variable/parameter). Not started.
+- [x] **T123a — Semantic tokens.** Done 2026-09-17, picked up as part of
+  T134's security/depth re-audit rather than deferred further, and scoped
+  down from its own original ambition by a real finding made while
+  implementing it: every bundled theme (`themes/*.json`, all 20 of them)
+  currently defines exactly **four** syntax colors —
+  `comment`/`keyword`/`number`/`string` — not the far richer vocabulary
+  (`function`, `type`, `variable`, …) the Tree-sitter `.scm` highlight
+  queries actually emit captures for for (those simply render unstyled
+  today, a pre-existing gap this task didn't create). That means the
+  task's own headline motivation — mutable-vs-immutable binding,
+  deprecated, unused — has nowhere to render without a theme *schema*
+  change (new color slots across 20 files, plus decoding LSP token
+  *modifiers*, deliberately not attempted here) — filed as a separate,
+  explicitly-scoped follow-up rather than rushed into this same change.
+  What *is* implemented and real: full protocol plumbing — capability
+  declaration (`semanticTokens.requests.full`, the LSP 3.17 standard
+  `tokenTypes`/`tokenModifiers` lists), per-server legend capture at
+  `initialize` (`Server::semantic_tokens_legend`, since a token's numeric
+  type index is meaningless without it), and delta-decoding
+  (`vix_lsp_core::message::parse_semantic_tokens`, unit-tested against
+  hand-traced relative-position math) — plus a real, if narrow, visual
+  result: `App::apply_semantic_tokens` maps each token's type onto
+  whichever of the 4 existing theme slots it reasonably matches
+  (comment/keyword/number/string; everything else falls through to
+  Tree-sitter's own classification, unchanged), and
+  `Editor::set_semantic_tokens` + `draw_syntax_layer`'s merge (T123a's
+  only genuinely risky code, since it touches the shared render path —
+  found and fixed one real bug here via a failing test: `draw_syntax_layer`
+  was gated behind `code.is_highlight()`, true only when Tree-sitter has a
+  loaded grammar, which would have silently dropped semantic tokens
+  entirely for a language with an LSP server but no bundled Tree-sitter
+  grammar) puts the LSP's judgment ahead of Tree-sitter's wherever the two
+  would disagree. Re-requested after every edit, not just on open, since a
+  token's classification (e.g. future "unused") can change as the user
+  types. New tests at every layer: `vix-lsp-core` (legend parsing, delta
+  decoding, capability declaration), a `vix-lsp` mock-server round trip,
+  and 3 `vix-editor-core` render tests (merge takes effect, an unmapped
+  type is silently skipped, a stale out-of-range token doesn't panic).
 - [ ] **T123b — Multiple servers per buffer.** `Lsp`'s server registry is
   `HashMap<String, Server>` keyed by `language_id`, and `config_for` takes
   the *first* matching config by extension; there is no path for two

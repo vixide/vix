@@ -9,7 +9,7 @@
 
 use serde_json::{Value, json};
 
-use crate::{CompletionItem, Diagnostic, Location, Position, Range, Severity};
+use crate::{CompletionItem, Diagnostic, Location, Position, Range, SemanticToken, Severity};
 
 /// One file's text edits within a workspace edit: `(uri, [(range, new_text)])`.
 pub type UriEdits = (String, Vec<(Range, String)>);
@@ -77,7 +77,31 @@ pub fn initialize_params(process_id: Option<u32>, root_uri: Option<&str>) -> Val
                 // `workspace/diagnostic`, alongside push
                 // (`publishDiagnostics`) — some servers only enable pull
                 // support for clients that declare this.
-                "diagnostic": {}
+                "diagnostic": {},
+                // T123a: only `full` (whole-document) requests -- no
+                // `range` or `full.delta` in v1. `tokenTypes`/
+                // `tokenModifiers` list the LSP 3.17 standard set; per
+                // spec a server may still report types/modifiers outside
+                // it (its own `semanticTokensProvider.legend` is
+                // authoritative regardless), so this is advisory, not a
+                // hard filter — `parse_semantic_tokens` decodes against
+                // whatever legend the server actually sent.
+                "semanticTokens": {
+                    "requests": { "full": true },
+                    "tokenTypes": [
+                        "namespace", "type", "class", "enum", "interface",
+                        "struct", "typeParameter", "parameter", "variable",
+                        "property", "enumMember", "event", "function",
+                        "method", "macro", "keyword", "modifier", "comment",
+                        "string", "number", "regexp", "operator", "decorator"
+                    ],
+                    "tokenModifiers": [
+                        "declaration", "definition", "readonly", "static",
+                        "deprecated", "abstract", "async", "modification",
+                        "documentation", "defaultLibrary"
+                    ],
+                    "formats": ["relative"]
+                }
             },
             "workspace": {
                 "applyEdit": true,
@@ -182,7 +206,7 @@ pub fn range_formatting_params(
 }
 
 /// A `DocumentSymbolParams` / text-document-only params body (also used for
-/// `foldingRange`).
+/// `foldingRange` and `semanticTokens/full`, T123a).
 #[must_use]
 pub fn text_document_params(uri: &str) -> Value {
     json!({ "textDocument": { "uri": uri } })
@@ -271,6 +295,27 @@ pub fn parse_position_encoding(result: &Value) -> crate::Encoding {
         .map_or(crate::Encoding::Utf16, crate::Encoding::from_lsp)
 }
 
+/// The server's semantic-token type legend, read from an `initialize`
+/// result (`capabilities.semanticTokensProvider.legend.tokenTypes`, T123a) —
+/// the index each token in a later `semanticTokens/full` response names by
+/// number resolves against this list. Empty when the server doesn't
+/// advertise semantic tokens support at all.
+#[must_use]
+pub fn parse_semantic_tokens_legend(result: &Value) -> Vec<String> {
+    result
+        .get("capabilities")
+        .and_then(|c| c.get("semanticTokensProvider"))
+        .and_then(|p| p.get("legend"))
+        .and_then(|l| l.get("tokenTypes"))
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Parse a `textDocument/publishDiagnostics` notification into `(uri, diagnostics)`.
 #[must_use]
 pub fn parse_diagnostics(params: &Value) -> Option<(String, Vec<Diagnostic>)> {
@@ -351,6 +396,50 @@ pub fn parse_workspace_diagnostics(result: &Value) -> Vec<(String, Vec<Diagnosti
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Decode a `textDocument/semanticTokens/full` result's delta-encoded
+/// `data` array (T123a) into absolute [`SemanticToken`]s, resolved against
+/// `legend` (the server's own `tokenTypes` list from `initialize`, via
+/// [`parse_semantic_tokens_legend`]).
+///
+/// LSP encodes each token as 5 integers relative to the *previous* token:
+/// `[deltaLine, deltaStartChar, length, tokenType, tokenModifiers]` —
+/// `deltaStartChar` is relative to the previous token's start only when
+/// `deltaLine` is 0 (same line); otherwise it's absolute from the new
+/// line's start. Modifiers are deliberately not decoded in v1 (see
+/// [`SemanticToken`]). A token whose type index is out of range for
+/// `legend`, or a trailing group of fewer than 5 integers, is skipped
+/// rather than treated as fatal to the rest.
+#[must_use]
+pub fn parse_semantic_tokens(result: &Value, legend: &[String]) -> Vec<SemanticToken> {
+    let Some(data) = result.get("data").and_then(Value::as_array) else {
+        return Vec::new();
+    };
+    let nums: Vec<u32> = data
+        .iter()
+        .filter_map(|v| v.as_u64().and_then(|n| u32::try_from(n).ok()))
+        .collect();
+    let mut tokens = Vec::new();
+    let mut line = 0_u32;
+    let mut character = 0_u32;
+    for &[delta_line, delta_start, length, token_type_idx, _modifiers] in nums.as_chunks::<5>().0 {
+        if delta_line == 0 {
+            character += delta_start;
+        } else {
+            line += delta_line;
+            character = delta_start;
+        }
+        if let Some(token_type) = legend.get(token_type_idx as usize) {
+            tokens.push(SemanticToken {
+                line,
+                character,
+                length,
+                token_type: token_type.clone(),
+            });
+        }
+    }
+    tokens
 }
 
 /// Parse a `$/progress` notification's `params` into a one-line status
@@ -1031,6 +1120,83 @@ mod tests {
             "an end report has nothing left to show"
         );
         assert_eq!(parse_progress(&json!({"value": {"kind": "begin"}})), None);
+    }
+
+    #[test]
+    fn semantic_tokens_legend_reads_token_types() {
+        let result = json!({"capabilities": {"semanticTokensProvider": {
+            "legend": {"tokenTypes": ["variable", "function"], "tokenModifiers": []},
+            "full": true
+        }}});
+        assert_eq!(
+            parse_semantic_tokens_legend(&result),
+            vec!["variable".to_string(), "function".to_string()]
+        );
+        assert!(parse_semantic_tokens_legend(&json!({})).is_empty());
+    }
+
+    #[test]
+    fn semantic_tokens_decode_relative_deltas() {
+        let legend = vec!["variable".to_string(), "function".to_string()];
+        // Token 1: line 2, char 5, length 3, type 1 ("function"), no modifiers.
+        // Token 2: same line (deltaLine 0), char 5+4=9, length 6, type 0 ("variable").
+        // Token 3: deltaLine 1 -> line 3, char reset to the given deltaStartChar 0.
+        let result = json!({"data": [
+            2, 5, 3, 1, 0,
+            0, 4, 6, 0, 0,
+            1, 0, 4, 0, 0
+        ]});
+        let tokens = parse_semantic_tokens(&result, &legend);
+        assert_eq!(tokens.len(), 3);
+        assert_eq!(
+            tokens[0],
+            SemanticToken {
+                line: 2,
+                character: 5,
+                length: 3,
+                token_type: "function".into()
+            }
+        );
+        assert_eq!(
+            tokens[1],
+            SemanticToken {
+                line: 2,
+                character: 9,
+                length: 6,
+                token_type: "variable".into()
+            }
+        );
+        assert_eq!(
+            tokens[2],
+            SemanticToken {
+                line: 3,
+                character: 0,
+                length: 4,
+                token_type: "variable".into()
+            }
+        );
+    }
+
+    #[test]
+    fn semantic_tokens_skip_out_of_range_types_and_malformed_data() {
+        let legend = vec!["variable".to_string()];
+        // Type index 5 doesn't exist in a 1-element legend -- skipped.
+        let result = json!({"data": [0, 0, 3, 5, 0]});
+        assert!(parse_semantic_tokens(&result, &legend).is_empty());
+        assert!(parse_semantic_tokens(&json!({}), &legend).is_empty());
+    }
+
+    #[test]
+    fn capabilities_declare_semantic_tokens_full_requests() {
+        let params = initialize_params(None, None);
+        let semantic = &params["capabilities"]["textDocument"]["semanticTokens"];
+        assert_eq!(semantic["requests"]["full"], true);
+        assert!(
+            semantic["tokenTypes"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("function"))
+        );
     }
 
     #[test]

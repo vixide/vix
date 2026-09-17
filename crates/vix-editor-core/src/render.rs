@@ -55,8 +55,10 @@ impl Editor {
         // draw indentation guides (faint vertical bars at each indent level)
         self.draw_indent_guides(area, buf, line_number_width_u16, total_lines);
 
-        // draw syntax highlighting
-        if code.is_highlight() {
+        // draw syntax highlighting -- or the LSP semantic-token overlay
+        // (T123a) alone, for a file whose language has a server but no
+        // bundled Tree-sitter grammar (`is_highlight()` false: no query).
+        if code.is_highlight() || !self.semantic_tokens.is_empty() {
             self.draw_syntax_layer(
                 area,
                 buf,
@@ -740,24 +742,56 @@ impl Editor {
         // Highlight the whole visible region in a single Tree-sitter query rather
         // than one query per line: cheaper while typing, and the (start, end) cache
         // now memoizes one entry instead of one per visible line.
-        let highlights = {
-            let mut region: Option<(usize, usize)> = None;
-            for screen_y in 0..(area.height as usize) {
-                let Some(line_idx) = self.line_at_row(screen_y) else {
-                    break;
-                };
-                if line_idx >= total_lines {
-                    break;
-                }
-                let ls = code.line_to_char(line_idx);
-                let s = code.char_to_byte(ls);
-                let e = code.char_to_byte(ls + code.line_len(line_idx));
-                region = Some(region.map_or((s, e), |(rs, re)| (rs.min(s), re.max(e))));
+        let mut region: Option<(usize, usize)> = None;
+        for screen_y in 0..(area.height as usize) {
+            let Some(line_idx) = self.line_at_row(screen_y) else {
+                break;
+            };
+            if line_idx >= total_lines {
+                break;
             }
-            region
-                .map(|(s, e)| self.highlight_interval(s, e, &self.theme))
-                .unwrap_or_default()
-        };
+            let ls = code.line_to_char(line_idx);
+            let s = code.char_to_byte(ls);
+            let e = code.char_to_byte(ls + code.line_len(line_idx));
+            region = Some(region.map_or((s, e), |(rs, re)| (rs.min(s), re.max(e))));
+        }
+        let treesitter_highlights = region
+            .map(|(s, e)| self.highlight_interval(s, e, &self.theme))
+            .unwrap_or_default();
+        // T123a: LSP semantic tokens, a second highlight layer over
+        // Tree-sitter's purely syntactic one -- collected *before*
+        // `treesitter_highlights` below (not after) so the per-glyph scan's
+        // first-match-wins rule (see below) prefers the LSP's judgment over
+        // Tree-sitter's wherever the two disagree, which is the whole point
+        // of adding this layer; everywhere semantic tokens say nothing,
+        // Tree-sitter's own results still apply unchanged. Each span was
+        // computed against the buffer state at the moment it arrived (like
+        // `inlay_hints`/`fold_ranges`) and can go stale after an
+        // intervening edit; skip anything now out of bounds rather than let
+        // `char_to_byte` panic on it.
+        let mut highlights = Vec::new();
+        if let Some((region_start, region_end)) = region {
+            let total = code.len();
+            for (start_char, end_char, capture) in &self.semantic_tokens {
+                if *start_char >= *end_char || *end_char > total {
+                    continue;
+                }
+                let Some(style) = self.theme.get(capture) else {
+                    continue;
+                };
+                let start_byte = code.char_to_byte(*start_char);
+                let end_byte = code.char_to_byte(*end_char);
+                if end_byte <= region_start || start_byte >= region_end {
+                    continue;
+                }
+                highlights.push((
+                    start_byte.max(region_start),
+                    end_byte.min(region_end),
+                    *style,
+                ));
+            }
+        }
+        highlights.extend(treesitter_highlights);
         for screen_y in 0..(area.height as usize) {
             let Some(line_idx) = self.line_at_row(screen_y) else {
                 break;
@@ -973,6 +1007,62 @@ mod whitespace_tests {
             line1_styled,
             "second visible line (fn main) is highlighted via the single viewport query"
         );
+    }
+
+    #[test]
+    fn semantic_tokens_are_merged_into_the_syntax_layer() {
+        use ratatui_core::style::Color;
+        // Plain "text" grammar -- Tree-sitter contributes nothing here, so
+        // any highlighting on screen must come from the semantic-token
+        // overlay (T123a), not accidentally from the syntax layer too.
+        let mut ed = Editor::new("text", "myVariable\n", Vec::new()).unwrap();
+        ed.show_line_numbers(false);
+        ed.set_left_code_padding(0); // no gutter offset -- column 0 is char 0
+        ed.set_syntax_theme(&[("keyword", "ff0000")]);
+        // Chars 0..10 span the whole word "myVariable".
+        ed.set_semantic_tokens(vec![(0, 10, "keyword".to_string())]);
+        let area = Rect::new(0, 0, 40, 5);
+        let mut buf = Buffer::empty(area);
+        (&ed).render(area, &mut buf);
+        assert!(
+            (0..10).all(|x| buf[(x, 0)].fg == Color::Rgb(255, 0, 0)),
+            "the whole semantic-token span is styled"
+        );
+        assert_ne!(
+            buf[(10, 0)].fg,
+            Color::Rgb(255, 0, 0),
+            "styling doesn't bleed past the token's own end"
+        );
+    }
+
+    #[test]
+    fn semantic_tokens_with_no_theme_mapping_are_silently_skipped() {
+        use ratatui_core::style::Color;
+        // "function" has no capture in the theme passed here -- must not
+        // panic, and must not paint anything either.
+        let mut ed = Editor::new("text", "myFunction\n", Vec::new()).unwrap();
+        ed.show_line_numbers(false);
+        ed.set_left_code_padding(0);
+        ed.set_syntax_theme(&[("keyword", "ff0000")]);
+        ed.set_semantic_tokens(vec![(0, 10, "function".to_string())]);
+        let area = Rect::new(0, 0, 40, 5);
+        let mut buf = Buffer::empty(area);
+        (&ed).render(area, &mut buf);
+        assert!((0..10).all(|x| buf[(x, 0)].fg != Color::Rgb(255, 0, 0)));
+    }
+
+    #[test]
+    fn stale_semantic_tokens_past_the_buffer_end_do_not_panic() {
+        // The buffer shrank since these were computed (T123a's accepted
+        // staleness risk, same as inlay_hints/fold_ranges) -- must be
+        // skipped, not panic `char_to_byte` on an out-of-range index.
+        let mut ed = Editor::new("text", "hi\n", Vec::new()).unwrap();
+        ed.show_line_numbers(false);
+        ed.set_syntax_theme(&[("keyword", "ff0000")]);
+        ed.set_semantic_tokens(vec![(0, 500, "keyword".to_string())]);
+        let area = Rect::new(0, 0, 40, 5);
+        let mut buf = Buffer::empty(area);
+        (&ed).render(area, &mut buf); // must not panic
     }
 
     #[test]
