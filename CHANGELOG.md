@@ -8,6 +8,19 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Multiple LSP servers per file** (improvement plan T123b): a file can
+  now be handled by more than one configured server at once — e.g. a
+  type-checker plus a separate linter both watching `.rs`. Document sync
+  and most per-document requests (hover, go to definition, references,
+  completion, code actions, formatting, rename, and more) fan out to
+  every matching server; diagnostics from different servers for the same
+  file now coexist instead of one clobbering the other. A handful of
+  requests that continue one specific server's earlier response
+  (completion-item resolve, executing a code action's command,
+  call-hierarchy) still target only the first matching server — a
+  documented limitation, not a regression, when more than one server
+  handles the same file and that specific feature is in use. See
+  `crates/vix-lsp/spec/index.md`.
 - **LSP semantic tokens** (improvement plan T123a): a server's
   `textDocument/semanticTokens/full` response now feeds the syntax
   highlighting layer alongside (and on top of, where they overlap)

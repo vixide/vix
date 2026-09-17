@@ -242,8 +242,13 @@ pub struct Lsp {
     servers: HashMap<String, Server>,
     /// `rootUri` sent at initialize (the workspace root).
     root_uri: Option<String>,
-    /// Latest diagnostics keyed by canonical file path.
-    diagnostics: HashMap<PathBuf, Vec<Diagnostic>>,
+    /// Latest diagnostics keyed by canonical file path, then by the
+    /// `language_id` of the server that published them (T123b): a second
+    /// server handling the same file (e.g. a type-checker plus a separate
+    /// linter, both configured for `.rs`) publishes independently of the
+    /// first, so each server's own most recent report must be tracked
+    /// separately rather than one clobbering the other's entry outright.
+    diagnostics: HashMap<PathBuf, HashMap<String, Vec<Diagnostic>>>,
     /// Consecutive crash-respawn attempts per language, since it last
     /// survived [`STABLE_UPTIME`] without crashing again (T134 audit —
     /// crash recovery). Capped at [`MAX_RESTART_ATTEMPTS`] so a server that
@@ -286,16 +291,35 @@ impl Lsp {
         self.enabled && !self.configs.is_empty()
     }
 
-    /// The config handling `path` (matched by extension), if any.
-    fn config_for(&self, path: &Path) -> Option<ServerConfig> {
-        let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    /// Every config handling `path` (matched by extension) — more than one
+    /// server can be configured for the same extension (T123b: e.g. a
+    /// type-checker LSP and a separate linter LSP, both watching `.rs`),
+    /// and every one of them should see the document and be askable.
+    fn configs_for(&self, path: &Path) -> Vec<ServerConfig> {
+        let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+            return Vec::new();
+        };
+        let ext = ext.to_ascii_lowercase();
         self.configs
             .iter()
-            .find(|c| c.extensions.iter().any(|e| e.eq_ignore_ascii_case(&ext)))
+            .filter(|c| c.extensions.iter().any(|e| e.eq_ignore_ascii_case(&ext)))
             .cloned()
+            .collect()
     }
 
-    /// The position encoding for `path`'s server (UTF-16 if none / not ready).
+    /// The first matching config handling `path`, if any — for the few
+    /// requests that must target one specific server rather than fan out
+    /// (see [`Lsp::configs_for`]'s doc and `spec/index.md`'s "Known gaps").
+    fn config_for(&self, path: &Path) -> Option<ServerConfig> {
+        self.configs_for(path).into_iter().next()
+    }
+
+    /// The position encoding for `path`'s server (UTF-16 if none / not
+    /// ready). When more than one server handles `path`, this is the first
+    /// matching one's encoding — a documented limitation (`spec/index.md`
+    /// "Known gaps"): two servers disagreeing on encoding for the same file
+    /// is not handled per-server throughout the position-translation call
+    /// sites.
     #[must_use]
     pub fn encoding_for(&self, path: &Path) -> Encoding {
         self.config_for(path)
@@ -309,23 +333,51 @@ impl Lsp {
         self.enabled && self.config_for(path).is_some()
     }
 
-    /// Diagnostics for `path`, or an empty slice.
+    /// Diagnostics for `path` from every server handling it, merged
+    /// (T123b — each server's own report is tracked separately internally,
+    /// so a second server can no longer silently clobber the first's).
     #[must_use]
-    pub fn diagnostics_for(&self, path: &Path) -> &[Diagnostic] {
+    pub fn diagnostics_for(&self, path: &Path) -> Vec<Diagnostic> {
         let key = canonical(path);
-        self.diagnostics.get(&key).map_or(&[], Vec::as_slice)
+        self.diagnostics
+            .get(&key)
+            .map(|by_server| by_server.values().flatten().cloned().collect())
+            .unwrap_or_default()
     }
 
-    /// Every file's diagnostics (path, list), for the diagnostics panel. Files
-    /// with no current diagnostics are skipped.
-    pub fn all_diagnostics(&self) -> impl Iterator<Item = (&PathBuf, &Vec<Diagnostic>)> {
-        self.diagnostics.iter().filter(|(_, d)| !d.is_empty())
+    /// Every file's diagnostics (path, merged list across every server
+    /// handling it), for the diagnostics panel. Files with no current
+    /// diagnostics are skipped.
+    pub fn all_diagnostics(&self) -> impl Iterator<Item = (&PathBuf, Vec<Diagnostic>)> {
+        self.diagnostics.iter().filter_map(|(path, by_server)| {
+            let merged: Vec<Diagnostic> = by_server.values().flatten().cloned().collect();
+            (!merged.is_empty()).then_some((path, merged))
+        })
     }
 
-    /// Total diagnostic count across all files (for the status bar).
+    /// Total diagnostic count across all files and servers (for the status bar).
     #[must_use]
     pub fn diagnostic_count(&self) -> usize {
-        self.diagnostics.values().map(Vec::len).sum()
+        self.diagnostics
+            .values()
+            .flat_map(HashMap::values)
+            .map(Vec::len)
+            .sum()
+    }
+
+    /// Record `diags` as `lang`'s current diagnostics for `path` (T123b):
+    /// an empty report clears just that server's entry, not the whole
+    /// path, so a second server's diagnostics for the same file survive.
+    fn set_diagnostics(&mut self, lang: &str, path: &Path, diags: Vec<Diagnostic>) {
+        let by_server = self.diagnostics.entry(path.to_path_buf()).or_default();
+        if diags.is_empty() {
+            by_server.remove(lang);
+        } else {
+            by_server.insert(lang.to_string(), diags);
+        }
+        if by_server.is_empty() {
+            self.diagnostics.remove(path);
+        }
     }
 
     /// Whether any server is still starting up or has a request in flight, so the
@@ -347,91 +399,92 @@ impl Lsp {
         self.servers.get_mut(&config.language_id)
     }
 
-    /// Notify the server that `path` opened, with its current `text`.
+    /// Notify every server handling `path` that it opened, with its current
+    /// `text` (T123b: fans out to all of them, not just the first).
     pub fn did_open(&mut self, path: &Path, text: &str) {
         if !self.enabled {
             return;
         }
-        let Some(config) = self.config_for(path) else {
-            return;
-        };
         let uri = path_to_uri(path);
-        let lang = config.language_id.clone();
-        let Some(server) = self.ensure_server(&config) else {
-            return;
-        };
-        if server.docs.contains_key(&uri) {
-            return; // already open
-        }
-        server.docs.insert(uri.clone(), 1);
-        server.send(message::notification(
-            "textDocument/didOpen",
-            &message::did_open_params(&uri, &lang, 1, text),
-        ));
-    }
-
-    /// Notify the server that `path`'s buffer changed (full-document sync).
-    pub fn did_change(&mut self, path: &Path, text: &str) {
-        if !self.enabled {
-            return;
-        }
-        let Some(config) = self.config_for(path) else {
-            return;
-        };
-        let uri = path_to_uri(path);
-        let Some(server) = self.servers.get_mut(&config.language_id) else {
-            return;
-        };
-        let Some(version) = server.docs.get_mut(&uri) else {
-            return;
-        };
-        *version += 1;
-        let v = *version;
-        server.send(message::notification(
-            "textDocument/didChange",
-            &message::did_change_full_params(&uri, v, text),
-        ));
-    }
-
-    /// Notify the server that `path` closed.
-    pub fn did_close(&mut self, path: &Path) {
-        if !self.enabled {
-            return;
-        }
-        let Some(config) = self.config_for(path) else {
-            return;
-        };
-        let uri = path_to_uri(path);
-        if let Some(server) = self.servers.get_mut(&config.language_id)
-            && server.docs.remove(&uri).is_some()
-        {
+        for config in self.configs_for(path) {
+            let lang = config.language_id.clone();
+            let Some(server) = self.ensure_server(&config) else {
+                continue;
+            };
+            if server.docs.contains_key(&uri) {
+                continue; // already open
+            }
+            server.docs.insert(uri.clone(), 1);
             server.send(message::notification(
-                "textDocument/didClose",
-                &message::did_close_params(&uri),
+                "textDocument/didOpen",
+                &message::did_open_params(&uri, &lang, 1, text),
             ));
         }
     }
 
-    /// Send a feature request for `path` at `(line, character)`; the response
-    /// arrives later via [`Lsp::poll`] as the matching [`LspEvent`].
-    fn request(&mut self, path: &Path, method: &str, line: u32, character: u32, kind: Pending) {
-        let Some(config) = self.config_for(path) else {
+    /// Notify every server handling `path` that its buffer changed
+    /// (full-document sync; T123b: fans out to all of them).
+    pub fn did_change(&mut self, path: &Path, text: &str) {
+        if !self.enabled {
             return;
-        };
-        let uri = path_to_uri(path);
-        let Some(server) = self.servers.get_mut(&config.language_id) else {
-            return;
-        };
-        if !server.docs.contains_key(&uri) {
-            return; // only query open documents
         }
-        let id = server.alloc_id();
-        server.pending.insert(id, kind);
-        server.send(message::request(
-            id,
-            method,
-            &message::position_params(&uri, line, character),
-        ));
+        let uri = path_to_uri(path);
+        for config in self.configs_for(path) {
+            let Some(server) = self.servers.get_mut(&config.language_id) else {
+                continue;
+            };
+            let Some(version) = server.docs.get_mut(&uri) else {
+                continue;
+            };
+            *version += 1;
+            let v = *version;
+            server.send(message::notification(
+                "textDocument/didChange",
+                &message::did_change_full_params(&uri, v, text),
+            ));
+        }
+    }
+
+    /// Notify every server handling `path` that it closed (T123b: fans out).
+    pub fn did_close(&mut self, path: &Path) {
+        if !self.enabled {
+            return;
+        }
+        let uri = path_to_uri(path);
+        for config in self.configs_for(path) {
+            if let Some(server) = self.servers.get_mut(&config.language_id)
+                && server.docs.remove(&uri).is_some()
+            {
+                server.send(message::notification(
+                    "textDocument/didClose",
+                    &message::did_close_params(&uri),
+                ));
+            }
+        }
+    }
+
+    /// Send a feature request for `path` at `(line, character)` to every
+    /// server handling it (T123b: fans out — e.g. two servers both asked for
+    /// hover text produce two `LspEvent::Hover`s, one per response, as they
+    /// arrive). Each response arrives later via [`Lsp::poll`] as the
+    /// matching [`LspEvent`].
+    fn request(&mut self, path: &Path, method: &str, line: u32, character: u32, kind: Pending) {
+        let uri = path_to_uri(path);
+        for config in self.configs_for(path) {
+            let Some(server) = self.servers.get_mut(&config.language_id) else {
+                continue;
+            };
+            if !server.docs.contains_key(&uri) {
+                continue; // only query open documents
+            }
+            let id = server.alloc_id();
+            server.pending.insert(id, kind);
+            server.send(message::request(
+                id,
+                method,
+                &message::position_params(&uri, line, character),
+            ));
+        }
     }
 
     /// Request hover info at `(line, character)`.
@@ -510,6 +563,17 @@ impl Lsp {
 
     /// Step 2 of call hierarchy: request the incoming calls (callers) for the
     /// prepared `item`. The response arrives as `LspEvent::References`.
+    ///
+    /// Deliberately **not** fanned out across every server handling `path`
+    /// (T123b's scope cut, `spec/index.md` "Known gaps"): `item` is an
+    /// opaque payload one specific server produced in step 1
+    /// (`request_prepare_call_hierarchy`, which *does* fan out), and
+    /// nothing here tracks which one — sending it to every matching server
+    /// would mean sending it to servers that never issued it. Targets the
+    /// first matching config, same as before T123b; correct when only one
+    /// server handles `path` (still the common case), and no worse than
+    /// today when more than one does and call hierarchy specifically is
+    /// the feature in use.
     pub fn request_incoming_calls(&mut self, path: &Path, item: serde_json::Value) {
         let Some(config) = self.config_for(path) else {
             return;
@@ -528,25 +592,25 @@ impl Lsp {
         ));
     }
 
-    /// Request all references to the symbol at `(line, character)`.
+    /// Request all references to the symbol at `(line, character)`, from
+    /// every server handling `path` (T123b: fans out).
     pub fn request_references(&mut self, path: &Path, line: u32, character: u32) {
-        let Some(config) = self.config_for(path) else {
-            return;
-        };
         let uri = path_to_uri(path);
-        let Some(server) = self.servers.get_mut(&config.language_id) else {
-            return;
-        };
-        if !server.docs.contains_key(&uri) {
-            return;
+        for config in self.configs_for(path) {
+            let Some(server) = self.servers.get_mut(&config.language_id) else {
+                continue;
+            };
+            if !server.docs.contains_key(&uri) {
+                continue;
+            }
+            let id = server.alloc_id();
+            server.pending.insert(id, Pending::References);
+            server.send(message::request(
+                id,
+                "textDocument/references",
+                &message::reference_params(&uri, line, character, true),
+            ));
         }
-        let id = server.alloc_id();
-        server.pending.insert(id, Pending::References);
-        server.send(message::request(
-            id,
-            "textDocument/references",
-            &message::reference_params(&uri, line, character, true),
-        ));
     }
 
     /// Request the document symbols (outline) for `path`.
@@ -610,6 +674,14 @@ impl Lsp {
 
     /// Execute a server command (`workspace/executeCommand`); the response is
     /// ignored (edits arrive via a server `workspace/applyEdit` request).
+    ///
+    /// Deliberately **not** fanned out across every server handling `path`
+    /// (T123b's scope cut, `spec/index.md` "Known gaps"): `command` names
+    /// one specific server's own command (usually from a code action or
+    /// code lens that server attached), and nothing here tracks which
+    /// server that was — sending it to every matching server would mean
+    /// asking servers that never advertised that command to run it.
+    /// Targets the first matching config, same as before T123b.
     pub fn execute_command(&mut self, path: &Path, command: &str, arguments: &Value) {
         let Some(config) = self.config_for(path) else {
             return;
@@ -655,6 +727,15 @@ impl Lsp {
 
     /// Resolve fuller detail/documentation for a completion item (sent to
     /// `path`'s server). `data` is the opaque payload the server round-trips.
+    ///
+    /// Deliberately **not** fanned out across every server handling `path`
+    /// (T123b's scope cut, `spec/index.md` "Known gaps"): the item being
+    /// resolved came from one specific server's completion response (from
+    /// `request_completion`, which *does* fan out), and nothing here tracks
+    /// which one — sending `data` to every matching server would mean
+    /// asking servers that never proposed this item to resolve it. Targets
+    /// the first matching config, same as before T123b; correct when only
+    /// one server handles `path` (still the common case).
     pub fn request_completion_resolve(&mut self, path: &Path, label: &str, data: Option<&Value>) {
         let Some(config) = self.config_for(path) else {
             return;
@@ -721,24 +802,28 @@ impl Lsp {
     /// unused variable/parameter). Only sent to servers that actually
     /// advertised support (a non-empty legend at `initialize`) — a server
     /// with none never gets asked, since `handle_response`'s decode would
-    /// have nothing to resolve type indices against anyway.
+    /// have nothing to resolve type indices against anyway. When more than
+    /// one matching server supports it (T123b), each response fully
+    /// replaces the editor's semantic-token layer as it arrives — the last
+    /// one to respond wins, same documented last-write-wins simplification
+    /// as every other single-buffer LSP feature (`spec/index.md`).
     pub fn request_semantic_tokens(&mut self, path: &Path) {
-        let Some(config) = self.config_for(path) else {
-            return;
-        };
-        if self
-            .servers
-            .get(&config.language_id)
-            .is_none_or(|s| s.semantic_tokens_legend.is_empty())
-        {
-            return;
+        let uri = path_to_uri(path);
+        for config in self.configs_for(path) {
+            let Some(server) = self.servers.get_mut(&config.language_id) else {
+                continue;
+            };
+            if server.semantic_tokens_legend.is_empty() || !server.docs.contains_key(&uri) {
+                continue;
+            }
+            let id = server.alloc_id();
+            server.pending.insert(id, Pending::SemanticTokens);
+            server.send(message::request(
+                id,
+                "textDocument/semanticTokens/full",
+                &message::text_document_params(&uri),
+            ));
         }
-        self.send_request(
-            path,
-            "textDocument/semanticTokens/full",
-            Pending::SemanticTokens,
-            message::text_document_params,
-        );
     }
 
     /// Request code actions for the range `[start, end)`, with `diagnostics`
@@ -784,46 +869,47 @@ impl Lsp {
         );
     }
 
-    /// Send a request for an open document, building params from its URI.
+    /// Send a request for an open document to every server handling `path`
+    /// (T123b: fans out, same as [`Lsp::request`]), building params from its
+    /// URI. `params` takes `&self` by `Fn` rather than `FnOnce` since it may
+    /// now be called once per matching server.
     fn send_request(
         &mut self,
         path: &Path,
         method: &str,
         kind: Pending,
-        params: impl FnOnce(&str) -> Value,
+        params: impl Fn(&str) -> Value,
     ) {
-        let Some(config) = self.config_for(path) else {
-            return;
-        };
         let uri = path_to_uri(path);
-        let Some(server) = self.servers.get_mut(&config.language_id) else {
-            return;
-        };
-        if !server.docs.contains_key(&uri) {
-            return;
+        for config in self.configs_for(path) {
+            let Some(server) = self.servers.get_mut(&config.language_id) else {
+                continue;
+            };
+            if !server.docs.contains_key(&uri) {
+                continue;
+            }
+            let id = server.alloc_id();
+            server.pending.insert(id, kind);
+            server.send(message::request(id, method, &params(&uri)));
         }
-        let id = server.alloc_id();
-        server.pending.insert(id, kind);
-        server.send(message::request(id, method, &params(&uri)));
     }
 
-    /// Notify the server that `path` was saved (full text), to trigger
-    /// re-analysis.
+    /// Notify every server handling `path` that it was saved (full text), to
+    /// trigger re-analysis (T123b: fans out to all of them).
     pub fn did_save(&mut self, path: &Path, text: &str) {
         if !self.enabled {
             return;
         }
-        let Some(config) = self.config_for(path) else {
-            return;
-        };
         let uri = path_to_uri(path);
-        if let Some(server) = self.servers.get_mut(&config.language_id)
-            && server.docs.contains_key(&uri)
-        {
-            server.send(message::notification(
-                "textDocument/didSave",
-                &message::did_save_params(&uri, text),
-            ));
+        for config in self.configs_for(path) {
+            if let Some(server) = self.servers.get_mut(&config.language_id)
+                && server.docs.contains_key(&uri)
+            {
+                server.send(message::notification(
+                    "textDocument/didSave",
+                    &message::did_save_params(&uri, text),
+                ));
+            }
         }
     }
 
@@ -949,11 +1035,7 @@ impl Lsp {
                 && let Some((uri, diags)) = message::parse_diagnostics(params)
             {
                 let path = canonical(&uri_to_path(&uri));
-                if diags.is_empty() {
-                    self.diagnostics.remove(&path);
-                } else {
-                    self.diagnostics.insert(path.clone(), diags);
-                }
+                self.set_diagnostics(lang, &path, diags);
                 events.push(LspEvent::Diagnostics(path));
             }
             if method == "$/progress"
@@ -1044,11 +1126,7 @@ impl Lsp {
         if matches!(kind, Pending::WorkspaceDiagnostics) {
             for (uri, diags) in message::parse_workspace_diagnostics(result) {
                 let path = canonical(&uri_to_path(&uri));
-                if diags.is_empty() {
-                    self.diagnostics.remove(&path);
-                } else {
-                    self.diagnostics.insert(path.clone(), diags);
-                }
+                self.set_diagnostics(lang, &path, diags);
                 events.push(LspEvent::Diagnostics(path));
             }
             return;
@@ -1438,6 +1516,101 @@ mod tests {
         assert!(lsp.config_for(Path::new("/proj/src/main.RS")).is_some());
         assert!(lsp.config_for(Path::new("/proj/readme.md")).is_none());
         assert!(lsp.handles(Path::new("/proj/a.rs")));
+    }
+
+    #[test]
+    fn configs_for_returns_every_server_configured_for_the_extension() {
+        // T123b: a type-checker LSP and a separate linter LSP, both
+        // configured for the same extension, must both be findable for one
+        // file — not just the first one `configs` happens to list.
+        let type_checker = ServerConfig {
+            language_id: "rust-analyzer".into(),
+            extensions: vec!["rs".into()],
+            command: vec!["rust-analyzer".into()],
+        };
+        let linter = ServerConfig {
+            language_id: "rust-clippy".into(),
+            extensions: vec!["rs".into()],
+            command: vec!["clippy-lsp".into()],
+        };
+        let unrelated = ServerConfig {
+            language_id: "python".into(),
+            extensions: vec!["py".into()],
+            command: vec!["pylsp".into()],
+        };
+        let lsp = Lsp::new(
+            true,
+            vec![type_checker, linter, unrelated],
+            Path::new("/proj"),
+        );
+        let configs = lsp.configs_for(Path::new("/proj/src/main.rs"));
+        let langs: Vec<&str> = configs.iter().map(|c| c.language_id.as_str()).collect();
+        assert_eq!(langs, ["rust-analyzer", "rust-clippy"]);
+        assert!(lsp.handles(Path::new("/proj/src/main.rs")));
+    }
+
+    #[test]
+    fn diagnostics_from_two_servers_for_the_same_file_coexist() {
+        // T123b's motivating scenario: a type-checker and a linter both
+        // publish diagnostics for the same file. Neither publish should
+        // clobber the other's — both must still be present, merged, until
+        // one of them explicitly clears its own report (an empty publish).
+        let mut lsp = Lsp::new(true, vec![], Path::new("/proj"));
+        let path = PathBuf::from("/proj/src/main.rs");
+        let err = Diagnostic {
+            range: vix_lsp_core::Range {
+                start: vix_lsp_core::Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: vix_lsp_core::Position {
+                    line: 0,
+                    character: 1,
+                },
+            },
+            severity: vix_lsp_core::Severity::Error,
+            message: "type error".into(),
+            source: None,
+            related: Vec::new(),
+        };
+        let warn = Diagnostic {
+            range: vix_lsp_core::Range {
+                start: vix_lsp_core::Position {
+                    line: 1,
+                    character: 0,
+                },
+                end: vix_lsp_core::Position {
+                    line: 1,
+                    character: 1,
+                },
+            },
+            severity: vix_lsp_core::Severity::Warning,
+            message: "unused variable".into(),
+            source: None,
+            related: Vec::new(),
+        };
+        lsp.set_diagnostics("rust-analyzer", &canonical(&path), vec![err.clone()]);
+        lsp.set_diagnostics("rust-clippy", &canonical(&path), vec![warn.clone()]);
+        let merged = lsp.diagnostics_for(&path);
+        assert_eq!(merged.len(), 2);
+        assert!(merged.iter().any(|d| d.message == "type error"));
+        assert!(merged.iter().any(|d| d.message == "unused variable"));
+        assert_eq!(lsp.diagnostic_count(), 2);
+
+        // The linter clearing its own report (e.g. the lint no longer
+        // fires) must not touch the type-checker's still-current one.
+        lsp.set_diagnostics("rust-clippy", &canonical(&path), vec![]);
+        let after = lsp.diagnostics_for(&path);
+        assert_eq!(after.len(), 1);
+        assert_eq!(after[0].message, "type error");
+        assert_eq!(lsp.diagnostic_count(), 1);
+
+        // The type-checker clearing its own report too empties the path
+        // entirely, not just its own entry.
+        lsp.set_diagnostics("rust-analyzer", &canonical(&path), vec![]);
+        assert!(lsp.diagnostics_for(&path).is_empty());
+        assert_eq!(lsp.diagnostic_count(), 0);
+        assert_eq!(lsp.all_diagnostics().count(), 0);
     }
 
     #[test]

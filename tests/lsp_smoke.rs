@@ -197,6 +197,57 @@ while True:
         sys.exit(1)  # "crash" right after handling the first didOpen
 "#;
 
+/// T123b: a second, independent mock server for the same extension as
+/// `MOCK_SERVER` (e.g. a separate linter alongside a type-checker), so a
+/// test can drive both against one file at once. Publishes its own,
+/// distinctly-worded diagnostic on `didOpen` -- a different message than
+/// `MOCK_SERVER`'s "mock error", so a test can tell whether both reached
+/// the client (correct, T123b) or the second clobbered the first (the bug
+/// T123b fixed).
+const MOCK_SERVER_SECOND_LINTER: &str = r#"
+import sys, json
+
+def read_msg():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        line = line.decode('ascii').strip()
+        if line == '':
+            break
+        k, _, v = line.partition(':')
+        headers[k.strip().lower()] = v.strip()
+    n = int(headers.get('content-length', '0'))
+    return json.loads(sys.stdin.buffer.read(n))
+
+def send(obj):
+    data = json.dumps(obj).encode('utf-8')
+    sys.stdout.buffer.write(b'Content-Length: %d\r\n\r\n' % len(data))
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+while True:
+    msg = read_msg()
+    if msg is None:
+        break
+    method = msg.get('method')
+    mid = msg.get('id')
+    if method == 'initialize':
+        send({'jsonrpc':'2.0','id':mid,'result':{'capabilities':{'positionEncoding':'utf-16'}}})
+    elif method == 'textDocument/didOpen':
+        uri = msg['params']['textDocument']['uri']
+        send({'jsonrpc':'2.0','method':'textDocument/publishDiagnostics','params':{
+            'uri': uri,
+            'diagnostics': [{'range':{'start':{'line':1,'character':0},
+                                      'end':{'line':1,'character':3}},
+                             'severity':2,'message':'mock lint warning'}]}})
+    elif method == 'shutdown':
+        send({'jsonrpc':'2.0','id':mid,'result':None})
+    elif method == 'exit':
+        break
+"#;
+
 #[test]
 fn mock_server_round_trips_diagnostics_and_hover() {
     if !tool_available("python3") {
@@ -570,6 +621,70 @@ fn mock_server_crash_respawns_then_gives_up_after_max_attempts() {
     assert_eq!(
         restarts, 3,
         "exactly MAX_RESTART_ATTEMPTS respawns before giving up"
+    );
+}
+
+/// T123b: two servers configured for the same extension (a type-checker and
+/// a separate linter, the motivating example in the task's own text) both
+/// see `didOpen` for the same file, and both publish their own diagnostics
+/// without one clobbering the other -- the real bug fan-out was needed to
+/// fix, not just registering two servers.
+#[test]
+fn mock_server_two_servers_on_one_file_publish_independently() {
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("vix-lsp-mock-multi-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let type_checker = root.join("type_checker.py");
+    std::fs::write(&type_checker, MOCK_SERVER).unwrap();
+    let linter = root.join("linter.py");
+    std::fs::write(&linter, MOCK_SERVER_SECOND_LINTER).unwrap();
+    let file = root.join("a.rs");
+    std::fs::write(&file, "abc\n").unwrap();
+
+    let cfgs = vec![
+        LspServer {
+            language_id: "rust-type-checker".into(),
+            extensions: vec!["rs".into()],
+            command: vec![
+                "python3".into(),
+                type_checker.to_string_lossy().into_owned(),
+            ],
+        },
+        LspServer {
+            language_id: "rust-linter".into(),
+            extensions: vec!["rs".into()],
+            command: vec!["python3".into(), linter.to_string_lossy().into_owned()],
+        },
+    ];
+    let mut lsp = Lsp::new(true, cfgs, &root);
+    lsp.did_open(&file, "abc\n");
+
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < deadline && lsp.diagnostics_for(&file).len() < 2 {
+        for _ in lsp.poll() {}
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    lsp.shutdown();
+
+    let diags = lsp.diagnostics_for(&file);
+    let messages: Vec<&str> = diags.iter().map(|d| d.message.as_str()).collect();
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(
+        diags.len(),
+        2,
+        "both servers' diagnostics for the same file must coexist, got {messages:?}"
+    );
+    assert!(
+        messages.contains(&"mock error"),
+        "the type-checker's diagnostic should still be present: {messages:?}"
+    );
+    assert!(
+        messages.contains(&"mock lint warning"),
+        "the linter's diagnostic should also be present: {messages:?}"
     );
 }
 

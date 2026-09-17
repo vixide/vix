@@ -1090,13 +1090,54 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   decoding, capability declaration), a `vix-lsp` mock-server round trip,
   and 3 `vix-editor-core` render tests (merge takes effect, an unmapped
   type is silently skipped, a stale out-of-range token doesn't panic).
-- [ ] **T123b — Multiple servers per buffer.** `Lsp`'s server registry is
-  `HashMap<String, Server>` keyed by `language_id`, and `config_for` takes
-  the *first* matching config by extension; there is no path for two
-  servers to both run against the same file (a common real-world setup: a
-  type-checker LSP + a separate linter LSP on the same buffer). Requires
-  re-keying the registry and fanning out per-document requests/events
-  across every server that handles a given file. Not started.
+- [x] **T123b — Multiple servers per buffer.** Done 2026-09-17. `configs_for`
+  replaces `config_for`, returning every config matching a file's
+  extension instead of just the first — the registry itself
+  (`HashMap<String, Server>` keyed by `language_id`) already supported two
+  independent servers once two configs could both be found for one file;
+  the real gap was every call site stopping at the first match. Document
+  sync (`didOpen`/`didChange`/`didClose`/`didSave`) and the two shared
+  request helpers (`request`/`send_request`, covering hover, the
+  definition family, completion, document/workspace symbols, code
+  actions, formatting, rename, prepare-rename, signature help, code lens,
+  inlay hints, folding/selection ranges, document highlight, linked
+  editing, semantic tokens, call-hierarchy preparation) now fan out to
+  every matching server — each response arrives as its own event, so two
+  servers answering one hover request produce two `LspEvent::Hover`s, not
+  a merged one. `request_references` (bespoke, not on the shared helpers)
+  got the same treatment by hand.
+  Diagnostics needed real restructuring, not just fan-out: previously a
+  flat `HashMap<PathBuf, Vec<Diagnostic>>`, so a second server publishing
+  for a file already tracked by a first would silently replace its
+  report — exactly the motivating scenario (a type-checker LSP + a
+  separate linter LSP on the same buffer) would have lost one of the
+  two. Now `HashMap<PathBuf, HashMap<String, Vec<Diagnostic>>>` (path →
+  language_id → that server's current report); `diagnostics_for`/
+  `all_diagnostics` merge across servers at read time (now returning
+  owned `Diagnostic`s/`Vec<Diagnostic>` rather than borrowed, since a
+  flattened merge can't be borrowed — the 4 call sites in `src/app*.rs`
+  needed no changes beyond one `.iter()` → `.into_iter()` a real compile
+  caught, since owned values support the same field access as borrowed
+  ones). Both `publishDiagnostics` (push) and `workspace/diagnostic`
+  (T123d's pull) write through the same new `set_diagnostics` helper.
+  **Deliberate, documented scope cut** (`crates/vix-lsp/spec/index.md`
+  "Known gaps"): `request_completion_resolve`, `execute_command`, and
+  `request_incoming_calls` still target only the first matching config,
+  not fanned out — each continues a response one *specific* earlier
+  server gave (an opaque completion-resolve payload, a code action/lens's
+  own command, a call-hierarchy item), and nothing tracks which server
+  that was once more than one is active for a file. Correct whenever only
+  one server handles a file (still the common case); no worse than before
+  T123b otherwise. Properly fixing this means tagging completion items /
+  code lenses / call-hierarchy items with their originating server
+  through `LspEvent`, `CompletionItem`, and `CodeLens` — a real follow-up,
+  not attempted here. New tests: 2 `vix-lsp` unit tests
+  (`configs_for_returns_every_server_configured_for_the_extension`,
+  `diagnostics_from_two_servers_for_the_same_file_coexist` — the latter
+  proves a second server clearing its own report doesn't touch the
+  first's), and a `tests/lsp_smoke.rs` mock-server test spawning two real
+  (Python) mock processes against one file, proving both `didOpen` sees
+  the file and both publish independently without clobbering.
 - [x] **T123c — Server crash recovery.** Done 2026-09-17, picked up as
   part of T134's security/depth re-audit rather than deferred further.
   `Lsp::poll`'s `Incoming::Exited` handling now respawns the same command
