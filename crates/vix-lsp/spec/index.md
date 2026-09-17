@@ -112,11 +112,6 @@ prior cut list):
   path for two servers to both run against the same file (a common
   real-world setup: a type-checker LSP + a separate linter LSP on the same
   buffer).
-- **No server crash recovery for an already-open buffer**: the reader
-  thread detects a dead server and reaps the process, but nothing respawns
-  it — every LSP feature for files that were already open goes silently
-  dead until the user closes and reopens them (`ensure_server` only fires
-  again on the next `did_open`).
 - **Pull-based `workspace/diagnostic`**: not used — Vix relies entirely on
   push (`publishDiagnostics`), so the Problems panel only ever shows
   diagnostics for files that have actually been opened/synced at least
@@ -129,8 +124,19 @@ prior cut list):
   (`App::workspace_folders`) isn't propagated to LSP servers at all.
 
 **Closed since the audit above**: `prepareRename` (§ Features, "Rename")
-and `relatedInformation` (§ Features, "Diagnostics") — both were T123e,
-done as part of the T134 security/depth re-audit rather than deferred.
+and `relatedInformation` (§ Features, "Diagnostics") — both T123e; and
+**server crash recovery** — T123c. A crashed server (the reader thread
+detects the dead process via EOF) is now respawned automatically, up to 3
+consecutive attempts since it last stayed up for 30 seconds (a genuine
+crash loop — a bad command, a real bug — gets 3 tries then a
+`msg.lsp_server_crashed` message instead of respawning forever; an
+isolated crash after a long healthy run gets its own fresh budget). Every
+file that was open on the crashed server gets a `didOpen` replayed with
+its *current* buffer content once the new process is ready
+(`LspEvent::ServerRestarted`) — `Lsp` never holds buffer content itself,
+only the host does, so this is a `Lsp`→host→`Lsp` round trip, not
+something `Lsp` can do alone. All three were done as part of the T134
+security/depth re-audit rather than deferred.
 
 See `tasks.md`'s T123a–T123f for the implementation status of each open
 item above.

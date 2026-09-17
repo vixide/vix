@@ -6564,6 +6564,20 @@ impl App {
                         self.status = t!("status.lsp_not_renameable").to_string();
                     }
                 },
+                crate::lsp::LspEvent::ServerRestarted(paths) => {
+                    // Forget these paths were ever synced so the very next
+                    // `lsp_sync_active` tick treats the active one (if it's
+                    // among them) as a fresh open, replaying `didOpen` with
+                    // its real, current content; a background tab self-heals
+                    // the same way whenever it next becomes active.
+                    for path in paths {
+                        self.lsp_synced.remove(&path);
+                    }
+                }
+                crate::lsp::LspEvent::ServerCrashed(language_id) => {
+                    self.messages
+                        .error(t!("msg.lsp_server_crashed", language = language_id).to_string());
+                }
             }
         }
         // Rebuild the active editor's diagnostic underlines every tick so they
