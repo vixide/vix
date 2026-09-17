@@ -50,7 +50,8 @@ a keybinding, or an automatic trigger), not just present unused in
 
 | Feature | How to use | Notes |
 | ------- | ---------- | ----- |
-| Diagnostics | automatic | Colored underlines (red error, yellow warning, cyan info, blue hint), separate channel from spellcheck. Push-based (`textDocument/publishDiagnostics`) only — see § Known gaps. Aggregated across every opened file into a workspace Problems panel (`lsp.diagnostics`); a diagnostic's `relatedInformation` (T134) — secondary locations like "previous definition here" — appears as indented, separately navigable rows right after it. |
+| Diagnostics | automatic | Colored underlines (red error, yellow warning, cyan info, blue hint), separate channel from spellcheck. Aggregated across every opened file into a workspace Problems panel (`lsp.diagnostics`), which also pulls a fresh `workspace/diagnostic` report on open (T123d) so it reflects a server's whole-project analysis, not just push (`textDocument/publishDiagnostics`) for files that happen to be open. A diagnostic's `relatedInformation` (T134) — secondary locations like "previous definition here" — appears as indented, separately navigable rows right after it. |
+| Progress | automatic | A `$/progress` update (T123d — e.g. an initial index build) shows as a one-line status message (`"Indexing: 3/10 crates (30%)"`); an `"end"` report produces no message of its own, since the status line is ambient/best-effort already. |
 | Go to Definition / Declaration / Type Definition / Implementation | Tools → Language Server | Falls back to the heuristic cross-workspace search when no server handles the file. |
 | Hover | Tools → Language Server → Hover | Tooltip with type/doc text for the symbol under the cursor; dismissed by the next keypress. |
 | Completion | `Ctrl+Space` | A list anchored at the cursor; `↑`/`↓` move, `Enter`/`Tab` accept, `Esc` cancels. `completionItem/resolve` fills in fuller detail/documentation lazily, once an item is selected. |
@@ -112,31 +113,29 @@ prior cut list):
   path for two servers to both run against the same file (a common
   real-world setup: a type-checker LSP + a separate linter LSP on the same
   buffer).
-- **Pull-based `workspace/diagnostic`**: not used — Vix relies entirely on
-  push (`publishDiagnostics`), so the Problems panel only ever shows
-  diagnostics for files that have actually been opened/synced at least
-  once, not a server's whole-project analysis.
-- **No `$/progress`**: a long-running server operation (e.g. an initial
-  index build) gives no percentage/message feedback beyond the busy-poll
-  rate speeding up.
 - **Single-root only**: `initialize` sends one `rootUri`, no
   `workspaceFolders` array; Vix's own editor-level multi-root concept
   (`App::workspace_folders`) isn't propagated to LSP servers at all.
 
 **Closed since the audit above**: `prepareRename` (§ Features, "Rename")
-and `relatedInformation` (§ Features, "Diagnostics") — both T123e; and
-**server crash recovery** — T123c. A crashed server (the reader thread
-detects the dead process via EOF) is now respawned automatically, up to 3
-consecutive attempts since it last stayed up for 30 seconds (a genuine
-crash loop — a bad command, a real bug — gets 3 tries then a
-`msg.lsp_server_crashed` message instead of respawning forever; an
-isolated crash after a long healthy run gets its own fresh budget). Every
-file that was open on the crashed server gets a `didOpen` replayed with
-its *current* buffer content once the new process is ready
-(`LspEvent::ServerRestarted`) — `Lsp` never holds buffer content itself,
-only the host does, so this is a `Lsp`→host→`Lsp` round trip, not
-something `Lsp` can do alone. All three were done as part of the T134
-security/depth re-audit rather than deferred.
+and `relatedInformation` (§ Features, "Diagnostics") — both T123e; **server
+crash recovery** — T123c; and **pull diagnostics / `$/progress`** — T123d.
+A crashed server (the reader thread detects the dead process via EOF) is
+now respawned automatically, up to 3 consecutive attempts since it last
+stayed up for 30 seconds (a genuine crash loop — a bad command, a real bug
+— gets 3 tries then a `msg.lsp_server_crashed` message instead of
+respawning forever; an isolated crash after a long healthy run gets its
+own fresh budget). Every file that was open on the crashed server gets a
+`didOpen` replayed with its *current* buffer content once the new process
+is ready (`LspEvent::ServerRestarted`) — `Lsp` never holds buffer content
+itself, only the host does, so this is a `Lsp`→host→`Lsp` round trip, not
+something `Lsp` can do alone. Opening the Problems panel now also pulls a
+fresh `workspace/diagnostic` report from every running server (§ Features,
+"Diagnostics"), merged into the same map push already fills; and a
+`$/progress` update (e.g. an initial index build) now shows as a one-line
+status message (`"Indexing: 3/10 crates (30%)"`) instead of nothing. All
+four were done as part of the T134 security/depth re-audit rather than
+deferred.
 
 See `tasks.md`'s T123a–T123f for the implementation status of each open
 item above.
