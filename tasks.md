@@ -1212,12 +1212,42 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   `"publishDiagnostics": {"relatedInformation": true}`, both previously
   wrong). `crates/vix-lsp/spec/index.md` updated (Features table +
   "Known gaps" § now shows both closed).
-- [ ] **T123f — Multi-root workspace propagation.** `initialize` sends one
-  `rootUri`, no `workspaceFolders` array; Vix's own editor-level multi-root
-  concept (`App::workspace_folders`) isn't propagated to LSP servers at
-  all. Requires deciding how a multi-root `App` maps onto a single spawned
-  server per `language_id` (T123b's per-buffer work may be a prerequisite
-  rather than orthogonal to this). Not started.
+- [x] **T123f — Multi-root workspace propagation.** Done 2026-09-17,
+  closing the T123 audit's whole list. Decided the question the task text
+  itself raised ("how a multi-root App maps onto a single spawned server
+  per language_id"): T123b's per-file fan-out mechanism already lets one
+  server answer for every folder it's told about, so there's no need to
+  spawn a server per root — each running `Server` (still one per
+  `language_id`) just needs to know the *whole* folder set instead of one
+  root. `Lsp::new` takes `folders: &[PathBuf]` (was `root: &Path`);
+  `initialize` sends every folder as `workspaceFolders: [{uri, name}, ...]`
+  (the first also as the deprecated single `rootUri`, for servers
+  predating LSP 3.6) and declares `capabilities.workspace.
+  workspaceFolders: true`. New `Lsp::add_workspace_folder` sends
+  `workspace/didChangeWorkspaceFolders` to every running server that
+  asked for it (`changeNotifications` in its own `initialize` response,
+  parsed into a new per-`Server` `workspace_folders_change_support` bool)
+  — wired into `App::workspace_add_folder`. `App::switch_workspace` gained
+  a `folders: &[PathBuf]` parameter so a multi-folder workspace file
+  (`App::workspace_open`) hands the fresh `Lsp` every folder from the
+  start, rather than the primary alone followed by a post-hoc
+  `workspace_folders` overwrite that never told `Lsp` about the rest.
+  There's no "remove folder from workspace" action in the app yet, so
+  only `didChangeWorkspaceFolders`'s `added` half has a real caller —
+  `removed` is supported by the message builder for whenever that action
+  exists, not wired to anything now. Hit `serde_json::json!`'s macro
+  recursion limit adding the new fields to `initialize_params`'s already-large
+  literal — fixed with `#![recursion_limit = "256"]` on `vix-lsp-core`
+  (a compile-time-only ceiling, unrelated to any runtime recursion).
+  New tests: 4 `vix-lsp-core` unit tests (`initialize_params` with/without
+  folders, `workspace_folders_change_support` parsing including the
+  registration-id-string case, `didChangeWorkspaceFolders` params shape),
+  1 `vix-lsp` unit test (`add_workspace_folder` builds the right
+  `(uri, name)` pairs and is a no-op on a duplicate), and a
+  `tests/lsp_smoke.rs` mock-server test that logs every message the
+  server receives and asserts `initialize` named the one open folder
+  while a later `add_workspace_folder` call produced exactly one
+  `didChangeWorkspaceFolders` notification naming the new one.
 - [x] **T124 — AI provider abstraction.** Done 2026-09-16. Investigated
   first, and the investigation reframed the task: `vix-ai-panel`/
   `vix-ai-diff`/DB NL→SQL don't call any AI provider directly today — every

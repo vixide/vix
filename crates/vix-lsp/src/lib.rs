@@ -195,6 +195,10 @@ struct Server {
     /// all. `parse_semantic_tokens` resolves a response's numeric type
     /// indices against this.
     semantic_tokens_legend: Vec<String>,
+    /// Whether this server's `initialize` response asked to be told about
+    /// workspace-folder changes (T123f) — see
+    /// `message::parse_workspace_folders_change_support`.
+    workspace_folders_change_support: bool,
     /// Whether `initialize` has completed and `initialized` been sent.
     ready: bool,
     /// Messages deferred until the server is `ready`.
@@ -240,8 +244,10 @@ pub struct Lsp {
     configs: Vec<ServerConfig>,
     /// Running servers keyed by language id.
     servers: HashMap<String, Server>,
-    /// `rootUri` sent at initialize (the workspace root).
-    root_uri: Option<String>,
+    /// Every open workspace folder (T123f), in display order — the first is
+    /// also sent as the deprecated single `rootUri` for servers that predate
+    /// `workspaceFolders` (LSP 3.6). A single-root app just has one entry.
+    folders: Vec<PathBuf>,
     /// Latest diagnostics keyed by canonical file path, then by the
     /// `language_id` of the server that published them (T123b): a second
     /// server handling the same file (e.g. a type-checker plus a separate
@@ -272,16 +278,50 @@ const MAX_RESTART_ATTEMPTS: u32 = 3;
 const STABLE_UPTIME: std::time::Duration = std::time::Duration::from_secs(30);
 
 impl Lsp {
-    /// Build a client from the persisted settings and the workspace root.
+    /// Build a client from the persisted settings and every open workspace
+    /// folder (T123f) — a single-root app passes a one-element slice.
     #[must_use]
-    pub fn new(enabled: bool, configs: Vec<ServerConfig>, root: &Path) -> Self {
+    pub fn new(enabled: bool, configs: Vec<ServerConfig>, folders: &[PathBuf]) -> Self {
         Lsp {
             enabled,
             configs,
             servers: HashMap::new(),
-            root_uri: Some(path_to_uri(root)),
+            folders: folders.to_vec(),
             diagnostics: HashMap::new(),
             restart_attempts: HashMap::new(),
+        }
+    }
+
+    /// Every open workspace folder as `(uri, name)` pairs, in order, for
+    /// `initialize`/`didChangeWorkspaceFolders` params (T123f). `name` is the
+    /// folder's own last path component (falling back to the full path for a
+    /// filesystem root, which has none).
+    fn folder_pairs(&self) -> Vec<(String, String)> {
+        self.folders
+            .iter()
+            .map(|f| (path_to_uri(f), folder_name(f)))
+            .collect()
+    }
+
+    /// Add `path` as a new workspace folder (T123f) — e.g. the "add folder to
+    /// workspace" action. A no-op if it's already one. Notifies every running
+    /// server whose own `initialize` response asked to hear about workspace-
+    /// folder changes (`workspace/didChangeWorkspaceFolders`); a server
+    /// spawned *after* this call already gets the full, current folder list
+    /// in its own `initialize`, so it needs no separate notification.
+    pub fn add_workspace_folder(&mut self, path: &Path) {
+        if self.folders.iter().any(|f| f == path) {
+            return;
+        }
+        self.folders.push(path.to_path_buf());
+        let added = [(path_to_uri(path), folder_name(path))];
+        for server in self.servers.values_mut() {
+            if server.workspace_folders_change_support {
+                server.send(message::notification(
+                    "workspace/didChangeWorkspaceFolders",
+                    &message::did_change_workspace_folders_params(&added, &[]),
+                ));
+            }
         }
     }
 
@@ -393,7 +433,7 @@ impl Lsp {
     /// not be spawned.
     fn ensure_server(&mut self, config: &ServerConfig) -> Option<&mut Server> {
         if !self.servers.contains_key(&config.language_id) {
-            let server = spawn(config, self.root_uri.as_deref())?;
+            let server = spawn(config, &self.folder_pairs())?;
             self.servers.insert(config.language_id.clone(), server);
         }
         self.servers.get_mut(&config.language_id)
@@ -988,7 +1028,7 @@ impl Lsp {
         let Some(config) = self.configs.iter().find(|c| c.language_id == lang).cloned() else {
             return;
         };
-        let Some(new_server) = spawn(&config, self.root_uri.as_deref()) else {
+        let Some(new_server) = spawn(&config, &self.folder_pairs()) else {
             events.push(LspEvent::ServerCrashed(lang.to_string()));
             return;
         };
@@ -1327,6 +1367,8 @@ impl Lsp {
         if let Some(result) = msg.get("result") {
             server.encoding = message::parse_position_encoding(result);
             server.semantic_tokens_legend = message::parse_semantic_tokens_legend(result);
+            server.workspace_folders_change_support =
+                message::parse_workspace_folders_change_support(result);
         }
         server.ready = true;
         server.ready_since = Some(Instant::now());
@@ -1369,7 +1411,7 @@ impl Lsp {
 }
 
 /// Spawn a server process and its stdout reader thread.
-fn spawn(config: &ServerConfig, root_uri: Option<&str>) -> Option<Server> {
+fn spawn(config: &ServerConfig, folders: &[(String, String)]) -> Option<Server> {
     let (program, args) = config.command.split_first()?;
     let mut child = Command::new(program)
         .args(args)
@@ -1393,6 +1435,7 @@ fn spawn(config: &ServerConfig, root_uri: Option<&str>) -> Option<Server> {
         docs: HashMap::new(),
         encoding: Encoding::Utf16,
         semantic_tokens_legend: Vec::new(),
+        workspace_folders_change_support: false,
         ready: false,
         queue: Vec::new(),
         ready_since: None,
@@ -1400,10 +1443,20 @@ fn spawn(config: &ServerConfig, root_uri: Option<&str>) -> Option<Server> {
     let init = message::request(
         INITIALIZE_ID,
         "initialize",
-        &message::initialize_params(Some(std::process::id()), root_uri),
+        &message::initialize_params(Some(std::process::id()), folders),
     );
     server.write_now(&init);
     Some(server)
+}
+
+/// `path`'s own last path component, for a `workspaceFolders` entry's `name`
+/// (T123f) — falls back to the full path for a filesystem root, which has
+/// none.
+fn folder_name(path: &Path) -> String {
+    path.file_name().map_or_else(
+        || path.to_string_lossy().into_owned(),
+        |n| n.to_string_lossy().into_owned(),
+    )
 }
 
 /// Drain framed messages off `wrx` and write them to the server's stdin. Runs
@@ -1512,7 +1565,7 @@ mod tests {
             extensions: vec!["rs".into()],
             command: vec!["rust-analyzer".into()],
         };
-        let lsp = Lsp::new(true, vec![cfg], Path::new("/proj"));
+        let lsp = Lsp::new(true, vec![cfg], &[PathBuf::from("/proj")]);
         assert!(lsp.config_for(Path::new("/proj/src/main.RS")).is_some());
         assert!(lsp.config_for(Path::new("/proj/readme.md")).is_none());
         assert!(lsp.handles(Path::new("/proj/a.rs")));
@@ -1541,7 +1594,7 @@ mod tests {
         let lsp = Lsp::new(
             true,
             vec![type_checker, linter, unrelated],
-            Path::new("/proj"),
+            &[PathBuf::from("/proj")],
         );
         let configs = lsp.configs_for(Path::new("/proj/src/main.rs"));
         let langs: Vec<&str> = configs.iter().map(|c| c.language_id.as_str()).collect();
@@ -1550,12 +1603,34 @@ mod tests {
     }
 
     #[test]
+    fn folder_pairs_names_the_root_first_then_each_added_folder() {
+        // T123f: initialize/didChangeWorkspaceFolders both need every open
+        // folder, root first, as (uri, name) pairs.
+        let mut lsp = Lsp::new(true, vec![], &[PathBuf::from("/proj")]);
+        assert_eq!(
+            lsp.folder_pairs(),
+            vec![("file:///proj".to_string(), "proj".to_string())]
+        );
+        lsp.add_workspace_folder(Path::new("/lib"));
+        assert_eq!(
+            lsp.folder_pairs(),
+            vec![
+                ("file:///proj".to_string(), "proj".to_string()),
+                ("file:///lib".to_string(), "lib".to_string())
+            ]
+        );
+        // Adding the same folder again is a no-op, not a duplicate entry.
+        lsp.add_workspace_folder(Path::new("/lib"));
+        assert_eq!(lsp.folder_pairs().len(), 2);
+    }
+
+    #[test]
     fn diagnostics_from_two_servers_for_the_same_file_coexist() {
         // T123b's motivating scenario: a type-checker and a linter both
         // publish diagnostics for the same file. Neither publish should
         // clobber the other's — both must still be present, merged, until
         // one of them explicitly clears its own report (an empty publish).
-        let mut lsp = Lsp::new(true, vec![], Path::new("/proj"));
+        let mut lsp = Lsp::new(true, vec![], &[PathBuf::from("/proj")]);
         let path = PathBuf::from("/proj/src/main.rs");
         let err = Diagnostic {
             range: vix_lsp_core::Range {
@@ -1615,8 +1690,8 @@ mod tests {
 
     #[test]
     fn disabled_or_unconfigured_is_inactive() {
-        assert!(!Lsp::new(false, vec![], Path::new("/")).is_active());
-        assert!(!Lsp::new(true, vec![], Path::new("/")).is_active());
+        assert!(!Lsp::new(false, vec![], &[PathBuf::from("/")]).is_active());
+        assert!(!Lsp::new(true, vec![], &[PathBuf::from("/")]).is_active());
     }
 
     #[test]

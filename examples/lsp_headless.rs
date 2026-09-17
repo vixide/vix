@@ -65,7 +65,7 @@ fn main() {
             server_script.to_string_lossy().into_owned(),
         ],
     };
-    let mut lsp = Lsp::new(true, vec![cfg], &root);
+    let mut lsp = Lsp::new(true, vec![cfg], std::slice::from_ref(&root));
     lsp.did_open(&doc, "abc\n");
 
     let deadline = Instant::now() + Duration::from_secs(10);
