@@ -1065,12 +1065,28 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   type-checker LSP + a separate linter LSP on the same buffer). Requires
   re-keying the registry and fanning out per-document requests/events
   across every server that handles a given file. Not started.
-- [ ] **T123c — Server crash recovery.** The reader thread detects a dead
-  server and reaps the process, but nothing respawns it — every LSP
-  feature for files that were already open goes silently dead until the
-  user closes and reopens them (`ensure_server` only fires again on the
-  next `did_open`). Respawn + replay `didOpen` for every document still
-  open against that `language_id`. Not started.
+- [x] **T123c — Server crash recovery.** Done 2026-09-17, picked up as
+  part of T134's security/depth re-audit rather than deferred further.
+  `Lsp::poll`'s `Incoming::Exited` handling now respawns the same command
+  (up to `MAX_RESTART_ATTEMPTS` = 3 consecutive attempts since it last
+  stayed up for `STABLE_UPTIME` = 30s — a real crash loop gets 3 tries
+  then a `LspEvent::ServerCrashed` message instead of respawning forever;
+  an isolated crash after a long healthy run earns its own fresh budget,
+  tracked via a new `Server::ready_since` timestamp rather than resetting
+  on every `ready` transition, which would have let a "crashes shortly
+  after each respawn" server dodge the cap entirely by reaching `ready`
+  every time). A new `LspEvent::ServerRestarted(Vec<PathBuf>)` names every
+  file that was open on the crashed server (from its own `docs` table,
+  captured before the crashed `Server` is dropped) so the host can replay
+  `didOpen` with each file's *real, current* content — `Lsp` never holds
+  buffer content itself. `App::poll_lsp` handles this by forgetting those
+  paths were ever synced (`lsp_synced`), so the very next
+  `lsp_sync_active` tick (the active tab, if affected) or the next time a
+  background tab becomes active treats it as a fresh open. New
+  `tests/lsp_smoke.rs` mock server that deterministically "crashes" (exits)
+  right after every `didOpen` it handles, driving the full chain end to
+  end: exactly 3 respawns, each correctly naming the crashed file for
+  replay, then a `ServerCrashed` event instead of a 4th attempt.
 - [ ] **T123d — Pull-based `workspace/diagnostic` and `$/progress`.** Vix
   relies entirely on push (`publishDiagnostics`), so the Problems panel
   only ever shows diagnostics for files that have actually been

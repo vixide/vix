@@ -20,6 +20,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender, channel};
+use std::time::Instant;
 
 use serde_json::{Value, json};
 
@@ -129,6 +130,18 @@ pub enum LspEvent {
     /// cursor's position can be renamed at all, and if so, what to seed the
     /// rename prompt with.
     RenamePrepared(RenamePrepared),
+    /// A crashed server for this language was respawned (T134 audit: it
+    /// used to just vanish, silently dead for every file that was already
+    /// open on it). These files were open on the crashed server and need a
+    /// fresh `didOpen` replayed with their *current* content — `Lsp` itself
+    /// has no buffer content, only the host does.
+    ServerRestarted(Vec<PathBuf>),
+    /// A server for this language crashed and either exceeded the
+    /// automatic respawn attempt limit, or failed to respawn at all (e.g.
+    /// the command no longer exists) — every LSP feature for this language
+    /// is dead until the next explicit `did_open` (e.g. closing and
+    /// reopening a file).
+    ServerCrashed(String),
 }
 
 /// Outcome of `textDocument/prepareRename`, sent before the rename prompt
@@ -166,6 +179,10 @@ struct Server {
     ready: bool,
     /// Messages deferred until the server is `ready`.
     queue: Vec<Value>,
+    /// When this server reached `ready`, used to tell a genuine crash-loop
+    /// (many crashes in quick succession) from an isolated crash after a
+    /// long healthy run — see [`MAX_RESTART_ATTEMPTS`].
+    ready_since: Option<Instant>,
 }
 
 impl Server {
@@ -207,7 +224,27 @@ pub struct Lsp {
     root_uri: Option<String>,
     /// Latest diagnostics keyed by canonical file path.
     diagnostics: HashMap<PathBuf, Vec<Diagnostic>>,
+    /// Consecutive crash-respawn attempts per language, since it last
+    /// survived [`STABLE_UPTIME`] without crashing again (T134 audit —
+    /// crash recovery). Capped at [`MAX_RESTART_ATTEMPTS`] so a server that
+    /// crashes in a tight loop (a bad command, a real bug) doesn't respawn
+    /// forever — deliberately *not* reset on every `ready`, since a server
+    /// that crashes shortly after each respawn (this cap's whole reason to
+    /// exist) would otherwise reach `ready` every time and keep resetting
+    /// its own budget, never actually hitting the cap.
+    restart_attempts: HashMap<String, u32>,
 }
+
+/// How many times [`Lsp::poll`] auto-respawns a crashed server, consecutively
+/// (without [`STABLE_UPTIME`] of healthy running in between), before giving
+/// up on it until the next explicit `did_open`.
+const MAX_RESTART_ATTEMPTS: u32 = 3;
+
+/// How long a respawned server must stay `ready` without crashing again
+/// before a further crash is treated as a fresh, isolated incident (its own
+/// full [`MAX_RESTART_ATTEMPTS`] budget) rather than a continuation of the
+/// same crash loop.
+const STABLE_UPTIME: std::time::Duration = std::time::Duration::from_secs(30);
 
 impl Lsp {
     /// Build a client from the persisted settings and the workspace root.
@@ -219,6 +256,7 @@ impl Lsp {
             servers: HashMap::new(),
             root_uri: Some(path_to_uri(root)),
             diagnostics: HashMap::new(),
+            restart_attempts: HashMap::new(),
         }
     }
 
@@ -746,6 +784,15 @@ impl Lsp {
                         // per incident). The reader saw EOF, so `wait` is prompt.
                         if let Some(mut server) = self.servers.remove(&lang) {
                             let _ = server.child.wait();
+                            let survived_a_while = server
+                                .ready_since
+                                .is_some_and(|t| t.elapsed() >= STABLE_UPTIME);
+                            self.respawn_after_crash(
+                                &lang,
+                                &server.docs,
+                                survived_a_while,
+                                &mut events,
+                            );
                         }
                         break;
                     }
@@ -754,6 +801,47 @@ impl Lsp {
             }
         }
         events
+    }
+
+    /// Handle one server's crash (T134 audit — this used to just remove the
+    /// server and stop, leaving every file that was open on it silently dead
+    /// until the user closed and reopened it): respawn the same command, up
+    /// to [`MAX_RESTART_ATTEMPTS`] consecutive attempts since it last stayed
+    /// up for [`STABLE_UPTIME`] (`survived_a_while`, `true` resets the
+    /// budget — a fresh, isolated incident earns its own full budget rather
+    /// than inheriting a count from a crash loop long past), and tell the
+    /// host which files (`open_docs`, the crashed server's own doc-sync
+    /// table) need a fresh `didOpen` replayed with their real, current
+    /// content — `Lsp` never holds buffer content itself, only the host
+    /// does.
+    fn respawn_after_crash(
+        &mut self,
+        lang: &str,
+        open_docs: &HashMap<String, i64>,
+        survived_a_while: bool,
+        events: &mut Vec<LspEvent>,
+    ) {
+        if survived_a_while {
+            self.restart_attempts.remove(lang);
+        }
+        let attempts = self.restart_attempts.entry(lang.to_string()).or_insert(0);
+        *attempts += 1;
+        if *attempts > MAX_RESTART_ATTEMPTS {
+            events.push(LspEvent::ServerCrashed(lang.to_string()));
+            return;
+        }
+        let Some(config) = self.configs.iter().find(|c| c.language_id == lang).cloned() else {
+            return;
+        };
+        let Some(new_server) = spawn(&config, self.root_uri.as_deref()) else {
+            events.push(LspEvent::ServerCrashed(lang.to_string()));
+            return;
+        };
+        self.servers.insert(lang.to_string(), new_server);
+        if !open_docs.is_empty() {
+            let paths = open_docs.keys().map(|uri| uri_to_path(uri)).collect();
+            events.push(LspEvent::ServerRestarted(paths));
+        }
     }
 
     /// Handle one decoded message from server `lang`.
@@ -1042,6 +1130,7 @@ impl Lsp {
             server.encoding = message::parse_position_encoding(result);
         }
         server.ready = true;
+        server.ready_since = Some(Instant::now());
         server.write_now(&message::notification("initialized", &json!({})));
         let queued = std::mem::take(&mut server.queue);
         for m in queued {
@@ -1106,6 +1195,7 @@ fn spawn(config: &ServerConfig, root_uri: Option<&str>) -> Option<Server> {
         encoding: Encoding::Utf16,
         ready: false,
         queue: Vec::new(),
+        ready_since: None,
     };
     let init = message::request(
         INITIALIZE_ID,

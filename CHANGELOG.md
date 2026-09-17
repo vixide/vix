@@ -8,6 +8,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **LSP server crash recovery** (improvement plan T123c): a crashed
+  language server for a file that was already open used to just go
+  silently dead until you closed and reopened it. It now respawns
+  automatically (up to 3 consecutive attempts since it last stayed up for
+  30 seconds — a real crash loop gets 3 tries, then a message instead of
+  respawning forever) and replays `didOpen` for every file that was open
+  on it, with each file's current content.
 - **LSP `prepareRename` and `relatedInformation`** (improvement plan
   T123e): renaming now confirms with the server first — a position it
   says can't be renamed shows a status message instead of opening a

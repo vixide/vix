@@ -137,6 +137,52 @@ while True:
         break
 "#;
 
+/// A mock server that completes `initialize` and answers exactly one
+/// `didOpen` (publishing a diagnostic so the test can tell it got there),
+/// then exits immediately -- simulating a crash, deterministically, on
+/// *every* launch (including each respawn), for the T134 crash-recovery
+/// tests below.
+const MOCK_SERVER_CRASHES_AFTER_DID_OPEN: &str = r#"
+import sys, json
+
+def read_msg():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        line = line.decode('ascii').strip()
+        if line == '':
+            break
+        k, _, v = line.partition(':')
+        headers[k.strip().lower()] = v.strip()
+    n = int(headers.get('content-length', '0'))
+    return json.loads(sys.stdin.buffer.read(n))
+
+def send(obj):
+    data = json.dumps(obj).encode('utf-8')
+    sys.stdout.buffer.write(b'Content-Length: %d\r\n\r\n' % len(data))
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+while True:
+    msg = read_msg()
+    if msg is None:
+        break
+    method = msg.get('method')
+    mid = msg.get('id')
+    if method == 'initialize':
+        send({'jsonrpc':'2.0','id':mid,'result':{'capabilities':{'positionEncoding':'utf-16'}}})
+    elif method == 'textDocument/didOpen':
+        uri = msg['params']['textDocument']['uri']
+        send({'jsonrpc':'2.0','method':'textDocument/publishDiagnostics','params':{
+            'uri': uri,
+            'diagnostics': [{'range':{'start':{'line':0,'character':0},
+                                      'end':{'line':0,'character':1}},
+                             'severity':1,'message':'mock'}]}})
+        sys.exit(1)  # "crash" right after handling the first didOpen
+"#;
+
 #[test]
 fn mock_server_round_trips_diagnostics_and_hover() {
     if !tool_available("python3") {
@@ -335,6 +381,72 @@ fn mock_server_prepare_rename_null_surfaces_as_not_renameable() {
     let _ = std::fs::remove_dir_all(&root);
 
     assert_eq!(outcome, Some(RenamePrepared::NotRenameable));
+}
+
+/// T134 audit: a crashed server for an already-open file used to just
+/// vanish -- every LSP feature for that file went silently dead until the
+/// user closed and reopened it. It now respawns (up to `MAX_RESTART_ATTEMPTS`
+/// times) and emits `ServerRestarted` naming the files that need a fresh
+/// `didOpen` replayed with their real content -- this test drives that
+/// replay itself (exactly what `App::poll_lsp` does), proving the full
+/// respawn chain and that it eventually gives up with `ServerCrashed`
+/// rather than looping forever against a server that crash-loops.
+#[test]
+fn mock_server_crash_respawns_then_gives_up_after_max_attempts() {
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("vix-lsp-mock-crash-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER_CRASHES_AFTER_DID_OPEN).unwrap();
+    let file = root.join("a.rs");
+    std::fs::write(&file, "abc\n").unwrap();
+
+    let cfg = LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
+    };
+    let mut lsp = Lsp::new(true, vec![cfg], &root);
+    lsp.did_open(&file, "abc\n");
+
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let mut restarts = 0;
+    let mut crashed_language: Option<String> = None;
+    while Instant::now() < deadline && crashed_language.is_none() {
+        for ev in lsp.poll() {
+            match ev {
+                LspEvent::ServerRestarted(paths) => {
+                    restarts += 1;
+                    assert_eq!(
+                        paths,
+                        vec![file.clone()],
+                        "names the crashed file for replay"
+                    );
+                    // Exactly what App::poll_lsp does on this event: replay
+                    // didOpen with the file's real (here, unchanged) content.
+                    lsp.did_open(&file, "abc\n");
+                }
+                LspEvent::ServerCrashed(language) => crashed_language = Some(language),
+                _ => {}
+            }
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    lsp.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(
+        crashed_language.as_deref(),
+        Some("rust"),
+        "should eventually give up rather than respawn forever"
+    );
+    assert_eq!(
+        restarts, 3,
+        "exactly MAX_RESTART_ATTEMPTS respawns before giving up"
+    );
 }
 
 /// T123: typing `(` inside a call should auto-trigger signature help (no
