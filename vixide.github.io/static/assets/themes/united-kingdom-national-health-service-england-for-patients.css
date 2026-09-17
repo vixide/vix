@@ -1,118 +1,158 @@
 /* ============================================================================
- * Lily theme: dark
+ * NHS England (United Kingdom) Design System
+ * ----------------------------------------------------------------------------
+ * Upstream tracked: NHS.UK frontend v9.x visual language (v10 is in
+ * pre-release; re-check the palette when it goes stable). Independent
+ * implementation against Lily class hooks; not affiliated with or
+ * endorsed by the NHS.
  *
- * Standalone Lily Design System theme — declares the theme tokens and inlines
- * the component CSS for all 492 Lily components, so this single file is the
- * only stylesheet required to render a Lily-styled page.
+ * Canonical references
+ *   - NHS Service Manual: https://service-manual.nhs.uk/design-system
+ *   - NHS Identity Guidelines (Colours):
+ *       https://www.england.nhs.uk/nhsidentity/identity-guidelines/colours/
+ *   - NHS frontend tokens (Sass source):
+ *       https://github.com/nhsuk/nhsuk-frontend
+ *   - Typography: Frutiger W01 (primary), Arial / system-ui fallback
+ *   - Base font size: 16px, modular scale (14 / 16 / 19 / 22 / 26 / 32 / 48 / 64)
+ *   - Spacing scale (px): 0, 4, 8, 12, 16, 24, 32, 40, 48, 64
+ *   - WCAG 2.2 AAA target; focus outline is 4px solid #FFEB3B over #212B32
  *
+ * Brand palette (sRGB → OKLCH conversions used below)
+ *   NHS Blue           #005EB8   primary brand colour
+ *   NHS Dark Blue      #003087   hover / pressed states, secondary
+ *   NHS Bright Blue    #0072CE   informational links / chips
+ *   NHS Light Blue     #41B6E6   accent, illustrative
+ *   NHS Aqua Blue      #00A9CE   emphasis / supplementary
+ *   NHS Black          #212B32   primary text
+ *   NHS Dark Grey      #425563   secondary text
+ *   NHS Mid Grey       #768692   tertiary text / borders
+ *   NHS Pale Grey      #E8EDEE   surface backgrounds
+ *   NHS White          #FFFFFF   page background
+ *   NHS Warm Yellow    #FFB81C   warning / focus indicator
+ *   NHS Emergency Red  #DA291C   error / destructive action
+ *   NHS Green          #009639   success / confirmation
+ *   NHS Dark Green     #006747   success hover
  *
- * Credit for the theme source: DaisyUI (https://daisyui.com/)
+ * Geometry rules (NHS frontend defaults)
+ *   - Border radius: 4px on cards / inputs / buttons (selectors are square: 0)
+ *   - Borders: 1px solid, drawn in NHS Mid Grey #768692 by default
+ *   - Surfaces are flat: no shadow, no gradient (depth = 0)
+ *   - No textures / noise (noise = 0); the system favours legibility over flair
  *
- * Upstream tracked: DaisyUI v5-era theme palette, adapted to Lily tokens and hooks.
+ * Accessibility commitments encoded in this theme
+ *   - All foreground/background pairs target WCAG AA at minimum (most reach AAA)
+ *   - Warning content is dark (oklch ~28%) so #FFB81C yellow stays legible
+ *   - Primary/secondary/info/success/error all use white content for contrast
  * ========================================================================= */
 
 /* Theme tokens — the colour, radius, border, and depth variables consumed
  * by every Lily component rule below. The theme applies by default (`:root`)
- * and also when explicitly opted into via `<html data-theme="dark">`,
+ * and also when explicitly opted into via `<html data-theme="united-kingdom-national-health-service-england-for-patients">`,
  * so multiple themes can coexist in one document and be switched at runtime
  * by updating the `data-theme` attribute. */
 
-:where(:root, :root[data-theme="dark"]) {
-    color-scheme: dark;
+:where(:root, :root[data-theme="united-kingdom-national-health-service-england-for-patients"]) {
+    color-scheme: light;
 
-    /* Page-level surface (primary canvas). Sits behind body copy
-       and primary content areas. Lightest base shade in light
-       themes, deepest in dark themes. */
-    --color-base-100: oklch(25.33% 0.016 252.42);
-    /* Secondary surface — section panels, card backgrounds,
-       sidebars, table-header fills. One step away from the page
-       surface. */
-    --color-base-200: oklch(23.26% 0.014 253.1);
-    /* Tertiary surface — dividers, sunken wells, hover-row
-       backgrounds. The most muted of the three base shades. */
-    --color-base-300: oklch(21.15% 0.012 254.09);
-    /* Primary text colour. High-contrast against base-100 to meet
-       WCAG contrast ratios for body copy. */
-    --color-base-content: oklch(97.81% 0.029 256.847);
-    /* Primary brand / action colour. Used on primary buttons,
-       active navigation items, selected states, and the focus
-       ring. */
-    --color-primary: oklch(58% 0.233 277.117);
-    /* Foreground colour used over `--color-primary` fills (so
-       primary buttons retain a guaranteed contrast ratio). */
-    --color-primary-content: oklch(96% 0.018 272.314);
-    /* Secondary brand colour. Pressed/hover state for primary
-       buttons and visited links; also drives the secondary chrome
-       family. */
-    --color-secondary: oklch(65% 0.241 354.308);
-    /* Foreground colour used over `--color-secondary` fills. */
-    --color-secondary-content: oklch(94% 0.028 342.258);
-    /* Accent colour — used sparingly for emphasis, the AI label,
-       illustrations, and tertiary call-outs. */
-    --color-accent: oklch(77% 0.152 181.912);
-    /* Foreground colour used over `--color-accent` fills. */
-    --color-accent-content: oklch(38% 0.063 188.416);
-    /* Neutral chrome surface — footer bars, code blocks,
-       tooltips, government-banner strips. Typically the theme's
-       darkest neutral. */
-    --color-neutral: oklch(14% 0.005 285.823);
-    /* Foreground colour used over `--color-neutral` fills. */
-    --color-neutral-content: oklch(92% 0.004 286.32);
-    /* Informational status colour — informational banners, links,
-       'did-you-know' callouts. */
-    --color-info: oklch(74% 0.16 232.661);
-    /* Foreground colour used over `--color-info` fills. */
-    --color-info-content: oklch(29% 0.066 243.157);
-    /* Success / confirmation colour — used on success panels,
-       completed step indicators, validation pass states, and the
-       green RAG status. */
-    --color-success: oklch(76% 0.177 163.223);
-    /* Foreground colour used over `--color-success` fills. */
-    --color-success-content: oklch(37% 0.077 168.94);
-    /* Warning colour — yellow/amber band; used on phase banners,
-       in-progress states, validation warnings, and the amber RAG
-       status. */
-    --color-warning: oklch(82% 0.189 84.429);
-    /* Foreground colour used over `--color-warning` fills. Often
-       dark so text remains legible on a bright yellow background. */
-    --color-warning-content: oklch(41% 0.112 45.904);
-    /* Error / destructive colour — used on alert dialogs, error
-       messages, validation failures, urgent care cards, and the
-       red RAG status. */
-    --color-error: oklch(71% 0.194 13.428);
-    /* Foreground colour used over `--color-error` fills. */
-    --color-error-content: oklch(27% 0.105 12.094);
-    /* Smallest corner radius. Applied to chips, badges, switches,
-       and radio/checkbox containers (mapped to `--lily-radius-
-       sm`). */
-    --radius-selector: 0.5rem;
-    /* Medium corner radius. Applied to inputs, buttons, menu
-       items, tooltips, and most everyday form controls (mapped to
-       `--lily-radius-md`). */
+    /* ---- Surfaces
+       -------------------------------------------------------- */
+       /* base-100: page background. NHS White #FFFFFF — the
+       default canvas */ /* used behind body copy and primary
+       content areas. */
+    --color-base-100: oklch(100% 0 0);
+    /* base-200: secondary surface. NHS Pale Grey #E8EDEE —
+       sectioned */ /* backgrounds, sidebars, and the "grey-panel"
+       pattern in the manual. */
+    --color-base-200: oklch(94% 0.005 220);
+    /* base-300: tertiary surface. Slightly darker pale grey used
+       for */ /* dividers, table zebra-striping and hover
+       backgrounds on list rows. */
+    --color-base-300: oklch(89% 0.007 220);
+    /* base-content: primary text. NHS Black #212B32 — the body-
+       copy */ /* colour. Note this is NOT pure black; it warms
+       text slightly to */ /* reduce on-screen glare per NHS
+       readability guidance. */
+    --color-base-content: oklch(28% 0.015 230);
+    /* ---- Primary (NHS Blue)
+       --------------------------------------------- */ /* Primary
+       action colour. NHS Blue #005EB8 — the signature brand */ /*
+       colour used on the NHS logo block, primary buttons, and
+       active nav. */
+    --color-primary: oklch(45% 0.17 251);
+    --color-primary-content: oklch(100% 0 0);
+    /* ---- Secondary (NHS Dark Blue)
+       -------------------------------------- */ /* Hover /
+       pressed state for primary, and secondary chrome. */ /* NHS
+       Dark Blue #003087 — also used for visited links by some
+       teams. */
+    --color-secondary: oklch(33% 0.18 264);
+    --color-secondary-content: oklch(100% 0 0);
+    /* ---- Accent (NHS Light Blue)
+       ---------------------------------------- */ /* Illustrative
+       accent. NHS Light Blue #41B6E6 — used in charts, */ /*
+       diagrams, and supplementary UI cues. Not for primary CTAs.
+       Darkened from L=0.67 on 2026-08-27: white accent-content
+       needs >=4.5:1 for small text (axe color-contrast on ai-
+       label). */
+    --color-accent: oklch(52% 0.13 220);
+    --color-accent-content: oklch(100% 0 0);
+    /* ---- Neutral
+       -------------------------------------------------------- */
+       /* Neutral chrome (footer, dark cards). Mirrors base-
+       content so that */ /* the page maintains a single neutral
+       identity across both polarities. */
+    --color-neutral: oklch(28% 0.015 230);
+    --color-neutral-content: oklch(100% 0 0);
+    /* ---- Info (NHS Bright Blue)
+       ----------------------------------------- */ /*
+       Informational banners, links, and "did you know?" callouts.
+       */ /* NHS Bright Blue #0072CE — distinct from primary so
+       banners read as */ /* messages rather than calls to action. */
+    --color-info: oklch(54% 0.17 247);
+    --color-info-content: oklch(100% 0 0);
+    /* ---- Success (NHS Green)
+       -------------------------------------------- */ /*
+       Confirmation, completed-step, "you have been booked"
+       panels. */ /* NHS Green #009639 — meets 4.5:1 against white
+       when paired below. */
+    --color-success: oklch(56% 0.16 145);
+    --color-success-content: oklch(100% 0 0);
+    /* ---- Warning (NHS Warm Yellow)
+       -------------------------------------- */ /* Caution
+       banners and the canonical focus indicator. */ /* NHS Warm
+       Yellow #FFB81C — because the swatch is light, content */ /*
+       must be dark (≈ NHS Black) to clear WCAG AA contrast. */
+    --color-warning: oklch(82% 0.16 79);
+    --color-warning-content: oklch(28% 0.015 230);
+    /* ---- Error (NHS Emergency Services Red)
+       ----------------------------- */ /* Validation errors,
+       destructive actions, urgent banners. */ /* NHS Emergency
+       Services Red #DA291C — reserved for genuine errors; */ /*
+       do not use for decorative emphasis (it carries strong NHS
+       meaning). */
+    --color-error: oklch(55% 0.22 28);
+    --color-error-content: oklch(100% 0 0);
+    /* ---- Geometry tokens
+       ------------------------------------------------ */ /*
+       Selectors (checkbox / radio): square per NHS frontend
+       defaults. */
+    --radius-selector: 0rem;
+    /* Form fields: 4px corners — NHS frontend uses `$nhsuk-
+       border-radius`. */
     --radius-field: 0.25rem;
-    /* Largest corner radius. Applied to cards, dialogs, drawers,
-       and hero blocks (mapped to `--lily-radius-lg`). */
-    --radius-box: 0.5rem;
-    /* Base size for selector-style controls (checkbox/radio glyph
-       size, switch thumb diameter). Currently unused by Lily's
-       baseline component rules but available for theme
-       extensions. */
+    /* Card / panel / dialog: same 4px corner radius for visual
+       harmony. */
+    --radius-box: 0.25rem;
+    /* Inner padding hints for selectors and fields (Lily sizing). */
     --size-selector: 0.25rem;
-    /* Base size for field-style controls (input height
-       multiplier). Currently unused by Lily's baseline component
-       rules but available for theme extensions. */
     --size-field: 0.25rem;
-    /* Default border width applied to inputs, buttons, dividers,
-       table cells, etc. Single source of truth for the system's
-       stroke weight. */
+    /* Border width: 1px hairline, matching `$nhsuk-border-width-
+       form`. */
     --border: 1px;
-    /* Depth flag (0 or 1). Lily's baseline rules read it
-       implicitly via the shadow tokens; a depth-0 theme
-       effectively renders flat. */
-    --depth: 1;
-    /* Noise flag (0 or 1). Reserved for theme extensions that
-       want to layer a subtle texture; the baseline rules do not
-       consume it. */
+    /* Depth & noise off — NHS guidance avoids shadows and
+       textures so */ /* the interface looks clinical, calm, and
+       easy to read. */
+    --depth: 0;
     --noise: 0;
 }
 

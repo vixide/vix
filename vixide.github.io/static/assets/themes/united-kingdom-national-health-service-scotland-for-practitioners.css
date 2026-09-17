@@ -1,118 +1,303 @@
 /* ============================================================================
- * Lily theme: dark
+ * NHS Scotland (United Kingdom) Design System — Practitioner / Clinical variant
+ * ----------------------------------------------------------------------------
+ * This is the clinical, high-information-density sibling of
+ * `united-kingdom-national-health-service-scotland-for-patients.css`. The
+ * patient theme targets the public-facing nhsinform.scot reading
+ * experience: comfortable 16px body copy, generous 44px hit targets that
+ * meet WCAG 2.5.5 for occasional self-service users on touch devices, and
+ * 4px radii that read as calm and approachable.
  *
- * Standalone Lily Design System theme — declares the theme tokens and inlines
- * the component CSS for all 492 Lily components, so this single file is the
- * only stylesheet required to render a Lily-styled page.
+ * The practitioner theme targets a very different audience: clinicians,
+ * pharmacists, triage nurses, and admin staff who spend their entire shift
+ * inside an electronic patient record (EPR), prescribing workflow, or
+ * triage console. They use precision pointing devices (mouse + keyboard,
+ * sometimes stylus), read at viewing distances of 60–80cm, and need to
+ * fit as many fields, rows, and identifiers on screen as possible without
+ * scrolling. Density wins over generosity. To deliver that, this theme:
  *
+ *   - shrinks the Lily spacing scale by roughly 50% so paddings, margins,
+ *     and gaps compact;
+ *   - sharpens corner radii to 2px so cards and inputs read as functional
+ *     instruments rather than friendly consumer panels;
+ *   - drops control min-heights from 2.5rem (40–44px touch targets) to
+ *     1.75rem (~28px desktop targets), still WCAG 2.5.8 minimum (24px)
+ *     and well within Fitts'-law-acceptable for mouse + keyboard users
+ *     in a clinical setting where the operator is trained, the cursor is
+ *     precise, and screen real estate is at a premium;
+ *   - reduces the default body font-size from 16px to 14px, the size
+ *     conventional clinical systems (EMIS, SystmOne, Vision, EPIC,
+ *     Cerner) use for their data-dense panels;
+ *   - tightens input and button padding so identifier strings (CHI
+ *     numbers, NHS numbers, dose, allergens) fit on a single line in
+ *     narrow side panels.
  *
- * Credit for the theme source: DaisyUI (https://daisyui.com/)
+ * Colours, focus indicator, semantic meaning of warning / error / success,
+ * and the NHS Scotland brand identity are unchanged — only geometry and
+ * typography differ. A user who switches between patient-facing and
+ * practitioner-facing services will see the same NHS Scotland blue and
+ * the same NHS Warm Yellow focus ring; the practitioner UI just packs
+ * more information into the same viewport.
  *
- * Upstream tracked: DaisyUI v5-era theme palette, adapted to Lily tokens and hooks.
+ * NHS Scotland is the umbrella for 14 territorial NHS boards plus seven
+ * special boards (NHS 24, NHS Education for Scotland, NHS National Services
+ * Scotland, Public Health Scotland, Scottish Ambulance Service, State
+ * Hospitals Board, NHS Healthcare Improvement Scotland). Its public-facing
+ * digital surface is split across three closely-aligned brand expressions
+ * that this theme harmonises into one Lily token set:
+ *
+ *   1. NHS Scotland corporate brand (Scottish Government / CMO directorate)
+ *      — the formal navy-blue identity used by NHS boards, statutory
+ *      publications, and the NHS Scotland staff intranet.
+ *   2. NHS Inform — the citizen-facing health information service published
+ *      by NHS 24 at nhsinform.scot. Uses the deeper navy plus a bright NHS
+ *      cyan for links and signposting.
+ *   3. NHS 24 service brand (111, Scotland's telehealth line) — a darker,
+ *      more clinical reading of the same palette with magenta/violet
+ *      callouts reserved for safety messaging.
+ *
+ * Upstream tracked: NHS.UK frontend v9.x visual language (v10 is in
+ * pre-release; re-check the palette when it goes stable). Independent
+ * implementation against Lily class hooks; not affiliated with or
+ * endorsed by the NHS.
+ *
+ * Canonical references
+ *   - NHS Scotland Identity Standards (Scottish Government CMO Directorate):
+ *       https://www.publications.scot.nhs.uk/
+ *   - NHS Inform (citizen-facing health information):
+ *       https://www.nhsinform.scot/
+ *   - NHS 24 (telehealth / 111):
+ *       https://www.nhs24.scot/
+ *   - Scottish Government Design System (sibling system, shares typography
+ *     conventions and accessibility targets):
+ *       https://designsystem.gov.scot/
+ *   - Digital Scotland Service Standard (legal accessibility baseline):
+ *       https://www.gov.scot/publications/digital-scotland-service-standard/
+ *   - Typography: Frutiger W01 (primary, shared with NHS UK), Roboto for
+ *     NHS Inform body copy, Arial / system-ui as the universal fallback.
+ *   - Base font size: 16px; modular scale matches NHS UK (14/16/19/22/26/
+ *     32/48/64) so components ported from the NHS UK frontend "just work".
+ *   - Spacing scale (px): 0, 4, 8, 12, 16, 24, 32, 40, 48, 64 — identical
+ *     to NHS UK frontend's `$nhsuk-spacing-responsive-scale`.
+ *   - WCAG 2.2 AA mandated by the Digital Scotland Service Standard;
+ *     Lily targets AAA. The focus indicator below clears AAA at 3:1
+ *     against every surface in the theme.
+ *
+ * Brand palette (sRGB swatches → OKLCH equivalents used in the theme)
+ *   NHS Scotland Navy      #003087   primary brand colour (Pantone 287)
+ *                                    The flagship NHS Scotland blue.
+ *                                    Darker than NHS England's #005EB8;
+ *                                    this is the single most distinctive
+ *                                    visual difference between the two
+ *                                    nations' systems.
+ *   NHS Scotland Mid Blue  #0078D4   primary action / link colour
+ *                                    (NHS Inform's link blue, also used
+ *                                    on NHS24 service buttons).
+ *   NHS Bright Blue        #0072CE   informational accents, shared with
+ *                                    the NHS UK identity for cross-border
+ *                                    services and chips/badges.
+ *   NHS Light Blue         #41B6E6   illustrative accent, infographics,
+ *                                    chart palette.
+ *   NHS Aqua / Teal        #00A499   supplementary accent (NHS24 chrome).
+ *   NHS Scotland Magenta   #AE2573   safety-critical callouts used by
+ *                                    NHS 24 for "phone 999" messaging.
+ *                                    Not exposed as a Lily role; cited
+ *                                    here for completeness only.
+ *   NHS Black              #212B32   primary text on white surfaces.
+ *   NHS Dark Grey          #425563   secondary text, captions.
+ *   NHS Mid Grey           #768692   tertiary text, dividers, default
+ *                                    border colour on form fields.
+ *   NHS Pale Grey          #E8EDEE   sectioned surfaces, summary panels,
+ *                                    table zebra striping.
+ *   NHS Inform Off-White   #F0F4F5   page wash used by nhsinform.scot
+ *                                    behind the main column on wider
+ *                                    viewports (slightly cooler than
+ *                                    NHS UK's pale grey).
+ *   NHS White              #FFFFFF   default page background.
+ *   NHS Warm Yellow        #FFB81C   warning banners, also the canonical
+ *                                    focus indicator across NHS UK / NHS
+ *                                    Scotland / NHS Wales — a deliberate
+ *                                    cross-system commitment so keyboard
+ *                                    users recognise focus everywhere.
+ *   NHS Emergency Red      #DA291C   error / destructive action, also
+ *                                    the colour used on the "999" badge
+ *                                    inside NHS Inform.
+ *   NHS Green              #009639   success / confirmation.
+ *   NHS Dark Green         #006747   success hover / pressed state.
+ *
+ * Geometry rules (shared with NHS UK frontend)
+ *   - Border radius: 4px on cards, inputs, and buttons. Selectors
+ *     (checkbox/radio) are square (0px) to keep the tick mark perfectly
+ *     centred — a NHS frontend convention preserved here.
+ *   - Borders: 1px solid hairline, drawn in NHS Mid Grey #768692.
+ *   - Surfaces are flat: no shadow, no gradient (depth = 0). NHS Scotland
+ *     identity guidance discourages skeuomorphism so clinical content
+ *     reads calmly on low-contrast and reduced-vision displays.
+ *   - No textures or noise (noise = 0).
+ *
+ * Accessibility commitments encoded in this theme
+ *   - All foreground/background pairs target WCAG AA at minimum; the
+ *     primary / secondary / info / success / error swatches reach AAA
+ *     when paired with the matching *-content colour below.
+ *   - Warning content is dark (≈ NHS Black) so #FFB81C yellow stays
+ *     legible — yellow-on-white would fall below AA.
+ *   - Focus ring (rendered by the example apps' CSS, not declared here)
+ *     uses NHS Warm Yellow #FFB81C over NHS Black #212B32 to guarantee
+ *     visibility on every theme surface including primary and error.
+ *   - Colour is never the sole carrier of meaning (WCAG 1.4.1) — every
+ *     status component pairs colour with an icon, text label, or ARIA
+ *     attribute per AGENTS/accessibility.md.
+ *
+ * Relationship to sibling themes
+ *   - united-kingdom-national-health-service-england.css — same modular
+ *     scale and geometry; primary is lighter (#005EB8 vs #003087).
+ *   - united-kingdom-national-health-service-wales.css — shares yellow,
+ *     red, and green roles; primary leans toward GIG Cymru's deeper navy.
+ *   Components are visually portable across the three nations: only the
+ *   primary / secondary / accent tokens differ, never the geometry or
+ *   the safety palette (warning / error / success).
  * ========================================================================= */
 
 /* Theme tokens — the colour, radius, border, and depth variables consumed
  * by every Lily component rule below. The theme applies by default (`:root`)
- * and also when explicitly opted into via `<html data-theme="dark">`,
+ * and also when explicitly opted into via `<html data-theme="united-kingdom-national-health-service-scotland-for-practitioners">`,
  * so multiple themes can coexist in one document and be switched at runtime
  * by updating the `data-theme` attribute. */
 
-:where(:root, :root[data-theme="dark"]) {
-    color-scheme: dark;
+:where(:root, :root[data-theme="united-kingdom-national-health-service-scotland-for-practitioners"]) {
+    color-scheme: light;
 
-    /* Page-level surface (primary canvas). Sits behind body copy
-       and primary content areas. Lightest base shade in light
-       themes, deepest in dark themes. */
-    --color-base-100: oklch(25.33% 0.016 252.42);
-    /* Secondary surface — section panels, card backgrounds,
-       sidebars, table-header fills. One step away from the page
-       surface. */
-    --color-base-200: oklch(23.26% 0.014 253.1);
-    /* Tertiary surface — dividers, sunken wells, hover-row
-       backgrounds. The most muted of the three base shades. */
-    --color-base-300: oklch(21.15% 0.012 254.09);
-    /* Primary text colour. High-contrast against base-100 to meet
-       WCAG contrast ratios for body copy. */
-    --color-base-content: oklch(97.81% 0.029 256.847);
-    /* Primary brand / action colour. Used on primary buttons,
-       active navigation items, selected states, and the focus
-       ring. */
-    --color-primary: oklch(58% 0.233 277.117);
-    /* Foreground colour used over `--color-primary` fills (so
-       primary buttons retain a guaranteed contrast ratio). */
-    --color-primary-content: oklch(96% 0.018 272.314);
-    /* Secondary brand colour. Pressed/hover state for primary
-       buttons and visited links; also drives the secondary chrome
-       family. */
-    --color-secondary: oklch(65% 0.241 354.308);
-    /* Foreground colour used over `--color-secondary` fills. */
-    --color-secondary-content: oklch(94% 0.028 342.258);
-    /* Accent colour — used sparingly for emphasis, the AI label,
-       illustrations, and tertiary call-outs. */
-    --color-accent: oklch(77% 0.152 181.912);
-    /* Foreground colour used over `--color-accent` fills. */
-    --color-accent-content: oklch(38% 0.063 188.416);
-    /* Neutral chrome surface — footer bars, code blocks,
-       tooltips, government-banner strips. Typically the theme's
-       darkest neutral. */
-    --color-neutral: oklch(14% 0.005 285.823);
-    /* Foreground colour used over `--color-neutral` fills. */
-    --color-neutral-content: oklch(92% 0.004 286.32);
-    /* Informational status colour — informational banners, links,
-       'did-you-know' callouts. */
-    --color-info: oklch(74% 0.16 232.661);
-    /* Foreground colour used over `--color-info` fills. */
-    --color-info-content: oklch(29% 0.066 243.157);
-    /* Success / confirmation colour — used on success panels,
-       completed step indicators, validation pass states, and the
-       green RAG status. */
-    --color-success: oklch(76% 0.177 163.223);
-    /* Foreground colour used over `--color-success` fills. */
-    --color-success-content: oklch(37% 0.077 168.94);
-    /* Warning colour — yellow/amber band; used on phase banners,
-       in-progress states, validation warnings, and the amber RAG
-       status. */
-    --color-warning: oklch(82% 0.189 84.429);
-    /* Foreground colour used over `--color-warning` fills. Often
-       dark so text remains legible on a bright yellow background. */
-    --color-warning-content: oklch(41% 0.112 45.904);
-    /* Error / destructive colour — used on alert dialogs, error
-       messages, validation failures, urgent care cards, and the
-       red RAG status. */
-    --color-error: oklch(71% 0.194 13.428);
-    /* Foreground colour used over `--color-error` fills. */
-    --color-error-content: oklch(27% 0.105 12.094);
-    /* Smallest corner radius. Applied to chips, badges, switches,
-       and radio/checkbox containers (mapped to `--lily-radius-
-       sm`). */
-    --radius-selector: 0.5rem;
-    /* Medium corner radius. Applied to inputs, buttons, menu
-       items, tooltips, and most everyday form controls (mapped to
-       `--lily-radius-md`). */
-    --radius-field: 0.25rem;
-    /* Largest corner radius. Applied to cards, dialogs, drawers,
-       and hero blocks (mapped to `--lily-radius-lg`). */
-    --radius-box: 0.5rem;
-    /* Base size for selector-style controls (checkbox/radio glyph
-       size, switch thumb diameter). Currently unused by Lily's
-       baseline component rules but available for theme
-       extensions. */
-    --size-selector: 0.25rem;
-    /* Base size for field-style controls (input height
-       multiplier). Currently unused by Lily's baseline component
-       rules but available for theme extensions. */
-    --size-field: 0.25rem;
-    /* Default border width applied to inputs, buttons, dividers,
-       table cells, etc. Single source of truth for the system's
-       stroke weight. */
+    /* ---- Surfaces
+       -------------------------------------------------------- */
+       /* base-100: page background. NHS White #FFFFFF — the
+       canvas behind */ /* body copy, primary content cards, and
+       dialog modals. */
+    --color-base-100: oklch(100% 0 0);
+    /* base-200: secondary surface. NHS Inform Off-White #F0F4F5 —
+       used */ /* on nhsinform.scot for the page wash behind the
+       main column at */ /* wide breakpoints, and for summary /
+       "at a glance" panels. */
+    --color-base-200: oklch(96% 0.008 220);
+    /* base-300: tertiary surface. NHS Pale Grey #E8EDEE — divider
+       rows, */ /* table zebra striping, list-row hover, and the
+       "grey panel" used */ /* for sectioned navigation in NHS 24
+       service journeys. */
+    --color-base-300: oklch(92% 0.01 220);
+    /* base-content: primary text. NHS Black #212B32 — warm near-
+       black */ /* tuned to reduce on-screen glare for users
+       reading long-form */ /* clinical content (a shared NHS UK /
+       NHS Scotland choice). */
+    --color-base-content: oklch(26% 0.015 230);
+    /* ---- Primary (NHS Scotland Navy)
+       ------------------------------------ */ /* NHS Scotland
+       Navy #003087 (Pantone 287) — the flagship brand */ /*
+       colour. Darker than NHS England's #005EB8: this is the
+       single */ /* clearest visual signal that a service belongs
+       to NHS Scotland */ /* rather than NHS England. Used on the
+       NHS Scotland logo block, */ /* primary buttons, the global
+       header band on nhsinform.scot, and */ /* the active state
+       of primary nav. */
+    --color-primary: oklch(32% 0.18 264);
+    --color-primary-content: oklch(100% 0 0);
+    /* ---- Secondary (NHS Scotland Mid Blue)
+       ------------------------------ */ /* NHS Scotland Mid Blue
+       #0078D4 — the link colour on nhsinform.scot */ /* and the
+       secondary-button fill on NHS 24 journeys. Sits between */
+       /* the navy primary and the bright accent so layered
+       buttons keep a */ /* clear hierarchy without losing the NHS
+       Scotland identity. */
+    --color-secondary: oklch(52% 0.18 248);
+    --color-secondary-content: oklch(100% 0 0);
+    /* ---- Accent (NHS Aqua / Teal)
+       --------------------------------------- */ /* NHS Aqua /
+       Teal #00A499 — supplementary accent associated with */ /*
+       NHS 24 chrome and used for illustrative chart series. Not
+       for */ /* primary calls to action; reserve for decorative
+       emphasis, */ /* category chips, and data visualisation.
+       Darkened from L=0.62 on 2026-08-27: white accent-content
+       needs >=4.5:1 for small text (axe color-contrast on ai-
+       label). */
+    --color-accent: oklch(52% 0.11 192);
+    --color-accent-content: oklch(100% 0 0);
+    /* ---- Neutral
+       -------------------------------------------------------- */
+       /* Neutral chrome (dark footer, NHS 24 dark cards, on-call
+       signage). */ /* Mirrors base-content so dark blocks share
+       the same warm near-black */ /* identity as body text,
+       keeping the page visually coherent. */
+    --color-neutral: oklch(26% 0.015 230);
+    --color-neutral-content: oklch(100% 0 0);
+    /* ---- Info (NHS Bright Blue)
+       ----------------------------------------- */ /* NHS Bright
+       Blue #0072CE — informational banners ("did you know?", */
+       /* "your appointment is at…"), inline help, and link chips.
+       Distinct */ /* from primary so message banners read as
+       messages, not actions. */
+    --color-info: oklch(54% 0.17 247);
+    --color-info-content: oklch(100% 0 0);
+    /* ---- Success (NHS Green)
+       -------------------------------------------- */ /* NHS
+       Green #009639 — confirmation panels, completed-step
+       indicators */ /* ("you have been booked"), and the success
+       state on form summaries. */ /* Identical role and contrast
+       target as the NHS UK system so shared */ /* components
+       carry the same meaning across the border. */
+    --color-success: oklch(56% 0.16 145);
+    --color-success-content: oklch(100% 0 0);
+    /* ---- Warning (NHS Warm Yellow)
+       -------------------------------------- */ /* NHS Warm
+       Yellow #FFB81C — caution banners and the canonical focus */
+       /* indicator. Yellow swatches are light, so the content
+       colour MUST */ /* stay dark (≈ NHS Black) to clear WCAG AA
+       contrast. Reusing this */ /* hue across NHS England, NHS
+       Scotland, and NHS Wales is deliberate: */ /* keyboard users
+       build muscle memory for "yellow means focus". */
+    --color-warning: oklch(82% 0.16 79);
+    --color-warning-content: oklch(26% 0.015 230);
+    /* ---- Error (NHS Emergency Services Red)
+       ----------------------------- */ /* NHS Emergency Services
+       Red #DA291C — validation errors, */ /* destructive actions,
+       "phone 999" badges inside NHS Inform. */ /* Reserved for
+       genuine errors and safety messages: the colour */ /*
+       carries strong NHS meaning across both nations and must not
+       be */ /* used for decorative emphasis. */
+    --color-error: oklch(55% 0.22 28);
+    --color-error-content: oklch(100% 0 0);
+    /* ---- Geometry tokens (clinical / high-density)
+       --------------------- */ /* Selectors (checkbox / radio):
+       square per NHS frontend defaults so */ /* the tick / dot
+       stays perfectly centred at every font size. Square */ /*
+       selectors are doubly appropriate for clinical UI where
+       checklist */ /* grids dominate (allergies, observations,
+       problem-list flags). */
+    --radius-selector: 0rem;
+    /* Form fields: 2px corners — sharper than the 4px patient
+       theme. */ /* Clinical instruments traditionally use crisp
+       rectangles; the small */ /* radius keeps a hint of softness
+       so the UI doesn't read as hostile */ /* while still
+       aligning more closely to EPR conventions. */
+    --radius-field: 0.125rem;
+    /* Card / panel / dialog: 2px corner radius. Tight corners
+       keep */ /* clinical worklists, observation tables, and
+       side-panel cards */ /* visually instrument-like and align
+       edges to a 2px grid. */
+    --radius-box: 0.125rem;
+    /* Inner padding hints for selectors and fields — compressed
+       so */ /* checklist rows and field grids pack tightly. */
+    --size-selector: 0.125rem;
+    --size-field: 0.125rem;
+    /* Border width: 1px hairline, matching `$nhsuk-border-width-
+       form`. */ /* The hairline is the smallest legible border on
+       the LCDs used in */ /* clinical settings; going to 0.5px
+       loses the edge on non-Retina */ /* workstation displays
+       still common in NHS estate. */
     --border: 1px;
-    /* Depth flag (0 or 1). Lily's baseline rules read it
-       implicitly via the shadow tokens; a depth-0 theme
-       effectively renders flat. */
-    --depth: 1;
-    /* Noise flag (0 or 1). Reserved for theme extensions that
-       want to layer a subtle texture; the baseline rules do not
-       consume it. */
+    /* Depth & noise off — NHS Scotland identity guidance, like
+       NHS UK, */ /* avoids shadows, gradients, and textures so
+       the interface looks */ /* clinical, calm, and easy to read
+       on low-end devices common in */ /* community health
+       settings. */
+    --depth: 0;
     --noise: 0;
 }
 
@@ -192,14 +377,17 @@
         --lily-radius-md: var(--radius-field);
         --lily-radius-lg: var(--radius-box);
 
-        /* --- Spacing scale ------------------------------------------------- */
+        /* --- Spacing scale (clinical / high-density) ----------------------- */
         /* Five-step spacing scale used by every gap, padding, and margin.
-           Linear progression keeps rhythm consistent at any zoom level. */
-        --lily-space-xs: 0.25rem;
-        --lily-space-sm: 0.5rem;
-        --lily-space-md: 1rem;
-        --lily-space-lg: 1.5rem;
-        --lily-space-xl: 2rem;
+           Roughly half the patient theme's values so clinical worklists,
+           observation grids, and form-dense panels pack tightly while
+           still reserving enough whitespace for keyboard navigation and
+           focus rings to remain visually distinct. */
+        --lily-space-xs: 0.125rem; /* hairline gaps inside tables/badges */
+        --lily-space-sm: 0.25rem;  /* default inline gap                  */
+        --lily-space-md: 0.5rem;   /* default block padding               */
+        --lily-space-lg: 0.75rem;  /* card / dialog padding               */
+        --lily-space-xl: 1rem;     /* page-level rhythm                   */
 
         /* --- Typography ---------------------------------------------------- */
         /* Body font stack — system fonts first so consumers get a
@@ -222,6 +410,22 @@
             color-mix(in oklch, var(--color-base-content) 12%, transparent);
         --lily-shadow-lg: 0 12px 32px
             color-mix(in oklch, var(--color-base-content) 16%, transparent);
+    }
+
+    /* Body typography — clinical density. 14px base body copy + 1.35
+       line-height matches the data-dense panels of EMIS, SystmOne,
+       Vision, EPIC, and Cerner. Setting `font-size` on the `body`
+       element (not the root) keeps `rem` anchored to the browser's
+       16px so layout dimensions tied to `rem` (paddings, min-heights,
+       focus offsets) stay predictable; only inherited text-sized
+       declarations shrink. Consumers needing larger text override
+       `body { font-size }` in their own stylesheet. */
+    :where(body) {
+        font-size: 0.875rem;
+        line-height: 1.35;
+        font-family: var(--lily-font-body);
+        color: var(--lily-text);
+        background-color: var(--lily-surface);
     }
 
     /* Focus ring — every interactive Lily class hook gets the same visible
@@ -278,8 +482,12 @@
         display: inline-block;
         width: 100%; /* fill parent by default; consumer caps via container */
         max-width: 100%;
-        min-height: 2.5rem; /* WCAG 2.5.5 target-size guidance (~44px) */
-        padding: 0.5rem 0.75rem;
+        /* Clinical density: 1.75rem (~28px) min-height clears WCAG 2.5.8
+           Minimum (24px) while letting EPR-style worklists pack ~25 rows
+           per 1080px viewport instead of the patient theme's ~17. The
+           shorter row is appropriate for mouse + keyboard precision. */
+        min-height: 1.75rem;
+        padding: 0.125rem 0.375rem;
         font: inherit;
         font-family: var(--lily-font-body);
         color: var(--lily-text);
@@ -335,7 +543,7 @@
     /* Submit / reset / image / generic button inputs render as buttons. */
     :where(.button-input, .submit-input, .reset-input, .image-input) {
         width: auto;
-        min-width: 2.5rem;
+        min-width: 1.75rem;
         background-color: var(--color-primary);
         color: var(--color-primary-content);
         border-color: transparent;
@@ -354,9 +562,9 @@
     /* Color input — narrow swatch with internal padding so the colour chip
        reads cleanly inside the input frame. */
     :where(.color-input) {
-        min-height: 2.5rem;
-        padding: 0.25rem;
-        width: 3rem;
+        min-height: 1.75rem;
+        padding: 0.125rem;
+        width: 2.25rem;
         cursor: pointer;
     }
 
@@ -446,8 +654,8 @@
     }
     :where(.password-input-or-text-input-div > input) {
         flex: 1;
-        min-height: 2.5rem;
-        padding: 0.5rem 0.75rem;
+        min-height: 1.75rem;
+        padding: 0.125rem 0.375rem;
         background-color: var(--lily-surface);
         color: var(--lily-text);
         border: var(--border) solid var(--lily-border-strong);
@@ -552,15 +760,17 @@
      * ====================================================================== */
 
     /* Baseline button — primary-coloured pill. Variants override colour or
-       shape below. */
+       shape below. Clinical density: shorter, tighter padding for toolbar
+       rows and side-panel actions; gap drops because labels are usually
+       icons or short verbs ("Save", "Sign", "Print", "Refer"). */
     :where(.button, [class$="-button"]:not(.hamburger-menu-button)) {
         appearance: none;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 0.5rem; /* leave room for an icon + label */
-        min-height: 2.5rem; /* WCAG target-size guidance */
-        padding: 0.5rem 1rem;
+        gap: 0.25rem; /* icon + short label */
+        min-height: 1.75rem; /* WCAG 2.5.8 (24px) cleared by 4px */
+        padding: 0.125rem 0.5rem;
         font: inherit;
         font-family: var(--lily-font-body);
         font-weight: 600;
@@ -602,23 +812,25 @@
     /* --- Button variants ---------------------------------------------------- */
 
     /* Icon button — square; aspect-ratio keeps it from squashing when the
-       icon font changes size. */
+       icon font changes size. Compact for toolbars dense with action verbs. */
     :where(.icon-button) {
-        padding: 0.5rem;
-        min-width: 2.5rem;
+        padding: 0.125rem;
+        min-width: 1.75rem;
         aspect-ratio: 1;
     }
 
     /* Floating action button — pinned to the bottom-right of the viewport.
-       Uses logical inset properties so it flips correctly under RTL. */
+       Uses logical inset properties so it flips correctly under RTL.
+       Smaller than the patient theme so it doesn't obscure clinical
+       worklist data when the FAB sits over a table. */
     :where(.float-button) {
         position: fixed;
-        inset-block-end: 1rem;
-        inset-inline-end: 1rem;
+        inset-block-end: 0.5rem;
+        inset-inline-end: 0.5rem;
         box-shadow: var(--lily-shadow-lg);
         border-radius: 999px;
-        width: 3.5rem;
-        height: 3.5rem;
+        width: 2.5rem;
+        height: 2.5rem;
         padding: 0;
     }
 
@@ -705,7 +917,7 @@
     /* Button group — horizontal cluster of related actions. */
     :where(.button-group) {
         display: inline-flex;
-        gap: 0.25rem;
+        gap: 0.125rem;
     }
 
     /* --- Bars of buttons (action / menu / tab / task / tool) ---------------- */
@@ -713,8 +925,8 @@
     :where(.action-bar, .menu-bar, .tab-bar, .task-bar, .tool-bar) {
         display: flex;
         align-items: center;
-        gap: 0.25rem;
-        padding: 0.5rem;
+        gap: 0.125rem;
+        padding: 0.125rem 0.25rem;
         background-color: var(--lily-surface-alt);
         border: var(--border) solid var(--lily-border);
         border-radius: var(--lily-radius-md);
@@ -739,7 +951,7 @@
     }
     /* Panel revealed by the active tab. */
     :where(.tab-panel) {
-        padding: 1rem;
+        padding: 0.5rem;
         background-color: var(--lily-surface);
         border: var(--border) solid var(--lily-border);
         border-radius: var(--lily-radius-md);
@@ -802,7 +1014,9 @@
         padding: 0;
     }
 
-    /* Baseline — every list-item gets a thin hairline rule between rows. */
+    /* Baseline — every list-item gets a thin hairline rule between rows.
+       Clinical density: rows pack to 1.5x line-height so worklists and
+       problem-list/medication-list panels show more entries at once. */
     :where(
         .accordion-list-item,
         .breadcrumb-list-item,
@@ -825,7 +1039,7 @@
         .tree-list-item,
         .validation-list-item
     ) {
-        padding: 0.5rem 0;
+        padding: 0.25rem 0;
         border-bottom: var(--border) solid var(--lily-border);
     }
 
@@ -865,13 +1079,14 @@
         border: 0;
         padding: 0;
     }
-    /* Pagination link — square-ish chip with a generous tap target. */
+    /* Pagination link — square-ish chip; smaller target for mouse-driven
+       clinical workflows where rows of 50–100 results are common. */
     :where(.pagination-link) {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 2.5rem;
-        padding: 0.5rem 0.75rem;
+        min-width: 1.75rem;
+        padding: 0.125rem 0.375rem;
         border-radius: var(--lily-radius-md);
         text-decoration: none;
     }
@@ -1064,7 +1279,8 @@
         background-color: var(--lily-surface-alt);
     }
 
-    /* Header cells — bold, slightly tighter padding, with a 2px under-rule. */
+    /* Header cells — bold, tight clinical-grid padding. The 2px under-rule
+       is retained so column boundaries remain crisp in long worklists. */
     :where(
         .table-th,
         .data-table-th,
@@ -1072,14 +1288,15 @@
         .kanban-table-th,
         .gantt-table-th
     ) {
-        padding: 0.625rem 0.75rem;
+        padding: 0.25rem 0.5rem;
         text-align: start;
         font-weight: 600;
         border-bottom: 2px solid var(--lily-border-strong);
     }
 
     /* Body cells — top-aligned (multi-line content reads better when the
-       baseline is at the top, not centred). */
+       baseline is at the top, not centred). Tight padding lets EPR-style
+       observation grids pack ~30 rows per 800px column. */
     :where(
         .table-td,
         .data-table-td,
@@ -1087,7 +1304,7 @@
         .kanban-table-td,
         .gantt-table-td
     ) {
-        padding: 0.625rem 0.75rem;
+        padding: 0.125rem 0.5rem;
         border-bottom: var(--border) solid var(--lily-border);
         vertical-align: top;
     }
@@ -1107,8 +1324,8 @@
     :where(.data-filter-form) {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.75rem;
-        padding: 1rem;
+        gap: 0.25rem;
+        padding: 0.375rem 0.5rem;
         background-color: var(--lily-surface-alt);
         border-radius: var(--lily-radius-md);
     }
@@ -1162,16 +1379,17 @@
         .success-panel
     ) {
         display: block;
-        padding: 1rem;
+        padding: 0.5rem;
         background-color: var(--lily-surface);
         color: var(--lily-text);
         border: var(--border) solid var(--lily-border);
         border-radius: var(--lily-radius-lg);
         box-shadow: var(--lily-shadow-sm);
     }
-    /* Feature card — generous padding because it leads the page. */
+    /* Feature card — slightly more padding because it leads the page,
+       but still clinical-tight. */
     :where(.feature-card) {
-        padding: 1.5rem;
+        padding: 0.75rem;
     }
     /* Hover card — popover-like; lift it with the medium shadow. */
     :where(.hover-card) {
@@ -1212,7 +1430,10 @@
      * per severity so the message reads at a glance.
      * ====================================================================== */
 
-    /* Baseline — alert/banner/callout/notification all share the same frame. */
+    /* Baseline — alert/banner/callout/notification all share the same frame.
+       Clinical density keeps the coloured rail at 4px so the severity
+       still reads at a glance, but compresses padding so the message
+       footprint shrinks in side panels. */
     :where(
         .alert,
         .banner,
@@ -1230,12 +1451,12 @@
     ) {
         display: flex;
         align-items: flex-start;
-        gap: 0.75rem;
-        padding: 1rem;
+        gap: 0.375rem;
+        padding: 0.375rem 0.5rem;
         background-color: var(--lily-surface-alt);
         color: var(--lily-text);
         border: var(--border) solid var(--lily-border);
-        border-inline-start-width: 0.375rem; /* the coloured rail */
+        border-inline-start-width: 0.25rem; /* the coloured rail */
         border-radius: var(--lily-radius-md);
     }
 
@@ -1322,8 +1543,8 @@
     :where(.banner-box, .medical-banner-box) {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
-        padding: 0.75rem 1rem;
+        gap: 0.375rem;
+        padding: 0.25rem 0.5rem;
     }
 
     /* Sticky promo — sits at the very top of the viewport on scroll. */
@@ -1339,9 +1560,11 @@
         font-weight: 600;
     }
     /* Error summary — heavyweight 4px border (GOV.UK pattern) so users
-       scrolling back to the top of a form see it immediately. */
+       scrolling back to the top of a form see it immediately. The thick
+       red border is preserved at full weight even in clinical density;
+       failed-form recovery is too important to subdue. */
     :where(.error-summary) {
-        padding: 1rem;
+        padding: 0.5rem;
         border: 0.25rem solid var(--color-error);
     }
 
@@ -1364,19 +1587,19 @@
     :where(.form, .editable-form) {
         display: flex;
         flex-direction: column;
-        gap: 1rem;
+        gap: 0.5rem;
     }
     /* Field — wraps a single label + input + hint/error trio. */
     :where(.field) {
         display: flex;
         flex-direction: column;
-        gap: 0.375rem;
+        gap: 0.125rem;
     }
     /* Fieldset — semantic <fieldset>; border + padded inset, legend bold. */
     :where(.fieldset) {
         border: var(--border) solid var(--lily-border);
         border-radius: var(--lily-radius-md);
-        padding: 1rem;
+        padding: 0.5rem;
     }
     :where(.fieldset > legend) {
         padding-inline: 0.5rem;
@@ -1412,7 +1635,7 @@
         display: block;
         width: 100%;
         margin-inline: auto;
-        padding-inline: 1rem;
+        padding-inline: 0.5rem;
         box-sizing: border-box;
     }
     /* Fixed-width — caps at a comfortable reading width (~1152px). */
@@ -1432,26 +1655,26 @@
     :where(.flex-stack) {
         display: flex;
         flex-direction: column;
-        gap: 1rem;
+        gap: 0.5rem;
     }
     :where(.grid) {
         display: grid;
-        gap: 1rem;
+        gap: 0.5rem;
     }
     :where(.masonry) {
         column-count: 3;
-        column-gap: 1rem;
+        column-gap: 0.5rem;
     }
     /* Horizontal-rule replacement that respects theme borders. */
     :where(.separator) {
         border: 0;
         border-top: var(--border) solid var(--lily-border);
-        margin: 1rem 0;
+        margin: 0.5rem 0;
     }
     /* Generic content tile. */
     :where(.tile) {
         display: block;
-        padding: 1rem;
+        padding: 0.5rem;
         background-color: var(--lily-surface);
         border: var(--border) solid var(--lily-border);
         border-radius: var(--lily-radius-md);
@@ -1460,7 +1683,7 @@
     :where(.sidebar) {
         display: block;
         background-color: var(--lily-surface-alt);
-        padding: 1rem;
+        padding: 0.5rem;
         border-radius: var(--lily-radius-md);
     }
     /* Aspect-ratio box — 16:9 default; consumers override `aspect-ratio`. */
@@ -1473,7 +1696,7 @@
     }
     /* Framer — bordered box for embeds / illustrations. */
     :where(.framer) {
-        padding: 1rem;
+        padding: 0.5rem;
         border: var(--border) solid var(--lily-border);
         border-radius: var(--lily-radius-md);
     }
@@ -1491,7 +1714,7 @@
     :where(.content-block) {
         max-width: var(--content-width-normal);
         margin-inline: auto;
-        padding-inline: 1rem;
+        padding-inline: 0.5rem;
         box-sizing: border-box;
     }
     :where(.content-block[data-width="narrower"]) {
@@ -1540,16 +1763,17 @@
     /* Header / footer chrome — secondary surface, padded. */
     :where(.grail-layout-top-header, .grail-layout-bottom-footer) {
         background-color: var(--lily-surface-alt);
-        padding: 1rem;
+        padding: 0.375rem 0.5rem;
     }
     /* Asides — secondary surface, padded. */
     :where(.grail-layout-left-aside, .grail-layout-right-aside) {
-        padding: 1rem;
+        padding: 0.5rem;
         background-color: var(--lily-surface-alt);
     }
-    /* Main content area — primary surface, more generous padding. */
+    /* Main content area — primary surface, slightly more padding than the
+       chrome regions but still tight by clinical convention. */
     :where(.grail-layout-center-main) {
-        padding: 1.5rem;
+        padding: 0.75rem;
     }
     /* Mobile breakpoint — collapse to a single column, stacking the regions. */
     @media (max-width: 48rem) {
@@ -1563,13 +1787,13 @@
     /* Standalone semantic header / footer landmarks. */
     :where(.header) {
         display: block;
-        padding: 1rem;
+        padding: 0.375rem 0.5rem;
         background-color: var(--lily-surface);
         border-bottom: var(--border) solid var(--lily-border);
     }
     :where(.footer) {
         display: block;
-        padding: 1rem;
+        padding: 0.375rem 0.5rem;
         background-color: var(--lily-surface-alt);
         border-top: var(--border) solid var(--lily-border);
     }
@@ -1593,7 +1817,7 @@
         color: var(--lily-text);
         border: var(--border) solid var(--lily-border);
         border-radius: var(--lily-radius-lg);
-        padding: 1.5rem;
+        padding: 0.75rem;
         box-shadow: var(--lily-shadow-lg);
         max-width: min(40rem, 90vw); /* cap on big screens, fit on small */
     }
@@ -1656,7 +1880,7 @@
         color: var(--lily-text);
         border-inline-start: var(--border) solid var(--lily-border);
         box-shadow: var(--lily-shadow-lg);
-        padding: 1rem;
+        padding: 0.5rem;
         z-index: 101;
     }
 
@@ -1680,8 +1904,8 @@
     :where(.menu-item, .context-menu-item) {
         display: flex;
         align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 0.75rem;
+        gap: 0.375rem;
+        padding: 0.125rem 0.375rem;
         border-radius: var(--lily-radius-md);
         cursor: pointer;
     }
@@ -1716,7 +1940,7 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        padding: 0.5rem;
+        padding: 0.125rem;
         background: transparent;
         border: var(--border) solid var(--lily-border-strong);
         border-radius: var(--lily-radius-md);
@@ -1863,14 +2087,15 @@
      * Avatars, badges, tags, status
      * ====================================================================== */
 
-    /* Avatar — circular tile (2.5rem) with sunken background as the
-       fallback colour when no image is provided. */
+    /* Avatar — circular tile (1.75rem in clinical density) with sunken
+       background as the fallback colour when no image is provided.
+       Smaller so author/clinician chips fit in dense activity columns. */
     :where(.avatar) {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 2.5rem;
-        height: 2.5rem;
+        width: 1.75rem;
+        height: 1.75rem;
         border-radius: 50%;
         background-color: var(--lily-surface-sunken);
         color: var(--lily-text);
@@ -2035,11 +2260,13 @@
     }
 
     /* Native <select> styling — drop the UA chrome and draw our own caret
-       via two stacked linear-gradients. */
+       via two stacked linear-gradients. Clinical-density select matches
+       the input baseline (1.75rem min-height) so dropdowns align with
+       text inputs in a side-by-side field grid. */
     :where(select.theme-select, .select, .select-with-extras, .tree-select) {
         width: 100%;
-        min-height: 2.5rem;
-        padding: 0.5rem 2rem 0.5rem 0.75rem; /* extra right padding for caret */
+        min-height: 1.75rem;
+        padding: 0.125rem 1.5rem 0.125rem 0.375rem; /* extra right padding for caret */
         font: inherit;
         background-color: var(--lily-surface);
         color: var(--lily-text);
@@ -2050,9 +2277,9 @@
             linear-gradient(45deg, transparent 50%, var(--lily-text) 50%),
             linear-gradient(135deg, var(--lily-text) 50%, transparent 50%);
         background-position:
-            calc(100% - 1.1rem) 1.1rem,
-            calc(100% - 0.7rem) 1.1rem;
-        background-size: 0.4rem 0.4rem;
+            calc(100% - 0.9rem) 0.7rem,
+            calc(100% - 0.55rem) 0.7rem;
+        background-size: 0.35rem 0.35rem;
         background-repeat: no-repeat;
     }
     /* Options inherit the select colours so the dropdown matches the input. */
@@ -2521,16 +2748,16 @@
     }
     /* Blockquote — primary-coloured rail + italic body. */
     :where(.blockquote) {
-        margin: 1rem 0;
-        padding: 0.5rem 1rem;
+        margin: 0.5rem 0;
+        padding: 0.25rem 0.5rem;
         border-inline-start: 0.25rem solid var(--color-primary);
         color: var(--lily-text);
         font-style: italic;
     }
     /* End-notes / related content — top-bordered section at the foot. */
     :where(.end-notes, .related-content) {
-        margin-top: 2rem;
-        padding-top: 1rem;
+        margin-top: 1rem;
+        padding-top: 0.5rem;
         border-top: var(--border) solid var(--lily-border);
     }
     /* Caption / footnote / citation — small muted text. */
@@ -2560,7 +2787,7 @@
     /* Code block — full-width block with horizontal scroll. */
     :where(.code-block) {
         display: block;
-        padding: 1rem;
+        padding: 0.5rem;
         background-color: var(--color-neutral);
         color: var(--color-neutral-content);
         font-family: var(--lily-font-mono);
@@ -2571,7 +2798,7 @@
     /* Inset text — left-railed callout for "Important" content
        (GOV.UK / NHS pattern). */
     :where(.inset-text) {
-        padding: 0.75rem 1rem;
+        padding: 0.375rem 0.5rem;
         border-inline-start: 0.25rem solid var(--color-primary);
         background-color: var(--lily-surface-alt);
     }
@@ -2739,7 +2966,7 @@
         display: block;
         background-color: var(--lily-surface);
         border-radius: var(--lily-radius-md);
-        padding: 1rem;
+        padding: 0.5rem;
         color: var(--lily-text);
         /* Six-colour palette — the consumer's chart library picks these up. */
         --lily-chart-color-1: var(--color-primary);
@@ -2862,27 +3089,29 @@
         grid-template-columns: 1fr 1fr;
         gap: 0.5rem;
     }
-    /* Addressograph box — paper-form ID label (NHS / hospital pattern). */
+    /* Addressograph box — paper-form ID label (NHS / hospital pattern).
+       Reads as a paper-form sticker; tight padding preserves the
+       look of a clinical patient-ID label. */
     :where(.addressograph-box) {
         display: block;
-        padding: 0.75rem 1rem;
+        padding: 0.25rem 0.5rem;
         background-color: var(--lily-surface-alt);
         border: 2px solid var(--lily-text);
         font-family: var(--lily-font-mono);
-        line-height: 1.4;
+        line-height: 1.3;
     }
     /* Government identifier — dark chrome bar containing an ID number. */
     :where(.government-identifier) {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
-        padding: 0.75rem 1rem;
+        gap: 0.375rem;
+        padding: 0.25rem 0.5rem;
         background-color: var(--color-neutral);
         color: var(--color-neutral-content);
     }
     /* Share / signup / CTA panels — alt-surface promo blocks. */
     :where(.share-page, .newsletter-signup, .call-to-action) {
-        padding: 1rem;
+        padding: 0.5rem;
         background-color: var(--lily-surface-alt);
         border-radius: var(--lily-radius-md);
     }
@@ -2901,7 +3130,7 @@
         display: block;
         border: var(--border) solid var(--lily-border);
         border-radius: var(--lily-radius-md);
-        padding: 0.5rem 1rem;
+        padding: 0.25rem 0.5rem;
     }
     :where(.details > summary, .expander > summary, .collapsible > summary) {
         cursor: pointer;
@@ -2932,13 +3161,13 @@
         .answer
     ) {
         display: block;
-        padding: 0.75rem 0;
+        padding: 0.25rem 0;
     }
     /* Draft wrapper — dashed border + optional "Draft" pill prefix. */
     :where(.draft) {
         border: 1px dashed var(--lily-border-strong);
         background-color: var(--lily-surface-alt);
-        padding: 1rem;
+        padding: 0.5rem;
         border-radius: var(--lily-radius-md);
     }
     :where(.draft[data-status="draft"])::before {
@@ -2968,7 +3197,7 @@
     /* File upload — drop-zone aesthetic: dashed border, alt surface. */
     :where(.file-upload) {
         display: block;
-        padding: 1.5rem;
+        padding: 0.75rem;
         background-color: var(--lily-surface-alt);
         border: 2px dashed var(--lily-border-strong);
         border-radius: var(--lily-radius-md);
@@ -2997,7 +3226,7 @@
         background-color: var(--lily-surface);
         border: var(--border) solid var(--lily-border);
         border-radius: var(--lily-radius-lg);
-        padding: 1rem;
+        padding: 0.5rem;
         box-shadow: var(--lily-shadow-md);
     }
 
@@ -3020,7 +3249,7 @@
         display: block;
         border: var(--border) solid var(--lily-border);
         border-radius: var(--lily-radius-md);
-        padding: 0.5rem 0.75rem;
+        padding: 0.25rem 0.5rem;
     }
     :where(.accordion-checkbox-input) {
         margin-inline-end: 0.5rem;
