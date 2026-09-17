@@ -61,6 +61,13 @@ while True:
     mid = msg.get('id')
     if method == 'initialize':
         send({'jsonrpc':'2.0','id':mid,'result':{'capabilities':{'positionEncoding':'utf-16'}}})
+        send({'jsonrpc':'2.0','method':'$/progress','params':{
+            'token':'t1','value':{'kind':'begin','title':'Indexing','percentage':0}}})
+    elif method == 'workspace/diagnostic':
+        send({'jsonrpc':'2.0','id':mid,'result':{'items':[
+            {'uri':'file:///other.rs','kind':'full','items':[
+                {'range':{'start':{'line':2,'character':0},'end':{'line':2,'character':5}},
+                 'severity':1,'message':'workspace-wide finding'}]}]}})
     elif method == 'textDocument/didOpen':
         uri = msg['params']['textDocument']['uri']
         send({'jsonrpc':'2.0','method':'textDocument/publishDiagnostics','params':{
@@ -381,6 +388,65 @@ fn mock_server_prepare_rename_null_surfaces_as_not_renameable() {
     let _ = std::fs::remove_dir_all(&root);
 
     assert_eq!(outcome, Some(RenamePrepared::NotRenameable));
+}
+
+/// T123d: `$/progress` (sent unprompted right after `initialize` here)
+/// surfaces as an event, and a `workspace/diagnostic` pull (triggered
+/// explicitly, unlike push) merges into the same diagnostics map as
+/// `publishDiagnostics` -- for a file (`other.rs`) that was never opened or
+/// synced at all, proving this is genuinely whole-project, not just a
+/// second way to learn about files already tracked.
+#[test]
+fn mock_server_progress_and_pull_diagnostics_round_trip() {
+    if !tool_available("python3") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("vix-lsp-mock-pull-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let mock = root.join("mock_lsp.py");
+    std::fs::write(&mock, MOCK_SERVER).unwrap();
+    let file = root.join("a.rs");
+    std::fs::write(&file, "abc\n").unwrap();
+
+    let cfg = LspServer {
+        language_id: "rust".into(),
+        extensions: vec!["rs".into()],
+        command: vec!["python3".into(), mock.to_string_lossy().into_owned()],
+    };
+    let mut lsp = Lsp::new(true, vec![cfg], &root);
+    lsp.did_open(&file, "abc\n");
+
+    // The mock hardcodes this as a bare absolute path, not root-relative --
+    // matched here exactly, not derived from `root`.
+    let other = PathBuf::from("/other.rs");
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let mut progress: Option<String> = None;
+    let mut pulled = false;
+    let mut asked_pull = false;
+    while Instant::now() < deadline && !pulled {
+        for ev in lsp.poll() {
+            match ev {
+                LspEvent::Progress(text) => progress = Some(text),
+                LspEvent::Diagnostics(path) if path.ends_with("other.rs") => pulled = true,
+                _ => {}
+            }
+        }
+        if !asked_pull && !lsp.diagnostics_for(&file).is_empty() {
+            lsp.request_workspace_diagnostics();
+            asked_pull = true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    lsp.shutdown();
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(progress.as_deref(), Some("Indexing (0%)"));
+    assert!(pulled, "the pull's own file should get its diagnostics too");
+    assert_eq!(
+        lsp.diagnostics_for(&other)[0].message,
+        "workspace-wide finding"
+    );
 }
 
 /// T134 audit: a crashed server for an already-open file used to just

@@ -53,6 +53,7 @@ enum Pending {
     PrepareCallHierarchy,
     IncomingCalls,
     PrepareRename,
+    WorkspaceDiagnostics,
 }
 
 /// A message handed back from a server's stdout reader thread.
@@ -142,6 +143,12 @@ pub enum LspEvent {
     /// is dead until the next explicit `did_open` (e.g. closing and
     /// reopening a file).
     ServerCrashed(String),
+    /// A `$/progress` update worth showing (T123d) — e.g. a server's
+    /// initial index build. Only `"begin"`/`"report"` kinds reach the host;
+    /// an `"end"` report has nothing left to say, so it produces no event
+    /// (the host's status line is ambient/best-effort already, same as
+    /// every other transient status message).
+    Progress(String),
 }
 
 /// Outcome of `textDocument/prepareRename`, sent before the rename prompt
@@ -672,6 +679,28 @@ impl Lsp {
         );
     }
 
+    /// Pull a full workspace diagnostic report from every running server
+    /// (T123d): unlike push (`publishDiagnostics`), this reflects a
+    /// server's whole-project analysis, not just files that have actually
+    /// been opened/synced. Results merge into the same diagnostics map push
+    /// already fills (`handle_response`'s `WorkspaceDiagnostics` case), so
+    /// the Problems panel picks them up with no other host wiring.
+    pub fn request_workspace_diagnostics(&mut self) {
+        let langs: Vec<String> = self.servers.keys().cloned().collect();
+        for lang in langs {
+            let Some(server) = self.servers.get_mut(&lang) else {
+                continue;
+            };
+            let id = server.alloc_id();
+            server.pending.insert(id, Pending::WorkspaceDiagnostics);
+            server.send(message::request(
+                id,
+                "workspace/diagnostic",
+                &message::workspace_diagnostic_params(),
+            ));
+        }
+    }
+
     /// Request code actions for the range `[start, end)`, with `diagnostics`
     /// (raw LSP objects overlapping the range) in the request context.
     pub fn request_code_action(
@@ -887,6 +916,12 @@ impl Lsp {
                 }
                 events.push(LspEvent::Diagnostics(path));
             }
+            if method == "$/progress"
+                && let Some(params) = msg.get("params")
+                && let Some(text) = message::parse_progress(params)
+            {
+                events.push(LspEvent::Progress(text));
+            }
             return;
         }
         // Response to one of our requests (id, no method).
@@ -920,6 +955,14 @@ impl Lsp {
                 events.push(LspEvent::RenamePrepared(RenamePrepared::Default));
                 return;
             }
+            // T123d: pull diagnostics (`workspace/diagnostic`) is a newer
+            // LSP 3.17 addition most servers don't implement yet; a "method
+            // not found" here is expected and silent, not a user-visible
+            // failure -- push (`publishDiagnostics`) already covers the
+            // baseline experience regardless.
+            if matches!(kind, Pending::WorkspaceDiagnostics) {
+                return;
+            }
             if let Some(error) = msg.get("error") {
                 let text = error
                     .get("message")
@@ -940,6 +983,22 @@ impl Lsp {
                 None => RenamePrepared::NotRenameable,
             };
             events.push(LspEvent::RenamePrepared(outcome));
+            return;
+        }
+        // T123d: merges straight into `self.diagnostics`, the same map push
+        // (`publishDiagnostics`) fills — needs `&mut self`, unlike every
+        // other response kind, so it can't go through the self-less
+        // `response_to_events`.
+        if matches!(kind, Pending::WorkspaceDiagnostics) {
+            for (uri, diags) in message::parse_workspace_diagnostics(result) {
+                let path = canonical(&uri_to_path(&uri));
+                if diags.is_empty() {
+                    self.diagnostics.remove(&path);
+                } else {
+                    self.diagnostics.insert(path.clone(), diags);
+                }
+                events.push(LspEvent::Diagnostics(path));
+            }
             return;
         }
         if result.is_null() {

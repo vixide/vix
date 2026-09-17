@@ -6578,6 +6578,7 @@ impl App {
                     self.messages
                         .error(t!("msg.lsp_server_crashed", language = language_id).to_string());
                 }
+                crate::lsp::LspEvent::Progress(text) => self.status = text,
             }
         }
         // Rebuild the active editor's diagnostic underlines every tick so they

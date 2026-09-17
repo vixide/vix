@@ -72,13 +72,25 @@ pub fn initialize_params(process_id: Option<u32>, root_uri: Option<&str>) -> Val
                 "linkedEditingRange": {},
                 "callHierarchy": {},
                 "inlayHint": {},
-                "publishDiagnostics": { "relatedInformation": true }
+                "publishDiagnostics": { "relatedInformation": true },
+                // T123d: opts into pull-based `textDocument/diagnostic` /
+                // `workspace/diagnostic`, alongside push
+                // (`publishDiagnostics`) — some servers only enable pull
+                // support for clients that declare this.
+                "diagnostic": {}
             },
             "workspace": {
                 "applyEdit": true,
                 "symbol": {},
-                "executeCommand": {}
-            }
+                "executeCommand": {},
+                // T123d: no `previousResultIds` tracking in v1, so the
+                // server never needs to ask the client to discard cached
+                // reports.
+                "diagnostics": { "refreshSupport": false }
+            },
+            // T123d: `$/progress` (e.g. an initial index build) is only
+            // sent to clients that declare support for it.
+            "window": { "workDoneProgress": true }
         }
     })
 }
@@ -186,6 +198,14 @@ pub fn execute_command_params(command: &str, arguments: &Value) -> Value {
 #[must_use]
 pub fn workspace_symbol_params(query: &str) -> Value {
     json!({ "query": query })
+}
+
+/// A `WorkspaceDiagnosticParams` body (T123d): always requests a fresh, full
+/// report — v1 tracks no `previousResultIds`, so there is nothing to ask the
+/// server to skip re-sending.
+#[must_use]
+pub fn workspace_diagnostic_params() -> Value {
+    json!({ "previousResultIds": [] })
 }
 
 /// A `DidSaveTextDocumentParams` body including the full saved text.
@@ -299,6 +319,62 @@ fn parse_related_information(diagnostic: &Value) -> Vec<(Location, String)> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Parse a `workspace/diagnostic` result's `items` into `(uri, diagnostics)`
+/// pairs (T123d) — merges the same way a `(uri, diagnostics)` pair from
+/// push-based `textDocument/publishDiagnostics` does. A
+/// `WorkspaceUnchangedDocumentDiagnosticReport` (`kind: "unchanged"`) is
+/// skipped: v1 tracks no `previousResultIds`, so the server never actually
+/// sends one, but skipping it explicitly is still correct if one ever
+/// arrives — there is nothing to update.
+#[must_use]
+pub fn parse_workspace_diagnostics(result: &Value) -> Vec<(String, Vec<Diagnostic>)> {
+    result
+        .get("items")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    let uri = item.get("uri").and_then(Value::as_str)?.to_string();
+                    if item.get("kind").and_then(Value::as_str) != Some("full") {
+                        return None;
+                    }
+                    let diags = item
+                        .get("items")
+                        .and_then(Value::as_array)
+                        .map(|arr| arr.iter().filter_map(parse_one_diagnostic).collect())
+                        .unwrap_or_default();
+                    Some((uri, diags))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Parse a `$/progress` notification's `params` into a one-line status
+/// message (T123d), or `None` for an `"end"` report (nothing more to show)
+/// or a payload with neither a title nor a message.
+#[must_use]
+pub fn parse_progress(params: &Value) -> Option<String> {
+    let value = params.get("value")?;
+    if value.get("kind").and_then(Value::as_str) == Some("end") {
+        return None;
+    }
+    let title = value.get("title").and_then(Value::as_str);
+    let message = value.get("message").and_then(Value::as_str);
+    let percentage = value.get("percentage").and_then(Value::as_u64);
+    let mut out = match (title, message) {
+        (Some(t), Some(m)) => format!("{t}: {m}"),
+        (Some(t), None) => t.to_string(),
+        (None, Some(m)) => m.to_string(),
+        (None, None) => return None,
+    };
+    if let Some(p) = percentage {
+        out = format!("{out} ({p}%)");
+    }
+    Some(out)
 }
 
 /// Parse a `textDocument/prepareRename` result into a placeholder decision.
@@ -900,6 +976,61 @@ mod tests {
             text_document["publishDiagnostics"]["relatedInformation"],
             true
         );
+    }
+
+    #[test]
+    fn capabilities_declare_pull_diagnostics_and_progress() {
+        let params = initialize_params(None, None);
+        assert_eq!(
+            params["capabilities"]["textDocument"]["diagnostic"],
+            json!({})
+        );
+        assert_eq!(params["capabilities"]["window"]["workDoneProgress"], true);
+    }
+
+    #[test]
+    fn workspace_diagnostics_parse_full_reports_and_skip_unchanged() {
+        let result = json!({
+            "items": [
+                { "uri": "file:///a.rs", "kind": "full", "items": [
+                    { "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 1}},
+                      "severity": 1, "message": "boom" }
+                ]},
+                { "uri": "file:///b.rs", "kind": "unchanged", "resultId": "abc" },
+                { "uri": "file:///c.rs", "kind": "full", "items": [] }
+            ]
+        });
+        let pairs = parse_workspace_diagnostics(&result);
+        assert_eq!(pairs.len(), 2, "the unchanged report is skipped");
+        assert_eq!(pairs[0].0, "file:///a.rs");
+        assert_eq!(pairs[0].1.len(), 1);
+        assert_eq!(pairs[0].1[0].message, "boom");
+        assert_eq!(pairs[1].0, "file:///c.rs");
+        assert!(pairs[1].1.is_empty());
+    }
+
+    #[test]
+    fn progress_formats_title_message_and_percentage() {
+        assert_eq!(
+            parse_progress(&json!({"value": {"kind": "begin", "title": "Indexing"}})),
+            Some("Indexing".to_string())
+        );
+        assert_eq!(
+            parse_progress(&json!({"value": {"kind": "report", "message": "3/10 crates"}})),
+            Some("3/10 crates".to_string())
+        );
+        assert_eq!(
+            parse_progress(&json!({"value": {
+                "kind": "report", "title": "Indexing", "message": "3/10 crates", "percentage": 30
+            }})),
+            Some("Indexing: 3/10 crates (30%)".to_string())
+        );
+        assert_eq!(
+            parse_progress(&json!({"value": {"kind": "end"}})),
+            None,
+            "an end report has nothing left to show"
+        );
+        assert_eq!(parse_progress(&json!({"value": {"kind": "begin"}})), None);
     }
 
     #[test]

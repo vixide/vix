@@ -795,6 +795,14 @@ impl App {
     /// Enter on a row jumps to it. Reuses the static-results search overlay.
     pub(super) fn open_diagnostics_panel(&mut self) {
         use crate::lsp_core::Severity;
+        // T123d: pull a fresh workspace-wide report too, not just whatever
+        // push (`publishDiagnostics`) has accumulated for files that
+        // happen to have been opened/synced already -- a server that
+        // supports pull can now surface its whole-project analysis here.
+        // Best-effort and async: this panel still renders from whatever is
+        // already in `self.lsp` below, and the pull's results (if any)
+        // arrive on a later `poll_lsp` tick.
+        self.lsp.request_workspace_diagnostics();
         // Each diagnostic's own `Hit` paired with its (possibly empty)
         // `relatedInformation` rows (T134 audit: parsed but never shown
         // before this) -- kept grouped so sorting reorders diagnostics

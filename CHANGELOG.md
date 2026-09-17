@@ -8,6 +8,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **LSP pull diagnostics and `$/progress`** (improvement plan T123d):
+  opening the Problems panel now also pulls a fresh `workspace/diagnostic`
+  report from every running server, so it reflects a server's whole-project
+  analysis instead of only files that happened to be opened; a server's
+  `$/progress` update (e.g. an initial index build) now shows as a status
+  message instead of nothing.
 - **LSP server crash recovery** (improvement plan T123c): a crashed
   language server for a file that was already open used to just go
   silently dead until you closed and reopened it. It now respawns

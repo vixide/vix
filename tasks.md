@@ -1087,15 +1087,36 @@ Task IDs are stable — reference them in branch names (e.g. `feat/T101-ci`).
   right after every `didOpen` it handles, driving the full chain end to
   end: exactly 3 respawns, each correctly naming the crashed file for
   replay, then a `ServerCrashed` event instead of a 4th attempt.
-- [ ] **T123d — Pull-based `workspace/diagnostic` and `$/progress`.** Vix
-  relies entirely on push (`publishDiagnostics`), so the Problems panel
-  only ever shows diagnostics for files that have actually been
-  opened/synced at least once, not a server's whole-project analysis; add
-  a pull request on workspace open/refresh. Bundle in `$/progress` handling
-  (a long-running server operation, e.g. an initial index build, currently
-  gives no percentage/message feedback beyond the busy-poll rate speeding
-  up) since both are "give the user visibility into server-side work not
-  tied to one open document." Not started.
+- [x] **T123d — Pull-based `workspace/diagnostic` and `$/progress`.** Done
+  2026-09-17, picked up as part of T134's security/depth re-audit rather
+  than deferred further. **Pull diagnostics**: new
+  `Lsp::request_workspace_diagnostics` sends `workspace/diagnostic` to
+  every running server; its `Pending::WorkspaceDiagnostics` response
+  merges straight into the same `self.diagnostics` map push
+  (`publishDiagnostics`) already fills, via the same
+  `LspEvent::Diagnostics(path)` event — so the Problems panel needed zero
+  new rendering logic, just a trigger. That trigger is
+  `App::open_diagnostics_panel`: opening the panel now pulls a fresh
+  whole-project report first, not just whatever push has accumulated for
+  files that happen to have been opened/synced already. A server that
+  doesn't implement pull (most don't yet — it's a newer LSP 3.17 addition)
+  gets a silent no-op, not a `RequestFailed` message, same treatment as
+  `prepareRename`'s absence (T123e) — push already covers the baseline
+  experience regardless. **`$/progress`**: `vix_lsp_core::message::
+  parse_progress` turns a `{kind, title?, message?, percentage?}` payload
+  into one status-line string (`"Indexing: 3/10 crates (30%)"`), pushed as
+  `LspEvent::Progress`; an `"end"` report produces no event (the status
+  line is ambient/best-effort already, same as every other transient
+  status message in this app — nothing new needed to "clear" it). Both
+  capabilities correctly declared in `initialize` (`textDocument.diagnostic`,
+  `workspace.diagnostics.refreshSupport: false`, `window.workDoneProgress`
+  — none were declared before, so a spec-correct server could have
+  withheld both). New mock-server test proves the full round trip: a
+  `$/progress` notification sent right after `initialize`, and a
+  `workspace/diagnostic` pull that reports a diagnostic for a file
+  (`other.rs`) that was *never opened or synced at all* — proving this is
+  genuinely whole-project, not just a second way to learn about files
+  already tracked.
 - [x] **T123e — `prepareRename` and `relatedInformation`.** Done
   2026-09-16, picked up as part of T134's security/depth re-audit rather
   than deferred further. `prepareRename`: `begin_lsp_rename` now sends
