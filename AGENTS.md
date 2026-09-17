@@ -18,22 +18,22 @@ editor — see [index.md](index.md) for scope.
 ## Working rules
 
 - Uses [Lily Design System](https://lilydesignsystem.github.io/)'s headless
-  Svelte components (`lily-design-system-svelte-headless`) for semantic
+  Svelte components (`@lilydesignsystem/svelte-headless`) for semantic
   HTML/ARIA structure — `Header`, `NavigationMenu`, `Card`, etc. They ship no
   CSS; every rule lives in [`static/assets/style.css`](static/assets/style.css)
   against Lily's class hooks (`.button`, `.card`, `.header`, `.navigation-menu`,
   …). Keep new UI on this pattern rather than hand-rolled markup where a
   matching headless component exists.
 - Also uses three Lily Svelte helpers, same headless-plus-hand-written-CSS
-  pattern: `lily-design-system-svelte-theme-picker` (site light/dark toggle
+  pattern: `@lilydesignsystem/svelte-theme-picker` (site light/dark toggle
   in the header — attribute-based, swaps a managed `<link>` between
   [`static/assets/themes/light.css`](static/assets/themes/light.css) and
   [`dark.css`](static/assets/themes/dark.css) and sets `data-theme` on
   `<html>`; `src/app.html` pre-renders the default `light` `<link>` so the
   static build ships with real CSS in place rather than a picker-injected
-  one), `lily-design-system-svelte-share-picker` (header share button; see
+  one), `@lilydesignsystem/svelte-share-picker` (header share button; see
   the `page.data.title` convention below for how it gets its title), and
-  `lily-design-system-svelte-text-size-picker` (installed, not yet wired
+  `@lilydesignsystem/svelte-text-size-picker` (installed, not yet wired
   into a page).
 - **`page.data.title` convention**: every route's `+page.ts` `load` returns
   `{ title }`; `+layout.svelte` renders the one `<title>` from

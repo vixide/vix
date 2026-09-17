@@ -1,8 +1,8 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { Header, NavigationMenu } from 'lily-design-system-svelte-headless';
-  import { ThemePicker } from 'lily-design-system-svelte-theme-picker';
-  import { SharePicker, type ShareTarget } from 'lily-design-system-svelte-share-picker';
+  import { Header, NavigationMenu } from '@lilydesignsystem/svelte-headless';
+  import { ThemePicker } from '@lilydesignsystem/svelte-theme-picker';
+  import { SharePicker, type ShareTarget } from '@lilydesignsystem/svelte-share-picker';
 
   let { children } = $props();
 
