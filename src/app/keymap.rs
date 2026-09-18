@@ -568,12 +568,24 @@ impl App {
             } else {
                 self.modal_mode_indicator()
             }),
-            Keymap::Emacs if self.emacs_prefix => Some("C-x-".to_string()),
-            Keymap::Emacs if self.emacs_c_x_prefix => Some("C-c C-x-".to_string()),
-            Keymap::Emacs if self.emacs_c_p_c_m_prefix => Some("C-c p c m-".to_string()),
-            Keymap::Emacs if self.emacs_c_p_c_prefix => Some("C-c p c-".to_string()),
-            Keymap::Emacs if self.emacs_c_p_prefix => Some("C-c p-".to_string()),
-            Keymap::Emacs if self.emacs_c_prefix => Some("C-c-".to_string()),
+            Keymap::Emacs if self.emacs_chord == crate::app::EmacsChord::CtrlX => {
+                Some("C-x-".to_string())
+            }
+            Keymap::Emacs if self.emacs_chord == crate::app::EmacsChord::CtrlCCtrlX => {
+                Some("C-c C-x-".to_string())
+            }
+            Keymap::Emacs if self.emacs_chord == crate::app::EmacsChord::CtrlCPCM => {
+                Some("C-c p c m-".to_string())
+            }
+            Keymap::Emacs if self.emacs_chord == crate::app::EmacsChord::CtrlCPC => {
+                Some("C-c p c-".to_string())
+            }
+            Keymap::Emacs if self.emacs_chord == crate::app::EmacsChord::CtrlCP => {
+                Some("C-c p-".to_string())
+            }
+            Keymap::Emacs if self.emacs_chord == crate::app::EmacsChord::CtrlC => {
+                Some("C-c-".to_string())
+            }
             Keymap::Spacemacs => Some(if let Some(seq) = &self.spacemacs_leader {
                 format!("SPC {seq}")
             } else {
@@ -602,17 +614,17 @@ impl App {
     #[must_use]
     pub fn which_key(&self) -> Option<(String, Vec<(String, String)>)> {
         match self.active_keymap() {
-            Keymap::Emacs if self.emacs_prefix => {
+            Keymap::Emacs if self.emacs_chord == crate::app::EmacsChord::CtrlX => {
                 Some(("C-x".to_string(), Self::emacs_context_rows("C-x")))
             }
-            Keymap::Emacs if self.emacs_c_x_prefix => {
+            Keymap::Emacs if self.emacs_chord == crate::app::EmacsChord::CtrlCCtrlX => {
                 Some(("C-c C-x".to_string(), Self::emacs_context_rows("C-c C-x")))
             }
-            Keymap::Emacs if self.emacs_c_p_c_m_prefix => Some((
+            Keymap::Emacs if self.emacs_chord == crate::app::EmacsChord::CtrlCPCM => Some((
                 "C-c p c m".to_string(),
                 Self::emacs_context_rows("C-c p c m"),
             )),
-            Keymap::Emacs if self.emacs_c_p_c_prefix => {
+            Keymap::Emacs if self.emacs_chord == crate::app::EmacsChord::CtrlCPC => {
                 // `m` continues into the subproject family; shown here as a
                 // hint row even though it is not itself a dispatchable
                 // action (so not itself in the "C-c p c" table).
@@ -620,11 +632,11 @@ impl App {
                 rows.push(("m".to_string(), "project.subproject.*".to_string()));
                 Some(("C-c p c".to_string(), rows))
             }
-            Keymap::Emacs if self.emacs_c_p_prefix => Some((
+            Keymap::Emacs if self.emacs_chord == crate::app::EmacsChord::CtrlCP => Some((
                 "C-c p".to_string(),
                 vec![("c".to_string(), "project.*".to_string())],
             )),
-            Keymap::Emacs if self.emacs_c_prefix => {
+            Keymap::Emacs if self.emacs_chord == crate::app::EmacsChord::CtrlC => {
                 Some(("C-c".to_string(), Self::emacs_context_rows("C-c")))
             }
             Keymap::Spacemacs => {
@@ -1036,34 +1048,34 @@ impl App {
     /// not fall through).
     fn emacs_key(&mut self, key: KeyEvent) -> bool {
         // Second key of a `Ctrl+X …` chord.
-        if self.emacs_prefix {
-            self.emacs_prefix = false;
+        if self.emacs_chord == crate::app::EmacsChord::CtrlX {
+            self.emacs_chord = crate::app::EmacsChord::None;
             return self.emacs_chord_key(key);
         }
         // Third key of a `Ctrl+C Ctrl+X …` chord (the extended Org family).
-        if self.emacs_c_x_prefix {
-            self.emacs_c_x_prefix = false;
+        if self.emacs_chord == crate::app::EmacsChord::CtrlCCtrlX {
+            self.emacs_chord = crate::app::EmacsChord::None;
             return self.emacs_c_x_chord_key(key);
         }
         // Fifth key of a `Ctrl+C p c m …` chord (the `project.subproject.*`
         // family).
-        if self.emacs_c_p_c_m_prefix {
-            self.emacs_c_p_c_m_prefix = false;
+        if self.emacs_chord == crate::app::EmacsChord::CtrlCPCM {
+            self.emacs_chord = crate::app::EmacsChord::None;
             return self.emacs_c_p_c_m_chord_key(key);
         }
         // Fourth key of a `Ctrl+C p c …` chord (the `project.*` family).
-        if self.emacs_c_p_c_prefix {
-            self.emacs_c_p_c_prefix = false;
+        if self.emacs_chord == crate::app::EmacsChord::CtrlCPC {
+            self.emacs_chord = crate::app::EmacsChord::None;
             return self.emacs_c_p_c_chord_key(key);
         }
         // Third key of a `Ctrl+C p …` chord.
-        if self.emacs_c_p_prefix {
-            self.emacs_c_p_prefix = false;
+        if self.emacs_chord == crate::app::EmacsChord::CtrlCP {
+            self.emacs_chord = crate::app::EmacsChord::None;
             return self.emacs_c_p_chord_key(key);
         }
         // Second key of a `Ctrl+C …` chord (the Org command family).
-        if self.emacs_c_prefix {
-            self.emacs_c_prefix = false;
+        if self.emacs_chord == crate::app::EmacsChord::CtrlC {
+            self.emacs_chord = crate::app::EmacsChord::None;
             return self.emacs_c_chord_key(key);
         }
         // `Ctrl+U` starts a universal argument, applied to the next command
@@ -1083,11 +1095,11 @@ impl App {
         // chords and Meta/Alt bindings alike) is one registry lookup —
         // see `crates/vix-keybindings/spec/index.md`.
         if Self::ctrl(&key) && matches!(key.code, KeyCode::Char('x')) {
-            self.emacs_prefix = true;
+            self.emacs_chord = crate::app::EmacsChord::CtrlX;
             return true;
         }
         if Self::ctrl(&key) && matches!(key.code, KeyCode::Char('c')) {
-            self.emacs_c_prefix = true;
+            self.emacs_chord = crate::app::EmacsChord::CtrlC;
             return true;
         }
         if Self::ctrl(&key) || Self::alt(&key) {
@@ -1161,7 +1173,7 @@ impl App {
         };
         // `C-c C-x` opens the third-key chord family.
         if Self::ctrl(&key) && c.eq_ignore_ascii_case(&'x') {
-            self.emacs_c_x_prefix = true;
+            self.emacs_chord = crate::app::EmacsChord::CtrlCCtrlX;
             return true;
         }
         let pressed = Self::chord_key_name(&key, c);
@@ -1169,7 +1181,7 @@ impl App {
         // context's doc comment, `crates/vix-keybindings/src/emacs.rs`, for
         // why `p` is plain, not `C-p`).
         if pressed == "p" {
-            self.emacs_c_p_prefix = true;
+            self.emacs_chord = crate::app::EmacsChord::CtrlCP;
             return true;
         }
         if pressed == "C-t" {
@@ -1238,7 +1250,7 @@ impl App {
     /// unrecognized key at any other chord depth.
     pub(super) fn emacs_c_p_chord_key(&mut self, key: KeyEvent) -> bool {
         if key.code == KeyCode::Char('c') && !Self::ctrl(&key) {
-            self.emacs_c_p_c_prefix = true;
+            self.emacs_chord = crate::app::EmacsChord::CtrlCPC;
         } else {
             self.status = t!("status.emacs_no_chord").to_string();
         }
@@ -1251,7 +1263,7 @@ impl App {
     /// any other key is looked up in this one.
     pub(super) fn emacs_c_p_c_chord_key(&mut self, key: KeyEvent) -> bool {
         if key.code == KeyCode::Char('m') && !Self::ctrl(&key) {
-            self.emacs_c_p_c_m_prefix = true;
+            self.emacs_chord = crate::app::EmacsChord::CtrlCPCM;
             return true;
         }
         let KeyCode::Char(c) = key.code else {

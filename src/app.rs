@@ -1470,6 +1470,31 @@ impl Visible {
     }
 }
 
+/// Which Emacs-keymap chord prefix is pending (T149): at most one at a time —
+/// the next key completes it — so an enum rather than six bools. A state
+/// with two prefixes both "pending" was never meaningful and is now
+/// unrepresentable; `reset_keymap_modes` clears whichever one is pending
+/// (before T149 it cleared only `C-x`, so a pending `C-c …` chord survived a
+/// keymap switch). Always `None` in the non-Emacs keymaps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EmacsChord {
+    /// No chord pending.
+    None,
+    /// `Ctrl+X` pressed; the next key completes the chord.
+    CtrlX,
+    /// `Ctrl+C` pressed (the Org command family, e.g. `C-c C-t`, `C-c C-c`).
+    CtrlC,
+    /// `C-c C-x` pressed (the extended Org family); waiting for the third key.
+    CtrlCCtrlX,
+    /// `C-c p` pressed (the `project.*` family); waiting for the third key.
+    CtrlCP,
+    /// `C-c p c` pressed; waiting for the fourth key.
+    CtrlCPC,
+    /// `C-c p c m` pressed (the `project.subproject.*` family); waiting for
+    /// the fifth key.
+    CtrlCPCM,
+}
+
 /// The whole application state.
 // T149 in progress: the 15 UI-visibility bools are already a `Visible`
 // bitset; the remaining ones move into `EmacsChord`/`Modes`/`Transient` in
@@ -1805,15 +1830,6 @@ pub struct App {
     /// the normal text clipboard, matching Emacs's own dedicated table
     /// rectangle clipboard. Row-major cell text.
     table_rectangle_clip: Option<Vec<Vec<String>>>,
-    /// Pending third key of an Emacs `C-c C-x …` chord.
-    emacs_c_x_prefix: bool,
-    /// Pending third key of an Emacs `C-c p …` chord (the `project.*` family).
-    emacs_c_p_prefix: bool,
-    /// Pending fourth key of an Emacs `C-c p c …` chord.
-    emacs_c_p_c_prefix: bool,
-    /// Pending fifth key of an Emacs `C-c p c m …` chord (the
-    /// `project.subproject.*` family).
-    emacs_c_p_c_m_prefix: bool,
     /// The link target entered in the first Insert Link… prompt, held while the
     /// description prompt is open.
     pending_link_target: Option<String>,
@@ -1947,12 +1963,8 @@ pub struct App {
     pub bottom_hmax: usize,
     /// Which dock (if any) is being resized by an in-progress edge drag.
     dock_resize: Option<DockResize>,
-    /// Emacs keymap: a `Ctrl+X` prefix has been pressed and the next key
-    /// completes the chord. Always false in other keymaps.
-    emacs_prefix: bool,
-    /// Emacs keymap: a `Ctrl+C` prefix has been pressed (the Org command family,
-    /// e.g. `C-c C-t`, `C-c C-c`) and the next key completes the chord.
-    emacs_c_prefix: bool,
+    /// Which Emacs chord prefix is pending, if any (T149 — see [`EmacsChord`]).
+    emacs_chord: EmacsChord,
     /// Emacs keymap: a `Ctrl+U` universal argument is pending, applying to the
     /// next command (used by `C-u C-c C-t` to close a task *with* a note).
     emacs_universal: bool,
@@ -2249,10 +2261,7 @@ impl App {
             agenda_restriction: None,
             src_edit: None,
             table_rectangle_clip: None,
-            emacs_c_x_prefix: false,
-            emacs_c_p_prefix: false,
-            emacs_c_p_c_prefix: false,
-            emacs_c_p_c_m_prefix: false,
+            emacs_chord: EmacsChord::None,
             pending_link_target: None,
             expand_selection_dir: None,
             suspend_requested: false,
@@ -2307,8 +2316,6 @@ impl App {
             messages_hmax: 0,
             bottom_hmax: 0,
             dock_resize: None,
-            emacs_prefix: false,
-            emacs_c_prefix: false,
             emacs_universal: false,
             agenda: None,
             modal_insert: false,
@@ -8768,7 +8775,7 @@ impl App {
     /// Reset per-keymap session state (Emacs chord prefix, Vim mode/command line)
     /// so a freshly chosen keymap starts clean — Vim begins in Normal mode.
     fn reset_keymap_modes(&mut self) {
-        self.emacs_prefix = false;
+        self.emacs_chord = EmacsChord::None;
         self.modal_insert = false;
         self.modal_mode = vix_modal::Mode::Normal;
         self.modal_count.reset();
@@ -14514,8 +14521,12 @@ mod tests {
         app.editor.new_tab_with_content("* Task\n");
         // `C-c C-x` arms the third-key prefix instead of dispatching.
         assert!(app.emacs_c_chord_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL)));
-        assert!(app.emacs_c_x_prefix, "C-c C-x arms the extended family");
-        app.emacs_c_x_prefix = false;
+        assert_eq!(
+            app.emacs_chord,
+            EmacsChord::CtrlCCtrlX,
+            "C-c C-x arms the extended family"
+        );
+        app.emacs_chord = EmacsChord::None;
         // `C-c C-x a` toggles the ARCHIVE tag.
         assert!(app.emacs_c_x_chord_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE)));
         let text = app.editor.active_tab().unwrap().text();
@@ -14645,12 +14656,20 @@ mod tests {
         let mut app = App::new(dir.clone(), Settings::default());
         // `C-c p` arms the third-key prefix instead of dispatching.
         assert!(app.emacs_c_chord_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE)));
-        assert!(app.emacs_c_p_prefix, "C-c p arms the project family");
-        app.emacs_c_p_prefix = false;
+        assert_eq!(
+            app.emacs_chord,
+            EmacsChord::CtrlCP,
+            "C-c p arms the project family"
+        );
+        app.emacs_chord = EmacsChord::None;
         // `C-c p c` arms the fourth-key prefix.
         assert!(app.emacs_c_p_chord_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE)));
-        assert!(app.emacs_c_p_c_prefix, "C-c p c arms the command family");
-        app.emacs_c_p_c_prefix = false;
+        assert_eq!(
+            app.emacs_chord,
+            EmacsChord::CtrlCPC,
+            "C-c p c arms the command family"
+        );
+        app.emacs_chord = EmacsChord::None;
         // `C-c p c x` dispatches `project.run_task`; no tasks are defined
         // here, so it reports as much — still proof the chord reached the
         // action rather than falling through to "no chord".
@@ -14659,11 +14678,12 @@ mod tests {
         // `C-c p c m` arms the fifth-key prefix, and `C-c p c m r` dispatches
         // `project.subproject.run`; no subproject exists here either.
         assert!(app.emacs_c_p_c_chord_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE)));
-        assert!(
-            app.emacs_c_p_c_m_prefix,
+        assert_eq!(
+            app.emacs_chord,
+            EmacsChord::CtrlCPCM,
             "C-c p c m arms the subproject family"
         );
-        app.emacs_c_p_c_m_prefix = false;
+        app.emacs_chord = EmacsChord::None;
         assert!(app.emacs_c_p_c_m_chord_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE)));
         assert_eq!(app.status, t!("status.project_no_subproject").to_string());
 

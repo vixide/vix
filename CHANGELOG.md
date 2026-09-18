@@ -619,10 +619,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   written by any earlier version loads identically (now covered by
   tests). Separately, 15 of `App`'s own UI-surface-visibility bools
   (`show_explorer`, `show_bottom_dock`, `pomodoro_open`, …) are now one
-  `App::visible: Visible` bitset. Only Rust code that reads these fields
-  directly (embedders, scripts built against the crate) sees the new
-  `settings.<group>.<field>` / `app.visible.contains(Visible::…)` shapes
-  — no in-app behavior changes. See `crates/vix-settings/spec/index.md`.
+  `App::visible: Visible` bitset, and its 6 mutually-exclusive
+  Emacs-keymap chord-prefix bools are one `App::emacs_chord: EmacsChord`
+  enum. Only Rust code that reads these fields directly (embedders,
+  scripts built against the crate) sees the new shapes
+  (`settings.<group>.<field>`, `app.visible.contains(Visible::…)`,
+  `app.emacs_chord == EmacsChord::…`). See
+  `crates/vix-settings/spec/index.md`.
 - **Opening a large file no longer blocks on a synchronous parse**
   (improvement plan T121): buffers at or above the existing 50 KB
   async-reparse threshold now route their *initial* Tree-sitter parse
@@ -674,6 +677,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Switching keymaps (Vix → View → Keymap) could leave a pending Emacs
+  chord armed** (found during improvement plan T149's `App` bool-to-enum
+  pass): resetting per-keymap state on a keymap switch only ever cleared
+  a pending `Ctrl+X` prefix, so a pending `C-c …` or `C-c p …` chord
+  survived the switch and could fire unexpectedly on the very next key
+  in the new keymap. Consolidating the six separate chord-prefix flags
+  into one `EmacsChord` enum made the reset a single, unconditional
+  assignment, closing the gap as a direct consequence.
 - **Three real LSP bugs found by the T123 audit** (above): the
   `initialize` request's advertised `capabilities` didn't match reality —
   it claimed `"didSave": false` while `textDocument/didSave` is actually
