@@ -43,12 +43,11 @@ Ctrl+F
 Type "word_counts"
 Sleep 500ms
 Escape
+Sleep 300ms
 
-# The keyboard-shortcuts overlay.
-Ctrl+P
-Type ">Keyboard Shortcuts"
-Sleep 400ms
-Enter
+# The keyboard-shortcuts overlay (F1 -- `help.shortcuts` has no Command
+# Palette entry, only this direct binding, shared across every keymap).
+F1
 Sleep 1.5s
 Escape
 

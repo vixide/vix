@@ -279,6 +279,16 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.toggle_spellcheck", "view.spellcheck"),
     ("cmd.git_status", "git.status"),
     ("cmd.git_changes", "git.changes"),
+    // Reuse the menu item's own (already fully-translated) label rather than
+    // adding new `cmd.*` keys: found missing from here entirely while
+    // scripting the git-hunks demo (T406) -- `git.stage_hunk`/
+    // `git.unstage_hunk` had no palette entry and no keybinding in any
+    // keymap, reachable only through Git menu → Stage Hunk. Doesn't match
+    // the "Git: X" label convention the other `cmd.git_*` entries above use,
+    // but that's a purely cosmetic difference, and this way the fix needs no
+    // new translations at all.
+    ("menu.item.git.stage_hunk", "git.stage_hunk"),
+    ("menu.item.git.unstage_hunk", "git.unstage_hunk"),
     ("cmd.git_log", "git.log"),
     ("cmd.git_clone", "git.clone"),
     ("cmd.git_switch_branch", "git.switch_branch"),
@@ -303,6 +313,19 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.conflict_ours", "git.conflict_ours"),
     ("cmd.conflict_theirs", "git.conflict_theirs"),
     ("cmd.conflict_both", "git.conflict_both"),
+    // Same gap, same fix as git.stage_hunk/git.unstage_hunk above (found
+    // scripting the org-roam demo, T406): the whole Org-roam link/backlink/
+    // graph feature area had zero Command Palette entries, `org.link.follow`
+    // reachable only via a chord that's Emacs-keymap-only (`C-c C-o`) and
+    // not the default keymap at all, `roam.backlinks`/`roam.graph` not
+    // bound to any key in any keymap. Reusing the existing menu labels
+    // again, for the same no-new-translations reason.
+    ("menu.item.org.links.follow", "org.link.follow"),
+    ("menu.item.org.roam.backlinks", "roam.backlinks"),
+    ("menu.item.org.roam.graph", "roam.graph"),
+    // Same again (found scripting the themes demo, T406): the theme editor
+    // is real but had no palette entry either.
+    ("menu.item.view.theme_edit", "view.theme_edit"),
     ("cmd.toggle_calendar", "tools.calendar"),
     ("cmd.edit_table", "tools.edit_table"),
     ("cmd.edit_outline", "tools.edit_outline"),

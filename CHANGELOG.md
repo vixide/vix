@@ -8,6 +8,25 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **8 demo GIFs** (improvement plan T406) under `docs/demos/`, embedded
+  (the overview tour) in the README's `## Demos` section: an overview
+  tour, the command palette, multi-cursor editing, git hunk staging, the
+  DB workbench, Org-roam, the interactive table editor, and syntax
+  highlighting — each a real recorded terminal session against
+  `examples/demo-workspace/`. Regenerate with `scripts/render-demos.sh`
+  (real VHS, needs a headless-capable browser) or the new
+  `scripts/render-demos-lite.sh` (no browser at all — a real pty, a
+  hand-written asciicast recorder, and `agg` for the GIF encode; see its
+  own header and `tasks.md`'s T406 entry for why it exists and what it
+  found along the way).
+- **`git.stage_hunk`/`git.unstage_hunk`/`org.link.follow`/
+  `roam.backlinks`/`roam.graph`/`view.theme_edit` in the Command
+  Palette** (found while scripting the demo GIFs above, T406): all six
+  had a menu item but no Command Palette entry and (all but the last)
+  no keybinding in any keymap — `org.link.follow` in particular carried
+  only an Emacs-keymap `C-c C-o` chord, unreachable under every other
+  keymap including the default. `>Stage Hunk`, `>Follow Link`, etc. now
+  work.
 - **Multi-root LSP workspaces** (improvement plan T123f): `initialize` now
   sends every open workspace folder (`workspaceFolders`), not just one
   `rootUri` — a server sees the whole workspace, not only its first

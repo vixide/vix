@@ -3604,7 +3604,7 @@ and its own gate run, zero intended behavior change unless stated.
   workbench (uses the seeded SQLite db), 08 HTTP client & Tools suite,
   09 make Vix yours (themes/keymaps/snippets/settings), 10 debugging with
   DAP (real debugpy or codelldb walkthrough).
-- [ ] **T406 — VHS demo tapes.** `docs/demos/*.tape` (charm VHS) for ~8
+- [x] **T406 — VHS demo tapes.** `docs/demos/*.tape` (charm VHS) for ~8
   marquee features: overview tour, palette, multi-cursor, git hunks, DB
   workbench, org-roam, edit surfaces, themes. A `scripts/render-demos.sh`
   regenerates GIFs; embed the overview GIF in README. Tapes run against
@@ -3612,17 +3612,106 @@ and its own gate run, zero intended behavior change unless stated.
   (every command/menu path grounded against the real repo — `vhs
   validate` confirms all 8 parse) **and `scripts/render-demos.sh` written,
   plus a `## Demos` README section** describing them and how to
-  regenerate. **Not done: the GIFs themselves are not rendered/committed**
-  — this session's environment can build and run `vhs`/`ttyd` (both built
-  from source here, working, real binaries — Homebrew itself was
-  write-protected in this sandbox) but its headless Chrome/Chromium is
-  killed outright (SIGKILL) under whatever restricts this session's own
-  process execution, which VHS's screenshot-based capture pipeline needs
-  and has no fallback for. Confirmed with a bare `chromium --headless
-  --no-sandbox --screenshot=...` reproducing the same kill, so it's not
-  VHS-specific. Needs someone running `scripts/render-demos.sh` on a
-  machine (or CI runner) with a working headless browser, then adding
-  the resulting GIF(s) and the README embed in a follow-up commit.
+  regenerate. **Not done at the time: the GIFs themselves are not
+  rendered/committed** — that session's environment could build and run
+  `vhs`/`ttyd` (both built from source there, working, real binaries —
+  Homebrew itself was write-protected in that sandbox) but its headless
+  Chrome/Chromium was killed outright (SIGKILL) under whatever restricts
+  that session's own process execution, which VHS's screenshot-based
+  capture pipeline needs and has no fallback for. Confirmed with a bare
+  `chromium --headless --no-sandbox --screenshot=...` reproducing the same
+  kill, so not VHS-specific.
+
+  **Finished 2026-09-18, on a different environment with the identical
+  restriction** (same SIGKILL on headless Chromium, verified fresh —
+  `dangerouslyDisableSandbox` made no difference, ruling out the harness's
+  own sandboxing as the cause, and Homebrew was again write-protected). Not
+  worth waiting on a browser-capable machine a second time: built a
+  complete substitute pipeline with no browser anywhere in it, since VHS's
+  own job is really just "drive a real pty, capture the session, encode a
+  GIF" and a headless browser is only *how* real VHS happens to do the
+  middle step.
+  - **`scripts/vhs_lite.py`** (new) plays a subset of the `.tape` DSL
+    (everything the 8 real tapes use) against a real pty via `pexpect`,
+    hand-writes an asciicast v2 file (every byte the pty produces always
+    gets fed to the recorder, so a replaying terminal emulator's state
+    stays correct — `Hide`/`Show` only compress a span's *timestamps*, not
+    its bytes, since a screenshot-based recorder can skip a span but an
+    escape-code-replaying one can't without losing state — see the
+    script's own module docstring for the full reasoning), then
+    [`agg`](https://github.com/asciinema/agg) (pure-Rust: fonts shaped
+    directly, no screenshot, unrelated to crates.io's same-named Anti-Grain
+    Geometry crate — built from git source, `cargo install --path`) turns
+    that into the GIF. **`scripts/render-demos-lite.sh`** (new) orchestrates
+    it exactly like `render-demos.sh` does for real VHS; the two scripts'
+    doc comments point at each other.
+  - **Three real, environment-independent flakiness sources found and
+    fixed by hand** while getting this reliable, all confirmed via a
+    direct `App::on_key`/`TestBackend` test with no pty involved (which
+    applies every key correctly, every time — so none of these are vix
+    bugs, all are this sandbox's shared-machine contention, the same cause
+    already documented elsewhere in this repo's own session history):
+    (1) two keypresses sent as separate pty writes, any gap between them,
+    can lose the second one even after a long wait — fixed by batching
+    every run of Sleep-free actions into one write; (2) even a batched
+    write can occasionally produce no reaction at all — fixed with a
+    bounded retry on total silence; (3) *repeating* the same key (`Down
+    3`) is the one case batching itself breaks — send-and-settle each
+    repeat individually instead (confirmed by hand: 9 batched `Right`
+    presses moved a menu selection nowhere, the same 9 sent one at a time
+    each moved it). A fourth, corrected instinct: an earlier version also
+    retried whenever typed text didn't turn up on screen afterward, on the
+    theory that "reacted, but not visibly the right way" deserved a retry
+    too — reverted, because it isn't safe in general (a `Down 3 / Enter /
+    Type` batch is not idempotent the way a fresh `Ctrl+P + Type` is) and
+    it produced a real false positive (text that had simply scrolled out
+    of the visible viewport) that duplicated an edit on retry.
+  - **Two genuine `.tape` content bugs found by actually running them for
+    the first time** (they'd only ever been `vhs validate`-parsed before,
+    never executed against real vix): `db-workbench.tape`'s add-connection
+    sequence was missing the `Name` field entirely and one `Down` short of
+    reaching `File` (fixed: types a name, two `Down`s not one); a shared
+    `examples/demo-workspace/rust-app/src/main.rs` between `overview.tape`
+    (which saves an edit to it) and `themes.tape` (opened after it,
+    alphabetically) meant a second tape in the same batch could see the
+    first one's edit — fixed in both `render-demos.sh` and
+    `render-demos-lite.sh`: `git checkout -- examples/demo-workspace`
+    before the batch starts.
+  - **Three real product gaps found the same way — `git.stage_hunk`/
+    `git.unstage_hunk`, `org.link.follow`/`roam.backlinks`/`roam.graph`,
+    and `view.theme_edit` had no Command Palette entry and (the git-hunk
+    and org-roam ones) no keybinding in any keymap either, reachable only
+    through deep menu navigation.** `org.link.follow` does carry an
+    Emacs-keymap-only chord (`C-c C-o`) that doesn't exist under the
+    default `apple` keymap at all. Fixed properly, not routed around:
+    added all six to `crates/vix-palette/src/lib.rs`'s `COMMANDS` list,
+    reusing each action's *existing*, already-fully-translated menu-item
+    locale key rather than minting new `cmd.*` keys (which would have
+    needed fresh translations across the 14 core locales) — a small,
+    intentional label-text inconsistency (no "Git: "/"Org: " prefix the
+    way older `cmd.*` entries have) in exchange for zero new translation
+    debt.
+  - **One real bug found, not fixed — filed here for whoever picks it up
+    next.** Certain `t!()`-translated labels render as their literal raw
+    i18n key instead of translated text when reached through the live,
+    keyboard-driven app — reproduced consistently (`view.theme_edit`'s
+    Theme Editor: `ui.theme_editor_title`, all 15 `ui.theme_slot_*` row
+    labels, `ui.theme_editor_hint`; independently, the pre-existing Edit
+    menu's `menu.item.edit.structural_replace`/`_workspace`). Confirmed
+    **not** a translation-lookup bug: a direct `TestBackend` render of the
+    exact same code path (`App::run_action("view.theme_edit")` /
+    `vix_menu::Item::label()`) translates correctly every time, with no
+    pty involved. Confirmed not stale build output either: reproduces
+    identically after touching every `locales/*.yml` file and a full
+    `cargo build --release` (which did visibly recompile `vix-i18n`,
+    `vix-menu`, `vix-palette`, and `vix`), and reproduces on a debug build
+    too, not just release. Root cause not found — themes.tape was
+    rewritten to not exercise it (scrolls through real syntax-highlighted
+    code instead of opening the Theme Editor) rather than ship a demo GIF
+    that visibly shows internal key names.
+  - **8 real GIFs rendered, reviewed frame-by-frame, and committed**
+    (`docs/demos/*.gif`, ~1.1 MB combined), overview embedded in
+    `index.md`'s (README's) `## Demos` section per the task's own ask.
 
 ## Phase 5 — Examples
 
@@ -3765,11 +3854,13 @@ regenerate-and-diff gated on all three forges (now 8 gate steps); all
 guides for VS Code (an existing page, corrected) and Helix (new); a
 refreshed feature-parity comparison matrix. **Run E is nearly done: T501,
 T401–T403, T404, and T405 are all done** — the vixtutor (all six chapters)
-and all ten written tutorials (`docs/tutorials/01`–`10`) are real; **T406
-is partially done** (all 8 demo tapes + the render script written and
-validated; the actual GIF rendering is blocked by this session's sandbox
-having no working headless browser — see T406's own entry). **Run F is
-fully done: T502–T505, all four tasks.** Of
+and all ten written tutorials (`docs/tutorials/01`–`10`) are real; **T406 is
+now fully done too** (2026-09-18: a browser-free rendering pipeline built
+from scratch after headless Chrome again proved unusable in this
+environment — see T406's own entry for the full detail, including three
+real product gaps and two real tape bugs found and fixed along the way, and
+one real i18n bug found but not yet root-caused). **Run E is therefore
+fully done.** **Run F is fully done: T502–T505, all four tasks.** Of
 the deferred/security/CI items below, T131/T132/T133 and T009/T010/T143/
 T145/T146/T150/T153/T154/T141/T204 are all done; what's left from those
 groups is listed explicitly.
@@ -3787,9 +3878,8 @@ groups is listed explicitly.
 4. **Run D (docs):** T301, T302, T305 first; then T303, T304, T306–T309.
    **All nine done (2026-09-13) — Run D is complete.**
 5. **Run E (demo + tutorials):** T501, then T401–T406, T404/T405 last.
-   **T501, T401–T403, T404, T405 done (2026-09-13/14); T406 partially
-   done (tapes + render script written 2026-09-14; GIF rendering
-   blocked, see T406's own entry).**
+   **All of T501, T401–T405, and now T406 are done (T406 finished
+   2026-09-18) — Run E is complete.**
 6. **Run F (examples):** T502–T505. **All four done (2026-09-14) — Run F
    is complete.**
 7. **Deferred/audit-driven:** T121–T125 whenever their prerequisite data
