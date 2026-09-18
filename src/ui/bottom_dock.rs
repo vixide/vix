@@ -32,7 +32,7 @@ pub(super) fn draw_bottom_dock(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(block, area);
     let total = app.bottom_dock.lines.len();
     let h = inner.height as usize;
-    let allow_bars = app.settings.show_scrollbar && inner.width > 1 && inner.height > 1;
+    let allow_bars = app.settings.viewport.show_scrollbar && inner.width > 1 && inner.height > 1;
     let vbar = allow_bars && total > h;
 
     // The visible rows, and whether they overflow horizontally → a bottom hbar.

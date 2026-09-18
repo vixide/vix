@@ -1202,8 +1202,8 @@ impl App {
     /// Toggle the inline (end-of-line) git blame for the cursor's line, persisting
     /// the preference. Clears the annotation immediately when turned off.
     fn toggle_inline_blame(&mut self) {
-        self.settings.inline_blame = !self.settings.inline_blame;
-        let on = self.settings.inline_blame;
+        self.settings.subsystems.inline_blame = !self.settings.subsystems.inline_blame;
+        let on = self.settings.subsystems.inline_blame;
         if !on {
             self.blame_cache = None;
             if let Some(t) = self.editor.active_tab_mut() {
@@ -1222,7 +1222,7 @@ impl App {
     /// only when the cursor moves to a different line (cached in `blame_cache`).
     /// Called once per event-loop iteration.
     pub fn refresh_inline_blame(&mut self) {
-        if !self.settings.inline_blame {
+        if !self.settings.subsystems.inline_blame {
             if self.blame_cache.take().is_some()
                 && let Some(t) = self.editor.active_tab_mut()
             {

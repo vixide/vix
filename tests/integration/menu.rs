@@ -42,9 +42,12 @@ fn vix_menu_license_shows_trademark_info() {
 fn view_toggle_menu_tooltips_hides_them() {
     use ratatui::{Terminal, backend::TestBackend};
     let mut app = app_at(Path::new("."));
-    assert!(app.settings.show_menu_tooltips, "tooltips on by default");
+    assert!(
+        app.settings.viewport.show_menu_tooltips,
+        "tooltips on by default"
+    );
     app.run_action("view.menu_tooltips");
-    assert!(!app.settings.show_menu_tooltips, "toggled off");
+    assert!(!app.settings.viewport.show_menu_tooltips, "toggled off");
 
     // With tooltips off, opening a menu and highlighting an item shows no help.
     let file = vix::menu::menus()

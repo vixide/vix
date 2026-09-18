@@ -37,6 +37,18 @@ another config file — a test, an embedder — never touches the user's.
 Because the schema is `#[serde(default)]`, an older config file still loads
 cleanly when new fields are added — each missing field takes its default.
 
+On the Rust side, `Settings`'s ~30 `bool` fields are grouped into small
+per-topic sub-structs (`GutterSettings`, `PanelSettings`, `SaveSettings`,
+and others — improvement plan T149), each `#[serde(flatten)]`'d back onto
+`Settings` — `clippy::struct_excessive_bools` counts bools in any one
+struct, so one large group doesn't dodge the lint, only several small ones
+do. This is purely a Rust-source organization: `#[serde(flatten)]` keeps
+every one of these settings a flat top-level `config.toml` key, exactly as
+if it were still declared directly on `Settings` — a config file written
+before T149 loads identically, and the table below still lists every
+setting as one flat key regardless of which Rust struct it actually lives
+on.
+
 ## Editing settings
 
 Choose **Vix → Settings…** to open the config file. Vix first writes the current
@@ -181,9 +193,14 @@ Settings…**.
 ## As implemented in Vix
 
 `crates/vix-settings/src/lib.rs` defines the `Settings` struct (every field, its doc comment,
-and its default), the `LspServer` entry type, the `MAX_RECENT_FILES` cap (`15`),
-and the `load`/`save`/`config_path`/`themes_dir`/`indent_string` helpers, all
-backed by `confy` under the app name `vix` and config stem `config`.
+and its default), its 11 `#[serde(flatten)]`'d bool-group sub-structs (T149:
+`GutterSettings`, `EditorVisualSettings`, `PanelSettings`,
+`SecondaryPanelSettings`, `ViewportSettings`, `MiscSettings`, `SaveSettings`,
+`EditorBehaviorSettings`, `TypingSettings`, `StartupSettings`,
+`SubsystemSettings`), the `LspServer` entry type, the `MAX_RECENT_FILES` cap
+(`15`), and the `load`/`save`/`config_path`/`themes_dir`/`indent_string`
+helpers, all backed by `confy` under the app name `vix` and config stem
+`config`.
 `src/main.rs` calls `Settings::load()` at startup. In `src/app.rs`,
 `open_settings_file` handles the `vix.settings` menu action (save-then-open), and
 `on_exit` persists settings (and shuts down LSP) when Vix quits.

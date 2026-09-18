@@ -1475,17 +1475,17 @@ fn breadcrumb_shows_file_and_enclosing_symbol() {
 #[test]
 fn on_save_toggles_flip_settings() {
     let mut app = app_at(Path::new("."));
-    let trim = app.settings.trim_trailing_whitespace;
+    let trim = app.settings.save.trim_trailing_whitespace;
     app.run_action("view.trim_on_save");
     assert_eq!(
-        app.settings.trim_trailing_whitespace, !trim,
+        app.settings.save.trim_trailing_whitespace, !trim,
         "trim-on-save toggled"
     );
 
-    let nl = app.settings.ensure_final_newline;
+    let nl = app.settings.save.ensure_final_newline;
     app.run_action("view.final_newline_on_save");
     assert_eq!(
-        app.settings.ensure_final_newline, !nl,
+        app.settings.save.ensure_final_newline, !nl,
         "final-newline-on-save toggled"
     );
 }
@@ -1567,8 +1567,8 @@ fn save_respects_disabled_normalization() {
     let file = dir.join("r.txt");
     fs::write(&file, "abc").unwrap(); // no trailing newline
     let mut app = app_at(&dir);
-    app.settings.trim_trailing_whitespace = false;
-    app.settings.ensure_final_newline = false;
+    app.settings.save.trim_trailing_whitespace = false;
+    app.settings.save.ensure_final_newline = false;
     app.open_initial(&file.clone());
     app.on_key(keycode(KeyCode::End));
     for _ in 0..2 {
@@ -1644,7 +1644,7 @@ fn visible_whitespace_toggle() {
             .flags
             .contains(vix::editor::Flags::SHOW_WHITESPACE)
     );
-    assert!(!app.settings.show_whitespace);
+    assert!(!app.settings.gutter.show_whitespace);
     app.run_action("view.whitespace");
     assert!(
         app.editor
@@ -1652,7 +1652,10 @@ fn visible_whitespace_toggle() {
             .contains(vix::editor::Flags::SHOW_WHITESPACE),
         "toggles visible whitespace on"
     );
-    assert!(app.settings.show_whitespace, "persists the new setting");
+    assert!(
+        app.settings.gutter.show_whitespace,
+        "persists the new setting"
+    );
     app.run_action("view.whitespace");
     assert!(
         !app.editor
@@ -1700,13 +1703,13 @@ fn soft_wrap_toggle() {
         !app.editor.flags.contains(vix::editor::Flags::SOFT_WRAP),
         "off by default"
     );
-    assert!(!app.settings.soft_wrap);
+    assert!(!app.settings.editor_visual.soft_wrap);
     app.run_action("view.soft_wrap");
     assert!(
         app.editor.flags.contains(vix::editor::Flags::SOFT_WRAP),
         "toggles soft wrap on"
     );
-    assert!(app.settings.soft_wrap, "persists the setting");
+    assert!(app.settings.editor_visual.soft_wrap, "persists the setting");
     app.run_action("view.soft_wrap");
     assert!(
         !app.editor.flags.contains(vix::editor::Flags::SOFT_WRAP),
@@ -2017,7 +2020,7 @@ fn toggle_status_bar_action_flips_and_persists() {
     app.run_action("view.status_bar");
     assert!(!app.show_status_bar, "the action hides the status bar");
     assert!(
-        !app.settings.show_status_bar,
+        !app.settings.secondary_panels.show_status_bar,
         "the choice persists in settings"
     );
     app.run_action("view.status_bar");
@@ -2038,7 +2041,7 @@ fn toggle_scrollbar_flips_persists_and_reclaims_the_column() {
 
     app.run_action("view.scrollbar"); // hide it
     assert!(!app.show_scrollbar);
-    assert!(!app.settings.show_scrollbar, "choice persists");
+    assert!(!app.settings.viewport.show_scrollbar, "choice persists");
     term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
     assert_eq!(app.layout.scrollbar.width, 0, "scrollbar column collapses");
     assert_eq!(
@@ -2256,7 +2259,7 @@ fn toggle_bottom_dock_flips_persists_and_renders() {
 
     app.run_action("view.bottom_dock");
     assert!(!app.show_bottom_dock, "the action hides the bottom dock");
-    assert!(!app.settings.show_bottom_dock, "the choice persists");
+    assert!(!app.settings.panels.show_bottom_dock, "the choice persists");
 
     app.run_action("view.bottom_dock");
     assert!(app.show_bottom_dock, "toggling again shows it");
@@ -2728,7 +2731,7 @@ fn spellcheck_toggle_persists_and_clears_when_off() {
     app.run_action("view.spellcheck");
     assert!(app.spellcheck, "toggle enables spellcheck");
     assert!(
-        app.settings.spellcheck,
+        app.settings.typing.spellcheck,
         "the setting is updated for persistence"
     );
     app.run_action("view.spellcheck");
@@ -3664,7 +3667,7 @@ fn welcome_dialog_shows_on_the_first_launch_only() {
     // First launch: no config file yet, so the dialog is enabled and opens.
     let first = Settings::load_from(&config);
     assert!(
-        first.show_welcome_dialog,
+        first.startup.show_welcome_dialog,
         "a fresh config starts with the welcome dialog enabled"
     );
     let mut app = App::new(dir.clone(), first).with_settings_path(&config);
@@ -3675,7 +3678,7 @@ fn welcome_dialog_shows_on_the_first_launch_only() {
         "the welcome dialog opens on the first launch"
     );
     assert!(
-        !app.settings.show_welcome_dialog,
+        !app.settings.startup.show_welcome_dialog,
         "showing it turns the setting off"
     );
 
@@ -3688,7 +3691,7 @@ fn welcome_dialog_shows_on_the_first_launch_only() {
     // Second launch: the saved config now has the dialog turned off.
     let second = Settings::load_from(&config);
     assert!(
-        !second.show_welcome_dialog,
+        !second.startup.show_welcome_dialog,
         "the first show persisted show_welcome_dialog = false"
     );
     let mut app = App::new(dir.clone(), second).with_settings_path(&config);

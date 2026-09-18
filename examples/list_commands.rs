@@ -166,34 +166,24 @@ fn render_actions(root: &Path) -> String {
 /// One `Settings` struct field: its name, its literal Rust type (as written
 /// in `crates/vix-settings/src/lib.rs`), and its doc comment (joined into
 /// one line).
+#[derive(Clone)]
 struct SettingsField {
     name: String,
     ty: String,
     doc: String,
 }
 
-/// Parse `crates/vix-settings/src/lib.rs`'s own `pub struct Settings { .. }`
-/// body: each field's doc comment (consecutive `///` lines immediately
-/// above it) and its `name: Type` declaration, in source order.
-///
-/// # Panics
-///
-/// Panics if no fields are found — a signal this parser has drifted from a
-/// real shape change in `Settings`, not a silently wrong scan.
-fn parse_settings_fields(src: &str) -> Vec<SettingsField> {
+/// Parse one `pub struct <Name> { .. }` body starting at `lines` (already
+/// positioned just past the opening `{`, so `depth` starts at 1): each
+/// field's doc comment (consecutive `///` lines immediately above it) and
+/// its `name: Type` declaration, in source order. Stops (and leaves `lines`
+/// positioned after the closing brace) once brace depth returns to 0.
+fn parse_struct_body(lines: &mut std::iter::Peekable<std::str::Lines<'_>>) -> Vec<SettingsField> {
     let mut fields = Vec::new();
-    let mut in_struct = false;
-    let mut depth = 0i32;
+    let mut depth = 1i32;
     let mut doc_buf: Vec<String> = Vec::new();
-    for line in src.lines() {
+    for line in lines.by_ref() {
         let trimmed = line.trim();
-        if !in_struct {
-            if trimmed.starts_with("pub struct Settings {") {
-                in_struct = true;
-                depth = 1;
-            }
-            continue;
-        }
         if let Some(text) = trimmed.strip_prefix("///") {
             doc_buf.push(text.trim().to_string());
             continue;
@@ -212,10 +202,67 @@ fn parse_settings_fields(src: &str) -> Vec<SettingsField> {
             doc_buf.clear();
             continue;
         }
+        // Any other line (an attribute like `#[serde(flatten)]`, a blank
+        // line, a doc comment on the struct itself before its first field)
+        // carries no field of its own — just keep tracking brace depth so
+        // we know when this struct's body ends. Not clearing `doc_buf` here
+        // is deliberate: an attribute line between a doc comment and its
+        // `pub` field (e.g. `/// ...` then `#[serde(flatten)]` then
+        // `pub gutter: GutterSettings,`) must not lose the doc.
         depth += i32::try_from(trimmed.matches('{').count()).unwrap_or(0);
         depth -= i32::try_from(trimmed.matches('}').count()).unwrap_or(0);
         if depth == 0 {
             break;
+        }
+    }
+    fields
+}
+
+/// Parse every `pub struct <Name> { .. }` in `src` into its own field list,
+/// keyed by struct name — including `Settings` itself and every small
+/// `#[serde(flatten)]`-target sub-struct `Settings` groups its bools into
+/// (T149; see `Settings`'s own doc comment in
+/// `crates/vix-settings/src/lib.rs` for why they're split out at all).
+fn parse_all_structs(src: &str) -> std::collections::HashMap<String, Vec<SettingsField>> {
+    let mut structs = std::collections::HashMap::new();
+    let mut lines = src.lines().peekable();
+    while let Some(line) = lines.next() {
+        let trimmed = line.trim();
+        let Some(rest) = trimmed.strip_prefix("pub struct ") else {
+            continue;
+        };
+        let Some(name_end) = rest.find([' ', '{']) else {
+            continue;
+        };
+        let name = rest[..name_end].to_string();
+        if !rest.trim_end().ends_with('{') {
+            continue; // a tuple/unit struct, or the opening brace is on its own line — none of ours are
+        }
+        structs.insert(name, parse_struct_body(&mut lines));
+    }
+    structs
+}
+
+/// Parse `crates/vix-settings/src/lib.rs`'s own `pub struct Settings { .. }`
+/// body: every field's doc comment and `name: Type` declaration, in source
+/// order — with each `#[serde(flatten)]` sub-struct field (T149) expanded
+/// in place into *its* fields, since those (not the wrapper field itself)
+/// are the real flat TOML keys `config.toml` round-trips.
+///
+/// # Panics
+///
+/// Panics if no fields are found — a signal this parser has drifted from a
+/// real shape change in `Settings`, not a silently wrong scan.
+fn parse_settings_fields(src: &str) -> Vec<SettingsField> {
+    let structs = parse_all_structs(src);
+    let settings_fields = structs
+        .get("Settings")
+        .expect("found no `pub struct Settings` at all — did it move or rename?");
+    let mut fields = Vec::new();
+    for f in settings_fields {
+        match structs.get(f.ty.as_str()) {
+            Some(inner) => fields.extend(inner.iter().cloned()),
+            None => fields.push(f.clone()),
         }
     }
     assert!(

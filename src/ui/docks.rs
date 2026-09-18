@@ -204,7 +204,7 @@ pub(super) fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
         })
         .collect();
     let total = app.messages.items.len();
-    let allow_bars = app.settings.show_scrollbar && inner.width > 1 && inner.height > 1;
+    let allow_bars = app.settings.viewport.show_scrollbar && inner.width > 1 && inner.height > 1;
     let vbar = allow_bars && total > inner.height as usize;
     let text_w = if vbar { inner.width - 1 } else { inner.width } as usize;
     let content_w = rows.iter().map(|s| span_line_width(s)).max().unwrap_or(0);

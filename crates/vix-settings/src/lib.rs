@@ -28,68 +28,60 @@ const CONFIG_NAME: &str = "config";
 ///
 /// Every field has a default (see [`Settings::default`]); `#[serde(default)]`
 /// lets older config files load even when new fields are added.
+///
+/// Boolean toggles are grouped into small `#[serde(flatten)]`'d sub-structs
+/// (T149) rather than left as ~30 direct `bool` fields on `Settings` itself —
+/// `clippy::struct_excessive_bools` counts bools in any one struct, so a
+/// single large group doesn't dodge the lint, only many small ones do.
+/// `#[serde(flatten)]` keeps the on-disk `config.toml` format unchanged: each
+/// field still round-trips as its own flat top-level key, exactly as if it
+/// were still declared directly on `Settings`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
-// Independent persisted preferences; each maps to one flat TOML key. Grouping
-// them would break the on-disk format and only relocate the lint.
-#[allow(clippy::struct_excessive_bools)]
 pub struct Settings {
-    /// Show the line-number gutter.
-    pub line_numbers: bool,
-    /// Show line numbers relative to the cursor line (hybrid: cursor line absolute).
-    pub relative_line_numbers: bool,
-    /// Render visible glyphs for whitespace (space, tab, line ending).
-    pub show_whitespace: bool,
-    /// Wrap long lines across screen rows instead of scrolling horizontally.
-    pub soft_wrap: bool,
-    /// Show the file explorer on startup.
-    pub show_explorer: bool,
+    /// Line-number gutter and inline whitespace-glyph display (T149).
+    #[serde(flatten)]
+    pub gutter: GutterSettings,
+    /// Soft-wrap, rainbow brackets, and word-highlight visual aids (T149).
+    #[serde(flatten)]
+    pub editor_visual: EditorVisualSettings,
+    /// Explorer, message drawer, and bottom dock visibility (T149).
+    #[serde(flatten)]
+    pub panels: PanelSettings,
+    /// Status bar, breadcrumb bar, and outline sidebar visibility (T149).
+    #[serde(flatten)]
+    pub secondary_panels: SecondaryPanelSettings,
+    /// Scrollbar, minimap, and menu-tooltip visibility (T149).
+    #[serde(flatten)]
+    pub viewport: ViewportSettings,
+    /// Independent toggles with no natural sibling group (T149).
+    #[serde(flatten)]
+    pub misc: MiscSettings,
+    /// What happens to a file's content on save, before it's written (T149).
+    #[serde(flatten)]
+    pub save: SaveSettings,
+    /// Editor-session behaviors: autosave, sticky scroll, persistent undo (T149).
+    #[serde(flatten)]
+    pub editor_behavior: EditorBehaviorSettings,
+    /// Typing-time behaviors: editorconfig, auto-pair, spellcheck (T149).
+    #[serde(flatten)]
+    pub typing: TypingSettings,
+    /// What happens when Vix starts (T149).
+    #[serde(flatten)]
+    pub startup: StartupSettings,
+    /// Whole-subsystem on/off switches: LSP, modal engine, inline blame (T149).
+    #[serde(flatten)]
+    pub subsystems: SubsystemSettings,
     /// How the file explorer's Delete acts: `"trash"` (default — move to the
     /// OS trash/Recycle Bin, undoable from there) or `"hard"` (remove
     /// outright, `fs::remove_file`/`remove_dir_all`, no undo). Any other
     /// value falls back to `"trash"`, the safer default, rather than
     /// silently hard-deleting on a typo.
     pub explorer_delete: String,
-    /// Show the message drawer on startup.
-    pub show_messages: bool,
-    /// Show the bottom status bar.
-    pub show_status_bar: bool,
-    /// Show the breadcrumb bar (file ▸ enclosing symbol) above the editor.
-    pub show_breadcrumbs: bool,
-    /// Show the code-outline sidebar (symbol list that follows the cursor).
-    pub show_outline_dock: bool,
-    /// Show the editor's right-side scroll bar.
-    pub show_scrollbar: bool,
-    /// Show the bottom dock (log/output/data panel).
-    pub show_bottom_dock: bool,
     /// Height (rows) of the bottom dock; drag its top edge to resize.
     pub bottom_dock_height: u16,
     /// Maximum lines retained in the bottom dock (scrollback); oldest dropped past this.
     pub scrollback: usize,
-    /// Open single-clicked / arrow-scanned files in an ephemeral preview tab.
-    pub preview_tabs: bool,
-    /// On save, strip trailing spaces/tabs from every line.
-    pub trim_trailing_whitespace: bool,
-    /// On save, append a final newline if the file does not end with one.
-    pub ensure_final_newline: bool,
-    /// On save, run the language server's formatter (when the file has one).
-    pub format_on_save: bool,
-    /// Periodically save the active dirty file-backed buffer (every few seconds).
-    pub auto_save: bool,
-    /// Pin the enclosing scope's header line at the top of the editor while
-    /// scrolling (sticky scroll).
-    pub sticky_scroll: bool,
-    /// Color matching brackets by nesting depth (rainbow brackets).
-    pub rainbow_brackets: bool,
-    /// Persist each file's undo tree across sessions (restored on reopen when the
-    /// file content still matches).
-    pub persistent_undo: bool,
-    /// Show a code-overview minimap column at the right of the editor.
-    pub show_minimap: bool,
-    /// Show hover tooltips (help text) on the menu bar's menus and items.
-    pub show_menu_tooltips: bool,
-    /// Passively highlight every occurrence of the word under the cursor.
-    pub highlight_word: bool,
     /// Indentation inserted by Tab: `"spaces"` (default) or `"tabs"`.
     pub indent_style: String,
     /// Number of spaces per indent when `indent_style` is `"spaces"`.
@@ -123,25 +115,16 @@ pub struct Settings {
     /// Action ids of commands recently run from the command palette, most-recent
     /// first; surfaced at the top of the `>` command list.
     pub command_recents: Vec<String>,
-    /// Underline misspelled words in comments and strings.
-    pub spellcheck: bool,
     /// Extra directory to search for Hunspell dictionaries, on top of the
     /// autodetected standard locations. Empty = autodetect only. Both the
     /// `<dir>/<name>.{aff,dic}` and `<dir>/<name>/index.{aff,dic}` layouts work.
     pub dictionary_path: String,
-    /// Master switch for Language Server Protocol features (diagnostics, hover,
-    /// go-to-definition, completion). When off, no servers are launched.
-    pub lsp_enabled: bool,
     /// Configured language servers, matched to files by extension. Each entry is
     /// a language id (sent to the server), the file extensions it handles, and
     /// the command (program + args) to launch. Empty by default — Vix ships no
     /// built-in server, so add the ones you have installed, e.g.
     /// `{ language_id = "rust", extensions = ["rs"], command = ["rust-analyzer"] }`.
     pub lsp_servers: Vec<LspServer>,
-    /// Show the welcome dialog on launch. Vix sets it to `false` and saves the
-    /// settings as soon as the dialog has been shown once, so it appears on the
-    /// first run only; set it back to `true` to see it again.
-    pub show_welcome_dialog: bool,
     /// Directory of vCard (`.vcf`) files for the contact browser (Tools →
     /// Contacts…). Empty = use the workspace root.
     pub contacts_dir: String,
@@ -168,14 +151,6 @@ pub struct Settings {
     /// `"America/New_York"`). Chosen via Tools → Time Zone…; used app-wide
     /// (e.g. the clock panel).
     pub time_zone: String,
-    /// Reopen the previous session (open files, focused tab, cursor positions)
-    /// when Vix is launched in a workspace with no file given on the command
-    /// line. The session is saved per workspace root in `session.toml`.
-    pub restore_session: bool,
-    /// Keep search-match highlights visible after the Find box closes ("sticky"
-    /// highlights), until they are explicitly toggled off. When false, closing
-    /// Find clears the highlights.
-    pub sticky_search_highlight: bool,
     /// Command template the **AI** menu runs over editor text. The placeholder
     /// `{prompt}` is replaced with the action's instruction; if the template also
     /// contains `{file}` it is replaced with the path of a temp file holding the
@@ -206,18 +181,6 @@ pub struct Settings {
     /// for `ai_provider = "cli"`; optional for `"ollama"` (a local server
     /// needs no key by default).
     pub ai_api_key_command: String,
-    /// Review AI replace transforms (Annotate / Improve) as an accept/reject diff
-    /// before applying, instead of overwriting the text immediately. On by default.
-    pub ai_diff_review: bool,
-    /// Apply `.editorconfig` rules (indent style/size, trim/final-newline on save)
-    /// for opened files, overriding the global settings per file. On by default.
-    pub editorconfig: bool,
-    /// Auto-insert the matching closer when an opening bracket/quote is typed (and
-    /// delete both with Backspace inside an empty pair). On by default.
-    pub auto_pair: bool,
-    /// Show the git blame for the cursor's line inline (dimmed, end of line). Off
-    /// by default; toggle via **Git → Toggle Inline Blame**.
-    pub inline_blame: bool,
     /// Configured debug adapters (DAP), matched to files by extension. Empty by
     /// default — add the adapters you have installed.
     pub debug_adapters: Vec<vix_dap::DebugAdapter>,
@@ -237,6 +200,243 @@ pub struct Settings {
     /// Saved database connections for the **DB** menu (the `vix-db` crate spec). Passwords
     /// are never stored here; they are prompted for per session.
     pub db_connections: Vec<vix_db::connect::Connection>,
+}
+
+/// Line-number gutter and inline whitespace-glyph display toggles (T149 —
+/// see [`Settings`]'s own doc comment for why these are grouped).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GutterSettings {
+    /// Show the line-number gutter.
+    pub line_numbers: bool,
+    /// Show line numbers relative to the cursor line (hybrid: cursor line absolute).
+    pub relative_line_numbers: bool,
+    /// Render visible glyphs for whitespace (space, tab, line ending).
+    pub show_whitespace: bool,
+}
+
+impl Default for GutterSettings {
+    fn default() -> Self {
+        GutterSettings {
+            line_numbers: true,
+            relative_line_numbers: false,
+            show_whitespace: false,
+        }
+    }
+}
+
+/// Editor visual-aid toggles: how lines wrap, and what gets colored or
+/// highlighted while editing (T149).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EditorVisualSettings {
+    /// Wrap long lines across screen rows instead of scrolling horizontally.
+    pub soft_wrap: bool,
+    /// Color matching brackets by nesting depth (rainbow brackets).
+    pub rainbow_brackets: bool,
+    /// Passively highlight every occurrence of the word under the cursor.
+    pub highlight_word: bool,
+}
+
+/// Primary panel visibility on startup: the file explorer, message drawer,
+/// and bottom dock (T149).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PanelSettings {
+    /// Show the file explorer on startup.
+    pub show_explorer: bool,
+    /// Show the message drawer on startup.
+    pub show_messages: bool,
+    /// Show the bottom dock (log/output/data panel).
+    pub show_bottom_dock: bool,
+}
+
+impl Default for PanelSettings {
+    fn default() -> Self {
+        PanelSettings {
+            show_explorer: true,
+            show_messages: true,
+            show_bottom_dock: true,
+        }
+    }
+}
+
+/// Secondary panel visibility: the status bar, breadcrumb bar, and
+/// code-outline sidebar (T149).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SecondaryPanelSettings {
+    /// Show the bottom status bar.
+    pub show_status_bar: bool,
+    /// Show the breadcrumb bar (file ▸ enclosing symbol) above the editor.
+    pub show_breadcrumbs: bool,
+    /// Show the code-outline sidebar (symbol list that follows the cursor).
+    pub show_outline_dock: bool,
+}
+
+impl Default for SecondaryPanelSettings {
+    fn default() -> Self {
+        SecondaryPanelSettings {
+            show_status_bar: true,
+            show_breadcrumbs: false,
+            show_outline_dock: false,
+        }
+    }
+}
+
+/// Editor-adjacent chrome visibility: the scroll bar, minimap, and menu
+/// tooltips (T149).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ViewportSettings {
+    /// Show the editor's right-side scroll bar.
+    pub show_scrollbar: bool,
+    /// Show a code-overview minimap column at the right of the editor.
+    pub show_minimap: bool,
+    /// Show hover tooltips (help text) on the menu bar's menus and items.
+    pub show_menu_tooltips: bool,
+}
+
+impl Default for ViewportSettings {
+    fn default() -> Self {
+        ViewportSettings {
+            show_scrollbar: true,
+            show_minimap: false,
+            show_menu_tooltips: true,
+        }
+    }
+}
+
+/// Independent toggles that don't share a natural sibling group (T149):
+/// ephemeral preview tabs, sticky search highlights, and AI diff review.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MiscSettings {
+    /// Open single-clicked / arrow-scanned files in an ephemeral preview tab.
+    pub preview_tabs: bool,
+    /// Keep search-match highlights visible after the Find box closes ("sticky"
+    /// highlights), until they are explicitly toggled off. When false, closing
+    /// Find clears the highlights.
+    pub sticky_search_highlight: bool,
+    /// Review AI replace transforms (Annotate / Improve) as an accept/reject diff
+    /// before applying, instead of overwriting the text immediately. On by default.
+    pub ai_diff_review: bool,
+}
+
+impl Default for MiscSettings {
+    fn default() -> Self {
+        MiscSettings {
+            preview_tabs: true,
+            sticky_search_highlight: true,
+            ai_diff_review: true,
+        }
+    }
+}
+
+/// What happens to a file's content on save, before it's written (T149).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SaveSettings {
+    /// On save, strip trailing spaces/tabs from every line.
+    pub trim_trailing_whitespace: bool,
+    /// On save, append a final newline if the file does not end with one.
+    pub ensure_final_newline: bool,
+    /// On save, run the language server's formatter (when the file has one).
+    pub format_on_save: bool,
+}
+
+impl Default for SaveSettings {
+    fn default() -> Self {
+        SaveSettings {
+            trim_trailing_whitespace: true,
+            ensure_final_newline: true,
+            format_on_save: false,
+        }
+    }
+}
+
+/// Editor-session behaviors: periodic autosave, sticky scroll, and
+/// cross-session persistent undo (T149).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EditorBehaviorSettings {
+    /// Periodically save the active dirty file-backed buffer (every few seconds).
+    pub auto_save: bool,
+    /// Pin the enclosing scope's header line at the top of the editor while
+    /// scrolling (sticky scroll).
+    pub sticky_scroll: bool,
+    /// Persist each file's undo tree across sessions (restored on reopen when the
+    /// file content still matches).
+    pub persistent_undo: bool,
+}
+
+impl Default for EditorBehaviorSettings {
+    fn default() -> Self {
+        EditorBehaviorSettings {
+            auto_save: false,
+            sticky_scroll: true,
+            persistent_undo: true,
+        }
+    }
+}
+
+/// Typing-time behaviors: `.editorconfig` overrides, bracket/quote
+/// auto-pairing, and spellcheck underlines (T149).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TypingSettings {
+    /// Apply `.editorconfig` rules (indent style/size, trim/final-newline on save)
+    /// for opened files, overriding the global settings per file. On by default.
+    pub editorconfig: bool,
+    /// Auto-insert the matching closer when an opening bracket/quote is typed (and
+    /// delete both with Backspace inside an empty pair). On by default.
+    pub auto_pair: bool,
+    /// Underline misspelled words in comments and strings.
+    pub spellcheck: bool,
+}
+
+impl Default for TypingSettings {
+    fn default() -> Self {
+        TypingSettings {
+            editorconfig: true,
+            auto_pair: true,
+            spellcheck: false,
+        }
+    }
+}
+
+/// What happens when Vix starts (T149): restoring the previous session, and
+/// showing the first-run welcome dialog.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StartupSettings {
+    /// Reopen the previous session (open files, focused tab, cursor positions)
+    /// when Vix is launched in a workspace with no file given on the command
+    /// line. The session is saved per workspace root in `session.toml`.
+    pub restore_session: bool,
+    /// Show the welcome dialog on launch. Vix sets it to `false` and saves the
+    /// settings as soon as the dialog has been shown once, so it appears on the
+    /// first run only; set it back to `true` to see it again.
+    pub show_welcome_dialog: bool,
+}
+
+impl Default for StartupSettings {
+    fn default() -> Self {
+        StartupSettings {
+            restore_session: true,
+            show_welcome_dialog: true,
+        }
+    }
+}
+
+/// Whole-subsystem on/off switches (T149): the LSP client, the modal
+/// (Vim-style) editing engine, and inline git blame.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SubsystemSettings {
+    /// Master switch for Language Server Protocol features (diagnostics, hover,
+    /// go-to-definition, completion). When off, no servers are launched.
+    pub lsp_enabled: bool,
     /// Use `vix-modal`'s real mode engine (Normal/Insert/Visual/Visual Line,
     /// composable operators, counts, registers, text objects, dot-repeat) for
     /// the Vi and Spacemacs keymaps' Normal-mode vocabulary, instead of the
@@ -247,6 +447,19 @@ pub struct Settings {
     /// status notes) — turn this off to fall back to the original table if
     /// one of them matters to you.
     pub modal_engine: bool,
+    /// Show the git blame for the cursor's line inline (dimmed, end of line). Off
+    /// by default; toggle via **Git → Toggle Inline Blame**.
+    pub inline_blame: bool,
+}
+
+impl Default for SubsystemSettings {
+    fn default() -> Self {
+        SubsystemSettings {
+            lsp_enabled: true,
+            modal_engine: true,
+            inline_blame: false,
+        }
+    }
 }
 
 /// One configured language server (a `lsp_servers` entry).
@@ -266,31 +479,20 @@ pub const MAX_RECENT_FILES: usize = 15;
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            line_numbers: true,
-            relative_line_numbers: false,
-            show_whitespace: false,
-            soft_wrap: false,
-            show_explorer: true,
+            gutter: GutterSettings::default(),
+            editor_visual: EditorVisualSettings::default(),
+            panels: PanelSettings::default(),
+            secondary_panels: SecondaryPanelSettings::default(),
+            viewport: ViewportSettings::default(),
+            misc: MiscSettings::default(),
+            save: SaveSettings::default(),
+            editor_behavior: EditorBehaviorSettings::default(),
+            typing: TypingSettings::default(),
+            startup: StartupSettings::default(),
+            subsystems: SubsystemSettings::default(),
             explorer_delete: "trash".to_string(),
-            show_messages: true,
-            show_status_bar: true,
-            show_breadcrumbs: false,
-            show_outline_dock: false,
-            show_scrollbar: true,
-            show_bottom_dock: true,
             bottom_dock_height: 9,
             scrollback: 1000,
-            preview_tabs: true,
-            trim_trailing_whitespace: true,
-            ensure_final_newline: true,
-            format_on_save: false,
-            auto_save: false,
-            sticky_scroll: true,
-            rainbow_brackets: false,
-            persistent_undo: true,
-            show_minimap: false,
-            show_menu_tooltips: true,
-            highlight_word: false,
             indent_style: "spaces".to_string(),
             tab_width: 4,
             wrap_column: 80,
@@ -304,11 +506,8 @@ impl Default for Settings {
             recent_files: Vec::new(),
             recent_files_max: MAX_RECENT_FILES,
             command_recents: Vec::new(),
-            spellcheck: false,
             dictionary_path: String::new(),
-            lsp_enabled: true,
             lsp_servers: Vec::new(),
-            show_welcome_dialog: true,
             contacts_dir: String::new(),
             org_capture_templates: vix_org_capture::defaults(),
             org_priority_highest: '0',
@@ -316,8 +515,6 @@ impl Default for Settings {
             org_priority_default: '0',
             org_agenda_files: Vec::new(),
             time_zone: "UTC".to_string(),
-            restore_session: true,
-            sticky_search_highlight: true,
             // Placeholders are single-quoted by `ai_command_line`, so the
             // template must NOT add quotes of its own (doing so would let chat
             // text break out and inject shell commands).
@@ -326,17 +523,12 @@ impl Default for Settings {
             ai_endpoint: String::new(),
             ai_model: String::new(),
             ai_api_key_command: String::new(),
-            ai_diff_review: true,
-            editorconfig: true,
-            auto_pair: true,
-            inline_blame: false,
             debug_adapters: Vec::new(),
             test_command: "cargo test".to_string(),
             test_width: 40,
             project_snippets: "config/snippets/snippets.json".to_string(),
             coverage_path: String::new(),
             db_connections: Vec::new(),
-            modal_engine: true,
         }
     }
 }
@@ -506,7 +698,11 @@ fn sh_single_quote(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Settings, sh_single_quote};
+    use super::{
+        EditorBehaviorSettings, GutterSettings, PanelSettings, SaveSettings,
+        SecondaryPanelSettings, Settings, SubsystemSettings, TypingSettings, ViewportSettings,
+        sh_single_quote,
+    };
 
     #[test]
     fn t124_ai_provider_defaults_to_cli_with_no_http_config() {
@@ -588,5 +784,130 @@ mod tests {
             0o600
         );
         std::fs::remove_file(&path).ok();
+    }
+
+    /// T149: the whole point of `#[serde(flatten)]`-ing the bool groups
+    /// instead of e.g. nesting them under real TOML tables (`[gutter]`,
+    /// `[panels]`, …) is that `config.toml`'s on-disk shape doesn't change
+    /// at all — every setting is still one flat top-level key, exactly as
+    /// if `Settings` still declared it directly. A config file written by
+    /// the *old*, pre-T149 schema (flat keys, no group nesting) must still
+    /// load correctly, with the overridden keys taking effect and every
+    /// other key (bool or not) falling back to its default via
+    /// `#[serde(default)]` — including keys that now live in a different
+    /// Rust struct than the top-level one.
+    #[test]
+    fn old_flat_config_format_still_loads_correctly() {
+        let path = std::env::temp_dir().join(format!(
+            "vix-settings-old-format-{}.toml",
+            std::process::id()
+        ));
+        std::fs::write(
+            &path,
+            r#"
+line_numbers = false
+show_welcome_dialog = false
+ai_diff_review = false
+modal_engine = false
+theme = "light"
+"#,
+        )
+        .unwrap();
+        let s = Settings::load_from(&path);
+        std::fs::remove_file(&path).ok();
+
+        // The five keys present in the old-format file took effect...
+        assert!(!s.gutter.line_numbers, "line_numbers override applied");
+        assert!(
+            !s.startup.show_welcome_dialog,
+            "show_welcome_dialog override applied"
+        );
+        assert!(!s.misc.ai_diff_review, "ai_diff_review override applied");
+        assert!(!s.subsystems.modal_engine, "modal_engine override applied");
+        assert_eq!(s.theme, "light");
+        // ...and every key the old file didn't mention -- in every group,
+        // not just the one two keys above happened to touch -- still
+        // resolves to its real default, proving `#[serde(default)]`
+        // reaches through the flatten boundary correctly.
+        assert_eq!(
+            s.gutter.show_whitespace,
+            GutterSettings::default().show_whitespace
+        );
+        assert_eq!(
+            s.panels.show_explorer,
+            PanelSettings::default().show_explorer
+        );
+        assert_eq!(
+            s.secondary_panels.show_status_bar,
+            SecondaryPanelSettings::default().show_status_bar
+        );
+        assert_eq!(
+            s.viewport.show_scrollbar,
+            ViewportSettings::default().show_scrollbar
+        );
+        assert_eq!(
+            s.save.format_on_save,
+            SaveSettings::default().format_on_save
+        );
+        assert_eq!(
+            s.editor_behavior.auto_save,
+            EditorBehaviorSettings::default().auto_save
+        );
+        assert_eq!(s.typing.spellcheck, TypingSettings::default().spellcheck);
+        assert_eq!(
+            s.subsystems.lsp_enabled,
+            SubsystemSettings::default().lsp_enabled
+        );
+    }
+
+    /// A full round trip (`Settings::default()` saved, then reloaded)
+    /// preserves every field — sampled across every group plus a few
+    /// non-bool fields, not just the ones the test above happened to
+    /// override.
+    #[test]
+    fn default_settings_round_trip_through_toml_is_lossless() {
+        let path = std::env::temp_dir().join(format!(
+            "vix-settings-round-trip-{}.toml",
+            std::process::id()
+        ));
+        let original = Settings::default();
+        original.save_to(&path).unwrap();
+        let reloaded = Settings::load_from(&path);
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(reloaded.gutter.line_numbers, original.gutter.line_numbers);
+        assert_eq!(
+            reloaded.editor_visual.rainbow_brackets,
+            original.editor_visual.rainbow_brackets
+        );
+        assert_eq!(reloaded.panels.show_explorer, original.panels.show_explorer);
+        assert_eq!(
+            reloaded.secondary_panels.show_breadcrumbs,
+            original.secondary_panels.show_breadcrumbs
+        );
+        assert_eq!(
+            reloaded.viewport.show_minimap,
+            original.viewport.show_minimap
+        );
+        assert_eq!(reloaded.misc.preview_tabs, original.misc.preview_tabs);
+        assert_eq!(
+            reloaded.save.trim_trailing_whitespace,
+            original.save.trim_trailing_whitespace
+        );
+        assert_eq!(
+            reloaded.editor_behavior.sticky_scroll,
+            original.editor_behavior.sticky_scroll
+        );
+        assert_eq!(reloaded.typing.auto_pair, original.typing.auto_pair);
+        assert_eq!(
+            reloaded.startup.restore_session,
+            original.startup.restore_session
+        );
+        assert_eq!(
+            reloaded.subsystems.inline_blame,
+            original.subsystems.inline_blame
+        );
+        assert_eq!(reloaded.theme, original.theme);
+        assert_eq!(reloaded.tab_width, original.tab_width);
     }
 }
