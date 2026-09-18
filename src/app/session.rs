@@ -88,7 +88,7 @@ impl App {
     /// disabled or there is no saved session for this root. Called by `main`
     /// only when no file was given on the command line.
     pub fn restore_session(&mut self) {
-        if !self.settings.restore_session {
+        if !self.settings.startup.restore_session {
             return;
         }
         let key = self.session_key();
@@ -357,7 +357,7 @@ impl App {
         };
         self.explorer = Explorer::new(new_root.to_path_buf());
         self.lsp = crate::lsp::Lsp::new(
-            self.settings.lsp_enabled,
+            self.settings.subsystems.lsp_enabled,
             self.settings.lsp_servers.clone(),
             &self.workspace_folders,
         );

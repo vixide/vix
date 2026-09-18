@@ -11,7 +11,10 @@ use crate::common::*;
 fn vi_app(tag: &str, text: &str, modal_engine: bool) -> App {
     let mut app = app_with(Settings {
         keymap: "vi".to_string(),
-        modal_engine,
+        subsystems: SubsystemSettings {
+            modal_engine,
+            ..SubsystemSettings::default()
+        },
         ..Settings::default()
     });
     let dir = unique_dir(tag);

@@ -30,7 +30,7 @@ impl App {
     /// [`vix_modal::Mode::Insert`] (that path is still `modal_insert`,
     /// unchanged, checked by the caller before this ever runs).
     pub(super) fn modal_key(&mut self, key: KeyEvent) -> bool {
-        if !self.settings.modal_engine {
+        if !self.settings.subsystems.modal_engine {
             return false;
         }
         match self.modal_mode {

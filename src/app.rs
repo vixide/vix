@@ -2023,29 +2023,36 @@ impl App {
         // Apply the saved time zone so the clock panel and status bar use it.
         crate::time_zone_model::set_active(&settings.time_zone);
         let mut flags = crate::editor::Flags::empty();
-        flags.set(crate::editor::Flags::LINE_NUMBERS, settings.line_numbers);
+        flags.set(
+            crate::editor::Flags::LINE_NUMBERS,
+            settings.gutter.line_numbers,
+        );
         flags.set(
             crate::editor::Flags::RELATIVE_LINE_NUMBERS,
-            settings.relative_line_numbers,
+            settings.gutter.relative_line_numbers,
         );
         flags.set(
             crate::editor::Flags::SHOW_WHITESPACE,
-            settings.show_whitespace,
+            settings.gutter.show_whitespace,
         );
-        flags.set(crate::editor::Flags::SOFT_WRAP, settings.soft_wrap);
+        flags.set(
+            crate::editor::Flags::SOFT_WRAP,
+            settings.editor_visual.soft_wrap,
+        );
         let mut editor = Editor::new(flags, settings.indent_string());
         for tab in &mut editor.tabs {
-            tab.editor.set_auto_pair(settings.auto_pair);
-            tab.editor.set_rainbow_brackets(settings.rainbow_brackets);
+            tab.editor.set_auto_pair(settings.typing.auto_pair);
             tab.editor
-                .set_relative_line_numbers(settings.relative_line_numbers);
+                .set_rainbow_brackets(settings.editor_visual.rainbow_brackets);
+            tab.editor
+                .set_relative_line_numbers(settings.gutter.relative_line_numbers);
         }
         let mut messages = Messages::default();
         messages.advice(t!("msg.welcome").to_string());
         messages.info(t!("msg.welcome_hint").to_string());
 
         let lsp = crate::lsp::Lsp::new(
-            settings.lsp_enabled,
+            settings.subsystems.lsp_enabled,
             settings.lsp_servers.clone(),
             &[root.to_path_buf()],
         );
@@ -2193,12 +2200,12 @@ impl App {
             bookmarks: Vec::new(),
             nav_idx: 0,
             picker: None,
-            show_explorer: settings.show_explorer,
-            show_messages: settings.show_messages,
-            show_status_bar: settings.show_status_bar,
-            show_breadcrumbs: settings.show_breadcrumbs,
+            show_explorer: settings.panels.show_explorer,
+            show_messages: settings.panels.show_messages,
+            show_status_bar: settings.secondary_panels.show_status_bar,
+            show_breadcrumbs: settings.secondary_panels.show_breadcrumbs,
             zen_saved: None,
-            show_scrollbar: settings.show_scrollbar,
+            show_scrollbar: settings.viewport.show_scrollbar,
             overwrite: false,
             show_ruler: false,
             macro_recording: false,
@@ -2226,10 +2233,10 @@ impl App {
             git_head_cache: std::collections::HashMap::new(),
             coverage: None,
             coverage_visible: false,
-            spellcheck: settings.spellcheck,
+            spellcheck: settings.typing.spellcheck,
             speller: None,
             speller_locale: None,
-            show_bottom_dock: settings.show_bottom_dock,
+            show_bottom_dock: settings.panels.show_bottom_dock,
             bottom_dock: crate::bottom_dock::BottomDock::with_scrollback(settings.scrollback),
             bottom_hscroll: 0,
             explorer_hscroll: 0,
@@ -2322,9 +2329,9 @@ impl App {
     /// Called by `main` after construction; kept out of [`App::new`] so tests
     /// build a clean, overlay-free app.
     pub fn maybe_show_welcome(&mut self) {
-        if self.settings.show_welcome_dialog {
+        if self.settings.startup.show_welcome_dialog {
             self.welcome = Some(WelcomePanel::open(Self::welcome_lines()));
-            self.settings.show_welcome_dialog = false;
+            self.settings.startup.show_welcome_dialog = false;
             let _ = self.store_settings();
         }
     }
@@ -2564,45 +2571,9 @@ impl App {
             "view.right_dock" | "view.messages" => self.toggle_right_dock(),
             "view.status_bar" => self.toggle_status_bar(),
             "view.zen" => self.toggle_zen(),
-            "view.breadcrumbs" => {
-                self.show_breadcrumbs = !self.show_breadcrumbs;
-                self.settings.show_breadcrumbs = self.show_breadcrumbs;
-            }
             "view.outline_dock" => self.toggle_outline_dock(),
-            "view.trim_on_save" => {
-                self.settings.trim_trailing_whitespace = !self.settings.trim_trailing_whitespace;
-            }
-            "view.final_newline_on_save" => {
-                self.settings.ensure_final_newline = !self.settings.ensure_final_newline;
-            }
-            "view.format_on_save" => {
-                self.settings.format_on_save = !self.settings.format_on_save;
-                self.status =
-                    t!("status.format_on_save", on = self.settings.format_on_save).to_string();
-            }
-            "view.auto_save" => {
-                self.settings.auto_save = !self.settings.auto_save;
-                self.status = t!("status.auto_save", on = self.settings.auto_save).to_string();
-            }
-            "view.sticky_scroll" => {
-                self.settings.sticky_scroll = !self.settings.sticky_scroll;
-                self.status =
-                    t!("status.sticky_scroll", on = self.settings.sticky_scroll).to_string();
-            }
-            "view.minimap" => {
-                self.settings.show_minimap = !self.settings.show_minimap;
-                self.status = t!("status.minimap", on = self.settings.show_minimap).to_string();
-            }
+            a if self.run_view_settings_toggle(a) => {}
             "view.menu_tooltips" => self.toggle_menu_tooltips(),
-            "view.highlight_word" => {
-                self.settings.highlight_word = !self.settings.highlight_word;
-                if !self.settings.highlight_word {
-                    self.editor.set_word_marks(Vec::new());
-                }
-                self.word_highlight_key = None; // force a rebuild on next refresh
-                self.status =
-                    t!("status.highlight_word", on = self.settings.highlight_word).to_string();
-            }
             "view.scrollbar" => self.toggle_scrollbar(),
             "view.spellcheck" => self.toggle_spellcheck(),
             "view.auto_pair" => self.toggle_auto_pair(),
@@ -2624,6 +2595,73 @@ impl App {
             "tab.next" => self.editor.next_tab(),
             "tab.prev" => self.editor.prev_tab(),
             _ => return self.run_help_action(action),
+        }
+        true
+    }
+
+    /// The `view.*` actions that toggle one `Settings` bool (and, for
+    /// several, also update the status line) — split out of
+    /// `run_view_action` to keep it within the pedantic line-count limit
+    /// (T149: qualifying each field through its new `Settings` sub-struct
+    /// group lengthened these arms enough to tip it over). Returns `true`
+    /// if `action` was one of these.
+    fn run_view_settings_toggle(&mut self, action: &str) -> bool {
+        match action {
+            "view.breadcrumbs" => {
+                self.show_breadcrumbs = !self.show_breadcrumbs;
+                self.settings.secondary_panels.show_breadcrumbs = self.show_breadcrumbs;
+            }
+            "view.trim_on_save" => {
+                self.settings.save.trim_trailing_whitespace =
+                    !self.settings.save.trim_trailing_whitespace;
+            }
+            "view.final_newline_on_save" => {
+                self.settings.save.ensure_final_newline = !self.settings.save.ensure_final_newline;
+            }
+            "view.format_on_save" => {
+                self.settings.save.format_on_save = !self.settings.save.format_on_save;
+                self.status = t!(
+                    "status.format_on_save",
+                    on = self.settings.save.format_on_save
+                )
+                .to_string();
+            }
+            "view.auto_save" => {
+                self.settings.editor_behavior.auto_save = !self.settings.editor_behavior.auto_save;
+                self.status = t!(
+                    "status.auto_save",
+                    on = self.settings.editor_behavior.auto_save
+                )
+                .to_string();
+            }
+            "view.sticky_scroll" => {
+                self.settings.editor_behavior.sticky_scroll =
+                    !self.settings.editor_behavior.sticky_scroll;
+                self.status = t!(
+                    "status.sticky_scroll",
+                    on = self.settings.editor_behavior.sticky_scroll
+                )
+                .to_string();
+            }
+            "view.minimap" => {
+                self.settings.viewport.show_minimap = !self.settings.viewport.show_minimap;
+                self.status =
+                    t!("status.minimap", on = self.settings.viewport.show_minimap).to_string();
+            }
+            "view.highlight_word" => {
+                self.settings.editor_visual.highlight_word =
+                    !self.settings.editor_visual.highlight_word;
+                if !self.settings.editor_visual.highlight_word {
+                    self.editor.set_word_marks(Vec::new());
+                }
+                self.word_highlight_key = None; // force a rebuild on next refresh
+                self.status = t!(
+                    "status.highlight_word",
+                    on = self.settings.editor_visual.highlight_word
+                )
+                .to_string();
+            }
+            _ => return false,
         }
         true
     }
@@ -3486,7 +3524,7 @@ impl App {
         // Format on save: re-format via the language server, then re-save once the
         // edits land (see `apply_lsp_edits`). The plain save above already wrote
         // the file, so it is never lost if formatting is slow or unsupported.
-        if self.settings.format_on_save
+        if self.settings.save.format_on_save
             && let Some(p) = self.active_path()
             && self.lsp.handles(&p)
         {
@@ -3510,7 +3548,7 @@ impl App {
                     self.lsp.did_save(&p, &text);
                 }
                 // Persist the undo tree alongside the saved content.
-                if self.settings.persistent_undo
+                if self.settings.editor_behavior.persistent_undo
                     && let Some(tab) = self.editor.active_tab()
                 {
                     crate::undo_store::save(&p, &tab.text(), tab.editor.code_ref().history());
@@ -3529,11 +3567,11 @@ impl App {
     /// On-save normalization options derived from the current settings.
     fn save_options(&self) -> crate::editor::SaveOptions {
         let mut opts = crate::editor::SaveOptions {
-            trim_trailing_whitespace: self.settings.trim_trailing_whitespace,
-            ensure_final_newline: self.settings.ensure_final_newline,
+            trim_trailing_whitespace: self.settings.save.trim_trailing_whitespace,
+            ensure_final_newline: self.settings.save.ensure_final_newline,
         };
         // Let the active file's .editorconfig override the global on-save rules.
-        if self.settings.editorconfig
+        if self.settings.typing.editorconfig
             && let Some(path) = self.editor.active_tab().and_then(|t| t.path.as_deref())
         {
             let ec = crate::editorconfig::resolve(path);
@@ -3553,7 +3591,7 @@ impl App {
     /// active file in the tree.
     fn toggle_left_dock(&mut self) {
         self.show_explorer = !self.show_explorer;
-        self.settings.show_explorer = self.show_explorer;
+        self.settings.panels.show_explorer = self.show_explorer;
         if self.show_explorer
             && let Some(p) = self.editor.active_tab().and_then(|t| t.path.clone())
         {
@@ -3564,13 +3602,13 @@ impl App {
     /// Toggle the right dock (the message drawer).
     fn toggle_right_dock(&mut self) {
         self.show_messages = !self.show_messages;
-        self.settings.show_messages = self.show_messages;
+        self.settings.panels.show_messages = self.show_messages;
     }
 
     /// Toggle the bottom status bar, persisting the choice.
     fn toggle_status_bar(&mut self) {
         self.show_status_bar = !self.show_status_bar;
-        self.settings.show_status_bar = self.show_status_bar;
+        self.settings.secondary_panels.show_status_bar = self.show_status_bar;
     }
 
     /// Toggle zen (focus) mode: hide the explorer, messages, bottom dock, and
@@ -3607,7 +3645,7 @@ impl App {
     /// scroll is off, the top is visible, or there is no enclosing scope.
     #[must_use]
     pub fn sticky_header(&self) -> Option<String> {
-        if !self.settings.sticky_scroll {
+        if !self.settings.editor_behavior.sticky_scroll {
             return None;
         }
         let tab = self.editor.active_tab()?;
@@ -3652,7 +3690,7 @@ impl App {
     /// Toggle the bottom dock (log/output/data panel), persisting the choice.
     fn toggle_bottom_dock(&mut self) {
         self.show_bottom_dock = !self.show_bottom_dock;
-        self.settings.show_bottom_dock = self.show_bottom_dock;
+        self.settings.panels.show_bottom_dock = self.show_bottom_dock;
         if !self.show_bottom_dock && self.focus == Focus::BottomDock {
             self.focus = Focus::Editor;
         }
@@ -3661,7 +3699,7 @@ impl App {
     /// Toggle the editor's right-side scroll bar, persisting the choice.
     fn toggle_scrollbar(&mut self) {
         self.show_scrollbar = !self.show_scrollbar;
-        self.settings.show_scrollbar = self.show_scrollbar;
+        self.settings.viewport.show_scrollbar = self.show_scrollbar;
         self.status = if self.show_scrollbar {
             t!("status.scrollbar_on")
         } else {
@@ -3671,12 +3709,12 @@ impl App {
     }
 
     /// Toggle whether the menu bar shows hover tooltips (help text) for its menus
-    /// and items. Persisted via `settings.show_menu_tooltips`.
+    /// and items. Persisted via `settings.viewport.show_menu_tooltips`.
     fn toggle_menu_tooltips(&mut self) {
-        self.settings.show_menu_tooltips = !self.settings.show_menu_tooltips;
+        self.settings.viewport.show_menu_tooltips = !self.settings.viewport.show_menu_tooltips;
         self.status = t!(
             "status.menu_tooltips",
-            on = self.settings.show_menu_tooltips
+            on = self.settings.viewport.show_menu_tooltips
         )
         .to_string();
     }
@@ -4304,7 +4342,7 @@ impl App {
     /// choice and refreshing the marks on the active buffer.
     fn toggle_spellcheck(&mut self) {
         self.spellcheck = !self.spellcheck;
-        self.settings.spellcheck = self.spellcheck;
+        self.settings.typing.spellcheck = self.spellcheck;
         if !self.spellcheck {
             self.speller = None;
             self.speller_locale = None;
@@ -4629,7 +4667,7 @@ impl App {
     /// Periodically save the active dirty, file-backed buffer when auto-save is
     /// enabled (every few seconds). Uses a plain write (no format-on-save churn).
     pub fn poll_auto_save(&mut self) {
-        if !self.settings.auto_save {
+        if !self.settings.editor_behavior.auto_save {
             return;
         }
         if self
@@ -4652,7 +4690,7 @@ impl App {
     /// the cursor in the active buffer (recomputed only when the buffer or cursor
     /// changes). Clears the marks when the cursor is not on a word.
     pub fn refresh_word_highlight(&mut self) {
-        if !self.settings.highlight_word {
+        if !self.settings.editor_visual.highlight_word {
             return;
         }
         let key = self.editor.active_tab().filter(|t| !t.is_image()).map(|t| {
@@ -5741,7 +5779,7 @@ impl App {
             .flags
             .set(crate::editor::Flags::LINE_NUMBERS, on);
         self.editor.refresh_line_numbers();
-        self.settings.line_numbers = on;
+        self.settings.gutter.line_numbers = on;
         self.status = if on {
             t!("status.line_numbers_on")
         } else {
@@ -5809,8 +5847,8 @@ impl App {
     /// Toggle relative (hybrid) line numbering, mirrored across every tab and
     /// persisted.
     fn toggle_relative_line_numbers(&mut self) {
-        let on = !self.settings.relative_line_numbers;
-        self.settings.relative_line_numbers = on;
+        let on = !self.settings.gutter.relative_line_numbers;
+        self.settings.gutter.relative_line_numbers = on;
         self.editor
             .flags
             .set(crate::editor::Flags::RELATIVE_LINE_NUMBERS, on);
@@ -5833,7 +5871,7 @@ impl App {
             .flags
             .set(crate::editor::Flags::SHOW_WHITESPACE, on);
         self.editor.refresh_whitespace();
-        self.settings.show_whitespace = on;
+        self.settings.gutter.show_whitespace = on;
         self.status = if on {
             t!("status.whitespace_on")
         } else {
@@ -5852,7 +5890,7 @@ impl App {
             .map_or(fallback, |t| t.editor.toggle_soft_wrap());
         self.editor.flags.set(crate::editor::Flags::SOFT_WRAP, on);
         self.editor.refresh_soft_wrap();
-        self.settings.soft_wrap = on;
+        self.settings.editor_visual.soft_wrap = on;
         self.status = if on {
             t!("status.soft_wrap_on")
         } else {
@@ -7077,7 +7115,7 @@ impl App {
 
     /// Arrow-scan preview: opening the highlighted file in an ephemeral tab.
     fn preview_selected(&mut self) {
-        if !self.settings.preview_tabs {
+        if !self.settings.misc.preview_tabs {
             return;
         }
         if let Some(node) = self.explorer.selected_node()
@@ -7130,7 +7168,7 @@ impl App {
                     self.editor.promote_active();
                     self.record_recent(path);
                     // Restore the persisted undo tree for a freshly opened file.
-                    if opened_new && self.settings.persistent_undo {
+                    if opened_new && self.settings.editor_behavior.persistent_undo {
                         self.restore_persistent_undo(path);
                     }
                 }
@@ -7159,15 +7197,15 @@ impl App {
     /// Apply the `.editorconfig` indent (style/size) for `path` to the active tab,
     /// when `EditorConfig` support is enabled and the file's config specifies one.
     fn apply_editorconfig_indent(&mut self, path: &Path) {
-        let auto_pair = self.settings.auto_pair;
-        let rainbow = self.settings.rainbow_brackets;
-        let relative = self.settings.relative_line_numbers;
+        let auto_pair = self.settings.typing.auto_pair;
+        let rainbow = self.settings.editor_visual.rainbow_brackets;
+        let relative = self.settings.gutter.relative_line_numbers;
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_auto_pair(auto_pair);
             tab.editor.set_rainbow_brackets(rainbow);
             tab.editor.set_relative_line_numbers(relative);
         }
-        if !self.settings.editorconfig {
+        if !self.settings.typing.editorconfig {
             return;
         }
         if let Some(indent) = crate::editorconfig::resolve(path).indent_string()
@@ -7212,8 +7250,8 @@ impl App {
 
     /// Toggle bracket/quote auto-pairing for every open buffer and persist it.
     fn toggle_auto_pair(&mut self) {
-        self.settings.auto_pair = !self.settings.auto_pair;
-        let on = self.settings.auto_pair;
+        self.settings.typing.auto_pair = !self.settings.typing.auto_pair;
+        let on = self.settings.typing.auto_pair;
         for tab in &mut self.editor.tabs {
             tab.editor.set_auto_pair(on);
         }
@@ -7227,8 +7265,9 @@ impl App {
 
     /// Toggle rainbow (depth-colored) brackets for every open buffer and persist it.
     fn toggle_rainbow_brackets(&mut self) {
-        self.settings.rainbow_brackets = !self.settings.rainbow_brackets;
-        let on = self.settings.rainbow_brackets;
+        self.settings.editor_visual.rainbow_brackets =
+            !self.settings.editor_visual.rainbow_brackets;
+        let on = self.settings.editor_visual.rainbow_brackets;
         for tab in &mut self.editor.tabs {
             tab.editor.set_rainbow_brackets(on);
         }
@@ -7850,7 +7889,7 @@ impl App {
             self.messages_mouse(mouse);
             return;
         }
-        if self.settings.show_outline_dock
+        if self.settings.secondary_panels.show_outline_dock
             && rect_contains(self.layout.outline_dock, col, row)
             && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
         {
@@ -7880,7 +7919,7 @@ impl App {
         let a = self.layout.bottom_dock;
         let total = self.bottom_dock.lines.len();
         let viewport = a.height.saturating_sub(1) as usize;
-        let sb_shown = self.settings.show_scrollbar && total > viewport && a.width > 1;
+        let sb_shown = self.settings.viewport.show_scrollbar && total > viewport && a.width > 1;
         let sb_col = a.x + a.width.saturating_sub(1);
         if sb_shown
             && mouse.column == sb_col
@@ -8159,7 +8198,7 @@ impl App {
         // tree instead of selecting a row.
         let total = self.explorer.nodes.len();
         let viewport = a.height.saturating_sub(1) as usize;
-        let sb_shown = self.settings.show_scrollbar && total > viewport && a.width > 1;
+        let sb_shown = self.settings.viewport.show_scrollbar && total > viewport && a.width > 1;
         let sb_col = a.x + a.width.saturating_sub(2);
         if sb_shown
             && mouse.column == sb_col
@@ -8218,7 +8257,7 @@ impl App {
         // Scrollbar (rightmost column) press/drag scrolls the message list.
         let total = self.messages.items.len();
         let viewport = area.height.saturating_sub(1) as usize;
-        let sb_shown = self.settings.show_scrollbar && total > viewport && area.width > 1;
+        let sb_shown = self.settings.viewport.show_scrollbar && total > viewport && area.width > 1;
         let sb_col = area.x + area.width.saturating_sub(1);
         if sb_shown
             && mouse.column == sb_col
@@ -9862,7 +9901,7 @@ impl App {
     /// else `AiDest::Replace` — the choice every fixed-instruction AI text
     /// transform (Annotate/Improve/generate-doc-comment) makes the same way.
     fn ai_replace_or_diff_dest(&self, tab: usize, target: AiTarget) -> AiDest {
-        if self.settings.ai_diff_review {
+        if self.settings.misc.ai_diff_review {
             AiDest::Diff { tab, target }
         } else {
             AiDest::Replace { tab, target }
@@ -10248,7 +10287,7 @@ impl App {
                         let mut insert = text.to_string();
                         insert.push('\n');
                         let target = AiTarget::Range(at, at);
-                        if self.settings.ai_diff_review {
+                        if self.settings.misc.ai_diff_review {
                             self.open_ai_diff(tab, target, &insert);
                         } else {
                             self.apply_ai_replace(tab, target, &insert);
@@ -10856,7 +10895,8 @@ impl App {
 
     /// Toggle the persistent outline sidebar and persist the preference.
     fn toggle_outline_dock(&mut self) {
-        self.settings.show_outline_dock = !self.settings.show_outline_dock;
+        self.settings.secondary_panels.show_outline_dock =
+            !self.settings.secondary_panels.show_outline_dock;
         self.refresh_outline_dock();
     }
 
@@ -10864,7 +10904,7 @@ impl App {
     /// and keep its highlight on the symbol nearest the cursor. Cheap between
     /// changes (cached by tab + revision). Called once per event-loop iteration.
     pub fn refresh_outline_dock(&mut self) {
-        if !self.settings.show_outline_dock {
+        if !self.settings.secondary_panels.show_outline_dock {
             self.outline_dock = None;
             self.outline_dock_key = None;
             return;
@@ -11118,7 +11158,7 @@ impl App {
     fn end_search(&mut self) {
         // Sticky highlights stay visible after the Find box closes; otherwise
         // clear them. Either way the search bar itself goes away.
-        if !self.settings.sticky_search_highlight {
+        if !self.settings.misc.sticky_search_highlight {
             self.clear_marks();
         }
         self.search = None;
@@ -12913,14 +12953,14 @@ impl App {
             Ok(r) => r,
             Err(e) => {
                 self.show_bottom_dock = true;
-                self.settings.show_bottom_dock = true;
+                self.settings.panels.show_bottom_dock = true;
                 self.bottom_dock.push(format!("[bad regex: {e}]"));
                 self.status = t!("msg.bad_regex", error = e).to_string();
                 return;
             }
         };
         self.show_bottom_dock = true;
-        self.settings.show_bottom_dock = true;
+        self.settings.panels.show_bottom_dock = true;
         self.bottom_dock.push(format!("$ search \"{query}\""));
         let mut count = 0usize;
         let mut files = 0usize;
@@ -13036,7 +13076,7 @@ impl App {
             return;
         }
         self.show_bottom_dock = true;
-        self.settings.show_bottom_dock = true;
+        self.settings.panels.show_bottom_dock = true;
         self.bottom_dock.push(format!("$ {cmd}"));
 
         // Merge the whole command's stderr into stdout so one pipe carries both.
@@ -14026,7 +14066,7 @@ mod tests {
     fn highlight_word_marks_all_occurrences_under_the_cursor() {
         let mut app = App::new(std::env::temp_dir(), Settings::default());
         app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
-        app.settings.highlight_word = true;
+        app.settings.editor_visual.highlight_word = true;
         app.editor.new_tab_with_content("foo bar foo baz foo");
         // Cursor at offset 0 sits on the first "foo".
         if let Some(t) = app.editor.active_tab_mut() {

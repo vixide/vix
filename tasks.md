@@ -2540,6 +2540,44 @@ and its own gate run, zero intended behavior change unless stated.
   five structs already converted (each was ~20-30 call sites) — that's
   *why* it was worth measuring and checking in on rather than starting
   on the strength of the other five going smoothly.
+  **`Settings` done 2026-09-18 (6/7)**, on an explicit user go-ahead to
+  do the App/Settings portion after all. Exactly the verified plan
+  above: its 32 `bool` fields (the note's "31" undercounted by one)
+  grouped into 11 small `#[serde(flatten)]`'d sub-structs
+  (`GutterSettings`, `EditorVisualSettings`, `PanelSettings`,
+  `SecondaryPanelSettings`, `ViewportSettings`, `MiscSettings`,
+  `SaveSettings`, `EditorBehaviorSettings`, `TypingSettings`,
+  `StartupSettings`, `SubsystemSettings`), each ≤3 bools — the lint's
+  default threshold is 3, so 32 bools need ≥11 groups, and a couple of
+  groups are honestly "unrelated toggles with no natural sibling"
+  (`MiscSettings`) rather than pretending at cohesion. The `Settings`
+  `#[allow(clippy::struct_excessive_bools)]` is gone. On-disk
+  `config.toml` is byte-for-byte unchanged, now *tested* rather than
+  asserted: 2 new unit tests load a pre-T149 flat-key config (overrides
+  land in the right group; untouched keys in every group still get their
+  defaults through the flatten boundary) and round-trip
+  `Settings::default()`. Call sites: 119 mechanical `settings.<field>` →
+  `settings.<group>.<field>` rewrites across 12 files, deliberately
+  scoped to a `settings.` prefix — `App` has its *own* `show_explorer`/
+  `show_messages`/`show_status_bar`/`show_scrollbar`/`show_bottom_dock`/
+  `show_breadcrumbs`/`spellcheck` bools (runtime UI state, distinct from
+  the persisted defaults), so a blind rename would have corrupted those;
+  the compiler then found the 2 strays the prefix scope missed (locals
+  holding a `Settings` directly). Two real knock-ons a mechanical pass
+  wouldn't predict: (1) `examples/list_commands.rs`'s settings-doc
+  generator parsed `pub struct Settings { .. }`'s literal source text and
+  would have emitted 11 bogus `gutter: GutterSettings` rows while
+  dropping all 32 real keys — rewritten to parse every `pub struct` and
+  expand flatten fields in place (`docs/reference/settings.md` diff is a
+  pure reorder, still 68 settings); (2) the longer qualified paths tipped
+  `run_view_action` over the 100-line pedantic limit, and splitting 8
+  arms into `run_view_settings_toggle` then silently dropped those 8
+  action ids from `docs/reference/actions.md` (661→653) because
+  `vix_action_catalog::dispatch_scan::DISPATCHERS` is an explicit
+  function list — caught only by the gate's regenerate-and-diff step, not
+  by `tests/action_catalog.rs` (whose assertions are "everything found
+  is titled", not "everything expected was found"); fixed by registering
+  the new dispatcher. `App` (19 bools) is the one remaining struct.
 - [x] **T150 — Remove the two crate-level blanket allows.** Done. Both
   gone, no per-expression allow needed to replace either: `multicursor.rs`'s
   `multi_insert`/`multi_delete` — the only cast sites in the file —

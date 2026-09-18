@@ -16,7 +16,10 @@ use crate::common::*;
 fn app_with_canned_ai_reply(dir: &Path, output: &str, ai_diff_review: bool) -> App {
     let settings = Settings {
         ai_command: format!("printf '%s' '{output}'"),
-        ai_diff_review,
+        misc: MiscSettings {
+            ai_diff_review,
+            ..MiscSettings::default()
+        },
         ..Settings::default()
     };
     let mut app = App::new(dir.to_path_buf(), settings).with_session_path(isolated_session_path());

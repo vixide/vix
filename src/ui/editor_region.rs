@@ -25,7 +25,7 @@ pub(super) fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) 
     if panes.is_empty() {
         // Carve a minimap column from the right edge (when enabled and there's
         // room); the remainder splits into editor text + scrollbar as before.
-        let (inner, minimap_area) = if app.settings.show_minimap && inner.width > 40 {
+        let (inner, minimap_area) = if app.settings.viewport.show_minimap && inner.width > 40 {
             let s = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Min(1), Constraint::Length(MINIMAP_WIDTH)])
@@ -214,7 +214,8 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         let text_visible = (text.width as usize).saturating_sub(gutter);
         // A horizontal scrollbar appears when not soft-wrapping and a line
         // overflows the visible text width (and the scrollbar is enabled).
-        let hbar = app.settings.show_scrollbar && !soft && text.height > 1 && maxw > text_visible;
+        let hbar =
+            app.settings.viewport.show_scrollbar && !soft && text.height > 1 && maxw > text_visible;
         let editor_area = if hbar {
             Rect {
                 height: text.height - 1,

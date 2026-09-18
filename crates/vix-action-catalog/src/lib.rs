@@ -744,6 +744,7 @@ pub mod dispatch_scan {
         ("src/app.rs", "run_app_action"),
         ("src/app.rs", "run_help_action"),
         ("src/app.rs", "run_view_action"),
+        ("src/app.rs", "run_view_settings_toggle"),
         ("src/app.rs", "run_project_action"),
         ("src/app.rs", "db_action"),
         ("src/app.rs", "open_edit_surface"),

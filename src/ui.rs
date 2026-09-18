@@ -103,7 +103,7 @@ fn body_columns(app: &App, body: Rect) -> BodyColumns {
             app.settings.messages_width.clamp(12, dock_max),
         ));
     }
-    if app.settings.show_outline_dock {
+    if app.settings.secondary_panels.show_outline_dock {
         constraints.push(Constraint::Length(
             app.settings.outline_width.clamp(12, dock_max),
         ));
@@ -131,7 +131,11 @@ fn body_columns(app: &App, body: Rect) -> BodyColumns {
     let explorer_rect = app.show_explorer.then(|| take(&mut ci));
     let center_rect = take(&mut ci);
     let messages_rect = app.show_messages.then(|| take(&mut ci));
-    let outline_rect = app.settings.show_outline_dock.then(|| take(&mut ci));
+    let outline_rect = app
+        .settings
+        .secondary_panels
+        .show_outline_dock
+        .then(|| take(&mut ci));
     let debug_rect = app.show_debug_panel.then(|| take(&mut ci));
     let test_rect = app.show_test_panel.then(|| take(&mut ci));
     BodyColumns {
