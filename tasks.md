@@ -3709,6 +3709,32 @@ and its own gate run, zero intended behavior change unless stated.
     rewritten to not exercise it (scrolls through real syntax-highlighted
     code instead of opening the Theme Editor) rather than ship a demo GIF
     that visibly shows internal key names.
+    Follow-up narrowing (still not conclusive, but rules a few things
+    out): it is **not** "every key this session added to
+    `palette::COMMANDS`" — `git.stage_hunk`/`git.unstage_hunk` (added the
+    same way, same session) render correctly live (`Stage Hunk`/
+    `Unstage Hunk`, confirmed in the palette results list itself, not just
+    the action running), while `view.theme_edit` (added identically)
+    doesn't. Not key length or segment count either —
+    `menu.item.edit.structural_replace` (34 chars, 4 dot-segments) and
+    `menu.item.git.stage_hunk` (24 chars, 4 dot-segments) are the same
+    shape; one fails, one doesn't. Not a stray duplicate key elsewhere in
+    the catalog, and not a hidden-character/line-ending issue in the
+    source YAML (checked both directly, byte for byte). One real,
+    possibly-related lead worth starting from: `vix-i18n`'s own
+    `[profile.dev.package.vix-i18n]` comment (`Cargo.toml`, T148(b))
+    documents that its `i18n!` macro expands to *one function* that
+    sequentially `.insert()`s every `(key, locale)` pair into a `HashMap`
+    — "tens of thousands of statements in a single ... frame" — and that
+    this already overflowed the default debug thread stack once before
+    (fixed by building just that one crate at a real optimization level).
+    A single-function, tens-of-thousands-of-sequential-inserts codegen
+    strategy is exactly the shape of thing that could plausibly have a
+    *different*, more subtle failure mode for a handful of entries — worth
+    a debug build of `vix-i18n` itself (not just the workspace) and
+    stepping through (or instrumenting) that generated insert function
+    around where `ui.theme_editor_title`/`menu.item.edit.structural_
+    replace` land, before assuming anything at the call sites.
   - **8 real GIFs rendered, reviewed frame-by-frame, and committed**
     (`docs/demos/*.gif`, ~1.1 MB combined), overview embedded in
     `index.md`'s (README's) `## Demos` section per the task's own ask.
