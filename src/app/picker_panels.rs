@@ -13,7 +13,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
-use super::{App, AsciiPanel, NerdPalette, Prompt, PromptKind, X11Panel, rect_contains};
+use super::{App, AppFlags, AsciiPanel, NerdPalette, Prompt, PromptKind, X11Panel, rect_contains};
 use crate::settings::Settings;
 
 impl App {
@@ -219,7 +219,7 @@ impl App {
             KeyCode::Enter => self.use_selected_x11(),
             KeyCode::Esc => {
                 self.x11_panel = None;
-                self.theme_editor_picking = false;
+                self.flags.remove(AppFlags::THEME_EDITOR_PICKING);
             }
             _ => {}
         }
@@ -253,7 +253,7 @@ impl App {
         let Some(p) = self.x11_panel.as_ref() else {
             return;
         };
-        if self.theme_editor_picking {
+        if self.flags.contains(AppFlags::THEME_EDITOR_PICKING) {
             let c = p.selected_color();
             if let Some(editor) = self.theme_editor.as_mut() {
                 editor.apply_color([c.r, c.g, c.b]);
@@ -261,7 +261,7 @@ impl App {
                 self.editor.refresh_theme();
             }
             self.x11_panel = None;
-            self.theme_editor_picking = false;
+            self.flags.remove(AppFlags::THEME_EDITOR_PICKING);
             return;
         }
         let hex = p.selected_hex().to_string();
@@ -319,7 +319,7 @@ impl App {
             // slot's new color (see `use_selected_x11`'s theme-editor branch).
             KeyCode::Enter => {
                 if self.theme_editor.is_some() {
-                    self.theme_editor_picking = true;
+                    self.flags.insert(AppFlags::THEME_EDITOR_PICKING);
                     self.x11_panel = Some(X11Panel::open());
                 }
             }
@@ -346,7 +346,7 @@ impl App {
         if let Some(p) = self.theme_editor.as_mut() {
             let idx = p.scroll + row_in_view;
             if p.select_index(idx) {
-                self.theme_editor_picking = true;
+                self.flags.insert(AppFlags::THEME_EDITOR_PICKING);
                 self.x11_panel = Some(X11Panel::open());
             }
         }
@@ -357,7 +357,7 @@ impl App {
     pub(super) fn close_theme_editor(&mut self) {
         self.theme_editor = None;
         self.x11_panel = None;
-        self.theme_editor_picking = false;
+        self.flags.remove(AppFlags::THEME_EDITOR_PICKING);
         if let Some(name) = self.theme_editor_baseline.take() {
             Self::apply_saved_theme(&name);
             self.editor.refresh_theme();

@@ -431,7 +431,7 @@ fn git_open_at_revision_with_an_unknown_revision_reports_an_error() {
 fn refresh_git_populates_branch_when_in_a_repo() {
     let mut app = app_at(Path::new("."));
     app.refresh_git();
-    if app.git_repo {
+    if app.flags.contains(AppFlags::GIT_REPO) {
         assert!(app.git_branch.is_some(), "a repo reports a branch");
     }
     // The dirty flag is always consistent with the cached status list.

@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 
-use super::{App, Focus, ProjectHistory, WorkspaceChooser, node_to_pane, pane_to_node};
+use super::{App, AppFlags, Focus, ProjectHistory, WorkspaceChooser, node_to_pane, pane_to_node};
 use crate::explorer::Explorer;
 use crate::settings::Settings;
 
@@ -220,7 +220,7 @@ impl App {
         if let Some(prior) = session.workspace(&key) {
             Self::carry_forward_project_fields(&mut ws, prior);
         }
-        if self.project_session_loaded {
+        if self.flags.contains(AppFlags::PROJECT_SESSION_LOADED) {
             self.fill_project_fields(&mut ws);
         }
         session.set_workspace(ws);
@@ -231,10 +231,10 @@ impl App {
     /// and last-run command from the session store, at most once per run.
     /// A no-op once already loaded (whether or not a saved session existed).
     pub(super) fn ensure_project_session_loaded(&mut self) {
-        if self.project_session_loaded {
+        if self.flags.contains(AppFlags::PROJECT_SESSION_LOADED) {
             return;
         }
-        self.project_session_loaded = true;
+        self.flags.insert(AppFlags::PROJECT_SESSION_LOADED);
         let key = self.session_key();
         let Some(ws) = self.load_session().workspace(&key).cloned() else {
             return;

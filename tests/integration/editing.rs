@@ -853,7 +853,10 @@ fn mode_and_suspend_actions() {
     );
     let mut app = app_at(Path::new("."));
     app.run_action("suspend");
-    assert!(app.suspend_requested, "suspend flags the main loop");
+    assert!(
+        app.flags.contains(AppFlags::SUSPEND_REQUESTED),
+        "suspend flags the main loop"
+    );
 }
 
 #[test]
@@ -1055,7 +1058,7 @@ fn overwrite_mode_types_over_characters() {
     type_str(&mut app, "abc");
     app.run_action("edit.go_first"); // cursor to start of line 0
     app.run_action("toggle_overwrite_mode");
-    assert!(app.overwrite);
+    assert!(app.flags.contains(AppFlags::OVERWRITE));
     app.on_key(key('X'));
     // 'X' overwrites 'a' rather than inserting before it.
     assert_eq!(app.editor.active_tab().unwrap().text(), "Xbc");
@@ -1626,7 +1629,7 @@ fn goto_line_moves_cursor() {
 fn quit_action_sets_flag() {
     let mut app = app_at(Path::new("."));
     app.on_key(ctrl('q'));
-    assert!(app.should_quit);
+    assert!(app.flags.contains(AppFlags::SHOULD_QUIT));
 }
 
 #[test]
@@ -2743,11 +2746,14 @@ fn quitting_with_a_dirty_tab_prompts_then_quits_on_discard() {
     app.run_action("file.quit");
     assert!(app.unsaved.is_some(), "a dirty quit prompts first");
     assert!(
-        !app.should_quit,
+        !app.flags.contains(AppFlags::SHOULD_QUIT),
         "quit is deferred until the tab is resolved"
     );
     app.on_key(key('d')); // discard -> no more dirty tabs -> quit
-    assert!(app.should_quit, "discarding the last dirty tab quits");
+    assert!(
+        app.flags.contains(AppFlags::SHOULD_QUIT),
+        "discarding the last dirty tab quits"
+    );
 }
 
 #[test]
@@ -2776,15 +2782,21 @@ fn spellcheck_toggle_persists_and_clears_when_off() {
     // Toggling the setting works without a dictionary present (graceful no-op):
     // enabling sets the flag; disabling clears marks and the flag.
     let mut app = app_at(Path::new("."));
-    assert!(!app.spellcheck);
+    assert!(!app.flags.contains(AppFlags::SPELLCHECK));
     app.run_action("view.spellcheck");
-    assert!(app.spellcheck, "toggle enables spellcheck");
+    assert!(
+        app.flags.contains(AppFlags::SPELLCHECK),
+        "toggle enables spellcheck"
+    );
     assert!(
         app.settings.typing.spellcheck,
         "the setting is updated for persistence"
     );
     app.run_action("view.spellcheck");
-    assert!(!app.spellcheck, "toggle disables spellcheck");
+    assert!(
+        !app.flags.contains(AppFlags::SPELLCHECK),
+        "toggle disables spellcheck"
+    );
     assert!(
         app.editor
             .active_tab()

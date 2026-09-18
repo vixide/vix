@@ -13,7 +13,7 @@
 
 use std::path::{Path, PathBuf};
 
-use super::{App, Prompt, PromptKind};
+use super::{App, AppFlags, Prompt, PromptKind};
 
 impl App {
     /// Dispatch an Org-roam / Org-node action. Returns `true` if `action` was
@@ -53,7 +53,7 @@ impl App {
             "roam.dailies_today" => self.roam_open_daily(&Self::roam_today()),
             "roam.dailies_calendar" => {
                 self.calendar = crate::calendar::Calendar::new();
-                self.calendar_dailies = true;
+                self.flags.insert(AppFlags::CALENDAR_DAILIES);
                 self.visible.set(crate::app::Visible::CALENDAR, true);
             }
             "roam.dailies_capture" => {

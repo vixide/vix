@@ -7,7 +7,7 @@ use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, ListState};
 
 use super::{draw_hscrollbar, draw_scrollbar, git_change_color, hslice_spans, span_line_width};
-use crate::app::{App, Focus};
+use crate::app::{App, AppFlags, Focus};
 use crate::theme::{self, icon};
 
 /// Build the styled spans for explorer rows `top..end`: indent, type glyph,
@@ -30,7 +30,7 @@ fn explorer_rows(app: &App, top: usize, end: usize) -> Vec<Vec<Span<'static>>> {
                 theme::file_icon(&n.name)
             };
             let mut style = Style::default();
-            let cut_pending = app.clip_cut && app.clip.contains(&n.path);
+            let cut_pending = app.flags.contains(AppFlags::CLIP_CUT) && app.clip.contains(&n.path);
             if cut_pending {
                 style = style.add_modifier(Modifier::DIM);
             }

@@ -10,12 +10,12 @@
 //!
 //! ```
 //! use std::path::PathBuf;
-//! use vix::app::App;
+//! use vix::app::{App, AppFlags};
 //! use vix::settings::Settings;
 //!
 //! // Build an app rooted at a directory. No terminal is required for this.
 //! let app = App::new(PathBuf::from("."), Settings::default());
-//! assert!(!app.should_quit);
+//! assert!(!app.flags.contains(AppFlags::SHOULD_QUIT));
 //! ```
 //!
 //! # Internationalization

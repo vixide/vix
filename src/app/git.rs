@@ -18,8 +18,8 @@ use std::path::Path;
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 
 use super::{
-    AiDest, AiReplace, App, BranchChooser, DiffViewState, GitPanel, Prompt, PromptKind, gutter_hex,
-    rect_contains,
+    AiDest, AiReplace, App, AppFlags, BranchChooser, DiffViewState, GitPanel, Prompt, PromptKind,
+    gutter_hex, rect_contains,
 };
 use crate::editor::Tab;
 
@@ -285,11 +285,12 @@ impl App {
     /// Refresh the cached git state (repo?, branch, changed files) for the workspace
     /// root. Cheap enough to call after saves and git actions; not per-frame.
     pub fn refresh_git(&mut self) {
-        self.git_repo = crate::git::is_repo(&self.root);
+        self.flags
+            .set(AppFlags::GIT_REPO, crate::git::is_repo(&self.root));
         // HEAD may have moved (commit/checkout) or the working tree changed; drop
         // the cached HEAD blobs so the diff gutter refetches.
         self.git_head_cache.clear();
-        if self.git_repo {
+        if self.flags.contains(AppFlags::GIT_REPO) {
             self.git_branch = crate::git::branch(&self.root);
             self.git_status = crate::git::status(&self.root);
         } else {
@@ -302,7 +303,7 @@ impl App {
     /// line that differs from its committed (HEAD) version. The HEAD blob is
     /// fetched once per path and cached.
     pub fn refresh_git_gutter(&mut self) {
-        if !self.git_repo {
+        if !self.flags.contains(AppFlags::GIT_REPO) {
             if let Some(t) = self.editor.active_tab_mut() {
                 t.editor.clear_gutter_marks();
             }
@@ -342,7 +343,7 @@ impl App {
     /// populating the HEAD blob cache on demand. Empty outside a repo or for
     /// images / unsaved buffers.
     fn active_hunks(&mut self) -> Vec<crate::git::Hunk> {
-        if !self.git_repo {
+        if !self.flags.contains(AppFlags::GIT_REPO) {
             return Vec::new();
         }
         let Some((path, current)) = self.editor.active_tab().and_then(|t| {
@@ -493,7 +494,7 @@ impl App {
     /// Run a workspace-level git op (stash/amend), then refresh state and report
     /// success with `ok_key` or the error in the status line.
     fn git_op(&mut self, op: fn(&Path) -> Result<(), String>, ok_key: &str) {
-        if !self.git_repo {
+        if !self.flags.contains(AppFlags::GIT_REPO) {
             self.status = t!("status.git_not_repo").to_string();
             return;
         }
@@ -638,7 +639,7 @@ impl App {
     /// the cached status — `None` when not in a repo or the file is unchanged.
     #[must_use]
     pub fn git_change_for(&self, path: &Path) -> Option<crate::git::Change> {
-        if !self.git_repo {
+        if !self.flags.contains(AppFlags::GIT_REPO) {
             return None;
         }
         let rel = path
@@ -656,7 +657,7 @@ impl App {
     /// the workspace root is not a git repository.
     fn open_git_panel(&mut self) {
         self.refresh_git();
-        if !self.git_repo {
+        if !self.flags.contains(AppFlags::GIT_REPO) {
             self.status = t!("status.git_not_repo").into();
             return;
         }
