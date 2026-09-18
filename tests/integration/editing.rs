@@ -942,11 +942,11 @@ fn autocomplete_completes_a_buffer_word() {
 fn macro_records_and_replays_editor_keys() {
     let mut app = app_at(Path::new("."));
     app.run_action("macro.record"); // start recording
-    assert!(app.macro_recording);
+    assert_eq!(app.macro_state, vix::app::MacroState::Recording);
     app.on_key(key('a'));
     app.on_key(key('b'));
     app.run_action("macro.record"); // stop
-    assert!(!app.macro_recording);
+    assert_eq!(app.macro_state, vix::app::MacroState::Idle);
     assert_eq!(app.editor.active_tab().unwrap().text(), "ab");
     app.run_action("macro.play"); // replays "ab" at the cursor
     assert_eq!(app.editor.active_tab().unwrap().text(), "abab");

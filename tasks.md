@@ -2633,7 +2633,40 @@ and its own gate run, zero intended behavior change unless stated.
   `overwrite`, `show_ruler`, `macro_recording`, `macro_playing`,
   `emacs_universal`, `project_session_loaded`, `scrollbar_active`,
   `split_resize`, `modal_insert`, `modal_pending_g`,
-  `modal_pending_register_select`. Not yet started.
+  `modal_pending_register_select`. Not yet started. **Correction found
+  while scoping slice 3: that 14-bool list itself was stale** — a direct
+  grep of the struct at that point found the true count was 18, not 14;
+  five fields had gone unlisted (`suspend_requested`, `git_repo`,
+  `spellcheck`, `calendar_dailies`, `should_quit`) and `show_ruler` had
+  already left the struct in an earlier slice, so it never belonged on
+  the list at all.
+  **Slice 3/N done 2026-09-18**: 2 pairs of mutually-exclusive bools
+  become 2 small enums. `macro_recording`/`macro_playing` (at most one
+  true at a time — a macro is never simultaneously recording and
+  playing) become `macro_state: MacroState`
+  (`Idle`/`Recording`/`Playing`, `#[derive(Default)]` on `Idle`).
+  `modal_pending_g`/`modal_pending_register_select` (same shape — the
+  modal engine resolves a pending `gg` before it could ever also have a
+  pending register-select) become `modal_pending: ModalPending`
+  (`None`/`G`/`RegisterSelect`, `#[derive(Default)]` on `None`). ~15
+  call sites across `src/app.rs` and `src/app/modal.rs`, done by hand
+  (not the earlier slices' regex script, given the smaller scope and to
+  avoid a repeat of slices 1/2's stray-token mangling) and verified
+  clean on the first `cargo check`. `tests/integration/editing.rs`'s
+  macro test updated to assert on `MacroState` variants directly.
+  Pre-slice-3 the corrected count was 18 remaining bools (not 14, per
+  the correction above); this slice removed 4 of them
+  (`macro_recording`, `macro_playing`, `modal_pending_g`,
+  `modal_pending_register_select`), leaving **14 genuinely
+  single-purpose toggles**: `theme_editor_picking`, `test_capture`,
+  `clip_cut`, `overwrite`, `suspend_requested`, `git_repo`,
+  `spellcheck`, `calendar_dailies`, `should_quit`,
+  `project_session_loaded`, `scrollbar_active`, `split_resize`,
+  `emacs_universal`, `modal_insert` — planned as one final `AppFlags`
+  bitset (slice 4, not yet started) since they're independently, freely
+  combinable (a theme-pick overlay, a pending git status, and a dirty
+  scrollbar are all unrelated facts that can all be true at once)
+  rather than mutually exclusive modes.
 - [x] **T150 — Remove the two crate-level blanket allows.** Done. Both
   gone, no per-expression allow needed to replace either: `multicursor.rs`'s
   `multi_insert`/`multi_delete` — the only cast sites in the file —

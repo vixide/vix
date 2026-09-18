@@ -1495,12 +1495,43 @@ pub enum EmacsChord {
     CtrlCPCM,
 }
 
+/// Whether a keyboard macro is being recorded or replayed right now (T149)
+/// — see [`App::macro_state`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum MacroState {
+    /// Neither recording nor replaying.
+    #[default]
+    Idle,
+    /// Capturing editor keys into `App::macro_keys`.
+    Recording,
+    /// Replaying `App::macro_keys` at the cursor.
+    Playing,
+}
+
+/// Which modal-engine (T113/T114) pending sub-state, if any, the very next
+/// key resolves (T149) — see `App::modal_pending`. Structurally exclusive:
+/// `modal_key` consumes a pending register-select before it could ever check
+/// for a pending `gg`, and setting either happens only once the other is
+/// already resolved.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ModalPending {
+    /// Neither is pending.
+    #[default]
+    None,
+    /// Waiting for the second `g` of `gg`.
+    G,
+    /// Waiting for the register-name letter after `"` (e.g. `"a`).
+    RegisterSelect,
+}
+
 /// The whole application state.
-// T149 in progress: the 15 UI-visibility bools are already a `Visible`
-// bitset; the remaining ones move into `EmacsChord`/`Modes`/`Transient` in
-// the following slices, after which this allow goes. (The earlier rationale
-// here — that a single flags struct "would itself exceed the bool limit" —
-// was wrong: the lint counts `bool` *fields*, and a bitset has none.)
+// T149 in progress: the 15 UI-visibility bools are a `Visible` bitset, the 6
+// Emacs chord-prefix bools an `EmacsChord` enum, and (this slice) the 2
+// macro-state and 2 modal-pending bools each their own small enum. A dozen
+// single-purpose bools remain, to become one more bitset in the next slice,
+// after which this allow goes. (The earlier rationale here — that a single
+// flags struct "would itself exceed the bool limit" — was wrong: the lint
+// counts `bool` *fields*, and a bitset has none.)
 #[allow(clippy::struct_excessive_bools)]
 pub struct App {
     /// Workspace root directory.
@@ -1802,12 +1833,13 @@ pub struct App {
     /// Overwrite (type-over) mode: typed characters replace the one under the
     /// cursor instead of inserting. Session-only; toggled with `toggle_overwrite_mode`.
     pub overwrite: bool,
-    /// Whether a keyboard macro is being recorded (capturing editor keys).
-    pub macro_recording: bool,
+    /// Whether a keyboard macro is being recorded or replayed right now
+    /// (T149 — recording and playing are mutually exclusive: `play_macro`
+    /// refuses to start while recording, so an enum replaces what were two
+    /// separate bools).
+    pub macro_state: MacroState,
     /// The recorded editor key sequence, replayed by `macro.play`.
     macro_keys: Vec<KeyEvent>,
-    /// True while replaying, to suppress re-recording and recursion.
-    macro_playing: bool,
     /// In-progress word-completion cycle (buffer-word autocomplete).
     complete_session: Option<CompleteSession>,
     /// Cursor position captured when an LSP rename prompt was opened, used to
@@ -1995,20 +2027,21 @@ pub struct App {
     /// The modal engine's in-progress numeric count prefix (`3` before a
     /// motion). Reset after every motion fires or a pending key resolves.
     modal_count: vix_modal::Count,
-    /// The modal engine is waiting for the second `g` of `gg` (T113). Distinct
-    /// from the old table's own `vim_pending`, which still owns `d`/`y`'s
-    /// pending second key when `Settings::modal_engine` is off — once it's
-    /// on, `d`/`c`/`y` are the modal engine's own (T114;
+    /// The modal engine's `gg` (T149: [`ModalPending::G`]) / `"` register-select
+    /// (T149: [`ModalPending::RegisterSelect`]) pending sub-state, if any
+    /// (T113/T114). Distinct from the old table's own `vim_pending`, which
+    /// still owns `d`/`y`'s pending second key when `Settings::modal_engine`
+    /// is off — once it's on, `d`/`c`/`y` are the modal engine's own (T114;
     /// `modal_pending_operator` below), and `vim_pending`'s `d`/`y` arms
     /// never run.
-    modal_pending_g: bool,
+    modal_pending: ModalPending,
     /// The modal engine is waiting for the target character of a pending
     /// `f`/`t`/`F`/`T` (T113), holding that key itself so the handler knows
     /// which of the four to run once the target arrives.
     modal_pending_find: Option<char>,
     /// An operator (`d`/`c`/`y`, T114) waiting for its motion, text object,
     /// or a doubled repeat of itself (`dd`/`cc`/`yy` — the whole current
-    /// line). Any of `modal_pending_g`/`modal_pending_find` above can still
+    /// line). Any of `modal_pending`/`modal_pending_find` above can still
     /// be reached while this is set (`d3fx`, `dgg`, …) — they resolve to a
     /// motion the same way either way, per
     /// [`App::apply_modal_motion_fallible`].
@@ -2021,9 +2054,6 @@ pub struct App {
     /// no operator is pending, so it's always safe to multiply into a
     /// motion's count unconditionally.
     modal_operator_count: usize,
-    /// The modal engine is waiting for the register-name letter after `"`
-    /// (T114), e.g. `"a` before `dw`/`p`.
-    modal_pending_register_select: bool,
     /// The register `"{letter}` selected for the *next* operator or
     /// `p`/`P` (T114), consumed and cleared the moment that command runs.
     /// `None` means the unnamed register — real `vix_clipboard`, which
@@ -2251,9 +2281,8 @@ impl App {
             picker: None,
             zen_saved: None,
             overwrite: false,
-            macro_recording: false,
+            macro_state: MacroState::Idle,
             macro_keys: Vec::new(),
-            macro_playing: false,
             complete_session: None,
             rename_at: None,
             ai_instruction_target: None,
@@ -2325,11 +2354,10 @@ impl App {
             tutor: None,
             modal_mode: vix_modal::Mode::default(),
             modal_count: vix_modal::Count::default(),
-            modal_pending_g: false,
+            modal_pending: ModalPending::None,
             modal_pending_find: None,
             modal_pending_operator: None,
             modal_operator_count: 1,
-            modal_pending_register_select: false,
             modal_active_register: None,
             modal_registers: vix_modal::register::Registers::default(),
             modal_unnamed_kind: vix_modal::register::RegisterKind::Char,
@@ -3499,13 +3527,14 @@ impl App {
                 .to_string();
             }
             "macro.record" => {
-                self.macro_recording = !self.macro_recording;
-                if self.macro_recording {
-                    self.macro_keys.clear();
-                    self.status = t!("status.macro_recording").to_string();
-                } else {
+                if self.macro_state == MacroState::Recording {
+                    self.macro_state = MacroState::Idle;
                     self.status =
                         t!("status.macro_recorded", count = self.macro_keys.len()).to_string();
+                } else {
+                    self.macro_state = MacroState::Recording;
+                    self.macro_keys.clear();
+                    self.status = t!("status.macro_recording").to_string();
                 }
             }
             "macro.play" => self.play_macro(),
@@ -5973,7 +6002,7 @@ impl App {
         }
         // Capture editor-bound keys into a macro while recording (modal/menu keys
         // never reach here, so they are naturally excluded).
-        if self.macro_recording && !self.macro_playing {
+        if self.macro_state == MacroState::Recording {
             self.macro_keys.push(key);
         }
         // While a snippet is expanding, Tab walks its fields and Esc ends it.
@@ -6094,14 +6123,14 @@ impl App {
     /// Replay the recorded macro's editor keys at the current cursor. No-op while
     /// recording or when nothing has been recorded.
     fn play_macro(&mut self) {
-        if self.macro_recording || self.macro_keys.is_empty() {
+        if self.macro_state == MacroState::Recording || self.macro_keys.is_empty() {
             return;
         }
-        self.macro_playing = true;
+        self.macro_state = MacroState::Playing;
         for key in self.macro_keys.clone() {
             self.editor_key(key);
         }
-        self.macro_playing = false;
+        self.macro_state = MacroState::Idle;
         self.status = t!("status.macro_played").to_string();
     }
 
@@ -8779,11 +8808,10 @@ impl App {
         self.modal_insert = false;
         self.modal_mode = vix_modal::Mode::Normal;
         self.modal_count.reset();
-        self.modal_pending_g = false;
+        self.modal_pending = ModalPending::None;
         self.modal_pending_find = None;
         self.modal_pending_operator = None;
         self.modal_operator_count = 1;
-        self.modal_pending_register_select = false;
         self.modal_active_register = None;
         self.modal_pending_text_object = None;
         self.modal_recording.clear();
