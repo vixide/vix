@@ -2614,8 +2614,26 @@ and its own gate run, zero intended behavior change unless stated.
   `emacs_universal`, `project_session_loaded`, `scrollbar_active`,
   `split_resize`, `modal_insert`, `modal_pending_g`,
   `modal_pending_register_select`) needing individual per-field
-  judgment calls, exactly as flagged when this was scoped out. Not
-  yet started.
+  judgment calls, exactly as flagged when this was scoped out.
+  **Slice 2/N done 2026-09-18**: the 6 mutually-exclusive Emacs-keymap
+  chord-prefix bools (`emacs_prefix`, `emacs_c_prefix`,
+  `emacs_c_x_prefix`, `emacs_c_p_prefix`, `emacs_c_p_c_prefix`,
+  `emacs_c_p_c_m_prefix`) become one `emacs_chord: EmacsChord` enum
+  (`None`/`CtrlX`/`CtrlC`/`CtrlCCtrlX`/`CtrlCP`/`CtrlCPC`/`CtrlCPCM`) —
+  at most one chord is ever pending at a time, so an enum is the
+  correct shape where the first slice's bitset (independently
+  combinable toggles) wasn't. 39 call sites across `src/app.rs` and
+  `src/app/keymap.rs`. Found and fixed a real, previously-silent bug as
+  a direct side effect of the consolidation: `reset_keymap_modes`
+  (switching keymaps) used to clear only `emacs_prefix`
+  (`self.emacs_prefix = false`), so a pending `C-c …`/`C-c p …` chord
+  survived a keymap switch — one `self.emacs_chord = EmacsChord::None`
+  now clears whichever chord was actually pending, unconditionally.
+  14 bools remain: `theme_editor_picking`, `test_capture`, `clip_cut`,
+  `overwrite`, `show_ruler`, `macro_recording`, `macro_playing`,
+  `emacs_universal`, `project_session_loaded`, `scrollbar_active`,
+  `split_resize`, `modal_insert`, `modal_pending_g`,
+  `modal_pending_register_select`. Not yet started.
 - [x] **T150 — Remove the two crate-level blanket allows.** Done. Both
   gone, no per-expression allow needed to replace either: `multicursor.rs`'s
   `multi_insert`/`multi_delete` — the only cast sites in the file —
