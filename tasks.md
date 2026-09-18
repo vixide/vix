@@ -3709,32 +3709,80 @@ and its own gate run, zero intended behavior change unless stated.
     rewritten to not exercise it (scrolls through real syntax-highlighted
     code instead of opening the Theme Editor) rather than ship a demo GIF
     that visibly shows internal key names.
-    Follow-up narrowing (still not conclusive, but rules a few things
-    out): it is **not** "every key this session added to
-    `palette::COMMANDS`" — `git.stage_hunk`/`git.unstage_hunk` (added the
-    same way, same session) render correctly live (`Stage Hunk`/
-    `Unstage Hunk`, confirmed in the palette results list itself, not just
-    the action running), while `view.theme_edit` (added identically)
-    doesn't. Not key length or segment count either —
-    `menu.item.edit.structural_replace` (34 chars, 4 dot-segments) and
-    `menu.item.git.stage_hunk` (24 chars, 4 dot-segments) are the same
-    shape; one fails, one doesn't. Not a stray duplicate key elsewhere in
-    the catalog, and not a hidden-character/line-ending issue in the
-    source YAML (checked both directly, byte for byte). One real,
-    possibly-related lead worth starting from: `vix-i18n`'s own
-    `[profile.dev.package.vix-i18n]` comment (`Cargo.toml`, T148(b))
-    documents that its `i18n!` macro expands to *one function* that
-    sequentially `.insert()`s every `(key, locale)` pair into a `HashMap`
-    — "tens of thousands of statements in a single ... frame" — and that
-    this already overflowed the default debug thread stack once before
-    (fixed by building just that one crate at a real optimization level).
-    A single-function, tens-of-thousands-of-sequential-inserts codegen
-    strategy is exactly the shape of thing that could plausibly have a
-    *different*, more subtle failure mode for a handful of entries — worth
-    a debug build of `vix-i18n` itself (not just the workspace) and
-    stepping through (or instrumenting) that generated insert function
-    around where `ui.theme_editor_title`/`menu.item.edit.structural_
-    replace` land, before assuming anything at the call sites.
+    **Second follow-up pass (same day), with real instrumentation this
+    time, not just static reading — narrowed a great deal further, still
+    unresolved.** Added a temporary debug probe directly in
+    `src/ui/picker_panels.rs` calling the surfaced
+    `crate::_rust_i18n_try_translate("en", key)` function itself (the
+    exact function `t!()` expands to) and writing its result to a file for
+    a handful of keys at once, run live against the real binary. Findings,
+    each a real data point, not a guess:
+    - `crate::_rust_i18n_try_translate("en", "ui.theme_editor_title")`
+      itself returns `None` — confirming the failure is inside
+      `vix-i18n`'s own lookup, not at any call site, and ruling out
+      `vix-menu`/`vix-palette`/`picker_panels.rs` as suspects entirely.
+    - `cargo expand`ed `vix-i18n`'s generated source (installed
+      `cargo-expand` for this) and confirmed the "en" locale's block
+      *does* contain `map.insert(Cow::Borrowed("ui.theme_editor_title"),
+      Cow::Borrowed("Edit Theme"))`, written exactly once, no duplicate
+      key anywhere in that 2509-entry block. The **source-level generated
+      code is correct** — this is not a codegen bug.
+    - Wrote a tiny standalone crate calling `serde_saphyr` (the actual
+      YAML parser `rust-i18n-support` 4.2.1 uses — a `0.0.29` pre-1.0
+      dependency, `Cargo.lock` confirmed) directly on the real
+      `locales/ui.yml`: parses cleanly, all 289 keys present,
+      `ui.theme_editor_title` present with the correct `"en": "Edit
+      Theme"` value. **The YAML parse is correct too** — not a
+      `serde_saphyr` bug either, at least not at the single-file level.
+    - Forced a guaranteed-clean rebuild (`cargo clean -p vix-i18n
+      --release` and non-release both, then a full rebuild) — identical
+      failure. Not a stale artifact anywhere in the dependency graph.
+    - `ui.explorer` (line 427, an early, always-worked key) through
+      `ui.db_export_clipboard` (line 4335) all resolve correctly, live;
+      `ui.theme_slot_menu_bar_fg` (line 4351, the very next key in the
+      file) and everything after it through end-of-file (the rest of the
+      theme-editor block, 17 keys total, literally the last thing anyone
+      appended to `ui.yml`) fail. **But** this is not simply "position in
+      the source file": `rust-i18n-support`'s own loader
+      (`rust-i18n-support-4.2.1/src/lib.rs`) collects everything into a
+      `BTreeMap<String, String>` (confirmed by reading its source) before
+      codegen, so source-file order shouldn't matter at all — and indeed,
+      manually moving `ui.theme_editor_title`'s block to the very top of
+      `ui.yml` and rebuilding **did not fix it**, still `None`. Whatever
+      the real correlate is, it isn't raw source position.
+    - `menu.item.edit.structural_replace` sits at position 596 of the
+      "en" block's 2509 sequential inserts (computed by parsing the
+      `cargo expand` output directly) — only 24% of the way through, far
+      from the tail-end pattern the `ui.yml` keys show — yet it fails the
+      same way, while `menu.item.git.stage_hunk` at position 746 (*later*
+      in the same sequence) works. Position-in-the-combined-sequence
+      isn't the correlate either, at least not on its own.
+    - Set `RUST_MIN_STACK=67108864` (64 MiB, 8x the default) before
+      launching — **no change**. This rules out the one concrete,
+      previously-verified-real lead (`[profile.dev.package.vix-i18n]`'s
+      documented stack-overflow precedent, T148(b)) as the cause here:
+      whatever's happening, it is not stack exhaustion during the
+      `LazyLock` initializer.
+    - The failure is **100% deterministic across every process restart**
+      observed (many, across this whole investigation) — the exact same
+      keys fail every single time. `std::collections::HashMap`'s default
+      hasher is randomly seeded per-process specifically to make hash
+      collisions non-reproducible; a real collision would be expected to
+      affect *different* keys on different runs. This rules out a random
+      hash-collision explanation too.
+    Net effect: every layer this session could inspect directly (YAML
+    source, `serde_saphyr`'s parse of it, `rust-i18n-support`'s merge/
+    flatten, the generated Rust source `cargo expand` shows, build
+    freshness, stack size, hash-seed randomness) is now confirmed
+    correct or ruled out. The gap left is *what the compiled `LazyLock`
+    initializer actually does at runtime* that the generated source
+    doesn't predict — which needs a debugger attached to the running
+    process (break on the relevant `HashMap::insert` calls and watch
+    what actually happens around `ui.theme_slot_menu_bar_fg`/
+    `menu.item.edit.structural_replace`) or a `rust-i18n`/`serde-saphyr`
+    upstream bug report with a minimal reproduction, not more black-box
+    probing from inside vix's own source — beyond this session's tools
+    and a reasonable stopping point after two full passes.
   - **8 real GIFs rendered, reviewed frame-by-frame, and committed**
     (`docs/demos/*.gif`, ~1.1 MB combined), overview embedded in
     `index.md`'s (README's) `## Demos` section per the task's own ask.
