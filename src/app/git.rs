@@ -78,7 +78,7 @@ impl App {
             "run.step_into" => self.dap.step_into(),
             "run.step_out" => self.dap.step_out(),
             "run.pause" => self.dap.pause(),
-            "run.panel" => self.show_debug_panel = !self.show_debug_panel,
+            "run.panel" => self.visible.toggle(crate::app::Visible::DEBUG_PANEL),
             "run.repl" => {
                 self.prompt = Some(Prompt::new(
                     PromptKind::DebugRepl,

@@ -41,16 +41,20 @@ impl App {
             }
             "roam.backlinks" => self.roam_backlinks(),
             "roam.backlinks_follow" => {
-                self.backlinks_follow = !self.backlinks_follow;
+                self.visible.toggle(crate::app::Visible::BACKLINKS_FOLLOW);
                 self.backlinks_follow_key = None; // force a rebuild on next refresh
                 self.refresh_backlinks_follow();
-                self.status = t!("status.backlinks_follow", on = self.backlinks_follow).to_string();
+                self.status = t!(
+                    "status.backlinks_follow",
+                    on = self.visible.contains(crate::app::Visible::BACKLINKS_FOLLOW)
+                )
+                .to_string();
             }
             "roam.dailies_today" => self.roam_open_daily(&Self::roam_today()),
             "roam.dailies_calendar" => {
                 self.calendar = crate::calendar::Calendar::new();
                 self.calendar_dailies = true;
-                self.show_calendar = true;
+                self.visible.set(crate::app::Visible::CALENDAR, true);
             }
             "roam.dailies_capture" => {
                 self.prompt = Some(Prompt::new(
@@ -540,7 +544,7 @@ impl App {
     /// When "Live Backlinks" is on, rebuild the bottom dock with the active node's
     /// backlinks whenever the active buffer (or its content) changes.
     pub fn refresh_backlinks_follow(&mut self) {
-        if !self.backlinks_follow {
+        if !self.visible.contains(crate::app::Visible::BACKLINKS_FOLLOW) {
             return;
         }
         let key = self
@@ -567,6 +571,6 @@ impl App {
                 self.bottom_dock.push(line.to_string());
             }
         }
-        self.show_bottom_dock = true;
+        self.visible.set(crate::app::Visible::BOTTOM_DOCK, true);
     }
 }

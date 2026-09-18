@@ -10,7 +10,10 @@ use crate::common::*;
 fn calendar_left_right_pages_months() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.calendar");
-    assert!(app.show_calendar, "Calendar opens on the current month");
+    assert!(
+        app.visible.contains(vix::app::Visible::CALENDAR),
+        "Calendar opens on the current month"
+    );
     let start = app.calendar.shown_month();
     assert!(
         app.calendar.grid().today.is_some(),
@@ -38,7 +41,10 @@ fn calendar_left_right_pages_months() {
 
     // Esc closes the box.
     app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert!(!app.show_calendar, "Esc closes the calendar");
+    assert!(
+        !app.visible.contains(vix::app::Visible::CALENDAR),
+        "Esc closes the calendar"
+    );
 }
 
 #[test]
@@ -61,7 +67,10 @@ fn calendar_nav_arrows_change_the_month() {
         title,
         "◀ returned to the original month"
     );
-    assert!(app.show_calendar, "an arrow click keeps the calendar open");
+    assert!(
+        app.visible.contains(vix::app::Visible::CALENDAR),
+        "an arrow click keeps the calendar open"
+    );
 }
 
 #[test]
@@ -92,7 +101,10 @@ fn calendar_click_inserts_into_editor() {
 
     // A click outside the box closes it.
     app.on_mouse(click(0, 23));
-    assert!(!app.show_calendar, "an outside click closes the calendar");
+    assert!(
+        !app.visible.contains(vix::app::Visible::CALENDAR),
+        "an outside click closes the calendar"
+    );
 }
 
 #[test]
@@ -294,11 +306,11 @@ fn file_browser_ctrl_o_falls_back_to_the_path_prompt() {
 #[test]
 fn ctrl_b_toggles_explorer() {
     let mut app = app_at(Path::new("."));
-    let before = app.show_explorer;
+    let before = app.visible.contains(vix::app::Visible::EXPLORER);
     app.on_key(ctrl('b'));
-    assert_ne!(app.show_explorer, before);
+    assert_ne!(app.visible.contains(vix::app::Visible::EXPLORER), before);
     app.on_key(ctrl('b'));
-    assert_eq!(app.show_explorer, before);
+    assert_eq!(app.visible.contains(vix::app::Visible::EXPLORER), before);
 }
 
 #[test]
@@ -317,7 +329,7 @@ fn open_calendar_swallows_editor_clicks() {
     app.layout.editor = Rect::new(0, 0, 80, 24);
     app.focus = Focus::Explorer;
     app.run_action("tools.calendar"); // open the calendar overlay
-    assert!(app.show_calendar);
+    assert!(app.visible.contains(vix::app::Visible::CALENDAR));
     // A click over the editor must not reach it while the calendar is open.
     app.on_mouse(click(5, 3));
     assert_eq!(
@@ -333,7 +345,7 @@ fn click_explorer_row_focuses_and_selects() {
     fs::write(dir.join("a.txt"), "1").unwrap();
     fs::write(dir.join("b.txt"), "2").unwrap();
     let mut app = app_at(&dir);
-    app.show_explorer = true;
+    app.visible.set(vix::app::Visible::EXPLORER, true);
     app.layout.explorer = Rect::new(0, 0, 30, 20);
     // Rows start one below the top border (explorer.y + 1). Click the SECOND row;
     // the first is already selected, where a click would promote/open the file.
@@ -346,7 +358,7 @@ fn click_explorer_row_focuses_and_selects() {
 #[test]
 fn drag_explorer_right_edge_resizes_left_dock() {
     let mut app = app_at(Path::new("."));
-    app.show_explorer = true;
+    app.visible.set(vix::app::Visible::EXPLORER, true);
     app.layout.menu = Rect::new(0, 0, 100, 1); // full width 100
     app.layout.explorer = Rect::new(0, 0, 30, 24); // right border at column 29
     let before = app.settings.explorer_width;

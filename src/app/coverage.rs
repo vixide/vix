@@ -35,7 +35,7 @@ impl App {
                 let report = vix_coverage::parse(&text);
                 let files = report.file_count();
                 self.coverage = Some(report);
-                self.coverage_visible = true;
+                self.visible.set(crate::app::Visible::COVERAGE, true);
                 self.refresh_coverage_gutter();
                 self.status = t!("status.coverage_loaded", files = files).to_string();
             }
@@ -54,8 +54,8 @@ impl App {
             self.status = t!("status.coverage_not_loaded").to_string();
             return;
         }
-        self.coverage_visible = !self.coverage_visible;
-        if self.coverage_visible {
+        self.visible.toggle(crate::app::Visible::COVERAGE);
+        if self.visible.contains(crate::app::Visible::COVERAGE) {
             self.refresh_coverage_gutter();
             self.status = t!("status.coverage_shown").to_string();
         } else {
@@ -79,7 +79,7 @@ impl App {
     /// gutter -- they share one gutter-sign column, so only one shows.
     #[must_use]
     pub fn coverage_gutter_active(&self) -> bool {
-        self.coverage_visible && self.coverage.is_some()
+        self.visible.contains(crate::app::Visible::COVERAGE) && self.coverage.is_some()
     }
 
     /// Recompute the coverage gutter for the active tab from the loaded
@@ -87,7 +87,7 @@ impl App {
     /// only calls this when it is) or the active tab's path isn't in the
     /// report.
     pub fn refresh_coverage_gutter(&mut self) {
-        if !self.coverage_visible {
+        if !self.visible.contains(crate::app::Visible::COVERAGE) {
             return;
         }
         let Some(report) = &self.coverage else {

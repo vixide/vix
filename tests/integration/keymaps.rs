@@ -627,9 +627,13 @@ fn vscode_keymap_split_panel_and_delete_line() {
     app.on_key(ctrl('\\'));
     assert!(app.editor.split_root.is_some(), "Ctrl+\\ splits");
     // Ctrl+J toggles the bottom panel.
-    let before = app.show_bottom_dock;
+    let before = app.visible.contains(vix::app::Visible::BOTTOM_DOCK);
     app.on_key(ctrl('j'));
-    assert_ne!(app.show_bottom_dock, before, "Ctrl+J toggles the panel");
+    assert_ne!(
+        app.visible.contains(vix::app::Visible::BOTTOM_DOCK),
+        before,
+        "Ctrl+J toggles the panel"
+    );
     // Ctrl+Shift+K deletes the current line.
     type_str(&mut app, "doomed");
     app.on_key(KeyEvent::new(

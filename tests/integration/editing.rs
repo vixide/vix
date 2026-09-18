@@ -377,24 +377,30 @@ fn surround_wraps_and_unwraps_the_selection() {
 fn pomodoro_start_closes_dialog_and_runs_in_background() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.pomodoro");
-    assert!(app.pomodoro_open, "dialog visible");
+    assert!(
+        app.visible.contains(vix::app::Visible::POMODORO),
+        "dialog visible"
+    );
     assert_eq!(app.pomodoro.as_ref().unwrap().label(), "25:00");
     assert!(!app.pomodoro_running());
     app.on_key(keycode(KeyCode::Down)); // 24 minutes
     app.on_key(keycode(KeyCode::Enter)); // Start
     // Start hides the dialog but the countdown keeps running.
-    assert!(!app.pomodoro_open, "dialog closed on Start");
+    assert!(
+        !app.visible.contains(vix::app::Visible::POMODORO),
+        "dialog closed on Start"
+    );
     assert!(app.pomodoro_running(), "timer still running in background");
     assert_eq!(app.pomodoro.as_ref().unwrap().label(), "24:00");
     // Reopening reveals the still-running timer.
     app.run_action("tools.pomodoro");
-    assert!(app.pomodoro_open);
+    assert!(app.visible.contains(vix::app::Visible::POMODORO));
     app.on_key(keycode(KeyCode::Enter)); // Stop → back to idle, dialog stays open
     assert!(!app.pomodoro_running(), "timer stopped");
-    assert!(app.pomodoro_open);
+    assert!(app.visible.contains(vix::app::Visible::POMODORO));
     app.on_key(keycode(KeyCode::Esc)); // close
     assert!(
-        !app.pomodoro_open && app.pomodoro.is_none(),
+        !app.visible.contains(vix::app::Visible::POMODORO) && app.pomodoro.is_none(),
         "dialog closed and timer dropped"
     );
 }
@@ -1036,11 +1042,11 @@ fn column_ruler_toggles_and_renders() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "some code here\n");
     app.run_action("toggle_ruler");
-    assert!(app.show_ruler);
+    assert!(app.visible.contains(vix::app::Visible::RULER));
     let mut term = Terminal::new(TestBackend::new(120, 20)).unwrap();
     term.draw(|f| vix::ui::draw(&mut app, f)).unwrap(); // ruler drawn, must not panic
     app.run_action("toggle_ruler");
-    assert!(!app.show_ruler);
+    assert!(!app.visible.contains(vix::app::Visible::RULER));
 }
 
 #[test]
@@ -1393,22 +1399,28 @@ fn qrcode_overlay_generates_and_closes() {
 #[test]
 fn zen_mode_hides_then_restores_chrome() {
     let mut app = app_at(Path::new("."));
-    app.show_explorer = true;
-    app.show_messages = true;
-    app.show_status_bar = true;
-    app.show_bottom_dock = true;
+    app.visible.set(vix::app::Visible::EXPLORER, true);
+    app.visible.set(vix::app::Visible::MESSAGES, true);
+    app.visible.set(vix::app::Visible::STATUS_BAR, true);
+    app.visible.set(vix::app::Visible::BOTTOM_DOCK, true);
 
     app.run_action("view.zen");
     assert!(app.is_zen(), "zen mode on");
     assert!(
-        !app.show_explorer && !app.show_messages && !app.show_status_bar && !app.show_bottom_dock,
+        !app.visible.contains(vix::app::Visible::EXPLORER)
+            && !app.visible.contains(vix::app::Visible::MESSAGES)
+            && !app.visible.contains(vix::app::Visible::STATUS_BAR)
+            && !app.visible.contains(vix::app::Visible::BOTTOM_DOCK),
         "zen hides the chrome"
     );
 
     app.run_action("view.zen");
     assert!(!app.is_zen(), "zen mode off");
     assert!(
-        app.show_explorer && app.show_messages && app.show_status_bar && app.show_bottom_dock,
+        app.visible.contains(vix::app::Visible::EXPLORER)
+            && app.visible.contains(vix::app::Visible::MESSAGES)
+            && app.visible.contains(vix::app::Visible::STATUS_BAR)
+            && app.visible.contains(vix::app::Visible::BOTTOM_DOCK),
         "zen restores prior visibility"
     );
 }
@@ -1461,7 +1473,10 @@ fn breadcrumb_shows_file_and_enclosing_symbol() {
     app.on_key(keycode(KeyCode::Down)); // cursor on line 3, inside beta
 
     app.run_action("view.breadcrumbs");
-    assert!(app.show_breadcrumbs, "breadcrumb bar toggled on");
+    assert!(
+        app.visible.contains(vix::app::Visible::BREADCRUMBS),
+        "breadcrumb bar toggled on"
+    );
     let crumb = app.breadcrumb();
     assert!(crumb.starts_with("m.rs"), "shows the file name: {crumb:?}");
     assert!(
@@ -2016,15 +2031,24 @@ fn narrow_editor_does_not_panic() {
 #[test]
 fn toggle_status_bar_action_flips_and_persists() {
     let mut app = app_at(Path::new("."));
-    assert!(app.show_status_bar, "the status bar is shown by default");
+    assert!(
+        app.visible.contains(vix::app::Visible::STATUS_BAR),
+        "the status bar is shown by default"
+    );
     app.run_action("view.status_bar");
-    assert!(!app.show_status_bar, "the action hides the status bar");
+    assert!(
+        !app.visible.contains(vix::app::Visible::STATUS_BAR),
+        "the action hides the status bar"
+    );
     assert!(
         !app.settings.secondary_panels.show_status_bar,
         "the choice persists in settings"
     );
     app.run_action("view.status_bar");
-    assert!(app.show_status_bar, "toggling again shows it");
+    assert!(
+        app.visible.contains(vix::app::Visible::STATUS_BAR),
+        "toggling again shows it"
+    );
 }
 
 #[test]
@@ -2035,12 +2059,15 @@ fn toggle_scrollbar_flips_persists_and_reclaims_the_column() {
     let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
 
     term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
-    assert!(app.show_scrollbar, "shown by default");
+    assert!(
+        app.visible.contains(vix::app::Visible::SCROLLBAR),
+        "shown by default"
+    );
     let with = app.layout.editor.width;
     assert!(app.layout.scrollbar.width > 0, "scrollbar has a column");
 
     app.run_action("view.scrollbar"); // hide it
-    assert!(!app.show_scrollbar);
+    assert!(!app.visible.contains(vix::app::Visible::SCROLLBAR));
     assert!(!app.settings.viewport.show_scrollbar, "choice persists");
     term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
     assert_eq!(app.layout.scrollbar.width, 0, "scrollbar column collapses");
@@ -2057,7 +2084,10 @@ fn clock_box_inserts_a_time_row() {
     use ratatui::backend::TestBackend;
     let mut app = app_at(Path::new("."));
     app.run_action("tools.clock");
-    assert!(app.show_clock, "the action opens the clock box");
+    assert!(
+        app.visible.contains(vix::app::Visible::CLOCK),
+        "the action opens the clock box"
+    );
     let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
     term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
     let r = app.layout.clock;
@@ -2071,11 +2101,17 @@ fn clock_box_inserts_a_time_row() {
         text.contains(':') && text.contains('-'),
         "inserted a date-time: {text:?}"
     );
-    assert!(app.show_clock, "a row click keeps the clock box open");
+    assert!(
+        app.visible.contains(vix::app::Visible::CLOCK),
+        "a row click keeps the clock box open"
+    );
 
     // A click outside the box closes it.
     app.on_mouse(click(0, 23));
-    assert!(!app.show_clock, "an outside click closes the clock box");
+    assert!(
+        !app.visible.contains(vix::app::Visible::CLOCK),
+        "an outside click closes the clock box"
+    );
 }
 
 #[test]
@@ -2089,7 +2125,10 @@ fn run_command_streams_output_to_bottom_dock() {
     app.on_key(keycode(KeyCode::Enter));
 
     assert!(app.prompt.is_none(), "Enter runs and closes the prompt");
-    assert!(app.show_bottom_dock, "running shows the bottom dock");
+    assert!(
+        app.visible.contains(vix::app::Visible::BOTTOM_DOCK),
+        "running shows the bottom dock"
+    );
 
     // The command runs in a background thread; drain it like the event loop does.
     let mut waited = 0;
@@ -2251,18 +2290,28 @@ fn toggle_bottom_dock_flips_persists_and_renders() {
     use ratatui::backend::TestBackend;
     let mut app = app_at(Path::new("."));
     // All three docks (left explorer, right messages, bottom) show by default.
-    assert!(app.show_bottom_dock, "shown by default");
     assert!(
-        app.show_explorer && app.show_messages,
+        app.visible.contains(vix::app::Visible::BOTTOM_DOCK),
+        "shown by default"
+    );
+    assert!(
+        app.visible.contains(vix::app::Visible::EXPLORER)
+            && app.visible.contains(vix::app::Visible::MESSAGES),
         "side docks default on"
     );
 
     app.run_action("view.bottom_dock");
-    assert!(!app.show_bottom_dock, "the action hides the bottom dock");
+    assert!(
+        !app.visible.contains(vix::app::Visible::BOTTOM_DOCK),
+        "the action hides the bottom dock"
+    );
     assert!(!app.settings.panels.show_bottom_dock, "the choice persists");
 
     app.run_action("view.bottom_dock");
-    assert!(app.show_bottom_dock, "toggling again shows it");
+    assert!(
+        app.visible.contains(vix::app::Visible::BOTTOM_DOCK),
+        "toggling again shows it"
+    );
 
     // The dock buffers lines and renders without panicking.
     app.bottom_dock.push("hello from the bottom dock");
@@ -3117,9 +3166,12 @@ fn system_info_panel_opens_inserts_and_closes() {
 #[test]
 fn test_panel_toggles_and_parser_builds_results() {
     let mut app = app_at(Path::new("."));
-    assert!(!app.show_test_panel);
+    assert!(!app.visible.contains(vix::app::Visible::TEST_PANEL));
     app.run_action("tools.test_panel");
-    assert!(app.show_test_panel, "Toggle Test Panel shows it");
+    assert!(
+        app.visible.contains(vix::app::Visible::TEST_PANEL),
+        "Toggle Test Panel shows it"
+    );
 
     // The parser turns runner output into a pass/fail list (used by the panel).
     let results = vix::test_runner::parse("test a::ok ... ok\ntest a::bad ... FAILED\n");
@@ -3212,7 +3264,7 @@ fn click_editor_focuses_it() {
 #[test]
 fn drag_messages_left_edge_resizes_right_dock() {
     let mut app = app_at(Path::new("."));
-    app.show_messages = true;
+    app.visible.set(vix::app::Visible::MESSAGES, true);
     app.layout.menu = Rect::new(0, 0, 100, 1);
     app.layout.messages = Rect::new(68, 0, 32, 24); // left border at column 68
     let before = app.settings.messages_width;
@@ -3239,16 +3291,18 @@ fn click_dock_toggle_icons() {
     let mut app = app_at(Path::new("."));
     app.layout.menu = Rect::new(0, 0, 100, 1);
     let (left, right) = vix::ui::dock_toggle_cols(app.layout.menu);
-    let explorer_before = app.show_explorer;
+    let explorer_before = app.visible.contains(vix::app::Visible::EXPLORER);
     app.on_mouse(click(left, 0));
     assert_ne!(
-        app.show_explorer, explorer_before,
+        app.visible.contains(vix::app::Visible::EXPLORER),
+        explorer_before,
         "left dock icon toggles the explorer"
     );
-    let messages_before = app.show_messages;
+    let messages_before = app.visible.contains(vix::app::Visible::MESSAGES);
     app.on_mouse(click(right, 0));
     assert_ne!(
-        app.show_messages, messages_before,
+        app.visible.contains(vix::app::Visible::MESSAGES),
+        messages_before,
         "right dock icon toggles the messages"
     );
 }

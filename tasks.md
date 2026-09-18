@@ -2577,7 +2577,45 @@ and its own gate run, zero intended behavior change unless stated.
   function list — caught only by the gate's regenerate-and-diff step, not
   by `tests/action_catalog.rs` (whose assertions are "everything found
   is titled", not "everything expected was found"); fixed by registering
-  the new dispatcher. `App` (19 bools) is the one remaining struct.
+  the new dispatcher.
+  **`App` slice 1/N done 2026-09-18**: the 15 UI-surface-visibility
+  bools (`show_explorer`, `show_bottom_dock`, `pomodoro_open`,
+  `coverage_visible`, `backlinks_follow`, …) become one `bitflags`
+  bitset, `pub visible: Visible`, on `App` — unlike `Settings`'
+  bools, these are genuinely independent freely-combinable toggles
+  (explorer and message drawer can both be open at once), so
+  `bitflags` (not a `#[serde(flatten)]` sub-struct — nothing here is
+  persisted) is the right tool, same as the five already-converted
+  structs from this task's first pass. `Visible::initial(&settings)`
+  seeds the six that mirror a `Settings` default at startup; the rest
+  start clear except `INLAY_HINTS`. 168 call sites across 12 files
+  moved from `self.<bool>` to `self.visible.{contains,set,toggle}`.
+  Two real bugs the mechanical rewrite's own regex necessarily couldn't
+  catch (multi-statement match arms it wasn't designed to touch,
+  patched by hand and caught immediately by the very next compile, not
+  found by review): a `tools.test_panel`/`run.panel` toggle arm and the
+  `view.breadcrumbs` arm each got a stray token from a naive
+  toggle-pattern substitution; both are one-line, now `.toggle(...)`
+  calls, covered by this slice's own passing gate run (no dedicated
+  regression test — see `App`'s own `toggle_*` unit tests, all
+  unchanged in behavior). `App`'s own `#[allow(clippy::
+  struct_excessive_bools)]` stays (its stale rationale comment —
+  "a single flags struct would itself exceed the bool limit" — was
+  simply wrong, since the lint counts `bool` *fields* and a bitset has
+  none; corrected in place) until every remaining bool leaves the
+  struct across the following slices. 4 bools left after this slice
+  are Emacs-keymap chord-prefix state (`emacs_prefix`,
+  `emacs_c_prefix`, `emacs_c_x_prefix`, `emacs_c_p_prefix`,
+  `emacs_c_p_c_prefix`, `emacs_c_p_c_m_prefix` — six, not four;
+  mutually exclusive, an `EmacsChord` enum fits better than a bitset)
+  plus a handful of other single-purpose toggles
+  (`theme_editor_picking`, `test_capture`, `clip_cut`, `overwrite`,
+  `show_ruler`, `macro_recording`/`macro_playing`,
+  `emacs_universal`, `project_session_loaded`, `scrollbar_active`,
+  `split_resize`, `modal_insert`, `modal_pending_g`,
+  `modal_pending_register_select`) needing individual per-field
+  judgment calls, exactly as flagged when this was scoped out. Not
+  yet started.
 - [x] **T150 — Remove the two crate-level blanket allows.** Done. Both
   gone, no per-expression allow needed to replace either: `multicursor.rs`'s
   `multi_insert`/`multi_delete` — the only cast sites in the file —

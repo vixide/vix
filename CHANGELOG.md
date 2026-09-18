@@ -609,17 +609,20 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **`Settings` bool fields are grouped internally** (improvement plan
-  T149, 6/7): the 32 on/off preferences on the `vix-settings` `Settings`
-  struct now live in 11 small per-topic sub-structs
-  (`settings.gutter.line_numbers`, `settings.save.format_on_save`, …)
-  instead of directly on `Settings`. **Your `config.toml` is unaffected**
-  — every setting is still the same flat top-level key with the same
-  name and default, and a config written by any earlier version loads
-  identically (now covered by tests). Only Rust code that reads
-  `Settings` fields directly (embedders, scripts built against the
-  crate) sees the new `settings.<group>.<field>` paths. See
-  `crates/vix-settings/spec/index.md`.
+- **Bool fields on `Settings` and `App` are grouped internally**
+  (improvement plan T149, in progress): the 32 on/off preferences on the
+  `vix-settings` `Settings` struct now live in 11 small per-topic
+  sub-structs (`settings.gutter.line_numbers`,
+  `settings.save.format_on_save`, …) instead of directly on `Settings`.
+  **Your `config.toml` is unaffected** — every setting is still the same
+  flat top-level key with the same name and default, and a config
+  written by any earlier version loads identically (now covered by
+  tests). Separately, 15 of `App`'s own UI-surface-visibility bools
+  (`show_explorer`, `show_bottom_dock`, `pomodoro_open`, …) are now one
+  `App::visible: Visible` bitset. Only Rust code that reads these fields
+  directly (embedders, scripts built against the crate) sees the new
+  `settings.<group>.<field>` / `app.visible.contains(Visible::…)` shapes
+  — no in-app behavior changes. See `crates/vix-settings/spec/index.md`.
 - **Opening a large file no longer blocks on a synchronous parse**
   (improvement plan T121): buffers at or above the existing 50 KB
   async-reparse threshold now route their *initial* Tree-sitter parse
