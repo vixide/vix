@@ -17,6 +17,7 @@
 //! (Visual mode's own motion vocabulary, still just `h j k l` per T112) keeps
 //! working exactly as it did before the engine existed.
 
+use super::ModalPending;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use vix_modal::motion::MotionKind::{self, Exclusive, Inclusive, Linewise};
 
@@ -57,11 +58,10 @@ impl App {
         // back through this very function and so naturally re-records
         // whatever it just repeated as the new last change, matching real
         // Vim's own "`.` after `.`" behavior with no special-casing.
-        if !self.modal_pending_g
+        if self.modal_pending == ModalPending::None
             && self.modal_pending_find.is_none()
             && self.modal_pending_text_object.is_none()
             && self.modal_pending_operator.is_none()
-            && !self.modal_pending_register_select
             && self.modal_active_register.is_none()
             && self.modal_count.is_empty()
             && self.modal_operator_count == 1
@@ -70,8 +70,8 @@ impl App {
         }
         self.modal_recording.push(key);
 
-        if self.modal_pending_register_select {
-            self.modal_pending_register_select = false;
+        if self.modal_pending == ModalPending::RegisterSelect {
+            self.modal_pending = ModalPending::None;
             if let KeyCode::Char(c @ 'a'..='z') = key.code {
                 self.modal_active_register = Some(c);
             }
@@ -84,7 +84,7 @@ impl App {
         // runs regardless of whether an operator is pending underneath it
         // (`dgg`, `df.`, …) — [`Self::apply_modal_motion_fallible`], which
         // this eventually reaches, is what actually checks that.
-        if self.modal_pending_g || self.modal_pending_find.is_some() {
+        if self.modal_pending == ModalPending::G || self.modal_pending_find.is_some() {
             self.modal_resolve_pending(key);
             return true;
         }
@@ -99,7 +99,7 @@ impl App {
             return false;
         }
         if key.code == KeyCode::Char('"') {
-            self.modal_pending_register_select = true;
+            self.modal_pending = ModalPending::RegisterSelect;
             return true;
         }
         // A digit keeps accumulating the count prefix -- unless it's a
@@ -358,7 +358,7 @@ impl App {
             // this first `g` -- only the pending-resolution arm (or an
             // unrelated key cancelling it) resets the counts.
             KeyCode::Char('g') => {
-                self.modal_pending_g = true;
+                self.modal_pending = ModalPending::G;
             }
             KeyCode::Char('G') => {
                 let line = if self.modal_count.is_empty() && self.modal_operator_count == 1 {
@@ -610,7 +610,7 @@ impl App {
         });
     }
 
-    /// Resolve a pending `gg` (`modal_pending_g`) or `f`/`t`/`F`/`T`
+    /// Resolve a pending `gg` (`ModalPending::G`) or `f`/`t`/`F`/`T`
     /// (`modal_pending_find`) now that its second key has arrived. A miss
     /// (an unexpected key, or one held with ctrl/alt) silently cancels —
     /// both the pending motion and any operator waiting on it — matching
@@ -618,8 +618,8 @@ impl App {
     fn modal_resolve_pending(&mut self, key: KeyEvent) {
         let count = self.modal_effective_count();
         let unmodified = !Self::ctrl(&key) && !Self::alt(&key);
-        if self.modal_pending_g {
-            self.modal_pending_g = false;
+        if self.modal_pending == ModalPending::G {
+            self.modal_pending = ModalPending::None;
             if unmodified && key.code == KeyCode::Char('g') {
                 self.modal_goto_line(Some(count));
                 return;
