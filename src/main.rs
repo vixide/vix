@@ -28,7 +28,7 @@ use crossterm::event::{
 };
 use crossterm::execute;
 
-use vix::app::App;
+use vix::app::{App, AppFlags};
 use vix::cli::Cli;
 use vix::settings::Settings;
 use vix::ui;
@@ -181,7 +181,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
         // Drain a finished asynchronous DB query into the workbench.
         app.poll_db_query();
         terminal.draw(|frame| ui::draw(app, frame))?;
-        if app.should_quit {
+        if app.flags.contains(AppFlags::SHOULD_QUIT) {
             return Ok(());
         }
         // Poll with a timeout so the calendar clock refreshes while idle; poll
@@ -210,8 +210,8 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
                 _ => {}
             }
         }
-        if app.suspend_requested {
-            app.suspend_requested = false;
+        if app.flags.contains(AppFlags::SUSPEND_REQUESTED) {
+            app.flags.remove(AppFlags::SUSPEND_REQUESTED);
             suspend(terminal);
         }
     }

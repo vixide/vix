@@ -1524,15 +1524,73 @@ pub enum ModalPending {
     RegisterSelect,
 }
 
+bitflags::bitflags! {
+    /// The last 14 single-purpose `App` toggles (T149, final slice) with no
+    /// shared mutual-exclusion or grouping story with each other — unlike
+    /// [`Visible`] (all genuinely independent UI-surface toggles) or
+    /// [`EmacsChord`]/[`MacroState`]/[`ModalPending`] (mutually exclusive
+    /// modes), these are just miscellaneous facts that happen to each be a
+    /// bool: a theme-pick overlay, a pending git status, a dirty scrollbar,
+    /// and so on are all unrelated and can all be true at once, which is
+    /// exactly what makes a bitset (not an enum) the right shape, same
+    /// reasoning as `Visible`. See each constant's own doc for what it
+    /// means and who reads/writes it.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct AppFlags: u16 {
+        /// Whether [`App::x11_panel`] was opened *from* the theme editor to
+        /// pick a slot's color, rather than from Tools → X11 Colors to
+        /// insert a hex value into a buffer — its `Enter` handler branches
+        /// on this.
+        const THEME_EDITOR_PICKING = 1 << 0;
+        /// While set, command output lines are also captured for test
+        /// parsing.
+        const TEST_CAPTURE = 1 << 1;
+        /// Whether [`App::clip`] holds a cut (move) rather than a copy.
+        const CLIP_CUT = 1 << 2;
+        /// Overwrite (type-over) mode: typed characters replace the one
+        /// under the cursor instead of inserting. Session-only; toggled
+        /// with `toggle_overwrite_mode`.
+        const OVERWRITE = 1 << 3;
+        /// Set by the `suspend` action; the main loop suspends the process
+        /// (`SIGTSTP`) on Unix and clears it on resume.
+        const SUSPEND_REQUESTED = 1 << 4;
+        /// Whether the workspace root is a git work tree (checked once at
+        /// startup).
+        const GIT_REPO = 1 << 5;
+        /// Whether spell-checking (red underline in comments/strings) is
+        /// enabled.
+        const SPELLCHECK = 1 << 6;
+        /// When set, the calendar opens/creates the selected day's
+        /// Org-roam daily note on Enter instead of inserting the date
+        /// string.
+        const CALENDAR_DAILIES = 1 << 7;
+        /// Set to request application exit.
+        const SHOULD_QUIT = 1 << 8;
+        /// Whether `project_command_cache`/`project_history`/
+        /// `project_last_command` have been loaded from the session store
+        /// yet this run. Guards both the lazy load (so it happens at most
+        /// once) and the save on exit (so a run that never touches a
+        /// `project.*` action does not overwrite previously saved project
+        /// state with empty defaults).
+        const PROJECT_SESSION_LOADED = 1 << 9;
+        /// Set while the editor scrollbar thumb is being dragged, so the
+        /// drag keeps scrolling even if the pointer drifts off the
+        /// one-column track.
+        const SCROLLBAR_ACTIVE = 1 << 10;
+        /// Set while the split divider is being dragged to resize the
+        /// panes.
+        const SPLIT_RESIZE = 1 << 11;
+        /// Emacs keymap: a `Ctrl+U` universal argument is pending, applying
+        /// to the next command (used by `C-u C-c C-t` to close a task
+        /// *with* a note).
+        const EMACS_UNIVERSAL = 1 << 12;
+        /// Vi / Spacemacs keymaps: set in Insert mode, clear in Normal
+        /// mode. Meaningless in the non-modal keymaps.
+        const MODAL_INSERT = 1 << 13;
+    }
+}
+
 /// The whole application state.
-// T149 in progress: the 15 UI-visibility bools are a `Visible` bitset, the 6
-// Emacs chord-prefix bools an `EmacsChord` enum, and (this slice) the 2
-// macro-state and 2 modal-pending bools each their own small enum. A dozen
-// single-purpose bools remain, to become one more bitset in the next slice,
-// after which this allow goes. (The earlier rationale here — that a single
-// flags struct "would itself exceed the bool limit" — was wrong: the lint
-// counts `bool` *fields*, and a bitset has none.)
-#[allow(clippy::struct_excessive_bools)]
 pub struct App {
     /// Workspace root directory.
     pub root: PathBuf,
@@ -1674,10 +1732,6 @@ pub struct App {
     pub x11_panel: Option<X11Panel>,
     /// Theme editor overlay (T202), when open.
     pub theme_editor: Option<vix_theme_editor_panel::Panel>,
-    /// Whether [`App::x11_panel`] was opened *from* the theme editor to pick
-    /// a slot's color, rather than from Tools → X11 Colors to insert a hex
-    /// value into a buffer — its `Enter` handler branches on this.
-    theme_editor_picking: bool,
     /// The theme editor's committed baseline, to revert to if the editor is
     /// closed (`Esc`) without saving. `None` when the editor is closed.
     theme_editor_baseline: Option<String>,
@@ -1757,8 +1811,6 @@ pub struct App {
     pub dap_variables: Vec<crate::dap::Variable>,
     /// Watch expressions and their last results: `(expr, result)`.
     pub dap_watches: Vec<(String, String)>,
-    /// While true, command output lines are also captured for test parsing.
-    test_capture: bool,
     /// Buffered output of the running test command, parsed on completion.
     test_buffer: Vec<String>,
     /// Parsed results of the last test run.
@@ -1804,8 +1856,6 @@ pub struct App {
     backlinks_follow_key: Option<(usize, u64)>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
     pub clip: Vec<PathBuf>,
-    /// Whether [`App::clip`] holds a cut (move) rather than a copy.
-    pub clip_cut: bool,
     /// Position-history jump list (Alt+Left / Alt+Right).
     pub nav_history: Vec<Location>,
     /// User bookmarks (file + line), toggled per line and navigable as a set.
@@ -1830,9 +1880,9 @@ pub struct App {
     pub focus: Focus,
     /// Which UI surfaces are currently shown (T149 — see [`Visible`]).
     pub visible: Visible,
-    /// Overwrite (type-over) mode: typed characters replace the one under the
-    /// cursor instead of inserting. Session-only; toggled with `toggle_overwrite_mode`.
-    pub overwrite: bool,
+    /// The last 14 single-purpose, mutually-independent toggles (T149 —
+    /// see [`AppFlags`]).
+    pub flags: AppFlags,
     /// Whether a keyboard macro is being recorded or replayed right now
     /// (T149 — recording and playing are mutually exclusive: `play_macro`
     /// refuses to start while recording, so an enum replaces what were two
@@ -1868,14 +1918,9 @@ pub struct App {
     /// Direction of a pending `selectionRange` request (`true` = expand, `false`
     /// = shrink), applied when the response arrives.
     expand_selection_dir: Option<bool>,
-    /// Set by the `suspend` action; the main loop suspends the process
-    /// (`SIGTSTP`) on Unix and clears it on resume.
-    pub suspend_requested: bool,
     /// Linked-editing ranges (char offsets in the active buffer) captured when
     /// the linked-edit prompt was opened, replaced together on submit.
     linked_ranges: Option<Vec<(usize, usize)>>,
-    /// Whether the workspace root is a git work tree (checked once at startup).
-    pub git_repo: bool,
     /// Cached current git branch (or short hash when detached), when in a repo.
     pub git_branch: Option<String>,
     /// Cached `git status` rows (changed files), refreshed on save / git actions.
@@ -1886,8 +1931,6 @@ pub struct App {
     /// Parsed coverage report (T210: **Tools → Load Coverage File…**), if one
     /// has been loaded. Stays cached across a Toggle Coverage Gutter off/on.
     coverage: Option<vix_coverage::Report>,
-    /// Whether spell-checking (red underline in comments/strings) is enabled.
-    pub spellcheck: bool,
     /// Loaded spell checker for the active locale, when spell-checking is on and
     /// a dictionary was found.
     pub speller: Option<crate::spellcheck::SpellChecker>,
@@ -1905,9 +1948,6 @@ pub struct App {
     pub explorer_hscroll: usize,
     /// Horizontal scroll offset (chars) of the message drawer.
     pub messages_hscroll: usize,
-    /// When true, the calendar opens/creates the selected day's Org-roam daily
-    /// note on Enter instead of inserting the date string.
-    pub calendar_dailies: bool,
     /// Month navigation state for the calendar box.
     pub calendar: crate::calendar::Calendar,
     /// Row-selection state for the clock box.
@@ -1927,8 +1967,6 @@ pub struct App {
     pending_rebind_action_id: Option<String>,
     /// Status-bar text.
     pub status: String,
-    /// Set to request application exit.
-    pub should_quit: bool,
     /// Pane rectangles recorded during the last render.
     pub layout: Layout,
     /// File paths under the workspace root, for the palette file finder.
@@ -1952,12 +1990,6 @@ pub struct App {
     /// The most recently run project command of any kind (a lifecycle
     /// command or a named task), for `project.repeat_last_task`.
     project_last_command: Option<String>,
-    /// Whether `project_command_cache`/`project_history`/`project_last_command`
-    /// have been loaded from the session store yet this run. Guards both the
-    /// lazy load (so it happens at most once) and the save on exit (so a run
-    /// that never touches a `project.*` action does not overwrite previously
-    /// saved project state with empty defaults).
-    project_session_loaded: bool,
     /// Context for a pending [`PromptKind::ProjectCommand`] prompt.
     pending_project_command: Option<PendingProjectCommand>,
     /// Action ids of commands recently run from the palette, most-recent first
@@ -1977,13 +2009,8 @@ pub struct App {
     /// The theme name currently applied as a menu hover/keyboard preview (reverted
     /// to the committed theme when the menu closes or the pointer leaves it).
     theme_preview: Option<String>,
-    /// True while the editor scrollbar thumb is being dragged, so the drag keeps
-    /// scrolling even if the pointer drifts off the one-column track.
-    scrollbar_active: bool,
     /// Which view's horizontal scrollbar is being dragged, if any.
     hbar_active: Option<HBar>,
-    /// True while the split divider is being dragged to resize the panes.
-    split_resize: bool,
     /// Max horizontal scroll (`content_width − viewport`) recorded each render for
     /// the editor, explorer, message drawer, and bottom dock, for scrollbar drag.
     pub editor_hmax: usize,
@@ -1997,15 +2024,9 @@ pub struct App {
     dock_resize: Option<DockResize>,
     /// Which Emacs chord prefix is pending, if any (T149 — see [`EmacsChord`]).
     emacs_chord: EmacsChord,
-    /// Emacs keymap: a `Ctrl+U` universal argument is pending, applying to the
-    /// next command (used by `C-u C-c C-t` to close a task *with* a note).
-    emacs_universal: bool,
     /// The interactive Org agenda view backing the current agenda buffer, if one
     /// is open — maps buffer lines to source tasks so `t` can toggle them.
     agenda: Option<AgendaView>,
-    /// Vi / Spacemacs keymaps: true in Insert mode, false in Normal mode.
-    /// Meaningless in the non-modal keymaps.
-    modal_insert: bool,
     /// Vim keymap: the in-progress `:` command-line text, when the command line
     /// is open.
     vim_cmd: Option<String>,
@@ -2219,7 +2240,6 @@ impl App {
             qrcode: None,
             x11_panel: None,
             theme_editor: None,
-            theme_editor_picking: false,
             theme_editor_baseline: None,
             media_type_panel: None,
             http_rx: None,
@@ -2252,7 +2272,11 @@ impl App {
             dap_variables: Vec::new(),
             dap_watches: Vec::new(),
             visible: Visible::initial(&settings),
-            test_capture: false,
+            flags: if settings.typing.spellcheck {
+                AppFlags::SPELLCHECK
+            } else {
+                AppFlags::empty()
+            },
             test_buffer: Vec::new(),
             test_results: Vec::new(),
             test_selected: 0,
@@ -2274,13 +2298,11 @@ impl App {
             word_highlight_key: None,
             backlinks_follow_key: None,
             clip: Vec::new(),
-            clip_cut: false,
             nav_history: Vec::new(),
             bookmarks: Vec::new(),
             nav_idx: 0,
             picker: None,
             zen_saved: None,
-            overwrite: false,
             macro_state: MacroState::Idle,
             macro_keys: Vec::new(),
             complete_session: None,
@@ -2293,21 +2315,17 @@ impl App {
             emacs_chord: EmacsChord::None,
             pending_link_target: None,
             expand_selection_dir: None,
-            suspend_requested: false,
             linked_ranges: None,
-            git_repo: false,
             git_branch: None,
             git_status: Vec::new(),
             git_head_cache: std::collections::HashMap::new(),
             coverage: None,
-            spellcheck: settings.typing.spellcheck,
             speller: None,
             speller_locale: None,
             bottom_dock: crate::bottom_dock::BottomDock::with_scrollback(settings.scrollback),
             bottom_hscroll: 0,
             explorer_hscroll: 0,
             messages_hscroll: 0,
-            calendar_dailies: false,
             calendar: crate::calendar::Calendar::new(),
             clock: crate::clock::Clock::new(),
             help: None,
@@ -2315,7 +2333,6 @@ impl App {
             pending_rebind_action_id: None,
             focus: Focus::Editor,
             status: t!("status.ready").to_string(),
-            should_quit: false,
             layout: Layout::default(),
             settings,
             settings_path: None,
@@ -2326,7 +2343,6 @@ impl App {
             project_command_cache: crate::tasks::lifecycle::LifecycleCommands::default(),
             project_history: ProjectHistory::default(),
             project_last_command: None,
-            project_session_loaded: false,
             pending_project_command: None,
             command_recents,
             last_search: None,
@@ -2337,17 +2353,13 @@ impl App {
             terminal: None,
             ai_diff: None,
             theme_preview: None,
-            scrollbar_active: false,
             hbar_active: None,
-            split_resize: false,
             editor_hmax: 0,
             explorer_hmax: 0,
             messages_hmax: 0,
             bottom_hmax: 0,
             dock_resize: None,
-            emacs_universal: false,
             agenda: None,
-            modal_insert: false,
             vim_cmd: None,
             vim_pending: None,
             spacemacs_leader: None,
@@ -3509,8 +3521,8 @@ impl App {
             "spawn_multi_cursor_up" => ed!(add_caret_above),
             "spawn_multi_cursor_down" => ed!(add_caret_below),
             "toggle_overwrite_mode" => {
-                self.overwrite = !self.overwrite;
-                self.status = t!(if self.overwrite {
+                self.flags.toggle(AppFlags::OVERWRITE);
+                self.status = t!(if self.flags.contains(AppFlags::OVERWRITE) {
                     "status.overwrite_on"
                 } else {
                     "status.overwrite_off"
@@ -3549,7 +3561,7 @@ impl App {
                     t!("prompt.run_command").to_string(),
                 ));
             }
-            "suspend" => self.suspend_requested = true,
+            "suspend" => self.flags.insert(AppFlags::SUSPEND_REQUESTED),
             _ => return false,
         }
         true
@@ -3965,7 +3977,9 @@ impl App {
     /// insert the formatted date at the cursor. Closes the calendar.
     fn calendar_accept(&mut self) {
         self.visible.set(Visible::CALENDAR, false);
-        if std::mem::take(&mut self.calendar_dailies) {
+        let dailies = self.flags.contains(AppFlags::CALENDAR_DAILIES);
+        self.flags.remove(AppFlags::CALENDAR_DAILIES);
+        if dailies {
             let date = self.calendar.selected_formatted("%Y-%m-%d");
             self.roam_open_daily(&date);
         } else {
@@ -4404,9 +4418,10 @@ impl App {
     /// Toggle spell-checking (red underline in comments/strings), persisting the
     /// choice and refreshing the marks on the active buffer.
     fn toggle_spellcheck(&mut self) {
-        self.spellcheck = !self.spellcheck;
-        self.settings.typing.spellcheck = self.spellcheck;
-        if !self.spellcheck {
+        self.flags.toggle(AppFlags::SPELLCHECK);
+        let on = self.flags.contains(AppFlags::SPELLCHECK);
+        self.settings.typing.spellcheck = on;
+        if !on {
             self.speller = None;
             self.speller_locale = None;
             if let Some(t) = self.editor.active_tab_mut() {
@@ -4414,7 +4429,7 @@ impl App {
             }
         }
         self.refresh_spellcheck();
-        self.status = if self.spellcheck {
+        self.status = if on {
             t!("status.spellcheck_on")
         } else {
             t!("status.spellcheck_off")
@@ -4426,7 +4441,7 @@ impl App {
     /// already loaded for that locale). A missing dictionary leaves the checker
     /// unset, so spell-checking is silently inert until the locale changes.
     fn ensure_speller(&mut self) {
-        if !self.spellcheck {
+        if !self.flags.contains(AppFlags::SPELLCHECK) {
             return;
         }
         let locale = rust_i18n::locale().to_string();
@@ -4531,7 +4546,7 @@ impl App {
     /// cursor. Reports a status when spell-checking is off/unavailable, the cursor
     /// is not on a word, or that word is spelled correctly.
     fn open_spell_suggest(&mut self) {
-        if self.spellcheck {
+        if self.flags.contains(AppFlags::SPELLCHECK) {
             self.ensure_speller();
         }
         if self.speller.is_none() {
@@ -6072,7 +6087,7 @@ impl App {
         // Overwrite mode: a plain character types over the one under the cursor
         // (delete it first, then the normal insert below replaces it). Skipped at
         // end-of-line, with a selection, or with multiple carets.
-        if self.overwrite
+        if self.flags.contains(AppFlags::OVERWRITE)
             && matches!(key.code, KeyCode::Char(_))
             && !Self::ctrl(&key)
             && !Self::alt(&key)
@@ -6774,9 +6789,9 @@ impl App {
             }
             KeyCode::Delete => self.explorer_delete_request(),
             KeyCode::Esc => {
-                if !self.clip.is_empty() && self.clip_cut {
+                if !self.clip.is_empty() && self.flags.contains(AppFlags::CLIP_CUT) {
                     self.clip.clear();
-                    self.clip_cut = false;
+                    self.flags.remove(AppFlags::CLIP_CUT);
                     self.status = t!("status.cut_cancelled").into();
                 } else if !self.explorer.marked.is_empty() {
                     self.explorer.clear_marks();
@@ -6797,7 +6812,7 @@ impl App {
         }
         let n = paths.len();
         self.clip = paths;
-        self.clip_cut = cut;
+        self.flags.set(AppFlags::CLIP_CUT, cut);
         self.status = (if cut {
             t!("status.cut_n", n = n)
         } else {
@@ -6820,7 +6835,7 @@ impl App {
         };
         self.paste = Some(PasteOp {
             target,
-            cut: self.clip_cut,
+            cut: self.flags.contains(AppFlags::CLIP_CUT),
             queue: self.clip.clone().into(),
             overwrite_all: false,
             skip_all: false,
@@ -6839,7 +6854,7 @@ impl App {
                     && op.cut
                 {
                     self.clip.clear();
-                    self.clip_cut = false;
+                    self.flags.remove(AppFlags::CLIP_CUT);
                 }
                 self.explorer.clear_marks();
                 self.explorer.rebuild();
@@ -6999,7 +7014,7 @@ impl App {
                 name: self.active_tab_name(),
             });
         } else {
-            self.should_quit = true;
+            self.flags.insert(AppFlags::SHOULD_QUIT);
         }
     }
 
@@ -7014,7 +7029,7 @@ impl App {
             }
         } else {
             self.unsaved = None;
-            self.should_quit = true;
+            self.flags.insert(AppFlags::SHOULD_QUIT);
         }
     }
 
@@ -7765,15 +7780,19 @@ impl App {
             MouseEventKind::Down(MouseButton::Left)
                 if rect_contains(self.layout.scrollbar, col, row) =>
             {
-                self.scrollbar_active = true;
+                self.flags.insert(AppFlags::SCROLLBAR_ACTIVE);
                 self.scrollbar_drag(row);
                 return true;
             }
-            MouseEventKind::Drag(MouseButton::Left) if self.scrollbar_active => {
+            MouseEventKind::Drag(MouseButton::Left)
+                if self.flags.contains(AppFlags::SCROLLBAR_ACTIVE) =>
+            {
                 self.scrollbar_drag(row);
                 return true;
             }
-            MouseEventKind::Up(MouseButton::Left) => self.scrollbar_active = false,
+            MouseEventKind::Up(MouseButton::Left) => {
+                self.flags.remove(AppFlags::SCROLLBAR_ACTIVE);
+            }
             _ => {}
         }
 
@@ -7806,6 +7825,13 @@ impl App {
             _ => {}
         }
 
+        self.try_chrome_resize_mouse(mouse, col, row)
+    }
+
+    /// The second half of [`App::try_chrome_mouse`]: dock-resize-edge and
+    /// split-divider press/drag. Split out to keep that function within the
+    /// line limit.
+    fn try_chrome_resize_mouse(&mut self, mouse: MouseEvent, col: u16, row: u16) -> bool {
         // Dock resizing: press a dock's inner edge (the explorer's right border
         // or the messages drawer's left border) and drag to resize it. The drag
         // continues even if the pointer drifts off that column.
@@ -7857,14 +7883,18 @@ impl App {
                         .editor
                         .resize_split_at(self.layout.editor_region, col, row) =>
             {
-                self.split_resize = true;
+                self.flags.insert(AppFlags::SPLIT_RESIZE);
                 return true;
             }
-            MouseEventKind::Drag(MouseButton::Left) if self.split_resize => {
+            MouseEventKind::Drag(MouseButton::Left)
+                if self.flags.contains(AppFlags::SPLIT_RESIZE) =>
+            {
                 self.resize_split(col, row);
                 return true;
             }
-            MouseEventKind::Up(MouseButton::Left) => self.split_resize = false,
+            MouseEventKind::Up(MouseButton::Left) => {
+                self.flags.remove(AppFlags::SPLIT_RESIZE);
+            }
             _ => {}
         }
         false
@@ -8805,7 +8835,7 @@ impl App {
     /// so a freshly chosen keymap starts clean — Vim begins in Normal mode.
     fn reset_keymap_modes(&mut self) {
         self.emacs_chord = EmacsChord::None;
-        self.modal_insert = false;
+        self.flags.remove(AppFlags::MODAL_INSERT);
         self.modal_mode = vix_modal::Mode::Normal;
         self.modal_count.reset();
         self.modal_pending = ModalPending::None;
@@ -13221,7 +13251,7 @@ impl App {
         for msg in msgs {
             match msg {
                 CmdMsg::Line(l) => {
-                    if self.test_capture {
+                    if self.flags.contains(AppFlags::TEST_CAPTURE) {
                         self.test_buffer.push(l.clone());
                     }
                     self.bottom_dock.push(l);
@@ -13247,7 +13277,7 @@ impl App {
         }
         if done {
             self.running_command = None;
-            if self.test_capture {
+            if self.flags.contains(AppFlags::TEST_CAPTURE) {
                 self.finish_test_run();
             }
             // A finished command may have changed the working tree or HEAD (e.g.
@@ -13263,7 +13293,7 @@ impl App {
             self.status = t!("status.command_busy").to_string();
             return;
         }
-        self.test_capture = true;
+        self.flags.insert(AppFlags::TEST_CAPTURE);
         self.test_buffer.clear();
         self.visible.set(Visible::TEST_PANEL, true);
         let cmd = self.settings.test_command.clone();
@@ -13272,7 +13302,7 @@ impl App {
 
     /// Parse the captured test output, populate the panel, and report a summary.
     fn finish_test_run(&mut self) {
-        self.test_capture = false;
+        self.flags.remove(AppFlags::TEST_CAPTURE);
         self.test_results = crate::test_runner::parse(&self.test_buffer.join("\n"));
         self.test_buffer.clear();
         self.test_selected = 0;
@@ -13970,12 +14000,14 @@ mod tests {
         app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
         app.run_action("roam.dailies_calendar");
         assert!(
-            app.visible.contains(Visible::CALENDAR) && app.calendar_dailies,
+            app.visible.contains(Visible::CALENDAR)
+                && app.flags.contains(AppFlags::CALENDAR_DAILIES),
             "dailies calendar opened"
         );
         app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert!(
-            !app.visible.contains(Visible::CALENDAR) && !app.calendar_dailies,
+            !app.visible.contains(Visible::CALENDAR)
+                && !app.flags.contains(AppFlags::CALENDAR_DAILIES),
             "calendar closed on accept"
         );
         let opened = app.editor.tabs.iter().any(|t| {

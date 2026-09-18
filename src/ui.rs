@@ -71,7 +71,7 @@ use tool_panels::{
     draw_unit_converter, draw_welcome,
 };
 
-use crate::app::{App, Focus};
+use crate::app::{App, AppFlags, Focus};
 use crate::menu::menus;
 use crate::theme;
 
@@ -165,12 +165,12 @@ fn body_columns(app: &App, body: Rect) -> BodyColumns {
 pub fn draw(app: &mut App, frame: &mut Frame) {
     // Refresh misspelled-word underlines before painting (event-driven redraw, so
     // this recomputes once per input rather than continuously).
-    if app.spellcheck {
+    if app.flags.contains(AppFlags::SPELLCHECK) {
         app.refresh_spellcheck();
     }
     if app.coverage_gutter_active() {
         app.refresh_coverage_gutter();
-    } else if app.git_repo {
+    } else if app.flags.contains(AppFlags::GIT_REPO) {
         app.refresh_git_gutter();
     }
     let area = frame.area();

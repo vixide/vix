@@ -15,7 +15,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
-use super::{App, Focus, Keymap, display_key, menu_index_for_alt};
+use super::{App, AppFlags, Focus, Keymap, display_key, menu_index_for_alt};
 use crate::editor_core::actions::Copy as CopyAction;
 
 impl App {
@@ -272,7 +272,7 @@ impl App {
             KeyCode::Enter => self.calendar_accept(),
             KeyCode::Esc | KeyCode::Char('q') => {
                 self.visible.set(crate::app::Visible::CALENDAR, false);
-                self.calendar_dailies = false;
+                self.flags.remove(AppFlags::CALENDAR_DAILIES);
             }
             _ => {}
         }
@@ -1081,13 +1081,15 @@ impl App {
         // `Ctrl+U` starts a universal argument, applied to the next command
         // (here: `C-u C-c C-t` closes a task with a note instead of just cycling).
         if Self::ctrl(&key) && matches!(key.code, KeyCode::Char('u')) {
-            self.emacs_universal = true;
+            self.flags.insert(AppFlags::EMACS_UNIVERSAL);
             self.status = t!("status.emacs_universal").to_string();
             return true;
         }
         // Any key other than the `Ctrl+C` prefix cancels a pending universal arg.
-        if self.emacs_universal && !(Self::ctrl(&key) && matches!(key.code, KeyCode::Char('c'))) {
-            self.emacs_universal = false;
+        if self.flags.contains(AppFlags::EMACS_UNIVERSAL)
+            && !(Self::ctrl(&key) && matches!(key.code, KeyCode::Char('c')))
+        {
+            self.flags.remove(AppFlags::EMACS_UNIVERSAL);
         }
         // `Ctrl+X`/`Ctrl+C` start a chord — a mode transition, not a
         // dispatchable action, so these two stay special-cased rather than
@@ -1160,7 +1162,8 @@ impl App {
     /// after `C-u`, closes it with a note), and `C-c C-c` runs the context action
     /// (toggle a checkbox / refresh statistics).
     pub(super) fn emacs_c_chord_key(&mut self, key: KeyEvent) -> bool {
-        let universal = std::mem::take(&mut self.emacs_universal);
+        let universal = self.flags.contains(AppFlags::EMACS_UNIVERSAL);
+        self.flags.remove(AppFlags::EMACS_UNIVERSAL);
         // `C-c RET` / `org-table-hline-and-move`: RET arrives as `KeyCode::Enter`,
         // not a `Char`, so it cannot go through the "C-c" context's table lookup.
         if key.code == KeyCode::Enter {
@@ -1315,9 +1318,9 @@ impl App {
             self.vim_cmd_key(key);
             return true;
         }
-        if self.modal_insert {
+        if self.flags.contains(AppFlags::MODAL_INSERT) {
             if key.code == KeyCode::Esc {
-                self.modal_insert = false;
+                self.flags.remove(AppFlags::MODAL_INSERT);
                 self.modal_mode = vix_modal::Mode::Normal;
                 return true;
             }
@@ -1385,7 +1388,7 @@ impl App {
     /// (`run_vim_action`, this file), and `c{motion}` (T114,
     /// `src/app/modal.rs`, once the deleted range is gone).
     pub(super) fn vim_enter_insert(&mut self) {
-        self.modal_insert = true;
+        self.flags.insert(AppFlags::MODAL_INSERT);
         self.modal_mode = vix_modal::Mode::Insert;
     }
 
@@ -1458,7 +1461,7 @@ impl App {
             "w" => self.run_action("file.save"),
             "q" => self.run_action("file.close"),
             // Vim force-quit discards unsaved changes without prompting.
-            "q!" => self.should_quit = true,
+            "q!" => self.flags.insert(AppFlags::SHOULD_QUIT),
             "wq" | "x" => {
                 self.run_action("file.save");
                 self.run_action("file.close");
@@ -1500,9 +1503,9 @@ impl App {
             self.vim_cmd_key(key);
             return true;
         }
-        if self.modal_insert {
+        if self.flags.contains(AppFlags::MODAL_INSERT) {
             if key.code == KeyCode::Esc {
-                self.modal_insert = false;
+                self.flags.remove(AppFlags::MODAL_INSERT);
                 self.modal_mode = vix_modal::Mode::Normal;
                 return true;
             }

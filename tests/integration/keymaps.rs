@@ -349,7 +349,7 @@ fn emacs_keymap_chords_open_find_and_quit() {
     // C-x C-c quits.
     app.on_key(ctrl('x'));
     app.on_key(ctrl('c'));
-    assert!(app.should_quit, "C-x C-c quits");
+    assert!(app.flags.contains(AppFlags::SHOULD_QUIT), "C-x C-c quits");
 }
 
 #[test]
@@ -398,7 +398,7 @@ fn vim_keymap_command_line_quits() {
     app.on_key(key('!'));
     assert_eq!(app.mode_indicator().as_deref(), Some(":q!"));
     app.on_key(keycode(KeyCode::Enter));
-    assert!(app.should_quit, ":q! quits");
+    assert!(app.flags.contains(AppFlags::SHOULD_QUIT), ":q! quits");
 }
 
 #[test]

@@ -90,7 +90,7 @@ fn toggle_key_menu_shows_the_shortcuts_overlay() {
 #[test]
 fn vix_menu_quit_quits_program() {
     let mut app = app_at(Path::new("."));
-    assert!(!app.should_quit);
+    assert!(!app.flags.contains(AppFlags::SHOULD_QUIT));
 
     // Open the menu bar (the Vix menu is first), then walk down to "Quit".
     app.on_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
@@ -119,7 +119,10 @@ fn vix_menu_quit_quits_program() {
 
     // The main loop (main.rs) breaks out as soon as this flag is set, so
     // choosing Vix -> Quit really does end the program.
-    assert!(app.should_quit, "Vix -> Quit must request exit");
+    assert!(
+        app.flags.contains(AppFlags::SHOULD_QUIT),
+        "Vix -> Quit must request exit"
+    );
 }
 
 #[test]

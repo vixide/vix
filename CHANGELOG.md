@@ -610,28 +610,30 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - **Bool fields on `Settings` and `App` are grouped internally**
-  (improvement plan T149, in progress): the 32 on/off preferences on the
-  `vix-settings` `Settings` struct now live in 11 small per-topic
-  sub-structs (`settings.gutter.line_numbers`,
+  (improvement plan T149, now fully done — 7/7 structs): the 32 on/off
+  preferences on the `vix-settings` `Settings` struct now live in 11
+  small per-topic sub-structs (`settings.gutter.line_numbers`,
   `settings.save.format_on_save`, …) instead of directly on `Settings`.
   **Your `config.toml` is unaffected** — every setting is still the same
   flat top-level key with the same name and default, and a config
   written by any earlier version loads identically (now covered by
-  tests). Separately, 15 of `App`'s own UI-surface-visibility bools
-  (`show_explorer`, `show_bottom_dock`, `pomodoro_open`, …) are now one
-  `App::visible: Visible` bitset, its 6 mutually-exclusive Emacs-keymap
-  chord-prefix bools are one `App::emacs_chord: EmacsChord` enum, and
-  (recording/replaying a keyboard macro, and a pending `gg`/register-select
-  in the modal engine, are each themselves mutually exclusive) its
-  `macro_recording`/`macro_playing` bools are one
-  `App::macro_state: MacroState` enum and its `modal_pending_g`/
-  `modal_pending_register_select` bools are one
-  `App::modal_pending: ModalPending` enum. Only Rust code that reads
-  these fields directly (embedders, scripts built against the crate)
-  sees the new shapes (`settings.<group>.<field>`,
+  tests). Separately, all of `App`'s own bools are now typed: 15
+  UI-surface-visibility bools (`show_explorer`, `show_bottom_dock`,
+  `pomodoro_open`, …) are one `App::visible: Visible` bitset; 6
+  mutually-exclusive Emacs-keymap chord-prefix bools are one
+  `App::emacs_chord: EmacsChord` enum; recording/replaying a keyboard
+  macro is one `App::macro_state: MacroState` enum; a pending
+  `gg`/register-select in the modal engine is one
+  `App::modal_pending: ModalPending` enum; and the last 14
+  single-purpose, mutually-independent toggles (`clip_cut`, `overwrite`,
+  `suspend_requested`, `git_repo`, `spellcheck`, `calendar_dailies`,
+  `should_quit`, …) are one `App::flags: AppFlags` bitset. Only Rust
+  code that reads these fields directly (embedders, scripts built
+  against the crate) sees the new shapes (`settings.<group>.<field>`,
   `app.visible.contains(Visible::…)`, `app.emacs_chord == EmacsChord::…`,
   `app.macro_state == MacroState::…`,
-  `app.modal_pending == ModalPending::…`). See
+  `app.modal_pending == ModalPending::…`,
+  `app.flags.contains(AppFlags::…)`). See
   `crates/vix-settings/spec/index.md`.
 - **Opening a large file no longer blocks on a synchronous parse**
   (improvement plan T121): buffers at or above the existing 50 KB

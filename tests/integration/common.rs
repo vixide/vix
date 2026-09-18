@@ -12,7 +12,7 @@ pub(crate) use crossterm::event::{
 };
 pub(crate) use ratatui::layout::Rect;
 
-pub(crate) use vix::app::{App, Focus, PromptKind};
+pub(crate) use vix::app::{App, AppFlags, Focus, PromptKind};
 pub(crate) use vix::calendar;
 pub(crate) use vix::clock;
 pub(crate) use vix::fileops;

@@ -2486,7 +2486,7 @@ and its own gate run, zero intended behavior change unless stated.
   while only that one crate pays an optimization-vs-iteration-speed
   cost, not the whole workspace. Full `scripts/check` gate green
   end-to-end afterward, including the originally-failing test.
-- [ ] **T149 — Replace boolean clusters with types.** Seven
+- [x] **T149 — Replace boolean clusters with types.** Seven
   `struct_excessive_bools` allows found (one more than the task's own
   count of six): `App`, `Settings`, `Editor` (both `vix-editor` and
   `vix-editor-core`), `SearchBar`, `WorkspaceSearch`, and
@@ -2667,6 +2667,35 @@ and its own gate run, zero intended behavior change unless stated.
   combinable (a theme-pick overlay, a pending git status, and a dirty
   scrollbar are all unrelated facts that can all be true at once)
   rather than mutually exclusive modes.
+  **Slice 4/4 done 2026-09-18 — `App` and T149 both fully closed
+  (7/7).** All 14 remaining single-purpose bools become one `AppFlags`
+  bitset (14 named consts, `u16`-backed), the same reasoning as
+  `Visible`: independently, freely combinable facts, not mutually
+  exclusive modes. A single `pub flags: AppFlags` field replaces them
+  all — several of the 14 (`clip_cut`, `overwrite`, `suspend_requested`,
+  `git_repo`, `spellcheck`, `calendar_dailies`, `should_quit`) were
+  already `pub` (read from `src/main.rs`, `src/ui.rs`,
+  `src/ui/explorer.rs`, and the integration test suite), so the merged
+  field is `pub` too, same tradeoff `Visible` already made in slice 1.
+  ~94 call sites across `src/app.rs` and 7 `src/app/*.rs` submodules,
+  `src/main.rs`, `src/lib.rs`'s own doctest, `src/ui.rs`,
+  `src/ui/explorer.rs`, and 5 `tests/integration/*.rs` files — mixed
+  mechanical (Python find/replace, scoped per field name to avoid the
+  `Settings`-vs-`App` `spellcheck`/`calendar_dailies` collision T149's
+  Settings pass already found once) and by-hand fixes, clean on the
+  first `cargo check`. Two knock-on fixes, both caught by the gate, not
+  by review: an intra-doc link `[`App::modal_pending`]` in the
+  slice-3-added `ModalPending` doc broke `cargo doc` once
+  `modal_pending` stayed private (rustdoc refuses a public link to a
+  private item) — changed to a plain code span; and turning 3
+  single-line mouse-drag match arms into blocks (`self.flags.remove(...)`
+  needs a statement, `self.scrollbar_active = false` didn't) pushed
+  `try_chrome_mouse` over the 100-line pedantic limit — split its
+  second half (dock-resize-edge and split-divider handling) into a new
+  `try_chrome_resize_mouse` sibling. `App`'s own
+  `#[allow(clippy::struct_excessive_bools)]` is gone — the struct now
+  has zero `bool` fields, closing out the lint's very first finding
+  from this task and all seven of the task's own original structs.
 - [x] **T150 — Remove the two crate-level blanket allows.** Done. Both
   gone, no per-expression allow needed to replace either: `multicursor.rs`'s
   `multi_insert`/`multi_delete` — the only cast sites in the file —
@@ -3768,12 +3797,12 @@ groups is listed explicitly.
 8. **Security:** T131/T132/T133 are done. **T134 remains**, blocked on
    T105 and T124/T125 shipping.
 9. **CI + code quality:** T009/T010/T141/T142/T143/T144/T145/T146/T147/
-   T148/T150/T151/T152/T153/T154 are all done. **T149 is 5/7 done, and
-   that's where it stops** — `App`/`Settings` (measured at ~350-450
-   call sites combined) were explicitly deferred indefinitely by the
-   user once real scope was in hand, not just pushed to "later" (see
-   T149's own entry for the concrete findings). This run has nothing
-   else open.
+   T148/T149/T150/T151/T152/T153/T154 are all done. **T149's `App`/
+   `Settings` portion (measured at ~350-450 call sites combined, once
+   explicitly deferred indefinitely after that measurement) was picked
+   back up and finished 2026-09-18**, closing all 7/7 structs (see
+   T149's own entry for the full slice-by-slice detail). This run has
+   nothing else open.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.
