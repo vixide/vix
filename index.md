@@ -207,13 +207,19 @@ with the real code that reads it.
 
 ## Demos
 
+![Overview tour](docs/demos/overview.gif)
+
 `docs/demos/*.tape` are [VHS](https://github.com/charmbracelet/vhs) scripts
 that record eight short terminal-session GIFs of real Vix features — an
-overview tour, the command palette, multi-cursor editing, git hunk staging,
-the DB workbench, Org-roam, the table editor, and themes — each run against
-`examples/demo-workspace/`. Regenerate them with `scripts/render-demos.sh`
-(needs `vhs` on `PATH`, which in turn needs `ttyd` and a headless-capable
-Chrome/Chromium; `brew install vhs` covers the first two).
+overview tour (above), the command palette, multi-cursor editing, git hunk
+staging, the DB workbench, Org-roam, the table editor, and themes — each run
+against `examples/demo-workspace/`. Regenerate them with
+`scripts/render-demos.sh` (needs `vhs` on `PATH`, which in turn needs `ttyd`
+and a headless-capable Chrome/Chromium; `brew install vhs` covers the first
+two) or, on a machine that can't run a headless browser at all,
+`scripts/render-demos-lite.sh` (see its own header for the browser-free
+pipeline it uses instead — a real pty, a hand-written asciicast recorder, and
+[`agg`](https://github.com/asciinema/agg) for the GIF encode).
 
 ## License
 

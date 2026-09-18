@@ -17,7 +17,10 @@ Enter
 Sleep 1s
 Show
 
-# Open the connections list and add the seeded demo.sqlite.
+# Open the connections list and add the seeded demo.sqlite. `a` opens the
+# add-connection form on the Name field; Kind already defaults to sqlite
+# (Space would cycle it if it didn't), so the two Downs move straight to
+# the File field.
 Ctrl+P
 Type ">DB: Connections"
 Sleep 400ms
@@ -25,6 +28,9 @@ Enter
 Sleep 500ms
 Type "a"
 Sleep 300ms
+Type "Demo"
+Sleep 300ms
+Down
 Down
 Type "db/demo.sqlite"
 Sleep 300ms
