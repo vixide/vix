@@ -92,13 +92,13 @@ struct BodyColumns {
 fn body_columns(app: &App, body: Rect) -> BodyColumns {
     let dock_max = body.width.saturating_sub(20).max(12);
     let mut constraints = Vec::new();
-    if app.show_explorer {
+    if app.visible.contains(crate::app::Visible::EXPLORER) {
         constraints.push(Constraint::Length(
             app.settings.explorer_width.clamp(12, dock_max),
         ));
     }
     constraints.push(Constraint::Min(20));
-    if app.show_messages {
+    if app.visible.contains(crate::app::Visible::MESSAGES) {
         constraints.push(Constraint::Length(
             app.settings.messages_width.clamp(12, dock_max),
         ));
@@ -108,12 +108,12 @@ fn body_columns(app: &App, body: Rect) -> BodyColumns {
             app.settings.outline_width.clamp(12, dock_max),
         ));
     }
-    if app.show_debug_panel {
+    if app.visible.contains(crate::app::Visible::DEBUG_PANEL) {
         constraints.push(Constraint::Length(
             app.settings.debug_width.clamp(12, dock_max),
         ));
     }
-    if app.show_test_panel {
+    if app.visible.contains(crate::app::Visible::TEST_PANEL) {
         constraints.push(Constraint::Length(
             app.settings.test_width.clamp(12, dock_max),
         ));
@@ -128,16 +128,28 @@ fn body_columns(app: &App, body: Rect) -> BodyColumns {
         *ci += 1;
         r
     };
-    let explorer_rect = app.show_explorer.then(|| take(&mut ci));
+    let explorer_rect = app
+        .visible
+        .contains(crate::app::Visible::EXPLORER)
+        .then(|| take(&mut ci));
     let center_rect = take(&mut ci);
-    let messages_rect = app.show_messages.then(|| take(&mut ci));
+    let messages_rect = app
+        .visible
+        .contains(crate::app::Visible::MESSAGES)
+        .then(|| take(&mut ci));
     let outline_rect = app
         .settings
         .secondary_panels
         .show_outline_dock
         .then(|| take(&mut ci));
-    let debug_rect = app.show_debug_panel.then(|| take(&mut ci));
-    let test_rect = app.show_test_panel.then(|| take(&mut ci));
+    let debug_rect = app
+        .visible
+        .contains(crate::app::Visible::DEBUG_PANEL)
+        .then(|| take(&mut ci));
+    let test_rect = app
+        .visible
+        .contains(crate::app::Visible::TEST_PANEL)
+        .then(|| take(&mut ci));
     BodyColumns {
         explorer: explorer_rect,
         center: center_rect,
@@ -169,7 +181,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         Constraint::Length(1), // menu bar
         Constraint::Min(1),    // body
     ];
-    if app.show_status_bar {
+    if app.visible.contains(crate::app::Visible::STATUS_BAR) {
         vconstraints.push(Constraint::Length(2)); // status bar (top border + content)
     }
     let rows = Layout::default()
@@ -181,7 +193,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
 
     // The bottom dock (when shown) takes a fixed-height strip at the bottom of the
     // body; the rest is the main body (explorer | center | messages).
-    let (body, bottom_dock_rect) = if app.show_bottom_dock {
+    let (body, bottom_dock_rect) = if app.visible.contains(crate::app::Visible::BOTTOM_DOCK) {
         // Height is user-adjustable (drag the dock's top edge); keep at least 3
         // rows for the main body above it.
         let max_h = rows[1].height.saturating_sub(3).max(3);
@@ -205,7 +217,10 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     } = body_columns(app, body);
 
     // Center: tab bar, optional breadcrumb bar, then editor+scrollbar.
-    let (tabs_rect, breadcrumb_rect, editor_cell) = center_split(center_rect, app.show_breadcrumbs);
+    let (tabs_rect, breadcrumb_rect, editor_cell) = center_split(
+        center_rect,
+        app.visible.contains(crate::app::Visible::BREADCRUMBS),
+    );
     app.layout.tabs = tabs_rect;
 
     let editor_block = Block::default()
@@ -273,10 +288,10 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.jump.is_some() {
         draw_jump_labels(app, frame);
     }
-    if app.show_calendar {
+    if app.visible.contains(crate::app::Visible::CALENDAR) {
         draw_calendar(app, frame, area);
     }
-    if app.show_clock {
+    if app.visible.contains(crate::app::Visible::CLOCK) {
         draw_clock(app, frame, area);
     }
     if app.menu.is_open() {
@@ -465,7 +480,7 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.code_lens.is_some() {
         draw_code_lens(app, frame, area);
     }
-    if app.pomodoro_open {
+    if app.visible.contains(crate::app::Visible::POMODORO) {
         draw_pomodoro(app, frame, area);
     }
     if app.welcome.is_some() {

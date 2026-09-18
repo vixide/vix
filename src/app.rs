@@ -1400,10 +1400,82 @@ pub struct CompletionPopup {
     pub selected: usize,
 }
 
+bitflags::bitflags! {
+    /// Which of [`App`]'s UI surfaces are currently shown (T149): each bit is
+    /// an independent, freely-combinable toggle — the explorer and the message
+    /// drawer can both be open, the calendar and the clock can both be open —
+    /// not one of several mutually-exclusive modes, so a bitset (not an enum)
+    /// is the right shape, and grouping them into a plain sub-struct would only
+    /// relocate `clippy::struct_excessive_bools`. Several mirror a persisted
+    /// `Settings` default at startup ([`Visible::initial`]); the rest start
+    /// hidden, except inlay hints.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct Visible: u16 {
+        /// The explorer (left dock) pane.
+        const EXPLORER = 1 << 0;
+        /// The message drawer (right dock).
+        const MESSAGES = 1 << 1;
+        /// The bottom status bar.
+        const STATUS_BAR = 1 << 2;
+        /// The editor's right-side scroll bar.
+        const SCROLLBAR = 1 << 3;
+        /// The bottom dock (log/output/data panel).
+        const BOTTOM_DOCK = 1 << 4;
+        /// The breadcrumb bar (file ▸ symbol) above the editor.
+        const BREADCRUMBS = 1 << 5;
+        /// The Debug panel (stack / variables / watch).
+        const DEBUG_PANEL = 1 << 6;
+        /// The test-results panel.
+        const TEST_PANEL = 1 << 7;
+        /// The calendar box.
+        const CALENDAR = 1 << 8;
+        /// The clock box.
+        const CLOCK = 1 << 9;
+        /// A vertical guide at the [`crate::ui::RULER_COLUMN`] text column.
+        /// Session-only; toggled with `toggle_ruler`.
+        const RULER = 1 << 10;
+        /// LSP inlay hints (toggled via `view.inlay_hints`).
+        const INLAY_HINTS = 1 << 11;
+        /// The Pomodoro dialog. The timer keeps running in the background while
+        /// this is clear; the break alert re-opens it.
+        const POMODORO = 1 << 12;
+        /// The coverage gutter. While it is shown, the git diff gutter is skipped
+        /// for the active tab -- both use the same gutter-sign column, so only
+        /// one shows at a time.
+        const COVERAGE = 1 << 13;
+        /// The bottom dock shows live backlinks for the active node.
+        const BACKLINKS_FOLLOW = 1 << 14;
+    }
+}
+
+impl Visible {
+    /// The startup set: the surfaces whose visibility is a persisted preference
+    /// take it from `settings`; inlay hints start on; everything else starts
+    /// hidden.
+    fn initial(settings: &Settings) -> Self {
+        let mut v = Visible::INLAY_HINTS;
+        v.set(Visible::EXPLORER, settings.panels.show_explorer);
+        v.set(Visible::MESSAGES, settings.panels.show_messages);
+        v.set(Visible::BOTTOM_DOCK, settings.panels.show_bottom_dock);
+        v.set(
+            Visible::STATUS_BAR,
+            settings.secondary_panels.show_status_bar,
+        );
+        v.set(
+            Visible::BREADCRUMBS,
+            settings.secondary_panels.show_breadcrumbs,
+        );
+        v.set(Visible::SCROLLBAR, settings.viewport.show_scrollbar);
+        v
+    }
+}
+
 /// The whole application state.
-// Many independent UI/editor toggles; grouping them only relocates the lint
-// (a single flags struct would itself exceed the bool limit) and adds noise at
-// every call site.
+// T149 in progress: the 15 UI-visibility bools are already a `Visible`
+// bitset; the remaining ones move into `EmacsChord`/`Modes`/`Transient` in
+// the following slices, after which this allow goes. (The earlier rationale
+// here — that a single flags struct "would itself exceed the bool limit" —
+// was wrong: the lint counts `bool` *fields*, and a bitset has none.)
 #[allow(clippy::struct_excessive_bools)]
 pub struct App {
     /// Workspace root directory.
@@ -1629,8 +1701,6 @@ pub struct App {
     pub dap_variables: Vec<crate::dap::Variable>,
     /// Watch expressions and their last results: `(expr, result)`.
     pub dap_watches: Vec<(String, String)>,
-    /// Whether the Debug panel (stack / variables / watch) is shown.
-    pub show_debug_panel: bool,
     /// While true, command output lines are also captured for test parsing.
     test_capture: bool,
     /// Buffered output of the running test command, parsed on completion.
@@ -1639,8 +1709,6 @@ pub struct App {
     pub test_results: Vec<crate::test_runner::TestResult>,
     /// Highlighted row in the test panel.
     pub test_selected: usize,
-    /// Whether the test-results panel is shown.
-    pub show_test_panel: bool,
     /// LSP hover tooltip overlay, when shown.
     pub hover: Option<HoverPopup>,
     /// LSP completion overlay, when shown.
@@ -1660,11 +1728,8 @@ pub struct App {
     /// Code-lens chooser (LSP), when open.
     pub code_lens: Option<CodeLensMenu>,
     /// Pomodoro timer state (Tools → Pomodoro…). Stays `Some` and keeps counting
-    /// down even after the dialog is closed via Start; see [`Self::pomodoro_open`].
+    /// down even after the dialog is closed via Start; see [`Visible::POMODORO`].
     pub pomodoro: Option<crate::pomodoro_tool::Timer>,
-    /// Whether the Pomodoro dialog is currently visible. The timer keeps running
-    /// in the background while this is `false`; the break alert re-opens it.
-    pub pomodoro_open: bool,
     /// Wall-clock anchor for the running Pomodoro countdown; `None` while idle.
     pomodoro_last_tick: Option<std::time::Instant>,
     /// Last-seen on-disk modification time per open file path, for detecting
@@ -1679,8 +1744,6 @@ pub struct App {
     last_auto_save: Option<std::time::Instant>,
     /// `(tab, revision, cursor)` the word-occurrence highlight was last built for.
     word_highlight_key: Option<(usize, u64, usize)>,
-    /// When true, the bottom dock shows live backlinks for the active node.
-    backlinks_follow: bool,
     /// `(active tab, revision)` the backlinks dock was last built for.
     backlinks_follow_key: Option<(usize, u64)>,
     /// Explorer clipboard: paths plus whether this is a cut (move) or copy.
@@ -1709,20 +1772,11 @@ pub struct App {
     pub session_path: Option<PathBuf>,
     /// Which pane has focus.
     pub focus: Focus,
-    /// Whether the explorer pane is shown.
-    pub show_explorer: bool,
-    /// Whether the message drawer is shown.
-    pub show_messages: bool,
-    /// Whether the bottom status bar is shown.
-    pub show_status_bar: bool,
-    /// Whether the editor's right-side scroll bar is shown.
-    pub show_scrollbar: bool,
+    /// Which UI surfaces are currently shown (T149 — see [`Visible`]).
+    pub visible: Visible,
     /// Overwrite (type-over) mode: typed characters replace the one under the
     /// cursor instead of inserting. Session-only; toggled with `toggle_overwrite_mode`.
     pub overwrite: bool,
-    /// Show a vertical guide at the [`crate::ui::RULER_COLUMN`] text column.
-    /// Session-only; toggled with `toggle_ruler`.
-    pub show_ruler: bool,
     /// Whether a keyboard macro is being recorded (capturing editor keys).
     pub macro_recording: bool,
     /// The recorded editor key sequence, replayed by `macro.play`.
@@ -1766,8 +1820,6 @@ pub struct App {
     /// Direction of a pending `selectionRange` request (`true` = expand, `false`
     /// = shrink), applied when the response arrives.
     expand_selection_dir: Option<bool>,
-    /// Whether LSP inlay hints are displayed (toggled via `view.inlay_hints`).
-    show_inlay_hints: bool,
     /// Set by the `suspend` action; the main loop suspends the process
     /// (`SIGTSTP`) on Unix and clears it on resume.
     pub suspend_requested: bool,
@@ -1786,10 +1838,6 @@ pub struct App {
     /// Parsed coverage report (T210: **Tools → Load Coverage File…**), if one
     /// has been loaded. Stays cached across a Toggle Coverage Gutter off/on.
     coverage: Option<vix_coverage::Report>,
-    /// Whether the coverage gutter is currently shown. While it is, the git
-    /// diff gutter is skipped for the active tab -- both use the same
-    /// gutter-sign column, so only one shows at a time.
-    coverage_visible: bool,
     /// Whether spell-checking (red underline in comments/strings) is enabled.
     pub spellcheck: bool,
     /// Loaded spell checker for the active locale, when spell-checking is on and
@@ -1798,10 +1846,6 @@ pub struct App {
     /// Locale the loaded (or last-attempted) [`speller`](Self::speller) is for, so
     /// it is reloaded only on a locale change.
     speller_locale: Option<String>,
-    /// Whether the bottom dock (log/output/data panel) is shown.
-    pub show_bottom_dock: bool,
-    /// Whether the breadcrumb bar (file ▸ symbol) is shown above the editor.
-    pub show_breadcrumbs: bool,
     /// Saved dock/status visibility while zen (focus) mode is active, restored on
     /// exit. `Some` iff zen mode is on. Holds (explorer, messages, bottom, status).
     pub zen_saved: Option<(bool, bool, bool, bool)>,
@@ -1813,15 +1857,11 @@ pub struct App {
     pub explorer_hscroll: usize,
     /// Horizontal scroll offset (chars) of the message drawer.
     pub messages_hscroll: usize,
-    /// Whether the calendar box is shown.
-    pub show_calendar: bool,
     /// When true, the calendar opens/creates the selected day's Org-roam daily
     /// note on Enter instead of inserting the date string.
     pub calendar_dailies: bool,
     /// Month navigation state for the calendar box.
     pub calendar: crate::calendar::Calendar,
-    /// Whether the clock box is shown.
-    pub show_clock: bool,
     /// Row-selection state for the clock box.
     pub clock: crate::clock::Clock,
     /// Keyboard-shortcut overlay (Help → Keyboard Shortcuts…, F1), when open:
@@ -2169,12 +2209,11 @@ impl App {
             dap_stack: Vec::new(),
             dap_variables: Vec::new(),
             dap_watches: Vec::new(),
-            show_debug_panel: false,
+            visible: Visible::initial(&settings),
             test_capture: false,
             test_buffer: Vec::new(),
             test_results: Vec::new(),
             test_selected: 0,
-            show_test_panel: false,
             hover: None,
             completion: None,
             dialog: None,
@@ -2185,14 +2224,12 @@ impl App {
             code_actions: None,
             code_lens: None,
             pomodoro: None,
-            pomodoro_open: false,
             pomodoro_last_tick: None,
             disk_mtimes: std::collections::HashMap::new(),
             last_disk_poll: None,
             format_save_pending: None,
             last_auto_save: None,
             word_highlight_key: None,
-            backlinks_follow: false,
             backlinks_follow_key: None,
             clip: Vec::new(),
             clip_cut: false,
@@ -2200,14 +2237,8 @@ impl App {
             bookmarks: Vec::new(),
             nav_idx: 0,
             picker: None,
-            show_explorer: settings.panels.show_explorer,
-            show_messages: settings.panels.show_messages,
-            show_status_bar: settings.secondary_panels.show_status_bar,
-            show_breadcrumbs: settings.secondary_panels.show_breadcrumbs,
             zen_saved: None,
-            show_scrollbar: settings.viewport.show_scrollbar,
             overwrite: false,
-            show_ruler: false,
             macro_recording: false,
             macro_keys: Vec::new(),
             macro_playing: false,
@@ -2224,7 +2255,6 @@ impl App {
             emacs_c_p_c_m_prefix: false,
             pending_link_target: None,
             expand_selection_dir: None,
-            show_inlay_hints: true,
             suspend_requested: false,
             linked_ranges: None,
             git_repo: false,
@@ -2232,19 +2262,15 @@ impl App {
             git_status: Vec::new(),
             git_head_cache: std::collections::HashMap::new(),
             coverage: None,
-            coverage_visible: false,
             spellcheck: settings.typing.spellcheck,
             speller: None,
             speller_locale: None,
-            show_bottom_dock: settings.panels.show_bottom_dock,
             bottom_dock: crate::bottom_dock::BottomDock::with_scrollback(settings.scrollback),
             bottom_hscroll: 0,
             explorer_hscroll: 0,
             messages_hscroll: 0,
-            show_calendar: false,
             calendar_dailies: false,
             calendar: crate::calendar::Calendar::new(),
-            show_clock: false,
             clock: crate::clock::Clock::new(),
             help: None,
             keybinding_editor: None,
@@ -2503,16 +2529,16 @@ impl App {
             a if a.starts_with("view.keymap:") => self.set_keymap(&a["view.keymap:".len()..]),
             a if a.starts_with("script:") => self.run_script_command(a),
             "tools.calendar" => {
-                self.show_calendar = !self.show_calendar;
+                self.visible.toggle(Visible::CALENDAR);
                 // Always open on the present month; navigation is per-session.
-                if self.show_calendar {
+                if self.visible.contains(Visible::CALENDAR) {
                     self.calendar.reset();
                 }
             }
             a if self.open_edit_surface(a) => {}
             "tools.clock" => {
-                self.show_clock = !self.show_clock;
-                if self.show_clock {
+                self.visible.toggle(Visible::CLOCK);
+                if self.visible.contains(Visible::CLOCK) {
                     self.clock.selected = 0;
                 }
             }
@@ -2550,7 +2576,7 @@ impl App {
             "keybindings.reload" => self.reload_key_overrides(),
             "keybindings.editor" => self.open_keybinding_editor(),
             "tools.test" => self.run_tests(),
-            "tools.test_panel" => self.show_test_panel = !self.show_test_panel,
+            "tools.test_panel" => self.visible.toggle(Visible::TEST_PANEL),
             "tools.terminal" => self.toggle_terminal(),
             "tools.diff" => self.open_compare_prompt(),
             "tools.palette" => self.open_palette(),
@@ -2608,8 +2634,9 @@ impl App {
     fn run_view_settings_toggle(&mut self, action: &str) -> bool {
         match action {
             "view.breadcrumbs" => {
-                self.show_breadcrumbs = !self.show_breadcrumbs;
-                self.settings.secondary_panels.show_breadcrumbs = self.show_breadcrumbs;
+                self.visible.toggle(Visible::BREADCRUMBS);
+                self.settings.secondary_panels.show_breadcrumbs =
+                    self.visible.contains(Visible::BREADCRUMBS);
             }
             "view.trim_on_save" => {
                 self.settings.save.trim_trailing_whitespace =
@@ -3456,8 +3483,8 @@ impl App {
                 .to_string();
             }
             "toggle_ruler" => {
-                self.show_ruler = !self.show_ruler;
-                self.status = t!(if self.show_ruler {
+                self.visible.toggle(Visible::RULER);
+                self.status = t!(if self.visible.contains(Visible::RULER) {
                     "status.ruler_on"
                 } else {
                     "status.ruler_off"
@@ -3590,9 +3617,9 @@ impl App {
     /// Toggle the left dock (the file explorer). Revealing it also reveals the
     /// active file in the tree.
     fn toggle_left_dock(&mut self) {
-        self.show_explorer = !self.show_explorer;
-        self.settings.panels.show_explorer = self.show_explorer;
-        if self.show_explorer
+        self.visible.toggle(Visible::EXPLORER);
+        self.settings.panels.show_explorer = self.visible.contains(Visible::EXPLORER);
+        if self.visible.contains(Visible::EXPLORER)
             && let Some(p) = self.editor.active_tab().and_then(|t| t.path.clone())
         {
             self.explorer.reveal(&p);
@@ -3601,14 +3628,14 @@ impl App {
 
     /// Toggle the right dock (the message drawer).
     fn toggle_right_dock(&mut self) {
-        self.show_messages = !self.show_messages;
-        self.settings.panels.show_messages = self.show_messages;
+        self.visible.toggle(Visible::MESSAGES);
+        self.settings.panels.show_messages = self.visible.contains(Visible::MESSAGES);
     }
 
     /// Toggle the bottom status bar, persisting the choice.
     fn toggle_status_bar(&mut self) {
-        self.show_status_bar = !self.show_status_bar;
-        self.settings.secondary_panels.show_status_bar = self.show_status_bar;
+        self.visible.toggle(Visible::STATUS_BAR);
+        self.settings.secondary_panels.show_status_bar = self.visible.contains(Visible::STATUS_BAR);
     }
 
     /// Toggle zen (focus) mode: hide the explorer, messages, bottom dock, and
@@ -3616,21 +3643,21 @@ impl App {
     /// The change is runtime-only — it does not overwrite the saved settings.
     fn toggle_zen(&mut self) {
         if let Some((explorer, messages, bottom, status)) = self.zen_saved.take() {
-            self.show_explorer = explorer;
-            self.show_messages = messages;
-            self.show_bottom_dock = bottom;
-            self.show_status_bar = status;
+            self.visible.set(Visible::EXPLORER, explorer);
+            self.visible.set(Visible::MESSAGES, messages);
+            self.visible.set(Visible::BOTTOM_DOCK, bottom);
+            self.visible.set(Visible::STATUS_BAR, status);
         } else {
             self.zen_saved = Some((
-                self.show_explorer,
-                self.show_messages,
-                self.show_bottom_dock,
-                self.show_status_bar,
+                self.visible.contains(Visible::EXPLORER),
+                self.visible.contains(Visible::MESSAGES),
+                self.visible.contains(Visible::BOTTOM_DOCK),
+                self.visible.contains(Visible::STATUS_BAR),
             ));
-            self.show_explorer = false;
-            self.show_messages = false;
-            self.show_bottom_dock = false;
-            self.show_status_bar = false;
+            self.visible.set(Visible::EXPLORER, false);
+            self.visible.set(Visible::MESSAGES, false);
+            self.visible.set(Visible::BOTTOM_DOCK, false);
+            self.visible.set(Visible::STATUS_BAR, false);
         }
     }
 
@@ -3689,18 +3716,18 @@ impl App {
 
     /// Toggle the bottom dock (log/output/data panel), persisting the choice.
     fn toggle_bottom_dock(&mut self) {
-        self.show_bottom_dock = !self.show_bottom_dock;
-        self.settings.panels.show_bottom_dock = self.show_bottom_dock;
-        if !self.show_bottom_dock && self.focus == Focus::BottomDock {
+        self.visible.toggle(Visible::BOTTOM_DOCK);
+        self.settings.panels.show_bottom_dock = self.visible.contains(Visible::BOTTOM_DOCK);
+        if !self.visible.contains(Visible::BOTTOM_DOCK) && self.focus == Focus::BottomDock {
             self.focus = Focus::Editor;
         }
     }
 
     /// Toggle the editor's right-side scroll bar, persisting the choice.
     fn toggle_scrollbar(&mut self) {
-        self.show_scrollbar = !self.show_scrollbar;
-        self.settings.viewport.show_scrollbar = self.show_scrollbar;
-        self.status = if self.show_scrollbar {
+        self.visible.toggle(Visible::SCROLLBAR);
+        self.settings.viewport.show_scrollbar = self.visible.contains(Visible::SCROLLBAR);
+        self.status = if self.visible.contains(Visible::SCROLLBAR) {
             t!("status.scrollbar_on")
         } else {
             t!("status.scrollbar_off")
@@ -3901,7 +3928,7 @@ impl App {
     /// Accept the calendar's selected date: open its daily note (dailies mode) or
     /// insert the formatted date at the cursor. Closes the calendar.
     fn calendar_accept(&mut self) {
-        self.show_calendar = false;
+        self.visible.set(Visible::CALENDAR, false);
         if std::mem::take(&mut self.calendar_dailies) {
             let date = self.calendar.selected_formatted("%Y-%m-%d");
             self.roam_open_daily(&date);
@@ -4236,7 +4263,7 @@ impl App {
             self.pomodoro = Some(crate::pomodoro_tool::Timer::new());
             self.pomodoro_last_tick = None;
         }
-        self.pomodoro_open = true;
+        self.visible.set(Visible::POMODORO, true);
     }
 
     /// Run the dialog's primary button: Start while idle (which closes the dialog
@@ -4250,7 +4277,7 @@ impl App {
                 if let Some(t) = self.pomodoro.as_mut() {
                     t.start();
                 }
-                self.pomodoro_open = false; // run in the background
+                self.visible.set(Visible::POMODORO, false); // run in the background
             }
             Some(_) => {
                 if let Some(t) = self.pomodoro.as_mut() {
@@ -4290,12 +4317,12 @@ impl App {
             match timer.tick(secs) {
                 Tick::BreakStarted => {
                     self.status = t!("status.pomodoro_break").to_string();
-                    self.pomodoro_open = true; // surface the break alert
+                    self.visible.set(Visible::POMODORO, true); // surface the break alert
                 }
                 Tick::Finished => {
                     self.status = t!("status.pomodoro_done").to_string();
                     self.pomodoro = None;
-                    self.pomodoro_open = false;
+                    self.visible.set(Visible::POMODORO, false);
                 }
                 Tick::None => {}
             }
@@ -4330,7 +4357,7 @@ impl App {
                 ) {
                     self.pomodoro = None;
                 }
-                self.pomodoro_open = false;
+                self.visible.set(Visible::POMODORO, false);
             }
             _ => {}
         }
@@ -7648,18 +7675,18 @@ impl App {
         // The find / replace box: a left click focuses the Find or Replace field.
         panel!(search, search_mouse);
         // The calendar box: a left click inserts a date-time line or a day.
-        if self.show_calendar {
+        if self.visible.contains(Visible::CALENDAR) {
             self.calendar_mouse(mouse);
             return true;
         }
         // The clock box: a left click inserts the picked time row.
-        if self.show_clock {
+        if self.visible.contains(Visible::CLOCK) {
             self.clock_mouse(mouse);
             return true;
         }
         // The Pomodoro dialog: a left click on the Start/Stop/Cancel button runs
         // it (Start closes the dialog and keeps the countdown running).
-        if self.pomodoro_open {
+        if self.visible.contains(Visible::POMODORO) {
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind
                 && rect_contains(self.layout.pomodoro_button, mouse.column, mouse.row)
             {
@@ -7748,12 +7775,15 @@ impl App {
         // continues even if the pointer drifts off that column.
         // Edges only exist once a render has recorded the dock's rectangle; a
         // zeroed (never-drawn) rect would otherwise claim row/column 0.
-        let left_edge = (self.show_explorer && self.layout.explorer.width > 0)
+        let left_edge = (self.visible.contains(Visible::EXPLORER)
+            && self.layout.explorer.width > 0)
             .then(|| self.layout.explorer.right().saturating_sub(1));
-        let right_edge = (self.show_messages && self.layout.messages.width > 0)
+        let right_edge = (self.visible.contains(Visible::MESSAGES)
+            && self.layout.messages.width > 0)
             .then_some(self.layout.messages.x);
         // The bottom dock's top edge (its top border row), draggable to resize.
-        let bottom_edge = (self.show_bottom_dock && self.layout.bottom_dock.height > 0)
+        let bottom_edge = (self.visible.contains(Visible::BOTTOM_DOCK)
+            && self.layout.bottom_dock.height > 0)
             .then_some(self.layout.bottom_dock.y);
         match mouse.kind {
             // The bottom edge is a row, so check it first (a column edge could
@@ -7860,7 +7890,8 @@ impl App {
             }
             return;
         }
-        if self.show_explorer && rect_contains(self.layout.explorer, col, row) {
+        if self.visible.contains(Visible::EXPLORER) && rect_contains(self.layout.explorer, col, row)
+        {
             self.explorer_mouse(mouse);
             return;
         }
@@ -7885,7 +7916,8 @@ impl App {
             self.editor_mouse(mouse);
             return;
         }
-        if self.show_messages && rect_contains(self.layout.messages, col, row) {
+        if self.visible.contains(Visible::MESSAGES) && rect_contains(self.layout.messages, col, row)
+        {
             self.messages_mouse(mouse);
             return;
         }
@@ -7897,7 +7929,7 @@ impl App {
             self.outline_dock_click((row - r.y) as usize);
             return;
         }
-        if self.show_test_panel
+        if self.visible.contains(Visible::TEST_PANEL)
             && rect_contains(self.layout.test_panel, col, row)
             && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
         {
@@ -7908,7 +7940,9 @@ impl App {
             }
             return;
         }
-        if self.show_bottom_dock && rect_contains(self.layout.bottom_dock, col, row) {
+        if self.visible.contains(Visible::BOTTOM_DOCK)
+            && rect_contains(self.layout.bottom_dock, col, row)
+        {
             self.bottomdock_mouse(mouse);
         }
     }
@@ -8103,7 +8137,7 @@ impl App {
         let full = self.layout.menu.width; // the menu bar spans the full width
         match self.dock_resize {
             Some(DockResize::Left) => {
-                let other = if self.show_messages {
+                let other = if self.visible.contains(Visible::MESSAGES) {
                     self.settings.messages_width
                 } else {
                     0
@@ -8113,7 +8147,7 @@ impl App {
                 self.settings.explorer_width = w;
             }
             Some(DockResize::Right) => {
-                let other = if self.show_explorer {
+                let other = if self.visible.contains(Visible::EXPLORER) {
                     self.settings.explorer_width
                 } else {
                     0
@@ -11433,7 +11467,7 @@ impl App {
         }
         let r = self.layout.clock;
         if !rect_contains(r, mouse.column, mouse.row) {
-            self.show_clock = false;
+            self.visible.set(Visible::CLOCK, false);
             return;
         }
         let row = (mouse.row - r.y) as usize;
@@ -11457,7 +11491,7 @@ impl App {
         }
         let r = self.layout.calendar;
         if !rect_contains(r, mouse.column, mouse.row) {
-            self.show_calendar = false;
+            self.visible.set(Visible::CALENDAR, false);
             return;
         }
         let rel_y = mouse.row - r.y;
@@ -12952,14 +12986,14 @@ impl App {
         let re = match Regex::new(&pat) {
             Ok(r) => r,
             Err(e) => {
-                self.show_bottom_dock = true;
+                self.visible.set(Visible::BOTTOM_DOCK, true);
                 self.settings.panels.show_bottom_dock = true;
                 self.bottom_dock.push(format!("[bad regex: {e}]"));
                 self.status = t!("msg.bad_regex", error = e).to_string();
                 return;
             }
         };
-        self.show_bottom_dock = true;
+        self.visible.set(Visible::BOTTOM_DOCK, true);
         self.settings.panels.show_bottom_dock = true;
         self.bottom_dock.push(format!("$ search \"{query}\""));
         let mut count = 0usize;
@@ -13075,7 +13109,7 @@ impl App {
             self.status = t!("status.command_busy").to_string();
             return;
         }
-        self.show_bottom_dock = true;
+        self.visible.set(Visible::BOTTOM_DOCK, true);
         self.settings.panels.show_bottom_dock = true;
         self.bottom_dock.push(format!("$ {cmd}"));
 
@@ -13196,7 +13230,7 @@ impl App {
         }
         self.test_capture = true;
         self.test_buffer.clear();
-        self.show_test_panel = true;
+        self.visible.set(Visible::TEST_PANEL, true);
         let cmd = self.settings.test_command.clone();
         self.run_command(&cmd);
     }
@@ -13864,7 +13898,8 @@ mod tests {
         app.open_path(&dir.join("target.org"), false);
         app.run_action("roam.backlinks_follow");
         assert!(
-            app.backlinks_follow && app.show_bottom_dock,
+            app.visible.contains(Visible::BACKLINKS_FOLLOW)
+                && app.visible.contains(Visible::BOTTOM_DOCK),
             "live backlinks on, dock shown"
         );
         let joined = app.bottom_dock.lines.join("\n");
@@ -13900,12 +13935,12 @@ mod tests {
         app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
         app.run_action("roam.dailies_calendar");
         assert!(
-            app.show_calendar && app.calendar_dailies,
+            app.visible.contains(Visible::CALENDAR) && app.calendar_dailies,
             "dailies calendar opened"
         );
         app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert!(
-            !app.show_calendar && !app.calendar_dailies,
+            !app.visible.contains(Visible::CALENDAR) && !app.calendar_dailies,
             "calendar closed on accept"
         );
         let opened = app.editor.tabs.iter().any(|t| {

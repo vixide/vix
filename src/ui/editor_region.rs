@@ -42,7 +42,8 @@ pub(super) fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) 
             )
         };
         app.layout.minimap = minimap_area;
-        let (editor_area, scrollbar_area) = if app.show_scrollbar {
+        let (editor_area, scrollbar_area) = if app.visible.contains(crate::app::Visible::SCROLLBAR)
+        {
             let s = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Min(1), Constraint::Length(1)])
@@ -122,7 +123,7 @@ pub(super) fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) 
 /// Render one split pane (tab `tab_index`) into `area` with its own vertical
 /// scrollbar; returns the text rectangle (for mouse hit-testing).
 fn draw_pane(app: &mut App, frame: &mut Frame, area: Rect, tab_index: usize) -> Rect {
-    let (text, sb) = if app.show_scrollbar && area.width > 1 {
+    let (text, sb) = if app.visible.contains(crate::app::Visible::SCROLLBAR) && area.width > 1 {
         let s = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Min(1), Constraint::Length(1)])
@@ -154,7 +155,7 @@ fn draw_pane(app: &mut App, frame: &mut Frame, area: Rect, tab_index: usize) -> 
     }
     if let Some(tab) = app.editor.tabs.get(tab_index) {
         frame.render_widget(&tab.editor, text);
-        if app.show_ruler {
+        if app.visible.contains(crate::app::Visible::RULER) {
             tint_ruler(frame, text, &tab.editor);
         }
         if sb.width > 0 {

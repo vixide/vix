@@ -396,7 +396,10 @@ fn search_in_workspace_to_dock_lists_and_jumps() {
     }
     app.on_key(keycode(KeyCode::Enter));
 
-    assert!(app.show_bottom_dock, "shows the dock");
+    assert!(
+        app.visible.contains(vix::app::Visible::BOTTOM_DOCK),
+        "shows the dock"
+    );
     let out = app.bottom_dock.lines.join("\n");
     assert!(
         out.contains("a.txt:2:1:"),

@@ -42,9 +42,15 @@ pub(super) fn draw_menu_bar(app: &App, frame: &mut Frame, area: Rect) {
         }
     };
     let docks = Line::from(vec![
-        Span::styled(icon::FOLDER, dock_style(app.show_explorer)),
+        Span::styled(
+            icon::FOLDER,
+            dock_style(app.visible.contains(crate::app::Visible::EXPLORER)),
+        ),
         Span::raw(" "),
-        Span::styled(icon::BELL, dock_style(app.show_messages)),
+        Span::styled(
+            icon::BELL,
+            dock_style(app.visible.contains(crate::app::Visible::MESSAGES)),
+        ),
         Span::raw(" "),
     ]);
     frame.render_widget(

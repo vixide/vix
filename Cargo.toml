@@ -171,6 +171,9 @@ lang-yaml = ["vix-editor-core/lang-yaml"]
 # the two in step when bumping — a mismatched `version` here would publish
 # against the wrong dependency range even though local builds resolve by path.
 [dependencies]
+# Bit-set types for `App`'s grouped bool state (T149) — the same crate the
+# other converted structs (`vix-editor-core`, `vix-find-panel`, …) use.
+bitflags = { workspace = true }
 # Shared single-embed i18n backend for the whole workspace (see crates/vix-i18n).
 vix-i18n = { path = "crates/vix-i18n", version = "1.6.0" }
 

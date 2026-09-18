@@ -407,8 +407,8 @@ fn org_tab_folds_drawer_under_cursor() {
 
     // The folded header renders `:properties:...`; its body text is off-screen.
     // Hide the side docks so the editor pane is wide enough to show the marker.
-    app.show_explorer = false;
-    app.show_messages = false;
+    app.visible.set(vix::app::Visible::EXPLORER, false);
+    app.visible.set(vix::app::Visible::MESSAGES, false);
     let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
     term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
     let screen: String = term

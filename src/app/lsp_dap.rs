@@ -30,7 +30,7 @@ use crate::workspace_search::{Flags as WorkspaceFlags, Hit, WorkspaceSearch};
 impl App {
     /// Request inlay hints for the whole document `path` (when display is on).
     fn request_inlay_hints(&mut self, path: &Path) {
-        if !self.show_inlay_hints || !self.lsp.handles(path) {
+        if !self.visible.contains(crate::app::Visible::INLAY_HINTS) || !self.lsp.handles(path) {
             return;
         }
         let lines = self
@@ -44,7 +44,7 @@ impl App {
     /// Store inlay hints on the active buffer, converting each LSP `character`
     /// (encoding units) to a char column within its line.
     pub(super) fn apply_inlay_hints(&mut self, hints: &[(u32, u32, String)]) {
-        if !self.show_inlay_hints {
+        if !self.visible.contains(crate::app::Visible::INLAY_HINTS) {
             return;
         }
         let Some(path) = self.active_path() else {
@@ -112,8 +112,8 @@ impl App {
 
     /// Toggle inlay-hint display: clear them when turning off, refetch when on.
     pub(super) fn toggle_inlay_hints(&mut self) {
-        self.show_inlay_hints = !self.show_inlay_hints;
-        if self.show_inlay_hints {
+        self.visible.toggle(crate::app::Visible::INLAY_HINTS);
+        if self.visible.contains(crate::app::Visible::INLAY_HINTS) {
             if let Some(path) = self.active_path() {
                 self.request_inlay_hints(&path);
             }
@@ -260,7 +260,7 @@ impl App {
             })
             .collect();
         if self.dap.start(&adapter, &path.to_string_lossy(), bps) {
-            self.show_debug_panel = true;
+            self.visible.set(crate::app::Visible::DEBUG_PANEL, true);
             self.status = t!("status.debug_started").to_string();
         } else {
             self.status = t!("status.debug_failed").to_string();
@@ -934,7 +934,7 @@ impl App {
             PromptKind::DebugWatch => {
                 self.dap_watches.push((expr.to_string(), String::new()));
                 self.dap.evaluate(expr);
-                self.show_debug_panel = true;
+                self.visible.set(crate::app::Visible::DEBUG_PANEL, true);
             }
             _ => {}
         }

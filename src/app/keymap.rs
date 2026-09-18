@@ -127,9 +127,9 @@ impl App {
             keybinding_editor,
             palette,
             search,
-        ) || self.pomodoro_open
-            || self.show_calendar
-            || self.show_clock
+        ) || self.visible.contains(crate::app::Visible::POMODORO)
+            || self.visible.contains(crate::app::Visible::CALENDAR)
+            || self.visible.contains(crate::app::Visible::CLOCK)
             || self.menu.is_open()
             || self.paste.as_ref().is_some_and(|p| p.conflict.is_some())
     }
@@ -208,18 +208,18 @@ impl App {
         if self.try_tool_dialog_key(key) {
             return true;
         }
-        if self.pomodoro_open {
+        if self.visible.contains(crate::app::Visible::POMODORO) {
             self.pomodoro_key(key);
             return true;
         }
         // While the calendar box is open it captures left/right to page months.
-        if self.show_calendar {
+        if self.visible.contains(crate::app::Visible::CALENDAR) {
             self.calendar_key(key);
             return true;
         }
         // While the clock box is open it captures up/down to pick a time row and
         // Enter to insert it.
-        if self.show_clock {
+        if self.visible.contains(crate::app::Visible::CLOCK) {
             match key.code {
                 KeyCode::Up => self.clock.up(),
                 KeyCode::Down => self.clock.down(),
@@ -229,9 +229,11 @@ impl App {
                         let area = self.editor_view();
                         self.editor.insert_str(&text, area);
                     }
-                    self.show_clock = false;
+                    self.visible.set(crate::app::Visible::CLOCK, false);
                 }
-                KeyCode::Esc | KeyCode::Char('q') => self.show_clock = false,
+                KeyCode::Esc | KeyCode::Char('q') => {
+                    self.visible.set(crate::app::Visible::CLOCK, false);
+                }
                 _ => {}
             }
             return true;
@@ -269,7 +271,7 @@ impl App {
             }
             KeyCode::Enter => self.calendar_accept(),
             KeyCode::Esc | KeyCode::Char('q') => {
-                self.show_calendar = false;
+                self.visible.set(crate::app::Visible::CALENDAR, false);
                 self.calendar_dailies = false;
             }
             _ => {}
@@ -1011,8 +1013,8 @@ impl App {
         self.focus = if self.focus == Focus::Explorer {
             Focus::Editor
         } else {
-            if !self.show_explorer {
-                self.show_explorer = true;
+            if !self.visible.contains(crate::app::Visible::EXPLORER) {
+                self.visible.set(crate::app::Visible::EXPLORER, true);
             }
             Focus::Explorer
         };
@@ -1450,7 +1452,7 @@ impl App {
                 self.run_action("file.close");
             }
             "Ex" => {
-                self.show_explorer = true;
+                self.visible.set(crate::app::Visible::EXPLORER, true);
                 self.focus = Focus::Explorer;
             }
             "e" => self.run_action("file.open"),
