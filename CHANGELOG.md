@@ -705,6 +705,18 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A handful of UI labels (the Theme Editor's title and all 15 color-slot
+  names, Structural Replace's two menu entries) could render as their raw
+  internal i18n key instead of translated text** (found scripting the
+  T406 demo GIFs): a real LLVM fat-LTO codegen bug in `vix-i18n`'s
+  translation-table initializer (one function doing ~2500 sequential
+  `HashMap` inserts per locale — exactly the shape most likely to trip
+  it), triggered only by `[profile.release]`'s `lto = true`, never by
+  `cargo test` or a debug build. Switched to `lto = "thin"` (a lighter
+  LTO mode, and what `[profile.dist]` — the profile actual releases
+  build with — already used, so shipped releases were very likely never
+  affected). See `Cargo.toml`'s own comment on `[profile.release]` and
+  `tasks.md`'s T406 entry for the full investigation.
 - **Switching keymaps (Vix → View → Keymap) could leave a pending Emacs
   chord armed** (found during improvement plan T149's `App` bool-to-enum
   pass): resetting per-keymap state on a keymap switch only ever cleared
