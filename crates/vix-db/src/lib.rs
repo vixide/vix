@@ -14,6 +14,10 @@
 //! connection and its URL, and [`session`] owns the live connection. This
 //! module is the state machine the host drives with keys.
 
+#![warn(clippy::pedantic)]
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
+
 // Shared workspace i18n (see the vix_i18n crate).
 #[macro_use]
 extern crate vix_i18n;
@@ -125,6 +129,10 @@ type SchemaColumns = Vec<(String, String, String)>;
 
 /// Foreign-key edges `(child, child_col, parent, parent_col)` from the catalog.
 type SchemaRels = Vec<(String, String, String, String)>;
+
+/// One staged cell edit: `(underlying row index, column index)` →
+/// `(original value, new value)`.
+type CellEdit = ((usize, usize), (String, String));
 
 /// An execution awaiting write/DDL confirmation.
 #[derive(Debug, Clone)]
@@ -749,10 +757,10 @@ impl Browser {
                 self.yank(&text);
             }
             KeyCode::Up | KeyCode::Char('k') => {
-                self.view_scroll = self.view_scroll.saturating_sub(1)
+                self.view_scroll = self.view_scroll.saturating_sub(1);
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                self.view_scroll = (self.view_scroll + 1).min(last)
+                self.view_scroll = (self.view_scroll + 1).min(last);
             }
             KeyCode::PageUp => self.view_scroll = self.view_scroll.saturating_sub(10),
             KeyCode::PageDown => self.view_scroll = (self.view_scroll + 10).min(last),
@@ -791,7 +799,7 @@ impl Browser {
         let last = self.cell_text.lines().count().saturating_sub(1);
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => {
-                self.view_scroll = self.view_scroll.saturating_sub(1)
+                self.view_scroll = self.view_scroll.saturating_sub(1);
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 self.view_scroll = (self.view_scroll + 1).min(last);
@@ -2350,14 +2358,33 @@ impl Browser {
             )
         };
 
-        let mut edits: Vec<((usize, usize), (String, String))> =
-            self.edits.iter().map(|(k, v)| (*k, v.clone())).collect();
+        let mut edits: Vec<CellEdit> = self.edits.iter().map(|(k, v)| (*k, v.clone())).collect();
         edits.sort_by_key(|(k, _)| *k);
 
-        // Build the WHERE from the row's primary-key cells, and a re-read query
-        // for optimistic conflict detection.
+        let Some(updates) = self.build_pending_updates(kind, &target, &pk_idx, &edits) else {
+            return;
+        };
+        let count = updates.len();
+        if !self.apply_updates_in_transaction(&updates) {
+            return;
+        }
+        self.edits.clear();
+        self.message = Some(t!("msg.db_edit_committed", count = count).to_string());
+        self.preview_selected_refresh(&schema, &table, kind);
+    }
+
+    /// Build one `UPDATE` statement per staged edit, re-reading each cell first
+    /// to detect a concurrent change (optimistic conflict check). Sets
+    /// `self.message` and returns `None` on the first conflict or read error.
+    fn build_pending_updates(
+        &mut self,
+        kind: connect::Kind,
+        target: &str,
+        pk_idx: &[usize],
+        edits: &[CellEdit],
+    ) -> Option<Vec<String>> {
         let mut updates = Vec::new();
-        for ((row, col), (original, new)) in &edits {
+        for ((row, col), (original, new)) in edits {
             let Some(cells) = self.grid.rows.get(*row) else {
                 continue;
             };
@@ -2393,12 +2420,12 @@ impl Browser {
                     if &live != original {
                         self.message =
                             Some(t!("msg.db_edit_conflict", column = column).to_string());
-                        return;
+                        return None;
                     }
                 }
                 Err(e) => {
                     self.message = Some(e);
-                    return;
+                    return None;
                 }
             }
             updates.push(format!(
@@ -2407,31 +2434,32 @@ impl Browser {
                 catalog::quote_literal(new)
             ));
         }
+        Some(updates)
+    }
 
-        // Apply in one transaction; roll back on the first error.
-        let count = updates.len();
+    /// Apply every `UPDATE` in one transaction, rolling back and setting
+    /// `self.message` on the first error. Returns whether the commit succeeded.
+    fn apply_updates_in_transaction(&mut self, updates: &[String]) -> bool {
         if self.run_sql("BEGIN").is_err() {
             self.message = Some(t!("msg.db_ai_failed").to_string());
-            return;
+            return false;
         }
-        for sql in &updates {
+        for sql in updates {
             if let Err(e) = self.run_sql(sql) {
                 let _ = self.run_sql("ROLLBACK");
                 self.tx = TxState::None;
                 self.message = Some(e);
-                return;
+                return false;
             }
         }
         if let Err(e) = self.run_sql("COMMIT") {
             let _ = self.run_sql("ROLLBACK");
             self.tx = TxState::None;
             self.message = Some(e);
-            return;
+            return false;
         }
         self.tx = TxState::None;
-        self.edits.clear();
-        self.message = Some(t!("msg.db_edit_committed", count = count).to_string());
-        self.preview_selected_refresh(&schema, &table, kind);
+        true
     }
 
     /// Re-run a table preview after a commit to show the persisted values.

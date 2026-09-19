@@ -3823,6 +3823,232 @@ and its own gate run, zero intended behavior change unless stated.
   fixed both the missing step and the count, now nine with this task's
   addition.
 
+## Run G (self-audit findings, 2026-09-19)
+
+Found by four parallel research passes (lint/dead-code, test/CI gaps,
+performance, architecture/docs-drift) over the whole workspace after the
+T001–T505 backlog closed out. Ranked by value/effort within each group;
+`[x]`/`[ ]` tracks status same as every other task.
+
+**T506–T515 all done 2026-09-19** (same day, one pass). **T516 and T517
+remain, both explicitly deferred** in their own entries above — T516
+(splitting `vix-db`/`vix-org`'s remaining un-split `lib.rs` files) is a
+multi-session project on the scale of T141/T142, not a quick win; T517
+(lazy per-locale i18n backend) needs upstream-crate-level work and isn't a
+measured problem today. Everything else actionable in this run is closed.
+
+- [x] **T506 — `scripts/check` silently skips 2,440 unit tests in all 116
+  member crates.** Root cause: the repo's `Cargo.toml` declares both a
+  `[workspace]` and a root `[package] name = "vix"`, so Cargo's
+  `workspace_default_members` is just the root package — any command
+  without `--workspace`/`-p` only touches `vix` itself. `scripts/check`'s
+  `cargo build --all-targets` / `cargo clippy --all-targets` /
+  `cargo test` all omit `--workspace`. Clippy-linting of member crates'
+  *library* code still happens (it's pulled in transitively as a path
+  dependency), but member crates' own `#[cfg(test)]` test code is never
+  even compiled locally — confirmed via `cargo test --no-run` (10 test
+  binaries, all belonging to root `vix`) vs. `cargo test --workspace
+  --no-run` (128). All three real CI configs already correctly use
+  `--workspace`, and `spec/ci/index.md`'s own documented gate does too —
+  only the script drifted. **Done 2026-09-19**: added `--workspace` to
+  all three lines in `scripts/check`. Ran the full `cargo test
+  --workspace` once by hand before shipping the change: 245 test
+  binaries, all green, zero failures — nothing had been silently
+  regressing, but this is the first time that was actually verified
+  locally instead of only on CI.
+- [x] **T507 — 21 crates (incl. `vix-db`) are missing the "universal" hard
+  lint attributes `AGENTS.md`/crate-map.md claim every crate has.**
+  `vix-db` (DB workbench: connections, credentials, SQL — the most
+  security-sensitive feature crate in the repo) has none of
+  `#![forbid(unsafe_code)]`, `#![deny(missing_docs)]`, or
+  `#![warn(clippy::pedantic)]`. 20 more crates (`vix-base-tool`,
+  `vix-base16`, `vix-calendar-panel`, `vix-case`, `vix-conflict-tool`,
+  `vix-editor-core`, `vix-format-tool`, `vix-jwt-tool`, `vix-lsp`,
+  `vix-markdown-preview`, `vix-menu`, `vix-palette`, `vix-regex-tool`,
+  `vix-session`, `vix-settings`, `vix-snippet-tool`, `vix-theme`,
+  `vix-undo-store`, `vix-workspace`) have `pedantic` but are missing
+  `forbid(unsafe_code)` and `deny(missing_docs)`; `vix-fileops` is
+  missing only `deny(missing_docs)`. Since both lints are allow-by-default
+  in rustc, this isn't redundant — undocumented pub items or stray
+  `unsafe` blocks in these crates (`vix-db`, `vix-menu`, `vix-palette`,
+  `vix-settings`, `vix-editor-core` among them) would not fail CI today.
+  Also undercuts the CodeQL-deferral rationale elsewhere in this file,
+  which assumes `forbid(unsafe_code)` is already workspace-wide. **Done
+  2026-09-19**: added the missing attributes to all 21 crates. Every crate
+  but `vix-db` was already clean under the newly-enabled lints (no
+  missing-docs or unsafe-code findings anywhere else) — `vix-db`, which
+  had never run `clippy::pedantic` at all, turned up 5 real findings:
+  a `format!` appended to a `String` (`connect.rs`, fixed with `write!`),
+  two missing statement-terminating semicolons, and `commit_edits` at
+  107/100 lines — split into `commit_edits` (orchestration) +
+  `build_pending_updates` (the conflict-checked `UPDATE` builder) +
+  `apply_updates_in_transaction` (the transaction itself), with a new
+  `CellEdit` type alias for the tuple clippy flagged as too complex
+  inline. `cargo test -p vix-db` still green after the split.
+- [x] **T508 — `README.md`'s License section understates the actual
+  license.** It says "Apache-2.0 or MIT at your option," but the real
+  license (`LICENSE`, `Cargo.toml`'s `license` field, and
+  `spec/license/index.md`, all three consistent) is a 5-way choice:
+  Apache-2.0, BSD-3-Clause, MIT, GPL-2.0-only, or GPL-3.0-only. This is
+  the landing-page text a downstream consumer is most likely to read.
+  **Done 2026-09-19** (`index.md`, `README.md`'s twin): rewrote to name
+  all five and link `LICENSE`.
+- [x] **T509 — Stale "sanctioned allow" claims in `AGENTS.md`,
+  `agents/conventions.md`, and `agents/share/crate-map.md`.** All three
+  still say `#[allow(clippy::struct_excessive_bools)]` is sanctioned "on
+  `App` and `Settings`" — both were converted to `bitflags` fields
+  2026-09-18 (T149), so the allow no longer exists anywhere in the repo
+  (verified: grepped every `#[allow(...)]`, none is
+  `struct_excessive_bools`). This is the third time this exact claim has
+  gone stale across these docs. `agents/conventions.md` and
+  `agents/share/crate-map.md` also claim `vix-editor-core`'s modules
+  "keep `#[allow(clippy::all, clippy::pedantic)]` for upstream style" —
+  every one of its 13 module files actually carries a plain
+  `#![warn(clippy::pedantic)]` with no blanket allow. **Done 2026-09-19**:
+  rewrote both stale clauses in all three files (kept the still-accurate
+  `too_many_lines`/`too_many_arguments` clause), and fixed the also-stale
+  crate count in `agents/share/crate-map.md` (112 → 116) while touching
+  it. Also fixed two more stale mentions found in passing while
+  re-reading these files for T510–T515: `spec/test/index.md` and
+  `docs/performance/index.md` both still said `[profile.release]` uses
+  `lto = true` — it's been `lto = "thin"` since this same session's
+  earlier i18n/LTO-miscompilation fix (see T406's entry).
+- [x] **T510 — Per-frame git-gutter diff has no revision cache.**
+  `src/ui.rs`'s `draw()` calls `app.refresh_git_gutter()`
+  (`src/app/git.rs`) on *every redraw* for any git-tracked file (i.e.
+  almost always), which does a full `Code::get_content()` (O(n) rope→
+  String) plus a full `similar::TextDiff` Myers diff against the HEAD
+  blob — unconditionally, even when nothing changed since the last
+  frame (a cursor move, a resize). The sibling `refresh_git`'s own doc
+  comment says "not per-frame"; that discipline wasn't applied here.
+  Unmeasured by the existing benches (`benches/editor_ops.rs` never
+  calls `ui::draw()`). For a large tracked file this directly threatens
+  the keypress-to-frame budget T121/T122 established. **Done 2026-09-19**:
+  new `App::git_gutter_cache_key: Option<(PathBuf, u64)>` field; `refresh_
+  git_gutter` now reads the active tab's path + `Editor::revision()`
+  (already existed, O(1)) *before* touching the buffer at all, and
+  returns immediately on a cache hit — the O(n) `get_content()` +
+  Myers diff only runs on a genuine miss. `refresh_git` (HEAD moved)
+  clears the cache key alongside the existing HEAD-blob cache clear. New
+  test `git_gutter_refresh_skips_recompute_until_the_buffer_revision_
+  changes` (`tests/integration/git.rs`) proves the cache hit doesn't
+  repopulate cleared marks and a real edit does invalidate it; all 10
+  `git::*` tests (`--ignored`) still pass.
+- [x] **T511 — Sticky-scroll header and breadcrumbs recompile a regex and
+  rescan the whole buffer every frame.** `App::sticky_header` (default
+  on: `editor_behavior.sticky_scroll` defaults `true`) and
+  `App::breadcrumb` both call `tab.text()` (full buffer clone) then
+  `palette::symbols()`, which compiles a fresh `regex::Regex` from a
+  `format!`'d pattern on *every call* — no `LazyLock`, no cache keyed on
+  buffer revision. Fires every frame the file is scrolled past the top
+  line. **Done 2026-09-19**, two parts: (1) `vix-palette`'s `SYMBOL_RE`
+  hoisted to a `LazyLock<Regex>` — the pattern never varied with input,
+  so compiling it per-call was pure waste regardless of caching; (2) new
+  `App::active_tab_symbols`, backing both callers, caching the scan by
+  `(tab index, path, revision)` in a `RefCell` (both callers only ever
+  had `&App` — sticky-scroll/breadcrumb are read-only rendering queries,
+  and `draw_breadcrumb` deliberately keeps `&App` rather than becoming
+  the one `&mut App` exception among "immutable reads" render calls, per
+  the comment in `src/ui.rs`'s `draw`). Tab *index* is part of the key,
+  not just path, because both callers must also work for untitled
+  buffers (`path: None`), where two different tabs could otherwise share
+  a `(None, 0)` key. New tests: `breadcrumb_symbols_cache_tracks_edits_
+  and_distinguishes_tabs` (edit invalidates; a second tab's cache entry
+  is never served for the first) and the pre-existing `sticky_header_
+  shows_enclosing_scope_when_scrolled` (a scroll with no edit must still
+  find the right cached entry) both pass.
+- [x] **T512 — Minimap clones the whole buffer, once per line, every
+  frame it's visible.** `src/ui/minimap.rs`: `tab.text().lines().map(
+  str::to_string).collect()` — full rope→String plus a fresh `String`
+  per line, unconditional on whether the buffer changed. `viewport.
+  show_minimap` defaults off, so lower priority than T510/T511, but
+  users who *do* enable it are disproportionately likely to be editing
+  large files. **Done 2026-09-19**: reads each line's trimmed length
+  straight from `Code::line(i)` (a zero-copy `RopeSlice`) via a new
+  `trimmed_char_len` helper (ropey's `Chars` iterator isn't
+  double-ended, so it's a single forward walk remembering the length as
+  of the last non-whitespace char) — no per-line `String`, no whole-
+  buffer clone. Incidentally fixed a latent inconsistency: `total` now
+  comes from `Code::len_lines()` (rope semantics, matching what
+  `top_visible_line`/`editor_height` already use) instead of
+  `str::lines()`, which drops the final phantom empty line a trailing
+  `\n` produces — the two were previously counting lines two different
+  ways. New test `minimap_renders_a_bar_per_line_band_without_panicking`
+  (`tests/integration/panels.rs`) renders it via `TestBackend` with a
+  trailing-newline buffer (the edge that inconsistency touched) and
+  checks for real bar glyphs; pre-existing `minimap_click_jumps_to_
+  proportional_line` still passes.
+- [x] **T513 — Criterion benches exist but never run in CI, and don't
+  cover the T510/T511 hot paths.** `benches/{text_ops,editor_ops,
+  search_and_palette,startup}.rs` are real (wired via root `Cargo.toml`
+  `[[bench]]`) but deliberately local-only per `spec/test/index.md`
+  ("too slow to relink for a benchmark someone reruns often") — so
+  there's no automated guard against a future regression in *any* hot
+  path, and none of the four files benchmark `vix-git::diff_marks` or
+  `vix-palette::symbols` at all, meaning even a local `cargo bench` run
+  today wouldn't catch T510/T511. **Done 2026-09-19** (the small half):
+  new `benches/frame_ops.rs`, two groups (`git/diff_marks`,
+  `palette/symbols`) at 1k/20k/100k lines, wired into root `Cargo.toml`'s
+  `[[bench]]` list and `spec/test/index.md`'s bench table; smoke-tested
+  with `cargo bench --bench frame_ops -- --test` (all 6 cases pass).
+  **The stretch half (a non-blocking, informational CI job) stays
+  deferred** — it's an infra addition, not a quick pairing with the
+  bench-file work, and nothing here demands it urgently; revisit if a
+  frame-path regression ever actually slips through unnoticed.
+- [x] **T514 — No documented binary-size budget or long-term trend.**
+  The `binary-size` CI job (T008) only tracks a delta against the
+  immediately-previous `main` build (cache overwritten each push) — a
+  slow multi-quarter creep across many individually-small PRs would be
+  invisible. `spec/ci/index.md` documents the mechanism but states no
+  target number. **Done 2026-09-19**: new "Binary size budget" section
+  in `docs/performance/index.md` — measured today's stripped release
+  binary (macOS/arm64, current `[profile.release]`) at ~25.4 MB, and set
+  a 35 MB (~40% headroom) threshold as "worth a real look," with a note
+  to re-baseline the next time it's deliberately grown for a good
+  reason.
+- [x] **T515 — `Code::get_content()`/`slice()` are undocumented O(n)
+  traps.** `vix-editor-core` correctly uses `ropey::Rope` (O(log n)
+  insert/delete/index, O(1) structural-sharing clone) — no algorithmic
+  risk at the storage layer — but `get_content()`/`slice()` are full O(n)
+  materializations with no doc-comment warning, and the crate's own spec
+  never states the rope's complexity characteristics at all. This is
+  exactly the trap T510/T511/T512 each fell into independently. **Done
+  2026-09-19**: `crates/vix-editor-core/spec/index.md` documents actions,
+  not the buffer engine, so the natural home turned out to be the code
+  itself — added a "performance characteristics" paragraph to `Code`'s
+  own struct doc comment (pointing at T510/T511 as real examples of the
+  trap and its fix) plus doc-comment notes on `get_content`/`slice`
+  themselves. `cargo doc -p vix-editor-core` (warnings denied) confirms
+  every new intra-doc link resolves.
+- [ ] **T516 — `crates/vix-db/src/lib.rs` (3,035 lines / 119 fns) and
+  `crates/vix-org/src/lib.rs` (2,969 lines / 152 fns) are the one
+  un-split piece left in two otherwise fully-modularized crates.**
+  `vix-db` already has 17 sibling submodules covering every concern
+  except the top-level key-dispatch/view state machine; `vix-org` has
+  only `columns.rs` split out so far. Same shape `src/app.rs`/`src/ui.rs`
+  were in before T141/T142 (which proved out reusable extraction tooling
+  — `extract_app_module.py`/`extract_ui_module.py`). Not a rule
+  violation (no stated repo-wide max-file-size rule), just a real
+  opportunity matching established practice. **Deferred**: this is a
+  multi-slice project on the scale of T141/T142 (each took several
+  sessions), not a quick win — scope it as its own run when picked up,
+  don't fold into a general cleanup pass.
+- [ ] **T517 — `vix-i18n` eagerly builds all 15 locales' translation
+  maps at startup, not just the active one.** Confirmed via the real
+  `rust-i18n-macro` expansion: `i18n!` generates a `LazyLock` whose init
+  closure inserts every key for every locale (~37,800 total
+  `HashMap::insert` calls across 9 `locales/*.yml` files × 15 locales),
+  even though only one locale's map is ever queried per process. This
+  fires on the first `t!()` call, early enough that it's likely folded
+  invisibly into one of T122's already-small measured startup buckets
+  rather than isolated. **Deferred**: fixing this means implementing a
+  custom `rust_i18n::Backend` that builds only the active locale eagerly
+  (others lazily on `set_locale`) — upstream-crate behavior vix doesn't
+  directly control beyond swapping backends. Large effort, and the
+  startup-budget task (T122) already closed with headroom, so this is a
+  "nice to have" rather than a measured problem — revisit if startup
+  time ever becomes a real complaint.
+
 ---
 
 ## Ideas backlog (unscoped)

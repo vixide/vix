@@ -223,7 +223,8 @@ pipeline it uses instead — a real pty, a hand-written asciicast recorder, and
 
 ## License
 
-Licensed under either of Apache-2.0 or MIT at your option.
+Licensed under any of Apache-2.0, BSD-3-Clause, MIT, GPL-2.0-only, or
+GPL-3.0-only, at your option. See [`LICENSE`](LICENSE).
 
 ## Security
 

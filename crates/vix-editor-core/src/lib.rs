@@ -8,6 +8,8 @@
 //! exceptions) is inherited from the crate root (`lib.rs`).
 
 #![warn(clippy::pedantic)]
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 /// Editing operations (cursor movement, insert, delete, indent, clipboard, undo).
 pub mod actions;

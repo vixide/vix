@@ -8,6 +8,7 @@
 
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::{Deserialize, Serialize};
+use std::fmt::Write as _;
 
 /// Which database engine a connection targets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -197,7 +198,7 @@ fn server_url(conn: &Connection, password: &str, host: &str, port: &str) -> Stri
                 } else {
                     "ssl-mode"
                 };
-                url.push_str(&format!("?{key}={value}"));
+                let _ = write!(url, "?{key}={value}");
             }
             url
         }

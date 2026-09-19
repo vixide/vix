@@ -5,6 +5,8 @@
 //! and camelCase humps) and rejoin in the target style.
 
 #![warn(clippy::pedantic)]
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 /// `FOO BAR`
 #[must_use]

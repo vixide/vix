@@ -7,6 +7,8 @@
 //! UTC, ISO week, active zone) moved to `vix-clock-panel`.
 
 #![warn(clippy::pedantic)]
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 use jiff::civil::Date;
 use jiff::{ToSpan, Zoned};

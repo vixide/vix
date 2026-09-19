@@ -705,6 +705,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Editing a git-tracked file, or scrolling with sticky-scroll/breadcrumbs/
+  the minimap on, recomputed real work every single frame instead of only
+  when the buffer actually changed** (found by a codebase self-audit,
+  T510–T512): the diff gutter re-ran a full Myers diff against HEAD on
+  every redraw, the sticky-scroll header and breadcrumb bar re-scanned the
+  whole buffer for declarations (and recompiled the same fixed regex to do
+  it) on every frame the file was scrolled, and the minimap cloned every
+  line of the buffer into a fresh `String` on every frame it was visible.
+  All three are now cached and skip the recompute when nothing relevant
+  changed since the last frame. Most noticeable on a large file.
 - **A handful of UI labels (the Theme Editor's title and all 15 color-slot
   names, Structural Replace's two menu entries) could render as their raw
   internal i18n key instead of translated text** (found scripting the

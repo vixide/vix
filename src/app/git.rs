@@ -290,6 +290,7 @@ impl App {
         // HEAD may have moved (commit/checkout) or the working tree changed; drop
         // the cached HEAD blobs so the diff gutter refetches.
         self.git_head_cache.clear();
+        self.git_gutter_cache_key = None;
         if self.flags.contains(AppFlags::GIT_REPO) {
             self.git_branch = crate::git::branch(&self.root);
             self.git_status = crate::git::status(&self.root);
@@ -301,7 +302,11 @@ impl App {
 
     /// Recompute the editor diff gutter for the active tab: a colored bar on each
     /// line that differs from its committed (HEAD) version. The HEAD blob is
-    /// fetched once per path and cached.
+    /// fetched once per path and cached; the diff itself is skipped entirely
+    /// when neither the path nor the buffer's edit revision changed since the
+    /// last call (T510: this runs on every redraw, so a cheap `(path,
+    /// revision)` check avoids a full buffer materialization + Myers diff on
+    /// every frame a git-tracked file is open but untouched).
     pub fn refresh_git_gutter(&mut self) {
         if !self.flags.contains(AppFlags::GIT_REPO) {
             if let Some(t) = self.editor.active_tab_mut() {
@@ -309,17 +314,22 @@ impl App {
             }
             return;
         }
-        let Some((path, current)) = self.editor.active_tab().and_then(|t| {
+        let Some((path, revision)) = self.editor.active_tab().and_then(|t| {
             if t.is_image() {
                 return None;
             }
-            t.path.clone().map(|p| (p, t.text()))
+            t.path.clone().map(|p| (p, t.editor.revision()))
         }) else {
             if let Some(t) = self.editor.active_tab_mut() {
                 t.editor.clear_gutter_marks();
             }
             return;
         };
+        if self.git_gutter_cache_key.as_ref() == Some(&(path.clone(), revision)) {
+            return;
+        }
+        self.git_gutter_cache_key = Some((path.clone(), revision));
+        let current = self.editor.active_tab().map(Tab::text).unwrap_or_default();
         if !self.git_head_cache.contains_key(&path) {
             let head = path
                 .strip_prefix(&self.root)

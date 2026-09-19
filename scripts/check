@@ -13,13 +13,13 @@ echo "==> cargo fmt --check"
 cargo fmt --check
 
 echo "==> cargo build"
-cargo build --all-targets
+cargo build --workspace --all-targets
 
 echo "==> cargo clippy (pedantic, -D warnings)"
-cargo clippy --all-targets -- -D warnings
+cargo clippy --workspace --all-targets -- -D warnings
 
 echo "==> cargo test"
-cargo test
+cargo test --workspace
 
 echo "==> run headless examples (T505)"
 cargo run --example list_commands >/dev/null

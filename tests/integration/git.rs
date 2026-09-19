@@ -28,6 +28,60 @@ fn git_gutter_marks_a_modified_line() {
 }
 
 #[test]
+#[ignore = "needs git and an in-tree checkout"]
+fn git_gutter_refresh_skips_recompute_until_the_buffer_revision_changes() {
+    // T510: `refresh_git_gutter` is called every redraw, so it must not
+    // recompute the diff (and thus repopulate the gutter) when neither the
+    // active path nor the buffer's edit revision changed since the last call.
+    let mut app = app_at(Path::new("."));
+    app.refresh_git();
+    app.open_initial(&PathBuf::from("Cargo.toml"));
+    app.on_key(key('x')); // modify the first line
+    app.refresh_git_gutter();
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .gutter_marks()
+            .is_some_and(|m| !m.is_empty()),
+        "the edit is marked in the gutter"
+    );
+
+    // Clear the marks by hand, then refresh again with no intervening edit:
+    // a cache hit must leave them cleared rather than recomputing and
+    // repopulating them.
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .clear_gutter_marks();
+    app.refresh_git_gutter();
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .gutter_marks()
+            .is_none(),
+        "no new edit since the last refresh, so the cache hit must not repopulate the marks"
+    );
+
+    // A further edit bumps the revision, so the next refresh must recompute.
+    app.on_key(key('y'));
+    app.refresh_git_gutter();
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .gutter_marks()
+            .is_some_and(|m| !m.is_empty()),
+        "a new edit invalidates the cache, so the gutter is recomputed"
+    );
+}
+
+#[test]
 #[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_panel_stages_and_commits() {
     let dir = unique_dir("gitpanel");

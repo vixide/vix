@@ -15,6 +15,8 @@
 //! ```
 
 #![warn(clippy::pedantic)]
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 use std::path::{Component, Path, PathBuf};
 

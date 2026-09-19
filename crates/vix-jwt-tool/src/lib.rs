@@ -6,6 +6,8 @@
 //! JWT Decode via `App::transform_selection_or_buffer_try`.
 
 #![warn(clippy::pedantic)]
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;

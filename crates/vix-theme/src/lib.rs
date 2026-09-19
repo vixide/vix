@@ -5,6 +5,8 @@
 //! (which is not part of the theme model).
 
 #![warn(clippy::pedantic)]
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 pub use vix_theme_model::{
     CustomTheme, Region, base, bg, custom_name, dim, editor_cursor, fg, region_base, region_bg,

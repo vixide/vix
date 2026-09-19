@@ -5,6 +5,8 @@
 //! host owns insertion.
 
 #![warn(clippy::pedantic)]
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 /// One named, insertable snippet.
 pub struct Snippet {

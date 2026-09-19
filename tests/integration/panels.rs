@@ -377,3 +377,37 @@ fn drag_explorer_right_edge_resizes_left_dock() {
         "release ends the resize"
     );
 }
+
+#[test]
+fn minimap_renders_a_bar_per_line_band_without_panicking() {
+    // T512: `draw_minimap` reads each line's trimmed length straight from the
+    // rope (via `Code::line`) instead of a `Vec<String>` clone of the whole
+    // buffer. A buffer ending in a newline exercises the edge this touches:
+    // `Code::len_lines()` (rope semantics) counts one more trailing line than
+    // `str::lines()` would, so this also guards the line-index bound.
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    let mut app = app_at(Path::new("."));
+    app.visible.set(vix::app::Visible::EXPLORER, false);
+    let lines: String = (0..50)
+        .map(|i| format!("line {i} {}\n", "x".repeat(i)))
+        .collect();
+    app.editor.new_tab_with_content(&lines);
+    app.run_action("view.minimap");
+    assert!(
+        app.settings.viewport.show_minimap,
+        "the minimap is toggled on"
+    );
+    let mut term = Terminal::new(TestBackend::new(120, 24)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let mm = app.layout.minimap;
+    assert!(
+        mm.width > 0 && mm.height > 0,
+        "the minimap rect was laid out"
+    );
+    let buf = term.backend().buffer();
+    let has_bar = (mm.left()..mm.right())
+        .flat_map(|x| (mm.top()..mm.bottom()).map(move |y| (x, y)))
+        .any(|(x, y)| buf[(x, y)].symbol() == "\u{2593}" || buf[(x, y)].symbol() == "\u{2592}");
+    assert!(has_bar, "at least one band drew a bar for its longest line");
+}

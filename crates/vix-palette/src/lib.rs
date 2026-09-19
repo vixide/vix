@@ -10,6 +10,8 @@
 //! | `@@`   | Symbols (workspace)|
 
 #![warn(clippy::pedantic)]
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 // Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
 // translation lookup fns at this crate root (see the vix_i18n crate).
@@ -18,6 +20,7 @@ extern crate vix_i18n;
 vix_i18n::surface!();
 
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 /// Which palette sub-mode is active, chosen by the input's leading prefix.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -346,8 +349,20 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.prev_tab", "tab.prev"),
 ];
 
+/// The declaration-scanning pattern used by [`symbols`], compiled once. It
+/// never varies with input, so callers on a per-frame path (sticky-scroll
+/// header, breadcrumb) don't each pay to recompile it (T511).
+static SYMBOL_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
+    let kw = "fn|func|function|def|class|struct|enum|trait|impl|interface|type|mod|\
+              namespace|package|macro_rules!";
+    let pat =
+        format!(r"(?:\b({kw})\s+([A-Za-z_][A-Za-z0-9_]*)|(#define)\s+([A-Za-z_][A-Za-z0-9_]*))");
+    regex::Regex::new(&pat).expect("SYMBOL_RE pattern is a fixed, tested literal")
+});
+
 /// One declaration found in a buffer, for the `@` go-to-symbol mode and the
 /// outline panel.
+#[derive(Clone)]
 pub struct Symbol {
     /// The structural keyword (`fn`, `struct`, `mod`, `impl`, …), for the outline
     /// type prefix. May be empty for `#define`-style matches.
@@ -368,13 +383,7 @@ pub struct Symbol {
 /// to top-level structure.
 #[must_use]
 pub fn symbols(text: &str) -> Vec<Symbol> {
-    let kw = "fn|func|function|def|class|struct|enum|trait|impl|interface|type|mod|\
-              namespace|package|macro_rules!";
-    let pat =
-        format!(r"(?:\b({kw})\s+([A-Za-z_][A-Za-z0-9_]*)|(#define)\s+([A-Za-z_][A-Za-z0-9_]*))");
-    let Ok(re) = regex::Regex::new(&pat) else {
-        return Vec::new();
-    };
+    let re = &*SYMBOL_RE;
     let mut out = Vec::new();
     for (i, line) in text.lines().enumerate() {
         if let Some(caps) = re.captures(line)

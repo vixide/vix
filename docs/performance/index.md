@@ -15,10 +15,10 @@ cargo bench -- editor/open             # one group; Criterion compares to the
 ```
 
 `cargo bench` uses `[profile.bench]` (speed-optimized, no LTO) rather than the
-default `[profile.release]` (size-optimized, `lto = true`) that a plain bench
-run would otherwise inherit — the release profile is tuned for a small
+default `[profile.release]` (size-optimized, `lto = "thin"`) that a plain
+bench run would otherwise inherit — the release profile is tuned for a small
 shipped binary, not for representative hot-path timing, and workspace-wide
-LTO makes the final link too slow to rerun casually.
+LTO makes the final link slower to rerun casually.
 
 ## Baseline (measured 2026-09-15, `editor/open` re-measured after T121, `startup/*` added for T122)
 
@@ -141,6 +141,22 @@ A smaller, unconditional fix landed alongside it: `App::new` scanned the
 custom-themes directory (real filesystem I/O) **twice** — once inside
 `apply_saved_theme`, once again immediately after for the View → Theme
 submenu's name list — now scanned once and reused for both.
+
+## Binary size budget (T514)
+
+CI's `binary-size` job (T008) only tracks a delta against the immediately
+previous `main` build — useful for catching one PR's regression, but a slow
+multi-quarter creep across many individually-small additions wouldn't show up
+against a baseline that moves with it. This section is the number to compare
+against over a longer horizon.
+
+Measured 2026-09-19 (macOS/arm64, `cargo build --release`, `[profile.release]`
+— `lto = "thin"`, `strip = true`, `opt-level = "z"`): the stripped `vix`
+binary is **~25.4 MB**. Budget: flag it for a real look — not necessarily a
+regression, could be a deliberate new bundled grammar or asset, but worth
+asking why — if it crosses **35 MB** (roughly 40% headroom) on any platform
+CI measures. Update this number (and re-set the budget) the next time it's
+deliberately grown for a good reason, so the budget keeps meaning something.
 
 ## Reading the numbers
 

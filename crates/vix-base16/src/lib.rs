@@ -11,6 +11,8 @@
 //! themes in `themes/`.
 
 #![warn(clippy::pedantic)]
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 use vix_theme_model::{CustomTheme, parse_theme};
 

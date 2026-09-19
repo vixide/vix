@@ -92,13 +92,14 @@ Every crate sets `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]`
 - **`#![warn(clippy::pedantic)]`** is on at the crate root **and repeated in
   every module file**. There is no blanket `#![allow(clippy::pedantic)]` and no
   `#![allow(missing_docs)]`; fix findings in code. Sanctioned allows are only a
-  few **targeted** ones: `#[allow(clippy::struct_excessive_bools)]` on `App` and
-  `Settings` (T149 converted `SearchBar`, `WorkspaceSearch`, `DblockParams`, and
-  both `Editor`s to a `bitflags`-based `Flags` field instead, removing their
-  allows — prefer that over a new allow for a struct whose bools are
-  independent, freely-combinable toggles) and a handful of
-  `#[allow(clippy::too_many_lines)]` / `too_many_arguments` on specific
-  functions that resist further extraction.
+  handful of **targeted** `#[allow(clippy::too_many_lines)]` /
+  `too_many_arguments` on specific functions that resist further extraction —
+  there is no standing `#[allow(clippy::struct_excessive_bools)]` anywhere in
+  the codebase: T149 converted every bool-cluster struct (`SearchBar`,
+  `WorkspaceSearch`, `DblockParams`, both `Editor`s, and finally `App` and
+  `Settings` themselves) to a `bitflags`-based `Flags` field instead. Prefer
+  that over a new allow for a struct whose bools are independent,
+  freely-combinable toggles.
 - Keep the tree clean: `cargo clippy --workspace --all-targets -- -D warnings`.
 
 ## Non-negotiable conventions

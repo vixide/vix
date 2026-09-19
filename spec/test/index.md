@@ -176,6 +176,7 @@ The corpus is not committed; the regression is.
 | `editor_ops` | Opening a file (parsing it, up to a ~100 MB synthetic file — highlighting is a separate, always-lazy, per-viewport cost this doesn't measure), typing, a 10k-operation burst of random inserts/deletes, pasting, undo, whole-buffer line transforms |
 | `search_and_palette` | The three per-keystroke search paths: find-in-buffer, workspace search (up to a generated 10k-file tree), and palette fuzzy filtering |
 | `startup` | Cold-start cost: `App::new` (theme scan, editor/menu/LSP-client setup) and `refresh_git` (the three `git` subprocesses a real workspace's cold start pays), benchmarked separately |
+| `frame_ops` | The two per-*frame* buffer scans found and fixed by T510/T511: the editor diff gutter (`vix_git::diff_marks`) and the sticky-scroll/breadcrumb declaration scan (`vix_palette::symbols`) |
 
 ```sh
 cargo bench                                  # everything
@@ -184,9 +185,9 @@ cargo bench -- editor/open                   # one group; Criterion compares to 
 ```
 
 `cargo bench` runs under `[profile.bench]` (speed-optimized, no LTO) rather
-than letting it inherit `[profile.release]` (`opt-level = "z"`, `lto = true`
+than letting it inherit `[profile.release]` (`opt-level = "z"`, `lto = "thin"`
 — tuned for a small shipped binary, not representative hot-path timing, and
-too slow to relink for a benchmark someone reruns often).
+slower to relink for a benchmark someone reruns often).
 
 Criterion stores each run under `target/criterion/` and reports the change from
 the previous one, so the workflow is: measure, change, measure again, and read
