@@ -3908,8 +3908,9 @@ groups is listed explicitly.
 2. **Run B (big rocks kickoff):** T101, T111 (specs only), then T102–T105
    and T112–T115 as follow-on runs. T104 turned out to need its own spec
    first (`crates/vix-keybindings/spec/index.md`) — its T104a–T104j are a
-   further follow-on chain, one keymap conversion per task. T101–T105 and
-   T111 are done; **T112–T115 (modal-editing implementation) remain**.
+   further follow-on chain, one keymap conversion per task. **All of
+   T101–T105, T111, and T112–T115 are done (T112–T115 finished
+   2026-09-14/15) — Run B is complete.**
 3. **Run C (features):** T201–T211 in any order, one branch each — T104j
    shipped 2026-09-04, so T204 was unblocked too (§ T204's own note);
    T210/T211 never had a dependency either. **All of T201–T211 are done
@@ -3921,10 +3922,10 @@ groups is listed explicitly.
    2026-09-18) — Run E is complete.**
 6. **Run F (examples):** T502–T505. **All four done (2026-09-14) — Run F
    is complete.**
-7. **Deferred/audit-driven:** T121–T125 whenever their prerequisite data
-   (benches, audits) exists. Not started.
-8. **Security:** T131/T132/T133 are done. **T134 remains**, blocked on
-   T105 and T124/T125 shipping.
+7. **Deferred/audit-driven:** T121–T125. **All five done (2026-09-15/16)
+   — this group is complete.**
+8. **Security:** T131/T132/T133 are done. **T134 is also done
+   (2026-09-16)** — this group is complete.
 9. **CI + code quality:** T009/T010/T141/T142/T143/T144/T145/T146/T147/
    T148/T149/T150/T151/T152/T153/T154 are all done. **T149's `App`/
    `Settings` portion (measured at ~350-450 call sites combined, once
@@ -3932,6 +3933,9 @@ groups is listed explicitly.
    back up and finished 2026-09-18**, closing all 7/7 structs (see
    T149's own entry for the full slice-by-slice detail). This run has
    nothing else open.
+
+**Every run and every group above is complete. The backlog (T001–T505)
+has no open tasks remaining as of 2026-09-19.**
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.
