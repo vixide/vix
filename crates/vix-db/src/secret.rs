@@ -7,9 +7,12 @@
 //! password can be stored back so later connects skip the prompt.
 //!
 //! The keyring backend is platform-specific: macOS uses the native Security
-//! framework (via the `keyring` crate) so the password never appears as a
-//! process argument; Linux uses the `secret-tool` CLI with the secret passed on
-//! stdin. Both keep the plaintext out of the process table.
+//! framework and Windows the native Credential Manager (both via the
+//! `keyring` crate) so the password never appears as a process argument;
+//! Linux uses the `secret-tool` CLI with the secret passed on stdin. All
+//! three keep the plaintext out of the process table. Any other platform has
+//! no supported backend (Run H, T548: Windows support added — the `keyring`
+//! crate already had it, just not enabled).
 //!
 //! sqlx does not read `~/.pgpass` / `~/.my.cnf`, so those are deliberately not
 //! part of the waterfall. The command *construction* is pure and unit-tested;
@@ -74,11 +77,12 @@ fn secret_tool_store(conn: &Connection, password: &str) -> Cmd {
 
 /// Read `conn`'s password from the OS keyring, or `None` when it is absent or
 /// the platform has no supported keyring. On macOS this uses the native
-/// Security framework (no secret on the process argument list); on Linux it
-/// runs `secret-tool lookup`.
+/// Security framework, on Windows the native Credential Manager (no secret on
+/// the process argument list either way); on Linux it runs `secret-tool
+/// lookup`.
 #[must_use]
 pub fn keyring_get(conn: &Connection) -> Option<String> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     {
         keyring::Entry::new(SERVICE, &account(conn))
             .ok()?
@@ -90,20 +94,20 @@ pub fn keyring_get(conn: &Connection) -> Option<String> {
     {
         run(&secret_tool_lookup(conn)).filter(|pw| !pw.is_empty())
     }
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = conn;
         None
     }
 }
 
-/// Store `password` for `conn` in the OS keyring; `true` on success. macOS uses
-/// the native Security framework (the secret is never a process argument);
-/// Linux runs `secret-tool store` with the secret on stdin. Unsupported
-/// platforms return `false`.
+/// Store `password` for `conn` in the OS keyring; `true` on success. macOS
+/// and Windows use their native credential stores (the secret is never a
+/// process argument); Linux runs `secret-tool store` with the secret on
+/// stdin. Unsupported platforms return `false`.
 #[must_use]
 pub fn keyring_set(conn: &Connection, password: &str) -> bool {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     {
         keyring::Entry::new(SERVICE, &account(conn))
             .and_then(|entry| entry.set_password(password))
@@ -113,7 +117,7 @@ pub fn keyring_set(conn: &Connection, password: &str) -> bool {
     {
         run(&secret_tool_store(conn, password)).is_some()
     }
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (conn, password);
         false

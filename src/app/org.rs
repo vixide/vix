@@ -847,7 +847,7 @@ impl App {
             return;
         }
         self.settings.org_agenda_files.push(rel.clone());
-        let _ = self.store_settings();
+        self.store_settings_or_warn();
         self.status = t!("status.org_agenda_file_added", path = rel).to_string();
     }
 
@@ -861,7 +861,7 @@ impl App {
         if self.settings.org_agenda_files.len() == before {
             self.status = t!("status.org_agenda_file_absent", path = rel).to_string();
         } else {
-            let _ = self.store_settings();
+            self.store_settings_or_warn();
             self.status = t!("status.org_agenda_file_removed", path = rel).to_string();
         }
     }
@@ -869,7 +869,7 @@ impl App {
     /// Clear the agenda file list, restoring the every-project-file default.
     fn org_agenda_file_clear(&mut self) {
         self.settings.org_agenda_files.clear();
-        let _ = self.store_settings();
+        self.store_settings_or_warn();
         self.status = t!("status.org_agenda_files_cleared").to_string();
     }
 

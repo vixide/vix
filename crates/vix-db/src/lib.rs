@@ -934,8 +934,13 @@ impl Browser {
                     self.finish_connect(&conn, &password);
                     // Save the just-entered password for next time, if the
                     // connection opted in and we actually connected.
-                    if conn.store_keyring && self.conn.is_some() {
-                        let _ = secret::store(&conn, &password);
+                    if conn.store_keyring && self.conn.is_some() && !secret::store(&conn, &password)
+                    {
+                        // T545 (Run H): this used to be `let _ = secret::
+                        // store(...)`, discarding the outcome entirely --
+                        // the user explicitly opted into "remember this
+                        // password" and got no indication it didn't work.
+                        self.message = Some(t!("msg.db_keyring_save_failed").to_string());
                     }
                 }
             }

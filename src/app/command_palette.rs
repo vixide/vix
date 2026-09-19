@@ -382,7 +382,7 @@ impl App {
         self.settings
             .command_recents
             .clone_from(&self.command_recents);
-        let _ = self.store_settings();
+        self.store_settings_or_warn();
     }
 
     fn accept_palette(&mut self) {
