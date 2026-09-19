@@ -1952,6 +1952,15 @@ pub struct App {
     /// Locale the loaded (or last-attempted) [`speller`](Self::speller) is for, so
     /// it is reloaded only on a locale change.
     speller_locale: Option<String>,
+    /// Why [`speller`](Self::speller) is `None`, when spell-checking is on and
+    /// loading genuinely failed for `speller_locale` (a permission error, a
+    /// corrupt dictionary, or no dictionary for that locale) rather than
+    /// simply never having been attempted. `vix_spellcheck::Error`
+    /// distinguishes all three (T541, Run H: `ensure_speller` used to
+    /// discard which one via `.ok()`, going "silently inert" exactly as its
+    /// own doc comment admitted, with that admission never reaching the
+    /// user); this is the formatted detail `open_spell_suggest` surfaces.
+    speller_error: Option<String>,
     /// Saved dock/status visibility while zen (focus) mode is active, restored on
     /// exit. `Some` iff zen mode is on. Holds (explorer, messages, bottom, status).
     pub zen_saved: Option<(bool, bool, bool, bool)>,
@@ -2341,6 +2350,7 @@ impl App {
             coverage: None,
             speller: None,
             speller_locale: None,
+            speller_error: None,
             bottom_dock: crate::bottom_dock::BottomDock::with_scrollback(settings.scrollback),
             bottom_hscroll: 0,
             explorer_hscroll: 0,
@@ -3634,6 +3644,10 @@ impl App {
     /// re-save so the latter can't recurse.
     fn write_active_to_disk(&mut self) -> bool {
         let opts = self.save_options();
+        // Captured before the attempt (T539, Run H): it doesn't change on
+        // failure, and `save_active`'s `Err` case is a bare `io::Error` with
+        // no path attached, so this is the only chance to name it.
+        let path_before = self.editor.active_tab().and_then(|t| t.path.clone());
         match self.editor.save_active(opts) {
             Ok(p) => {
                 self.status = t!("status.saved", path = p.display()).to_string();
@@ -3651,8 +3665,11 @@ impl App {
                 true
             }
             Err(e) => {
-                self.messages
-                    .error(t!("msg.save_failed", error = e).to_string());
+                let msg = path_before.map_or_else(
+                    || t!("msg.save_failed", error = e).to_string(),
+                    |p| t!("msg.save_failed_path", path = p.display(), error = e).to_string(),
+                );
+                self.messages.error(msg);
                 false
             }
         }
@@ -4498,10 +4515,17 @@ impl App {
         if self.speller_locale.as_deref() == Some(locale.as_str()) {
             return;
         }
-        self.speller = crate::spellcheck::load_for(&self.settings.dictionary_path, &locale).ok();
-        if let Some(sc) = self.speller.as_mut() {
-            for word in Self::load_user_words() {
-                sc.add_word(&word);
+        match crate::spellcheck::load_for(&self.settings.dictionary_path, &locale) {
+            Ok(mut sc) => {
+                for word in Self::load_user_words() {
+                    sc.add_word(&word);
+                }
+                self.speller = Some(sc);
+                self.speller_error = None;
+            }
+            Err(e) => {
+                self.speller = None;
+                self.speller_error = Some(e.to_string());
             }
         }
         self.speller_locale = Some(locale);
@@ -4600,7 +4624,14 @@ impl App {
             self.ensure_speller();
         }
         if self.speller.is_none() {
-            self.status = t!("status.spell_unavailable").into();
+            self.status = match self.speller_error.as_deref() {
+                // Spell-checking is on, but loading genuinely failed: say why
+                // (permission error / corrupt dictionary / no dictionary for
+                // this locale) instead of the generic "check the directory"
+                // advice, which is only actually actionable for that last case.
+                Some(detail) => t!("status.spell_load_failed", error = detail).to_string(),
+                None => t!("status.spell_unavailable").into(),
+            };
             return;
         }
         let found = self.editor.active_tab().and_then(|t| {
@@ -5886,9 +5917,12 @@ impl App {
                 tab.dirty = false;
                 self.status = t!("status.reverted", path = path.display()).to_string();
             }
-            Err(e) => self
-                .messages
-                .error(t!("msg.open_failed", error = e).to_string()),
+            Err(e) => self.messages.error(
+                // T539 (Run H): this wrongly reused `msg.open_failed`
+                // ("Open failed") for a revert -- a different operation with
+                // its own, more accurate wording, and (now) the path too.
+                t!("msg.revert_failed", path = path.display(), error = e).to_string(),
+            ),
         }
     }
 
@@ -7176,9 +7210,10 @@ impl App {
                                 self.close_buffers_under(&canon);
                                 removed += 1;
                             }
-                            Err(e) => self
-                                .messages
-                                .error(t!("msg.delete_failed", error = e).to_string()),
+                            Err(e) => self.messages.error(
+                                t!("msg.delete_failed", path = path.display(), error = e)
+                                    .to_string(),
+                            ),
                         }
                     }
                     self.explorer.clear_marks();
@@ -7305,7 +7340,7 @@ impl App {
             }
             Err(e) => self
                 .messages
-                .error(t!("msg.open_failed", error = e).to_string()),
+                .error(t!("msg.open_failed_path", path = path.display(), error = e).to_string()),
         }
     }
 
@@ -13195,9 +13230,15 @@ impl App {
                 self.explorer.rebuild();
                 self.refresh_git();
             }
-            Err(e) => self
-                .messages
-                .error(t!("msg.rename_failed", error = e).to_string()),
+            Err(e) => self.messages.error(
+                t!(
+                    "msg.rename_failed",
+                    old = cur.display(),
+                    new = new_path.display(),
+                    error = e
+                )
+                .to_string(),
+            ),
         }
     }
 
@@ -13420,15 +13461,31 @@ impl App {
         }
     }
 
-    /// Persist settings on exit; failures become a status message only.
+    /// Persist settings and the session on exit; failures become a status
+    /// message *and* an `eprintln!` (T544, Run H: `main` calls this after
+    /// `ratatui::restore()` has already torn the TUI down, so a message only
+    /// pushed to `self.messages` at this point can never actually render —
+    /// unlike every other caller of `store_settings`/`save_session`, which
+    /// run mid-session with a real frame still to come. `eprintln!` is the
+    /// one channel that still reaches the user: stderr isn't touched by
+    /// `ratatui::restore()`, so it survives in the terminal's scrollback).
+    /// The `self.messages` push is kept too, for anything that inspects
+    /// `App` state directly (tests, an embedder) without going through a
+    /// real terminal session.
     pub fn on_exit(&mut self) {
         self.lsp.shutdown();
-        self.save_session();
+        if let Err(e) = self.save_session() {
+            // This used to be `let _ = self.save_session();`, silently
+            // discarding the error while the identically-shaped
+            // `store_settings` two lines below was already handled properly.
+            let msg = t!("msg.session_save_failed", error = e).to_string();
+            eprintln!("{msg}");
+            self.messages.push(Level::Warn, msg);
+        }
         if let Err(e) = self.store_settings() {
-            self.messages.push(
-                Level::Warn,
-                t!("msg.settings_save_failed", error = e).to_string(),
-            );
+            let msg = t!("msg.settings_save_failed", error = e).to_string();
+            eprintln!("{msg}");
+            self.messages.push(Level::Warn, msg);
         }
     }
 }
@@ -14363,6 +14420,149 @@ mod tests {
     }
 
     #[test]
+    fn revert_failure_names_the_path_not_just_the_error() {
+        // T539 (Run H): this used to wrongly reuse `msg.open_failed` ("Open
+        // failed: ...") for a revert, and neither key named the file.
+        let dir = std::env::temp_dir().join(format!("vix-revertfail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("gone.txt");
+        std::fs::write(&path, "original\n").unwrap();
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.open_path(&path, false);
+        std::fs::remove_file(&path).unwrap(); // now revert's own read fails
+        app.run_action("file.revert");
+        let text = app
+            .messages
+            .items
+            .last()
+            .map(|m| m.text.as_str())
+            .unwrap_or_default();
+        assert!(
+            text.contains("gone.txt"),
+            "names the specific file, not just the error: {text:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rename_failure_names_both_the_old_and_new_path() {
+        // T539 (Run H): the old message named neither path.
+        let dir = std::env::temp_dir().join(format!("vix-renamefail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("gone.txt");
+        std::fs::write(&path, "content\n").unwrap();
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.open_path(&path, false);
+        std::fs::remove_file(&path).unwrap(); // now the rename's source is gone
+        app.rename_file("renamed.txt");
+        let text = app
+            .messages
+            .items
+            .last()
+            .map(|m| m.text.as_str())
+            .unwrap_or_default();
+        assert!(
+            text.contains("gone.txt") && text.contains("renamed.txt"),
+            "names both the old and new path: {text:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn open_failure_names_the_path_not_just_the_error() {
+        // T539 (Run H): `msg.open_failed` had no `%{path}`.
+        let dir = std::env::temp_dir().join(format!("vix-openfail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.open_path(&dir.join("does-not-exist.txt"), false);
+        let text = app
+            .messages
+            .items
+            .last()
+            .map(|m| m.text.as_str())
+            .unwrap_or_default();
+        assert!(
+            text.contains("does-not-exist.txt"),
+            "names the specific file, not just the error: {text:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn save_failure_names_the_path_not_just_the_error() {
+        use std::os::unix::fs::PermissionsExt as _;
+        // T539 (Run H): `msg.save_failed` had no `%{path}`.
+        let dir = std::env::temp_dir().join(format!("vix-savefail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("locked.txt");
+        std::fs::write(&path, "original\n").unwrap();
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.open_path(&path, false);
+        let area = app.layout.editor;
+        app.editor.insert_str("x", area);
+        // Block both the atomic write and its fallback the same way T535's
+        // own test does: unwritable directory, read-only file.
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o444)).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+        app.run_action("file.save");
+        let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755));
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644));
+        let text = app
+            .messages
+            .items
+            .last()
+            .map(|m| m.text.as_str())
+            .unwrap_or_default();
+        assert!(
+            text.contains("locked.txt"),
+            "names the specific file, not just the error: {text:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn delete_failure_names_the_path_not_just_the_error() {
+        use std::os::unix::fs::PermissionsExt as _;
+        // T539 (Run H): `msg.delete_failed` had no `%{path}` — with several
+        // files selected, a mid-batch failure gave no way to tell which one.
+        let dir = std::env::temp_dir().join(format!("vix-delfail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("locked.txt");
+        std::fs::write(&path, "content\n").unwrap();
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.settings.explorer_delete = "hard".to_string(); // plain fs::remove_file, not trash
+        app.confirm = Some(Confirm {
+            message: String::new(),
+            paths: vec![path.clone()],
+        });
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+        app.confirm_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+        let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755));
+        let text = app
+            .messages
+            .items
+            .last()
+            .map(|m| m.text.as_str())
+            .unwrap_or_default();
+        assert!(
+            text.contains("locked.txt"),
+            "names the specific file, not just the error: {text:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn insert_file_inserts_contents_at_cursor() {
         let dir = std::env::temp_dir().join(format!("vix-insfile-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -14513,6 +14713,79 @@ mod tests {
         app.run_action("org.link.follow");
         let line = app.editor.active_tab().unwrap().editor.cursor_line();
         assert_eq!(line, 2, "cursor jumped to the Two headline");
+    }
+
+    #[test]
+    fn org_follow_web_link_actually_stores_the_url_on_the_clipboard() {
+        // T542 (Run H): this used to call the bare `vix_clipboard::set`
+        // directly and unconditionally show "Copied ... to the clipboard"
+        // regardless of its result -- now routed through the editor's
+        // fallback-aware `set_clipboard`, so something is always genuinely
+        // stored (real clipboard, else the in-memory register) rather than
+        // the message merely claiming so.
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.editor
+            .new_tab_with_content("[[https://example.com][site]]\n");
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_cursor(2); // inside the link
+        }
+        app.run_action("org.link.follow");
+        assert!(
+            app.status.contains("example.com"),
+            "status reports the copied URL: {:?}",
+            app.status
+        );
+        let stored = app
+            .editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .get_clipboard()
+            .expect("something was actually stored, not just claimed");
+        assert_eq!(stored, "https://example.com");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn on_exit_reports_a_session_save_failure_not_just_a_settings_one() {
+        use std::os::unix::fs::PermissionsExt as _;
+        // T544 (Run H): `on_exit` used to `let _ = self.save_session();`,
+        // discarding its error while the identically-shaped
+        // `store_settings` call right after it was already handled
+        // properly. Block the write with an unwritable parent directory
+        // (same technique `vix-fileops`'s own permission tests use) so
+        // `save_session` genuinely fails, not just compiles.
+        let base = std::env::temp_dir().join(format!("vix-onexit-{}", std::process::id()));
+        let blocked = base.join("blocked"); // session path's parent: made unwritable below
+        let open = base.join("open"); // settings path's parent: stays writable
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&blocked).unwrap();
+        std::fs::create_dir_all(&open).unwrap();
+        let mut app = App::new(std::env::temp_dir(), Settings::default())
+            .with_session_path(blocked.join("session.toml"))
+            .with_settings_path(open.join("config.toml"));
+        std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o555)).unwrap();
+        app.on_exit();
+        // Restore perms first so cleanup can proceed no matter what.
+        let _ = std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o755));
+        assert!(
+            app.messages
+                .items
+                .iter()
+                .any(|m| m.level == Level::Warn && m.text.contains("session")),
+            "on_exit reported the session-save failure, not just discarding it: {:?}",
+            app.messages
+                .items
+                .iter()
+                .map(|m| &m.text)
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            open.join("config.toml").exists(),
+            "the settings save, on a separate writable path, still succeeded independently"
+        );
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
@@ -15094,5 +15367,35 @@ mod tests {
         app.accept_org_table_sort("1 n");
         let text = app.editor.active_tab().unwrap().text();
         assert_eq!(text, "| 1 |\n| 2 |\n| 3 |\n", "{text:?}");
+    }
+
+    #[test]
+    fn spell_suggest_reports_the_specific_load_error_when_one_occurred() {
+        // T541 (Run H): `ensure_speller` used to discard *why* loading the
+        // dictionary failed via `.ok()` -- every failure (a permission
+        // error, a corrupt dictionary, or simply no dictionary for the
+        // locale) looked identical to the user: no feedback at all beyond
+        // spell-check quietly not working. `open_spell_suggest` now reports
+        // the specific `vix_spellcheck::Error` detail when one was recorded.
+        //
+        // Set `speller_locale` to the real active locale so `ensure_speller`
+        // (called first, unconditionally, by `open_spell_suggest`) sees its
+        // own early-return match and skips re-attempting a real dictionary
+        // lookup -- this test simulates a prior failure without depending on
+        // the untracked `./dictionaries` set or mutating the global i18n
+        // locale (both of which the *other* spellcheck tests avoid too, via
+        // `#[ignore]`).
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.flags.insert(AppFlags::SPELLCHECK);
+        app.speller = None;
+        app.speller_locale = Some(rust_i18n::locale().to_string());
+        app.speller_error = Some("no dictionary found for locale 'xx'".to_string());
+        app.open_spell_suggest();
+        assert!(
+            app.status.contains("no dictionary found for locale 'xx'"),
+            "shows the specific load error, not the generic \
+             enable-it-and-check-the-directory message: {:?}",
+            app.status
+        );
     }
 }

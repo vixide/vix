@@ -322,7 +322,13 @@ impl App {
         match crate::org_table::sum_column(&text, line, byte_col) {
             Some(sum) => {
                 let formatted = Self::format_table_number(sum);
-                let _ = vix_clipboard::set(&formatted);
+                // T542 (Run H): route through the editor's fallback-aware
+                // `set_clipboard` instead of the bare `vix_clipboard::set` --
+                // the message below used to claim success unconditionally
+                // even when nothing was actually stored anywhere.
+                if let Some(t) = self.editor.active_tab_mut() {
+                    let _ = t.editor.set_clipboard(&formatted);
+                }
                 self.status = t!("status.org_table_sum", sum = formatted).to_string();
             }
             None => self.status = t!("status.org_table_no_table").to_string(),
