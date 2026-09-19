@@ -705,6 +705,19 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Org-node: inserting a `#+transclude:` directive for a new node could
+  silently fail to create the node's file** (found by a codebase
+  self-audit, T518): `node_insert_transclusion` was missing the
+  `create_dir_all` call its sibling `roam_insert_link` has, a copy-paste
+  drift — it now creates the node's directory first, exactly like every
+  other way of creating an Org-roam node.
+- **A save that failed both its atomic write and its in-place fallback
+  could report the wrong, stale error** (found by a codebase self-audit,
+  T535): the reported error always named the *first* (atomic) attempt's
+  failure even when the *second* (fallback) attempt failed for an
+  unrelated reason — e.g. showing "permission denied creating temp file"
+  when the real, final problem was "disk full." The fallback's own error
+  is now what's reported (with the atomic one kept alongside, not lost).
 - **Editing a git-tracked file, or scrolling with sticky-scroll/breadcrumbs/
   the minimap on, recomputed real work every single frame instead of only
   when the buffer actually changed** (found by a codebase self-audit,

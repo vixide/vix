@@ -135,29 +135,13 @@ impl Panel {
     }
 }
 
-/// Convert a `u64` to the nearest `f64` without a lossy `as` cast. The high and
-/// low 32-bit halves are each representable exactly, so the single rounding on
-/// the recombining add matches what `n as f64` would produce.
-fn u64_to_f64(n: u64) -> f64 {
-    let high = u32::try_from(n >> 32).unwrap_or(u32::MAX);
-    let low = u32::try_from(n & 0xFFFF_FFFF).unwrap_or(u32::MAX);
-    f64::from(high) * 4_294_967_296.0 + f64::from(low)
-}
-
 /// Format a byte count as a human-readable size (`16.0 GiB`).
+///
+/// Delegates to `vix-byte-size` (Run H, T521) — this crate and
+/// `vix-file-information-panel` used to each hand-roll an identical copy.
 #[must_use]
 pub fn human_bytes(n: u64) -> String {
-    const UNITS: [&str; 6] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
-    if n < 1024 {
-        return format!("{n} B");
-    }
-    let mut value = u64_to_f64(n);
-    let mut unit = 0;
-    while value >= 1024.0 && unit < UNITS.len() - 1 {
-        value /= 1024.0;
-        unit += 1;
-    }
-    format!("{value:.1} {}", UNITS[unit])
+    vix_byte_size::human_bytes(n)
 }
 
 /// Format a duration in seconds as `Dd Hh Mm`.

@@ -153,9 +153,24 @@ pub fn write_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
             // Fall back to a truncating in-place write, which needs write
             // permission only on the file (not its directory).
             let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-            fs::write(&target, data).map_err(|_| atomic_err)
+            fs::write(&target, data)
+                .map_err(|fallback_err| combine_errors(&atomic_err, &fallback_err))
         }
     }
+}
+
+/// Both `write_atomic`'s attempts failed (T535, Run H): report the
+/// **fallback's** own error, not the earlier atomic attempt's — the atomic
+/// error is almost always the parent-directory permission issue the fallback
+/// exists specifically to route around, so leading with it points the user at
+/// a stale, misleading cause (e.g. "permission denied creating temp file"
+/// when the real, final reason is "disk full"). The atomic error is kept in
+/// the message too, not discarded outright, in case it's still relevant.
+fn combine_errors(atomic_err: &io::Error, fallback_err: &io::Error) -> io::Error {
+    io::Error::new(
+        fallback_err.kind(),
+        format!("{fallback_err} (atomic write also failed: {atomic_err})"),
+    )
 }
 
 /// Same as [`write_atomic`], but a **newly created** file is always 0600
@@ -176,7 +191,8 @@ pub fn write_atomic_private(path: &Path, data: &[u8]) -> io::Result<()> {
         Ok(()) => Ok(()),
         Err(atomic_err) => {
             let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-            fs::write(&target, data).map_err(|_| atomic_err)?;
+            fs::write(&target, data)
+                .map_err(|fallback_err| combine_errors(&atomic_err, &fallback_err))?;
             if !existed {
                 restrict_to_owner(&target);
             }
@@ -472,6 +488,47 @@ mod tests {
         let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o755));
         result.expect("save must succeed via the in-place fallback");
         assert_eq!(fs::read(&p).unwrap(), b"new");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn write_atomic_reports_the_fallback_error_when_both_attempts_fail() {
+        use std::os::unix::fs::PermissionsExt as _;
+        // T535 (Run H): when the atomic write AND its in-place fallback both
+        // fail, the returned error must reflect the *fallback's* own failure
+        // (the one that actually explains why nothing was saved), not the
+        // earlier atomic attempt's — a prior version of this function
+        // discarded the fallback's error entirely via `.map_err(|_| atomic_err)`.
+        // Block the atomic path (unwritable directory) *and* the fallback
+        // (read-only file itself), so both genuinely fail.
+        let dir = scratch("atomic-both-fail");
+        let p = dir.join("f.txt");
+        fs::write(&p, b"old").unwrap();
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o444)).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o555)).unwrap();
+        let result = write_atomic(&p, b"new");
+        // Restore perms first so cleanup can proceed no matter what.
+        let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o755));
+        let _ = fs::set_permissions(&p, fs::Permissions::from_mode(0o644));
+        let Err(e) = result else {
+            // Running as root: chmod doesn't actually block anything, so both
+            // attempts genuinely succeed — nothing to assert, and the file's
+            // content is already proven correct by the sibling test above.
+            return;
+        };
+        assert_eq!(
+            e.kind(),
+            io::ErrorKind::PermissionDenied,
+            "the reported kind matches the fallback's own failure (a direct \
+             fs::write to the read-only file has this same kind), not some \
+             other, earlier failure: {e}"
+        );
+        let msg = e.to_string();
+        assert!(
+            msg.contains("atomic write also failed"),
+            "the atomic attempt's error is kept too, not silently dropped: {msg:?}"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 

@@ -1,0 +1,10 @@
+[package]
+name = "vix-byte-size"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Format a byte count as a human-readable size (`16.0 KiB`)."
+
+[dependencies]

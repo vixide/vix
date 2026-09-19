@@ -2139,7 +2139,9 @@ impl App {
         let theme_names = crate::theme_model::theme_names(&available_themes);
         crate::menu::set_theme_names(theme_names);
         // Apply the saved time zone so the clock panel and status bar use it.
-        crate::time_zone_model::set_active(&settings.time_zone);
+        // An unknown/stale saved name is fine to ignore here: `set_active`
+        // just leaves the zone at its UTC default in that case.
+        let _ = crate::time_zone_model::set_active(&settings.time_zone);
         let mut flags = crate::editor::Flags::empty();
         flags.set(
             crate::editor::Flags::LINE_NUMBERS,
@@ -4411,7 +4413,10 @@ impl App {
         if let Some(timer) = self.pomodoro.as_mut() {
             match timer.tick(secs) {
                 Tick::BreakStarted => {
-                    self.status = t!("status.pomodoro_break").to_string();
+                    // Same text as `ui.pomodoro_break_label` (Run H, T524:
+                    // was a separate, identical-in-every-locale duplicate
+                    // key, despite living in a different namespace file).
+                    self.status = t!("ui.pomodoro_break_label").to_string();
                     self.visible.set(Visible::POMODORO, true); // surface the break alert
                 }
                 Tick::Finished => {

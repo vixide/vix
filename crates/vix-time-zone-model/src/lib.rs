@@ -17,7 +17,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-use std::sync::RwLock;
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 mod zones;
 pub use zones::ZONES;
@@ -68,15 +68,34 @@ pub fn utc_index() -> usize {
 // as UTC.
 static ACTIVE: RwLock<Option<usize>> = RwLock::new(None);
 
+/// Read-lock [`ACTIVE`], recovering from poisoning instead of panicking (Run
+/// H, T534) — same rationale and pattern as `vix-theme-model`'s identical
+/// helper: a panic anywhere else while holding this lock would otherwise
+/// permanently poison this process-wide static, and the guarded value can
+/// never itself be left inconsistent by a panicking writer (the one write
+/// here is a single plain assignment, see [`set_active`]), so recovering it
+/// is safe, not just convenient.
+fn read() -> RwLockReadGuard<'static, Option<usize>> {
+    ACTIVE
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Write-lock [`ACTIVE`]; see [`read`] for why poisoning is recovered from
+/// rather than panicked on.
+fn write() -> RwLockWriteGuard<'static, Option<usize>> {
+    ACTIVE
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// Set the active zone by canonical `name`. Returns `true` if the name is known
 /// (and was applied); `false` leaves the active zone unchanged.
-///
-/// # Panics
-/// Panics if the active-zone lock is poisoned.
+#[must_use]
 pub fn set_active(name: &str) -> bool {
     match index_of(name) {
         Some(i) => {
-            *ACTIVE.write().expect("time-zone lock") = Some(i);
+            *write() = Some(i);
             true
         }
         None => false,
@@ -84,15 +103,9 @@ pub fn set_active(name: &str) -> bool {
 }
 
 /// The active [`Zone`] (UTC until one is set).
-///
-/// # Panics
-/// Panics if the active-zone lock is poisoned.
 #[must_use]
 pub fn active() -> &'static Zone {
-    let idx = ACTIVE
-        .read()
-        .expect("time-zone lock")
-        .unwrap_or_else(utc_index);
+    let idx = read().unwrap_or_else(utc_index);
     &ZONES[idx.min(ZONES.len() - 1)]
 }
 
@@ -137,6 +150,22 @@ mod tests {
         assert_eq!(active_name(), "America/New_York");
         assert!(!set_active("Not/AZone"));
         assert_eq!(active_name(), "America/New_York");
+
+        // T534 (Run H): a panic while another thread holds the lock must not
+        // poison it for good — before the fix (a bare `.expect("time-zone
+        // lock")`), every call below would itself panic once poisoned. Stays
+        // in this same test (not a separate one), matching the sibling
+        // `vix-theme-model` crate's convention of one test touching this
+        // process-global static, to avoid interference from parallel test
+        // threads in the same binary.
+        let panicked = std::thread::spawn(|| {
+            let _guard = ACTIVE.write().unwrap();
+            panic!("simulated panic while holding the time-zone lock");
+        })
+        .join();
+        assert!(panicked.is_err(), "the spawned thread did panic");
+        let _ = active(); // would panic here before the fix
+
         // Restore for any other test ordering.
         assert!(set_active("UTC"));
     }

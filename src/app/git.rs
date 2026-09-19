@@ -24,6 +24,36 @@ use super::{
 use crate::editor::Tab;
 
 impl App {
+    /// Bail (with the standard "not a repository" status message) unless
+    /// `self.root` is a git repository. Extracted after this exact 3-line
+    /// guard was found copy-pasted at 13 call sites (Run H, T519) — always
+    /// a fresh filesystem check, matching every one of those sites'
+    /// original behavior exactly (not the cached `AppFlags::GIT_REPO`,
+    /// which a couple of *other* sites use instead for a different reason
+    /// and are left alone here to avoid changing their check semantics).
+    fn require_git_repo(&mut self) -> bool {
+        if crate::git::is_repo(&self.root) {
+            return true;
+        }
+        self.status = t!("status.git_not_repo").into();
+        false
+    }
+
+    /// Bail (with the standard "nothing staged" status message) unless at
+    /// least one file is staged. Extracted after this exact 7-line guard was
+    /// found copy-pasted at 2 call sites (Run H, T519).
+    fn require_staged(&mut self) -> bool {
+        let any_staged = self
+            .git_status
+            .iter()
+            .any(crate::git::FileStatus::is_staged);
+        if any_staged {
+            return true;
+        }
+        self.status = t!("status.git_nothing_staged").into();
+        false
+    }
+
     /// Dispatch a `git.*` action. Returns `true` if `action` was handled.
     /// Extracted from [`App::run_action`] to keep that function within the line
     /// limit.
@@ -197,7 +227,9 @@ impl App {
     fn jj_begin_clone(&mut self) {
         self.prompt = Some(Prompt::new(
             PromptKind::JjClone,
-            t!("prompt.jj_clone").to_string(),
+            // Same text as `prompt.git_clone` (Run H, T524: was a separate,
+            // identical-in-every-locale duplicate key).
+            t!("prompt.git_clone").to_string(),
         ));
     }
 
@@ -205,7 +237,9 @@ impl App {
     fn jj_clone(&mut self, url: &str) {
         let url = url.trim();
         if url.is_empty() {
-            self.status = t!("status.jj_empty_url").into();
+            // Same text as `status.git_empty_url` (Run H, T524: was a
+            // separate, identical-in-every-locale duplicate key).
+            self.status = t!("status.git_empty_url").into();
             return;
         }
         self.run_command(&format!("jj git clone {}", Self::shell_single_quote(url)));
@@ -435,15 +469,7 @@ impl App {
         rebuilt.push_str(&hunk.head_text);
         rebuilt.push_str(&lines[end..].concat());
         let caret: usize = lines[..start].iter().map(|l| l.chars().count()).sum();
-        if let Some(t) = self.editor.active_tab_mut() {
-            t.editor.set_content(&rebuilt);
-            t.editor.set_cursor(caret);
-            t.editor.set_selection(None);
-            t.dirty = true;
-            t.preview = false;
-        }
-        self.refresh_git_gutter();
-        self.status = t!("status.hunk_reverted").to_string();
+        self.apply_rebuilt_buffer(&rebuilt, caret, "status.hunk_reverted");
     }
 
     /// Resolve the merge conflict at (or after) the cursor by keeping `how`.
@@ -468,15 +494,23 @@ impl App {
             .iter()
             .map(|l| l.chars().count())
             .sum();
+        self.apply_rebuilt_buffer(&rebuilt, caret, "status.conflict_resolved");
+    }
+
+    /// Replace the active tab's content with `rebuilt` (a hunk-revert or
+    /// conflict-resolution result), place the cursor at `caret`, and report
+    /// `status_key`. Extracted after `revert_hunk` and `resolve_conflict`
+    /// were found sharing this exact 8-line tail (Run H, T522).
+    fn apply_rebuilt_buffer(&mut self, rebuilt: &str, caret: usize, status_key: &str) {
         if let Some(t) = self.editor.active_tab_mut() {
-            t.editor.set_content(&rebuilt);
+            t.editor.set_content(rebuilt);
             t.editor.set_cursor(caret);
             t.editor.set_selection(None);
             t.dirty = true;
             t.preview = false;
         }
         self.refresh_git_gutter();
-        self.status = t!("status.conflict_resolved").to_string();
+        self.status = t!(status_key).to_string();
     }
 
     /// Move the cursor to the next merge conflict at or after it.
@@ -762,12 +796,7 @@ impl App {
 
     /// Begin a commit: prompt for a message (only when something is staged).
     fn git_begin_commit(&mut self) {
-        let any_staged = self
-            .git_status
-            .iter()
-            .any(crate::git::FileStatus::is_staged);
-        if !any_staged {
-            self.status = t!("status.git_nothing_staged").into();
+        if !self.require_staged() {
             return;
         }
         self.git_panel = None;
@@ -787,12 +816,7 @@ impl App {
             self.status = t!("status.ai_busy").to_string();
             return;
         }
-        let any_staged = self
-            .git_status
-            .iter()
-            .any(crate::git::FileStatus::is_staged);
-        if !any_staged {
-            self.status = t!("status.git_nothing_staged").into();
+        if !self.require_staged() {
             return;
         }
         let Some(diff) = crate::git::staged_diff(&self.root) else {
@@ -832,8 +856,7 @@ impl App {
 
     /// Begin creating a topic branch: prompt for its name (only in a repo).
     fn git_begin_new_branch(&mut self) {
-        if !crate::git::is_repo(&self.root) {
-            self.status = t!("status.git_not_repo").into();
+        if !self.require_git_repo() {
             return;
         }
         self.git_panel = None;
@@ -871,8 +894,7 @@ impl App {
     /// Show the commit log, optionally limited to commits newer than `since`
     /// (a git date spec like `1-day-ago`), streaming it into the bottom dock.
     fn git_log_since(&mut self, since: Option<&str>) {
-        if !crate::git::is_repo(&self.root) {
-            self.status = t!("status.git_not_repo").into();
+        if !self.require_git_repo() {
             return;
         }
         self.git_panel = None;
@@ -883,8 +905,7 @@ impl App {
     /// Show a decorated commit graph across all refs, streaming it into the
     /// bottom dock.
     fn git_log_graph(&mut self) {
-        if !crate::git::is_repo(&self.root) {
-            self.status = t!("status.git_not_repo").into();
+        if !self.require_git_repo() {
             return;
         }
         self.git_panel = None;
@@ -902,8 +923,7 @@ impl App {
     /// streamed-to-the-dock views above. `Enter` opens the highlighted
     /// commit's diff in a read-only tab.
     fn open_git_log(&mut self) {
-        if !crate::git::is_repo(&self.root) {
-            self.status = t!("status.git_not_repo").into();
+        if !self.require_git_repo() {
             return;
         }
         let entries = crate::git::log(&self.root, 200);
@@ -922,8 +942,7 @@ impl App {
     /// just this file. No-op (with a status message) without an active file
     /// or one with no history yet.
     fn open_git_file_history(&mut self) {
-        if !crate::git::is_repo(&self.root) {
-            self.status = t!("status.git_not_repo").into();
+        if !self.require_git_repo() {
             return;
         }
         let Some(path) = self.active_path() else {
@@ -1012,8 +1031,7 @@ impl App {
     /// **Git → Log → Open File at Revision…**: prompt for a revision, then
     /// open the active file's content at it. No-op without an active file.
     fn open_git_at_revision_prompt(&mut self) {
-        if !crate::git::is_repo(&self.root) {
-            self.status = t!("status.git_not_repo").into();
+        if !self.require_git_repo() {
             return;
         }
         if self.active_path().is_none() {
@@ -1081,8 +1099,7 @@ impl App {
 
     /// Show the working-tree status, streaming `git status` into the bottom dock.
     fn git_status_to_dock(&mut self) {
-        if !crate::git::is_repo(&self.root) {
-            self.status = t!("status.git_not_repo").into();
+        if !self.require_git_repo() {
             return;
         }
         self.git_panel = None;
@@ -1122,8 +1139,7 @@ impl App {
     /// feeding the prompted text via a throwaway `GIT_EDITOR` that copies it into
     /// the description file (so no interactive editor opens).
     pub(super) fn git_edit_description(&mut self, desc: &str) {
-        if !crate::git::is_repo(&self.root) {
-            self.status = t!("status.git_not_repo").into();
+        if !self.require_git_repo() {
             return;
         }
         let Ok(tmp) = crate::fileops::write_private_temp("vix-branchdesc", desc.as_bytes()) else {
@@ -1144,8 +1160,7 @@ impl App {
         if name.is_empty() {
             return;
         }
-        if !crate::git::is_repo(&self.root) {
-            self.status = t!("status.git_not_repo").into();
+        if !self.require_git_repo() {
             return;
         }
         self.git_panel = None;
@@ -1159,8 +1174,7 @@ impl App {
         if pattern.is_empty() {
             return;
         }
-        if !crate::git::is_repo(&self.root) {
-            self.status = t!("status.git_not_repo").into();
+        if !self.require_git_repo() {
             return;
         }
         self.git_panel = None;
@@ -1172,8 +1186,7 @@ impl App {
     /// Annotate the cursor's current line with its `git blame` attribution
     /// (short hash, author, date, and commit summary) in the status bar.
     fn git_blame_line(&mut self) {
-        if !crate::git::is_repo(&self.root) {
-            self.status = t!("status.git_not_repo").into();
+        if !self.require_git_repo() {
             return;
         }
         let Some((path, line)) = self
@@ -1285,8 +1298,7 @@ impl App {
     /// Run a remote git command (push/pull/fetch) asynchronously, streaming its
     /// output to the bottom dock. Git state refreshes when it completes.
     fn git_remote_command(&mut self, cmd: &str) {
-        if !crate::git::is_repo(&self.root) {
-            self.status = t!("status.git_not_repo").into();
+        if !self.require_git_repo() {
             return;
         }
         self.git_panel = None;
@@ -1300,8 +1312,7 @@ impl App {
     /// Open the branch chooser; `merge` picks merge-into-current rather than
     /// checkout.
     fn open_branch_chooser_mode(&mut self, merge: bool) {
-        if !crate::git::is_repo(&self.root) {
-            self.status = t!("status.git_not_repo").into();
+        if !self.require_git_repo() {
             return;
         }
         let branches = crate::git::local_branches(&self.root);

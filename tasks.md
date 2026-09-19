@@ -4049,6 +4049,493 @@ measured problem today. Everything else actionable in this run is closed.
   "nice to have" rather than a measured problem — revisit if startup
   time ever becomes a real complaint.
 
+## Run H (second self-audit pass, 2026-09-19)
+
+Four more parallel research passes over fresh angles Run G didn't cover:
+code duplication/DRY, concurrency/threading correctness, error-handling
+quality, and cross-platform (Windows) correctness. Two genuine
+correctness bugs turned up (T518, T528 below), not just style/maintenance
+debt. Grouped by source pass; ranked by value/effort within each group.
+
+### Duplication / DRY
+
+- [x] **T518 — `node_insert_transclusion` is missing the `create_dir_all`
+  its sibling `roam_insert_link` has, a real bug from copy-paste drift.**
+  `src/app/roam.rs`: both functions share an identical "find or create
+  the node's file" preamble, but `roam_insert_link` (introducing commit
+  `a913aa3`) creates the target directory first
+  (`std::fs::create_dir_all(parent)`) before `roam_insert_link` on
+  `path`; `node_insert_transclusion` (added later, `ca47669`, by
+  copy-pasting the block) dropped that line. Inserting a transclusion
+  for a title whose Org-roam directory doesn't exist yet fails silently
+  where the sibling function succeeds. Fix: extract one
+  `fn roam_find_or_create_node(&mut self, title: &str) -> Option<String>`
+  (including the `create_dir_all`) shared by both — the crate already
+  has `roam_write_and_open` for the "and open it" variant three other
+  callers use; this is its "don't open" sibling. Small effort, real bug.
+  **Done 2026-09-19**: added `App::roam_find_or_create_node`, both call
+  sites now delegate to it. New test `roam_node_insert_and_transclusion_
+  recreate_a_missing_root` (`tests/integration/editing.rs`) deletes the
+  workspace root between the two calls and proves both actions still
+  succeed — it would have failed on `node.insert_transclusion` before
+  this fix.
+- [x] **T519 — `is_repo`/`nothing_staged` guard clauses copy-pasted 13+
+  times in `src/app/git.rs`.** The 3-line
+  `if !crate::git::is_repo(&self.root) { self.status = t!(...); return; }`
+  guard appears verbatim at 13 call sites (plus 2 `AppFlags::GIT_REPO`
+  variants), and the "nothing staged" guard opens both
+  `git_begin_commit` and `git_generate_commit_message` identically. Fix:
+  `fn require_git_repo(&mut self) -> bool` / `fn require_staged(&mut
+  self) -> bool`, called as `if !self.require_git_repo() { return; }` —
+  an internal guard helper, not a second `run_action` path for one
+  command, so it doesn't conflict with the "one action id, one arm"
+  rule. Small, mechanical effort. **Done 2026-09-19**, implemented
+  exactly as scoped: both helpers added, all 13 + 2 sites replaced by a
+  byte-for-byte search/replace (zero behavior change — `require_git_
+  repo` still does the same fresh `crate::git::is_repo` check every
+  one of the 13 sites did; the 2 `AppFlags::GIT_REPO`-cached sites were
+  deliberately left alone, different check semantics, out of scope
+  here). All 11 `--ignored git::*` tests plus the 5 `--ignored
+  editing::*` git/hunk/spellcheck tests still pass.
+- [ ] **T520 — The Howard Hinnant civil-date algorithm
+  (`civil_from_days`/`days_from_civil`) is hand-rolled independently in
+  3 crates.** `crates/vix-file-information-panel/src/lib.rs:159-170`,
+  `crates/vix-git/src/lib.rs:355-368` (`epoch_to_date`), and
+  `crates/vix-org/src/lib.rs:1050-1060`/`1875-1882` each reimplement the
+  same ~15-line integer algorithm (magic constants `719_468`/
+  `146_097`/`36_524`/`146_096`) with no shared test — real subtle-bug
+  risk in three unrelated copies rather than domain-driven similarity
+  (none of the three crates depend on `time`/`chrono`). Fix: extract a
+  tiny dependency-free crate (or fold into an existing low-level one)
+  exposing both functions, unit-tested once. Small effort.
+- [x] **T521 — `human_bytes` byte-size formatter duplicated verbatim
+  (including its doc comment) in 2 crates.**
+  `crates/vix-file-information-panel/src/lib.rs:108-126` and
+  `crates/vix-system-information-panel/src/lib.rs:140-161` — identical
+  `UNITS` array, loop, and "lossless u64→f64" rounding comment. (Not
+  `vix-file-browser-panel::size_label`, a deliberately different compact
+  KB/MB variant.) Fix: move `human_bytes` + its `u64_to_f64` helper
+  somewhere both crates can share. Small effort. **Done 2026-09-19**:
+  new `vix-byte-size` crate (clears T151's "own spec + own tests + a
+  real reuse story" bar — two existing consumers, pure/testable in
+  isolation), both panel crates now delegate to it. Crate count
+  116→117 — found and fixed two more stale "112"/"116" count mentions
+  in `agents/share/crate-map.md`/`AGENTS.md` while updating them (one,
+  `crate-map.md`'s own `crates/` table row, had been stale since
+  *before* T509's count fix earlier this run — T509 caught two of the
+  three mentions, missed this third one).
+- [x] **T522 — `revert_hunk`/`resolve_conflict` share an identical
+  8-line "commit the rebuilt buffer" tail.** `src/app/git.rs:438-447`
+  and `:471-479` are byte-for-byte identical (set content/cursor/
+  selection/dirty/preview, refresh gutter, set status) except the final
+  status key. Fix: `fn apply_rebuilt_buffer(&mut self, rebuilt: &str,
+  caret: usize, status_key: &str)`. Small effort. **Done 2026-09-19**,
+  implemented exactly as scoped (the `t!(status_key)` runtime-key
+  pattern already exists elsewhere, e.g. `git_op`'s `ok_key`). Both
+  `revert_hunk_restores_committed_text` and
+  `conflict_resolve_keeps_chosen_side` (`tests/integration/editing.rs`)
+  still pass.
+- [ ] **T523 — Throwaway git-repo bootstrap reimplemented 13 times
+  across `tests/integration/{git,editing}.rs`.** No shared helper in
+  `common.rs`, so every test needing a real repo hand-rolls the same
+  `run` closure + `init -q` + two `config` calls (13 sites total), each
+  preceded by a redundant `fs::create_dir_all` (`unique_dir` already
+  does this). Fix: add `pub(crate) fn init_git_repo(dir: &Path)` to
+  `common.rs`. Small effort, test-only.
+- [ ] **T524 — Three genuine sentence-level duplicate i18n key pairs.**
+  `prompt.git_clone`/`prompt.jj_clone` (`locales/prompt.yml:795-796` /
+  `:1051-1052`), `status.git_empty_url`/`status.jj_empty_url`
+  (`locales/status.yml:807-808` / `:4855-4856`), and
+  `status.pomodoro_break`/`ui.pomodoro_break_label` (`locales/
+  status.yml:3671-3672` / `locales/ui.yml:2607-2608`, the clearest case
+  — spans two different namespace files) all carry an identical `en:`
+  sentence for two call sites that could share one key. Fix: collapse
+  each pair, repoint the 2 call sites each, drop ~15 translated lines
+  per merge × 3. Small effort each. **Done 2026-09-19**: verified all
+  three pairs match across every one of the 15 locales (not just `en:`)
+  before merging any of them, so nothing translated is actually lost.
+  All three `jj`/`status` call sites repointed at their surviving
+  sibling key with an explanatory comment; the three now-redundant
+  locale blocks removed (45 lines across the two `locales/*.yml`
+  files). `cargo test --test i18n_keys` still passes.
+- [ ] **T525 — Undo/redo snapshot stacks hand-rolled independently in 5
+  `vix-edit-*` crates, at 3 different quality levels.** Identical
+  `const HISTORY_CAP: usize = 200;` and near-identical `push_undo`
+  bodies in `vix-edit-bytes`, `vix-edit-sql`, `vix-edit-value` (still
+  duplicate push/pop inline in both directions) vs. `vix-edit-table`/
+  `vix-edit-outline` (already converged on a shared `restore()` helper
+  between undo/redo). Fix: a small generic `vix-undo-stack` crate (same
+  shape as `vix-list-state`, T144) — `push_capped<T>(stack: &mut
+  Vec<T>, item: T, cap: usize)`. Small/medium effort.
+- [ ] **T526 — `wrap_line` greedy word-wrap reimplemented independently
+  in `vix-welcome-panel` and `vix-ai-panel`, with a real behavior
+  difference.** `crates/vix-welcome-panel/src/lib.rs:34-60` does not
+  break over-long words; `crates/vix-ai-panel/src/lib.rs:154-183` does,
+  character-by-character. No doc explains why a welcome screen and an
+  AI transcript should differ here — looks accidental, not deliberate.
+  (`vix-textops::wrap`/`wrap_chunk` solves the harder editor-wrap
+  problem and isn't part of this — a candidate host for a shared "plain
+  greedy wrap" primitive.) **Needs a product decision first** (which
+  over-long-word behavior is correct for each panel) before the merge —
+  small/medium effort once decided.
+- [ ] **T527 — `menu.item.org.roam.*.help`/`menu.item.org.node.*.help`:
+  4 pairs of identical help text for the same underlying actions, across
+  ~15 locales.** `locales/menu.yml:20905/20921/20937/20969` (Org▸Roam)
+  and `:21065/21081/21129/21177` (Org▸Node) — confirmed both menu paths
+  bind to the same actions in `crates/vix-menu/src/lib.rs:1722-1762`.
+  Arguably intentional (same feature surfaced at two menu locations),
+  but the whole sentence is duplicated per locale, not a short word.
+  Medium effort (touches ~15 languages × 4 pairs).
+- [ ] **T528 — `stage_hunk`/`unstage_hunk` share ~20 lines of identical
+  setup and an identical `stage_content` dispatch/report tail; only the
+  middle (staging vs. unstaging logic) genuinely differs.**
+  `src/app/git.rs:524-579` and `:585-639`. Medium effort — the shared
+  edges are easy to extract, the middle needs care not to conflate.
+- [ ] **T529 — `src/app/picker_panels.rs`: near-identical key/mouse
+  dispatch duplicated across 4 list panels (~120 lines).** `ascii_mouse`
+  (148-163), `x11_mouse` (228-243), `media_type_mouse` (461-476) are
+  textually identical apart from field name and insert callback; the
+  `Up`/`Down`/`PageUp`/`PageDown` key-handler block repeats across
+  `ascii_key`/`x11_key`/`media_type_key`/`theme_editor_key`. The four
+  panel types already expose the same method names (`up`/`down`/
+  `page_up`/`page_down`/`select_index`), so a small trait (legal in the
+  `vix` binary crate) could unify this. Medium effort.
+- [ ] **T530 — Minor duplication, low priority.** `rgb(hex)` hex-to-byte
+  parsing duplicated in `crates/vix-editor-core/src/utils.rs:88-99` and
+  `crates/vix-base16/src/lib.rs:99-103` (same lenient policy; not
+  `vix-color-converter-tool::from_hex`, a deliberately stricter public
+  API). Picker footer hint strings duplicated verbatim: `ui.snippets_
+  hint`/`ui.media_types_hint` and `ui.tasks_hint`/`ui.scripts_hint`
+  (`locales/ui.yml`). AI-replace polling loop (`tests/integration/
+  ai.rs:30-38` vs. inlined in `git.rs:157-162`) and a custom-dir-and-
+  settings app-builder (`ai.rs:16-27` vs. `git.rs:145-150`) each
+  duplicated once — promote `wait_for` to `common.rs`, add `app_at_
+  with(root, settings)`. All small effort, low individual value; batch
+  together if picked up.
+
+### Concurrency / threading correctness
+
+- [ ] **T531 — DB workbench connect (and its own cancel path) fully
+  blocks the single UI event-loop thread — can freeze the whole editor,
+  not just the DB view.** `crates/vix-db/src/lib.rs`'s `finish_connect`
+  (called synchronously from ordinary key handlers) runs, all inline on
+  the UI thread: `secret::resolve()` (may shell out and block on a
+  configured `password_command`), `tunnel::open`'s `wait_ready` (polls
+  with `thread::sleep(100ms)` up to a 10s timeout), and
+  `session::Session::connect` (blocks on a real `sqlx::AnyConnection::
+  connect(url)` with **no configured connect timeout** — an
+  unreachable/filtered host hits the OS TCP timeout, commonly 60-130s).
+  Every other DB operation has a `poll_*` async counterpart
+  (`Session::send`/`poll`, whose own doc comment explains exactly why);
+  `connect`/`restart` were left out of that design. Worse: **the
+  designed escape hatch also blocks** — `cancel_query`'s `session.
+  restart()` calls `Session::connect` again, synchronously, on the same
+  UI thread, inside the Ctrl+C handler meant to recover from a stuck
+  query, so if the network condition that caused the hang is still
+  present, cancelling a hung query can itself hang. Fix: move
+  `finish_connect`'s body to a background thread mirroring `session::
+  worker`'s existing pattern, with a `poll_connect` drained each
+  event-loop tick — same shape as `poll_command`/`poll_ai_replace`/
+  `poll_http` already established in `src/app.rs`. **Medium-large
+  effort, highest-severity finding of this run** — real, but risky to
+  rush in a security-sensitive area (DB connections); scope as its own
+  focused change with its own test pass rather than folding into a
+  general cleanup.
+- [ ] **T532 — Cancelling or disconnecting a DB session abandons, but
+  doesn't cancel, the in-flight query — repeated cancels against a hung
+  query can exhaust the DB's connection limit.** `crates/vix-db/src/
+  session.rs`'s `restart()`/`Browser::disconnect()` just drop
+  `reply_rx`; the old worker thread, if blocked inside `stream_sql`'s
+  `stream.next().await` waiting on the network, has no cancellation
+  signal and only notices abandonment the next successful `reply_tx.
+  send`, which never happens if the query never produces another row.
+  Each Ctrl+C against a truly hung query leaves one more connection
+  open-but-blocked; repeat enough times and even fresh connect attempts
+  fail against the DB's own `max_connections`, with no indication it's
+  self-inflicted. Fix: thread a cancellation token (`Arc<AtomicBool>` or
+  a `watch` channel) through `stream_sql`'s loop, checked each
+  iteration — same pattern the tree-sitter parse worker already uses
+  (T533). Medium effort; depends on T531's architecture for the cleanest
+  fix, though it could also land independently.
+- [x] **T533 — Tree-sitter background parse isn't cancelled when its
+  buffer closes mid-parse.** `crates/vix-editor-core/src/code.rs`'s
+  `Code` has no `Drop` impl; `request_async_parse` only sets an existing
+  parse's `cancel: Arc<AtomicBool>` when a *newer* request supersedes an
+  older one, never when `Code` itself is dropped. Not a leak (the
+  worker thread's current parse still finishes and then exits cleanly
+  once `res_rx` is gone) — just a few seconds of wasted CPU on a
+  now-irrelevant parse for a very large closed buffer. Fix: `impl Drop
+  for Code` that sets the cancel flag before its fields drop. Small
+  effort, low severity. **Done 2026-09-19**, implemented exactly as
+  scoped. New test `dropping_code_mid_parse_signals_the_worker_to_
+  cancel` checks the flag transitions on drop — deterministic, not
+  dependent on winning a race with the worker thread. Also fixed, while
+  touching `Code`'s own doc comment (added for T515): it claimed
+  "cloning `Code` is O(1)", but `Code` doesn't implement `Clone` at all
+  (it owns a worker thread, a `Box<dyn Fn>` callback, and undo history)
+  — only the underlying rope has that property; reworded to say so.
+- [x] **T534 — `vix-theme-model`/`vix-time-zone-model` use `.expect(...)`
+  on a lock instead of the poison-recovery pattern 3 sibling crates
+  already established.** `crates/vix-theme-model/src/lib.rs` (7 call
+  sites) and `crates/vix-time-zone-model/src/lib.rs` (2 call sites) do
+  `CUSTOM.write().expect("theme lock")`/`ACTIVE.read().expect(...)` —
+  a panic anywhere while holding either lock (in a test, or in
+  production) permanently poisons the process-wide static, cascading
+  into every subsequent call (both are read on essentially every frame
+  render). `vix-clipboard`, `vix-terminal`, and two `Arc<Mutex<Child>>`
+  sites in `src/app.rs` already guard against exactly this with
+  `unwrap_or_else(PoisonError::into_inner)`, one with an explicit
+  comment explaining why. Low real-world risk in production (the code
+  held under these two locks is trivial, panic-free field access/
+  `format!`), but a concrete risk for **test-suite flakiness**: `cargo
+  test` runs a crate's tests in parallel by default (no
+  `--test-threads=1`/`serial_test` anywhere in the repo), so any test
+  panicking while touching theme/time-zone state poisons the static for
+  the rest of that binary, cascading into unrelated failures in the
+  same run — the same class of "shared process-wide global touched by
+  parallel test threads" flakiness already fixed once for the clipboard
+  (see `[[vix-flaky-clipboard-register-test]]`-style prior fix). Fix:
+  mirror the existing pattern at all ~9 call sites. Small effort.
+  **Done 2026-09-19**: both crates gained private `read()`/`write()`
+  helpers (mirroring `vix-clipboard`'s `lock` helper) recovering from
+  poisoning; every one of the 9 call sites converted, and the now-stale
+  "Panics if the lock is poisoned" doc notes removed from all 9 public
+  functions (they no longer can). New test coverage extends each
+  crate's one existing state-touching test (per its own "keep the
+  process-global state sequential" convention) with a check that
+  spawns a thread which panics while holding the lock, then proves a
+  normal call afterward still works — would have panicked before the
+  fix.
+
+### Error handling / silent-failure quality
+
+- [x] **T535 — `write_atomic`/`write_atomic_private` report the WRONG
+  error when both the atomic write and its fallback fail — a real bug
+  in the save path behind nearly every file write in Vix.**
+  `crates/vix-fileops/src/lib.rs:156,179`: on the fallback path,
+  `fs::write(&target, data).map_err(|_| atomic_err)` discards the
+  fallback's own `io::Error` and always returns the *first* attempt's
+  error instead — so a user hitting (say) "disk full" on the fallback
+  write sees a stale "permission denied creating temp file" message
+  from the earlier, unrelated failure. Fix: capture and report the
+  fallback's own error (or combine both). Small effort, real bug.
+  **Done 2026-09-19**: new `combine_errors` helper reports the
+  fallback's own `ErrorKind`, with the atomic error appended to the
+  message rather than discarded outright. New test `write_atomic_
+  reports_the_fallback_error_when_both_attempts_fail` blocks both the
+  atomic path (unwritable directory) and the fallback (read-only file)
+  and confirms the returned error's kind and message reflect the
+  fallback's real failure, not the stale atomic one.
+- [ ] **T536 — DAP (debugger) requests silently discard failure — a
+  rejected breakpoint or an invalid step request just "does nothing,"
+  no message.** `crates/vix-dap/src/lib.rs:375-420`, the `Pending::
+  Other => {}` arm at line 418 throws away both `success` and the
+  adapter's `message` field for every DAP request except `evaluate`
+  (`initialize`, `launch`, `configurationDone`, `setBreakpoints`,
+  `continue`/`next`/`stepIn`/`stepOut`/`pause`). LSP has the equivalent
+  right (`LspEvent::RequestFailed`, surfaced in `src/app/lsp_dap.rs`);
+  DAP has no counterpart. Fix: add a `DapEvent::RequestFailed(String)`
+  variant, check `success` in the `Other` arm, surface it the same way
+  LSP's failures already are. Medium effort.
+- [ ] **T537 — A settings-file syntax error silently resets everything
+  to defaults on next launch, with zero notification.**
+  `crates/vix-settings/src/lib.rs:541-543`: `pub fn load() -> Settings {
+  confy::load(APP_NAME, Some(CONFIG_NAME)).unwrap_or_default() }` — a
+  typo from hand-editing `config.toml` loses the user's theme,
+  keybindings, and every other setting with no warning at all. Fix:
+  distinguish "file doesn't exist yet" (fine, use defaults silently)
+  from "file exists but failed to parse" (queue a warning message
+  naming the parse error) — `confy`'s error type should let these be
+  told apart. Medium effort.
+- [ ] **T538 — `sqlx::Error`'s structured detail is flattened to a bare
+  `String` inside the DB worker thread, before it ever crosses back to
+  the UI.** `crates/vix-db/src/session.rs:236,280,187` all do `.map_err
+  (|e| e.to_string())`/equivalent at the point of origin. `sqlx::Error`
+  is structured (`Database` with `.code()`/`.constraint()`, `Io`,
+  `PoolTimedOut`, `Protocol`, `Configuration`), but stringifying it
+  immediately means the UI can never programmatically distinguish
+  "connection lost, offer reconnect" from "unique-constraint violation,
+  highlight the row" from "syntax error at position N" — all become one
+  opaque string. Fix: plumb a structured error (or at least `.kind()`/
+  `.code()`) across the `mpsc` channel instead of a `String`. Medium
+  effort, cross-cutting (touches the channel's message type and every
+  consumer).
+- [ ] **T539 — The five most common user actions (save/open/revert/
+  rename/delete) show generic errors with no filename, though the path
+  is in scope at every site.** `src/app.rs`: Ctrl+S save (`:3651-3654`,
+  `msg.save_failed`), open file (`:7301-7304`, `msg.open_failed`),
+  revert buffer (`:5865`, wrongly reuses `msg.open_failed`), rename
+  (`:13193-13195`, `msg.rename_failed`, names neither old nor new path),
+  and explorer batch delete (`:7174-7177`, each loop iteration's failure
+  *overwrites* the last, so only the final failure of N is ever shown,
+  still with no filename). Contrast `:12742-12744` (workspace
+  search-and-replace write), which already does this right —
+  `t!("msg.write_failed", path = path.display(), error = e)` — and
+  `continue`s the loop instead of aborting. Fix: add `path`/`old`/`new`
+  interpolation to the four single-item locale keys (small effort each)
+  and accumulate the batch-delete failures into one message instead of
+  overwriting (medium effort for that one site).
+- [ ] **T540 — `vix-git::stage`/`unstage` return a bare `bool`,
+  discarding git's real stderr — inconsistent with their own sibling.**
+  `crates/vix-git/src/lib.rs:498-500,568-571` collapse the command
+  result to `bool`; the caller (`src/app/git.rs:744-747`) can only show
+  a static, non-interpolated `"Git command failed"` on failure. The
+  sibling `stage_content` (same file, line 520) already does this
+  right — `Result<(), String>` with the real stderr — this is an
+  internal inconsistency, not a systemic constraint. Medium/large
+  effort (touches the function signatures and both call sites' i18n).
+- [ ] **T541 — `ensure_speller` discards a well-designed 3-variant
+  `Error` enum, going "silently inert" exactly as its own doc comment
+  admits — but that admission never reaches the user.** `src/app.rs:
+  4496`: `self.speller = crate::spellcheck::load_for(...).ok();`.
+  `vix_spellcheck::Error` (`crates/vix-spellcheck/src/lib.rs:34`)
+  distinguishes `Io` (permissions/path), `Parse` (malformed
+  dictionary), and `NotFound` (no dictionary for the locale) — each
+  independently actionable — but `.ok()` throws all three away. A user
+  with a wrong `dictionary_path` vs. a corrupt dictionary vs. an
+  unsupported locale sees identical (zero) feedback. Fix: surface a
+  status/message keyed on the `Err` variant. Small effort.
+- [ ] **T542 — Clipboard "yank" operations in two places claim success
+  even when the clipboard write silently failed.** `src/app/org.rs:
+  979-980` ("Copied %{url} to the clipboard") and `src/app/org_table.rs:
+  325-326` ("Sum: %{sum} (copied to the clipboard)") show their success
+  message unconditionally, not gated on `vix_clipboard::set`'s actual
+  result — unlike the established fallback pattern in `crates/
+  vix-editor-core/src/editor.rs:645-653`, which sets an in-memory
+  fallback and (implicitly) knows when the real clipboard write failed.
+  Two more sites (`src/app/modal.rs:509`, `src/app/org.rs:379`) also
+  bypass the checked pattern without the false-success claim. One layer
+  down, `crates/vix-clipboard/src/lib.rs:72,89` wraps `arboard::Error`
+  via `.map_err(|e| anyhow!(e.to_string()))` rather than
+  `anyhow::Error::from(e)`, losing the ability to distinguish
+  `ClipboardOccupied` (transient, retryable) from `ContentNotAvailable`/
+  `ClipboardNotSupported` even for a caller that wanted to react
+  differently. Fix: gate the two false-success messages on the real
+  `Result`; fix the `anyhow!` wrapping to preserve the source error.
+  Small effort, real (if minor) correctness bug on the two claiming
+  sites.
+- [ ] **T543 — `vix-edit-value` (JSON/YAML editor) discards
+  `serde_yaml`'s line/column diagnostics, showing only a static "not
+  valid JSON or YAML."** `crates/vix-edit-value/src/lib.rs:117-119`:
+  `serde_yaml::from_str(text).ok()?` throws away the parser's own
+  location detail; the caller (`src/app.rs:9639`) has nothing better to
+  show. Fix: change `from_text` to return `Result<Self, String>` and
+  surface the real message. Medium effort.
+- [ ] **T544 — `save_session` discards its error silently while the
+  identical-shaped `store_settings` two lines below is handled
+  properly.** `src/app.rs:13419-13428`: `self.save_session();` (root:
+  `src/app/session.rs:227`, `let _ = self.store_session(&session);`)
+  vs. `store_settings()` right below, wrapped in `if let Err(e) = ...`.
+  Also worth checking in the same fix: the settings-save warning is
+  queued immediately before process exit (`src/main.rs:152`) with no
+  further render tick, so it may never actually be seen either — same
+  root issue as T539's "the user needs to see this before exit"
+  concern, just for the settings/session case instead of a save/open
+  error. Small effort.
+- [ ] **T545 — Several settings/state writes after an explicit user
+  action are silently discarded, at 6+ sites with the same shape.**
+  `src/app/session.rs:381` (`open_settings_file` doesn't save settings
+  first, no warning), `src/app/org.rs:850,864,872` (agenda file add/
+  remove/clear discard `store_settings()`, then unconditionally show
+  success), `src/app/picker_panels.rs:402` (theme "Save As" persists
+  the theme JSON carefully but discards the active-selection save),
+  `src/app.rs:9581,9588,9595` (DB connection list/query history/saved
+  queries discarded after explicit user actions), and `crates/vix-db/
+  src/lib.rs:938` (OS-keyring password store discarded after the user
+  explicitly opts into "remember password"). Fix: reuse the existing
+  `self.messages.error`/Warn pattern already used elsewhere in the same
+  files at each site. Small effort each; batch together if picked up.
+- [x] **T546 — `unwrap()`/`expect()` reachability: thorough negative
+  result, recorded so a future pass doesn't re-walk the same ground.**
+  Stripped `#[cfg(test)]` bodies workspace-wide (823 → 103 genuine
+  candidates) and traced ~15 of the riskiest, including two requiring a
+  read of the `ropey`/`str_indices` dependency source itself to confirm
+  behavior — e.g. "Go to Byte" → `Rope::byte_to_char` looked like the
+  strongest candidate (a user-typed byte offset, not char-boundary-
+  clamped) but `str_indices` 0.4.4's `from_byte_idx` snaps backward to
+  the nearest boundary rather than panicking; `Rope::byte_slice` does
+  genuinely panic on a non-boundary range, but its only caller always
+  passes tree-sitter node ranges, always valid by construction. All
+  user-facing regex compilation and all LSP/DAP response parsing use
+  `match`/`Option`, never bare-unwrap user/server-shaped input. **No new
+  confirmed-reachable panic found — done as a negative result**, not a
+  gap. One soft, unactioned observation: nothing enforces this (no
+  `#![deny(clippy::unwrap_used)]` anywhere), so the cleanliness is by
+  discipline, not by a lint gate — a future regression wouldn't be
+  caught automatically; not proposing that lint here (it would be a
+  large, disruptive addition for close to zero measured benefit given
+  this clean result), just naming the gap between "true today" and
+  "enforced."
+
+### Cross-platform (Windows) correctness
+
+CI (`.github/workflows/ci.yml`) only ever builds/tests on
+`ubuntu-latest`/`macos-latest` — there is no Windows runner, so a
+Windows-only bug can live indefinitely undetected. Checked and
+confirmed **solid, no finding needed**: `PathBuf::join` used
+consistently (no raw `"{}/{}"` path concatenation for real filesystem
+paths), CRLF/LF explicitly detected and preserved
+(`Code::first_line_ending`), config-dir resolution goes through
+`confy`→`etcetera` (a real cross-platform base-dirs crate, not manual
+`$HOME` parsing), `git`/`hunspell` binary resolution has deliberate
+`PATHEXT`-aware, cwd-safe `which_on_path` (also closes a real Windows
+`CreateProcessW` binary-planting vector), symlink creation has all
+three platform branches, the integrated terminal uses `portable-pty`
+(ConPTY-aware) with `cfg!(windows)`-gated shell selection, and
+duplicate-tab detection uses `Path::canonicalize()` (handles
+case-insensitive filesystems correctly).
+
+- [ ] **T547 — Every "run an external command" feature hard-depends on
+  a POSIX `sh` with no Windows path — breaks whole feature classes, not
+  just degrades them, on stock Windows.** Two sites in `src/app.rs`:
+  `spawn_ai_cli` (`:10241`, the CLI-mode AI assistant) and
+  `run_command_in` (`:13227`, "the one async pipeline every
+  command-running action funnels through" per its own doc comment,
+  reached from ≥9 call sites: the "Run shell command" palette action,
+  Project → Compile/Run/Test, the Go menu, etc.) both do
+  `Command::new("sh").arg("-c").arg(cmd)` unconditionally. Unlike
+  `toggle_terminal` (`:10664-10685`), which does branch on `cfg!
+  (windows)` for `cmd.exe` vs. `/bin/sh`, these two have no such branch
+  — on stock Windows (no WSL, no Git-Bash on `PATH`) every one of these
+  actions fails outright with "program not found." `Settings::
+  ai_command_line` also builds its command string via `sh_single_quote`
+  (POSIX quoting), meaningless to `cmd.exe`/PowerShell even if a shell
+  were found. Fix: mirror `toggle_terminal`'s cfg-gated shell + flag
+  choice (`cmd.exe /C` vs. `sh -c`), and give `sh_single_quote` a
+  Windows sibling — cmd.exe/PowerShell quoting is genuinely
+  inconsistent, so this needs real care, not just "make it compile."
+  Medium effort; **no Windows CI exists to verify against**, so land
+  this only with a way to actually test it (a local Windows machine, or
+  standing up a Windows CI job first).
+- [ ] **T548 — OS keyring support on Windows is a silent no-op stub,
+  despite the `keyring` crate (already a dependency, already used on
+  macOS via the identical `keyring::Entry` API) supporting Windows
+  Credential Manager behind an unused feature flag.**
+  `crates/vix-db/src/secret.rs:81-119` and `crates/vix-ai-core/src/
+  secret.rs:36-59`: the `#[cfg(not(unix))]` arm is `{ let _ = conn;
+  None }` / `{ let _ = (conn, password); false }`. Root cause: root
+  `Cargo.toml:41` pins `keyring = { version = "3", features =
+  ["apple-native"] }` — only the macOS backend is enabled. On Windows,
+  both the DB workbench's saved-password waterfall and the AI
+  provider's saved-API-key waterfall permanently skip persistent
+  storage, falling through to `api_key_command`/`password_command` (if
+  configured) or an interactive prompt every single time — no "remember
+  this" the way macOS/Linux users get. Fix: add `"windows-native"` to
+  the `keyring` feature list, add a third `#[cfg(windows)]` arm mirroring
+  the macOS one (the `keyring::Entry` API is backend-agnostic, close to
+  copy-paste). Small effort, isolated/additive (cannot regress non-
+  Windows behavior) — the one caveat is the same as T547: no Windows CI
+  to actually verify the new arm works.
+- [ ] **T549 — Workspace Dashboard's disk-usage stat shells out to
+  `du`, unavailable on Windows; fails silently (cosmetic, not a
+  crash).** `src/app.rs:10872-10883`: `Command::new("du").arg("-sh")...`
+  inside `if let Ok(out) = ... { }`, so on Windows the Dashboard's
+  disk-size figure just never populates — already degrades gracefully,
+  lowest priority of the three Windows findings. Fix: replace with a
+  pure-Rust recursive size sum (`walkdir` + `Metadata::len()`, both
+  already dependencies elsewhere) so it works identically on every
+  platform instead of shelling out at all. Small effort, low value.
+
 ---
 
 ## Ideas backlog (unscoped)

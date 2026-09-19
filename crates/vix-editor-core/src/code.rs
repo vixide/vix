@@ -227,11 +227,14 @@ fn parse_worker_loop(
 /// The text buffer with Tree-sitter highlighting and undo/redo support.
 ///
 /// Backed by [`ropey::Rope`]: insert/delete/index are O(log n) in the buffer
-/// size, and cloning `Code` is O(1) (structural sharing) — no algorithmic risk
-/// scaling to a large file. The one trap is [`Code::get_content`]/
-/// [`Code::slice`], which materialize an owned `String` and are genuinely
-/// O(n); see their own doc comments before calling either from a per-frame or
-/// per-keystroke path.
+/// size, and cloning the rope itself is O(1) (structural sharing) — no
+/// algorithmic risk scaling to a large file. The one trap is
+/// [`Code::get_content`]/[`Code::slice`], which materialize an owned `String`
+/// and are genuinely O(n); see their own doc comments before calling either
+/// from a per-frame or per-keystroke path. (`Code` as a whole does not
+/// implement `Clone` — it owns a background parse worker thread, a
+/// `Box<dyn Fn>` change callback, and undo history, none of which would be
+/// meaningful to duplicate; only the rope backing it has that property.)
 pub struct Code {
     content: ropey::Rope,
     lang: String,
@@ -255,6 +258,25 @@ pub struct Code {
     edit_gen: u64,
     /// Background reparse worker for large buffers (lazily created on first use).
     parse_worker: Option<ParseWorker>,
+}
+
+impl Drop for Code {
+    /// Signal any in-flight background parse to stop (T533, Run H). Without
+    /// this, closing a tab mid-parse of a very large buffer left the worker
+    /// thread running `parser.parse_with_options` to completion purely for a
+    /// result nothing would ever read — not a leak (the thread still exits
+    /// cleanly once it next tries to send on `results`, and the channel is
+    /// already gone with `self`), just wasted CPU on a now-irrelevant parse.
+    /// The worker's `progress_callback` (see `parse_worker_loop`) already
+    /// polls this same flag periodically to break out early; this only adds
+    /// the one missing trigger for it — dropping `Code` itself, not just a
+    /// newer request superseding an older one (`request_async_parse` already
+    /// handles that case).
+    fn drop(&mut self) {
+        if let Some(worker) = &self.parse_worker {
+            worker.cancel.store(true, Ordering::Relaxed);
+        }
+    }
 }
 
 impl Code {
@@ -1515,6 +1537,34 @@ mod tests {
             code.content.char(0),
             '/',
             "the edit is part of what was parsed"
+        );
+    }
+
+    #[test]
+    fn dropping_code_mid_parse_signals_the_worker_to_cancel() {
+        // T533 (Run H): closing a tab (dropping its `Code`) mid-background-
+        // parse used to leave the worker thread running the current parse to
+        // completion purely for a result nothing would ever read. `Code`'s
+        // `Drop` impl now signals the same cancel flag `parse_worker_loop`'s
+        // `progress_callback` already polls, so it can break out early
+        // instead — this checks the flag transitions on drop, deterministic
+        // and independent of how far the worker thread has actually gotten.
+        let big = "fn f() { let x = 1; }\n".repeat(3000);
+        let code = Code::new(&big, "rust", None).unwrap();
+        let cancel = code
+            .parse_worker
+            .as_ref()
+            .expect("over the async threshold, so the worker exists")
+            .cancel
+            .clone();
+        assert!(
+            !cancel.load(Ordering::Relaxed),
+            "not cancelled while `code` is still alive"
+        );
+        drop(code);
+        assert!(
+            cancel.load(Ordering::Relaxed),
+            "dropping `code` signals the worker to cancel"
         );
     }
 

@@ -5280,6 +5280,7 @@ dependencies = [
  "vix-base16",
  "vix-base64-tool",
  "vix-bottom-dock",
+ "vix-byte-size",
  "vix-calculator-tool",
  "vix-calendar-panel",
  "vix-case",
@@ -5448,6 +5449,10 @@ dependencies = [
 
 [[package]]
 name = "vix-bottom-dock"
+version = "1.6.0"
+
+[[package]]
+name = "vix-byte-size"
 version = "1.6.0"
 
 [[package]]
@@ -5784,6 +5789,7 @@ dependencies = [
 name = "vix-file-information-panel"
 version = "1.6.0"
 dependencies = [
+ "vix-byte-size",
  "vix-list-state",
 ]
 
@@ -6098,6 +6104,7 @@ name = "vix-system-information-panel"
 version = "1.6.0"
 dependencies = [
  "sysinfo",
+ "vix-byte-size",
  "vix-list-state",
 ]
 
