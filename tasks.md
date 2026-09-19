@@ -4054,8 +4054,20 @@ measured problem today. Everything else actionable in this run is closed.
 Four more parallel research passes over fresh angles Run G didn't cover:
 code duplication/DRY, concurrency/threading correctness, error-handling
 quality, and cross-platform (Windows) correctness. Two genuine
-correctness bugs turned up (T518, T528 below), not just style/maintenance
+correctness bugs turned up (T518, T535 below), not just style/maintenance
 debt. Grouped by source pass; ranked by value/effort within each group.
+
+**15 of 32 done as of 2026-09-19** (T518, T519, T521, T522, T524, T533,
+T534, T535, T539, T541, T542, T544, T545, T546, T548) — every item with
+no architectural risk and no external dependency this session couldn't
+provide (a Windows machine/CI, careful multi-session design work). What
+remains is real, scoped, and ranked, not vague: two more mechanical
+dedups (T520, T523 — test-only), several medium-effort message/error-
+structuring fixes needing more design care (T525–T530, T536–T538, T540,
+T543), the two DB-connect concurrency findings (T531, T532 — T531 is
+explicitly the highest-severity single finding of this whole run, but
+deliberately not rushed), and two Windows items that need a way to
+actually test on Windows first (T547) or are low-value cosmetic (T549).
 
 ### Duplication / DRY
 
@@ -4142,7 +4154,7 @@ debt. Grouped by source pass; ranked by value/effort within each group.
   preceded by a redundant `fs::create_dir_all` (`unique_dir` already
   does this). Fix: add `pub(crate) fn init_git_repo(dir: &Path)` to
   `common.rs`. Small effort, test-only.
-- [ ] **T524 — Three genuine sentence-level duplicate i18n key pairs.**
+- [x] **T524 — Three genuine sentence-level duplicate i18n key pairs.**
   `prompt.git_clone`/`prompt.jj_clone` (`locales/prompt.yml:795-796` /
   `:1051-1052`), `status.git_empty_url`/`status.jj_empty_url`
   (`locales/status.yml:807-808` / `:4855-4856`), and
@@ -4396,7 +4408,7 @@ debt. Grouped by source pass; ranked by value/effort within each group.
   right — `Result<(), String>` with the real stderr — this is an
   internal inconsistency, not a systemic constraint. Medium/large
   effort (touches the function signatures and both call sites' i18n).
-- [ ] **T541 — `ensure_speller` discards a well-designed 3-variant
+- [x] **T541 — `ensure_speller` discards a well-designed 3-variant
   `Error` enum, going "silently inert" exactly as its own doc comment
   admits — but that admission never reaches the user.** `src/app.rs:
   4496`: `self.speller = crate::spellcheck::load_for(...).ok();`.
@@ -4418,7 +4430,7 @@ debt. Grouped by source pass; ranked by value/effort within each group.
   failure without depending on the untracked `./dictionaries` set or
   mutating the global i18n locale, matching how the file's other
   spellcheck tests already avoid both.
-- [ ] **T542 — Clipboard "yank" operations in two places claim success
+- [x] **T542 — Clipboard "yank" operations in two places claim success
   even when the clipboard write silently failed.** `src/app/org.rs:
   979-980` ("Copied %{url} to the clipboard") and `src/app/org_table.rs:
   325-326` ("Sum: %{sum} (copied to the clipboard)") show their success
@@ -4454,7 +4466,7 @@ debt. Grouped by source pass; ranked by value/effort within each group.
   location detail; the caller (`src/app.rs:9639`) has nothing better to
   show. Fix: change `from_text` to return `Result<Self, String>` and
   surface the real message. Medium effort.
-- [ ] **T544 — `save_session` discards its error silently while the
+- [x] **T544 — `save_session` discards its error silently while the
   identical-shaped `store_settings` two lines below is handled
   properly.** `src/app.rs:13419-13428`: `self.save_session();` (root:
   `src/app/session.rs:227`, `let _ = self.store_session(&session);`)
