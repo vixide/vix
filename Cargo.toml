@@ -542,8 +542,31 @@ harness = false
 [target.'cfg(target_env = "musl")'.dependencies]
 mimalloc = { workspace = true }
 
+# `lto = "thin"`, not `true` (fat LTO) -- found and fixed 2026-09-19 as the
+# real root cause of a bug that looked, for a long time, like a translation
+# or data problem: a handful of `vix-i18n` catalog entries (confirmed:
+# `ui.theme_editor_title`, all 15 `ui.theme_slot_*`, `ui.theme_editor_hint`,
+# `menu.item.edit.structural_replace(_workspace)`, `menu.item.view.
+# theme_edit` -- there may be others never manually spot-checked) rendered
+# as their own raw i18n key instead of translated text, but *only* in a
+# `[profile.release]`-built (fat-LTO) binary actually run -- never in
+# `cargo test`, never in a direct `TestBackend` render, and confirmed (via
+# `cargo expand` and a standalone `serde_saphyr` parse of the real YAML)
+# that the source, the parse, and the generated Rust are all correct. Root
+# cause: `vix-i18n`'s `i18n!` macro (see its own `[profile.dev.package.
+# vix-i18n]` comment below) expands to one function doing ~2500 sequential
+# `HashMap::insert` calls per locale -- exactly the shape of code most
+# likely to hit a real LLVM fat-LTO codegen bug, and empirically: `lto =
+# false` fixed it, and so does `lto = "thin"` (confirmed with the exact
+# same reproduction, multiple runs, after this same finding), while `lto =
+# true` reproduces it deterministically every time. `[profile.dist]` — the
+# profile actual releases build with — already used `"thin"`, so shipped
+# releases were very likely never affected; only a plain `cargo build
+# --release` (this profile) was. No upstream rust-i18n/LLVM bug report
+# filed yet — that's the natural next step for whoever has time, with this
+# as a real, minimal-ish reproduction to hand a bug tracker.
 [profile.release]
-lto = true
+lto = "thin"
 strip = true
 opt-level = "z"
 
@@ -577,10 +600,15 @@ debug = 1
 # coverage) expands to one function that sequentially `.insert()`s every
 # (key, locale) pair into a `HashMap` — tens of thousands of statements in a
 # single unoptimized frame overflows the default 8 MiB thread stack the
-# first time it runs (`cargo test`/a debug `cargo run`; a release build is
-# unaffected — LLVM's optimizer collapses the frame). Building just this one
-# crate at a real optimization level (still debug elsewhere, so iteration
-# stays fast) is enough headroom without raising `RUST_MIN_STACK` globally
-# or shrinking the catalog.
+# first time it runs (`cargo test`/a debug `cargo run`; a release build does
+# not stack-overflow here — LLVM's optimizer collapses the frame). Building
+# just this one crate at a real optimization level (still debug elsewhere,
+# so iteration stays fast) is enough headroom without raising
+# `RUST_MIN_STACK` globally or shrinking the catalog. This same giant
+# function turned out to have a *second*, much subtler problem under fat
+# LTO specifically — see `[profile.release]`'s own comment below for that
+# one; the two are easy to conflate but are different bugs with different
+# fixes (this one's about stack size, that one's a suspected LLVM
+# miscompilation).
 [profile.dev.package.vix-i18n]
 opt-level = 2

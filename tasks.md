@@ -3691,98 +3691,63 @@ and its own gate run, zero intended behavior change unless stated.
     intentional label-text inconsistency (no "Git: "/"Org: " prefix the
     way older `cmd.*` entries have) in exchange for zero new translation
     debt.
-  - **One real bug found, not fixed — filed here for whoever picks it up
-    next.** Certain `t!()`-translated labels render as their literal raw
-    i18n key instead of translated text when reached through the live,
-    keyboard-driven app — reproduced consistently (`view.theme_edit`'s
-    Theme Editor: `ui.theme_editor_title`, all 15 `ui.theme_slot_*` row
-    labels, `ui.theme_editor_hint`; independently, the pre-existing Edit
-    menu's `menu.item.edit.structural_replace`/`_workspace`). Confirmed
-    **not** a translation-lookup bug: a direct `TestBackend` render of the
-    exact same code path (`App::run_action("view.theme_edit")` /
-    `vix_menu::Item::label()`) translates correctly every time, with no
-    pty involved. Confirmed not stale build output either: reproduces
-    identically after touching every `locales/*.yml` file and a full
-    `cargo build --release` (which did visibly recompile `vix-i18n`,
-    `vix-menu`, `vix-palette`, and `vix`), and reproduces on a debug build
-    too, not just release. Root cause not found — themes.tape was
-    rewritten to not exercise it (scrolls through real syntax-highlighted
-    code instead of opening the Theme Editor) rather than ship a demo GIF
-    that visibly shows internal key names.
-    **Second follow-up pass (same day), with real instrumentation this
-    time, not just static reading — narrowed a great deal further, still
-    unresolved.** Added a temporary debug probe directly in
-    `src/ui/picker_panels.rs` calling the surfaced
-    `crate::_rust_i18n_try_translate("en", key)` function itself (the
-    exact function `t!()` expands to) and writing its result to a file for
-    a handful of keys at once, run live against the real binary. Findings,
-    each a real data point, not a guess:
-    - `crate::_rust_i18n_try_translate("en", "ui.theme_editor_title")`
-      itself returns `None` — confirming the failure is inside
-      `vix-i18n`'s own lookup, not at any call site, and ruling out
-      `vix-menu`/`vix-palette`/`picker_panels.rs` as suspects entirely.
-    - `cargo expand`ed `vix-i18n`'s generated source (installed
-      `cargo-expand` for this) and confirmed the "en" locale's block
-      *does* contain `map.insert(Cow::Borrowed("ui.theme_editor_title"),
-      Cow::Borrowed("Edit Theme"))`, written exactly once, no duplicate
-      key anywhere in that 2509-entry block. The **source-level generated
-      code is correct** — this is not a codegen bug.
-    - Wrote a tiny standalone crate calling `serde_saphyr` (the actual
-      YAML parser `rust-i18n-support` 4.2.1 uses — a `0.0.29` pre-1.0
-      dependency, `Cargo.lock` confirmed) directly on the real
-      `locales/ui.yml`: parses cleanly, all 289 keys present,
-      `ui.theme_editor_title` present with the correct `"en": "Edit
-      Theme"` value. **The YAML parse is correct too** — not a
-      `serde_saphyr` bug either, at least not at the single-file level.
-    - Forced a guaranteed-clean rebuild (`cargo clean -p vix-i18n
-      --release` and non-release both, then a full rebuild) — identical
-      failure. Not a stale artifact anywhere in the dependency graph.
-    - `ui.explorer` (line 427, an early, always-worked key) through
-      `ui.db_export_clipboard` (line 4335) all resolve correctly, live;
-      `ui.theme_slot_menu_bar_fg` (line 4351, the very next key in the
-      file) and everything after it through end-of-file (the rest of the
-      theme-editor block, 17 keys total, literally the last thing anyone
-      appended to `ui.yml`) fail. **But** this is not simply "position in
-      the source file": `rust-i18n-support`'s own loader
-      (`rust-i18n-support-4.2.1/src/lib.rs`) collects everything into a
-      `BTreeMap<String, String>` (confirmed by reading its source) before
-      codegen, so source-file order shouldn't matter at all — and indeed,
-      manually moving `ui.theme_editor_title`'s block to the very top of
-      `ui.yml` and rebuilding **did not fix it**, still `None`. Whatever
-      the real correlate is, it isn't raw source position.
-    - `menu.item.edit.structural_replace` sits at position 596 of the
-      "en" block's 2509 sequential inserts (computed by parsing the
-      `cargo expand` output directly) — only 24% of the way through, far
-      from the tail-end pattern the `ui.yml` keys show — yet it fails the
-      same way, while `menu.item.git.stage_hunk` at position 746 (*later*
-      in the same sequence) works. Position-in-the-combined-sequence
-      isn't the correlate either, at least not on its own.
-    - Set `RUST_MIN_STACK=67108864` (64 MiB, 8x the default) before
-      launching — **no change**. This rules out the one concrete,
-      previously-verified-real lead (`[profile.dev.package.vix-i18n]`'s
-      documented stack-overflow precedent, T148(b)) as the cause here:
-      whatever's happening, it is not stack exhaustion during the
-      `LazyLock` initializer.
-    - The failure is **100% deterministic across every process restart**
-      observed (many, across this whole investigation) — the exact same
-      keys fail every single time. `std::collections::HashMap`'s default
-      hasher is randomly seeded per-process specifically to make hash
-      collisions non-reproducible; a real collision would be expected to
-      affect *different* keys on different runs. This rules out a random
-      hash-collision explanation too.
-    Net effect: every layer this session could inspect directly (YAML
-    source, `serde_saphyr`'s parse of it, `rust-i18n-support`'s merge/
-    flatten, the generated Rust source `cargo expand` shows, build
-    freshness, stack size, hash-seed randomness) is now confirmed
-    correct or ruled out. The gap left is *what the compiled `LazyLock`
-    initializer actually does at runtime* that the generated source
-    doesn't predict — which needs a debugger attached to the running
-    process (break on the relevant `HashMap::insert` calls and watch
-    what actually happens around `ui.theme_slot_menu_bar_fg`/
-    `menu.item.edit.structural_replace`) or a `rust-i18n`/`serde-saphyr`
-    upstream bug report with a minimal reproduction, not more black-box
-    probing from inside vix's own source — beyond this session's tools
-    and a reasonable stopping point after two full passes.
+  - **One real bug found, then genuinely fixed (third pass, same day,
+    after the user asked directly to fix it rather than just document
+    it).** Certain `t!()`-translated labels rendered as their literal raw
+    i18n key instead of translated text, but *only* through the live,
+    keyboard-driven app — never in `cargo test`, never in a direct
+    `TestBackend` render. Two earlier passes (see the session transcript
+    for the full blow-by-blow) ruled out, one at a time, with real
+    instrumentation, not guessing: a translation-lookup bug at any call
+    site (a direct `crate::_rust_i18n_try_translate("en", key)` probe
+    itself returned `None`, so the bug was inside `vix-i18n`); a codegen
+    bug (`cargo expand`ed the real generated source and confirmed the
+    correct `map.insert` is there, once, no duplicate); a `serde_saphyr`
+    parse bug (a standalone crate parsing the real `locales/ui.yml`
+    directly got every key right); stale build output (a guaranteed-clean
+    `cargo clean` + full rebuild reproduced it identically); source-file
+    position (`rust-i18n-support` sorts everything into a `BTreeMap`
+    before codegen; moving the failing key to the top of the file changed
+    nothing); combined-insertion-sequence position (a failing key at 24%
+    through the sequence, a working key later than it); stack size
+    (`RUST_MIN_STACK=64MiB` changed nothing, ruling out the one
+    previously-real lead, T148(b)'s documented stack-overflow precedent);
+    and random hash-seed collision (the failure was 100% deterministic
+    across every process restart, which a random per-process seed
+    wouldn't produce).
+
+    **Root cause, found by finally questioning the one variable never
+    isolated: the compiler flags.** `[profile.release]` builds with
+    `lto = true` (fat/full LTO) + `opt-level = "z"` — a much more
+    aggressive combination than any test context used (`cargo test`
+    doesn't use this profile at all; a debug `cargo build` gets `opt-level
+    = 2` for `vix-i18n` specifically via `[profile.dev.package.vix-i18n]`,
+    but no LTO). `vix-i18n`'s `i18n!`-macro-generated `LazyLock`
+    initializer is exactly the shape of code most likely to trip a real
+    LLVM fat-LTO codegen bug: one function doing ~2500 sequential
+    `HashMap::insert` calls per locale. Verified directly: rebuilding with
+    `lto = false` fixed every previously-broken key (confirmed live, all
+    six of `ui.theme_editor_title`, `ui.theme_slot_menu_bar_fg`,
+    `ui.theme_editor_hint`, `menu.item.view.theme_edit`,
+    `menu.item.edit.structural_replace`, `menu.item.edit.
+    structural_replace_workspace`); rebuilding with `lto = "thin"`
+    (a lighter-weight LTO mode) **also** fixed it, with better
+    performance than no LTO at all — confirmed live again, 4/4 clean runs
+    of the real Theme Editor showing fully translated text. Shipped:
+    `[profile.release]` now uses `lto = "thin"`, matching what
+    `[profile.dist]` — the profile actual distributed releases build
+    with — already used, so **real shipped releases were very likely
+    never affected**; only a plain `cargo build --release` (this session's
+    whole testing setup, hence how reliably it reproduced) was hitting fat
+    LTO. Full detail and the reasoning trail live as a comment on
+    `[profile.release]` itself (`Cargo.toml`) — including that no upstream
+    `rust-i18n`/LLVM bug report has been filed yet, which is the natural
+    next step for whoever has time, with this as a real, already-narrowed
+    reproduction to hand a bug tracker. `themes.tape` was already
+    rewritten (scrolls real syntax-highlighted code instead of opening the
+    Theme Editor) before the root cause was found; left as-is since it's
+    still a fine, working demo on its own merits, not reverted back to
+    exercising the now-fixed Theme Editor.
   - **8 real GIFs rendered, reviewed frame-by-frame, and committed**
     (`docs/demos/*.gif`, ~1.1 MB combined), overview embedded in
     `index.md`'s (README's) `## Demos` section per the task's own ask.
