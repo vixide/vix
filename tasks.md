@@ -4479,7 +4479,7 @@ debt. Grouped by source pass; ranked by value/effort within each group.
   write with an unwritable parent (settings kept on a separate,
   writable path) and confirms both: the session failure is reported,
   and the settings save still succeeds independently.
-- [ ] **T545 — Several settings/state writes after an explicit user
+- [x] **T545 — Several settings/state writes after an explicit user
   action are silently discarded, at 6+ sites with the same shape.**
   `src/app/session.rs:381` (`open_settings_file` doesn't save settings
   first, no warning), `src/app/org.rs:850,864,872` (agenda file add/
@@ -4492,6 +4492,22 @@ debt. Grouped by source pass; ranked by value/effort within each group.
   explicitly opts into "remember password"). Fix: reuse the existing
   `self.messages.error`/Warn pattern already used elsewhere in the same
   files at each site. Small effort each; batch together if picked up.
+  **Done 2026-09-19**: found one more instance of the identical shape
+  while sweeping (`maybe_show_welcome`) plus the command palette's
+  recent-commands persist, 9 sites total. New shared `App::
+  store_settings_or_warn` (warns instead of erroring — the in-memory
+  change already happened at every site and should be kept regardless
+  of whether the write succeeded) replaces `let _ = self.
+  store_settings();` everywhere; new `msg.db_data_save_failed` covers
+  the two `crate::db::store` sites (query history/saved queries, a
+  different persistence mechanism than `Settings`); `vix-db`'s keyring
+  site (a `bool`, not a `Result` — no detail to surface) gets a new,
+  generic `msg.db_keyring_save_failed`. New test forces
+  `org_agenda_file_add`'s persist to fail and confirms both halves:
+  the in-memory change is kept, and the failure is reported, not
+  silently dropped. Full workspace `cargo test --test integration`
+  (547 tests) and `-p vix --lib` (56 tests) both green after the
+  refactor.
 - [x] **T546 — `unwrap()`/`expect()` reachability: thorough negative
   result, recorded so a future pass doesn't re-walk the same ground.**
   Stripped `#[cfg(test)]` bodies workspace-wide (823 → 103 genuine
@@ -4554,7 +4570,7 @@ case-insensitive filesystems correctly).
   Medium effort; **no Windows CI exists to verify against**, so land
   this only with a way to actually test it (a local Windows machine, or
   standing up a Windows CI job first).
-- [ ] **T548 — OS keyring support on Windows is a silent no-op stub,
+- [x] **T548 — OS keyring support on Windows is a silent no-op stub,
   despite the `keyring` crate (already a dependency, already used on
   macOS via the identical `keyring::Entry` API) supporting Windows
   Credential Manager behind an unused feature flag.**
@@ -4572,7 +4588,23 @@ case-insensitive filesystems correctly).
   the macOS one (the `keyring::Entry` API is backend-agnostic, close to
   copy-paste). Small effort, isolated/additive (cannot regress non-
   Windows behavior) — the one caveat is the same as T547: no Windows CI
-  to actually verify the new arm works.
+  to actually verify the new arm works. **Done 2026-09-19**, exactly as
+  scoped: `"windows-native"` added to the `keyring` feature list, both
+  `keyring_get` and (`vix-db` only) `keyring_set` gained a
+  `#[cfg(any(target_os = "macos", windows))]` arm reusing the identical
+  macOS body (`vix-ai-core` never had a `keyring_set` to begin with —
+  read-only API-key lookup by design). Confirmed additive: `cargo deny
+  check` clean (advisories/bans/licenses/sources all ok), full local
+  test suite green. **Windows compilation itself could not be directly
+  verified** — this sandbox's `x86_64-pc-windows-msvc`/`-gnu` cross-
+  compile fails on an unrelated, pre-existing `ring` (TLS) C-toolchain
+  gap (`assert.h` not found) before ever reaching `keyring`'s own code,
+  and there is still no Windows CI. Confidence is high regardless: the
+  change is a pure feature-flag addition plus copy-pasting an API
+  already proven to work identically for macOS, and `keyring`'s whole
+  purpose is exactly this one-API/pluggable-backend shape — but this is
+  a real, honestly-acknowledged verification gap, not a claim of
+  Windows testing that didn't happen.
 - [ ] **T549 — Workspace Dashboard's disk-usage stat shells out to
   `du`, unavailable on Windows; fails silently (cosmetic, not a
   crash).** `src/app.rs:10872-10883`: `Command::new("du").arg("-sh")...`

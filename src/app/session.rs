@@ -30,6 +30,20 @@ impl App {
         }
     }
 
+    /// [`App::store_settings`], but push a warning message instead of
+    /// returning the error — for sites where the in-memory change already
+    /// took effect and should be kept regardless of whether it could be
+    /// persisted (Run H, T545: several such sites used to discard the
+    /// error entirely via `let _ = self.store_settings();`).
+    pub(super) fn store_settings_or_warn(&mut self) {
+        if let Err(e) = self.store_settings() {
+            self.messages.push(
+                crate::messages::Level::Warn,
+                t!("msg.settings_save_failed", error = e).to_string(),
+            );
+        }
+    }
+
     /// Persist this app's settings to `path` instead of the user's config
     /// directory. Builder form of [`App::settings_path`], for tests and
     /// embedders that need an isolated config file.
@@ -389,7 +403,11 @@ impl App {
             self.status = t!("status.settings_no_path").to_string();
             return;
         };
-        let _ = self.store_settings();
+        // T545 (Run H): this used to be `let _ = self.store_settings();` --
+        // opening the file for editing right after a failed save silently
+        // means the file on disk doesn't yet reflect in-app changes, with no
+        // indication anything went wrong.
+        self.store_settings_or_warn();
         self.with_jump(|s| {
             s.open_path(&path, false);
             s.focus = Focus::Editor;

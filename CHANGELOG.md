@@ -8,6 +8,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **DB workbench and AI-provider "remember this" credentials now persist
+  on Windows too** (found by a codebase self-audit, T548): the OS-keyring
+  backend was already implemented for macOS/Linux, but the `keyring`
+  crate's Windows Credential Manager support was never turned on — a
+  Windows user opting into "remember password"/a saved API key silently
+  got prompted every time regardless. Fixed by enabling the feature; the
+  same code path macOS already used handles Windows too.
 - **8 demo GIFs** (improvement plan T406) under `docs/demos/`, embedded
   (the overview tour) in the README's `## Demos` section: an overview
   tour, the command palette, multi-cursor editing, git hunk staging, the
@@ -705,6 +712,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Several settings/state saves that happen automatically after an
+  action — adding/removing an agenda file, saving a theme selection,
+  the command-palette recent-commands list, DB connection/query-history
+  persistence, opening the settings file for editing — silently
+  discarded a write failure**, unconditionally showing success (found
+  by a codebase self-audit, T545): the in-memory change still takes
+  effect (nothing is lost this session), but a failure to persist it is
+  now reported instead of hidden.
 - **Error messages for save/open/revert/rename/delete now name the
   specific file** (found by a codebase self-audit, T539): all five used
   to show only the raw underlying error, e.g. "Save failed: Permission

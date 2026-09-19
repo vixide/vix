@@ -399,7 +399,7 @@ impl App {
         self.theme_editor = None;
         self.x11_panel = None;
         self.settings.theme = name.to_string();
-        let _ = self.store_settings();
+        self.store_settings_or_warn();
         Self::apply_saved_theme(name);
         self.editor.refresh_theme();
         self.status = t!("status.theme_saved", name = name).to_string();

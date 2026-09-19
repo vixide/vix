@@ -32,11 +32,13 @@ fn run(program: &str, args: &[&str]) -> Option<String> {
 
 /// Read `provider`'s key from the OS keyring, or `None` when it is absent or
 /// the platform has no supported keyring. On macOS this uses the native
-/// Security framework (no secret on the process argument list); on Linux it
-/// runs `secret-tool lookup`.
+/// Security framework, on Windows the native Credential Manager (no secret on
+/// the process argument list either way); on Linux it runs `secret-tool
+/// lookup`. (Run H, T548: Windows support added — the `keyring` crate already
+/// had it, just not enabled.)
 #[must_use]
 pub fn keyring_get(provider: &str) -> Option<String> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     {
         keyring::Entry::new(SERVICE, provider)
             .ok()?
@@ -51,7 +53,7 @@ pub fn keyring_get(provider: &str) -> Option<String> {
             &["lookup", "service", SERVICE, "account", provider],
         )
     }
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = provider;
         None

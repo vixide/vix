@@ -2434,7 +2434,7 @@ impl App {
         if self.settings.startup.show_welcome_dialog {
             self.welcome = Some(WelcomePanel::open(Self::welcome_lines()));
             self.settings.startup.show_welcome_dialog = false;
-            let _ = self.store_settings();
+            self.store_settings_or_warn();
         }
     }
 
@@ -9618,21 +9618,32 @@ impl App {
             .and_then(crate::db::Browser::take_dirty_connections)
         {
             self.settings.db_connections = conns;
-            let _ = self.store_settings();
+            self.store_settings_or_warn();
         }
         if let Some(history) = self
             .db
             .as_mut()
             .and_then(crate::db::Browser::take_dirty_history)
         {
-            let _ = crate::db::store::save_history(&history);
+            // T545 (Run H): this used to be `let _ = ...`, discarding the
+            // error entirely.
+            if let Err(e) = crate::db::store::save_history(&history) {
+                self.messages.push(
+                    Level::Warn,
+                    t!("msg.db_data_save_failed", error = e).to_string(),
+                );
+            }
         }
         if let Some(saved) = self
             .db
             .as_mut()
             .and_then(crate::db::Browser::take_dirty_saved)
+            && let Err(e) = crate::db::store::save_saved(&saved)
         {
-            let _ = crate::db::store::save_saved(&saved);
+            self.messages.push(
+                Level::Warn,
+                t!("msg.db_data_save_failed", error = e).to_string(),
+            );
         }
         // A queued natural-language → SQL request: spawn the assistant CLI and
         // route its reply back into the workbench editor.
@@ -14822,6 +14833,51 @@ mod tests {
         assert_eq!(files.len(), 1);
         assert!(files[0].1.ends_with("a.org"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn org_agenda_file_add_warns_but_keeps_the_change_when_persisting_fails() {
+        use std::os::unix::fs::PermissionsExt as _;
+        // T545 (Run H): `org_agenda_file_add`/`_remove`/`_clear` (and several
+        // other sites) used to `let _ = self.store_settings();`, discarding
+        // the error silently. The new shared `store_settings_or_warn` warns
+        // instead -- and, since the in-memory change already happened
+        // (matching every other site converted the same way), it's kept
+        // regardless of whether the write succeeded.
+        let base = std::env::temp_dir().join(format!("vix-agendawarn-{}", std::process::id()));
+        let root = base.join("root");
+        let cfg_dir = base.join("cfg"); // made unwritable below
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&cfg_dir).unwrap();
+        std::fs::write(root.join("a.org"), "* TODO Alpha\n").unwrap();
+        let mut app = App::new(root.clone(), Settings::default())
+            .with_settings_path(cfg_dir.join("config.toml"));
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.open_path(&root.join("a.org"), false);
+        std::fs::set_permissions(&cfg_dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+        app.run_action("org.agenda.file_add");
+        let _ = std::fs::set_permissions(&cfg_dir, std::fs::Permissions::from_mode(0o755));
+        assert_eq!(app.settings.org_agenda_files.len(), 1);
+        assert!(
+            app.settings.org_agenda_files[0].ends_with("a.org"),
+            "the in-memory change took effect regardless of the write failure: {:?}",
+            app.settings.org_agenda_files
+        );
+        assert!(
+            app.messages
+                .items
+                .iter()
+                .any(|m| m.level == Level::Warn && m.text.contains("settings")),
+            "the write failure was reported, not discarded: {:?}",
+            app.messages
+                .items
+                .iter()
+                .map(|m| &m.text)
+                .collect::<Vec<_>>()
+        );
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
