@@ -2,7 +2,7 @@
 
 Vix is a **Cargo workspace** (`[workspace] members = ["crates/*"]`) on **edition
 2024**. The root package `vix` (`src/`) is the thin **App shell** — CLI, event
-loop, `App` state, rendering, and the explorer — and it depends on the 116
+loop, `App` state, rendering, and the explorer — and it depends on the 117
 `vix-*` **member crates** under `crates/` that hold every feature plus the custom
 editor widget (`vix-editor-core`). Shared reference for where things live.
 
@@ -113,6 +113,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 | Text tools  | `vix-format-tool`, `vix-jwt-tool`, `vix-base-tool`, `vix-base64-tool`, `vix-url-tool`, `vix-uuid-tool`, `vix-zid-tool`, `vix-checksum-tool`, `vix-regex-tool`, `vix-markdown-preview`, `vix-convert-tabular`, `vix-convert-from-*-into-*-tool` (12). |
 | Pure text ops | `vix-align` (align lines on a delimiter), `vix-textops` (line-ending convert / squeeze blanks / ROT13 / hard wrap, plus cursor-relative rewrites: increment number, smart toggle, transpose chars/words/lines/sentences/paragraphs/sections, wrap paragraph, `sentence_starts`, `tag_column`), `vix-case` (selection case transforms), `vix-emmet` (abbreviation → HTML), `vix-tags` (HTML/XML matching-tag jump). Pure `text → text` / offset helpers with unit tests, driven from Edit/Go/Tools actions. |
 | Pure list ops | `vix-list-state` (T144: `up`/`down`/`page_up`/`page_down`/`select_index`/`ensure_visible` — shared `selected`/`scroll` arithmetic for a scrollable single-selection list; plain functions over `usize`s, not a struct panels adopt, so every panel keeps its own field names — see `crates/vix-list-state/spec/index.md`). |
+| Byte size   | `vix-byte-size` (Run H, T521: `human_bytes(n: u64) -> String`, e.g. `"16.0 KiB"` — extracted after `vix-file-information-panel` and `vix-system-information-panel` were found hand-rolling an identical copy each). |
 | Networking  | `vix-http-client` (`.http`-buffer parser + blocking `ureq` send; response into a tab). |
 | Undo store  | `vix-undo-store` (persist/restore the undo tree per file under `<config>/undo/`, content-hash guarded). |
 | Clipboard   | `vix-clipboard` (process-wide serialized clipboard access; the platform pasteboard is opt-in through `use_system`, so a test run never touches it). |
@@ -135,7 +136,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 
 | Path            | Contents                                                            |
 | --------------- | ------------------------------------------------------------------- |
-| `crates/`       | The 112 `vix-*` workspace member crates (each with its own `spec/`).|
+| `crates/`       | The 117 `vix-*` workspace member crates (each with its own `spec/`).|
 | `langs/`        | Tree-sitter highlight queries (`<lang>/highlights.scm`), embedded.  |
 | `locales/`      | `app.yml` — rust-i18n translations (English fallback).              |
 | `dictionaries/` | Hunspell dictionaries — gitignored; see `crates/vix-spellcheck/spec/dictionaries`. |

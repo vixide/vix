@@ -8,4 +8,5 @@ repository.workspace = true
 description = "Information about the active editor file, plus the panel's row-selection state."
 
 [dependencies]
+vix-byte-size = { path = "../vix-byte-size", version = "1.6.0" }
 vix-list-state = { path = "../vix-list-state", version = "1.6.0" }

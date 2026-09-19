@@ -16,7 +16,7 @@
 #![deny(missing_docs)]
 
 use std::path::Path;
-use std::sync::RwLock;
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use ratatui::style::{Color, Modifier, Style};
 use serde::{Deserialize, Serialize};
@@ -26,29 +26,42 @@ use serde::{Deserialize, Serialize};
 const FALLBACK_FG: Color = Color::Rgb(215, 215, 215);
 const FALLBACK_BG: Color = Color::Rgb(40, 40, 40);
 
-/// Primary foreground: the active theme's editor foreground (or the dark default).
-///
-/// # Panics
-/// Panics if the active-theme lock is poisoned.
-#[must_use]
-pub fn fg() -> Color {
+/// Read-lock [`CUSTOM`], recovering from poisoning instead of panicking (Run
+/// H, T534): a panic anywhere else while holding this lock — in a test, or in
+/// production — would otherwise permanently poison this process-wide static,
+/// and [`fg`]/[`bg`] alone are called on essentially every frame render, so
+/// every subsequent call would panic too. The guarded value can never itself
+/// be left inconsistent by a panicking writer (every write here is one plain
+/// assignment, see [`set_custom`]), so recovering it is safe, not just
+/// convenient — mirrors the same pattern already used by `vix-clipboard`,
+/// `vix-terminal`, and the `Arc<Mutex<Child>>` sites in the app shell.
+fn read() -> RwLockReadGuard<'static, Option<CustomTheme>> {
     CUSTOM
         .read()
-        .expect("theme lock")
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Write-lock [`CUSTOM`]; see [`read`] for why poisoning is recovered from
+/// rather than panicked on.
+fn write() -> RwLockWriteGuard<'static, Option<CustomTheme>> {
+    CUSTOM
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Primary foreground: the active theme's editor foreground (or the dark default).
+#[must_use]
+pub fn fg() -> Color {
+    read()
         .as_ref()
         .and_then(|c| c.editor.foreground)
         .map_or(FALLBACK_FG, rgb)
 }
 
 /// Primary background: the active theme's editor background (or the dark default).
-///
-/// # Panics
-/// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn bg() -> Color {
-    CUSTOM
-        .read()
-        .expect("theme lock")
+    read()
         .as_ref()
         .and_then(|c| c.editor.background)
         .map_or(FALLBACK_BG, rgb)
@@ -255,24 +268,14 @@ impl RegionColors {
 static CUSTOM: RwLock<Option<CustomTheme>> = RwLock::new(None);
 
 /// Set (or clear) the active theme.
-///
-/// # Panics
-/// Panics if the active-theme lock is poisoned.
 pub fn set_custom(theme: Option<CustomTheme>) {
-    *CUSTOM.write().expect("theme lock") = theme;
+    *write() = theme;
 }
 
 /// Name of the active theme, if one is active.
-///
-/// # Panics
-/// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn custom_name() -> Option<String> {
-    CUSTOM
-        .read()
-        .expect("theme lock")
-        .as_ref()
-        .map(|c| c.name.clone())
+    read().as_ref().map(|c| c.name.clone())
 }
 
 fn rgb(c: Rgb) -> Color {
@@ -280,12 +283,9 @@ fn rgb(c: Rgb) -> Color {
 }
 
 /// Foreground color for `region`: the theme's, or the primary editor foreground.
-///
-/// # Panics
-/// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn region_fg(region: Region) -> Color {
-    if let Some(ct) = CUSTOM.read().expect("theme lock").as_ref()
+    if let Some(ct) = read().as_ref()
         && let Some(c) = ct.region_colors(region).foreground
     {
         return rgb(c);
@@ -294,12 +294,9 @@ pub fn region_fg(region: Region) -> Color {
 }
 
 /// Background color for `region`: the theme's, or the primary editor background.
-///
-/// # Panics
-/// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn region_bg(region: Region) -> Color {
-    if let Some(ct) = CUSTOM.read().expect("theme lock").as_ref()
+    if let Some(ct) = read().as_ref()
         && let Some(c) = ct.region_colors(region).background
     {
         return rgb(c);
@@ -308,14 +305,9 @@ pub fn region_bg(region: Region) -> Color {
 }
 
 /// Font attributes (`ITALIC` / `BOLD`) the active theme requests for `region`.
-///
-/// # Panics
-/// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn region_modifiers(region: Region) -> Modifier {
-    CUSTOM
-        .read()
-        .expect("theme lock")
+    read()
         .as_ref()
         .map_or_else(Modifier::empty, |ct| ct.region_colors(region).modifiers())
 }
@@ -330,27 +322,16 @@ pub fn region_base(region: Region) -> Style {
 }
 
 /// Cursor color from the active theme, if one specifies it.
-///
-/// # Panics
-/// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn editor_cursor() -> Option<Color> {
-    CUSTOM
-        .read()
-        .expect("theme lock")
-        .as_ref()
-        .and_then(|c| c.editor.cursor)
-        .map(rgb)
+    read().as_ref().and_then(|c| c.editor.cursor).map(rgb)
 }
 
 /// Syntax-highlight colors as `(token, "#rrggbb")` pairs from the active theme.
 /// Empty when the theme specifies no token colors (so the editor stays plain).
-///
-/// # Panics
-/// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn syntax_theme() -> Vec<(&'static str, String)> {
-    let guard = CUSTOM.read().expect("theme lock");
+    let guard = read();
     let Some(ct) = guard.as_ref() else {
         return Vec::new();
     };
@@ -371,12 +352,9 @@ pub fn syntax_theme() -> Vec<(&'static str, String)> {
 /// The active theme's color for one syntax token (`"keyword"`, `"string"`,
 /// `"comment"`, `"number"`); `None` when no theme is active, the token is
 /// unknown, or the theme leaves it unset.
-///
-/// # Panics
-/// Panics if the active-theme lock is poisoned.
 #[must_use]
 pub fn syntax_color(token: &str) -> Option<Color> {
-    let guard = CUSTOM.read().expect("theme lock");
+    let guard = read();
     let ct = guard.as_ref()?;
     let color = match token {
         "keyword" => ct.syntax.keyword,
@@ -513,5 +491,21 @@ mod tests {
             pairs.contains(&("number", "#040404".to_string())),
             "{pairs:?}"
         );
+
+        // T534 (Run H): a panic while another thread holds the lock must not
+        // poison it for good — before the fix (a bare `.expect("theme
+        // lock")`), every call below would itself panic once poisoned. Stays
+        // in this same test (not a separate one) per the file's own "one
+        // test to keep the process-global theme state sequential" rule above.
+        let panicked = std::thread::spawn(|| {
+            let _guard = CUSTOM.write().unwrap();
+            panic!("simulated panic while holding the theme lock");
+        })
+        .join();
+        assert!(panicked.is_err(), "the spawned thread did panic");
+        let _ = fg(); // would panic here before the fix
+        let _ = bg();
+        set_custom(Some(theme(r#"{ "name": "after-poison" }"#)));
+        assert_eq!(custom_name().as_deref(), Some("after-poison"));
     }
 }

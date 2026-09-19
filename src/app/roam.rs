@@ -197,6 +197,41 @@ impl App {
         }
     }
 
+    /// Find an Org-roam node by title, or create one on disk (not opened) and
+    /// return its id either way. Shared by [`App::roam_insert_link`] (which
+    /// also inserts a link at the cursor) and [`App::node_insert_transclusion`]
+    /// (which inserts a `#+transclude:` directive instead) — extracted after a
+    /// copy-paste drift left one of the two copies of this preamble without
+    /// `create_dir_all`, so creating a node silently failed on that path
+    /// whenever `self.root` itself didn't exist yet (Run H, T518).
+    fn roam_find_or_create_node(&mut self, title: &str) -> Option<String> {
+        if let Some(path) = self.roam_find_by_title(title) {
+            return std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|c| crate::roam::node_id(&c));
+        }
+        let id = crate::uuid_tool::v4();
+        let path = self
+            .root
+            .join(format!("{}.org", crate::roam::slugify(title)));
+        let body = crate::roam::new_node(title, &id);
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match std::fs::write(&path, &body) {
+            Ok(()) => {
+                self.build_file_index();
+                self.explorer.rebuild();
+                Some(id)
+            }
+            Err(e) => {
+                self.messages
+                    .error(t!("msg.save_failed", error = e).to_string());
+                None
+            }
+        }
+    }
+
     /// Org-roam: insert a link to a node (found or created) at the cursor. Unlike
     /// find/capture this never leaves the buffer the user is editing — a freshly
     /// created node file is written to disk but not opened.
@@ -205,32 +240,7 @@ impl App {
         if title.is_empty() {
             return;
         }
-        let id = if let Some(path) = self.roam_find_by_title(&title) {
-            std::fs::read_to_string(&path)
-                .ok()
-                .and_then(|c| crate::roam::node_id(&c))
-        } else {
-            let id = crate::uuid_tool::v4();
-            let path = self
-                .root
-                .join(format!("{}.org", crate::roam::slugify(&title)));
-            let body = crate::roam::new_node(&title, &id);
-            if let Some(parent) = path.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
-            match std::fs::write(&path, &body) {
-                Ok(()) => {
-                    self.build_file_index();
-                    self.explorer.rebuild();
-                    Some(id)
-                }
-                Err(e) => {
-                    self.messages
-                        .error(t!("msg.save_failed", error = e).to_string());
-                    None
-                }
-            }
-        };
+        let id = self.roam_find_or_create_node(&title);
         let link = id.map_or_else(
             || format!("[[file:{}.org][{title}]]", crate::roam::slugify(&title)),
             |id| crate::roam::node_link(&id, &title),
@@ -463,29 +473,7 @@ impl App {
         if title.is_empty() {
             return;
         }
-        let id = if let Some(path) = self.roam_find_by_title(&title) {
-            std::fs::read_to_string(&path)
-                .ok()
-                .and_then(|c| crate::roam::node_id(&c))
-        } else {
-            let id = crate::uuid_tool::v4();
-            let path = self
-                .root
-                .join(format!("{}.org", crate::roam::slugify(&title)));
-            let body = crate::roam::new_node(&title, &id);
-            match std::fs::write(&path, &body) {
-                Ok(()) => {
-                    self.build_file_index();
-                    self.explorer.rebuild();
-                    Some(id)
-                }
-                Err(e) => {
-                    self.messages
-                        .error(t!("msg.save_failed", error = e).to_string());
-                    None
-                }
-            }
-        };
+        let id = self.roam_find_or_create_node(&title);
         if let Some(id) = id {
             self.insert_content(&format!("{}\n", crate::roam::transclusion(&id, &title)));
         }

@@ -106,23 +106,12 @@ pub fn rows(info: &FileInfo) -> Vec<Row> {
 }
 
 /// Format a byte count as a human-readable size (`16.0 KiB`).
+///
+/// Delegates to `vix-byte-size` (Run H, T521) — this crate and
+/// `vix-system-information-panel` used to each hand-roll an identical copy.
 #[must_use]
 pub fn human_bytes(n: u64) -> String {
-    const UNITS: [&str; 6] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
-    if n < 1024 {
-        return format!("{n} B");
-    }
-    // Lossless `u64` -> `f64`: each 32-bit half is exactly representable, so the
-    // single rounding on the recombining add matches `n as f64`.
-    let high = u32::try_from(n >> 32).unwrap_or(u32::MAX);
-    let low = u32::try_from(n & 0xFFFF_FFFF).unwrap_or(u32::MAX);
-    let mut value = f64::from(high) * 4_294_967_296.0 + f64::from(low);
-    let mut unit = 0;
-    while value >= 1024.0 && unit < UNITS.len() - 1 {
-        value /= 1024.0;
-        unit += 1;
-    }
-    format!("{value:.1} {}", UNITS[unit])
+    vix_byte_size::human_bytes(n)
 }
 
 /// Format Unix permission bits as a `rwxr-xr-x`-style string (low 9 bits).

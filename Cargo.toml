@@ -254,6 +254,8 @@ vix-ascii-character-picker = { path = "crates/vix-ascii-character-picker", versi
 vix-base64-tool = { path = "crates/vix-base64-tool", version = "1.6.0" }
 # Convert an integer between decimal, hexadecimal, binary, and octal.
 vix-base-tool = { path = "crates/vix-base-tool", version = "1.6.0" }
+# Format a byte count as a human-readable size (`16.0 KiB`).
+vix-byte-size = { path = "crates/vix-byte-size", version = "1.6.0" }
 # Bottom dock: a scrollable line buffer for logs, output, and data views.
 vix-bottom-dock = { path = "crates/vix-bottom-dock", version = "1.6.0" }
 # Evaluate a typed formula, plus the Calculator dialog's editing state.

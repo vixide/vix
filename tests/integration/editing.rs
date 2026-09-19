@@ -155,6 +155,53 @@ fn roam_capture_insert_dailies_and_views() {
 }
 
 #[test]
+fn roam_node_insert_and_transclusion_recreate_a_missing_root() {
+    // T518 (Run H): `roam_insert_link` and `node_insert_transclusion` shared
+    // an identical "find or create the node" preamble, but a copy-paste drift
+    // left one of the two copies without `create_dir_all` — so creating a
+    // brand-new node silently failed whenever `self.root` itself didn't exist
+    // on disk (the file's parent directory). Both are now backed by one
+    // shared helper (`App::roam_find_or_create_node`) that always creates it;
+    // this proves neither call site regressed and the bug can't recur on
+    // just one of the two paths again.
+    let dir = unique_dir("roam-missing-root");
+    let mut app = app_at(&dir);
+    fs::remove_dir_all(&dir).unwrap(); // root now missing on disk
+
+    app.run_action("roam.node_insert");
+    type_str(&mut app, "Recreated Root");
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(
+        dir.join("recreated-root.org").exists(),
+        "roam.node_insert recreates the missing root and writes the node"
+    );
+    let buf = app.editor.active_tab().unwrap().text();
+    assert!(
+        buf.contains("[[id:") && buf.contains("][Recreated Root]]"),
+        "link inserted despite the missing root: {buf:?}"
+    );
+
+    fs::remove_dir_all(&dir).unwrap(); // root missing again for the second call
+
+    let mut app = app_at(&dir);
+    type_str(&mut app, "#+title: Host\n");
+    app.run_action("node.insert_transclusion");
+    type_str(&mut app, "Also Recreated");
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(
+        dir.join("also-recreated.org").exists(),
+        "node.insert_transclusion recreates the missing root and writes the node"
+    );
+    let buf = app.editor.active_tab().unwrap().text();
+    assert!(
+        buf.contains("#+transclude:"),
+        "transclusion directive inserted despite the missing root: {buf:?}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn matching_tag_jumps_between_open_and_close() {
     let mut app = app_at(Path::new("."));
     type_str(&mut app, "<div><span>x</span></div>");
