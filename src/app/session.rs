@@ -213,7 +213,13 @@ impl App {
     /// when this run never loaded it (see
     /// [`App::ensure_project_session_loaded`]), else this run's in-memory
     /// copy.
-    pub(super) fn save_session(&self) {
+    ///
+    /// # Errors
+    ///
+    /// Returns the underlying write error (Run H, T544: callers used to
+    /// discard it via `let _ = ...`, unlike the identically-shaped
+    /// `store_settings`/its own callers, which have always surfaced theirs).
+    pub(super) fn save_session(&self) -> Result<(), confy::ConfyError> {
         let mut ws = self.workspace_session();
         let key = self.session_key();
         let mut session = self.load_session();
@@ -224,7 +230,7 @@ impl App {
             self.fill_project_fields(&mut ws);
         }
         session.set_workspace(ws);
-        let _ = self.store_session(&session);
+        self.store_session(&session)
     }
 
     /// Load this workspace root's persisted project command cache, history,
@@ -346,7 +352,12 @@ impl App {
     /// the fresh `Lsp`'s own `initialize` from the start rather than added
     /// one at a time after the fact.
     pub(super) fn switch_workspace(&mut self, new_root: &Path, folders: &[PathBuf]) {
-        self.save_session();
+        if let Err(e) = self.save_session() {
+            self.messages.push(
+                crate::messages::Level::Warn,
+                t!("msg.session_save_failed", error = e).to_string(),
+            );
+        }
         self.lsp.shutdown();
         self.lsp_synced.clear();
         self.root = new_root.to_path_buf();

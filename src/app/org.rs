@@ -976,7 +976,14 @@ impl App {
             || target.starts_with("https://")
             || target.starts_with("mailto:")
         {
-            let _ = vix_clipboard::set(&target);
+            // T542 (Run H): route through the editor's fallback-aware
+            // `set_clipboard` (real clipboard, else an in-memory register)
+            // instead of the bare `vix_clipboard::set` -- the message
+            // below used to claim success unconditionally even when
+            // nothing was actually stored anywhere.
+            if let Some(t) = self.editor.active_tab_mut() {
+                let _ = t.editor.set_clipboard(&target);
+            }
             self.status = t!("status.org_link_copied", url = target).to_string();
         } else if let Some(id) = target.strip_prefix("id:") {
             let id = id.to_string();

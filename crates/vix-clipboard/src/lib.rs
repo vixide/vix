@@ -69,7 +69,13 @@ pub fn set(text: &str) -> Result<()> {
     }
     arboard::Clipboard::new()
         .and_then(|mut c| c.set_text(text.to_string()))
-        .map_err(|e| anyhow!(e.to_string()))
+        // T542 (Run H): keep the real `arboard::Error` as the source instead
+        // of collapsing it to a plain string via `anyhow!(e.to_string())` --
+        // a future caller that wants to distinguish e.g. `ClipboardOccupied`
+        // (transient, worth retrying) from `ClipboardNotSupported` can
+        // `downcast_ref::<arboard::Error>()`; today's callers still just
+        // `Display` it, unaffected either way.
+        .map_err(anyhow::Error::from)
 }
 
 /// Read the clipboard text, serialized behind the shared lock.
@@ -86,7 +92,8 @@ pub fn get() -> Result<String> {
     }
     arboard::Clipboard::new()
         .and_then(|mut c| c.get_text())
-        .map_err(|e| anyhow!(e.to_string()))
+        // See the matching comment in `set` (T542, Run H).
+        .map_err(anyhow::Error::from)
 }
 
 #[cfg(test)]

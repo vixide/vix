@@ -705,6 +705,29 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Error messages for save/open/revert/rename/delete now name the
+  specific file** (found by a codebase self-audit, T539): all five used
+  to show only the raw underlying error, e.g. "Save failed: Permission
+  denied" with no indication of which file — now "Save failed for
+  ~/notes.md: Permission denied." Reverting a file also used to show
+  "Open failed," the wrong verb for what actually happened.
+- **Following a web/mail link from Org, or copying a table column's sum
+  (`C-c +`), could claim "Copied to the clipboard" even when nothing was
+  actually copied** (found by a codebase self-audit, T542): both now
+  route through the same clipboard path (real clipboard, falling back to
+  an in-memory one) the rest of the app already uses, so the claim is
+  genuinely true.
+- **Spell-check silently doing nothing gave no indication why** (found
+  by a codebase self-audit, T541): a missing/corrupt dictionary, or a
+  permissions problem reading one, all looked identical to the user —
+  zero feedback. Pressing Ctrl+; (spell-suggest) now reports the
+  specific reason.
+- **A session-save failure on exit (or when switching workspaces) was
+  silently discarded**, unlike the adjacent settings-save failure, which
+  was already reported (found by a codebase self-audit, T544) — both
+  are now reported, and (since exit-time messages can no longer render
+  in the already-closed TUI) also printed to stderr so they survive in
+  the terminal's scrollback.
 - **Org-node: inserting a `#+transclude:` directive for a new node could
   silently fail to create the node's file** (found by a codebase
   self-audit, T518): `node_insert_transclusion` was missing the

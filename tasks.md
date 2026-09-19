@@ -4360,21 +4360,33 @@ debt. Grouped by source pass; ranked by value/effort within each group.
   `.code()`) across the `mpsc` channel instead of a `String`. Medium
   effort, cross-cutting (touches the channel's message type and every
   consumer).
-- [ ] **T539 — The five most common user actions (save/open/revert/
+- [x] **T539 — The five most common user actions (save/open/revert/
   rename/delete) show generic errors with no filename, though the path
   is in scope at every site.** `src/app.rs`: Ctrl+S save (`:3651-3654`,
   `msg.save_failed`), open file (`:7301-7304`, `msg.open_failed`),
   revert buffer (`:5865`, wrongly reuses `msg.open_failed`), rename
   (`:13193-13195`, `msg.rename_failed`, names neither old nor new path),
-  and explorer batch delete (`:7174-7177`, each loop iteration's failure
-  *overwrites* the last, so only the final failure of N is ever shown,
-  still with no filename). Contrast `:12742-12744` (workspace
+  and explorer batch delete (`:7174-7177`, each loop iteration's
+  failure, no filename). Contrast `:12742-12744` (workspace
   search-and-replace write), which already does this right —
-  `t!("msg.write_failed", path = path.display(), error = e)` — and
-  `continue`s the loop instead of aborting. Fix: add `path`/`old`/`new`
-  interpolation to the four single-item locale keys (small effort each)
-  and accumulate the batch-delete failures into one message instead of
-  overwriting (medium effort for that one site).
+  `t!("msg.write_failed", path = path.display(), error = e)`. Fix: add
+  `path`/`old`/`new` interpolation to the five single-item locale keys.
+  Small effort each. **Done 2026-09-19**, all five: `msg.save_failed`/
+  `msg.open_failed` each split into a new `_path`-suffixed sibling key
+  (kept the originals unchanged — both are shared across several other
+  call sites this task didn't touch, each without an obviously-correct
+  path in scope); `msg.revert_failed` is a new, correctly-named key
+  replacing the wrongly-reused `msg.open_failed`; `msg.rename_failed`
+  and `msg.delete_failed` (each with exactly one call site) had `path`/
+  `old`+`new` added directly to their existing shape. One correction to
+  this entry's own original text while implementing: batch delete does
+  **not** actually overwrite — `self.messages.error(...)` already
+  appends (confirmed by reading `Messages::push`), so every failure in
+  a batch was always individually visible; only the missing filename
+  was a real gap. Five new regression tests (one per site, four via a
+  deleted-out-from-under-it file, one via `#[cfg(unix)]` permission
+  bits matching T535's own technique) each force a real failure and
+  check the specific path appears in the message, not just the error.
 - [ ] **T540 — `vix-git::stage`/`unstage` return a bare `bool`,
   discarding git's real stderr — inconsistent with their own sibling.**
   `crates/vix-git/src/lib.rs:498-500,568-571` collapse the command
@@ -4394,7 +4406,18 @@ debt. Grouped by source pass; ranked by value/effort within each group.
   independently actionable — but `.ok()` throws all three away. A user
   with a wrong `dictionary_path` vs. a corrupt dictionary vs. an
   unsupported locale sees identical (zero) feedback. Fix: surface a
-  status/message keyed on the `Err` variant. Small effort.
+  status/message keyed on the `Err` variant. Small effort. **Done
+  2026-09-19**: new `App::speller_error: Option<String>` field records
+  the formatted `Display` of whichever variant `load_for` returned;
+  `open_spell_suggest` (already the one place that reports "spellcheck
+  unavailable", via the pre-existing `status.spell_unavailable`) now
+  shows the specific detail via a new `status.spell_load_failed`
+  ("Spell-check failed to load: %{error}") when one was recorded,
+  falling back to the original generic message only when spellcheck
+  was never even attempted (still off). New test simulates a recorded
+  failure without depending on the untracked `./dictionaries` set or
+  mutating the global i18n locale, matching how the file's other
+  spellcheck tests already avoid both.
 - [ ] **T542 — Clipboard "yank" operations in two places claim success
   even when the clipboard write silently failed.** `src/app/org.rs:
   979-980` ("Copied %{url} to the clipboard") and `src/app/org_table.rs:
@@ -4413,7 +4436,17 @@ debt. Grouped by source pass; ranked by value/effort within each group.
   differently. Fix: gate the two false-success messages on the real
   `Result`; fix the `anyhow!` wrapping to preserve the source error.
   Small effort, real (if minor) correctness bug on the two claiming
-  sites.
+  sites. **Done 2026-09-19**: both call sites now route through the
+  same fallback-aware `Editor::set_clipboard` the rest of the app uses
+  (real clipboard, else an in-memory register) instead of the bare
+  `vix_clipboard::set`, so the "copied" claim is genuinely true again —
+  something is always actually stored. `vix-clipboard`'s `set`/`get`
+  now use `anyhow::Error::from(e)`, preserving `arboard::Error` as the
+  source. New test follows a web link and reads the clipboard back
+  through the same tab, not just checking the status message. The two
+  lower-priority sites named in the finding (`modal.rs:509`,
+  `org.rs:379` — bypass the pattern but never claimed success) were
+  deliberately left alone, out of this task's actual scope.
 - [ ] **T543 — `vix-edit-value` (JSON/YAML editor) discards
   `serde_yaml`'s line/column diagnostics, showing only a static "not
   valid JSON or YAML."** `crates/vix-edit-value/src/lib.rs:117-119`:
@@ -4431,7 +4464,21 @@ debt. Grouped by source pass; ranked by value/effort within each group.
   further render tick, so it may never actually be seen either — same
   root issue as T539's "the user needs to see this before exit"
   concern, just for the settings/session case instead of a save/open
-  error. Small effort.
+  error. Small effort. **Done 2026-09-19**: `App::save_session` now
+  returns `Result<(), confy::ConfyError>` instead of swallowing it
+  internally; both callers (`on_exit`, `switch_workspace`) handle it —
+  new `msg.session_save_failed` key, same shape as the existing
+  `msg.settings_save_failed`. Also fixed the "never actually seen"
+  half found in the same task: `on_exit` runs after `main` has already
+  called `ratatui::restore()`, so a `self.messages` push at that point
+  can never render — both `on_exit` failure paths (session *and* the
+  pre-existing settings one) now also `eprintln!`, the one channel
+  that still reaches the user post-restore, while keeping the
+  `self.messages` push for anything that inspects `App` state directly
+  without a real terminal session. New test blocks the session path's
+  write with an unwritable parent (settings kept on a separate,
+  writable path) and confirms both: the session failure is reported,
+  and the settings save still succeeds independently.
 - [ ] **T545 — Several settings/state writes after an explicit user
   action are silently discarded, at 6+ sites with the same shape.**
   `src/app/session.rs:381` (`open_settings_file` doesn't save settings
