@@ -27,13 +27,17 @@ on top.
 - **No blanket allows.** There is no `#![allow(clippy::pedantic)]` and no
   `#![allow(missing_docs)]`; fix findings in code (saturating `try_from` casts,
   extract helpers for `too_many_lines`, context structs for `too_many_arguments`,
-  add `# Errors`/`# Panics`, etc.). The reused `editor_core` engine modules keep
-  `#[allow(clippy::all, clippy::pedantic)]` for upstream style; new editor code
-  goes in a Vix-owned module (`wrap`, `brackets`, `lines`), held to pedantic.
-- Sanctioned exceptions are only a few **targeted** allows:
-  `#[allow(clippy::struct_excessive_bools)]` on `App`/`Settings`/`SearchBar`/
-  `WorkspaceSearch`/`editor_core::Editor`, and a handful of `too_many_lines` /
-  `too_many_arguments` on specific functions that resist further extraction.
+  add `# Errors`/`# Panics`, etc.). `editor_core`'s modules are held to the same
+  plain `#![warn(clippy::pedantic)]` as everywhere else — there is no blanket
+  `#[allow(clippy::all, clippy::pedantic)]` anywhere in the crate.
+- Sanctioned exceptions are only a handful of **targeted** `too_many_lines` /
+  `too_many_arguments` allows on specific functions that resist further
+  extraction. There is no standing `#[allow(clippy::struct_excessive_bools)]`
+  anywhere in the codebase: every bool-cluster struct (`App`, `Settings`,
+  `SearchBar`, `WorkspaceSearch`, `DblockParams`, both `editor_core::Editor`s)
+  has been converted to a `bitflags`-based `Flags` field instead — prefer that
+  over a new allow for a struct whose bools are independent, freely-combinable
+  toggles.
 
 ## Internationalization
 

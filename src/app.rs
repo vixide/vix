@@ -666,6 +666,10 @@ pub struct GitPanel {
 /// run (or [`SEP_ACTION`] for a separator).
 type ContextItem = (&'static str, &'static str);
 
+/// The key/value cached by [`App::active_tab_symbols`] (T511): `(active tab
+/// index, path, buffer revision)` and the symbols found for that state.
+type SymbolsCache = Option<(usize, Option<PathBuf>, u64, Vec<crate::palette::Symbol>)>;
+
 /// Sentinel action marking a context-menu separator.
 const SEP_ACTION: &str = "menu.separator";
 
@@ -1928,6 +1932,17 @@ pub struct App {
     /// Cached HEAD blob text per file path, for the editor diff gutter. Cleared
     /// on save / git actions so it refetches.
     git_head_cache: std::collections::HashMap<PathBuf, String>,
+    /// The `(path, buffer revision)` the diff gutter was last computed for
+    /// (T510: `refresh_git_gutter` is called every redraw, so this skips
+    /// recomputing the Myers diff when neither has changed since).
+    git_gutter_cache_key: Option<(PathBuf, u64)>,
+    /// Cache for the declaration scan behind [`App::sticky_header`] and
+    /// [`App::breadcrumb`]: `(active tab index, path, buffer revision, the
+    /// symbols found)`. A cache hit avoids re-materializing the whole buffer
+    /// and rescanning it for declarations on every frame (T511). `RefCell`
+    /// because both callers only have `&App` — sticky-scroll and the
+    /// breadcrumb bar are read-only rendering queries, not state mutations.
+    symbols_cache: std::cell::RefCell<SymbolsCache>,
     /// Parsed coverage report (T210: **Tools → Load Coverage File…**), if one
     /// has been loaded. Stays cached across a Toggle Coverage Gutter off/on.
     coverage: Option<vix_coverage::Report>,
@@ -2319,6 +2334,8 @@ impl App {
             git_branch: None,
             git_status: Vec::new(),
             git_head_cache: std::collections::HashMap::new(),
+            git_gutter_cache_key: None,
+            symbols_cache: std::cell::RefCell::new(None),
             coverage: None,
             speller: None,
             speller_locale: None,
@@ -3733,7 +3750,7 @@ impl App {
         }
         // The enclosing symbol is the last one declared at or above the first
         // visible line; show it only when its own header line is scrolled off.
-        crate::palette::symbols(&tab.text())
+        self.active_tab_symbols()
             .into_iter()
             .rev()
             .find(|s| s.line <= top) // 1-based line <= top means strictly above the first visible (top+1)
@@ -3755,11 +3772,39 @@ impl App {
             return name;
         }
         let line = self.editor.cursor_1based().0;
-        let symbols = crate::palette::symbols(&tab.text());
+        let symbols = self.active_tab_symbols();
         match symbols.iter().rev().find(|s| s.line <= line) {
             Some(sym) => format!("{name}  \u{25b8}  {}", sym.name),
             None => name,
         }
+    }
+
+    /// The declarations found in the active tab's buffer, from a cache keyed
+    /// on `(tab index, path, buffer revision)` (T511: [`App::sticky_header`]
+    /// and [`App::breadcrumb`] both need this on every frame the file is
+    /// scrolled/has a cursor; without the cache each would re-materialize the
+    /// whole buffer and rescan it for declarations independently, per frame).
+    /// Empty when there is no active tab.
+    fn active_tab_symbols(&self) -> Vec<crate::palette::Symbol> {
+        let Some(tab) = self.editor.active_tab() else {
+            return Vec::new();
+        };
+        let revision = tab.editor.revision();
+        if let Some((idx, path, rev, symbols)) = self.symbols_cache.borrow().as_ref()
+            && *idx == self.editor.active
+            && *path == tab.path
+            && *rev == revision
+        {
+            return symbols.clone();
+        }
+        let symbols = crate::palette::symbols(&tab.text());
+        *self.symbols_cache.borrow_mut() = Some((
+            self.editor.active,
+            tab.path.clone(),
+            revision,
+            symbols.clone(),
+        ));
+        symbols
     }
 
     /// Toggle the bottom dock (log/output/data panel), persisting the choice.
@@ -14137,6 +14182,45 @@ mod tests {
         assert!(
             header.contains("fn outer"),
             "header is the enclosing fn: {header:?}"
+        );
+    }
+
+    #[test]
+    fn breadcrumb_symbols_cache_tracks_edits_and_distinguishes_tabs() {
+        // T511: the declaration scan behind `sticky_header`/`breadcrumb` is
+        // cached by (tab index, path, revision); this proves a cache hit
+        // never serves stale or cross-tab-contaminated results.
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.editor.new_tab_with_content("fn alpha() {}\n");
+        let first_tab = app.editor.active; // App::new's own initial tab is index 0
+        let crumb = app.breadcrumb();
+        assert!(crumb.contains("alpha"), "shows alpha: {crumb:?}");
+
+        // Editing the buffer must invalidate the cache, not serve the old name.
+        if let Some(t) = app.editor.active_tab_mut() {
+            t.editor.set_content("fn renamed() {}\n");
+            t.editor.set_cursor(0);
+        }
+        let crumb = app.breadcrumb();
+        assert!(
+            crumb.contains("renamed") && !crumb.contains("alpha"),
+            "edit invalidated the cache: {crumb:?}"
+        );
+
+        // A second tab with different content must not reuse the first tab's
+        // cached symbols merely because both are at the same revision.
+        app.editor.new_tab_with_content("fn other() {}\n");
+        let crumb = app.breadcrumb();
+        assert!(
+            crumb.contains("other"),
+            "second tab shows its own symbol, not the first tab's: {crumb:?}"
+        );
+
+        app.editor.active = first_tab;
+        let crumb = app.breadcrumb();
+        assert!(
+            crumb.contains("renamed"),
+            "switching back shows the first tab's own symbol again: {crumb:?}"
         );
     }
 

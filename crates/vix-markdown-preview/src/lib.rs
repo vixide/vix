@@ -14,6 +14,8 @@
 //! *preview* lines instead of source lines.
 
 #![warn(clippy::pedantic)]
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 use std::fmt::Write;
 

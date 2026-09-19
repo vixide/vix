@@ -225,6 +225,13 @@ fn parse_worker_loop(
 }
 
 /// The text buffer with Tree-sitter highlighting and undo/redo support.
+///
+/// Backed by [`ropey::Rope`]: insert/delete/index are O(log n) in the buffer
+/// size, and cloning `Code` is O(1) (structural sharing) — no algorithmic risk
+/// scaling to a large file. The one trap is [`Code::get_content`]/
+/// [`Code::slice`], which materialize an owned `String` and are genuinely
+/// O(n); see their own doc comments before calling either from a per-frame or
+/// per-keystroke path.
 pub struct Code {
     content: ropey::Rope,
     lang: String,
@@ -430,12 +437,22 @@ impl Code {
     }
 
     /// Return the entire buffer contents as a `String`.
+    ///
+    /// O(n) in the buffer size — a full materialization of the rope, not the
+    /// cheap O(1) structural-sharing clone `Code` itself supports. Fine for a
+    /// one-shot, user-invoked action (save, export); avoid calling this from a
+    /// per-frame or per-keystroke path without caching the result and keying
+    /// the cache on [`Code::revision`] (see T510/T511 in the app's own
+    /// `tasks.md` for two real examples of this trap and its fix).
     #[must_use]
     pub fn get_content(&self) -> String {
         self.content.to_string()
     }
 
     /// Return the text between two character offsets as a `String`.
+    ///
+    /// O(n) in `end - start` — see [`Code::get_content`]'s note on avoiding
+    /// this on a per-frame/per-keystroke path.
     ///
     /// # Panics
     ///

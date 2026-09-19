@@ -2,7 +2,7 @@
 
 Vix is a **Cargo workspace** (`[workspace] members = ["crates/*"]`) on **edition
 2024**. The root package `vix` (`src/`) is the thin **App shell** — CLI, event
-loop, `App` state, rendering, and the explorer — and it depends on the 112
+loop, `App` state, rendering, and the explorer — and it depends on the 116
 `vix-*` **member crates** under `crates/` that hold every feature plus the custom
 editor widget (`vix-editor-core`). Shared reference for where things live.
 
@@ -19,21 +19,23 @@ Every crate root sets `#![forbid(unsafe_code)]`, `#![deny(missing_docs)]`, and
 `#![warn(clippy::pedantic)]`, and **every module file** repeats
 `#![warn(clippy::pedantic)]`. There is **no** blanket `#![allow(clippy::pedantic)]`
 or `#![allow(missing_docs)]` anywhere — findings are fixed in code. Sanctioned
-allows are only a few **targeted** ones: `#[allow(clippy::struct_excessive_bools)]`
-on `App` and `Settings` (T149 converted `SearchBar`/`WorkspaceSearch`/
-`DblockParams`/both `Editor`s to a `bitflags`-based `Flags` field instead,
-removing their allows — prefer that over a new allow for a struct whose
-bools are independent, freely-combinable toggles) and a handful of
-`#[allow(clippy::too_many_lines)]` / `too_many_arguments` on specific
-functions that resist further extraction.
-`cargo clippy --all-targets -- -D warnings` is clean. See
+allows are only a handful of **targeted** `#[allow(clippy::too_many_lines)]` /
+`too_many_arguments` ones on specific functions that resist further
+extraction — there is no standing `#[allow(clippy::struct_excessive_bools)]`
+anywhere in the codebase: T149 converted every bool-cluster struct (`App`,
+`Settings`, `SearchBar`, `WorkspaceSearch`, `DblockParams`, both `Editor`s) to
+a `bitflags`-based `Flags` field instead. Prefer that over a new allow for a
+struct whose bools are independent, freely-combinable toggles.
+`cargo clippy --workspace --all-targets -- -D warnings` is clean. See
 [[rust-clippy-pedantic]] / `spec/rust-clippy-pedantic`.
 
 ## `vix-editor-core` — the code-editor widget (`crates/vix-editor-core/src/`)
 
-The fully-custom terminal code-editor crate. Its engine (reused) modules carry
-`#[allow(clippy::all, clippy::pedantic)]`; the Vix-owned modules are held to
-pedantic. Reached from the host via `vix-editor`'s `CodeEditor` (a re-export of
+The fully-custom terminal code-editor crate. Every module — reused engine and
+Vix-owned alike — is held to the same plain `#![warn(clippy::pedantic)]` as
+every other crate; there is no blanket `#[allow(clippy::all, clippy::pedantic)]`
+anywhere in it. Reached from the host via `vix-editor`'s `CodeEditor` (a
+re-export of
 `editor_core::editor::Editor`).
 
 | Module             | Kind       | Owns                                                            |

@@ -7,6 +7,8 @@
 //! instead open a nested submenu (e.g. View → Editor, Edit → Find).
 
 #![warn(clippy::pedantic)]
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 // Shared workspace i18n (see the vix_i18n crate).
 #[macro_use]

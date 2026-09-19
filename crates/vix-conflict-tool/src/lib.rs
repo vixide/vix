@@ -13,6 +13,8 @@
 //! [`Resolution`].
 
 #![warn(clippy::pedantic)]
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 /// Which side of a conflict to keep.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

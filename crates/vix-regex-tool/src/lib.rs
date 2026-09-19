@@ -6,6 +6,8 @@
 //! holds the fields and computes [`Tester::result`].
 
 #![warn(clippy::pedantic)]
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 /// Which field the regex-tester dialog is editing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

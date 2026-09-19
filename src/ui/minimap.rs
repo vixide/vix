@@ -20,8 +20,12 @@ pub(super) fn draw_minimap(app: &mut App, frame: &mut Frame, area: Rect, editor_
     if tab.is_image() {
         return;
     }
-    let lines: Vec<String> = tab.text().lines().map(str::to_string).collect();
-    let total = lines.len().max(1);
+    // T512: read each line's trimmed length straight from the rope instead of
+    // cloning the whole buffer into a `String` and then again into a `Vec<String>`
+    // (one allocation per line) up front — this scan touches every line's chars
+    // either way, but with no per-line allocation.
+    let code = tab.editor.code_ref();
+    let total = code.len_lines().max(1);
     let rows = area.height as usize;
     let top = app.editor.top_visible_line();
     let view_end = (top + editor_height).min(total);
@@ -33,9 +37,8 @@ pub(super) fn draw_minimap(app: &mut App, frame: &mut Frame, area: Rect, editor_
         // The band of source lines this minimap row represents.
         let start = r * total / rows;
         let end = ((r + 1) * total / rows).max(start + 1).min(total);
-        let longest = lines[start..end]
-            .iter()
-            .map(|l| l.trim_end().chars().count())
+        let longest = (start..end)
+            .map(|i| trimmed_char_len(code.line(i)))
             .max()
             .unwrap_or(0);
         // Scale the longest line (~120 cols) to the minimap width.
@@ -50,4 +53,18 @@ pub(super) fn draw_minimap(app: &mut App, frame: &mut Frame, area: Rect, editor_
         text.push(Line::from(Span::styled(s, style)));
     }
     frame.render_widget(Paragraph::new(text), area);
+}
+
+/// The char length of `line` with trailing whitespace (including the newline)
+/// excluded, without allocating — `ropey`'s `Chars` iterator isn't double-ended,
+/// so this walks forward once, remembering the length as of the last
+/// non-whitespace char seen.
+fn trimmed_char_len(line: ropey::RopeSlice<'_>) -> usize {
+    let mut last_non_ws = 0;
+    for (i, c) in line.chars().enumerate() {
+        if !c.is_whitespace() {
+            last_non_ws = i + 1;
+        }
+    }
+    last_non_ws
 }
