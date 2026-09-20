@@ -67,6 +67,9 @@ pub struct Session {
     url: String,
     /// Setup statements re-applied on [`restart`](Session::restart).
     setup: Vec<String>,
+    /// Signals the worker to abandon an in-flight statement and exit as
+    /// soon as it can (Run H, T532) — see [`Self::cancel`].
+    cancel_tx: tokio::sync::watch::Sender<bool>,
 }
 
 impl Session {
@@ -84,12 +87,22 @@ impl Session {
         let (req_tx, req_rx) = mpsc::channel::<Request>();
         let (reply_tx, reply_rx) = mpsc::channel::<Chunk>();
         let (ready_tx, ready_rx) = mpsc::channel::<Result<(), String>>();
+        let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
         let url = url.to_string();
         let setup = setup.to_vec();
         let (worker_url, worker_setup) = (url.clone(), setup.clone());
         std::thread::Builder::new()
             .name("vix-db-session".into())
-            .spawn(move || worker(&worker_url, &worker_setup, &ready_tx, &req_rx, &reply_tx))
+            .spawn(move || {
+                worker(
+                    &worker_url,
+                    &worker_setup,
+                    &ready_tx,
+                    &req_rx,
+                    &reply_tx,
+                    cancel_rx,
+                );
+            })
             .map_err(|e| e.to_string())?;
         ready_rx.recv().map_err(|e| e.to_string())??;
         Ok(Session {
@@ -97,7 +110,27 @@ impl Session {
             reply_rx,
             url,
             setup,
+            cancel_tx,
         })
+    }
+
+    /// Tell the worker to abandon whatever statement it's mid-flight on and
+    /// exit as soon as it can, rather than run to completion (which, for a
+    /// genuinely hung network read, may be never) — Run H, T532. The worker
+    /// notices even while blocked inside a single `.await` on the stream
+    /// (unlike dropping [`Self::req_tx`] alone, which only unblocks a worker
+    /// that's back at `req_rx.recv()` between statements).
+    ///
+    /// A one-way, **sticky** signal meant to precede giving up on the
+    /// session entirely ([`restart`](Session::restart), or the host
+    /// disconnecting), not a resettable pause: once sent, the *next*
+    /// statement handed to this same worker (if any) is abandoned
+    /// immediately too, even though nothing was in flight when `cancel` was
+    /// called. Harmless to call more than once — but callers that still
+    /// want to use the session afterward should call
+    /// [`restart`](Session::restart) instead of calling this directly.
+    pub fn cancel(&self) {
+        let _ = self.cancel_tx.send(true);
     }
 
     /// Hand the worker a statement without waiting for its reply — the async
@@ -126,14 +159,20 @@ impl Session {
         }
     }
 
-    /// Abandon the current worker (its in-flight statement's result is dropped
-    /// when it finally arrives) and reconnect on a fresh connection — how a
-    /// cancelled query returns control to the UI. Transaction state is lost.
+    /// Abandon the current worker and reconnect on a fresh connection — how
+    /// a cancelled query returns control to the UI. Transaction state is
+    /// lost. [`cancel`](Self::cancel)s the old worker first (T532) so it
+    /// stops as soon as it notices, rather than only once the *new*
+    /// connection below happens to finish — `*self` isn't overwritten (and
+    /// so the old `Session`, including its own `cancel_tx`, isn't dropped)
+    /// until then, which would otherwise leave the signal until too late to
+    /// matter for how promptly the old worker exits.
     ///
     /// # Errors
     ///
     /// Returns the reconnect error if the new connection cannot be opened.
     pub fn restart(&mut self) -> Result<(), String> {
+        self.cancel();
         let (url, setup) = (self.url.clone(), self.setup.clone());
         *self = Session::connect(&url, &setup)?;
         Ok(())
@@ -163,13 +202,14 @@ impl Session {
 }
 
 /// The worker loop: connect, signal readiness, then serve one statement at a
-/// time until the request channel closes.
+/// time until the request channel closes or [`Session::cancel`] fires.
 fn worker(
     url: &str,
     setup: &[String],
     ready_tx: &mpsc::Sender<Result<(), String>>,
     req_rx: &mpsc::Receiver<Request>,
     reply_tx: &mpsc::Sender<Chunk>,
+    mut cancel_rx: tokio::sync::watch::Receiver<bool>,
 ) {
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -197,11 +237,21 @@ fn worker(
     }
     let _ = ready_tx.send(Ok(()));
     while let Ok(Request::Run(sql)) = req_rx.recv() {
-        if !rt.block_on(stream_sql(&mut conn, &sql, reply_tx)) {
-            break; // the consumer went away (a cancel abandoned this worker)
+        if !rt.block_on(stream_sql(&mut conn, &sql, reply_tx, &mut cancel_rx)) {
+            break; // the consumer went away, or cancelled (T532), and abandoned this worker
         }
     }
-    let _ = rt.block_on(sqlx::Connection::close(conn));
+    // A genuinely dead connection's close() could itself hang waiting on the
+    // network (T532's same concern, one step later) -- bounded so a worker
+    // that already gave up on its query doesn't then get stuck saying
+    // goodbye to it.
+    let _ = rt.block_on(async {
+        tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            sqlx::Connection::close(conn),
+        )
+        .await
+    });
 }
 
 /// Remove any credential from a connection error before it is shown in the UI.
@@ -239,12 +289,14 @@ async fn exec_one(conn: &mut sqlx::AnyConnection, sql: &str) -> Result<(), Strin
 /// Stream one statement's rows back as [`Chunk`]s: a [`Chunk::Head`], then
 /// [`Chunk::Rows`] batches of up to [`BATCH`], then [`Chunk::Done`] (flagged
 /// truncated past [`MAX_ROWS`]) — or a [`Chunk::Err`]. Returns `false` when the
-/// consumer's channel has closed, so the worker can stop. `AssertSqlSafe` is
-/// the intended opt-in for the workbench's user SQL, not an injection hazard.
+/// consumer's channel has closed, or [`Session::cancel`] fired (T532), so the
+/// worker can stop either way. `AssertSqlSafe` is the intended opt-in for the
+/// workbench's user SQL, not an injection hazard.
 async fn stream_sql(
     conn: &mut sqlx::AnyConnection,
     sql: &str,
     reply_tx: &mpsc::Sender<Chunk>,
+    cancel_rx: &mut tokio::sync::watch::Receiver<bool>,
 ) -> bool {
     let query = sqlx::raw_sql(sqlx::AssertSqlSafe(sql.to_string()));
     let mut stream = query.fetch(conn);
@@ -252,7 +304,19 @@ async fn stream_sql(
     let mut batch: Vec<Vec<String>> = Vec::new();
     let mut total = 0usize;
     let mut truncated = false;
-    while let Some(item) = stream.next().await {
+    loop {
+        let item = tokio::select! {
+            item = stream.next() => item,
+            // Cancelled (or the Session, and its cancel_tx, was simply
+            // dropped -- `changed()` also errors then): give up on this
+            // statement immediately rather than wait on a network read
+            // that may never produce another item, so the worker can move
+            // on to closing the connection and exiting (T532).
+            _ = cancel_rx.changed() => return false,
+        };
+        let Some(item) = item else {
+            break;
+        };
         match item {
             Ok(row) => {
                 if !head_sent {
@@ -448,6 +512,52 @@ mod tests {
             .expect("query after restart");
         assert_eq!(rows, vec![vec!["1"]], "committed data is still there");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn cancel_is_a_one_way_signal_the_next_statement_also_notices() {
+        let mut s = memory();
+        s.cancel(); // nothing in flight yet -- calling it twice is still fine
+        s.cancel();
+        assert!(
+            s.run("SELECT 1").is_err(),
+            "cancel is sticky: the next statement is abandoned too, not just \
+             whatever was in flight when it was called -- callers that still \
+             want to use the session afterward must restart() it instead"
+        );
+    }
+
+    /// The exact mechanism [`stream_sql`] relies on (Run H, T532): a
+    /// `tokio::select!` between the stream and `cancel_rx.changed()` must
+    /// resolve via cancellation even when the other branch would otherwise
+    /// never complete on its own -- standing in for a genuinely hung network
+    /// read, which sqlite has no way to simulate for an end-to-end test.
+    #[test]
+    fn cancel_unblocks_a_select_that_would_otherwise_wait_forever() {
+        let (cancel_tx, mut cancel_rx) = tokio::sync::watch::channel(false);
+        std::thread::spawn(move || {
+            // Give the select below a moment to actually start waiting --
+            // not required for correctness (`changed()` also resolves
+            // immediately if the version already moved on before the
+            // receiver was ever polled), just makes the interrupt-in-
+            // progress case this test means to exercise the likely one.
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            let _ = cancel_tx.send(true);
+        });
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let cancelled = rt.block_on(async {
+            tokio::select! {
+                () = std::future::pending::<()>() => false,
+                _ = cancel_rx.changed() => true,
+            }
+        });
+        assert!(
+            cancelled,
+            "cancel() unblocked a select that would otherwise wait forever"
+        );
     }
 
     #[test]

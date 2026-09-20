@@ -4057,14 +4057,13 @@ quality, and cross-platform (Windows) correctness. Two genuine
 correctness bugs turned up (T518, T535 below), not just style/maintenance
 debt. Grouped by source pass; ranked by value/effort within each group.
 
-**28 of 32 done as of 2026-09-20** (T518–T531, T533–T537, T539–T546,
-T548) — including T531, explicitly the highest-severity single finding
-of this whole run, given its own focused change and test pass rather
-than rushed. What remains: T532 (the deeper half of the DB-connect
-finding T531 didn't touch — the abandoned worker thread itself still
-has no cancellation signal), a large cross-cutting error-structuring
-item (T538), and two Windows items that need a way to actually test on
-Windows first (T547) or are low-value cosmetic (T549).
+**29 of 32 done as of 2026-09-20** (T518–T537, T539–T546, T548) —
+including both DB-connect concurrency findings (T531, T532), T531
+explicitly the highest-severity single finding of this whole run, each
+given its own focused change and test pass rather than rushed. What
+remains: a large cross-cutting error-structuring item (T538), and two
+Windows items that need a way to actually test on Windows first (T547)
+or are low-value cosmetic (T549).
 
 ### Duplication / DRY
 
@@ -4503,7 +4502,7 @@ Windows first (T547) or are low-value cosmetic (T549).
     way to abort one early — out of scope for "stop the UI thread from
     blocking," a plausible separate future feature, not part of what
     this finding asked for.
-- [ ] **T532 — Cancelling or disconnecting a DB session abandons, but
+- [x] **T532 — Cancelling or disconnecting a DB session abandons, but
   doesn't cancel, the in-flight query — repeated cancels against a hung
   query can exhaust the DB's connection limit.** `crates/vix-db/src/
   session.rs`'s `restart()`/`Browser::disconnect()` just drop
@@ -4519,13 +4518,50 @@ Windows first (T547) or are low-value cosmetic (T549).
   iteration — same pattern the tree-sitter parse worker already uses
   (T533). Medium effort; depends on T531's architecture for the cleanest
   fix, though it could also land independently.
-  **T531 done 2026-09-20 and did give T532 its architecture** (`cancel_
-  query` now backgrounds the reconnect, so trying `Session::restart`
-  again no longer blocks the UI thread either) — but the actual
-  connection-leak root cause this task describes is untouched: the
-  *old*, abandoned worker thread still has no cancellation signal and
-  still only notices abandonment on its next successful send, which may
-  never come. Still open, still real, still its own change.
+  **Done 2026-09-20.** The task's own suggested design (a flag "checked
+  each iteration") doesn't actually work for this shape of loop on its
+  own: `stream.next().await` can block on a single network read
+  indefinitely, and a flag is only ever consulted *between* iterations —
+  it never gets a chance to interrupt a read that's already in flight.
+  Genuinely interrupting it needs the read to be raced against something,
+  so `Session` gained a `tokio::sync::watch::channel(bool)` instead:
+  `cancel_tx` on the session, `cancel_rx` cloned into the worker and
+  threaded into `stream_sql`, whose row loop now does
+  `tokio::select! { item = stream.next() => ..., _ = cancel_rx.changed()
+  => return false }` — a genuinely-hung read gets raced away from, not
+  just checked around. `Session::cancel()` (new, `pub`) sends the signal;
+  `restart()` calls it on the *old* session before opening the new one
+  (calling it only via natural `Drop` timing, as first drafted, would
+  have delayed the signal until the new connect finished — too late to
+  matter for how promptly the old worker exits); `Browser::disconnect()`
+  now calls it too before dropping the session, so a plain disconnect
+  (not just mid-query Ctrl+C) also releases a stuck connection promptly.
+  Also bounded the worker's own `Connection::close()` with a 2s
+  `tokio::time::timeout` — the same "network is unresponsive" condition
+  that motivated this task could in principle make a graceful close hang
+  too, one step later; a worker that already gave up on its query
+  shouldn't then get stuck saying goodbye to it. `cancel()` turned out to
+  be a one-way, **sticky** signal — once sent, the worker's *next*
+  statement (if any) is abandoned too, not just whatever was mid-flight —
+  which is exactly right for its only two real callers (both about to
+  replace or drop the session anyway) but is documented explicitly since
+  it's an easy contract to get wrong; caught via a test of my own
+  drafted with the wrong premise (asserted the session stayed usable
+  after an idle `cancel()`; it doesn't, correctly) before it shipped.
+  Added `tokio`'s `sync`/`macros` features to the workspace dependency
+  (only `vix-db` and the root `vix` package consume `tokio`, so this is
+  additive-only for everyone else). Two new tests: one exercising the
+  exact `select!` mechanism against a future that would otherwise never
+  resolve (sqlite has no way to simulate a genuinely hung network read
+  for a true end-to-end test, so this tests the real primitive instead,
+  deterministically — no timing-based flakiness), one proving the sticky
+  contract. No CHANGELOG entry (pure internal robustness fix, no
+  user-visible behavior change — the observable difference is a
+  previously-possible connection leak no longer happening, not a new
+  screen or message). Verified: `cargo clippy --workspace --all-targets
+  -- -D warnings` clean; `cargo test -p vix-db` (116 tests, up from 114)
+  and `cargo test --test db_smoke -- --include-ignored` (12 tests) both
+  green; full `cargo test --workspace` green; `scripts/check-docs` green.
 - [x] **T533 — Tree-sitter background parse isn't cancelled when its
   buffer closes mid-parse.** `crates/vix-editor-core/src/code.rs`'s
   `Code` has no `Drop` impl; `request_async_parse` only sets an existing
