@@ -622,7 +622,10 @@ fn async_connect_and_reconnect_run_off_the_event_loop() {
     let dir = std::env::temp_dir().join(format!("vix-db-async-connect-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("async-connect.db");
-    seed(&file, &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1)"]);
+    seed(
+        &file,
+        &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1)"],
+    );
 
     // Connecting: `handle_key` alone (no `key()`, which would auto-drain)
     // must return with the connect still pending, not already resolved.
