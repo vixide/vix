@@ -4057,13 +4057,17 @@ quality, and cross-platform (Windows) correctness. Two genuine
 correctness bugs turned up (T518, T535 below), not just style/maintenance
 debt. Grouped by source pass; ranked by value/effort within each group.
 
-**30 of 32 done as of 2026-09-20** (T518–T548, i.e. everything except
-T547/T549) — including both DB-connect concurrency findings (T531,
-T532), T531 explicitly the highest-severity single finding of this
-whole run, and T538's error-structuring, each given its own focused
-change and test pass rather than rushed. What remains: two Windows
-items that need a way to actually test on Windows first (T547) or are
-low-value cosmetic (T549).
+**31 of 32 done as of 2026-09-20** — everything except T547, which is
+the one item in the entire run that genuinely can't be done responsibly
+without a Windows machine or CI: novel `cmd.exe`/PowerShell quoting
+logic, not just a compile-time cfg branch, so "looks right" isn't
+enough confidence to ship on faith. T548 and T549 (the run's other two
+Windows findings) *were* safe to land blind — both pure, additive,
+non-branching changes (a feature flag plus a proven-identical API
+reuse; a portability rewrite with no OS-specific code at all) that this
+session could actually verify. T547 needed real quoting logic to get
+right, which this session could not verify — that's the whole
+difference, not "some Windows work got done and some didn't."
 
 ### Duplication / DRY
 
@@ -5009,7 +5013,7 @@ case-insensitive filesystems correctly).
   purpose is exactly this one-API/pluggable-backend shape — but this is
   a real, honestly-acknowledged verification gap, not a claim of
   Windows testing that didn't happen.
-- [ ] **T549 — Workspace Dashboard's disk-usage stat shells out to
+- [x] **T549 — Workspace Dashboard's disk-usage stat shells out to
   `du`, unavailable on Windows; fails silently (cosmetic, not a
   crash).** `src/app.rs:10872-10883`: `Command::new("du").arg("-sh")...`
   inside `if let Ok(out) = ... { }`, so on Windows the Dashboard's
@@ -5018,6 +5022,28 @@ case-insensitive filesystems correctly).
   pure-Rust recursive size sum (`walkdir` + `Metadata::len()`, both
   already dependencies elsewhere) so it works identically on every
   platform instead of shelling out at all. Small effort, low value.
+  **Done 2026-09-20.** Unlike T547 (genuinely Windows-specific shell/
+  quoting logic that needs real Windows testing to have confidence in),
+  this is pure filesystem code with no OS branch at all — fully
+  verifiable right here. New `dir_size(dir: &Path) -> u64` mirrors the
+  sibling `count_files`'s own hand-rolled recursive `std::fs::read_dir`
+  walk exactly (same `.git`/`target` skip, same best-effort-on-unreadable
+  shape) rather than pulling in `walkdir` as the task's own text
+  suggested — the existing local idiom already does the job with zero
+  new dependencies. Formatted via `vix_byte_size::human_bytes` (T521),
+  matching how every other size figure in the app is already shown,
+  rather than trying to preserve `du -sh`'s particular output style.
+  Extended the existing dashboard integration test (previously only
+  waited for/checked `file_count`) to also wait for and assert on
+  `disk_usage`, catching the exact byte count of two known-size fixture
+  files. No CHANGELOG entry (T309: the Windows case goes from "silently
+  broken" to "working" — user-visible there, but this session can't
+  verify it firsthand — while on macOS/Linux the only visible change is
+  a cosmetic reformat from `du`'s `"128M"`-style to `"128.0 MiB"`-style,
+  neither significant enough alone). Verified: `cargo clippy --workspace
+  --all-targets -- -D warnings` and `RUSTDOCFLAGS="-D warnings" cargo
+  doc --workspace --no-deps` both clean; the extended integration test
+  passes; full `scripts/check` green.
 
 ---
 
