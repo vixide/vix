@@ -118,8 +118,8 @@ impl Session {
     /// exit as soon as it can, rather than run to completion (which, for a
     /// genuinely hung network read, may be never) — Run H, T532. The worker
     /// notices even while blocked inside a single `.await` on the stream
-    /// (unlike dropping [`Self::req_tx`] alone, which only unblocks a worker
-    /// that's back at `req_rx.recv()` between statements).
+    /// (unlike dropping the request channel alone, which only unblocks a
+    /// worker that's back at `req_rx.recv()` between statements).
     ///
     /// A one-way, **sticky** signal meant to precede giving up on the
     /// session entirely ([`restart`](Session::restart), or the host
