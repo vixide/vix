@@ -712,6 +712,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A genuine settings-file syntax error (not a missing file — that's
+  fine) used to silently reset everything to defaults, with zero
+  notification** (found by a codebase self-audit, T537): a real parse
+  failure in an existing `config.toml` is now reported once the editor
+  starts, instead of quietly losing the theme, keybindings, and every
+  other setting.
 - **A rejected debugger request (an invalid breakpoint, a step that
   isn't valid in the current state, …) used to just silently do
   nothing** (found by a codebase self-audit, T536): the status line

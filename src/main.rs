@@ -54,7 +54,16 @@ fn main() -> io::Result<()> {
     // the user had on their pasteboard.
     vix::clipboard::use_system();
 
-    let settings = Settings::load();
+    // T537 (Run H): `Settings::load()`'s own fallback silently discarded a
+    // genuine load failure (a missing file is *not* one -- `confy` already
+    // returns/writes `Settings::default()` transparently for that case, so
+    // an `Err` here always means something real, e.g. a TOML syntax error in
+    // an existing file). Caught here instead, so `app.warn_settings_load_
+    // failed` can report it once the `App` (and its message drawer) exists.
+    let (settings, settings_load_error) = match Settings::try_load() {
+        Ok(s) => (s, None),
+        Err(e) => (Settings::default(), Some(e.to_string())),
+    };
 
     // A `--locale` flag wins over the persisted setting, but is not saved back.
     let locale = cli
@@ -65,6 +74,9 @@ fn main() -> io::Result<()> {
 
     let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let mut app = App::new(root, settings);
+    if let Some(e) = settings_load_error {
+        app.warn_settings_load_failed(&e);
+    }
     // `refresh_git` shells out to `git` (repo?/branch/status, each its own
     // subprocess) -- moved below the first frame (T122; it alone measured
     // ~82ms of a ~96ms cold start, `App::new` itself only ~10ms). `App`'s

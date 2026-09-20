@@ -44,6 +44,18 @@ impl App {
         }
     }
 
+    /// Report that `Settings::try_load` failed before this `App` existed, so
+    /// `main` can hand off what it caught (Run H, T537). `App::new` already
+    /// received `Settings::default()` in that case (the caller's own
+    /// fallback) — this only queues the message explaining why, called once,
+    /// right after construction, before the first frame.
+    pub fn warn_settings_load_failed(&mut self, error: &str) {
+        self.messages.push(
+            crate::messages::Level::Warn,
+            t!("msg.settings_load_failed", error = error).to_string(),
+        );
+    }
+
     /// Persist this app's settings to `path` instead of the user's config
     /// directory. Builder form of [`App::settings_path`], for tests and
     /// embedders that need an isolated config file.
