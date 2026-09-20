@@ -4057,16 +4057,17 @@ quality, and cross-platform (Windows) correctness. Two genuine
 correctness bugs turned up (T518, T535 below), not just style/maintenance
 debt. Grouped by source pass; ranked by value/effort within each group.
 
-**15 of 32 done as of 2026-09-19** (T518, T519, T521, T522, T524, T533,
-T534, T535, T539, T541, T542, T544, T545, T546, T548) — every item with
-no architectural risk and no external dependency this session couldn't
-provide (a Windows machine/CI, careful multi-session design work). What
-remains is real, scoped, and ranked, not vague: two more mechanical
-dedups (T520, T523 — test-only), several medium-effort message/error-
-structuring fixes needing more design care (T525–T530, T536–T538, T540,
-T543), the two DB-connect concurrency findings (T531, T532 — T531 is
-explicitly the highest-severity single finding of this whole run, but
-deliberately not rushed), and two Windows items that need a way to
+**23 of 32 done as of 2026-09-20** (T518–T525, T528, T533–T537, T539–T546,
+T548) — every item with no architectural risk and no external dependency
+this session couldn't provide (a Windows machine/CI, careful multi-session
+design work, or an explicit product decision). What remains is real,
+scoped, and ranked, not vague: one item needing a product decision this
+session shouldn't make unilaterally (T526 — `wrap_line` over-long-word
+behavior), two more dedups needing a small trait/wider locale sweep
+(T527, T529–T530), the two DB-connect concurrency findings (T531, T532 —
+T531 is explicitly the highest-severity single finding of this whole run,
+but deliberately not rushed), a large cross-cutting error-structuring
+item (T538), and two Windows items that need a way to
 actually test on Windows first (T547) or are low-value cosmetic (T549).
 
 ### Duplication / DRY
@@ -4245,11 +4246,32 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   Arguably intentional (same feature surfaced at two menu locations),
   but the whole sentence is duplicated per locale, not a short word.
   Medium effort (touches ~15 languages × 4 pairs).
-- [ ] **T528 — `stage_hunk`/`unstage_hunk` share ~20 lines of identical
+- [x] **T528 — `stage_hunk`/`unstage_hunk` share ~20 lines of identical
   setup and an identical `stage_content` dispatch/report tail; only the
   middle (staging vs. unstaging logic) genuinely differs.**
   `src/app/git.rs:524-579` and `:585-639`. Medium effort — the shared
   edges are easy to extract, the middle needs care not to conflate.
+  **Done 2026-09-20**: extracted the shared preamble into
+  `App::active_hunk_context(&mut self, failed_key: &str) -> Option<(Hunk,
+  PathBuf, String, String)>` (hunk, path, rel, current) — built on the
+  existing `active_hunks()` helper, resolving the cursor's hunk, its
+  file's absolute path/relative-to-root path/current text, or setting the
+  "outside workspace" status (keyed per-caller) and returning `None`. Kept
+  `path` in the tuple (not just `rel`) even though only `stage_hunk` needs
+  it (for the `git_head_cache` fallback lookup) — harmless for
+  `unstage_hunk` to ignore, and simpler than two near-identical helpers.
+  Extracted the shared tail into `App::apply_hunk_index(&mut self, rel:
+  &str, new_index: &str, ok_key: &str, err_key: &str)`, mirroring
+  `stage_content`'s dispatch/refresh/report pattern used by both. The
+  middle (the actual staging-math vs. unstaging-math, which genuinely
+  differs) was left untouched in each function. No behavior change, no
+  new locale keys, no CHANGELOG entry (pure internal dedup, per T309's
+  rule). Verified: `cargo clippy -p vix --all-targets -- -D warnings`
+  clean; the three existing integration tests
+  (`stage_hunk_stages_only_the_cursor_hunk`,
+  `unstage_hunk_removes_the_cursor_hunk_from_index`,
+  `revert_hunk_restores_committed_text`) still pass unchanged; full
+  `scripts/check` green.
 - [ ] **T529 — `src/app/picker_panels.rs`: near-identical key/mouse
   dispatch duplicated across 4 list panels (~120 lines).** `ascii_mouse`
   (148-163), `x11_mouse` (228-243), `media_type_mouse` (461-476) are

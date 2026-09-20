@@ -13,7 +13,7 @@
 
 #![warn(clippy::pedantic)]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 
@@ -552,14 +552,20 @@ impl App {
         }
     }
 
-    /// Stage just the hunk under the cursor into the git index, leaving the rest
-    /// of the file's changes unstaged and the working tree untouched. Safe: it
-    /// only stages when the index still matches HEAD for the hunk's region.
-    fn stage_hunk(&mut self) {
+    /// Resolve the hunk under the cursor plus its file's absolute path and
+    /// current content, or set a status message (keyed on `failed_key` for
+    /// the "outside workspace" case) and return `None`. Extracted after this
+    /// ~20-line preamble was found duplicated in `stage_hunk`/`unstage_hunk`
+    /// (Run H, T528) — the hunk-math each does with the result still differs
+    /// enough to stay in each caller.
+    fn active_hunk_context(
+        &mut self,
+        failed_key: &str,
+    ) -> Option<(crate::git::Hunk, PathBuf, String, String)> {
         let hunks = self.active_hunks();
         if hunks.is_empty() {
             self.status = t!("status.no_changes").to_string();
-            return;
+            return None;
         }
         let line = self
             .editor
@@ -567,20 +573,42 @@ impl App {
             .map_or(0, |t| t.editor.cursor_line());
         let Some(hunk) = hunks.into_iter().find(|h| h.contains(line)) else {
             self.status = t!("status.no_hunk").to_string();
-            return;
+            return None;
         };
-        let Some((path, current)) = self
+        let (path, current) = self
             .editor
             .active_tab()
-            .and_then(|t| t.path.clone().map(|p| (p, t.text())))
+            .and_then(|t| t.path.clone().map(|p| (p, t.text())))?;
+        let Ok(rel) = path.strip_prefix(&self.root) else {
+            self.status = t!(failed_key, error = "outside workspace").to_string();
+            return None;
+        };
+        let rel = rel.to_string_lossy().replace('\\', "/");
+        Some((hunk, path, rel, current))
+    }
+
+    /// Write `new_index` as `rel`'s index content, reporting success via
+    /// `ok_key` or failure via `err_key` (with git's own error). Extracted
+    /// after this tail was found duplicated in `stage_hunk`/`unstage_hunk`
+    /// (Run H, T528).
+    fn apply_hunk_index(&mut self, rel: &str, new_index: &str, ok_key: &str, err_key: &str) {
+        match crate::git::stage_content(&self.root, rel, new_index) {
+            Ok(()) => {
+                self.refresh_git();
+                self.status = t!(ok_key).to_string();
+            }
+            Err(e) => self.status = t!(err_key, error = e).to_string(),
+        }
+    }
+
+    /// Stage just the hunk under the cursor into the git index, leaving the rest
+    /// of the file's changes unstaged and the working tree untouched. Safe: it
+    /// only stages when the index still matches HEAD for the hunk's region.
+    fn stage_hunk(&mut self) {
+        let Some((hunk, path, rel, current)) = self.active_hunk_context("status.stage_hunk_failed")
         else {
             return;
         };
-        let Ok(rel) = path.strip_prefix(&self.root) else {
-            self.status = t!("status.stage_hunk_failed", error = "outside workspace").to_string();
-            return;
-        };
-        let rel = rel.to_string_lossy().replace('\\', "/");
         // Base the new index content on the currently-staged version (== HEAD
         // when nothing is staged yet), so other hunks stay unstaged.
         let base = crate::git::index_blob(&self.root, &rel)
@@ -603,13 +631,12 @@ impl App {
         let mut new_index = base_lines[..hunk.head_start].concat();
         new_index.push_str(&added);
         new_index.push_str(&base_lines[hunk.head_start + head_count..].concat());
-        match crate::git::stage_content(&self.root, &rel, &new_index) {
-            Ok(()) => {
-                self.refresh_git();
-                self.status = t!("status.hunk_staged").to_string();
-            }
-            Err(e) => self.status = t!("status.stage_hunk_failed", error = e).to_string(),
-        }
+        self.apply_hunk_index(
+            &rel,
+            &new_index,
+            "status.hunk_staged",
+            "status.stage_hunk_failed",
+        );
     }
 
     /// Unstage just the hunk under the cursor from the git index, leaving the
@@ -617,31 +644,11 @@ impl App {
     /// mirror of [`App::stage_hunk`]: safe — it only unstages when the hunk's
     /// working-tree lines are present in the index at the expected position.
     fn unstage_hunk(&mut self) {
-        let hunks = self.active_hunks();
-        if hunks.is_empty() {
-            self.status = t!("status.no_changes").to_string();
-            return;
-        }
-        let line = self
-            .editor
-            .active_tab()
-            .map_or(0, |t| t.editor.cursor_line());
-        let Some(hunk) = hunks.into_iter().find(|h| h.contains(line)) else {
-            self.status = t!("status.no_hunk").to_string();
-            return;
-        };
-        let Some((path, current)) = self
-            .editor
-            .active_tab()
-            .and_then(|t| t.path.clone().map(|p| (p, t.text())))
+        let Some((hunk, _path, rel, current)) =
+            self.active_hunk_context("status.unstage_hunk_failed")
         else {
             return;
         };
-        let Ok(rel) = path.strip_prefix(&self.root) else {
-            self.status = t!("status.unstage_hunk_failed", error = "outside workspace").to_string();
-            return;
-        };
-        let rel = rel.to_string_lossy().replace('\\', "/");
         // The index must currently carry this hunk's working-tree lines (i.e. it
         // is staged); replacing them with the committed text removes it.
         let Some(base) = crate::git::index_blob(&self.root, &rel) else {
@@ -663,13 +670,12 @@ impl App {
         let mut new_index = base_lines[..hunk.head_start].concat();
         new_index.push_str(&hunk.head_text);
         new_index.push_str(&base_lines[hunk.head_start + added_count..].concat());
-        match crate::git::stage_content(&self.root, &rel, &new_index) {
-            Ok(()) => {
-                self.refresh_git();
-                self.status = t!("status.hunk_unstaged").to_string();
-            }
-            Err(e) => self.status = t!("status.unstage_hunk_failed", error = e).to_string(),
-        }
+        self.apply_hunk_index(
+            &rel,
+            &new_index,
+            "status.hunk_unstaged",
+            "status.unstage_hunk_failed",
+        );
     }
 
     /// Whether the working tree has uncommitted changes (derived from the cached
