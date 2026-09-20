@@ -98,10 +98,12 @@ const PALETTES: &[Palette] = &[
 ];
 
 /// Convert a 6-digit hex string to a JSON `[r, g, b]` array. Falls back to black
-/// for malformed input (the palettes above are all well-formed).
+/// for malformed input (the palettes above are all well-formed). Delegates to
+/// `vix-hex-rgb` (Run H, T530) -- this crate and `vix-editor-core` used to
+/// each hand-roll an identical lenient hex parser.
 fn rgb(hex: &str) -> String {
-    let byte = |i: usize| u8::from_str_radix(hex.get(i..i + 2).unwrap_or("00"), 16).unwrap_or(0);
-    format!("[{}, {}, {}]", byte(0), byte(2), byte(4))
+    let (r, g, b) = vix_hex_rgb::rgb(hex);
+    format!("[{r}, {g}, {b}]")
 }
 
 /// Render one palette to the bundled theme JSON schema (see `themes/*.json`),

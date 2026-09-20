@@ -6,8 +6,6 @@
 //! `poll_ai_replace` have had at all (Annotate/Improve/Summarize/Explain/
 //! Define had none before this).
 
-use std::time::{Duration, Instant};
-
 use crate::common::*;
 
 /// Build an app whose `ai_command` ignores its input and always prints
@@ -22,20 +20,7 @@ fn app_with_canned_ai_reply(dir: &Path, output: &str, ai_diff_review: bool) -> A
         },
         ..Settings::default()
     };
-    let mut app = App::new(dir.to_path_buf(), settings).with_session_path(isolated_session_path());
-    app.layout.editor = Rect::new(0, 0, 80, 24);
-    app
-}
-
-/// Poll `App::poll_ai_replace` until `pred` holds, or fail after 5 seconds --
-/// generous for a local `sh -c printf`, which finishes in well under that.
-fn wait_for(app: &mut App, mut pred: impl FnMut(&App) -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while Instant::now() < deadline && !pred(app) {
-        app.poll_ai_replace();
-        std::thread::sleep(Duration::from_millis(10));
-    }
-    assert!(pred(app), "timed out waiting for the AI task to finish");
+    app_at_with(dir, settings)
 }
 
 #[test]
@@ -70,7 +55,7 @@ fn edit_with_instruction_runs_the_typed_text_and_always_opens_a_diff() {
     }
     app.on_key(keycode(KeyCode::Enter));
 
-    wait_for(&mut app, |app| app.ai_diff_review().is_some());
+    wait_for_ai_replace(&mut app, |app| app.ai_diff_review().is_some());
     assert_eq!(app.ai_diff_review().unwrap().result(), "REPLACED");
     // The buffer itself is untouched until the diff is accepted.
     assert_eq!(
@@ -88,7 +73,7 @@ fn generate_doc_comment_inserts_just_above_the_cursor_line() {
     buffer_with(&mut app, "fn foo() {}\n", 0);
 
     app.run_action("ai.generate_doc_comment");
-    wait_for(&mut app, |app| {
+    wait_for_ai_replace(&mut app, |app| {
         app.editor.active_tab().unwrap().editor.get_content() != "fn foo() {}\n"
     });
 

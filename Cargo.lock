@@ -5327,6 +5327,7 @@ dependencies = [
  "vix-find-panel",
  "vix-format-tool",
  "vix-git",
+ "vix-hex-rgb",
  "vix-html-character-picker",
  "vix-http-client",
  "vix-i18n",
@@ -5440,6 +5441,7 @@ version = "1.6.0"
 name = "vix-base16"
 version = "1.6.0"
 dependencies = [
+ "vix-hex-rgb",
  "vix-theme-model",
 ]
 
@@ -5777,6 +5779,7 @@ dependencies = [
  "unicode-segmentation",
  "unicode-width 0.2.2",
  "vix-clipboard",
+ "vix-hex-rgb",
 ]
 
 [[package]]
@@ -5843,6 +5846,10 @@ dependencies = [
  "vix-civil-date",
  "vix-list-state",
 ]
+
+[[package]]
+name = "vix-hex-rgb"
+version = "1.6.0"
 
 [[package]]
 name = "vix-html-character-picker"
