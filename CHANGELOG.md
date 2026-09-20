@@ -712,6 +712,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A rejected debugger request (an invalid breakpoint, a step that
+  isn't valid in the current state, …) used to just silently do
+  nothing** (found by a codebase self-audit, T536): the status line
+  now reports the adapter's own reason, mirroring how a failed language
+  server request is already reported.
 - **The JSON/YAML editor's "not valid JSON or YAML" message now says
   what's actually wrong and where** (found by a codebase self-audit,
   T543): it used to be one static message regardless of the real

@@ -89,6 +89,12 @@ pub enum DapEvent {
     },
     /// The session ended.
     Terminated,
+    /// A request the adapter rejected (e.g. an invalid breakpoint, a step
+    /// that isn't valid in the current state): the command name and, when
+    /// the adapter provided one, its own reason (Run H, T536 — every request
+    /// but `evaluate`, which already reports its own failure inline, used to
+    /// have this silently discarded).
+    RequestFailed(String),
 }
 
 /// Messages from the reader thread.
@@ -107,8 +113,10 @@ enum Pending {
     Variables,
     /// `evaluate` (REPL/watch), carrying the source expression.
     Evaluate(String),
-    /// Any other request whose response needs no special handling.
-    Other,
+    /// Any other request whose response needs no special handling on
+    /// success; carries its command name so a *failure* can still name
+    /// which request it was (Run H, T536).
+    Other(String),
 }
 
 /// One active debug session.
@@ -221,7 +229,11 @@ impl Dap {
             "pathFormat": "path",
             "supportsRunInTerminalRequest": false,
         });
-        session.request("initialize", &init, Pending::Other);
+        session.request(
+            "initialize",
+            &init,
+            Pending::Other("initialize".to_string()),
+        );
         self.session = Some(session);
         true
     }
@@ -232,7 +244,7 @@ impl Dap {
             s.request(
                 "disconnect",
                 &json!({ "terminateDebuggee": true }),
-                Pending::Other,
+                Pending::Other("disconnect".to_string()),
             );
             let _ = s.child.kill();
             let _ = s.child.wait(); // reap so no zombie adapter is left behind
@@ -269,7 +281,11 @@ impl Dap {
             && let Some(tid) = s.thread_id
         {
             s.stopped = false;
-            s.request(command, &json!({ "threadId": tid }), Pending::Other);
+            s.request(
+                command,
+                &json!({ "threadId": tid }),
+                Pending::Other(command.to_string()),
+            );
         }
     }
 
@@ -382,6 +398,17 @@ impl Dap {
         let Some(kind) = s.pending.remove(&id) else {
             return;
         };
+        // A failed request is reported uniformly, whatever it was for --
+        // except `evaluate`, which already shows its own error text inline
+        // in the REPL/watch result below (Run H, T536: every other kind used
+        // to just drop the failure here, with no indication anything had
+        // gone wrong -- a rejected breakpoint or an invalid step just
+        // silently "did nothing").
+        if !success && !matches!(kind, Pending::Evaluate(_)) {
+            let reason = msg.get("message").and_then(Value::as_str);
+            events.push(DapEvent::RequestFailed(failed_request_text(&kind, reason)));
+            return;
+        }
         match kind {
             Pending::StackTrace => {
                 let frames = parse_frames(&body);
@@ -415,7 +442,7 @@ impl Dap {
                 };
                 events.push(DapEvent::Evaluated { expr, result });
             }
-            Pending::Other => {}
+            Pending::Other(_) => {}
         }
     }
 }
@@ -446,8 +473,12 @@ impl Session {
         }
         self.configured = true;
         let launch = self.launch_args.clone();
-        self.request("launch", &launch, Pending::Other);
-        self.request("configurationDone", &json!({}), Pending::Other);
+        self.request("launch", &launch, Pending::Other("launch".to_string()));
+        self.request(
+            "configurationDone",
+            &json!({}),
+            Pending::Other("configurationDone".to_string()),
+        );
     }
 
     /// Send a `setBreakpoints` request for `path` with 1-based `lines`.
@@ -460,7 +491,11 @@ impl Session {
             "source": { "path": path, "name": name },
             "breakpoints": bps,
         });
-        self.request("setBreakpoints", &args, Pending::Other);
+        self.request(
+            "setBreakpoints",
+            &args,
+            Pending::Other("setBreakpoints".to_string()),
+        );
     }
 }
 
@@ -541,6 +576,27 @@ fn parse_variables(body: &Value) -> Vec<Variable> {
         .unwrap_or_default()
 }
 
+/// The text for a failed request's [`DapEvent::RequestFailed`]: the command
+/// name, plus the adapter's own `message` field when it gave one (Run H,
+/// T536). Extracted as a free function (rather than inlined in
+/// `handle_response`) so it's directly testable without a live `Session`.
+fn failed_request_text(kind: &Pending, message: Option<&str>) -> String {
+    let command = match kind {
+        Pending::Other(command) => command.as_str(),
+        Pending::StackTrace => "stackTrace",
+        Pending::Scopes => "scopes",
+        Pending::Variables => "variables",
+        // `handle_response` never calls this for `Evaluate` (it reports its
+        // own failure inline instead) -- kept here only so the match stays
+        // exhaustive if that ever changes.
+        Pending::Evaluate(_) => "evaluate",
+    };
+    match message {
+        Some(reason) if !reason.is_empty() => format!("{command}: {reason}"),
+        _ => command.to_string(),
+    }
+}
+
 /// Background thread: drain framed messages off `wrx` and write them to the
 /// adapter's stdin, so a stalled adapter can never block the UI thread. Exits
 /// when the channel closes (the [`Session`] was dropped) or a write fails.
@@ -581,6 +637,37 @@ fn spawn_reader(mut stdout: std::process::ChildStdout, tx: Sender<Incoming>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_request_text_names_the_command_and_the_adapters_reason() {
+        // T536 (Run H): every DAP request but `evaluate` used to have its
+        // failure silently discarded; this is the text that now reaches the
+        // host as `DapEvent::RequestFailed`.
+        assert_eq!(
+            failed_request_text(&Pending::Other("setBreakpoints".to_string()), None),
+            "setBreakpoints",
+            "no adapter-provided reason: just the command name"
+        );
+        assert_eq!(
+            failed_request_text(
+                &Pending::Other("setBreakpoints".to_string()),
+                Some("invalid line 42")
+            ),
+            "setBreakpoints: invalid line 42",
+            "the adapter's own reason is included"
+        );
+        assert_eq!(
+            failed_request_text(&Pending::Other("next".to_string()), Some("")),
+            "next",
+            "an empty reason string falls back to just the command name"
+        );
+        assert_eq!(
+            failed_request_text(&Pending::StackTrace, None),
+            "stackTrace"
+        );
+        assert_eq!(failed_request_text(&Pending::Scopes, None), "scopes");
+        assert_eq!(failed_request_text(&Pending::Variables, None), "variables");
+    }
 
     #[test]
     fn launch_args_expand_program() {
