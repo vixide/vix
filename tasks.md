@@ -4460,7 +4460,7 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   deleted-out-from-under-it file, one via `#[cfg(unix)]` permission
   bits matching T535's own technique) each force a real failure and
   check the specific path appears in the message, not just the error.
-- [ ] **T540 — `vix-git::stage`/`unstage` return a bare `bool`,
+- [x] **T540 — `vix-git::stage`/`unstage` return a bare `bool`,
   discarding git's real stderr — inconsistent with their own sibling.**
   `crates/vix-git/src/lib.rs:498-500,568-571` collapse the command
   result to `bool`; the caller (`src/app/git.rs:744-747`) can only show
@@ -4469,6 +4469,21 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   right — `Result<(), String>` with the real stderr — this is an
   internal inconsistency, not a systemic constraint. Medium/large
   effort (touches the function signatures and both call sites' i18n).
+  **Done 2026-09-20**, turned out smaller than scoped: `src/app/git.rs`
+  already had a second sibling, `git_op` (stash/stash-pop/amend),
+  reporting exactly this shape via an existing `msg.git_failed_reason`
+  key — `git_stage_selected` just hadn't been converted to match when
+  those were added. `stage`/`unstage` now return `Result<(), String>`
+  like `stage_content`; the one call site mirrors `git_op`'s identical
+  `Err` arm. The now-fully-unused `msg.git_failed` key (its only two
+  remaining references were comments) was removed from all 15 locales
+  rather than left as dead cruft. New `vix-git` unit test runs both
+  functions against a plain non-repo directory (deterministic, no
+  fixture needed) and confirms a real, non-empty git-provided message
+  comes back. `git_panel_stages_and_commits` (the real staging/
+  unstaging integration test) and the full `vix-git` suite (26 tests)
+  still pass; `cargo test --test i18n_keys` confirms nothing still
+  references the removed key.
 - [x] **T541 — `ensure_speller` discards a well-designed 3-variant
   `Error` enum, going "silently inert" exactly as its own doc comment
   admits — but that admission never reaches the user.** `src/app.rs:

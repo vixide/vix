@@ -771,13 +771,17 @@ impl App {
         let Some(path) = self.git_selected_path() else {
             return;
         };
-        let ok = if stage {
+        let result = if stage {
             crate::git::stage(&self.root, &path)
         } else {
             crate::git::unstage(&self.root, &path)
         };
-        if !ok {
-            self.messages.error(t!("msg.git_failed").to_string());
+        // T540 (Run H): mirrors `git_op`'s identical `Err` handling above --
+        // `stage`/`unstage` used to collapse to a bare `bool`, so this could
+        // only show the generic, non-interpolated `msg.git_failed`.
+        if let Err(e) = result {
+            self.messages
+                .error(t!("msg.git_failed_reason", error = e).to_string());
         }
         self.refresh_git();
         self.clamp_git_selection();

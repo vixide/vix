@@ -712,6 +712,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Stage/unstage failures in the Git panel showed a generic "Git
+  command failed" with no reason** (found by a codebase self-audit,
+  T540): now shows git's own message, matching how a stash/amend
+  failure was already reported.
 - **A genuine settings-file syntax error (not a missing file — that's
   fine) used to silently reset everything to defaults, with zero
   notification** (found by a codebase self-audit, T537): a real parse
