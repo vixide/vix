@@ -537,19 +537,49 @@ impl Default for Settings {
 
 impl Settings {
     /// Load settings from the user's config directory, falling back to
-    /// [`Settings::default`] on any error (missing file, parse failure, …).
+    /// [`Settings::default`] on any error (missing file, parse failure, …)
+    /// and discarding it. Prefer [`Settings::try_load`] when the caller can
+    /// report a failure to the user; this exists for callers (tests, simple
+    /// embedders) that don't need to.
     #[must_use]
     pub fn load() -> Settings {
-        confy::load(APP_NAME, Some(CONFIG_NAME)).unwrap_or_default()
+        Self::try_load().unwrap_or_default()
+    }
+
+    /// Load settings from the user's config directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns the underlying error only for a genuine failure — a *missing*
+    /// file is not one of them (`confy` transparently returns
+    /// [`Settings::default`] and writes it out for next time); this fires
+    /// only for something like a real TOML syntax error in an existing file
+    /// (Run H, T537), meaning the user's actual settings are about to be
+    /// silently discarded in favor of defaults unless the caller reports it.
+    pub fn try_load() -> Result<Settings, confy::ConfyError> {
+        confy::load(APP_NAME, Some(CONFIG_NAME))
     }
 
     /// Load settings from an explicit file, falling back to
-    /// [`Settings::default`] on any error (missing file, parse failure, …).
-    /// Used by tests and embedders that keep a config outside the user's config
-    /// directory; [`Settings::load`] is the normal entry point.
+    /// [`Settings::default`] on any error (missing file, parse failure, …)
+    /// and discarding it. Used by tests and embedders that keep a config
+    /// outside the user's config directory; [`Settings::load`] is the normal
+    /// entry point. Prefer [`Settings::try_load_from`] when the caller can
+    /// report a failure.
     #[must_use]
     pub fn load_from(path: &std::path::Path) -> Settings {
-        confy::load_path(path).unwrap_or_default()
+        Self::try_load_from(path).unwrap_or_default()
+    }
+
+    /// [`Settings::load_from`], reporting a genuine failure instead of
+    /// discarding it — see [`Settings::try_load`]'s doc comment for what
+    /// counts as one (a missing file does not).
+    ///
+    /// # Errors
+    ///
+    /// Returns the underlying error on a genuine load failure.
+    pub fn try_load_from(path: &std::path::Path) -> Result<Settings, confy::ConfyError> {
+        confy::load_path(path)
     }
 
     /// The string Tab inserts: a tab character for `indent_style = "tabs"`, else
@@ -860,6 +890,33 @@ theme = "light"
             s.subsystems.lsp_enabled,
             SubsystemSettings::default().lsp_enabled
         );
+    }
+
+    #[test]
+    fn try_load_from_distinguishes_a_missing_file_from_a_genuine_parse_error() {
+        // T537 (Run H): a missing file must still transparently succeed
+        // (confy writes out the default for next time) -- only a real parse
+        // failure in a file that exists is a genuine error worth reporting.
+        let dir = std::env::temp_dir().join(format!("vix-settings-tryload-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let missing = dir.join("does-not-exist.toml");
+        assert!(
+            Settings::try_load_from(&missing).is_ok(),
+            "a missing file is not an error"
+        );
+
+        let broken = dir.join("broken.toml");
+        std::fs::write(&broken, "theme = [this is not valid toml").unwrap();
+        let err = Settings::try_load_from(&broken)
+            .expect_err("a real TOML syntax error must be reported, not silently defaulted");
+        assert!(
+            err.to_string().to_lowercase().contains("toml"),
+            "the error names what actually went wrong: {err}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A full round trip (`Settings::default()` saved, then reloaded)

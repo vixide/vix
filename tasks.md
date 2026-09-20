@@ -4395,7 +4395,7 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   `status.lsp_request_failed` exactly (`"Debugger: %{message}"`, same
   as `"Language server: %{message}"`), surfaced in `src/app.rs`'s
   `DapEvent` match arm right next to the LSP one it mirrors.
-- [ ] **T537 — A settings-file syntax error silently resets everything
+- [x] **T537 — A settings-file syntax error silently resets everything
   to defaults on next launch, with zero notification.**
   `crates/vix-settings/src/lib.rs:541-543`: `pub fn load() -> Settings {
   confy::load(APP_NAME, Some(CONFIG_NAME)).unwrap_or_default() }` — a
@@ -4404,7 +4404,22 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   distinguish "file doesn't exist yet" (fine, use defaults silently)
   from "file exists but failed to parse" (queue a warning message
   naming the parse error) — `confy`'s error type should let these be
-  told apart. Medium effort.
+  told apart. Medium effort. **Done 2026-09-20**: reading `confy`'s own
+  source settled the distinction for free — a missing file was never
+  actually an `Err` to begin with (`confy::load_path` catches
+  `NotFound` internally and transparently returns/writes
+  `Settings::default()`), so every real `Err` already means a genuine
+  failure; no manual "which case is this" logic was needed. New
+  `Settings::try_load`/`try_load_from` (kept `load`/`load_from` as
+  thin discard-the-error wrappers, only `main.rs` cared about the
+  error) plus `App::warn_settings_load_failed` — called once, right
+  after `App::new`, well before the first frame, so (unlike T544's
+  post-`ratatui::restore()` case) the message drawer can show it
+  normally, no `eprintln!` fallback needed here. New test loads a
+  missing file (must succeed) and a file with real broken TOML (must
+  report a real error naming "toml") from the same helper, proving the
+  distinction holds without ever touching the real user config
+  directory.
 - [ ] **T538 — `sqlx::Error`'s structured detail is flattened to a bare
   `String` inside the DB worker thread, before it ever crosses back to
   the UI.** `crates/vix-db/src/session.rs:236,280,187` all do `.map_err
