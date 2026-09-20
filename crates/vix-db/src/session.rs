@@ -46,8 +46,97 @@ pub enum Chunk {
     Rows(Vec<Vec<String>>),
     /// The statement finished; `true` if it was truncated at [`MAX_ROWS`].
     Done(bool),
-    /// The statement failed, with a display-ready message.
-    Err(String),
+    /// The statement failed.
+    Err(QueryError),
+}
+
+/// A query's failure, classified enough to let the host react differently to
+/// a lost connection, a constraint violation, or a plain database/other error
+/// — instead of one opaque string (Run H, T538). `Display`s as `message`, so
+/// every existing "just show the text" call site keeps working unchanged.
+#[derive(Debug, Clone)]
+pub struct QueryError {
+    /// Display-ready message — what a bare `String` used to carry.
+    pub message: String,
+    /// A rough classification of what went wrong.
+    pub kind: QueryErrorKind,
+    /// The driver's raw error code, when it provides one (e.g. Postgres's
+    /// SQLSTATE), for callers that want more than the coarse `kind`.
+    pub code: Option<String>,
+}
+
+/// A rough classification of a [`QueryError`] — coarse buckets a host can
+/// react to (offering a reconnect for a lost connection, highlighting a row
+/// for a constraint violation, …) without parsing the display message. Own
+/// copy of the constraint variants `sqlx::error::ErrorKind` already
+/// distinguishes, rather than reusing that type directly, so this type (and
+/// [`Chunk`], which carries it) can stay `Clone` — `sqlx::error::ErrorKind`
+/// isn't.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueryErrorKind {
+    /// The connection itself is gone (an I/O error talking to the server).
+    ConnectionLost,
+    /// A unique/primary key constraint was violated.
+    UniqueViolation,
+    /// A foreign key constraint was violated.
+    ForeignKeyViolation,
+    /// A not-null constraint was violated.
+    NotNullViolation,
+    /// A check constraint was violated.
+    CheckViolation,
+    /// An exclusion constraint was violated.
+    ExclusionViolation,
+    /// The database rejected the statement for some other reason (a syntax
+    /// error, an unknown column, …), or the driver didn't classify it.
+    Database,
+    /// Anything else (a disconnected channel, a non-`sqlx::Error` failure, …).
+    Other,
+}
+
+impl std::fmt::Display for QueryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl QueryError {
+    /// Classify a driver error and capture its display message in one step.
+    fn from_sqlx(e: &sqlx::Error) -> QueryError {
+        let (kind, code) = match e {
+            sqlx::Error::Io(_) => (QueryErrorKind::ConnectionLost, None),
+            sqlx::Error::Database(db_err) => {
+                let kind = match db_err.kind() {
+                    sqlx::error::ErrorKind::UniqueViolation => QueryErrorKind::UniqueViolation,
+                    sqlx::error::ErrorKind::ForeignKeyViolation => {
+                        QueryErrorKind::ForeignKeyViolation
+                    }
+                    sqlx::error::ErrorKind::NotNullViolation => QueryErrorKind::NotNullViolation,
+                    sqlx::error::ErrorKind::CheckViolation => QueryErrorKind::CheckViolation,
+                    sqlx::error::ErrorKind::ExclusionViolation => {
+                        QueryErrorKind::ExclusionViolation
+                    }
+                    _ => QueryErrorKind::Database,
+                };
+                (kind, db_err.code().map(std::borrow::Cow::into_owned))
+            }
+            _ => (QueryErrorKind::Other, None),
+        };
+        QueryError {
+            message: e.to_string(),
+            kind,
+            code,
+        }
+    }
+
+    /// A disconnected-channel or other non-`sqlx::Error` failure, with no
+    /// finer classification available.
+    fn other(message: impl Into<String>) -> QueryError {
+        QueryError {
+            message: message.into(),
+            kind: QueryErrorKind::Other,
+            code: None,
+        }
+    }
 }
 
 /// Registers sqlx's `Any` drivers exactly once per process.
@@ -154,7 +243,7 @@ impl Session {
             Ok(chunk) => Some(chunk),
             Err(mpsc::TryRecvError::Empty) => None,
             Err(mpsc::TryRecvError::Disconnected) => {
-                Some(Chunk::Err(t!("msg.db_not_connected").to_string()))
+                Some(Chunk::Err(QueryError::other(t!("msg.db_not_connected"))))
             }
         }
     }
@@ -195,7 +284,7 @@ impl Session {
                 Chunk::Head(h) => headers = h,
                 Chunk::Rows(mut batch) => rows.append(&mut batch),
                 Chunk::Done(_) => return Ok((headers, rows)),
-                Chunk::Err(e) => return Err(e),
+                Chunk::Err(e) => return Err(e.to_string()),
             }
         }
     }
@@ -341,7 +430,7 @@ async fn stream_sql(
                     break;
                 }
             }
-            Err(e) => return reply_tx.send(Chunk::Err(e.to_string())).is_ok(),
+            Err(e) => return reply_tx.send(Chunk::Err(QueryError::from_sqlx(&e))).is_ok(),
         }
     }
     drop(stream);
@@ -384,6 +473,23 @@ mod tests {
 
     fn memory() -> Session {
         Session::connect("sqlite::memory:", &[]).expect("in-memory sqlite connects")
+    }
+
+    /// Send `sql` (expected to fail) and return its classified error, via
+    /// the real async `send`/`poll` path — the actual integration point
+    /// `QueryError::from_sqlx` (Run H, T538) is exercised through, not just
+    /// the classifier called directly on a synthetic `sqlx::Error`.
+    fn send_and_expect_err(s: &mut Session, sql: &str) -> QueryError {
+        s.send(sql).unwrap();
+        loop {
+            match s.poll() {
+                Some(Chunk::Err(e)) => return e,
+                Some(Chunk::Head(_) | Chunk::Rows(_) | Chunk::Done(_)) => {
+                    panic!("expected {sql:?} to fail")
+                }
+                None => std::thread::yield_now(),
+            }
+        }
     }
 
     #[test]
@@ -567,5 +673,38 @@ mod tests {
             !err.is_empty(),
             "a bad setup statement surfaces as a connect error"
         );
+    }
+
+    #[test]
+    fn a_unique_constraint_violation_is_classified_not_just_stringified() {
+        let mut s = memory();
+        s.run("CREATE TABLE t (a INTEGER PRIMARY KEY)").unwrap();
+        s.run("INSERT INTO t VALUES (1)").unwrap();
+        let err = send_and_expect_err(&mut s, "INSERT INTO t VALUES (1)");
+        assert_eq!(
+            err.kind,
+            QueryErrorKind::UniqueViolation,
+            "message: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn a_plain_syntax_error_is_classified_as_database_not_a_constraint() {
+        let mut s = memory();
+        let err = send_and_expect_err(&mut s, "SELEKT 1");
+        assert_eq!(
+            err.kind,
+            QueryErrorKind::Database,
+            "message: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn query_error_displays_as_its_message() {
+        // Every existing "just show the text" call site relies on this.
+        let err = QueryError::other("boom");
+        assert_eq!(err.to_string(), "boom");
     }
 }
