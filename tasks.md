@@ -4057,15 +4057,14 @@ quality, and cross-platform (Windows) correctness. Two genuine
 correctness bugs turned up (T518, T535 below), not just style/maintenance
 debt. Grouped by source pass; ranked by value/effort within each group.
 
-**24 of 32 done as of 2026-09-20** (T518–T525, T528–T529, T533–T537,
+**25 of 32 done as of 2026-09-20** (T518–T525, T528–T530, T533–T537,
 T539–T546, T548) — every item with no architectural risk and no external
 dependency this session couldn't provide (a Windows machine/CI, careful
 multi-session design work, or an explicit product decision). What remains
 is real, scoped, and ranked, not vague: one item needing a product
 decision this session shouldn't make unilaterally (T526 — `wrap_line`
-over-long-word behavior), two more dedups (T527 — a ~15-locale help-text
-sweep; T530 — a small low-priority batch), the two DB-connect concurrency
-findings (T531, T532 —
+over-long-word behavior), one more dedup needing a ~15-locale help-text
+sweep (T527), the two DB-connect concurrency findings (T531, T532 —
 T531 is explicitly the highest-severity single finding of this whole run,
 but deliberately not rushed), a large cross-cutting error-structuring
 item (T538), and two Windows items that need a way to
@@ -4302,7 +4301,7 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   full `cargo test --test integration` (548 tests, including the ASCII
   panel, media-type picker, and all 5 theme-editor/x11-picker tests)
   passes unchanged.
-- [ ] **T530 — Minor duplication, low priority.** `rgb(hex)` hex-to-byte
+- [x] **T530 — Minor duplication, low priority.** `rgb(hex)` hex-to-byte
   parsing duplicated in `crates/vix-editor-core/src/utils.rs:88-99` and
   `crates/vix-base16/src/lib.rs:99-103` (same lenient policy; not
   `vix-color-converter-tool::from_hex`, a deliberately stricter public
@@ -4314,6 +4313,41 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   duplicated once — promote `wait_for` to `common.rs`, add `app_at_
   with(root, settings)`. All small effort, low individual value; batch
   together if picked up.
+  **Done 2026-09-20**: 3 of the 4 sub-items landed; the 4th was
+  investigated and correctly rejected.
+  - `rgb(hex)`: new tiny crate `vix-hex-rgb` (`rgb(hex: &str) -> (u8, u8,
+    u8)`), matching the precedent set by T520/T521/T525's crates this
+    run. Both `vix-editor-core::utils::rgb` and `vix-base16::rgb` now
+    delegate to it (the latter just reformats the tuple into its
+    `"[r, g, b]"` JSON string). Crate count 119→120.
+  - Test helpers: added `app_at_with(root, settings)` and
+    `wait_for_ai_replace(app, pred)` to `tests/integration/common.rs`
+    exactly as scoped; `ai.rs`'s `app_with_canned_ai_reply` now builds on
+    `app_at_with` instead of repeating `App::new`/`with_session_path`/
+    `layout.editor`, and both `ai.rs` and `git.rs` now call the shared
+    `wait_for_ai_replace` instead of each keeping (or, in `git.rs`'s
+    case, inlining) their own copy of the same 5-second poll loop.
+  - **Picker footer hint strings: investigated, NOT merged.** The
+    original finding claimed `ui.snippets_hint`/`ui.media_types_hint`
+    and `ui.tasks_hint`/`ui.scripts_hint` are duplicated "verbatim" —
+    true only for English. A full per-locale diff
+    (`locales/ui.yml`) found real, independent divergence: `de`/`pl`/
+    `ja` differ between `snippets_hint`/`media_types_hint` ("Filter" vs.
+    "Filter tippen", "ruch" vs. "przesuń", missing vs. present "入力"),
+    and `de`/`hi` differ between `tasks_hint`/`scripts_hint` ("wählen"
+    vs. "auswählen", a Hindi diacritic). Merging would have silently
+    overwritten those already-distinct translations with one locale's
+    wording for both contexts — a real user-visible regression, not a
+    cleanup. Left as four separate keys; corrected here rather than
+    silently either merging (an unreviewed translation change) or
+    skipping without explanation.
+  No CHANGELOG entry (pure internal dedup, per T309's rule) except the
+  new crate itself is still an internal-only refactor with no
+  user-visible behavior change either. Verified: `cargo clippy --workspace
+  --all-targets -- -D warnings` clean; `cargo test --workspace` fully
+  green (every crate, including the two new `vix-hex-rgb` unit tests);
+  `scripts/check-docs` confirms the new crate's spec/description/crate-map
+  entry are all consistent (120 crates).
 
 ### Concurrency / threading correctness
 

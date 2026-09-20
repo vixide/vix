@@ -87,16 +87,12 @@ pub fn count_indent_units(
 
 /// Parse a `#RRGGBB` (or `RRGGBB`) hex string into an `(r, g, b)` triple.
 ///
-/// Any component that is missing or invalid is treated as `0`.
+/// Any component that is missing or invalid is treated as `0`. Delegates to
+/// `vix-hex-rgb` (Run H, T530) -- this crate and `vix-base16` used to each
+/// hand-roll an identical lenient hex parser.
 #[must_use]
 pub fn rgb(hex: &str) -> (u8, u8, u8) {
-    let hex = hex.trim_start_matches('#');
-    let component = |range: std::ops::Range<usize>| {
-        hex.get(range)
-            .and_then(|s| u8::from_str_radix(s, 16).ok())
-            .unwrap_or(0)
-    };
-    (component(0..2), component(2..4), component(4..6))
+    vix_hex_rgb::rgb(hex)
 }
 
 /// Calculate end position by walking through the text

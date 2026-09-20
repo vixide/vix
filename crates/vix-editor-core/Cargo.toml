@@ -42,6 +42,7 @@ anyhow = { workspace = true }
 bitflags = { workspace = true }
 crossterm = { workspace = true }
 vix-clipboard = { path = "../vix-clipboard", version = "1.5.0" }
+vix-hex-rgb = { path = "../vix-hex-rgb", version = "1.6.0" }
 getrandom = { workspace = true }
 ratatui-core = { workspace = true }
 ropey = { workspace = true }

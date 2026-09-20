@@ -4,8 +4,6 @@
 // handful of them, so a glob import earns its keep over a long explicit list.
 #![allow(clippy::wildcard_imports)]
 
-use std::time::{Duration, Instant};
-
 use crate::common::*;
 
 #[test]
@@ -128,8 +126,7 @@ fn git_panel_generates_a_commit_message_from_the_staged_diff() {
         ai_command: "printf '%s' 'Add a.txt with a greeting'".to_string(),
         ..Settings::default()
     };
-    let mut app = App::new(dir.clone(), settings).with_session_path(isolated_session_path());
-    app.layout.editor = Rect::new(0, 0, 80, 24);
+    let mut app = app_at_with(&dir, settings);
 
     app.run_action("git.changes");
     assert!(app.git_panel.is_some(), "panel opens in a repo");
@@ -137,11 +134,7 @@ fn git_panel_generates_a_commit_message_from_the_staged_diff() {
     assert!(app.git_status[0].is_staged(), "file is staged");
 
     app.on_key(keycode(KeyCode::Char('g'))); // generate a commit message
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while Instant::now() < deadline && app.prompt.is_none() {
-        app.poll_ai_replace();
-        std::thread::sleep(Duration::from_millis(10));
-    }
+    wait_for_ai_replace(&mut app, |app| app.prompt.is_some());
     let prompt = app
         .prompt
         .as_ref()

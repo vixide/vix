@@ -6,6 +6,7 @@
 
 pub(crate) use std::fs;
 pub(crate) use std::path::{Path, PathBuf};
+pub(crate) use std::time::{Duration, Instant};
 
 pub(crate) use crossterm::event::{
     KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
@@ -109,6 +110,31 @@ pub(crate) fn app_with(settings: Settings) -> App {
         App::new(Path::new(".").to_path_buf(), settings).with_session_path(isolated_session_path());
     app.layout.editor = Rect::new(0, 0, 80, 24);
     app
+}
+
+/// Build an app rooted at `root` with custom `settings` and a realistic
+/// editor viewport -- the one combination neither `app_at` (default
+/// settings) nor `app_with` (always rooted at `.`) covers on its own.
+/// Extracted (Run H, T530) after two call sites each hand-rolled this exact
+/// three-line builder because they needed both a real root and custom
+/// settings (an `ai_command` override) together.
+pub(crate) fn app_at_with(root: &Path, settings: Settings) -> App {
+    let mut app = App::new(root.to_path_buf(), settings).with_session_path(isolated_session_path());
+    app.layout.editor = Rect::new(0, 0, 80, 24);
+    app
+}
+
+/// Poll `App::poll_ai_replace` until `pred` holds, or fail after 5 seconds --
+/// generous for a local `sh -c printf`, which finishes in well under that.
+/// Extracted (Run H, T530) after this exact loop was found duplicated
+/// (once as this named helper in `ai.rs`, once inlined in `git.rs`).
+pub(crate) fn wait_for_ai_replace(app: &mut App, mut pred: impl FnMut(&App) -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline && !pred(app) {
+        app.poll_ai_replace();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(pred(app), "timed out waiting for the AI task to finish");
 }
 
 /// If a script-trust prompt (T132) is pending, answer "yes" -- the same
