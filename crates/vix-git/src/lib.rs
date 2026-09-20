@@ -490,10 +490,21 @@ pub fn head_blob(dir: &Path, rel_path: &str) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-/// Stage a path (`git add -- <path>`). Returns whether the command succeeded.
-#[must_use]
-pub fn stage(dir: &Path, rel_path: &str) -> bool {
-    git(dir, &["add", "--", rel_path]).is_ok_and(|o| o.status.success())
+/// Stage a path (`git add -- <path>`).
+///
+/// # Errors
+///
+/// Returns git's own stderr on failure (Run H, T540 — this used to collapse
+/// to a bare `bool`, so the caller could only show a static "git failed"
+/// with no reason, inconsistent with the sibling [`stage_content`], which
+/// already reports the real error).
+pub fn stage(dir: &Path, rel_path: &str) -> Result<(), String> {
+    let out = git(dir, &["add", "--", rel_path]).map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
 }
 
 /// The staged (index) version of `rel_path` (`git show :path`), trailing newline
@@ -560,10 +571,19 @@ fn git_stdin(dir: &Path, args: &[&str], input: &str) -> Result<String, String> {
     }
 }
 
-/// Unstage a path (`git restore --staged -- <path>`). Returns success.
-#[must_use]
-pub fn unstage(dir: &Path, rel_path: &str) -> bool {
-    git(dir, &["restore", "--staged", "--", rel_path]).is_ok_and(|o| o.status.success())
+/// Unstage a path (`git restore --staged -- <path>`).
+///
+/// # Errors
+///
+/// Returns git's own stderr on failure (Run H, T540 — see [`stage`]'s doc
+/// comment for why).
+pub fn unstage(dir: &Path, rel_path: &str) -> Result<(), String> {
+    let out = git(dir, &["restore", "--staged", "--", rel_path]).map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
 }
 
 /// The staged diff (`git diff --staged`), for feeding to an AI commit-message
@@ -935,6 +955,23 @@ mod tests {
         assert!(show_commit(&dir, "--upload-pack=evil", None).is_none());
         assert!(show_file_at(&dir, "--upload-pack=evil", "a.rs").is_none());
         assert!(resolve_short_sha(&dir, "--upload-pack=evil").is_none());
+    }
+
+    #[test]
+    fn stage_and_unstage_report_the_real_git_error() {
+        // T540 (Run H): these used to collapse to a bare `bool`, so a caller
+        // could only show a generic "git failed" with no reason. Any git
+        // command run outside a repository fails immediately with a real,
+        // git-provided message -- no repo fixture needed to prove it's
+        // captured now instead of discarded.
+        let dir = std::env::temp_dir().join(format!("vix-git-notrepo-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let err = stage(&dir, "a.txt").expect_err("not a repo, so this must fail");
+        assert!(!err.is_empty(), "a real message, not silently discarded");
+        let err = unstage(&dir, "a.txt").expect_err("not a repo, so this must fail");
+        assert!(!err.is_empty(), "a real message, not silently discarded");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
