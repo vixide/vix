@@ -81,6 +81,28 @@ pub(crate) fn unique_dir(tag: &str) -> PathBuf {
     dir
 }
 
+/// Initialize a git repo at `dir` with a deterministic identity, for tests
+/// that need a throwaway repo. Extracted (Run H, T523) after this exact
+/// `git init` + two `git config` calls were found copy-pasted at 13 call
+/// sites across `git.rs`/`editing.rs`. `name` is the commit author name —
+/// almost every caller wants the literal `"Test"`; one test (proving `git
+/// blame` surfaces the real author, not a hardcoded placeholder) passes a
+/// distinctive one instead. Callers still declare their own `run` closure
+/// for whatever git commands they need after this (`add`, `commit`, …) —
+/// only the init/identity sequence itself was ever actually duplicated.
+pub(crate) fn init_git_repo(dir: &Path, name: &str) {
+    let run = |args: &[&str]| {
+        std::process::Command::new("git")
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+    };
+    run(&["init", "-q"]);
+    run(&["config", "user.email", "t@example.com"]);
+    run(&["config", "user.name", name]);
+}
+
 /// Build an app with custom settings and a realistic editor viewport.
 pub(crate) fn app_with(settings: Settings) -> App {
     let mut app =

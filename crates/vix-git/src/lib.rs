@@ -350,20 +350,15 @@ fn parse_tz_offset(tz: &str) -> i32 {
 }
 
 /// Convert a Unix `secs` (+ `tz_offset` seconds east of UTC) to a `YYYY-MM-DD`
-/// calendar date, via Howard Hinnant's `civil_from_days` algorithm.
+/// calendar date.
+///
+/// Delegates to `vix-civil-date` (Run H, T520) — this crate,
+/// `vix-file-information-panel`, and `vix-org` used to each hand-roll an
+/// independent copy of the same day-count-to-calendar-date algorithm.
 #[must_use]
 fn epoch_to_date(secs: i64, tz_offset: i32) -> String {
     let days = (secs + i64::from(tz_offset)).div_euclid(86_400);
-    let z = days + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = y + i64::from(m <= 2);
+    let (y, m, d) = vix_civil_date::civil_from_days(days);
     format!("{y:04}-{m:02}-{d:02}")
 }
 

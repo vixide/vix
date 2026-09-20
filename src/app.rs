@@ -9686,8 +9686,10 @@ impl App {
             return;
         }
         match crate::edit_value::Tree::from_text(&tab.text(), format) {
-            Some(tree) => self.edit_value = Some(tree),
-            None => self.messages.warn(t!("msg.edit_value_parse").to_string()),
+            Ok(tree) => self.edit_value = Some(tree),
+            Err(e) => self
+                .messages
+                .warn(t!("msg.edit_value_parse", error = e).to_string()),
         }
     }
 

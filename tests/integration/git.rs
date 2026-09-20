@@ -86,16 +86,7 @@ fn git_gutter_refresh_skips_recompute_until_the_buffer_revision_changes() {
 fn git_panel_stages_and_commits() {
     let dir = unique_dir("gitpanel");
     fs::create_dir_all(&dir).unwrap();
-    let run = |args: &[&str]| {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(args)
-            .output()
-            .unwrap();
-    };
-    run(&["init", "-q"]);
-    run(&["config", "user.email", "t@example.com"]);
-    run(&["config", "user.name", "Test"]);
+    init_git_repo(&dir, "Test");
     fs::write(dir.join("a.txt"), "hello\n").unwrap();
 
     let mut app = app_at(&dir);
@@ -128,16 +119,7 @@ fn git_panel_stages_and_commits() {
 fn git_panel_generates_a_commit_message_from_the_staged_diff() {
     let dir = unique_dir("gitpanel-ai-commit");
     fs::create_dir_all(&dir).unwrap();
-    let run = |args: &[&str]| {
-        std::process::Command::new("git")
-            .current_dir(&dir)
-            .args(args)
-            .output()
-            .unwrap();
-    };
-    run(&["init", "-q"]);
-    run(&["config", "user.email", "t@example.com"]);
-    run(&["config", "user.name", "Test"]);
+    init_git_repo(&dir, "Test");
     fs::write(dir.join("a.txt"), "hello\n").unwrap();
 
     // Deterministic `ai_command`: ignores its input, always prints the same
@@ -190,6 +172,7 @@ fn git_stash_and_pop_round_trip() {
     let dir = unique_dir("gitstash");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
+    init_git_repo(&dir, "Test");
     let run = |args: &[&str]| {
         std::process::Command::new("git")
             .current_dir(&dir)
@@ -197,9 +180,6 @@ fn git_stash_and_pop_round_trip() {
             .output()
             .unwrap();
     };
-    run(&["init", "-q"]);
-    run(&["config", "user.email", "t@example.com"]);
-    run(&["config", "user.name", "Test"]);
     let file = dir.join("a.txt");
     fs::write(&file, "one\n").unwrap();
     run(&["add", "."]);
@@ -223,6 +203,7 @@ fn git_stash_and_pop_round_trip() {
 fn git_blame_annotates_the_current_line() {
     let dir = unique_dir("gitblame");
     fs::create_dir_all(&dir).unwrap();
+    init_git_repo(&dir, "Ada Lovelace");
     let run = |args: &[&str]| {
         std::process::Command::new("git")
             .current_dir(&dir)
@@ -230,9 +211,6 @@ fn git_blame_annotates_the_current_line() {
             .output()
             .unwrap();
     };
-    run(&["init", "-q"]);
-    run(&["config", "user.email", "t@example.com"]);
-    run(&["config", "user.name", "Ada Lovelace"]);
     let file = dir.join("a.txt");
     fs::write(&file, "one\ntwo\nthree\n").unwrap();
     run(&["add", "."]);
@@ -265,6 +243,7 @@ fn git_blame_annotates_the_current_line() {
 fn git_blame_flags_an_uncommitted_line() {
     let dir = unique_dir("gitblameunc");
     fs::create_dir_all(&dir).unwrap();
+    init_git_repo(&dir, "Test");
     let run = |args: &[&str]| {
         std::process::Command::new("git")
             .current_dir(&dir)
@@ -272,9 +251,6 @@ fn git_blame_flags_an_uncommitted_line() {
             .output()
             .unwrap();
     };
-    run(&["init", "-q"]);
-    run(&["config", "user.email", "t@example.com"]);
-    run(&["config", "user.name", "Test"]);
     let file = dir.join("a.txt");
     fs::write(&file, "committed\n").unwrap();
     run(&["add", "."]);
@@ -300,6 +276,7 @@ fn git_browse_log_lists_commits_and_enter_opens_the_diff_tab() {
     let dir = unique_dir("gitlog");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
+    init_git_repo(&dir, "Test");
     let run = |args: &[&str]| {
         std::process::Command::new("git")
             .current_dir(&dir)
@@ -307,9 +284,6 @@ fn git_browse_log_lists_commits_and_enter_opens_the_diff_tab() {
             .output()
             .unwrap();
     };
-    run(&["init", "-q"]);
-    run(&["config", "user.email", "t@example.com"]);
-    run(&["config", "user.name", "Test"]);
     fs::write(dir.join("a.txt"), "one\n").unwrap();
     run(&["add", "."]);
     run(&["commit", "-q", "-m", "first commit"]);
@@ -353,6 +327,7 @@ fn git_file_history_lists_only_commits_touching_the_active_file() {
     let dir = unique_dir("gitfilehistory");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
+    init_git_repo(&dir, "Test");
     let run = |args: &[&str]| {
         std::process::Command::new("git")
             .current_dir(&dir)
@@ -360,9 +335,6 @@ fn git_file_history_lists_only_commits_touching_the_active_file() {
             .output()
             .unwrap();
     };
-    run(&["init", "-q"]);
-    run(&["config", "user.email", "t@example.com"]);
-    run(&["config", "user.name", "Test"]);
     fs::write(dir.join("a.txt"), "a1\n").unwrap();
     run(&["add", "."]);
     run(&["commit", "-q", "-m", "add a"]);
@@ -403,6 +375,7 @@ fn git_open_at_revision_shows_the_files_old_content_read_only() {
     let dir = unique_dir("gitrevision");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
+    init_git_repo(&dir, "Test");
     let run = |args: &[&str]| {
         std::process::Command::new("git")
             .current_dir(&dir)
@@ -410,9 +383,6 @@ fn git_open_at_revision_shows_the_files_old_content_read_only() {
             .output()
             .unwrap();
     };
-    run(&["init", "-q"]);
-    run(&["config", "user.email", "t@example.com"]);
-    run(&["config", "user.name", "Test"]);
     let file = dir.join("a.txt");
     fs::write(&file, "old content\n").unwrap();
     run(&["add", "."]);
@@ -449,6 +419,7 @@ fn git_open_at_revision_with_an_unknown_revision_reports_an_error() {
     let dir = unique_dir("gitrevisionbad");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
+    init_git_repo(&dir, "Test");
     let run = |args: &[&str]| {
         std::process::Command::new("git")
             .current_dir(&dir)
@@ -456,9 +427,6 @@ fn git_open_at_revision_with_an_unknown_revision_reports_an_error() {
             .output()
             .unwrap();
     };
-    run(&["init", "-q"]);
-    run(&["config", "user.email", "t@example.com"]);
-    run(&["config", "user.name", "Test"]);
     let file = dir.join("a.txt");
     fs::write(&file, "content\n").unwrap();
     run(&["add", "."]);

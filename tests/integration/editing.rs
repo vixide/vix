@@ -1377,6 +1377,32 @@ fn edit_json_opens_edits_and_saves() {
 }
 
 #[test]
+fn edit_json_parse_failure_names_the_real_problem() {
+    // T543 (Run H): this used to show only a static "not valid JSON or
+    // YAML" -- now the parser's own message (line/column included).
+    let dir = unique_dir("ejson-bad");
+    let file = dir.join("data.json");
+    fs::write(&file, "{ not valid\n").unwrap();
+
+    let mut app = app_at(&dir);
+    app.open_initial(&file);
+    app.run_action("tools.edit_json");
+    assert!(app.edit_value.is_none(), "the editor did not open");
+    let text = app
+        .messages
+        .items
+        .last()
+        .map(|m| m.text.as_str())
+        .unwrap_or_default();
+    assert!(
+        text.to_lowercase().contains("line"),
+        "the parser's own diagnostic names a location, not just a generic \
+         message: {text:?}"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn edit_bytes_opens_overwrites_and_saves() {
     let dir = unique_dir("ebytes");
     let file = dir.join("b.txt");
@@ -2942,6 +2968,7 @@ fn revert_hunk_restores_committed_text() {
     // the temp dir lives under a symlink (e.g. macOS /var → /private/var); the
     // diff gutter and revert key the HEAD cache off that shared prefix.
     let dir = dir.canonicalize().unwrap();
+    init_git_repo(&dir, "Test");
     let run = |args: &[&str]| {
         std::process::Command::new("git")
             .current_dir(&dir)
@@ -2949,9 +2976,6 @@ fn revert_hunk_restores_committed_text() {
             .output()
             .unwrap();
     };
-    run(&["init", "-q"]);
-    run(&["config", "user.email", "t@example.com"]);
-    run(&["config", "user.name", "Test"]);
     let file = dir.join("a.txt");
     fs::write(&file, "one\ntwo\n").unwrap();
     run(&["add", "."]);
@@ -2978,6 +3002,7 @@ fn stage_hunk_stages_only_the_cursor_hunk() {
     let dir = unique_dir("stagehunk");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
+    init_git_repo(&dir, "Test");
     let run = |args: &[&str]| {
         std::process::Command::new("git")
             .current_dir(&dir)
@@ -2985,9 +3010,6 @@ fn stage_hunk_stages_only_the_cursor_hunk() {
             .output()
             .unwrap();
     };
-    run(&["init", "-q"]);
-    run(&["config", "user.email", "t@example.com"]);
-    run(&["config", "user.name", "Test"]);
     let file = dir.join("a.txt");
     fs::write(&file, "one\ntwo\nthree\n").unwrap();
     run(&["add", "."]);
@@ -3023,6 +3045,7 @@ fn unstage_hunk_removes_the_cursor_hunk_from_index() {
     let dir = unique_dir("unstagehunk");
     fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
+    init_git_repo(&dir, "Test");
     let run = |args: &[&str]| {
         std::process::Command::new("git")
             .current_dir(&dir)
@@ -3030,9 +3053,6 @@ fn unstage_hunk_removes_the_cursor_hunk_from_index() {
             .output()
             .unwrap();
     };
-    run(&["init", "-q"]);
-    run(&["config", "user.email", "t@example.com"]);
-    run(&["config", "user.name", "Test"]);
     let file = dir.join("a.txt");
     fs::write(&file, "one\ntwo\nthree\n").unwrap();
     run(&["add", "."]);
@@ -3068,6 +3088,7 @@ fn unstage_hunk_removes_the_cursor_hunk_from_index() {
 fn branch_chooser_switches_branches() {
     let dir = unique_dir("gitbranch");
     fs::create_dir_all(&dir).unwrap();
+    init_git_repo(&dir, "Test");
     let run = |args: &[&str]| {
         std::process::Command::new("git")
             .current_dir(&dir)
@@ -3075,9 +3096,6 @@ fn branch_chooser_switches_branches() {
             .output()
             .unwrap();
     };
-    run(&["init", "-q"]);
-    run(&["config", "user.email", "t@example.com"]);
-    run(&["config", "user.name", "Test"]);
     fs::write(dir.join("a.txt"), "hello\n").unwrap();
     run(&["add", "."]);
     run(&["commit", "-q", "-m", "init"]);
