@@ -191,13 +191,16 @@ impl Hex {
 
     /// Capture the current state onto the undo stack and clear redo.
     fn push_undo(&mut self) {
-        self.undo.push(Snapshot {
-            bytes: self.bytes.clone(),
-            cursor: self.cursor,
-        });
-        if self.undo.len() > HISTORY_CAP {
-            self.undo.remove(0);
-        }
+        // Delegates to `vix-capped-stack` (Run H, T525) -- this crate and
+        // four siblings used to each hand-roll this identical clamp.
+        vix_capped_stack::push_capped(
+            &mut self.undo,
+            Snapshot {
+                bytes: self.bytes.clone(),
+                cursor: self.cursor,
+            },
+            HISTORY_CAP,
+        );
         self.redo.clear();
     }
 

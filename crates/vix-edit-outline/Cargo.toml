@@ -9,4 +9,5 @@ description = "The outline editor: hierarchical hide/show and restructuring for 
 
 [dependencies]
 crossterm = { workspace = true }
+vix-capped-stack = { path = "../vix-capped-stack", version = "1.6.0" }
 vix-list-state = { path = "../vix-list-state", version = "1.6.0" }

@@ -1,0 +1,10 @@
+[package]
+name = "vix-capped-stack"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Push an item onto a Vec, evicting the oldest entry first if that would grow it past a cap."
+
+[dependencies]

@@ -4201,7 +4201,7 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   sibling key with an explanatory comment; the three now-redundant
   locale blocks removed (45 lines across the two `locales/*.yml`
   files). `cargo test --test i18n_keys` still passes.
-- [ ] **T525 — Undo/redo snapshot stacks hand-rolled independently in 5
+- [x] **T525 — Undo/redo snapshot stacks hand-rolled independently in 5
   `vix-edit-*` crates, at 3 different quality levels.** Identical
   `const HISTORY_CAP: usize = 200;` and near-identical `push_undo`
   bodies in `vix-edit-bytes`, `vix-edit-sql`, `vix-edit-value` (still
@@ -4209,7 +4209,23 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   `vix-edit-outline` (already converged on a shared `restore()` helper
   between undo/redo). Fix: a small generic `vix-undo-stack` crate (same
   shape as `vix-list-state`, T144) — `push_capped<T>(stack: &mut
-  Vec<T>, item: T, cap: usize)`. Small/medium effort.
+  Vec<T>, item: T, cap: usize)`. Small/medium effort. **Done
+  2026-09-20**: named `vix-capped-stack` instead of the task's own
+  suggested `vix-undo-stack` — deliberately, since the function isn't
+  undo-aware at all (each crate keeps its own `Snapshot` type and
+  undo/redo semantics unchanged; only the identical "push, evict oldest
+  if over cap" clamp moved), and `vix-undo-store` already exists for a
+  *different* feature (persistent, per-file undo history saved to
+  disk) — reusing "undo" in this crate's name risked exactly the
+  confusion the task itself didn't intend. Matches T144/T521/T520's own
+  "own spec + own tests + a real reuse story" bar (5 consumers).
+  `push_capped` deliberately evicts only one entry per call, mirroring
+  every original site's own `if` (not `while`) — documented explicitly
+  in both the doc comment and a test, rather than silently changing to
+  a stronger "always enforce the cap" guarantee nobody asked for.
+  Crate count 118→119. All 6 affected crates' full test suites pass,
+  including each `vix-edit-*` crate's own pre-existing `undo_and_redo`-
+  shaped test.
 - [ ] **T526 — `wrap_line` greedy word-wrap reimplemented independently
   in `vix-welcome-panel` and `vix-ai-panel`, with a real behavior
   difference.** `crates/vix-welcome-panel/src/lib.rs:34-60` does not
