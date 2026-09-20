@@ -12,8 +12,11 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use vix::db::{Browser, Pages, Pane, View, connect, session::Session};
 
-/// Drain a query started with `F5`/`Enter` until it finishes, so a test can
-/// observe its result synchronously, as a real event loop would.
+/// Drain any async DB work started by the last key press — a streamed query
+/// (`F5`/`EXPLAIN`), a background connect, or a cancelled query's background
+/// reconnect (Run H, T531 made both of the latter two asynchronous, the same
+/// way M3/M4 already made queries asynchronous) — until it finishes, so a
+/// test can observe the result synchronously, as a real event loop would.
 ///
 /// Bounded by wall-clock time, not a fixed iteration count (T009): a
 /// spin-count budget has no relationship to actual elapsed time — on a
@@ -29,16 +32,18 @@ use vix::db::{Browser, Pages, Pane, View, connect, session::Session};
 /// contention, not a database-level race: the worker thread serves one
 /// connection, one statement at a time, so there is no cross-statement
 /// visibility race to chase here). A generous real-time deadline fixes the
-/// harness's own wait, not `vix-db`'s non-blocking `poll()`/`poll_query()`,
-/// which are correctly `try_recv`-based for a real per-frame UI tick and
-/// need no change.
-fn drain_query(browser: &mut Browser) {
+/// harness's own wait, not `vix-db`'s non-blocking `poll()`/`poll_query()`/
+/// `poll_connect()`/`poll_reconnect()`, which are correctly `try_recv`-based
+/// for a real per-frame UI tick and need no change.
+fn drain_async(browser: &mut Browser) {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-    while browser.query_running() {
+    while browser.query_running() || browser.connect_running() || browser.reconnect_running() {
         browser.poll_query();
+        browser.poll_connect();
+        browser.poll_reconnect();
         assert!(
             std::time::Instant::now() < deadline,
-            "query did not finish within 30s — worker thread stalled or deadlocked"
+            "async DB work did not finish within 30s — worker thread stalled or deadlocked"
         );
         std::thread::yield_now();
     }
@@ -46,8 +51,9 @@ fn drain_query(browser: &mut Browser) {
 
 fn key(browser: &mut Browser, code: KeyCode) {
     browser.handle_key(KeyEvent::new(code, KeyModifiers::NONE), Pages::default());
-    // User statements (F5/EXPLAIN) now run asynchronously; see `drain_query`.
-    drain_query(browser);
+    // User statements (F5/EXPLAIN), connects, and reconnects all run
+    // asynchronously; see `drain_async`.
+    drain_async(browser);
 }
 
 fn type_str(browser: &mut Browser, text: &str) {
@@ -605,6 +611,66 @@ fn large_result_streams_in_batches() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Run H, T531: connecting (and, T532, a cancelled query's reconnect) used
+/// to run fully synchronously on the UI thread — `Session::connect` alone
+/// can block for a real amount of time (an unreachable host's OS TCP
+/// timeout is commonly 60-130s). This proves both are now genuinely
+/// asynchronous: right after the triggering key/call, the workbench reports
+/// the work as still running rather than already finished.
+#[test]
+fn async_connect_and_reconnect_run_off_the_event_loop() {
+    let dir = std::env::temp_dir().join(format!("vix-db-async-connect-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("async-connect.db");
+    seed(&file, &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1)"]);
+
+    // Connecting: `handle_key` alone (no `key()`, which would auto-drain)
+    // must return with the connect still pending, not already resolved.
+    let mut b = Browser::new(vec![sqlite_connection("async-connect", &file)]);
+    b.handle_key(
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        Pages::default(),
+    );
+    assert!(
+        b.connect_running(),
+        "the connect is in flight, not applied synchronously"
+    );
+    assert_eq!(
+        b.view,
+        View::Connections,
+        "still on the connections list until poll_connect resolves it"
+    );
+    drain_async(&mut b);
+    assert_eq!(b.view, View::Workbench, "connect finished: {:?}", b.message);
+
+    // Reconnecting after a cancel: same story for `cancel_query`. Send a
+    // query without draining (so it is caught in flight, mirroring
+    // `async_query_runs_off_the_event_loop_and_cancels`), cancel it, and
+    // check the reconnect is *itself* still pending immediately after --
+    // `cancel_query` returning doesn't mean the reconnect finished.
+    type_str(&mut b, "SELECT a FROM t");
+    b.handle_key(
+        KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE),
+        Pages::default(),
+    );
+    assert!(
+        b.query_running(),
+        "the query is in flight, not applied synchronously"
+    );
+    b.cancel_query();
+    assert!(
+        b.reconnect_running(),
+        "the reconnect is in flight right after cancel_query returns, not already finished"
+    );
+    drain_async(&mut b);
+    assert!(
+        !b.reconnect_running(),
+        "the reconnect resolved once drained"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn async_query_runs_off_the_event_loop_and_cancels() {
     let dir = std::env::temp_dir().join(format!("vix-db-async-{}", std::process::id()));
@@ -630,7 +696,7 @@ fn async_query_runs_off_the_event_loop_and_cancels() {
         b.query_running(),
         "the query is in flight, not applied synchronously"
     );
-    drain_query(&mut b);
+    drain_async(&mut b);
     assert_eq!(
         b.grid.rows,
         vec![vec!["3".to_string()]],
@@ -644,6 +710,10 @@ fn async_query_runs_off_the_event_loop_and_cancels() {
     );
     b.cancel_query();
     assert!(!b.query_running(), "cancel clears the in-flight query");
+    // The reconnect itself now runs in the background too (T531/T532); wait
+    // for it, or the Backspace presses below race it and get swallowed by
+    // the "reconnecting" busy gate.
+    drain_async(&mut b);
     b.focus = Pane::Editor;
     for _ in 0..b.query.text().len() {
         key(&mut b, KeyCode::Backspace);

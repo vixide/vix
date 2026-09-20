@@ -192,6 +192,9 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
         app.poll_http();
         // Drain a finished asynchronous DB query into the workbench.
         app.poll_db_query();
+        // Drain a finished asynchronous DB connect/reconnect (Run H, T531).
+        app.poll_db_connect();
+        app.poll_db_reconnect();
         terminal.draw(|frame| ui::draw(app, frame))?;
         if app.flags.contains(AppFlags::SHOULD_QUIT) {
             return Ok(());
@@ -209,6 +212,8 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
             || app.parse_busy()
             || app.http_running()
             || app.db_query_running()
+            || app.db_connect_running()
+            || app.db_reconnect_running()
         {
             Duration::from_millis(50)
         } else {

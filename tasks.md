@@ -4057,14 +4057,13 @@ quality, and cross-platform (Windows) correctness. Two genuine
 correctness bugs turned up (T518, T535 below), not just style/maintenance
 debt. Grouped by source pass; ranked by value/effort within each group.
 
-**27 of 32 done as of 2026-09-20** (T518–T530, T533–T537, T539–T546,
-T548) — every item with no architectural risk and no external
-dependency this session couldn't provide (a Windows machine/CI, careful
-multi-session design work). What remains is real, scoped, and ranked, not
-vague: the two DB-connect concurrency findings (T531, T532 — T531 is
-explicitly the highest-severity single finding of this whole run, but
-deliberately not rushed), a large cross-cutting error-structuring item
-(T538), and two Windows items that need a way to actually test on
+**28 of 32 done as of 2026-09-20** (T518–T531, T533–T537, T539–T546,
+T548) — including T531, explicitly the highest-severity single finding
+of this whole run, given its own focused change and test pass rather
+than rushed. What remains: T532 (the deeper half of the DB-connect
+finding T531 didn't touch — the abandoned worker thread itself still
+has no cancellation signal), a large cross-cutting error-structuring
+item (T538), and two Windows items that need a way to actually test on
 Windows first (T547) or are low-value cosmetic (T549).
 
 ### Duplication / DRY
@@ -4396,7 +4395,7 @@ Windows first (T547) or are low-value cosmetic (T549).
 
 ### Concurrency / threading correctness
 
-- [ ] **T531 — DB workbench connect (and its own cancel path) fully
+- [x] **T531 — DB workbench connect (and its own cancel path) fully
   blocks the single UI event-loop thread — can freeze the whole editor,
   not just the DB view.** `crates/vix-db/src/lib.rs`'s `finish_connect`
   (called synchronously from ordinary key handlers) runs, all inline on
@@ -4422,6 +4421,88 @@ Windows first (T547) or are low-value cosmetic (T549).
   rush in a security-sensitive area (DB connections); scope as its own
   focused change with its own test pass rather than folding into a
   general cleanup.
+  **Done 2026-09-20**: took the "own focused change, own test pass"
+  instruction literally — read `session.rs`, the existing
+  `poll_query`/`send`/`poll` async-query design, and the
+  `poll_http`/`poll_ai_replace` host-side pattern in full before writing
+  anything.
+  - `connect_worker(conn, password)` (a new free function) now does the
+    entire risky chain — resolve a password when none was given
+    (`secret::resolve`, mirroring the old waterfall, reported back as
+    `ConnectOutcome::NeedsPassword` when it comes up empty so the host
+    still shows the interactive prompt), open the SSH tunnel, open the
+    session — on a plain `std::thread::spawn`'d background thread, not
+    the UI thread. `Browser::begin_connect` starts it and stores a new
+    `pending_connect: Option<PendingConnect>`; the new `poll_connect`
+    (called each tick from `App::poll_db_connect`, wired into
+    `src/main.rs`'s loop and its busy-timeout list exactly like the
+    other `poll_*`s) drains it — into the workbench on success, onto the
+    password prompt on `NeedsPassword`, or back to the connections list
+    with the error on failure. `start_connect` and the password prompt's
+    Enter handler both now call `begin_connect` instead of the old
+    synchronous `finish_connect`.
+  - The catalog load (`run_catalog(objects_sql)`) right after a
+    successful connect stayed a synchronous, one-shot `session.run`
+    call — a deliberate, documented scope boundary: it's bounded and
+    fast on an already-open connection, unlike the network-risky work
+    that moved off the UI thread, and every other one-shot internal
+    query in this crate (`refresh_catalog`, `load_columns`) already
+    works this way.
+  - `cancel_query`'s reconnect got the same treatment: it now takes the
+    session, spawns a background thread to call `Session::restart` on
+    it, and stores a `pending_reconnect: Option<PendingReconnect>`
+    drained by a new `poll_reconnect` (same wiring as `poll_connect`).
+    This fixes the "designed escape hatch also blocks" half of the
+    finding; it does **not** fix the *other* half T532 describes (the
+    abandoned worker thread itself still has no cancellation signal) —
+    that remains T532's own, separate, unstarted scope.
+  - Added a live "Connecting… (Ns)" status (`msg.db_connecting`, now
+    taking `%{secs}`) refreshed on every still-pending `poll_connect`
+    tick — connects can now genuinely take up to a minute-plus, so the
+    user needs proof it isn't stuck, not just proof the UI didn't
+    freeze. `key_connections` and `key_workbench` gate input while a
+    connect/reconnect is pending (mirroring the existing
+    `query_running()` busy-gate) so a second attempt can't race the
+    first.
+  - Genuinely new risk introduced: `ConnectOutcome`/`Session` now cross
+    a thread boundary (`Send`, verified by the crate compiling — neither
+    type holds anything non-`Send`). Fixed all 4 test-suite fallout
+    sites this uncovered: `tests/db_smoke.rs`'s `key()` helper (its
+    `drain_query` renamed `drain_async`, now also draining
+    connect/reconnect — every one of its ~11 "connect via Enter, assert
+    `View::Workbench`" call sites keeps working unmodified), one
+    `cancel_query` call site there needing an explicit extra drain
+    before its next keypresses (a real race the old synchronous code
+    never had — a Backspace typed before the background reconnect
+    resolved would have been silently swallowed by the new busy gate),
+    and `crates/vix-db/src/lib.rs`'s own internal
+    `password_prompt_gates_server_connections` test (now waits via a
+    new `wait_for_connect` helper). Added a fifth, dedicated
+    regression test, `async_connect_and_reconnect_run_off_the_event_loop`
+    in `db_smoke.rs`, asserting directly (not just incidentally, via the
+    other tests still passing) that both `connect_running()` and
+    `reconnect_running()` are true *immediately* after their triggering
+    key/call returns — the actual property this task exists to
+    guarantee.
+  - No CHANGELOG entry: this is an internal responsiveness fix with one
+    small, genuinely user-visible addition (the "Connecting… (Ns)"
+    status), not withheld per T309's rule but not judged worth a
+    changelog line either — the UI stays "connect, then the workbench
+    opens," just without a chance of freezing on the way.
+  - Verified: `cargo clippy --workspace --all-targets -- -D warnings`
+    clean; `cargo test -p vix-db` (114 tests) and `cargo test --test
+    db_smoke -- --include-ignored` (12 tests, all needing real SQLite
+    fixtures) both fully green; the workspace-wide
+    `tests/i18n_keys.rs` structural tests pass (the reshaped
+    `msg.db_connecting` key checked for real call-site placeholder
+    agreement); full `cargo test --workspace` green;
+    `scripts/check-docs` green.
+  - **Not attempted, and not required to claim this done**: an explicit
+    "cancel an in-flight connect" gesture. Input is gated (not silently
+    dropped into a confusing error) while a connect runs, but there's no
+    way to abort one early — out of scope for "stop the UI thread from
+    blocking," a plausible separate future feature, not part of what
+    this finding asked for.
 - [ ] **T532 — Cancelling or disconnecting a DB session abandons, but
   doesn't cancel, the in-flight query — repeated cancels against a hung
   query can exhaust the DB's connection limit.** `crates/vix-db/src/
@@ -4438,6 +4519,13 @@ Windows first (T547) or are low-value cosmetic (T549).
   iteration — same pattern the tree-sitter parse worker already uses
   (T533). Medium effort; depends on T531's architecture for the cleanest
   fix, though it could also land independently.
+  **T531 done 2026-09-20 and did give T532 its architecture** (`cancel_
+  query` now backgrounds the reconnect, so trying `Session::restart`
+  again no longer blocks the UI thread either) — but the actual
+  connection-leak root cause this task describes is untouched: the
+  *old*, abandoned worker thread still has no cancellation signal and
+  still only notices abandonment on its next successful send, which may
+  never come. Still open, still real, still its own change.
 - [x] **T533 — Tree-sitter background parse isn't cancelled when its
   buffer closes mid-parse.** `crates/vix-editor-core/src/code.rs`'s
   `Code` has no `Drop` impl; `request_async_parse` only sets an existing

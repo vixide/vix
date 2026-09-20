@@ -10585,6 +10585,42 @@ impl App {
             .is_some_and(crate::db::Browser::query_running)
     }
 
+    /// Drain a finished asynchronous DB connect (or password-prompted retry)
+    /// into the workbench (Run H, T531). Called each event-loop tick; cheap
+    /// when nothing is running.
+    pub fn poll_db_connect(&mut self) {
+        if let Some(b) = self.db.as_mut() {
+            b.poll_connect();
+        }
+    }
+
+    /// Whether a DB connect is running asynchronously (keeps the loop
+    /// polling).
+    #[must_use]
+    pub fn db_connect_running(&self) -> bool {
+        self.db
+            .as_ref()
+            .is_some_and(crate::db::Browser::connect_running)
+    }
+
+    /// Drain a finished asynchronous DB reconnect (a cancelled query's
+    /// recovery, Run H, T531/T532) into the workbench. Called each
+    /// event-loop tick; cheap when nothing is running.
+    pub fn poll_db_reconnect(&mut self) {
+        if let Some(b) = self.db.as_mut() {
+            b.poll_reconnect();
+        }
+    }
+
+    /// Whether a DB reconnect is running asynchronously (keeps the loop
+    /// polling).
+    #[must_use]
+    pub fn db_reconnect_running(&self) -> bool {
+        self.db
+            .as_ref()
+            .is_some_and(crate::db::Browser::reconnect_running)
+    }
+
     // ----- AI chat panel --------------------------------------------------
 
     /// Open the AI chat panel (a persistent conversation with the configured
