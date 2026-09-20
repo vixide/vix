@@ -5327,6 +5327,7 @@ dependencies = [
  "vix-find-panel",
  "vix-format-tool",
  "vix-git",
+ "vix-greedy-wrap",
  "vix-hex-rgb",
  "vix-html-character-picker",
  "vix-http-client",
@@ -5421,6 +5422,9 @@ dependencies = [
 [[package]]
 name = "vix-ai-panel"
 version = "1.6.0"
+dependencies = [
+ "vix-greedy-wrap",
+]
 
 [[package]]
 name = "vix-align"
@@ -5848,6 +5852,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-greedy-wrap"
+version = "1.6.0"
+
+[[package]]
 name = "vix-hex-rgb"
 version = "1.6.0"
 
@@ -6257,6 +6265,9 @@ dependencies = [
 [[package]]
 name = "vix-welcome-panel"
 version = "1.6.0"
+dependencies = [
+ "vix-greedy-wrap",
+]
 
 [[package]]
 name = "vix-workspace"
