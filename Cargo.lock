@@ -5285,6 +5285,7 @@ dependencies = [
  "vix-byte-size",
  "vix-calculator-tool",
  "vix-calendar-panel",
+ "vix-capped-stack",
  "vix-case",
  "vix-checksum-tool",
  "vix-civil-date",
@@ -5472,6 +5473,10 @@ version = "1.6.0"
 dependencies = [
  "jiff",
 ]
+
+[[package]]
+name = "vix-capped-stack"
+version = "1.6.0"
 
 [[package]]
 name = "vix-case"
@@ -5681,6 +5686,7 @@ name = "vix-edit-bytes"
 version = "1.6.0"
 dependencies = [
  "crossterm",
+ "vix-capped-stack",
  "vix-list-state",
 ]
 
@@ -5689,6 +5695,7 @@ name = "vix-edit-outline"
 version = "1.6.0"
 dependencies = [
  "crossterm",
+ "vix-capped-stack",
  "vix-list-state",
 ]
 
@@ -5697,6 +5704,7 @@ name = "vix-edit-sql"
 version = "1.6.0"
 dependencies = [
  "crossterm",
+ "vix-capped-stack",
  "vix-list-state",
 ]
 
@@ -5705,6 +5713,7 @@ name = "vix-edit-table"
 version = "1.6.0"
 dependencies = [
  "crossterm",
+ "vix-capped-stack",
  "vix-convert-tabular",
 ]
 
@@ -5716,6 +5725,7 @@ dependencies = [
  "proptest",
  "serde_json",
  "serde_yaml",
+ "vix-capped-stack",
  "vix-list-state",
 ]
 

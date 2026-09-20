@@ -262,6 +262,8 @@ vix-bottom-dock = { path = "crates/vix-bottom-dock", version = "1.6.0" }
 vix-calculator-tool = { path = "crates/vix-calculator-tool", version = "1.6.0" }
 # Calendar box: the navigable month grid.
 vix-calendar-panel = { path = "crates/vix-calendar-panel", version = "1.6.0" }
+# Push an item onto a Vec, evicting the oldest entry if that would grow it past a cap.
+vix-capped-stack = { path = "crates/vix-capped-stack", version = "1.6.0" }
 # Text case transforms applied to the editor selection (Edit → Case).
 vix-case = { path = "crates/vix-case", version = "1.6.0" }
 # Compute SHA-256 and SHA-512 checksums of text, returned as lowercase hex.
