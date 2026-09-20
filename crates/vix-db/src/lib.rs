@@ -2225,8 +2225,13 @@ impl Browser {
         }
     }
 
-    /// Finalize a streamed statement that errored partway.
-    fn finish_stream_err(&mut self, error: &str) {
+    /// Finalize a streamed statement that errored partway. `last_error`
+    /// (fed to "fix the last error" AI prompts) always keeps the driver's
+    /// own raw message; `message` (the status line shown to the user) gets
+    /// a clarifying hint on top of it when the error's [`session::
+    /// QueryErrorKind`] (Run H, T538) says the connection itself is gone —
+    /// a plain I/O error's text alone doesn't make that obvious.
+    fn finish_stream_err(&mut self, error: &session::QueryError) {
         let Some(pending) = self.pending_query.take() else {
             return;
         };
@@ -2238,8 +2243,12 @@ impl Browser {
             origin: store::Origin::User,
         });
         self.note_tx(&pending.sql, false);
-        self.last_error = Some((pending.sql.clone(), error.to_string()));
-        self.message = Some(error.to_string());
+        self.last_error = Some((pending.sql.clone(), error.message.clone()));
+        self.message = Some(if error.kind == session::QueryErrorKind::ConnectionLost {
+            t!("msg.db_connection_lost", error = &error.message).to_string()
+        } else {
+            error.message.clone()
+        });
     }
 
     /// Update the client-side transaction state from an executed statement:

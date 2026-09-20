@@ -4057,13 +4057,13 @@ quality, and cross-platform (Windows) correctness. Two genuine
 correctness bugs turned up (T518, T535 below), not just style/maintenance
 debt. Grouped by source pass; ranked by value/effort within each group.
 
-**29 of 32 done as of 2026-09-20** (T518–T537, T539–T546, T548) —
-including both DB-connect concurrency findings (T531, T532), T531
-explicitly the highest-severity single finding of this whole run, each
-given its own focused change and test pass rather than rushed. What
-remains: a large cross-cutting error-structuring item (T538), and two
-Windows items that need a way to actually test on Windows first (T547)
-or are low-value cosmetic (T549).
+**30 of 32 done as of 2026-09-20** (T518–T548, i.e. everything except
+T547/T549) — including both DB-connect concurrency findings (T531,
+T532), T531 explicitly the highest-severity single finding of this
+whole run, and T538's error-structuring, each given its own focused
+change and test pass rather than rushed. What remains: two Windows
+items that need a way to actually test on Windows first (T547) or are
+low-value cosmetic (T549).
 
 ### Duplication / DRY
 
@@ -4682,7 +4682,7 @@ or are low-value cosmetic (T549).
   report a real error naming "toml") from the same helper, proving the
   distinction holds without ever touching the real user config
   directory.
-- [ ] **T538 — `sqlx::Error`'s structured detail is flattened to a bare
+- [x] **T538 — `sqlx::Error`'s structured detail is flattened to a bare
   `String` inside the DB worker thread, before it ever crosses back to
   the UI.** `crates/vix-db/src/session.rs:236,280,187` all do `.map_err
   (|e| e.to_string())`/equivalent at the point of origin. `sqlx::Error`
@@ -4695,6 +4695,50 @@ or are low-value cosmetic (T549).
   `.code()`) across the `mpsc` channel instead of a `String`. Medium
   effort, cross-cutting (touches the channel's message type and every
   consumer).
+  **Done 2026-09-20.** Scoped deliberately to what the task actually
+  asks — plumb the structured data — not to building the two illustrative
+  UI features it names ("offer reconnect", "highlight the row"); those
+  stay future work now that the data to build them on finally exists.
+  `session::Chunk::Err(String)` → `Chunk::Err(QueryError)`, a new struct
+  (`message: String`, `kind: QueryErrorKind`, `code: Option<String>`)
+  with a `Display` impl printing `message`, so every existing "just show
+  the text" call site (`{e}`, `.to_string()`) keeps compiling unchanged.
+  `QueryErrorKind` mirrors `sqlx::error::ErrorKind`'s constraint variants
+  (`UniqueViolation`/`ForeignKeyViolation`/`NotNullViolation`/
+  `CheckViolation`/`ExclusionViolation`) plus `ConnectionLost` (an `Io`
+  error) and `Database`/`Other` — a plain **copy** of sqlx's own
+  categories rather than reusing `sqlx::error::ErrorKind` directly,
+  since that type isn't `Clone` and `Chunk` (which carries it) already
+  is. The one real origin site (`stream_sql`'s `Err(e) =>` arm) now
+  classifies via a new `QueryError::from_sqlx`; the crate's actual
+  ripple turned out small, not the "touches every consumer" the task
+  worried about — `Session::run()` (the *blocking* convenience wrapper,
+  used by ~20+ call sites throughout `lib.rs`) converts back to a plain
+  `String` in one line at its own `Chunk::Err` match arm, so its public
+  signature and every one of those callers needed zero changes.
+  Realized one small, real consumer rather than shipping inert
+  plumbing: `finish_stream_err` (the async streaming path's failure
+  handler — what F5/EXPLAIN actually go through) now appends a
+  clarifying "reconnect from the connections list" hint (new locale key
+  `msg.db_connection_lost`, 15 locales) to the status line specifically
+  for `ConnectionLost`, while `last_error` (fed to "fix the last error"
+  AI prompts, which want the driver's own raw text, not a UI hint)
+  keeps the unmodified message regardless of kind. No CHANGELOG entry:
+  the *general* case (a syntax error, say) shows exactly the same text
+  as before; only the one new, narrow `ConnectionLost` case gets an
+  additional sentence, not different enough on its own to warrant a
+  changelog line by this crate's usual bar for internal robustness
+  work. Verified: `cargo clippy --workspace --all-targets -- -D
+  warnings` and `RUSTDOCFLAGS="-D warnings" cargo doc --workspace
+  --no-deps` (matching CI's own invocation) both clean; `cargo test -p
+  vix-db` (119 tests, up from 116 — three new: two proving real SQLite
+  errors classify correctly through the actual `send`/`poll` path, not
+  just a synthetic `sqlx::Error` fed straight to the classifier, one
+  proving the `Display` fallback) and `cargo test --test db_smoke --
+  --include-ignored` (12 tests) both green; `tests/i18n_keys.rs`
+  structural tests confirm the new locale key's placeholder is filled
+  correctly at its one call site; full `cargo test --workspace` and
+  `scripts/check-docs` green.
 - [x] **T539 — The five most common user actions (save/open/revert/
   rename/delete) show generic errors with no filename, though the path
   is in scope at every site.** `src/app.rs`: Ctrl+S save (`:3651-3654`,
