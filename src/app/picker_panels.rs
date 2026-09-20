@@ -12,9 +12,91 @@
 #![warn(clippy::pedantic)]
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use ratatui::layout::Rect;
 
 use super::{App, AppFlags, AsciiPanel, NerdPalette, Prompt, PromptKind, X11Panel, rect_contains};
 use crate::settings::Settings;
+
+/// The navigation surface the ASCII, X11 color, media type, and theme
+/// editor panels all share -- extracted (Run H, T529) after their key/mouse
+/// dispatch turned up near-identical apart from field name and the action
+/// taken on select. A local trait over each panel's own (foreign, per-crate)
+/// type; each impl below just forwards to the panel's identically-named
+/// inherent methods.
+trait ListPanel {
+    fn up(&mut self);
+    fn down(&mut self);
+    fn page_up(&mut self, page: usize);
+    fn page_down(&mut self, page: usize);
+    fn scroll(&self) -> usize;
+}
+
+macro_rules! impl_list_panel {
+    ($ty:ty) => {
+        impl ListPanel for $ty {
+            fn up(&mut self) {
+                Self::up(self);
+            }
+            fn down(&mut self) {
+                Self::down(self);
+            }
+            fn page_up(&mut self, page: usize) {
+                Self::page_up(self, page);
+            }
+            fn page_down(&mut self, page: usize) {
+                Self::page_down(self, page);
+            }
+            fn scroll(&self) -> usize {
+                self.scroll
+            }
+        }
+    };
+}
+
+impl_list_panel!(AsciiPanel);
+impl_list_panel!(X11Panel);
+impl_list_panel!(crate::media_type::Panel);
+impl_list_panel!(vix_theme_editor_panel::Panel);
+
+/// Try the Up/Down/PageUp/PageDown navigation keys against `panel`,
+/// returning whether one handled `code`. Each caller still handles its own
+/// remaining keys (Home/End, Enter, Esc, ...) since those differ per panel.
+fn list_panel_nav_key<P: ListPanel>(panel: &mut Option<P>, code: KeyCode, page: usize) -> bool {
+    let Some(p) = panel.as_mut() else {
+        return false;
+    };
+    match code {
+        KeyCode::Up => p.up(),
+        KeyCode::Down => p.down(),
+        KeyCode::PageUp => p.page_up(page),
+        KeyCode::PageDown => p.page_down(page),
+        _ => return false,
+    }
+    true
+}
+
+/// Resolve a left-click inside a list-style picker panel's `rect` to the
+/// item index under the cursor (the panel's `scroll` offset plus the
+/// clicked row), or `None` when the click isn't a left-button-down inside
+/// `rect`, or no panel is open. Each caller still decides what to do when
+/// `select_index` reports the click landed on a real row -- that differs
+/// per panel (insert-and-keep-open vs. the theme editor's pick-and-open-
+/// x11-panel).
+fn list_panel_click_index<P: ListPanel>(
+    panel: Option<&P>,
+    rect: Rect,
+    mouse: MouseEvent,
+) -> Option<usize> {
+    if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+        return None;
+    }
+    if !rect_contains(rect, mouse.column, mouse.row) {
+        return None;
+    }
+    let p = panel?;
+    let row_in_view = (mouse.row - rect.y) as usize;
+    Some(p.scroll() + row_in_view)
+}
 
 impl App {
     pub(super) fn open_nerd_palette(&mut self) {
@@ -106,27 +188,10 @@ impl App {
 
     pub(super) fn ascii_key(&mut self, key: KeyEvent) {
         let page = (self.layout.ascii_panel.height as usize).max(1);
+        if list_panel_nav_key(&mut self.ascii_panel, key.code, page) {
+            return;
+        }
         match key.code {
-            KeyCode::Up => {
-                if let Some(p) = self.ascii_panel.as_mut() {
-                    p.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(p) = self.ascii_panel.as_mut() {
-                    p.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(p) = self.ascii_panel.as_mut() {
-                    p.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(p) = self.ascii_panel.as_mut() {
-                    p.page_down(page);
-                }
-            }
             KeyCode::Home => {
                 if let Some(p) = self.ascii_panel.as_mut() {
                     p.page_up(p.len());
@@ -146,19 +211,15 @@ impl App {
     }
 
     pub(super) fn ascii_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+        let Some(idx) =
+            list_panel_click_index(self.ascii_panel.as_ref(), self.layout.ascii_panel, mouse)
+        else {
             return;
-        }
-        let r = self.layout.ascii_panel;
-        if !rect_contains(r, mouse.column, mouse.row) {
-            return;
-        }
-        let row_in_view = (mouse.row - r.y) as usize;
-        if let Some(p) = self.ascii_panel.as_mut() {
-            let idx = p.scroll + row_in_view;
-            if p.select_index(idx) {
-                self.insert_selected_ascii();
-            }
+        };
+        if let Some(p) = self.ascii_panel.as_mut()
+            && p.select_index(idx)
+        {
+            self.insert_selected_ascii();
         }
     }
 
@@ -182,27 +243,10 @@ impl App {
 
     pub(super) fn x11_key(&mut self, key: KeyEvent) {
         let page = (self.layout.x11_panel.height as usize).max(1);
+        if list_panel_nav_key(&mut self.x11_panel, key.code, page) {
+            return;
+        }
         match key.code {
-            KeyCode::Up => {
-                if let Some(p) = self.x11_panel.as_mut() {
-                    p.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(p) = self.x11_panel.as_mut() {
-                    p.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(p) = self.x11_panel.as_mut() {
-                    p.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(p) = self.x11_panel.as_mut() {
-                    p.page_down(page);
-                }
-            }
             KeyCode::Home => {
                 if let Some(p) = self.x11_panel.as_mut() {
                     p.page_up(p.len());
@@ -226,19 +270,15 @@ impl App {
     }
 
     pub(super) fn x11_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+        let Some(idx) =
+            list_panel_click_index(self.x11_panel.as_ref(), self.layout.x11_panel, mouse)
+        else {
             return;
-        }
-        let r = self.layout.x11_panel;
-        if !rect_contains(r, mouse.column, mouse.row) {
-            return;
-        }
-        let row_in_view = (mouse.row - r.y) as usize;
-        if let Some(p) = self.x11_panel.as_mut() {
-            let idx = p.scroll + row_in_view;
-            if p.select_index(idx) {
-                self.use_selected_x11();
-            }
+        };
+        if let Some(p) = self.x11_panel.as_mut()
+            && p.select_index(idx)
+        {
+            self.use_selected_x11();
         }
     }
 
@@ -294,27 +334,10 @@ impl App {
 
     pub(super) fn theme_editor_key(&mut self, key: KeyEvent) {
         let page = (self.layout.theme_editor.height as usize).max(1);
+        if list_panel_nav_key(&mut self.theme_editor, key.code, page) {
+            return;
+        }
         match key.code {
-            KeyCode::Up => {
-                if let Some(p) = self.theme_editor.as_mut() {
-                    p.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(p) = self.theme_editor.as_mut() {
-                    p.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(p) = self.theme_editor.as_mut() {
-                    p.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(p) = self.theme_editor.as_mut() {
-                    p.page_down(page);
-                }
-            }
             // Enter opens the X11 color picker to choose the highlighted
             // slot's new color (see `use_selected_x11`'s theme-editor branch).
             KeyCode::Enter => {
@@ -335,20 +358,16 @@ impl App {
     }
 
     pub(super) fn theme_editor_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+        let Some(idx) =
+            list_panel_click_index(self.theme_editor.as_ref(), self.layout.theme_editor, mouse)
+        else {
             return;
-        }
-        let r = self.layout.theme_editor;
-        if !rect_contains(r, mouse.column, mouse.row) {
-            return;
-        }
-        let row_in_view = (mouse.row - r.y) as usize;
-        if let Some(p) = self.theme_editor.as_mut() {
-            let idx = p.scroll + row_in_view;
-            if p.select_index(idx) {
-                self.flags.insert(AppFlags::THEME_EDITOR_PICKING);
-                self.x11_panel = Some(X11Panel::open());
-            }
+        };
+        if let Some(p) = self.theme_editor.as_mut()
+            && p.select_index(idx)
+        {
+            self.flags.insert(AppFlags::THEME_EDITOR_PICKING);
+            self.x11_panel = Some(X11Panel::open());
         }
     }
 
@@ -420,27 +439,10 @@ impl App {
 
     pub(super) fn media_type_key(&mut self, key: KeyEvent) {
         let page = (self.layout.media_type_panel.height as usize).max(1);
+        if list_panel_nav_key(&mut self.media_type_panel, key.code, page) {
+            return;
+        }
         match key.code {
-            KeyCode::Up => {
-                if let Some(p) = self.media_type_panel.as_mut() {
-                    p.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(p) = self.media_type_panel.as_mut() {
-                    p.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(p) = self.media_type_panel.as_mut() {
-                    p.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(p) = self.media_type_panel.as_mut() {
-                    p.page_down(page);
-                }
-            }
             KeyCode::Backspace => {
                 if let Some(p) = self.media_type_panel.as_mut() {
                     p.backspace();
@@ -459,19 +461,17 @@ impl App {
     }
 
     pub(super) fn media_type_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+        let Some(idx) = list_panel_click_index(
+            self.media_type_panel.as_ref(),
+            self.layout.media_type_panel,
+            mouse,
+        ) else {
             return;
-        }
-        let r = self.layout.media_type_panel;
-        if !rect_contains(r, mouse.column, mouse.row) {
-            return;
-        }
-        let row_in_view = (mouse.row - r.y) as usize;
-        if let Some(p) = self.media_type_panel.as_mut() {
-            let idx = p.scroll + row_in_view;
-            if p.select_index(idx) {
-                self.insert_selected_media_type();
-            }
+        };
+        if let Some(p) = self.media_type_panel.as_mut()
+            && p.select_index(idx)
+        {
+            self.insert_selected_media_type();
         }
     }
 
