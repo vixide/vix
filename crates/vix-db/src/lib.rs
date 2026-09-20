@@ -180,6 +180,59 @@ struct Pending {
     kind: QueryKind,
 }
 
+/// Outcome of a background connect attempt (Run H, T531): fully connected,
+/// no stored credential found (fall back to the interactive password
+/// prompt, exactly like the old synchronous credential waterfall did), or
+/// failed outright (bad credentials, unreachable host, a failing setup
+/// statement, …).
+enum ConnectOutcome {
+    /// The session is open and ready; `tunnel` is `Some` only when this
+    /// connection is configured to go over one.
+    Connected {
+        /// The newly opened session.
+        session: session::Session,
+        /// The SSH tunnel the session's URL points through, if configured.
+        tunnel: Option<tunnel::Tunnel>,
+    },
+    /// `conn` needs a password and none was found via `password_command` or
+    /// the keyring — the host should show the interactive password prompt.
+    NeedsPassword,
+    /// The connect failed; a display-ready message.
+    Failed(String),
+}
+
+/// A connect running on a background thread, awaited by
+/// [`Browser::poll_connect`] (Run H, T531). Covers both the initial connect
+/// from the connections list and a retry with a manually-typed password.
+struct PendingConnect {
+    /// The eventual [`ConnectOutcome`].
+    rx: std::sync::mpsc::Receiver<ConnectOutcome>,
+    /// When the attempt began (for a future "still connecting…" indicator).
+    started: std::time::Instant,
+    /// The connection being connected to.
+    conn: connect::Connection,
+    /// The connections-list index, so a [`ConnectOutcome::NeedsPassword`]
+    /// can route to the password prompt exactly like the old synchronous
+    /// `start_connect` did. `None` for a retry that already carried an
+    /// explicit password (typed on the prompt itself), where
+    /// `NeedsPassword` can't recur.
+    idx: Option<usize>,
+    /// The password this attempt used, kept only long enough to store it in
+    /// the keyring on success if the connection opted in (T545); empty (and
+    /// irrelevant) for the auto-resolved-credential path, since a resolved
+    /// credential is already stored by definition.
+    password: String,
+}
+
+/// A cancelled query's reconnect running on a background thread, awaited by
+/// [`Browser::poll_reconnect`] (Run H, T531/T532).
+struct PendingReconnect {
+    /// The eventual reconnect result: the fresh session, or the reconnect's
+    /// own error (in which case the workbench gives up and disconnects,
+    /// exactly like the old synchronous path did).
+    rx: std::sync::mpsc::Receiver<Result<session::Session, String>>,
+}
+
 /// Which persisted stores changed since the host last collected them.
 #[derive(Debug, Clone, Copy, Default)]
 struct Dirty {
@@ -437,6 +490,14 @@ pub struct Browser {
     /// The active SSH tunnel, kept alive for the connection's lifetime (drop
     /// kills `ssh`).
     tunnel: Option<tunnel::Tunnel>,
+    /// A connect (or password-prompted reconnect) running on a background
+    /// thread, awaited by [`Browser::poll_connect`] (Run H, T531). `None`
+    /// once resolved either way.
+    pending_connect: Option<PendingConnect>,
+    /// A cancelled query's reconnect running on a background thread, awaited
+    /// by [`Browser::poll_reconnect`] (Run H, T531/T532). `None` once
+    /// resolved either way.
+    pending_reconnect: Option<PendingReconnect>,
 }
 
 /// State for the bind-parameter prompt: the SQL and its `:name` placeholders,
@@ -512,6 +573,8 @@ impl Browser {
             edit_input: String::new(),
             pending_query: None,
             tunnel: None,
+            pending_connect: None,
+            pending_reconnect: None,
         }
     }
 
@@ -840,6 +903,11 @@ impl Browser {
 
     /// Keys on the saved-connections list.
     fn key_connections(&mut self, key: KeyEvent) -> Outcome {
+        // A connect is running in the background (T531); ignore other input
+        // rather than race a second connect attempt against it.
+        if self.connect_running() {
+            return Outcome::Consumed;
+        }
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => self.sel = self.sel.saturating_sub(1),
             KeyCode::Down | KeyCode::Char('j') => {
@@ -931,17 +999,11 @@ impl Browser {
                     && let Some(conn) = self.connections.get(i).cloned()
                 {
                     let password = std::mem::take(&mut self.password);
-                    self.finish_connect(&conn, &password);
-                    // Save the just-entered password for next time, if the
-                    // connection opted in and we actually connected.
-                    if conn.store_keyring && self.conn.is_some() && !secret::store(&conn, &password)
-                    {
-                        // T545 (Run H): this used to be `let _ = secret::
-                        // store(...)`, discarding the outcome entirely --
-                        // the user explicitly opted into "remember this
-                        // password" and got no indication it didn't work.
-                        self.message = Some(t!("msg.db_keyring_save_failed").to_string());
-                    }
+                    // T531 (Run H): connects in the background now, so the
+                    // "did it actually connect" keyring-store check (T545)
+                    // moved into `poll_connect`'s `Connected` arm, where the
+                    // outcome is actually known.
+                    self.begin_connect(conn, Some(password), None);
                 }
             }
             KeyCode::Esc => {
@@ -954,24 +1016,101 @@ impl Browser {
         Outcome::Consumed
     }
 
-    /// Begin connecting to connection `idx`. `SQLite` needs no password; server
-    /// engines first try the credential waterfall (`password_command`, then the
-    /// OS keyring) and only prompt when that comes up empty.
+    /// Begin connecting to connection `idx` on a background thread (Run H,
+    /// T531): the credential waterfall (`password_command`, then the OS
+    /// keyring), any SSH tunnel, and the connection itself all used to run
+    /// inline on the UI thread here — an unreachable host alone can hit a
+    /// 60-130s OS TCP timeout. [`Self::poll_connect`] finishes it: either
+    /// straight into the workbench, or onto the password prompt when no
+    /// stored credential was found (mirroring the old synchronous
+    /// waterfall's behavior, just no longer blocking while it runs).
     fn start_connect(&mut self, idx: usize) {
         let Some(conn) = self.connections.get(idx).cloned() else {
             return;
         };
-        if !conn.needs_password() {
-            self.finish_connect(&conn, "");
+        self.begin_connect(conn, None, Some(idx));
+    }
+
+    /// Kick off a background connect to `conn`. `password`: `Some` uses
+    /// exactly that password (the password prompt's retry, which already
+    /// resolved it interactively); `None` has the background thread resolve
+    /// it non-interactively first (`SQLite` needs none; server engines try
+    /// `password_command` then the keyring), reporting back
+    /// [`ConnectOutcome::NeedsPassword`] when that comes up empty. `idx` is
+    /// only meaningful for the `None` case — see [`PendingConnect::idx`].
+    fn begin_connect(&mut self, conn: connect::Connection, password: Option<String>, idx: Option<usize>) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let worker_conn = conn.clone();
+        let worker_password = password.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(connect_worker(&worker_conn, worker_password.as_deref()));
+        });
+        self.message = Some(t!("msg.db_connecting", secs = 0).to_string());
+        self.pending_connect = Some(PendingConnect {
+            rx,
+            started: std::time::Instant::now(),
+            conn,
+            idx,
+            password: password.unwrap_or_default(),
+        });
+    }
+
+    /// Whether a connect (or password-prompted retry) is running in the
+    /// background (keeps the host's event loop polling fast).
+    #[must_use]
+    pub fn connect_running(&self) -> bool {
+        self.pending_connect.is_some()
+    }
+
+    /// Drain a finished background connect into the workbench. Called by the
+    /// host each event-loop tick; cheap when nothing is pending. While still
+    /// pending, refreshes the status line with the elapsed time — a connect
+    /// can now genuinely take a while (an unreachable host's OS TCP timeout
+    /// is commonly 60-130s), so the user needs proof it isn't stuck.
+    pub fn poll_connect(&mut self) {
+        let Some(pending) = self.pending_connect.take() else {
             return;
+        };
+        let outcome = match pending.rx.try_recv() {
+            Ok(outcome) => outcome,
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                self.message = Some(
+                    t!("msg.db_connecting", secs = pending.started.elapsed().as_secs())
+                        .to_string(),
+                );
+                self.pending_connect = Some(pending); // still waiting -- put it back
+                return;
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                ConnectOutcome::Failed(t!("msg.db_not_connected").to_string())
+            }
+        };
+        match outcome {
+            ConnectOutcome::NeedsPassword => {
+                self.pending = pending.idx;
+                self.password.clear();
+                self.view = View::Password;
+            }
+            ConnectOutcome::Failed(e) => {
+                self.message = Some(e);
+                self.view = View::Connections;
+            }
+            ConnectOutcome::Connected { session, tunnel } => {
+                self.finish_connected(pending.conn.clone(), session, tunnel);
+                // Save the just-entered password for next time, if the
+                // connection opted in and we actually connected — checked
+                // after, exactly like the old synchronous path, so a
+                // keyring-save failure's message can still overwrite the
+                // "connected" one below it (T545's existing behavior).
+                if pending.conn.store_keyring
+                    && !pending.password.is_empty()
+                    && self.conn.is_some()
+                    && !secret::store(&pending.conn, &pending.password)
+                {
+                    self.message = Some(t!("msg.db_keyring_save_failed").to_string());
+                }
+            }
         }
-        if let Some(password) = secret::resolve(&conn) {
-            self.finish_connect(&conn, &password);
-            return;
-        }
-        self.pending = Some(idx);
-        self.password.clear();
-        self.view = View::Password;
     }
 
     /// Run a user-initiated `sql` on the live session, timing and logging it.
@@ -1012,43 +1151,20 @@ impl Browser {
         result
     }
 
-    /// Open the persistent session, load the catalog, and enter the
-    /// workbench.
-    fn finish_connect(&mut self, conn: &connect::Connection, password: &str) {
-        // Bring up an SSH tunnel first, if configured, and point the URL at its
-        // local end. The tunnel is held for the connection's lifetime.
-        let tunnel = match tunnel::open(conn) {
-            Ok(tunnel) => tunnel,
-            Err(e) => {
-                self.message = Some(e);
-                self.view = View::Connections;
-                return;
-            }
-        };
-        let url = match &tunnel {
-            Some(t) => connect::url_via_local(conn, password, t.local_port),
-            None => connect::url(conn, password),
-        };
-        // A read-only connection asks the server to reject writes too, where
-        // the engine supports it; the client guard covers the rest.
-        let setup: Vec<String> = if conn.writable {
-            Vec::new()
-        } else {
-            connect::read_only_sql(conn.kind, true)
-                .into_iter()
-                .collect()
-        };
-        match session::Session::connect(&url, &setup) {
-            Ok(session) => {
-                self.session = Some(session);
-                self.tunnel = tunnel;
-            }
-            Err(e) => {
-                self.message = Some(e);
-                self.view = View::Connections;
-                return;
-            }
-        }
+    /// Install a freshly (and, since T531, asynchronously) connected
+    /// `session`/`tunnel` for `conn`: load the catalog and enter the
+    /// workbench, or roll back to the connections list on a catalog-load
+    /// failure. The catalog load stays a synchronous, one-shot `session.run`
+    /// call — bounded and fast on an already-open connection, unlike the
+    /// network-risky work `connect_worker` now does off the UI thread.
+    fn finish_connected(
+        &mut self,
+        conn: connect::Connection,
+        session: session::Session,
+        tunnel: Option<tunnel::Tunnel>,
+    ) {
+        self.session = Some(session);
+        self.tunnel = tunnel;
         self.write_enabled = conn.writable;
         self.tx = TxState::None;
         match self.run_catalog(catalog::objects_sql(conn.kind)) {
@@ -1056,7 +1172,7 @@ impl Browser {
                 self.tree = catalog::Tree::from_objects(&object_triples(rows));
                 self.load_columns(conn.kind);
                 self.message = Some(t!("msg.db_connected", name = conn.name).to_string());
-                self.conn = Some(conn.clone());
+                self.conn = Some(conn);
                 self.view = View::Workbench;
                 self.focus = Pane::Editor;
             }
@@ -1107,6 +1223,8 @@ impl Browser {
         self.import_path.clear();
         self.tx = TxState::None;
         self.pending_query = None;
+        self.pending_connect = None;
+        self.pending_reconnect = None;
         self.set_uneditable();
         self.ask_input.clear();
         self.password.clear();
@@ -1133,14 +1251,27 @@ impl Browser {
     }
 
     /// Keys inside the workbench, after the pane-independent chords.
-    fn key_workbench(&mut self, key: KeyEvent, pages: Pages) -> Outcome {
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-        let alt = key.modifiers.contains(KeyModifiers::ALT);
-        // While a query runs the workbench is busy; only Ctrl+C responds.
+    /// Whether the workbench is currently "busy" (a query running, or a
+    /// cancelled query's background reconnect in flight, T531/T532) and, if
+    /// so, handles the one key that's still live while busy (`Ctrl+C`
+    /// cancels a running query). Callers treat a `true` result as
+    /// `Outcome::Consumed`.
+    fn workbench_busy(&mut self, key: KeyEvent, ctrl: bool) -> bool {
         if self.query_running() {
             if ctrl && matches!(key.code, KeyCode::Char('c' | 'C')) {
                 self.cancel_query();
             }
+            return true;
+        }
+        // Nothing to do but wait for the reconnect -- there is no session to
+        // cancel-and-restart again.
+        self.pending_reconnect.is_some()
+    }
+
+    fn key_workbench(&mut self, key: KeyEvent, pages: Pages) -> Outcome {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        let alt = key.modifiers.contains(KeyModifiers::ALT);
+        if self.workbench_busy(key, ctrl) {
             return Outcome::Consumed;
         }
         match key.code {
@@ -1970,22 +2101,65 @@ impl Browser {
         }
     }
 
-    /// Cancel the in-flight query: abandon the worker (its result is discarded)
-    /// and reconnect so the UI is usable again. Transaction state is lost.
+    /// Cancel the in-flight query: abandon the worker (its result is
+    /// discarded when/if it ever arrives) and reconnect, in the background
+    /// (Run H, T531), so the UI is usable again. Transaction state is lost.
+    /// [`Self::poll_reconnect`] finishes it.
+    ///
+    /// The old synchronous `Session::restart` here was the designed escape
+    /// hatch from a hung query — but reconnecting calls `Session::connect`
+    /// again, so if the network condition that caused the hang was still
+    /// present, cancelling a hung query could itself hang. Backgrounding it
+    /// fixes that; actually cancelling the *old* worker's stuck read is a
+    /// separate, deeper fix (T532).
     pub fn cancel_query(&mut self) {
         if self.pending_query.take().is_none() {
             return;
         }
-        match self.session.as_mut().map(session::Session::restart) {
-            Some(Ok(())) => {
-                self.tx = TxState::None;
+        let Some(mut session) = self.session.take() else {
+            return;
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let result = session.restart().map(|()| session);
+            let _ = tx.send(result);
+        });
+        self.tx = TxState::None;
+        self.message = Some(t!("msg.db_cancelling").to_string());
+        self.pending_reconnect = Some(PendingReconnect { rx });
+    }
+
+    /// Whether a cancelled query's reconnect is running in the background
+    /// (keeps the host's event loop polling fast).
+    #[must_use]
+    pub fn reconnect_running(&self) -> bool {
+        self.pending_reconnect.is_some()
+    }
+
+    /// Drain a finished background reconnect (from [`Self::cancel_query`]).
+    /// Called by the host each event-loop tick; cheap when nothing is
+    /// pending.
+    pub fn poll_reconnect(&mut self) {
+        let Some(pending) = self.pending_reconnect.as_ref() else {
+            return;
+        };
+        let result = match pending.rx.try_recv() {
+            Ok(result) => result,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                Err(t!("msg.db_not_connected").to_string())
+            }
+        };
+        self.pending_reconnect = None;
+        match result {
+            Ok(session) => {
+                self.session = Some(session);
                 self.message = Some(t!("msg.db_cancelled").to_string());
             }
-            Some(Err(e)) => {
+            Err(e) => {
                 self.message = Some(e);
                 self.disconnect();
             }
-            None => {}
         }
     }
 
@@ -2620,6 +2794,47 @@ fn object_triples(rows: Vec<Vec<String>>) -> Vec<(String, String, String)> {
         .collect()
 }
 
+/// The actual (blocking) connect work, run on a background thread by
+/// [`Browser::begin_connect`] (Run H, T531): resolve a password
+/// non-interactively when `password` is `None` (`SQLite` needs none; server
+/// engines try `password_command` then the keyring), open an SSH tunnel if
+/// configured, then open the session. Every step here can block for a real
+/// amount of time — a slow/hanging `password_command`, the tunnel's
+/// `wait_ready` (up to 10s), or an unreachable host's OS TCP timeout
+/// (commonly 60-130s) — which is exactly why it no longer runs on the UI
+/// thread.
+fn connect_worker(conn: &connect::Connection, password: Option<&str>) -> ConnectOutcome {
+    let password = match password {
+        Some(p) => p.to_string(),
+        None if !conn.needs_password() => String::new(),
+        None => match secret::resolve(conn) {
+            Some(p) => p,
+            None => return ConnectOutcome::NeedsPassword,
+        },
+    };
+    // Bring up an SSH tunnel first, if configured, and point the URL at its
+    // local end. The tunnel is held for the connection's lifetime.
+    let tunnel = match tunnel::open(conn) {
+        Ok(tunnel) => tunnel,
+        Err(e) => return ConnectOutcome::Failed(e),
+    };
+    let url = match &tunnel {
+        Some(t) => connect::url_via_local(conn, &password, t.local_port),
+        None => connect::url(conn, &password),
+    };
+    // A read-only connection asks the server to reject writes too, where the
+    // engine supports it; the client guard covers the rest.
+    let setup: Vec<String> = if conn.writable {
+        Vec::new()
+    } else {
+        connect::read_only_sql(conn.kind, true).into_iter().collect()
+    };
+    match session::Session::connect(&url, &setup) {
+        Ok(session) => ConnectOutcome::Connected { session, tunnel },
+        Err(e) => ConnectOutcome::Failed(e),
+    }
+}
+
 /// Pretty-print `text` when it parses as JSON (the cell viewer's `p` toggle);
 /// `None` for non-JSON content.
 #[must_use]
@@ -2643,6 +2858,22 @@ mod tests {
             file: "/tmp/app.db".into(),
             ..connect::Connection::default()
         }])
+    }
+
+    /// Wait for a background connect/reconnect (Run H, T531/T532) to
+    /// resolve, so a test can observe its outcome synchronously, as a real
+    /// event loop would.
+    fn wait_for_connect(b: &mut Browser) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while b.connect_running() || b.reconnect_running() {
+            b.poll_connect();
+            b.poll_reconnect();
+            assert!(
+                std::time::Instant::now() < deadline,
+                "connect/reconnect did not finish within 5s"
+            );
+            std::thread::yield_now();
+        }
     }
 
     #[test]
@@ -2699,6 +2930,9 @@ mod tests {
             ..connect::Connection::default()
         }]);
         b.handle_key(key(KeyCode::Enter), Pages::default());
+        // The credential waterfall (password_command, then the keyring) now
+        // runs in the background (T531); wait for it.
+        wait_for_connect(&mut b);
         assert_eq!(
             b.view,
             View::Password,
