@@ -111,11 +111,18 @@ pub struct Tree {
 }
 
 impl Tree {
-    /// Parse `text` as JSON or YAML into a value tree. Returns `None` when the
-    /// text does not parse (the host can warn). YAML's parser also accepts JSON.
-    #[must_use]
-    pub fn from_text(text: &str, format: Format) -> Option<Self> {
-        let parsed: serde_yaml::Value = serde_yaml::from_str(text).ok()?;
+    /// Parse `text` as JSON or YAML into a value tree. YAML's parser also
+    /// accepts JSON.
+    ///
+    /// # Errors
+    ///
+    /// Returns the parser's own message (line/column included) when `text`
+    /// does not parse, instead of discarding it (Run H, T543: this used to
+    /// return a bare `Option`, so the caller could only show a static "not
+    /// valid JSON or YAML" with no indication of what was actually wrong or
+    /// where).
+    pub fn from_text(text: &str, format: Format) -> Result<Self, String> {
+        let parsed: serde_yaml::Value = serde_yaml::from_str(text).map_err(|e| e.to_string())?;
         let mut tree = Tree {
             root: from_yaml(&parsed),
             format,
@@ -129,7 +136,7 @@ impl Tree {
             redo: Vec::new(),
         };
         tree.rebuild();
-        Some(tree)
+        Ok(tree)
     }
 
     /// The chosen format.
@@ -646,8 +653,23 @@ mod tests {
     }
 
     #[test]
-    fn invalid_input_is_none() {
-        assert!(Tree::from_text("{ not valid", Format::Json).is_none());
+    fn invalid_input_is_an_error() {
+        assert!(Tree::from_text("{ not valid", Format::Json).is_err());
+    }
+
+    #[test]
+    fn parse_error_names_the_real_problem() {
+        // T543 (Run H): this used to be a bare `Option`, so the caller could
+        // only show a generic "not valid JSON or YAML" -- now the parser's
+        // own message (line/column included) is available.
+        // `Tree` isn't `Debug`, so `unwrap_err` isn't available; match instead.
+        let Err(err) = Tree::from_text("a: [1, 2\nb: 3", Format::Yaml) else {
+            panic!("expected a parse error");
+        };
+        assert!(
+            err.to_lowercase().contains("line"),
+            "the parser's own diagnostic names a location: {err:?}"
+        );
     }
 
     #[test]
@@ -731,8 +753,8 @@ mod tests {
     #[test]
     fn deeply_nested_value_does_not_overflow() {
         // The recursive `from_yaml`/`rebuild` walk must not stack-overflow on
-        // pathologically nested input; serde's depth limit rejects it as None.
+        // pathologically nested input; serde's depth limit rejects it as an error.
         let deep = format!("{}{}", "[".repeat(100_000), "]".repeat(100_000));
-        assert!(Tree::from_text(&deep, Format::Json).is_none());
+        assert!(Tree::from_text(&deep, Format::Json).is_err());
     }
 }

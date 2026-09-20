@@ -5287,6 +5287,7 @@ dependencies = [
  "vix-calendar-panel",
  "vix-case",
  "vix-checksum-tool",
+ "vix-civil-date",
  "vix-clipboard",
  "vix-clock-panel",
  "vix-color-converter-tool",
@@ -5484,6 +5485,10 @@ dependencies = [
  "md-5 0.11.0",
  "sha2 0.11.0",
 ]
+
+[[package]]
+name = "vix-civil-date"
+version = "1.6.0"
 
 [[package]]
 name = "vix-clipboard"
@@ -5792,6 +5797,7 @@ name = "vix-file-information-panel"
 version = "1.6.0"
 dependencies = [
  "vix-byte-size",
+ "vix-civil-date",
  "vix-list-state",
 ]
 
@@ -5824,6 +5830,7 @@ name = "vix-git"
 version = "1.6.0"
 dependencies = [
  "similar 3.2.0",
+ "vix-civil-date",
  "vix-list-state",
 ]
 
@@ -5969,6 +5976,7 @@ dependencies = [
  "bitflags 2.13.1",
  "proptest",
  "regex",
+ "vix-civil-date",
 ]
 
 [[package]]

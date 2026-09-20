@@ -9,4 +9,5 @@ description = "Git integration: status/diff/staging via the git CLI."
 
 [dependencies]
 similar = { workspace = true }
+vix-civil-date = { path = "../vix-civil-date", version = "1.6.0" }
 vix-list-state = { path = "../vix-list-state", version = "1.6.0" }

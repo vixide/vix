@@ -4109,7 +4109,7 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   deliberately left alone, different check semantics, out of scope
   here). All 11 `--ignored git::*` tests plus the 5 `--ignored
   editing::*` git/hunk/spellcheck tests still pass.
-- [ ] **T520 — The Howard Hinnant civil-date algorithm
+- [x] **T520 — The Howard Hinnant civil-date algorithm
   (`civil_from_days`/`days_from_civil`) is hand-rolled independently in
   3 crates.** `crates/vix-file-information-panel/src/lib.rs:159-170`,
   `crates/vix-git/src/lib.rs:355-368` (`epoch_to_date`), and
@@ -4119,7 +4119,23 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   risk in three unrelated copies rather than domain-driven similarity
   (none of the three crates depend on `time`/`chrono`). Fix: extract a
   tiny dependency-free crate (or fold into an existing low-level one)
-  exposing both functions, unit-tested once. Small effort.
+  exposing both functions, unit-tested once. Small effort. **Done
+  2026-09-20**: new `vix-civil-date` crate (same "own spec + own tests
+  + a real reuse story" bar T521 cleared), all three sites now
+  delegate; `vix-org`'s `days_from_civil` (the reverse direction, never
+  duplicated elsewhere) moved here too rather than staying behind,
+  since it's the natural pair of `civil_from_days`. New direct tests
+  (round-trip across a ~1000-year span, known reference dates
+  cross-checked against Python's `datetime` — caught a real arithmetic
+  slip in the test's own first draft, `18_506` vs. the correct
+  `18_518`, before it shipped) give this algorithm its first-ever
+  isolated unit coverage; previously all three copies were only ever
+  exercised indirectly through each crate's own higher-level date
+  logic. Crate count 117→118. All pre-existing tests that exercise the
+  refactored call sites directly (`vix-file-information-panel`'s
+  `epoch_and_known_dates_format`, `vix-git`'s
+  `epoch_to_date_applies_tz_offset`, `vix-org`'s full 73-test suite)
+  still pass unchanged.
 - [x] **T521 — `human_bytes` byte-size formatter duplicated verbatim
   (including its doc comment) in 2 crates.**
   `crates/vix-file-information-panel/src/lib.rs:108-126` and
@@ -4147,13 +4163,28 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   `revert_hunk_restores_committed_text` and
   `conflict_resolve_keeps_chosen_side` (`tests/integration/editing.rs`)
   still pass.
-- [ ] **T523 — Throwaway git-repo bootstrap reimplemented 13 times
+- [x] **T523 — Throwaway git-repo bootstrap reimplemented 13 times
   across `tests/integration/{git,editing}.rs`.** No shared helper in
   `common.rs`, so every test needing a real repo hand-rolls the same
   `run` closure + `init -q` + two `config` calls (13 sites total), each
   preceded by a redundant `fs::create_dir_all` (`unique_dir` already
   does this). Fix: add `pub(crate) fn init_git_repo(dir: &Path)` to
-  `common.rs`. Small effort, test-only.
+  `common.rs`. Small effort, test-only. **Done 2026-09-20**: signature
+  ended up `init_git_repo(dir: &Path, name: &str)` — 12 of the 13 sites
+  pass the literal `"Test"`, one (`git_blame_annotates_the_current_line`)
+  deliberately passes `"Ada Lovelace"` to prove blame surfaces the real
+  author, not a hardcoded placeholder, so the name had to stay a
+  parameter rather than being baked into the helper. Only the `git
+  init`/`git config` sequence moved — every site still declares its own
+  local `run` closure for whatever commands it needs afterward (`add`,
+  `commit`, …); 2 of the 13 no longer needed one at all post-init and
+  had it removed outright (caught by `unused_variables` immediately).
+  The redundant-`fs::create_dir_all`-after-`unique_dir` note in this
+  entry's own original text was **not** acted on — it turned out to
+  describe a much broader pattern (21 sites across the whole test
+  suite, not just these 13), out of this task's actual scope; left for
+  a separate cleanup if picked up later. All 16 `--ignored` `git::*`/
+  relevant `editing::*` tests pass, including the Ada Lovelace one.
 - [x] **T524 — Three genuine sentence-level duplicate i18n key pairs.**
   `prompt.git_clone`/`prompt.jj_clone` (`locales/prompt.yml:795-796` /
   `:1051-1052`), `status.git_empty_url`/`status.jj_empty_url`
@@ -4459,13 +4490,23 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   lower-priority sites named in the finding (`modal.rs:509`,
   `org.rs:379` — bypass the pattern but never claimed success) were
   deliberately left alone, out of this task's actual scope.
-- [ ] **T543 — `vix-edit-value` (JSON/YAML editor) discards
+- [x] **T543 — `vix-edit-value` (JSON/YAML editor) discards
   `serde_yaml`'s line/column diagnostics, showing only a static "not
   valid JSON or YAML."** `crates/vix-edit-value/src/lib.rs:117-119`:
   `serde_yaml::from_str(text).ok()?` throws away the parser's own
   location detail; the caller (`src/app.rs:9639`) has nothing better to
   show. Fix: change `from_text` to return `Result<Self, String>` and
-  surface the real message. Medium effort.
+  surface the real message. Medium effort. **Done 2026-09-20**,
+  implemented exactly as scoped. `msg.edit_value_parse` (single call
+  site, safe to reshape directly) gained `%{error}`. `Tree` isn't
+  `Debug`, so the existing tests' `.unwrap_err()` calls needed
+  `let Err(e) = ... else { panic!() }` instead — `unwrap_err` requires
+  the `Ok` type to be `Debug`, not the error. New test confirms the
+  parser's real message (a line number) reaches the surfaced string,
+  not just a generic "not valid" message; a second, App-level test
+  confirms the same all the way through `tools.edit_json`'s real
+  failure path. All 11 `vix-edit-value` tests plus both
+  `editing::edit_json_*` integration tests pass.
 - [x] **T544 — `save_session` discards its error silently while the
   identical-shaped `store_settings` two lines below is handled
   properly.** `src/app.rs:13419-13428`: `self.save_session();` (root:

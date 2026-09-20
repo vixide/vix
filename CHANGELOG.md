@@ -712,6 +712,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The JSON/YAML editor's "not valid JSON or YAML" message now says
+  what's actually wrong and where** (found by a codebase self-audit,
+  T543): it used to be one static message regardless of the real
+  parse failure; now it includes the parser's own line/column detail.
 - **Several settings/state saves that happen automatically after an
   action — adding/removing an agenda file, saving a theme selection,
   the command-palette recent-commands list, DB connection/query-history
