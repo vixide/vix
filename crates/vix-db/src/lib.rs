@@ -1038,7 +1038,12 @@ impl Browser {
     /// `password_command` then the keyring), reporting back
     /// [`ConnectOutcome::NeedsPassword`] when that comes up empty. `idx` is
     /// only meaningful for the `None` case — see [`PendingConnect::idx`].
-    fn begin_connect(&mut self, conn: connect::Connection, password: Option<String>, idx: Option<usize>) {
+    fn begin_connect(
+        &mut self,
+        conn: connect::Connection,
+        password: Option<String>,
+        idx: Option<usize>,
+    ) {
         let (tx, rx) = std::sync::mpsc::channel();
         let worker_conn = conn.clone();
         let worker_password = password.clone();
@@ -1075,8 +1080,11 @@ impl Browser {
             Ok(outcome) => outcome,
             Err(std::sync::mpsc::TryRecvError::Empty) => {
                 self.message = Some(
-                    t!("msg.db_connecting", secs = pending.started.elapsed().as_secs())
-                        .to_string(),
+                    t!(
+                        "msg.db_connecting",
+                        secs = pending.started.elapsed().as_secs()
+                    )
+                    .to_string(),
                 );
                 self.pending_connect = Some(pending); // still waiting -- put it back
                 return;
@@ -2827,7 +2835,9 @@ fn connect_worker(conn: &connect::Connection, password: Option<&str>) -> Connect
     let setup: Vec<String> = if conn.writable {
         Vec::new()
     } else {
-        connect::read_only_sql(conn.kind, true).into_iter().collect()
+        connect::read_only_sql(conn.kind, true)
+            .into_iter()
+            .collect()
     };
     match session::Session::connect(&url, &setup) {
         Ok(session) => ConnectOutcome::Connected { session, tunnel },
