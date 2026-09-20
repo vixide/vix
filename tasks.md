@@ -4057,14 +4057,15 @@ quality, and cross-platform (Windows) correctness. Two genuine
 correctness bugs turned up (T518, T535 below), not just style/maintenance
 debt. Grouped by source pass; ranked by value/effort within each group.
 
-**23 of 32 done as of 2026-09-20** (T518–T525, T528, T533–T537, T539–T546,
-T548) — every item with no architectural risk and no external dependency
-this session couldn't provide (a Windows machine/CI, careful multi-session
-design work, or an explicit product decision). What remains is real,
-scoped, and ranked, not vague: one item needing a product decision this
-session shouldn't make unilaterally (T526 — `wrap_line` over-long-word
-behavior), two more dedups needing a small trait/wider locale sweep
-(T527, T529–T530), the two DB-connect concurrency findings (T531, T532 —
+**24 of 32 done as of 2026-09-20** (T518–T525, T528–T529, T533–T537,
+T539–T546, T548) — every item with no architectural risk and no external
+dependency this session couldn't provide (a Windows machine/CI, careful
+multi-session design work, or an explicit product decision). What remains
+is real, scoped, and ranked, not vague: one item needing a product
+decision this session shouldn't make unilaterally (T526 — `wrap_line`
+over-long-word behavior), two more dedups (T527 — a ~15-locale help-text
+sweep; T530 — a small low-priority batch), the two DB-connect concurrency
+findings (T531, T532 —
 T531 is explicitly the highest-severity single finding of this whole run,
 but deliberately not rushed), a large cross-cutting error-structuring
 item (T538), and two Windows items that need a way to
@@ -4272,7 +4273,7 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   `unstage_hunk_removes_the_cursor_hunk_from_index`,
   `revert_hunk_restores_committed_text`) still pass unchanged; full
   `scripts/check` green.
-- [ ] **T529 — `src/app/picker_panels.rs`: near-identical key/mouse
+- [x] **T529 — `src/app/picker_panels.rs`: near-identical key/mouse
   dispatch duplicated across 4 list panels (~120 lines).** `ascii_mouse`
   (148-163), `x11_mouse` (228-243), `media_type_mouse` (461-476) are
   textually identical apart from field name and insert callback; the
@@ -4281,6 +4282,26 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   panel types already expose the same method names (`up`/`down`/
   `page_up`/`page_down`/`select_index`), so a small trait (legal in the
   `vix` binary crate) could unify this. Medium effort.
+  **Done 2026-09-20**: added a private `ListPanel` trait (`up`/`down`/
+  `page_up`/`page_down`/`scroll`) implemented for the four panel types
+  via one `impl_list_panel!` macro (each method just forwards to the
+  panel's own identically-named inherent method) — `select_index` was
+  deliberately left out of the trait: it's still called directly as an
+  inherent method at each call site, since what happens after a
+  successful select is exactly the part that genuinely differs per
+  panel. Two free functions now do the shared work: `list_panel_nav_key`
+  (Up/Down/PageUp/PageDown, used by all 4 `*_key` handlers, each still
+  handling its own remaining keys — Home/End, Enter, Esc, Backspace/Char
+  — afterward) and `list_panel_click_index` (left-click hit-test +
+  scroll-relative row → index, used by all 4 `*_mouse` handlers, each
+  still deciding what to do with a successful `select_index`).
+  `picker_panels.rs` shrank from 494 to 468 lines despite the added
+  trait/macro/helper scaffolding. No behavior change, no new locale
+  keys, no CHANGELOG entry (pure internal dedup, per T309's rule).
+  Verified: `cargo clippy -p vix --all-targets -- -D warnings` clean;
+  full `cargo test --test integration` (548 tests, including the ASCII
+  panel, media-type picker, and all 5 theme-editor/x11-picker tests)
+  passes unchanged.
 - [ ] **T530 — Minor duplication, low priority.** `rgb(hex)` hex-to-byte
   parsing duplicated in `crates/vix-editor-core/src/utils.rs:88-99` and
   `crates/vix-base16/src/lib.rs:99-103` (same lenient policy; not
