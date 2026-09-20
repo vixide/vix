@@ -1221,7 +1221,14 @@ impl Browser {
     /// in-memory password — and return to the connections list.
     pub fn disconnect(&mut self) {
         self.conn = None;
-        self.session = None;
+        // Signal the worker before dropping it (T532): if it's stuck mid-
+        // statement on a hung network read, this is what actually gets it
+        // to notice and exit, rather than leaving the connection open (and
+        // counting against the database's own connection limit) until a
+        // network condition that may never resolve on its own does.
+        if let Some(session) = self.session.take() {
+            session.cancel();
+        }
         self.tunnel = None; // drop → kills the ssh forward
         self.write_enabled = false;
         self.log = store::Log::default();
