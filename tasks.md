@@ -4369,7 +4369,7 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   atomic path (unwritable directory) and the fallback (read-only file)
   and confirms the returned error's kind and message reflect the
   fallback's real failure, not the stale atomic one.
-- [ ] **T536 — DAP (debugger) requests silently discard failure — a
+- [x] **T536 — DAP (debugger) requests silently discard failure — a
   rejected breakpoint or an invalid step request just "does nothing,"
   no message.** `crates/vix-dap/src/lib.rs:375-420`, the `Pending::
   Other => {}` arm at line 418 throws away both `success` and the
@@ -4379,7 +4379,22 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   right (`LspEvent::RequestFailed`, surfaced in `src/app/lsp_dap.rs`);
   DAP has no counterpart. Fix: add a `DapEvent::RequestFailed(String)`
   variant, check `success` in the `Other` arm, surface it the same way
-  LSP's failures already are. Medium effort.
+  LSP's failures already are. Medium effort. **Done 2026-09-20**: went
+  a step further than "the `Other` arm" — `Pending::Other` gained a
+  `String` field (the command name) so the check runs uniformly for
+  *every* pending kind except `Evaluate` (which already reports its
+  own failure inline), not just the generic catch-all; `StackTrace`/
+  `Scopes`/`Variables` failures are now reported too, closing a gap
+  the task's own wording hadn't named. The command-name-plus-reason
+  formatting logic was pulled into a free function
+  (`failed_request_text`) specifically so it has direct unit coverage
+  without needing a live `Session`/spawned adapter — this crate's
+  existing tests are all pure-function-shaped, so a live-`Session`
+  integration test would have been the odd one out. New
+  `status.dap_request_failed` mirrors the existing
+  `status.lsp_request_failed` exactly (`"Debugger: %{message}"`, same
+  as `"Language server: %{message}"`), surfaced in `src/app.rs`'s
+  `DapEvent` match arm right next to the LSP one it mirrors.
 - [ ] **T537 — A settings-file syntax error silently resets everything
   to defaults on next launch, with zero notification.**
   `crates/vix-settings/src/lib.rs:541-543`: `pub fn load() -> Settings {

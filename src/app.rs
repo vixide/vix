@@ -4986,6 +4986,12 @@ impl App {
                     self.refresh_debug_markers();
                     self.status = t!("status.debug_terminated").to_string();
                 }
+                crate::dap::DapEvent::RequestFailed(message) => {
+                    // T536 (Run H): mirrors the identical LSP handling above
+                    // (`LspEvent::RequestFailed`) — a rejected breakpoint or
+                    // an invalid step used to just silently "do nothing".
+                    self.status = t!("status.dap_request_failed", message = message).to_string();
+                }
             }
         }
         // Re-evaluate watches whenever we are stopped.
