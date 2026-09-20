@@ -28,35 +28,14 @@ pub struct Panel {
     pub scroll: usize,
 }
 
-/// Greedily word-wrap one source `line` to `width` columns. A blank line yields a
-/// single empty string; a word longer than `width` is left to overflow. `width`
-/// `0` returns the line unchanged.
+/// Greedily word-wrap one source `line` to `width` columns. A blank line
+/// yields a single empty string; a word longer than `width` is hard-broken
+/// character-by-character; `width` `0` returns the line unchanged. Delegates
+/// to `vix-greedy-wrap` (Run H, T526) -- this crate and `vix-ai-panel` used
+/// to each hand-roll an independent copy, disagreeing on exactly the
+/// over-long-word case; breaking is the product decision that won.
 fn wrap_line(line: &str, width: usize) -> Vec<String> {
-    if width == 0 {
-        return vec![line.to_string()];
-    }
-    let mut out: Vec<String> = Vec::new();
-    let mut cur = String::new();
-    let mut cur_len = 0usize;
-    for word in line.split_whitespace() {
-        let wlen = word.chars().count();
-        if cur_len == 0 {
-            cur.push_str(word);
-            cur_len = wlen;
-        } else if cur_len + 1 + wlen <= width {
-            cur.push(' ');
-            cur.push_str(word);
-            cur_len += 1 + wlen;
-        } else {
-            out.push(std::mem::take(&mut cur));
-            cur.push_str(word);
-            cur_len = wlen;
-        }
-    }
-    if !cur.is_empty() || out.is_empty() {
-        out.push(cur);
-    }
-    out
+    vix_greedy_wrap::wrap_line(line, width)
 }
 
 impl Panel {

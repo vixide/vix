@@ -4057,17 +4057,15 @@ quality, and cross-platform (Windows) correctness. Two genuine
 correctness bugs turned up (T518, T535 below), not just style/maintenance
 debt. Grouped by source pass; ranked by value/effort within each group.
 
-**26 of 32 done as of 2026-09-20** (T518–T530, T533–T537, T539–T546,
+**27 of 32 done as of 2026-09-20** (T518–T530, T533–T537, T539–T546,
 T548) — every item with no architectural risk and no external
 dependency this session couldn't provide (a Windows machine/CI, careful
-multi-session design work, or an explicit product decision). What remains
-is real, scoped, and ranked, not vague: one item needing a product
-decision this session shouldn't make unilaterally (T526 — `wrap_line`
-over-long-word behavior), the two DB-connect concurrency findings
-(T531, T532 — T531 is explicitly the highest-severity single finding of
-this whole run, but deliberately not rushed), a large cross-cutting
-error-structuring item (T538), and two Windows items that need a way to
-actually test on Windows first (T547) or are low-value cosmetic (T549).
+multi-session design work). What remains is real, scoped, and ranked, not
+vague: the two DB-connect concurrency findings (T531, T532 — T531 is
+explicitly the highest-severity single finding of this whole run, but
+deliberately not rushed), a large cross-cutting error-structuring item
+(T538), and two Windows items that need a way to actually test on
+Windows first (T547) or are low-value cosmetic (T549).
 
 ### Duplication / DRY
 
@@ -4226,7 +4224,7 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   Crate count 118→119. All 6 affected crates' full test suites pass,
   including each `vix-edit-*` crate's own pre-existing `undo_and_redo`-
   shaped test.
-- [ ] **T526 — `wrap_line` greedy word-wrap reimplemented independently
+- [x] **T526 — `wrap_line` greedy word-wrap reimplemented independently
   in `vix-welcome-panel` and `vix-ai-panel`, with a real behavior
   difference.** `crates/vix-welcome-panel/src/lib.rs:34-60` does not
   break over-long words; `crates/vix-ai-panel/src/lib.rs:154-183` does,
@@ -4237,6 +4235,31 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   greedy wrap" primitive.) **Needs a product decision first** (which
   over-long-word behavior is correct for each panel) before the merge —
   small/medium effort once decided.
+  **Done 2026-09-20**: asked rather than guessed — the user chose
+  "always break over-long words" (the AI panel's prior behavior) as the
+  merged answer. New tiny crate `vix-greedy-wrap` (`wrap_line(line: &str,
+  width: usize) -> Vec<String>`), matching this session's established
+  T520/T521/T525/T530 pattern for a pure function duplicated across
+  unrelated crates. Its implementation is the welcome panel's original
+  structure (the `width == 0`/blank-line edge cases it already handled
+  cleanly) with the AI panel's over-long-word hard-break spliced in, and
+  `split_whitespace()` (not `split(' ')`) for the word boundary — the AI
+  panel's original `split(' ')` would have produced spurious empty
+  "words" on a double space; folding both panels onto the more correct
+  splitter is a safe, in-scope tightening, not scope creep, since it
+  only changes behavior on an input (consecutive spaces) neither panel's
+  own tests exercised. Both panels' `wrap_line` are now one-line
+  delegations. Crate count 120→121. New tests (6, including one proving
+  double-spaces collapse and one proving an over-long word doesn't eat
+  the word before it) plus both panels' pre-existing wrap tests, which
+  needed no changes since the merged behavior is a strict superset for
+  every case they exercise. No CHANGELOG entry: the AI panel's rendered
+  behavior is unchanged, and the welcome panel's changes only for a
+  pathological input (a single word wider than the terminal) that
+  wasn't reachable before either. Verified: `cargo clippy --workspace
+  --all-targets -- -D warnings` clean; `cargo test -p vix-greedy-wrap -p
+  vix-welcome-panel -p vix-ai-panel` and the full `cargo test --workspace`
+  green; `scripts/check-docs` confirms the new crate (121 crates).
 - [x] **T527 — `menu.item.org.roam.*.help`/`menu.item.org.node.*.help`:
   4 pairs of identical help text for the same underlying actions, across
   ~15 locales.** `locales/menu.yml:20905/20921/20937/20969` (Org▸Roam)

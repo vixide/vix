@@ -8,4 +8,5 @@ repository.workspace = true
 description = "AI chat panel: a persistent conversation surface for the configured assistant."
 
 [dependencies]
+vix-greedy-wrap = { path = "../vix-greedy-wrap", version = "1.6.0" }
 

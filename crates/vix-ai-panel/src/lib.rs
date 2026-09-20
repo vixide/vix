@@ -149,37 +149,12 @@ impl Panel {
     }
 }
 
-/// Greedily word-wrap one paragraph (no embedded newlines) to `width` columns,
-/// breaking over-long words. Returns at least one (possibly empty) line.
+/// Greedily word-wrap one paragraph (no embedded newlines) to `width`
+/// columns, breaking over-long words. Returns at least one (possibly empty)
+/// line. Delegates to `vix-greedy-wrap` (Run H, T526) -- this crate and
+/// `vix-welcome-panel` used to each hand-roll an independent copy.
 fn wrap_line(text: &str, width: usize) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut cur = String::new();
-    for word in text.split(' ') {
-        if word.chars().count() > width {
-            if !cur.is_empty() {
-                lines.push(std::mem::take(&mut cur));
-            }
-            let mut chunk = String::new();
-            for ch in word.chars() {
-                if chunk.chars().count() == width {
-                    lines.push(std::mem::take(&mut chunk));
-                }
-                chunk.push(ch);
-            }
-            cur = chunk;
-            continue;
-        }
-        let extra = usize::from(!cur.is_empty());
-        if cur.chars().count() + extra + word.chars().count() > width {
-            lines.push(std::mem::take(&mut cur));
-        }
-        if !cur.is_empty() {
-            cur.push(' ');
-        }
-        cur.push_str(word);
-    }
-    lines.push(cur);
-    lines
+    vix_greedy_wrap::wrap_line(text, width)
 }
 
 #[cfg(test)]

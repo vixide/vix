@@ -8,3 +8,4 @@ repository.workspace = true
 description = "The first-run welcome screen's scroll state."
 
 [dependencies]
+vix-greedy-wrap = { path = "../vix-greedy-wrap", version = "1.6.0" }
