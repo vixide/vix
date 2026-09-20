@@ -827,10 +827,12 @@ fn workspace_dashboard_opens_counts_files_and_closes() {
         "folder is shown immediately"
     );
 
-    // Wait (bounded) for the async file-count metric to arrive.
+    // Wait (bounded) for the async file-count and disk-usage metrics to
+    // arrive.
     for _ in 0..200 {
         app.poll_dashboard();
-        if app.dashboard.as_ref().unwrap().file_count.is_some() {
+        let d = app.dashboard.as_ref().unwrap();
+        if d.file_count.is_some() && d.disk_usage.is_some() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -839,6 +841,16 @@ fn workspace_dashboard_opens_counts_files_and_closes() {
         app.dashboard.as_ref().unwrap().file_count,
         Some(2),
         "counted the two files"
+    );
+    // Run H, T549: a pure-Rust recursive sum replaced shelling out to `du`
+    // (unavailable on stock Windows), formatted via the same `human_bytes`
+    // the rest of the app uses -- the two files are 2 bytes each, well under
+    // 1 KiB, so this should read as a plain byte count.
+    let disk_usage = app.dashboard.as_ref().unwrap().disk_usage.clone();
+    assert_eq!(
+        disk_usage.as_deref(),
+        Some("4 B"),
+        "summed the two 2-byte files directly, no shell-out"
     );
 
     app.on_key(keycode(KeyCode::Esc));

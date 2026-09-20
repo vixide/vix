@@ -10941,8 +10941,9 @@ impl App {
 
     // ----- workspace dashboard ----------------------------------------------
 
-    /// Open the Workspace Dashboard and kick off the background metric computations
-    /// (disk usage via `du`, a recursive file count, and the git commit count).
+    /// Open the Workspace Dashboard and kick off the background metric
+    /// computations (a recursive disk-usage sum, a recursive file count, and
+    /// the git commit count).
     pub(super) fn open_dashboard(&mut self) {
         // Idempotent while already open: re-invoking the action must not spawn
         // another batch of metric threads (and another `du` scan) on top of the
@@ -10965,17 +10966,7 @@ impl App {
         let dtx = tx.clone();
         let droot = root.clone();
         std::thread::spawn(move || {
-            if let Ok(out) = std::process::Command::new("du")
-                .arg("-sh")
-                .arg(&droot)
-                .output()
-                && out.status.success()
-            {
-                let text = String::from_utf8_lossy(&out.stdout);
-                if let Some(size) = text.split_whitespace().next() {
-                    let _ = dtx.send(DashMsg::Disk(size.to_string()));
-                }
-            }
+            let _ = dtx.send(DashMsg::Disk(vix_byte_size::human_bytes(dir_size(&droot))));
         });
 
         let ftx = tx.clone();
@@ -13833,6 +13824,33 @@ fn do_replace(
         }
         None => current.1,
     }
+}
+
+/// Recursively sum file sizes (in bytes) under `dir`, skipping `.git` and
+/// `target` (the large generated trees) — mirrors [`count_files`]'s walk
+/// exactly. Pure Rust so it works identically on every platform, rather than
+/// shelling out to `du` (Run H, T549: `du` doesn't exist on stock Windows,
+/// so the Workspace Dashboard's disk-size figure silently never populated
+/// there). Best-effort: unreadable entries are skipped.
+fn dir_size(dir: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    let mut total = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        if name == ".git" || name == "target" {
+            continue;
+        }
+        match entry.file_type() {
+            Ok(ft) if ft.is_dir() => total += dir_size(&entry.path()),
+            Ok(ft) if ft.is_file() => {
+                total += entry.metadata().map_or(0, |m| m.len());
+            }
+            _ => {}
+        }
+    }
+    total
 }
 
 /// Recursively count regular files under `dir`, skipping `.git` and `target`
