@@ -4057,17 +4057,16 @@ quality, and cross-platform (Windows) correctness. Two genuine
 correctness bugs turned up (T518, T535 below), not just style/maintenance
 debt. Grouped by source pass; ranked by value/effort within each group.
 
-**25 of 32 done as of 2026-09-20** (T518–T525, T528–T530, T533–T537,
-T539–T546, T548) — every item with no architectural risk and no external
+**26 of 32 done as of 2026-09-20** (T518–T530, T533–T537, T539–T546,
+T548) — every item with no architectural risk and no external
 dependency this session couldn't provide (a Windows machine/CI, careful
 multi-session design work, or an explicit product decision). What remains
 is real, scoped, and ranked, not vague: one item needing a product
 decision this session shouldn't make unilaterally (T526 — `wrap_line`
-over-long-word behavior), one more dedup needing a ~15-locale help-text
-sweep (T527), the two DB-connect concurrency findings (T531, T532 —
-T531 is explicitly the highest-severity single finding of this whole run,
-but deliberately not rushed), a large cross-cutting error-structuring
-item (T538), and two Windows items that need a way to
+over-long-word behavior), the two DB-connect concurrency findings
+(T531, T532 — T531 is explicitly the highest-severity single finding of
+this whole run, but deliberately not rushed), a large cross-cutting
+error-structuring item (T538), and two Windows items that need a way to
 actually test on Windows first (T547) or are low-value cosmetic (T549).
 
 ### Duplication / DRY
@@ -4238,7 +4237,7 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   greedy wrap" primitive.) **Needs a product decision first** (which
   over-long-word behavior is correct for each panel) before the merge —
   small/medium effort once decided.
-- [ ] **T527 — `menu.item.org.roam.*.help`/`menu.item.org.node.*.help`:
+- [x] **T527 — `menu.item.org.roam.*.help`/`menu.item.org.node.*.help`:
   4 pairs of identical help text for the same underlying actions, across
   ~15 locales.** `locales/menu.yml:20905/20921/20937/20969` (Org▸Roam)
   and `:21065/21081/21129/21177` (Org▸Node) — confirmed both menu paths
@@ -4246,6 +4245,29 @@ actually test on Windows first (T547) or are low-value cosmetic (T549).
   Arguably intentional (same feature surfaced at two menu locations),
   but the whole sentence is duplicated per locale, not a short word.
   Medium effort (touches ~15 languages × 4 pairs).
+  **Done 2026-09-20**: verified, per-locale, that all 4 pairs really are
+  byte-identical across all 15 languages first (unlike T530's hint-string
+  sub-item, which looked the same but wasn't — checked this one properly
+  before touching it). `Item` gained a new private `help_key: Option<
+  &'static str>` field (and a `leaf_shared_help(label, action, shortcut,
+  help_key)` constructor alongside the existing `leaf`/`sub`): when set,
+  `Item::help()` derives the `.help` lookup from `help_key` instead of
+  the item's own `label`, so two items can share one catalog entry while
+  keeping their own (different) display labels. The 4 Org▸Node entries
+  now use `leaf_shared_help` pointing at their Org▸Roam counterpart's
+  help key; the 4 now-redundant `menu.item.org.node.*.help` blocks were
+  deleted from `locales/menu.yml` (60 locale lines removed: 4 keys × 15
+  languages). New test `org_node_items_share_help_text_with_their_org_
+  roam_counterparts` proves both the sharing (`Item::help()` returns the
+  same text as the Roam counterpart) and the cleanup (the stale
+  `org.node.*.help` key no longer resolves at all) — it would fail
+  either way if the wiring regressed. No CHANGELOG entry (pure internal
+  dedup, per T309's rule; the rendered tooltip text is unchanged).
+  Verified: `cargo clippy --workspace --all-targets -- -D warnings`
+  clean; `cargo test -p vix-menu` (11 tests, including the new one) and
+  the workspace-wide `tests/i18n_keys.rs` structural tests (catalog
+  completeness, placeholder-fill checks) all pass; `scripts/check-docs`
+  green.
 - [x] **T528 — `stage_hunk`/`unstage_hunk` share ~20 lines of identical
   setup and an identical `stage_content` dispatch/report tail; only the
   middle (staging vs. unstaging logic) genuinely differs.**

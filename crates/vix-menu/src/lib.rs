@@ -27,6 +27,14 @@ pub struct Item {
     /// When set, selecting this item opens a nested submenu instead of running
     /// an action.
     pub submenu: Option<&'static [Item]>,
+    /// Override for the label key `.help` is derived from (see
+    /// [`Item::help`]). `None` (the common case) derives help from `label`
+    /// itself; `Some(other_label)` shares another item's help translation --
+    /// used by a handful of items that surface the very same action (and so
+    /// the very same help text) at two menu locations (Run H, T527: Org →
+    /// Roam's node commands are also reachable under Org → Node), so the
+    /// sentence-length help string isn't duplicated per locale for both.
+    help_key: Option<&'static str>,
 }
 
 /// Sentinel `action` marking a non-selectable separator row in a dropdown.
@@ -40,6 +48,25 @@ impl Item {
             action,
             shortcut,
             submenu: None,
+            help_key: None,
+        }
+    }
+
+    /// A leaf item whose hover-tooltip help text is shared with another
+    /// item's translation, rather than its own `label.help`. See
+    /// [`Item::help_key`].
+    const fn leaf_shared_help(
+        label: &'static str,
+        action: &'static str,
+        shortcut: &'static str,
+        help_key: &'static str,
+    ) -> Item {
+        Item {
+            label,
+            action,
+            shortcut,
+            submenu: None,
+            help_key: Some(help_key),
         }
     }
 
@@ -50,6 +77,7 @@ impl Item {
             action: "",
             shortcut: "",
             submenu: Some(items),
+            help_key: None,
         }
     }
 
@@ -60,14 +88,15 @@ impl Item {
     }
 
     /// Hover-tooltip help text for this entry, translated into the active locale.
-    /// Derived from the label key by appending `.help`; `None` when no such key
-    /// exists (see `help_text`, private). Separators never have help.
+    /// Derived by appending `.help` to `help_key` when set, else to the label
+    /// key itself; `None` when no such key exists (see `help_text`, private).
+    /// Separators never have help.
     #[must_use]
     pub fn help(&self) -> Option<String> {
         if self.is_separator() {
             return None;
         }
-        help_text(self.label)
+        help_text(self.help_key.unwrap_or(self.label))
     }
 
     /// Whether this entry is a separator (a non-selectable divider line).
@@ -100,6 +129,7 @@ const SEP: Item = Item {
     action: SEPARATOR,
     shortcut: "",
     submenu: None,
+    help_key: None,
 };
 
 /// A top-level menu and its items.
@@ -1742,15 +1772,30 @@ const ORG_ROAM: &[Item] = &[
 /// Org → Node. Find / Insert Link / Random reuse the shared node infrastructure;
 /// the rest are org-node's distinctive operations.
 const ORG_NODE: &[Item] = &[
-    Item::leaf("menu.item.org.node.find", "roam.node_find", ""),
-    Item::leaf("menu.item.org.node.insert_link", "roam.node_insert", ""),
+    Item::leaf_shared_help(
+        "menu.item.org.node.find",
+        "roam.node_find",
+        "",
+        "menu.item.org.roam.node_find",
+    ),
+    Item::leaf_shared_help(
+        "menu.item.org.node.insert_link",
+        "roam.node_insert",
+        "",
+        "menu.item.org.roam.node_insert",
+    ),
     Item::leaf("menu.item.org.node.link_complete", "roam.link_complete", ""),
     Item::leaf(
         "menu.item.org.node.insert_transclusion",
         "node.insert_transclusion",
         "",
     ),
-    Item::leaf("menu.item.org.node.random", "roam.node_random", ""),
+    Item::leaf_shared_help(
+        "menu.item.org.node.random",
+        "roam.node_random",
+        "",
+        "menu.item.org.roam.node_random",
+    ),
     SEP,
     Item::leaf("menu.item.org.node.nodeify", "node.nodeify", ""),
     Item::leaf(
@@ -1759,7 +1804,12 @@ const ORG_NODE: &[Item] = &[
         "",
     ),
     SEP,
-    Item::leaf("menu.item.org.node.backlinks", "roam.backlinks", ""),
+    Item::leaf_shared_help(
+        "menu.item.org.node.backlinks",
+        "roam.backlinks",
+        "",
+        "menu.item.org.roam.backlinks",
+    ),
     Item::leaf("menu.item.org.node.dead_links", "node.dead_links", ""),
     SEP,
     Item::leaf(
@@ -2637,6 +2687,56 @@ mod tests {
             .expect("file.new item");
         assert!(new.help().is_some(), "menu item help present");
         assert_eq!(SEP.help(), None, "separators have no help");
+    }
+
+    /// Org → Node's Find/Insert Link/Random/Backlinks entries reuse Org →
+    /// Roam's exact actions (Run H, T527) and, via `Item::leaf_shared_help`,
+    /// their exact help text too -- rather than each locale carrying two
+    /// copies of the same sentence. `locales/menu.yml` has no
+    /// `menu.item.org.node.find.help` (etc.) entry any more, so this only
+    /// passes if the item's `help_key` override is actually wired up.
+    #[test]
+    fn org_node_items_share_help_text_with_their_org_roam_counterparts() {
+        let pairs = [
+            ("menu.item.org.node.find", "menu.item.org.roam.node_find"),
+            (
+                "menu.item.org.node.insert_link",
+                "menu.item.org.roam.node_insert",
+            ),
+            (
+                "menu.item.org.node.random",
+                "menu.item.org.roam.node_random",
+            ),
+            (
+                "menu.item.org.node.backlinks",
+                "menu.item.org.roam.backlinks",
+            ),
+        ];
+        let find_item = |label: &str| -> &Item {
+            ORG_ROAM
+                .iter()
+                .chain(ORG_NODE.iter())
+                .find(|it| it.label == label)
+                .unwrap_or_else(|| panic!("no item labeled {label}"))
+        };
+        for (node_label, roam_label) in pairs {
+            let node_help = find_item(node_label).help();
+            let roam_help = find_item(roam_label).help();
+            assert!(
+                node_help.is_some(),
+                "{node_label} should resolve shared help text"
+            );
+            assert_eq!(
+                node_help, roam_help,
+                "{node_label} and {roam_label} should share identical help text"
+            );
+            let stale_key = format!("{node_label}.help");
+            assert_eq!(
+                t!(&stale_key).to_string(),
+                stale_key,
+                "{stale_key} should no longer exist as its own catalog entry"
+            );
+        }
     }
 
     /// Every menu label that is an i18n key (by convention, prefixed `menu.` —
