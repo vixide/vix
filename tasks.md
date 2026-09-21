@@ -4087,10 +4087,34 @@ measured problem today. Everything else actionable in this run is closed.
     zero behavior change: `cargo test -p vix-db` (119 tests) and
     `cargo test --test db_smoke -- --include-ignored` (12 tests) both
     pass unchanged; full `scripts/check` green.
-  - Remaining for `vix-db` (not yet sliced): AI features (~12 methods),
-    results-grid cell editing (~12), import/export/history/saved/log/
-    chart (~18), tree/editor/results key dispatch + popup/detail/DDL
-    (~10). `vix-org` not started at all yet.
+  - **`vix-db` slice 3/~5, done**: `ai_features.rs` — Ask a schema-
+    grounded question, fix the last error, explain a query, optimize
+    the statement at the cursor, and apply/discard the reply
+    (`ai_busy`/`take_ai_request`/`key_ask`/`open_ask`/`schema_facts`/
+    `submit_ask`/`queue_ai`/`fix_error`/`explain_query`/
+    `optimize_current`/`apply_ai_reply`/`ai_failed` — 12 methods), plus
+    the private `AiReply`/`AiState` and `pub` `AiRequest` types (and two
+    small `SchemaColumns`/`SchemaRels` type aliases). `lib.rs`
+    2,340→2,074 lines. The one slice so far needing `pub mod` rather
+    than a plain private `mod`: `AiRequest` crosses the crate boundary
+    (`src/app.rs` calls `Browser::take_ai_request` directly), so keeping
+    the module private would have left a `pub` type unreachable from
+    outside the crate — caught immediately by `cargo doc`'s
+    `private-intra-doc-links` check (`RUSTDOCFLAGS="-D warnings"`,
+    matching CI's own invocation, now run as a matter of course before
+    every commit in this run rather than found out by CI). Also needed
+    to bump `AiReply` to `pub(crate)` (a plain compiler warning this
+    time, not a hard doc error): `AiState`'s own `pub(crate)`
+    `Running(AiReply)` variant can't be more visible than the payload
+    type it carries. Pure move otherwise, zero behavior change: `cargo
+    test -p vix-db` (119 tests, including the AI-specific
+    `ask_ai_builds_a_schema_only_request_and_applies_the_reply` in
+    `db_smoke.rs`) and the full `db_smoke.rs` suite (12 tests) both
+    pass unchanged; full `scripts/check` green.
+  - Remaining for `vix-db` (not yet sliced): results-grid cell editing
+    (~12 methods), import/export/history/saved/log/chart (~18),
+    tree/editor/results key dispatch + popup/detail/DDL (~10). `vix-org`
+    not started at all yet.
 - [ ] **T517 — `vix-i18n` eagerly builds all 15 locales' translation
   maps at startup, not just the active one.** Confirmed via the real
   `rust-i18n-macro` expansion: `i18n!` generates a `LazyLock` whose init
