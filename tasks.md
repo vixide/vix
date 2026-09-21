@@ -4214,6 +4214,27 @@ measured problem today. Everything else actionable in this run is closed.
       comment mention) in `columns.rs` to the new path. Pure move,
       zero behavior change: `cargo test -p vix-org` (73 tests) and the
       full workspace suite pass unchanged; full `scripts/check` green.
+    - **`vix-org` slice 3/~6, done**: `properties_and_dates.rs` — "Tags
+      & properties" (`get_tags`/`set_tags`/`toggle_tag`/`set_property`),
+      "Archive" (`archive_subtree`), and "Dates & scheduling"
+      (`timestamp_for`/`shift_timestamp_at`/`plan`) merged into one
+      file — 8 `pub fn`s re-exported at the crate root. `lib.rs`
+      2,242→1,878 lines (post-`cargo fmt`). Three private items bumped
+      to `pub(crate)`: `TAGS` (the tag-group regex — needed by
+      `columns.rs`, which renders a tags column, and by the "Column
+      view" section still in `lib.rs`), `is_planning` (needed by
+      `columns.rs`, to skip a headline's planning line when placing a
+      dblock), and `line_of_char` (needed by the Footnotes section,
+      still in `lib.rs`). Fixed 6 `crate::TAGS`/`crate::is_planning`
+      call sites in `columns.rs` to the new `crate::
+      properties_and_dates::` path. Extended the extraction script's
+      `pub_crate_items` bumper to also match `static` items (it
+      previously only matched `fn`/`struct`/`enum`/`const`/`type` — the
+      first slice needing a `pub(crate)` static surfaced the gap, a
+      `SystemExit` before anything was written, not a silent bug).
+      Pure move, zero behavior change: `cargo test -p vix-org` (73
+      tests) and the full workspace suite (every crate, 0 failures)
+      pass unchanged; full `scripts/check` green.
 - [ ] **T517 — `vix-i18n` eagerly builds all 15 locales' translation
   maps at startup, not just the active one.** Confirmed via the real
   `rust-i18n-macro` expansion: `i18n!` generates a `LazyLock` whose init

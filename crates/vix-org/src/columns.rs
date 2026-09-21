@@ -292,7 +292,7 @@ fn file_level_columns_spec(lines: &[&str]) -> Option<ColumnsSpec> {
 /// owned by headline `h` (after any planning line), or `None` if it has none.
 fn own_property_drawer(lines: &[&str], h: usize) -> Option<(usize, usize)> {
     let mut at = h + 1;
-    if at < lines.len() && crate::is_planning(lines[at]) {
+    if at < lines.len() && crate::properties_and_dates::is_planning(lines[at]) {
         at += 1;
     }
     if at < lines.len() && lines[at].trim().eq_ignore_ascii_case(":PROPERTIES:") {
@@ -377,7 +377,7 @@ fn parse_headline_parts(line: &str) -> (String, String, String) {
     let Some(level) = crate::headline_level(line) else {
         return (String::new(), String::new(), String::new());
     };
-    let bare = crate::TAGS.replace(line, "");
+    let bare = crate::properties_and_dates::TAGS.replace(line, "");
     let rest = bare[level..].trim();
     let (kw, body) = split_keyword_generic(rest);
     let (prio, title) = match crate::todo_meta::strip_priority(body) {
@@ -401,7 +401,7 @@ fn item_priority(lines: &[&str], h: usize) -> String {
 
 /// A headline's own trailing `:tag:tag:` group, colon-wrapped (`""` if none).
 fn item_tags(lines: &[&str], h: usize) -> String {
-    match crate::TAGS.captures(lines[h]) {
+    match crate::properties_and_dates::TAGS.captures(lines[h]) {
         Some(c) => {
             let inner = c[1].trim_matches(':').replace("::", ":");
             if inner.is_empty() {
@@ -440,7 +440,7 @@ fn item_alltags(lines: &[&str], h: usize) -> String {
 fn planning_value(lines: &[&str], h: usize, keyword: &str) -> String {
     let mut i = h + 1;
     let mut combined = String::new();
-    while i < lines.len() && crate::is_planning(lines[i]) {
+    while i < lines.len() && crate::properties_and_dates::is_planning(lines[i]) {
         combined.push_str(lines[i]);
         combined.push(' ');
         i += 1;
@@ -1127,10 +1127,12 @@ fn set_item_text(text: &str, line: usize, new_title: &str) -> Option<String> {
     let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
     let original = lines.get(line)?.clone();
     let level = crate::headline_level(&original)?;
-    let tags_suffix = crate::TAGS
+    let tags_suffix = crate::properties_and_dates::TAGS
         .captures(&original)
         .map_or_else(String::new, |c| format!(" {}", &c[1]));
-    let bare = crate::TAGS.replace(&original, "").to_string();
+    let bare = crate::properties_and_dates::TAGS
+        .replace(&original, "")
+        .to_string();
     let rest = bare[level..].trim();
     let (kw, body) = split_keyword_generic(rest);
     let kw_prefix = if kw.is_empty() {
