@@ -4111,10 +4111,39 @@ measured problem today. Everything else actionable in this run is closed.
     `ask_ai_builds_a_schema_only_request_and_applies_the_reply` in
     `db_smoke.rs`) and the full `db_smoke.rs` suite (12 tests) both
     pass unchanged; full `scripts/check` green.
-  - Remaining for `vix-db` (not yet sliced): results-grid cell editing
-    (~12 methods), import/export/history/saved/log/chart (~18),
-    tree/editor/results key dispatch + popup/detail/DDL (~10). `vix-org`
-    not started at all yet.
+  - **`vix-db` slice 4/~5, done**: `cell_edit.rs` — the results grid's
+    editable-cell workflow: previewing a single table
+    (`preview_selected`/`set_editable`/`set_uneditable`), staging and
+    committing cell edits (`begin_cell_edit`/`key_cell_edit`/
+    `commit_edits`/`build_pending_updates`/`apply_updates_in_
+    transaction`), following a foreign key (`follow_fk`), expanding a
+    row (`expand_row`), the cell/text viewer (`key_cell`,
+    `staged_value`, `editable`), and the detail/DDL popup
+    (`show_detail`/`show_ddl`/`refresh_popup`/`preview_selected_
+    refresh`) — 17 methods, plus the private `CellEdit` type alias.
+    `lib.rs` 2,074→1,636 lines (more than half its original size gone).
+    The largest cross-reference count of any slice so far — 11 of its
+    17 methods needed `pub(super)` (called from `lib.rs`'s dispatch and
+    from `ai_features.rs`/`execute.rs`/`lifecycle.rs`), applied via a
+    small loop this time rather than one `sed` per name, having done
+    enough of these by now to know the shape. `Popup` (the struct these
+    methods populate) stayed in `lib.rs`: also used by the editor's
+    autocomplete popup, unrelated to cell editing, so moving its
+    *definition* here would have been wrong even though this slice is
+    its heaviest user. Pure move otherwise, zero behavior change:
+    `cargo test -p vix-db` (119 tests) and `cargo test --test db_smoke
+    -- --include-ignored` (12 tests, including
+    `staged_cell_edits_commit_in_a_transaction` and
+    `table_details_report_columns`) both pass unchanged; full
+    `scripts/check` green.
+  - Remaining for `vix-db` (not yet sliced): import/export/history/
+    saved/log/chart (~18 methods), tree/editor/results key dispatch +
+    a handful of small accessors (~10-15) — what's left of `lib.rs`
+    after this slice is close to being *only* those two groups plus
+    the genuinely-shared state (`Browser`'s own struct/`new`/`Form`/
+    `Pane`/`View`/`Popup`/the `handle_key` dispatcher), so slice 5 may
+    end up being the last one for `vix-db`. `vix-org` not started at
+    all yet.
 - [ ] **T517 — `vix-i18n` eagerly builds all 15 locales' translation
   maps at startup, not just the active one.** Confirmed via the real
   `rust-i18n-macro` expansion: `i18n!` generates a `LazyLock` whose init
