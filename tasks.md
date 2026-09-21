@@ -4195,6 +4195,25 @@ measured problem today. Everything else actionable in this run is closed.
       back from `lib.rs` and `columns.rs` via `crate::headline_nav::`.
       Pure move, zero behavior change: `cargo test -p vix-org` (73
       tests) passes unchanged; full `scripts/check` green.
+    - **`vix-org` slice 2/~6, done**: `todo_meta.rs` — the "Priority"
+      and "Statistics cookies & checkbox propagation" sections merged
+      into one file (they're small and share the checkbox regex/
+      helpers): priority cookies (`priority`/`set_priority`/
+      `priority_up`/`priority_down`/`close_headline`/`has_checkbox`/
+      `toggle_checkbox`) and statistics-cookie propagation
+      (`update_statistics`, plus `move_subtree_up`/`move_subtree_down`,
+      which live in this section for no deeper reason than "also
+      subtree-reordering-adjacent") — 10 `pub fn`s re-exported at the
+      crate root. `lib.rs` 2,591→2,242 lines. Three private helpers
+      bumped to `pub(crate)` and referenced back as
+      `crate::todo_meta::*`: `split_keyword`/`strip_priority` (the
+      Column view section still needs them, in `lib.rs` for now) and
+      `headline_todo` (needed by "Other built-in agenda views", also
+      still in `lib.rs`). Fixed two `crate::strip_priority`/
+      `crate::split_keyword` call sites (one live, one just a doc-
+      comment mention) in `columns.rs` to the new path. Pure move,
+      zero behavior change: `cargo test -p vix-org` (73 tests) and the
+      full workspace suite pass unchanged; full `scripts/check` green.
 - [ ] **T517 — `vix-i18n` eagerly builds all 15 locales' translation
   maps at startup, not just the active one.** Confirmed via the real
   `rust-i18n-macro` expansion: `i18n!` generates a `LazyLock` whose init
