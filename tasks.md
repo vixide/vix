@@ -4136,14 +4136,32 @@ measured problem today. Everything else actionable in this run is closed.
     `staged_cell_edits_commit_in_a_transaction` and
     `table_details_report_columns`) both pass unchanged; full
     `scripts/check` green.
-  - Remaining for `vix-db` (not yet sliced): import/export/history/
-    saved/log/chart (~18 methods), tree/editor/results key dispatch +
-    a handful of small accessors (~10-15) — what's left of `lib.rs`
-    after this slice is close to being *only* those two groups plus
-    the genuinely-shared state (`Browser`'s own struct/`new`/`Form`/
-    `Pane`/`View`/`Popup`/the `handle_key` dispatcher), so slice 5 may
-    end up being the last one for `vix-db`. `vix-org` not started at
-    all yet.
+  - **`vix-db` slice 5/5, done — `vix-db` fully sliced.** `panels.rs`:
+    everything left that wasn't connecting, running SQL, talking to the
+    assistant, or cell editing — history/saved-query lists, the query
+    log, the ER diagram, CSV/TSV import, results export, and the
+    tree/editor/results panes' own key dispatch (including the shared
+    autocomplete-popup handling) plus the chart/yank/format-at-cursor
+    odds and ends — 23 methods, no types to move. `lib.rs`
+    1,636→1,116 lines (**3,328→1,116 across all five slices, a 66%
+    cut**); real code (excluding the `#[cfg(test)]` module) is now
+    ~660 lines — `Browser`'s struct/`new`, `Form`/`Pane`/`View`/`Popup`,
+    and the two top-level dispatchers (`handle_key`/`key_workbench`),
+    exactly the "genuinely shared" core this run expected to be left
+    once every cohesive feature slice had its own file. Same mechanics
+    as every prior slice (a handful of `use super::{...}` imports for
+    modules this slice's methods call into, `pub(super)` on whichever
+    of its 23 methods `lib.rs`'s own dispatchers or a sibling slice
+    call back into). Pure move, zero behavior change: `cargo test -p
+    vix-db` (119 tests) and `cargo test --test db_smoke --
+    --include-ignored` (12 tests, including
+    `params_import_fk_and_chart_flows` and `query_log_records_metrics_
+    and_erd_maps_foreign_keys`) both pass unchanged; full `scripts/
+    check` green.
+  - **`vix-db` is done. `vix-org` not started at all yet** — its own
+    `lib.rs` (2,969 lines per the task's original citation) is the
+    remaining half of this run, on the same scale as what `vix-db` just
+    took five slices to do.
 - [ ] **T517 — `vix-i18n` eagerly builds all 15 locales' translation
   maps at startup, not just the active one.** Confirmed via the real
   `rust-i18n-macro` expansion: `i18n!` generates a `LazyLock` whose init
