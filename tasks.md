@@ -4020,7 +4020,7 @@ measured problem today. Everything else actionable in this run is closed.
   trap and its fix) plus doc-comment notes on `get_content`/`slice`
   themselves. `cargo doc -p vix-editor-core` (warnings denied) confirms
   every new intra-doc link resolves.
-- [ ] **T516 — `crates/vix-db/src/lib.rs` (3,035 lines / 119 fns) and
+- [x] **T516 — `crates/vix-db/src/lib.rs` (3,035 lines / 119 fns) and
   `crates/vix-org/src/lib.rs` (2,969 lines / 152 fns) are the one
   un-split piece left in two otherwise fully-modularized crates.**
   `vix-db` already has 17 sibling submodules covering every concern
@@ -4275,6 +4275,50 @@ measured problem today. Everything else actionable in this run is closed.
       `lib.rs` 1,730→1,275 lines. Pure move, zero behavior change:
       `cargo test -p vix-org` (73 tests) and the full workspace suite
       pass unchanged; full `scripts/check` green.
+    - **`vix-org` slice 6/6, done — closing T516 entirely.**
+      `export.rs`: the last of the file's 15 sections, `to_markdown`/
+      `to_html`/`to_latex`/`to_ics` re-exported at the crate root.
+      `LINK`/`BARE_LINK` (the `[[target][desc]]` regexes) and
+      `safe_href` (the XSS-hardening scheme guard from the 2026-07
+      security audit) bumped to `pub(crate)`: `text_refs.rs`'s
+      Hyperlinks functions need the first two, and `lib.rs`'s own test
+      module asserts on `safe_href` directly. That last one surfaced a
+      real asymmetry in the extraction technique worth recording: a
+      `pub(crate)` item referenced only through the test module's
+      `use super::*;` glob does *not* count as "used" for rustc's
+      unused-import lint on the re-exporting `use` at the crate root —
+      only a *named* `use super::{that_item, ...};` from a sibling
+      module does. Every prior slice's `pub(crate)` bump happened to
+      also be named-imported by a sibling, masking this; `safe_href`
+      wasn't, so `use export::safe_href;` at the root came back
+      "unused" even though the tests genuinely called it. Fixed by
+      dropping that import and qualifying the three test call sites as
+      `export::safe_href(...)` instead — simpler than chasing glob
+      semantics, and it's how a one-off test-only reference should
+      look anyway. Also dropped three more root-level imports
+      (`std::fmt::Write`, `std::sync::LazyLock`, `regex::Regex`) that
+      export.rs's departure left genuinely unused in `lib.rs`.
+      **`lib.rs` 1,275→936 lines (3,328→936 lines including the
+      3,328-line high-water mark this session's own T531/T532/T538
+      pushed it to before this run started — a 72% cut). What's left
+      is exactly the "genuinely central" core this run expected:
+      `headline_level`/`subtree_range`/`drawer_name`/
+      `is_drawer_header`/`drawer_range` (the primitives even
+      `headline_nav.rs` depends on), `promote`/`demote`/
+      `reindent_subtree`/`cycle_todo`/`set_headline_keyword`, the 15
+      `mod`/`use`/`pub use` declarations wiring the six new
+      submodules (`headline_nav`, `todo_meta`, `properties_and_dates`,
+      `text_refs`, `agenda`, `export` — plus the pre-existing
+      `columns`), and the `#[cfg(test)] mod tests` block exercising
+      the crate end-to-end (unchanged in shape across all six slices).**
+      Pure move, zero behavior change: `cargo test -p vix-org` (73
+      tests) and the full workspace suite (every crate, 0 failures)
+      pass unchanged; full `scripts/check` green.
+  - **T516 is fully done — both halves.** `vix-db`: 3,328→1,119 lines
+    across 5 slices. `vix-org`: 2,961→936 lines (crate-root citation)
+    across 6 slices. 11 new submodules total (5 + 6), zero behavior
+    change anywhere (every slice's tests passed unchanged before and
+    after), full `scripts/check` green on every one of the 11 pushes.
 - [ ] **T517 — `vix-i18n` eagerly builds all 15 locales' translation
   maps at startup, not just the active one.** Confirmed via the real
   `rust-i18n-macro` expansion: `i18n!` generates a `LazyLock` whose init
