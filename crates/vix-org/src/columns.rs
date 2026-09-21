@@ -358,7 +358,7 @@ fn direct_children(lines: &[&str], h: usize) -> Vec<usize> {
 }
 
 /// Split a headline's post-stars text into its recognized TODO-like keyword
-/// (see [`KEYWORDS`]) and the remaining body. Unlike `crate::split_keyword`
+/// (see [`KEYWORDS`]) and the remaining body. Unlike `crate::todo_meta::split_keyword`
 /// (hardcoded to literal `TODO`/`DONE`), this also recognizes the common
 /// extra states column view needs to display and edit.
 fn split_keyword_generic(rest: &str) -> (&str, &str) {
@@ -380,7 +380,7 @@ fn parse_headline_parts(line: &str) -> (String, String, String) {
     let bare = crate::TAGS.replace(line, "");
     let rest = bare[level..].trim();
     let (kw, body) = split_keyword_generic(rest);
-    let (prio, title) = match crate::strip_priority(body) {
+    let (prio, title) = match crate::todo_meta::strip_priority(body) {
         Some((p, after)) => (format!("[#{p}]"), after),
         None => (String::new(), body),
     };
@@ -1138,7 +1138,7 @@ fn set_item_text(text: &str, line: usize, new_title: &str) -> Option<String> {
     } else {
         format!("{kw} ")
     };
-    let priority_prefix = match crate::strip_priority(body) {
+    let priority_prefix = match crate::todo_meta::strip_priority(body) {
         Some((p, _)) => format!("[#{p}] "),
         None => String::new(),
     };
