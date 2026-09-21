@@ -4,8 +4,8 @@
 //! everything but TODO/occur matches), footnotes (jump to/create a `[fn:x]`
 //! reference or definition), source blocks (find/replace a `#+begin_src`
 //! body), and the read-only column-view table. Extracted from `lib.rs`
-//! (T516). `LINK`/`BARE_LINK` stay in `lib.rs`'s own Export section (not
-//! extracted yet) since it defines them; referenced back via `super::`.
+//! (T516). `LINK`/`BARE_LINK` live in `export.rs` (T516 slice 6), which
+//! defines them; referenced back via `crate::export::`.
 
 use std::fmt::Write as _;
 use std::sync::LazyLock;
@@ -13,9 +13,9 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use super::{
-    BARE_LINK, LINK, TAGS, governing, headline_level, line_of_char, split_keyword, strip_priority,
-    subtree_range,
+    TAGS, governing, headline_level, line_of_char, split_keyword, strip_priority, subtree_range,
 };
+use crate::export::{BARE_LINK, LINK};
 
 // ----- Hyperlinks ------------------------------------------------------------
 
