@@ -4056,11 +4056,41 @@ measured problem today. Everything else actionable in this run is closed.
     `handle_key` dispatcher) — same visibility pattern `src/app/*.rs`'s
     own split already established, since `Browser` (like `App`) is
     defined in the parent module the new file is a child of.
+  - **`vix-db` slice 2/~5, done**: `execute.rs` — running SQL: the
+    write/DDL confirmation and bind-parameter prompts (`key_confirm`,
+    `key_params`), synchronous internal queries (`run_sql`,
+    `run_catalog`, `run_traced`), the busy-gate (`workbench_busy`),
+    async execution (`execute`/`execute_sql`/`execute_all`/`explain`/
+    `run_statement`/`start_query`/`poll_query`/`cancel_query`/
+    `reconnect_running`/`poll_reconnect`/`finish_stream`/
+    `finish_stream_err`), client-side transaction tracking
+    (`note_tx`/`run_tx`/`begin_tx`/`commit_tx`/`rollback_tx`/`run_all`),
+    and two small accessors (`toggle_write_mode`/`pending_summary`) —
+    24 methods, plus the private `PendingRun`/`QueryKind`/`Pending`/
+    `PendingReconnect` types. `lib.rs` 2,918→2,340 lines.
+    Found-and-fixed one genuinely pre-existing (T531-introduced) doc-
+    comment misplacement surfaced by the move: `key_workbench`'s own
+    doc comment had ended up sitting above the newly-extracted
+    `workbench_busy` instead (harmless — both are private, so
+    `#![deny(missing_docs)]` never caught it) — restored to the right
+    function. Also caught a real bug in the extraction *script itself*
+    before it shipped: its item-mover only walked back over `///` doc
+    lines, not `#[derive(...)]` attribute lines, so a moved enum/struct
+    with a derive left that attribute orphaned in `lib.rs`, silently
+    attaching to whatever the next item happened to be — surfaced
+    immediately as a `conflicting implementations of trait Debug`
+    compile error (two derives landing on one item), not a silent
+    wrong-behavior bug, but real enough to have shipped a corrupted
+    file had the build not been checked before committing. Re-verified
+    slice 1 was unaffected (its two moved types never had derives to
+    begin with, so the bug never fired there). Pure move otherwise,
+    zero behavior change: `cargo test -p vix-db` (119 tests) and
+    `cargo test --test db_smoke -- --include-ignored` (12 tests) both
+    pass unchanged; full `scripts/check` green.
   - Remaining for `vix-db` (not yet sliced): AI features (~12 methods),
-    query execution/transactions (~25, the largest slice), results-grid
-    cell editing (~12), import/export/history/saved/log/chart (~18),
-    tree/editor/results key dispatch + popup/detail/DDL (~10). `vix-org`
-    not started at all yet.
+    results-grid cell editing (~12), import/export/history/saved/log/
+    chart (~18), tree/editor/results key dispatch + popup/detail/DDL
+    (~10). `vix-org` not started at all yet.
 - [ ] **T517 — `vix-i18n` eagerly builds all 15 locales' translation
   maps at startup, not just the active one.** Confirmed via the real
   `rust-i18n-macro` expansion: `i18n!` generates a `LazyLock` whose init
