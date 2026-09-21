@@ -4158,10 +4158,43 @@ measured problem today. Everything else actionable in this run is closed.
     `params_import_fk_and_chart_flows` and `query_log_records_metrics_
     and_erd_maps_foreign_keys`) both pass unchanged; full `scripts/
     check` green.
-  - **`vix-db` is done. `vix-org` not started at all yet** — its own
-    `lib.rs` (2,969 lines per the task's original citation) is the
-    remaining half of this run, on the same scale as what `vix-db` just
-    took five slices to do.
+  - **`vix-db` is done.** `vix-org`'s own `lib.rs` (2,969 lines per the
+    task's original citation) is the remaining half of this run, on the
+    same scale as what `vix-db` just took five slices to do — but a
+    different *shape*: not one giant `impl Browser` block but ~105 free
+    functions + 47 methods on two small structs ("a pragmatic subset of
+    Org-mode... all functions are pure", per its own doc comment),
+    already pre-organized into 15 `// ----- Section Name -----`-
+    delimited sections that make ready-made slice boundaries. Reused
+    `vix-db`'s established conventions: a fresh single-use Python
+    extraction script (`extract_org_slice.py`, brace/section-span based
+    rather than the `impl`-method-span matcher `vix-db` needed), the
+    `columns.rs` submodule's own pre-existing pattern of an *explicit*
+    `pub use mod_name::{a, b, c};` re-export list at the crate root
+    (never a wildcard) so external callers keep calling
+    `vix_org::function_name(...)` in the crate's flat namespace
+    (confirmed via `src/app/org.rs`, which calls e.g.
+    `crate::org::nav_parent` directly).
+    - **`vix-org` slice 1/~6, done**: `headline_nav.rs` — headline
+      location and structure editing: finding the headline governing a
+      cursor line (`governing`), navigating between headlines
+      (`nav_parent`/`nav_next`/`nav_prev`/`nav_forward_same`/
+      `nav_backward_same`), inserting a new heading (`new_heading`),
+      listing every headline (`headlines`), sorting a subtree's children
+      (`sort_children`), and refiling/pasting a subtree elsewhere
+      (`refile`/`paste_subtree`) — 11 items. Despite being the single
+      most depended-upon section in the crate (`governing`/`relevel`
+      back edits in the Tags & properties, Archive, Dates & scheduling,
+      and Footnotes sections, plus `columns.rs`'s column-view logic), it
+      earned its own file rather than folding into `lib.rs`'s core: it's
+      a cohesive feature in its own right, matching how every other
+      topic here already gets its own file (mirrors the `vix-db`
+      decision to keep only genuinely-shared state in the root, not
+      widely-used helpers). `lib.rs` 2,961→2,591 lines (post-`cargo
+      fmt`). `governing`/`relevel` bumped to `pub(crate)`, referenced
+      back from `lib.rs` and `columns.rs` via `crate::headline_nav::`.
+      Pure move, zero behavior change: `cargo test -p vix-org` (73
+      tests) passes unchanged; full `scripts/check` green.
 - [ ] **T517 — `vix-i18n` eagerly builds all 15 locales' translation
   maps at startup, not just the active one.** Confirmed via the real
   `rust-i18n-macro` expansion: `i18n!` generates a `LazyLock` whose init
