@@ -548,7 +548,7 @@ fn clocksum_value(lines: &[&str], h: usize, today_filter: Option<(i32, u32, u32)
     let mut total = 0u32;
     for line in &lines[h..end] {
         if let Some(filter) = today_filter {
-            let Some(start_ts) = crate::clock_start(line) else {
+            let Some(start_ts) = crate::agenda::clock_start(line) else {
                 continue;
             };
             let Some(date) = start_ts.get(0..10) else {
@@ -559,11 +559,11 @@ fn clocksum_value(lines: &[&str], h: usize, today_filter: Option<(i32, u32, u32)
                 continue;
             }
         }
-        if let Some(min) = crate::clock_minutes(line) {
+        if let Some(min) = crate::agenda::clock_minutes(line) {
             total += min;
         }
     }
-    crate::hhmm(total)
+    crate::agenda::hhmm(total)
 }
 
 /// `BLOCKED`: `"t"` if headline `h` has at least one direct child whose TODO

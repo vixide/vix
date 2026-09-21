@@ -4254,6 +4254,27 @@ measured problem today. Everything else actionable in this run is closed.
       move, zero behavior change: `cargo test -p vix-org` (73 tests)
       and the full workspace suite pass unchanged; full `scripts/
       check` green.
+    - **`vix-org` slice 5/~6, done**: `agenda.rs` — "Agenda & time
+      tracking" (`agenda_items`/`render_agenda`/`agenda`, the
+      `AgendaItem` struct), "Other built-in agenda views"
+      (`todo_list`/`tags_match`/`search`/`stuck_projects`/
+      `render_list`/`time_report`), and "Clocking"
+      (`clock_in`/`clock_out`) — 12 `pub` items re-exported at the
+      crate root. Four private items bumped to `pub(crate)`:
+      `days_from_civil` (needed by `properties_and_dates.rs`, T516
+      slice 3, to shift a timestamp's date — its own import switched
+      from `super::days_from_civil` to `crate::agenda::
+      days_from_civil` now that the two live in sibling modules rather
+      than parent/child) and `clock_start`/`clock_minutes`/`hhmm`
+      (needed by `columns.rs`'s CLOCK-summary rendering; fixed 3
+      `crate::clock_*`/`crate::hhmm` call sites there to the new
+      `crate::agenda::` path). Caught by the compiler on the first
+      `cargo check`, not by cross-reference grep — the grep this time
+      only covered `lib.rs` itself, missing `columns.rs`, a reminder
+      to grep every sibling file, not just the one being edited.
+      `lib.rs` 1,730→1,275 lines. Pure move, zero behavior change:
+      `cargo test -p vix-org` (73 tests) and the full workspace suite
+      pass unchanged; full `scripts/check` green.
 - [ ] **T517 — `vix-i18n` eagerly builds all 15 locales' translation
   maps at startup, not just the active one.** Confirmed via the real
   `rust-i18n-macro` expansion: `i18n!` generates a `LazyLock` whose init
