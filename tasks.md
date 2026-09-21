@@ -4235,6 +4235,25 @@ measured problem today. Everything else actionable in this run is closed.
       Pure move, zero behavior change: `cargo test -p vix-org` (73
       tests) and the full workspace suite (every crate, 0 failures)
       pass unchanged; full `scripts/check` green.
+    - **`vix-org` slice 4/~6, done**: `text_refs.rs` — five small,
+      individually-too-small-for-their-own-file sections merged into
+      one: "Hyperlinks" (`link_at`/`link_pos`), "Sparse trees"
+      (`todo_tree_folds`/`occur_folds`), "Footnotes"
+      (`footnote`/`id_location`), "Source blocks"
+      (`src_block_at`/`replace_src_body`), and "Column view"
+      (`column_view`) — 9 `pub fn`s re-exported at the crate root. No
+      new `pub(crate)` bumps needed this slice: every private helper it
+      touches (`sparse_folds`/`is_todo_headline`/`FOOTNOTE`/
+      `line_start_char`/`append_footnote_definition`/`src_begin`) is
+      used only within these five sections, confirmed via cross-
+      reference grep before extracting rather than discovered by
+      compiler error. Referenced back to `lib.rs`'s still-there Export
+      section for `LINK`/`BARE_LINK` (`super::`, no visibility change
+      needed — private root items are visible to every descendant
+      module). `lib.rs` 1,878→1,730 lines (post-`cargo fmt`). Pure
+      move, zero behavior change: `cargo test -p vix-org` (73 tests)
+      and the full workspace suite pass unchanged; full `scripts/
+      check` green.
 - [ ] **T517 — `vix-i18n` eagerly builds all 15 locales' translation
   maps at startup, not just the active one.** Confirmed via the real
   `rust-i18n-macro` expansion: `i18n!` generates a `LazyLock` whose init
