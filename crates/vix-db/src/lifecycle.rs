@@ -8,9 +8,9 @@
 use crossterm::event::{KeyCode, KeyEvent};
 
 use super::{
-    AiState, Browser, FORM_FIELDS, FORM_KIND, FORM_ROWS, FORM_STORE, FORM_WRITABLE, Form, Outcome,
-    Pane, TxState, View, catalog, complete, connect, object_triples, secret, session, store,
-    tunnel,
+    Browser, FORM_FIELDS, FORM_KIND, FORM_ROWS, FORM_STORE, FORM_WRITABLE, Form, Outcome, Pane,
+    TxState, View, ai_features::AiState, catalog, complete, connect, object_triples, secret,
+    session, store, tunnel,
 };
 
 /// Outcome of a background connect attempt (Run H, T531): fully connected,
