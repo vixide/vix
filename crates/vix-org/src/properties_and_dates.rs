@@ -1,19 +1,19 @@
 //! Tags (`:tag1:tag2:`), the `:PROPERTIES:` drawer, archiving a subtree,
 //! and date/timestamp handling (parsing, shifting the date under the
 //! cursor, and `SCHEDULED:`/`DEADLINE:` planning lines). Extracted from
-//! `lib.rs` (T516). `TAGS`, `is_planning`, and `line_of_char` stay
-//! `pub(crate)`: `columns.rs` needs `TAGS` and `is_planning` (to render a
-//! column-view table cell and to skip a headline's planning line when
-//! placing a dblock), the "Column view" section (still in `lib.rs`) also
-//! needs `TAGS`, and the Footnotes section (still in `lib.rs`) needs
-//! `line_of_char`.
+//! `lib.rs` (T516). `TAGS` and `is_planning` stay `pub(crate)`:
+//! `columns.rs` needs both (to render a column-view table cell and to
+//! skip a headline's planning line when placing a dblock), and
+//! `text_refs::column_view` needs `TAGS` too. `line_of_char` stays
+//! `pub(crate)` for `text_refs`'s Footnotes functions.
 
 use std::fmt::Write as _;
 use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::{days_from_civil, drawer_range, governing, headline_level, relevel, subtree_range};
+use super::{drawer_range, governing, headline_level, relevel, subtree_range};
+use crate::agenda::days_from_civil;
 
 // ----- Tags & properties -----------------------------------------------------
 
