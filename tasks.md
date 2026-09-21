@@ -4032,7 +4032,35 @@ measured problem today. Everything else actionable in this run is closed.
   opportunity matching established practice. **Deferred**: this is a
   multi-slice project on the scale of T141/T142 (each took several
   sessions), not a quick win — scope it as its own run when picked up,
-  don't fold into a general cleanup pass.
+  don't fold into a general cleanup pass. **Started as its own run
+  2026-09-20** (picked up explicitly, not folded into the Run H
+  continuation): no committed `extract_app_module.py`/
+  `extract_ui_module.py` tooling survived from T141/T142 (scratchpad
+  scripts, never checked in), so this run writes fresh single-use
+  extraction scripts per slice instead — the technique (find each
+  method's exact span via brace-matching, move it, fix what the
+  compiler flags) is the same either way.
+  - **`vix-db` slice 1/~5, done**: `lifecycle.rs` — connecting/
+    disconnecting (`key_connections`/`key_form`/`key_password`,
+    `start_connect`/`begin_connect`/`connect_running`/`poll_connect`,
+    `finish_connected`/`load_columns`/`disconnect`/`refresh_catalog`,
+    plus the private `ConnectOutcome`/`PendingConnect`/`connect_worker`
+    T531 added). `lib.rs` 3,328→2,918 lines (this session's T531/T532/
+    T538 had already grown it past the task's original 3,035
+    citation). Pure move, zero behavior change: `cargo test -p vix-db`
+    (119 tests) and `cargo test --test db_smoke -- --include-ignored`
+    (12 tests) both pass unchanged; full `scripts/check` green.
+    `PendingConnect` needed `pub(crate)` (referenced from `lib.rs`'s
+    `Browser` struct field); `key_connections`/`key_form`/
+    `key_password` needed `pub(super)` (called from `lib.rs`'s
+    `handle_key` dispatcher) — same visibility pattern `src/app/*.rs`'s
+    own split already established, since `Browser` (like `App`) is
+    defined in the parent module the new file is a child of.
+  - Remaining for `vix-db` (not yet sliced): AI features (~12 methods),
+    query execution/transactions (~25, the largest slice), results-grid
+    cell editing (~12), import/export/history/saved/log/chart (~18),
+    tree/editor/results key dispatch + popup/detail/DDL (~10). `vix-org`
+    not started at all yet.
 - [ ] **T517 — `vix-i18n` eagerly builds all 15 locales' translation
   maps at startup, not just the active one.** Confirmed via the real
   `rust-i18n-macro` expansion: `i18n!` generates a `LazyLock` whose init
