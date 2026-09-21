@@ -227,7 +227,7 @@ pub fn resolve_columns_spec(text: &str, line: usize) -> ColumnsSpec {
 /// Search upward from the headline governing `line` through its ancestors for
 /// the nearest `:COLUMNS:` entry property.
 fn ancestor_columns_spec(lines: &[&str], line: usize) -> Option<ColumnsSpec> {
-    let mut cur = crate::governing(lines, line);
+    let mut cur = crate::headline_nav::governing(lines, line);
     while let Some(h) = cur {
         if let Some(val) = property_value_opt(lines, h, "COLUMNS")
             && let Some(mut spec) = parse_columns_spec(&val)
@@ -632,7 +632,7 @@ pub fn todo_keywords() -> &'static [&'static str] {
 #[must_use]
 pub fn columns_spec_anchor(text: &str, line: usize) -> Option<usize> {
     let lines: Vec<&str> = text.split('\n').collect();
-    let mut cur = crate::governing(&lines, line);
+    let mut cur = crate::headline_nav::governing(&lines, line);
     while let Some(h) = cur {
         if property_value_opt(&lines, h, "COLUMNS").is_some() {
             return Some(h);
@@ -1114,7 +1114,7 @@ pub fn build_column_table(
     file_name: Option<&str>,
 ) -> (Vec<ColumnRow>, String) {
     let lines: Vec<&str> = text.split('\n').collect();
-    let scope = match crate::governing(&lines, line) {
+    let scope = match crate::headline_nav::governing(&lines, line) {
         Some(h) => crate::subtree_range(&lines, h).unwrap_or((0, lines.len())),
         None => (0, lines.len()),
     };
@@ -1358,7 +1358,7 @@ fn render_begin_line(params: &DblockParams) -> String {
 /// Resolve the `[start, end)` headline scope a dblock's `:id` selects.
 fn dblock_scope(lines: &[&str], at_line: usize, id: &str) -> (usize, usize) {
     if id == "local" {
-        if let Some(h) = crate::governing(lines, at_line) {
+        if let Some(h) = crate::headline_nav::governing(lines, at_line) {
             return crate::subtree_range(lines, h).unwrap_or((0, lines.len()));
         }
         return (0, lines.len());
