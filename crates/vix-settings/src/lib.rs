@@ -747,8 +747,19 @@ fn sh_single_quote(s: &str) -> String {
 ///
 /// - wraps in `"…"`, which suppresses `cmd.exe`'s own `&`/`|`/`<`/`>`/`(`/`)`
 ///   metacharacters for as long as the quoted region stays open;
-/// - escapes an embedded `"` as `\"` rather than closing and reopening the
-///   quoted region, so it can never prematurely end that region;
+/// - replaces an embedded `"` with `'` rather than escaping it as `\"` —
+///   `cmd.exe`'s own line-scanning parser toggles quoted/unquoted on
+///   *every* literal `"` it sees, with no backslash-escape concept at all
+///   (that convention belongs to the *called* program's own argv parsing,
+///   which never even sees this text — `cmd.exe`'s scan for `&`/`|`/`<`/`>`
+///   happens first). A `\"` therefore still closes the quoted region early,
+///   just as an unescaped `"` would, silently exposing whatever comes next
+///   to real metacharacter interpretation — found via a real Windows CI
+///   failure, not reasoned out in the abstract: an adversarial prompt with
+///   an embedded `"` let a later `>` get parsed as a real output redirect.
+///   There is no way to keep an embedded `"` both literal and inside a
+///   quoted region under `cmd.exe`'s own parser, so it is replaced outright
+///   rather than half-escaped into a false sense of safety;
 /// - escapes `%` as `%%`, which `cmd.exe`'s `/C` parser (like a batch file)
 ///   collapses to a literal `%` without triggering `%VAR%` environment
 ///   expansion — verified, not folklore: an unescaped `%` here would let
@@ -761,7 +772,7 @@ fn cmd_double_quote(s: &str) -> String {
     out.push('"');
     for c in s.chars() {
         match c {
-            '"' => out.push_str("\\\""),
+            '"' => out.push('\''),
             '%' => out.push_str("%%"),
             '\r' | '\n' => out.push(' '),
             _ => out.push(c),
@@ -864,7 +875,11 @@ mod tests {
 
     #[test]
     fn cmd_double_quote_escapes_quotes_percents_and_newlines() {
-        assert_eq!(cmd_double_quote(r#"a"b"#), r#""a\"b""#);
+        // An embedded `"` is replaced with `'`, not escaped as `\"` --
+        // `cmd.exe`'s own parser toggles quote state on every literal `"`
+        // regardless of a preceding backslash, so `\"` would still end the
+        // quoted region early (T547, found via real Windows CI).
+        assert_eq!(cmd_double_quote(r#"a"b"#), r#""a'b""#);
         assert_eq!(cmd_double_quote("plain"), "\"plain\"");
         assert_eq!(cmd_double_quote("100%"), "\"100%%\"");
         // CRLF becomes two spaces (CR and LF each map to one) -- harmless,
