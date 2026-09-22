@@ -5891,6 +5891,8 @@ name = "vix-i18n"
 version = "1.6.0"
 dependencies = [
  "rust-i18n",
+ "rust-i18n-support",
+ "serde_json",
 ]
 
 [[package]]

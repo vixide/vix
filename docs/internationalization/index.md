@@ -41,8 +41,12 @@ welcome messages appear in the chosen language.
 
 ## How it works in the code
 
-- `crates/vix-i18n/src/lib.rs` initializes the catalog once:
-  `i18n!("../../locales", fallback = "en")`.
+- `crates/vix-i18n/src/lib.rs` initializes the catalog once, but not via
+  `rust_i18n::i18n!` — that macro's codegen builds every locale eagerly, so
+  `build.rs` merges `locales/` at build time and splits it per locale, and
+  `lib.rs` parses each locale's blob lazily, only when something actually
+  asks for a translation in it (T517). Every other crate still reads through
+  `vix_i18n::t!` unchanged.
 - All translation strings live under `locales/`, one file per key namespace
   (`menu.yml`, `status.yml`, …, T148) — rust-i18n merges every file in the
   directory into one table, each following its own "version 2" format (every

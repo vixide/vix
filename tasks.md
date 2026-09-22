@@ -4319,7 +4319,7 @@ measured problem today. Everything else actionable in this run is closed.
     across 6 slices. 11 new submodules total (5 + 6), zero behavior
     change anywhere (every slice's tests passed unchanged before and
     after), full `scripts/check` green on every one of the 11 pushes.
-- [ ] **T517 — `vix-i18n` eagerly builds all 15 locales' translation
+- [x] **T517 — `vix-i18n` eagerly builds all 15 locales' translation
   maps at startup, not just the active one.** Confirmed via the real
   `rust-i18n-macro` expansion: `i18n!` generates a `LazyLock` whose init
   closure inserts every key for every locale (~37,800 total
@@ -4333,7 +4333,60 @@ measured problem today. Everything else actionable in this run is closed.
   directly control beyond swapping backends. Large effort, and the
   startup-budget task (T122) already closed with headroom, so this is a
   "nice to have" rather than a measured problem — revisit if startup
-  time ever becomes a real complaint.
+  time ever becomes a real complaint. **Done 2026-09-22**, started as its
+  own run after the user explicitly chose to pick it up despite the
+  "nice to have" framing above (asked via `AskUserQuestion` once T516
+  closed and the backlog had nothing else safely-actionable left).
+  Confirmed by reading `rust-i18n-macro`'s and `rust-i18n-support`'s real
+  source (pinned version 4.2.1, found under
+  `~/.cargo/registry/src/.../rust-i18n{,-macro,-support}-4.2.1`) that the
+  `i18n!` macro's `backend = ` argument only **extends** the eagerly-built
+  table with another backend — it can't replace the codegen that builds
+  it, so avoiding the eager build meant not calling `i18n!` at all.
+  Implementation: `crates/vix-i18n/build.rs` now also calls
+  `rust_i18n_support::load_locales` (a new build-dependency, feature
+  `codegen`) — the exact function `i18n!` itself calls — to merge
+  `locales/*.yml`, then writes one JSON blob per locale under `$OUT_DIR`
+  plus a generated `locale_blobs.rs` listing them as `(code,
+  include_str!(..))` pairs. `crates/vix-i18n/src/lib.rs` `include!`s that
+  list and defines `LazyBackend` (a `rust_i18n::Backend` impl): one
+  `OnceLock<HashMap<String,String>>` per locale, deserialized (via
+  `serde_json`, already a workspace dependency) only the first time
+  something asks for a translation in that locale — so a typical run
+  parses at most two locales (the active one, and English for the
+  fallback walk) instead of all of them. Everything downstream
+  (`_rust_i18n_translate`/`_rust_i18n_try_translate`/the fallback walk)
+  is a hand-written copy of what `i18n!`'s own codegen produces, kept
+  behaviorally identical by construction — confirmed by tracing `t!`'s
+  real macro expansion (`crate::_rust_i18n_try_translate`, referenced by
+  name, not through the macro-generated statics) to see that only that
+  one function's name/signature is a real contract; `surface!()`'s
+  existing re-export needed no changes. New tests in `vix-i18n` itself
+  (none existed before) cover per-locale translation + interpolation,
+  the English/unknown-locale fallback chain, the unknown-key fallback
+  (`t!`'s own literal-message fallback, distinct from
+  `_rust_i18n_translate`'s own `"locale.key"` format — both now tested),
+  `available_locales`, and — the actual point of this task — a direct
+  assertion that querying one locale leaves every other locale's
+  `OnceLock` unpopulated. One `#[allow(clippy::used_underscore_items)]`
+  per underscore-prefixed function, narrowly scoped with a comment
+  explaining the names are a naming *contract* with `rust_i18n`'s own
+  macro-generated code, not unfinished internal code (a new clippy lint
+  this session hadn't hit before). Fixed one accidental collision with
+  `tests/i18n_keys.rs` (a repo-root scanner asserting every literal
+  `t!("...")` key exists in `locales/`): a deliberately-missing test key
+  needed to be bound to a variable first, not passed as a literal, to
+  dodge the scanner (documented inline, and a case worth remembering for
+  any future test of the same kind). `cargo deny check` passed clean on
+  the five new (build-only) transitive dependencies `rust-i18n-support`'s
+  `codegen` feature pulls in. Updated `crates/vix-i18n/spec/index.md` and
+  `docs/internationalization/index.md` (both described the removed
+  `i18n!(...)` call verbatim) — no `CHANGELOG.md` entry, per
+  `agents/conventions.md`'s rule: an internal refactor with zero
+  user-visible behavior change doesn't get one. Full workspace test
+  suite (every crate, 0 failures, including the `vix-menu`/
+  `tests/i18n_keys.rs` translation-coverage guards) and full
+  `scripts/check`-equivalent gate green.
 
 ## Run H (second self-audit pass, 2026-09-19)
 
