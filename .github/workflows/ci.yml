@@ -130,16 +130,28 @@ jobs:
           lychee --no-progress --scheme https --scheme http \
             --timeout 10 --max-retries 1 --exclude-path target '**/*.md'
 
-  # Build and test on the platforms Vix ships on. Windows is covered by the
-  # release workflow's cross-builds; adding it here would roughly double CI
-  # wall time for little extra signal, since the logic is terminal-independent.
+  # Build and test on the platforms Vix ships on. Windows joined the matrix
+  # for T547 (tasks.md): the release workflow's cross-builds only compile for
+  # distribution (via `dist`, on version tags) -- they never run `cargo test`
+  # or exercise runtime behavior, so they can't catch an OS-specific runtime
+  # bug (e.g. shelling out via a hardcoded POSIX `sh`). Most of the suite is
+  # genuinely terminal-independent and this roughly doubles CI wall time for
+  # that part, but it's the only way to get real signal on the part that
+  # isn't.
   test:
     name: build + test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    # windows-latest's default shell is PowerShell, but the headless-examples
+    # step below uses POSIX redirection (`>/dev/null`); Git-Bash is preinstalled
+    # on the windows-latest runner image, so this just picks it consistently
+    # on every platform instead of only overriding the one step that needs it.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
         with:

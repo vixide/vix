@@ -5316,7 +5316,26 @@ case-insensitive filesystems correctly).
   inconsistent, so this needs real care, not just "make it compile."
   Medium effort; **no Windows CI exists to verify against**, so land
   this only with a way to actually test it (a local Windows machine, or
-  standing up a Windows CI job first).
+  standing up a Windows CI job first). **Windows CI added 2026-09-22**
+  (a prerequisite step, its own change): `windows-latest` joined
+  `.github/workflows/ci.yml`'s `test` matrix alongside
+  `ubuntu-latest`/`macos-latest` — surfaced as its own conflict first
+  (the job's existing comment documented a deliberate decision not to
+  run the matrix on Windows, reasoning the release workflow's
+  cross-builds already covered it; confirmed that's only a
+  compile-for-distribution check via `dist` on version tags, never
+  `cargo test`, so it can't actually catch an OS-specific runtime bug
+  like this one — the user chose to add it anyway, accepting the ~2x
+  wall-time cost). Set the job's default shell to `bash` (Git-Bash,
+  preinstalled on the runner image) since the headless-examples step
+  uses POSIX redirection PowerShell (windows-latest's actual default)
+  doesn't understand. GitLab and Codeberg stay Linux-only — they never
+  had macOS coverage either (both run a single Docker-image job, not a
+  native-runner matrix), so this doesn't widen an existing three-way
+  parity gap, just the pre-existing GitHub-only ubuntu/macos one.
+  `spec/ci/index.md` updated to match. This step alone doesn't fix
+  the bug — it's still open, now with a way to verify the fix once
+  written.
 - [x] **T548 — OS keyring support on Windows is a silent no-op stub,
   despite the `keyring` crate (already a dependency, already used on
   macOS via the identical `keyring::Entry` API) supporting Windows
