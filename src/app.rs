@@ -9027,41 +9027,61 @@ impl App {
                         .join(" ");
                     add(Self::action_title(b.action_id), keys);
                 }
+                // Spacemacs's own Normal mode dispatches through the very
+                // same `vim_normal_key` the "vi" keymap uses (T560) — show
+                // its inherited vocabulary too, not just the leader chords,
+                // so F1 doesn't silently omit most of what a Spacemacs user
+                // actually has bound.
+                for (action, keys) in Self::table_rows_for("vi") {
+                    add(action, keys);
+                }
             }
-            // Walks every context of every id below generically — Emacs is
-            // the only one with more than one context (its chord tables,
-            // T104a); the rest have only ever had one ("", T104c–g) — so a
-            // later context/binding needs no matching change here. One
-            // arm since T145 merged what used to be Emacs's own (needing
-            // a chord-prefix string) with everyone else's: `ctx.name` is
-            // always `""` for the single-context keymaps, so building a
-            // prefix from it is a no-op for them, not special-cased away.
-            id @ ("emacs" | "vscode-macos" | "vscode-windows" | "intellij-macos"
+            id @ ("vi" | "emacs" | "vscode-macos" | "vscode-windows" | "intellij-macos"
             | "intellij-windows" | "eclipse" | "sublime" | "apple") => {
-                for table in vix_keybindings::TABLES.iter().filter(|t| t.keymap_id == id) {
-                    for ctx in table.contexts {
-                        let prefix: String = ctx
-                            .name
-                            .split(' ')
-                            .filter(|s| !s.is_empty())
-                            .map(modifier_token_display)
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        for b in ctx.bindings {
-                            let key_display = modifier_token_display(b.key_token);
-                            let keys = if prefix.is_empty() {
-                                key_display
-                            } else {
-                                format!("{prefix} {key_display}")
-                            };
-                            add(Self::action_title(b.action_id), keys);
-                        }
-                    }
+                for (action, keys) in Self::table_rows_for(id) {
+                    add(action, keys);
                 }
             }
             _ => {}
         }
         out
+    }
+
+    /// Every `(action title, key display)` pair from every context of every
+    /// `vix_keybindings::TABLES` entry for keymap id `id` — the F1 help
+    /// overlay's per-keymap rows (T560). A plain owned `Vec`, not a closure
+    /// capturing `shortcut_rows`'s own `add` callback, specifically so it
+    /// can be called more than once within that function (once generically,
+    /// once for Spacemacs's inherited "vi" vocabulary) without two
+    /// simultaneous mutable borrows of `add` fighting each other. Emacs is
+    /// the only id with more than one context (its chord tables, T104a);
+    /// the rest have only ever had one ("", T104c–g) — one shape covers
+    /// both since T145, `ctx.name` being empty for single-context keymaps
+    /// makes building a prefix from it a no-op for them, not special-cased
+    /// away.
+    fn table_rows_for(id: &str) -> Vec<(String, String)> {
+        let mut rows = Vec::new();
+        for table in vix_keybindings::TABLES.iter().filter(|t| t.keymap_id == id) {
+            for ctx in table.contexts {
+                let prefix: String = ctx
+                    .name
+                    .split(' ')
+                    .filter(|s| !s.is_empty())
+                    .map(modifier_token_display)
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                for b in ctx.bindings {
+                    let key_display = modifier_token_display(b.key_token);
+                    let keys = if prefix.is_empty() {
+                        key_display
+                    } else {
+                        format!("{prefix} {key_display}")
+                    };
+                    rows.push((Self::action_title(b.action_id), keys));
+                }
+            }
+        }
+        rows
     }
 
     /// The translated title for an action id: its menu label when a menu

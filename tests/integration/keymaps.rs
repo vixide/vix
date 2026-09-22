@@ -9,12 +9,33 @@ use crate::common::*;
 #[test]
 fn help_overlay_includes_the_active_keymap_chords() {
     let mut app = app_at(Path::new("."));
+    // T560: the Vi keymap's own Normal-mode vocabulary used to be entirely
+    // absent from the F1 overlay (the `match` arm listing which keymap ids
+    // pull in `vix_keybindings::TABLES` omitted "vi"), and Spacemacs (whose
+    // own Normal mode shares that exact table, per
+    // `spacemacs_normal_mode_shares_the_vi_vocabulary` below) inherited the
+    // same gap for everything but its leader chords.
+    app.settings.keymap = "vi".to_string();
+    app.run_action("help.shortcuts");
+    let h = app.help.as_ref().expect("open");
+    assert!(
+        h.rows.iter().any(|s| s.keys == "h"),
+        "Vi's own Normal-mode chords (e.g. 'h') are listed: {:?}",
+        h.rows.iter().map(|s| &s.keys).collect::<Vec<_>>()
+    );
+    app.help = None;
+
     app.settings.keymap = "spacemacs".to_string();
     app.run_action("help.shortcuts");
     let h = app.help.as_ref().expect("open");
     assert!(
         h.rows.iter().any(|s| s.keys == "SPC f f"),
         "Spacemacs leader chords listed: {:?}",
+        h.rows.iter().map(|s| &s.keys).collect::<Vec<_>>()
+    );
+    assert!(
+        h.rows.iter().any(|s| s.keys == "h"),
+        "Spacemacs also inherits the shared Vi Normal-mode chords: {:?}",
         h.rows.iter().map(|s| &s.keys).collect::<Vec<_>>()
     );
     app.help = None;

@@ -6159,7 +6159,7 @@ as every other task.
   index 4 is not a char boundary; it is inside 'é'"`), then restored
   the fix and confirmed green again — proof this wasn't a test that
   would have passed either way.
-- [ ] **T560 — F1 "Keyboard Shortcuts" help overlay shows zero of the Vi
+- [x] **T560 — F1 "Keyboard Shortcuts" help overlay shows zero of the Vi
   keymap's own bindings (and none of Spacemacs's shared Vi vocabulary
   either).** `App::shortcut_rows` (`src/app.rs:9021-9063`)'s `match
   self.settings.keymap.as_str()` block lists `"emacs" | "vscode-macos" |
@@ -6188,6 +6188,31 @@ as every other task.
   `"vi"` case to the existing test. Low effort, high severity for the
   affected (likely sizable) user population — a one-line-ish fix to a
   real, high-visibility regression.
+  **Done 2026-09-22.** Fixed exactly as scoped, plus the Spacemacs
+  half of the gap the audit also flagged: added `"vi"` to the generic
+  keymap-id match arm, and — since Spacemacs's own Normal mode
+  dispatches through the identical `vim_normal_key` the `vi` keymap
+  uses — made the `"spacemacs"` arm pull in the shared `vi` table too,
+  not just its own leader chords. The table-walking logic had to move
+  from an inline closure to a real `table_rows_for(id) -> Vec<(String,
+  String)>` associated function (a closure capturing the outer `add`
+  callback by mutable reference couldn't be called twice within the
+  same `match` — once generically, once for Spacemacs's inherited
+  vocabulary — without two conflicting simultaneous borrows; a plain
+  owned `Vec` sidesteps that entirely). Extended
+  `help_overlay_includes_the_active_keymap_chords` with `"vi"` and
+  Spacemacs-inherits-`"h"` assertions. Folded in the audit's own
+  secondary finding: `crates/vix-keyboard-shortcut-panel/spec/
+  index.md`'s "Contents" section was stale (only documented Emacs/
+  Spacemacs, missing the other keymaps' flat tables already shown
+  since T104c/d) — corrected in the same commit. **Verified the fix
+  actually matters, not just that new tests pass**: temporarily
+  reverted both the `"vi"` match-arm addition and the Spacemacs
+  inherited-table addition, confirmed the extended test fails exactly
+  as the audit described (zero Vi-specific rows, only menu/palette/
+  shared rows — the full failure output byte-for-byte matches the
+  audit's own characterization), then restored the fix and confirmed
+  green again.
 - [ ] **T561 — `vix-doctor` (T553, this session's own addition) violates
   the project's hard i18n rule: zero `t!()` calls, shown in a live,
   localized TUI overlay.** `crates/vix-doctor/src/lib.rs:66-195` — every

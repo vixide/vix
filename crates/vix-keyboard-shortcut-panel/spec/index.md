@@ -16,9 +16,13 @@ The host assembles the rows from every active source, deduplicated on
    key combo + i18n description; see below);
 2. **every menu-item accelerator**, walking all menus and submenus (the
    action name is the item's translated label);
-3. the **active keymap's chord tables** — the Spacemacs `SPC` leader map
-   (shown as `SPC f f`, …) when the keymap is `spacemacs`, and the Emacs
-   `Ctrl X` map (shown as `Ctrl X Ctrl F`, …) when it is `emacs`.
+3. the **active keymap's chord tables**, for every keymap id (`vi`,
+   `emacs`, `vscode-macos`, `vscode-windows`, `intellij-macos`,
+   `intellij-windows`, `eclipse`, `sublime`, `apple` — T560 closed the last
+   gap here, adding `vi`, which had been silently missing since T104b);
+   Spacemacs additionally shows its own `SPC` leader map (`SPC f f`, …)
+   *plus* the shared `vi` table, since Spacemacs's own Normal mode
+   dispatches through the identical handler the `vi` keymap uses.
 
 An action name comes from the menu item that runs it when there is one,
 else from `vix-action-catalog`'s `(action id -> i18n title key)` entry for
