@@ -5368,17 +5368,41 @@ case-insensitive filesystems correctly).
   {prompt}`, no output-shortcut faking) with an instruction packed
   with `"`, `&`, `%PATH%`, and backticks, asserting the text comes back
   through the AI diff byte-for-byte unchanged, proving it was
-  interpolated as inert data rather than re-executed; a **second**
-  existing test in the same style (`app_with_canned_ai_reply`'s
-  `printf`-based helper) was already exercising the real spawn path
-  and started covering the new `cmd.exe` branch automatically once
-  pushed; (3) a new `run_command_merges_stderr_into_the_captured_output`
-  test (`tests/integration/editing.rs`) for the `{ }`/`( )` grouping
-  change specifically, with a two-statement, two-stream command built
+  interpolated as inert data rather than re-executed; (3) a new
+  `run_command_merges_stderr_into_the_captured_output` test
+  (`tests/integration/editing.rs`) for the `{ }`/`( )` grouping change
+  specifically, with a two-statement, two-stream command built
   per-platform (`&` chains sequentially in `cmd.exe` but backgrounds in
-  `sh`, so the same literal string isn't valid on both). All of it
-  pushed and confirmed against the real Windows CI job — not just
-  locally, matching every other fix in this run.
+  `sh`, so the same literal string isn't valid on both).
+  **First real Windows CI run of this push found two more genuine
+  bugs** — `printf` (used by both the new adversarial test and an
+  *existing* helper, `app_with_canned_ai_reply`, that had quietly been
+  exercising the real spawn path this whole session) turned out not to
+  be on `cmd.exe`'s own `PATH` the way it is once `sh` itself is
+  already running (`sh.exe`, an MSYS2/Git-for-Windows binary, adjusts
+  its *own* internal `PATH` on launch to include its sibling
+  toolchain's `usr/bin`; `cmd.exe` never does) — both tests hung until
+  their 5-second timeout, never a clean "not found" error. Fixed by
+  dropping `printf` entirely: `app_with_canned_ai_reply` now writes its
+  canned reply to a file and has the command read it back (`type` on
+  Windows, `cat` on Unix — both real builtins/always-on-`PATH`, no
+  cross-shell "does this external tool exist" question at all); the
+  adversarial test switched from exact byte-for-byte output comparison
+  (fragile across shells anyway — `cmd.exe`'s builtin `echo` doesn't
+  strip quotes the way a real argv-parsing program would) to a
+  side-effect check: the malicious instruction embeds a command that
+  would create a marker file *only* if it ever escaped its quoting and
+  ran as a separate statement, and the test asserts that file never
+  appears. Also added unconditional CRLF-to-LF normalization to
+  `spawn_ai_cli`'s captured output (`src/app.rs`) — a real product
+  improvement this surfaced, not just a test workaround: a Windows
+  console command's text-mode output can be CRLF-terminated regardless
+  of what produced it, and no downstream consumer (the diff view, the
+  buffer) wants a visible `\r` in text that's conceptually just lines.
+  All of it pushed and confirmed against the real Windows CI job — not
+  just locally, matching every other fix in this run; the printf
+  failure itself is exactly why "confirmed against real CI" was the
+  bar throughout, not "compiles, looks right."
 - [x] **T548 — OS keyring support on Windows is a silent no-op stub,
   despite the `keyring` crate (already a dependency, already used on
   macOS via the identical `keyring::Entry` API) supporting Windows

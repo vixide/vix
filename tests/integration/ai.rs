@@ -1,19 +1,32 @@
 //! T125's new AI features: "Edit selection with instruction" and "Generate
 //! doc comment" (the Git panel's AI commit-message generator has its own
 //! throwaway-repo test in `git.rs`, alongside its siblings). These drive the
-//! CLI spawn path (`ai_command`, made deterministic via `printf`) end to
-//! end -- the first real test coverage `spawn_ai_cmd`/`AiReplace`/
+//! CLI spawn path (`ai_command`, made deterministic by reading back a file)
+//! end to end -- the first real test coverage `spawn_ai_cmd`/`AiReplace`/
 //! `poll_ai_replace` have had at all (Annotate/Improve/Summarize/Explain/
 //! Define had none before this).
 
 use crate::common::*;
 
 /// Build an app whose `ai_command` ignores its input and always prints
-/// `output` -- deterministic, no real assistant needed. `output` must not
-/// contain a single quote (kept simple; every caller here controls it).
+/// `output` -- deterministic, no real assistant needed. Writes `output` to a
+/// file and has the command print that file back (`type` on Windows, `cat`
+/// on Unix) rather than trying to build one shell-escaped literal that
+/// reproduces `output` exactly on both platforms' own builtins (T547: an
+/// earlier version used `printf '%s' '...'`, portable across `sh`
+/// implementations but not present on `cmd.exe`'s own `PATH` the way it is
+/// once `sh` itself is already running -- confirmed against real Windows
+/// CI, not assumed).
 fn app_with_canned_ai_reply(dir: &Path, output: &str, ai_diff_review: bool) -> App {
+    let canned = dir.join("canned-ai-reply.txt");
+    fs::write(&canned, output).unwrap();
+    let cmd = if cfg!(windows) {
+        format!("type {}", canned.display())
+    } else {
+        format!("cat {}", canned.display())
+    };
     let settings = Settings {
-        ai_command: format!("printf '%s' '{output}'"),
+        ai_command: cmd,
         misc: MiscSettings {
             ai_diff_review,
             ..MiscSettings::default()
@@ -70,20 +83,21 @@ fn edit_with_instruction_prompt_cannot_inject_shell_commands() {
     // T547: the same protection `ai_command_line`'s {prompt} placeholder
     // gets from `sh_single_quote`/`cmd_double_quote`, exercised end to end
     // through a real subprocess spawn (not just the string-level unit tests
-    // in vix-settings) -- an instruction packed with shell metacharacters
-    // must come back through `printf` completely unchanged, proving it was
-    // interpolated as inert data, never re-interpreted as shell syntax by
-    // whichever native shell this platform's `spawn_ai_cli` picked.
-    //
-    // `%s` (not `'%s'`) deliberately: single quotes have no meaning to
-    // `cmd.exe` at all -- it wouldn't strip them the way `sh` does, so a
-    // quoted format string would reach `printf` with the quote characters
-    // still attached on Windows. An unquoted `%s` needs no shell protection
-    // on either platform (no whitespace/glob characters) and isn't a valid
-    // `cmd.exe` variable reference on its own (no matching second `%`).
+    // in vix-settings). `echo` (a builtin on both `sh` and `cmd.exe`, unlike
+    // `printf` -- which turned out not to be on `cmd.exe`'s own PATH the way
+    // it is once `sh` itself is running, an earlier version of this test
+    // found the hard way against real Windows CI) always succeeds, so
+    // instead of comparing its exact output (`cmd.exe`'s builtin `echo`
+    // doesn't strip the surrounding quotes the way a real argv-parsing
+    // program would, so a byte-for-byte comparison isn't portable either),
+    // this proves the instruction was inert by side effect: an embedded
+    // command that -- if it ever escaped its quoting and got interpreted as
+    // a *separate* statement -- would create a marker file that must never
+    // appear.
     let dir = unique_dir("ai-edit-instr-injection");
+    let marker = dir.join("injected.txt");
     let settings = Settings {
-        ai_command: "printf %s {prompt}".to_string(),
+        ai_command: "echo {prompt}".to_string(),
         misc: MiscSettings {
             ai_diff_review: false,
             ..MiscSettings::default()
@@ -99,17 +113,22 @@ fn edit_with_instruction_prompt_cannot_inject_shell_commands() {
         .set_selection_range(0, 5); // "hello"
 
     app.run_action("ai.edit_with_instruction");
-    let evil = "\"; echo INJECTED; echo \" & echo INJECTED & echo %PATH% & echo `id`";
+    let touch = if cfg!(windows) {
+        format!("type nul > {}", marker.display())
+    } else {
+        format!("touch {}", marker.display())
+    };
+    let evil = format!("\"; {touch}; echo \" & {touch} & echo %PATH% & echo `id`");
     for ch in evil.chars() {
         app.on_key(key(ch));
     }
     app.on_key(keycode(KeyCode::Enter));
 
     wait_for_ai_replace(&mut app, |app| app.ai_diff_review().is_some());
-    assert_eq!(
-        app.ai_diff_review().unwrap().result(),
-        evil,
-        "the instruction must come back byte-for-byte unchanged, never re-interpreted"
+    assert!(
+        !marker.exists(),
+        "the embedded command must never actually run: {}",
+        app.ai_diff_review().unwrap().result()
     );
     fs::remove_dir_all(&dir).ok();
 }
