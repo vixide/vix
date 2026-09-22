@@ -4396,17 +4396,19 @@ quality, and cross-platform (Windows) correctness. Two genuine
 correctness bugs turned up (T518, T535 below), not just style/maintenance
 debt. Grouped by source pass; ranked by value/effort within each group.
 
-**31 of 32 done as of 2026-09-20** — everything except T547, which is
-the one item in the entire run that genuinely can't be done responsibly
-without a Windows machine or CI: novel `cmd.exe`/PowerShell quoting
-logic, not just a compile-time cfg branch, so "looks right" isn't
-enough confidence to ship on faith. T548 and T549 (the run's other two
-Windows findings) *were* safe to land blind — both pure, additive,
-non-branching changes (a feature flag plus a proven-identical API
-reuse; a portability rewrite with no OS-specific code at all) that this
-session could actually verify. T547 needed real quoting logic to get
-right, which this session could not verify — that's the whole
-difference, not "some Windows work got done and some didn't."
+**32 of 32 done as of 2026-09-22.** T547 was the one item in the entire
+run that genuinely couldn't be done responsibly without a Windows
+machine or CI: novel `cmd.exe`/PowerShell quoting logic, not just a
+compile-time cfg branch, so "looks right" wasn't enough confidence to
+ship on faith. T548 and T549 (the run's other two Windows findings)
+*were* safe to land blind — both pure, additive, non-branching changes
+(a feature flag plus a proven-identical API reuse; a portability
+rewrite with no OS-specific code at all) that session could actually
+verify. T547 needed real quoting logic to get right, which that
+session could not verify — that was the whole difference, not "some
+Windows work got done and some didn't." **T547 done 2026-09-22**, once
+real Windows CI existed (its own prerequisite step, T547's own entry
+below) to verify against.
 
 ### Duplication / DRY
 
@@ -5295,7 +5297,7 @@ three platform branches, the integrated terminal uses `portable-pty`
 duplicate-tab detection uses `Path::canonicalize()` (handles
 case-insensitive filesystems correctly).
 
-- [ ] **T547 — Every "run an external command" feature hard-depends on
+- [x] **T547 — Every "run an external command" feature hard-depends on
   a POSIX `sh` with no Windows path — breaks whole feature classes, not
   just degrades them, on stock Windows.** Two sites in `src/app.rs`:
   `spawn_ai_cli` (`:10241`, the CLI-mode AI assistant) and
@@ -5336,6 +5338,47 @@ case-insensitive filesystems correctly).
   `spec/ci/index.md` updated to match. This step alone doesn't fix
   the bug — it's still open, now with a way to verify the fix once
   written.
+  **T547's own fix done 2026-09-22**, once the Windows CI job above
+  (plus the four bugs it found and T550-T552 fixed) was itself
+  confirmed green. New shared `shell_program()` helper (`("sh", "-c")`
+  on Unix, `("cmd", "/C")` on Windows) mirrors `toggle_terminal`'s own
+  choice; both `spawn_ai_cli` and `run_command_in` now use it instead
+  of hardcoding `"sh"`. `run_command_in`'s POSIX `{ … ; } 2>&1`
+  grouping (so the redirect covers a whole `;`/`&&`-chained command,
+  not just its last stage) got a `cmd.exe` sibling using its own
+  `( … ) 2>&1` grouping — `cmd.exe` has no `{ }`, but `( )` does the
+  same job. `Settings::ai_command_line`'s `{prompt}`/`{file}` quoting
+  (previously always POSIX `sh_single_quote`) now picks
+  `cmd_double_quote` on Windows: wraps in `"…"`, escapes an embedded
+  `"` as `\"` (never closes the quoted region early), escapes `%` as
+  `%%` (blocks `%VAR%` environment-variable expansion from reading and
+  leaking anything the interpolated text happens to spell), and turns
+  an embedded CR/LF into a space (so a multi-line prompt can't be read
+  as more than one `cmd.exe` statement) — explicitly documented as a
+  best effort, not a proof: `cmd.exe` has no quoting mechanism as
+  airtight as POSIX single quotes.
+  Verified three ways, not just "compiles": (1) unit tests for
+  `cmd_double_quote` itself and for `ai_command_line`'s quoting choice
+  (rewrote the four existing tests, previously hardcoded to the POSIX
+  form, to compute their expected value via the same platform check
+  `ai_command_line` itself uses — they'd have silently started failing
+  on Windows CI otherwise); (2) a new end-to-end adversarial test,
+  `edit_with_instruction_prompt_cannot_inject_shell_commands`
+  (`tests/integration/ai.rs`) — runs a real subprocess (`printf %s
+  {prompt}`, no output-shortcut faking) with an instruction packed
+  with `"`, `&`, `%PATH%`, and backticks, asserting the text comes back
+  through the AI diff byte-for-byte unchanged, proving it was
+  interpolated as inert data rather than re-executed; a **second**
+  existing test in the same style (`app_with_canned_ai_reply`'s
+  `printf`-based helper) was already exercising the real spawn path
+  and started covering the new `cmd.exe` branch automatically once
+  pushed; (3) a new `run_command_merges_stderr_into_the_captured_output`
+  test (`tests/integration/editing.rs`) for the `{ }`/`( )` grouping
+  change specifically, with a two-statement, two-stream command built
+  per-platform (`&` chains sequentially in `cmd.exe` but backgrounds in
+  `sh`, so the same literal string isn't valid on both). All of it
+  pushed and confirmed against the real Windows CI job — not just
+  locally, matching every other fix in this run.
 - [x] **T548 — OS keyring support on Windows is a silent no-op stub,
   despite the `keyring` crate (already a dependency, already used on
   macOS via the identical `keyring::Entry` API) supporting Windows
@@ -5524,7 +5567,11 @@ out wrong; only the second, evidence-driven attempt, informed by a
 diagnostic assertion added specifically to stop guessing, actually
 fixed it) — the other two landed first-try. `build + test
 (windows-latest)` went from failing on all four tests, to two (T551
-and T552 confirmed fixed), to zero.
+and T552 confirmed fixed), to zero — **`build + test (windows-latest)`
+is fully green as of 2026-09-22**, the same run confirming T550's real
+fix. Real Windows CI now exists, is green, and found + fixed four
+genuine bugs before T547's own original shell-quoting fix was even
+touched.
 
 ---
 

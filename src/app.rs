@@ -10297,8 +10297,9 @@ impl App {
         };
         let path = tmp.display().to_string();
         let cmd = self.settings.ai_command_line(prompt, &path);
-        let mut child = match std::process::Command::new("sh")
-            .arg("-c")
+        let (program, flag) = shell_program();
+        let mut child = match std::process::Command::new(program)
+            .arg(flag)
             .arg(cmd)
             .current_dir(&self.root)
             .stdout(std::process::Stdio::piped())
@@ -13315,10 +13316,19 @@ impl App {
         self.settings.panels.show_bottom_dock = true;
         self.bottom_dock.push(format!("$ {cmd}"));
 
-        // Merge the whole command's stderr into stdout so one pipe carries both.
-        let mut child = match std::process::Command::new("sh")
-            .arg("-c")
-            .arg(format!("{{ {cmd} ; }} 2>&1"))
+        // Merge the whole command's stderr into stdout so one pipe carries
+        // both: `{ … ; } 2>&1` groups a `;`/`&&`-chained POSIX command so the
+        // redirect covers all of it, not just its last stage; `cmd.exe` has
+        // no `{ }` but its own `( … )` grouping does the same job (T547).
+        let (program, flag) = shell_program();
+        let script = if cfg!(windows) {
+            format!("({cmd}) 2>&1")
+        } else {
+            format!("{{ {cmd} ; }} 2>&1")
+        };
+        let mut child = match std::process::Command::new(program)
+            .arg(flag)
+            .arg(script)
             .current_dir(dir)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
@@ -13637,6 +13647,19 @@ fn display_key(k: &str) -> String {
         "SPC".to_string()
     } else {
         k.to_string()
+    }
+}
+
+/// The native shell program and flag for running a one-off command line on
+/// this platform: `("sh", "-c")` on Unix, `("cmd", "/C")` on Windows (T547).
+/// Mirrors `toggle_terminal`'s own interactive-shell choice, but for the
+/// "run one command line, capture its output" shape `run_command_in`/
+/// `spawn_ai_cli` both need instead of an interactive PTY session.
+fn shell_program() -> (&'static str, &'static str) {
+    if cfg!(windows) {
+        ("cmd", "/C")
+    } else {
+        ("sh", "-c")
     }
 }
 
