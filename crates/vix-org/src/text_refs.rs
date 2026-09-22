@@ -217,7 +217,13 @@ pub fn id_location(text: &str, id: &str) -> Option<usize> {
     let lines: Vec<&str> = text.split('\n').collect();
     let hit = lines.iter().position(|l| {
         let t = l.trim();
-        t.len() >= 4 && t[..4].eq_ignore_ascii_case(":id:") && t[4..].trim() == id
+        // `t.get(..4)` (not `t.len() >= 4 && t[..4]`, T559): a byte-length
+        // check alone doesn't prove offset 4 is a *char* boundary -- a
+        // multi-byte character straddling it panics the raw slice before
+        // the literal comparison even runs, on a line that doesn't even
+        // match. `get` returns `None` instead, and once it returns `Some`
+        // offset 4 is proven a boundary, so the later `t[4..]` is safe too.
+        t.get(..4).is_some_and(|p| p.eq_ignore_ascii_case(":id:")) && t[4..].trim() == id
     })?;
     Some(governing(&lines, hit).unwrap_or(hit))
 }
@@ -227,7 +233,13 @@ pub fn id_location(text: &str, id: &str) -> Option<usize> {
 /// Whether `line` opens a source block, returning its language (may be empty).
 fn src_begin(line: &str) -> Option<String> {
     let t = line.trim_start();
-    let rest = if t.len() >= 11 && t[..11].eq_ignore_ascii_case("#+begin_src") {
+    // `t.get(..11)` (T559, same char-boundary reasoning as `id_location`
+    // above): proves offset 11 is a char boundary before the later
+    // `t[11..]` slice, instead of only checking byte length.
+    let rest = if t
+        .get(..11)
+        .is_some_and(|p| p.eq_ignore_ascii_case("#+begin_src"))
+    {
         &t[11..]
     } else {
         return None;
@@ -312,4 +324,32 @@ pub fn column_view(text: &str) -> String {
         );
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // T559: `id_location`/`src_begin` used to check byte *length* before
+    // slicing at a fixed byte offset, not that the offset was actually a
+    // char *boundary* -- a multi-byte character straddling it panicked the
+    // slice before the keyword comparison even ran, on a line that
+    // doesn't even match. Byte offsets verified precisely, not eyeballed.
+
+    #[test]
+    fn id_location_does_not_panic_on_a_multibyte_char_at_the_checked_offset() {
+        // 3 ASCII bytes then a 2-byte 'é' starting at byte 3 -- byte
+        // offset 4 (the check's slice point) lands inside that character.
+        let doc = "abcé rest of line, not a real property\n";
+        assert_eq!(id_location(doc, "whatever"), None);
+    }
+
+    #[test]
+    fn src_begin_does_not_panic_on_a_multibyte_char_at_the_checked_offset() {
+        // Same reasoning as `category_value`'s own regression test in
+        // columns.rs: 10 ASCII bytes then 'é' starting at byte 10 --
+        // offset 11 lands inside it.
+        let line = "1234567890é rest of line, not a real keyword";
+        assert_eq!(src_begin(line), None);
+    }
 }
