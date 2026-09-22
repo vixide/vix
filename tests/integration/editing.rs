@@ -2264,6 +2264,51 @@ fn run_command_merges_stderr_into_the_captured_output() {
 }
 
 #[test]
+fn bell_on_command_done_is_off_by_default() {
+    // T557: confirms the setting's own default, and that a command still
+    // completes normally with it untouched -- the byte `ring_bell` would
+    // write isn't itself observable from here (it goes to the real
+    // process stdout, which `cargo test` captures, not a value this test
+    // can intercept), so this -- like the pre-existing `terminal_zoom`,
+    // which writes escape sequences the same way with no test of its own
+    // for the literal bytes -- verifies the gate's trigger condition
+    // rather than the write.
+    let app = app_at(Path::new("."));
+    assert!(!app.settings.accessibility.bell_on_command_done);
+}
+
+#[test]
+fn run_command_completes_normally_with_the_bell_setting_on() {
+    // Proves turning `bell_on_command_done` on doesn't break the command
+    // pipeline itself (hang, panic, or otherwise interfere) -- see
+    // `bell_on_command_done_is_off_by_default` for why the actual bell
+    // byte isn't asserted on directly.
+    let settings = Settings {
+        accessibility: vix::settings::AccessibilitySettings {
+            bell_on_command_done: true,
+        },
+        ..Settings::default()
+    };
+    let mut app = app_at_with(Path::new("."), settings);
+    app.run_action("tools.run_command");
+    for c in "echo hello-vix".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+
+    let mut waited = 0;
+    while app.command_running() && waited < 300 {
+        app.poll_command();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        waited += 1;
+    }
+    app.poll_command();
+
+    let out = app.bottom_dock.lines.join("\n");
+    assert!(out.contains("[exit 0]"), "command still completed: {out:?}");
+}
+
+#[test]
 fn cancel_command_kills_a_running_command() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.run_command");

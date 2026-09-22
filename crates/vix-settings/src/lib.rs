@@ -74,6 +74,11 @@ pub struct Settings {
     /// Whole-subsystem on/off switches: LSP, modal engine, inline blame (T149).
     #[serde(flatten)]
     pub subsystems: SubsystemSettings,
+    /// Channels for surfacing state changes outside the visible screen —
+    /// e.g. a terminal bell, for someone not looking at the screen when a
+    /// background command finishes (T557).
+    #[serde(flatten)]
+    pub accessibility: AccessibilitySettings,
     /// How the file explorer's Delete acts: `"trash"` (default — move to the
     /// OS trash/Recycle Bin, undoable from there) or `"hard"` (remove
     /// outright, `fs::remove_file`/`remove_dir_all`, no undo). Any other
@@ -335,6 +340,22 @@ impl Default for MiscSettings {
     }
 }
 
+/// Channels for surfacing a state change outside the visible screen (T557,
+/// `docs/accessibility/index.md`) — a starting point, not a finished
+/// feature: see the audit doc for what else was considered and why most of
+/// it isn't a small-settings-field fix.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AccessibilitySettings {
+    /// Ring the terminal bell (`\x07`) when a background command started
+    /// via `run_command_in` (Project → Compile/Run/Test, "Run shell
+    /// command", …) finishes — audible (or, on terminals configured for a
+    /// visual bell, visible) to someone not looking at the screen when it
+    /// happens, sighted or not. Off by default: opt-in, so it never
+    /// surprises someone who didn't ask for it.
+    pub bell_on_command_done: bool,
+}
+
 /// What happens to a file's content on save, before it's written (T149).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -492,6 +513,7 @@ impl Default for Settings {
             typing: TypingSettings::default(),
             startup: StartupSettings::default(),
             subsystems: SubsystemSettings::default(),
+            accessibility: AccessibilitySettings::default(),
             explorer_delete: "trash".to_string(),
             bottom_dock_height: 9,
             scrollback: 1000,

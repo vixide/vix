@@ -18,6 +18,10 @@ list; this page adds usage detail and the `git` integration snippets.
 | ---- | ------ |
 | `-l, --locale <LOCALE>` | UI language for this run only (e.g. `en`, `es`, `fr`, `de`, `cy`) — overrides the saved `locale` setting without persisting the change. |
 | `--diff <OLD> <NEW>` | Open a read-only unified-diff overlay comparing the two files directly, independent of any open buffer. This is the shape a `git difftool` driver invokes with (`$LOCAL $REMOTE`) — see below. |
+| `--tutor` | Launch straight into the interactive tutorial (also reachable from a running session via **Help → Tutorial**), in place of any files also passed — see `crates/vix-tutor/spec/index.md`. |
+| `--doctor` | Check the environment for common setup friction (`git` on `PATH`, configured LSP servers spawnable, the active locale's spellcheck dictionary loadable, terminal color support) and print a plain pass/fail report, then exit without starting the editor. Also reachable via **Help → Run Diagnostics** — see `crates/vix-doctor/spec/index.md`. |
+| `--export-settings <PATH>` | Bundle `config.toml`, macros, keybindings, the user dictionary, and the active custom theme into one file at `PATH`, then exit. Also reachable via **Vix → Export Settings…** — see `crates/vix-settings-bundle/spec/index.md`. |
+| `--import-settings <PATH>` | Restore a bundle written by `--export-settings` from `PATH` (backing up any file it replaces first), then exit. Also reachable via **Vix → Import Settings…**. |
 | `--version` | Print the version and exit. |
 | `--version --json` | Print `{"name":"vix","version":"…"}` instead of plain text, for scripts/tooling. |
 | `--help` | Full flag reference (clap-generated, always in sync with the binary). |

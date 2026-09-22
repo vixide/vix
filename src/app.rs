@@ -7401,6 +7401,21 @@ impl App {
         }
     }
 
+    /// Ring the terminal bell (`\x07`) — the one signal a state change can
+    /// reliably send outside the visible screen (T557,
+    /// `docs/accessibility/index.md`): audible on terminals with a sound
+    /// bell, or flashed on ones configured for a visual bell instead,
+    /// either way perceivable by someone not looking at the screen when it
+    /// happens. Callers gate this behind `Settings::accessibility.
+    /// bell_on_command_done` (or a future sibling setting) — this helper
+    /// itself has no opinion on when ringing it is appropriate.
+    fn ring_bell() {
+        use std::io::Write;
+        let mut out = std::io::stdout();
+        let _ = out.write_all(b"\x07");
+        let _ = out.flush();
+    }
+
     /// Best-effort terminal font zoom. A TUI cannot portably resize the font, so
     /// this emits the escape sequence for terminals that support one (xterm
     /// `OSC 50`, urxvt `OSC 720/721`) based on `$TERM`; on other terminals it
@@ -13448,6 +13463,9 @@ impl App {
                         self.messages.info(note);
                     } else {
                         self.messages.error(note);
+                    }
+                    if self.settings.accessibility.bell_on_command_done {
+                        Self::ring_bell();
                     }
                     done = true;
                 }

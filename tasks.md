@@ -5974,7 +5974,7 @@ starting any of them.
   one line where the original 5-line form didn't, so `fmt + clippy +
   doc` failed for real on GitHub CI. Fixed with one follow-up commit
   (`cargo fmt --all` + re-verify); confirmed green on the next push.
-- [ ] **T557 — Accessibility audit for screen readers.** T203 added a
+- [x] **T557 — Accessibility audit for screen readers.** T203 added a
   WCAG-AA high-contrast *theme* (a color/contrast fix, not a screen-
   reader one — a TUI's accessibility to an actual screen reader is a
   different, narrower question: does *anything* Vix does get announced
@@ -5999,6 +5999,47 @@ starting any of them.
   it) as part of the same task; document the rest as follow-on ideas
   rather than guessing at scope now. Moderate effort, audit-shaped —
   budget more time for research/writing than for code.
+  **Done 2026-09-22.** Wrote `docs/accessibility/index.md`, grounded in
+  real research (not just reasoning from first principles) — the honest
+  finding turned out bigger than the task's own framing anticipated:
+  the two-channel "title or bell" question is real but secondary. The
+  primary barrier is structural — real accessibility reporting on
+  modern full-screen-redraw TUI frameworks (Ink, Bubble Tea, tcell, and
+  Vix's own foundation `ratatui`) identifies constant cursor
+  repositioning plus whole-screen redraws as what actually "makes
+  screen readers go nuts," and Vix (`src/ui.rs`'s `draw` repaints
+  everything every tick) fits that pattern exactly — confirmed by
+  reading the actual rendering code, not assumed. Heavy box-drawing
+  borders and Nerd-Font-icon-only signaling (grepped across the
+  codebase, not guessed) compound it. Documented this plainly rather
+  than let a small settings field imply the problem was solved.
+  **Shipped anyway, as the one genuinely safe low-risk win**: new
+  `Settings::accessibility.bell_on_command_done` (off by default,
+  new `AccessibilitySettings` sub-struct — a lone bool would have
+  pushed `MiscSettings` over clippy's `struct_excessive_bools`
+  threshold, the same class of thing T553's `Cli` hit) rings the
+  terminal bell when a `run_command_in`-driven background command
+  (Project → Compile/Run/Test, "Run shell command") finishes.
+  A terminal-title update was considered and deliberately **not**
+  shipped — needs care restoring the original title on exit, and its
+  actual screen-reader announcement behavior is genuinely uncertain in
+  a way the bell mostly isn't; recorded as a real follow-on, not a
+  time-ran-out gap. The real fix — an opt-in "screen reader mode"
+  (flat rendering, no box-drawing, text role-markers instead of
+  icon-only signals) — is recorded with its real precedent (other real
+  TUI/CLI tools' own shipped screen-reader modes) as a genuinely sized
+  follow-on, correctly out of this audit's scope (a rendering redesign,
+  not a documentation/small-settings task). Two small real gaps fixed
+  in passing: `docs/cli/index.md` was missing table rows for
+  `--tutor`/`--doctor`/`--export-settings`/`--import-settings`
+  entirely (T553/T555's own oversight, caught via `scripts/
+  docs-coverage` correctly flagging `vix-doctor` as uncovered) — fixed,
+  confirmed the tool-flagged gap cleared; and `docs/accessibility/`
+  was missing its `README.md`/`index.md` twin symlink, the convention
+  every sibling `docs/<topic>/` directory already follows (`check-docs`
+  didn't catch a *missing* twin, only a *drifted* one — a real,
+  narrow gap in that check itself, not chased further here since it's
+  outside T557's own scope).
 
 ---
 
