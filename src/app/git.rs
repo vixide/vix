@@ -655,11 +655,7 @@ impl App {
         };
         let (rebuilt, caret) = rebuild_with_resolution(&content, &conflict, how);
         self.apply_rebuilt_buffer(&rebuilt, caret, "status.conflict_resolved");
-        let refreshed = self
-            .editor
-            .active_tab()
-            .map(Tab::text)
-            .unwrap_or_default();
+        let refreshed = self.editor.active_tab().map(Tab::text).unwrap_or_default();
         if let Some(list) = self.conflict_list.as_mut() {
             list.refresh(&refreshed);
             if list.is_empty() {
