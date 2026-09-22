@@ -24,10 +24,10 @@ vix-i18n = { path = "../vix-i18n", version = "1.5.0" }
 vix-list-state = { path = "../vix-list-state", version = "1.6.0" }
 vix-theme = { path = "../vix-theme", version = "1.5.0" }
 
-# macOS: store DB passwords through the native Security framework rather than
-# shelling out to `security add-generic-password -w <password>`, which exposes
-# the plaintext password as a process argument (visible in `ps`). Scoped to
-# macOS so Linux/Windows builds don't pull in the backend; Linux keeps the
-# already-secure `secret-tool` CLI (secret on stdin).
-[target.'cfg(target_os = "macos")'.dependencies]
+# macOS and Windows: store DB passwords through the native credential store
+# (Security framework / Credential Manager, T548) rather than shelling out to
+# a CLI that exposes the plaintext password as a process argument (visible in
+# `ps`/Task Manager). Scoped to these two targets so Linux doesn't pull in the
+# backend; Linux keeps the already-secure `secret-tool` CLI (secret on stdin).
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
 keyring = { workspace = true }

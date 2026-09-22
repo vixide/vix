@@ -14,10 +14,10 @@ serde_json = { workspace = true }
 # workspace entry since `vix-http-client` sends/reads plain text, not JSON.
 ureq = { workspace = true, features = ["json"] }
 
-# macOS: store the API key through the native Security framework rather than
-# shelling out to a CLI that exposes the plaintext as a process argument.
-# Linux instead uses the already-secure `secret-tool` CLI (secret on stdin) —
-# see `crates/vix-db/src/secret.rs` for the sibling implementation this
-# mirrors.
-[target.'cfg(target_os = "macos")'.dependencies]
+# macOS and Windows: store the API key through the native credential store
+# (Security framework / Credential Manager, T548) rather than shelling out to
+# a CLI that exposes the plaintext as a process argument. Linux instead uses
+# the already-secure `secret-tool` CLI (secret on stdin) — see
+# `crates/vix-db/src/secret.rs` for the sibling implementation this mirrors.
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
 keyring = { workspace = true }

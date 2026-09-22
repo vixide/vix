@@ -5371,6 +5371,28 @@ case-insensitive filesystems correctly).
   purpose is exactly this one-API/pluggable-backend shape — but this is
   a real, honestly-acknowledged verification gap, not a claim of
   Windows testing that didn't happen.
+  **That acknowledged gap was real: the first real Windows CI run
+  (2026-09-22, once T547's prerequisite job existed) found a genuine
+  bug in this fix.** `error[E0433]: cannot find module or crate
+  keyring` at `crates/vix-db/src/secret.rs:87,112` — `cargo build
+  --all-targets` failed outright on `windows-latest`, before even
+  reaching `cargo test`. Root cause: `crates/vix-db/Cargo.toml` and
+  `crates/vix-ai-core/Cargo.toml` each gate their own `keyring =
+  { workspace = true }` line behind `[target.'cfg(target_os =
+  "macos")'.dependencies]` — a **Cargo.toml-level** per-target gate
+  that T548 never touched, forgotten alongside the code-level
+  `#[cfg(any(target_os = "macos", windows))]` arm it did add. Enabling
+  `windows-native` in the *workspace* `keyring` feature list
+  (root `Cargo.toml:41`) was necessary but not sufficient — the crate
+  still wasn't linked into either binary for the Windows target at
+  all, feature flags notwithstanding. Fixed by widening both
+  `[target.'cfg(...)']` gates to `cfg(any(target_os = "macos",
+  windows))`; also fixed the matching stale comments (both crate
+  manifests' and the root workspace one) that still said "scoped to
+  macOS" after T548 had already made that untrue. This is exactly the
+  kind of bug the task's own "honestly-acknowledged verification gap"
+  called out — not from bad reasoning, just genuinely impossible to
+  catch without the runner that didn't exist yet.
 - [x] **T549 — Workspace Dashboard's disk-usage stat shells out to
   `du`, unavailable on Windows; fails silently (cosmetic, not a
   crash).** `src/app.rs:10872-10883`: `Command::new("du").arg("-sh")...`
