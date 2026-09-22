@@ -820,3 +820,90 @@ pub(super) fn draw_outline(app: &mut App, frame: &mut Frame, area: Rect) {
             .min(chunks[0].height),
     };
 }
+
+/// The first line of `text` (with its ending stripped), truncated to `max`
+/// characters — a one-line preview of a conflict side for
+/// [`draw_conflict_list`]. Empty when `text` itself is empty (an empty
+/// side is valid, e.g. a conflict where one branch deleted the lines).
+fn preview_line(text: &str, max: usize) -> String {
+    let first = text.lines().next().unwrap_or("");
+    let truncated: String = first.chars().take(max).collect();
+    if first.chars().count() > max {
+        format!("{truncated}…")
+    } else {
+        truncated
+    }
+}
+
+/// Render the Conflict overlay (T556, `git.conflict_list`): every merge
+/// conflict in the active buffer, each row previewing both sides.
+pub(super) fn draw_conflict_list(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.conflict_list.is_none() {
+        return;
+    }
+    let n = app.conflict_list.as_ref().unwrap().len();
+    let width = 64u16.min(area.width);
+    let max_rows = area.height.saturating_sub(3).max(1);
+    let rows = u16::try_from(n).unwrap_or(u16::MAX).min(max_rows);
+    let height = (rows + 3).min(area.height);
+    let rect = Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 4,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .style(theme::base())
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::title(true))
+        .title(format!(" {} {} ", icon::BRANCH, t!("ui.conflict_list")));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let view_h = chunks[0].height as usize;
+    if let Some(l) = app.conflict_list.as_mut() {
+        l.ensure_visible(view_h);
+    }
+    let l = app.conflict_list.as_ref().unwrap();
+    // Reserve room for the row number and the " → " separator so both
+    // previews get a fair, even share of the remaining width.
+    let side_width = (chunks[0].width as usize).saturating_sub(9) / 2;
+    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
+    for idx in l.scroll..(l.scroll + view_h).min(l.len()) {
+        let c = &l.entries[idx];
+        let text = format!(
+            "{:>3}: {} → {}",
+            idx + 1,
+            preview_line(&c.ours, side_width),
+            preview_line(&c.theirs, side_width)
+        );
+        if idx == l.selected {
+            lines.push(Line::from(Span::styled(text, theme::selected())));
+        } else {
+            lines.push(Line::from(Span::raw(text)));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines), chunks[0]);
+
+    let hint = Line::from(Span::styled(
+        t!("ui.conflict_list_hint").to_string(),
+        theme::dim(),
+    ));
+    frame.render_widget(Paragraph::new(hint), chunks[1]);
+
+    app.layout.conflict_list = Rect {
+        x: chunks[0].x,
+        y: chunks[0].y,
+        width: chunks[0].width,
+        height: u16::try_from(view_h)
+            .unwrap_or(u16::MAX)
+            .min(chunks[0].height),
+    };
+}

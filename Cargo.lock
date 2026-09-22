@@ -5546,6 +5546,9 @@ dependencies = [
 [[package]]
 name = "vix-conflict-tool"
 version = "1.6.0"
+dependencies = [
+ "vix-list-state",
+]
 
 [[package]]
 name = "vix-contact-panel"

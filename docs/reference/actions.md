@@ -161,6 +161,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `git.changes` | Changes… | Menu |
 | `git.clone` | Clone… | Menu |
 | `git.conflict_both` | Keep Both | Menu |
+| `git.conflict_list` | List Conflicts… | Menu |
 | `git.conflict_next` | Next Conflict | Menu |
 | `git.conflict_ours` | Keep Ours | Menu |
 | `git.conflict_theirs` | Keep Theirs | Menu |
@@ -671,4 +672,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**664 actions.**
+**665 actions.**

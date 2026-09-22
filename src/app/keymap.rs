@@ -104,6 +104,7 @@ impl App {
             ai_diff,
             ai_panel,
             outline,
+            conflict_list,
             query_replace,
             structural_replace,
             replace_confirm,
@@ -336,6 +337,7 @@ impl App {
         panel!(ai_diff, ai_diff_key);
         panel!(ai_panel, ai_panel_key);
         panel!(outline, outline_key);
+        panel!(conflict_list, conflict_list_key);
         panel!(query_replace, qr_key);
         panel!(structural_replace, sr_key);
         panel!(replace_confirm, replace_confirm_key);
