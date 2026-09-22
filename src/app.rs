@@ -10297,20 +10297,13 @@ impl App {
         };
         let path = tmp.display().to_string();
         let cmd = self.settings.ai_command_line(prompt, &path);
-        let (program, flag) = shell_program();
         // `ai_command_line` always redirects the shell's own stdin from
         // `path` (`< "…"`) unless the template uses `{file}` instead, so
         // this process's own stdin is never actually read either way --
         // explicitly closed rather than left to the default of inheriting
-        // this process's own stdin, which on Windows left `cmd.exe`'s `<`
-        // redirect racing an inherited handle from the parent and hanging
-        // indefinitely instead of ever completing (T547, found via a real
-        // Windows CI run: every spawn_ai_cli-driven test timed out, while
-        // run_command_in's sibling tests -- whose command lines never
-        // redirect stdin -- passed).
-        let mut child = match std::process::Command::new(program)
-            .arg(flag)
-            .arg(cmd)
+        // this process's own stdin, which is never what a background
+        // command should be reading from regardless of platform (T547).
+        let mut child = match shell_command(&cmd)
             .current_dir(&self.root)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
@@ -13337,7 +13330,6 @@ impl App {
         // both: `{ … ; } 2>&1` groups a `;`/`&&`-chained POSIX command so the
         // redirect covers all of it, not just its last stage; `cmd.exe` has
         // no `{ }` but its own `( … )` grouping does the same job (T547).
-        let (program, flag) = shell_program();
         let script = if cfg!(windows) {
             format!("({cmd}) 2>&1")
         } else {
@@ -13345,13 +13337,8 @@ impl App {
         };
         // Explicitly closed rather than inherited: a background command has
         // no business reading from vix's own stdin (the terminal device vix
-        // itself is reading raw input from), and an inherited handle there
-        // is exactly what left every `spawn_ai_cli`-driven command hanging
-        // on Windows (see its own call site's comment, T547) once its shell
-        // invocation also redirected stdin from a file.
-        let mut child = match std::process::Command::new(program)
-            .arg(flag)
-            .arg(script)
+        // itself is reading raw input from) (T547).
+        let mut child = match shell_command(&script)
             .current_dir(dir)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
@@ -13674,17 +13661,46 @@ fn display_key(k: &str) -> String {
     }
 }
 
-/// The native shell program and flag for running a one-off command line on
-/// this platform: `("sh", "-c")` on Unix, `("cmd", "/C")` on Windows (T547).
+/// Build a `Command` that runs `script` as one shell command line on this
+/// platform: `sh -c script` on Unix, `cmd /C script` on Windows (T547).
 /// Mirrors `toggle_terminal`'s own interactive-shell choice, but for the
 /// "run one command line, capture its output" shape `run_command_in`/
 /// `spawn_ai_cli` both need instead of an interactive PTY session.
-fn shell_program() -> (&'static str, &'static str) {
-    if cfg!(windows) {
-        ("cmd", "/C")
-    } else {
-        ("sh", "-c")
-    }
+///
+/// On Windows this is `.raw_arg(script)`, deliberately not the ordinary
+/// `.arg(script)` used on every other platform: `script` already carries
+/// its own `cmd.exe`-flavored quoting (`cmd_double_quote`'s `"…"` around a
+/// redirected file path, `run_command_in`'s `( … )` grouping), and `.arg`'s
+/// automatic Windows argument escaping — designed for a called program
+/// that parses its own argv the standard (MSVC CRT / `CommandLineToArgvW`)
+/// way — re-escapes embedded `"` characters as `\"` in the literal command
+/// line text on the way in. `cmd.exe`'s own `/C` handling does not use
+/// that parsing at all (it strips a pair of outer quotes only when there
+/// is no *other* quote character anywhere inside them), so the `\"` that
+/// `.arg` had just introduced left `cmd.exe` seeing extra literal quotes
+/// it didn't expect and never successfully running the command. Found via
+/// a real Windows CI run: three tests whose `script` contains an embedded
+/// `"…"` (everything through `spawn_ai_cli`, which always quotes its
+/// stdin-redirect target) still hung even once T547's earlier
+/// stdin-inheritance fix landed, while every test whose `script` has no
+/// embedded quotes had already been passing. `raw_arg` appends `script`
+/// to the command line completely unescaped — safe here because it is
+/// already exactly the text `cmd.exe` itself should parse, not user input
+/// reaching this function unquoted.
+#[cfg(windows)]
+fn shell_command(script: &str) -> std::process::Command {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = std::process::Command::new("cmd");
+    cmd.arg("/C");
+    cmd.raw_arg(script);
+    cmd
+}
+
+#[cfg(not(windows))]
+fn shell_command(script: &str) -> std::process::Command {
+    let mut cmd = std::process::Command::new("sh");
+    cmd.arg("-c").arg(script);
+    cmd
 }
 
 /// A short jump label for index `i`: `a`..`z`, then `aa`, `ab`, … (base-26 over

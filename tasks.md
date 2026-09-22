@@ -5424,11 +5424,37 @@ case-insensitive filesystems correctly).
   on both `spawn_ai_cli`'s and (proactively, same reasoning applies even
   though its own tests never showed the bug) `run_command_in`'s
   `Command` builders — a spawned background command has no business
-  reading vix's own terminal stdin either way. Local gate green (fmt,
-  clippy, rustdoc with warnings denied, full workspace test suite,
-  `scripts/check-docs`); pushed for verification against the real
-  `windows-latest` CI job, matching every other fix in this run — see
-  the follow-up note below once that run reports back.
+  reading vix's own terminal stdin either way. Pushed and verified
+  against real Windows CI: **the same three tests still hung,
+  identically** — the stdin fix was reasonable practice but not the
+  actual bug.
+  **Fourth, and actually final, root cause**: Rust's `std::process::
+  Command::arg()` on Windows performs its own MSVC-CRT-style argument
+  escaping — designed for a called program that parses its own argv
+  the standard way — before handing the joined string to `CreateProcess`.
+  `cmd.exe /C`, however, does **not** parse its command line that way;
+  it takes the text after `/C` more or less verbatim, stripping a pair
+  of outer quotes only when there is no *other* `"` anywhere inside
+  them. Every failing test's shell `script` contains an embedded
+  `"…"` (`cmd_double_quote`'s quoting around the stdin-redirect target,
+  or `run_command_in`'s `( … )` grouping combined with a quoted
+  argument) — `.arg()`'s escaping turned each embedded `"` into a
+  literal `\"` in the command-line text on the way in, which `cmd.exe`
+  then saw as *more* quote characters, defeated its own outer-quote
+  stripping, and never successfully parsed the command at all (every
+  *passing* test's `script`, by contrast, had no embedded quotes to
+  corrupt). Fix: replaced the shared `shell_program()` helper with
+  `shell_command(script)`, returning a fully-built `Command`; on
+  Windows it uses [`CommandExt::raw_arg`] instead of `.arg()` for
+  `script` — appends the text completely unescaped, which is correct
+  here specifically because `script` is not raw, untrusted, unquoted
+  user input reaching this function; it is already-quoted text meant
+  to be parsed by `cmd.exe`'s own rules, and `.arg()`'s escaping was
+  actively getting in the way of that, not protecting anything. Local
+  gate green (fmt, clippy, rustdoc with warnings denied, full workspace
+  test suite — Windows-specific behavior can't be exercised locally,
+  same caveat as every round before this one — `scripts/check-docs`);
+  pushed for verification against the real `windows-latest` CI job.
 - [x] **T548 — OS keyring support on Windows is a silent no-op stub,
   despite the `keyring` crate (already a dependency, already used on
   macOS via the identical `keyring::Entry` API) supporting Windows
