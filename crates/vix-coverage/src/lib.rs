@@ -52,20 +52,39 @@ impl Report {
     ///
     /// Reports name files inconsistently (relative to the project root,
     /// relative to some other directory, with a different separator, or —
-    /// once a real path has been through `Path::canonicalize` on Windows —
-    /// different casing than the literal string that named the same file
-    /// elsewhere), so this tries an exact match first, then falls back to
-    /// the recorded path being a suffix of `path` or vice versa, all
+    /// once a real path has been through `Path::canonicalize`, e.g. on
+    /// Windows — different casing than the literal string that named the
+    /// same file elsewhere), so this tries an exact match first, then falls
+    /// back to the recorded path being a suffix of `path` or vice versa, all
     /// compared via `normalize`.
+    ///
+    /// If neither finds a match, a last resort tries canonicalizing each
+    /// recorded path and comparing that against `path` directly (assumed
+    /// already canonical, as every real caller's is) — a real filesystem
+    /// call, so only tried once the cheap string comparisons above have both
+    /// failed. This catches path aliasing no amount of string normalization
+    /// can bridge: found via a real Windows CI run (T547/T550), where a
+    /// report built from `std::env::temp_dir()`'s own string recorded a
+    /// legacy 8.3 short name (`RUNNER~1`) for a path segment `canonicalize`
+    /// resolves to its long form (`runneradmin`) — genuinely different
+    /// strings naming the identical directory. Silently falls through when
+    /// a recorded path doesn't exist locally (a report from a different
+    /// machine, or a synthetic path in a test fixture) rather than erroring.
     #[must_use]
     pub fn lines_for(&self, path: &Path) -> Option<&HashMap<usize, Hit>> {
         let wanted = normalize(&path.to_string_lossy());
-        self.files.iter().find_map(|(recorded, lines)| {
+        if let Some(lines) = self.files.iter().find_map(|(recorded, lines)| {
             let recorded = normalize(recorded);
             (wanted == recorded
                 || wanted.ends_with(recorded.as_str())
                 || recorded.ends_with(wanted.as_str()))
             .then_some(lines)
+        }) {
+            return Some(lines);
+        }
+        self.files.iter().find_map(|(recorded, lines)| {
+            let canon = Path::new(recorded).canonicalize().ok()?;
+            (canon == path).then_some(lines)
         })
     }
 
@@ -329,6 +348,40 @@ mod tests {
         let canonicalized_form =
             Path::new(r"\\?\C:\Users\runneradmin\AppData\Local\Temp\proj\lib.rs");
         assert!(report.lines_for(canonicalized_form).is_some());
+    }
+
+    #[test]
+    fn lines_for_canonicalizes_as_a_last_resort_when_string_matching_fails() {
+        // The real bug behind the case test above: on Windows,
+        // `std::env::temp_dir()`'s own string can carry a legacy 8.3 short
+        // name (`RUNNER~1`) for a path segment `Path::canonicalize` resolves
+        // to its long form (`runneradmin`) -- genuinely different strings,
+        // not just different case, so no string-normalization step can ever
+        // bridge them (confirmed via a real Windows CI run, T547/T550: the
+        // case-only fix above did *not* resolve the actual failure). Proves
+        // the canonicalize-based fallback tier itself works, using a path
+        // alias (`dir/sibling/../lib.rs`) that's portable to reproduce on
+        // any OS -- `..` resolution is exactly the kind of alias no amount
+        // of string comparison, case-folding included, can match.
+        let dir =
+            std::env::temp_dir().join(format!("vix-coverage-canon-test-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("sibling")).unwrap();
+        let file = dir.join("lib.rs");
+        std::fs::write(&file, "fn a() {}\n").unwrap();
+
+        let recorded = dir.join("sibling").join("..").join("lib.rs");
+        let report = parse_lcov(&format!(
+            "SF:{}\nDA:1,1\nend_of_record\n",
+            recorded.display()
+        ));
+
+        let canonical = file.canonicalize().unwrap();
+        assert!(
+            report.lines_for(&canonical).is_some(),
+            "canonicalize-based fallback should resolve the `..` alias"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
