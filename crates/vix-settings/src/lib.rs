@@ -800,6 +800,22 @@ fn cmd_double_quote(s: &str) -> String {
             _ => out.push(c),
         }
     }
+    // Double any run of backslashes immediately before the closing quote
+    // (T562): this string is neutral to `cmd.exe`'s own line-scanning
+    // parser (handled above), but the *child process's* own argv parser
+    // (the standard MSVCRT/`CommandLineToArgvW` convention every normal
+    // Windows program uses) treats an *odd* number of backslashes right
+    // before a `"` as escaping that quote into a literal character rather
+    // than a delimiter -- without this, a value ending in a lone `\`
+    // (reachable from ordinary buffer content, e.g. a Windows-style path)
+    // would leave the child's parser reading the closing quote below as
+    // still inside the argument, silently absorbing whatever the template
+    // placed after it into this same argument instead of treating it
+    // separately.
+    let trailing_backslashes = out.chars().rev().take_while(|&c| c == '\\').count();
+    for _ in 0..trailing_backslashes {
+        out.push('\\');
+    }
     out.push('"');
     out
 }
@@ -914,6 +930,24 @@ mod tests {
         // alone -- confirm they pass through unescaped (only `"`, `%`, and
         // CR/LF get special handling).
         assert_eq!(cmd_double_quote("a & b | c"), "\"a & b | c\"");
+    }
+
+    #[test]
+    fn cmd_double_quote_doubles_a_trailing_backslash_run() {
+        // T562: a lone trailing `\` must become `\\` (even count) so the
+        // *child process's* own argv parser -- which does understand
+        // backslash+quote escaping, unlike cmd.exe's own line-scanning --
+        // reads the closing quote as a real delimiter, not an escaped
+        // literal. Reachable from an ordinary Windows-style path ending in
+        // a bare backslash.
+        assert_eq!(cmd_double_quote(r"C:\Users\me\"), r#""C:\Users\me\\""#);
+        // An even run already survives untouched (already balanced).
+        assert_eq!(cmd_double_quote(r"a\\"), r#""a\\\\""#);
+        // No trailing backslash at all: nothing to double.
+        assert_eq!(cmd_double_quote("plain"), "\"plain\"");
+        // A backslash that isn't at the very end is untouched -- only the
+        // run immediately before the closing quote matters.
+        assert_eq!(cmd_double_quote(r"a\b"), r#""a\b""#);
     }
 
     #[test]

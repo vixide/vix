@@ -6252,7 +6252,7 @@ as every other task.
   claimed the crate depended on nothing but `vix-settings`/
   `vix-spellcheck`, now stale) to document both the i18n dependency
   and the locale-ordering fix.
-- [ ] **T562 — Windows `cmd_double_quote` doesn't escape a trailing
+- [x] **T562 — Windows `cmd_double_quote` doesn't escape a trailing
   backslash before its closing quote, corrupting argument boundaries in
   non-default `ai_command` templates.** `crates/vix-settings/src/
   lib.rs:792-805` correctly neutralizes `cmd.exe`'s own line-scanning
@@ -6275,6 +6275,16 @@ as every other task.
   handles its own escape case correctly). Small effort, medium severity
   (Windows-only, non-default-template-only, but a real argv-corruption
   primitive once those conditions are met).
+  **Done 2026-09-22.** Fixed exactly as scoped: `cmd_double_quote` now
+  counts the trailing backslash run already built into `out` and
+  doubles it before appending the closing `"`, matching the standard
+  MSVCRT/`CommandLineToArgvW` convention (an odd count before a `"`
+  escapes it into a literal rather than a delimiter). New unit test
+  covering a lone trailing backslash (odd → doubled), an already-even
+  run (untouched net effect — doubled either way, staying even), no
+  trailing backslash at all, and a backslash that isn't at the very
+  end (confirming only the *trailing* run matters, not any backslash
+  anywhere in the string).
 - [ ] **T563 — The `*-information-panel` crate family (System/File/Text
   Information) is 100% untranslated.** `crates/vix-system-information-
   panel/src/lib.rs:178-220`, `crates/vix-file-information-panel/src/
