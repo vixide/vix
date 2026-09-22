@@ -62,10 +62,20 @@ Three jobs, so a formatting failure is visible without waiting for the tests:
 
 - **lint** — `fmt`, `clippy`, `doc` on `ubuntu-latest`. These findings are
   platform-independent, so they run once rather than per matrix entry.
-- **test** — `build` + `test` on `ubuntu-latest` and `macos-latest`. Windows is
-  covered by the release workflow's cross-builds; adding it here would roughly
-  double wall time for little extra signal, because the editing logic is
-  terminal-independent and tested without a TTY.
+- **test** — `build` + `test` on `ubuntu-latest`, `macos-latest`, and
+  `windows-latest` (T547, `tasks.md`). Windows joined the matrix because the
+  release workflow's cross-builds only compile for distribution (via `dist`,
+  on version tags) — they never run `cargo test`, so they can't catch an
+  OS-specific runtime bug (e.g. shelling out via a hardcoded POSIX `sh`,
+  T547's own finding). Most of the suite is genuinely terminal-independent
+  and this roughly doubles wall time for that part, but it's the only way to
+  get real signal on the part that isn't. The job's default shell is `bash`
+  (Git-Bash, preinstalled on the `windows-latest` runner image) rather than
+  the platform-default PowerShell, so the same POSIX-syntax steps (e.g. the
+  headless-examples run, `T505`) work unmodified on every OS in the matrix.
+  GitLab and Codeberg stay Linux-only (see below) — they never had macOS
+  coverage either, so this doesn't widen an existing three-way parity gap,
+  just this pre-existing GitHub-only one.
 - **msrv** — `cargo check` on the toolchain floor declared by
   `workspace.package.rust-version` in `Cargo.toml`. Bump the matrix entry when
   that floor moves.
