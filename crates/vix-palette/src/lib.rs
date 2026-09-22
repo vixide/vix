@@ -495,15 +495,41 @@ fn term_score(hay: &str, hay_len: usize, needle: &str) -> Option<i32> {
 
 /// Parse a `path:line[:col]` suffix. Returns the path part and an optional
 /// (line, col) target.
+///
+/// A Windows absolute path's drive letter (`C:\src\lib.rs`) carries its own
+/// colon, indistinguishable from the `path:line` separator by position
+/// alone — skip over it first (T547: a real Windows CI run found this left
+/// `C:\src\lib.rs:12` parsing as path `"C"`, line `"\src\lib.rs:12"` \[not a
+/// number, so no target at all\] instead of path `"C:\src\lib.rs"`, line
+/// `12`).
 #[must_use]
 pub fn parse_path_target(input: &str) -> (String, Option<(usize, usize)>) {
-    let mut parts = input.splitn(3, ':');
-    let path = parts.next().unwrap_or("").to_string();
+    let drive_len = windows_drive_prefix_len(input);
+    let (drive, rest) = input.split_at(drive_len);
+    let mut parts = rest.splitn(3, ':');
+    let path = format!("{drive}{}", parts.next().unwrap_or(""));
     let line = parts.next().and_then(|s| s.parse::<usize>().ok());
     let col = parts.next().and_then(|s| s.parse::<usize>().ok());
     match line {
         Some(l) => (path, Some((l, col.unwrap_or(1)))),
         None => (path, None),
+    }
+}
+
+/// The length of a leading Windows drive-letter prefix (a single ASCII
+/// letter, a colon, then `\` or `/`), or 0 when `input` doesn't start with
+/// one. Anything else with a colon early in the string (a relative path, a
+/// URL-ish scheme, …) is left alone.
+fn windows_drive_prefix_len(input: &str) -> usize {
+    let bytes = input.as_bytes();
+    if bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'\\' | b'/')
+    {
+        2
+    } else {
+        0
     }
 }
 
@@ -662,5 +688,52 @@ mod tests {
         p.input = "@local".into();
         assert!(matches!(p.mode(), Mode::Symbols));
         assert_eq!(p.query(), "local");
+    }
+
+    #[test]
+    fn parse_path_target_splits_path_line_and_column() {
+        assert_eq!(
+            parse_path_target("src/lib.rs:12:5"),
+            ("src/lib.rs".to_string(), Some((12, 5)))
+        );
+        assert_eq!(
+            parse_path_target("src/lib.rs:12"),
+            ("src/lib.rs".to_string(), Some((12, 1)))
+        );
+        assert_eq!(
+            parse_path_target("src/lib.rs"),
+            ("src/lib.rs".to_string(), None)
+        );
+    }
+
+    #[test]
+    fn parse_path_target_keeps_a_windows_drive_letter_out_of_the_split() {
+        // T547: a real Windows CI run found `splitn(3, ':')` alone treated
+        // the drive letter's own colon as the path:line separator, parsing
+        // `C:\src\lib.rs:12` as path "C", line "\src\lib.rs:12" (not a
+        // number, so no target at all) instead of the intended path/line.
+        assert_eq!(
+            parse_path_target(r"C:\src\lib.rs:12:5"),
+            (r"C:\src\lib.rs".to_string(), Some((12, 5)))
+        );
+        assert_eq!(
+            parse_path_target(r"C:\src\lib.rs:12"),
+            (r"C:\src\lib.rs".to_string(), Some((12, 1)))
+        );
+        assert_eq!(
+            parse_path_target(r"C:\src\lib.rs"),
+            (r"C:\src\lib.rs".to_string(), None)
+        );
+        // Forward-slash form (also valid on Windows) works the same way.
+        assert_eq!(
+            parse_path_target("C:/src/lib.rs:12"),
+            ("C:/src/lib.rs".to_string(), Some((12, 1)))
+        );
+        // A relative path that merely starts with a letter isn't mistaken
+        // for a drive prefix -- there's no `:` right after the first char.
+        assert_eq!(
+            parse_path_target("a.rs:3"),
+            ("a.rs".to_string(), Some((3, 1)))
+        );
     }
 }

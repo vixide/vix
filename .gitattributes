@@ -1,0 +1,26 @@
+# Force a consistent line ending on checkout regardless of the checking-out
+# machine's own git config. Without this, a text file committed with LF
+# (every source file here always has been) checks out as CRLF on a machine
+# with `core.autocrlf=true` -- GitHub's `windows-latest` runner's Git for
+# Windows defaults to exactly that. That silently broke vix-tutor's
+# exact-match lesson-progress checks the first time real Windows CI actually
+# ran them (T547): a test's `.replace("DELETE THIS ENTIRE LINE\n", "")`
+# against a CRLF-corrupted buffer never matched, since the pattern's `\n`
+# no longer immediately followed the text.
+* text=auto eol=lf
+
+# Genuine binaries: never touched by line-ending conversion.
+*.gif -text
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.ico -text
+*.woff -text
+*.woff2 -text
+*.ttf -text
+*.sqlite -text
+
+# Already committed with CRLF (the WiX toolset's own convention for its
+# installer config) -- leave it alone rather than force LF and disagree
+# with what's already in the repository.
+wix/main.wxs -text
