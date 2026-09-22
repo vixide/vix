@@ -130,6 +130,7 @@ impl App {
             }
             "git.conflict_both" => self.resolve_conflict(crate::conflict_tool::Resolution::Both),
             "git.conflict_next" => self.conflict_next(),
+            "git.conflict_list" => self.open_conflict_list(),
             "git.stash" => self.git_op(crate::git::stash_push, "status.git_stashed"),
             "git.stash_pop" => self.git_op(crate::git::stash_pop, "status.git_stash_popped"),
             "git.amend" => self.git_op(crate::git::commit_amend, "status.git_amended"),
@@ -486,14 +487,7 @@ impl App {
             self.status = t!("status.no_conflict").to_string();
             return;
         };
-        let lines: Vec<&str> = content.split_inclusive('\n').collect();
-        let mut rebuilt = lines[..conflict.start].concat();
-        rebuilt.push_str(&conflict.resolved(how));
-        rebuilt.push_str(&lines[conflict.end.min(lines.len())..].concat());
-        let caret: usize = lines[..conflict.start]
-            .iter()
-            .map(|l| l.chars().count())
-            .sum();
+        let (rebuilt, caret) = rebuild_with_resolution(&content, &conflict, how);
         self.apply_rebuilt_buffer(&rebuilt, caret, "status.conflict_resolved");
     }
 
@@ -532,6 +526,145 @@ impl App {
                 self.editor.goto(c.start + 1, None, area);
             }
             None => self.status = t!("status.no_conflict").to_string(),
+        }
+    }
+
+    // ----- conflict overlay (T556) -----------------------------------------
+
+    /// Open the Conflict overlay (`git.conflict_list`), listing every merge
+    /// conflict in the active buffer. Reports a status when there are none.
+    fn open_conflict_list(&mut self) {
+        let Some(text) = self
+            .editor
+            .active_tab()
+            .filter(|t| !t.is_image())
+            .map(Tab::text)
+        else {
+            return;
+        };
+        let entries = crate::conflict_tool::find_all(&text);
+        if entries.is_empty() {
+            self.status = t!("status.no_conflict").to_string();
+            return;
+        }
+        self.conflict_list = Some(crate::conflict_tool::List::new(entries));
+    }
+
+    pub(super) fn conflict_list_key(&mut self, key: KeyEvent) {
+        let page = (self.layout.conflict_list.height as usize).max(1);
+        match key.code {
+            KeyCode::Up => {
+                if let Some(l) = self.conflict_list.as_mut() {
+                    l.up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(l) = self.conflict_list.as_mut() {
+                    l.down();
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(l) = self.conflict_list.as_mut() {
+                    l.page_up(page);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(l) = self.conflict_list.as_mut() {
+                    l.page_down(page);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(l) = self.conflict_list.as_mut() {
+                    l.page_up(l.len());
+                }
+            }
+            KeyCode::End => {
+                if let Some(l) = self.conflict_list.as_mut() {
+                    l.page_down(l.len());
+                }
+            }
+            KeyCode::Enter => self.jump_to_conflict_list_selection(),
+            KeyCode::Char('o') => {
+                self.resolve_conflict_list_selection(crate::conflict_tool::Resolution::Ours);
+            }
+            KeyCode::Char('t') => {
+                self.resolve_conflict_list_selection(crate::conflict_tool::Resolution::Theirs);
+            }
+            KeyCode::Char('b') => {
+                self.resolve_conflict_list_selection(crate::conflict_tool::Resolution::Both);
+            }
+            KeyCode::Esc => self.conflict_list = None,
+            _ => {}
+        }
+    }
+
+    pub(super) fn conflict_list_mouse(&mut self, mouse: MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+        let r = self.layout.conflict_list;
+        if !rect_contains(r, mouse.column, mouse.row) {
+            return;
+        }
+        let row = (mouse.row - r.y) as usize;
+        if let Some(l) = self.conflict_list.as_mut() {
+            let idx = l.scroll + row;
+            if l.select_index(idx) {
+                self.jump_to_conflict_list_selection();
+            }
+        }
+    }
+
+    /// Jump the cursor to the highlighted conflict and close the overlay.
+    fn jump_to_conflict_list_selection(&mut self) {
+        let Some(start) = self
+            .conflict_list
+            .as_ref()
+            .and_then(|l| l.entries.get(l.selected))
+            .map(|c| c.start)
+        else {
+            return;
+        };
+        self.conflict_list = None;
+        self.with_jump(|s| {
+            let area = s.editor_view();
+            s.editor.goto(start + 1, None, area);
+            s.focus = crate::app::Focus::Editor;
+        });
+    }
+
+    /// Resolve the highlighted conflict with `how`, without leaving the
+    /// overlay: rebuilds the buffer, then re-scans it for the (now shorter)
+    /// list of remaining conflicts, closing the overlay once none are left.
+    fn resolve_conflict_list_selection(&mut self, how: crate::conflict_tool::Resolution) {
+        let Some(content) = self
+            .editor
+            .active_tab()
+            .filter(|t| !t.is_image())
+            .map(Tab::text)
+        else {
+            return;
+        };
+        let Some(conflict) = self
+            .conflict_list
+            .as_ref()
+            .and_then(|l| l.entries.get(l.selected))
+            .cloned()
+        else {
+            return;
+        };
+        let (rebuilt, caret) = rebuild_with_resolution(&content, &conflict, how);
+        self.apply_rebuilt_buffer(&rebuilt, caret, "status.conflict_resolved");
+        let refreshed = self
+            .editor
+            .active_tab()
+            .map(Tab::text)
+            .unwrap_or_default();
+        if let Some(list) = self.conflict_list.as_mut() {
+            list.refresh(&refreshed);
+            if list.is_empty() {
+                self.conflict_list = None;
+            }
         }
     }
 
@@ -1463,4 +1596,26 @@ impl App {
                 .error(t!("msg.git_checkout_failed", error = e).to_string()),
         }
     }
+}
+
+/// Rebuild `content` with `conflict` replaced by its `how` resolution,
+/// returning the new text and the caret position (character offset) right
+/// before the resolved block. Shared by `App::resolve_conflict` (the
+/// cursor-based per-conflict actions) and `App::resolve_conflict_list_
+/// selection` (T556, the Conflict overlay) — one implementation, not two
+/// that could drift.
+fn rebuild_with_resolution(
+    content: &str,
+    conflict: &crate::conflict_tool::Conflict,
+    how: crate::conflict_tool::Resolution,
+) -> (String, usize) {
+    let lines: Vec<&str> = content.split_inclusive('\n').collect();
+    let mut rebuilt = lines[..conflict.start].concat();
+    rebuilt.push_str(&conflict.resolved(how));
+    rebuilt.push_str(&lines[conflict.end.min(lines.len())..].concat());
+    let caret: usize = lines[..conflict.start]
+        .iter()
+        .map(|l| l.chars().count())
+        .sum();
+    (rebuilt, caret)
 }

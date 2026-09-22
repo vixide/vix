@@ -42,8 +42,8 @@ use dialogs::{
 };
 use docks::{draw_debug_panel, draw_messages, draw_outline_dock, draw_test_panel};
 use edit_surfaces::{
-    draw_column_view, draw_edit_bytes, draw_edit_outline, draw_edit_sql, draw_edit_table,
-    draw_edit_value, draw_html_panel, draw_outline,
+    draw_column_view, draw_conflict_list, draw_edit_bytes, draw_edit_outline, draw_edit_sql,
+    draw_edit_table, draw_edit_value, draw_html_panel, draw_outline,
 };
 use editor_region::draw_editor_region;
 use explorer::draw_explorer;
@@ -446,6 +446,9 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     if app.outline.is_some() {
         draw_outline(app, frame, area);
+    }
+    if app.conflict_list.is_some() {
+        draw_conflict_list(app, frame, area);
     }
     if app.completion.is_some() {
         draw_completion(app, frame);

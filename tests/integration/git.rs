@@ -452,3 +452,102 @@ fn refresh_git_populates_branch_when_in_a_repo() {
     // The dirty flag is always consistent with the cached status list.
     assert_eq!(app.git_dirty(), !app.git_status.is_empty());
 }
+
+const TWO_CONFLICTS: &str = "a\n<<<<<<< HEAD\nours1\n=======\ntheirs1\n>>>>>>> branch\nmid\n\
+    <<<<<<< HEAD\nours2\n=======\ntheirs2\n>>>>>>> branch\nz\n";
+
+#[test]
+fn conflict_list_opens_with_every_conflict_in_source_order() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, TWO_CONFLICTS, 0);
+    app.run_action("git.conflict_list");
+    let list = app.conflict_list.as_ref().expect("the overlay opened");
+    assert_eq!(list.len(), 2);
+    assert_eq!(list.entries[0].ours, "ours1\n");
+    assert_eq!(list.entries[1].ours, "ours2\n");
+}
+
+#[test]
+fn conflict_list_reports_no_conflict_on_a_clean_buffer() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, "hello world\n", 0);
+    app.run_action("git.conflict_list");
+    assert!(app.conflict_list.is_none(), "nothing to list");
+}
+
+#[test]
+fn conflict_list_enter_jumps_to_the_selected_conflict_and_closes() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, TWO_CONFLICTS, 0);
+    app.run_action("git.conflict_list");
+    app.on_key(keycode(KeyCode::Down)); // select the second conflict
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.conflict_list.is_none(), "the overlay closed");
+    // The cursor landed on the second conflict's `<<<<<<<` line (1-based
+    // line 8 in TWO_CONFLICTS).
+    assert_eq!(app.editor.cursor_1based().0, 8);
+}
+
+#[test]
+fn conflict_list_resolve_key_resolves_without_closing_the_overlay() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, TWO_CONFLICTS, 0);
+    app.run_action("git.conflict_list");
+    app.on_key(key('o')); // keep ours for the first (currently selected) conflict
+    let list = app
+        .conflict_list
+        .as_ref()
+        .expect("one conflict remains, so the overlay stays open");
+    assert_eq!(list.len(), 1);
+    assert_eq!(list.entries[0].ours, "ours2\n");
+    let content = app.editor.active_tab().unwrap().editor.get_content();
+    assert!(
+        content.contains("ours1") && !content.contains("theirs1"),
+        "the first conflict resolved to ours: {content}"
+    );
+}
+
+#[test]
+fn conflict_list_resolve_key_closes_the_overlay_once_none_remain() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, TWO_CONFLICTS, 0);
+    app.run_action("git.conflict_list");
+    app.on_key(key('o'));
+    app.on_key(key('t')); // resolve the (now-first) remaining conflict too
+    assert!(
+        app.conflict_list.is_none(),
+        "no conflicts left, overlay closed"
+    );
+}
+
+#[test]
+fn conflict_list_esc_closes_without_changing_the_buffer() {
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, TWO_CONFLICTS, 0);
+    let before = app.editor.active_tab().unwrap().editor.get_content();
+    app.run_action("git.conflict_list");
+    app.on_key(esc());
+    assert!(app.conflict_list.is_none());
+    assert_eq!(
+        app.editor.active_tab().unwrap().editor.get_content(),
+        before
+    );
+}
+
+#[test]
+fn conflict_list_renders_without_panicking() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut app = app_at(Path::new("."));
+    buffer_with(&mut app, TWO_CONFLICTS, 0);
+    app.run_action("git.conflict_list");
+    let mut term = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let screen: String = term
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(ratatui::buffer::Cell::symbol)
+        .collect();
+    assert!(screen.contains("ours1"), "a conflict preview is shown");
+}

@@ -5908,7 +5908,7 @@ starting any of them.
   real developer's own config directory. `docs/reference/actions.md`/
   `man/vix.1` regenerated; `AGENTS.md`/`agents/share/crate-map.md`
   crate-count references updated.
-- [ ] **T556 — A proper overlay for resolving Git merge conflicts.**
+- [x] **T556 — A proper overlay for resolving Git merge conflicts.**
   **Correction to the Ideas-backlog framing below, found while sizing
   this**: per-conflict resolution is not actually a zero-to-one gap —
   `git.conflict_ours`/`git.conflict_theirs`/`git.conflict_both`
@@ -5933,6 +5933,41 @@ starting any of them.
   when sizing further whether to fold it in or split it off. Moderate
   effort; the underlying parser (`vix-conflict-tool`) already does the
   hard part.
+  **Done 2026-09-22.** Extended the existing `vix-conflict-tool` crate
+  rather than adding a new one — `find_all` (walk-the-whole-buffer
+  generalization of `find`) plus `List` (selection/scroll state on
+  `vix-list-state`'s shared navigation helpers, the exact same shape
+  `vix-outline-panel`'s `Outline` already used, per the task's own
+  "survey an existing panel" instruction) live naturally alongside
+  `find`/`Resolution`/`Conflict` rather than fragmenting the domain
+  across a third crate. **Git → List Conflicts…**
+  (`git.conflict_list`, new `vix-menu` leaf) opens the overlay;
+  `Enter` jumps + closes (mirrors `conflict_next`'s single jump, but
+  any row); `o`/`t`/`b` resolve the highlighted conflict **without
+  closing the overlay** — the buffer is rebuilt via a `rebuild_with_
+  resolution` helper factored out of `resolve_conflict` (so the
+  cursor-based per-conflict actions and the new overlay path share one
+  implementation, not two that could drift), then the list is
+  re-scanned from the buffer's new content (a resolved block's line
+  range no longer exists, so it can't be patched in place) and closes
+  itself once nothing remains. Wired through the same `panel!`
+  key/mouse dispatch macros and `Layout`/`App` field conventions every
+  other list-and-jump overlay in this codebase already uses (`outline`
+  was the direct model throughout — field placement, `overlay_
+  capturing_keys`, `try_panel_key`/`try_panel_mouse`, the render
+  function's own row-highlighting/scroll-window shape in `src/ui/
+  edit_surfaces.rs`) — no new architecture, just one more instance of
+  an established pattern. Workspace-wide (every conflicted file, not
+  just the active buffer) stayed out of scope as flagged, a natural
+  follow-on if wanted later. Translated into all 15 locales (menu item
+  + help text + the overlay's own title/hint line). Verified: 6 new
+  `vix-conflict-tool` unit tests (`find_all` ordering, `List`
+  navigation bounds, `refresh`'s clamp-on-shrink behavior) plus 7 new
+  integration tests (`tests/integration/git.rs`) covering the open/
+  jump/resolve-without-closing/resolve-to-empty-then-close/Esc/render
+  paths end to end against a real `App` — no real git repo needed
+  (the parser and the overlay both work on plain buffer text, git only
+  ever produces the markers).
 - [ ] **T557 — Accessibility audit for screen readers.** T203 added a
   WCAG-AA high-contrast *theme* (a color/contrast fix, not a screen-
   reader one — a TUI's accessibility to an actual screen reader is a

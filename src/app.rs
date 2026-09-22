@@ -1358,6 +1358,9 @@ pub struct Layout {
     pub git_log: Rect,
     /// Row-list rectangle of the open outline panel, so a click can hit-test a row.
     pub outline: Rect,
+    /// Row-list rectangle of the open Conflict overlay (T556), so a click can
+    /// hit-test a row.
+    pub conflict_list: Rect,
     /// Row-list rectangle of the outline sidebar dock, for click-to-jump.
     pub outline_dock: Rect,
     /// Inner content rectangle of the open find / replace box, so a click can
@@ -1765,6 +1768,9 @@ pub struct App {
     dashboard_rx: Option<std::sync::mpsc::Receiver<DashMsg>>,
     /// Code outline overlay, when open.
     pub outline: Option<Outline>,
+    /// Conflict overlay (T556, `git.conflict_list`): every merge conflict in
+    /// the active buffer, when open.
+    pub conflict_list: Option<crate::conflict_tool::List>,
     /// Persistent code-outline sidebar (symbol list following the cursor), when
     /// the dock is shown. Rebuilt by `refresh_outline_dock`.
     pub outline_dock: Option<Outline>,
@@ -2278,6 +2284,7 @@ impl App {
             dashboard: None,
             dashboard_rx: None,
             outline: None,
+            conflict_list: None,
             outline_dock: None,
             outline_dock_key: None,
             welcome: None,
@@ -7824,6 +7831,7 @@ impl App {
         panel!(clipboard_chooser, clipboard_mouse);
         panel!(workspace_chooser, workspace_chooser_mouse);
         panel!(outline, outline_mouse);
+        panel!(conflict_list, conflict_list_mouse);
         // The find / replace box: a left click focuses the Find or Replace field.
         panel!(search, search_mouse);
         // The calendar box: a left click inserts a date-time line or a day.

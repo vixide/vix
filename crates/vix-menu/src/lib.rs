@@ -1461,6 +1461,7 @@ const GIT: &[Item] = &[
     Item::leaf("menu.item.git.revert_hunk", "git.revert_hunk", ""),
     SEP,
     Item::leaf("menu.item.git.conflict_next", "git.conflict_next", ""),
+    Item::leaf("menu.item.git.conflict_list", "git.conflict_list", ""),
     Item::sub("menu.item.git.resolve", GIT_RESOLVE),
     SEP,
     Item::leaf("menu.item.git.amend", "git.amend", ""),
