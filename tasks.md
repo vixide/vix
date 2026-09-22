@@ -6043,6 +6043,237 @@ starting any of them.
 
 ---
 
+## Run J (third self-audit pass, 2026-09-22)
+
+Four parallel research passes over fresh angles Run G (lint/dead-code,
+test/CI gaps, performance, architecture/docs-drift) and Run H (DRY,
+concurrency, error-handling, cross-platform) hadn't covered: security
+(specifically everything shipped since the 2026-07 hardening pass,
+Run I's five new crates/features included), panic-safety (a systematic
+`.unwrap()`/slice-indexing sweep distinguishing real risk from provably-
+safe), i18n/l10n correctness (beyond raw key-coverage, already at 100%
+across 15 locales), and UX/keybinding consistency. Two genuinely
+dangerous findings turned up (T558, T559) — not style/maintenance debt.
+Ranked by value/effort within each group; `[x]`/`[ ]` tracks status same
+as every other task.
+
+- [ ] **T558 — Path traversal in `vix-settings-bundle` import: arbitrary
+  file write via a crafted bundle, plus a silent, unreviewed overwrite of
+  `config.toml`'s command-bearing fields.** `crates/vix-settings-bundle/
+  src/lib.rs`'s `destination_for` (`:179-190`) resolves the four fixed
+  entry names to hardcoded paths, but treats any other bundle-entry name
+  as `theme/<filename>` and joins it onto `themes_dir()` with **no
+  traversal check** — `filename` comes straight from the untrusted
+  bundle JSON's map key. A crafted `bundle.json` with an entry named
+  `"theme/../../../../.ssh/authorized_keys"` (or a `LaunchAgents` plist,
+  a shell rc file, a crontab, …) writes attacker-controlled content to
+  an attacker-chosen path the moment a victim runs **Vix → Import
+  Settings…** (or `vix --import-settings`) against the file — the
+  existing backup-before-overwrite step doesn't prevent this, it just
+  preserves the victim's real file under `.bak` before writing the
+  attacker's content in its place. Compounding: `config.toml` **is**
+  unconditionally bundled and silently overwritten on import with no
+  review — and it carries `ai_command`/`ai_api_key_command`/
+  `test_command`/`lsp_servers[].command`, all free-text shell command
+  lines the running editor executes on ordinary actions (AI query, "Run
+  Tests", opening a matching file for LSP). The crate's own spec already
+  reasoned through exactly this class of risk for `.rhai` scripts
+  (deliberately excluded from bundling for it) but didn't apply the same
+  reasoning to `config.toml`'s own command fields. Fix: reject/normalize
+  `..` path components (and any other path separator) in the
+  `theme/<filename>` suffix before joining; decide and implement a
+  review/confirm step for importing `config.toml`'s command-bearing
+  fields specifically (at minimum surface a diff/warning before
+  overwriting them, mirroring T132's script-trust prompt in spirit).
+  Small effort, high severity — real arbitrary-file-write, trivial to
+  craft, one social-engineered import away from persistence or RCE.
+- [ ] **T559 — Byte-slicing on unchecked UTF-8 char boundaries crashes
+  the editor on real Org files with certain multi-byte characters.**
+  Four sites in recently-added `vix-org` code (2026-09-21 agenda/export
+  module extraction) share the same bug: `s.len() >= N && s[..N] ==
+  "literal"` only checks *byte* length, not that offset `N` is a char
+  boundary — `crates/vix-org/src/text_refs.rs:220` (`id_location`,
+  `t[..4]` against `":id:"`), `:230` (`src_begin`, `t[..11]` against
+  `"#+begin_src"`), `crates/vix-org/src/columns.rs:256`
+  (`file_level_columns_spec`, `t[..10]` against `"#+COLUMNS:"`), `:488`
+  (`category_value`, `t[..11]` against `"#+CATEGORY:"`). Any line
+  (anywhere — `id_location` scans **every `.org` file in the project**,
+  not just the one being viewed) that trims to text where the checked
+  byte offset lands inside a multi-byte character (the simplest
+  concrete trigger: any line starting `café…`, or any 9-10 ASCII bytes
+  immediately followed by an accented/CJK character for the `columns.rs`
+  sites) panics the slice *before* the literal comparison even runs —
+  so it crashes on lines that don't even match the keyword being
+  searched for. All four run synchronously in the main input-handling
+  path (`id_location` reached via `org_follow_id`,
+  `src/app/org.rs:643`; the `columns.rs` sites via `org.column_view`),
+  so every hit is a full editor crash, not a contained background-thread
+  failure — and `id_location`'s project-wide scan means a single stray
+  accented word anywhere in the project poisons every `id:`-link follow.
+  Fix: `t.get(..N)` (already the correct pattern used elsewhere in this
+  codebase, e.g. `crates/vix-org-capture/src/lib.rs:634`) instead of
+  direct `t[..N]` indexing, at all four sites. Small effort, high
+  severity — real, easily-triggered crash in shipped, recently-touched
+  code.
+- [ ] **T560 — F1 "Keyboard Shortcuts" help overlay shows zero of the Vi
+  keymap's own bindings (and none of Spacemacs's shared Vi vocabulary
+  either).** `App::shortcut_rows` (`src/app.rs:9021-9063`)'s `match
+  self.settings.keymap.as_str()` block lists `"emacs" | "vscode-macos" |
+  "vscode-windows" | "intellij-macos" | "intellij-windows" | "eclipse" |
+  "sublime" | "apple"` at its `id @ (...)` arm (`:9039-9040`) but omits
+  `"vi"` entirely; the separate `"spacemacs"` arm above only adds the
+  `SPC`-leader bindings, never the shared Vi Normal-mode table
+  Spacemacs's own module doc says it reuses. Both fall through to `_ =>
+  {}`. A user on the Vi keymap (or Spacemacs) pressing F1 to check what
+  `h`/`w`/`dd`/`gg`/`x`/`p`/`u`/`i`/`a`/`o`/… do sees **nothing** — not
+  one of the ~30 Vi Normal-mode bindings — while every other keymap's F1
+  overlay correctly shows its own table. The generated static docs
+  (`docs/reference/keybindings-vi.md`) are correct; this is a live
+  in-app discrepancy only. Traced to T104b (`4e02d29`, 2026-09-03) —
+  T104c/T104d's own entries note they bonus-fixed exactly this same gap
+  for Emacs/VS Code/IntelliJ at the time, but T104b never did the
+  equivalent for `"vi"`; survived T145's later consolidation of this
+  match arm untouched. The one existing test on this path
+  (`help_overlay_includes_the_active_keymap_chords`,
+  `tests/integration/keymaps.rs:10-38`) only asserts on Spacemacs's
+  leader chords and Emacs's `Ctrl X` chords, never plain Vi's own
+  vocabulary, which is why this was never caught. Fix: add `"vi"` to the
+  `id @ (...)` arm's id list; decide whether Spacemacs's own arm should
+  also pull in the shared `"vi"`-id table (it currently doesn't, so
+  Spacemacs users hit the same gap for everything but the leader); add a
+  `"vi"` case to the existing test. Low effort, high severity for the
+  affected (likely sizable) user population — a one-line-ish fix to a
+  real, high-visibility regression.
+- [ ] **T561 — `vix-doctor` (T553, this session's own addition) violates
+  the project's hard i18n rule: zero `t!()` calls, shown in a live,
+  localized TUI overlay.** `crates/vix-doctor/src/lib.rs:66-195` — every
+  check name and `detail` string (`"found on PATH"`, `"not found on
+  PATH"`, `"none configured"`, `"TERM=dumb"`, the summary line, …) is a
+  hardcoded English literal; the crate depends on `vix_settings`/
+  `vix_spellcheck` only, never `vix_i18n`. Reached from
+  `src/app.rs:2801-2802` for **Help → Run Diagnostics** — a genuine
+  in-app overlay opened after `rust_i18n::set_locale` has already run,
+  not just the CLI-only `--doctor` path (whose own English-only output
+  is consistent with the pre-existing `--version` convention and not a
+  bug on its own). A non-`en` user opening Help → Run Diagnostics sees
+  every line in English regardless of locale. Missed at the time because
+  the i18n coverage test only checks keys that *do* call `t!()` — a
+  crate calling it zero times is invisible to that test entirely. Fix:
+  wire `vix-doctor`'s check names/details through `t!()` and the right
+  `locales/*.yml` file, across all 15 locales (~10 short strings).
+  Small-medium effort.
+- [ ] **T562 — Windows `cmd_double_quote` doesn't escape a trailing
+  backslash before its closing quote, corrupting argument boundaries in
+  non-default `ai_command` templates.** `crates/vix-settings/src/
+  lib.rs:792-805` correctly neutralizes `cmd.exe`'s own line-scanning
+  metacharacters (T547's fix), but the *child process's* own argv parser
+  (the standard MSVCRT/`CommandLineToArgvW` convention) applies a
+  different rule: an odd number of backslashes immediately before a `"`
+  makes that quote literal rather than a delimiter, and does not toggle
+  quote mode the way `cmd_double_quote` assumes. A `prompt` string
+  ending in a lone `\` — reachable from attacker-influenced buffer
+  content (e.g. text an untrusted file ends with, selected and sent to
+  the AI) — produces `"...x\"`, which the child's parser reads as a
+  still-open quoted token, silently swallowing whatever argument comes
+  next (e.g. a `--file "<path>"` placeholder) into the prompt argument
+  instead of treating it separately. Only exploitable with a non-default
+  `ai_command` template that places another placeholder after
+  `{prompt}` — the shipped default (`claude -p {prompt}`, stdin-only)
+  isn't affected. Fix: double any trailing run of backslashes
+  immediately before the closing quote (matching the standard Windows
+  quoting convention, and mirroring how `sh_single_quote` already
+  handles its own escape case correctly). Small effort, medium severity
+  (Windows-only, non-default-template-only, but a real argv-corruption
+  primitive once those conditions are met).
+- [ ] **T563 — The `*-information-panel` crate family (System/File/Text
+  Information) is 100% untranslated.** `crates/vix-system-information-
+  panel/src/lib.rs:178-220`, `crates/vix-file-information-panel/src/
+  lib.rs:63-103`, `crates/vix-text-information-panel/src/lib.rs:101-105`
+  — zero `t!()` calls across all three files (confirmed by grep, not
+  assumed); every row label (`"Operating System"`, `"Memory"`, `"Total
+  RAM"`, `"Characters"`, `"Words"`, `"Size"`, `"Last modified"`, …) is a
+  hardcoded English string. All three are real, reachable Tools-menu
+  panels — a non-`en` user opening any of them sees 100% English
+  regardless of locale, not a partial gap. Invisible to the i18n
+  coverage test for the same reason as T561 (keys that never call
+  `t!()` at all aren't checked). Fix: wire all three through `t!()`
+  across all 15 locales (~20 short labels total). Medium effort
+  (mechanical but real volume), medium-high severity (three whole
+  panels, not an edge case).
+- [ ] **T564 — No bidi/RTL text support anywhere in the render path,
+  affecting the `ar` (Arabic) locale.** `crates/vix-locale-model/src/
+  lib.rs`'s `Locale` struct has no direction flag; nothing in
+  `src/ui.rs`/`src/ui/*.rs` checks for RTL; confirmed no bidi support
+  exists in the dependency stack either (`ratatui`/`crossterm`'s vendored
+  sources have zero bidi/RTL references; the `unicode-bidi` crate in
+  `Cargo.lock` is an unrelated transitive dep, not wired into text
+  layout). Every Arabic UI string is painted left-to-right in logical/
+  storage order — visually wrong for RTL text, with no bidi-run
+  reordering (UAX #9) for embedded LTR runs (a `%{path}`, a number) and
+  no RTL-aware panel/menu alignment. This is a fundamental architecture
+  gap affecting the one RTL locale Vix ships translations for, not a
+  one-line fix: proper support needs bidi-run reordering (e.g. via the
+  `unicode-bidi` crate) integrated into every `Line`/`Span` built from
+  translated text, plus RTL-aware layout for whole panels/menus.
+  Recorded here, sized honestly as large/architectural, rather than
+  guessed at or silently left undiscovered — a real follow-on project,
+  not something to start speculatively.
+- [ ] **T565 — Fixed-plural-form translations are grammatically wrong
+  for Arabic, Russian, and Polish across most counted-value strings.**
+  `rust-i18n` 4.2.1 (confirmed via its vendored source) has no
+  plural-rule support at all — every `%{count}`/`%{n}` key is one fixed
+  string substituted verbatim regardless of the number, which the
+  existing key-coverage test can't catch (it only verifies placeholder
+  *presence*, not grammatical correctness per count). Arabic has six
+  number categories (zero/one/two/few/many/other); e.g.
+  `locales/status.yml:1186`/`:4466` use the "few" broken-plural form
+  (correct only for n=3-10), reading as an agreement error at n=1 and
+  needing a dual form at n=2. Russian/Polish have three categories
+  (one/few/many); e.g. `locales/status.yml:4225`/`:4462` use the
+  genitive-plural "many" form, wrong at n=1 (needs nominative singular)
+  and n=2-4 (needs a different plural form). A few Russian strings
+  sidestep this via a count-invariant rephrasing ("Occurrences: N"
+  instead of "N occurrences") but inconsistently, not systematically.
+  English has the same underlying issue but it's cosmetic there, not a
+  real grammatical error the way it is in these three locales. Proper
+  fix needs either a `rust-i18n` upgrade with CLDR-aware pluralization
+  (not available in the currently-pinned version) or systematically
+  rephrasing every counted string per affected locale into a
+  count-invariant form — a large, cross-cutting, framework-level effort.
+  Recorded honestly as such, not undertaken here.
+- [ ] **T566 — Calendar panel month/year heading is always English,
+  never locale-aware.** `crates/vix-calendar-panel/src/lib.rs:176-180`'s
+  `title()` uses `jiff`'s `strftime("%B %Y")`, and `%B` isn't
+  locale-aware without the `jiff-icu` feature — confirmed via
+  `Cargo.lock`, only `jiff-core`/`jiff-static`/`jiff-tzdb-platform` are
+  pulled in. Rendered directly into the visible calendar header
+  (`src/ui/boxes.rs:56`), so a `de`/`fr`/`ar`/`ru`/… user sees e.g.
+  `"September 2026"` in an otherwise-translated panel regardless of
+  `settings.locale`. No locale-keyed month-name table exists elsewhere
+  in the codebase to reuse. Fix: either enable `jiff-icu` and wire it to
+  `settings.locale`, or hand-roll a small per-locale month-name table
+  (15 locales × 12 names). Medium effort.
+- [ ] **T567 — Byte-size formatting always uses a `.` decimal separator
+  regardless of locale.** `crates/vix-byte-size/src/lib.rs:33` —
+  `format!("{value:.1} {}", UNITS[unit])` uses Rust's default
+  locale-invariant float formatting; `settings.locale` is never
+  consulted. Locales conventionally using a comma decimal separator
+  (`de`, `fr`, `pl`, `ru`, `pt`, …) see e.g. `"16.0 KiB"` where their own
+  convention expects `"16,0 KiB"`. Used by both the file-information and
+  system-information panels (T563's own gap — worth fixing together).
+  Small-medium effort, low severity.
+- [ ] **T568 — Find/Replace's "Alt C case / Alt R regex" hint is
+  hardcoded English, inconsistent with the sibling DB-workbench hint
+  right next to it.** `src/ui/search.rs:493-497` — `format!("Alt C case:
+  {}   Alt R regex: {}", …)` never wrapped in `t!()`; pre-existing since
+  `ea4829a` (2026-06-12), not a recent regression, but a real, live gap
+  — inconsistent with the near-identical, correctly-localized pattern
+  one file over (`src/ui/db.rs:69`, `t!("ui.db_connections_hint")`). A
+  non-English user doing Find/Replace sees this one hint in English
+  while everything else around it is translated. Trivial effort.
+
+---
+
 ## Ideas backlog (unscoped)
 
 Bigger or more speculative than the tasks above — not yet sized, not yet
