@@ -6114,7 +6114,7 @@ as every other task.
   with an isolated fake `HOME`, confirming the traversal entry is
   skipped, the real file traversal was aiming at is never created, and
   the malicious command fields never reach the real config.toml.
-- [ ] **T559 — Byte-slicing on unchecked UTF-8 char boundaries crashes
+- [x] **T559 — Byte-slicing on unchecked UTF-8 char boundaries crashes
   the editor on real Org files with certain multi-byte characters.**
   Four sites in recently-added `vix-org` code (2026-09-21 agenda/export
   module extraction) share the same bug: `s.len() >= N && s[..N] ==
@@ -6142,6 +6142,23 @@ as every other task.
   direct `t[..N]` indexing, at all four sites. Small effort, high
   severity — real, easily-triggered crash in shipped, recently-touched
   code.
+  **Done 2026-09-22.** All four sites fixed exactly as scoped: the
+  byte-length-only check replaced with `t.get(..N)` (proven safe, not
+  guessed — once `get` returns `Some`, the offset is a real char
+  boundary, so a subsequent raw `t[N..]` slice at the same offset is
+  then also safe). New regression tests at all four sites, with the
+  triggering multi-byte-character byte offset verified precisely (via
+  a real UTF-8 decode check, not eyeballed) rather than assumed —
+  `text_refs.rs` gained its own `#[cfg(test)] mod tests` (it had none
+  before, unlike `columns.rs`) for `id_location`/`src_begin`;
+  `columns.rs`'s existing test module gained two more for
+  `file_level_columns_spec`/`category_value`. **Verified the fix
+  actually matters, not just that the new tests pass**: temporarily
+  reverted the `id_location` fix alone, confirmed its new regression
+  test panics with the exact error the audit predicted (`"end byte
+  index 4 is not a char boundary; it is inside 'é'"`), then restored
+  the fix and confirmed green again — proof this wasn't a test that
+  would have passed either way.
 - [ ] **T560 — F1 "Keyboard Shortcuts" help overlay shows zero of the Vi
   keymap's own bindings (and none of Spacemacs's shared Vi vocabulary
   either).** `App::shortcut_rows` (`src/app.rs:9021-9063`)'s `match

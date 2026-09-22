@@ -252,8 +252,11 @@ fn file_level_columns_spec(lines: &[&str]) -> Option<ColumnsSpec> {
     let top = &lines[..first_headline];
     for line in top {
         let t = line.trim();
-        if t.len() >= 10
-            && t[..10].eq_ignore_ascii_case("#+COLUMNS:")
+        // `t.get(..10)` (T559): a byte-length check alone doesn't prove
+        // offset 10 is a char boundary -- a multi-byte character
+        // straddling it panics the raw slice before the comparison runs.
+        if t.get(..10)
+            .is_some_and(|p| p.eq_ignore_ascii_case("#+COLUMNS:"))
             && let Some(mut spec) = parse_columns_spec(t)
         {
             spec.allowed_values = parse_all_values(top);
@@ -485,7 +488,11 @@ fn category_value(lines: &[&str], h: usize, file_name: Option<&str>) -> String {
     }
     for line in lines {
         let t = line.trim();
-        if t.len() >= 11 && t[..11].eq_ignore_ascii_case("#+CATEGORY:") {
+        // `t.get(..11)` (T559, same reasoning as above): proves offset 11
+        // is a char boundary before the later `t[11..]` slice.
+        if t.get(..11)
+            .is_some_and(|p| p.eq_ignore_ascii_case("#+CATEGORY:"))
+        {
             let v = t[11..].trim();
             if !v.is_empty() {
                 return v.to_string();
@@ -1984,5 +1991,30 @@ CLOCK: [2026-08-12 Wed 09:00]--[2026-08-12 Wed 09:15] =>  0:15
         let (rows, _) = build_column_table(doc, 0, &spec, (2026, 8, 12), None);
         assert_eq!(rows[1].values[1], ":inner:");
         assert_eq!(rows[1].values[2], ":inner:outer:");
+    }
+
+    // T559: `file_level_columns_spec`/`category_value` used to check byte
+    // *length* before slicing at a fixed byte offset, not that the offset
+    // was actually a char *boundary* -- a multi-byte character straddling
+    // it panicked the slice before the keyword comparison even ran, on a
+    // line that doesn't even match. These lines are exactly long enough in
+    // bytes to reach the checked offset only by way of a multi-byte
+    // character sitting right at it.
+
+    #[test]
+    fn file_level_columns_spec_does_not_panic_on_a_multibyte_char_at_the_checked_offset() {
+        // Verified byte-for-byte (not eyeballed): 9 ASCII bytes then a
+        // 2-byte 'é' starting at byte 9 -- byte offset 10 (the check's
+        // slice point) lands inside that character, not on a boundary.
+        let lines = ["123456789é rest of line, not a real keyword"];
+        assert_eq!(file_level_columns_spec(&lines), None);
+    }
+
+    #[test]
+    fn category_value_does_not_panic_on_a_multibyte_char_at_the_checked_offset() {
+        // Same reasoning, one byte further out: 10 ASCII bytes then 'é'
+        // starting at byte 10 -- offset 11 lands inside it.
+        let lines = ["1234567890é rest of line, not a real keyword"];
+        assert_eq!(category_value(&lines, 0, None), "");
     }
 }
