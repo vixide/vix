@@ -2225,6 +2225,45 @@ fn run_command_streams_output_to_bottom_dock() {
 }
 
 #[test]
+fn run_command_merges_stderr_into_the_captured_output() {
+    // T547: `run_command_in` groups a `;`/`&&`-chained command before
+    // redirecting (`{ … ; } 2>&1` on Unix, `cmd.exe`'s own `( … ) 2>&1` on
+    // Windows) so the redirect covers every stage, not just the last one --
+    // exercised here with a two-statement command, one line to each stream.
+    // `&` chains sequentially in `cmd.exe` but backgrounds the preceding
+    // command in `sh`, so the two forms aren't interchangeable; built
+    // per-platform to test each shell's own real chaining syntax rather
+    // than assume portability that doesn't exist.
+    let mut app = app_at(Path::new("."));
+    app.run_action("tools.run_command");
+    assert!(app.prompt.is_some());
+    let cmd = if cfg!(windows) {
+        "echo out-line & echo err-line 1>&2"
+    } else {
+        "echo out-line; echo err-line >&2"
+    };
+    for c in cmd.chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+
+    let mut waited = 0;
+    while app.command_running() && waited < 300 {
+        app.poll_command();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        waited += 1;
+    }
+    app.poll_command();
+
+    let out = app.bottom_dock.lines.join("\n");
+    assert!(out.contains("out-line"), "stdout line present: {out:?}");
+    assert!(
+        out.contains("err-line"),
+        "stderr line merged in too: {out:?}"
+    );
+}
+
+#[test]
 fn cancel_command_kills_a_running_command() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.run_command");

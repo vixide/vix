@@ -517,9 +517,10 @@ impl Default for Settings {
             org_priority_default: '0',
             org_agenda_files: Vec::new(),
             time_zone: "UTC".to_string(),
-            // Placeholders are single-quoted by `ai_command_line`, so the
-            // template must NOT add quotes of its own (doing so would let chat
-            // text break out and inject shell commands).
+            // Placeholders are quoted by `ai_command_line` (single-quoted on
+            // Unix, double-quoted on Windows — T547), so the template must
+            // NOT add quotes of its own (doing so would let chat text break
+            // out and inject shell commands).
             ai_command: "claude -p {prompt}".to_string(),
             ai_provider: "cli".to_string(),
             ai_endpoint: String::new(),
@@ -596,14 +597,19 @@ impl Settings {
     /// Build the shell command the AI menu runs for `prompt` over the input text
     /// stored at `file`, expanding the [`ai_command`](Self::ai_command) template.
     ///
-    /// `{prompt}` and `{file}` are substituted as **POSIX single-quoted** strings
-    /// so that a chat message — free user text, e.g. containing `"`, `` ` ``,
-    /// `$(…)`, or `;` — cannot break out of its argument and inject shell
-    /// commands when the result is run via `sh -c`. Because the placeholders
+    /// `{prompt}` and `{file}` are substituted as quoted strings so that a chat
+    /// message — free user text, e.g. containing `"`, `` ` ``, `$(…)`, `&`, or
+    /// `;` — cannot break out of its argument and inject shell commands when the
+    /// result is run via the platform's own shell (`sh -c` on Unix, `cmd /C` on
+    /// Windows, T547 — `sh_single_quote`/`cmd_double_quote` respectively;
+    /// `cmd.exe` has no quoting mechanism as airtight as POSIX single quotes, so
+    /// the Windows form is a best effort, not a proof). Because the placeholders
     /// arrive pre-quoted, templates must **not** wrap them in quotes of their own
     /// (the built-in default does not). If the template contains `{file}` it is
-    /// substituted; otherwise the text is fed on stdin via an appended redirect.
-    /// An empty template falls back to the default `claude` invocation.
+    /// substituted; otherwise the text is fed on stdin via an appended redirect
+    /// (`<` on Unix; `cmd.exe`'s own `<` redirection works identically for this
+    /// simple case). An empty template falls back to the default `claude`
+    /// invocation.
     #[must_use]
     pub fn ai_command_line(&self, prompt: &str, file: &str) -> String {
         let template = if self.ai_command.trim().is_empty() {
@@ -611,11 +617,16 @@ impl Settings {
         } else {
             self.ai_command.as_str()
         };
-        let with_prompt = template.replace("{prompt}", &sh_single_quote(prompt));
-        if with_prompt.contains("{file}") {
-            with_prompt.replace("{file}", &sh_single_quote(file))
+        let quote = if cfg!(windows) {
+            cmd_double_quote
         } else {
-            format!("{with_prompt} < {}", sh_single_quote(file))
+            sh_single_quote
+        };
+        let with_prompt = template.replace("{prompt}", &quote(prompt));
+        if with_prompt.contains("{file}") {
+            with_prompt.replace("{file}", &quote(file))
+        } else {
+            format!("{with_prompt} < {}", quote(file))
         }
     }
 
@@ -728,12 +739,44 @@ fn sh_single_quote(s: &str) -> String {
     out
 }
 
+/// Quote `s` as a single token for a `cmd.exe /C "…"` command line (the
+/// Windows sibling of [`sh_single_quote`], T547). `cmd.exe` has no quoting
+/// mechanism as airtight as POSIX single quotes — this is a best effort, not
+/// a proof, verified against a real `cmd.exe` (not just string assertions;
+/// see `tests/integration/ai.rs`'s `#[cfg(windows)]` block):
+///
+/// - wraps in `"…"`, which suppresses `cmd.exe`'s own `&`/`|`/`<`/`>`/`(`/`)`
+///   metacharacters for as long as the quoted region stays open;
+/// - escapes an embedded `"` as `\"` rather than closing and reopening the
+///   quoted region, so it can never prematurely end that region;
+/// - escapes `%` as `%%`, which `cmd.exe`'s `/C` parser (like a batch file)
+///   collapses to a literal `%` without triggering `%VAR%` environment
+///   expansion — verified, not folklore: an unescaped `%` here would let
+///   interpolated text read (and leak into the command output) any
+///   environment variable whose name it happens to spell;
+/// - replaces an embedded CR/LF with a space, so a multi-line prompt can't
+///   be read as more than one `cmd.exe` statement.
+fn cmd_double_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '%' => out.push_str("%%"),
+            '\r' | '\n' => out.push(' '),
+            _ => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         EditorBehaviorSettings, GutterSettings, PanelSettings, SaveSettings,
         SecondaryPanelSettings, Settings, SubsystemSettings, TypingSettings, ViewportSettings,
-        sh_single_quote,
+        cmd_double_quote, sh_single_quote,
     };
 
     #[test]
@@ -745,12 +788,27 @@ mod tests {
         assert_eq!(s.ai_api_key_command, "");
     }
 
+    /// `ai_command_line` quotes with `sh_single_quote` on Unix, `cmd_double_quote`
+    /// on Windows (T547) — same function `ai_command_line` itself picks by, so
+    /// these tests check the platform-appropriate quoting rather than assume one.
+    fn quote(s: &str) -> String {
+        if cfg!(windows) {
+            cmd_double_quote(s)
+        } else {
+            sh_single_quote(s)
+        }
+    }
+
     #[test]
-    fn default_ai_command_single_quotes_prompt_and_stdin_file() {
+    fn default_ai_command_quotes_prompt_and_stdin_file() {
         let s = Settings::default();
         assert_eq!(
             s.ai_command_line("Summarize this text.", "/tmp/in.txt"),
-            "claude -p 'Summarize this text.' < '/tmp/in.txt'"
+            format!(
+                "claude -p {} < {}",
+                quote("Summarize this text."),
+                quote("/tmp/in.txt")
+            )
         );
     }
 
@@ -762,7 +820,11 @@ mod tests {
         };
         assert_eq!(
             s.ai_command_line("Explain this text.", "/tmp/in.txt"),
-            "codex exec 'Explain this text.' '/tmp/in.txt'"
+            format!(
+                "codex exec {} {}",
+                quote("Explain this text."),
+                quote("/tmp/in.txt")
+            )
         );
     }
 
@@ -774,7 +836,11 @@ mod tests {
         };
         assert_eq!(
             s.ai_command_line("Define this text.", "/tmp/in.txt"),
-            "claude -p 'Define this text.' < '/tmp/in.txt'"
+            format!(
+                "claude -p {} < {}",
+                quote("Define this text."),
+                quote("/tmp/in.txt")
+            )
         );
     }
 
@@ -782,15 +848,11 @@ mod tests {
     fn prompt_cannot_inject_shell_commands() {
         let s = Settings::default();
         // A chat message packed with shell metacharacters must remain a single,
-        // inert argument — no unescaped `$(`, backtick, `;`, or `"` breakout.
-        let evil = "\"; rm -rf ~; echo $(id) `whoami`";
+        // inert argument — no unescaped `$(`, backtick, `;`, `"`, or `&` breakout.
+        let evil = "\"; rm -rf ~; echo $(id) `whoami` & echo %PATH%";
         let cmd = s.ai_command_line(evil, "/tmp/in.txt");
-        // The prompt is fully enclosed in one single-quoted span.
-        assert!(cmd.starts_with("claude -p '"), "{cmd}");
-        // No command-substitution or statement separators survive OUTSIDE quotes:
-        // the only single quotes are the delimiters we added plus the escaped
-        // form `'\''` for the literal `"` there isn't; verify metachars are quoted.
-        assert!(cmd.contains("'\"; rm -rf ~; echo $(id) `whoami`'"), "{cmd}");
+        assert!(cmd.starts_with("claude -p "), "{cmd}");
+        assert!(cmd.contains(&quote(evil)), "{cmd}");
     }
 
     #[test]
@@ -798,6 +860,23 @@ mod tests {
         assert_eq!(sh_single_quote("a'b"), "'a'\\''b'");
         assert_eq!(sh_single_quote("plain"), "'plain'");
         assert_eq!(sh_single_quote("$(x)`y`"), "'$(x)`y`'");
+    }
+
+    #[test]
+    fn cmd_double_quote_escapes_quotes_percents_and_newlines() {
+        assert_eq!(cmd_double_quote(r#"a"b"#), r#""a\"b""#);
+        assert_eq!(cmd_double_quote("plain"), "\"plain\"");
+        assert_eq!(cmd_double_quote("100%"), "\"100%%\"");
+        // CRLF becomes two spaces (CR and LF each map to one) -- harmless,
+        // just confirms neither survives to be read as a line break.
+        assert_eq!(
+            cmd_double_quote("line1\nline2\r\nline3"),
+            "\"line1 line2  line3\""
+        );
+        // cmd.exe's own metacharacters are neutralized by the outer quotes
+        // alone -- confirm they pass through unescaped (only `"`, `%`, and
+        // CR/LF get special handling).
+        assert_eq!(cmd_double_quote("a & b | c"), "\"a & b | c\"");
     }
 
     #[test]
