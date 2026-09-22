@@ -39,6 +39,42 @@ fn vix_menu_license_shows_trademark_info() {
 }
 
 #[test]
+fn help_run_diagnostics_shows_a_check_report() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut app = app_at(Path::new("."));
+    let help = vix::menu::menus()
+        .iter()
+        .position(|m| m.name == "menu.help")
+        .expect("help menu");
+    assert!(
+        vix::menu::menus()[help]
+            .items
+            .iter()
+            .any(|it| it.action == "help.doctor"),
+        "Help menu has a Run Diagnostics item"
+    );
+    app.run_action("help.doctor");
+    assert!(app.welcome.is_some(), "the report opened as an overlay");
+    let mut term = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let screen: String = term
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(ratatui::buffer::Cell::symbol)
+        .collect();
+    // The `git` check always runs and reports one of these two exact words
+    // (this test suite itself presupposes a real toolchain and, in this
+    // repo, a git checkout -- a reasonable environmental assumption, same
+    // one `vix-doctor`'s own unit test makes).
+    assert!(
+        screen.contains("PASS") || screen.contains("FAIL"),
+        "the report renders at least one check's outcome"
+    );
+}
+
+#[test]
 fn view_toggle_menu_tooltips_hides_them() {
     use ratatui::{Terminal, backend::TestBackend};
     let mut app = app_at(Path::new("."));

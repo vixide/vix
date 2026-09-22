@@ -2786,6 +2786,10 @@ impl App {
                 self.welcome = Some(WelcomePanel::open(Self::report_issue_lines()));
             }
             "help.privacy" => self.welcome = Some(WelcomePanel::open(Self::privacy_lines())),
+            "help.doctor" => {
+                let checks = crate::doctor::run(&self.settings);
+                self.welcome = Some(WelcomePanel::open(crate::doctor::format_report(&checks)));
+            }
             "vix.settings" => self.open_settings_file(),
             "vix.about" => {
                 self.dialog = Some(Dialog {

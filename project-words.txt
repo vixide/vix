@@ -311,3 +311,4 @@ configs
 debuginfo
 dispatchable
 codegen
+spawnable

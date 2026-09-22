@@ -5324,6 +5324,7 @@ dependencies = [
  "vix-dap",
  "vix-db",
  "vix-diff-view",
+ "vix-doctor",
  "vix-edit-bytes",
  "vix-edit-outline",
  "vix-edit-sql",
@@ -5697,6 +5698,14 @@ name = "vix-diff-view"
 version = "1.6.0"
 dependencies = [
  "similar 3.2.0",
+]
+
+[[package]]
+name = "vix-doctor"
+version = "1.6.0"
+dependencies = [
+ "vix-settings",
+ "vix-spellcheck",
 ]
 
 [[package]]

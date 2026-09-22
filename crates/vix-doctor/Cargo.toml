@@ -1,0 +1,12 @@
+[package]
+name = "vix-doctor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Environment checks for vix --doctor: git on PATH, configured LSP servers spawnable, the active locale's spellcheck dictionary loadable, terminal color support"
+
+[dependencies]
+vix-settings = { path = "../vix-settings", version = "1.6.0" }
+vix-spellcheck = { path = "../vix-spellcheck", version = "1.6.0" }

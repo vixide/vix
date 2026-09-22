@@ -2,7 +2,7 @@
 
 Vix is a **Cargo workspace** (`[workspace] members = ["crates/*"]`) on **edition
 2024**. The root package `vix` (`src/`) is the thin **App shell** — CLI, event
-loop, `App` state, rendering, and the explorer — and it depends on the 121
+loop, `App` state, rendering, and the explorer — and it depends on the 122
 `vix-*` **member crates** under `crates/` that hold every feature plus the custom
 editor widget (`vix-editor-core`). Shared reference for where things live.
 
@@ -133,14 +133,14 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 | Docks       | `vix-left-dock` (explorer), `vix-right-dock` (messages), `vix-bottom-dock` (output buffer). |
 | Files / ops | `vix-fileops` (explorer copy/cut/paste/delete filesystem helpers), `vix-file-browser-panel` (File → Open… browser: walkdir listing + fuzzy/glob/ext search, sort, filters). |
 | Models      | `vix-keymap-model`, `vix-locale-model`, `vix-theme-model`, `vix-time-zone-model`. |
-| Help        | `vix-keyboard-shortcut-panel`, `vix-action-catalog` (T147: `(action id -> i18n title key)` catalog for every `run_action` id titled nowhere else — no `vix-menu` leaf and no `palette::COMMANDS` entry. `App::action_title` (F1 help, the keybinding editor) falls back to it before the raw id; the command palette's `>` mode appends it directly to `COMMANDS`; `shortcuts_for`-based UI, once any exists, can pair its results with it the same way). |
+| Help        | `vix-keyboard-shortcut-panel`, `vix-action-catalog` (T147: `(action id -> i18n title key)` catalog for every `run_action` id titled nowhere else — no `vix-menu` leaf and no `palette::COMMANDS` entry. `App::action_title` (F1 help, the keybinding editor) falls back to it before the raw id; the command palette's `>` mode appends it directly to `COMMANDS`; `shortcuts_for`-based UI, once any exists, can pair its results with it the same way), `vix-doctor` (T553: environment checks — `git` on `PATH`, configured LSP servers spawnable, the active locale's spellcheck dictionary loadable, terminal color support — for `vix --doctor` and Help → Run Diagnostics; host-agnostic by design so the CLI path can call it before any `App` exists). |
 | i18n        | `vix-i18n` (embedded rust-i18n catalog).                                      |
 
 ## Other top-level paths
 
 | Path            | Contents                                                            |
 | --------------- | ------------------------------------------------------------------- |
-| `crates/`       | The 121 `vix-*` workspace member crates (each with its own `spec/`).|
+| `crates/`       | The 122 `vix-*` workspace member crates (each with its own `spec/`).|
 | `langs/`        | Tree-sitter highlight queries (`<lang>/highlights.scm`), embedded.  |
 | `locales/`      | `app.yml` — rust-i18n translations (English fallback).              |
 | `dictionaries/` | Hunspell dictionaries — gitignored; see `crates/vix-spellcheck/spec/dictionaries`. |

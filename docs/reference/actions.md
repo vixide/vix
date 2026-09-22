@@ -194,6 +194,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `git.unstage_hunk` | Unstage Hunk | Menu |
 | `half_page_down` | Half Page Down | Catalog |
 | `half_page_up` | Half Page Up | Catalog |
+| `help.doctor` | Run Diagnostics | Menu |
 | `help.license` | License | Menu |
 | `help.privacy` | Privacy Statement | Menu |
 | `help.report_issue` | Report an Issue… | Menu |
@@ -668,4 +669,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**661 actions.**
+**662 actions.**

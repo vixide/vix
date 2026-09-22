@@ -124,6 +124,7 @@ pub use vix_convert_tabular as convert_tabular;
 pub use vix_dap as dap;
 pub use vix_db as db;
 pub use vix_diff_view as diff_view;
+pub use vix_doctor as doctor;
 pub use vix_edit_bytes as edit_bytes;
 pub use vix_edit_outline as edit_outline;
 pub use vix_edit_sql as edit_sql;

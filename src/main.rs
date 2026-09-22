@@ -65,6 +65,17 @@ fn main() -> io::Result<()> {
         Err(e) => (Settings::default(), Some(e.to_string())),
     };
 
+    // Checks the *persisted* config (locale included), independent of a
+    // `--locale` flag also passed alongside `--doctor` -- same simplification
+    // `--version`'s early return above already makes: this exits before the
+    // rest of `main` reconciles the CLI override with settings.
+    if cli.doctor {
+        for line in vix::doctor::format_report(&vix::doctor::run(&settings)) {
+            println!("{line}");
+        }
+        return Ok(());
+    }
+
     // A `--locale` flag wins over the persisted setting, but is not saved back.
     let locale = cli
         .locale
