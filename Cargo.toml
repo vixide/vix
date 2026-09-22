@@ -33,11 +33,12 @@ trash = "5"
 walkdir = "2"
 ureq = "2"
 regex = "1"
-# macOS: store secrets (DB passwords, T124's AI provider API keys) through the
-# native Security framework rather than shelling out to a CLI that exposes the
-# plaintext as a process argument. Linux instead uses the already-secure
-# `secret-tool` CLI (secret on stdin), so this dependency is scoped per-crate
-# to `cfg(target_os = "macos")` rather than pulled in everywhere.
+# macOS and Windows: store secrets (DB passwords, T124's AI provider API
+# keys) through the native credential store (Security framework / Credential
+# Manager, T548) rather than shelling out to a CLI that exposes the plaintext
+# as a process argument. Linux instead uses the already-secure `secret-tool`
+# CLI (secret on stdin), so this dependency is scoped per-crate to
+# `cfg(any(target_os = "macos", windows))` rather than pulled in everywhere.
 keyring = { version = "3", features = ["apple-native", "windows-native"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
