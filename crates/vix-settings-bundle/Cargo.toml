@@ -1,0 +1,14 @@
+[package]
+name = "vix-settings-bundle"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Bundle a user's config.toml, macros.toml, keybindings.toml, user dictionary, and active custom theme into one file, and restore them from it"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+vix-settings = { path = "../vix-settings", version = "1.6.0" }
+vix-theme-model = { path = "../vix-theme-model", version = "1.6.0" }

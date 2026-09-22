@@ -5376,6 +5376,7 @@ dependencies = [
  "vix-script",
  "vix-session",
  "vix-settings",
+ "vix-settings-bundle",
  "vix-snippet-tool",
  "vix-snippets",
  "vix-spellcheck",
@@ -6126,6 +6127,16 @@ dependencies = [
  "vix-db",
  "vix-fileops",
  "vix-org-capture",
+]
+
+[[package]]
+name = "vix-settings-bundle"
+version = "1.6.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "vix-settings",
+ "vix-theme-model",
 ]
 
 [[package]]

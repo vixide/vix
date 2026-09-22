@@ -15,7 +15,10 @@ use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 
-use super::{App, AppFlags, Focus, ProjectHistory, WorkspaceChooser, node_to_pane, pane_to_node};
+use super::{
+    App, AppFlags, Focus, ProjectHistory, Prompt, PromptKind, WorkspaceChooser, node_to_pane,
+    pane_to_node,
+};
 use crate::explorer::Explorer;
 use crate::settings::Settings;
 
@@ -424,5 +427,65 @@ impl App {
             s.open_path(&path, false);
             s.focus = Focus::Editor;
         });
+    }
+
+    /// Open the **Vix → Export Settings…** prompt (T555).
+    pub(super) fn open_export_settings_prompt(&mut self) {
+        self.prompt = Some(Prompt::new(
+            PromptKind::ExportSettings,
+            t!("prompt.export_settings").to_string(),
+        ));
+    }
+
+    /// Open the **Vix → Import Settings…** prompt (T555).
+    pub(super) fn open_import_settings_prompt(&mut self) {
+        self.prompt = Some(Prompt::new(
+            PromptKind::ImportSettings,
+            t!("prompt.import_settings").to_string(),
+        ));
+    }
+
+    /// `PromptKind::ExportSettings`'s accept handler: bundle the current
+    /// settings and write them to `input` (resolved relative to the
+    /// workspace root). Empty input is a no-op.
+    pub(super) fn export_settings(&mut self, input: &str) {
+        if input.is_empty() {
+            return;
+        }
+        let path = self.resolve(input);
+        let bundle = crate::settings_bundle::collect(&self.settings);
+        match crate::settings_bundle::write(&bundle, &path) {
+            Ok(()) => {
+                self.status = t!("status.settings_exported", path = path.display()).to_string();
+            }
+            Err(e) => self
+                .messages
+                .error(t!("msg.settings_export_failed", error = e).to_string()),
+        }
+    }
+
+    /// `PromptKind::ImportSettings`'s accept handler: read a bundle from
+    /// `input` (resolved relative to the workspace root) and write every
+    /// entry back to its real location (backing up any file it replaces
+    /// first). Empty input is a no-op.
+    pub(super) fn import_settings(&mut self, input: &str) {
+        if input.is_empty() {
+            return;
+        }
+        let path = self.resolve(input);
+        match crate::settings_bundle::read(&path) {
+            Ok(bundle) => {
+                let written = crate::settings_bundle::apply(&bundle)
+                    .into_iter()
+                    .filter(|(_, outcome)| {
+                        *outcome != crate::settings_bundle::EntryOutcome::Skipped
+                    })
+                    .count();
+                self.status = t!("status.settings_imported", count = written).to_string();
+            }
+            Err(e) => self
+                .messages
+                .error(t!("msg.settings_import_failed", error = e).to_string()),
+        }
     }
 }

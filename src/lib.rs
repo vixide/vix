@@ -157,6 +157,7 @@ pub use vix_outline_panel as outline_panel;
 pub use vix_pomodoro_tool as pomodoro_tool;
 pub use vix_right_dock as right_dock;
 pub use vix_roam as roam;
+pub use vix_settings_bundle as settings_bundle;
 pub use vix_spellcheck as spellcheck;
 pub use vix_status_bar_panel as status_bar_panel;
 pub use vix_system_information_panel as system_information_panel;

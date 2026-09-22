@@ -5837,7 +5837,7 @@ starting any of them.
   generation can only be exercised for real on a version-tag release
   (the same verification gap every prior `release.yml`-touching change
   in this codebase has had, not a new one T554 introduced).
-- [ ] **T555 — Settings/profile export-import.** "Export my setup"
+- [x] **T555 — Settings/profile export-import.** "Export my setup"
   bundles everything under the config directory that isn't a live
   cache — `config.toml`, the active custom theme (from
   `Settings::themes_dir()`), `macros.toml`
@@ -5856,6 +5856,58 @@ starting any of them.
   in the spec before writing code: overwrite outright, back up the old
   file first, or prompt — this is exactly the kind of choice that's
   easy to get wrong silently. Moderate effort.
+  **Done 2026-09-22.** Built as a new crate, `vix-settings-bundle` —
+  same reasoning as T553's `vix-doctor`: `--export-settings`/
+  `--import-settings` have to work before any `App` exists, so the
+  bundling logic needed to work from a bare `Settings` value, not an
+  `App` method (crate count 122→123). Conflict policy, decided and
+  documented in the spec before writing code as the task asked:
+  **back up, not prompt or silent overwrite** — any file an import is
+  about to replace is renamed to `<name>.bak` first (not timestamped;
+  a second import just replaces the previous `.bak`). Deliberately
+  non-interactive so the CLI path and the menu path share one policy
+  and one code path, rather than the CLI silently overwriting while the
+  menu prompts (or the reverse). One real scope narrowing found while
+  writing the spec: `Settings::scripts_dir()`'s `.rhai` scripts are
+  **not** bundled — a script can do anything a normal user script can
+  (read/write files, run commands), so silently importing and running
+  someone else's scripts is a real risk a settings bundle shouldn't
+  carry by default; sharing scripts stays a manual file-copy. Bundle
+  format is plain pretty-printed JSON (not a real archive format) —
+  every bundled file (`config.toml`/`macros.toml`/`keybindings.toml`/
+  the user dictionary/the active custom theme's JSON) is already plain
+  text, so a `.tar`/`.zip` dependency would buy nothing; JSON's string
+  escaping already handles arbitrary content safely and stays
+  diffable if a person opens it directly. `--export-settings <PATH>`/
+  `--import-settings <PATH>` (`src/cli.rs`, extracted into a
+  `handle_settings_bundle_flags` helper in `main.rs` once inlining
+  pushed `main` over clippy's line-count limit) mirror `--doctor`'s
+  early-return shape; **Vix → Export/Import Settings…** (two new
+  `vix-menu` leaves, `PromptKind::ExportSettings`/`ImportSettings`,
+  `App::export_settings`/`import_settings` in `src/app/session.rs` next
+  to the existing `open_settings_file`) reuse the exact same crate
+  functions, so there is only one bundling/import implementation, not
+  two that could drift. Translated into all 15 locales (menu items +
+  help text + both prompts + status/error messages). Verified three
+  ways: `vix-settings-bundle`'s own 6 unit tests (deliberately never
+  calling `apply`/`collect` against this machine's *real* config paths
+  with content that would touch them — the same real-developer-file-
+  safety discipline `isolated_session_path()` already established
+  elsewhere in this codebase — instead proving the pure logic:
+  `destination_for`'s name→path mapping, `append_bak`'s collision
+  safety, a full write/read round-trip in an isolated temp dir); two
+  new integration tests (`tests/integration/menu.rs`) — export is
+  read-only against the real config paths so it's run for real
+  end-to-end, import's own test deliberately only confirms the prompt
+  opens, never submits it, for the same real-file-safety reason; and a
+  genuine manual smoke test outside `cargo test` (a real, isolated
+  fake `HOME`/`XDG_CONFIG_HOME` passed to the actual built binary)
+  confirming export writes real content, import restores it, and a
+  second import correctly produces `.bak` — the only way to verify
+  `apply`'s real-path-writing behavior at all without ever risking the
+  real developer's own config directory. `docs/reference/actions.md`/
+  `man/vix.1` regenerated; `AGENTS.md`/`agents/share/crate-map.md`
+  crate-count references updated.
 - [ ] **T556 — A proper overlay for resolving Git merge conflicts.**
   **Correction to the Ideas-backlog framing below, found while sizing
   this**: per-conflict resolution is not actually a zero-to-one gap —

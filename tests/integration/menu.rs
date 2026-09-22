@@ -75,6 +75,74 @@ fn help_run_diagnostics_shows_a_check_report() {
 }
 
 #[test]
+fn vix_export_settings_writes_a_real_bundle() {
+    // Export is read-only against the real config directory (it only
+    // reads `Settings::config_path()` and friends, never writes to them),
+    // so -- unlike import, deliberately not exercised end to end here,
+    // see `vix_import_settings_opens_the_prompt` below -- it's safe to run
+    // for real in a test.
+    let dir = unique_dir("vix-export-settings");
+    let out = dir.join("bundle.json");
+    let mut app = app_at(Path::new("."));
+    let vixm = vix::menu::menus()
+        .iter()
+        .position(|m| m.name == "menu.vix")
+        .expect("vix menu");
+    assert!(
+        vix::menu::menus()[vixm]
+            .items
+            .iter()
+            .any(|it| it.action == "vix.export_settings"),
+        "Vix menu has an Export Settings item"
+    );
+    app.run_action("vix.export_settings");
+    assert!(matches!(
+        app.prompt.as_ref().map(|p| p.kind),
+        Some(vix::app::PromptKind::ExportSettings)
+    ));
+    for ch in out.display().to_string().chars() {
+        app.on_key(key(ch));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+
+    let content = fs::read_to_string(&out).expect("the bundle file was written");
+    assert!(
+        content.contains("\"format\""),
+        "the written file is a real bundle, not empty: {content}"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn vix_import_settings_opens_the_prompt() {
+    // Deliberately doesn't submit the prompt: `import_settings` writes
+    // back to the *real* `Settings::config_path()` and friends on this
+    // machine (backing up whatever it replaces first, by design -- see
+    // `crates/vix-settings-bundle/spec/index.md`), which a test must never
+    // do to the actual developer running it. Verified end to end instead
+    // via a real, isolated `HOME`/`XDG_CONFIG_HOME` outside `cargo test`
+    // (T555, tasks.md) -- the same "can't safely unit-test the sharp edge,
+    // so exercise it deliberately elsewhere" call `vix-settings-bundle`'s
+    // own unit tests already make.
+    let mut app = app_at(Path::new("."));
+    assert!(
+        vix::menu::menus()
+            .iter()
+            .find(|m| m.name == "menu.vix")
+            .expect("vix menu")
+            .items
+            .iter()
+            .any(|it| it.action == "vix.import_settings"),
+        "Vix menu has an Import Settings item"
+    );
+    app.run_action("vix.import_settings");
+    assert!(matches!(
+        app.prompt.as_ref().map(|p| p.kind),
+        Some(vix::app::PromptKind::ImportSettings)
+    ));
+}
+
+#[test]
 fn view_toggle_menu_tooltips_hides_them() {
     use ratatui::{Terminal, backend::TestBackend};
     let mut app = app_at(Path::new("."));

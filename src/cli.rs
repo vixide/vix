@@ -62,4 +62,20 @@ pub struct Cli {
     /// via **Help → Run Diagnostics**. See `crates/vix-doctor/spec/index.md`.
     #[arg(long)]
     pub doctor: bool,
+
+    /// Bundle `config.toml`, `macros.toml`, `keybindings.toml`, the user
+    /// dictionary, and the active custom theme into a single file at
+    /// `PATH`, then exit without starting the editor. Also reachable from
+    /// a running session via **Vix → Export Settings…**. See
+    /// `crates/vix-settings-bundle/spec/index.md`.
+    #[arg(long, value_name = "PATH")]
+    pub export_settings: Option<std::path::PathBuf>,
+
+    /// Restore a bundle written by `--export-settings` (or **Vix → Export
+    /// Settings…**) from `PATH`, then exit without starting the editor —
+    /// any file about to be overwritten is renamed to `<name>.bak` first.
+    /// Also reachable from a running session via **Vix → Import
+    /// Settings…**.
+    #[arg(long, value_name = "PATH")]
+    pub import_settings: Option<std::path::PathBuf>,
 }

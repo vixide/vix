@@ -2,7 +2,7 @@
 
 Vix is a **Cargo workspace** (`[workspace] members = ["crates/*"]`) on **edition
 2024**. The root package `vix` (`src/`) is the thin **App shell** — CLI, event
-loop, `App` state, rendering, and the explorer — and it depends on the 122
+loop, `App` state, rendering, and the explorer — and it depends on the 123
 `vix-*` **member crates** under `crates/` that hold every feature plus the custom
 editor widget (`vix-editor-core`). Shared reference for where things live.
 
@@ -103,7 +103,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 | Media types | `vix-media-type` (the MIME catalog parsed from `crates/vix-media-type/spec/media-types.tsv`; text/binary base, extension lookup, picker). |
 | Org mode    | `vix-org` (headline structure, TODO/checkbox, the column-view *spec* — format string, resolution, Markdown/HTML export), `vix-column-view` (T152: the interactive Column View *overlay* — cursor, edit modes, key handling — over `vix-org`'s resolved spec), `vix-org-table` (the built-in table editor: structural edits + `TBLFM` formulas), `vix-org-capture` (capture templates + placeholder expansion), `vix-affix` (prefix/suffix add/drop/toggle helpers), `vix-roam` (Org-roam nodes/backlinks/dailies/transclusion), `vix-org-contacts` (contact parsing + vCard). |
 | Run / test  | `vix-tasks` (named `tasks.toml` tasks, project-type lifecycle commands, task discovery, monorepo subprojects, test-at-point — Project menu), `vix-test-runner` (parse test output into a pass/fail tree), `vix-terminal` (integrated shell), `vix-diff-view` (compare-with-file), `vix-coverage` (T210: LCOV/Cobertura XML report parsing for the coverage gutter — Tools → Load Coverage File…). |
-| Config      | `vix-editorconfig` (`.editorconfig` parsing), `vix-macros` (persisted keyboard macros), `vix-workspace` (`.toml` workspace: folders + files + split pane tree), `vix-settings` (confy-backed `Settings`), `vix-session` (save/restore). |
+| Config      | `vix-editorconfig` (`.editorconfig` parsing), `vix-macros` (persisted keyboard macros), `vix-workspace` (`.toml` workspace: folders + files + split pane tree), `vix-settings` (confy-backed `Settings`), `vix-session` (save/restore), `vix-settings-bundle` (T555: bundle `config.toml`/macros/keybindings/user dictionary/the active custom theme into one file for `vix --export-settings`/`--import-settings` and **Vix → Export/Import Settings…**; host-agnostic so the CLI path can call it before any `App` exists, same reasoning as `vix-doctor`). |
 | Scripting   | `vix-script` — Rhai user scripting (`crates/vix-script/spec/index.md`); a plain (non-optional) dependency, wired into the App shell as of T103: scripts load at startup and on `script.reload`, registered commands appear in the command palette (`script:<stem>:<id>`) and Tools → Scripts → Run…, `prompt`/`message`/`error` use the real prompt overlay and message drawer. **T104** (wiring `bind_key` into the real keymap) is done as of T104j — see the Keybindings row below. Only **T105** (sample scripts + docs) remains open. |
 | Modal editing | `vix-modal` — the real modal-editing engine for the Vi/Spacemacs keymaps: modes, operator × motion composition, counts, registers, text objects, dot-repeat (`crates/vix-modal/spec/index.md`); replaces `vim_normal_key`'s ad hoc binding table in `src/app.rs`. **Design-only** as of T111: no functional code until T112. |
 | Tutor       | `vix-tutor` — an interactive, in-editor tutorial: six chapters whose lessons are real, freely-editable Vix buffers copied to a working temp dir, with cheap textual progress checks against what the learner typed (`crates/vix-tutor/spec/index.md`); launched via `vix --tutor` or **Help → Tutorial**. **Design-only** as of T401: no functional code until T402. |
@@ -140,7 +140,7 @@ crates the same way (`vix-workspace-search`, `vix-edit-outline`,
 
 | Path            | Contents                                                            |
 | --------------- | ------------------------------------------------------------------- |
-| `crates/`       | The 122 `vix-*` workspace member crates (each with its own `spec/`).|
+| `crates/`       | The 123 `vix-*` workspace member crates (each with its own `spec/`).|
 | `langs/`        | Tree-sitter highlight queries (`<lang>/highlights.scm`), embedded.  |
 | `locales/`      | `app.yml` — rust-i18n translations (English fallback).              |
 | `dictionaries/` | Hunspell dictionaries — gitignored; see `crates/vix-spellcheck/spec/dictionaries`. |
