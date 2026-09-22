@@ -10298,10 +10298,21 @@ impl App {
         let path = tmp.display().to_string();
         let cmd = self.settings.ai_command_line(prompt, &path);
         let (program, flag) = shell_program();
+        // `ai_command_line` always redirects the shell's own stdin from
+        // `path` (`< "…"`) unless the template uses `{file}` instead, so
+        // this process's own stdin is never actually read either way --
+        // explicitly closed rather than left to the default of inheriting
+        // this process's own stdin, which on Windows left `cmd.exe`'s `<`
+        // redirect racing an inherited handle from the parent and hanging
+        // indefinitely instead of ever completing (T547, found via a real
+        // Windows CI run: every spawn_ai_cli-driven test timed out, while
+        // run_command_in's sibling tests -- whose command lines never
+        // redirect stdin -- passed).
         let mut child = match std::process::Command::new(program)
             .arg(flag)
             .arg(cmd)
             .current_dir(&self.root)
+            .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
             .spawn()
@@ -13332,10 +13343,17 @@ impl App {
         } else {
             format!("{{ {cmd} ; }} 2>&1")
         };
+        // Explicitly closed rather than inherited: a background command has
+        // no business reading from vix's own stdin (the terminal device vix
+        // itself is reading raw input from), and an inherited handle there
+        // is exactly what left every `spawn_ai_cli`-driven command hanging
+        // on Windows (see its own call site's comment, T547) once its shell
+        // invocation also redirected stdin from a file.
         let mut child = match std::process::Command::new(program)
             .arg(flag)
             .arg(script)
             .current_dir(dir)
+            .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
             .spawn()

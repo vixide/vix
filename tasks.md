@@ -5403,6 +5403,32 @@ case-insensitive filesystems correctly).
   just locally, matching every other fix in this run; the printf
   failure itself is exactly why "confirmed against real CI" was the
   bar throughout, not "compiles, looks right."
+  **Second real Windows CI run (after the printf fix) found a third,
+  final bug**: 3 tests (`generate_doc_comment_inserts_just_above_the_
+  cursor_line`, `edit_with_instruction_prompt_cannot_inject_shell_
+  commands`, `edit_with_instruction_runs_the_typed_text_and_always_
+  opens_a_diff`) still failed — not with an error, but the same "timed
+  out waiting for the AI task to finish" every one of the earlier
+  bugs' *symptoms* also produced, at `tests/integration/common.rs:137`.
+  Diagnosed by comparing which tests passed vs. failed rather than
+  guessing again: `run_command_in`'s own test (whose command line never
+  gets a shell redirect) passed; every `spawn_ai_cli`-based test (whose
+  command line *always* gets a trailing `< file` stdin redirect,
+  appended by `ai_command_line` whenever the configured template has no
+  `{file}` placeholder) hung. Hypothesis: `std::process::Command`, left
+  unconfigured, inherits the parent's stdin handle — on Windows that
+  inherited handle apparently conflicts with `cmd.exe`'s own `<`
+  redirect on the same command line (Unix's `sh -c '... < file'` has no
+  such problem, which is why this was invisible until real Windows CI
+  existed at all). Fix: explicitly `.stdin(std::process::Stdio::null())`
+  on both `spawn_ai_cli`'s and (proactively, same reasoning applies even
+  though its own tests never showed the bug) `run_command_in`'s
+  `Command` builders — a spawned background command has no business
+  reading vix's own terminal stdin either way. Local gate green (fmt,
+  clippy, rustdoc with warnings denied, full workspace test suite,
+  `scripts/check-docs`); pushed for verification against the real
+  `windows-latest` CI job, matching every other fix in this run — see
+  the follow-up note below once that run reports back.
 - [x] **T548 — OS keyring support on Windows is a silent no-op stub,
   despite the `keyring` crate (already a dependency, already used on
   macOS via the identical `keyring::Entry` API) supporting Windows
