@@ -5967,7 +5967,13 @@ starting any of them.
   jump/resolve-without-closing/resolve-to-empty-then-close/Esc/render
   paths end to end against a real `App` — no real git repo needed
   (the parser and the overlay both work on plain buffer text, git only
-  ever produces the markers).
+  ever produces the markers). **First push's CI run genuinely caught a
+  real gate gap**: `cargo fmt --all --check` had run clean before a
+  later clippy-driven edit (3 redundant-closure fixes), but wasn't
+  re-run after it — the shorter fixed form fit rustfmt's line width on
+  one line where the original 5-line form didn't, so `fmt + clippy +
+  doc` failed for real on GitHub CI. Fixed with one follow-up commit
+  (`cargo fmt --all` + re-verify); confirmed green on the next push.
 - [ ] **T557 — Accessibility audit for screen readers.** T203 added a
   WCAG-AA high-contrast *theme* (a color/contrast fix, not a screen-
   reader one — a TUI's accessibility to an actual screen reader is a
