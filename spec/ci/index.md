@@ -90,7 +90,17 @@ target triples (`aarch64`/`x86_64-apple-darwin`, `aarch64`/`x86_64-unknown-linux
 GitHub Release, then pushes the formula to `vixide/homebrew-tap` — that last
 step is why the `HOMEBREW_TAP_TOKEN` secret exists (see
 `spec/homebrew-tap-token`). `release.yml` is **generated**: edit
-`dist-workspace.toml` and re-run `dist init`, never the workflow by hand.
+`dist-workspace.toml` and re-run `dist init` (or the narrower `dist
+generate --mode ci`), never the workflow by hand — `dist generate --mode
+ci --check` fails if the committed file has drifted from the config, the
+same check-then-write shape `docs/reference/*.md`/`man/vix.1`'s own
+regenerate-and-diff gate uses, though nothing currently runs it in CI
+(only ever exercised by hand before a release-affecting config change).
+`dist-workspace.toml`'s `cargo-cyclonedx = true` (T554, tasks.md) makes
+each release also generate and upload a CycloneDX SBOM (`*.cdx.xml`, one
+per target) via `cargo-cyclonedx` — native `dist` support, not a
+hand-rolled job — for downstream consumers doing their own supply-chain
+compliance.
 
 Who's authorized to do what here is governed by
 [`AI_STATEMENT.md`](../../AI_STATEMENT.md), not by this file: an AI agent may

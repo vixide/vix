@@ -5789,7 +5789,7 @@ starting any of them.
   the way T149's conversions had. `docs/reference/actions.md`/
   `man/vix.1` regenerated; `AGENTS.md`/`agents/share/crate-map.md`
   crate-count references (121→122) updated.
-- [ ] **T554 — SBOM generation as a release artifact.** Emit a Software
+- [x] **T554 — SBOM generation as a release artifact.** Emit a Software
   Bill of Materials (CycloneDX, via `cargo-cyclonedx`) alongside the
   existing release binaries, for downstream consumers doing their own
   supply-chain compliance. **Scope note found while sizing this**:
@@ -5812,6 +5812,31 @@ starting any of them.
   document the decision in `spec/ci/index.md` either way. Small-to-
   moderate effort, additive, zero risk to the existing release path if
   done as (b).
+  **Done 2026-09-22 — option (a), the right place, turned out to be
+  real**: the pinned `dist` (`cargo-dist-version = "0.32.0"`, well above
+  the `cargo-cyclonedx = true` key's introduction in 0.26.0, confirmed
+  via web search against `dist`'s own changelog) has native CycloneDX
+  SBOM support — verified against the real, locally-installed `dist
+  0.32.0` binary, not just docs: added the one key to
+  `dist-workspace.toml`, ran `dist generate --mode ci --check` first
+  (showed the exact diff `release.yml` needed without writing it), then
+  `dist generate --mode ci` for real. The regenerated `release.yml`
+  installs `cargo-cyclonedx` (pinned to a specific release by `dist`
+  itself, same trust level as the rest of the file's generated content)
+  and adds one step generating `*.cdx.xml` per target, uploaded
+  alongside the existing artifacts — no hand-maintained job, no new
+  workflow file, confirmed via a second `--check` pass showing zero
+  further drift. `spec/ci/index.md` documents both the new SBOM output
+  and (a gap noticed while writing this, worth flagging honestly rather
+  than silently fixing out of scope) that nothing currently runs `dist
+  generate --mode ci --check` in CI itself — `release.yml`'s "generated,
+  never hand-edited" contract is enforced only by convention, not a
+  gate, unlike `docs/reference/*.md`/`man/vix.1`'s own regenerate-and-
+  diff step. No Rust source touched, so no new test coverage beyond
+  `dist generate --check` itself passing; the actual `*.cdx.xml`
+  generation can only be exercised for real on a version-tag release
+  (the same verification gap every prior `release.yml`-touching change
+  in this codebase has had, not a new one T554 introduced).
 - [ ] **T555 — Settings/profile export-import.** "Export my setup"
   bundles everything under the config directory that isn't a live
   cache — `config.toml`, the active custom theme (from
