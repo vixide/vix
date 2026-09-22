@@ -5701,6 +5701,23 @@ touched.
 
 ---
 
+**GitLab CI gap, found 2026-09-22 (unrelated to any task above)**: while
+verifying T553's push, independently checked GitLab's pipeline API
+directly (not just `gh run view`, which only ever covers GitHub) and
+found every GitLab pipeline for this repo has failed since **2026-08-29**
+(`failure_reason: "ci_quota_exceeded"` — GitLab's shared-runner CI
+minutes exhausted for the project) — roughly 3.5 weeks and many commits'
+worth of pushes, this session's T547 Windows-CI work included, that
+GitLab specifically never actually verified, even though every one of
+them was confirmed green on GitHub (and, per T547's own investigation,
+Codeberg's structurally-independent Linux-only job). Not a code
+regression — an account/billing quota only the user can resolve. Per the
+user's own choice when this was surfaced: noted here, GitHub + Codeberg
+are the two forges actually verified going forward until it's resolved;
+not re-investigated each time it recurs (see the memory note
+`vix-gitlab-ci-quota-exceeded-2026-09` for the full detail and the
+re-check command).
+
 ## Run I (promoted from the Ideas backlog, 2026-09-22)
 
 Five items promoted from "Ideas backlog" below — the ones with a clear,
