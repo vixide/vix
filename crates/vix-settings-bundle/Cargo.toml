@@ -10,5 +10,6 @@ description = "Bundle a user's config.toml, macros.toml, keybindings.toml, user 
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+toml = { workspace = true }
 vix-settings = { path = "../vix-settings", version = "1.6.0" }
 vix-theme-model = { path = "../vix-theme-model", version = "1.6.0" }

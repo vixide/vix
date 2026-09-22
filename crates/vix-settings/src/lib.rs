@@ -486,7 +486,7 @@ impl Default for SubsystemSettings {
 }
 
 /// One configured language server (a `lsp_servers` entry).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LspServer {
     /// LSP `languageId` sent in `didOpen` (e.g. `"rust"`, `"python"`).
     pub language_id: String,

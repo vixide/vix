@@ -294,7 +294,7 @@ fn handle_settings_bundle_flags(cli: &Cli, settings: &Settings) -> bool {
     if let Some(path) = &cli.import_settings {
         match vix::settings_bundle::read(path) {
             Ok(bundle) => {
-                for (name, outcome) in vix::settings_bundle::apply(&bundle) {
+                for (name, outcome, preserved) in vix::settings_bundle::apply(&bundle) {
                     let note = match outcome {
                         vix::settings_bundle::EntryOutcome::Written => "written",
                         vix::settings_bundle::EntryOutcome::WrittenAfterBackup => {
@@ -303,6 +303,13 @@ fn handle_settings_bundle_flags(cli: &Cli, settings: &Settings) -> bool {
                         vix::settings_bundle::EntryOutcome::Skipped => "skipped",
                     };
                     println!("{name}: {note}");
+                    if preserved {
+                        println!(
+                            "  (ai_command/ai_api_key_command/test_command/lsp_servers differed \
+                             from your current config and were NOT imported -- edit config.toml \
+                             by hand if you really want them)"
+                        );
+                    }
                 }
             }
             Err(e) => eprintln!(

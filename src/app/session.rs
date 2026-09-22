@@ -475,13 +475,19 @@ impl App {
         let path = self.resolve(input);
         match crate::settings_bundle::read(&path) {
             Ok(bundle) => {
-                let written = crate::settings_bundle::apply(&bundle)
-                    .into_iter()
-                    .filter(|(_, outcome)| {
+                let outcomes = crate::settings_bundle::apply(&bundle);
+                let written = outcomes
+                    .iter()
+                    .filter(|(_, outcome, _)| {
                         *outcome != crate::settings_bundle::EntryOutcome::Skipped
                     })
                     .count();
+                let preserved = outcomes.iter().any(|(_, _, preserved)| *preserved);
                 self.status = t!("status.settings_imported", count = written).to_string();
+                if preserved {
+                    self.messages
+                        .warn(t!("msg.settings_import_command_fields_preserved").to_string());
+                }
             }
             Err(e) => self
                 .messages
