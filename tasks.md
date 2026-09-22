@@ -5425,6 +5425,91 @@ case-insensitive filesystems correctly).
   doc --workspace --no-deps` both clean; the extended integration test
   passes; full `scripts/check` green.
 
+### First real Windows CI findings (2026-09-22)
+
+Once `windows-latest` joined GitHub's build+test matrix (T547's
+prerequisite step) and the T548 keyring-linking regression was fixed,
+the very first real Windows test run surfaced four more genuine bugs —
+none related to T547's own shell-quoting concern. All four found and
+fixed same day, each with a regression test; none required an actual
+Windows machine to fix once root-caused, only to *discover* (this
+session's local cross-compile can't get past an unrelated `ring`/
+C-toolchain gap, same as T548's own note) and to *verify* (pushed and
+re-watched the real Windows CI run each time).
+
+- [x] **T550 — `vix-coverage`'s report-to-buffer path matching is
+  case-sensitive, so a loaded coverage report can match zero lines on
+  Windows.** `Report::lines_for` already normalized `\` to `/` before
+  comparing, but not case. `Path::canonicalize` (called by
+  `vix-editor::Editor::open` for every opened tab) can resolve a path
+  to different casing than a literal string naming the same file
+  elsewhere — e.g. `%TEMP%`'s own casing vs. the filesystem's canonical
+  one for the same case-insensitive path, both valid, neither matching
+  the other byte-for-byte. Two integration tests failed on this:
+  `load_coverage_file_marks_the_gutter_covered_and_uncovered` (0 marks
+  instead of 2) and `toggle_coverage_gutter_hides_then_restores_the_
+  cached_report` (its very first assertion, "loaded and shown"). Fixed
+  by folding case-folding into the existing separator-normalization
+  helper (now named `normalize`, applied uniformly rather than only in
+  the fallback path) — deliberately unconditional, not `cfg(windows)`-
+  gated: it can only produce a *false positive* between two paths
+  differing solely in case, and on a case-sensitive filesystem (Linux)
+  two real, distinct files differing only in case are rare enough that
+  the tolerance is worth it for the Windows/macOS correctness it buys.
+  New test `lines_for_matches_a_windows_path_that_differs_only_in_case`
+  pins the exact scenario found (literal `RUNNERADMIN` vs. canonicalized
+  `runneradmin` in a `\\?\C:\...` path).
+- [x] **T551 — `vix-palette::parse_path_target` splits a `path:line:col`
+  string on every colon, so a Windows drive letter's own colon
+  (`C:\...`) is mistaken for the path/line separator.** `input.splitn(3,
+  ':')` on `C:\src\lib.rs:12` parsed as path `"C"`, line
+  `"\src\lib.rs:12"` (not a number, so no target at all) — silently
+  producing no jump target rather than a wrong one. Found via
+  `editing::clicking_a_dock_location_jumps_to_it` (`left: None, right:
+  Some("\\?\C:\...\hit.txt")` — the click never opened anything). Five
+  call sites share this one function (the bottom-dock click-to-jump
+  that exposed the bug, the command palette's `@path:line` navigation,
+  and `vix-file-browser-panel`'s word-under-cursor path-target parsing)
+  so this one fix covers all of them. Fixed by detecting a leading
+  single-ASCII-letter-colon-then-`\`-or-`/` drive prefix and excluding
+  it from the split, added as a new `windows_drive_prefix_len` helper.
+  Two new test functions (`parse_path_target_splits_path_line_and_
+  column` — no prior coverage existed for this function at all —
+  and `parse_path_target_keeps_a_windows_drive_letter_out_of_the_
+  split`).
+- [x] **T552 — No repo-root `.gitattributes`, so a Windows checkout's
+  own `core.autocrlf` setting decides every text file's line endings —
+  and broke an exact-match test the first time it mattered.**
+  `vix-tutor`'s bundled lesson files are plain LF in the git objects
+  (confirmed no `\r` bytes), but GitHub's `windows-latest` runner's Git
+  for Windows defaults to `core.autocrlf=true`, so `actions/checkout`
+  writes them to the working tree as CRLF — and `include_str!` embeds
+  whatever's on disk at compile time. `tests/integration/tutor.rs`'s
+  `status_bar_progress_updates_live_as_tasks_are_completed` simulates
+  completing "delete this line" via `.replace("DELETE THIS ENTIRE
+  LINE\n", "", 1)`; against CRLF-corrupted content the pattern's
+  trailing `\n` no longer immediately follows the text, so the replace
+  silently no-ops and the progress indicator stayed at "0/3" instead of
+  advancing to "1/3". (The crate's own runtime check,
+  `!text.contains("DELETE THIS ENTIRE LINE")` with no `\n` in the
+  pattern, was already CRLF-agnostic by construction — only the test's
+  own replace wasn't.) Fixed at the root: new repo-root `.gitattributes`
+  with `* text=auto eol=lf`, forcing every future checkout (any OS) to
+  match what's already committed, plus explicit `-text` for the real
+  binaries (`*.gif`, `*.sqlite`, common image/font extensions) and a
+  carve-out for `wix/main.wxs` (already committed CRLF — the WiX
+  toolset's own convention, left alone rather than disagreed with).
+  Confirmed adding the file didn't itself flag any tracked file as
+  changed on this (already-LF) checkout.
+Three distinct fixes for the four failing tests (T550 alone accounts for
+two: `load_coverage_file_marks_the_gutter_covered_and_uncovered` and
+`toggle_coverage_gutter_hides_then_restores_the_cached_report` share one
+root cause). All verified against the real Windows CI job (not just
+locally — this sandbox's Windows cross-compile can't get past the same
+pre-existing `ring`/C-toolchain gap T548 already hit): pushed together,
+watched `build + test (windows-latest)` go from failing on all four
+tests to green.
+
 ---
 
 ## Ideas backlog (unscoped)

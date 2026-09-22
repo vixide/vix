@@ -51,19 +51,21 @@ impl Report {
     /// report doesn't cover it.
     ///
     /// Reports name files inconsistently (relative to the project root,
-    /// relative to some other directory, or with a different separator), so
-    /// this tries an exact match first, then falls back to the recorded path
-    /// being a suffix of `path` or vice versa (normalized to `/`).
+    /// relative to some other directory, with a different separator, or —
+    /// once a real path has been through `Path::canonicalize` on Windows —
+    /// different casing than the literal string that named the same file
+    /// elsewhere), so this tries an exact match first, then falls back to
+    /// the recorded path being a suffix of `path` or vice versa, all
+    /// compared via `normalize`.
     #[must_use]
     pub fn lines_for(&self, path: &Path) -> Option<&HashMap<usize, Hit>> {
-        let wanted = path.to_string_lossy().replace('\\', "/");
-        if let Some(lines) = self.files.get(wanted.as_str()) {
-            return Some(lines);
-        }
+        let wanted = normalize(&path.to_string_lossy());
         self.files.iter().find_map(|(recorded, lines)| {
-            let recorded = recorded.replace('\\', "/");
-            (wanted.ends_with(recorded.as_str()) || recorded.ends_with(wanted.as_str()))
-                .then_some(lines)
+            let recorded = normalize(recorded);
+            (wanted == recorded
+                || wanted.ends_with(recorded.as_str())
+                || recorded.ends_with(wanted.as_str()))
+            .then_some(lines)
         })
     }
 
@@ -72,6 +74,22 @@ impl Report {
     pub fn file_count(&self) -> usize {
         self.files.len()
     }
+}
+
+/// Normalize a path string for tolerant comparison: forward slashes (a
+/// report may name a file with either separator, regardless of platform) and
+/// lowercase. Case-folding is deliberately unconditional, not
+/// `cfg(windows)`-gated: `Path::canonicalize` on Windows can resolve a path
+/// to different casing than a literal string built to name the same file
+/// (e.g. `%TEMP%`'s own casing vs. the filesystem's canonical one for the
+/// same case-insensitive path) — found via a real Windows CI run (T547) that
+/// this exact mismatch left a loaded coverage report matching zero lines. It
+/// can only ever cause a *false positive* between two paths differing solely
+/// in case; on a case-sensitive filesystem (Linux) two real, distinct files
+/// differing only in case are rare enough that the tolerance is worth it for
+/// the Windows/macOS correctness it buys.
+fn normalize(s: &str) -> String {
+    s.replace('\\', "/").to_lowercase()
 }
 
 /// Parse a coverage report, auto-detecting LCOV vs. Cobertura XML from its
@@ -296,6 +314,21 @@ mod tests {
         let report = parse_lcov("SF:/home/ci/checkout/src/lib.rs\nDA:1,1\nend_of_record\n");
         // The buffer's path is relative to a different (local) project root.
         assert!(report.lines_for(Path::new("src/lib.rs")).is_some());
+    }
+
+    #[test]
+    fn lines_for_matches_a_windows_path_that_differs_only_in_case() {
+        // T547: on Windows, `Path::canonicalize` can resolve a path to
+        // different casing than a literal string built to name the same
+        // file (e.g. `%TEMP%`'s own casing vs. the filesystem's canonical
+        // one) -- confirmed by a real Windows CI run, where this exact
+        // mismatch left a loaded report matching zero lines.
+        let report = parse_lcov(
+            "SF:C:\\Users\\RUNNERADMIN\\AppData\\Local\\Temp\\proj\\lib.rs\nDA:1,1\nend_of_record\n",
+        );
+        let canonicalized_form =
+            Path::new(r"\\?\C:\Users\runneradmin\AppData\Local\Temp\proj\lib.rs");
+        assert!(report.lines_for(canonicalized_form).is_some());
     }
 
     #[test]
