@@ -5437,28 +5437,37 @@ session's local cross-compile can't get past an unrelated `ring`/
 C-toolchain gap, same as T548's own note) and to *verify* (pushed and
 re-watched the real Windows CI run each time).
 
-- [x] **T550 — `vix-coverage`'s report-to-buffer path matching is
-  case-sensitive, so a loaded coverage report can match zero lines on
-  Windows.** `Report::lines_for` already normalized `\` to `/` before
-  comparing, but not case. `Path::canonicalize` (called by
-  `vix-editor::Editor::open` for every opened tab) can resolve a path
-  to different casing than a literal string naming the same file
-  elsewhere — e.g. `%TEMP%`'s own casing vs. the filesystem's canonical
-  one for the same case-insensitive path, both valid, neither matching
-  the other byte-for-byte. Two integration tests failed on this:
+- [x] **T550 — `vix-coverage`'s report-to-buffer path matching can't
+  bridge a real Windows path alias, so a loaded coverage report can
+  match zero lines.** `Report::lines_for` already normalized `\` to `/`
+  before comparing. Two integration tests failed on this:
   `load_coverage_file_marks_the_gutter_covered_and_uncovered` (0 marks
   instead of 2) and `toggle_coverage_gutter_hides_then_restores_the_
-  cached_report` (its very first assertion, "loaded and shown"). Fixed
-  by folding case-folding into the existing separator-normalization
-  helper (now named `normalize`, applied uniformly rather than only in
-  the fallback path) — deliberately unconditional, not `cfg(windows)`-
-  gated: it can only produce a *false positive* between two paths
-  differing solely in case, and on a case-sensitive filesystem (Linux)
-  two real, distinct files differing only in case are rare enough that
-  the tolerance is worth it for the Windows/macOS correctness it buys.
-  New test `lines_for_matches_a_windows_path_that_differs_only_in_case`
-  pins the exact scenario found (literal `RUNNERADMIN` vs. canonicalized
-  `runneradmin` in a `\\?\C:\...` path).
+  cached_report` (its very first assertion, "loaded and shown"). First
+  attempt: folded case-folding into the separator-normalization helper
+  (guessing `Path::canonicalize`'s casing might differ from a literal
+  path string naming the same file) — shipped, re-verified against real
+  Windows CI, **did not fix it**; same failure, byte-identical. Added a
+  diagnostic assertion instead of guessing again, re-ran, and got the
+  real answer: `SF:` was written as `C:\Users\RUNNER~1\AppData\Local\
+  Temp\...` while the active tab's canonicalized path was `\\?\C:\
+  Users\runneradmin\AppData\Local\Temp\...` — a Windows legacy 8.3
+  short filename (`RUNNER~1`) vs. its real long form (`runneradmin`),
+  genuinely different strings naming the same directory that no amount
+  of case-folding or separator normalization can ever bridge. Fixed
+  with a third, last-resort matching tier: when the string-based passes
+  (exact, then suffix, both case/separator-normalized) find nothing,
+  try `Path::canonicalize` on each recorded path and compare that
+  directly against the (already-canonical) argument — a real filesystem
+  call, so only paid once the cheap passes have both failed, and
+  silently skipped for a recorded path that doesn't exist locally (a
+  report from another machine, or a synthetic test fixture). New test
+  `lines_for_canonicalizes_as_a_last_resort_when_string_matching_fails`
+  proves the fallback tier itself (using a portable `dir/sibling/../
+  lib.rs` alias, since genuine 8.3 short names can't be reproduced
+  outside Windows); kept the earlier case-only test too, since a
+  case-only alias remains a real, separate, correctly-handled case even
+  though it wasn't *this* bug.
 - [x] **T551 — `vix-palette::parse_path_target` splits a `path:line:col`
   string on every colon, so a Windows drive letter's own colon
   (`C:\...`) is mistaken for the path/line separator.** `input.splitn(3,
@@ -5504,11 +5513,18 @@ re-watched the real Windows CI run each time).
 Three distinct fixes for the four failing tests (T550 alone accounts for
 two: `load_coverage_file_marks_the_gutter_covered_and_uncovered` and
 `toggle_coverage_gutter_hides_then_restores_the_cached_report` share one
-root cause). All verified against the real Windows CI job (not just
+root cause). All verified against the real Windows CI job, not just
 locally — this sandbox's Windows cross-compile can't get past the same
-pre-existing `ring`/C-toolchain gap T548 already hit): pushed together,
-watched `build + test (windows-latest)` go from failing on all four
-tests to green.
+pre-existing `ring`/C-toolchain gap T548 already hit, so every fix here
+was pushed and the real `build + test (windows-latest)` run re-checked
+before moving on, exactly like every other change this session. T550
+took two rounds to actually land (see its own entry above: the first
+guess — case-only normalization — shipped, was re-verified, and turned
+out wrong; only the second, evidence-driven attempt, informed by a
+diagnostic assertion added specifically to stop guessing, actually
+fixed it) — the other two landed first-try. `build + test
+(windows-latest)` went from failing on all four tests, to two (T551
+and T552 confirmed fixed), to zero.
 
 ---
 
