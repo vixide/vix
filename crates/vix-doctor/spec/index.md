@@ -46,6 +46,16 @@ A new crate rather than a method on [`vix::app::App`] because the CLI
 entry point (`vix --doctor`) runs before any `App` exists at all — the
 checks need to be callable from a bare `Settings` value with no
 terminal, no event loop, no live editor state. `vix-doctor` depends on
-`vix-settings` (for `Settings`/`LspServer`) and `vix-spellcheck` (for
-`load_for`) and nothing else; the App shell and `main.rs` are both
+`vix-settings` (for `Settings`/`LspServer`), `vix-spellcheck` (for
+`load_for`), and `vix-i18n` (every check name/detail string is
+translated via `t!`, see below); the App shell and `main.rs` are both
 plain consumers, not the other way around.
+
+Every check name and detail string is internationalized (T561: an
+earlier version called `t!` zero times — a real hard-rule violation,
+found by a self-audit, not caught at build time). `src/main.rs` sets
+the process-wide locale (from `--locale` if passed, else the persisted
+setting) *before* handling `--doctor`, specifically so the CLI path is
+genuinely localized too, not just the in-app **Help → Run
+Diagnostics** overlay (whose own locale is always already set by the
+time it can be opened at all).

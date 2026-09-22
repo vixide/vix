@@ -5708,6 +5708,8 @@ dependencies = [
 name = "vix-doctor"
 version = "1.6.0"
 dependencies = [
+ "rust-i18n",
+ "vix-i18n",
  "vix-settings",
  "vix-spellcheck",
 ]

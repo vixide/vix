@@ -8,5 +8,7 @@ repository.workspace = true
 description = "Environment checks for vix --doctor: git on PATH, configured LSP servers spawnable, the active locale's spellcheck dictionary loadable, terminal color support"
 
 [dependencies]
+rust-i18n = { workspace = true }
+vix-i18n = { path = "../vix-i18n", version = "1.6.0" }
 vix-settings = { path = "../vix-settings", version = "1.6.0" }
 vix-spellcheck = { path = "../vix-spellcheck", version = "1.6.0" }

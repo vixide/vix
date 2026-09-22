@@ -6213,7 +6213,7 @@ as every other task.
   shared rows — the full failure output byte-for-byte matches the
   audit's own characterization), then restored the fix and confirmed
   green again.
-- [ ] **T561 — `vix-doctor` (T553, this session's own addition) violates
+- [x] **T561 — `vix-doctor` (T553, this session's own addition) violates
   the project's hard i18n rule: zero `t!()` calls, shown in a live,
   localized TUI overlay.** `crates/vix-doctor/src/lib.rs:66-195` — every
   check name and `detail` string (`"found on PATH"`, `"not found on
@@ -6231,6 +6231,27 @@ as every other task.
   wire `vix-doctor`'s check names/details through `t!()` and the right
   `locales/*.yml` file, across all 15 locales (~10 short strings).
   Small-medium effort.
+  **Done 2026-09-22.** All check names/details wired through `t!`
+  across all 15 locales (new `locales/doctor.yml`, 17 keys). Real
+  build-mechanics detour along the way, found and fixed methodically
+  rather than guessed: every new key initially resolved to its own
+  literal name (`t!("doctor.no_color_note")` returning the string
+  `"doctor.no_color_note"`), traced by adding a throwaway debug probe
+  rather than guessing twice — `rust-i18n-support`'s `load_locales`
+  reads a locale file's *filename* as a real locale code unless the
+  file starts with an explicit `_version: 2` marker (every existing
+  `locales/*.yml` file already has one; the brand-new `doctor.yml`
+  simply didn't yet). Also fixed a genuine remaining gap in the same
+  area: `--locale es --doctor` used to silently ignore `--locale`
+  (`rust_i18n::set_locale` ran *after* `--doctor`'s own early return in
+  `main.rs`) — reordered so the CLI path is genuinely localized too,
+  not just the in-app overlay. Verified for real, not just via the
+  test suite: ran the actual built binary with `--locale es`/`--locale
+  ja`/`--locale ar --doctor` and read the real translated output.
+  Updated `crates/vix-doctor/spec/index.md`'s design notes (previously
+  claimed the crate depended on nothing but `vix-settings`/
+  `vix-spellcheck`, now stale) to document both the i18n dependency
+  and the locale-ordering fix.
 - [ ] **T562 — Windows `cmd_double_quote` doesn't escape a trailing
   backslash before its closing quote, corrupting argument boundaries in
   non-default `ai_command` templates.** `crates/vix-settings/src/
