@@ -6138,6 +6138,7 @@ version = "1.6.0"
 dependencies = [
  "serde",
  "serde_json",
+ "toml 1.1.4+spec-1.1.0",
  "vix-settings",
  "vix-theme-model",
 ]

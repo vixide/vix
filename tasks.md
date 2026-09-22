@@ -6057,7 +6057,7 @@ dangerous findings turned up (T558, T559) — not style/maintenance debt.
 Ranked by value/effort within each group; `[x]`/`[ ]` tracks status same
 as every other task.
 
-- [ ] **T558 — Path traversal in `vix-settings-bundle` import: arbitrary
+- [x] **T558 — Path traversal in `vix-settings-bundle` import: arbitrary
   file write via a crafted bundle, plus a silent, unreviewed overwrite of
   `config.toml`'s command-bearing fields.** `crates/vix-settings-bundle/
   src/lib.rs`'s `destination_for` (`:179-190`) resolves the four fixed
@@ -6087,6 +6087,33 @@ as every other task.
   overwriting them, mirroring T132's script-trust prompt in spirit).
   Small effort, high severity — real arbitrary-file-write, trivial to
   craft, one social-engineered import away from persistence or RCE.
+  **Done 2026-09-22.** Both fixed exactly as scoped. New `is_bare_filename`
+  rejects any `theme/…` entry whose filename contains a path separator
+  (`/` or `\`, both checked regardless of platform — a bundle can be
+  authored on one and imported on another) or is `.`/`..`. New
+  `sanitize_config_toml`/`preserve_command_fields` parse an incoming
+  `config.toml` entry as a real `Settings` value, compare its
+  `ai_command`/`ai_api_key_command`/`test_command`/`lsp_servers`
+  against the *current* on-disk settings (`Settings::load()`), and reset
+  just those fields back to current if they differ, before writing —
+  `apply` now returns a third `bool` (whether anything was preserved),
+  surfaced as a printed note (CLI) or a message-drawer warning (App), a
+  new `msg.settings_import_command_fields_preserved` key across all 15
+  locales. `preserve_command_fields` factored out as a pure function
+  (current settings + incoming settings in, sanitized settings + bool
+  out) specifically so the actual decision logic is unit-testable
+  without depending on this machine's real global config — the same
+  real-file-safety discipline established for this crate's own tests
+  already. `LspServer` gained `PartialEq`/`Eq` (needed to compare
+  `lsp_servers` field-for-field). Verified three ways: new unit tests
+  for both fixes (path rejection with a real `../../../../.ssh/…`-shaped
+  case; command-field preservation with a realistic malicious payload);
+  the full existing suite still green; and — the one that actually
+  matters most — a real crafted malicious `bundle.json` (a traversal
+  entry plus a hostile `config.toml`) run against the real built binary
+  with an isolated fake `HOME`, confirming the traversal entry is
+  skipped, the real file traversal was aiming at is never created, and
+  the malicious command fields never reach the real config.toml.
 - [ ] **T559 — Byte-slicing on unchecked UTF-8 char boundaries crashes
   the editor on real Org files with certain multi-byte characters.**
   Four sites in recently-added `vix-org` code (2026-09-21 agenda/export
