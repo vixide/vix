@@ -10331,6 +10331,12 @@ impl App {
             // The input file is no longer needed once the CLI has exited.
             let _ = std::fs::remove_file(&tmp);
             let success = ok && status.and_then(|s| s.code()) == Some(0);
+            // Normalize CRLF to LF unconditionally, not `cfg(windows)`-gated:
+            // a Windows console command's text-mode output can be
+            // CRLF-terminated regardless of what actually produced it (T547),
+            // and no downstream consumer (the diff view, the buffer) wants a
+            // visible `\r` in text that's conceptually just lines.
+            let out = out.replace("\r\n", "\n");
             let _ = tx.send(if success {
                 AiMsg::Done(out)
             } else {
