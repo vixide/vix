@@ -11,27 +11,37 @@ yet been translated falls back to English automatically.
 ## How it works: rust-i18n and `locales/`
 
 Localization is built on the [`rust-i18n`](https://crates.io/crates/rust-i18n)
-crate (version 4.x). `rust_i18n::i18n!` embeds the whole translation table into
-whichever crate invokes it, so a naive per-crate `i18n!` call in a 107-crate
-workspace would embed the whole `locales/` directory once per crate. Instead,
-the `vix-i18n` crate invokes it exactly **once**:
+crate (version 4.x), but `vix-i18n` doesn't call its `i18n!` macro: that macro
+embeds the whole translation table into whichever crate invokes it (so a naive
+per-crate call in a 121-crate workspace would embed all of `locales/` once per
+crate), and its own codegen unconditionally builds **every** locale's flat
+`key -> value` map the first time any translation is looked up — even though a
+process only ever queries one locale (plus English for the fallback walk).
+There's no macro option to make that lazy.
 
-```rust
-// crates/vix-i18n/src/lib.rs
-rust_i18n::i18n!("../../locales", fallback = "en");
-```
+So `vix-i18n` invokes `locales/`'s embedding itself, exactly **once**, split
+two ways (T517):
 
-and every other crate calls `vix_i18n::surface!()` once at its root plus
-`vix_i18n::t!`/`#[macro_use] extern crate vix_i18n;` to reuse that single
-embedded table instead of creating their own.
+- `crates/vix-i18n/build.rs` reuses `rust_i18n_support::load_locales` — the
+  same function the `i18n!` macro itself calls — to merge every
+  `locales/*.yml` file at build time, then writes one JSON blob per locale
+  under `$OUT_DIR`.
+- `crates/vix-i18n/src/lib.rs` `include!`s that list and defines a
+  `LazyBackend` (a `rust_i18n::Backend` implementation) that only
+  deserializes a locale's blob the first time something actually asks for a
+  translation in it. A typical run parses at most two locales — the active
+  one, and English for the fallback walk — instead of every bundled locale.
 
-This tells `rust-i18n` to load **every file** under `locales/` at
-**macro-expansion time** (i.e. when `vix-i18n` compiles), merge them into one
-table, and treat **English (`en`) as the fallback** for any missing
-translation. Splitting by namespace (T148) keeps any one file — and so any one
-translation PR's diff — well short of the ~28,900-line single file it used to
-be, named `app.yml`, before T148 (a name still worth searching Vix's own
-history for).
+Everything downstream of the backend (the translate/fallback logic `t!`'s
+expansion calls into) is a hand-written copy of what `i18n!`'s own codegen
+would otherwise generate, kept behaviorally identical: **English (`en`) is
+still the fallback** for any missing translation, and every other crate still
+calls `vix_i18n::surface!()` once at its root plus `vix_i18n::t!`/
+`#[macro_use] extern crate vix_i18n;` to reuse that single table instead of
+creating their own — none of that changed. Splitting by namespace (T148)
+keeps any one file — and so any one translation PR's diff — well short of the
+~28,900-line single file it used to be, named `app.yml`, before T148 (a name
+still worth searching Vix's own history for).
 
 Each entry in a `locales/*.yml` file is a translation **key** with one value
 per language:
@@ -176,21 +186,21 @@ follow later thanks to the English fallback.
 
 ## Rebuilds: `crates/vix-i18n/build.rs`
 
-Because every `locales/*.yml` file is read at **macro-expansion time** rather
-than via `include_str!`, Cargo has no built-in way to know those files affect
-`vix-i18n`'s compiled output — it only tracks `.rs` sources by default. Without
-a `cargo:rerun-if-changed` hint, editing a translation file (no `.rs`
-change) does **not** trigger a `vix-i18n` recompile: `cargo build`/`cargo test`
-report success using the previously-embedded, now-stale table, and any UI text
-added or changed since the last real rebuild renders as its raw key (e.g.
-`menu.item.org.capture.task` instead of "Task…") — rust-i18n's behavior for a
+Every `locales/*.yml` file is read by `build.rs`, not via `include_str!`, so
+Cargo has no built-in way to know those files affect `vix-i18n`'s compiled
+output — it only tracks `.rs` sources and a build script's own declared
+`cargo:rerun-if-changed` paths by default. Without that hint, editing a
+translation file (no `.rs` change) would **not** trigger a `vix-i18n`
+recompile: `cargo build`/`cargo test` would report success using the
+previously-generated, now-stale per-locale JSON blobs, and any UI text added
+or changed since the last real rebuild would render as its raw key (e.g.
+`menu.item.org.capture.task` instead of "Task…") — the fallback behavior for a
 key with no matching entry, which is indistinguishable from a genuinely stale
-embed. `crates/vix-i18n/build.rs` fixes this by emitting a
-`cargo:rerun-if-changed` for the `locales/` directory itself *and* every file
-inside it: on most filesystems a directory's own mtime only changes when an
-entry is added or removed, not when an existing file's content changes, so
-watching the directory alone would miss the common case (editing a
-translation).
+embed. `build.rs` emits `cargo:rerun-if-changed` for the `locales/` directory
+itself *and* every file inside it: on most filesystems a directory's own
+mtime only changes when an entry is added or removed, not when an existing
+file's content changes, so watching the directory alone would miss the common
+case (editing a translation).
 
 `vix-menu`'s `every_menu_label_translates` test (`crates/vix-menu/src/lib.rs`)
 guards against this regressing again: it walks the whole menu tree and asserts
@@ -212,7 +222,7 @@ text rather than an i18n key (the View → Theme/Locale/Time Zone submenus).
 - The **binary** (`src/main.rs`) parses `--locale`, resolves it against
   `settings.locale`, and calls `rust_i18n::set_locale` at startup.
 - The **bundle** lives in `locales/*.yml` (one file per key namespace, T148),
-  loaded once by `rust_i18n::i18n!("../../locales", fallback = "en")` in
-  `crates/vix-i18n/src/lib.rs` (a `build.rs` there makes Cargo track every file
-  in the directory so edits actually trigger a rebuild) and read everywhere
-  through `vix_i18n::t!`.
+  merged and split per-locale once by `crates/vix-i18n/build.rs`, loaded
+  lazily per-locale by `crates/vix-i18n/src/lib.rs`'s `LazyBackend` (T517;
+  `build.rs` also makes Cargo track every file in the directory so edits
+  actually trigger a rebuild), and read everywhere through `vix_i18n::t!`.
