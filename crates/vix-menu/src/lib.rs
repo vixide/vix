@@ -2134,6 +2134,8 @@ const HELP: &[Item] = &[
     Item::leaf("menu.item.help.license", "help.license", ""),
     Item::leaf("menu.item.help.report_issue", "help.report_issue", ""),
     Item::leaf("menu.item.help.privacy", "help.privacy", ""),
+    SEP,
+    Item::leaf("menu.item.help.doctor", "help.doctor", ""),
 ];
 
 /// Available theme names for the View → Theme submenu, set once by the host at

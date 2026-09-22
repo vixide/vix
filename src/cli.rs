@@ -9,6 +9,11 @@
 // comment, not a doc comment: clap's derive would otherwise show this
 // implementation rationale as the command's own `--help` text.
 /// Command-line interface for Vix.
+// `clippy::struct_excessive_bools`: each is an independent, freely-combinable
+// `#[arg(long)]` CLI flag, not related state a bitflags field could group --
+// `clap::Parser`'s derive needs one named `bool` field per flag, so there is
+// no bitflags-shaped alternative here the way T149 found for `App`/`Settings`.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(clap::Parser, Debug)]
 #[command(
     name = "vix",
@@ -48,4 +53,13 @@ pub struct Cli {
     /// passed. See `crates/vix-tutor/spec/index.md`.
     #[arg(long)]
     pub tutor: bool,
+
+    /// Check the environment for common setup friction (is `git` on
+    /// `PATH`, are configured LSP servers spawnable, does the active
+    /// locale's spellcheck dictionary load, does the terminal look
+    /// color-capable) and print a plain pass/fail report, then exit
+    /// without starting the editor. Also reachable from a running session
+    /// via **Help → Run Diagnostics**. See `crates/vix-doctor/spec/index.md`.
+    #[arg(long)]
+    pub doctor: bool,
 }

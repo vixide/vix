@@ -5710,7 +5710,7 @@ text already argued against for now (CodeQL) stay unpromoted. Sized and
 written up with the same rigor as every other task in this file before
 starting any of them.
 
-- [ ] **T553 — `vix --doctor`: a CLI subcommand (and Help menu entry)
+- [x] **T553 — `vix --doctor`: a CLI subcommand (and Help menu entry)
   that checks the environment for common setup friction and prints a
   plain pass/fail report.** Checks, each independently pass/fail/skip
   (a missing prerequisite for one check — e.g. no `lsp_servers`
@@ -5736,6 +5736,42 @@ starting any of them.
   existing overlays before adding a new one). Small effort: no new
   crate, no new I/O primitive, every check is a thin wrapper around an
   API that already exists.
+  **Done 2026-09-22.** Built as a new crate, `vix-doctor` — the scoping
+  note above turned out wrong in one respect once sized for real: a
+  bare-function approach on `App` couldn't work, because `vix --doctor`
+  has to run *before* any `App` exists at all (the CLI path), so the
+  checks needed to be callable from a plain `Settings` value with no
+  App/terminal dependency — exactly the "consumer other than the App
+  shell" bar `AGENTS.md`'s "When to add a new crate" section asks for
+  (crate count 121→122). Four checks (`git` via a real spawn attempt —
+  not just a `PATH` scan, so a broken shim is also caught; one per
+  configured LSP server, spawning only `command[0]`, not the full
+  configured args; the active locale's dictionary via
+  `vix_spellcheck::load_for` — the exact discovery-and-parse path the
+  editor itself uses, not a separate existence check, so a pass really
+  means spellcheck works; `TERM`/`NO_COLOR`), each independently
+  pass/fail/skip. `--doctor` (`src/cli.rs`, `main.rs`) prints the report
+  and exits before the TUI starts, reusing `--version`'s early-return
+  shape; **Help → Run Diagnostics** (new `vix-menu` leaf, new
+  `help.doctor` action) shows the same report via the existing
+  `WelcomePanel` overlay `Help → License`/`Privacy`/`Report an Issue`
+  already use — no new overlay type needed, matching the task's own
+  scoping note. `menu.item.help.doctor`(`.help`) translated into all 15
+  locales. New integration test (`tests/integration/menu.rs`) confirms
+  the menu wiring and that the report actually renders; `vix-doctor`'s
+  own 6 unit tests cover each check's logic directly (the `TERM`/
+  `NO_COLOR` decision factored into a pure `terminal_check` helper
+  specifically so it's testable without mutating real, process-global
+  environment variables — `set_var`/`remove_var` are `unsafe` as of the
+  2024 edition, and this crate forbids unsafe code). One real snag:
+  `Cli` crossed clippy's `struct_excessive_bools` threshold at 4 flags
+  (`version`/`json`/`tutor`/`doctor`) — a narrow, justified
+  `#[allow(...)]` on the struct itself, not a bitflags conversion,
+  since `clap::Parser`'s derive needs one named `bool` field per
+  `#[arg(long)]` flag and there is no meaningful "combined state" here
+  the way T149's conversions had. `docs/reference/actions.md`/
+  `man/vix.1` regenerated; `AGENTS.md`/`agents/share/crate-map.md`
+  crate-count references (121→122) updated.
 - [ ] **T554 — SBOM generation as a release artifact.** Emit a Software
   Bill of Materials (CycloneDX, via `cargo-cyclonedx`) alongside the
   existing release binaries, for downstream consumers doing their own
