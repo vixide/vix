@@ -5494,7 +5494,17 @@ case-insensitive filesystems correctly).
   regression from that change.) Local gate green again end to end
   (fmt, clippy, rustdoc with warnings denied, full workspace test
   suite, `scripts/check-docs`); pushed for verification against real
-  Windows CI — see the next note once that run reports back.
+  Windows CI — **confirmed green**: `build + test (windows-latest)`
+  passed outright, and so did the full 3-OS matrix
+  (`ubuntu-latest`/`macos-latest`/`windows-latest`) together with
+  `fmt + clippy + doc`, `msrv (1.96)`, `binary size (release)`, and
+  both docs jobs that aren't the persistently-benign, always-ignored
+  GitHub Pages deploy (Pages isn't enabled on this repo). **T547 is
+  genuinely done: five real, CI-discovered rounds (shell/quote choice,
+  printf, stdin inheritance, `raw_arg` for `cmd.exe`, and this quoting
+  correction) to get from "compiles" to "actually works on Windows,"
+  none of which a local read of the code alone would have caught —
+  closing out the last remaining item in the whole improvement plan.**
 - [x] **T548 — OS keyring support on Windows is a silent no-op stub,
   despite the `keyring` crate (already a dependency, already used on
   macOS via the identical `keyring::Entry` API) supporting Windows
