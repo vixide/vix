@@ -659,6 +659,8 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `vim.open_below` | Open Line Below | Catalog |
 | `vix.about` | About Vix | Menu |
 | `vix.email` | Email | Menu |
+| `vix.export_settings` | Export Settings… | Menu |
+| `vix.import_settings` | Import Settings… | Menu |
 | `vix.license` | License | Menu |
 | `vix.settings` | Settings… | Menu |
 | `vix.website` | Website | Menu |
@@ -669,4 +671,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**662 actions.**
+**664 actions.**

@@ -4,7 +4,7 @@
 .SH NAME
 vix \- Vix: Simple Terminal Rust IDE
 .SH SYNOPSIS
-\fBvix\fR [\fB\-l\fR|\fB\-\-locale\fR] [\fB\-\-diff\fR] [\fB\-\-version\fR] [\fB\-\-json\fR] [\fB\-\-tutor\fR] [\fB\-\-doctor\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
+\fBvix\fR [\fB\-l\fR|\fB\-\-locale\fR] [\fB\-\-diff\fR] [\fB\-\-version\fR] [\fB\-\-json\fR] [\fB\-\-tutor\fR] [\fB\-\-doctor\fR] [\fB\-\-export\-settings\fR] [\fB\-\-import\-settings\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
 .SH DESCRIPTION
 Vix: Simple Terminal Rust IDE
 .SH OPTIONS
@@ -26,6 +26,12 @@ Launch straight into the interactive tutorial (also reachable from a running ses
 .TP
 \fB\-\-doctor\fR
 Check the environment for common setup friction (is `git` on `PATH`, are configured LSP servers spawnable, does the active locale\*(Aqs spellcheck dictionary load, does the terminal look color\-capable) and print a plain pass/fail report, then exit without starting the editor. Also reachable from a running session via **Help → Run Diagnostics**. See `crates/vix\-doctor/spec/index.md`
+.TP
+\fB\-\-export\-settings\fR \fI<PATH>\fR
+Bundle `config.toml`, `macros.toml`, `keybindings.toml`, the user dictionary, and the active custom theme into a single file at `PATH`, then exit without starting the editor. Also reachable from a running session via **Vix → Export Settings…**. See `crates/vix\-settings\-bundle/spec/index.md`
+.TP
+\fB\-\-import\-settings\fR \fI<PATH>\fR
+Restore a bundle written by `\-\-export\-settings` (or **Vix → Export Settings…**) from `PATH`, then exit without starting the editor — any file about to be overwritten is renamed to `<name>.bak` first. Also reachable from a running session via **Vix → Import Settings…**
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

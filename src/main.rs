@@ -76,6 +76,14 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
 
+    // Same early-return shape as `--doctor` above: both exit before the TUI
+    // starts, so neither needs a running `App`/terminal at all. Grouped into
+    // one helper (rather than inlined here) to keep `main` under clippy's
+    // line-count limit.
+    if handle_settings_bundle_flags(&cli, &settings) {
+        return Ok(());
+    }
+
     // A `--locale` flag wins over the persisted setting, but is not saved back.
     let locale = cli
         .locale
@@ -269,4 +277,40 @@ fn suspend(terminal: &mut ratatui::DefaultTerminal) {
     }
     #[cfg(not(unix))]
     let _ = terminal;
+}
+
+/// Handle `--export-settings`/`--import-settings` (T555), printing a short
+/// report to stdout/stderr. Returns `true` if either flag was present (the
+/// caller should exit without starting the TUI); `false` otherwise.
+fn handle_settings_bundle_flags(cli: &Cli, settings: &Settings) -> bool {
+    if let Some(path) = &cli.export_settings {
+        let bundle = vix::settings_bundle::collect(settings);
+        match vix::settings_bundle::write(&bundle, path) {
+            Ok(()) => println!("Wrote settings bundle to {}", path.display()),
+            Err(e) => eprintln!("Failed to write settings bundle to {}: {e}", path.display()),
+        }
+        return true;
+    }
+    if let Some(path) = &cli.import_settings {
+        match vix::settings_bundle::read(path) {
+            Ok(bundle) => {
+                for (name, outcome) in vix::settings_bundle::apply(&bundle) {
+                    let note = match outcome {
+                        vix::settings_bundle::EntryOutcome::Written => "written",
+                        vix::settings_bundle::EntryOutcome::WrittenAfterBackup => {
+                            "written (previous file backed up to .bak)"
+                        }
+                        vix::settings_bundle::EntryOutcome::Skipped => "skipped",
+                    };
+                    println!("{name}: {note}");
+                }
+            }
+            Err(e) => eprintln!(
+                "Failed to read settings bundle from {}: {e}",
+                path.display()
+            ),
+        }
+        return true;
+    }
+    false
 }

@@ -148,6 +148,10 @@ pub enum PromptKind {
     /// Enter a coverage report (LCOV or Cobertura XML) path to load for the
     /// coverage gutter (T210). Pre-filled from the `coverage_path` setting.
     LoadCoverageFile,
+    /// Enter a path to write a settings bundle to (T555).
+    ExportSettings,
+    /// Enter a path to read a settings bundle from (T555).
+    ImportSettings,
     /// Enter a structural search pattern (T201: `$X`/`$$X` holes).
     StructuralPattern,
     /// Enter the replacement template for a structural search pattern
@@ -2791,6 +2795,8 @@ impl App {
                 self.welcome = Some(WelcomePanel::open(crate::doctor::format_report(&checks)));
             }
             "vix.settings" => self.open_settings_file(),
+            "vix.export_settings" => self.open_export_settings_prompt(),
+            "vix.import_settings" => self.open_import_settings_prompt(),
             "vix.about" => {
                 self.dialog = Some(Dialog {
                     title: t!("menu.item.vix.about").to_string(),
@@ -13086,6 +13092,8 @@ impl App {
             PromptKind::CompareFile => self.open_diff_with(prompt.input.trim()),
             PromptKind::InsertFile => self.insert_file_at_cursor(prompt.input.trim()),
             PromptKind::LoadCoverageFile => self.load_coverage_file(prompt.input.trim()),
+            PromptKind::ExportSettings => self.export_settings(prompt.input.trim()),
+            PromptKind::ImportSettings => self.import_settings(prompt.input.trim()),
             PromptKind::StructuralPattern => self.accept_structural_pattern(&prompt.input),
             PromptKind::StructuralReplacement => self.accept_structural_replacement(&prompt.input),
             PromptKind::ProjectCommand => self.accept_project_command_prompt(&prompt.input),

@@ -388,6 +388,9 @@ vix-regex-tool = { path = "crates/vix-regex-tool", version = "1.6.0" }
 vix-right-dock = { path = "crates/vix-right-dock", version = "1.6.0" }
 # Org-roam: networked, Zettelkasten-style note-taking over a directory of Org files.
 vix-roam = { path = "crates/vix-roam", version = "1.6.0" }
+# Bundle config.toml/macros.toml/keybindings.toml/the user dictionary/the
+# active custom theme into one file, and restore them from it.
+vix-settings-bundle = { path = "crates/vix-settings-bundle", version = "1.6.0" }
 # A small library of reusable text snippets, plus the picker's selection state.
 vix-snippet-tool = { path = "crates/vix-snippet-tool", version = "1.6.0" }
 # Spell-checking for the Vix editor (Hunspell-backed, over comment/string ranges).
