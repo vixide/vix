@@ -65,10 +65,20 @@ fn main() -> io::Result<()> {
         Err(e) => (Settings::default(), Some(e.to_string())),
     };
 
-    // Checks the *persisted* config (locale included), independent of a
-    // `--locale` flag also passed alongside `--doctor` -- same simplification
-    // `--version`'s early return above already makes: this exits before the
-    // rest of `main` reconciles the CLI override with settings.
+    // A `--locale` flag wins over the persisted setting, but is not saved
+    // back. Set *before* `--doctor`/`--export-settings`/`--import-settings`
+    // below (T561: once `vix-doctor` actually called `t!()`, leaving this
+    // until after those early-return paths would have made `--locale es
+    // --doctor` silently ignore `--locale` -- worth fixing now that it
+    // would otherwise be a real, avoidable inconsistency, not "the CLI
+    // path just doesn't localize" the way `--version`'s own plain text
+    // still reasonably doesn't).
+    let locale = cli
+        .locale
+        .clone()
+        .unwrap_or_else(|| settings.locale.clone());
+    rust_i18n::set_locale(&locale);
+
     if cli.doctor {
         for line in vix::doctor::format_report(&vix::doctor::run(&settings)) {
             println!("{line}");
@@ -83,13 +93,6 @@ fn main() -> io::Result<()> {
     if handle_settings_bundle_flags(&cli, &settings) {
         return Ok(());
     }
-
-    // A `--locale` flag wins over the persisted setting, but is not saved back.
-    let locale = cli
-        .locale
-        .clone()
-        .unwrap_or_else(|| settings.locale.clone());
-    rust_i18n::set_locale(&locale);
 
     let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let mut app = App::new(root, settings);
