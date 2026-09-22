@@ -5349,8 +5349,10 @@ case-insensitive filesystems correctly).
   `( … ) 2>&1` grouping — `cmd.exe` has no `{ }`, but `( )` does the
   same job. `Settings::ai_command_line`'s `{prompt}`/`{file}` quoting
   (previously always POSIX `sh_single_quote`) now picks
-  `cmd_double_quote` on Windows: wraps in `"…"`, escapes an embedded
-  `"` as `\"` (never closes the quoted region early), escapes `%` as
+  `cmd_double_quote` on Windows: wraps in `"…"`, originally escaped an
+  embedded `"` as `\"` on the (wrong — see the later correction below,
+  found via real Windows CI) theory that this would never close the
+  quoted region early, escapes `%` as
   `%%` (blocks `%VAR%` environment-variable expansion from reading and
   leaking anything the interpolated text happens to spell), and turns
   an embedded CR/LF into a space (so a multi-line prompt can't be read
@@ -5455,6 +5457,44 @@ case-insensitive filesystems correctly).
   test suite — Windows-specific behavior can't be exercised locally,
   same caveat as every round before this one — `scripts/check-docs`);
   pushed for verification against the real `windows-latest` CI job.
+  **That run's real result: 2 of the 3 previously-hanging tests passed
+  — the `raw_arg` fix was real progress, not a red herring — but the
+  third, `edit_with_instruction_prompt_cannot_inject_shell_commands`,
+  still failed.** The difference: that test's adversarial instruction
+  contains an embedded literal `"` character (deliberately, to prove
+  it can't break out of its quoting); the other two don't. Root cause,
+  the actual final one: `cmd_double_quote`'s own escaping — `"` → `\"`
+  — was built on a wrong assumption, the same wrong assumption `.arg()`
+  had just been shown to make and get fixed for: `cmd.exe`'s own
+  line-scanning parser (the one that looks for `&`/`|`/`<`/`>` to know
+  where one statement ends and another begins) toggles its
+  quoted/unquoted state on *every* literal `"` it sees, full stop —
+  there is no backslash-escape concept at that layer at all (that
+  belongs to the *called* program's own argv parsing, which never even
+  sees this text). So `\"` in the interpolated prompt did exactly what
+  a bare `"` would have: closed the quoted region early. Traced by
+  hand against the exact adversarial string this test sends — with the
+  quoted region closed early, the fragment `> {marker path}` inside
+  it, meant to stay inert as literal text, became a real, unquoted
+  `cmd.exe` output redirect, silently sending the spawned `echo`'s
+  stdout to a file instead of the pipe the reader thread was
+  `read_to_string`-ing from; that reader thread then blocked waiting
+  for a pipe that would never produce more data and never close on its
+  own timeline relative to the 5-second test deadline — not a hung
+  child process in the OS sense, a redirected one. Fix: replaced the
+  `"` → `\"` escape with `"` → `'` (a harmless substitute, inert to
+  `cmd.exe`, since there is no way to keep an embedded `"` both literal
+  and safely inside a quoted region under `cmd.exe`'s own parser — this
+  is a real, provable limitation of `cmd.exe`, not a gap in this fix).
+  Updated `cmd_double_quote`'s own doc comment (which had asserted the
+  wrong `\"` behavior "can never prematurely end that region" — also
+  wrong, now corrected) and its direct unit test. (The `raw_arg` push's
+  own CI run also had one `macos-latest` failure, the already-known
+  flaky clipboard-register test — see the memory note on it — not a
+  regression from that change.) Local gate green again end to end
+  (fmt, clippy, rustdoc with warnings denied, full workspace test
+  suite, `scripts/check-docs`); pushed for verification against real
+  Windows CI — see the next note once that run reports back.
 - [x] **T548 — OS keyring support on Windows is a silent no-op stub,
   despite the `keyring` crate (already a dependency, already used on
   macOS via the identical `keyring::Entry` API) supporting Windows
