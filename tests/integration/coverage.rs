@@ -48,6 +48,16 @@ fn load_coverage_file_marks_the_gutter_covered_and_uncovered() {
     app.on_key(keycode(KeyCode::Enter));
 
     assert!(app.prompt.is_none(), "prompt closes on accept");
+    assert!(
+        app.has_coverage(),
+        "report failed to load; messages: {:?}",
+        app.messages
+            .items
+            .iter()
+            .map(|m| &m.text)
+            .collect::<Vec<_>>()
+    );
+    let active_path = app.editor.active_tab().unwrap().path.clone();
     let marks = app
         .editor
         .active_tab()
@@ -56,7 +66,13 @@ fn load_coverage_file_marks_the_gutter_covered_and_uncovered() {
         .gutter_marks()
         .cloned()
         .unwrap_or_default();
-    assert_eq!(marks.len(), 2, "both recorded lines are marked: {marks:?}");
+    assert_eq!(
+        marks.len(),
+        2,
+        "both recorded lines are marked: {marks:?}; active tab path: {active_path:?}; \
+         SF: path written: {:?}",
+        src.display().to_string()
+    );
     assert!(
         marks.contains(&(0, GREEN)),
         "line 1 (0-based index 0) is covered: {marks:?}"
