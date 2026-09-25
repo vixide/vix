@@ -2,10 +2,13 @@
 
 Format a byte count as a human-readable size (`16.0 KiB`).
 
-**Status:** Shipped (Run H, T521). One pure function, `human_bytes(n: u64)
--> String`, plus its private `u64_to_f64` helper (a lossless `u64`→`f64`
-conversion via the exact-per-32-bit-half trick, avoiding `as`'s precision
-loss above 2^53).
+**Status:** Shipped (Run H, T521; locale-aware decimal separator added
+T567). Two pure functions — `human_bytes(n: u64) -> String` (always `.` as
+the decimal separator) and `human_bytes_for_locale(n: u64, locale: &str)
+-> String` (swaps in `,` for the several Vix locales that conventionally
+write it that way: `de`/`es`/`fr`/`pl`/`pt`/`ru`) — plus a private
+`u64_to_f64` helper (a lossless `u64`→`f64` conversion via the
+exact-per-32-bit-half trick, avoiding `as`'s precision loss above 2^53).
 
 ## Why this crate exists
 
@@ -35,4 +38,9 @@ unrelated concern with its own small test suite.
 
 Both consumer crates replaced their own `human_bytes`/`u64_to_f64` with a
 plain re-export/delegation to this crate; their own public API (still named
-`human_bytes` at each crate's own call sites) is unchanged.
+`human_bytes` at each crate's own call sites) is unchanged. Since T567,
+that delegation calls `human_bytes_for_locale` with the active
+`rust_i18n::locale()` rather than the locale-invariant `human_bytes`,
+since every one of their call sites is user-facing text. `src/app.rs`'s
+workspace-dashboard disk-size figure calls `human_bytes_for_locale`
+directly for the same reason.

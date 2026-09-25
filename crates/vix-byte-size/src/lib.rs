@@ -19,7 +19,9 @@ fn u64_to_f64(n: u64) -> f64 {
     f64::from(high) * 4_294_967_296.0 + f64::from(low)
 }
 
-/// Format a byte count as a human-readable size (`16.0 KiB`).
+/// Format a byte count as a human-readable size (`16.0 KiB`), always using
+/// `.` as the decimal separator regardless of locale. Prefer
+/// [`human_bytes_for_locale`] for output a user will actually see.
 #[must_use]
 pub fn human_bytes(n: u64) -> String {
     const UNITS: [&str; 6] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
@@ -33,6 +35,28 @@ pub fn human_bytes(n: u64) -> String {
         unit += 1;
     }
     format!("{value:.1} {}", UNITS[unit])
+}
+
+/// Locales that conventionally write a decimal quantity with `,` rather
+/// than `.` (verified against real-world formatting convention for each,
+/// not guessed) — matched by exact code, since every locale Vix ships
+/// today is a bare code with no region suffix (`"de"`, not `"de-DE"`).
+const COMMA_DECIMAL_LOCALES: &[&str] = &["de", "es", "fr", "pl", "pt", "ru"];
+
+/// Format a byte count as a human-readable size (`16.0 KiB`), using the
+/// decimal-separator convention of `locale` (e.g. `"de"` → `16,0 KiB`).
+///
+/// T567: [`human_bytes`] always used Rust's locale-invariant float
+/// formatting (a literal `.`), which is wrong for the several Vix locales
+/// that conventionally use `,` as their decimal separator.
+#[must_use]
+pub fn human_bytes_for_locale(n: u64, locale: &str) -> String {
+    let formatted = human_bytes(n);
+    if COMMA_DECIMAL_LOCALES.contains(&locale) {
+        formatted.replace('.', ",")
+    } else {
+        formatted
+    }
 }
 
 #[cfg(test)]
@@ -58,6 +82,31 @@ mod tests {
         // Larger than any real file, but must still format instead of
         // panicking on an out-of-bounds `UNITS` index.
         assert_eq!(human_bytes(u64::MAX), "16384.0 PiB");
+    }
+
+    #[test]
+    fn comma_decimal_locales_swap_the_separator() {
+        assert_eq!(human_bytes_for_locale(16 * 1024, "de"), "16,0 KiB");
+        assert_eq!(human_bytes_for_locale(16 * 1024, "fr"), "16,0 KiB");
+        assert_eq!(human_bytes_for_locale(16 * 1024, "es"), "16,0 KiB");
+        assert_eq!(human_bytes_for_locale(16 * 1024, "pl"), "16,0 KiB");
+        assert_eq!(human_bytes_for_locale(16 * 1024, "pt"), "16,0 KiB");
+        assert_eq!(human_bytes_for_locale(16 * 1024, "ru"), "16,0 KiB");
+    }
+
+    #[test]
+    fn other_locales_keep_the_dot() {
+        assert_eq!(human_bytes_for_locale(16 * 1024, "en"), "16.0 KiB");
+        assert_eq!(human_bytes_for_locale(16 * 1024, "ja"), "16.0 KiB");
+        assert_eq!(human_bytes_for_locale(16 * 1024, "zh"), "16.0 KiB");
+    }
+
+    #[test]
+    fn comma_swap_never_touches_the_unit_or_a_value_below_1024() {
+        // Below 1024 there's no decimal point to swap at all; the unit
+        // suffix itself must never gain a stray comma either.
+        assert_eq!(human_bytes_for_locale(0, "de"), "0 B");
+        assert_eq!(human_bytes_for_locale(1023, "de"), "1023 B");
     }
 
     #[test]

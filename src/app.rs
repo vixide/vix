@@ -11029,8 +11029,12 @@ impl App {
 
         let dtx = tx.clone();
         let droot = root.clone();
+        let dlocale = rust_i18n::locale().to_string();
         std::thread::spawn(move || {
-            let _ = dtx.send(DashMsg::Disk(vix_byte_size::human_bytes(dir_size(&droot))));
+            let _ = dtx.send(DashMsg::Disk(vix_byte_size::human_bytes_for_locale(
+                dir_size(&droot),
+                &dlocale,
+            )));
         });
 
         let ftx = tx.clone();

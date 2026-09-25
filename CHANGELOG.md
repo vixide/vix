@@ -14,6 +14,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Characters`, `Size`, `Last modified`, …) was a hardcoded English
   string regardless of the active locale. New `locales/info.yml`
   translates all 45 labels across all 15 locales.
+- **Three more small i18n gaps closed** (self-audit, T566/T567/T568):
+  the calendar panel's month/year heading (`Tools → Calendar…`) now
+  translates the month name instead of always showing English
+  (`locales/calendar.yml`); byte sizes (`16.0 KiB`) now use a `,`
+  decimal separator for the locales that conventionally write it that
+  way (`de`/`es`/`fr`/`pl`/`pt`/`ru`); and Find/Replace's toggle hint
+  ("Alt C case / Alt R regex") is translated, matching the sibling
+  DB-workbench hint next to it.
 - **DB workbench and AI-provider "remember this" credentials now persist
   on Windows too** (found by a codebase self-audit, T548): the OS-keyring
   backend was already implemented for macOS/Linux, but the `keyring`

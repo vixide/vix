@@ -11,7 +11,10 @@ month area.
 ## Layout
 
 - A month header `◀  Month Year  ▶`. The `◀` / `▶` glyphs are clickable
-  month-nav arrows (column 0 and column 20 of the header row).
+  month-nav arrows (column 0 and column 20 of the header row). The month
+  name is translated per `settings.locale` (`calendar.month_01`..
+  `calendar.month_12` in `locales/calendar.yml`), not `jiff`'s
+  locale-invariant `%B`.
 - A Monday-first day grid: a weekday header row, then up to six week rows. The
   **selected day** (the keyboard cursor) is reverse-highlighted; **today** is
   marked only when the displayed month is the current month.

@@ -10,6 +10,14 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+// Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
+// translation lookup fns at this crate root (see the vix_i18n crate). T566:
+// `title()` used `strftime("%B %Y")`, and `%B` isn't locale-aware without
+// the (unused) `jiff-icu` feature, so the month name was always English.
+#[macro_use]
+extern crate vix_i18n;
+vix_i18n::surface!();
+
 use jiff::civil::Date;
 use jiff::{ToSpan, Zoned};
 
@@ -173,10 +181,14 @@ impl Calendar {
         self.shown
     }
 
-    /// Month-and-year heading for the displayed month, e.g. `June 2026`.
+    /// Month-and-year heading for the displayed month, e.g. `June 2026`
+    /// (the month name translated per the active locale; T566 — `jiff`'s
+    /// `%B` isn't locale-aware without the `jiff-icu` feature, which this
+    /// crate doesn't pull in).
     #[must_use]
     pub fn title(&self) -> String {
-        self.shown.strftime("%B %Y").to_string()
+        let key = format!("calendar.month_{:02}", self.shown.month());
+        format!("{} {}", t!(&key), self.shown.year())
     }
 
     /// Day grid for the displayed month (today highlighted only if it is the
@@ -248,5 +260,30 @@ mod tests {
         assert_eq!(after.month(), start.month());
         cal.reset();
         assert_eq!(cal.shown_month(), start);
+    }
+
+    #[test]
+    fn title_uses_the_translated_month_name() {
+        // T566 regression: `title()` used to hardcode `strftime("%B %Y")`,
+        // which is always English. Navigate to a known month (January) so
+        // the exact string is predictable regardless of when this test
+        // runs, then check it under a few different locales.
+        //
+        // The active locale is process-global; no other test in this crate
+        // asserts on translated text, so this set/assert/restore is safe
+        // from racing anything else in the same test binary.
+        let mut cal = Calendar::new();
+        while cal.shown_month().month() != 1 {
+            cal.next_month();
+        }
+        let year = cal.shown_month().year();
+
+        rust_i18n::set_locale("en");
+        assert_eq!(cal.title(), format!("January {year}"));
+        rust_i18n::set_locale("de");
+        assert_eq!(cal.title(), format!("Januar {year}"));
+        rust_i18n::set_locale("ja");
+        assert_eq!(cal.title(), format!("1月 {year}"));
+        rust_i18n::set_locale("en");
     }
 }
