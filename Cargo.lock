@@ -5840,8 +5840,10 @@ dependencies = [
 name = "vix-file-information-panel"
 version = "1.6.0"
 dependencies = [
+ "rust-i18n",
  "vix-byte-size",
  "vix-civil-date",
+ "vix-i18n",
  "vix-list-state",
 ]
 
@@ -6178,8 +6180,10 @@ version = "1.6.0"
 name = "vix-system-information-panel"
 version = "1.6.0"
 dependencies = [
+ "rust-i18n",
  "sysinfo",
  "vix-byte-size",
+ "vix-i18n",
  "vix-list-state",
 ]
 
@@ -6216,6 +6220,10 @@ version = "1.6.0"
 [[package]]
 name = "vix-text-information-panel"
 version = "1.6.0"
+dependencies = [
+ "rust-i18n",
+ "vix-i18n",
+]
 
 [[package]]
 name = "vix-textops"

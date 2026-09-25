@@ -8,6 +8,8 @@ repository.workspace = true
 description = "Information about the active editor file, plus the panel's row-selection state."
 
 [dependencies]
+rust-i18n = { workspace = true }
 vix-byte-size = { path = "../vix-byte-size", version = "1.6.0" }
 vix-civil-date = { path = "../vix-civil-date", version = "1.6.0" }
+vix-i18n = { path = "../vix-i18n", version = "1.6.0" }
 vix-list-state = { path = "../vix-list-state", version = "1.6.0" }

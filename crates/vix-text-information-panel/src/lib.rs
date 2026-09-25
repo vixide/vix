@@ -18,6 +18,14 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+// Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
+// translation lookup fns at this crate root (see the vix_i18n crate). T563:
+// this crate originally called `t!` zero times -- every row label was
+// hardcoded English, shown in the real Tools -> About -> Text... panel.
+#[macro_use]
+extern crate vix_i18n;
+vix_i18n::surface!();
+
 /// Computed statistics for a span of text.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Stats {
@@ -98,11 +106,11 @@ pub fn rows(stats: &Stats) -> Vec<Row> {
         value: n.to_string(),
     };
     vec![
-        row("Characters", stats.characters),
-        row("Words", stats.words),
-        row("Lines", stats.lines),
-        row("Sentences", stats.sentences),
-        row("Paragraphs", stats.paragraphs),
+        row(&t!("info.characters"), stats.characters),
+        row(&t!("info.words"), stats.words),
+        row(&t!("info.lines"), stats.lines),
+        row(&t!("info.sentences"), stats.sentences),
+        row(&t!("info.paragraphs"), stats.paragraphs),
     ]
 }
 
@@ -208,7 +216,10 @@ mod tests {
         let s = analyze("a b c");
         let mut p = Panel::open(&s);
         assert_eq!(p.len(), 5);
-        assert_eq!(p.rows[1].label, "Words");
+        // Never assert on translated text directly (the active locale is
+        // process-global and races other tests) -- compare against the same
+        // t! call the code under test made.
+        assert_eq!(p.rows[1].label, t!("info.words").to_string());
         assert_eq!(p.selected_value(), "5"); // Characters row: "a b c" = 5 chars
         p.down();
         assert_eq!(p.selected_value(), "3"); // Words = 3

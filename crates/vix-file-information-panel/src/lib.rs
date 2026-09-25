@@ -11,6 +11,14 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+// Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
+// translation lookup fns at this crate root (see the vix_i18n crate). T563:
+// this crate originally called `t!` zero times -- every row label was
+// hardcoded English, shown in the real Tools -> File Information panel.
+#[macro_use]
+extern crate vix_i18n;
+vix_i18n::surface!();
+
 /// Raw facts the host gathers about the active file.
 #[derive(Clone, Debug, Default)]
 pub struct FileInfo {
@@ -57,50 +65,56 @@ impl Row {
 /// Build the display rows for `info`.
 #[must_use]
 pub fn rows(info: &FileInfo) -> Vec<Row> {
+    let unsaved = t!("info.unsaved").to_string();
     let mut rows = vec![
         Row::new(
-            "Name",
+            &t!("info.name"),
             if info.name.is_empty() {
-                "(unsaved)".into()
+                unsaved.clone()
             } else {
                 info.name.clone()
             },
         ),
         Row::new(
-            "Path",
+            &t!("info.path"),
             if info.path.is_empty() {
-                "(unsaved)".into()
+                unsaved
             } else {
                 info.path.clone()
             },
         ),
-        Row::new("Language", info.language.clone()),
+        Row::new(&t!("info.language"), info.language.clone()),
         Row::new(
-            "Modified",
+            &t!("info.modified"),
             if info.dirty {
-                "yes (unsaved changes)"
+                t!("info.modified_yes").to_string()
             } else {
-                "no"
+                t!("info.modified_no").to_string()
             },
         ),
-        Row::new("Characters", info.chars.to_string()),
-        Row::new("Words", info.words.to_string()),
-        Row::new("Lines", info.lines.to_string()),
+        Row::new(&t!("info.characters"), info.chars.to_string()),
+        Row::new(&t!("info.words"), info.words.to_string()),
+        Row::new(&t!("info.lines"), info.lines.to_string()),
     ];
     if let Some(bytes) = info.bytes {
         rows.push(Row::new(
-            "Size",
-            format!("{} ({bytes} bytes)", human_bytes(bytes)),
+            &t!("info.size"),
+            t!("info.size_value", human = human_bytes(bytes), bytes = bytes).to_string(),
         ));
     }
     if let Some(mode) = info.mode {
         rows.push(Row::new(
-            "Permissions",
-            format!("{} ({:o})", format_unix_mode(mode), mode & 0o7777),
+            &t!("info.permissions"),
+            t!(
+                "info.permissions_value",
+                formatted = format_unix_mode(mode),
+                octal = format!("{:o}", mode & 0o7777)
+            )
+            .to_string(),
         ));
     }
     if let Some(secs) = info.modified_secs {
-        rows.push(Row::new("Last modified", format_unix_time(secs)));
+        rows.push(Row::new(&t!("info.last_modified"), format_unix_time(secs)));
     }
     rows
 }
@@ -262,18 +276,26 @@ mod tests {
             dirty: true,
         };
         let r = rows(&info);
-        assert!(r.iter().any(|x| x.label == "Characters" && x.value == "10"));
+        // Never assert on translated text directly (the active locale is
+        // process-global and races other tests) -- compare against the same
+        // t! calls the code under test made.
+        let characters = t!("info.characters").to_string();
+        let permissions = t!("info.permissions").to_string();
+        let size = t!("info.size").to_string();
+        let modified = t!("info.modified").to_string();
+        let modified_yes_prefix = t!("info.modified_yes").to_string();
+        assert!(r.iter().any(|x| x.label == characters && x.value == "10"));
         assert!(
             r.iter()
-                .any(|x| x.label == "Permissions" && x.value.starts_with("rw-r--r--"))
+                .any(|x| x.label == permissions && x.value.starts_with("rw-r--r--"))
         );
         assert!(
             r.iter()
-                .any(|x| x.label == "Size" && x.value.contains("2.0 KiB"))
+                .any(|x| x.label == size && x.value.contains("2.0 KiB"))
         );
         assert!(
             r.iter()
-                .any(|x| x.label == "Modified" && x.value.starts_with("yes"))
+                .any(|x| x.label == modified && x.value.starts_with(&modified_yes_prefix))
         );
     }
 
@@ -285,12 +307,13 @@ mod tests {
             ..Default::default()
         };
         let r = rows(&info);
-        assert!(
-            r.iter()
-                .any(|x| x.label == "Name" && x.value == "(unsaved)")
-        );
-        assert!(!r.iter().any(|x| x.label == "Size"));
-        assert!(!r.iter().any(|x| x.label == "Permissions"));
+        let name = t!("info.name").to_string();
+        let unsaved = t!("info.unsaved").to_string();
+        let size = t!("info.size").to_string();
+        let permissions = t!("info.permissions").to_string();
+        assert!(r.iter().any(|x| x.label == name && x.value == unsaved));
+        assert!(!r.iter().any(|x| x.label == size));
+        assert!(!r.iter().any(|x| x.label == permissions));
     }
 
     #[test]
