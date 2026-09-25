@@ -5492,6 +5492,8 @@ name = "vix-calendar-panel"
 version = "1.6.0"
 dependencies = [
  "jiff",
+ "rust-i18n",
+ "vix-i18n",
 ]
 
 [[package]]

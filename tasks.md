@@ -6369,7 +6369,7 @@ as every other task.
   rephrasing every counted string per affected locale into a
   count-invariant form — a large, cross-cutting, framework-level effort.
   Recorded honestly as such, not undertaken here.
-- [ ] **T566 — Calendar panel month/year heading is always English,
+- [x] **T566 — Calendar panel month/year heading is always English,
   never locale-aware.** `crates/vix-calendar-panel/src/lib.rs:176-180`'s
   `title()` uses `jiff`'s `strftime("%B %Y")`, and `%B` isn't
   locale-aware without the `jiff-icu` feature — confirmed via
@@ -6381,7 +6381,22 @@ as every other task.
   in the codebase to reuse. Fix: either enable `jiff-icu` and wire it to
   `settings.locale`, or hand-roll a small per-locale month-name table
   (15 locales × 12 names). Medium effort.
-- [ ] **T567 — Byte-size formatting always uses a `.` decimal separator
+  **Done 2026-09-25.** Hand-rolled the month-name table via the
+  standard `t!()`/`locales/*.yml` pipeline rather than `jiff-icu`
+  (keeps the crate's only dependency `jiff`, no new ICU4X data
+  dependency for 12 words × 15 locales). Wired `vix-calendar-panel`
+  with the same `vix_i18n::surface!()` pattern as T561/T563. New
+  `locales/calendar.yml` (`_version: 2`) with `calendar.month_01`..
+  `calendar.month_12`. `title()` now builds the key at runtime
+  (`format!("calendar.month_{:02}", self.shown.month())`) and passes
+  it to `t!(&key)` — precedent for a runtime (non-literal) `t!` key
+  already existed elsewhere in the codebase (`src/app.rs`, `examples/
+  list_commands.rs`). New permanent regression test
+  (`title_uses_the_translated_month_name`) navigates to a known month
+  (January) and checks the exact translated string under `en`/`de`/
+  `ja` — a deliberate, restored-afterward `rust_i18n::set_locale` call,
+  safe since no other test in this crate asserts on translated text.
+- [x] **T567 — Byte-size formatting always uses a `.` decimal separator
   regardless of locale.** `crates/vix-byte-size/src/lib.rs:33` —
   `format!("{value:.1} {}", UNITS[unit])` uses Rust's default
   locale-invariant float formatting; `settings.locale` is never
@@ -6390,7 +6405,19 @@ as every other task.
   convention expects `"16,0 KiB"`. Used by both the file-information and
   system-information panels (T563's own gap — worth fixing together).
   Small-medium effort, low severity.
-- [ ] **T568 — Find/Replace's "Alt C case / Alt R regex" hint is
+  **Done 2026-09-25.** Added `human_bytes_for_locale(n, locale)` (kept
+  `human_bytes` as the plain locale-invariant formatter both functions
+  build on, rather than changing its signature and breaking every
+  existing caller/test) — swaps `.` for `,` for `de`/`es`/`fr`/`pl`/
+  `pt`/`ru` (real, verified convention for each, not guessed at for the
+  rest — `ar`/`hi`/`bn`/`zh`/`ja`/the Celtic locales keep `.`). Updated
+  all 3 real call sites that produce user-facing output (`vix-file-
+  information-panel`'s and `vix-system-information-panel`'s own
+  `human_bytes` wrappers, and `src/app.rs`'s workspace-dashboard disk
+  size) to pass `rust_i18n::locale()` through; the dashboard's call runs
+  on a spawned background thread, so the locale is read on the main
+  thread first and moved in, not read from the worker thread.
+- [x] **T568 — Find/Replace's "Alt C case / Alt R regex" hint is
   hardcoded English, inconsistent with the sibling DB-workbench hint
   right next to it.** `src/ui/search.rs:493-497` — `format!("Alt C case:
   {}   Alt R regex: {}", …)` never wrapped in `t!()`; pre-existing since
@@ -6399,6 +6426,17 @@ as every other task.
   one file over (`src/ui/db.rs:69`, `t!("ui.db_connections_hint")`). A
   non-English user doing Find/Replace sees this one hint in English
   while everything else around it is translated. Trivial effort.
+  **Done 2026-09-25.** New `ui.search_case_regex_hint` key (`"Alt C
+  case: %{case}   Alt R regex: %{regex}"`, keeping the `Alt C`/`Alt R`
+  chord names literal — matching the established convention of never
+  translating key-chord names, e.g. `ui.db_hint`); the on/off state
+  words reuse the existing `ui.db_toggle_on`/`ui.db_toggle_off` keys
+  rather than adding a duplicate pair, and the "case"/"regex" label
+  words reuse the same wording already translated for `ui.toggle_case`/
+  `ui.toggle_regex` (stripped of their own `(Alt C)`/`(Alt R)`
+  suffix). Extracted the change into a small `search_case_regex_hint`
+  helper function — inlining it left `draw_prompt` over Clippy's
+  `too_many_lines` limit.
 
 ---
 

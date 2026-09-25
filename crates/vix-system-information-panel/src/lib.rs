@@ -143,13 +143,14 @@ impl Panel {
     }
 }
 
-/// Format a byte count as a human-readable size (`16.0 GiB`).
+/// Format a byte count as a human-readable size (`16.0 GiB`), using the
+/// active locale's decimal-separator convention (T567).
 ///
 /// Delegates to `vix-byte-size` (Run H, T521) — this crate and
 /// `vix-file-information-panel` used to each hand-roll an identical copy.
 #[must_use]
 pub fn human_bytes(n: u64) -> String {
-    vix_byte_size::human_bytes(n)
+    vix_byte_size::human_bytes_for_locale(n, &rust_i18n::locale())
 }
 
 /// Format a duration in seconds as `Dd Hh Mm`.

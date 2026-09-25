@@ -394,6 +394,24 @@ fn draw_prompt_preview(frame: &mut Frame, inner: Rect, text: &str, preview_rows:
     rows[2]
 }
 
+/// The "Alt C case: on   Alt R regex: on" hint shown under the workspace
+/// search prompt's toggles (T568).
+fn search_case_regex_hint(case_sensitive: bool, regex: bool) -> String {
+    let on = |b: bool| {
+        if b {
+            t!("ui.db_toggle_on")
+        } else {
+            t!("ui.db_toggle_off")
+        }
+    };
+    t!(
+        "ui.search_case_regex_hint",
+        case = on(case_sensitive),
+        regex = on(regex)
+    )
+    .to_string()
+}
+
 pub(super) fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
     let Some(p) = app.prompt.as_ref() else { return };
     // The workspace→dock search prompt shows case/regex toggles on a second line.
@@ -490,12 +508,7 @@ pub(super) fn draw_prompt(app: &App, frame: &mut Frame, area: Rect) {
             .constraints([Constraint::Length(1), Constraint::Length(1)])
             .split(inner);
         frame.render_widget(Paragraph::new(input), rows[0]);
-        let on = |b: bool| if b { "on" } else { "off" };
-        let hint = format!(
-            "Alt C case: {}   Alt R regex: {}",
-            on(p.case_sensitive),
-            on(p.regex)
-        );
+        let hint = search_case_regex_hint(p.case_sensitive, p.regex);
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(hint, theme::dim()))),
             rows[1],
