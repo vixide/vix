@@ -6285,7 +6285,7 @@ as every other task.
   trailing backslash at all, and a backslash that isn't at the very
   end (confirming only the *trailing* run matters, not any backslash
   anywhere in the string).
-- [ ] **T563 — The `*-information-panel` crate family (System/File/Text
+- [x] **T563 — The `*-information-panel` crate family (System/File/Text
   Information) is 100% untranslated.** `crates/vix-system-information-
   panel/src/lib.rs:178-220`, `crates/vix-file-information-panel/src/
   lib.rs:63-103`, `crates/vix-text-information-panel/src/lib.rs:101-105`
@@ -6300,6 +6300,34 @@ as every other task.
   across all 15 locales (~20 short labels total). Medium effort
   (mechanical but real volume), medium-high severity (three whole
   panels, not an edge case).
+  **Done 2026-09-25.** All three crates gained the same
+  `#[macro_use] extern crate vix_i18n; vix_i18n::surface!();` wiring
+  used for T561's `vix-doctor` fix, and every hardcoded row-label
+  string literal was replaced with `t!("info.<key>", …)`. New shared
+  `locales/info.yml` (starting with the critical `_version: 2` marker
+  — the exact T561 lesson: a namespace file without it gets treated as
+  content for a fake locale named after the filename, and every key
+  silently fails to resolve) with 45 keys across all 15 locales,
+  covering all three crates' vocabulary (system facts, file facts, and
+  the shared characters/words/lines counts the text-info panel also
+  uses). `vix-system-information-panel::gather()` had grown past
+  Clippy's `too_many_lines` limit once the label calls were spelled
+  out as `t!(...)` instead of string literals — split into three
+  section helpers (`os_and_cpu_rows`, `memory_and_storage_rows`,
+  `uptime_and_environment_rows`) rather than silencing the lint.
+  Fixed 4 existing unit tests across the three crates that had
+  asserted literal English label text (`"Logical cores"`,
+  `"Characters"`/`"Permissions"`/`"Size"`/`"Modified"`, `"Name"`/
+  `"(unsaved)"`, `"Words"`) — same T561 pattern: compare against the
+  same `t!(...)` call the code under test made, not a hardcoded
+  string, since the active locale is process-global and races other
+  tests. Verified the locale file actually resolves (not vacuously
+  true) via a temporary debug-probe test asserting `t!("info.
+  characters")` under both `en` and `ja` locales before removing it —
+  confirmed real translated output (`文字数`/`単語数`), not the raw key
+  string T561 hit on the first attempt. Full local gate
+  (`scripts/check`: fmt/build/clippy pedantic/full workspace test
+  suite/headless examples/doc/check-docs) green.
 - [ ] **T564 — No bidi/RTL text support anywhere in the render path,
   affecting the `ar` (Arabic) locale.** `crates/vix-locale-model/src/
   lib.rs`'s `Locale` struct has no direction flag; nothing in

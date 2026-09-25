@@ -8,6 +8,8 @@ repository.workspace = true
 description = "A read-only snapshot of host system information, plus the panel's selection."
 
 [dependencies]
+rust-i18n = { workspace = true }
 sysinfo = { workspace = true }
 vix-byte-size = { path = "../vix-byte-size", version = "1.6.0" }
+vix-i18n = { path = "../vix-i18n", version = "1.6.0" }
 vix-list-state = { path = "../vix-list-state", version = "1.6.0" }

@@ -8,6 +8,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **The System/File/Text Information panels (Tools menu) are now
+  localized** (self-audit, T563): all three panel crates called `t!()`
+  zero times — every row label (`Operating System`, `Total RAM`,
+  `Characters`, `Size`, `Last modified`, …) was a hardcoded English
+  string regardless of the active locale. New `locales/info.yml`
+  translates all 45 labels across all 15 locales.
 - **DB workbench and AI-provider "remember this" credentials now persist
   on Windows too** (found by a codebase self-audit, T548): the OS-keyring
   backend was already implemented for macOS/Linux, but the `keyring`
