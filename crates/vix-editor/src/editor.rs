@@ -1519,7 +1519,7 @@ mod nav_tests {
         // "foo  bar_baz qux" — words at 0, 5, 13 (underscore stays in one word).
         assert_eq!(word_starts("foo  bar_baz qux"), vec![0, 5, 13]);
         assert_eq!(word_starts("   leading"), vec![3]);
-        assert!(word_starts("...").is_empty());
+        assert_eq!(word_starts("..."), [] as [usize; 0]);
     }
 
     #[test]

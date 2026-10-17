@@ -253,7 +253,7 @@ mod tests {
         // process-global and races other tests in the same binary) -- the
         // status plus a non-empty, real detail is what this test actually
         // cares about.
-        assert!(!checks[0].detail.is_empty());
+        assert_ne!(checks[0].detail, "");
     }
 
     #[test]

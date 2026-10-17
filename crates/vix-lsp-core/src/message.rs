@@ -1267,7 +1267,10 @@ mod tests {
             parse_semantic_tokens_legend(&result),
             vec!["variable".to_string(), "function".to_string()]
         );
-        assert!(parse_semantic_tokens_legend(&json!({})).is_empty());
+        assert_eq!(
+            parse_semantic_tokens_legend(&json!({})),
+            [] as [std::string::String; 0]
+        );
     }
 
     #[test]
@@ -1317,8 +1320,14 @@ mod tests {
         let legend = vec!["variable".to_string()];
         // Type index 5 doesn't exist in a 1-element legend -- skipped.
         let result = json!({"data": [0, 0, 3, 5, 0]});
-        assert!(parse_semantic_tokens(&result, &legend).is_empty());
-        assert!(parse_semantic_tokens(&json!({}), &legend).is_empty());
+        assert_eq!(
+            parse_semantic_tokens(&result, &legend),
+            [] as [SemanticToken; 0]
+        );
+        assert_eq!(
+            parse_semantic_tokens(&json!({}), &legend),
+            [] as [SemanticToken; 0]
+        );
     }
 
     #[test]
@@ -1423,7 +1432,10 @@ mod tests {
         assert_eq!(edits.len(), 2);
         assert_eq!(edits[0].1, "let");
         assert_eq!(edits[1].0.start.line, 2);
-        assert!(parse_text_edits(&Value::Null).is_empty());
+        assert_eq!(
+            parse_text_edits(&Value::Null),
+            [] as [(Range, std::string::String); 0]
+        );
     }
 
     #[test]
@@ -1494,7 +1506,10 @@ mod tests {
             "paddingLeft adds a space"
         );
         assert_eq!(hints[1], (2, 1, "name:".to_string()), "label parts joined");
-        assert!(parse_inlay_hints(&Value::Null).is_empty());
+        assert_eq!(
+            parse_inlay_hints(&Value::Null),
+            [] as [(u32, u32, std::string::String); 0]
+        );
     }
 
     #[test]
@@ -1505,7 +1520,7 @@ mod tests {
             {"startLine": 9, "endLine": 12}
         ]));
         assert_eq!(fr, vec![(0, 4), (9, 12)], "single-line range dropped");
-        assert!(parse_folding_ranges(&Value::Null).is_empty());
+        assert_eq!(parse_folding_ranges(&Value::Null), [] as [(u32, u32); 0]);
     }
 
     #[test]
@@ -1539,7 +1554,7 @@ mod tests {
         }));
         assert_eq!(ranges.len(), 2);
         assert_eq!(ranges[1].start.line, 5);
-        assert!(parse_linked_editing_ranges(&json!({})).is_empty());
+        assert_eq!(parse_linked_editing_ranges(&json!({})), [] as [Range; 0]);
     }
 
     #[test]
@@ -1550,7 +1565,7 @@ mod tests {
         ]));
         assert_eq!(hs.len(), 2);
         assert_eq!(hs[1].start.line, 3);
-        assert!(parse_document_highlights(&Value::Null).is_empty());
+        assert_eq!(parse_document_highlights(&Value::Null), [] as [Range; 0]);
     }
 
     #[test]
@@ -1563,7 +1578,7 @@ mod tests {
         assert_eq!(ranges.len(), 3, "innermost, middle, outermost");
         assert_eq!(ranges[0].start.character, 4);
         assert_eq!(ranges[2].end.line, 5);
-        assert!(parse_selection_ranges(&Value::Null).is_empty());
+        assert_eq!(parse_selection_ranges(&Value::Null), [] as [Range; 0]);
     }
 
     #[test]
@@ -1579,7 +1594,16 @@ mod tests {
         assert_eq!(actions[0].0, "Import Foo");
         assert_eq!(actions[0].1.len(), 1, "first action has an edit");
         assert!(actions[1].1.is_empty(), "command-only action has no edit");
-        assert!(parse_code_actions(&Value::Null).is_empty());
+        assert_eq!(
+            parse_code_actions(&Value::Null),
+            [] as [(
+                std::string::String,
+                std::vec::Vec<(
+                    std::string::String,
+                    std::vec::Vec<(Range, std::string::String)>
+                )>
+            ); 0]
+        );
     }
 
     #[test]
@@ -1600,7 +1624,13 @@ mod tests {
         }));
         assert_eq!(by_doc.len(), 1);
         assert_eq!(by_doc[0].0, "file:///b.rs");
-        assert!(parse_workspace_edit(&json!({})).is_empty());
+        assert_eq!(
+            parse_workspace_edit(&json!({})),
+            [] as [(
+                std::string::String,
+                std::vec::Vec<(Range, std::string::String)>
+            ); 0]
+        );
     }
 
     #[test]

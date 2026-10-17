@@ -94,6 +94,6 @@ mod tests {
 
     #[test]
     fn empty_justfile_is_empty() {
-        assert!(discover_just_recipes("").is_empty());
+        assert_eq!(discover_just_recipes(""), []);
     }
 }

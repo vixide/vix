@@ -267,6 +267,6 @@ mod tests {
         g.filter = "x".into();
         g.set(vec!["a".into()], vec![]);
         assert_eq!((g.sel, g.col_off), (0, 0));
-        assert!(g.filter.is_empty());
+        assert_eq!(g.filter, "");
     }
 }

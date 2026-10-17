@@ -564,7 +564,7 @@ mod tests {
     #[test]
     fn connect_failure_is_reported() {
         let err = Session::connect("sqlite:/definitely/missing/dir/x.db", &[]).unwrap_err();
-        assert!(!err.is_empty());
+        assert_ne!(err, "");
     }
 
     #[test]

@@ -267,7 +267,7 @@ mod tests {
 
     #[test]
     fn shortcuts_for_an_unbound_action_is_empty() {
-        assert!(shortcuts_for("no.such.action").is_empty());
+        assert_eq!(shortcuts_for("no.such.action"), []);
     }
 
     #[test]

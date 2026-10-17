@@ -208,6 +208,6 @@ mod tests {
         assert_eq!(p.selected, 0);
         p.page_down(100);
         assert_eq!(p.selected, last);
-        assert!(!p.selected_value().is_empty());
+        assert_ne!(p.selected_value(), "");
     }
 }

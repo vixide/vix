@@ -161,7 +161,7 @@ fn structural_replace_with_no_matches_reports_status_and_opens_no_session() {
     type_pattern_and_replacement(&mut app, "add($X, $Y)", "sum($X, $Y)");
 
     assert!(app.structural_replace.is_none());
-    assert!(!app.status.is_empty());
+    assert_ne!(app.status, "");
 }
 
 #[test]
@@ -242,7 +242,7 @@ fn structural_replace_workspace_with_no_matches_reports_status() {
     app.on_key(keycode(KeyCode::Enter));
 
     assert!(app.replace_confirm.is_none());
-    assert!(!app.status.is_empty());
+    assert_ne!(app.status, "");
 
     fs::remove_dir_all(&dir).ok();
 }

@@ -753,7 +753,10 @@ mod tests {
         assert_eq!(hit.len(), 1);
         assert_eq!(hit[0].headline, "Meeting");
         // All words must appear in the entry body.
-        assert!(search(&files, "budget lunch").is_empty());
+        assert_eq!(
+            search(&files, "budget lunch"),
+            [] as [agenda::AgendaItem; 0]
+        );
         assert!(search(&files, "").is_empty(), "empty query matches nothing");
     }
 

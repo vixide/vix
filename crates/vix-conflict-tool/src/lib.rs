@@ -250,7 +250,7 @@ mod tests {
 
     #[test]
     fn find_all_is_empty_with_no_conflicts() {
-        assert!(find_all("plain\ntext\n").is_empty());
+        assert_eq!(find_all("plain\ntext\n"), [] as [Conflict; 0]);
     }
 
     #[test]

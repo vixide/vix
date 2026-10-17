@@ -283,8 +283,11 @@ mod tests {
 
     #[test]
     fn detects_zero_types_for_empty_dir() {
-        assert!(detect_project_types(&[]).is_empty());
-        assert!(detect_project_types(&["README.md"]).is_empty());
+        assert_eq!(detect_project_types(&[]), Vec::<&ProjectType>::new());
+        assert_eq!(
+            detect_project_types(&["README.md"]),
+            Vec::<&ProjectType>::new()
+        );
     }
 
     #[test]
@@ -322,7 +325,10 @@ mod tests {
 
     #[test]
     fn plain_pyproject_toml_alone_is_unclassified_without_content() {
-        assert!(detect_project_types(&["pyproject.toml"]).is_empty());
+        assert_eq!(
+            detect_project_types(&["pyproject.toml"]),
+            Vec::<&ProjectType>::new()
+        );
     }
 
     #[test]
@@ -350,7 +356,7 @@ mod tests {
         let dir = ["pyproject.toml"];
         let contents = [("pyproject.toml", "[build-system]\nrequires = []\n")];
         let types = detect_project_types_with_content(&dir, &contents);
-        assert!(types.is_empty());
+        assert_eq!(types, Vec::<&ProjectType>::new());
     }
 
     #[test]

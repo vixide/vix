@@ -352,7 +352,7 @@ mod tests {
 
     #[test]
     fn empty_input_is_empty() {
-        assert!(render("").is_empty());
+        assert_eq!(render(""), [] as [std::string::String; 0]);
     }
 
     #[test]

@@ -90,7 +90,7 @@ mod tests {
 
     #[test]
     fn identical_texts_have_no_diff() {
-        assert!(build("a\nb\n", "a\nb\n").is_empty());
+        assert_eq!(build("a\nb\n", "a\nb\n"), [] as [Line; 0]);
     }
 
     #[test]

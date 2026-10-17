@@ -47,13 +47,13 @@ mod tests {
 
     #[test]
     fn malformed_or_missing_tasks_is_empty() {
-        assert!(discover_taskfile_tasks("tasks: [1, 2").is_empty());
-        assert!(discover_taskfile_tasks("version: '3'\n").is_empty());
-        assert!(discover_taskfile_tasks("tasks: not-a-mapping\n").is_empty());
+        assert_eq!(discover_taskfile_tasks("tasks: [1, 2"), []);
+        assert_eq!(discover_taskfile_tasks("version: '3'\n"), []);
+        assert_eq!(discover_taskfile_tasks("tasks: not-a-mapping\n"), []);
     }
 
     #[test]
     fn empty_input_is_empty() {
-        assert!(discover_taskfile_tasks("").is_empty());
+        assert_eq!(discover_taskfile_tasks(""), []);
     }
 }

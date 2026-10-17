@@ -210,7 +210,7 @@ mod tests {
 
     #[test]
     fn empty_or_bad_toml_is_empty() {
-        assert!(parse("").is_empty());
-        assert!(parse("not = valid = toml").is_empty());
+        assert_eq!(parse(""), []);
+        assert_eq!(parse("not = valid = toml"), []);
     }
 }

@@ -169,7 +169,7 @@ mod tests {
     fn missing_fields_default_to_empty() {
         let ws = Workspace::from_toml("folders = [\"/x\"]\n").unwrap();
         assert_eq!(ws.folders, vec!["/x".to_string()]);
-        assert!(ws.files.is_empty());
+        assert_eq!(ws.files, [] as [std::string::String; 0]);
     }
 
     #[test]

@@ -226,8 +226,8 @@ mod tests {
     fn every_format_renders_and_has_a_label() {
         let (h, r) = rows();
         for f in FORMATS {
-            assert!(!render(*f, &h, &refs(&r), "t").is_empty());
-            assert!(!f.label().is_empty());
+            assert_ne!(render(*f, &h, &refs(&r), "t"), "");
+            assert_ne!(f.label(), "");
         }
     }
 }

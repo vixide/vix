@@ -212,7 +212,7 @@ mod tests {
     fn resolve_skips_an_empty_password_command() {
         // No password_command and (very likely) no keyring entry for this name.
         let c = conn("vix-test-nonexistent-xyz");
-        assert!(c.password_command.is_empty());
+        assert_eq!(c.password_command, "");
         // resolve may hit the keyring CLI but must not find this bogus account.
         assert_eq!(resolve(&c), None);
     }

@@ -233,7 +233,7 @@ mod tests {
         let InvokeOutcome::Error { message, state } = outcome else {
             panic!("expected Error")
         };
-        assert!(!message.is_empty());
+        assert_ne!(message, "");
         assert!(state.buffer_text_written);
         assert_eq!(state.buffer_text, "partial");
     }
@@ -300,7 +300,7 @@ mod tests {
             .load("broken", "this is not valid rhai (((")
             .unwrap_err();
         assert_eq!(err.stem, "broken");
-        assert!(!err.message.is_empty());
+        assert_ne!(err.message, "");
     }
 
     /// `load_all` isolates a broken script from the rest of the batch — one

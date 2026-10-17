@@ -77,8 +77,8 @@ mod tests {
 
     #[test]
     fn malformed_or_missing_tasks_is_empty() {
-        assert!(discover_deno_tasks("not json").is_empty());
-        assert!(discover_deno_tasks("{}").is_empty());
-        assert!(discover_deno_tasks(r#"{"tasks": "oops"}"#).is_empty());
+        assert_eq!(discover_deno_tasks("not json"), []);
+        assert_eq!(discover_deno_tasks("{}"), []);
+        assert_eq!(discover_deno_tasks(r#"{"tasks": "oops"}"#), []);
     }
 }

@@ -1006,7 +1006,7 @@ mod tests {
     #[test]
     fn parse_log_ignores_a_truncated_record() {
         let output = format!("abc123{LOG_FIELD_SEP}abc{LOG_FIELD_SEP}only three fields");
-        assert!(parse_log(&output).is_empty());
+        assert_eq!(parse_log(&output), [] as [LogEntry; 0]);
     }
 
     #[test]
@@ -1090,7 +1090,7 @@ mod tests {
 
     #[test]
     fn hunks_identical_text_is_empty() {
-        assert!(hunks("x\ny\n", "x\ny\n").is_empty());
+        assert_eq!(hunks("x\ny\n", "x\ny\n"), [] as [Hunk; 0]);
     }
 
     #[test]
@@ -1127,7 +1127,7 @@ mod tests {
 
     #[test]
     fn parse_status_skips_blank_and_short_lines() {
-        assert!(parse_status("\n\nx\n").is_empty());
+        assert_eq!(parse_status("\n\nx\n"), [] as [FileStatus; 0]);
     }
 
     #[test]
@@ -1159,7 +1159,7 @@ mod tests {
 
     #[test]
     fn diff_marks_empty_when_identical() {
-        assert!(diff_marks("x\ny\n", "x\ny\n").is_empty());
+        assert_eq!(diff_marks("x\ny\n", "x\ny\n"), [] as [(usize, LineMark); 0]);
     }
 
     #[test]

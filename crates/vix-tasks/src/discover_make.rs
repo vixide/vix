@@ -91,6 +91,6 @@ mod tests {
 
     #[test]
     fn empty_makefile_is_empty() {
-        assert!(discover_make_targets("").is_empty());
+        assert_eq!(discover_make_targets(""), []);
     }
 }

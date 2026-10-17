@@ -179,13 +179,13 @@ mod tests {
     fn parse_handles_escaped_dollar_and_plain_text() {
         let p = parse("cost is \\$5");
         assert_eq!(p.text, "cost is $5");
-        assert!(p.stops.is_empty());
+        assert_eq!(p.stops, [] as [Stop; 0]);
     }
 
     #[test]
     fn parse_plain_snippet_has_no_stops() {
         let p = parse("plain text\n");
         assert_eq!(p.text, "plain text\n");
-        assert!(p.stops.is_empty());
+        assert_eq!(p.stops, [] as [Stop; 0]);
     }
 }

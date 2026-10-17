@@ -236,7 +236,7 @@ fn open_recent_records_dedups_and_reopens() {
     fs::write(dir.join("a.txt"), "aaa").unwrap();
     fs::write(dir.join("b.txt"), "bbb").unwrap();
     let mut app = app_at(&dir);
-    assert!(app.settings.recent_files.is_empty());
+    assert_eq!(app.settings.recent_files, [] as [std::string::String; 0]);
 
     app.open_initial(&dir.join("a.txt"));
     app.open_initial(&dir.join("b.txt"));
@@ -314,7 +314,7 @@ fn goto_workspace_symbol_finds_symbols_across_files_and_jumps() {
 #[test]
 fn open_recent_empty_shows_status_only() {
     let mut app = app_at(Path::new("."));
-    assert!(app.settings.recent_files.is_empty());
+    assert_eq!(app.settings.recent_files, [] as [std::string::String; 0]);
     app.run_action("file.open_recent");
     assert!(
         app.recent_chooser.is_none(),

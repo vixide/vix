@@ -67,7 +67,7 @@ mod tests {
 
     #[test]
     fn headers_are_empty_without_a_key_and_bearer_with_one() {
-        assert!(headers("").is_empty());
+        assert_eq!(headers(""), [] as [(&str, std::string::String); 0]);
         assert_eq!(
             headers("tok"),
             vec![("Authorization", "Bearer tok".to_string())]

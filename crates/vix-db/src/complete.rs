@@ -219,7 +219,10 @@ mod tests {
             engine().suggest("SELECT nosuch.", 14).items.is_empty(),
             "unknown table"
         );
-        assert!(engine().suggest("", 0).items.is_empty());
+        assert_eq!(
+            engine().suggest("", 0).items,
+            [] as [std::string::String; 0]
+        );
     }
 
     #[test]

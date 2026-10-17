@@ -625,7 +625,10 @@ mod tests {
 
     #[test]
     fn no_match_yields_an_empty_list() {
-        assert!(m("nonexistent($X)", "totally unrelated code here").is_empty());
+        assert_eq!(
+            m("nonexistent($X)", "totally unrelated code here"),
+            [] as [Match; 0]
+        );
     }
 
     #[test]

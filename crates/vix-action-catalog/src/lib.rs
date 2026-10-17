@@ -864,8 +864,8 @@ mod tests {
     #[test]
     fn every_entry_has_a_non_empty_id_and_title() {
         for a in CATALOG {
-            assert!(!a.id.is_empty());
-            assert!(!a.title.is_empty());
+            assert_ne!(a.id, "");
+            assert_ne!(a.title, "");
         }
     }
 

@@ -93,7 +93,7 @@ mod tests {
     #[test]
     fn project_root_marker_is_not_a_subproject() {
         let files = ["Cargo.toml", "package.json"];
-        assert!(find_subprojects(&files).is_empty());
+        assert_eq!(find_subprojects(&files), []);
     }
 
     #[test]

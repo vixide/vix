@@ -54,8 +54,8 @@ mod tests {
 
     #[test]
     fn malformed_or_missing_scripts_is_empty() {
-        assert!(discover_composer_scripts("not json").is_empty());
-        assert!(discover_composer_scripts("{}").is_empty());
-        assert!(discover_composer_scripts(r#"{"scripts": {"bad": 1}}"#).is_empty());
+        assert_eq!(discover_composer_scripts("not json"), []);
+        assert_eq!(discover_composer_scripts("{}"), []);
+        assert_eq!(discover_composer_scripts(r#"{"scripts": {"bad": 1}}"#), []);
     }
 }

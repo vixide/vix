@@ -86,9 +86,15 @@ mod tests {
 
     #[test]
     fn malformed_or_missing_scripts_is_empty_not_panicking() {
-        assert!(discover_npm_scripts("not json", PackageManager::Npm).is_empty());
-        assert!(discover_npm_scripts("{}", PackageManager::Npm).is_empty());
-        assert!(discover_npm_scripts(r#"{"scripts": "oops"}"#, PackageManager::Npm).is_empty());
-        assert!(discover_npm_scripts(r#"{"scripts": {"x": 1}}"#, PackageManager::Npm).is_empty());
+        assert_eq!(discover_npm_scripts("not json", PackageManager::Npm), []);
+        assert_eq!(discover_npm_scripts("{}", PackageManager::Npm), []);
+        assert_eq!(
+            discover_npm_scripts(r#"{"scripts": "oops"}"#, PackageManager::Npm),
+            []
+        );
+        assert_eq!(
+            discover_npm_scripts(r#"{"scripts": {"x": 1}}"#, PackageManager::Npm),
+            []
+        );
     }
 }

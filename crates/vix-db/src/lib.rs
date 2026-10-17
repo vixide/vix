@@ -903,7 +903,7 @@ mod tests {
         );
         assert_eq!(b.view, View::Saved);
         b.handle_key(key(KeyCode::Char('d')), Pages::default());
-        assert!(b.saved.queries.is_empty());
+        assert_eq!(b.saved.queries, [] as [store::SavedQuery; 0]);
     }
 
     #[test]
@@ -1033,7 +1033,7 @@ mod tests {
             View::Workbench,
             "Esc clears the search, not the workbench"
         );
-        assert!(b.tree.filter.is_empty());
+        assert_eq!(b.tree.filter, "");
     }
 
     #[test]

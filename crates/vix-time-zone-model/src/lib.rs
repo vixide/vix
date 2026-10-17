@@ -127,7 +127,7 @@ mod tests {
 
     #[test]
     fn table_is_sorted_and_has_utc() {
-        assert!(!ZONES.is_empty());
+        assert_ne!(ZONES, []);
         assert!(index_of("UTC").is_some());
         assert!(index_of("America/New_York").is_some());
         let sorted = ZONES.windows(2).all(|w| w[0].name <= w[1].name);

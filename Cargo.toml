@@ -42,11 +42,11 @@ regex = "1"
 keyring = { version = "3", features = ["apple-native", "windows-native"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-ratatui-image = { version = "11.0.6", default-features = false, features = ["image-defaults", "crossterm"] }
+ratatui-image = { version = "11.1.0", default-features = false, features = ["image-defaults", "crossterm"] }
 image = "0.25"
 confy = "2.0.0"
-clap = { version = "4.6.6", features = ["derive"] }
-rust-i18n = "4.2.1"
+clap = { version = "4.6.7", features = ["derive"] }
+rust-i18n = "4.2.4"
 base64 = "0.23"
 # Held at 11.x deliberately: evalexpr 12.0.0 relicensed from MIT to
 # AGPL-3.0-only, which is incompatible with the license Vix offers. Do not

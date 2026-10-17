@@ -144,7 +144,7 @@ mod tests {
     fn a_lone_request_is_accepted() {
         let resolved = resolve(vec![user("C-S-k", "edit.duplicate_line")], "emacs");
         assert_eq!(resolved.accepted.len(), 1);
-        assert!(resolved.conflicts.is_empty());
+        assert_eq!(resolved.conflicts, []);
     }
 
     #[test]
@@ -160,7 +160,7 @@ mod tests {
             ],
             "emacs",
         );
-        assert!(resolved.accepted.is_empty());
+        assert_eq!(resolved.accepted, []);
         assert_eq!(resolved.conflicts.len(), 1);
         assert_eq!(resolved.conflicts[0].key_token, "C-S-k");
         assert_eq!(
@@ -176,7 +176,7 @@ mod tests {
             "emacs",
         );
         assert_eq!(resolved.accepted.len(), 2);
-        assert!(resolved.conflicts.is_empty());
+        assert_eq!(resolved.conflicts, []);
     }
 
     #[test]
@@ -194,7 +194,7 @@ mod tests {
     fn an_override_of_an_unbound_token_is_not_a_shadow() {
         let resolved = resolve(vec![user("C-does-not-exist", "some.action")], "emacs");
         assert_eq!(resolved.accepted.len(), 1);
-        assert!(resolved.shadows.is_empty());
+        assert_eq!(resolved.shadows, []);
     }
 
     #[test]
@@ -206,8 +206,8 @@ mod tests {
             vec![user("C-s", "a.action"), user("C-s", "b.action")],
             "emacs",
         );
-        assert!(resolved.accepted.is_empty());
-        assert!(resolved.shadows.is_empty());
+        assert_eq!(resolved.accepted, []);
+        assert_eq!(resolved.shadows, []);
         assert_eq!(resolved.conflicts.len(), 1);
     }
 

@@ -181,6 +181,9 @@ test result: FAILED. 1 passed; 1 failed; 1 ignored;
 
     #[test]
     fn empty_output_has_no_results() {
-        assert!(parse("compiling...\nwarning: unused\n").is_empty());
+        assert_eq!(
+            parse("compiling...\nwarning: unused\n"),
+            [] as [TestResult; 0]
+        );
     }
 }

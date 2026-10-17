@@ -450,7 +450,7 @@ mod tests {
         let s: Session = toml::from_str(old_toml).expect("old file still parses");
         let ws = s.workspace("/legacy").expect("workspace present");
         assert_eq!(ws.project_cmd_compile, None);
-        assert!(ws.project_history_compile.is_empty());
+        assert_eq!(ws.project_history_compile, [] as [std::string::String; 0]);
         assert_eq!(ws.project_last_command, None);
     }
 

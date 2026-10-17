@@ -57,7 +57,7 @@ mod tests {
     fn cap_of_zero_never_retains_anything() {
         let mut stack = Vec::new();
         push_capped(&mut stack, "x", 0);
-        assert!(stack.is_empty());
+        assert_eq!(stack, [] as [&str; 0]);
     }
 
     #[test]

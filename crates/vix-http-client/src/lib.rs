@@ -182,8 +182,11 @@ mod tests {
         let req = parse_request("# fetch it\nhttps://e.com/y\n").unwrap();
         assert_eq!(req.method, "GET");
         assert_eq!(req.url, "https://e.com/y");
-        assert!(req.headers.is_empty());
-        assert!(req.body.is_empty());
+        assert_eq!(
+            req.headers,
+            [] as [(std::string::String, std::string::String); 0]
+        );
+        assert_eq!(req.body, "");
     }
 
     #[test]

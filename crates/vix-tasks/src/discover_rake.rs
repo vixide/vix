@@ -141,7 +141,7 @@ mod tests {
     #[test]
     fn skips_interpolated_task_names() {
         let rakefile = "task \"release_#{ver}\" do\nend\n";
-        assert!(discover_rake_tasks(&[("Rakefile", rakefile)], false).is_empty());
+        assert_eq!(discover_rake_tasks(&[("Rakefile", rakefile)], false), []);
     }
 
     #[test]

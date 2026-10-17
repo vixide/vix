@@ -107,7 +107,7 @@ mod tests {
             std::process::id()
         ));
         let _ = std::fs::remove_file(&path);
-        assert!(load(&path).is_empty());
+        assert_eq!(load(&path), []);
     }
 
     #[test]
@@ -193,7 +193,7 @@ mod tests {
             std::process::id()
         ));
         std::fs::write(&path, "not valid toml {{{").unwrap();
-        assert!(load(&path).is_empty());
+        assert_eq!(load(&path), []);
         std::fs::remove_file(&path).ok();
     }
 }
