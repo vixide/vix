@@ -28,6 +28,35 @@ use crate::editor::SEARCH_MARK;
 use crate::workspace_search::{Flags as WorkspaceFlags, Hit, WorkspaceSearch};
 
 impl App {
+    /// Dispatch a `run.*` debugger action. Returns `true` if `action` was handled.
+    pub(super) fn run_dap_action(&mut self, action: &str) -> bool {
+        match action {
+            "run.start" => self.start_debugger(),
+            "run.stop" => self.stop_debugger(),
+            "run.toggle_breakpoint" => self.toggle_breakpoint(),
+            "run.continue" => self.dap.continue_(),
+            "run.step_over" => self.dap.step_over(),
+            "run.step_into" => self.dap.step_into(),
+            "run.step_out" => self.dap.step_out(),
+            "run.pause" => self.dap.pause(),
+            "run.panel" => self.visible.toggle(crate::app::Visible::DEBUG_PANEL),
+            "run.repl" => {
+                self.prompt = Some(Prompt::new(
+                    PromptKind::DebugRepl,
+                    t!("prompt.debug_repl").to_string(),
+                ));
+            }
+            "run.watch" => {
+                self.prompt = Some(Prompt::new(
+                    PromptKind::DebugWatch,
+                    t!("prompt.debug_watch").to_string(),
+                ));
+            }
+            _ => return false,
+        }
+        true
+    }
+
     /// Request inlay hints for the whole document `path` (when display is on).
     fn request_inlay_hints(&mut self, path: &Path) {
         if !self.visible.contains(crate::app::Visible::INLAY_HINTS) || !self.lsp.handles(path) {

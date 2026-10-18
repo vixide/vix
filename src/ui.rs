@@ -3,7 +3,7 @@
 
 #![warn(clippy::pedantic)]
 
-mod ai_terminal;
+mod ai;
 mod bottom_dock;
 mod boxes;
 mod choosers;
@@ -24,9 +24,10 @@ mod picker_panels;
 mod search;
 mod status_bar;
 mod tabs;
+mod terminal;
 mod tool_panels;
 
-use ai_terminal::{draw_ai_diff, draw_ai_panel, draw_terminal};
+use ai::{draw_ai_diff, draw_ai_panel};
 use bottom_dock::draw_bottom_dock;
 use boxes::{draw_calendar, draw_clock, draw_dashboard};
 use choosers::{
@@ -66,6 +67,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 use search::{draw_palette, draw_prompt, draw_search, draw_workspace_search};
 use status_bar::draw_status_bar;
 use tabs::{center_split, draw_breadcrumb, draw_tabs};
+use terminal::draw_terminal;
 use tool_panels::{
     draw_calculator, draw_color_converter, draw_dialog, draw_pomodoro, draw_regex_tester,
     draw_unit_converter, draw_welcome,
