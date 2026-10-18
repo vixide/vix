@@ -3,7 +3,9 @@
 
 #![warn(clippy::pedantic)]
 
-use super::{AiDest, AiReplace, App, KeyEvent, Level};
+#[cfg(feature = "ai")]
+use super::{AiDest, AiReplace};
+use super::{App, KeyEvent, Level};
 
 impl App {
     /// Dispatch a `db.*` action (the DB menu / palette). Returns `true` if
@@ -108,8 +110,16 @@ impl App {
                 t!("msg.db_data_save_failed", error = e).to_string(),
             );
         }
-        // A queued natural-language → SQL request: spawn the assistant CLI and
-        // route its reply back into the workbench editor.
+        self.db_run_ai_request();
+        if outcome == crate::db::Outcome::Close {
+            self.db = None;
+        }
+    }
+
+    /// Run a queued natural-language → SQL request: spawn the assistant CLI and
+    /// route its reply back into the workbench editor.
+    #[cfg(feature = "ai")]
+    fn db_run_ai_request(&mut self) {
         if let Some(req) = self
             .db
             .as_mut()
@@ -130,8 +140,15 @@ impl App {
                 b.ai_failed();
             }
         }
-        if outcome == crate::db::Outcome::Close {
-            self.db = None;
+    }
+
+    /// Without the `ai` capability a queued request just fails in the workbench.
+    #[cfg(not(feature = "ai"))]
+    fn db_run_ai_request(&mut self) {
+        if let Some(b) = self.db.as_mut()
+            && b.take_ai_request().is_some()
+        {
+            b.ai_failed();
         }
     }
 

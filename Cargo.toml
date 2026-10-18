@@ -158,8 +158,8 @@ sql = ["dep:vix-db", "dep:vix-edit-sql"]
 image = ["dep:image", "dep:ratatui-image", "vix-editor/image"]
 script = ["dep:vix-script"]
 terminal = ["dep:vix-terminal", "dep:vt100"]
-http = []
-ai = []
+http = ["dep:vix-http-client"]
+ai = ["dep:vix-ai-core", "dep:vix-ai-diff", "dep:vix-ai-panel"]
 git = []
 jj = []
 # Every capability. `default` enables it; tests that assume the whole product
@@ -258,11 +258,11 @@ vix-action-catalog = { path = "crates/vix-action-catalog", version = "1.6.0" }
 vix-affix = { path = "crates/vix-affix", version = "1.6.0" }
 # Direct HTTP clients for AI providers (Anthropic, OpenAI-compatible, Ollama)
 # plus keyring-backed API-key resolution.
-vix-ai-core = { path = "crates/vix-ai-core", version = "1.6.0" }
+vix-ai-core = { path = "crates/vix-ai-core", version = "1.6.0", optional = true }
 # Reviewable diff for AI text transforms (Annotate / Improve).
-vix-ai-diff = { path = "crates/vix-ai-diff", version = "1.6.0" }
+vix-ai-diff = { path = "crates/vix-ai-diff", version = "1.6.0", optional = true }
 # AI chat panel: a persistent conversation surface for the configured assistant.
-vix-ai-panel = { path = "crates/vix-ai-panel", version = "1.6.0" }
+vix-ai-panel = { path = "crates/vix-ai-panel", version = "1.6.0", optional = true }
 # Align lines on a delimiter (`=`, `:`, `,`, `|`, …).
 vix-align = { path = "crates/vix-align", version = "1.6.0" }
 # ASCII panel (Tools menu): the ASCII reference table + row-selection state.
@@ -350,7 +350,7 @@ vix-hex-rgb = { path = "crates/vix-hex-rgb", version = "1.6.0" }
 # HTML Characters panel (Tools menu): named-character table + picker state.
 vix-html-character-picker = { path = "crates/vix-html-character-picker", version = "1.6.0" }
 # A minimal HTTP client driven by a `.http`-style buffer.
-vix-http-client = { path = "crates/vix-http-client", version = "1.6.0" }
+vix-http-client = { path = "crates/vix-http-client", version = "1.6.0", optional = true }
 # Decode a JSON Web Token's header and payload into readable JSON.
 vix-jwt-tool = { path = "crates/vix-jwt-tool", version = "1.6.0" }
 # Data and table state for the keybinding editor overlay (rebind/reset).

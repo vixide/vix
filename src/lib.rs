@@ -101,8 +101,23 @@ pub mod ui;
 pub use crate::calendar_panel as calendar;
 pub use vix_action_catalog as action_catalog;
 pub use vix_affix as affix;
+#[cfg(feature = "ai")]
 pub use vix_ai_diff as ai_diff;
+#[cfg(feature = "ai")]
 pub use vix_ai_panel as ai_panel;
+/// Stand-ins for the AI diff review and chat panel in a build without the `ai`
+/// feature: uninhabited, so the `App` fields that hold them stay `None`.
+#[cfg(not(feature = "ai"))]
+pub mod ai_diff {
+    /// The (absent) AI diff review; uninhabited.
+    pub enum Review {}
+}
+/// See [`ai_diff`].
+#[cfg(not(feature = "ai"))]
+pub mod ai_panel {
+    /// The (absent) AI chat panel; uninhabited.
+    pub enum Panel {}
+}
 pub use vix_align as align;
 pub use vix_ascii_character_picker as ascii_character_picker;
 pub use vix_base_tool as base_tool;
@@ -163,6 +178,7 @@ pub use vix_file_information_panel as file_information_panel;
 pub use vix_find_panel as find_panel;
 pub use vix_git as git;
 pub use vix_html_character_picker as html_character_picker;
+#[cfg(feature = "http")]
 pub use vix_http_client as http_client;
 pub use vix_keybindings as keybindings;
 pub use vix_keyboard_shortcut_panel as keyboard_shortcut_panel;

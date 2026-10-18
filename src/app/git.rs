@@ -12,9 +12,11 @@ use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 
+#[cfg(feature = "ai")]
+use super::{AiDest, AiReplace};
 use super::{
-    AiDest, AiReplace, App, AppFlags, BranchChooser, Confirm, ConfirmKind, DiffViewState, GitPanel,
-    Prompt, PromptKind, gutter_hex, rect_contains,
+    App, AppFlags, BranchChooser, Confirm, ConfirmKind, DiffViewState, GitPanel, Prompt,
+    PromptKind, gutter_hex, rect_contains,
 };
 use crate::editor::Tab;
 
@@ -660,6 +662,7 @@ impl App {
             KeyCode::Char('s' | 'S') => self.git_stage_selected(true),
             KeyCode::Char('u' | 'U') => self.git_stage_selected(false),
             KeyCode::Char('c' | 'C') => self.git_begin_commit(),
+            #[cfg(feature = "ai")]
             KeyCode::Char('g' | 'G') => self.git_generate_commit_message(),
             KeyCode::Char('r' | 'R') => {
                 self.refresh_git();
@@ -784,6 +787,7 @@ impl App {
     /// once it arrives (`AiDest::GitCommitMessage` in `poll_ai_replace`) --
     /// this only fills the message box, it never commits on its own; the
     /// user still reviews the text and presses Enter (or Esc to discard).
+    #[cfg(feature = "ai")]
     fn git_generate_commit_message(&mut self) {
         if self.ai_replace.is_some() {
             self.status = t!("status.ai_busy").to_string();
