@@ -1353,6 +1353,9 @@ const TOOLS_LSP: &[Item] = &[
     ),
     SEP,
     Item::leaf("menu.item.lsp.diagnostics", "lsp.diagnostics", ""),
+    SEP,
+    Item::leaf("menu.item.lsp.restart", "lsp.restart", ""),
+    Item::leaf("menu.item.lsp.show_log", "lsp.show_log", ""),
 ];
 
 const AI: &[Item] = &[

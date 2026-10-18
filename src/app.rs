@@ -3202,6 +3202,8 @@ impl App {
                 }
             }
             "lsp.hover" => self.lsp_hover(),
+            "lsp.restart" => self.lsp_restart(),
+            "lsp.show_log" => self.lsp_show_log(),
             "lsp.complete" => self.lsp_complete(),
             "lsp.diagnostics" => self.open_diagnostics_panel(),
             "tools.todo_finder" => self.open_todo_finder(),

@@ -17,11 +17,13 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::fmt::Write as _;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use serde_json::{Value, json};
@@ -177,6 +179,24 @@ pub enum RenamePrepared {
     NotRenameable,
 }
 
+/// Most stderr lines kept per language (T576).
+const LOG_LINES: usize = 2_000;
+
+/// A server's recent stderr, shared with its reader thread. Kept per
+/// language on [`Lsp`], so it survives a restart.
+type LogBuf = Arc<Mutex<VecDeque<String>>>;
+
+/// Append `line` to `log`, dropping the oldest past [`LOG_LINES`].
+fn log_push(log: &LogBuf, line: String) {
+    let mut q = log
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if q.len() >= LOG_LINES {
+        q.pop_front();
+    }
+    q.push_back(line);
+}
+
 /// One running language server.
 struct Server {
     child: Child,
@@ -266,6 +286,8 @@ pub struct Lsp {
     /// exist) would otherwise reach `ready` every time and keep resetting
     /// its own budget, never actually hitting the cap.
     restart_attempts: HashMap<String, u32>,
+    /// Recent stderr per language id (T576), shared with reader threads.
+    logs: HashMap<String, LogBuf>,
 }
 
 /// How many times [`Lsp::poll`] auto-respawns a crashed server, consecutively
@@ -291,7 +313,70 @@ impl Lsp {
             folders: folders.to_vec(),
             diagnostics: HashMap::new(),
             restart_attempts: HashMap::new(),
+            logs: HashMap::new(),
         }
+    }
+
+    /// The (created on demand) stderr log for `lang`.
+    fn log_for(&mut self, lang: &str) -> LogBuf {
+        self.logs.entry(lang.to_string()).or_default().clone()
+    }
+
+    /// The recent stderr of every server configured for `path`, each under a
+    /// `== language (command) ==` heading (T576). Empty when none is
+    /// configured; a configured server that printed nothing shows just its
+    /// heading.
+    #[must_use]
+    pub fn server_log(&self, path: &Path) -> String {
+        let mut out = String::new();
+        for config in self.configs_for(path) {
+            let _ = writeln!(
+                out,
+                "== {} ({}) ==",
+                config.language_id,
+                config.command.join(" ")
+            );
+            if let Some(log) = self.logs.get(&config.language_id) {
+                let q = log
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                for line in q.iter() {
+                    out.push_str(line);
+                    out.push('\n');
+                }
+            }
+        }
+        out
+    }
+
+    /// Restart every server configured for `path` (T576): shut it down, drop
+    /// the diagnostics it published, reset its crash budget and spawn a fresh
+    /// one. Returns the files that were open on the old servers, so the host
+    /// can replay `didOpen` with their real content (as for a crash respawn
+    /// — see [`LspEvent::ServerRestarted`]).
+    pub fn restart(&mut self, path: &Path) -> Vec<PathBuf> {
+        let mut reopen = Vec::new();
+        for config in self.configs_for(path) {
+            let lang = config.language_id.clone();
+            if let Some(mut server) = self.servers.remove(&lang) {
+                reopen.extend(server.docs.keys().map(|uri| uri_to_path(uri)));
+                server.write_now(&message::request(server.next_id, "shutdown", &Value::Null));
+                server.write_now(&message::notification("exit", &Value::Null));
+                let _ = server.child.kill();
+                let _ = server.child.wait();
+            }
+            let log = self.log_for(&lang);
+            log_push(&log, "--- restarted ---".to_string());
+            for per_lang in self.diagnostics.values_mut() {
+                per_lang.remove(&lang);
+            }
+            self.diagnostics.retain(|_, m| !m.is_empty());
+            self.restart_attempts.remove(&lang);
+            let _ = self.ensure_server(&config);
+        }
+        reopen.sort();
+        reopen.dedup();
+        reopen
     }
 
     /// Every open workspace folder as `(uri, name)` pairs, in order, for
@@ -435,7 +520,8 @@ impl Lsp {
     /// not be spawned.
     fn ensure_server(&mut self, config: &ServerConfig) -> Option<&mut Server> {
         if !self.servers.contains_key(&config.language_id) {
-            let server = spawn(config, &self.folder_pairs())?;
+            let log = self.log_for(&config.language_id);
+            let server = spawn(config, &self.folder_pairs(), &log)?;
             self.servers.insert(config.language_id.clone(), server);
         }
         self.servers.get_mut(&config.language_id)
@@ -1030,7 +1116,8 @@ impl Lsp {
         let Some(config) = self.configs.iter().find(|c| c.language_id == lang).cloned() else {
             return;
         };
-        let Some(new_server) = spawn(&config, &self.folder_pairs()) else {
+        let log = self.log_for(lang);
+        let Some(new_server) = spawn(&config, &self.folder_pairs(), &log) else {
             events.push(LspEvent::ServerCrashed(lang.to_string()));
             return;
         };
@@ -1413,17 +1500,20 @@ impl Lsp {
 }
 
 /// Spawn a server process and its stdout reader thread.
-fn spawn(config: &ServerConfig, folders: &[(String, String)]) -> Option<Server> {
+fn spawn(config: &ServerConfig, folders: &[(String, String)], log: &LogBuf) -> Option<Server> {
     let (program, args) = config.command.split_first()?;
     let mut child = Command::new(program)
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .ok()?;
     let stdin = child.stdin.take()?;
     let stdout = child.stdout.take()?;
+    if let Some(stderr) = child.stderr.take() {
+        spawn_stderr_reader(stderr, log.clone());
+    }
     let (tx, rx) = channel();
     spawn_reader(stdout, tx);
     let (wtx, wrx) = channel::<Vec<u8>>();
@@ -1459,6 +1549,20 @@ fn folder_name(path: &Path) -> String {
         || path.to_string_lossy().into_owned(),
         |n| n.to_string_lossy().into_owned(),
     )
+}
+
+/// Collect a server's stderr, line by line, into its bounded log (T576).
+/// Exits when the pipe closes (the server died).
+fn spawn_stderr_reader(stderr: std::process::ChildStderr, log: LogBuf) {
+    std::thread::spawn(move || {
+        use std::io::BufRead;
+        for line in std::io::BufReader::new(stderr)
+            .lines()
+            .map_while(Result::ok)
+        {
+            log_push(&log, line);
+        }
+    });
 }
 
 /// Drain framed messages off `wrx` and write them to the server's stdin. Runs
@@ -1726,5 +1830,56 @@ mod tests {
         );
         let _ = child.kill();
         let _ = child.wait();
+    }
+
+    #[test]
+    fn log_ring_is_bounded_and_server_log_has_a_heading() {
+        let log: LogBuf = LogBuf::default();
+        for i in 0..LOG_LINES + 5 {
+            log_push(&log, format!("l{i}"));
+        }
+        let q = log.lock().unwrap();
+        assert_eq!(q.len(), LOG_LINES);
+        assert_eq!(q.front().unwrap(), "l5");
+        drop(q);
+
+        let cfg = ServerConfig {
+            language_id: "rust".into(),
+            command: vec!["ra".into(), "--x".into()],
+            extensions: vec!["rs".into()],
+        };
+        let mut lsp = Lsp::new(true, vec![cfg], &[PathBuf::from("/")]);
+        lsp.logs.insert("rust".into(), log);
+        let text = lsp.server_log(Path::new("a.rs"));
+        assert!(text.starts_with("== rust (ra --x) ==\n"));
+        assert!(text.ends_with(&format!("l{}\n", LOG_LINES + 4)));
+        assert_eq!(lsp.server_log(Path::new("a.txt")), "");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn restart_respawns_the_server_and_captures_its_stderr() {
+        let cfg = ServerConfig {
+            language_id: "fake".into(),
+            command: vec!["sh".into(), "-c".into(), "echo booted >&2; sleep 5".into()],
+            extensions: vec!["fk".into()],
+        };
+        let mut lsp = Lsp::new(true, vec![cfg], &[PathBuf::from("/")]);
+        lsp.did_open(Path::new("/tmp/a.fk"), "x");
+        let reopen = lsp.restart(Path::new("/tmp/a.fk"));
+        assert_eq!(reopen, vec![PathBuf::from("/tmp/a.fk")]);
+        // The new server starts with no open documents.
+        assert!(lsp.servers["fake"].docs.is_empty());
+        let mut text = String::new();
+        for _ in 0..100 {
+            text = lsp.server_log(Path::new("/tmp/a.fk"));
+            if text.matches("booted").count() >= 2 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(text.contains("--- restarted ---"), "{text}");
+        assert!(text.matches("booted").count() >= 2, "{text}");
+        lsp.shutdown();
     }
 }

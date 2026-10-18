@@ -432,6 +432,42 @@ impl App {
         });
     }
 
+    /// Restart the language server(s) for the active file (T576): the host
+    /// replays `didOpen` for each file that was open on them on the next
+    /// sync tick.
+    pub(super) fn lsp_restart(&mut self) {
+        let Some(path) = self.active_path() else {
+            return;
+        };
+        if !self.lsp.handles(&path) {
+            self.status = t!("status.lsp_inactive").to_string();
+            return;
+        }
+        for reopened in self.lsp.restart(&path) {
+            self.lsp_synced.remove(&reopened);
+        }
+        self.refresh_diagnostic_marks();
+        self.status = t!("status.lsp_restarted").to_string();
+    }
+
+    /// Show the active file's language server stderr in a read-only tab
+    /// (T576).
+    pub(super) fn lsp_show_log(&mut self) {
+        let Some(path) = self.active_path() else {
+            return;
+        };
+        if !self.lsp.handles(&path) {
+            self.status = t!("status.lsp_inactive").to_string();
+            return;
+        }
+        let mut log = self.lsp.server_log(&path);
+        if log.lines().all(|l| l.starts_with("== ")) {
+            log.push_str(&t!("status.lsp_log_empty"));
+            log.push('\n');
+        }
+        self.open_readonly_text_tab(&t!("ui.lsp_log_title"), &log);
+    }
+
     /// Request hover info for the symbol under the cursor.
     pub(super) fn lsp_hover(&mut self) {
         let Some(path) = self.active_path() else {
