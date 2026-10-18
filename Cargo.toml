@@ -156,7 +156,7 @@ syntax-all = ["vix-editor-core/syntax-all"]
 # runtime filter in `src/capability.rs`; later tasks (T588+) attach crates.
 sql = ["dep:vix-db", "dep:vix-edit-sql"]
 image = ["dep:image", "dep:ratatui-image", "vix-editor/image"]
-script = []
+script = ["dep:vix-script"]
 terminal = []
 http = []
 ai = []
@@ -231,13 +231,9 @@ vix-lsp = { path = "crates/vix-lsp", version = "1.6.0" }
 # Top menu bar with keyboard-navigable dropdowns (one level of submenus).
 vix-menu = { path = "crates/vix-menu", version = "1.6.0" }
 # User `.rhai` scripting: load, sandbox, and run scripts against the active
-# buffer (see crates/vix-script/spec/index.md). A plain dependency, not an
-# optional Cargo feature — T101 originally gated it behind a `scripting`
-# feature (mirroring the `lang-*`/`syntax-*` binary-size levers), but once
-# T103 wired it into the App shell (startup load, palette, menu, prompt
-# system) it became just as "always compiled in" as any other core feature,
-# the same call T111 made for `vix-modal`.
-vix-script = { path = "crates/vix-script", version = "1.6.0" }
+# buffer (see crates/vix-script/spec/index.md). Optional behind the `script`
+# capability feature (T590; spec/cargo-features).
+vix-script = { path = "crates/vix-script", version = "1.6.0", optional = true }
 # Per-workspace editor session, persisted with `confy`.
 vix-session = { path = "crates/vix-session", version = "1.6.0" }
 # User settings, persisted with `confy`.

@@ -6,6 +6,8 @@
 //! `HostState` each handler produces, the same pattern `vix-script`'s own
 //! tests use.
 
+#![cfg(feature = "script")]
+
 use std::path::{Path, PathBuf};
 
 use vix_script::{HostState, InvokeOutcome, Runtime};

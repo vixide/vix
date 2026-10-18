@@ -159,6 +159,7 @@ pub(super) fn draw_task_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
         draw_list_chooser(frame, area, &t!("ui.tasks"), &hint, &labels, c.selected);
 }
 
+#[cfg(feature = "script")]
 pub(super) fn draw_script_chooser(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(c) = app.script_chooser.as_ref() else {
         return;

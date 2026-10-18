@@ -233,8 +233,7 @@ impl App {
                     }
                 }
                 scored.extend(self.script_palette_entries(&query));
-                let catalog_start = palette::COMMANDS.len()
-                    + self.scripts.iter().map(|s| s.commands.len()).sum::<usize>();
+                let catalog_start = palette::COMMANDS.len() + self.script_command_count();
                 scored.extend(self.catalog_palette_entries(&query, catalog_start));
                 scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
                 entries = scored.into_iter().map(|(_, _, e)| e).collect();

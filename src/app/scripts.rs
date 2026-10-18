@@ -20,6 +20,34 @@ use crate::palette::{self, Action as PAction, Entry};
 use crate::settings::Settings;
 
 impl App {
+    /// How many commands every loaded script registered, in total.
+    pub(super) fn script_command_count(&self) -> usize {
+        self.scripts.iter().map(|s| s.commands.len()).sum()
+    }
+
+    /// Every loaded script's `bind_key` requests, as key-binding overrides.
+    pub(super) fn script_key_requests(&self) -> Vec<vix_keybindings::Override> {
+        let mut requests = Vec::new();
+        for script in &self.scripts {
+            for binding in &script.bindings {
+                requests.push(vix_keybindings::Override {
+                    key_token: binding.key_token.clone(),
+                    action_id: format!("script:{}:{}", script.stem, binding.command_id),
+                    source: vix_keybindings::Source::Script(script.stem.clone()),
+                });
+            }
+        }
+        requests
+    }
+
+    /// The stem of the loaded script that bound `key_token`, if any.
+    pub(super) fn script_binding_stem(&self, key_token: &str) -> Option<String> {
+        self.scripts
+            .iter()
+            .find(|s| s.bindings.iter().any(|b| b.key_token == key_token))
+            .map(|s| s.stem.clone())
+    }
+
     /// (Re)load every `.rhai` script from the global scripts directory
     /// (`Settings::scripts_dir()`) — always trusted, the user put them there
     /// directly — and, only if this workspace's project scripts are trusted

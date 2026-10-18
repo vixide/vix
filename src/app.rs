@@ -21,7 +21,10 @@ mod org;
 mod org_table;
 mod picker_panels;
 mod roam;
+#[cfg(feature = "script")]
 mod scripts;
+#[cfg(not(feature = "script"))]
+mod scripts_off;
 mod session;
 mod structural_replace;
 mod terminal;
@@ -917,10 +920,16 @@ pub struct MacroChooser {
     pub selected: usize,
 }
 
+/// Stand-in for the script chooser in a build without the `script` feature;
+/// never constructed (`App::script_chooser` stays `None`).
+#[cfg(not(feature = "script"))]
+pub enum ScriptChooser {}
+
 /// The script-command chooser (Tools → Scripts → Run…): every command every
 /// loaded script registered, flattened, alongside the script's file stem
 /// (its identity, shown so two commands with the same label are still
 /// distinguishable). Choosing one runs it (`App::run_selected_script_command`).
+#[cfg(feature = "script")]
 pub struct ScriptChooser {
     /// `(script file stem, registered command)` pairs, across every loaded
     /// script, in load then registration order.
@@ -933,6 +942,7 @@ pub struct ScriptChooser {
 /// loaded script (`App::scripts` index) and which of its `fn`s to re-invoke
 /// with the entered text once `App::prompt` (`PromptKind::Script`) is
 /// submitted. Cleared on submit or cancel.
+#[cfg(feature = "script")]
 struct PendingScriptPrompt {
     /// Index into `App::scripts`.
     script_index: usize,
@@ -1723,10 +1733,12 @@ pub struct App {
     pub macro_chooser: Option<MacroChooser>,
     /// The Rhai scripting engine (`crates/vix-script`), built once at
     /// startup. Loading/reloading scripts rebuilds `scripts`, not this.
+    #[cfg(feature = "script")]
     script_runtime: vix_script::Runtime,
     /// Every currently-loaded script (`App::load_scripts`/`reload_scripts`),
     /// in discovery order (global scripts, then project scripts, sorted by
     /// file stem within each — see `vix_script::discover`).
+    #[cfg(feature = "script")]
     scripts: Vec<vix_script::LoadedScript>,
     /// Accepted key binding overrides — persisted (`keybindings.toml`,
     /// T104i) and every loaded script's `bind_key` requests (T104j) —
@@ -1739,6 +1751,7 @@ pub struct App {
     pub script_chooser: Option<ScriptChooser>,
     /// A script's `prompt(...)` request awaiting an answer, while
     /// `App::prompt` (`PromptKind::Script`) is open.
+    #[cfg(feature = "script")]
     pending_script_prompt: Option<PendingScriptPrompt>,
     /// Recent clipboard entries (copies/cuts), most-recent first, for the
     /// paste-from-history picker.
@@ -2293,10 +2306,13 @@ impl App {
             git_log: None,
             task_chooser: None,
             macro_chooser: None,
+            #[cfg(feature = "script")]
             script_runtime: vix_script::Runtime::new(),
+            #[cfg(feature = "script")]
             scripts: Vec::new(),
             key_overrides: std::collections::HashMap::new(),
             script_chooser: None,
+            #[cfg(feature = "script")]
             pending_script_prompt: None,
             clipboard_ring: Vec::new(),
             clipboard_chooser: None,
@@ -2669,6 +2685,7 @@ impl App {
                 self.set_locale_by_code(&a["view.locale:".len()..]);
             }
             a if a.starts_with("view.keymap:") => self.set_keymap(&a["view.keymap:".len()..]),
+            #[cfg(feature = "script")]
             a if a.starts_with("script:") => self.run_script_command(a),
             "tools.calendar" => {
                 self.visible.toggle(Visible::CALENDAR);
@@ -2715,7 +2732,9 @@ impl App {
             }
             "tools.cancel_command" => self.cancel_command(),
             "tools.tasks" => self.open_tasks(),
+            #[cfg(feature = "script")]
             "script.run" => self.open_script_chooser(),
+            #[cfg(feature = "script")]
             "script.reload" => self.reload_scripts(),
             "keybindings.reload" => self.reload_key_overrides(),
             "keybindings.editor" => self.open_keybinding_editor(),
@@ -5219,15 +5238,7 @@ impl App {
                 source: vix_keybindings::Source::User,
             })
             .collect();
-        for script in &self.scripts {
-            for binding in &script.bindings {
-                requests.push(vix_keybindings::Override {
-                    key_token: binding.key_token.clone(),
-                    action_id: format!("script:{}:{}", script.stem, binding.command_id),
-                    source: vix_keybindings::Source::Script(script.stem.clone()),
-                });
-            }
-        }
+        requests.extend(self.script_key_requests());
         self.apply_key_overrides(requests);
     }
 
@@ -5344,12 +5355,8 @@ impl App {
                     .or_else(|| vix_keybindings::lookup_shared(&key_token).map(str::to_string))?;
                 let source = if overridden_tokens.contains(key_token.as_str()) {
                     Source::User
-                } else if let Some(script) = self
-                    .scripts
-                    .iter()
-                    .find(|s| s.bindings.iter().any(|b| b.key_token == key_token))
-                {
-                    Source::Script(script.stem.clone())
+                } else if let Some(stem) = self.script_binding_stem(&key_token) {
+                    Source::Script(stem)
                 } else {
                     Source::BuiltIn
                 };
@@ -12166,7 +12173,10 @@ impl App {
         match key.code {
             KeyCode::Esc => {
                 self.prompt = None;
-                self.pending_script_prompt = None;
+                #[cfg(feature = "script")]
+                {
+                    self.pending_script_prompt = None;
+                }
                 self.pending_rebind_action_id = None;
             }
             // Alt+Enter inserts a newline in the multi-line git-commit prompt;
@@ -13188,6 +13198,7 @@ fn count_files(dir: &Path) -> u64 {
 /// The text of the line `ed`'s cursor is on — `vix-script`'s `current_line()`
 /// (§ API v1). `CodeEditor` has no such accessor directly, only the pieces
 /// (`code_ref`, `point`, `line_to_char`, `line_len`) to build one from.
+#[cfg(feature = "script")]
 fn script_current_line_text(ed: &crate::editor::CodeEditor) -> String {
     let code = ed.code_ref();
     let (row, _col) = code.point(ed.get_cursor());
