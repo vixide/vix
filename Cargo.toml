@@ -42,8 +42,10 @@ regex = "1"
 keyring = { version = "3", features = ["apple-native", "windows-native"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-ratatui-image = { version = "11.1.0", default-features = false, features = ["image-defaults", "crossterm"] }
-image = "0.25"
+ratatui-image = { version = "11.1.0", default-features = false, features = ["crossterm"] }
+# Display-only: just the decoders `is_image_path` accepts. Default features would
+# also compile an AV1 encoder (rav1e/ravif), exr, dds and rayon (T583).
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp", "ico", "tiff"] }
 confy = "2.0.0"
 clap = { version = "4.6.7", features = ["derive"] }
 rust-i18n = "4.2.4"
@@ -453,7 +455,7 @@ serde_json = { workspace = true }
 # Image preview. Default features pull `chafa-dyn`, which dynamically links the
 # native libchafa via pkg-config and so blocks portable cross-compilation; drop
 # it and keep the built-in protocols (Sixel/Kitty/iTerm2/Halfblocks).
-ratatui-image = { workspace = true }
+ratatui-image = { version = "11.1.0", default-features = false, features = ["crossterm"] }
 image = { workspace = true }
 confy = { workspace = true }
 clap = { workspace = true }
