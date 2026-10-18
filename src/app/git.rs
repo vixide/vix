@@ -1,15 +1,10 @@
 //! Version control: Git status/diff/staging/branches/log/blame and the
-//! Git panel, plus a sibling Jujutsu (`jj`) dispatcher for repos that use
-//! it instead.
+//! Git panel. The sibling Jujutsu dispatcher lives in `jj.rs`, and the `run.*`
+//! debugger actions in `lsp_dap.rs` (T585).
 //!
-//! Moved out of `app.rs` verbatim (T141, slice 2); unlike the keymap-
-//! dispatch slice, these methods were scattered across the file rather
-//! than one contiguous block, interleaved with the debugger, spellcheck,
-//! and context-menu code that stayed behind. `run_git_action` also
-//! dispatches the `run.*` debugger actions (a pre-existing quirk, not
-//! introduced by this move) -- those call back into `app.rs`'s own
-//! debugger methods, which is fine: an inherent `impl App` block can
-//! live in any module of the crate.
+//! Moved out of `app.rs` verbatim (T141, slice 2); these methods were scattered
+//! across the file rather than one contiguous block. An inherent `impl App`
+//! block can live in any module of the crate.
 
 #![warn(clippy::pedantic)]
 
@@ -100,27 +95,6 @@ impl App {
             }
             "git.blame" => self.git_blame_line(),
             "git.blame_inline" => self.toggle_inline_blame(),
-            "run.start" => self.start_debugger(),
-            "run.stop" => self.stop_debugger(),
-            "run.toggle_breakpoint" => self.toggle_breakpoint(),
-            "run.continue" => self.dap.continue_(),
-            "run.step_over" => self.dap.step_over(),
-            "run.step_into" => self.dap.step_into(),
-            "run.step_out" => self.dap.step_out(),
-            "run.pause" => self.dap.pause(),
-            "run.panel" => self.visible.toggle(crate::app::Visible::DEBUG_PANEL),
-            "run.repl" => {
-                self.prompt = Some(Prompt::new(
-                    PromptKind::DebugRepl,
-                    t!("prompt.debug_repl").to_string(),
-                ));
-            }
-            "run.watch" => {
-                self.prompt = Some(Prompt::new(
-                    PromptKind::DebugWatch,
-                    t!("prompt.debug_watch").to_string(),
-                ));
-            }
             "git.revert_hunk" => self.revert_hunk(),
             "git.stage_hunk" => self.stage_hunk(),
             "git.unstage_hunk" => self.unstage_hunk(),
@@ -136,189 +110,9 @@ impl App {
             "git.amend" => self.git_op(crate::git::commit_amend, "status.git_amended"),
             "git.diff_next" => self.diff_goto(true),
             "git.diff_prev" => self.diff_goto(false),
-            // Jujutsu (`jj.*`) is a sibling VCS dispatcher; chain to it here so
-            // `run_action` needs only the one Git delegation arm.
-            other => return self.run_jj_action(other),
-        }
-        true
-    }
-
-    /// Dispatch a Jujutsu (`jj.*`) version-control action, streaming command
-    /// output into the bottom dock. Returns `true` if `action` was handled.
-    /// Mirrors [`App::run_git_action`] for the jj VCS.
-    fn run_jj_action(&mut self, action: &str) -> bool {
-        match action {
-            "jj.init" => self.jj_init(),
-            "jj.clone" => self.jj_begin_clone(),
-            "jj.status" => self.jj_command("jj --no-pager status"),
-            "jj.diff" => self.jj_command("jj --no-pager diff"),
-            "jj.show" => self.jj_command("jj --no-pager show"),
-            "jj.log" => self.jj_command("jj --no-pager log"),
-            "jj.log_all" => self.jj_command("jj --no-pager log -r ::"),
-            "jj.op_log" => self.jj_command("jj --no-pager op log"),
-            "jj.new" => self.jj_command("jj new"),
-            "jj.describe" => self.jj_begin_prompt(PromptKind::JjDescribe, "prompt.jj_describe"),
-            "jj.commit" => self.jj_begin_prompt(PromptKind::JjCommit, "prompt.jj_commit"),
-            "jj.edit" => self.jj_begin_prompt(PromptKind::JjEdit, "prompt.jj_edit"),
-            "jj.squash" => self.jj_command("jj squash"),
-            "jj.abandon" => self.jj_command("jj abandon"),
-            "jj.restore" => self.jj_command("jj restore"),
-            "jj.rebase" => self.jj_begin_prompt(PromptKind::JjRebase, "prompt.jj_rebase"),
-            "jj.undo" => self.jj_command("jj undo"),
-            "jj.bookmark_create" => {
-                self.jj_begin_prompt(PromptKind::JjBookmarkCreate, "prompt.jj_bookmark_create");
-            }
-            "jj.bookmark_set" => {
-                self.jj_begin_prompt(PromptKind::JjBookmarkSet, "prompt.jj_bookmark_set");
-            }
-            "jj.bookmark_delete" => {
-                self.jj_begin_prompt(PromptKind::JjBookmarkDelete, "prompt.jj_bookmark_delete");
-            }
-            "jj.bookmark_list" => self.jj_command("jj --no-pager bookmark list"),
-            "jj.git_push" => self.jj_command("jj git push"),
-            "jj.git_fetch" => self.jj_command("jj git fetch"),
             _ => return false,
         }
         true
-    }
-
-    /// Whether the workspace root holds a Jujutsu repo (a `.jj` directory).
-    fn jj_is_repo(&self) -> bool {
-        self.root.join(".jj").exists()
-    }
-
-    /// Run a `jj` command in the workspace, streaming its output into the bottom
-    /// dock, but only when the workspace is a jj repo.
-    fn jj_command(&mut self, cmd: &str) {
-        if !self.jj_is_repo() {
-            self.status = t!("status.jj_not_repo").into();
-            return;
-        }
-        self.run_command(cmd);
-    }
-
-    /// Open a single-line prompt (of `kind`, titled by i18n key `title`) for a jj
-    /// command, but only when the workspace is a jj repo.
-    fn jj_begin_prompt(&mut self, kind: PromptKind, title: &str) {
-        if !self.jj_is_repo() {
-            self.status = t!("status.jj_not_repo").into();
-            return;
-        }
-        self.prompt = Some(Prompt::new(kind, t!(title).to_string()));
-    }
-
-    /// Initialize a Jujutsu repo in the workspace, refusing if one already exists.
-    /// Colocates with an existing Git repo (so both tools share the working copy)
-    /// when a `.git` is present; otherwise creates a plain jj-backed repo.
-    fn jj_init(&mut self) {
-        if self.jj_is_repo() {
-            self.status = t!("status.jj_already_init").into();
-            return;
-        }
-        let colocate = self.root.join(".git").exists() || crate::git::is_repo(&self.root);
-        self.run_command(if colocate {
-            "jj git init --colocate"
-        } else {
-            "jj git init"
-        });
-    }
-
-    /// Begin cloning a repository with jj: prompt for its URL (works outside a
-    /// repo too, so it is not guarded by [`App::jj_is_repo`]).
-    fn jj_begin_clone(&mut self) {
-        self.prompt = Some(Prompt::new(
-            PromptKind::JjClone,
-            // Same text as `prompt.git_clone` (Run H, T524: was a separate,
-            // identical-in-every-locale duplicate key).
-            t!("prompt.git_clone").to_string(),
-        ));
-    }
-
-    /// Clone `url` into the workspace with `jj git clone`.
-    fn jj_clone(&mut self, url: &str) {
-        let url = url.trim();
-        if url.is_empty() {
-            // Same text as `status.git_empty_url` (Run H, T524: was a
-            // separate, identical-in-every-locale duplicate key).
-            self.status = t!("status.git_empty_url").into();
-            return;
-        }
-        let Some(quoted) = Self::vcs_shell_arg(url, false) else {
-            self.status = t!("status.git_bad_argument").into();
-            return;
-        };
-        self.run_command(&format!("jj git clone -- {quoted}"));
-    }
-
-    /// Set the working-copy change description (`jj describe -m`).
-    fn jj_describe(&mut self, message: &str) {
-        self.jj_message_command("jj describe -m", message);
-    }
-
-    /// Describe the working-copy change and start a new one (`jj commit -m`).
-    fn jj_commit(&mut self, message: &str) {
-        self.jj_message_command("jj commit -m", message);
-    }
-
-    /// Run a `jj` command that takes a required `-m` message, rejecting an empty
-    /// one and shell-quoting it.
-    fn jj_message_command(&mut self, prefix: &str, message: &str) {
-        let message = message.trim();
-        if message.is_empty() {
-            self.status = t!("status.jj_empty_message").into();
-            return;
-        }
-        self.run_command(&format!("{prefix} {}", Self::shell_single_quote(message)));
-    }
-
-    /// Set the working-copy revision to `rev` (`jj edit`).
-    fn jj_edit(&mut self, rev: &str) {
-        let rev = rev.trim();
-        if rev.is_empty() {
-            self.status = t!("status.jj_empty_revision").into();
-            return;
-        }
-        self.run_command(&format!("jj edit {}", Self::shell_single_quote(rev)));
-    }
-
-    /// Rebase the working-copy change onto destination `dest` (`jj rebase -d`).
-    fn jj_rebase(&mut self, dest: &str) {
-        let dest = dest.trim();
-        if dest.is_empty() {
-            self.status = t!("status.jj_empty_revision").into();
-            return;
-        }
-        self.run_command(&format!("jj rebase -d {}", Self::shell_single_quote(dest)));
-    }
-
-    /// Run a `jj bookmark <sub> <name>` command, rejecting an empty name.
-    fn jj_bookmark(&mut self, sub: &str, name: &str) {
-        let name = name.trim();
-        if name.is_empty() {
-            self.status = t!("status.jj_empty_bookmark").into();
-            return;
-        }
-        self.run_command(&format!(
-            "jj bookmark {sub} {}",
-            Self::shell_single_quote(name)
-        ));
-    }
-
-    /// Handle a completed Jujutsu prompt: run the jj command for the entered
-    /// `input`. Grouped out of [`App::accept_prompt`] to keep it within the line
-    /// limit, mirroring [`App::accept_roam_prompt`].
-    pub(super) fn accept_jj_prompt(&mut self, kind: PromptKind, input: &str) {
-        match kind {
-            PromptKind::JjClone => self.jj_clone(input),
-            PromptKind::JjDescribe => self.jj_describe(input),
-            PromptKind::JjCommit => self.jj_commit(input),
-            PromptKind::JjEdit => self.jj_edit(input),
-            PromptKind::JjRebase => self.jj_rebase(input),
-            PromptKind::JjBookmarkCreate => self.jj_bookmark("create", input),
-            PromptKind::JjBookmarkSet => self.jj_bookmark("set", input),
-            PromptKind::JjBookmarkDelete => self.jj_bookmark("delete", input),
-            _ => {}
-        }
     }
 
     /// Refresh the cached git state (repo?, branch, changed files) for the workspace
