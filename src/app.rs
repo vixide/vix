@@ -43,7 +43,13 @@ use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKin
 use crossterm::event::KeyModifiers;
 use include_dir::{Dir, include_dir};
 use ratatui::layout::Rect;
-use ratatui_image::picker::Picker;
+#[cfg(feature = "image")]
+use ratatui_image::picker::Picker as ImagePicker;
+
+/// Stand-in for the terminal-graphics picker in a build without the `image`
+/// feature; never constructed, so `App::picker` stays `None`.
+#[cfg(not(feature = "image"))]
+pub enum ImagePicker {}
 use regex::Regex;
 
 use crate::editor::{Editor, SEARCH_MARK, SplitDir, Tab, is_image_path};
@@ -1916,7 +1922,7 @@ pub struct App {
     pub nav_idx: usize,
     /// Terminal image picker; `None` until set from a real terminal (so tests
     /// and headless use construct fine), and on terminals without graphics.
-    pub picker: Option<Picker>,
+    pub picker: Option<ImagePicker>,
     /// Persisted user settings.
     pub settings: Settings,
     /// Settings file this app persists to. `None` — the normal case — uses the
@@ -7755,6 +7761,7 @@ impl App {
         self.status = format!("{}:{}", loc.path.display(), loc.line);
     }
 
+    #[cfg(feature = "image")]
     fn open_image(&mut self, path: &Path) {
         let Some(picker) = self.picker.as_ref() else {
             self.messages.warn(t!("msg.image_needs_terminal"));
@@ -7771,6 +7778,14 @@ impl App {
                 .messages
                 .error(t!("msg.image_open_failed", error = e).to_string()),
         }
+    }
+
+    /// Without the `image` feature an image path can't open; say so rather than
+    /// loading the file as text.
+    #[cfg(not(feature = "image"))]
+    fn open_image(&mut self, _path: &Path) {
+        self.messages
+            .warn(t!("msg.capability_missing", name = "image").to_string());
     }
 
     // ----- mouse ----------------------------------------------------------
@@ -13086,6 +13101,7 @@ fn html_cell_at(e: &crate::html_character_picker::Entity, rel_col: usize) -> Str
 
 /// Decode an image file into a `DynamicImage` the picker can turn into a
 /// terminal protocol.
+#[cfg(feature = "image")]
 fn decode_image(path: &Path) -> Result<image::DynamicImage, String> {
     image::ImageReader::open(path)
         .map_err(|e| e.to_string())?
@@ -13228,6 +13244,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "image")]
     #[test]
     fn every_displayable_image_extension_has_a_compiled_in_decoder() {
         // T583 trimmed the `image` codecs to exactly what `is_image_path` accepts.
@@ -14743,11 +14760,12 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    #[cfg(feature = "image")]
     #[test]
     fn renders_image_tab_without_panic() {
         let mut app = App::new(std::env::temp_dir(), Settings::default());
         // Halfblocks renders into a plain cell buffer — no real terminal needed.
-        let picker = Picker::halfblocks();
+        let picker = ImagePicker::halfblocks();
         let img = image::DynamicImage::new_rgb8(8, 8);
         let proto = picker.new_resize_protocol(img);
         app.editor.open_image(Path::new("/tmp/vix-test.png"), proto);

@@ -7,11 +7,17 @@ license.workspace = true
 repository.workspace = true
 description = "Editor host: the `CodeEditor` widget wrapper and the pane tree."
 
+[features]
+default = ["image"]
+# Inline image tabs (a terminal-graphics protocol per tab). Without it `Tab::image`
+# is an uninhabited stand-in and `Tab::is_image` is always false.
+image = ["dep:ratatui-image"]
+
 [dependencies]
 bitflags = { workspace = true }
 ratatui = { workspace = true }
 ratatui-core = { workspace = true }
-ratatui-image = { workspace = true }
+ratatui-image = { workspace = true, optional = true }
 vix-editor-core = { path = "../vix-editor-core", version = "1.6.0", default-features = false }
 vix-fileops = { path = "../vix-fileops", version = "1.6.0" }
 vix-textops = { path = "../vix-textops", version = "1.6.0" }

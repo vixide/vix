@@ -18,7 +18,7 @@ no payoff and the heaviest coupling.
 | Feature | Owns action ids | Crates it will gate (T588+) |
 | --- | --- | --- |
 | `sql` | `db.*`, `tools.edit_sql` | `vix-db`, `vix-edit-sql` |
-| `image` | (none; image tabs) | the `image` / `ratatui-image` display path |
+| `image` | (none; image tabs) | `image`, `ratatui-image` (43 exclusive crates; forwards to `vix-editor/image`) |
 | `script` | `script.*`, `script:*` | `vix-script` |
 | `terminal` | `tools.terminal` | `vix-terminal` |
 | `http` | `tools.http_send` | `vix-http-client` |
@@ -59,7 +59,7 @@ unchanged.
 
 T586 (this framework) adds the features as empty (`sql = []`, …) and the runtime
 filter; nothing is compiled out yet, so the build is unchanged. T587 (done) adds CI for
-every feature combination (`spec/ci/index.md`); T588–T593 attach each capability's crates and code;
+every feature combination (`spec/ci/index.md`); T588 (`sql`) and T589 (`image`) are done; T590–T593 attach each capability's crates and code;
 T594 decides distribution.
 
 Tests: `src/capability.rs` (prefix map), `vix-menu` (`filter_menus`), and, in a

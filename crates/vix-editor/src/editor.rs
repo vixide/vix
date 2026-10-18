@@ -12,7 +12,13 @@ use std::path::{Path, PathBuf};
 
 use ratatui::layout::Rect;
 use ratatui::style::Style;
-use ratatui_image::protocol::StatefulProtocol;
+#[cfg(feature = "image")]
+pub use ratatui_image::protocol::StatefulProtocol as ImageProtocol;
+
+/// Stand-in for the terminal-graphics protocol in a build without the `image`
+/// feature: it can never be constructed, so `Tab::image` is always `None`.
+#[cfg(not(feature = "image"))]
+pub enum ImageProtocol {}
 use vix_editor_core::actions::{
     Delete, Duplicate, InsertText, MoveDown, MoveRight, MoveUp, SelectAll,
 };
@@ -194,7 +200,7 @@ pub struct Tab {
     /// Ephemeral preview tab (single-click / arrow-scan from the explorer).
     pub preview: bool,
     /// When set, this tab shows an image instead of the text editor.
-    pub image: Option<StatefulProtocol>,
+    pub image: Option<ImageProtocol>,
     /// When set, the buffer is locked against edits (view-only).
     pub read_only: bool,
     /// When set, the file on disk isn't writable by this user (T572).
@@ -519,7 +525,8 @@ impl Editor {
     }
 
     /// Open an image file in a tab, rendered with the given protocol.
-    pub fn open_image(&mut self, path: &Path, proto: StatefulProtocol) {
+    #[cfg(feature = "image")]
+    pub fn open_image(&mut self, path: &Path, proto: ImageProtocol) {
         let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         if let Some(i) = self
             .tabs
