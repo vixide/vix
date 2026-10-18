@@ -119,6 +119,17 @@ unprivileged user. A test that reaches the real network fails there instead
 of in a downstream packager's sandbox. Test git helpers set
 `GIT_TERMINAL_PROMPT=0`. Audit at introduction: no test used a real remote.
 
+### Minimal release variant (T594)
+
+`.github/workflows/release-minimal.yml` (GitHub only, hand-written — unlike the
+dist-generated `release.yml`, which it must not be merged into) builds `vix` with
+`--no-default-features` for five targets on the same version-tag trigger,
+packages each with the README, LICENSE, CHANGELOG and man page plus a SHA-256, and
+attaches them to the GitHub Release once `release.yml` has created it (it polls for
+up to 90 minutes; `GITHUB_TOKEN`-created releases cannot trigger a second workflow).
+No installers: dist builds one app per package and every installer assumes one
+binary per target. Not exercised on a runner until the next tag.
+
 ### Feature combinations (T587)
 
 All three forges (a `feature-combos` job on GitHub and GitLab, a step on

@@ -34,6 +34,17 @@ npm install -g @vixide/vix
 `.zip` for Windows) are attached to every
 [GitHub Release](https://github.com/vixide/vix/releases).
 
+**Minimal build** (small and locked down): every GitHub Release also carries
+`vix-minimal-<target>.tar.gz` (`.zip` on Windows) plus a `.sha256` file. It is
+`vix` built with `--no-default-features`, so it leaves out the DB workbench,
+image preview, scripting, the integrated terminal, the HTTP client, the AI
+assistant, Git and Jujutsu integration, and syntax highlighting. It links no
+TLS stack, makes no network connections, and never runs `git`. It is about 44% smaller than the default build (12.3 MiB vs 21.8 MiB on macOS arm64). It has no
+installer: unpack it and put `vix` on your `PATH`. Build the same thing from
+source with `cargo build --release --no-default-features`, or keep what you want
+with `--features sql,git,…` (see
+[`spec/cargo-features/index.md`](../../spec/cargo-features/index.md)).
+
 **From source** (needs a Rust toolchain, 1.96+):
 
 ```sh
