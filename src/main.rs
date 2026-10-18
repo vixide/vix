@@ -38,8 +38,13 @@ fn main() -> io::Result<()> {
 
     if cli.version {
         if cli.json {
+            let capabilities = vix::capability::enabled_names()
+                .iter()
+                .map(|c| format!("\"{c}\""))
+                .collect::<Vec<_>>()
+                .join(",");
             println!(
-                r#"{{"name":"vix","version":"{}"}}"#,
+                r#"{{"name":"vix","version":"{}","capabilities":[{capabilities}]}}"#,
                 env!("CARGO_PKG_VERSION")
             );
         } else {
@@ -80,7 +85,9 @@ fn main() -> io::Result<()> {
     rust_i18n::set_locale(&locale);
 
     if cli.doctor {
-        for line in vix::doctor::format_report(&vix::doctor::run(&settings)) {
+        let mut checks = vix::doctor::run(&settings);
+        checks.push(vix::capability::doctor_check());
+        for line in vix::doctor::format_report(&checks) {
             println!("{line}");
         }
         return Ok(());

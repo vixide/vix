@@ -170,6 +170,7 @@ impl App {
         for (i, a) in vix_action_catalog::CATALOG
             .iter()
             .filter(|a| !palette::COMMANDS.iter().any(|(_, action)| *action == a.id))
+            .filter(|a| crate::capability::is_available(a.id))
             .enumerate()
         {
             let idx = start_idx + i;
@@ -209,6 +210,9 @@ impl App {
                     |action: &str| self.command_recents.iter().position(|a| a == action);
                 let mut scored: Vec<(i32, usize, Entry)> = Vec::new();
                 for (cat_idx, (label_key, action)) in palette::COMMANDS.iter().enumerate() {
+                    if !crate::capability::is_available(action) {
+                        continue;
+                    }
                     let label = t!(*label_key).to_string();
                     let entry = Entry {
                         label: format!("> {label}"),
