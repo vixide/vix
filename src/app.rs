@@ -19,6 +19,7 @@ mod http;
 mod http_off;
 mod info_panels;
 mod insert_tools;
+#[cfg(feature = "jj")]
 mod jj;
 mod keymap;
 mod lsp_dap;
@@ -2736,6 +2737,7 @@ impl App {
             a if self.run_vim_action(a) => {}
             other if self.run_view_action(other) => {}
             other if self.run_git_action(other) => {}
+            #[cfg(feature = "jj")]
             other if self.run_jj_action(other) => {}
             other if self.run_dap_action(other) => {}
             other if self.run_project_action(other) => {}
@@ -12274,6 +12276,7 @@ impl App {
             PromptKind::GitCommit => self.git_commit(&prompt.input),
             PromptKind::GitNewBranch => self.git_create_branch(&prompt.input),
             PromptKind::GitClone => self.git_clone(&prompt.input),
+            #[cfg(feature = "jj")]
             PromptKind::JjClone
             | PromptKind::JjDescribe
             | PromptKind::JjCommit
@@ -12284,6 +12287,15 @@ impl App {
             | PromptKind::JjBookmarkDelete => {
                 self.accept_jj_prompt(prompt.kind, &prompt.input);
             }
+            #[cfg(not(feature = "jj"))]
+            PromptKind::JjClone
+            | PromptKind::JjDescribe
+            | PromptKind::JjCommit
+            | PromptKind::JjEdit
+            | PromptKind::JjRebase
+            | PromptKind::JjBookmarkCreate
+            | PromptKind::JjBookmarkSet
+            | PromptKind::JjBookmarkDelete => {}
             PromptKind::GitEditDescription => self.git_edit_description(&prompt.input),
             PromptKind::GitDeleteBranch => self.git_delete_branch(&prompt.input),
             PromptKind::GitGrep => self.git_grep(&prompt.input),

@@ -24,7 +24,7 @@ no payoff and the heaviest coupling.
 | `http` | `tools.http_send` | `vix-http-client` (`http_off.rs` stand-ins) |
 | `ai` | `ai.*` | `vix-ai-core`, `-diff`, `-panel` (`ai_off.rs` stand-ins; Git's generated commit message and DB assist are `cfg(ai)`) |
 | `git` | `git.*` | (surface only: no crates) |
-| `jj` | `jj.*` | (surface only: no crates) |
+| `jj` | `jj.*` | (surface only: no crates; `src/app/jj.rs`) |
 | `full` | umbrella for every capability; `default` enables it, and whole-product tests gate on it | all of the above |
 | `net` | umbrella for `http`, `ai`, `sql` | everything that can reach the network |
 
@@ -57,10 +57,17 @@ unchanged.
 
 ## Status
 
-T586 (this framework) adds the features as empty (`sql = []`, …) and the runtime
-filter; nothing is compiled out yet, so the build is unchanged. T587 (done) adds CI for
-every feature combination (`spec/ci/index.md`); T588 (`sql`), T589 (`image`) and T590 (`script`) and T591 (`terminal`), T592 (`http`, `ai`) are done; T593 attaches each capability's crates and code;
-T594 decides distribution.
+Run L is implemented except two items. Done: T586 (framework), T587 (CI for every
+feature combination, `spec/ci/index.md`), and the capabilities `sql` (T588), `image`
+(T589), `script` (T590), `terminal` (T591), `http` and `ai` (T592), and `jj` (T593).
+Each gated capability keeps shared call sites `cfg`-free with a small `*_off.rs`
+stand-in module or an uninhabited stand-in type.
+
+Not done: `git` (T593's second half) is deliberately an empty runtime-filter feature.
+It is surface-only (no crates) and medium-hard: explorer colors, the status bar, the
+gutter, inline blame and the dashboard each need a git-off fallback. Do it only when a
+locked-down build is actually wanted. T594 (whether to ship a minimal variant as a
+release artifact, and documenting every feature's measured size) needs the maintainer.
 
 Tests: `src/capability.rs` (prefix map), `vix-menu` (`filter_menus`), and, in a
 `--no-default-features` build, `an_action_from_a_disabled_capability_warns_…`.
