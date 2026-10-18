@@ -342,6 +342,79 @@ pub fn unique_copy_name(dir: &Path, original: &Path) -> PathBuf {
     unreachable!("the loop returns once a free name is found")
 }
 
+/// Largest file [`read_text_guarded`] reads into a text buffer by default.
+pub const MAX_TEXT_BYTES: u64 = 50 * 1024 * 1024;
+
+/// Why [`read_text_guarded`] refused a file (T571). Carried inside an
+/// [`io::Error`] of kind `InvalidData`; recover it with
+/// [`TextReadError::from_io`] to pick a translated message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextReadError {
+    /// A FIFO, socket, device, or directory: reading it could block forever.
+    NotRegular,
+    /// Larger than the byte limit.
+    TooLarge,
+    /// Contains NUL bytes: binary, not text.
+    Binary,
+}
+
+impl std::fmt::Display for TextReadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::NotRegular => "not a regular file",
+            Self::TooLarge => "file is too large to open as text",
+            Self::Binary => "binary file",
+        })
+    }
+}
+
+impl std::error::Error for TextReadError {}
+
+impl TextReadError {
+    /// The refusal inside `e`, if `e` came from [`read_text_guarded`].
+    #[must_use]
+    pub fn from_io(e: &io::Error) -> Option<Self> {
+        e.get_ref()?.downcast_ref::<Self>().copied()
+    }
+}
+
+/// Read a text file, refusing anything that would hang, exhaust memory, or
+/// isn't text (T571). Non-UTF-8 text is decoded lossily; the returned flag is
+/// `true` then, so the caller can open it read-only rather than corrupt it on
+/// save.
+///
+/// # Errors
+///
+/// An `InvalidData` error wrapping a [`TextReadError`] for a non-regular,
+/// oversized, or binary file; otherwise the underlying I/O error.
+pub fn read_text_guarded(path: &Path, max_bytes: u64) -> io::Result<(String, bool)> {
+    use io::Read as _;
+    let refuse = |why| io::Error::new(io::ErrorKind::InvalidData, why);
+    // `metadata` follows symlinks, so a link to a regular file is fine.
+    let meta = fs::metadata(path)?;
+    if !meta.is_file() {
+        return Err(refuse(TextReadError::NotRegular));
+    }
+    if meta.len() > max_bytes {
+        return Err(refuse(TextReadError::TooLarge));
+    }
+    let mut bytes = Vec::new();
+    // `take` bounds the read even if the file grows after the stat.
+    fs::File::open(path)?
+        .take(max_bytes + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > max_bytes {
+        return Err(refuse(TextReadError::TooLarge));
+    }
+    if bytes.iter().take(8192).any(|&b| b == 0) {
+        return Err(refuse(TextReadError::Binary));
+    }
+    match String::from_utf8(bytes) {
+        Ok(s) => Ok((s, false)),
+        Err(e) => Ok((String::from_utf8_lossy(e.as_bytes()).into_owned(), true)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -635,5 +708,34 @@ mod tests {
             !target.exists(),
             "file should be gone from its original location"
         );
+    }
+
+    #[test]
+    fn read_text_guarded_refuses_non_text_and_decodes_lossily() {
+        let dir = std::env::temp_dir().join(format!("vix-guard-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let why = |p: &Path, max| {
+            TextReadError::from_io(&read_text_guarded(p, max).unwrap_err()).unwrap()
+        };
+        assert_eq!(why(&dir, 100), TextReadError::NotRegular);
+        let big = dir.join("big");
+        fs::write(&big, vec![b'a'; 200]).unwrap();
+        assert_eq!(why(&big, 100), TextReadError::TooLarge);
+        let bin = dir.join("bin");
+        fs::write(&bin, b"ab\0cd").unwrap();
+        assert_eq!(why(&bin, 100), TextReadError::Binary);
+        let latin = dir.join("latin");
+        fs::write(&latin, b"caf\xe9").unwrap();
+        assert_eq!(
+            read_text_guarded(&latin, 100).unwrap(),
+            ("caf\u{fffd}".to_string(), true)
+        );
+        let ok = dir.join("ok");
+        fs::write(&ok, "héllo").unwrap();
+        assert_eq!(
+            read_text_guarded(&ok, 100).unwrap(),
+            ("héllo".to_string(), false)
+        );
+        let _ = fs::remove_dir_all(&dir);
     }
 }

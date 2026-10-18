@@ -7382,9 +7382,28 @@ impl App {
                 self.apply_editorconfig_indent(path);
                 self.status = t!("status.opened", path = path.display()).to_string();
             }
-            Err(e) => self
-                .messages
-                .error(t!("msg.open_failed_path", path = path.display(), error = e).to_string()),
+            Err(e) => {
+                let reason = match crate::fileops::TextReadError::from_io(&e) {
+                    Some(crate::fileops::TextReadError::NotRegular) => {
+                        t!("msg.open_not_regular").to_string()
+                    }
+                    Some(crate::fileops::TextReadError::TooLarge) => {
+                        t!("msg.open_too_large").to_string()
+                    }
+                    Some(crate::fileops::TextReadError::Binary) => {
+                        t!("msg.open_binary").to_string()
+                    }
+                    None => e.to_string(),
+                };
+                self.messages.error(
+                    t!(
+                        "msg.open_failed_path",
+                        path = path.display(),
+                        error = reason
+                    )
+                    .to_string(),
+                );
+            }
         }
     }
 

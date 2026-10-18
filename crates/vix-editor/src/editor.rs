@@ -575,7 +575,9 @@ impl Editor {
             return Ok(());
         }
 
-        let content = fs::read_to_string(&canon)?;
+        // Guarded (T571): a FIFO, huge file, or binary refuses with a typed
+        // error; non-UTF-8 text opens lossily and read-only.
+        let (content, lossy) = vix_fileops::read_text_guarded(&canon, vix_fileops::MAX_TEXT_BYTES)?;
         let editor = make_editor(Some(&canon), &content, self.flags, &self.indent);
         let tab = Tab {
             editor,
@@ -583,7 +585,7 @@ impl Editor {
             dirty: false,
             preview,
             image: None,
-            read_only: false,
+            read_only: lossy,
         };
 
         if preview && let Some(i) = self.tabs.iter().position(|t| t.preview) {
