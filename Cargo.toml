@@ -157,7 +157,7 @@ syntax-all = ["vix-editor-core/syntax-all"]
 sql = ["dep:vix-db", "dep:vix-edit-sql"]
 image = ["dep:image", "dep:ratatui-image", "vix-editor/image"]
 script = ["dep:vix-script"]
-terminal = []
+terminal = ["dep:vix-terminal", "dep:vt100"]
 http = []
 ai = []
 git = []
@@ -422,7 +422,7 @@ vix-tags = { path = "crates/vix-tags", version = "1.6.0" }
 # Project task running: tasks.toml, per-project-type lifecycle commands, discovered tasks, subprojects, and test-at-point.
 vix-tasks = { path = "crates/vix-tasks", version = "1.6.0" }
 # Integrated terminal: a real PTY hosting a shell, parsed by `vt100`.
-vix-terminal = { path = "crates/vix-terminal", version = "1.6.0" }
+vix-terminal = { path = "crates/vix-terminal", version = "1.6.0", optional = true }
 # Parse test-runner output into a pass/fail list with jump-to-failure.
 vix-test-runner = { path = "crates/vix-test-runner", version = "1.6.0" }
 # Statistics about a span of text, plus the panel's row-selection state.
@@ -500,7 +500,7 @@ nix = { workspace = true }
 # optional image/svg renderers; we only use the built-in Unicode renderer.
 qrcode = { workspace = true }
 # `vt100` parses the integrated terminal's escape sequences into a screen grid.
-vt100 = { workspace = true }
+vt100 = { workspace = true, optional = true }
 
 # Dependencies for the in-tree code-editor widget (src/editor_core/).
 anyhow = { workspace = true }

@@ -77,7 +77,15 @@ pub use vix_snippet_tool as snippet_tool;
 pub use vix_snippets as snippets;
 pub use vix_tags as tags;
 pub use vix_tasks as tasks;
+#[cfg(feature = "terminal")]
 pub use vix_terminal as terminal;
+/// Stand-in for the integrated terminal in a build without the `terminal`
+/// feature; `Terminal` is uninhabited, so `App::terminal` is always `None`.
+#[cfg(not(feature = "terminal"))]
+pub mod terminal {
+    /// The (absent) integrated terminal; uninhabited.
+    pub enum Terminal {}
+}
 pub use vix_test_runner as test_runner;
 pub use vix_textops as textops;
 pub use vix_theme as theme;

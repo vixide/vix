@@ -25,6 +25,7 @@ mod picker_panels;
 mod search;
 mod status_bar;
 mod tabs;
+#[cfg(feature = "terminal")]
 mod terminal;
 mod tool_panels;
 
@@ -69,6 +70,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 use search::{draw_palette, draw_prompt, draw_search, draw_workspace_search};
 use status_bar::draw_status_bar;
 use tabs::{center_split, draw_breadcrumb, draw_tabs};
+#[cfg(feature = "terminal")]
 use terminal::draw_terminal;
 use tool_panels::{
     draw_calculator, draw_color_converter, draw_dialog, draw_pomodoro, draw_regex_tester,
@@ -371,6 +373,7 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.ai_panel.is_some() {
         draw_ai_panel(app, frame, area);
     }
+    #[cfg(feature = "terminal")]
     if app.terminal.is_some() {
         draw_terminal(app, frame, area);
     }

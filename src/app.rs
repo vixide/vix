@@ -27,7 +27,10 @@ mod scripts;
 mod scripts_off;
 mod session;
 mod structural_replace;
+#[cfg(feature = "terminal")]
 mod terminal;
+#[cfg(not(feature = "terminal"))]
+mod terminal_off;
 mod tutor;
 
 use std::collections::VecDeque;
