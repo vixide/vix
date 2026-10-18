@@ -123,12 +123,28 @@ pub use vix_convert_from_tsv_into_json_tool as convert_from_tsv_into_json_tool;
 pub use vix_convert_from_yaml_into_json_tool as convert_from_yaml_into_json_tool;
 pub use vix_convert_tabular as convert_tabular;
 pub use vix_dap as dap;
+#[cfg(feature = "sql")]
 pub use vix_db as db;
+/// Stand-in for the DB workbench in a build without the `sql` feature
+/// (`spec/cargo-features`): the type exists so `App::db` keeps its shape, but
+/// it can never be constructed, so every `Some` path is statically dead.
+#[cfg(not(feature = "sql"))]
+pub mod db {
+    /// The (absent) DB workbench; uninhabited.
+    pub enum Browser {}
+}
 pub use vix_diff_view as diff_view;
 pub use vix_doctor as doctor;
 pub use vix_edit_bytes as edit_bytes;
 pub use vix_edit_outline as edit_outline;
+#[cfg(feature = "sql")]
 pub use vix_edit_sql as edit_sql;
+/// Stand-in for the SQL editor in a build without the `sql` feature; see [`db`].
+#[cfg(not(feature = "sql"))]
+pub mod edit_sql {
+    /// The (absent) SQL editor; uninhabited.
+    pub enum Editor {}
+}
 pub use vix_edit_table as edit_table;
 pub use vix_edit_value as edit_value;
 pub use vix_editor::pane_tree;

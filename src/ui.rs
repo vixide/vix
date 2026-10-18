@@ -7,6 +7,7 @@ mod ai;
 mod bottom_dock;
 mod boxes;
 mod choosers;
+#[cfg(feature = "sql")]
 mod db;
 mod dialogs;
 mod docks;
@@ -36,15 +37,14 @@ use choosers::{
     draw_recent_chooser, draw_refile_chooser, draw_script_chooser, draw_spell_suggest,
     draw_task_chooser, draw_workspace_chooser,
 };
-use db::draw_db;
 use dialogs::{
     draw_confirm, draw_paste_conflict, draw_query_replace, draw_replace_confirm, draw_script_trust,
     draw_structural_replace, draw_unsaved, draw_wgrep_confirm,
 };
 use docks::{draw_debug_panel, draw_messages, draw_outline_dock, draw_test_panel};
 use edit_surfaces::{
-    draw_column_view, draw_conflict_list, draw_edit_bytes, draw_edit_outline, draw_edit_sql,
-    draw_edit_table, draw_edit_value, draw_html_panel, draw_outline,
+    draw_column_view, draw_conflict_list, draw_edit_bytes, draw_edit_outline, draw_edit_table,
+    draw_edit_value, draw_html_panel, draw_outline,
 };
 use editor_region::draw_editor_region;
 use explorer::draw_explorer;
@@ -387,6 +387,22 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     draw_overlays_aux(app, frame, area);
 }
 
+/// The `sql` capability's overlays: the SQL statement editor, then the DB
+/// workbench on top of it. Nothing to draw in a build without the feature.
+#[cfg(feature = "sql")]
+fn draw_sql_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
+    if app.edit_sql.is_some() {
+        edit_surfaces::draw_edit_sql(app, frame, area);
+    }
+    if app.db.is_some() {
+        db::draw_db(app, frame, area);
+    }
+}
+
+/// See the `sql` version above.
+#[cfg(not(feature = "sql"))]
+fn draw_sql_overlays(_app: &mut App, _frame: &mut Frame, _area: Rect) {}
+
 /// Second half of the overlay dispatch (split from `draw_overlays` to satisfy the
 /// per-function line limit). Behavior is identical to inlining this dispatch.
 fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -401,12 +417,7 @@ fn draw_overlays_aux(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.structural_replace.is_some() {
         draw_structural_replace(app, frame, area);
     }
-    if app.edit_sql.is_some() {
-        draw_edit_sql(app, frame, area);
-    }
-    if app.db.is_some() {
-        draw_db(app, frame, area);
-    }
+    draw_sql_overlays(app, frame, area);
     if app.media_type_panel.is_some() {
         draw_media_type_panel(app, frame, area);
     }
