@@ -16,6 +16,7 @@ extern crate vix_i18n;
 vix_i18n::surface!();
 
 /// A single dropdown entry: a leaf action, a separator, or a submenu.
+#[derive(Clone, Copy)]
 pub struct Item {
     /// i18n key for the displayed label (e.g. `"menu.item.file.new"`).
     pub label: &'static str,
@@ -2162,7 +2163,71 @@ pub fn set_theme_names(names: Vec<String>) {
 /// View → Theme, whose items are the runtime theme list (see [`set_theme_names`]).
 #[must_use]
 pub fn menus() -> &'static [MenuDef] {
-    MENUS_CELL.get_or_init(build_menus).as_slice()
+    MENUS_CELL
+        .get_or_init(|| {
+            let menus = build_menus();
+            match ACTION_FILTER.get() {
+                Some(keep) => filter_menus(menus, *keep),
+                None => menus,
+            }
+        })
+        .as_slice()
+}
+
+/// Decides whether an action id belongs in this build's menus.
+type ActionFilter = fn(&str) -> bool;
+
+/// The optional action filter (see [`set_action_filter`]).
+static ACTION_FILTER: std::sync::OnceLock<ActionFilter> = std::sync::OnceLock::new();
+
+/// Hide every leaf whose action `keep` rejects (a capability compiled out of
+/// this build), along with submenus and top-level menus left empty. Call once at
+/// startup, before [`menus`] is first called; later calls are ignored. With no
+/// filter set the menus are unchanged, so this crate stays free of any build
+/// configuration.
+pub fn set_action_filter(keep: ActionFilter) {
+    let _ = ACTION_FILTER.set(keep);
+}
+
+/// `menus` with every leaf `keep` rejects removed, and any submenu or menu that
+/// ends up with no selectable item removed too. Separators are collapsed so a
+/// removed run never leaves one leading, trailing, or doubled.
+fn filter_menus(menus: Vec<MenuDef>, keep: ActionFilter) -> Vec<MenuDef> {
+    menus
+        .into_iter()
+        .filter_map(|m| {
+            let items = filter_items(m.items, keep);
+            (!items.is_empty()).then_some(MenuDef {
+                name: m.name,
+                items,
+            })
+        })
+        .collect()
+}
+
+/// One level of [`filter_menus`]; the result is leaked to `'static` like every
+/// other runtime-built submenu here.
+fn filter_items(items: &'static [Item], keep: ActionFilter) -> &'static [Item] {
+    let mut out: Vec<Item> = Vec::with_capacity(items.len());
+    for item in items {
+        let kept = if let Some(sub) = item.submenu {
+            let sub = filter_items(sub, keep);
+            (!sub.is_empty()).then_some(Item {
+                submenu: Some(sub),
+                ..*item
+            })
+        } else if item.action == SEPARATOR {
+            // Never lead with a separator or stack two.
+            (out.last().is_some_and(|l| l.action != SEPARATOR)).then_some(*item)
+        } else {
+            keep(item.action).then_some(*item)
+        };
+        out.extend(kept);
+    }
+    while out.last().is_some_and(|l| l.action == SEPARATOR) {
+        out.pop();
+    }
+    Box::leak(out.into_boxed_slice())
 }
 
 /// Build the View → Theme submenu items from the available theme names, leaking
@@ -2675,6 +2740,40 @@ impl Menu {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn filter_drops_rejected_leaves_empty_submenus_and_stray_separators() {
+        fn walk(items: &[Item], bad: &mut Vec<String>) {
+            for (i, it) in items.iter().enumerate() {
+                if it.action.starts_with("db.") {
+                    bad.push(it.action.to_string());
+                }
+                if it.action == SEPARATOR && (i == 0 || i + 1 == items.len()) {
+                    bad.push("edge separator".to_string());
+                }
+                if it.action == SEPARATOR && i > 0 && items[i - 1].action == SEPARATOR {
+                    bad.push("doubled separator".to_string());
+                }
+                if let Some(sub) = it.submenu {
+                    walk(sub, bad);
+                }
+            }
+        }
+        fn keep(action: &str) -> bool {
+            !action.starts_with("db.")
+        }
+        let all = build_menus();
+        let before: usize = all.len();
+        let filtered = filter_menus(all, keep);
+        // The whole DB menu goes; nothing else with a surviving leaf does.
+        assert_eq!(filtered.len(), before - 1);
+        assert!(filtered.iter().all(|m| m.name != "menu.db"));
+        let mut bad = Vec::new();
+        for m in &filtered {
+            walk(m.items, &mut bad);
+        }
+        assert!(bad.is_empty(), "{bad:?}");
+    }
+
     use super::*;
 
     /// Hover help resolves via the `{label}.help` i18n convention: a real key

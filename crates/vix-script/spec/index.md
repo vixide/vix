@@ -293,17 +293,15 @@ opened is, and "never crash" is the literal bar (tasks.md T101):
   incrementally) — worth saying explicitly in the T105 sample-script docs,
   not just here.
 
-## Packaging: not a Cargo feature
+## Packaging: a Cargo feature again (T586)
 
-T101 originally gated this behind a `scripting` Cargo feature (default-on,
-mirroring the `lang-*`/`syntax-*` optional-grammar pattern), on the
-reasoning that `--no-default-features` should be able to drop it the same
-way it drops syntax highlighting. T103 revised that once `vix-script`
-became genuinely wired into the App shell (startup load, palette, menu,
-prompt system) — at that point it's just as "always compiled in" as any
-other core feature, e.g. `vix-editor` or `vix-menu` are not optional
-either. `vix-script` is now a plain, non-optional dependency of the root
-`vix` package, the same call `vix-modal` made in T111 for the same reason.
+T101 originally gated this behind a `scripting` Cargo feature; T103 reversed that
+once `vix-script` was wired into the App shell, and T111 made the same call for
+`vix-modal`. Run L reversed it again, for measured reasons: rhai is one of the
+largest single crates in the build. The `script` capability feature (default-on)
+is the framework in [`spec/cargo-features/index.md`](../../../spec/cargo-features/index.md);
+T590 attaches `dep:vix-script` to it. Until then it is an empty feature that only
+drives the runtime filter, and `vix-script` is still compiled in.
 
 ## What's deliberately not in v1
 

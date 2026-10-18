@@ -2178,6 +2178,7 @@ impl App {
         // the menu bar is first rendered.
         let theme_names = crate::theme_model::theme_names(&available_themes);
         crate::menu::set_theme_names(theme_names);
+        crate::menu::set_action_filter(crate::capability::is_available);
         // Apply the saved time zone so the clock panel and status bar use it.
         // An unknown/stale saved name is fine to ignore here: `set_active`
         // just leaves the zone at its UTC default in that case.
@@ -2600,6 +2601,16 @@ impl App {
     /// Dispatch a named action (shared by the menu bar, command palette, and
     /// keyboard shortcuts).
     pub fn run_action(&mut self, action: &str) {
+        // An action owned by a capability this build leaves out (T586). Menus and
+        // the palette already hide it; this catches the other routes in: a
+        // keymap binding, a script's `bind_key`, a typed command.
+        if let Some(cap) = crate::capability::Capability::for_action(action)
+            && !cap.enabled()
+        {
+            self.messages
+                .warn(t!("msg.capability_missing", name = cap.name()).to_string());
+            return;
+        }
         // Go-menu navigation and Org → Contacts live in their own dispatchers
         // (keeps this function within the line limit).
         if self.go_action(action) || self.contacts_action(action) {
@@ -2814,7 +2825,8 @@ impl App {
             }
             "help.privacy" => self.welcome = Some(WelcomePanel::open(Self::privacy_lines())),
             "help.doctor" => {
-                let checks = crate::doctor::run(&self.settings);
+                let mut checks = crate::doctor::run(&self.settings);
+                checks.push(crate::capability::doctor_check());
                 self.welcome = Some(WelcomePanel::open(crate::doctor::format_report(&checks)));
             }
             "vix.settings" => self.open_settings_file(),
@@ -13184,6 +13196,17 @@ const MIN_EDITOR_WIDTH: u16 = 20;
 
 #[cfg(test)]
 mod tests {
+    #[cfg(not(feature = "jj"))]
+    #[test]
+    fn an_action_from_a_disabled_capability_warns_instead_of_running() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.run_action("jj.status");
+        assert!(
+            app.messages.items.iter().any(|m| m.text.contains("jj")),
+            "expected a 'not included in this build' message"
+        );
+    }
+
     #[test]
     fn every_displayable_image_extension_has_a_compiled_in_decoder() {
         // T583 trimmed the `image` codecs to exactly what `is_image_path` accepts.

@@ -147,9 +147,23 @@ eula = false
 #
 # The grammars actually live in the vix_editor_core crate; these features simply
 # forward to that crate's identically-named features.
-default = ["syntax-common"]
+default = ["syntax-common", "sql", "image", "script", "terminal", "http", "ai", "git", "jj"]
 syntax-common = ["vix-editor-core/syntax-common"]
 syntax-all = ["vix-editor-core/syntax-all"]
+
+# Capability features (T586, spec/cargo-features). All default-on, so a normal
+# build is unchanged. They start empty (no `dep:` yet) and gate nothing but the
+# runtime filter in `src/capability.rs`; later tasks (T588+) attach crates.
+sql = []
+image = []
+script = []
+terminal = []
+http = []
+ai = []
+git = []
+jj = []
+# The network-facing capabilities together.
+net = ["http", "ai", "sql"]
 
 lang-bash = ["vix-editor-core/lang-bash"]
 lang-c = ["vix-editor-core/lang-c"]
