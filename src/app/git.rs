@@ -243,7 +243,11 @@ impl App {
             self.status = t!("status.git_empty_url").into();
             return;
         }
-        self.run_command(&format!("jj git clone {}", Self::shell_single_quote(url)));
+        let Some(quoted) = Self::vcs_shell_arg(url, false) else {
+            self.status = t!("status.git_bad_argument").into();
+            return;
+        };
+        self.run_command(&format!("jj git clone -- {quoted}"));
     }
 
     /// Set the working-copy change description (`jj describe -m`).
@@ -1271,7 +1275,15 @@ impl App {
             self.status = t!("status.git_empty_url").into();
             return;
         }
-        self.run_command(&format!("git clone {url}"));
+        let Some(quoted) = Self::vcs_shell_arg(url, false) else {
+            self.status = t!("status.git_bad_argument").into();
+            return;
+        };
+        // `--` ends option parsing; the protocol switches stop `ext::`/`fd::`
+        // URLs from running arbitrary commands (T569).
+        self.run_command(&format!(
+            "git -c protocol.ext.allow=never -c protocol.fd.allow=never clone -- {quoted}"
+        ));
     }
 
     /// Set the current branch's description (`git branch --edit-description`),
@@ -1317,8 +1329,12 @@ impl App {
             return;
         }
         self.git_panel = None;
-        // Single-quote the pattern so shell metacharacters in the regex are safe.
-        let quoted = format!("'{}'", pattern.replace('\'', "'\\''"));
+        // Quote the pattern so shell metacharacters in the regex are safe
+        // (`-e` already keeps a leading `-` from being an option).
+        let Some(quoted) = Self::vcs_shell_arg(pattern, true) else {
+            self.status = t!("status.git_bad_argument").into();
+            return;
+        };
         self.run_command(&format!("git --no-pager grep -n -e {quoted}"));
     }
 

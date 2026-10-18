@@ -85,7 +85,7 @@ fn keys_in(text: &str) -> BTreeSet<String> {
 /// copy-pasted into the wrong namespace file, or moved without deleting its
 /// old copy).
 fn load_catalog(root: &Path) -> BTreeMap<String, serde_yaml::Value> {
-    let dir = root.join("locales");
+    let dir = root.join("crates/vix-i18n/locales");
     let mut paths: Vec<PathBuf> = std::fs::read_dir(&dir)
         .expect("locales/ directory")
         .flatten()

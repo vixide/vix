@@ -120,7 +120,7 @@ fn no_catalog_entry_duplicates_a_palette_commands_entry() {
 /// has the full merge-with-conflict-detection version of this; this test
 /// only needs key *presence*, so a plain union is enough).
 fn locale_catalog_keys(root: &Path) -> BTreeSet<String> {
-    let dir = root.join("locales");
+    let dir = root.join("crates/vix-i18n/locales");
     let mut keys = BTreeSet::new();
     for entry in std::fs::read_dir(&dir)
         .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
