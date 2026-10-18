@@ -1610,6 +1610,10 @@ bitflags::bitflags! {
         /// Vi / Spacemacs keymaps: set in Insert mode, clear in Normal
         /// mode. Meaningless in the non-modal keymaps.
         const MODAL_INSERT = 1 << 13;
+        /// A left-drag that started in the editor is in progress (T581): the
+        /// drag keeps extending the selection and autoscrolling even when
+        /// the pointer leaves the editor rectangle.
+        const EDITOR_DRAG = 1 << 14;
     }
 }
 
@@ -8108,9 +8112,36 @@ impl App {
         false
     }
 
+    /// T581: an editor drag follows the pointer anywhere, so a selection
+    /// keeps extending and scrolling after it leaves the text area. Returns
+    /// whether the event was consumed.
+    fn try_editor_drag_mouse(&mut self, mouse: MouseEvent) -> bool {
+        if !self.flags.contains(AppFlags::EDITOR_DRAG) {
+            return false;
+        }
+        match mouse.kind {
+            MouseEventKind::Drag(MouseButton::Left) => {
+                self.editor_mouse(mouse);
+                true
+            }
+            MouseEventKind::Up(MouseButton::Left) => {
+                self.flags.remove(AppFlags::EDITOR_DRAG);
+                self.editor_mouse(mouse);
+                true
+            }
+            _ => {
+                self.flags.remove(AppFlags::EDITOR_DRAG);
+                false
+            }
+        }
+    }
+
     /// Handle a mouse event, dispatching to whichever pane it lands in.
     pub fn on_mouse(&mut self, mouse: MouseEvent) {
         if self.try_overlay_mouse(mouse) {
+            return;
+        }
+        if self.try_editor_drag_mouse(mouse) {
             return;
         }
         let (col, row) = (mouse.column, mouse.row);
@@ -8473,8 +8504,30 @@ impl App {
         self.focus = Focus::Editor;
     }
 
+    /// Whether an editor drag is in progress (T581), so the main loop polls
+    /// fast enough to autoscroll a held pointer.
+    #[must_use]
+    pub fn editor_drag_active(&self) -> bool {
+        self.flags.contains(AppFlags::EDITOR_DRAG)
+    }
+
+    /// Timer tick for an editor drag (T581): terminals report drag only on
+    /// motion, so a held pointer outside the view keeps scrolling from here.
+    pub fn poll_editor_drag(&mut self) {
+        if !self.flags.contains(AppFlags::EDITOR_DRAG) {
+            return;
+        }
+        let area = self.layout.editor;
+        if let Some(t) = self.editor.active_tab_mut() {
+            t.editor.autoscroll_tick(&area);
+        }
+    }
+
     fn editor_mouse(&mut self, mouse: MouseEvent) {
         self.focus = Focus::Editor;
+        if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+            self.flags.insert(AppFlags::EDITOR_DRAG);
+        }
         let area = self.layout.editor;
         let alt = mouse
             .modifiers

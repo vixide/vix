@@ -192,6 +192,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
         // Drain any streamed output from a running command into the bottom dock,
         // and any finished dashboard metrics into the dashboard panel.
         app.poll_command();
+        app.poll_editor_drag();
         app.poll_ai_replace();
         app.poll_dashboard();
         app.poll_pomodoro();
@@ -236,6 +237,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
             || app.db_query_running()
             || app.db_connect_running()
             || app.db_reconnect_running()
+            || app.editor_drag_active()
         {
             Duration::from_millis(50)
         } else {

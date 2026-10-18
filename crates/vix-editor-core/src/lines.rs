@@ -240,22 +240,67 @@ impl Editor {
         }
 
         let cur_line = self.code_ref().char_to_line(cursor).min(n - 1);
-        if down && cur_line + 1 >= n {
-            return;
-        }
-        if !down && cur_line == 0 {
-            return;
-        }
-        let target = if down { cur_line + 1 } else { cur_line - 1 };
+
+        // T580: a collapsed fold moves as one unit. The moved block is the
+        // cursor line plus its hidden body; the neighbour it swaps with is
+        // the adjacent visible line plus *its* hidden body, so a fold is
+        // never split or moved into.
+        let block_end = |line: usize| {
+            self.folds
+                .iter()
+                .find(|f| f.0 == line)
+                .map_or(line, |f| f.1.min(n - 1))
+        };
+        let block_start = |line: usize| {
+            self.folds
+                .iter()
+                .find(|f| f.0 < line && line <= f.1)
+                .map_or(line, |f| f.0)
+        };
+        let moved = (cur_line, block_end(cur_line));
+        let (first, second) = if down {
+            if moved.1 + 1 >= n {
+                return;
+            }
+            let nb = moved.1 + 1;
+            (moved, (nb, block_end(nb)))
+        } else {
+            if moved.0 == 0 {
+                return;
+            }
+            let nb_end = moved.0 - 1;
+            ((block_start(nb_end), nb_end), moved)
+        };
 
         // Column within the current line, preserved after the move.
         let line_start = self.code_ref().line_to_char(cur_line);
         let col = cursor - line_start;
 
-        lines.swap(cur_line, target);
+        let mut order: Vec<&str> = Vec::with_capacity(n);
+        order.extend(&lines[..first.0]);
+        order.extend(&lines[second.0..=second.1]);
+        order.extend(&lines[first.0..=first.1]);
+        order.extend(&lines[second.1 + 1..]);
+        let first_len = first.1 - first.0 + 1;
+        let second_len = second.1 - second.0 + 1;
+        // Where the moved block's first line lands.
+        let target = if down { first.0 + second_len } else { first.0 };
+        let lines = order;
         let mut new_text = lines.join("\n");
         if had_final_newline {
             new_text.push('\n');
+        }
+
+        // Carry any other collapsed folds inside the swapped region with
+        // their lines.
+        for f in &mut self.folds {
+            if f.0 >= first.0 && f.1 <= first.1 {
+                f.0 += second_len;
+                f.1 += second_len;
+            } else if f.0 >= second.0 && f.1 <= second.1 {
+                f.0 -= first_len;
+                f.1 -= first_len;
+            }
         }
 
         // Offset of the moved line in the rebuilt text, plus the preserved column
@@ -317,6 +362,50 @@ mod tests {
         let mut e = Editor::new("text", text, Vec::new()).unwrap();
         e.set_cursor(cursor);
         e
+    }
+
+    fn text(e: &Editor) -> String {
+        e.code_ref().slice(0, e.code_ref().len_chars())
+    }
+
+    /// T580: a collapsed fold moves as one unit -- down past a plain line,
+    /// up past a plain line, and a plain line moving past a whole fold.
+    #[test]
+    fn collapsed_fold_moves_as_a_unit() {
+        // Lines: 0 head, 1 body1, 2 body2, 3 plain. Fold 0..=2.
+        let mut e = ed("head\nb1\nb2\nplain", 0);
+        assert!(e.toggle_manual_fold(0, 2));
+        e.move_line_down();
+        assert_eq!(text(&e), "plain\nhead\nb1\nb2");
+        assert_eq!(
+            e.code_ref().char_to_line(e.get_cursor()),
+            1,
+            "cursor on head"
+        );
+        assert!(e.is_line_hidden(2) && e.is_line_hidden(3) && !e.is_line_hidden(1));
+        e.move_line_up();
+        assert_eq!(text(&e), "head\nb1\nb2\nplain");
+        assert!(e.is_line_hidden(1) && e.is_line_hidden(2) && !e.is_line_hidden(3));
+
+        // A plain line moving up past a collapsed fold jumps the whole fold.
+        let mut e = ed("head\nb1\nb2\nplain", 0);
+        e.toggle_manual_fold(0, 2);
+        let plain = e.code_ref().line_to_char(3);
+        e.set_cursor(plain);
+        e.move_line_up();
+        assert_eq!(text(&e), "plain\nhead\nb1\nb2");
+        assert!(e.is_line_hidden(2) && e.is_line_hidden(3) && !e.is_line_hidden(1));
+    }
+
+    #[test]
+    fn two_adjacent_collapsed_folds_swap_whole() {
+        let mut e = ed("a\na1\nb\nb1", 0);
+        e.toggle_manual_fold(0, 1);
+        e.toggle_manual_fold(2, 3);
+        e.move_line_down();
+        assert_eq!(text(&e), "b\nb1\na\na1");
+        assert!(e.is_line_hidden(1) && e.is_line_hidden(3));
+        assert!(!e.is_line_hidden(2));
     }
 
     #[test]
