@@ -3660,6 +3660,17 @@ impl App {
             self.run_action("file.save_as");
             return;
         }
+        // T572: a file this user can't write offers Save As up front rather
+        // than failing at the write.
+        if self
+            .editor
+            .active_tab()
+            .is_some_and(|t| t.fs_access == crate::editor::FsAccess::ReadOnly)
+        {
+            self.status = t!("status.file_not_writable").to_string();
+            self.run_action("file.save_as");
+            return;
+        }
         if !self.write_active_to_disk() {
             return;
         }
