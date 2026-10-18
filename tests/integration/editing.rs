@@ -358,6 +358,7 @@ fn clipboard_history_records_copies_and_pastes_from_it() {
 }
 
 #[test]
+#[cfg(feature = "http")]
 fn http_send_reports_when_buffer_has_no_request() {
     // A buffer without a request line is rejected up front (no network attempt).
     let mut app = app_at(Path::new("."));
@@ -873,6 +874,7 @@ fn line_transforms_via_actions() {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn conflict_resolve_keeps_chosen_side() {
     let mut app = app_at(Path::new("."));
     type_str(
@@ -1003,6 +1005,7 @@ fn macro_records_and_replays_editor_keys() {
 }
 
 #[test]
+#[cfg(feature = "script")]
 fn accepting_trust_persists_and_loads_automatically_next_launch() {
     let dir = unique_dir("script-trust-accept");
     fs::create_dir_all(dir.join(".vix/scripts")).unwrap();
@@ -1044,6 +1047,7 @@ fn accepting_trust_persists_and_loads_automatically_next_launch() {
 }
 
 #[test]
+#[cfg(feature = "script")]
 fn declining_trust_persists_but_a_manual_reload_asks_again() {
     let dir = unique_dir("script-trust-decline");
     fs::create_dir_all(dir.join(".vix/scripts")).unwrap();

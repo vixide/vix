@@ -88,6 +88,15 @@ jobs:
       - name: cargo test
         run: cargo test --workspace
 
+      # T587: every Cargo feature combination must keep compiling and passing
+      # its own tests (spec/cargo-features/index.md).
+      - name: feature combinations (T587)
+        run: |
+          cargo install cargo-hack --locked
+          cargo clippy -p vix --no-default-features --all-targets -- -D warnings
+          cargo test -p vix --no-default-features
+          cargo hack check -p vix --each-feature --no-dev-deps
+
       # T505 (tasks.md): every example must keep running, not just compiling
       # (--all-targets above already builds them all). Only the headless
       # ones run here, each given real arguments against files in this

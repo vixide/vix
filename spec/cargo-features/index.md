@@ -25,6 +25,7 @@ no payoff and the heaviest coupling.
 | `ai` | `ai.*` | `vix-ai-core`, `-diff`, `-panel` |
 | `git` | `git.*` | (surface only: no crates) |
 | `jj` | `jj.*` | (surface only: no crates) |
+| `full` | umbrella for every capability; `default` enables it, and whole-product tests gate on it | all of the above |
 | `net` | umbrella for `http`, `ai`, `sql` | everything that can reach the network |
 
 `syntax-*` / `lang-*` (Tree-sitter grammars) are a separate, older axis and are
@@ -32,7 +33,7 @@ unchanged.
 
 ## Rules
 
-- **Default-on.** `default` lists every capability feature. `--no-default-features`
+- **Default-on.** `default` enables `full`, which lists every capability feature. `--no-default-features`
   is a supported build.
 - **Gate at the root, filter at runtime.** `cfg` lives only in the root package
   (`src/capability.rs` and, from T588, the gated modules). `vix-menu` and
@@ -57,8 +58,8 @@ unchanged.
 ## Status
 
 T586 (this framework) adds the features as empty (`sql = []`, …) and the runtime
-filter; nothing is compiled out yet, so the build is unchanged. T587 adds CI for
-every feature combination; T588–T593 attach each capability's crates and code;
+filter; nothing is compiled out yet, so the build is unchanged. T587 (done) adds CI for
+every feature combination (`spec/ci/index.md`); T588–T593 attach each capability's crates and code;
 T594 decides distribution.
 
 Tests: `src/capability.rs` (prefix map), `vix-menu` (`filter_menus`), and, in a

@@ -2,10 +2,12 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::cast_possible_truncation, clippy::format_collect)]
 
+#[cfg(feature = "ai")]
 mod ai;
 mod catalog;
 mod common;
 mod coverage;
+#[cfg(feature = "sql")]
 mod db;
 mod editing;
 mod find;
@@ -18,6 +20,7 @@ mod modal;
 mod org;
 mod palette;
 mod panels;
+#[cfg(feature = "script")]
 mod scripting;
 mod structural_replace;
 mod themes;

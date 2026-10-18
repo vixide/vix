@@ -119,6 +119,22 @@ unprivileged user. A test that reaches the real network fails there instead
 of in a downstream packager's sandbox. Test git helpers set
 `GIT_TERMINAL_PROMPT=0`. Audit at introduction: no test used a real remote.
 
+### Feature combinations (T587)
+
+All three forges (a `feature-combos` job on GitHub and GitLab, a step on
+Codeberg) run, for the root package: `cargo clippy --no-default-features
+--all-targets -- -D warnings`, `cargo test --no-default-features`, and
+`cargo hack check --each-feature --no-dev-deps`, so every capability feature
+(`spec/cargo-features/index.md`) keeps compiling alone and all-off. `scripts/check`
+runs the same three (the `cargo hack` step is skipped with a note when
+`cargo-hack` isn't installed). The checks that read source text or render the
+whole product — `tests/action_catalog.rs` (via `dispatch_scan`), the menu-bar
+insta snapshots, `tests/integration/menu.rs`'s Alt-letter test, and the
+`list_commands --write` / `generate_man` diffs — are **default-feature only**: they
+run in the normal job, and the snapshot and menu tests are gated on
+`#[cfg(feature = "full")]`. Tests that need one capability gate on its feature
+(`#[cfg(feature = "ai")]`, …), the same pattern as `lang-*` grammar tests.
+
 ## GitLab
 
 Stages `check` → `test` → `release`, on the pinned `rust:1.96` image (the

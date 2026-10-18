@@ -99,6 +99,29 @@ jobs:
         run: |
           sudo unshare -n -- sh -c "ip link set lo up && exec sudo -u $USER env PATH=$PATH HOME=$HOME GIT_TERMINAL_PROMPT=0 cargo test --workspace --offline"
 
+  # T587: a build with every capability off must compile, lint and pass its own
+  # tests, and each feature must build on its own. Tests that assume the whole
+  # product are gated on `feature = "full"`; see spec/cargo-features/index.md.
+  feature-combos:
+    name: feature combinations (T587)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: install cargo-hack
+        run: cargo install cargo-hack --locked
+      - name: clippy with no default features
+        run: cargo clippy -p vix --no-default-features --all-targets -- -D warnings
+      - name: test with no default features
+        run: cargo test -p vix --no-default-features
+      - name: check each feature
+        run: cargo hack check -p vix --each-feature --no-dev-deps
+
   # Broken-link gate for the docs (T002, spec/ci/index.md). The offline pass
   # only walks local files (deterministic, no network) and is part of the
   # gate; the external pass hits real URLs, which go stale independently of

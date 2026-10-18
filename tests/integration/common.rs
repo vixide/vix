@@ -19,7 +19,9 @@ pub(crate) use vix::clock;
 pub(crate) use vix::fileops;
 pub(crate) use vix::palette::{fuzzy_match, parse_path_target};
 pub(crate) use vix::search::{Flags as SearchFlags, SearchBar};
-pub(crate) use vix::settings::{MiscSettings, Settings, SubsystemSettings};
+#[cfg(feature = "ai")]
+pub(crate) use vix::settings::MiscSettings;
+pub(crate) use vix::settings::{Settings, SubsystemSettings};
 pub(crate) use vix::workspace_search::Flags as WorkspaceFlags;
 
 pub(crate) fn key(c: char) -> KeyEvent {
@@ -142,6 +144,7 @@ pub(crate) fn wait_for_ai_replace(app: &mut App, mut pred: impl FnMut(&App) -> b
 /// flow a real user granting workspace trust goes through, via the real
 /// `on_key` dispatch. Safe to call even when nothing is pending (a fresh
 /// `.vix/scripts/` with no files yet queues no prompt at all).
+#[cfg(feature = "script")]
 pub(crate) fn trust_scripts_if_prompted(app: &mut App) {
     if app.script_trust.is_some() {
         app.on_key(key('y'));
@@ -152,6 +155,7 @@ pub(crate) fn trust_scripts_if_prompted(app: &mut App) {
 /// `script.run` chooser (`App::scripts` itself is private) -- closes the
 /// chooser it opens to check, so it doesn't leak into whatever the test
 /// does next.
+#[cfg(feature = "script")]
 pub(crate) fn loaded_script_command_count(app: &mut App) -> usize {
     app.run_action("script.run");
     let n = app.script_chooser.as_ref().map_or(0, |c| c.commands.len());
@@ -162,6 +166,7 @@ pub(crate) fn loaded_script_command_count(app: &mut App) -> usize {
 /// `load_scripts()` plus an immediate "yes" to this workspace's trust
 /// prompt (T132), for tests whose point is a script's own behavior, not
 /// the trust gate itself.
+#[cfg(feature = "script")]
 pub(crate) fn load_scripts_trusted(app: &mut App) {
     app.load_scripts();
     app.maybe_prompt_script_trust();
