@@ -12,26 +12,9 @@
 //! filesystem. The host collects prompt answers, builds a [`Context`], reads
 //! and writes files, and calls into these functions to do the text shaping.
 
-use serde::{Deserialize, Serialize};
-
 // ----- Template shape --------------------------------------------------------
 
-/// How the expanded template is wrapped when inserted.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum EntryType {
-    /// A headline (`* ...`); the default.
-    #[default]
-    Entry,
-    /// Raw text, inserted verbatim with no wrapper.
-    Plain,
-    /// A plain list item (`- ...`).
-    Item,
-    /// A checkbox list item (`- [ ] ...`).
-    CheckItem,
-    /// A table row, appended as `| ... |`.
-    TableLine,
-}
+pub use vix_settings::EntryType;
 
 /// Where a captured entry is filed, parsed from a template's `target` string.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,41 +60,7 @@ impl Target {
     }
 }
 
-/// A user-configured capture template (an entry in the `org_capture_templates`
-/// setting).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CaptureTemplate {
-    /// Single-character (by convention) key identifying this template.
-    pub key: String,
-    /// Human-readable label shown in the capture menu/chooser.
-    pub description: String,
-    /// How the expanded template is wrapped.
-    #[serde(default)]
-    pub entry_type: EntryType,
-    /// Where the entry is filed; see [`Target::parse`].
-    #[serde(default = "default_target")]
-    pub target: String,
-    /// The template body: literal text plus placeholders (`%^{Prompt}`, `%t`,
-    /// `%a`, …).
-    pub template: String,
-    /// Insert at the top of the target (headline/file) instead of the bottom.
-    #[serde(default)]
-    pub prepend: bool,
-    /// Blank lines to pad before and after the inserted entry.
-    #[serde(default)]
-    pub empty_lines: u8,
-    /// Skip the review step and file immediately once every `%^{}` prompt
-    /// (and the tag prompt, if any) is answered.
-    #[serde(default)]
-    pub immediate_finish: bool,
-    /// Start a `CLOCK:` entry on the newly captured headline.
-    #[serde(default)]
-    pub clock_in: bool,
-}
-
-fn default_target() -> String {
-    "cursor".to_string()
-}
+pub use vix_settings::CaptureTemplate;
 
 // ----- Placeholder extraction ------------------------------------------------
 
@@ -774,78 +723,7 @@ pub fn insert_datetree(
 
 // ----- Built-in templates ---------------------------------------------------
 
-/// The built-in templates seeded into `org_capture_templates` by default:
-/// `Anything` (a quick `* TODO`), `Todo` (a blank `* TODO` to fill in), and
-/// `Contact` (an org-contacts-style entry with a property drawer).
-#[must_use]
-pub fn defaults() -> Vec<CaptureTemplate> {
-    vec![
-        CaptureTemplate {
-            key: "a".to_string(),
-            description: "Anything".to_string(),
-            entry_type: EntryType::Entry,
-            target: default_target(),
-            template: "* TODO %^{Task}".to_string(),
-            prepend: false,
-            empty_lines: 0,
-            immediate_finish: true,
-            clock_in: false,
-        },
-        CaptureTemplate {
-            key: "t".to_string(),
-            description: "Task".to_string(),
-            entry_type: EntryType::Entry,
-            target: default_target(),
-            template: "* TODO ".to_string(),
-            prepend: false,
-            empty_lines: 0,
-            immediate_finish: false,
-            clock_in: false,
-        },
-        CaptureTemplate {
-            key: "b".to_string(),
-            description: "Babel".to_string(),
-            entry_type: EntryType::Plain,
-            target: default_target(),
-            template: "#+begin_src %^{Language}\n%?\n#+end_src".to_string(),
-            prepend: false,
-            empty_lines: 0,
-            immediate_finish: false,
-            clock_in: false,
-        },
-        CaptureTemplate {
-            key: "n".to_string(),
-            description: "Note".to_string(),
-            entry_type: EntryType::Entry,
-            target: default_target(),
-            template: "* %^{Note}\n  %U".to_string(),
-            prepend: false,
-            empty_lines: 0,
-            immediate_finish: true,
-            clock_in: false,
-        },
-        CaptureTemplate {
-            key: "c".to_string(),
-            description: "Contact".to_string(),
-            entry_type: EntryType::Entry,
-            target: default_target(),
-            template: concat!(
-                "* %^{Name}\n",
-                "  :PROPERTIES:\n",
-                "  :EMAIL: %^{Email}\n",
-                "  :PHONE: %^{Phone}\n",
-                "  :ADDRESS: %^{Address}\n",
-                "  :BIRTHDAY: %^{Birthday}\n",
-                "  :END:",
-            )
-            .to_string(),
-            prepend: false,
-            empty_lines: 0,
-            immediate_finish: true,
-            clock_in: false,
-        },
-    ]
-}
+pub use vix_settings::default_capture_templates as defaults;
 
 #[cfg(test)]
 mod tests {

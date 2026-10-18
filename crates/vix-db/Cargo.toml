@@ -8,6 +8,7 @@ repository.workspace = true
 description = "DB workbench: connection management, schema browsing, and SQL queries."
 
 [dependencies]
+vix-settings = { path = "../vix-settings", version = "1.6.0" }
 confy = { workspace = true }
 crossterm = { workspace = true }
 futures-util = { workspace = true }

@@ -5272,6 +5272,7 @@ dependencies = [
  "serde",
  "serde_json",
  "vix-lsp-core",
+ "vix-settings",
 ]
 
 [[package]]
@@ -5293,6 +5294,7 @@ dependencies = [
  "vix-fileops",
  "vix-i18n",
  "vix-list-state",
+ "vix-settings",
  "vix-theme",
 ]
 
@@ -5640,6 +5642,7 @@ version = "1.6.0"
 dependencies = [
  "proptest",
  "serde",
+ "vix-settings",
 ]
 
 [[package]]
@@ -5729,10 +5732,8 @@ version = "1.6.0"
 dependencies = [
  "confy",
  "serde",
- "vix-dap",
- "vix-db",
+ "toml 1.1.8+spec-1.1.0",
  "vix-fileops",
- "vix-org-capture",
 ]
 
 [[package]]

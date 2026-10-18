@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Debug Adapter Protocol (DAP) client: drive a debug adapter over stdio."
 
 [dependencies]
+vix-settings = { path = "../vix-settings", version = "1.6.0" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 vix-lsp-core = { path = "../vix-lsp-core", version = "1.6.0" }

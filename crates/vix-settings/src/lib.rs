@@ -20,6 +20,11 @@
 
 use serde::{Deserialize, Serialize};
 
+mod model;
+pub use model::{
+    CaptureTemplate, Connection, DebugAdapter, EntryType, Kind, default_capture_templates,
+};
+
 /// Application name used by [`confy`] to locate the config directory.
 const APP_NAME: &str = "vix";
 
@@ -144,7 +149,7 @@ pub struct Settings {
     /// placeholder-driven templates filed at a cursor/id/file/headline/
     /// datetree target. Seeded with `Anything`/`Todo`/`Contact` by default;
     /// see the `vix-org-capture` crate and `crates/vix-org-capture/spec/index.md`.
-    pub org_capture_templates: Vec<vix_org_capture::CaptureTemplate>,
+    pub org_capture_templates: Vec<CaptureTemplate>,
     /// Highest-priority character for a headline's `[#X]` priority cookie
     /// (**Org → Priority**). "Highest" sorts first — Vix's default is
     /// numeric (`'0'` highest .. `'9'` lowest), unlike Emacs's default
@@ -195,7 +200,7 @@ pub struct Settings {
     pub ai_api_key_command: String,
     /// Configured debug adapters (DAP), matched to files by extension. Empty by
     /// default — add the adapters you have installed.
-    pub debug_adapters: Vec<vix_dap::DebugAdapter>,
+    pub debug_adapters: Vec<DebugAdapter>,
     /// Command run by **Tools → Run Tests**, whose output is parsed into a
     /// pass/fail tree (e.g. `cargo test`, `pytest -v`, `npm test`).
     pub test_command: String,
@@ -211,7 +216,7 @@ pub struct Settings {
     pub test_width: u16,
     /// Saved database connections for the **DB** menu (the `vix-db` crate spec). Passwords
     /// are never stored here; they are prompted for per session.
-    pub db_connections: Vec<vix_db::connect::Connection>,
+    pub db_connections: Vec<Connection>,
 }
 
 /// Line-number gutter and inline whitespace-glyph display toggles (T149 —
@@ -539,7 +544,7 @@ impl Default for Settings {
             dictionary_path: String::new(),
             lsp_servers: Vec::new(),
             contacts_dir: String::new(),
-            org_capture_templates: vix_org_capture::defaults(),
+            org_capture_templates: default_capture_templates(),
             org_priority_highest: '0',
             org_priority_lowest: '9',
             org_priority_default: '0',
@@ -833,6 +838,62 @@ mod tests {
         SecondaryPanelSettings, Settings, SubsystemSettings, TypingSettings, ViewportSettings,
         cmd_double_quote, sh_single_quote,
     };
+    use crate::EntryType;
+
+    /// T584: the DB, debug-adapter and org-capture sections are plain data owned by
+    /// this crate, so a config carrying every one of them survives a load → save
+    /// round trip unchanged even in a build that omits those capabilities.
+    #[test]
+    fn config_with_every_capability_section_round_trips() {
+        let src = r#"
+[[db_connections]]
+name = "prod"
+kind = "postgres"
+host = "db.example.com"
+port = "5433"
+user = "admin"
+database = "app"
+writable = true
+password_command = "pass show db/prod"
+ssh_host = "jump.example.com"
+sslmode = "verify-full"
+
+[[debug_adapters]]
+adapter_id = "codelldb"
+extensions = ["rs", "c"]
+command = ["codelldb", "--port", "0"]
+
+[debug_adapters.launch]
+program = "{program}"
+
+[[org_capture_templates]]
+key = "j"
+description = "Journal"
+entry_type = "check-item"
+target = "file+datetree:journal.org"
+template = "- [ ] %^{What}"
+prepend = true
+empty_lines = 1
+immediate_finish = true
+clock_in = true
+"#;
+        let first: Settings = toml::from_str(src).unwrap();
+        assert_eq!(first.db_connections[0].host, "db.example.com");
+        assert_eq!(first.debug_adapters[0].launch["program"], "{program}");
+        assert_eq!(
+            first.org_capture_templates[0].entry_type,
+            EntryType::CheckItem
+        );
+        let saved = toml::to_string(&first).unwrap();
+        let second: Settings = toml::from_str(&saved).unwrap();
+        assert_eq!(toml::to_string(&second).unwrap(), saved);
+        assert_eq!(second.db_connections, first.db_connections);
+        assert_eq!(second.org_capture_templates, first.org_capture_templates);
+        assert_eq!(
+            second.debug_adapters[0].command,
+            first.debug_adapters[0].command
+        );
+    }
 
     #[test]
     fn t124_ai_provider_defaults_to_cli_with_no_http_config() {

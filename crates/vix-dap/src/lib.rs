@@ -20,25 +20,11 @@ use std::io::{Read, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
-use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use vix_lsp_core::frame;
 
-/// A configured debug adapter (parallels `LspServer` in `vix-settings`).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DebugAdapter {
-    /// Adapter id sent in `initialize` (e.g. `"codelldb"`, `"debugpy"`).
-    pub adapter_id: String,
-    /// File extensions (without the dot) this adapter debugs, e.g. `["rs"]`.
-    pub extensions: Vec<String>,
-    /// Launch command: program then args, e.g. `["codelldb", "--port", "0"]`.
-    pub command: Vec<String>,
-    /// Extra fields merged into the `launch` request arguments (as TOML → JSON),
-    /// e.g. `program`, `cwd`, `args`. `{program}` is replaced with the file path.
-    #[serde(default)]
-    pub launch: std::collections::BTreeMap<String, String>,
-}
+pub use vix_settings::DebugAdapter;
 
 /// One stack frame from a `stackTrace` response.
 #[derive(Clone, Debug, PartialEq, Eq)]
