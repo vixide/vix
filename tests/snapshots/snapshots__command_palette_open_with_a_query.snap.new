@@ -1,0 +1,35 @@
+---
+source: tests/snapshots.rs
+assertion_line: 201
+expression: screen
+---
+ Vix  File  Edit  View  Go  Run  Org  Project  Tools  Help                                       
+  Explorer ─────────────────╮  untitled                           ╭  Messages ───────────────────
+ src                        │──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
+ Cargo.toml                 │    1                                ●│ Ctrl B toggles the file explo
+ README.md                  │                                     ││
+               ╭  Command Palette [Commands] ──────────────────────────────────────╮
+               │❯ >goto█                                                            │
+               │> Go to Start                                                       │
+               │> Go to End                                                         │
+               │> Go to Line End                                                    │
+               │> Go to Line Number                                                 │
+               │> Go to Line Start                                                  │
+               │> Go to Paragraph End                                               │
+               │> Go to Section Start                                               │
+               │> Go to Section End                                                 │
+               │> Go to Definition                                                  │
+               │> Go to Paragraph Start                                             │
+               │> Go to Symbol in File                                              │
+               │> Go to Symbol in Workspace                                         │───────────────
+  Output ─────│> LSP: Go to Implementation                                         │───────────────
+(no output yet)│> LSP: Go to Type Definition                                        │
+               │> Toggle Bottom Status                                              │
+               │> Toggle Overwrite Mode                                             │
+               │                                                                    │
+               │prefixes:  (none) files   > commands   # buffers   : line   @ symbol│
+               ╰────────────────────────────────────────────────────────────────────╯
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ untitled  —  Ready                                                text  LF  UTF-8   Ln 1:Col 1   

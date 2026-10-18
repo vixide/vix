@@ -1,0 +1,35 @@
+---
+source: tests/snapshots.rs
+assertion_line: 261
+expression: screen
+---
+ Vix  File  Edit  View  Go  Run  Org  Project  Tools  Help                                       
+  Explorer ─────────────────╮  untitled                           ╭  Messages ───────────────────
+ src                        │──────────────────────────────────────│ Welcome to Vix. Press Ctrl P
+ Cargo.toml                 │    1                                ●│ Ctrl B toggles the file explo
+ README.md                  │                                     ││ git is not included in this b
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││
+                             │                                     ││●──────────────────────────────
+  Output ──────────────────────────────────────────────────────────────────────────────────────────
+(no output yet)
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ untitled  —  Ready                                                text  LF  UTF-8   Ln 1:Col 1   

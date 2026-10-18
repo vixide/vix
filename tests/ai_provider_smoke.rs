@@ -7,6 +7,8 @@
 //! `crates/vix-ai-core/tests/http_smoke.rs`'s direct (App-free) exercise of
 //! `complete` alone.
 
+#![cfg(feature = "ai")]
+
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::{Duration, Instant};

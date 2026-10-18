@@ -515,6 +515,7 @@ const TWO_CONFLICTS: &str = "a\n<<<<<<< HEAD\nours1\n=======\ntheirs1\n>>>>>>> b
     <<<<<<< HEAD\nours2\n=======\ntheirs2\n>>>>>>> branch\nz\n";
 
 #[test]
+#[cfg(feature = "git")]
 fn conflict_list_opens_with_every_conflict_in_source_order() {
     let mut app = app_at(Path::new("."));
     buffer_with(&mut app, TWO_CONFLICTS, 0);
@@ -534,6 +535,7 @@ fn conflict_list_reports_no_conflict_on_a_clean_buffer() {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn conflict_list_enter_jumps_to_the_selected_conflict_and_closes() {
     let mut app = app_at(Path::new("."));
     buffer_with(&mut app, TWO_CONFLICTS, 0);
@@ -547,6 +549,7 @@ fn conflict_list_enter_jumps_to_the_selected_conflict_and_closes() {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn conflict_list_resolve_key_resolves_without_closing_the_overlay() {
     let mut app = app_at(Path::new("."));
     buffer_with(&mut app, TWO_CONFLICTS, 0);

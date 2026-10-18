@@ -20,6 +20,10 @@
 //! See "Reviewing/updating snapshots" in `agents/conventions.md` for the
 //! workflow when a golden file needs to change.
 
+// Default-feature only: the menu bar and palette differ in a build with a capability
+// compiled out (T587).
+#![cfg(feature = "full")]
+
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;

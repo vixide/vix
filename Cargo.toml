@@ -147,7 +147,7 @@ eula = false
 #
 # The grammars actually live in the vix_editor_core crate; these features simply
 # forward to that crate's identically-named features.
-default = ["syntax-common", "sql", "image", "script", "terminal", "http", "ai", "git", "jj"]
+default = ["syntax-common", "full"]
 syntax-common = ["vix-editor-core/syntax-common"]
 syntax-all = ["vix-editor-core/syntax-all"]
 
@@ -162,6 +162,10 @@ http = []
 ai = []
 git = []
 jj = []
+# Every capability. `default` enables it; tests that assume the whole product
+# (menu-bar snapshots, Alt-letter menus) gate on it, since a build with any
+# capability off legitimately has a different menu bar.
+full = ["sql", "image", "script", "terminal", "http", "ai", "git", "jj"]
 # The network-facing capabilities together.
 net = ["http", "ai", "sql"]
 

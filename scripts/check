@@ -21,6 +21,15 @@ cargo clippy --workspace --all-targets -- -D warnings
 echo "==> cargo test"
 cargo test --workspace
 
+echo "==> feature combinations (T587)"
+cargo clippy -p vix --no-default-features --all-targets -- -D warnings
+cargo test -p vix --no-default-features
+if command -v cargo-hack >/dev/null 2>&1; then
+	cargo hack check -p vix --each-feature --no-dev-deps
+else
+	echo "    (skipping each-feature check: 'cargo install cargo-hack --locked' to enable)"
+fi
+
 echo "==> run headless examples (T505)"
 cargo run --example list_commands >/dev/null
 cargo run --example headless_edit >/dev/null

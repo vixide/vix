@@ -364,6 +364,7 @@ fn f10_toggles_menu_bar() {
 }
 
 #[test]
+#[cfg(feature = "full")]
 fn alt_letters_open_specific_menus() {
     let alt = |c: char| KeyEvent::new(KeyCode::Char(c), KeyModifiers::ALT);
     let menu_index = |name: &str| {

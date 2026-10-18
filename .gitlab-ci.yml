@@ -142,6 +142,17 @@ test:
     - cargo run --example textops_pipeline -- index.md >/dev/null
     - cargo run --example query_search -- examples/demo-workspace TODO >/dev/null
 
+# T587: every Cargo feature combination must keep compiling and passing its own
+# tests (spec/cargo-features/index.md).
+feature-combos:
+  stage: test
+  script:
+    - rustup component add clippy
+    - cargo install cargo-hack --locked
+    - cargo clippy -p vix --no-default-features --all-targets -- -D warnings
+    - cargo test -p vix --no-default-features
+    - cargo hack check -p vix --each-feature --no-dev-deps
+
 # T008 (tasks.md): binary-size visibility, at a fraction of the GitHub job's
 # complexity (see spec/ci/index.md) — posting a merge-request note needs an
 # API token this pipeline is not given, so this reports to the job log
