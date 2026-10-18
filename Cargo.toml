@@ -444,9 +444,6 @@ ratatui = { workspace = true }
 crossterm = { workspace = true }
 # Recursive, .gitignore-aware directory walking for the file index / fuzzy finder.
 ignore = { workspace = true }
-# HTTP client for the REST tool. Pure-Rust TLS (rustls) so it cross-compiles to
-# musl/windows-gnu without a system OpenSSL.
-ureq = { workspace = true }
 # Regular expressions for find/replace.
 regex = { workspace = true }
 # Settings serialization (confy handles the TOML; serde derives the schema).
@@ -486,9 +483,7 @@ nix = { workspace = true }
 # QR code generation (Tools → QR Code). default-features = false drops the
 # optional image/svg renderers; we only use the built-in Unicode renderer.
 qrcode = { workspace = true }
-# Integrated terminal (Tools → Terminal): a real PTY (ConPTY/openpty) hosting a
-# shell, with `vt100` parsing the escape sequences into a renderable screen grid.
-portable-pty = { workspace = true }
+# `vt100` parses the integrated terminal's escape sequences into a screen grid.
 vt100 = { workspace = true }
 
 # Dependencies for the in-tree code-editor widget (src/editor_core/).
@@ -501,34 +496,6 @@ streaming-iterator = { workspace = true }
 tree-sitter = { workspace = true }
 unicode-segmentation = { workspace = true }
 unicode-width = { workspace = true }
-
-# Optional Tree-sitter grammars, selected by the lang-* features above.
-tree-sitter-bash = { workspace = true, optional = true }
-tree-sitter-c = { workspace = true, optional = true }
-tree-sitter-c-sharp = { workspace = true, optional = true }
-tree-sitter-cpp = { workspace = true, optional = true }
-tree-sitter-css = { workspace = true, optional = true }
-tree-sitter-go = { workspace = true, optional = true }
-tree-sitter-html = { workspace = true, optional = true }
-tree-sitter-java = { workspace = true, optional = true }
-tree-sitter-javascript = { workspace = true, optional = true }
-tree-sitter-json = { workspace = true, optional = true }
-tree-sitter-md = { workspace = true, optional = true }
-tree-sitter-python = { workspace = true, optional = true }
-tree-sitter-rust = { workspace = true, optional = true }
-tree-sitter-toml-ng = { workspace = true, optional = true }
-tree-sitter-typescript = { workspace = true, optional = true }
-tree-sitter-yaml = { workspace = true, optional = true }
-
-# DB workbench (crates/vix-db/spec): embedded database drivers via the `Any` runtime
-# driver — SQLite (bundled C), and pure-Rust PostgreSQL/MySQL over rustls (no
-# system OpenSSL, same rationale as ureq). Replaces shelling out to the
-# sqlite3/psql/mysql CLIs and holds one persistent connection per session.
-sqlx = { workspace = true }
-# Minimal runtime for sqlx's async drivers; each DB session owns a
-# current-thread runtime on its own worker thread (src/db/session.rs).
-tokio = { workspace = true }
-futures-util = { workspace = true }
 
 [dev-dependencies]
 clap_mangen = { workspace = true }
