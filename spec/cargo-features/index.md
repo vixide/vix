@@ -68,7 +68,7 @@ never spawns `git` (no status, gutter, inline blame, branch/log/conflict tools, 
 menu, dashboard commit count, or `git` probe in `--doctor`). The `vix-git` crate stays
 compiled because `App`'s fields and the panel drawing use its plain data types; plain
 file comparison (Tools → Compare with File) moved to `diff_tool.rs` so it works in
-every build. T594 (distribution) is decided below.
+every build. T594 is decided below.
 
 Tests: `src/capability.rs` (prefix map), `vix-menu` (`filter_menus`), and, in a
 `--no-default-features` build, `an_action_from_a_disabled_capability_warns_…`.
@@ -76,3 +76,19 @@ Tests: `src/capability.rs` (prefix map), `vix-menu` (`filter_menus`), and, in a
 ## Measured
 
 `cargo tree --no-default-features -e normal` has **zero** `sqlx`, `ureq`, `rustls`, `ring`, `keyring`, `rhai`, `portable-pty`, `vt100`, `image` or `ratatui-image` crates: with `net` (`http`, `ai`, `sql`) off, the build contains no TLS stack and makes no outbound network connections.
+
+## Distribution (T594)
+
+Decided with the maintainer: **ship a minimal variant** (`--no-default-features`,
+"no features") as an extra release artifact, alongside the normal build. It ships as
+plain per-target archives with checksums (`.github/workflows/release-minimal.yml`,
+`spec/ci/index.md`), not as installers: dist builds one app per package and
+Homebrew, npm and MSI each assume one binary per target. The normal installers and
+SBOM are unchanged and still carry the full default build. Documented for users in
+`docs/getting-started`.
+
+Measured (macOS arm64, `cargo build --release`, 2026-10-18): the default build is
+22,893,440 bytes (21.8 MiB); `--no-default-features` is 12,857,520 bytes (12.3 MiB),
+about 44% smaller, with `vix --version --json` reporting `"capabilities":[]`. The
+`binary-size` CI job reports the default build only; per-feature-off sizes are not yet
+in its comment.
