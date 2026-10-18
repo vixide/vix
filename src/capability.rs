@@ -111,6 +111,19 @@ pub fn enabled_names() -> Vec<&'static str> {
         .collect()
 }
 
+/// Every `--doctor` check for this build: the standard set from `vix-doctor`,
+/// minus the `git` probe when Git is compiled out (a locked-down build never
+/// spawns `git`, not even to look for it), plus the capabilities row.
+#[must_use]
+pub fn doctor_checks(settings: &crate::settings::Settings) -> Vec<vix_doctor::Check> {
+    let mut checks = vix_doctor::run(settings);
+    if !Capability::Git.enabled() {
+        checks.retain(|c| c.name != "git");
+    }
+    checks.push(doctor_check());
+    checks
+}
+
 /// A `--doctor` / Help → Run Diagnostics row listing the compiled-in
 /// capabilities, so a bug report says which build the user ran.
 #[must_use]

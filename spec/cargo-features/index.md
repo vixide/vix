@@ -23,7 +23,7 @@ no payoff and the heaviest coupling.
 | `terminal` | `tools.terminal` | `vix-terminal`, `vt100` (portable-pty; `terminal_off.rs` no-op stand-ins) |
 | `http` | `tools.http_send` | `vix-http-client` (`http_off.rs` stand-ins) |
 | `ai` | `ai.*` | `vix-ai-core`, `-diff`, `-panel` (`ai_off.rs` stand-ins; Git's generated commit message and DB assist are `cfg(ai)`) |
-| `git` | `git.*` | (surface only: no crates) |
+| `git` | `git.*` | (surface only: `vix-git` stays compiled for the panel data types, but nothing calls its process-spawning code; `src/app/git.rs`, with `git_off.rs` stand-ins) |
 | `jj` | `jj.*` | (surface only: no crates; `src/app/jj.rs`) |
 | `full` | umbrella for every capability; `default` enables it, and whole-product tests gate on it | all of the above |
 | `net` | umbrella for `http`, `ai`, `sql` | everything that can reach the network |
@@ -63,11 +63,12 @@ feature combination, `spec/ci/index.md`), and the capabilities `sql` (T588), `im
 Each gated capability keeps shared call sites `cfg`-free with a small `*_off.rs`
 stand-in module or an uninhabited stand-in type.
 
-Not done: `git` (T593's second half) is deliberately an empty runtime-filter feature.
-It is surface-only (no crates) and medium-hard: explorer colors, the status bar, the
-gutter, inline blame and the dashboard each need a git-off fallback. Do it only when a
-locked-down build is actually wanted. T594 (whether to ship a minimal variant as a
-release artifact, and documenting every feature's measured size) needs the maintainer.
+`git` (second half of T593) is done as a surface-only lock-down: without it Vix
+never spawns `git` (no status, gutter, inline blame, branch/log/conflict tools, Git
+menu, dashboard commit count, or `git` probe in `--doctor`). The `vix-git` crate stays
+compiled because `App`'s fields and the panel drawing use its plain data types; plain
+file comparison (Tools → Compare with File) moved to `diff_tool.rs` so it works in
+every build. T594 (distribution) is decided below.
 
 Tests: `src/capability.rs` (prefix map), `vix-menu` (`filter_menus`), and, in a
 `--no-default-features` build, `an_action_from_a_disabled_capability_warns_…`.

@@ -12,7 +12,11 @@ mod coverage;
 mod db;
 #[cfg(not(feature = "sql"))]
 mod db_off;
+mod diff_tool;
+#[cfg(feature = "git")]
 mod git;
+#[cfg(not(feature = "git"))]
+mod git_off;
 #[cfg(feature = "http")]
 mod http;
 #[cfg(not(feature = "http"))]
@@ -601,6 +605,7 @@ enum AiDest {
     /// Open the git commit prompt pre-filled with the reply (T125's
     /// "Generate Commit Message") — fills the message box, never commits on
     /// its own; the user still reviews and presses Enter.
+    #[cfg(feature = "git")]
     GitCommitMessage,
     /// Insert the reply as its own line immediately before position `at` in
     /// tab `tab` (T125's "Generate Doc Comment"). Unlike `Replace`/`Diff`,
@@ -1894,6 +1899,7 @@ pub struct App {
     lsp_synced: std::collections::HashMap<PathBuf, u64>,
     /// Inline-blame cache: the `(path, 1-based line)` last blamed, so the blame is
     /// recomputed only when the cursor moves to a different line.
+    #[cfg(feature = "git")]
     blame_cache: Option<(PathBuf, usize)>,
     /// Debug Adapter Protocol client (one active session).
     pub dap: crate::dap::Dap,
@@ -2024,10 +2030,12 @@ pub struct App {
     pub git_status: Vec<crate::git::FileStatus>,
     /// Cached HEAD blob text per file path, for the editor diff gutter. Cleared
     /// on save / git actions so it refetches.
+    #[cfg(feature = "git")]
     git_head_cache: std::collections::HashMap<PathBuf, String>,
     /// The `(path, buffer revision)` the diff gutter was last computed for
     /// (T510: `refresh_git_gutter` is called every redraw, so this skips
     /// recomputing the Myers diff when neither has changed since).
+    #[cfg(feature = "git")]
     git_gutter_cache_key: Option<(PathBuf, u64)>,
     /// Cache for the declaration scan behind [`App::sticky_header`] and
     /// [`App::breadcrumb`]: `(active tab index, path, buffer revision, the
@@ -2389,6 +2397,7 @@ impl App {
             vcard: None,
             lsp,
             lsp_synced: std::collections::HashMap::new(),
+            #[cfg(feature = "git")]
             blame_cache: None,
             dap: crate::dap::Dap::new(),
             breakpoints: std::collections::HashMap::new(),
@@ -2444,7 +2453,9 @@ impl App {
             linked_ranges: None,
             git_branch: None,
             git_status: Vec::new(),
+            #[cfg(feature = "git")]
             git_head_cache: std::collections::HashMap::new(),
+            #[cfg(feature = "git")]
             git_gutter_cache_key: None,
             symbols_cache: std::cell::RefCell::new(None),
             coverage: None,
@@ -2736,6 +2747,7 @@ impl App {
             a if self.run_text_tool_action(a) => {}
             a if self.run_vim_action(a) => {}
             other if self.run_view_action(other) => {}
+            #[cfg(feature = "git")]
             other if self.run_git_action(other) => {}
             #[cfg(feature = "jj")]
             other if self.run_jj_action(other) => {}
@@ -2896,8 +2908,7 @@ impl App {
             }
             "help.privacy" => self.welcome = Some(WelcomePanel::open(Self::privacy_lines())),
             "help.doctor" => {
-                let mut checks = crate::doctor::run(&self.settings);
-                checks.push(crate::capability::doctor_check());
+                let checks = crate::capability::doctor_checks(&self.settings);
                 self.welcome = Some(WelcomePanel::open(crate::doctor::format_report(&checks)));
             }
             "vix.settings" => self.open_settings_file(),
@@ -2957,11 +2968,13 @@ impl App {
         true
     }
 
+    #[cfg(any(feature = "git", feature = "jj"))]
     /// Single-quote `s` for safe use as one `sh -c` word (POSIX escaping).
     fn shell_single_quote(s: &str) -> String {
         format!("'{}'", s.replace('\'', "'\\''"))
     }
 
+    #[cfg(any(feature = "git", feature = "jj"))]
     /// Quote one user-typed argument (a clone URL, a grep pattern) for the
     /// shell that [`App::run_command_in`] hands the line to, or `None` when
     /// it can't be made safe (T569). `allow_dash` is `false` for positional
@@ -10221,9 +10234,7 @@ impl App {
         });
 
         std::thread::spawn(move || {
-            let _ = tx.send(DashMsg::Commits(
-                crate::git::commit_count(&root).unwrap_or(0),
-            ));
+            let _ = tx.send(DashMsg::Commits(repo_commit_count(&root)));
         });
 
         self.dashboard_rx = Some(rx);
@@ -12273,8 +12284,11 @@ impl App {
             PromptKind::SearchToDock => {
                 self.search_workspace_to_dock(&prompt.input, prompt.case_sensitive, prompt.regex);
             }
+            #[cfg(feature = "git")]
             PromptKind::GitCommit => self.git_commit(&prompt.input),
+            #[cfg(feature = "git")]
             PromptKind::GitNewBranch => self.git_create_branch(&prompt.input),
+            #[cfg(feature = "git")]
             PromptKind::GitClone => self.git_clone(&prompt.input),
             #[cfg(feature = "jj")]
             PromptKind::JjClone
@@ -12296,10 +12310,22 @@ impl App {
             | PromptKind::JjBookmarkCreate
             | PromptKind::JjBookmarkSet
             | PromptKind::JjBookmarkDelete => {}
+            #[cfg(feature = "git")]
             PromptKind::GitEditDescription => self.git_edit_description(&prompt.input),
+            #[cfg(feature = "git")]
             PromptKind::GitDeleteBranch => self.git_delete_branch(&prompt.input),
+            #[cfg(feature = "git")]
             PromptKind::GitGrep => self.git_grep(&prompt.input),
+            #[cfg(feature = "git")]
             PromptKind::GitOpenAtRevision => self.git_open_at_revision(prompt.input.trim()),
+            #[cfg(not(feature = "git"))]
+            PromptKind::GitCommit
+            | PromptKind::GitNewBranch
+            | PromptKind::GitClone
+            | PromptKind::GitEditDescription
+            | PromptKind::GitDeleteBranch
+            | PromptKind::GitGrep
+            | PromptKind::GitOpenAtRevision => {}
             PromptKind::WorkspaceSymbol => {
                 if let Some(path) = self.active_path()
                     && self.lsp.handles(&path)
@@ -13249,6 +13275,20 @@ fn script_current_line_text(ed: &crate::editor::CodeEditor) -> String {
 }
 
 /// Hex color for a diff-gutter line mark (green add, yellow modify, red delete).
+/// Commits in the repository at `root`, for the dashboard; always 0 in a build
+/// without the `git` capability (nothing may spawn `git`).
+#[cfg(feature = "git")]
+fn repo_commit_count(root: &Path) -> u64 {
+    crate::git::commit_count(root).unwrap_or(0)
+}
+
+/// See the `git` version above.
+#[cfg(not(feature = "git"))]
+fn repo_commit_count(_root: &Path) -> u64 {
+    0
+}
+
+#[cfg(feature = "git")]
 fn gutter_hex(mark: crate::git::LineMark) -> &'static str {
     match mark {
         crate::git::LineMark::Added => "#3fb950",
@@ -13379,6 +13419,7 @@ mod tests {
 
     /// T569: hostile clone URLs / patterns are refused or quoted into one
     /// shell word, never interpreted.
+    #[cfg(any(feature = "git", feature = "jj"))]
     #[test]
     fn vcs_shell_arg_refuses_options_and_quotes_metacharacters() {
         assert_eq!(App::vcs_shell_arg("--upload-pack=touch x", false), None);
