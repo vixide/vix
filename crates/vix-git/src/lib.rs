@@ -504,6 +504,20 @@ pub fn head_blob(dir: &Path, rel_path: &str) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+/// Stage every change in the working tree (`git add -A`).
+///
+/// # Errors
+///
+/// Returns git's own stderr on failure.
+pub fn stage_all(dir: &Path) -> Result<(), String> {
+    let out = git(dir, &["add", "-A"]).map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
 /// Stage a path (`git add -- <path>`).
 ///
 /// # Errors

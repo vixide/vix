@@ -85,6 +85,11 @@ pub struct Settings {
     /// value falls back to `"trash"`, the safer default, rather than
     /// silently hard-deleting on a typo.
     pub explorer_delete: String,
+    /// What Git → Commit does when nothing is staged but the tree has
+    /// changes (T577): `"ask"` (default — confirm, then `git add -A`),
+    /// `"always"` (stage everything without asking) or `"never"` (refuse).
+    /// Any other value behaves as `"ask"`.
+    pub smart_commit: String,
     /// Height (rows) of the bottom dock; drag its top edge to resize.
     pub bottom_dock_height: u16,
     /// Maximum lines retained in the bottom dock (scrollback); oldest dropped past this.
@@ -515,6 +520,7 @@ impl Default for Settings {
             subsystems: SubsystemSettings::default(),
             accessibility: AccessibilitySettings::default(),
             explorer_delete: "trash".to_string(),
+            smart_commit: "ask".to_string(),
             bottom_dock_height: 9,
             scrollback: 1000,
             indent_style: "spaces".to_string(),

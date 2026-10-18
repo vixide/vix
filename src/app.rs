@@ -620,12 +620,24 @@ pub struct PasteOp {
     pub conflict: Option<PathBuf>,
 }
 
-/// A yes/no confirmation (currently only used for delete).
+/// What a [`Confirm`] does when answered yes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ConfirmKind {
+    /// Delete [`Confirm::paths`] (explorer Delete).
+    #[default]
+    Delete,
+    /// `git add -A`, then open the commit prompt (T577).
+    StageAllAndCommit,
+}
+
+/// A yes/no confirmation (explorer delete, smart commit).
 pub struct Confirm {
     /// Prompt text.
     pub message: String,
     /// Paths the confirmed action will act on.
     pub paths: Vec<PathBuf>,
+    /// What "yes" does.
+    pub kind: ConfirmKind,
 }
 
 /// A pending "trust this workspace's scripts?" decision (T132), shown once
@@ -7243,10 +7255,29 @@ impl App {
         self.confirm = Some(Confirm {
             message: t!(key, n = paths.len()).to_string(),
             paths,
+            kind: ConfirmKind::Delete,
         });
     }
 
     fn confirm_key(&mut self, key: KeyEvent) {
+        if self
+            .confirm
+            .as_ref()
+            .is_some_and(|c| c.kind == ConfirmKind::StageAllAndCommit)
+        {
+            match key.code {
+                KeyCode::Char('y' | 'Y') => {
+                    self.confirm = None;
+                    self.git_stage_all_then_commit();
+                }
+                KeyCode::Char('n' | 'N') | KeyCode::Esc => {
+                    self.confirm = None;
+                    self.status = t!("status.git_nothing_staged").into();
+                }
+                _ => {}
+            }
+            return;
+        }
         match key.code {
             KeyCode::Char('y' | 'Y') => {
                 if let Some(c) = self.confirm.take() {
@@ -14883,6 +14914,7 @@ mod tests {
         app.confirm = Some(Confirm {
             message: String::new(),
             paths: vec![path.clone()],
+            kind: ConfirmKind::Delete,
         });
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o555)).unwrap();
         app.confirm_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));

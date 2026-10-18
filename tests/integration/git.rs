@@ -109,6 +109,64 @@ fn git_panel_stages_and_commits() {
     fs::remove_dir_all(&dir).ok();
 }
 
+/// T577: with nothing staged but a dirty tree, Git → Commit asks (default),
+/// stages everything without asking ("always"), or refuses ("never").
+#[test]
+#[ignore = "needs git; creates a throwaway repo and commits in it"]
+fn smart_commit_ask_always_and_never() {
+    let dir = unique_dir("smartcommit");
+    fs::create_dir_all(&dir).unwrap();
+    init_git_repo(&dir, "Test");
+    fs::write(dir.join("a.txt"), "hello\n").unwrap();
+    let mut app = app_at(&dir);
+    let press_c = |app: &mut App| {
+        app.run_action("git.changes");
+        app.on_key(keycode(KeyCode::Char('c')));
+    };
+
+    app.settings.smart_commit = "never".to_string();
+    press_c(&mut app);
+    assert!(
+        app.confirm.is_none() && app.prompt.is_none(),
+        "never refuses"
+    );
+
+    app.settings.smart_commit = "ask".to_string();
+    press_c(&mut app);
+    assert!(app.confirm.is_some(), "ask shows a confirm");
+    assert!(
+        app.git_status.iter().all(|f| !f.is_staged()),
+        "nothing staged yet"
+    );
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(
+        app.confirm.is_none() && app.prompt.is_none(),
+        "no declines cleanly"
+    );
+    assert!(app.git_status.iter().all(|f| !f.is_staged()));
+
+    press_c(&mut app);
+    app.on_key(key('y'));
+    assert!(
+        app.confirm.is_none() && app.prompt.is_some(),
+        "yes opens the commit prompt"
+    );
+    assert!(app.git_status.iter().all(vix::git::FileStatus::is_staged));
+
+    fs::remove_dir_all(&dir).ok();
+
+    // "always" skips the confirm.
+    let dir = unique_dir("smartcommit-always");
+    fs::create_dir_all(&dir).unwrap();
+    init_git_repo(&dir, "Test");
+    fs::write(dir.join("a.txt"), "hello\n").unwrap();
+    let mut app = app_at(&dir);
+    app.settings.smart_commit = "always".to_string();
+    press_c(&mut app);
+    assert!(app.confirm.is_none() && app.prompt.is_some());
+    fs::remove_dir_all(&dir).ok();
+}
+
 /// T125: the Git panel's `g` key generates a commit message from the staged
 /// diff and opens the commit prompt pre-filled with it -- it only fills the
 /// message box, it never commits on its own.
