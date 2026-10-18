@@ -173,3 +173,11 @@ Every action has a smoke test in `tests/integration/catalog.rs`
 | `deselect` | `deselect` | `Deselect` |
 | `clear-info` | `clear_info` | `ClearInfo` |
 | `none` | `none` | `None` |
+
+## Collapsed folds and Move Line (T580)
+
+Move Line Up/Down treats a collapsed fold as one block: the moved block is the cursor line plus its hidden body, and it swaps with the adjacent visible line plus *its* hidden body. A fold is never split or moved into, and other collapsed folds inside the swapped region keep their shape.
+
+## Drag past the edge (T581)
+
+A left-drag keeps extending the selection when the pointer leaves the text area: a pointer at or past the top or bottom edge scrolls one line and extends to the edge row; one left of the text clamps to the first column. The app keeps routing the drag to the editor wherever the pointer is, and calls `Editor::autoscroll_tick` from the main loop (polling every 50 ms while a drag is active), because terminals report drag only on motion.

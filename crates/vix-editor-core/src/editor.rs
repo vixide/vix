@@ -75,6 +75,11 @@ pub struct Editor {
     /// Selection snapping mode (to word, to line, or none)
     pub(crate) selection_snap: SelectionSnap,
 
+    /// Last pointer position `(column, row)` of an in-progress left-drag, for
+    /// [`Editor::autoscroll_tick`] (T581): a terminal only reports drag on
+    /// motion, so a held, still pointer outside the view needs a timer.
+    pub(crate) drag_pointer: Option<(u16, u16)>,
+
     /// Fallback clipboard storage when the system clipboard is unavailable
     pub(crate) clipboard: Option<String>,
 
@@ -212,6 +217,7 @@ impl Editor {
             selection: None,
             clicks: ClickTracker::new(Duration::from_millis(700)),
             selection_snap: SelectionSnap::None,
+            drag_pointer: None,
             clipboard: None,
             marks: None,
             spell_marks: None,

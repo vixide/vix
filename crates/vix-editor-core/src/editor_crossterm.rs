@@ -175,29 +175,125 @@ impl Editor {
             MouseEventKind::ScrollUp => self.scroll_up(),
             MouseEventKind::ScrollDown => self.scroll_down(area.height as usize),
             MouseEventKind::Down(MouseButton::Left) => {
+                self.drag_pointer = None;
                 let pos = self.cursor_from_mouse(mouse.column, mouse.row, area);
                 if let Some(cursor) = pos {
                     self.handle_mouse_down(cursor);
                 }
             }
             MouseEventKind::Drag(MouseButton::Left) => {
-                // Auto-scroll when dragging on the last or first visible row
-                if mouse.row == area.top() {
-                    self.scroll_up();
-                }
-                if mouse.row == area.bottom().saturating_sub(1) {
-                    self.scroll_down(area.height as usize);
-                }
-                let pos = self.cursor_from_mouse(mouse.column, mouse.row, area);
-                if let Some(cursor) = pos {
-                    self.handle_mouse_drag(cursor);
-                }
+                self.drag_pointer = Some((mouse.column, mouse.row));
+                self.drag_to(mouse.column, mouse.row, *area);
             }
             MouseEventKind::Up(MouseButton::Left) => {
                 self.selection_snap = SelectionSnap::None;
+                self.drag_pointer = None;
             }
             _ => {}
         }
         Ok(())
+    }
+
+    /// Extend the selection to the pointer at `(column, row)` during a drag
+    /// (T581). A pointer past the top or bottom edge scrolls one line and
+    /// extends to the edge row, and one left of the text clamps to the first
+    /// column, so the selection keeps growing instead of stalling.
+    fn drag_to(&mut self, column: u16, row: u16, area: Rect) {
+        let top = area.top();
+        let last = area.bottom().saturating_sub(1);
+        if row <= top {
+            self.scroll_up();
+        }
+        if row >= last {
+            self.scroll_down(area.height as usize);
+        }
+        let gutter = u16::try_from(self.get_line_number_width()).unwrap_or(u16::MAX);
+        let col = column.clamp(
+            area.left().saturating_add(gutter),
+            area.right().saturating_sub(1),
+        );
+        if let Some(cursor) = self.cursor_from_mouse(col, row.clamp(top, last), &area) {
+            self.handle_mouse_drag(cursor);
+        }
+    }
+
+    /// Repeat the last drag while the pointer is held still outside the top
+    /// or bottom edge (T581). Call periodically; a no-op when no drag is in
+    /// progress or the pointer is inside the view. Returns whether it acted.
+    pub fn autoscroll_tick(&mut self, area: &Rect) -> bool {
+        let Some((column, row)) = self.drag_pointer else {
+            return false;
+        };
+        if row > area.top() && row < area.bottom().saturating_sub(1) {
+            return false;
+        }
+        self.drag_to(column, row, *area);
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::KeyModifiers;
+
+    fn ev(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
+        MouseEvent {
+            kind,
+            column,
+            row,
+            modifiers: KeyModifiers::NONE,
+        }
+    }
+
+    fn doc() -> Editor {
+        let text = (0..200).fold(String::new(), |a, i| a + &format!("line {i}\n"));
+        Editor::new("text", &text, Vec::new()).unwrap()
+    }
+
+    /// T581: dragging past the bottom/top edge keeps scrolling and keeps
+    /// extending the selection, and a held pointer keeps going on ticks.
+    #[test]
+    fn drag_past_the_edges_autoscrolls_and_extends_the_selection() {
+        let area = Rect::new(0, 5, 40, 10);
+        let mut e = doc();
+        e.set_offset_y(50);
+        e.mouse(ev(MouseEventKind::Down(MouseButton::Left), 8, 8), &area)
+            .unwrap();
+        let anchor_line = e.code_ref().char_to_line(e.get_cursor());
+
+        // Pointer far below the view (e.g. over the status bar).
+        e.mouse(ev(MouseEventKind::Drag(MouseButton::Left), 8, 30), &area)
+            .unwrap();
+        assert_eq!(e.offset_y, 51, "scrolled down");
+        let sel = e.get_selection().expect("selection extended");
+        let end_line = e.code_ref().char_to_line(sel.end);
+        assert!(
+            end_line > anchor_line + 5,
+            "extended to the last visible row"
+        );
+
+        // Held still: ticks keep scrolling and extending.
+        assert!(e.autoscroll_tick(&area));
+        assert!(e.autoscroll_tick(&area));
+        assert_eq!(e.offset_y, 53);
+        let sel2 = e.get_selection().unwrap();
+        let end2 = e.code_ref().char_to_line(sel2.end);
+        assert!(end2 > end_line);
+
+        // Pointer above the view scrolls back up.
+        e.mouse(ev(MouseEventKind::Drag(MouseButton::Left), 8, 0), &area)
+            .unwrap();
+        assert_eq!(e.offset_y, 52);
+
+        // Inside the view: no tick action. After release: none either.
+        e.mouse(ev(MouseEventKind::Drag(MouseButton::Left), 8, 8), &area)
+            .unwrap();
+        assert!(!e.autoscroll_tick(&area));
+        e.mouse(ev(MouseEventKind::Drag(MouseButton::Left), 8, 30), &area)
+            .unwrap();
+        e.mouse(ev(MouseEventKind::Up(MouseButton::Left), 8, 30), &area)
+            .unwrap();
+        assert!(!e.autoscroll_tick(&area));
     }
 }
