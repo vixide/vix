@@ -168,14 +168,17 @@ fn main() -> io::Result<()> {
     // support simply won't send motion events.
     let _ = write!(io::stdout(), "\x1b[?1003h");
     let _ = io::stdout().flush();
-    // Query the terminal for graphics support so images can be displayed. Use a
-    // short timeout (the default is 2s) so startup never stalls on terminals
-    // that don't answer the capability query.
-    let query = ratatui_image::picker::cap_parser::QueryStdioOptions {
-        timeout: Duration::from_millis(250),
-        ..Default::default()
-    };
-    app.picker = ratatui_image::picker::Picker::from_query_stdio_with_options(query).ok();
+    #[cfg(feature = "image")]
+    {
+        // Query the terminal for graphics support so images can be displayed. Use a
+        // short timeout (the default is 2s) so startup never stalls on terminals
+        // that don't answer the capability query.
+        let query = ratatui_image::picker::cap_parser::QueryStdioOptions {
+            timeout: Duration::from_millis(250),
+            ..Default::default()
+        };
+        app.picker = ratatui_image::picker::Picker::from_query_stdio_with_options(query).ok();
+    }
     // Draw once before the (comparatively expensive, git-subprocess-based)
     // initial refresh, so the terminal shows real content immediately
     // rather than sitting on whatever was on screen before Vix started for

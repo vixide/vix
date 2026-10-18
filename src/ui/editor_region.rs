@@ -7,8 +7,6 @@
 
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Paragraph};
-use ratatui_image::StatefulImage;
-use ratatui_image::protocol::StatefulProtocol;
 
 use super::{RULER_COLUMN, draw_hscrollbar, draw_minimap, draw_scrollbar};
 use crate::app::App;
@@ -149,7 +147,7 @@ fn draw_pane(app: &mut App, frame: &mut Frame, area: Rect, tab_index: usize) -> 
         if let Some(tab) = app.editor.tabs.get_mut(tab_index)
             && let Some(proto) = tab.image.as_mut()
         {
-            frame.render_stateful_widget(StatefulImage::<StatefulProtocol>::new(), text, proto);
+            render_image(frame, text, proto);
         }
         return text;
     }
@@ -202,7 +200,7 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         if let Some(tab) = app.editor.active_tab_mut()
             && let Some(proto) = tab.image.as_mut()
         {
-            frame.render_stateful_widget(StatefulImage::<StatefulProtocol>::new(), text, proto);
+            render_image(frame, text, proto);
         }
         return;
     }
@@ -258,4 +256,21 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         app.editor_hmax = 0;
     }
     app.layout.editor_hscrollbar = hbar_rect.unwrap_or_default();
+}
+
+/// Draw an image tab's terminal-graphics protocol into `area`.
+#[cfg(feature = "image")]
+fn render_image(frame: &mut Frame, area: Rect, proto: &mut crate::editor::ImageProtocol) {
+    frame.render_stateful_widget(
+        ratatui_image::StatefulImage::<crate::editor::ImageProtocol>::new(),
+        area,
+        proto,
+    );
+}
+
+/// Without the `image` feature no image tab can exist (`ImageProtocol` is
+/// uninhabited), so there is nothing to draw.
+#[cfg(not(feature = "image"))]
+fn render_image(_frame: &mut Frame, _area: Rect, proto: &mut crate::editor::ImageProtocol) {
+    match *proto {}
 }

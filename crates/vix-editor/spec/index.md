@@ -254,3 +254,7 @@ anchor/extend, the OS clipboard with in-process fallback, mouse hit-testing
 channels (`marks`, `spell_marks`, `diagnostic_marks`, `gutter_marks`). Cut, copy,
 paste, undo, redo, comment toggle, select-all, and duplicate are applied as
 `editor_core` actions from `App::run_action`.
+
+## `image` feature (T589)
+
+Image tabs depend on the default-on `image` feature (`ratatui-image`). Without it `Tab::image` is `Option<ImageProtocol>` with `ImageProtocol` an uninhabited enum, so `Tab::is_image` is always false and `Editor::open_image` does not exist; the App shows the capability-missing message when asked to open an image path. `is_image_path` is unconditional so such paths are never opened as text.
