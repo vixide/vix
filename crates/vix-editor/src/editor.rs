@@ -1561,3 +1561,22 @@ mod nav_tests {
         assert_eq!(sentence_starts("pi is 3.14 today"), vec![0]);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// T572: a filesystem-read-only tab shows a lock in its title; a
+    /// writable one doesn't, and toggling View-only doesn't touch it.
+    #[test]
+    fn title_shows_a_lock_only_for_filesystem_read_only_tabs() {
+        let mut e = Editor::new(Flags::LINE_NUMBERS, "    ".into());
+        let tab = e.active_tab_mut().unwrap();
+        assert!(!tab.title().contains('🔒'));
+        tab.fs_access = FsAccess::ReadOnly;
+        assert!(tab.title().contains('🔒'));
+        tab.read_only = true;
+        tab.read_only = false;
+        assert_eq!(tab.fs_access, FsAccess::ReadOnly);
+    }
+}

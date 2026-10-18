@@ -75,7 +75,7 @@ key)]` reverse lookup, not yet used by any UI) can pair its results with
   specific source always wins) and just as likely to drift silently, so
   both are rejected rather than allowed to sit unused.
 - **i18n**: the same test asserts every `CATALOG` title key exists in
-  `locales/action.yml`.
+  `crates/vix-i18n/locales/action.yml`.
 
 ## Roadmap
 

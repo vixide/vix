@@ -77,6 +77,28 @@ jobs:
       - name: scripts/check-docs
         run: python3 scripts/check-docs
 
+  # T573 (tasks.md): the suite must make no network calls -- distro builders
+  # run `cargo test` in offline sandboxes. Build with the network, then run
+  # the tests in a fresh network namespace that has only loopback (the AI
+  # and HTTP smoke tests talk to a local listener), as the unprivileged
+  # user so permission-based tests behave as they do for everyone else.
+  offline-test:
+    name: tests without network (T573)
+    runs-on: ubuntu-latest
+    env:
+      GIT_TERMINAL_PROMPT: "0"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build tests
+        run: cargo test --workspace --no-run
+      - name: run tests in an empty network namespace
+        run: |
+          sudo unshare -n -- sh -c "ip link set lo up && exec sudo -u $USER env PATH=$PATH HOME=$HOME GIT_TERMINAL_PROMPT=0 cargo test --workspace --offline"
+
   # Broken-link gate for the docs (T002, spec/ci/index.md). The offline pass
   # only walks local files (deterministic, no network) and is part of the
   # gate; the external pass hits real URLs, which go stale independently of
