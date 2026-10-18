@@ -8,7 +8,9 @@
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
-use super::{draw_scrollbar, trunc};
+use super::draw_scrollbar;
+#[cfg(feature = "sql")]
+use super::trunc;
 use crate::app::App;
 use crate::theme::{self, icon};
 
@@ -354,6 +356,7 @@ fn outline_line(tree: &crate::edit_outline::Tree, i: usize, selected: bool) -> L
 
 // Render the outline editor overlay: a scrolling tree of items with the selected
 // item highlighted, and a status/hint line.
+#[cfg(feature = "sql")]
 pub(super) fn draw_edit_sql(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.edit_sql.is_none() {
         return;

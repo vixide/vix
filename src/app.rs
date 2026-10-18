@@ -5,7 +5,10 @@
 mod ai;
 mod command_palette;
 mod coverage;
+#[cfg(feature = "sql")]
 mod db;
+#[cfg(not(feature = "sql"))]
+mod db_off;
 mod git;
 mod http;
 mod info_panels;
@@ -570,7 +573,8 @@ enum AiDest {
     /// of replacing the text immediately (see [`crate::ai_diff`]).
     Diff { tab: usize, target: AiTarget },
     /// Apply the reply to the DB workbench's SQL editor (see
-    /// [`crate::db::Browser::apply_ai_reply`]).
+    /// `vix_db::Browser::apply_ai_reply`).
+    #[cfg(feature = "sql")]
     Db,
     /// Open the git commit prompt pre-filled with the reply (T125's
     /// "Generate Commit Message") — fills the message box, never commits on
@@ -584,6 +588,19 @@ enum AiDest {
     /// before applying — otherwise the comment would run directly into the
     /// code it documents with nothing separating them.
     InsertBeforeLine { tab: usize, at: usize },
+}
+
+impl AiDest {
+    /// Whether the reply lands in a surface with its own inline status (the chat
+    /// panel or DB workbench), so it needs no `Messages` entry.
+    fn is_inline(self) -> bool {
+        match self {
+            AiDest::Panel => true,
+            #[cfg(feature = "sql")]
+            AiDest::Db => true,
+            _ => false,
+        }
+    }
 }
 
 /// An open AI diff review: the proposed change plus where it applies.
@@ -9697,6 +9714,7 @@ impl App {
         match action {
             "tools.edit_table" => self.open_edit_table(),
             "tools.edit_outline" => self.open_edit_outline(),
+            #[cfg(feature = "sql")]
             "tools.edit_sql" => self.open_edit_sql(),
             "tools.edit_json" => self.open_edit_value(crate::edit_value::Format::Json),
             "tools.edit_yaml" => self.open_edit_value(crate::edit_value::Format::Yaml),
@@ -9707,6 +9725,7 @@ impl App {
     }
 
     /// Open the SQL statement editor on the active buffer.
+    #[cfg(feature = "sql")]
     fn open_edit_sql(&mut self) {
         let Some(tab) = self.editor.active_tab() else {
             self.messages.warn(t!("msg.edit_sql_no_buffer").to_string());
@@ -9721,6 +9740,7 @@ impl App {
     }
 
     /// Route a key to the open SQL editor and act on its outcome.
+    #[cfg(feature = "sql")]
     fn edit_sql_key(&mut self, key: KeyEvent) {
         let page = usize::from(self.layout.edit_sql.height)
             .saturating_sub(1)
@@ -9737,6 +9757,7 @@ impl App {
     }
 
     /// Serialize the SQL editor back into the active buffer and save it.
+    #[cfg(feature = "sql")]
     fn save_edit_sql(&mut self) {
         let Some(text) = self.edit_sql.as_ref().map(crate::edit_sql::Editor::to_text) else {
             return;

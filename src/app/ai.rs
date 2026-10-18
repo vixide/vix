@@ -476,6 +476,7 @@ impl App {
                         }
                     }
                     AiDest::Diff { tab, target } => self.open_ai_diff(tab, target, text),
+                    #[cfg(feature = "sql")]
                     AiDest::Db => {
                         if let Some(b) = self.db.as_mut() {
                             b.apply_ai_reply(text);
@@ -500,7 +501,7 @@ impl App {
                     }
                 }
                 self.status = t!("status.ai_done", action = &ar.label).to_string();
-                if !matches!(ar.dest, AiDest::Panel | AiDest::Db) {
+                if !ar.dest.is_inline() {
                     self.messages.info(t!("status.ai_done", action = ar.label));
                 }
             }
@@ -528,11 +529,12 @@ impl App {
             panel.busy = false;
             panel.push(crate::ai_panel::Role::Error, message.clone());
         }
+        #[cfg(feature = "sql")]
         if let (AiDest::Db, Some(b)) = (ar.dest, self.db.as_mut()) {
             b.ai_failed();
         }
         self.status.clone_from(&message);
-        if !matches!(ar.dest, AiDest::Panel | AiDest::Db) {
+        if !ar.dest.is_inline() {
             self.messages.error(message);
         }
     }

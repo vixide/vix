@@ -154,7 +154,7 @@ syntax-all = ["vix-editor-core/syntax-all"]
 # Capability features (T586, spec/cargo-features). All default-on, so a normal
 # build is unchanged. They start empty (no `dep:` yet) and gate nothing but the
 # runtime filter in `src/capability.rs`; later tasks (T588+) attach crates.
-sql = []
+sql = ["dep:vix-db", "dep:vix-edit-sql"]
 image = []
 script = []
 terminal = []
@@ -220,7 +220,7 @@ vix-convert-from-tsv-into-json-tool = { path = "crates/vix-convert-from-tsv-into
 # Debug Adapter Protocol (DAP) client: drive a debug adapter over stdio.
 vix-dap = { path = "crates/vix-dap", version = "1.6.0" }
 # DB workbench: connection management, schema browsing, and SQL queries.
-vix-db = { path = "crates/vix-db", version = "1.6.0" }
+vix-db = { path = "crates/vix-db", version = "1.6.0", optional = true }
 # Editor host: the `CodeEditor` widget wrapper and the pane tree.
 vix-editor = { path = "crates/vix-editor", version = "1.6.0" }
 # The fully-custom terminal code-editor widget (owns the Tree-sitter grammars);
@@ -325,7 +325,7 @@ vix-edit-bytes = { path = "crates/vix-edit-bytes", version = "1.6.0" }
 # The outline editor: hierarchical hide/show and restructuring for prose text.
 vix-edit-outline = { path = "crates/vix-edit-outline", version = "1.6.0" }
 # The SQL edit surface: a statement-oriented view of a `.sql` buffer.
-vix-edit-sql = { path = "crates/vix-edit-sql", version = "1.6.0" }
+vix-edit-sql = { path = "crates/vix-edit-sql", version = "1.6.0", optional = true }
 # The table editor: a spreadsheet-like grid for viewing and editing
 # delimited data (CSV/TSV) as rows and columns.
 vix-edit-table = { path = "crates/vix-edit-table", version = "1.6.0" }

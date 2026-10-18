@@ -9,6 +9,8 @@
 //! sort, filter, export, EXPLAIN with the plan-doctor insight, and the
 //! write-confirmation gate. No external database or CLI is required.
 
+#![cfg(feature = "sql")]
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use vix::db::{Browser, Pages, Pane, View, connect, session::Session};
 
