@@ -13956,29 +13956,31 @@ fn jump_label(i: usize) -> String {
     }
 }
 
-/// The top-level menu index for an `Alt+letter` mnemonic: Vix=0, File=1, Edit=2,
-/// View=3 (Alt+I, since "Vix"/"View" both start with V), Go=4 (Alt+N, since Git
-/// keeps Alt+G and Alt+J is the recent-locations jump), Run=5 (Alt+R), AI=6,
-/// DB=7 (Alt+D), JJ=8 (no mnemonic — Alt+J is the recent-locations jump), Git=9,
-/// Org=10, Project=11 (no mnemonic — Alt+P already means `search.prev_selection`
-/// in the editor; see `global_shared_key`), Tools=12, Help=13. `None` for any
-/// other letter.
+/// The top-level menu index for an `Alt+letter` mnemonic, found by looking the
+/// menu up by its `MenuDef.name` so adding or removing a top-level menu can't
+/// shift the mnemonics. Vix=V, File=F, Edit=E, View=I (since "Vix"/"View" both
+/// start with V), Go=N (since Git keeps Alt+G and Alt+J is the recent-locations
+/// jump), Run=R, AI=A, DB=D, Git=G, Org=O, Tools=T, Help=H. JJ and Project have
+/// no mnemonic (Alt+J is the recent-locations jump; Alt+P already means
+/// `search.prev_selection` in the editor; see `global_shared_key`). `None` for
+/// any other letter, or when the menu isn't in the current build.
 fn menu_index_for_alt(c: char) -> Option<usize> {
-    match c.to_ascii_lowercase() {
-        'v' => Some(0),
-        'f' => Some(1),
-        'e' => Some(2),
-        'i' => Some(3),
-        'n' => Some(4),
-        'r' => Some(5),
-        'a' => Some(6),
-        'd' => Some(7),
-        'g' => Some(9),
-        'o' => Some(10),
-        't' => Some(12),
-        'h' => Some(13),
-        _ => None,
-    }
+    let name = match c.to_ascii_lowercase() {
+        'v' => "menu.vix",
+        'f' => "menu.file",
+        'e' => "menu.edit",
+        'i' => "menu.view",
+        'n' => "menu.go",
+        'r' => "menu.run",
+        'a' => "menu.ai",
+        'd' => "menu.db",
+        'g' => "menu.git",
+        'o' => "menu.org",
+        't' => "menu.tools",
+        'h' => "menu.help",
+        _ => return None,
+    };
+    crate::menu::menus().iter().position(|m| m.name == name)
 }
 
 /// The char offset within `code` of LSP position `(line, character)`, where
@@ -14226,6 +14228,32 @@ const MIN_EDITOR_WIDTH: u16 = 20;
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn alt_mnemonics_resolve_menus_by_name() {
+        let menus = crate::menu::menus();
+        for (c, name) in [
+            ('v', "menu.vix"),
+            ('F', "menu.file"),
+            ('e', "menu.edit"),
+            ('i', "menu.view"),
+            ('n', "menu.go"),
+            ('r', "menu.run"),
+            ('a', "menu.ai"),
+            ('d', "menu.db"),
+            ('g', "menu.git"),
+            ('o', "menu.org"),
+            ('t', "menu.tools"),
+            ('h', "menu.help"),
+        ] {
+            let i = menu_index_for_alt(c).unwrap_or_else(|| panic!("no menu for Alt+{c}"));
+            assert_eq!(menus[i].name, name, "Alt+{c}");
+        }
+        // JJ and Project deliberately have no mnemonic; unknown letters are None.
+        assert_eq!(menu_index_for_alt('j'), None);
+        assert_eq!(menu_index_for_alt('p'), None);
+        assert_eq!(menu_index_for_alt('z'), None);
+    }
+
     use super::*;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
