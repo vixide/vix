@@ -15,3 +15,7 @@ Vix re-reads `git status` on open, after each save, and after every git action,
 so changes you make on the command line are reflected (press `r` to refresh on
 demand).
 
+
+## Smart commit (T577)
+
+When nothing is staged but the working tree has changes, `c` consults the `smart_commit` setting: `"ask"` (default) shows a yes/no confirm that runs `git add -A` and then opens the commit prompt; `"always"` stages everything without asking; `"never"` keeps the old "nothing staged" refusal. A clean tree always refuses.

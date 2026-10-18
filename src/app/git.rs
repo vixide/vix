@@ -18,8 +18,8 @@ use std::path::{Path, PathBuf};
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 
 use super::{
-    AiDest, AiReplace, App, AppFlags, BranchChooser, DiffViewState, GitPanel, Prompt, PromptKind,
-    gutter_hex, rect_contains,
+    AiDest, AiReplace, App, AppFlags, BranchChooser, Confirm, ConfirmKind, DiffViewState, GitPanel,
+    Prompt, PromptKind, gutter_hex, rect_contains,
 };
 use crate::editor::Tab;
 
@@ -939,6 +939,28 @@ impl App {
 
     /// Begin a commit: prompt for a message (only when something is staged).
     fn git_begin_commit(&mut self) {
+        let any_staged = self
+            .git_status
+            .iter()
+            .any(crate::git::FileStatus::is_staged);
+        if !any_staged && !self.git_status.is_empty() {
+            // T577: nothing staged but the tree is dirty.
+            match self.settings.smart_commit.as_str() {
+                "never" => {}
+                "always" => {
+                    self.git_stage_all_then_commit();
+                    return;
+                }
+                _ => {
+                    self.confirm = Some(Confirm {
+                        message: t!("confirm.git_stage_all_commit").to_string(),
+                        paths: Vec::new(),
+                        kind: ConfirmKind::StageAllAndCommit,
+                    });
+                    return;
+                }
+            }
+        }
         if !self.require_staged() {
             return;
         }
@@ -947,6 +969,20 @@ impl App {
             PromptKind::GitCommit,
             t!("prompt.git_commit").to_string(),
         ));
+    }
+
+    /// `git add -A`, refresh the status, and open the commit prompt (T577).
+    pub(super) fn git_stage_all_then_commit(&mut self) {
+        match crate::git::stage_all(&self.root) {
+            Ok(()) => {
+                self.refresh_git();
+                self.git_begin_commit();
+            }
+            Err(e) => {
+                self.messages
+                    .error(t!("msg.git_stage_failed", error = e).to_string());
+            }
+        }
     }
 
     /// Generate a commit message from the staged diff with the configured AI
