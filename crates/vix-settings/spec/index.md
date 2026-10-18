@@ -207,3 +207,16 @@ helpers, all backed by `confy` under the app name `vix` and config stem
 
 [`confy`]: https://crates.io/crates/confy
 [TOML]: https://toml.io/
+
+## Capability data types (T584)
+
+`vix-settings` owns the plain serde types for the sections whose behavior lives
+elsewhere: `Connection` and `Kind` (DB, with their small pure helpers),
+`DebugAdapter` (DAP), and `CaptureTemplate`, `EntryType` and
+`default_capture_templates` (org-capture). `vix-db`, `vix-dap` and
+`vix-org-capture` depend on `vix-settings` and re-export them, so existing paths
+(`vix_db::connect::Connection`) still work. The direction matters: `Settings`
+must round-trip every section in every build, because `Settings::save` writes
+back only the fields it knows — gating a field behind a capability would silently
+delete the user's config the first time a build without that capability saved.
+A test loads a config with every section and re-saves it unchanged.
