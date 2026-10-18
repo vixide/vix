@@ -21,8 +21,8 @@ no payoff and the heaviest coupling.
 | `image` | (none; image tabs) | `image`, `ratatui-image` (43 exclusive crates; forwards to `vix-editor/image`) |
 | `script` | `script.*`, `script:*` | `vix-script` (rhai; `src/app/scripts.rs`, with `scripts_off.rs` no-op stand-ins) |
 | `terminal` | `tools.terminal` | `vix-terminal`, `vt100` (portable-pty; `terminal_off.rs` no-op stand-ins) |
-| `http` | `tools.http_send` | `vix-http-client` |
-| `ai` | `ai.*` | `vix-ai-core`, `-diff`, `-panel` |
+| `http` | `tools.http_send` | `vix-http-client` (`http_off.rs` stand-ins) |
+| `ai` | `ai.*` | `vix-ai-core`, `-diff`, `-panel` (`ai_off.rs` stand-ins; Git's generated commit message and DB assist are `cfg(ai)`) |
 | `git` | `git.*` | (surface only: no crates) |
 | `jj` | `jj.*` | (surface only: no crates) |
 | `full` | umbrella for every capability; `default` enables it, and whole-product tests gate on it | all of the above |
@@ -59,8 +59,12 @@ unchanged.
 
 T586 (this framework) adds the features as empty (`sql = []`, …) and the runtime
 filter; nothing is compiled out yet, so the build is unchanged. T587 (done) adds CI for
-every feature combination (`spec/ci/index.md`); T588 (`sql`), T589 (`image`) and T590 (`script`) and T591 (`terminal`) are done; T592–T593 attach each capability's crates and code;
+every feature combination (`spec/ci/index.md`); T588 (`sql`), T589 (`image`) and T590 (`script`) and T591 (`terminal`), T592 (`http`, `ai`) are done; T593 attaches each capability's crates and code;
 T594 decides distribution.
 
 Tests: `src/capability.rs` (prefix map), `vix-menu` (`filter_menus`), and, in a
 `--no-default-features` build, `an_action_from_a_disabled_capability_warns_…`.
+
+## Measured
+
+`cargo tree --no-default-features -e normal` has **zero** `sqlx`, `ureq`, `rustls`, `ring`, `keyring`, `rhai`, `portable-pty`, `vt100`, `image` or `ratatui-image` crates: with `net` (`http`, `ai`, `sql`) off, the build contains no TLS stack and makes no outbound network connections.

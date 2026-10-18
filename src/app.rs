@@ -2,7 +2,10 @@
 
 #![warn(clippy::pedantic)]
 
+#[cfg(feature = "ai")]
 mod ai;
+#[cfg(not(feature = "ai"))]
+mod ai_off;
 mod command_palette;
 mod coverage;
 #[cfg(feature = "sql")]
@@ -10,7 +13,10 @@ mod db;
 #[cfg(not(feature = "sql"))]
 mod db_off;
 mod git;
+#[cfg(feature = "http")]
 mod http;
+#[cfg(not(feature = "http"))]
+mod http_off;
 mod info_panels;
 mod insert_tools;
 mod jj;
@@ -549,6 +555,7 @@ struct RunningCommand {
     label: String,
 }
 
+#[cfg(feature = "ai")]
 /// Result of a background AI text transform whose output replaces editor text.
 enum AiMsg {
     /// The AI backend finished successfully, carrying its full reply text.
@@ -563,6 +570,7 @@ enum AiMsg {
     Failed(Option<String>),
 }
 
+#[cfg(feature = "ai")]
 /// Which part of a buffer an AI transform replaces.
 #[derive(Clone, Copy)]
 enum AiTarget {
@@ -572,6 +580,7 @@ enum AiTarget {
     Range(usize, usize),
 }
 
+#[cfg(feature = "ai")]
 /// Where a finished AI task's captured output goes.
 #[derive(Clone, Copy)]
 enum AiDest {
@@ -602,6 +611,7 @@ enum AiDest {
     InsertBeforeLine { tab: usize, at: usize },
 }
 
+#[cfg(feature = "ai")]
 impl AiDest {
     /// Whether the reply lands in a surface with its own inline status (the chat
     /// panel or DB workbench), so it needs no `Messages` entry.
@@ -615,6 +625,11 @@ impl AiDest {
     }
 }
 
+/// Stand-in for `AiDiffState` in a build without the `ai` feature; never constructed.
+#[cfg(not(feature = "ai"))]
+enum AiDiffState {}
+
+#[cfg(feature = "ai")]
 /// An open AI diff review: the proposed change plus where it applies.
 struct AiDiffState {
     /// The reviewable, hunk-toggleable diff.
@@ -625,6 +640,11 @@ struct AiDiffState {
     target: AiTarget,
 }
 
+/// Stand-in for `AiReplace` in a build without the `ai` feature; never constructed.
+#[cfg(not(feature = "ai"))]
+enum AiReplace {}
+
+#[cfg(feature = "ai")]
 /// A background AI task whose captured output is applied when it finishes —
 /// either replacing editor text (Annotate, Improve) or opening a new tab
 /// (Summarize, Explain, Define).
@@ -1809,6 +1829,7 @@ pub struct App {
     /// Media-type (MIME) picker overlay, when open.
     pub media_type_panel: Option<crate::media_type::Panel>,
     /// Receiver for an in-flight HTTP request's response (background `curl`).
+    #[cfg(feature = "http")]
     http_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
     /// HTML character palette overlay, when open.
     pub html_panel: Option<HtmlPanel>,
@@ -1972,6 +1993,7 @@ pub struct App {
     /// Selection captured when the "Edit selection with instruction" prompt
     /// was opened (T125), used to run the AI edit on submit: the tab and the
     /// exact range to replace.
+    #[cfg(feature = "ai")]
     ai_instruction_target: Option<(usize, AiTarget)>,
     /// The last Org link stored with **Org → Hyperlinks → Store Link** (seeds
     /// the Insert Link… prompt).
@@ -2342,6 +2364,7 @@ impl App {
             theme_editor: None,
             theme_editor_baseline: None,
             media_type_panel: None,
+            #[cfg(feature = "http")]
             http_rx: None,
             html_panel: None,
             system_info: None,
@@ -2408,6 +2431,7 @@ impl App {
             macro_keys: Vec::new(),
             complete_session: None,
             rename_at: None,
+            #[cfg(feature = "ai")]
             ai_instruction_target: None,
             stored_org_link: None,
             agenda_restriction: None,
@@ -12281,7 +12305,10 @@ impl App {
                 }
             }
             PromptKind::LinkedEdit => self.apply_linked_edit(&prompt.input),
+            #[cfg(feature = "ai")]
             PromptKind::AiInstruction => self.submit_ai_instruction(&prompt.input),
+            #[cfg(not(feature = "ai"))]
+            PromptKind::AiInstruction => {}
             PromptKind::ExplorerInclude => {
                 let exclude = self.explorer.exclude_filter.clone();
                 self.explorer.set_filter(prompt.input.trim(), &exclude);

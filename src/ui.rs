@@ -3,6 +3,7 @@
 
 #![warn(clippy::pedantic)]
 
+#[cfg(feature = "ai")]
 mod ai;
 mod bottom_dock;
 mod boxes;
@@ -29,6 +30,7 @@ mod tabs;
 mod terminal;
 mod tool_panels;
 
+#[cfg(feature = "ai")]
 use ai::{draw_ai_diff, draw_ai_panel};
 use bottom_dock::draw_bottom_dock;
 use boxes::{draw_calendar, draw_clock, draw_dashboard};
@@ -370,16 +372,7 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     if app.qrcode.is_some() {
         draw_qrcode(app, frame, area);
     }
-    if app.ai_panel.is_some() {
-        draw_ai_panel(app, frame, area);
-    }
-    #[cfg(feature = "terminal")]
-    if app.terminal.is_some() {
-        draw_terminal(app, frame, area);
-    }
-    if app.ai_diff_review().is_some() {
-        draw_ai_diff(app, frame, area);
-    }
+    draw_capability_overlays(app, frame, area);
     if app.theme_editor.is_some() {
         draw_theme_editor(app, frame, area);
     }
@@ -390,6 +383,26 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
         draw_html_panel(app, frame, area);
     }
     draw_overlays_aux(app, frame, area);
+}
+
+/// The overlays owned by optional capabilities, in stacking order: the AI chat
+/// panel, the integrated terminal, then the AI diff review. A build without a
+/// capability simply skips its overlay.
+fn draw_capability_overlays(app: &mut App, frame: &mut Frame, area: Rect) {
+    #[cfg(feature = "ai")]
+    if app.ai_panel.is_some() {
+        draw_ai_panel(app, frame, area);
+    }
+    #[cfg(feature = "terminal")]
+    if app.terminal.is_some() {
+        draw_terminal(app, frame, area);
+    }
+    #[cfg(feature = "ai")]
+    if app.ai_diff_review().is_some() {
+        draw_ai_diff(app, frame, area);
+    }
+    #[cfg(not(any(feature = "ai", feature = "terminal")))]
+    let _ = (app, frame, area);
 }
 
 /// The `sql` capability's overlays: the SQL statement editor, then the DB

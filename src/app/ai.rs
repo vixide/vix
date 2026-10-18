@@ -28,22 +28,6 @@ impl App {
 
     // ----- AI -------------------------------------------------------------
 
-    /// The selected text, or the whole active buffer when nothing is selected.
-    pub(super) fn selected_or_all_text(&mut self) -> String {
-        let selection = self
-            .editor
-            .active_tab_mut()
-            .and_then(|t| t.editor.get_selection_text());
-        match selection {
-            Some(s) if !s.trim().is_empty() => s,
-            _ => self
-                .editor
-                .active_tab()
-                .map(|t| t.editor.get_content())
-                .unwrap_or_default(),
-        }
-    }
-
     /// Summarize the selection (or the whole file when nothing is selected) with
     /// `claude`; the result opens in a new editor tab.
     pub(super) fn ai_summarize(&mut self) {
