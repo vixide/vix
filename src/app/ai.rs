@@ -466,6 +466,7 @@ impl App {
                             b.apply_ai_reply(text);
                         }
                     }
+                    #[cfg(feature = "git")]
                     AiDest::GitCommitMessage => {
                         self.git_panel = None;
                         self.prompt = Some(

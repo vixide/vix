@@ -170,6 +170,7 @@ fn smart_commit_ask_always_and_never() {
 /// T125: the Git panel's `g` key generates a commit message from the staged
 /// diff and opens the commit prompt pre-filled with it -- it only fills the
 /// message box, it never commits on its own.
+#[cfg(feature = "ai")]
 #[test]
 #[ignore = "needs git; creates a throwaway repo and commits in it"]
 fn git_panel_generates_a_commit_message_from_the_staged_diff() {

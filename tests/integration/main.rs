@@ -11,6 +11,7 @@ mod coverage;
 mod db;
 mod editing;
 mod find;
+#[cfg(feature = "git")]
 mod git;
 mod keybindings;
 mod keymaps;

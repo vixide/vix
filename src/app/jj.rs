@@ -78,7 +78,10 @@ impl App {
             self.status = t!("status.jj_already_init").into();
             return;
         }
+        #[cfg(feature = "git")]
         let colocate = self.root.join(".git").exists() || crate::git::is_repo(&self.root);
+        #[cfg(not(feature = "git"))]
+        let colocate = self.root.join(".git").exists();
         self.run_command(if colocate {
             "jj git init --colocate"
         } else {

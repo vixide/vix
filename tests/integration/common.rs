@@ -6,6 +6,7 @@
 
 pub(crate) use std::fs;
 pub(crate) use std::path::{Path, PathBuf};
+#[cfg(feature = "ai")]
 pub(crate) use std::time::{Duration, Instant};
 
 pub(crate) use crossterm::event::{
@@ -131,6 +132,7 @@ pub(crate) fn app_at_with(root: &Path, settings: Settings) -> App {
 /// generous for a local `sh -c printf`, which finishes in well under that.
 /// Extracted (Run H, T530) after this exact loop was found duplicated
 /// (once as this named helper in `ai.rs`, once inlined in `git.rs`).
+#[cfg(feature = "ai")]
 pub(crate) fn wait_for_ai_replace(app: &mut App, mut pred: impl FnMut(&App) -> bool) {
     let deadline = Instant::now() + Duration::from_secs(5);
     while Instant::now() < deadline && !pred(app) {

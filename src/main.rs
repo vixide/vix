@@ -85,8 +85,7 @@ fn main() -> io::Result<()> {
     rust_i18n::set_locale(&locale);
 
     if cli.doctor {
-        let mut checks = vix::doctor::run(&settings);
-        checks.push(vix::capability::doctor_check());
+        let checks = vix::capability::doctor_checks(&settings);
         for line in vix::doctor::format_report(&checks) {
             println!("{line}");
         }
