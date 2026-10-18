@@ -14229,6 +14229,33 @@ const MIN_EDITOR_WIDTH: u16 = 20;
 #[cfg(test)]
 mod tests {
     #[test]
+    fn every_displayable_image_extension_has_a_compiled_in_decoder() {
+        // T583 trimmed the `image` codecs to exactly what `is_image_path` accepts.
+        let dir = std::env::temp_dir().join(format!("vix-img-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let img = image::DynamicImage::new_rgba8(4, 4);
+        for (ext, fmt) in [
+            ("png", image::ImageFormat::Png),
+            ("jpg", image::ImageFormat::Jpeg),
+            ("gif", image::ImageFormat::Gif),
+            ("bmp", image::ImageFormat::Bmp),
+            ("webp", image::ImageFormat::WebP),
+            ("ico", image::ImageFormat::Ico),
+            ("tiff", image::ImageFormat::Tiff),
+        ] {
+            let path = dir.join(format!("p.{ext}"));
+            assert!(is_image_path(&path), "{ext} not an image path");
+            let mut buf = std::io::Cursor::new(Vec::new());
+            img.write_to(&mut buf, fmt)
+                .unwrap_or_else(|e| panic!("encode {ext}: {e}"));
+            std::fs::write(&path, buf.into_inner()).unwrap();
+            let got = decode_image(&path).unwrap_or_else(|e| panic!("decode {ext}: {e}"));
+            assert_eq!((got.width(), got.height()), (4, 4), "{ext}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn alt_mnemonics_resolve_menus_by_name() {
         let menus = crate::menu::menus();
         for (c, name) in [
