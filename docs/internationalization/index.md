@@ -61,7 +61,7 @@ welcome messages appear in the chosen language.
 No code changes are needed — edit YAML only.
 
 1. Open the `locales/*.yml` file for the key's namespace (see "Key namespace"
-   below) — `locales/menu.yml` for a menu label, and so on.
+   below) — `crates/vix-i18n/locales/menu.yml` for a menu label, and so on.
 2. For each key, add (or correct) your language line. Example:
 
    ```yaml
@@ -83,7 +83,7 @@ you have, and the rest stay in English until you fill them in.
 ## Key namespace
 
 Each namespace lives in the `locales/*.yml` file named for it, except a
-handful of low-volume ones grouped into `locales/misc.yml`.
+handful of low-volume ones grouped into `crates/vix-i18n/locales/misc.yml`.
 
 | Prefix          | File                 | Used for                                          |
 | --------------- | -------------------- | -------------------------------------------------- |

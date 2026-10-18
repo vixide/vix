@@ -13,7 +13,7 @@ month area.
 - A month header `◀  Month Year  ▶`. The `◀` / `▶` glyphs are clickable
   month-nav arrows (column 0 and column 20 of the header row). The month
   name is translated per `settings.locale` (`calendar.month_01`..
-  `calendar.month_12` in `locales/calendar.yml`), not `jiff`'s
+  `calendar.month_12` in `crates/vix-i18n/locales/calendar.yml`), not `jiff`'s
   locale-invariant `%B`.
 - A Monday-first day grid: a weekday header row, then up to six week rows. The
   **selected day** (the keyboard cursor) is reverse-highlighted; **today** is

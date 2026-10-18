@@ -30,3 +30,9 @@ content at a revision. See [git-history](git-history/index.md).
 - [toggle-diff-gutter](toggle-diff-gutter/index.md)
 - [unstage-hunk](unstage-hunk/index.md)
 - [word-diff](word-diff/index.md)
+
+## Gutter diff budget (T574)
+
+`diff_marks` runs on the UI thread. It returns no marks when either side
+exceeds 50,000 lines, and gives Myers a 40 ms deadline, after which the
+diff degrades to a coarser (still valid) result rather than stalling a frame.

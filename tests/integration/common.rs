@@ -95,6 +95,7 @@ pub(crate) fn init_git_repo(dir: &Path, name: &str) {
     let run = |args: &[&str]| {
         std::process::Command::new("git")
             .current_dir(dir)
+            .env("GIT_TERMINAL_PROMPT", "0")
             .args(args)
             .output()
             .unwrap();

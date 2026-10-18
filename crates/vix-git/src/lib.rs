@@ -141,6 +141,13 @@ pub enum LineMark {
     Deleted,
 }
 
+/// Buffers longer than this get no gutter diff marks (T574).
+const GUTTER_DIFF_MAX_LINES: usize = 50_000;
+
+/// Time budget for one gutter diff before `similar` falls back to a coarse
+/// result (T574).
+const GUTTER_DIFF_DEADLINE: std::time::Duration = std::time::Duration::from_millis(40);
+
 /// Compute per-line gutter marks between the committed text (`head`) and the
 /// current buffer (`current`), keyed by **current** line index (0-based).
 ///
@@ -151,10 +158,17 @@ pub enum LineMark {
 pub fn diff_marks(head: &str, current: &str) -> Vec<(usize, LineMark)> {
     use similar::{Algorithm, DiffOp, TextDiff};
 
+    let current_lines = current.lines().count();
+    // T574: this runs on the UI thread every refresh. Skip the gutter for
+    // huge buffers and put a deadline on Myers (O((N+M)·D)) so a heavily
+    // rewritten file degrades to a coarse diff instead of stalling a frame.
+    if current_lines.max(head.lines().count()) > GUTTER_DIFF_MAX_LINES {
+        return Vec::new();
+    }
     let diff = TextDiff::configure()
         .algorithm(Algorithm::Myers)
+        .timeout(GUTTER_DIFF_DEADLINE)
         .diff_lines(head, current);
-    let current_lines = current.lines().count();
     let mut marks = Vec::new();
     for op in diff.ops() {
         match *op {
@@ -1155,6 +1169,26 @@ mod tests {
             marks.iter().any(|&(_, m)| m == LineMark::Deleted),
             "a deletion is marked: {marks:?}"
         );
+    }
+
+    #[test]
+    fn diff_marks_skips_huge_buffers_and_finishes_fast_on_rewrites() {
+        // Over the line cap: no marks at all, and no work done.
+        let big = "x\n".repeat(GUTTER_DIFF_MAX_LINES + 1);
+        assert_eq!(diff_marks("", &big), vec![]);
+        // A fully rewritten mid-size file must come back inside a generous
+        // multiple of the deadline rather than running Myers to completion.
+        let head = (0..20_000).fold(String::new(), |a, i| a + &format!("a{i}\n"));
+        let cur = (0..20_000).fold(String::new(), |a, i| {
+            a + &format!(
+                "b{}
+",
+                i * 7 % 20_000
+            )
+        });
+        let start = std::time::Instant::now();
+        let _ = diff_marks(&head, &cur);
+        assert!(start.elapsed() < std::time::Duration::from_secs(2));
     }
 
     #[test]

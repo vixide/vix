@@ -169,15 +169,15 @@ namespaces:
 
 | Namespace   | File               | Purpose                                                            |
 |-------------|---------------------|---------------------------------------------------------------------|
-| `menu.*`    | `locales/menu.yml`   | Menu-bar names and menu item labels                                 |
-| `ui.*`      | `locales/ui.yml`     | In-pane and overlay UI labels, headings, and chrome                 |
-| `status.*`  | `locales/status.yml` | Transient status-bar messages (often with interpolated arguments)   |
-| `action.*`  | `locales/action.yml` | `vix-action-catalog` titles for actions with no menu leaf (T147)    |
-| `cmd.*`     | `locales/cmd.yml`    | Command-palette `>` mode labels (`palette::COMMANDS`)                |
-| `msg.*`     | `locales/msg.yml`    | Notices and error messages (e.g. `msg.save_failed`)                 |
-| `prompt.*`  | `locales/prompt.yml` | Input-prompt labels (open, save-as, rename, run command, …)         |
-| `help.*`    | `locales/help.yml`   | Keyboard-shortcut help-row descriptions                              |
-| `palette.*`, `agenda.*`, `blame.*`, `welcome.*`, `scratch.*`, `confirm.*` | `locales/misc.yml` | Low-volume namespaces (command-palette chrome, Org agenda, git blame, first-run welcome, the scratch buffer, counted confirmation prompts) |
+| `menu.*`    | `crates/vix-i18n/locales/menu.yml`   | Menu-bar names and menu item labels                                 |
+| `ui.*`      | `crates/vix-i18n/locales/ui.yml`     | In-pane and overlay UI labels, headings, and chrome                 |
+| `status.*`  | `crates/vix-i18n/locales/status.yml` | Transient status-bar messages (often with interpolated arguments)   |
+| `action.*`  | `crates/vix-i18n/locales/action.yml` | `vix-action-catalog` titles for actions with no menu leaf (T147)    |
+| `cmd.*`     | `crates/vix-i18n/locales/cmd.yml`    | Command-palette `>` mode labels (`palette::COMMANDS`)                |
+| `msg.*`     | `crates/vix-i18n/locales/msg.yml`    | Notices and error messages (e.g. `msg.save_failed`)                 |
+| `prompt.*`  | `crates/vix-i18n/locales/prompt.yml` | Input-prompt labels (open, save-as, rename, run command, …)         |
+| `help.*`    | `crates/vix-i18n/locales/help.yml`   | Keyboard-shortcut help-row descriptions                              |
+| `palette.*`, `agenda.*`, `blame.*`, `welcome.*`, `scratch.*`, `confirm.*` | `crates/vix-i18n/locales/misc.yml` | Low-volume namespaces (command-palette chrome, Org agenda, git blame, first-run welcome, the scratch buffer, counted confirmation prompts) |
 
 New user-facing text should be added as a key under the appropriate namespace
 (in its namespace's file, or `misc.yml` for a genuinely new low-volume one) —

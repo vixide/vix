@@ -110,6 +110,15 @@ tag that triggers the pipeline above — and so the GitHub Release, the
 installers, and the Homebrew tap push — is not covered by either grant and
 still gets confirmed first.
 
+### Offline tests (T573)
+
+GitHub only: an `offline-test` job builds the tests with the network, then
+runs `cargo test --workspace --offline` inside `unshare -n` with only
+loopback up (the AI/HTTP smoke tests use a local listener), as the
+unprivileged user. A test that reaches the real network fails there instead
+of in a downstream packager's sandbox. Test git helpers set
+`GIT_TERMINAL_PROMPT=0`. Audit at introduction: no test used a real remote.
+
 ## GitLab
 
 Stages `check` → `test` → `release`, on the pinned `rust:1.96` image (the
