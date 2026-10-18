@@ -342,6 +342,20 @@ pub fn unique_copy_name(dir: &Path, original: &Path) -> PathBuf {
     unreachable!("the loop returns once a free name is found")
 }
 
+/// Whether `path` exists but this user can't write it (T572). The metadata
+/// flag covers Windows' read-only attribute and mode `r--`; opening for append
+/// (which never changes the file) catches a root-owned `rw-r--r--` file
+/// under a normal user.
+#[must_use]
+pub fn is_unwritable(path: &Path) -> bool {
+    match fs::metadata(path) {
+        Ok(m) if m.is_file() => {
+            m.permissions().readonly() || fs::OpenOptions::new().append(true).open(path).is_err()
+        }
+        _ => false,
+    }
+}
+
 /// Largest file [`read_text_guarded`] reads into a text buffer by default.
 pub const MAX_TEXT_BYTES: u64 = 50 * 1024 * 1024;
 
@@ -737,5 +751,18 @@ mod tests {
             ("héllo".to_string(), false)
         );
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn is_unwritable_detects_a_read_only_file() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let p = std::env::temp_dir().join(format!("vix-ro-{}", std::process::id()));
+        fs::write(&p, b"x").unwrap();
+        assert!(!is_unwritable(&p));
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o444)).unwrap();
+        assert!(is_unwritable(&p));
+        assert!(!is_unwritable(&p.with_extension("missing")));
+        let _ = fs::remove_file(&p);
     }
 }

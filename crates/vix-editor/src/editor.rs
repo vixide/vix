@@ -173,6 +173,16 @@ pub fn text_field(content: &str) -> CodeEditor {
     ed
 }
 
+/// Whether the OS lets this user write a tab's file (T572).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum FsAccess {
+    /// The file can be written (or has no file yet).
+    #[default]
+    Writable,
+    /// The OS won't let this user write the file.
+    ReadOnly,
+}
+
 /// One open buffer shown as one tab.
 pub struct Tab {
     /// The underlying code-editor widget/state.
@@ -187,6 +197,10 @@ pub struct Tab {
     pub image: Option<StatefulProtocol>,
     /// When set, the buffer is locked against edits (view-only).
     pub read_only: bool,
+    /// When set, the file on disk isn't writable by this user (T572).
+    /// Separate from `read_only`: edits stay allowed (so Save As works) and
+    /// toggling View-only never clears it.
+    pub fs_access: FsAccess,
 }
 
 impl Tab {
@@ -220,7 +234,12 @@ impl Tab {
         } else {
             String::new()
         };
-        format!("{icon} {name}{flag}")
+        let lock = if self.fs_access == FsAccess::ReadOnly {
+            " 🔒"
+        } else {
+            ""
+        };
+        format!("{icon} {name}{flag}{lock}")
     }
 
     /// Full path for display (status bar / buffer switcher), or `"untitled"`.
@@ -478,6 +497,7 @@ impl Editor {
             preview: false,
             image: None,
             read_only: false,
+            fs_access: FsAccess::Writable,
         });
         self.active = self.tabs.len() - 1;
     }
@@ -493,6 +513,7 @@ impl Editor {
             preview: false,
             image: None,
             read_only: false,
+            fs_access: FsAccess::Writable,
         });
         self.active = self.tabs.len() - 1;
     }
@@ -517,6 +538,7 @@ impl Editor {
             preview: false,
             image: Some(proto),
             read_only: false,
+            fs_access: FsAccess::Writable,
         });
         self.active = self.tabs.len() - 1;
     }
@@ -577,6 +599,7 @@ impl Editor {
 
         // Guarded (T571): a FIFO, huge file, or binary refuses with a typed
         // error; non-UTF-8 text opens lossily and read-only.
+        let fs_read_only = vix_fileops::is_unwritable(&canon);
         let (content, lossy) = vix_fileops::read_text_guarded(&canon, vix_fileops::MAX_TEXT_BYTES)?;
         let editor = make_editor(Some(&canon), &content, self.flags, &self.indent);
         let tab = Tab {
@@ -586,6 +609,11 @@ impl Editor {
             preview,
             image: None,
             read_only: lossy,
+            fs_access: if fs_read_only {
+                FsAccess::ReadOnly
+            } else {
+                FsAccess::Writable
+            },
         };
 
         if preview && let Some(i) = self.tabs.iter().position(|t| t.preview) {
