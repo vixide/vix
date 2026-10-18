@@ -250,6 +250,8 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `lsp.linked_edit` | Edit Linked Ranges… | Menu |
 | `lsp.references` | Go to References | Menu |
 | `lsp.rename` | Rename Symbol | Menu |
+| `lsp.restart` | Restart Server | Menu |
+| `lsp.show_log` | Show Server Log | Menu |
 | `lsp.shrink_selection` | Shrink Selection | Menu |
 | `lsp.signature_help` | Signature Help | Menu |
 | `lsp.workspace_symbols` | Workspace Symbols… | Menu |
@@ -672,4 +674,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**665 actions.**
+**667 actions.**

@@ -195,6 +195,8 @@ keymap.
 | Feature | Menu item | Key | Action id | LSP method(s) |
 | --- | --- | --- | --- | --- |
 | Diagnostics | **Tools → Language Server → Diagnostics…** | — | `lsp.diagnostics` | `publishDiagnostics` |
+| Restart Server | **Tools → Language Server → Restart Server** | — | `lsp.restart` | `shutdown` / `initialize` |
+| Show Server Log | **Tools → Language Server → Show Server Log** | — | `lsp.show_log` | (server stderr) |
 | Hover | **Tools → Language Server → Hover** | — | `lsp.hover` | `hover` |
 | Go to Definition | **Tools → Language Server → Go to Definition** | `F12` | `nav.goto_definition` | `definition` |
 | Go to Implementation | **Tools → Language Server → Go to Implementation** | — | `nav.goto_implementation` | `implementation` |
