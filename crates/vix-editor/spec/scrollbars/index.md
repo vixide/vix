@@ -23,6 +23,23 @@ the bottom dock — also get a matching horizontal scrollbar.
 - A scrollbar appears only when the content overflows that axis, and honors the
   **Show/Hide Scroll Bar** toggle (`show_scrollbar`).
 
+## Markers (T578)
+
+The **editor's** vertical track can also carry colored markers, like an overview
+ruler, so changes and problems are visible without scrolling. A marker is a heavy
+`┃` in the marker's color, in place of the dim track `│`, on the track row
+proportional to its line (`row = round(line × (rows − 1) / (lines − 1))`, the thumb's
+own mapping). Sources, from lowest to highest priority when several share a row:
+
+1. live **search matches** (the editor's highlight marks);
+2. **git changes** and coverage (the gutter marks — the same ones the line-number
+   gutter paints, so they share its one-source-at-a-time rule);
+3. LSP **diagnostics** (the diagnostic underline marks, in their severity color).
+
+The thumb `●` is drawn on top of a marker. Markers appear only with the scroll bar and
+are gated by the `show_scrollbar_markers` setting (default on). Other scrollbars (explorer,
+docks, panels) have no markers.
+
 ## Interaction
 
 - **Mouse wheel** and the keyboard scroll the view vertically as usual.

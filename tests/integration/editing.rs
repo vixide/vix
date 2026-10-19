@@ -4024,3 +4024,34 @@ fn ai_panel_draws_in_a_tiny_terminal() {
         term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
     }
 }
+
+/// Count the heavy scroll-bar marker glyphs (`┃`) in a rendered frame.
+fn count_scrollbar_markers(app: &mut App) -> usize {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut term = Terminal::new(TestBackend::new(100, 30)).unwrap();
+    term.draw(|f| vix::ui::draw(app, f)).unwrap();
+    let buffer = term.backend().buffer();
+    (0..buffer.area.height)
+        .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
+        .filter(|&(x, y)| buffer[(x, y)].symbol() == "┃")
+        .count()
+}
+
+/// T578: gutter marks (git changes, coverage) show on the scroll bar track, and
+/// `show_scrollbar_markers = false` removes them.
+#[test]
+fn scrollbar_marks_gutter_changes_unless_disabled() {
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, &"line\n".repeat(120));
+    assert_eq!(count_scrollbar_markers(&mut app), 0, "no marks, no markers");
+
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_gutter_marks(vec![(10, "#00ff00"), (90, "#ff0000")]);
+    assert_eq!(count_scrollbar_markers(&mut app), 2);
+
+    app.settings.scrollbar.show_scrollbar_markers = false;
+    assert_eq!(count_scrollbar_markers(&mut app), 0);
+}

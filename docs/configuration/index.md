@@ -26,6 +26,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `show_messages` | bool   | `true`   | Show the message drawer on startup.                                  |
 | `show_status_bar` | bool | `true`   | Show the bottom status bar.                                          |
 | `show_scrollbar` | bool  | `true`   | Show the editor's right-side scroll bar.                             |
+| `show_scrollbar_markers` | bool | `true` | Mark the scroll bar where git changes, diagnostics and search matches are. |
 | `show_bottom_dock` | bool | `false` | Show the bottom dock (log/output/data panel).                        |
 | `bottom_dock_height` | int | `9`   | Height (rows) of the bottom dock; drag its top edge to resize.       |
 | `scrollback`    | int    | `1000`   | Maximum lines kept in the bottom dock; the oldest are dropped past this. |
@@ -99,6 +100,7 @@ smart_commit = "ask"
 show_messages = true
 show_status_bar = true
 show_scrollbar = true
+show_scrollbar_markers = true
 show_bottom_dock = false
 bottom_dock_height = 9
 preview_tabs = true

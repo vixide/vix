@@ -61,6 +61,9 @@ pub struct Settings {
     /// Scrollbar, minimap, and menu-tooltip visibility (T149).
     #[serde(flatten)]
     pub viewport: ViewportSettings,
+    /// What the editor's scroll bar marks (T578).
+    #[serde(flatten)]
+    pub scrollbar: ScrollbarSettings,
     /// Independent toggles with no natural sibling group (T149).
     #[serde(flatten)]
     pub misc: MiscSettings,
@@ -307,6 +310,25 @@ impl Default for SecondaryPanelSettings {
     }
 }
 
+/// What the editor's scroll bar shows beyond the thumb (T578). Kept apart from
+/// [`ViewportSettings`], which is already at `clippy::struct_excessive_bools`'s
+/// limit of three.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScrollbarSettings {
+    /// Mark the scroll bar track where git changes, diagnostics and search
+    /// matches are.
+    pub show_scrollbar_markers: bool,
+}
+
+impl Default for ScrollbarSettings {
+    fn default() -> Self {
+        ScrollbarSettings {
+            show_scrollbar_markers: true,
+        }
+    }
+}
+
 /// Editor-adjacent chrome visibility: the scroll bar, minimap, and menu
 /// tooltips (T149).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -523,6 +545,7 @@ impl Default for Settings {
             panels: PanelSettings::default(),
             secondary_panels: SecondaryPanelSettings::default(),
             viewport: ViewportSettings::default(),
+            scrollbar: ScrollbarSettings::default(),
             misc: MiscSettings::default(),
             save: SaveSettings::default(),
             editor_behavior: EditorBehaviorSettings::default(),

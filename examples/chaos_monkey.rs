@@ -384,6 +384,8 @@ fn run_in_sandbox() -> ! {
     }
     let status = Command::new(std::env::current_exe().expect("current exe"))
         .args(std::env::args().skip(1))
+        // Relative paths a random "save as" types resolve here, not in the repo.
+        .current_dir(&home)
         .env(SANDBOX_VAR, "1")
         .env("PATH", &empty_path)
         .env("HOME", &home)

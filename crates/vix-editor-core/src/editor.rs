@@ -734,6 +734,13 @@ impl Editor {
         );
     }
 
+    /// The current highlight marks (search matches and similar), as
+    /// `(start char, end char, color)` ranges, if any.
+    #[must_use]
+    pub fn marks(&self) -> Option<&Vec<(usize, usize, Color)>> {
+        self.marks.as_ref()
+    }
+
     /// Clear all highlight marks.
     pub fn remove_marks(&mut self) {
         self.marks = None;
