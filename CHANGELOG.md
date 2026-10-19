@@ -8,6 +8,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Scroll bar markers** (T578): the editor's scroll bar track shows colored `┃`
+  marks where git changes, diagnostics and search matches are (diagnostics win a
+  shared row, then git changes, then search), with the `●` thumb drawn on top.
+  Turn them off with `show_scrollbar_markers = false`.
 - **A chaos monkey for the real `App`** (T575): `examples/chaos_monkey.rs` feeds
   seeded random key, mouse, paste and resize streams into the app on a
   `TestBackend`, each iteration under a watchdog, and checks that the cursor and

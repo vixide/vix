@@ -8,7 +8,8 @@
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Paragraph};
 
-use super::{RULER_COLUMN, draw_hscrollbar, draw_minimap, draw_scrollbar};
+use super::scroll_markers;
+use super::{RULER_COLUMN, draw_hscrollbar, draw_minimap, draw_scrollbar_marked};
 use crate::app::App;
 use crate::theme;
 
@@ -159,10 +160,29 @@ fn draw_pane(app: &mut App, frame: &mut Frame, area: Rect, tab_index: usize) -> 
         if sb.width > 0 {
             let total = tab.line_count().max(1);
             let pos = tab.cursor_1based().0.saturating_sub(1);
-            draw_scrollbar(frame, sb, pos, total.saturating_sub(1));
+            let markers = scrollbar_markers(app, tab, total, sb.height);
+            draw_scrollbar_marked(frame, sb, pos, total.saturating_sub(1), &markers);
         }
     }
     text
+}
+
+/// The per-row marker colors for `tab`'s vertical scroll bar, or none when
+/// `show_scrollbar_markers` is off (T578).
+fn scrollbar_markers(
+    app: &App,
+    tab: &crate::editor::Tab,
+    total_lines: usize,
+    height: u16,
+) -> Vec<Option<Color>> {
+    if !app.settings.scrollbar.show_scrollbar_markers {
+        return Vec::new();
+    }
+    scroll_markers::bucket(
+        &scroll_markers::collect(tab),
+        total_lines,
+        usize::from(height),
+    )
 }
 
 /// Draw a faint vertical guide at [`RULER_COLUMN`] over an already-rendered
@@ -236,7 +256,8 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         if vsb.width > 0 {
             let total = app.editor.active_line_count().max(1);
             let pos = app.editor.cursor_1based().0.saturating_sub(1);
-            draw_scrollbar(frame, vsb, pos, total.saturating_sub(1));
+            let markers = scrollbar_markers(app, tab, total, vsb.height);
+            draw_scrollbar_marked(frame, vsb, pos, total.saturating_sub(1), &markers);
         }
         if hbar {
             let gutter_w = u16::try_from(gutter).unwrap_or(u16::MAX);

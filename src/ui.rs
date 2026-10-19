@@ -23,6 +23,7 @@ mod lsp_popups;
 mod menu_bar;
 mod minimap;
 mod picker_panels;
+mod scroll_markers;
 mod search;
 mod status_bar;
 mod tabs;
@@ -652,6 +653,19 @@ pub const RULER_COLUMN: usize = 80;
 /// reaches the bottom only on the last item); for scroll views pass
 /// `pos = scroll`, `max = total - viewport`.
 fn draw_scrollbar(frame: &mut Frame, area: Rect, pos: usize, max: usize) {
+    draw_scrollbar_marked(frame, area, pos, max, &[]);
+}
+
+/// [`draw_scrollbar`] with colored markers on the track (T578): `markers[r]` is
+/// the color for track row `r` (from `scroll_markers::bucket`), drawn as a heavy
+/// `┃`. The thumb is drawn on top of a marker; rows past `markers.len()` have none.
+fn draw_scrollbar_marked(
+    frame: &mut Frame,
+    area: Rect,
+    pos: usize,
+    max: usize,
+    markers: &[Option<Color>],
+) {
     if area.width == 0 || area.height == 0 {
         return;
     }
@@ -668,6 +682,8 @@ fn draw_scrollbar(frame: &mut Frame, area: Rect, pos: usize, max: usize) {
     for r in 0..h {
         lines.push(Line::from(if r == thumb {
             thumb_glyph.clone()
+        } else if let Some(Some(color)) = markers.get(r) {
+            Span::styled("┃", Style::default().fg(*color))
         } else {
             track_glyph()
         }));
