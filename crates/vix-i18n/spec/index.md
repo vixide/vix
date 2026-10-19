@@ -226,3 +226,16 @@ text rather than an i18n key (the View → Theme/Locale/Time Zone submenus).
   lazily per-locale by `crates/vix-i18n/src/lib.rs`'s `LazyBackend` (T517;
   `build.rs` also makes Cargo track every file in the directory so edits
   actually trigger a rebuild), and read everywhere through `vix_i18n::t!`.
+
+## Counted messages (T565)
+
+`rust-i18n` has no plural rules: a key is one fixed string whatever the number. English
+gets away with `item(s)`, but Arabic (six number categories), Russian and Polish (three
+each) read wrongly at most counts when the number precedes the noun (`%{n} wierszy` is
+right for 5, wrong for 1 and 2). So in `ar`, `ru` and `pl` a counted message is phrased
+**count-invariantly**: a label, a colon, the number (`Wiersze: %{n}`, `Строк: %{count}`,
+`الصفوف: %{count}`). `tests/i18n_keys.rs` keeps the list of counted keys
+(`COUNTED_KEYS`) and fails if one of those three locales puts the count directly before a
+noun (an abbreviation like `elem.` or a one/two-letter particle is fine). Add a new counted
+key to that list. Welsh, Irish and Scottish Gaelic have several plural categories too; they
+were not part of this change and still use the single English-shaped form.

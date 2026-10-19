@@ -753,6 +753,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Counted messages are grammatical in Arabic, Russian and Polish** (T565): 76
+  strings that put a number before a noun (`%{n} wierszy`, `%{n} عنصر`), correct for
+  only some counts, now read `Label: N` in those three locales (Rows: 3). A new test
+  keeps every counted key that way. Welsh, Irish and Scottish Gaelic still use the
+  single form.
 - **Crashes the chaos monkey found** (T575): the AI, diff, replace-confirm and
   chooser popups panicked in a terminal narrower than 30 columns or shorter than
   8 rows (`clamp` with `min > max`), as did LSP popups, the About/confirm dialog,

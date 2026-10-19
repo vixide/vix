@@ -438,3 +438,103 @@ fn catalog_entries_are_maps_of_locale_to_string() {
     }
     assert!(bad.is_empty(), "malformed catalog entries: {bad:#?}");
 }
+
+/// Counted messages (T565). `rust-i18n` has no plural rules, so a string like
+/// `"%{n} wierszy"` is one fixed form for every number, and Arabic (six number
+/// categories), Russian and Polish (three each) read wrongly at most counts. The
+/// fix chosen is to phrase these three locales count-invariantly — the number
+/// follows a label and a colon (`"Wiersze: %{n}"`) — rather than invent a plural
+/// layer. This list is every key whose English text carries a count.
+const COUNTED_KEYS: &[&str] = &[
+    "confirm.delete",
+    "confirm.delete_hard",
+    "msg.scripts_reloaded",
+    "msg.keybindings_reloaded",
+    "msg.db_rows",
+    "msg.db_rows_truncated",
+    "msg.db_ran_all",
+    "msg.db_erd_built",
+    "msg.db_imported",
+    "msg.db_edit_committed",
+    "status.session_restored",
+    "status.renamed_in",
+    "status.highlights_n",
+    "status.symbols_n",
+    "status.references_n",
+    "status.todos_n",
+    "status.diagnostics_n",
+    "status.org_sparse",
+    "status.org_agenda_view",
+    "status.roam_synced",
+    "status.node_reset",
+    "status.workspace_opened_skipped",
+    "status.git_reloaded",
+    "status.settings_imported",
+    "status.cut_n",
+    "status.copied_n",
+    "status.deleted_n",
+    "status.macro_recorded",
+    "status.matches",
+    "status.matches_n",
+    "status.matches_in_files",
+    "status.wgrep_opened",
+    "status.definitions_n",
+    "ui.script_trust_message",
+    "ui.file_browser_count",
+    "status.reloaded_external",
+];
+
+/// A count placeholder directly followed by a noun (`"%{n} wierszy"`), which is
+/// grammatically right for only some numbers. An abbreviation (`"%{n} elem."`)
+/// is invariant and allowed.
+fn count_before_noun(text: &str) -> Option<String> {
+    for placeholder in ["%{n}", "%{count}"] {
+        let mut from = 0;
+        while let Some(at) = text[from..].find(placeholder) {
+            let after = &text[from + at + placeholder.len()..];
+            from += at + placeholder.len();
+            let Some(rest) = after.strip_prefix(' ') else {
+                continue;
+            };
+            let word: String = rest.chars().take_while(|c| !c.is_whitespace()).collect();
+            let starts_with_letter = word.chars().next().is_some_and(char::is_alphabetic);
+            // A one- or two-letter word is a preposition or particle ("в"), not
+            // a noun; a trailing `.` (before any closing punctuation) marks an
+            // abbreviation.
+            let is_short = word.chars().filter(|c| c.is_alphabetic()).count() <= 2;
+            let is_abbreviation = word
+                .trim_end_matches(['?', '!', ')', ',', ':'])
+                .ends_with('.');
+            if starts_with_letter && !is_short && !is_abbreviation {
+                return Some(format!("{placeholder} {word}"));
+            }
+        }
+    }
+    None
+}
+
+#[test]
+fn counted_messages_in_ar_ru_pl_are_count_invariant() {
+    let root = workspace_root();
+    let catalog = load_catalog(&root);
+    let mut bad = Vec::new();
+    for key in COUNTED_KEYS {
+        let entry = catalog
+            .get(*key)
+            .unwrap_or_else(|| panic!("counted key `{key}` is not in the catalog"));
+        for locale in ["ar", "ru", "pl"] {
+            let Some(text) = entry.get(locale).and_then(serde_yaml::Value::as_str) else {
+                bad.push(format!("{key} has no {locale} text"));
+                continue;
+            };
+            if let Some(found) = count_before_noun(text) {
+                bad.push(format!("{key} [{locale}]: `{found}` in {text:?}"));
+            }
+        }
+    }
+    assert!(
+        bad.is_empty(),
+        "these counted strings put the number before a noun, which is wrong for most \
+         counts in ar/ru/pl (rephrase as `Label: %{{n}}`): {bad:#?}"
+    );
+}
