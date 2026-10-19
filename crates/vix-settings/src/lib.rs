@@ -105,8 +105,14 @@ pub struct Settings {
     pub tab_width: usize,
     /// Column that Edit → Wrap hard-wraps (fills) text at.
     pub wrap_column: usize,
-    /// Color theme: `"dark"` (default) or `"light"`.
+    /// Color theme: `"dark"` (default), `"light"`, the `name` of a custom theme, or
+    /// `"auto"` to follow the terminal's light/dark background (T579).
     pub theme: String,
+    /// The theme `theme = "auto"` picks on a light terminal (default `"light"`).
+    pub theme_light: String,
+    /// The theme `theme = "auto"` picks on a dark terminal, or when the
+    /// background can't be detected (default `"dark"`).
+    pub theme_dark: String,
     /// UI language as a locale code (e.g. `"en"`, `"es"`, `"fr"`, `"de"`, `"cy"`).
     /// Used as the default; a `--locale` CLI flag overrides it for one run.
     pub locale: String,
@@ -532,6 +538,8 @@ impl Default for Settings {
             tab_width: 4,
             wrap_column: 80,
             theme: "dark".to_string(),
+            theme_light: "light".to_string(),
+            theme_dark: "dark".to_string(),
             locale: "en".to_string(),
             keymap: "apple".to_string(),
             explorer_width: 30,

@@ -8,6 +8,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`theme = "auto"` follows the terminal's light/dark background** (T579): at
+  startup Vix asks the terminal for its background (OSC 11, 200 ms limit), then
+  `COLORFGBG`, then assumes dark, and applies the new `theme_light` /
+  `theme_dark` setting (defaults `light` / `dark`). Asked once per launch, and
+  only when `theme` is `"auto"`.
 - **The System/File/Text Information panels (Tools menu) are now
   localized** (self-audit, T563): all three panel crates called `t!()`
   zero times — every row label (`Operating System`, `Total RAM`,

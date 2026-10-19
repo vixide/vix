@@ -15,6 +15,8 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+pub mod background;
+
 use std::path::Path;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 

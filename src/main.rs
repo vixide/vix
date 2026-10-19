@@ -33,6 +33,60 @@ use vix::cli::Cli;
 use vix::settings::Settings;
 use vix::ui;
 
+/// Ask the terminal for its background colour (OSC 11) and classify it,
+/// falling back to `COLORFGBG`, then to "unknown" (the caller treats that as
+/// dark). The reply arrives as a burst of key events, which are consumed here;
+/// a terminal that does not answer costs at most [`BACKGROUND_QUERY_TIMEOUT`].
+fn detect_terminal_background() -> Option<vix::theme_model::background::Background> {
+    use vix::theme_model::background as bg;
+    let from_terminal = query_background_colour().map(bg::classify);
+    from_terminal.or_else(|| {
+        std::env::var("COLORFGBG")
+            .ok()
+            .and_then(|v| bg::from_colorfgbg(&v))
+    })
+}
+
+/// How long to wait for a terminal's answer to the OSC 11 query.
+const BACKGROUND_QUERY_TIMEOUT: Duration = Duration::from_millis(200);
+
+/// Send the OSC 11 query and collect the reply's characters until its
+/// terminator (BEL, or ESC `\`) or the timeout; `None` when there is no answer.
+fn query_background_colour() -> Option<(u8, u8, u8)> {
+    use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
+    crossterm::terminal::enable_raw_mode().ok()?;
+    let mut out = io::stdout();
+    if write!(out, "\x1b]11;?\x07")
+        .and_then(|()| out.flush())
+        .is_err()
+    {
+        let _ = crossterm::terminal::disable_raw_mode();
+        return None;
+    }
+    let mut reply = String::new();
+    let deadline = std::time::Instant::now() + BACKGROUND_QUERY_TIMEOUT;
+    while let Some(left) = deadline.checked_duration_since(std::time::Instant::now()) {
+        if !crossterm::event::poll(left).unwrap_or(false) {
+            break;
+        }
+        let Ok(Event::Key(key)) = crossterm::event::read() else {
+            continue;
+        };
+        if key.kind == KeyEventKind::Release {
+            continue;
+        }
+        match key.code {
+            // BEL arrives as Ctrl+G; the string terminator as ESC then `\`.
+            KeyCode::Char('g') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
+            KeyCode::Char('\\') if reply.contains("rgb:") => break,
+            KeyCode::Char(c) => reply.push(c),
+            _ => {}
+        }
+    }
+    let _ = crossterm::terminal::disable_raw_mode();
+    vix::theme_model::background::parse_osc11_reply(&reply)
+}
+
 fn main() -> io::Result<()> {
     let cli = Cli::parse();
 
@@ -98,6 +152,15 @@ fn main() -> io::Result<()> {
     // line-count limit.
     if handle_settings_bundle_flags(&cli, &settings) {
         return Ok(());
+    }
+
+    // `theme = "auto"`: find out whether the terminal is light or dark before the
+    // App applies its theme (T579). Nothing is asked for any other theme value.
+    if settings
+        .theme
+        .eq_ignore_ascii_case(vix::theme_model::background::AUTO)
+    {
+        vix::theme_model::background::set_detected(detect_terminal_background());
     }
 
     let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));

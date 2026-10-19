@@ -2243,7 +2243,7 @@ impl App {
         // directory scan is real filesystem I/O) and reused for the View →
         // Theme submenu below, rather than scanning twice on the startup path.
         let available_themes = Self::available_custom_themes();
-        Self::apply_saved_theme_from(&settings.theme, &available_themes);
+        Self::apply_saved_theme_from(&Self::effective_theme(settings), &available_themes);
         // Populate the View → Theme submenu with the available theme names before
         // the menu bar is first rendered.
         let theme_names = crate::theme_model::theme_names(&available_themes);
@@ -9052,7 +9052,7 @@ impl App {
     /// Revert a live theme hover/keyboard preview to the committed theme.
     fn revert_theme_preview(&mut self) {
         if self.theme_preview.take().is_some() {
-            Self::apply_saved_theme(&self.settings.theme);
+            Self::apply_saved_theme(&Self::effective_theme(&self.settings));
             self.editor.refresh_theme();
         }
     }
@@ -9073,6 +9073,18 @@ impl App {
     /// Apply a persisted theme value by name (case-insensitive, so the default
     /// `"dark"` matches the bundled `Dark`). Falls back to `Dark`, then to the
     /// first available theme.
+    /// The concrete theme name for `settings.theme`: `"auto"` resolves to
+    /// `theme_light` or `theme_dark` by the terminal background found at startup
+    /// (T579); any other value is returned as is.
+    fn effective_theme(settings: &Settings) -> String {
+        crate::theme_model::background::resolve_theme(
+            &settings.theme,
+            &settings.theme_light,
+            &settings.theme_dark,
+            crate::theme_model::background::detected(),
+        )
+    }
+
     fn apply_saved_theme(value: &str) {
         Self::apply_saved_theme_from(value, &Self::available_custom_themes());
     }
@@ -13469,6 +13481,22 @@ mod tests {
     use super::*;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+
+    /// T579: `theme = "auto"` resolves to `theme_dark` when no background was
+    /// detected (the unit-test process never queries a terminal), and every
+    /// other value is used as is.
+    #[test]
+    fn auto_theme_falls_back_to_the_dark_theme() {
+        let mut s = Settings {
+            theme: "auto".to_string(),
+            theme_dark: "nord".to_string(),
+            theme_light: "solarized-light".to_string(),
+            ..Settings::default()
+        };
+        assert_eq!(App::effective_theme(&s), "nord");
+        s.theme = "dracula".to_string();
+        assert_eq!(App::effective_theme(&s), "dracula");
+    }
 
     /// T595: a build without `tasks` has no shell runner: a command line is
     /// refused (nothing is started) and the disabled action is filtered.

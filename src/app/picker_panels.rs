@@ -319,7 +319,10 @@ impl App {
     pub(super) fn open_theme_editor(&mut self) {
         let base = Self::available_custom_themes()
             .into_iter()
-            .find(|t| t.name.eq_ignore_ascii_case(&self.settings.theme))
+            .find(|t| {
+                t.name
+                    .eq_ignore_ascii_case(&Self::effective_theme(&self.settings))
+            })
             .or_else(|| {
                 Self::available_custom_themes()
                     .into_iter()

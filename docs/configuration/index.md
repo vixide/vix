@@ -36,7 +36,9 @@ their defaults, so it is safe to delete or hand-edit.
 | `wrap_column`   | int    | `80`     | Column that **Edit → Wrap** hard-wraps (fills) text at.              |
 | `trim_trailing_whitespace` | bool | `true` | On save, strip trailing spaces/tabs from every line. |
 | `ensure_final_newline`     | bool | `true` | On save, append a final newline if the file lacks one. |
-| `theme`         | string | `"dark"` | `"dark"`, `"light"`, or the `name` of a custom theme.                |
+| `theme`         | string | `"dark"` | `"dark"`, `"light"`, the `name` of a custom theme, or `"auto"` to follow the terminal's background. |
+| `theme_light`   | string | `"light"` | The theme `"auto"` picks on a light terminal.                       |
+| `theme_dark`    | string | `"dark"` | The theme `"auto"` picks on a dark terminal (or when it can't tell). |
 | `locale`        | string | `"en"`   | UI language code (`en`, `es`, `fr`, `de`, `cy`, …).                  |
 | `keymap`        | string | `"apple"`| Keyboard navigation style: `"apple"`, `"emacs"`, or `"vi"`.         |
 | `explorer_width`| int    | `30`     | Width (columns) of the left dock; drag its right edge to resize.    |
