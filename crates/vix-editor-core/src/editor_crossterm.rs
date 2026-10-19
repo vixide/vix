@@ -208,11 +208,12 @@ impl Editor {
             self.scroll_down(area.height as usize);
         }
         let gutter = u16::try_from(self.get_line_number_width()).unwrap_or(u16::MAX);
-        let col = column.clamp(
-            area.left().saturating_add(gutter),
-            area.right().saturating_sub(1),
-        );
-        if let Some(cursor) = self.cursor_from_mouse(col, row.clamp(top, last), &area) {
+        // `max` then `min`, not `clamp`: a view narrower than its gutter (or no
+        // rows at all) has `min > max`, which `clamp` asserts against.
+        let col = column
+            .max(area.left().saturating_add(gutter))
+            .min(area.right().saturating_sub(1));
+        if let Some(cursor) = self.cursor_from_mouse(col, row.max(top).min(last), &area) {
             self.handle_mouse_drag(cursor);
         }
     }

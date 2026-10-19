@@ -335,13 +335,13 @@ impl Editor {
         if col < self.offset_x {
             self.offset_x = col.saturating_sub(step_size);
         } else if col >= self.offset_x + visible_width {
-            self.offset_x = col.saturating_sub(visible_width - step_size);
+            self.offset_x = col.saturating_sub(visible_width.saturating_sub(step_size));
         }
 
         if line < self.offset_y {
             self.offset_y = line;
         } else if line >= self.offset_y + visible_height {
-            self.offset_y = line.saturating_sub(visible_height - 1);
+            self.offset_y = line.saturating_sub(visible_height.saturating_sub(1));
         }
     }
 
@@ -517,6 +517,16 @@ impl Editor {
         self.code.set_state_before(self.cursor, self.selection);
         self.code.remove(0, self.code.len());
         self.code.insert(0, content);
+        // The new text can be shorter than the old (Replace All with an empty
+        // replacement empties it): keep the cursor, selection and extra carets
+        // inside it rather than pointing past the end (T575).
+        let len = self.code.len();
+        self.cursor = self.cursor.min(len);
+        self.selection = self.selection.filter(|s| s.start <= len && s.end <= len);
+        for caret in &mut self.carets {
+            caret.pos = caret.pos.min(len);
+            caret.anchor = caret.anchor.map(|a| a.min(len));
+        }
         self.code.set_state_after(self.cursor, self.selection);
         self.code.commit();
         self.reset_highlight_cache();

@@ -4,6 +4,7 @@
 
 #![warn(clippy::pedantic)]
 
+use super::ClampFit;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -162,7 +163,7 @@ pub(super) fn draw_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let content_w =
         u16::try_from(body.chars().count().max(title.chars().count())).unwrap_or(u16::MAX);
-    let width = (content_w + 6).clamp(16, area.width);
+    let width = content_w.saturating_add(6).clamp_fit(16, area.width);
     let height = 5u16.min(area.height); // border + body + blank + Ok + border
     let rect = Rect {
         x: area.x + (area.width.saturating_sub(width)) / 2,

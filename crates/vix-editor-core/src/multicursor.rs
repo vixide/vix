@@ -122,18 +122,31 @@ impl Editor {
     pub fn multi_insert(&mut self, text: &str) {
         let added = text.chars().count();
         let mut carets = self.gather();
-        carets.sort_by_key(|&(p, _)| p);
+        // By the start of each caret's replaced range, so an enclosing selection
+        // is applied before a caret inside it.
+        carets.sort_by_key(|&(p, a)| a.map_or(p, |a| a.min(p)));
         let primary = (self.cursor, self.selection);
         let code = self.code_mut();
         code.tx();
         code.set_state_before(primary.0, primary.1);
         let mut shift: isize = 0;
         let mut result: Vec<(usize, Option<usize>)> = Vec::with_capacity(carets.len());
+        // End of the span the previous caret already replaced, in the original
+        // text. A caret that starts inside it overlaps that edit: its text is
+        // already gone, so it is merged into the earlier caret rather than
+        // applied at a shifted offset that no longer exists (T575).
+        let mut prev_end = 0;
+        let len = code.len_chars();
         for (pos, anchor) in carets {
+            let (pos, anchor) = (pos.min(len), anchor.map(|a| a.min(len)));
             let (rstart, rend, base) = match anchor.filter(|&a| a != pos) {
                 Some(a) => (a.min(pos), a.max(pos), a.min(pos)),
                 None => (pos, pos, pos),
             };
+            if rstart < prev_end {
+                continue;
+            }
+            prev_end = rend;
             let at = shifted(base, shift);
             if rend > rstart {
                 let rs = shifted(rstart, shift);
@@ -407,6 +420,48 @@ mod caret_tests {
         let mut e = Editor::new("text", text, Vec::new()).unwrap();
         e.set_cursor(cursor);
         e
+    }
+
+    /// T575: scrolling to the cursor in a view narrower than the scroll step, or
+    /// with no rows, must not underflow (the chaos monkey found both).
+    #[test]
+    fn focus_in_a_tiny_view_does_not_underflow() {
+        use ratatui_core::layout::Rect;
+        let mut e = ed(&"x".repeat(200), 150);
+        for (w, h) in [(0, 0), (1, 0), (3, 1), (9, 0), (12, 2)] {
+            e.focus(&Rect::new(0, 0, w, h));
+        }
+    }
+
+    /// T575: replacing the whole text with something shorter leaves no cursor,
+    /// selection or extra caret pointing past the new end.
+    #[test]
+    fn set_content_keeps_cursor_selection_and_carets_inside_shorter_text() {
+        let mut e = ed("hello world", 9);
+        e.set_selection_range(6, 9);
+        e.add_caret_at(10);
+        e.set_content("hi");
+        let len = e.code_ref().len_chars();
+        assert!(e.get_cursor() <= len);
+        assert!(e.caret_positions().iter().all(|&p| p <= len));
+        assert!(
+            e.caret_selections()
+                .iter()
+                .all(|&(a, b)| a <= len && b <= len)
+        );
+        // And typing afterwards is safe.
+        e.multi_insert("!");
+    }
+
+    /// T575: a caret inside another caret's selection is merged into it rather
+    /// than applied at an offset the first edit already removed.
+    #[test]
+    fn multi_insert_merges_a_caret_inside_another_carets_selection() {
+        let mut e = ed("abcdefgh", 5);
+        e.set_selection_range(1, 5);
+        e.add_caret_at(3);
+        e.multi_insert("X");
+        assert_eq!(e.code_ref().len_chars(), "aXfgh".chars().count());
     }
 
     #[test]

@@ -240,10 +240,12 @@ fn draw_center(app: &mut App, frame: &mut Frame, text: Rect, scrollbar: Rect) {
         }
         if hbar {
             let gutter_w = u16::try_from(gutter).unwrap_or(u16::MAX);
+            // Saturating: a window narrower than the gutter has no scrollable
+            // width left (T575).
             let hb = Rect {
-                x: text.x + gutter_w,
-                y: text.y + text.height - 1,
-                width: text.width - gutter_w,
+                x: text.x.saturating_add(gutter_w),
+                y: (text.y + text.height).saturating_sub(1),
+                width: text.width.saturating_sub(gutter_w),
                 height: 1,
             };
             draw_hscrollbar(frame, hb, off, maxw.saturating_sub(text_visible));

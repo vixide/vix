@@ -130,6 +130,18 @@ up to 90 minutes; `GITHUB_TOKEN`-created releases cannot trigger a second workfl
 No installers: dist builds one app per package and every installer assumes one
 binary per target. Not exercised on a runner until the next tag.
 
+### Chaos monkey (T575)
+
+`.github/workflows/chaos.yml` (GitHub only) runs `examples/chaos_monkey` nightly and on
+demand: seeded random key, mouse, paste and resize streams into the real `App` on a
+`TestBackend`, each iteration under a watchdog, inside an empty network namespace
+(`unshare -n`, as in the offline test job). The example re-executes itself in a
+sandbox (empty `PATH`, throwaway `HOME`) so a random command line cannot start
+anything. It also asserts, after every event, that the cursor, selections and extra
+carets lie inside the text. A failure prints the seed, Vix's own stack frames and the
+last events; `--seed N --iterations 1` replays it. It is not in the per-push gate;
+`scripts/check` runs only a three-iteration fixed-seed smoke so the driver cannot rot.
+
 ### Feature combinations (T587)
 
 All three forges (a `feature-combos` job on GitHub and GitLab, a step on

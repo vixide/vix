@@ -3987,3 +3987,40 @@ fn open_diff_files_reports_a_missing_file_without_panicking() {
     );
     fs::remove_dir_all(&dir).ok();
 }
+
+/// T575 regression (found by the chaos monkey): popups sized with `clamp(30, width)`
+/// and an editor scroll step that subtracted from a tiny width panicked in a
+/// terminal narrower or shorter than they assumed. Every size from 1x1 up must
+/// draw, with a long line in the buffer and a menu open.
+#[test]
+fn tiny_terminals_draw_without_panicking() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut app = app_at(Path::new("."));
+    type_str(&mut app, &"long line ".repeat(30));
+    app.on_key(alt(KeyCode::Char('f')));
+    for width in [1u16, 2, 5, 9, 17, 29, 41] {
+        for height in [1u16, 2, 3, 7, 11] {
+            let mut term = Terminal::new(TestBackend::new(width, height)).unwrap();
+            term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+            // Typing and moving re-scroll against the new, tiny view.
+            type_str(&mut app, "xy");
+            app.on_key(keycode(KeyCode::End));
+            app.on_key(keycode(KeyCode::Down));
+            term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+        }
+    }
+}
+
+/// T575 regression: the AI chat panel was sized with `clamp(30, width)`, which
+/// panics when the terminal is narrower than 30 columns.
+#[test]
+#[cfg(feature = "ai")]
+fn ai_panel_draws_in_a_tiny_terminal() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut app = app_at(Path::new("."));
+    app.run_action("ai.chat");
+    for (w, h) in [(1u16, 1u16), (10, 4), (29, 7), (31, 9)] {
+        let mut term = Terminal::new(TestBackend::new(w, h)).unwrap();
+        term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    }
+}

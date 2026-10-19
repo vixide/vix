@@ -1,0 +1,56 @@
+# Chaos monkey (T575, tasks.md): long seeded random key/mouse/paste/resize
+# streams driven into the real App on a TestBackend, each iteration under a
+# watchdog. A panic or hang prints the seed and the last events so it replays
+# exactly with `cargo run --release --example chaos_monkey -- --seed N --iterations 1`.
+#
+# Deliberately not part of the per-push gate (ci.yml): it is randomized and long.
+# `scripts/check` runs a tiny fixed-seed smoke of the same driver so the driver
+# itself cannot rot. GitHub only; see spec/ci/index.md.
+
+name: Chaos monkey
+
+on:
+  schedule:
+    # Nightly, 03:30 UTC.
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "First seed (blank: this run's id)"
+        required: false
+      iterations:
+        description: "Iterations"
+        required: false
+        default: "500"
+      events:
+        description: "Events per iteration"
+        required: false
+        default: "600"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  chaos:
+    name: random input
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build the driver
+        run: cargo build --release --example chaos_monkey
+      # No network namespace access for the app, as in the test job (T573).
+      - name: run
+        env:
+          SEED: ${{ inputs.seed || github.run_id }}
+          ITERATIONS: ${{ inputs.iterations || '500' }}
+          EVENTS: ${{ inputs.events || '600' }}
+        run: |
+          sudo unshare -n -- sh -c "ip link set lo up && exec sudo -u $USER env PATH=$PATH HOME=$HOME target/release/examples/chaos_monkey --seed $SEED --iterations $ITERATIONS --events $EVENTS"

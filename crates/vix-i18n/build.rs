@@ -31,17 +31,20 @@ use std::fs;
 use std::path::Path;
 
 fn main() {
-    let dir = Path::new("../../locales");
+    let dir = Path::new("locales");
     println!("cargo:rerun-if-changed={}", dir.display());
-    let Ok(entries) = fs::read_dir(dir) else {
-        return;
-    };
+    let entries = fs::read_dir(dir).unwrap_or_else(|e| {
+        panic!(
+            "cannot read {} (is it missing from the package?): {e}",
+            dir.display()
+        );
+    });
     for entry in entries.flatten() {
         println!("cargo:rerun-if-changed={}", entry.path().display());
     }
 
     let locales: BTreeMap<String, BTreeMap<String, String>> =
-        rust_i18n_support::load_locales("../../locales", |_| false);
+        rust_i18n_support::load_locales("locales", |_| false);
 
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR is set during a build script");
     let mut code = String::from("pub(crate) static LOCALE_BLOBS: &[(&str, &str)] = &[\n");

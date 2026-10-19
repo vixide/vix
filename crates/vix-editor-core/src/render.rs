@@ -76,6 +76,11 @@ impl Editor {
 
         // draw selection(s) — one range per caret (multiple-cursor aware)
         for (start, end) in self.caret_selections() {
+            // A selection left pointing past a buffer that has since shrunk (the
+            // text was replaced under it) is drawn as far as the text goes,
+            // never indexed out of range (T575).
+            let end = end.min(total_chars);
+            let start = start.min(end);
             self.highlight_char_range(
                 area,
                 buf,

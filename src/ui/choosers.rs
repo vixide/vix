@@ -5,6 +5,7 @@
 
 #![warn(clippy::pedantic)]
 
+use super::ClampFit;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph};
 
@@ -32,8 +33,8 @@ pub(super) fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(d) = app.diff_view.as_ref() else {
         return;
     };
-    let width = (area.width * 8 / 10).clamp(30, area.width);
-    let height = (area.height * 8 / 10).clamp(8, area.height);
+    let width = (area.width * 8 / 10).clamp_fit(30, area.width);
+    let height = (area.height * 8 / 10).clamp_fit(8, area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
         y: area.y + area.height.saturating_sub(height) / 2,

@@ -36,6 +36,9 @@ cargo run --example headless_edit >/dev/null
 cargo run --example render_frame -- index.md >/dev/null
 cargo run --example textops_pipeline -- index.md >/dev/null
 cargo run --example query_search -- examples/demo-workspace TODO >/dev/null
+# T575: a tiny fixed-seed smoke of the chaos monkey, so the driver cannot rot. The
+# long randomized runs are the nightly `chaos.yml` workflow, not this gate.
+cargo run --example chaos_monkey -- --seed 1 --iterations 3 --events 150 >/dev/null
 
 echo "==> cargo doc (warnings denied)"
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
