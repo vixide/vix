@@ -22,6 +22,11 @@ use ratatui_core::widgets::Widget;
 ///
 impl Widget for &Editor {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        // A caller's rect can overhang a tiny terminal; never paint outside the buffer.
+        let area = area.intersection(buf.area);
+        if area.is_empty() {
+            return;
+        }
         if self.flags.contains(Flags::SOFT_WRAP) {
             self.render_wrapped(area, buf);
         } else {
@@ -1181,5 +1186,26 @@ mod whitespace_tests {
         let line0 = row(&buf, 0, 0, 12);
         assert!(!line0.contains('\u{00B7}'), "no glyphs when off: {line0:?}");
         assert!(!line0.contains('\u{2192}'));
+    }
+}
+
+#[cfg(test)]
+mod overhang_tests {
+    use crate::editor::Editor;
+    use ratatui_core::buffer::Buffer;
+    use ratatui_core::layout::Rect;
+    use ratatui_core::widgets::Widget;
+
+    /// Chaos-monkey regression: a rect taller or wider than the buffer (a 12x1
+    /// terminal) used to index outside it and panic.
+    #[test]
+    fn a_rect_overhanging_the_buffer_is_clipped_not_a_panic() {
+        for soft_wrap in [false, true] {
+            let mut ed = Editor::new("text", "one\ntwo\nthree\n", Vec::new()).unwrap();
+            ed.set_soft_wrap(soft_wrap);
+            let mut buf = Buffer::empty(Rect::new(0, 0, 12, 1));
+            (&ed).render(Rect::new(0, 0, 40, 9), &mut buf);
+            (&ed).render(Rect::new(30, 5, 10, 3), &mut buf);
+        }
     }
 }

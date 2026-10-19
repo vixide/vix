@@ -766,6 +766,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Crash on a one-row terminal** (chaos monkey, seed 777215): the editor widget painted
+  into a rect that overhung the screen buffer and indexed outside it. It now clips its
+  area to the buffer first.
+
 - **Counted messages are grammatical in Arabic, Russian and Polish** (T565): 76
   strings that put a number before a noun (`%{n} wierszy`, `%{n} عنصر`), correct for
   only some counts, now read `Label: N` in those three locales (Rows: 3). A new test
