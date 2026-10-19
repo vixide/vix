@@ -3,6 +3,7 @@
 
 #![warn(clippy::pedantic)]
 
+use super::ClampFit;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -15,8 +16,8 @@ pub(super) fn draw_ai_diff(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(review) = app.ai_diff_review() else {
         return;
     };
-    let width = (area.width * 8 / 10).clamp(30, area.width);
-    let height = (area.height * 8 / 10).clamp(8, area.height);
+    let width = (area.width * 8 / 10).clamp_fit(30, area.width);
+    let height = (area.height * 8 / 10).clamp_fit(8, area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
         y: area.y + area.height.saturating_sub(height) / 2,
@@ -115,8 +116,8 @@ pub(super) fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     if app.ai_panel.is_none() {
         return;
     }
-    let width = (area.width * 7 / 10).clamp(30, area.width);
-    let height = (area.height * 7 / 10).clamp(8, area.height);
+    let width = (area.width * 7 / 10).clamp_fit(30, area.width);
+    let height = (area.height * 7 / 10).clamp_fit(8, area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
         y: area.y + area.height.saturating_sub(height) / 2,

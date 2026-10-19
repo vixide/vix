@@ -94,6 +94,18 @@ struct BodyColumns {
     test: Option<Rect>,
 }
 
+/// `clamp` that never panics: where `min > max` (a terminal smaller than a
+/// popup's preferred minimum) the result is `max`, so the popup just shrinks to
+/// fit. `Ord::clamp` asserts `min <= max`, which a tiny window breaks (T575).
+pub(crate) trait ClampFit: Ord + Sized {
+    /// `self` at least `min`, then at most `max`.
+    fn clamp_fit(self, min: Self, max: Self) -> Self {
+        self.max(min).min(max)
+    }
+}
+
+impl ClampFit for u16 {}
+
 /// Split the body area into explorer | center | messages | outline | debug | test
 /// columns based on which docks are shown. Dock widths come from settings,
 /// clamped so the editor keeps room.

@@ -8,6 +8,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A chaos monkey for the real `App`** (T575): `examples/chaos_monkey.rs` feeds
+  seeded random key, mouse, paste and resize streams into the app on a
+  `TestBackend`, each iteration under a watchdog, and checks that the cursor and
+  selections stay inside the text. A panic or hang prints the seed, the Vix frames
+  and the last events, and `--seed N --iterations 1` replays it. It runs in a
+  sandbox (empty `PATH`, throwaway `HOME`), nightly via
+  `.github/workflows/chaos.yml`, with a tiny smoke in `scripts/check`.
 - **`theme = "auto"` follows the terminal's light/dark background** (T579): at
   startup Vix asks the terminal for its background (OSC 11, 200 ms limit), then
   `COLORFGBG`, then assumes dark, and applies the new `theme_light` /
@@ -731,6 +738,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Crashes the chaos monkey found** (T575): the AI, diff, replace-confirm and
+  chooser popups panicked in a terminal narrower than 30 columns or shorter than
+  8 rows (`clamp` with `min > max`), as did LSP popups, the About/confirm dialog,
+  a drag in a view narrower than its line-number gutter, and the editor's scroll
+  step in a very small view. Replace All (and any whole-buffer replacement) to a
+  shorter text left the selection and extra carets pointing past the end, which
+  crashed the status bar or the next keystroke; multi-cursor typing with a caret
+  inside another caret's selection applied an edit at a removed offset.
 - **Stage/unstage failures in the Git panel showed a generic "Git
   command failed" with no reason** (found by a codebase self-audit,
   T540): now shows git's own message, matching how a stash/amend

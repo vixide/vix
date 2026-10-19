@@ -4,6 +4,7 @@
 
 #![warn(clippy::pedantic)]
 
+use super::ClampFit;
 use ratatui::prelude::*;
 use ratatui::widgets::{
     Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap,
@@ -60,8 +61,10 @@ pub(super) fn draw_completion(app: &App, frame: &mut Frame) {
         })
         .max()
         .unwrap_or(10);
-    let width =
-        (u16::try_from(widest).unwrap_or(u16::MAX) + 2).clamp(16, area.width.saturating_sub(2));
+    let width = u16::try_from(widest)
+        .unwrap_or(u16::MAX)
+        .saturating_add(2)
+        .clamp_fit(16, area.width.saturating_sub(2));
     let height = u16::try_from(max_rows).unwrap_or(u16::MAX) + 2;
 
     let (cx, cy) = cursor_screen_yx(app).unwrap_or((area.x + 2, area.y));
@@ -120,7 +123,10 @@ pub(super) fn draw_hover(app: &App, frame: &mut Frame) {
     for line in text.lines() {
         rows += line.chars().count() / inner_w + 1;
     }
-    let height = (u16::try_from(rows).unwrap_or(u16::MAX) + 2).clamp(3, 12.min(area.height));
+    let height = u16::try_from(rows)
+        .unwrap_or(u16::MAX)
+        .saturating_add(2)
+        .clamp_fit(3, 12.min(area.height));
 
     let (cx, cy) = cursor_screen_yx(app).unwrap_or((area.x + 2, area.y));
     let y = if cy + 1 + height <= area.y + area.height {
@@ -182,7 +188,7 @@ fn draw_chooser(frame: &mut Frame, area: Rect, title: &str, titles: &[&str], sel
     let width = u16::try_from(longest)
         .unwrap_or(u16::MAX)
         .saturating_add(4)
-        .clamp(24, area.width);
+        .clamp_fit(24, area.width);
     let rows_n = u16::try_from(titles.len()).unwrap_or(u16::MAX);
     let height = rows_n.saturating_add(2).min(area.height);
     let rect = Rect {

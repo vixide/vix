@@ -5,6 +5,7 @@
 
 #![warn(clippy::pedantic)]
 
+use super::ClampFit;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 
@@ -74,8 +75,8 @@ pub(super) fn draw_replace_confirm(app: &App, frame: &mut Frame, area: Rect) {
     let Some(rc) = app.replace_confirm.as_ref() else {
         return;
     };
-    let width = (area.width * 7 / 10).clamp(30, area.width);
-    let height = (area.height * 6 / 10).clamp(8, area.height);
+    let width = (area.width * 7 / 10).clamp_fit(30, area.width);
+    let height = (area.height * 6 / 10).clamp_fit(8, area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
         y: area.y + area.height.saturating_sub(height) / 3,
@@ -129,8 +130,8 @@ pub(super) fn draw_wgrep_confirm(app: &App, frame: &mut Frame, area: Rect) {
     let Some(wc) = app.wgrep_confirm.as_ref() else {
         return;
     };
-    let width = (area.width * 7 / 10).clamp(30, area.width);
-    let height = (area.height * 6 / 10).clamp(8, area.height);
+    let width = (area.width * 7 / 10).clamp_fit(30, area.width);
+    let height = (area.height * 6 / 10).clamp_fit(8, area.height);
     let rect = Rect {
         x: area.x + area.width.saturating_sub(width) / 2,
         y: area.y + area.height.saturating_sub(height) / 3,
