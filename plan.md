@@ -218,6 +218,138 @@ Smaller, high-value features; each follows the standard per-feature recipe.
 4. **Example CI check.** `cargo build --examples` and run the headless
    examples in CI so they can never rot.
 
+### Comparator scan — ttt (2026-10-09)
+
+[ttt](https://github.com/eugenioenko/ttt) (Go, MIT, "a TUI that feels like
+a GUI") ships every two weeks; v1.5.0 → v1.7.1 (2026-09-10 → 2026-10-09,
+~150 merged PRs) was read in full, plus its open issues. Every candidate
+was checked against Vix's actual code before being kept. The ones Vix
+already has were dropped: inline images (`ratatui_image`), git-status
+colors in the explorer, reveal-active-file, trim trailing whitespace,
+transparent background, `vix -` stdin buffers, `llms.txt`, LSP `file://`
+percent-encoding, and dash-safe `git grep -e`. What's left, as **Run K**
+in `tasks.md` (T569–T581):
+
+1. **Security (T569–T574).** These come from ttt's own hardening PRs
+   (#628 pipes/devices, #748 credential prompts, #651 flag-shaped
+   queries, #698 read-only files, #673 diff memory). Following the same
+   threads through Vix's code turned up one high-severity bug: **Git →
+   Clone…** interpolates the prompted URL into a shell command
+   *unquoted*. The others: remote VCS commands that can grab `/dev/tty`
+   for a password prompt while the TUI is in raw mode; a file-open path
+   with no guard against FIFOs, devices, huge files, or non-UTF-8 bytes;
+   a `read_only` flag that is never set from file permissions; tests not
+   proven network-free (ttt's AUR incident); and an unbudgeted gutter
+   diff.
+2. **Robustness (T575).** An App-level "chaos monkey": random
+   key/mouse/resize streams driven through the real `App` on
+   `TestBackend`, with per-iteration hang detection. Vix's `fuzz/` covers
+   parsers only.
+3. **Features (T576–T581).** LSP Restart Server and Show Server Log; an
+   opt-in "stage everything?" step when committing with nothing staged;
+   scrollbar markers for git changes, diagnostics, and search matches;
+   `theme = "auto"` from the terminal's real background color; Move Line
+   across collapsed folds; autoscroll while drag-selecting past the
+   edge.
+
+Larger or speculative ideas from the same scan (per-script persistent
+storage and gutter-click hooks for Rhai, runtime-loadable grammars, a
+right-docked bottom panel, a remote-control socket for multiplexer
+integration) go to the `tasks.md` Ideas backlog rather than to tasks.
+
+### Capability Cargo features (researched 2026-10-09)
+
+**Goal.** Make whole capabilities, such as the **DB** menu and its
+workbench (`sql`) or the **Git** menu and its integration (`git`),
+optional at build time, the same way tree-sitter grammars already are
+(`syntax-*`/`lang-*`, forwarded to `vix-editor-core`).
+
+**This reverses a past decision, and the plan has to answer it.** T101
+put scripting behind a `scripting` feature. T103 made it unconditional
+again, reasoning that once a crate is wired into the App shell (startup,
+palette, menu, prompts) it is as core as `vix-editor`. T111 made the same
+call for `vix-modal`. That reasoning holds only as long as there's no
+payoff. Measured today, some areas have a real payoff and some don't:
+
+| Area | Third-party crates that disappear when off | Native C | Process/network surface removed | Coupling into the App shell |
+|---|---|---|---|---|
+| `sql` (vix-db, vix-edit-sql) | **48** (sqlx×6, tokio, libsqlite3-sys, tracing, …) | bundled SQLite | TCP to Postgres/MySQL, `ssh` tunnels, password command | medium: ~500 lines inline in `src/app.rs`; `vix-settings` holds `vix_db::Connection` |
+| `image` | **81** (mostly from `image`'s default codecs: AV1 *encoder* rav1e/ravif, exr, tiff, …) | — | untrusted-file codec parsing | medium: `Tab.image` lives in `vix-editor` |
+| `script` (vix-script) | **9**; rhai is one of the largest crates in the build | — | runs user `.rhai` | easy-medium: already isolated in `src/app/scripts.rs` |
+| `terminal` (vix-terminal) | **10** (portable-pty, vt100, nix 0.28, …) | — | interactive shell in a PTY | easy |
+| `http` + `ai` | **2** alone; **88** together with `sql` (rustls, **ring**, url/idna/icu, keyring) | ring | all outbound HTTP; `ai_command` shell | easy (http), medium (ai is also used by Git's commit message and DB assist) |
+| `git` (+`jj`) | **0** | — | spawning `git`/`jj` | medium-hard: git feeds explorer colors, status bar, gutter, dashboard; `src/app/git.rs` also hosts the jj and DAP dispatch |
+| `lsp` / `dap` | **0** | — | spawning servers/adapters | hard: completion popup reused by Org-roam/contacts; `lsp_enabled` already exists as a runtime off switch |
+| `org` | **0** | — | none | hard (143 menu leaves, Emacs keymap, `vix-column-view`, settings) — **not worth flagging** |
+
+So `sql`, `image`, `script`, and `terminal` are worth gating for build
+size, compile time, and C toolchain needs. Turning off `sql`+`http`+`ai`
+leaves tree-sitter as the only C in the default build, which also eases
+the musl cross-build. `git`, `jj`, `lsp`, `dap`, and `ai` are worth
+gating only to shrink attack surface for locked-down builds, so they come
+later. `org` stays unconditional.
+
+**Design.**
+
+1. **Every capability feature is on by default.** `default = ["syntax-common", "sql", "git", …]`.
+   Released binaries and every install channel stay byte-for-byte the
+   same in content. Minimal builds are `--no-default-features --features
+   …`. Whether to *ship* a minimal variant is a separate distribution
+   decision; each extra variant multiplies cargo-dist artifacts and SBOMs.
+2. **Gate at the root, filter at runtime. Do not scatter `cfg` through
+   `vix-menu`/`vix-palette`.** One `Capability` enum in the root, with
+   `Capability::enabled()` = `cfg!(feature = "…")`, and one mapping from
+   action-id prefix to capability (`db.`→Sql, `git.`→Git, `jj.`→Jj,
+   `ai.`→Ai, `run.`→Dap, …). `build_menus()` drops top-level menus and
+   leaves whose capability is off, and so does the palette. A disabled id
+   reached any other way (keymap, script `bind_key`, typed in the
+   palette) gets a translated message: "*X* is not included in this
+   build". That leaves `vix-menu`/`vix-palette` free of `cfg`.
+   `#[cfg(feature)]` then lives only where a crate actually has to be
+   absent: optional `dep:` edges, App fields, the dispatch functions,
+   poll calls in `main.rs`, and the `src/ui/*` draw calls.
+3. **Settings never lose data.** Before any gating, move the plain data
+   types `vix-settings` borrows (`vix_db::connect::Connection`,
+   `vix_dap::DebugAdapter`, `vix_org_capture::CaptureTemplate`) out of
+   those crates, so they are compiled into every build.
+   `Settings::save` (confy) writes back only fields it knows. If those
+   fields were gated, a no-`sql` build would silently delete the user's
+   `db_connections` on the next save.
+4. **Fix shared plumbing first.**
+   - `menu_index_for_alt` (`src/app.rs:13787`) hard-codes Alt-mnemonic
+     indices (`g`→9, …). Dropping Run, AI, DB, or JJ would send every
+     later mnemonic to the wrong menu, so it must look menus up by name.
+   - The root re-declares sqlx/tokio/futures-util/ureq/portable-pty but
+     never uses them. They have to go, or the feature will not shrink
+     anything.
+   - The dead `optional` root `tree-sitter-*` deps create stray implicit
+     features, so they go too.
+   - Do the cheap win before adding any flag: `image` is pulled in with
+     default features (`image-defaults`), which compiles an AV1
+     *encoder* Vix never uses. Narrowing it to png/jpeg/gif/webp may
+     remove most of `image`'s 81 crates on its own.
+5. **CI keeps every combination compiling.** No job builds anything but
+   default features today, so gated code would rot immediately. Add a
+   Linux job: `--no-default-features` build plus test, and
+   `cargo hack --each-feature`. The source-text checks stay
+   default-feature-only: `dispatch_scan` + `tests/action_catalog.rs`,
+   menu-bar insta snapshots, and the `list_commands --write` /
+   `generate_man` diffs.
+6. **Specs.** A new `spec/cargo-features/index.md` holds the
+   capability→crates→action-prefix table, the rules above, and the
+   T103 reversal with its rationale. `crates/vix-script/spec/index.md` §
+   "Packaging: not a Cargo feature" is updated to point there. The
+   README/AGENTS.md feature sections say what each flag removes.
+
+**Order** (tracked as **Run L**, T582–T594 in `tasks.md`): plumbing and
+the image slimming → settings decoupling → capability framework + CI
+matrix → `sql` → `image` → `script` → `terminal` → `http`/`ai` →
+`git`/`jj` → (optional) `lsp`/`dap` → distribution decision. Extract
+each area's inline dispatch into its own `src/app/<area>.rs` first
+(DB, AI, HTTP, terminal are still inline in `src/app.rs`; jj and the DAP
+`run.*` arms are misfiled in `src/app/git.rs`). That refactor is worth
+doing even if a flag never lands.
+
 ## Sequencing & dependencies
 
 - Phase 0 first, in full — it is cheap (~days) and everything else leans on
