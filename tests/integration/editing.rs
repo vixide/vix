@@ -4055,3 +4055,57 @@ fn scrollbar_marks_gutter_changes_unless_disabled() {
     app.settings.scrollbar.show_scrollbar_markers = false;
     assert_eq!(count_scrollbar_markers(&mut app), 0);
 }
+
+/// T571: a file over the size limit asks before opening; yes opens it, no leaves
+/// everything as it was.
+#[test]
+fn a_file_over_the_size_limit_asks_before_opening() {
+    use vix::app::ConfirmKind;
+    let dir = unique_dir("t571-large");
+    let path = dir.join("big.txt");
+    std::fs::write(&path, "x".repeat(500)).unwrap();
+    let mut app = app_at(&dir);
+    app.editor.max_text_bytes = 100;
+
+    app.open_initial(&path);
+    let confirm = app.confirm.as_ref().expect("a confirmation, not an error");
+    assert_eq!(confirm.kind, ConfirmKind::OpenLarge);
+    assert!(
+        app.editor.tabs.iter().all(|t| t.path.is_none()),
+        "not opened yet"
+    );
+
+    app.on_key(key('n'));
+    assert!(app.confirm.is_none());
+    assert!(app.editor.tabs.iter().all(|t| t.path.is_none()), "declined");
+
+    app.open_initial(&path);
+    app.on_key(key('y'));
+    assert!(app.confirm.is_none());
+    assert_eq!(app.editor.active_tab().unwrap().text().len(), 500);
+}
+
+/// T571: a binary file offers the byte editor, which writes the bytes back
+/// exactly (a text buffer would turn the invalid UTF-8 into U+FFFD).
+#[test]
+fn a_binary_file_opens_in_the_byte_editor_and_saves_byte_for_byte() {
+    use vix::app::ConfirmKind;
+    let dir = unique_dir("t571-binary");
+    let path = dir.join("blob.bin");
+    let original: Vec<u8> = vec![0, 159, 146, 150, 255, 0, 1, 2];
+    std::fs::write(&path, &original).unwrap();
+    let mut app = app_at(&dir);
+
+    app.open_initial(&path);
+    assert_eq!(
+        app.confirm.as_ref().map(|c| c.kind),
+        Some(ConfirmKind::OpenBinary)
+    );
+    app.on_key(key('y'));
+    let hex = app.edit_bytes.as_ref().expect("the byte editor opened");
+    assert_eq!(hex.to_bytes(), original.as_slice());
+
+    // Save without changing anything: the file must be identical.
+    app.on_key(ctrl('s'));
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+}

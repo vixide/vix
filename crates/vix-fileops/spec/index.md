@@ -104,3 +104,20 @@ symlink rather than following it into some other file:
 `keybindings.toml` (`vix-keybindings::user_bindings`) is a deliberate
 non-fix: its content (a key token paired with an action id) is never
 sensitive, so it keeps its original plain, non-private write.
+
+## Guarded text reads (T571)
+
+`read_text_guarded(path, max_bytes)` is how a file becomes a text buffer. It refuses what
+would freeze or exhaust Vix with a typed `TextReadError` (inside an `InvalidData`
+`io::Error`; recover it with `TextReadError::from_io`): `NotRegular` (a FIFO, socket,
+device or directory), `TooLarge` (over `max_bytes`, bounded even if the file grows after the
+stat) and `Binary` (a NUL in the first 8 KiB). Non-UTF-8 text decodes lossily and the
+returned flag makes the caller open it read-only. `MAX_TEXT_BYTES` (50 MiB) is the default
+limit and `HARD_MAX_TEXT_BYTES` (1 GiB) the ceiling that applies even after the user
+confirms. `read_to_string_guarded(path)` is the same guard for features that only want the
+text (insert file, revert, compare, the TODO finder). `which_on_path` resolves a program
+against `PATH` only, never the working directory.
+
+The host turns `TooLarge` and `Binary` into confirmations (`large_file_mb`; binary files
+open in the byte editor, which saves the bytes back exactly) rather than errors.
+

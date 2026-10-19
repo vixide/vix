@@ -316,6 +316,10 @@ pub struct Editor {
     pub split_root: Option<crate::pane_tree::Pane>,
     /// In-order index of the focused leaf within `split_root` (0 when unsplit).
     pub focused_leaf: usize,
+    /// The largest file [`Editor::open`] reads without being told to (T571); a
+    /// bigger one is refused with a typed error the host can turn into a
+    /// confirmation, then reopen with [`Editor::open_unbounded`].
+    pub max_text_bytes: u64,
 }
 
 impl Default for Editor {
@@ -336,6 +340,7 @@ impl Editor {
             indent,
             split_root: None,
             focused_leaf: 0,
+            max_text_bytes: vix_fileops::MAX_TEXT_BYTES,
         };
         e.new_tab();
         e
@@ -591,6 +596,19 @@ impl Editor {
     ///
     /// Returns an error if the file cannot be read.
     pub fn open(&mut self, path: &Path, preview: bool) -> io::Result<()> {
+        self.open_with_limit(path, preview, self.max_text_bytes)
+    }
+
+    /// [`Editor::open`] past the size limit the user confirmed: only the hard
+    /// ceiling (`vix_fileops::HARD_MAX_TEXT_BYTES`) still applies (T571).
+    ///
+    /// # Errors
+    /// As [`Editor::open`].
+    pub fn open_unbounded(&mut self, path: &Path, preview: bool) -> io::Result<()> {
+        self.open_with_limit(path, preview, vix_fileops::HARD_MAX_TEXT_BYTES)
+    }
+
+    fn open_with_limit(&mut self, path: &Path, preview: bool, max_bytes: u64) -> io::Result<()> {
         let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         if let Some(i) = self
             .tabs
@@ -607,7 +625,7 @@ impl Editor {
         // Guarded (T571): a FIFO, huge file, or binary refuses with a typed
         // error; non-UTF-8 text opens lossily and read-only.
         let fs_read_only = vix_fileops::is_unwritable(&canon);
-        let (content, lossy) = vix_fileops::read_text_guarded(&canon, vix_fileops::MAX_TEXT_BYTES)?;
+        let (content, lossy) = vix_fileops::read_text_guarded(&canon, max_bytes)?;
         let editor = make_editor(Some(&canon), &content, self.flags, &self.indent);
         let tab = Tab {
             editor,

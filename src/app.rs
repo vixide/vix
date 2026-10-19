@@ -688,6 +688,10 @@ pub enum ConfirmKind {
     Delete,
     /// `git add -A`, then open the commit prompt (T577).
     StageAllAndCommit,
+    /// Open [`Confirm::paths`] (one file) although it is above `large_file_mb` (T571).
+    OpenLarge,
+    /// Open [`Confirm::paths`] (one file) in the byte editor: it is binary (T571).
+    OpenBinary,
 }
 
 /// A yes/no confirmation (explorer delete, smart commit).
@@ -1821,6 +1825,9 @@ pub struct App {
     pub edit_value: Option<crate::edit_value::Tree>,
     /// Byte editor (hex view) overlay, when open.
     pub edit_bytes: Option<crate::edit_bytes::Hex>,
+    /// The file the byte editor edits directly (a binary file opened from the
+    /// confirmation, T571), or `None` when it edits the active text buffer.
+    edit_bytes_file: Option<PathBuf>,
     /// SQL statement editor overlay, when open.
     pub edit_sql: Option<crate::edit_sql::Editor>,
     /// DB workbench overlay (`spec/db`), when open.
@@ -2308,7 +2315,8 @@ impl App {
     pub fn new(root: PathBuf, settings: Settings) -> Self {
         // Seed the in-memory palette recents from the persisted list.
         let command_recents = settings.command_recents.clone();
-        let (editor, messages, lsp) = Self::build_core(&root, &settings);
+        let (mut editor, messages, lsp) = Self::build_core(&root, &settings);
+        editor.max_text_bytes = Self::max_text_bytes(&settings);
 
         let mut app = App {
             explorer: Explorer::new(root.clone()),
@@ -2366,6 +2374,7 @@ impl App {
             edit_outline: None,
             edit_value: None,
             edit_bytes: None,
+            edit_bytes_file: None,
             edit_sql: None,
             db: None,
             qrcode: None,
@@ -2587,7 +2596,8 @@ impl App {
     /// `docs/cli/index.md`.
     pub fn open_diff_files(&mut self, old: &Path, new: &Path) {
         let read = |p: &Path| {
-            std::fs::read_to_string(p).map_err(|e| t!("msg.open_failed", error = e).to_string())
+            crate::fileops::read_to_string_guarded(p)
+                .map_err(|e| t!("msg.open_failed", error = e).to_string())
         };
         let (old_text, new_text) = match (read(old), read(new)) {
             (Ok(o), Ok(n)) => (o, n),
@@ -6024,7 +6034,7 @@ impl App {
             return;
         }
         let path = self.resolve(input);
-        let Ok(text) = std::fs::read_to_string(&path) else {
+        let Ok(text) = crate::fileops::read_to_string_guarded(&path) else {
             self.messages
                 .error(t!("msg.open_failed", error = path.display()).to_string());
             return;
@@ -6049,7 +6059,7 @@ impl App {
             self.status = t!("status.revert_no_file").to_string();
             return;
         };
-        match std::fs::read_to_string(&path) {
+        match crate::fileops::read_to_string_guarded(&path) {
             Ok(content) => {
                 let cursor = tab.editor.get_cursor();
                 tab.editor.set_content(&content);
@@ -7333,6 +7343,31 @@ impl App {
     }
 
     fn confirm_key(&mut self, key: KeyEvent) {
+        if let Some(kind) = self
+            .confirm
+            .as_ref()
+            .map(|c| c.kind)
+            .filter(|k| matches!(k, ConfirmKind::OpenLarge | ConfirmKind::OpenBinary))
+        {
+            match key.code {
+                KeyCode::Char('y' | 'Y') => {
+                    if let Some(path) = self.confirm.take().and_then(|c| c.paths.into_iter().next())
+                    {
+                        if kind == ConfirmKind::OpenLarge {
+                            self.open_path_with(&path, false, true);
+                        } else {
+                            self.open_binary_file(&path);
+                        }
+                    }
+                }
+                KeyCode::Char('n' | 'N') | KeyCode::Esc => {
+                    self.confirm = None;
+                    self.status = t!("status.open_cancelled").into();
+                }
+                _ => {}
+            }
+            return;
+        }
         if self
             .confirm
             .as_ref()
@@ -7475,6 +7510,23 @@ impl App {
     }
 
     fn open_path(&mut self, path: &Path, preview: bool) {
+        self.open_path_with(path, preview, false);
+    }
+
+    /// The size above which opening a file asks first: `large_file_mb` megabytes,
+    /// or only the hard ceiling when that is `0` (T571).
+    fn max_text_bytes(settings: &Settings) -> u64 {
+        match settings.editor_behavior.large_file_mb {
+            0 => crate::fileops::HARD_MAX_TEXT_BYTES,
+            mb => mb
+                .saturating_mul(1024 * 1024)
+                .min(crate::fileops::HARD_MAX_TEXT_BYTES),
+        }
+    }
+
+    /// [`App::open_path`]; `past_size_limit` is set once the user confirmed
+    /// opening a file larger than `large_file_mb`.
+    fn open_path_with(&mut self, path: &Path, preview: bool, past_size_limit: bool) {
         if is_image_path(path) {
             if !preview {
                 self.open_image(path);
@@ -7483,7 +7535,12 @@ impl App {
             return;
         }
         let before = self.editor.tabs.len();
-        match self.editor.open(path, preview) {
+        let opened = if past_size_limit {
+            self.editor.open_unbounded(path, preview)
+        } else {
+            self.editor.open(path, preview)
+        };
+        match opened {
             Ok(()) => {
                 let opened_new = self.editor.tabs.len() > before;
                 if !preview {
@@ -7497,28 +7554,94 @@ impl App {
                 self.apply_editorconfig_indent(path);
                 self.status = t!("status.opened", path = path.display()).to_string();
             }
-            Err(e) => {
-                let reason = match crate::fileops::TextReadError::from_io(&e) {
-                    Some(crate::fileops::TextReadError::NotRegular) => {
-                        t!("msg.open_not_regular").to_string()
-                    }
-                    Some(crate::fileops::TextReadError::TooLarge) => {
-                        t!("msg.open_too_large").to_string()
-                    }
-                    Some(crate::fileops::TextReadError::Binary) => {
-                        t!("msg.open_binary").to_string()
-                    }
-                    None => e.to_string(),
-                };
-                self.messages.error(
+            Err(e) => self.report_open_failure(path, preview, &e),
+        }
+    }
+
+    /// Say why `path` did not open. A file over the size limit, or a binary one,
+    /// asks whether to open it anyway (or in the byte editor) instead of failing,
+    /// unless this was only an arrow-key preview (T571).
+    fn report_open_failure(&mut self, path: &Path, preview: bool, e: &std::io::Error) {
+        use crate::fileops::TextReadError;
+        let why = TextReadError::from_io(e);
+        let size = std::fs::metadata(path).map_or(0, |m| m.len());
+        let over_hard_cap = size > crate::fileops::HARD_MAX_TEXT_BYTES;
+        if !preview && !over_hard_cap {
+            let ask = match why {
+                Some(TextReadError::TooLarge) => Some((
+                    ConfirmKind::OpenLarge,
                     t!(
-                        "msg.open_failed_path",
+                        "confirm.open_large",
                         path = path.display(),
-                        error = reason
+                        mb = size.div_ceil(1024 * 1024)
                     )
                     .to_string(),
-                );
+                )),
+                Some(TextReadError::Binary) => Some((
+                    ConfirmKind::OpenBinary,
+                    t!("confirm.open_binary", path = path.display()).to_string(),
+                )),
+                _ => None,
+            };
+            if let Some((kind, message)) = ask {
+                self.confirm = Some(Confirm {
+                    message,
+                    paths: vec![path.to_path_buf()],
+                    kind,
+                });
+                return;
             }
+        }
+        let reason = match why {
+            Some(TextReadError::NotRegular) => t!("msg.open_not_regular").to_string(),
+            Some(TextReadError::TooLarge) => t!("msg.open_too_large").to_string(),
+            Some(TextReadError::Binary) => t!("msg.open_binary").to_string(),
+            None => e.to_string(),
+        };
+        if preview {
+            self.status = t!(
+                "msg.open_failed_path",
+                path = path.display(),
+                error = reason
+            )
+            .to_string();
+            return;
+        }
+        self.messages.error(
+            t!(
+                "msg.open_failed_path",
+                path = path.display(),
+                error = reason
+            )
+            .to_string(),
+        );
+    }
+
+    /// Open a binary file in the byte editor, saving straight back to the file
+    /// (not through a text buffer, which would corrupt non-UTF-8 bytes) (T571).
+    fn open_binary_file(&mut self, path: &Path) {
+        use std::io::Read as _;
+        let mut bytes = Vec::new();
+        let read = std::fs::File::open(path).and_then(|f| {
+            f.take(crate::fileops::HARD_MAX_TEXT_BYTES + 1)
+                .read_to_end(&mut bytes)
+        });
+        match read {
+            Ok(n) if (n as u64) <= crate::fileops::HARD_MAX_TEXT_BYTES => {
+                self.edit_bytes = Some(crate::edit_bytes::Hex::from_bytes(bytes));
+                self.edit_bytes_file = Some(path.to_path_buf());
+            }
+            Ok(_) => self.messages.error(
+                t!(
+                    "msg.open_failed_path",
+                    path = path.display(),
+                    error = t!("msg.open_too_large")
+                )
+                .to_string(),
+            ),
+            Err(e) => self
+                .messages
+                .error(t!("msg.open_failed_path", path = path.display(), error = e).to_string()),
         }
     }
 
@@ -9901,6 +10024,7 @@ impl App {
             return;
         }
         self.edit_bytes = Some(crate::edit_bytes::Hex::from_bytes(tab.text().into_bytes()));
+        self.edit_bytes_file = None;
     }
 
     /// Route a key to the open byte editor and act on its outcome.
@@ -9913,7 +10037,10 @@ impl App {
             None => return,
         };
         match outcome {
-            crate::edit_bytes::Outcome::Close => self.edit_bytes = None,
+            crate::edit_bytes::Outcome::Close => {
+                self.edit_bytes = None;
+                self.edit_bytes_file = None;
+            }
             crate::edit_bytes::Outcome::Save => self.save_edit_bytes(),
             crate::edit_bytes::Outcome::Consumed => {}
         }
@@ -9925,6 +10052,22 @@ impl App {
         let Some(bytes) = self.edit_bytes.as_ref().map(|h| h.to_bytes().to_vec()) else {
             return;
         };
+        // A binary file opened straight into the byte editor is written back byte
+        // for byte; going through a text buffer would corrupt it (T571).
+        if let Some(path) = self.edit_bytes_file.clone() {
+            match crate::fileops::write_atomic(&path, &bytes) {
+                Ok(()) => {
+                    if let Some(hex) = self.edit_bytes.as_mut() {
+                        hex.mark_saved();
+                    }
+                    self.status = t!("status.saved", path = path.display()).to_string();
+                }
+                Err(e) => self
+                    .messages
+                    .error(t!("msg.save_failed", error = e).to_string()),
+            }
+            return;
+        }
         let text = String::from_utf8_lossy(&bytes).into_owned();
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_content(&text);
@@ -11408,7 +11551,7 @@ impl App {
         static TAGS: &[&str] = &["TODO", "FIXME", "HACK", "XXX", "BUG", "NOTE"];
         let mut hits: Vec<Hit> = Vec::new();
         'files: for path in &self.file_index {
-            let Ok(content) = std::fs::read_to_string(path) else {
+            let Ok(content) = crate::fileops::read_to_string_guarded(path) else {
                 continue;
             };
             let rel = path
@@ -11542,7 +11685,7 @@ impl App {
         if meta.len() > 2_000_000 {
             return None; // skip very large files
         }
-        std::fs::read_to_string(path).ok()
+        crate::fileops::read_to_string_guarded(path).ok()
     }
 
     fn run_workspace_search(&mut self) {

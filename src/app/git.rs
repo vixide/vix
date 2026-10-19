@@ -109,7 +109,11 @@ impl App {
             "git.conflict_list" => self.open_conflict_list(),
             "git.stash" => self.git_op(crate::git::stash_push, "status.git_stashed"),
             "git.stash_pop" => self.git_op(crate::git::stash_pop, "status.git_stash_popped"),
-            "git.amend" => self.git_op(crate::git::commit_amend, "status.git_amended"),
+            "git.amend" => {
+                if !self.commit_signing_blocked() {
+                    self.git_op(crate::git::commit_amend, "status.git_amended");
+                }
+            }
             "git.diff_next" => self.diff_goto(true),
             "git.diff_prev" => self.diff_goto(false),
             _ => return false,
@@ -815,11 +819,26 @@ impl App {
         }
     }
 
+    /// Whether signing this commit would run a terminal pinentry, which draws
+    /// over Vix's screen and steals its keystrokes (T570). Warns instead of
+    /// committing, so nothing is half-done.
+    fn commit_signing_blocked(&mut self) -> bool {
+        if !crate::git::commit_signing_needs_tty(&self.root) {
+            return false;
+        }
+        self.messages
+            .warn(t!("msg.git_signing_needs_tty").to_string());
+        true
+    }
+
     /// Run `git commit -m <message>` and report the outcome.
     pub(super) fn git_commit(&mut self, message: &str) {
         let message = message.trim();
         if message.is_empty() {
             self.status = t!("status.git_empty_message").into();
+            return;
+        }
+        if self.commit_signing_blocked() {
             return;
         }
         match crate::git::commit(&self.root, message) {
