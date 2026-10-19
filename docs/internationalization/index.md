@@ -30,8 +30,10 @@ already reorders bidirectional text itself, otherwise the text is reversed twice
 With a right-to-left language the layout is mirrored too (`mirror_layout`:
 `"auto"` default, `"on"`, `"off"`): the explorer moves to the right, the message
 drawer and other docks to the left, and the editor's scroll bar to the left.
-Mouse dragging to resize a dock follows the mirrored edges. The menu bar and
-open menus stay left-aligned.
+Mouse dragging to resize a dock follows the mirrored edges. The menu bar
+mirrors too: the first menu is rightmost, dropdowns line up with their title's
+right edge, submenus open to the left, and the dock toggles move to the left
+edge. Text inside panels is reordered but not right-aligned.
 
 ## Choosing a language
 

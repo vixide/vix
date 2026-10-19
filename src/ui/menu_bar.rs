@@ -19,7 +19,11 @@ use crate::menu::menus;
 use crate::theme::{self, icon};
 
 pub(super) fn draw_menu_bar(app: &App, frame: &mut Frame, area: Rect) {
-    let mut spans = Vec::new();
+    let mirrored = super::layout_mirrored(app);
+    frame.render_widget(
+        Block::default().style(theme::region_base(theme::Region::MenuBar)),
+        area,
+    );
     for (i, m) in menus().iter().enumerate() {
         let open = app.menu.open == Some(i);
         let style = if open {
@@ -27,10 +31,17 @@ pub(super) fn draw_menu_bar(app: &App, frame: &mut Frame, area: Rect) {
         } else {
             Style::default().fg(theme::region_fg(theme::Region::MenuBar))
         };
-        spans.push(Span::styled(format!(" {} ", m.title()), style));
+        let rect = Rect {
+            x: super::menu_title_x(area, i, mirrored),
+            width: super::menu_title_width(i),
+            ..area
+        }
+        .intersection(area);
+        frame.render_widget(
+            Paragraph::new(Span::styled(format!(" {} ", m.title()), style)),
+            rect,
+        );
     }
-    let bar = Paragraph::new(Line::from(spans)).style(theme::region_base(theme::Region::MenuBar));
-    frame.render_widget(bar, area);
 
     // Right-aligned dock open/close toggles: bright when open, dim when closed.
     // Click handling lives in `App::menu_click` (see `dock_toggle_cols`).
@@ -41,21 +52,26 @@ pub(super) fn draw_menu_bar(app: &App, frame: &mut Frame, area: Rect) {
             theme::dim()
         }
     };
-    let docks = Line::from(vec![
-        Span::styled(
-            icon::FOLDER,
-            dock_style(app.visible.contains(crate::app::Visible::EXPLORER)),
-        ),
-        Span::raw(" "),
-        Span::styled(
-            icon::BELL,
-            dock_style(app.visible.contains(crate::app::Visible::MESSAGES)),
-        ),
-        Span::raw(" "),
-    ]);
+    let folder = Span::styled(
+        icon::FOLDER,
+        dock_style(app.visible.contains(crate::app::Visible::EXPLORER)),
+    );
+    let bell = Span::styled(
+        icon::BELL,
+        dock_style(app.visible.contains(crate::app::Visible::MESSAGES)),
+    );
+    let docks = Line::from(if mirrored {
+        vec![Span::raw(" "), bell, Span::raw(" "), folder]
+    } else {
+        vec![folder, Span::raw(" "), bell, Span::raw(" ")]
+    });
     frame.render_widget(
         Paragraph::new(docks)
-            .alignment(Alignment::Right)
+            .alignment(if mirrored {
+                Alignment::Left
+            } else {
+                Alignment::Right
+            })
             .style(theme::region_base(theme::Region::MenuBar)),
         area,
     );
@@ -174,7 +190,12 @@ pub(super) fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
         let fa = frame.area();
         let sub_w = dropdown_width(subitems);
         let sub_h = u16::try_from(subitems.len()).unwrap_or(u16::MAX) + 2;
-        let sub_x = (area.x + area.width).min(fa.width.saturating_sub(sub_w));
+        let mirrored = super::layout_mirrored(app);
+        let sub_x = if mirrored {
+            area.x.saturating_sub(sub_w)
+        } else {
+            (area.x + area.width).min(fa.width.saturating_sub(sub_w))
+        };
         let parent_row = u16::try_from(app.menu.item.unwrap_or(0)).unwrap_or(u16::MAX);
         let sub_y = (area.y + parent_row).min(fa.height.saturating_sub(sub_h));
         let sub_area = Rect {
@@ -192,7 +213,11 @@ pub(super) fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
         {
             let ss_w = dropdown_width(ssitems);
             let ss_h = u16::try_from(ssitems.len()).unwrap_or(u16::MAX) + 2;
-            let ss_x = (sub_area.x + sub_area.width).min(fa.width.saturating_sub(ss_w));
+            let ss_x = if mirrored {
+                sub_area.x.saturating_sub(ss_w)
+            } else {
+                (sub_area.x + sub_area.width).min(fa.width.saturating_sub(ss_w))
+            };
             let prow = u16::try_from(app.menu.sub.unwrap_or(0)).unwrap_or(u16::MAX);
             let ss_y = (sub_area.y + prow).min(fa.height.saturating_sub(ss_h));
             let ss_area = Rect {

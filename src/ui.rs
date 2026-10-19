@@ -305,7 +305,8 @@ fn draw_overlays(app: &mut App, frame: &mut Frame, area: Rect, menu_bar: Rect) {
     }
     if app.menu.is_open() {
         if let Some(i) = app.menu.open {
-            app.layout.menu_dropdown = menu_dropdown_rect(area, menu_bar, i);
+            app.layout.menu_dropdown =
+                menu_dropdown_rect_for(area, menu_bar, i, layout_mirrored(app));
         }
         draw_menu_dropdown(app, frame);
     }
@@ -577,22 +578,63 @@ fn menu_offsets() -> Vec<u16> {
     offsets
 }
 
-/// Columns (within the menu-bar rect) of the left- and right-dock toggle icons,
-/// matching the right-aligned layout drawn by `draw_menu_bar`.
+/// Width in columns of the top-level menu title at `index` (padding included).
+#[must_use]
+pub fn menu_title_width(index: usize) -> u16 {
+    u16::try_from(menus()[index].title().chars().count()).unwrap_or(u16::MAX) + 2
+}
+
+/// Screen column where the top-level menu title at `index` starts. Left to right
+/// from the bar's left edge, or, mirrored, right to left from its right edge so
+/// the first menu is rightmost (T564).
+#[must_use]
+pub fn menu_title_x(bar: Rect, index: usize, mirrored: bool) -> u16 {
+    let offset = menu_offsets()[index];
+    if mirrored {
+        (bar.x + bar.width).saturating_sub(offset + menu_title_width(index))
+    } else {
+        bar.x + offset
+    }
+}
+
+/// Columns of the explorer and messages dock toggle icons, matching the layout
+/// drawn by `draw_menu_bar` (right-aligned, or left-aligned when mirrored).
 #[must_use]
 pub fn dock_toggle_cols(menu: Rect) -> (u16, u16) {
-    let right = menu.x + menu.width;
-    // Layout from the right edge: FOLDER, space, BELL, space.
-    (right.saturating_sub(4), right.saturating_sub(2))
+    dock_toggle_cols_for(menu, false)
+}
+
+/// [`dock_toggle_cols`] for an explicit layout direction.
+#[must_use]
+pub fn dock_toggle_cols_for(menu: Rect, mirrored: bool) -> (u16, u16) {
+    if mirrored {
+        // From the left edge: space, BELL (messages), space, FOLDER (explorer).
+        (menu.x + 3, menu.x + 1)
+    } else {
+        let right = menu.x + menu.width;
+        // From the right edge: FOLDER (explorer), space, BELL (messages), space.
+        (right.saturating_sub(4), right.saturating_sub(2))
+    }
 }
 
 /// Geometry of the dropdown for the menu at `index`. Shared by the renderer and
 /// by mouse hit-testing (`App::on_mouse`) so clicks land on the right item.
 #[must_use]
 pub fn menu_dropdown_rect(frame_area: Rect, bar: Rect, index: usize) -> Rect {
+    menu_dropdown_rect_for(frame_area, bar, index, false)
+}
+
+/// [`menu_dropdown_rect`] for an explicit layout direction. Mirrored, the
+/// dropdown's right edge lines up with its title's right edge.
+#[must_use]
+pub fn menu_dropdown_rect_for(frame_area: Rect, bar: Rect, index: usize, mirrored: bool) -> Rect {
     let def = &menus()[index];
-    let x = bar.x + menu_offsets()[index];
     let width = dropdown_width(def.items);
+    let x = if mirrored {
+        (menu_title_x(bar, index, true) + menu_title_width(index)).saturating_sub(width)
+    } else {
+        menu_title_x(bar, index, false)
+    };
     let height = u16::try_from(def.items.len()).unwrap_or(u16::MAX) + 2;
     let y = bar.y + 1;
     Rect {

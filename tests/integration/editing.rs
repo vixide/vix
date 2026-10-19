@@ -4131,3 +4131,46 @@ fn mirrored_layout_swaps_docks_and_scrollbar() {
     assert!(ex.x > ed.x, "explorer moves to the right");
     assert!(sb.x < ed.x, "scroll bar moves to the left");
 }
+
+/// T564: a mirrored layout puts the menu titles right to left (first menu
+/// rightmost), the dock toggles at the left edge, and clicks still land.
+#[test]
+fn mirrored_menu_bar_hit_tests_follow_the_drawing() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut app = app_at(Path::new("."));
+    app.settings.mirror_layout = "on".into();
+    let mut term = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let bar = app.layout.menu;
+
+    let first = vix::ui::menu_title_x(bar, 0, true);
+    let second = vix::ui::menu_title_x(bar, 1, true);
+    assert!(first > second, "first menu is rightmost");
+    assert_eq!(first + vix::ui::menu_title_width(0), bar.x + bar.width);
+
+    // The first title's text is really drawn there (leading pad, then a letter).
+    let cell = term.backend().buffer()[(first + 1, bar.y)]
+        .symbol()
+        .to_string();
+    assert_ne!(
+        cell.trim(),
+        "",
+        "a title glyph is drawn at the computed column"
+    );
+
+    // A click on the first title opens it, and the dropdown's right edge lines up
+    // with the title's right edge.
+    app.on_mouse(click(first + 1, bar.y));
+    assert_eq!(app.menu.open, Some(0));
+    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+    let dd = app.layout.menu_dropdown;
+    assert_eq!(dd.x + dd.width, first + vix::ui::menu_title_width(0));
+    app.on_mouse(click(second + 1, bar.y));
+    assert_eq!(app.menu.open, Some(1), "the second title is hit-tested too");
+
+    let (explorer_col, messages_col) = vix::ui::dock_toggle_cols_for(bar, true);
+    assert!(
+        messages_col < explorer_col && explorer_col < 10,
+        "toggles hug the left edge"
+    );
+}
