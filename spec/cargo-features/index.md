@@ -100,6 +100,11 @@ What a `--no-default-features` binary still links: `crossterm`'s terminal-size f
 remove it. Everything else was checked by reading the linked binary's symbols
 (`nm`: the only caller of `Command::output` is `crossterm::terminal::sys::unix::tput_value`).
 
+`tests/spawn_sites.rs` keeps this list honest: it scans `src/` and every crate's
+`src/` for process-spawning code and fails when a file outside its `ALLOWED` table
+(file, reason, gating feature) contains one, or when an allowed file stops
+spawning. A new spawn site must be gated behind a capability feature first.
+
 ## Measured
 
 `cargo tree --no-default-features -e normal` has **zero** `sqlx`, `ureq`, `rustls`, `ring`, `keyring`, `rhai`, `portable-pty`, `vt100`, `image` or `ratatui-image` crates: with `net` (`http`, `ai`, `sql`) off, the build contains no TLS stack and makes no outbound network connections.
