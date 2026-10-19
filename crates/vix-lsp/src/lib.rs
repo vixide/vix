@@ -21,7 +21,9 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt::Write as _;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin};
+#[cfg(feature = "process")]
+use std::process::{Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -1499,16 +1501,28 @@ impl Lsp {
     }
 }
 
-/// Spawn a server process and its stdout reader thread.
-fn spawn(config: &ServerConfig, folders: &[(String, String)], log: &LogBuf) -> Option<Server> {
-    let (program, args) = config.command.split_first()?;
-    let mut child = Command::new(program)
+/// Start the server process with all three stdio streams piped.
+#[cfg(feature = "process")]
+fn start_process(program: &str, args: &[String]) -> Option<Child> {
+    Command::new(program)
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .ok()?;
+        .ok()
+}
+
+/// Without the `process` feature no server is ever started.
+#[cfg(not(feature = "process"))]
+fn start_process(_program: &str, _args: &[String]) -> Option<Child> {
+    None
+}
+
+/// Spawn a server process and its stdout reader thread.
+fn spawn(config: &ServerConfig, folders: &[(String, String)], log: &LogBuf) -> Option<Server> {
+    let (program, args) = config.command.split_first()?;
+    let mut child = start_process(program, args)?;
     let stdin = child.stdin.take()?;
     let stdout = child.stdout.take()?;
     if let Some(stderr) = child.stderr.take() {
@@ -1801,7 +1815,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(all(unix, feature = "process"))]
     fn writer_thread_decouples_the_caller_from_a_stalled_stdin() {
         use std::time::{Duration, Instant};
         // A child that never reads its stdin, so the OS pipe fills after ~64 KiB.
@@ -1857,6 +1871,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "process")]
     #[cfg(unix)]
     fn restart_respawns_the_server_and_captures_its_stderr() {
         let cfg = ServerConfig {

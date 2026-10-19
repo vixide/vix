@@ -7,6 +7,7 @@
 use crate::common::*;
 
 #[test]
+#[cfg(feature = "lsp")]
 fn diagnostics_panel_empty_reports_none() {
     let mut app = app_at(Path::new("."));
     app.run_action("lsp.diagnostics");

@@ -194,3 +194,8 @@ file sends `didOpen`; closing its tab sends `didClose`.
 ## Restart and server log (T576)
 
 Each server's stderr is captured on a reader thread into a per-language ring buffer of the last 2,000 lines, which survives restarts. `Lsp::server_log(path)` returns it under a `== language (command) ==` heading; **LSP → Show Server Log** opens it in a read-only tab. `Lsp::restart(path)` shuts the server(s) for `path` down, drops the diagnostics they published, resets the crash-respawn budget, spawns fresh ones and returns the files that were open on them; the host forgets their sync state so `didOpen` is replayed with current content on the next tick. **LSP → Restart Server** drives it.
+
+## Cargo features
+
+- `process` (default on): starting a server process. Off, `Lsp` can be built but every
+  server fails to start. The root `lsp` feature enables it (`spec/cargo-features`, T595).

@@ -36,3 +36,9 @@ content at a revision. See [git-history](git-history/index.md).
 `diff_marks` runs on the UI thread. It returns no marks when either side
 exceeds 50,000 lines, and gives Myers a 40 ms deadline, after which the
 diff degrades to a coarser (still valid) result rather than stalling a frame.
+
+## Cargo features
+
+- `process` (default on): the runners that start `git`. Off, the crate is only its data
+  types and pure parsers (`parse_status`, `diff_marks`, `hunks`, `LogPanel`, …) and never
+  starts a process. The root `git` feature enables it (`spec/cargo-features`, T595).

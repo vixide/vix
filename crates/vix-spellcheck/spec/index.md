@@ -43,3 +43,9 @@ session dictionary, `i` ignores it for the session, `Esc` closes.
 
 [`spellbook`]: https://crates.io/crates/spellbook
 [wooorm/dictionaries]: https://github.com/wooorm/dictionaries
+
+## Cargo features
+
+- `hunspell` (default on): ask the installed `hunspell -D` where dictionaries live. Off,
+  only the standard directories are searched and nothing is started. The root `hunspell`
+  feature enables it (`spec/cargo-features`, T595).

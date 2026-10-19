@@ -47,6 +47,7 @@ pub struct Check {
     pub detail: String,
 }
 
+#[cfg(any(feature = "probe-git", feature = "probe-lsp"))]
 /// Whether `program` can be spawned at all — used for both the `git` check
 /// and each configured LSP server's own binary. Only the spawn itself is
 /// checked (and the child is killed immediately once confirmed started);
@@ -67,6 +68,7 @@ fn spawnable(program: &str) -> bool {
         .is_ok()
 }
 
+#[cfg(feature = "probe-git")]
 /// Is `git` on `PATH`?
 #[must_use]
 pub fn check_git() -> Check {
@@ -82,6 +84,7 @@ pub fn check_git() -> Check {
     }
 }
 
+#[cfg(feature = "probe-lsp")]
 /// One check per configured `Settings::lsp_servers` entry — empty when none
 /// are configured (a skip, reported as a single entry, not silently
 /// nothing).
@@ -167,11 +170,36 @@ pub fn check_terminal() -> Check {
     )
 }
 
+/// The `git` check, or nothing when this build never starts `git`.
+#[cfg(feature = "probe-git")]
+fn git_probe() -> Vec<Check> {
+    vec![check_git()]
+}
+
+/// See the `probe-git` variant.
+#[cfg(not(feature = "probe-git"))]
+fn git_probe() -> Vec<Check> {
+    Vec::new()
+}
+
+/// The LSP-server checks, or nothing when this build never starts a server.
+#[cfg(feature = "probe-lsp")]
+fn lsp_probes(settings: &Settings) -> Vec<Check> {
+    check_lsp_servers(settings)
+}
+
+/// See the `probe-lsp` variant.
+#[cfg(not(feature = "probe-lsp"))]
+fn lsp_probes(_settings: &Settings) -> Vec<Check> {
+    Vec::new()
+}
+
 /// Run every check against `settings`, in a fixed, stable order.
 #[must_use]
 pub fn run(settings: &Settings) -> Vec<Check> {
-    let mut checks = vec![check_git()];
-    checks.extend(check_lsp_servers(settings));
+    let mut checks = Vec::new();
+    checks.extend(git_probe());
+    checks.extend(lsp_probes(settings));
     checks.push(check_spellcheck_dictionary(settings));
     checks.push(check_terminal());
     checks
@@ -210,6 +238,7 @@ pub fn format_report(checks: &[Check]) -> Vec<String> {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "probe-git")]
     #[test]
     fn git_is_found_on_a_dev_machine() {
         // This crate's own test suite runs under `cargo test`, which
@@ -219,6 +248,7 @@ mod tests {
         assert_eq!(check_git().status, Status::Pass);
     }
 
+    #[cfg(feature = "probe-lsp")]
     #[test]
     fn no_lsp_servers_configured_is_a_skip_not_a_pass_or_fail() {
         let checks = check_lsp_servers(&Settings::default());
@@ -226,6 +256,7 @@ mod tests {
         assert_eq!(checks[0].status, Status::Skip);
     }
 
+    #[cfg(feature = "probe-lsp")]
     #[test]
     fn an_unspawnable_lsp_server_command_fails() {
         let mut settings = Settings::default();
@@ -239,6 +270,7 @@ mod tests {
         assert_eq!(checks[0].status, Status::Fail);
     }
 
+    #[cfg(feature = "probe-lsp")]
     #[test]
     fn an_empty_lsp_server_command_fails_without_spawning_anything() {
         let mut settings = Settings::default();

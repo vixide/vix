@@ -17,7 +17,9 @@
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin};
+#[cfg(feature = "process")]
+use std::process::{Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use serde_json::{Value, json};
@@ -171,16 +173,7 @@ impl Dap {
         breakpoints: HashMap<String, Vec<usize>>,
     ) -> bool {
         self.stop();
-        let Some((prog, args)) = adapter.command.split_first() else {
-            return false;
-        };
-        let Ok(mut child) = Command::new(prog)
-            .args(args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-        else {
+        let Some(mut child) = spawn_adapter(adapter) else {
             return false;
         };
         let (Some(stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
@@ -618,6 +611,25 @@ fn spawn_reader(mut stdout: std::process::ChildStdout, tx: Sender<Incoming>) {
             }
         }
     });
+}
+
+/// Start the adapter process with piped stdin/stdout.
+#[cfg(feature = "process")]
+fn spawn_adapter(adapter: &DebugAdapter) -> Option<Child> {
+    let (prog, args) = adapter.command.split_first()?;
+    Command::new(prog)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()
+}
+
+/// Without the `process` feature no debug adapter is ever started.
+#[cfg(not(feature = "process"))]
+fn spawn_adapter(_adapter: &DebugAdapter) -> Option<Child> {
+    None
 }
 
 #[cfg(test)]

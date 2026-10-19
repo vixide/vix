@@ -2,7 +2,8 @@
 
 Vix makes some capabilities optional at build time: the **DB** workbench, inline
 **image** preview, **script**ing, the integrated **terminal**, the **HTTP**
-client, the **AI** assistant, **Git** and **Jujutsu** integration. Every
+client, the **AI** assistant, **Git** and **Jujutsu** integration, **LSP** and
+**DAP** servers, the **tasks** shell runner, and the **hunspell** probe. Every
 capability is **default-on**, so a released binary is unchanged; the features
 exist for source builds that want a smaller or locked-down Vix.
 
@@ -10,8 +11,12 @@ This reverses T103/T111's "wired in = always compiled" decision, deliberately an
 only for areas with a measured payoff (see `plan.md` § "Capability Cargo
 features"): an area earns a flag when it removes many third-party crates (`sql`
 48, `image` 81 before T583, `script` 9, `terminal` 10) or a whole outward surface
-(`http`, `ai`, `git`, `jj`). `org`, `lsp` and `dap` are deliberately not flagged:
-no payoff and the heaviest coupling.
+(`http`, `ai`, `git`, `jj`).
+
+A second criterion (T595) is **security surface**: every place Vix starts another
+program. `lsp`, `dap`, `tasks`, `hunspell` and `git` exist for that reason, not for
+size. In a build without them Vix starts **no child process** of its own. `org` stays
+unflagged: it has no payoff and the heaviest coupling.
 
 ## The table
 
@@ -23,9 +28,13 @@ no payoff and the heaviest coupling.
 | `terminal` | `tools.terminal` | `vix-terminal`, `vt100` (portable-pty; `terminal_off.rs` no-op stand-ins) |
 | `http` | `tools.http_send` | `vix-http-client` (`http_off.rs` stand-ins) |
 | `ai` | `ai.*` | `vix-ai-core`, `-diff`, `-panel` (`ai_off.rs` stand-ins; Git's generated commit message and DB assist are `cfg(ai)`) |
-| `git` | `git.*` | (surface only: `vix-git` stays compiled for the panel data types, but nothing calls its process-spawning code; `src/app/git.rs`, with `git_off.rs` stand-ins) |
-| `jj` | `jj.*` | (surface only: no crates; `src/app/jj.rs`) |
-| `full` | umbrella for every capability; `default` enables it, and whole-product tests gate on it | all of the above |
+| `git` | `git.*` | `vix-git/process` (the runners that spawn `git`; the crate keeps its data types and parsers) and `vix-doctor/probe-git`; implies `tasks`; `src/app/git.rs`, with `git_off.rs` stand-ins |
+| `jj` | `jj.*` | (surface only: no crates; `src/app/jj.rs`); implies `tasks`, since it runs the `jj` CLI |
+| `lsp` | `lsp.*` | `vix-lsp/process` (starting a server) and `vix-doctor/probe-lsp` (the `--doctor` check that starts each configured server) |
+| `dap` | `run.*` | `vix-dap/process` (starting a debug adapter) |
+| `tasks` | `project.*`, `tools.run_command`, `tools.cancel_command`, `tools.tasks`, `tools.test*` | the shell runner `spawn_shell` in `src/app.rs` (Run Command, project lifecycle, tests, the AI CLI provider) |
+| `hunspell` | (none) | `vix-spellcheck/hunspell` (running `hunspell -D` to find dictionaries) |
+| `full` | umbrella for every capability (including `lsp`, `dap`, `tasks`, `hunspell`); `default` enables it, and whole-product tests gate on it | all of the above |
 | `net` | umbrella for `http`, `ai`, `sql` | everything that can reach the network |
 
 `syntax-*` / `lang-*` (Tree-sitter grammars) are a separate, older axis and are
@@ -72,6 +81,24 @@ every build. T594 is decided below.
 
 Tests: `src/capability.rs` (prefix map), `vix-menu` (`filter_menus`), and, in a
 `--no-default-features` build, `an_action_from_a_disabled_capability_warns_…`.
+
+## Process spawning (T595)
+
+Every first-party site that starts a program is behind a feature: `vix-git` runners
+(`git`), `vix-lsp` and `vix-dap` (`lsp`, `dap`), `vix-doctor` probes, `vix-spellcheck`
+(`hunspell`), the shell runner (`tasks`, which `git`, `jj` need), plus the already
+gated `terminal`, `sql` (SSH tunnels, keychain helpers) and `ai` (keychain helper). The
+`explorer_delete = "trash"` path uses `NSFileManager` on macOS rather than the crate's
+default `osascript` child. `format` is not a capability: `vix-format-tool` pretty-prints
+JSON/YAML/TOML in-process and starts nothing.
+
+With `ai` but not `tasks`, only the HTTP providers work; the `cli` provider hands its
+command to a shell and reports *"tasks is not included in this build"*.
+
+What a `--no-default-features` binary still links: `crossterm`'s terminal-size fallback
+(`tput`) is third-party code that runs only when the size `ioctl` fails; Vix cannot
+remove it. Everything else was checked by reading the linked binary's symbols
+(`nm`: the only caller of `Command::output` is `crossterm::terminal::sys::unix::tput_value`).
 
 ## Measured
 

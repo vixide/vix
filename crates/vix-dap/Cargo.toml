@@ -7,6 +7,11 @@ license.workspace = true
 repository.workspace = true
 description = "Debug Adapter Protocol (DAP) client: drive a debug adapter over stdio."
 
+[features]
+default = ["process"]
+# Spawn debug-adapter processes. Off, no adapter is ever started.
+process = []
+
 [dependencies]
 vix-settings = { path = "../vix-settings", version = "1.6.0" }
 serde = { workspace = true }

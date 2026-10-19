@@ -7,6 +7,12 @@ license.workspace = true
 repository.workspace = true
 description = "Git integration: status/diff/staging via the git CLI."
 
+[features]
+default = ["process"]
+# The runners that spawn the `git` CLI. Off, the crate is only its data types
+# and parsers (no process is ever started); the root `git` feature turns it on.
+process = []
+
 [dependencies]
 similar = { workspace = true }
 vix-civil-date = { path = "../vix-civil-date", version = "1.6.0" }
