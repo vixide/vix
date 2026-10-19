@@ -119,6 +119,10 @@ pub struct Settings {
     /// UI language as a locale code (e.g. `"en"`, `"es"`, `"fr"`, `"de"`, `"cy"`).
     /// Used as the default; a `--locale` CLI flag overrides it for one run.
     pub locale: String,
+    /// Right-to-left text reordering (UAX #9) of the drawn screen: `"auto"`
+    /// (default; on when the UI language is right-to-left, e.g. Arabic), `"on"`,
+    /// or `"off"` for terminals that already reorder bidirectional text (T564).
+    pub bidi: String,
     /// Keyboard navigation style id: `"apple"` (default), `"vscode"`, `"emacs"`,
     /// or `"vi"`.
     pub keymap: String,
@@ -568,6 +572,7 @@ impl Default for Settings {
             theme_light: "light".to_string(),
             theme_dark: "dark".to_string(),
             locale: "en".to_string(),
+            bidi: "auto".to_string(),
             keymap: "apple".to_string(),
             explorer_width: 30,
             messages_width: 32,
