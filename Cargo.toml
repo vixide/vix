@@ -579,8 +579,16 @@ lto = "thin"
 strip = true
 opt-level = "z"
 
-# The minimal release variant (`release-minimal.yml`): trade build time and
-# unwinding for the smallest binary. Not used by dist or the default release.
+# The minimal release variant (`release-minimal.yml`), built for a reduced
+# security surface (spec/cargo-features, T595); it is not used by dist or the
+# default release.
+# - `panic = "abort"`: a panic ends the process instead of unwinding, so no
+#   code keeps running on state a panic left half-updated, and no unwinding
+#   tables or `catch_unwind` paths ship.
+# - `lto = "fat"` + `codegen-units = 1`: whole-program dead-code elimination, so
+#   unreachable dependency code (e.g. spawn paths no feature calls) is dropped
+#   from the binary rather than merely never called.
+# Smaller size is a side effect, not the goal.
 [profile.minimal]
 inherits = "release"
 lto = "fat"

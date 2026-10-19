@@ -46,6 +46,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y musl-tools
           echo "AR_x86_64-unknown-linux-musl=ar" >> "$GITHUB_ENV"
+      # The `minimal` profile is for a reduced security surface (panic=abort, fat
+      # LTO dead-code elimination); see [profile.minimal] in Cargo.toml.
       - name: build (no default features)
         run: cargo build --profile minimal --locked -p vix --no-default-features --target ${{ matrix.target }}
       - name: package
