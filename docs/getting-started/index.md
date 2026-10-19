@@ -39,9 +39,9 @@ npm install -g @vixide/vix
 `vix` built with `--no-default-features`, so it leaves out the DB workbench,
 image preview, scripting, the integrated terminal, the HTTP client, the AI
 assistant, Git and Jujutsu integration, and syntax highlighting. It links no
-TLS stack, makes no network connections, and never runs `git`. It is about 44% smaller than the default build (12.3 MiB vs 21.8 MiB on macOS arm64). It has no
+TLS stack, makes no network connections, and never runs `git`. It is built with a size-optimized profile and is about 66% smaller than the default build (7.4 MiB vs 21.8 MiB on macOS arm64). It has no
 installer: unpack it and put `vix` on your `PATH`. Build the same thing from
-source with `cargo build --release --no-default-features`, or keep what you want
+source with `cargo build --profile minimal --no-default-features`, or keep what you want
 with `--features sql,git,…` (see
 [`spec/cargo-features/index.md`](../../spec/cargo-features/index.md)).
 

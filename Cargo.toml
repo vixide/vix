@@ -573,6 +573,14 @@ lto = "thin"
 strip = true
 opt-level = "z"
 
+# The minimal release variant (`release-minimal.yml`): trade build time and
+# unwinding for the smallest binary. Not used by dist or the default release.
+[profile.minimal]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+
 # The profile that 'dist' will build with
 [profile.dist]
 inherits = "release"
