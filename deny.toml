@@ -26,6 +26,15 @@ ignore = [
     # The only ways out are upstream (rhai dropping/replacing smartstring)
     # or dropping user scripting. Revisit when rhai moves off it.
     "RUSTSEC-2026-0249",
+    # 2026-10-19: `unsafe-libyaml` is unmaintained (no vulnerability; repo
+    # archived 2024-03-25). It is the C-to-Rust libyaml port under `serde_yaml`
+    # (itself deprecated), which five crates use to read and write YAML:
+    #   serde_yaml -> unsafe-libyaml
+    # (vix, vix-edit-value, vix-format-tool, vix-tasks, and the two YAML/JSON
+    # converters). The way out is moving those crates to a maintained YAML
+    # crate, which can change emitted formatting, so it is its own task rather
+    # than a drive-by. Revisit when that migration is scheduled.
+    "RUSTSEC-2024-0449",
 ]
 
 [licenses]
