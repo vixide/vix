@@ -109,32 +109,33 @@ impl App {
             self.status = t!("status.git_empty_url").into();
             return;
         }
-        let Some(quoted) = Self::vcs_shell_arg(url, false) else {
+        if !Self::vcs_arg_ok(url, false) {
             self.status = t!("status.git_bad_argument").into();
             return;
-        };
-        self.run_command(&format!("jj git clone -- {quoted}"));
+        }
+        self.run_argv("jj", &["git", "clone", "--", url]);
     }
 
     /// Set the working-copy change description (`jj describe -m`).
     pub(super) fn jj_describe(&mut self, message: &str) {
-        self.jj_message_command("jj describe -m", message);
+        self.jj_message_command("describe", message);
     }
 
     /// Describe the working-copy change and start a new one (`jj commit -m`).
     pub(super) fn jj_commit(&mut self, message: &str) {
-        self.jj_message_command("jj commit -m", message);
+        self.jj_message_command("commit", message);
     }
 
-    /// Run a `jj` command that takes a required `-m` message, rejecting an empty
-    /// one and shell-quoting it.
-    pub(super) fn jj_message_command(&mut self, prefix: &str, message: &str) {
+    /// Run `jj <sub> --message=<message>`, rejecting an empty message. The
+    /// `--message=` form keeps a message that starts with `-` a value, and no
+    /// shell is involved (T569).
+    pub(super) fn jj_message_command(&mut self, sub: &str, message: &str) {
         let message = message.trim();
         if message.is_empty() {
             self.status = t!("status.jj_empty_message").into();
             return;
         }
-        self.run_command(&format!("{prefix} {}", Self::shell_single_quote(message)));
+        self.run_argv("jj", &[sub, &format!("--message={message}")]);
     }
 
     /// Set the working-copy revision to `rev` (`jj edit`).
@@ -144,7 +145,11 @@ impl App {
             self.status = t!("status.jj_empty_revision").into();
             return;
         }
-        self.run_command(&format!("jj edit {}", Self::shell_single_quote(rev)));
+        if !Self::vcs_arg_ok(rev, false) {
+            self.status = t!("status.git_bad_argument").into();
+            return;
+        }
+        self.run_argv("jj", &["edit", "--", rev]);
     }
 
     /// Rebase the working-copy change onto destination `dest` (`jj rebase -d`).
@@ -154,7 +159,11 @@ impl App {
             self.status = t!("status.jj_empty_revision").into();
             return;
         }
-        self.run_command(&format!("jj rebase -d {}", Self::shell_single_quote(dest)));
+        if !Self::vcs_arg_ok(dest, false) {
+            self.status = t!("status.git_bad_argument").into();
+            return;
+        }
+        self.run_argv("jj", &["rebase", "-d", dest]);
     }
 
     /// Run a `jj bookmark <sub> <name>` command, rejecting an empty name.
@@ -164,10 +173,11 @@ impl App {
             self.status = t!("status.jj_empty_bookmark").into();
             return;
         }
-        self.run_command(&format!(
-            "jj bookmark {sub} {}",
-            Self::shell_single_quote(name)
-        ));
+        if !Self::vcs_arg_ok(name, false) {
+            self.status = t!("status.git_bad_argument").into();
+            return;
+        }
+        self.run_argv("jj", &["bookmark", sub, "--", name]);
     }
 
     /// Handle a completed Jujutsu prompt: run the jj command for the entered

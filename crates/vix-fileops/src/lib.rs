@@ -107,6 +107,36 @@ pub fn remove_path(path: &Path) -> io::Result<()> {
     }
 }
 
+/// Find `name` on `PATH` (honouring `PATHEXT` on Windows) and return its
+/// absolute path. Never consults the current directory, so a repository that
+/// ships its own `git.exe` cannot get it run just by being opened (Windows
+/// resolves a bare program name against more than `PATH`).
+#[must_use]
+pub fn which_on_path(name: &str) -> Option<PathBuf> {
+    let exts: Vec<String> = if cfg!(windows) {
+        std::env::var("PATHEXT")
+            .unwrap_or_else(|_| ".EXE".into())
+            .split(';')
+            .map(str::to_string)
+            .collect()
+    } else {
+        vec![String::new()]
+    };
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        if dir.as_os_str().is_empty() {
+            continue; // an empty PATH entry means the cwd: never search it
+        }
+        for ext in &exts {
+            let candidate = dir.join(format!("{name}{ext}"));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
 /// Move a file or directory tree to the OS trash (Recycle Bin / Trash / etc.)
 /// instead of deleting it outright (T209). Unlike [`remove_path`], this can
 /// be undone by the user through their file manager's trash/recycle view.

