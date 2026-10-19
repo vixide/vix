@@ -13,6 +13,14 @@ submenu.
 Theme names are plain strings (also the value persisted in settings), so this
 crate stays free of any localization dependency.
 
+## Following the terminal (`theme = "auto"`, T579)
+
+`background` is the pure half of `theme = "auto"`: `parse_osc11_reply` (an OSC 11
+`rgb:` reply, 1–4 hex digits per component), `from_colorfgbg`, `classify` (Rec. 709
+luminance), `set_detected`/`detected` (the session's one answer) and `resolve_theme`
+(`"auto"` → `theme_light` or `theme_dark`; dark when nothing was detected). The
+terminal I/O that asks lives in the binary.
+
 ## See also
 
 - [theme spec](../../vix-theme/spec/) — shared theme model
