@@ -1109,15 +1109,24 @@ impl App {
             self.status = t!("status.git_empty_url").into();
             return;
         }
-        let Some(quoted) = Self::vcs_shell_arg(url, false) else {
+        if !Self::vcs_arg_ok(url, false) {
             self.status = t!("status.git_bad_argument").into();
             return;
-        };
+        }
         // `--` ends option parsing; the protocol switches stop `ext::`/`fd::`
         // URLs from running arbitrary commands (T569).
-        self.run_command(&format!(
-            "git -c protocol.ext.allow=never -c protocol.fd.allow=never clone -- {quoted}"
-        ));
+        self.run_argv(
+            "git",
+            &[
+                "-c",
+                "protocol.ext.allow=never",
+                "-c",
+                "protocol.fd.allow=never",
+                "clone",
+                "--",
+                url,
+            ],
+        );
     }
 
     /// Set the current branch's description (`git branch --edit-description`),
@@ -1149,7 +1158,11 @@ impl App {
             return;
         }
         self.git_panel = None;
-        self.run_command(&format!("git branch --delete {name}"));
+        if !Self::vcs_arg_ok(name, false) {
+            self.status = t!("status.git_bad_argument").into();
+            return;
+        }
+        self.run_argv("git", &["branch", "--delete", "--", name]);
     }
 
     /// Search the repository for `pattern` (`git grep`), streaming matches with
@@ -1163,13 +1176,13 @@ impl App {
             return;
         }
         self.git_panel = None;
-        // Quote the pattern so shell metacharacters in the regex are safe
-        // (`-e` already keeps a leading `-` from being an option).
-        let Some(quoted) = Self::vcs_shell_arg(pattern, true) else {
+        // The pattern is one argv element (`-e` keeps a leading `-` from being
+        // an option), so regex metacharacters are inert (T569).
+        if !Self::vcs_arg_ok(pattern, true) {
             self.status = t!("status.git_bad_argument").into();
             return;
-        };
-        self.run_command(&format!("git --no-pager grep -n -e {quoted}"));
+        }
+        self.run_argv("git", &["--no-pager", "grep", "-n", "-e", pattern]);
     }
 
     /// Annotate the cursor's current line with its `git blame` attribution

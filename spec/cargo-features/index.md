@@ -32,7 +32,7 @@ unflagged: it has no payoff and the heaviest coupling.
 | `jj` | `jj.*` | (surface only: no crates; `src/app/jj.rs`); implies `tasks`, since it runs the `jj` CLI |
 | `lsp` | `lsp.*` | `vix-lsp/process` (starting a server) and `vix-doctor/probe-lsp` (the `--doctor` check that starts each configured server) |
 | `dap` | `run.*` | `vix-dap/process` (starting a debug adapter) |
-| `tasks` | `project.*`, `tools.run_command`, `tools.cancel_command`, `tools.tasks`, `tools.test*` | the shell runner `spawn_shell` in `src/app.rs` (Run Command, project lifecycle, tests, the AI CLI provider) |
+| `tasks` | `project.*`, `tools.run_command`, `tools.cancel_command`, `tools.tasks`, `tools.test*` | the runners `spawn_shell` and `spawn_argv` in `src/app.rs` (Run Command, project lifecycle, tests, the AI CLI provider; and `spawn_argv`, which runs `git`/`jj` with real argv and no shell, for clone, grep, branch delete and the jj commands that take user text, T569) |
 | `hunspell` | (none) | `vix-spellcheck/hunspell` (running `hunspell -D` to find dictionaries) |
 | `full` | umbrella for every capability (including `lsp`, `dap`, `tasks`, `hunspell`); `default` enables it, and whole-product tests gate on it | all of the above |
 | `net` | umbrella for `http`, `ai`, `sql` | everything that can reach the network |
