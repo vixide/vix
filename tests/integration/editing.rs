@@ -2195,6 +2195,7 @@ fn clock_box_inserts_a_time_row() {
 }
 
 #[test]
+#[cfg(feature = "tasks")]
 fn run_command_streams_output_to_bottom_dock() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.run_command");
@@ -2229,6 +2230,7 @@ fn run_command_streams_output_to_bottom_dock() {
 }
 
 #[test]
+#[cfg(feature = "tasks")]
 fn run_command_merges_stderr_into_the_captured_output() {
     // T547: `run_command_in` groups a `;`/`&&`-chained command before
     // redirecting (`{ … ; } 2>&1` on Unix, `cmd.exe`'s own `( … ) 2>&1` on
@@ -2282,6 +2284,7 @@ fn bell_on_command_done_is_off_by_default() {
 }
 
 #[test]
+#[cfg(feature = "tasks")]
 fn run_command_completes_normally_with_the_bell_setting_on() {
     // Proves turning `bell_on_command_done` on doesn't break the command
     // pipeline itself (hang, panic, or otherwise interfere) -- see
@@ -2313,6 +2316,7 @@ fn run_command_completes_normally_with_the_bell_setting_on() {
 }
 
 #[test]
+#[cfg(feature = "tasks")]
 fn cancel_command_kills_a_running_command() {
     let mut app = app_at(Path::new("."));
     app.run_action("tools.run_command");
@@ -3329,6 +3333,7 @@ fn system_info_panel_opens_inserts_and_closes() {
 }
 
 #[test]
+#[cfg(feature = "tasks")]
 fn test_panel_toggles_and_parser_builds_results() {
     let mut app = app_at(Path::new("."));
     assert!(!app.visible.contains(vix::app::Visible::TEST_PANEL));
@@ -3344,6 +3349,7 @@ fn test_panel_toggles_and_parser_builds_results() {
 }
 
 #[test]
+#[cfg(feature = "dap")]
 fn debug_breakpoints_toggle_on_the_cursor_line() {
     let dir = unique_dir("breakpoints");
     fs::create_dir_all(&dir).unwrap();

@@ -12616,15 +12616,7 @@ impl App {
         // Explicitly closed rather than inherited: a background command has
         // no business reading from vix's own stdin (the terminal device vix
         // itself is reading raw input from) (T547).
-        let mut command = shell_command(&script);
-        no_tty_prompts(&mut command);
-        let mut child = match command
-            .current_dir(dir)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-        {
+        let mut child = match spawn_shell(&script, dir, true) {
             Ok(c) => c,
             Err(e) => {
                 self.bottom_dock.push(format!("[error: {e}]"));
@@ -12973,7 +12965,7 @@ fn display_key(k: &str) -> String {
 /// to the command line completely unescaped — safe here because it is
 /// already exactly the text `cmd.exe` itself should parse, not user input
 /// reaching this function unquoted.
-#[cfg(windows)]
+#[cfg(all(windows, feature = "tasks"))]
 fn shell_command(script: &str) -> std::process::Command {
     use std::os::windows::process::CommandExt;
     let mut cmd = std::process::Command::new("cmd");
@@ -12982,9 +12974,35 @@ fn shell_command(script: &str) -> std::process::Command {
     cmd
 }
 
+/// Start `script` in the platform shell in `dir` with stdin closed, stdout
+/// piped and stderr discarded. `no_tty` also applies [`no_tty_prompts`]. This is
+/// the only place Vix starts a shell, so a build without `tasks` has none.
+#[cfg(feature = "tasks")]
+fn spawn_shell(script: &str, dir: &Path, no_tty: bool) -> std::io::Result<std::process::Child> {
+    let mut command = shell_command(script);
+    if no_tty {
+        no_tty_prompts(&mut command);
+    }
+    command
+        .current_dir(dir)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+}
+
+/// Without `tasks` Vix never starts a shell.
+#[cfg(not(feature = "tasks"))]
+fn spawn_shell(_script: &str, _dir: &Path, _no_tty: bool) -> std::io::Result<std::process::Child> {
+    Err(std::io::Error::other(
+        t!("msg.capability_missing", name = "tasks").to_string(),
+    ))
+}
+
 /// Environment that stops a background VCS command (git, ssh, credential
 /// helpers) from prompting on `/dev/tty` over vix's raw-mode UI (T570).
 /// `GIT_SSH_COMMAND` is only added when the user hasn't chosen their own ssh.
+#[cfg(feature = "tasks")]
 fn no_tty_prompt_env(user_ssh_set: bool) -> Vec<(&'static str, &'static str)> {
     let mut env = vec![("GIT_TERMINAL_PROMPT", "0"), ("GCM_INTERACTIVE", "never")];
     if !user_ssh_set {
@@ -12995,6 +13013,7 @@ fn no_tty_prompt_env(user_ssh_set: bool) -> Vec<(&'static str, &'static str)> {
 
 /// Apply [`no_tty_prompt_env`] and, on Unix, a fresh process group so the
 /// child can't take terminal input (SIGTTIN) either.
+#[cfg(feature = "tasks")]
 fn no_tty_prompts(cmd: &mut std::process::Command) {
     let user_ssh_set =
         std::env::var_os("GIT_SSH_COMMAND").is_some() || std::env::var_os("GIT_SSH").is_some();
@@ -13019,7 +13038,7 @@ fn is_auth_failure_line(line: &str) -> bool {
         || l.contains("could not read password")
 }
 
-#[cfg(not(windows))]
+#[cfg(all(not(windows), feature = "tasks"))]
 fn shell_command(script: &str) -> std::process::Command {
     let mut cmd = std::process::Command::new("sh");
     cmd.arg("-c").arg(script);
@@ -13366,6 +13385,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "full")]
     fn alt_mnemonics_resolve_menus_by_name() {
         let menus = crate::menu::menus();
         for (c, name) in [
@@ -13395,9 +13415,22 @@ mod tests {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
+    /// T595: a build without `tasks` has no shell runner: a command line is
+    /// refused (nothing is started) and the disabled action is filtered.
+    #[test]
+    #[cfg(not(feature = "tasks"))]
+    fn without_tasks_no_shell_is_ever_started() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.run_command("echo should-not-run");
+        assert!(app.running_command.is_none());
+        assert!(!crate::capability::is_available("tools.run_command"));
+        assert!(!crate::capability::is_available("project.compile"));
+    }
+
     /// T570: background commands never prompt on the tty; a user's own ssh
     /// command is left alone; auth failures are recognised.
     #[test]
+    #[cfg(feature = "tasks")]
     fn background_commands_get_no_prompt_environment() {
         let env = no_tty_prompt_env(false);
         assert!(env.contains(&("GIT_TERMINAL_PROMPT", "0")));
@@ -14596,6 +14629,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "tasks")]
     fn project_compile_resolves_cargo_build_and_confirms_before_running() {
         let dir = std::env::temp_dir().join(format!("vix-proj-compile-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -14627,6 +14661,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "tasks")]
     fn project_discard_command_cache_clears_only_the_cache() {
         let dir = std::env::temp_dir().join(format!("vix-proj-discard-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -14653,6 +14688,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "tasks")]
     fn project_test_at_point_runs_the_test_under_cursor_without_a_prompt() {
         let dir =
             std::env::temp_dir().join(format!("vix-proj-test-at-point-{}", std::process::id()));
@@ -14684,6 +14720,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "tasks")]
     fn project_subproject_actions_report_no_subproject_outside_any_manifest() {
         let dir = std::env::temp_dir().join(format!("vix-proj-subproj-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -14706,6 +14743,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "tasks")]
     fn emacs_c_p_chords_dispatch_project_actions() {
         let dir = std::env::temp_dir().join(format!("vix-proj-chords-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);

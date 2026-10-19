@@ -627,6 +627,7 @@ fn emacs_keymap_ctrl_c_ctrl_x_footnote_chord() {
 }
 
 #[test]
+#[cfg(feature = "tasks")]
 fn emacs_keymap_ctrl_c_p_c_project_chord_resolves_to_the_real_action() {
     let mut app = app_at(Path::new("."));
     app.settings.keymap = "emacs".to_string();

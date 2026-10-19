@@ -15,9 +15,13 @@
 #![deny(missing_docs)]
 #![warn(clippy::pedantic)]
 
+#[cfg(feature = "process")]
 use std::ffi::OsString;
+#[cfg(feature = "process")]
 use std::path::Path;
+#[cfg(feature = "process")]
 use std::process::Command;
+#[cfg(feature = "process")]
 use std::sync::OnceLock;
 
 /// A kind of change to a file (in the index or the working tree).
@@ -376,6 +380,7 @@ fn epoch_to_date(secs: i64, tz_offset: i32) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+#[cfg(feature = "process")]
 /// `git blame` for a single 1-based line of a repo-relative path, parsed into a
 /// [`BlameLine`]. `None` when not a repo, the path is untracked, or on error.
 #[must_use]
@@ -390,6 +395,7 @@ pub fn blame_line(dir: &Path, rel_path: &str, line: usize) -> Option<BlameLine> 
 
 // ----- runners (shell out to `git`) --------------------------------------
 
+#[cfg(feature = "process")]
 /// Absolute path to the `git` executable, resolved from `PATH` exactly once.
 ///
 /// Every git runner sets `current_dir(dir)` to the opened repository, which is
@@ -404,6 +410,7 @@ fn git_program() -> &'static OsString {
     PROG.get_or_init(|| which_on_path("git").unwrap_or_else(|| "git".into()))
 }
 
+#[cfg(feature = "process")]
 /// Find `name` on `PATH` (honouring `PATHEXT` on Windows), returning its
 /// absolute path. Never consults the current directory.
 fn which_on_path(name: &str) -> Option<OsString> {
@@ -431,6 +438,7 @@ fn which_on_path(name: &str) -> Option<OsString> {
     None
 }
 
+#[cfg(feature = "process")]
 /// Whether `name` is safe to pass to `git` as a positional ref argument: not
 /// empty, not option-shaped (a leading `-` would be parsed as a flag), and free
 /// of whitespace/control characters. git itself forbids most of these in real
@@ -442,6 +450,7 @@ fn valid_ref_name(name: &str) -> bool {
         && !name.chars().any(|c| c.is_whitespace() || c.is_control())
 }
 
+#[cfg(feature = "process")]
 fn git(dir: &Path, args: &[&str]) -> std::io::Result<std::process::Output> {
     Command::new(git_program())
         .current_dir(dir)
@@ -449,6 +458,7 @@ fn git(dir: &Path, args: &[&str]) -> std::io::Result<std::process::Output> {
         .output()
 }
 
+#[cfg(feature = "process")]
 /// Run `git` and return trimmed stdout on success, or `None` on any failure.
 fn git_stdout(dir: &Path, args: &[&str]) -> Option<String> {
     let out = git(dir, args).ok()?;
@@ -459,12 +469,14 @@ fn git_stdout(dir: &Path, args: &[&str]) -> Option<String> {
     }
 }
 
+#[cfg(feature = "process")]
 /// Whether `dir` is inside a git working tree.
 #[must_use]
 pub fn is_repo(dir: &Path) -> bool {
     git_stdout(dir, &["rev-parse", "--is-inside-work-tree"]).as_deref() == Some("true")
 }
 
+#[cfg(feature = "process")]
 /// The current branch name, or `None` when detached / not a repo. A detached
 /// HEAD yields the short commit hash via the caller's discretion (here `None`).
 #[must_use]
@@ -478,12 +490,14 @@ pub fn branch(dir: &Path) -> Option<String> {
     }
 }
 
+#[cfg(feature = "process")]
 /// Whether the working tree has any staged or unstaged changes (incl. untracked).
 #[must_use]
 pub fn is_dirty(dir: &Path) -> bool {
     git_stdout(dir, &["status", "--porcelain"]).is_some_and(|s| !s.is_empty())
 }
 
+#[cfg(feature = "process")]
 /// The changed files reported by `git status --porcelain`.
 #[must_use]
 pub fn status(dir: &Path) -> Vec<FileStatus> {
@@ -492,6 +506,7 @@ pub fn status(dir: &Path) -> Vec<FileStatus> {
         .unwrap_or_default()
 }
 
+#[cfg(feature = "process")]
 /// The committed (`HEAD`) contents of a repo-relative path, or `None` if the path
 /// is not in HEAD (newly added/untracked) or on any error.
 #[must_use]
@@ -504,6 +519,7 @@ pub fn head_blob(dir: &Path, rel_path: &str) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+#[cfg(feature = "process")]
 /// Stage every change in the working tree (`git add -A`).
 ///
 /// # Errors
@@ -518,6 +534,7 @@ pub fn stage_all(dir: &Path) -> Result<(), String> {
     }
 }
 
+#[cfg(feature = "process")]
 /// Stage a path (`git add -- <path>`).
 ///
 /// # Errors
@@ -535,6 +552,7 @@ pub fn stage(dir: &Path, rel_path: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(feature = "process")]
 /// The staged (index) version of `rel_path` (`git show :path`), trailing newline
 /// preserved. `None` when the file is not in the index.
 #[must_use]
@@ -545,6 +563,7 @@ pub fn index_blob(dir: &Path, rel_path: &str) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+#[cfg(feature = "process")]
 /// Replace the index entry for `rel_path` with exactly `content` (used to stage
 /// a single hunk): hash the content into a blob and point the index at it,
 /// keeping the working tree untouched.
@@ -573,6 +592,7 @@ pub fn stage_content(dir: &Path, rel_path: &str, content: &str) -> Result<(), St
     }
 }
 
+#[cfg(feature = "process")]
 /// Run a git command feeding `input` on stdin; return its stdout on success.
 fn git_stdin(dir: &Path, args: &[&str], input: &str) -> Result<String, String> {
     use std::io::Write;
@@ -599,6 +619,7 @@ fn git_stdin(dir: &Path, args: &[&str], input: &str) -> Result<String, String> {
     }
 }
 
+#[cfg(feature = "process")]
 /// Unstage a path (`git restore --staged -- <path>`).
 ///
 /// # Errors
@@ -614,6 +635,7 @@ pub fn unstage(dir: &Path, rel_path: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(feature = "process")]
 /// The staged diff (`git diff --staged`), for feeding to an AI commit-message
 /// generator (T125) — `None` on any failure, or when nothing is staged
 /// (an empty diff is not useful context and would only prompt a generic
@@ -623,6 +645,7 @@ pub fn staged_diff(dir: &Path) -> Option<String> {
     git_stdout(dir, &["diff", "--staged"]).filter(|d| !d.is_empty())
 }
 
+#[cfg(feature = "process")]
 /// The number of commits reachable from HEAD (`git rev-list --count HEAD`), or
 /// `None` when not a repo or there are no commits yet.
 #[must_use]
@@ -633,6 +656,7 @@ pub fn commit_count(dir: &Path) -> Option<u64> {
         .ok()
 }
 
+#[cfg(feature = "process")]
 /// The local branch names, current branch first when it can be determined.
 #[must_use]
 pub fn local_branches(dir: &Path) -> Vec<String> {
@@ -651,6 +675,7 @@ pub fn local_branches(dir: &Path) -> Vec<String> {
     names
 }
 
+#[cfg(feature = "process")]
 /// Check out an existing branch (`git switch <branch>`). Returns `Ok(())` on
 /// success, or the captured stderr on failure (e.g. a conflicting dirty tree).
 ///
@@ -669,6 +694,7 @@ pub fn checkout(dir: &Path, branch: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(feature = "process")]
 /// Create a new branch and switch to it (`git switch -c <name>`). Returns
 /// `Ok(())` on success, or the captured stderr on failure (e.g. the name already
 /// exists or is invalid).
@@ -686,6 +712,7 @@ pub fn create_branch(dir: &Path, name: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(feature = "process")]
 /// Commit the staged changes with `message`. Returns `Ok(())` on success, or the
 /// captured stderr on failure (e.g. nothing staged, hook rejected).
 ///
@@ -695,6 +722,7 @@ pub fn commit(dir: &Path, message: &str) -> Result<(), String> {
     run_ok(dir, &["commit", "-m", message])
 }
 
+#[cfg(feature = "process")]
 /// Amend the previous commit, folding in currently-staged changes and keeping
 /// its message (`git commit --amend --no-edit`).
 ///
@@ -704,6 +732,7 @@ pub fn commit_amend(dir: &Path) -> Result<(), String> {
     run_ok(dir, &["commit", "--amend", "--no-edit"])
 }
 
+#[cfg(feature = "process")]
 /// Stash the working tree and index (`git stash push`).
 ///
 /// # Errors
@@ -805,12 +834,15 @@ impl LogPanel {
     }
 }
 
+#[cfg(feature = "process")]
 /// Delimiters for [`parse_log`]'s custom `git log --format`: ASCII unit
 /// separator between fields, record separator between commits. Neither can
 /// appear in ordinary commit metadata, so no escaping is needed.
 const LOG_FIELD_SEP: &str = "\u{1f}";
+#[cfg(feature = "process")]
 const LOG_RECORD_SEP: &str = "\u{1e}";
 
+#[cfg(feature = "process")]
 /// Parse [`log`]/[`file_log`]'s `git log` output (the `LOG_FORMAT` shape)
 /// into rows. Malformed records (the wrong number of fields) are skipped
 /// rather than panicking.
@@ -839,6 +871,7 @@ fn parse_log(output: &str) -> Vec<LogEntry> {
         .collect()
 }
 
+#[cfg(feature = "process")]
 /// `git log --format=<LOG_FORMAT>`'s format string: full/abbreviated hash,
 /// author name, author date, subject, then the record separator.
 fn log_format_arg() -> String {
@@ -847,6 +880,7 @@ fn log_format_arg() -> String {
     )
 }
 
+#[cfg(feature = "process")]
 /// The repository's `max` most recent commits on `HEAD` (**Git → Log**).
 #[must_use]
 pub fn log(dir: &Path, max: usize) -> Vec<LogEntry> {
@@ -857,6 +891,7 @@ pub fn log(dir: &Path, max: usize) -> Vec<LogEntry> {
         .unwrap_or_default()
 }
 
+#[cfg(feature = "process")]
 /// The `max` most recent commits touching `rel_path`, following renames
 /// (**Git → File History**).
 #[must_use]
@@ -880,6 +915,7 @@ pub fn file_log(dir: &Path, rel_path: &str, max: usize) -> Vec<LogEntry> {
     .unwrap_or_default()
 }
 
+#[cfg(feature = "process")]
 /// A commit's own unified diff (`git show <sha>`), or just the part touching
 /// `rel_path` when given. `None` on any failure, including an invalid `sha`
 /// (rejected before shelling out, the same guard [`checkout`] uses).
@@ -898,6 +934,7 @@ pub fn show_commit(dir: &Path, sha: &str, rel_path: Option<&str>) -> Option<Stri
     git_stdout(dir, &args)
 }
 
+#[cfg(feature = "process")]
 /// `rel_path`'s content at `revision` (`git show <revision>:<rel_path>`, e.g.
 /// **Git → Open File at Revision…**). `None` when `revision` doesn't resolve,
 /// the path isn't in that tree, or `revision` fails the same validation
@@ -921,6 +958,7 @@ pub fn show_file_at(dir: &Path, revision: &str, rel_path: &str) -> Option<String
         .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+#[cfg(feature = "process")]
 /// Resolve `revision` (a branch, tag, or any commit-ish) to its abbreviated
 /// hash (`git rev-parse --short`), for titling an Open File at Revision tab.
 /// `None` when it doesn't resolve or fails the ref-name validation.
@@ -932,6 +970,7 @@ pub fn resolve_short_sha(dir: &Path, revision: &str) -> Option<String> {
     git_stdout(dir, &["rev-parse", "--short", "--end-of-options", revision])
 }
 
+#[cfg(feature = "process")]
 /// Restore the most recent stash (`git stash pop`).
 ///
 /// # Errors
@@ -940,6 +979,7 @@ pub fn stash_pop(dir: &Path) -> Result<(), String> {
     run_ok(dir, &["stash", "pop"])
 }
 
+#[cfg(feature = "process")]
 /// Run a git command, mapping a non-zero exit to its trimmed stderr.
 fn run_ok(dir: &Path, args: &[&str]) -> Result<(), String> {
     match git(dir, args) {
@@ -953,6 +993,7 @@ fn run_ok(dir: &Path, args: &[&str]) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "process")]
     #[test]
     fn valid_ref_name_rejects_option_shaped_and_control_input() {
         assert!(valid_ref_name("main"));
@@ -967,6 +1008,7 @@ mod tests {
         assert!(!valid_ref_name("a\nb"));
     }
 
+    #[cfg(feature = "process")]
     #[test]
     fn checkout_and_create_branch_refuse_dash_prefixed_names() {
         // No git process is spawned: validation fails first, so any temp dir works.
@@ -976,6 +1018,7 @@ mod tests {
         assert!(create_branch(&dir, "--orphan").is_err());
     }
 
+    #[cfg(feature = "process")]
     #[test]
     fn show_commit_and_show_file_at_refuse_option_shaped_revisions() {
         // No git process is spawned: validation fails first, so any temp dir works.
@@ -985,6 +1028,7 @@ mod tests {
         assert!(resolve_short_sha(&dir, "--upload-pack=evil").is_none());
     }
 
+    #[cfg(feature = "process")]
     #[test]
     fn stage_and_unstage_report_the_real_git_error() {
         // T540 (Run H): these used to collapse to a bare `bool`, so a caller
@@ -1002,6 +1046,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[cfg(feature = "process")]
     #[test]
     fn parse_log_splits_records_and_fields() {
         let output = format!(
@@ -1020,6 +1065,7 @@ mod tests {
         assert_eq!(entries[1].author, "Grace Hopper");
     }
 
+    #[cfg(feature = "process")]
     #[test]
     fn parse_log_skips_a_trailing_empty_record() {
         // git log's own trailing record-separator leaves one empty record at
@@ -1031,6 +1077,7 @@ mod tests {
         assert_eq!(parse_log(&output).len(), 1);
     }
 
+    #[cfg(feature = "process")]
     #[test]
     fn parse_log_ignores_a_truncated_record() {
         let output = format!("abc123{LOG_FIELD_SEP}abc{LOG_FIELD_SEP}only three fields");
@@ -1068,6 +1115,7 @@ mod tests {
         assert_eq!(p.selected_sha(), Some("aaa111"));
     }
 
+    #[cfg(feature = "process")]
     #[test]
     fn which_on_path_never_returns_a_relative_or_cwd_path() {
         // Whatever it resolves (git may or may not be installed in CI), it must
@@ -1263,6 +1311,7 @@ mod tests {
 
     // Runner smoke test against this very repository. Ignored by default because
     // it assumes `git` is installed and the tests run inside the work tree.
+    #[cfg(feature = "process")]
     #[test]
     #[ignore = "needs git and an in-tree checkout"]
     fn runners_report_branch_in_this_repo() {

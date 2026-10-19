@@ -57,3 +57,8 @@ actions, `poll_dap` (drains events each loop), gutter markers
 
 - A single debug session at a time.
 - Variable trees are shown one level deep (the top frame's first scope).
+
+## Cargo features
+
+- `process` (default on): starting an adapter process. Off, `start` returns `false`. The
+  root `dap` feature enables it (`spec/cargo-features`, T595).

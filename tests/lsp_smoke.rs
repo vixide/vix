@@ -9,6 +9,8 @@
 //! run it with `cargo test --test lsp_smoke -- --ignored` when rust-analyzer is
 //! installed and on PATH.
 
+#![cfg(feature = "lsp")]
+
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};

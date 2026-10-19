@@ -122,6 +122,7 @@ pub(crate) fn app_with(settings: Settings) -> App {
 /// Extracted (Run H, T530) after two call sites each hand-rolled this exact
 /// three-line builder because they needed both a real root and custom
 /// settings (an `ai_command` override) together.
+#[cfg(any(feature = "ai", feature = "git", feature = "tasks"))]
 pub(crate) fn app_at_with(root: &Path, settings: Settings) -> App {
     let mut app = App::new(root.to_path_buf(), settings).with_session_path(isolated_session_path());
     app.layout.editor = Rect::new(0, 0, 80, 24);

@@ -116,7 +116,19 @@ pub fn remove_path(path: &Path) -> io::Result<()> {
 /// Returns an error if the platform's trash mechanism rejects the move (no
 /// trash available, permission denied, the path doesn't exist, …).
 pub fn trash_path(path: &Path) -> io::Result<()> {
-    trash::delete(path).map_err(io::Error::other)
+    // On macOS the crate's default asks Finder through an `osascript` child
+    // process; the `NSFileManager` call does the same job without starting one.
+    #[cfg(target_os = "macos")]
+    {
+        use trash::macos::{DeleteMethod, TrashContextExtMacos};
+        let mut ctx = trash::TrashContext::default();
+        ctx.set_delete_method(DeleteMethod::NsFileManager);
+        ctx.delete(path).map_err(io::Error::other)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        trash::delete(path).map_err(io::Error::other)
+    }
 }
 
 /// Atomically write `data` to `path`: write a sibling temp file, flush it to

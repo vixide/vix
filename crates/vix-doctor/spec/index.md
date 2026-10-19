@@ -59,3 +59,11 @@ setting) *before* handling `--doctor`, specifically so the CLI path is
 genuinely localized too, not just the in-app **Help → Run
 Diagnostics** overlay (whose own locale is always already set by the
 time it can be opened at all).
+
+## Cargo features
+
+- `probe-git` (default on): the `git` check, which starts `git --version`.
+- `probe-lsp` (default on): one check per configured LSP server, which starts it.
+
+Off, those checks are absent from `run` rather than reported as failures. The root `git`
+and `lsp` features enable them (`spec/cargo-features`, T595).

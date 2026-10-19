@@ -22,6 +22,7 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+#[cfg(feature = "hunspell")]
 use std::process::Command;
 
 use spellbook::Dictionary;
@@ -253,6 +254,7 @@ fn dict_name_candidates(locale: &str) -> Vec<String> {
 /// absolute path. On Windows a bare `Command::new(name)` would also search the
 /// process's cwd — so if Vix were launched from inside a malicious repo, a
 /// planted `hunspell.exe` there would run. Resolving against `PATH` closes that.
+#[cfg(feature = "hunspell")]
 fn which_on_path(name: &str) -> Option<PathBuf> {
     let exts: Vec<String> = if cfg!(windows) {
         std::env::var("PATHEXT")
@@ -280,6 +282,7 @@ fn which_on_path(name: &str) -> Option<PathBuf> {
 
 /// Parse the search paths reported by `hunspell -D` (printed to stderr under a
 /// `SEARCH PATH:` header as a colon-separated list).
+#[cfg(feature = "hunspell")]
 fn hunspell_search_dirs() -> Vec<PathBuf> {
     let Some(hunspell) = which_on_path("hunspell") else {
         return Vec::new();
@@ -300,6 +303,12 @@ fn hunspell_search_dirs() -> Vec<PathBuf> {
                 .collect();
         }
     }
+    Vec::new()
+}
+
+/// Without the `hunspell` feature the binary is never asked.
+#[cfg(not(feature = "hunspell"))]
+fn hunspell_search_dirs() -> Vec<PathBuf> {
     Vec::new()
 }
 

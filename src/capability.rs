@@ -26,11 +26,21 @@ pub enum Capability {
     Git,
     /// Jujutsu integration (`jj`).
     Jj,
+    /// Language servers (`lsp`): Vix starts the configured server programs.
+    Lsp,
+    /// Debug adapters (`dap`): Vix starts the configured adapter programs.
+    Dap,
+    /// The shell runner (`tasks`): Run Command, project tasks, tests, and
+    /// everything else that hands a command line to the platform shell.
+    Tasks,
+    /// Asking the installed `hunspell` where its dictionaries live (`hunspell`).
+    /// Owns no actions; it only decides whether that program is ever started.
+    Hunspell,
 }
 
 impl Capability {
     /// Every capability, in a stable order.
-    pub const ALL: [Capability; 8] = [
+    pub const ALL: [Capability; 12] = [
         Capability::Sql,
         Capability::Image,
         Capability::Script,
@@ -39,6 +49,10 @@ impl Capability {
         Capability::Ai,
         Capability::Git,
         Capability::Jj,
+        Capability::Lsp,
+        Capability::Dap,
+        Capability::Tasks,
+        Capability::Hunspell,
     ];
 
     /// The Cargo feature (and user-visible) name.
@@ -53,6 +67,10 @@ impl Capability {
             Capability::Ai => "ai",
             Capability::Git => "git",
             Capability::Jj => "jj",
+            Capability::Lsp => "lsp",
+            Capability::Dap => "dap",
+            Capability::Tasks => "tasks",
+            Capability::Hunspell => "hunspell",
         }
     }
 
@@ -68,6 +86,10 @@ impl Capability {
             Capability::Ai => cfg!(feature = "ai"),
             Capability::Git => cfg!(feature = "git"),
             Capability::Jj => cfg!(feature = "jj"),
+            Capability::Lsp => cfg!(feature = "lsp"),
+            Capability::Dap => cfg!(feature = "dap"),
+            Capability::Tasks => cfg!(feature = "tasks"),
+            Capability::Hunspell => cfg!(feature = "hunspell"),
         }
     }
 
@@ -85,6 +107,14 @@ impl Capability {
             ("ai.", Capability::Ai),
             ("git.", Capability::Git),
             ("jj.", Capability::Jj),
+            ("lsp.", Capability::Lsp),
+            // Every `run.*` action is a debugger (DAP) action.
+            ("run.", Capability::Dap),
+            ("project.", Capability::Tasks),
+            ("tools.run_command", Capability::Tasks),
+            ("tools.cancel_command", Capability::Tasks),
+            ("tools.tasks", Capability::Tasks),
+            ("tools.test", Capability::Tasks),
         ];
         PREFIXES
             .iter()
@@ -112,14 +142,12 @@ pub fn enabled_names() -> Vec<&'static str> {
 }
 
 /// Every `--doctor` check for this build: the standard set from `vix-doctor`,
-/// minus the `git` probe when Git is compiled out (a locked-down build never
-/// spawns `git`, not even to look for it), plus the capabilities row.
+/// minus the probes that start a program (`git`, each LSP server) when that
+/// capability is compiled out (a locked-down build never spawns them, not even
+/// to look), plus the capabilities row.
 #[must_use]
 pub fn doctor_checks(settings: &crate::settings::Settings) -> Vec<vix_doctor::Check> {
     let mut checks = vix_doctor::run(settings);
-    if !Capability::Git.enabled() {
-        checks.retain(|c| c.name != "git");
-    }
     checks.push(doctor_check());
     checks
 }
@@ -155,6 +183,16 @@ mod tests {
         );
         assert_eq!(Capability::for_action("git.push"), Some(Capability::Git));
         assert_eq!(Capability::for_action("jj.log"), Some(Capability::Jj));
+        assert_eq!(Capability::for_action("lsp.hover"), Some(Capability::Lsp));
+        assert_eq!(Capability::for_action("run.start"), Some(Capability::Dap));
+        assert_eq!(
+            Capability::for_action("project.compile"),
+            Some(Capability::Tasks)
+        );
+        assert_eq!(
+            Capability::for_action("tools.run_command"),
+            Some(Capability::Tasks)
+        );
         assert_eq!(Capability::for_action("file.save"), None);
         // Prefix match is on the dot: `github.*`-style ids are not Git's.
         assert_eq!(Capability::for_action("gitx.thing"), None);

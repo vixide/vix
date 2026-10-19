@@ -6,7 +6,7 @@
 
 use super::{
     AiDest, AiDiffState, AiMsg, AiReplace, AiTarget, App, Focus, KeyCode, KeyEvent, Prompt,
-    PromptKind, shell_command,
+    PromptKind, spawn_shell,
 };
 
 impl App {
@@ -332,13 +332,7 @@ impl App {
         // explicitly closed rather than left to the default of inheriting
         // this process's own stdin, which is never what a background
         // command should be reading from regardless of platform (T547).
-        let mut child = match shell_command(&cmd)
-            .current_dir(&self.root)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-        {
+        let mut child = match spawn_shell(&cmd, &self.root, false) {
             Ok(c) => c,
             Err(e) => {
                 self.messages

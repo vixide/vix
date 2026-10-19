@@ -7,5 +7,10 @@ license.workspace = true
 repository.workspace = true
 description = "Spell-checking for the Vix editor (Hunspell-backed, over comment/string ranges)."
 
+[features]
+default = ["hunspell"]
+# Ask the installed `hunspell` binary where its dictionaries live (spawns it).
+hunspell = []
+
 [dependencies]
 spellbook = { workspace = true }

@@ -7,6 +7,11 @@ license.workspace = true
 repository.workspace = true
 description = "LSP client: process management and document sync over `vix_lsp_core`."
 
+[features]
+default = ["process"]
+# Spawn language-server processes. Off, no server is ever started.
+process = []
+
 [dependencies]
 serde_json = { workspace = true }
 vix-lsp-core = { path = "../vix-lsp-core", version = "1.6.0" }

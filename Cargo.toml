@@ -160,12 +160,18 @@ script = ["dep:vix-script"]
 terminal = ["dep:vix-terminal", "dep:vt100"]
 http = ["dep:vix-http-client"]
 ai = ["dep:vix-ai-core", "dep:vix-ai-diff", "dep:vix-ai-panel"]
-git = []
-jj = []
+git = ["tasks", "vix-git/process", "vix-doctor/probe-git"]
+jj = ["tasks"]
+lsp = ["vix-lsp/process", "vix-doctor/probe-lsp"]
+dap = ["vix-dap/process"]
+# The shell runner: Run Command, project tasks, tests, and everything that
+# funnels through `App::run_command_in`. `git`/`jj` need it (they run the CLI).
+tasks = []
+hunspell = ["vix-spellcheck/hunspell"]
 # Every capability. `default` enables it; tests that assume the whole product
 # (menu-bar snapshots, Alt-letter menus) gate on it, since a build with any
 # capability off legitimately has a different menu bar.
-full = ["sql", "image", "script", "terminal", "http", "ai", "git", "jj"]
+full = ["sql", "image", "script", "terminal", "http", "ai", "git", "jj", "lsp", "dap", "tasks", "hunspell"]
 # The network-facing capabilities together.
 net = ["http", "ai", "sql"]
 
@@ -218,7 +224,7 @@ vix-convert-from-tsv-into-csv-tool = { path = "crates/vix-convert-from-tsv-into-
 # Convert: TSV text into a JSON array of objects.
 vix-convert-from-tsv-into-json-tool = { path = "crates/vix-convert-from-tsv-into-json-tool", version = "1.6.0" }
 # Debug Adapter Protocol (DAP) client: drive a debug adapter over stdio.
-vix-dap = { path = "crates/vix-dap", version = "1.6.0" }
+vix-dap = { path = "crates/vix-dap", version = "1.6.0", default-features = false }
 # DB workbench: connection management, schema browsing, and SQL queries.
 vix-db = { path = "crates/vix-db", version = "1.6.0", optional = true }
 # Editor host: the `CodeEditor` widget wrapper and the pane tree.
@@ -227,7 +233,7 @@ vix-editor = { path = "crates/vix-editor", version = "1.6.0", default-features =
 # default-features = false leaves grammar selection to the root `lang-*` features.
 vix-editor-core = { path = "crates/vix-editor-core", version = "1.6.0", default-features = false }
 # LSP client: process management and document sync over `vix_lsp_core`.
-vix-lsp = { path = "crates/vix-lsp", version = "1.6.0" }
+vix-lsp = { path = "crates/vix-lsp", version = "1.6.0", default-features = false }
 # Top menu bar with keyboard-navigable dropdowns (one level of submenus).
 vix-menu = { path = "crates/vix-menu", version = "1.6.0" }
 # User `.rhai` scripting: load, sandbox, and run scripts against the active
@@ -315,7 +321,7 @@ vix-coverage = { path = "crates/vix-coverage", version = "1.6.0" }
 # Read-only side-by-side comparison: a unified diff between two texts.
 vix-diff-view = { path = "crates/vix-diff-view", version = "1.6.0" }
 # Environment checks for `vix --doctor` and Help → Run Diagnostics.
-vix-doctor = { path = "crates/vix-doctor", version = "1.6.0" }
+vix-doctor = { path = "crates/vix-doctor", version = "1.6.0", default-features = false }
 # The byte editor: a hex/ASCII view for editing raw file bytes.
 vix-edit-bytes = { path = "crates/vix-edit-bytes", version = "1.6.0" }
 # The outline editor: hierarchical hide/show and restructuring for prose text.
@@ -342,7 +348,7 @@ vix-find-panel = { path = "crates/vix-find-panel", version = "1.6.0" }
 # Reformat the selection (or buffer) within one data format: pretty-print or minify.
 vix-format-tool = { path = "crates/vix-format-tool", version = "1.6.0" }
 # Git integration: status/diff/staging via the git CLI.
-vix-git = { path = "crates/vix-git", version = "1.6.0" }
+vix-git = { path = "crates/vix-git", version = "1.6.0", default-features = false }
 # Greedy word-wrap of one paragraph to a column width, hard-breaking over-long words.
 vix-greedy-wrap = { path = "crates/vix-greedy-wrap", version = "1.6.0" }
 # Lenient #RRGGBB/RRGGBB hex-string to (r, g, b) byte-triple parsing.
@@ -410,7 +416,7 @@ vix-settings-bundle = { path = "crates/vix-settings-bundle", version = "1.6.0" }
 # A small library of reusable text snippets, plus the picker's selection state.
 vix-snippet-tool = { path = "crates/vix-snippet-tool", version = "1.6.0" }
 # Spell-checking for the Vix editor (Hunspell-backed, over comment/string ranges).
-vix-spellcheck = { path = "crates/vix-spellcheck", version = "1.6.0" }
+vix-spellcheck = { path = "crates/vix-spellcheck", version = "1.6.0", default-features = false }
 # Formatting for the bottom status bar's two segments.
 vix-status-bar-panel = { path = "crates/vix-status-bar-panel", version = "1.6.0" }
 # Structural search & replace: metavariable-hole patterns matched token-by-token.
