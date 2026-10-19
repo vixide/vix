@@ -5557,6 +5557,9 @@ version = "1.6.0"
 [[package]]
 name = "vix-locale-model"
 version = "1.6.0"
+dependencies = [
+ "unicode-bidi",
+]
 
 [[package]]
 name = "vix-lorem"

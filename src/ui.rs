@@ -5,6 +5,7 @@
 
 #[cfg(feature = "ai")]
 mod ai;
+mod bidi;
 mod bottom_dock;
 mod boxes;
 mod choosers;
@@ -300,6 +301,9 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     }
 
     draw_overlays(app, frame, area, rows[0]);
+    if bidi::enabled(&app.settings.bidi, &rust_i18n::locale()) {
+        bidi::reorder_buffer(frame.buffer_mut());
+    }
 }
 
 /// Draw any active overlay on top of the base frame. Split out of `draw` to keep

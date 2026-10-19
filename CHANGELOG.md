@@ -8,6 +8,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Right-to-left text order** (T564): after each frame is drawn, stretches of
+  Arabic (and other RTL) text are reordered into visual order per UAX #9, with
+  numbers and Latin runs kept left-to-right and borders and column gaps held in
+  place. New `bidi` setting: `auto` (default; on for a right-to-left UI language),
+  `on`, `off` (for terminals that reorder text themselves). Layout is not
+  mirrored.
+
 - **Large files ask, binary files open in the byte editor** (T571): a file over
   `large_file_mb` (default 50, `0` never asks) now asks "open it anyway?" instead of
   failing, up to a 1 GiB ceiling; a binary file asks to open in the byte editor, which

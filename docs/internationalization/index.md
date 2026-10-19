@@ -22,8 +22,13 @@ English is the **fallback**: any key missing from another language renders its
 English text, so a partially-translated language still works everywhere.
 Coverage varies — English, Spanish, French, German, and Welsh are complete; the
 others currently translate the menu bar and theme names and fall back to English
-for the rest. Filling them in is YAML-only (see below). Note that Vix renders
-left-to-right, so right-to-left scripts (e.g. Arabic) are not yet laid out RTL.
+for the rest. Filling them in is YAML-only (see below). Right-to-left
+scripts (e.g. Arabic) are reordered into visual order after each frame is drawn
+(UAX #9), controlled by the `bidi` setting: `"auto"` (default; on when the UI
+language is right-to-left), `"on"`, or `"off"`. Turn it off if your terminal
+already reorders bidirectional text itself, otherwise the text is reversed twice.
+Panels and menus are not mirrored: the text inside each is reordered, but the
+layout stays left-aligned.
 
 ## Choosing a language
 

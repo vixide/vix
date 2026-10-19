@@ -41,6 +41,8 @@ their defaults, so it is safe to delete or hand-edit.
 | `theme_light`   | string | `"light"` | The theme `"auto"` picks on a light terminal.                       |
 | `theme_dark`    | string | `"dark"` | The theme `"auto"` picks on a dark terminal (or when it can't tell). |
 | `locale`        | string | `"en"`   | UI language code (`en`, `es`, `fr`, `de`, `cy`, …).                  |
+| `bidi`          | string | `"auto"` | Reorder right-to-left text (Arabic) for display: `auto`, `on` or `off`. |
+| `bidi` | string | `"auto"` | Reorder right-to-left text (Arabic) for display: `auto`, `on` or `off`. |
 | `keymap`        | string | `"apple"`| Keyboard navigation style: `"apple"`, `"emacs"`, or `"vi"`.         |
 | `explorer_width`| int    | `30`     | Width (columns) of the left dock; drag its right edge to resize.    |
 | `messages_width`| int    | `32`     | Width (columns) of the right dock; drag its left edge to resize.    |
@@ -112,6 +114,7 @@ trim_trailing_whitespace = true
 ensure_final_newline = true
 theme = "dark"
 locale = "en"
+bidi = "auto"
 keymap = "apple"
 explorer_width = 30
 messages_width = 32

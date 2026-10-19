@@ -8,6 +8,14 @@ The locale chooser lists these; the host applies a selection via
 `rust_i18n::set_locale` and persists it. Extracted from the former
 `vix-locale-chooser` so the data has its own home.
 
+## Right-to-left
+
+`is_rtl(code)` names right-to-left languages by primary subtag, and
+`visual_order(chars)` returns the UAX #9 visual order of one line (identity when
+the line has no strong right-to-left character). The App's `ui::bidi` pass applies
+it to each drawn frame under the `bidi` setting (`auto` | `on` | `off`, T564).
+Panels are not mirrored.
+
 ## See also
 
 - [i18n spec](../../vix-i18n/spec/) — shared localization model
