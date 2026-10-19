@@ -78,6 +78,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `format_on_save` | bool  | `false`  | On save, run the language server's formatter when the file has one. |
 | `auto_save`     | bool   | `false`  | Periodically save the active dirty, file-backed buffer. |
 | `persistent_undo` | bool | `true`   | Persist each file's undo tree across sessions, restored when the content still matches. |
+| `large_file_mb` | int | `50` | Ask before opening a file larger than this many megabytes (`0` never asks; a 1 GiB ceiling always applies). |
 | `restore_session` | bool | `true`   | Reopen the previous session (files, focus, cursors) when launched in a workspace with no file argument. |
 | `recent_files_max` | int | `20`     | How many entries to keep in `recent_files`. |
 | `time_zone`     | string | `UTC`    | Active IANA time zone (e.g. `America/New_York`), chosen via **Tools → Time Zone…**. |

@@ -16,7 +16,7 @@ impl App {
             return;
         }
         let other = self.resolve(input);
-        let Ok(other_text) = std::fs::read_to_string(&other) else {
+        let Ok(other_text) = crate::fileops::read_to_string_guarded(&other) else {
             self.messages
                 .error(t!("msg.open_failed", error = other.display()).to_string());
             return;

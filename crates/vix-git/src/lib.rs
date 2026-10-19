@@ -722,6 +722,52 @@ pub fn commit(dir: &Path, message: &str) -> Result<(), String> {
     run_ok(dir, &["commit", "-m", message])
 }
 
+/// Whether a `gpg-agent.conf` selects a terminal-based pinentry
+/// (`pinentry-curses`, `pinentry-tty`): the last `pinentry-program` line wins.
+/// Such a program draws on and reads from `/dev/tty` directly, so running it
+/// under Vix's raw-mode screen corrupts the display and steals keystrokes
+/// (T570).
+#[must_use]
+pub fn pinentry_wants_tty(agent_conf: &str) -> bool {
+    agent_conf
+        .lines()
+        .filter_map(|l| {
+            let l = l.trim();
+            if l.starts_with('#') {
+                return None;
+            }
+            l.strip_prefix("pinentry-program")
+                .filter(|rest| rest.starts_with(char::is_whitespace))
+                .map(str::trim)
+        })
+        .next_back()
+        .is_some_and(|program| {
+            let name = program.rsplit(['/', '\\']).next().unwrap_or(program);
+            name.contains("curses") || name.contains("tty")
+        })
+}
+
+#[cfg(feature = "process")]
+/// Whether committing in `dir` would sign with a terminal pinentry, which
+/// cannot run under Vix's raw-mode screen (T570): `commit.gpgsign` is true, the
+/// signing format is GPG, and the user's `gpg-agent.conf` selects a
+/// curses/tty pinentry.
+#[must_use]
+pub fn commit_signing_needs_tty(dir: &Path) -> bool {
+    if git_stdout(dir, &["config", "--bool", "--get", "commit.gpgsign"]).as_deref() != Some("true")
+    {
+        return false;
+    }
+    if git_stdout(dir, &["config", "--get", "gpg.format"]).as_deref() == Some("ssh") {
+        return false;
+    }
+    let home = std::env::var_os("GNUPGHOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".gnupg")));
+    home.and_then(|h| std::fs::read_to_string(h.join("gpg-agent.conf")).ok())
+        .is_some_and(|conf| pinentry_wants_tty(&conf))
+}
+
 #[cfg(feature = "process")]
 /// Amend the previous commit, folding in currently-staged changes and keeping
 /// its message (`git commit --amend --no-edit`).
@@ -1251,6 +1297,29 @@ mod tests {
         let start = std::time::Instant::now();
         let _ = diff_marks(&head, &cur);
         assert!(start.elapsed() < std::time::Duration::from_secs(2));
+    }
+
+    #[test]
+    fn pinentry_wants_tty_reads_the_last_program_line() {
+        assert!(pinentry_wants_tty(
+            "pinentry-program /usr/bin/pinentry-curses\n"
+        ));
+        assert!(pinentry_wants_tty(
+            "pinentry-program /opt/homebrew/bin/pinentry-tty"
+        ));
+        assert!(!pinentry_wants_tty(
+            "pinentry-program /usr/bin/pinentry-mac\n"
+        ));
+        assert!(!pinentry_wants_tty("default-cache-ttl 600\n"));
+        // A comment does not count, and the last real line wins.
+        assert!(!pinentry_wants_tty("# pinentry-program pinentry-curses\n"));
+        assert!(!pinentry_wants_tty(
+            "pinentry-program /usr/bin/pinentry-curses\npinentry-program /usr/bin/pinentry-gtk-2\n"
+        ));
+        assert!(pinentry_wants_tty(
+            "pinentry-program /usr/bin/pinentry-gtk-2\npinentry-program /usr/bin/pinentry-curses\n"
+        ));
+        assert!(!pinentry_wants_tty(""));
     }
 
     #[test]

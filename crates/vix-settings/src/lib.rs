@@ -429,6 +429,9 @@ pub struct EditorBehaviorSettings {
     /// Persist each file's undo tree across sessions (restored on reopen when the
     /// file content still matches).
     pub persistent_undo: bool,
+    /// Ask before opening a file larger than this many megabytes (T571); `0`
+    /// never asks and refuses nothing on size (the 1 GiB ceiling still applies).
+    pub large_file_mb: u64,
 }
 
 impl Default for EditorBehaviorSettings {
@@ -437,6 +440,7 @@ impl Default for EditorBehaviorSettings {
             auto_save: false,
             sticky_scroll: true,
             persistent_undo: true,
+            large_file_mb: 50,
         }
     }
 }

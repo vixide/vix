@@ -8,6 +8,17 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Large files ask, binary files open in the byte editor** (T571): a file over
+  `large_file_mb` (default 50, `0` never asks) now asks "open it anyway?" instead of
+  failing, up to a 1 GiB ceiling; a binary file asks to open in the byte editor, which
+  saves the bytes straight back to the file (no lossy text round trip). The same FIFO,
+  size and binary guard now covers Insert File, Revert, Compare with File, `--diff` and
+  the TODO finder.
+- **A terminal pinentry no longer corrupts the screen on commit** (T570): with
+  `commit.gpgsign=true` and a curses/tty `pinentry-program`, Git → Commit and Amend show
+  a translated hint instead of running a command that would draw over Vix.
+- **A gutter-diff benchmark** (T574): `benches/gutter_diff.rs` covers unchanged, lightly
+  edited and heavily rewritten buffers up to 40,000 lines, plus the line cap.
 - **Scroll bar markers** (T578): the editor's scroll bar track shows colored `┃`
   marks where git changes, diagnostics and search matches are (diagnostics win a
   shared row, then git changes, then search), with the `●` thumb drawn on top.

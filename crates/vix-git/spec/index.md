@@ -42,3 +42,20 @@ diff degrades to a coarser (still valid) result rather than stalling a frame.
 - `process` (default on): the runners that start `git`. Off, the crate is only its data
   types and pure parsers (`parse_status`, `diff_marks`, `hunks`, `LogPanel`, …) and never
   starts a process. The root `git` feature enables it (`spec/cargo-features`, T595).
+
+## Signing under a terminal pinentry (T570)
+
+`pinentry_wants_tty(gpg_agent_conf)` reports whether the last `pinentry-program` line names
+a curses or tty pinentry; `commit_signing_needs_tty(dir)` combines that with
+`commit.gpgsign=true` (and a non-SSH `gpg.format`) for the user's `gpg-agent.conf`. Such a
+pinentry opens `/dev/tty` itself, so under Vix's raw-mode screen it draws over the UI and
+steals keystrokes. The host calls it before `git commit` and `git commit --amend`, and shows
+`msg.git_signing_needs_tty` instead of running the commit.
+
+## Gutter diff budget (T574)
+
+`diff_marks` skips buffers over 50,000 lines and puts a 40 ms deadline on Myers. The
+`benches/gutter_diff.rs` Criterion bench keeps this honest: its `rewritten` rows (a few dozen
+repeated lines in scrambled order, Myers' worst case) should stay near the deadline as the line
+count grows, and `over_the_line_cap` should cost only the line count.
+

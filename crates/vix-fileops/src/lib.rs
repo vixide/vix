@@ -401,6 +401,10 @@ pub fn is_unwritable(path: &Path) -> bool {
 /// Largest file [`read_text_guarded`] reads into a text buffer by default.
 pub const MAX_TEXT_BYTES: u64 = 50 * 1024 * 1024;
 
+/// The most [`read_text_guarded`] will ever read into memory, even when the user
+/// confirms opening a file above their `large_file_mb` limit (T571).
+pub const HARD_MAX_TEXT_BYTES: u64 = 1024 * 1024 * 1024;
+
 /// Why [`read_text_guarded`] refused a file (T571). Carried inside an
 /// [`io::Error`] of kind `InvalidData`; recover it with
 /// [`TextReadError::from_io`] to pick a translated message.
@@ -469,6 +473,18 @@ pub fn read_text_guarded(path: &Path, max_bytes: u64) -> io::Result<(String, boo
         Ok(s) => Ok((s, false)),
         Err(e) => Ok((String::from_utf8_lossy(e.as_bytes()).into_owned(), true)),
     }
+}
+
+/// Read a user-chosen text file for a feature that only wants its contents
+/// (insert, revert, compare): [`read_text_guarded`] at the default limit, with
+/// non-UTF-8 text decoded lossily. The same refusals apply, so a FIFO or a
+/// multi-GB file cannot freeze or exhaust Vix from any of those paths (T571).
+///
+/// # Errors
+///
+/// As [`read_text_guarded`].
+pub fn read_to_string_guarded(path: &Path) -> io::Result<String> {
+    read_text_guarded(path, MAX_TEXT_BYTES).map(|(text, _)| text)
 }
 
 #[cfg(test)]
