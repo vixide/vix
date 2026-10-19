@@ -27,8 +27,11 @@ scripts (e.g. Arabic) are reordered into visual order after each frame is drawn
 (UAX #9), controlled by the `bidi` setting: `"auto"` (default; on when the UI
 language is right-to-left), `"on"`, or `"off"`. Turn it off if your terminal
 already reorders bidirectional text itself, otherwise the text is reversed twice.
-Panels and menus are not mirrored: the text inside each is reordered, but the
-layout stays left-aligned.
+With a right-to-left language the layout is mirrored too (`mirror_layout`:
+`"auto"` default, `"on"`, `"off"`): the explorer moves to the right, the message
+drawer and other docks to the left, and the editor's scroll bar to the left.
+Mouse dragging to resize a dock follows the mirrored edges. The menu bar and
+open menus stay left-aligned.
 
 ## Choosing a language
 

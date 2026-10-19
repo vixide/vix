@@ -111,74 +111,58 @@ impl ClampFit for u16 {}
 /// Split the body area into explorer | center | messages | outline | debug | test
 /// columns based on which docks are shown. Dock widths come from settings,
 /// clamped so the editor keeps room.
+/// Whether the layout is mirrored for a right-to-left UI language (T564).
+#[must_use]
+pub fn layout_mirrored(app: &App) -> bool {
+    bidi::mirrored(&app.settings.mirror_layout, &rust_i18n::locale())
+}
+
 fn body_columns(app: &App, body: Rect) -> BodyColumns {
+    use crate::app::Visible;
     let dock_max = body.width.saturating_sub(20).max(12);
-    let mut constraints = Vec::new();
-    if app.visible.contains(crate::app::Visible::EXPLORER) {
-        constraints.push(Constraint::Length(
-            app.settings.explorer_width.clamp(12, dock_max),
+    let st = &app.settings;
+    // Left-to-right order; a mirrored layout reverses it.
+    let mut order: Vec<(char, Constraint)> = Vec::new();
+    if app.visible.contains(Visible::EXPLORER) {
+        order.push((
+            'e',
+            Constraint::Length(st.explorer_width.clamp(12, dock_max)),
         ));
     }
-    constraints.push(Constraint::Min(20));
-    if app.visible.contains(crate::app::Visible::MESSAGES) {
-        constraints.push(Constraint::Length(
-            app.settings.messages_width.clamp(12, dock_max),
+    order.push(('c', Constraint::Min(20)));
+    if app.visible.contains(Visible::MESSAGES) {
+        order.push((
+            'm',
+            Constraint::Length(st.messages_width.clamp(12, dock_max)),
         ));
     }
-    if app.settings.secondary_panels.show_outline_dock {
-        constraints.push(Constraint::Length(
-            app.settings.outline_width.clamp(12, dock_max),
+    if st.secondary_panels.show_outline_dock {
+        order.push((
+            'o',
+            Constraint::Length(st.outline_width.clamp(12, dock_max)),
         ));
     }
-    if app.visible.contains(crate::app::Visible::DEBUG_PANEL) {
-        constraints.push(Constraint::Length(
-            app.settings.debug_width.clamp(12, dock_max),
-        ));
+    if app.visible.contains(Visible::DEBUG_PANEL) {
+        order.push(('d', Constraint::Length(st.debug_width.clamp(12, dock_max))));
     }
-    if app.visible.contains(crate::app::Visible::TEST_PANEL) {
-        constraints.push(Constraint::Length(
-            app.settings.test_width.clamp(12, dock_max),
-        ));
+    if app.visible.contains(Visible::TEST_PANEL) {
+        order.push(('t', Constraint::Length(st.test_width.clamp(12, dock_max))));
+    }
+    if layout_mirrored(app) {
+        order.reverse();
     }
     let cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints(constraints)
+        .constraints(order.iter().map(|&(_, c)| c).collect::<Vec<_>>())
         .split(body);
-    let mut ci = 0;
-    let take = |ci: &mut usize| {
-        let r = cols[*ci];
-        *ci += 1;
-        r
-    };
-    let explorer_rect = app
-        .visible
-        .contains(crate::app::Visible::EXPLORER)
-        .then(|| take(&mut ci));
-    let center_rect = take(&mut ci);
-    let messages_rect = app
-        .visible
-        .contains(crate::app::Visible::MESSAGES)
-        .then(|| take(&mut ci));
-    let outline_rect = app
-        .settings
-        .secondary_panels
-        .show_outline_dock
-        .then(|| take(&mut ci));
-    let debug_rect = app
-        .visible
-        .contains(crate::app::Visible::DEBUG_PANEL)
-        .then(|| take(&mut ci));
-    let test_rect = app
-        .visible
-        .contains(crate::app::Visible::TEST_PANEL)
-        .then(|| take(&mut ci));
+    let at = |k: char| order.iter().position(|&(o, _)| o == k).map(|i| cols[i]);
     BodyColumns {
-        explorer: explorer_rect,
-        center: center_rect,
-        messages: messages_rect,
-        outline: outline_rect,
-        debug: debug_rect,
-        test: test_rect,
+        explorer: at('e'),
+        center: at('c').unwrap_or(body),
+        messages: at('m'),
+        outline: at('o'),
+        debug: at('d'),
+        test: at('t'),
     }
 }
 

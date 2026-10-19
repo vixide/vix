@@ -8250,10 +8250,22 @@ impl App {
         // zeroed (never-drawn) rect would otherwise claim row/column 0.
         let left_edge = (self.visible.contains(Visible::EXPLORER)
             && self.layout.explorer.width > 0)
-            .then(|| self.layout.explorer.right().saturating_sub(1));
+            .then(|| {
+                if crate::ui::layout_mirrored(self) {
+                    self.layout.explorer.x
+                } else {
+                    self.layout.explorer.right().saturating_sub(1)
+                }
+            });
         let right_edge = (self.visible.contains(Visible::MESSAGES)
             && self.layout.messages.width > 0)
-            .then_some(self.layout.messages.x);
+            .then(|| {
+                if crate::ui::layout_mirrored(self) {
+                    self.layout.messages.right().saturating_sub(1)
+                } else {
+                    self.layout.messages.x
+                }
+            });
         // The bottom dock's top edge (its top border row), draggable to resize.
         let bottom_edge = (self.visible.contains(Visible::BOTTOM_DOCK)
             && self.layout.bottom_dock.height > 0)
@@ -8647,7 +8659,12 @@ impl App {
                     0
                 };
                 let max = full.saturating_sub(MIN_EDITOR + other).max(MIN_DOCK);
-                let w = (col.saturating_sub(self.layout.explorer.x) + 1).clamp(MIN_DOCK, max);
+                let w = if crate::ui::layout_mirrored(self) {
+                    self.layout.explorer.right().saturating_sub(col)
+                } else {
+                    col.saturating_sub(self.layout.explorer.x) + 1
+                }
+                .clamp(MIN_DOCK, max);
                 self.settings.explorer_width = w;
             }
             Some(DockResize::Right) => {
@@ -8657,12 +8674,12 @@ impl App {
                     0
                 };
                 let max = full.saturating_sub(MIN_EDITOR + other).max(MIN_DOCK);
-                let w = self
-                    .layout
-                    .messages
-                    .right()
-                    .saturating_sub(col)
-                    .clamp(MIN_DOCK, max);
+                let w = if crate::ui::layout_mirrored(self) {
+                    col.saturating_sub(self.layout.messages.x) + 1
+                } else {
+                    self.layout.messages.right().saturating_sub(col)
+                }
+                .clamp(MIN_DOCK, max);
                 self.settings.messages_width = w;
             }
             Some(DockResize::Bottom) | None => {}

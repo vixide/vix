@@ -14,7 +14,8 @@ The locale chooser lists these; the host applies a selection via
 `visual_order(chars)` returns the UAX #9 visual order of one line (identity when
 the line has no strong right-to-left character). The App's `ui::bidi` pass applies
 it to each drawn frame under the `bidi` setting (`auto` | `on` | `off`, T564).
-Panels are not mirrored.
+The layout mirrors (docks and the editor scroll bar swap sides) under
+`mirror_layout`; the menu bar does not.
 
 ## See also
 

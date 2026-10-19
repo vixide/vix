@@ -4109,3 +4109,25 @@ fn a_binary_file_opens_in_the_byte_editor_and_saves_byte_for_byte() {
     app.on_key(ctrl('s'));
     assert_eq!(std::fs::read(&path).unwrap(), original);
 }
+
+/// T564: `mirror_layout = "on"` swaps the docks and the editor's scroll bar to
+/// the opposite sides.
+#[test]
+fn mirrored_layout_swaps_docks_and_scrollbar() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let draw = |app: &mut App| {
+        let mut term = Terminal::new(TestBackend::new(120, 30)).unwrap();
+        term.draw(|f| vix::ui::draw(app, f)).unwrap();
+    };
+    let mut app = app_at(Path::new("."));
+    app.settings.mirror_layout = "off".into();
+    draw(&mut app);
+    let (ex, ed, sb) = (app.layout.explorer, app.layout.editor, app.layout.scrollbar);
+    assert!(ex.x < ed.x && sb.x > ed.x, "left-to-right baseline");
+
+    app.settings.mirror_layout = "on".into();
+    draw(&mut app);
+    let (ex, ed, sb) = (app.layout.explorer, app.layout.editor, app.layout.scrollbar);
+    assert!(ex.x > ed.x, "explorer moves to the right");
+    assert!(sb.x < ed.x, "scroll bar moves to the left");
+}

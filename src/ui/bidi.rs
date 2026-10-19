@@ -20,6 +20,12 @@ pub(super) fn enabled(setting: &str, locale: &str) -> bool {
     }
 }
 
+/// Whether the layout is mirrored: `mirror_layout = "on"`, or `"auto"` with a
+/// right-to-left UI language.
+pub(super) fn mirrored(setting: &str, locale: &str) -> bool {
+    enabled(setting, locale)
+}
+
 fn is_border(c: char) -> bool {
     ('\u{2500}'..='\u{259F}').contains(&c)
 }

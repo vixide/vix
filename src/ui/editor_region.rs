@@ -43,11 +43,16 @@ pub(super) fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) 
         app.layout.minimap = minimap_area;
         let (editor_area, scrollbar_area) = if app.visible.contains(crate::app::Visible::SCROLLBAR)
         {
+            let mirrored = super::layout_mirrored(app);
             let s = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .constraints(if mirrored {
+                    [Constraint::Length(1), Constraint::Min(1)]
+                } else {
+                    [Constraint::Min(1), Constraint::Length(1)]
+                })
                 .split(inner);
-            (s[0], s[1])
+            if mirrored { (s[1], s[0]) } else { (s[0], s[1]) }
         } else {
             (
                 inner,
