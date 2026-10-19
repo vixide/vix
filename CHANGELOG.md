@@ -8,6 +8,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Spawn-site guard** (security): `tests/spawn_sites.rs` fails the build when a
+  source file outside a documented allowlist can start a child process, so the
+  minimal build's "starts no other program" property cannot regress unnoticed.
+
 - **Right-to-left text order** (T564): after each frame is drawn, stretches of
   Arabic (and other RTL) text are reordered into visual order per UAX #9, with
   numbers and Latin runs kept left-to-right and borders and column gaps held in
