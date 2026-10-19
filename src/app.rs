@@ -8973,7 +8973,8 @@ impl App {
 
     fn menu_click(&mut self, col: u16) {
         // Right-aligned dock toggles take priority over menu hit-testing.
-        let (left_dock, right_dock) = crate::ui::dock_toggle_cols(self.layout.menu);
+        let (left_dock, right_dock) =
+            crate::ui::dock_toggle_cols_for(self.layout.menu, crate::ui::layout_mirrored(self));
         if col == left_dock {
             self.run_action("view.explorer");
             return;
@@ -9000,15 +9001,11 @@ impl App {
 
     /// Index of the top-level menu whose title spans column `col`, if any.
     fn top_menu_index_at(&self, col: u16) -> Option<usize> {
-        let mut x = self.layout.menu.x;
-        for (i, m) in menus().iter().enumerate() {
-            let w = u16::try_from(m.title().chars().count()).unwrap_or(u16::MAX) + 2;
-            if col >= x && col < x + w {
-                return Some(i);
-            }
-            x += w;
-        }
-        None
+        let mirrored = crate::ui::layout_mirrored(self);
+        (0..menus().len()).find(|&i| {
+            let x = crate::ui::menu_title_x(self.layout.menu, i, mirrored);
+            col >= x && col < x + crate::ui::menu_title_width(i)
+        })
     }
 
     /// Move the open-menu highlight to follow the pointer: hovering a different
