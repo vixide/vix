@@ -92,3 +92,8 @@ Measured (macOS arm64, `cargo build --release`, 2026-10-18): the default build i
 about 44% smaller, with `vix --version --json` reporting `"capabilities":[]`. The
 `binary-size` CI job reports the default build only; per-feature-off sizes are not yet
 in its comment.
+
+The release workflow builds the minimal variant with the dedicated `[profile.minimal]`
+(inherits `release`; `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`), which brings
+it to 7,800,336 bytes (7.4 MiB), about 66% smaller than the default build. Panics abort
+instead of unwinding in that variant only.
